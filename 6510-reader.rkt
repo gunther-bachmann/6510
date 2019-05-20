@@ -46,7 +46,13 @@
                         (pure (parse-number-string (string-append "$" x)))))
 (define 6510-integer/p (or/p integer/p hex-integer/p))
 
-(define 6510-eol/p (char/p #\newline))
+(define 6510-eol/p (do (many/p space/p)
+                       (or/p (do  (char/p #\;)
+                                 (many/p (or/p (char-not/p #\newline)
+                                               eof/p)))
+                             void/p)
+                     (or/p (char/p #\newline)
+                           eof/p)))
 
 ;; immediate, indirect and absolute addressing
 (define (imm-ind-abs-opcode/p opcode)
@@ -68,13 +74,17 @@
 
 (define 6510-opcode/p (or/p (imm-ind-abs-opcode/p "adc")))
 
-(define 6510-program/p (do ml-whitespace/p 6510-opcode/p))
+(define 6510-program/p (do ml-whitespace/p
+                           (many/p 6510-opcode/p)
+                         ))
 
 (define (literal-read-syntax src in)
-  (with-syntax ([str (parse-result! (parse-string (syntax/p 6510-program/p) (port->string in)))])
+  (with-syntax ([(str ...) (parse-result! (parse-string (syntax/p 6510-program/p) (port->string in)))])
     (strip-context
      #'(module anything racket
          (require "6510.rkt")
-         (provide data)
-         str
-         (define data 'str)))))
+         (provide program)
+         str ...
+         (define program `(,str ...))
+         (define data (assembler-program (initialize-cpu) 0 `(,str ...)))
+         ))))

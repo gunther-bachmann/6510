@@ -10,7 +10,7 @@
 (require rackunit)
 (require scribble/srcdoc)
 
-(provide parse-number-string ADC)
+(provide parse-number-string ADC assembler-program initialize-cpu)
 
 ;; ================================================================================ utility functions
 
