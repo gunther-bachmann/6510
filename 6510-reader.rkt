@@ -48,9 +48,10 @@
 
 (define 6510-eol/p (char/p #\newline))
 
-(define adc-opcode/p
+;; immediate, indirect and absolute addressing
+(define (imm-ind-abs-opcode/p opcode)
   (do
-      (string/p "adc")
+      (string/p opcode)
       (many/p space/p)
     [immediate <- (or/p void/p (char/p #\#))]
     [x <- 6510-integer/p]
@@ -60,12 +61,12 @@
                        void/p)]
     6510-eol/p
     (let* [(immediate-str (if (void? immediate) "" (string immediate)))
-           (base-result-lst `(ADC ,(string-append immediate-str (number->string x))))]
+           (base-result-lst `(,(string->symbol (string-upcase opcode)) ,(string-append immediate-str (number->string x))))]
       (pure (cond [(void? appendix) base-result-lst]
                   [else (append base-result-lst `(',(string->symbol appendix)))])))
     ))
 
-(define 6510-opcode/p (or/p adc-opcode/p))
+(define 6510-opcode/p (or/p (imm-ind-abs-opcode/p "adc")))
 
 (define 6510-program/p (do ml-whitespace/p 6510-opcode/p))
 
