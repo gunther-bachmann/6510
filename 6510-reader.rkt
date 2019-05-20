@@ -29,21 +29,23 @@
                           (char/p #\7)
                           (char/p #\8)
                           (char/p #\9)
-                          (char/p #\A)
-                          (char/p #\B)
-                          (char/p #\C)
-                          (char/p #\D)
-                          (char/p #\E)
-                          (char/p #\F)))
+                          (char-ci/p #\A)
+                          (char-ci/p #\B)
+                          (char-ci/p #\C)
+                          (char-ci/p #\D)
+                          (char-ci/p #\E)
+                          (char-ci/p #\F)))
 
 (define hex-string/p (do
                          [digits <- (many+/p hex-digit/p)]
                          (pure (list->string digits))))
 
 (define ml-whitespace/p (many/p (or/p (char/p #\newline) space/p)))
+
 (define hex-integer/p (do (char/p #\$)
                           [x <-  hex-string/p]
                         (pure (parse-number-string (string-append "$" x)))))
+
 (define 6510-integer/p (or/p integer/p hex-integer/p))
 
 (define 6510-eol/p (do (many/p space/p)
@@ -57,19 +59,19 @@
 ;; immediate, indirect and absolute addressing
 (define (imm-ind-abs-opcode/p opcode)
   (do
-      (string/p opcode)
+      (string-ci/p opcode)
       (many/p space/p)
     [immediate <- (or/p void/p (char/p #\#))]
     [x <- 6510-integer/p]
     [appendix <- (or/p (do (char/p #\,)
-                           (or/p (string/p "x")
-                                 (string/p "y")))
+                           (or/p (string-ci/p "x")
+                                 (string-ci/p "y")))
                        void/p)]
     6510-eol/p
     (let* [(immediate-str (if (void? immediate) "" (string immediate)))
            (base-result-lst `(,(string->symbol (string-upcase opcode)) ,(string-append immediate-str (number->string x))))]
       (pure (cond [(void? appendix) base-result-lst]
-                  [else (append base-result-lst `(',(string->symbol appendix)))])))
+                  [else (append base-result-lst `(',(string->symbol (string-downcase appendix))))])))
     ))
 
 (define 6510-opcode/p (do (many/p space/p) (or/p (imm-ind-abs-opcode/p "adc"))))
@@ -84,8 +86,11 @@
      #'(module anything racket
          (require "6510.rkt")
          (provide program raw-program)
-         str ...
+         ; str ...
          (define program `(,str ...))
          (define raw-program '(str ...))
          (define data (assembler-program (initialize-cpu) 0 `(,str ...)))
+         (displayln "program parsed:")
+         (displayln program)
+         (displayln raw-program)
          ))))
