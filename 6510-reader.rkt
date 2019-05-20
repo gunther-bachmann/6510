@@ -72,7 +72,7 @@
                   [else (append base-result-lst `(',(string->symbol appendix)))])))
     ))
 
-(define 6510-opcode/p (or/p (imm-ind-abs-opcode/p "adc")))
+(define 6510-opcode/p (do (many/p space/p) (or/p (imm-ind-abs-opcode/p "adc"))))
 
 (define 6510-program/p (do ml-whitespace/p
                            (many/p 6510-opcode/p)
@@ -83,8 +83,9 @@
     (strip-context
      #'(module anything racket
          (require "6510.rkt")
-         (provide program)
+         (provide program raw-program)
          str ...
          (define program `(,str ...))
+         (define raw-program '(str ...))
          (define data (assembler-program (initialize-cpu) 0 `(,str ...)))
          ))))

@@ -9,34 +9,11 @@
 (require racket/fixnum)
 (require rackunit)
 (require scribble/srcdoc)
+(require (for-syntax "6510-utils.rkt"))
+(require "6510-utils.rkt")
 
 (provide parse-number-string ADC assembler-program initialize-cpu)
 
-;; ================================================================================ utility functions
-
-(define (number-has-prefix? number-string)
-  (string-contains? "%$" (substring number-string 0 1)))
-
-(define (prefix->number-base prefix)
-  (case prefix
-    [("$") 16]
-    [("%") 2]
-    [else 10]))
-
-(define (parse-number-string number-string)
-  (exact-floor (string->number (substring  number-string (if (number-has-prefix? number-string) 1 0))
-                               (prefix->number-base (substring number-string 0 1)))))
-
-(define (low-byte absolute)
-  (bitwise-and #xFF absolute))
-
-(define (high-byte absolute)
-  (bitwise-and #xFF (arithmetic-shift absolute -8)))
-
-(define (absolute high low)
-  (bitwise-ior (arithmetic-shift high 8) low))
-
-;; ================================================================================
 
 (struct cpu-state (program-counter flags memory accumulator x-index y-index stack-pointer))
 
@@ -217,12 +194,14 @@
     [(ADC op)
      (if (equal? (substring (syntax-e #'op) 0 1) "#")
          #'(ADC_i (parse-number-string (substring op 1)))
-         (if (>= 5 (syntax-span #'op))
-             #'(ADC_zp (parse-number-string op))
-             #'(ADC_abs (parse-number-string op))))]
+         (let ([op-number (parse-number-string (syntax->datum #'op))])
+           (if (> 256 op-number)
+               #'(ADC_zp (parse-number-string op))
+               #'(ADC_abs (parse-number-string op)))))]
     [(ADC op, idx)
-     (let ((indirect (syntax-e #'idx)))
-       (if (>= 5 (syntax-span #'op))
+     (let* ([indirect (syntax-e #'idx)]
+            [op-number (parse-number-string (syntax->datum #'op))])
+       (if (> 256 op-number)
            (case indirect
              [(x) #'(ADC_zpx (parse-number-string op))]
              [else (error "adc zero page index mode unknown" indirect)])
