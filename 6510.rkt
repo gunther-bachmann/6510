@@ -12,7 +12,7 @@
 (require (for-syntax "6510-utils.rkt"))
 (require "6510-utils.rkt")
 
-(provide parse-number-string ADC assembler-program initialize-cpu)
+(provide parse-number-string ADC assembler-program initialize-cpu BRK run JSR LDA)
 
 
 (struct cpu-state (program-counter flags memory accumulator x-index y-index stack-pointer))
@@ -26,13 +26,10 @@
 (define (assembler-program state memory-address commands)
   (load state memory-address (flatten commands)))
 
-(define (BRK) (list #x00))
 
 (define (JMP_abs absolute)
   (list #x4C (high-byte absolute) (low-byte absolute)))
 
-(define (JSR_abs absolute)
-  (list #x20 (high-byte absolute) (low-byte absolute)))
 
 (define (load state memory-address program)
   (map (lambda (pair) (fxvector-set! (cpu-state-memory state) (first pair) (last pair)))
@@ -110,7 +107,22 @@
   (printf "PC = ~a~n" (cpu-state-program-counter state))
   (printf "C = ~s" (if (carry-flag? state) "X" " " )))
 
-;; (run (assembler-program (initialize-cpu) 0 (list (LDA_i #x41) (JSR_abs #xFFFF) (BRK))))
+
+;; ================================================================================ JSR
+
+(define (JSR_abs absolute)
+  (list #x20 (high-byte absolute) (low-byte absolute)))
+
+(define-syntax (JSR stx)
+  (syntax-case stx ()
+    [(JSR op)  #'(JSR_abs (parse-number-string op))]))
+
+;; ================================================================================ BRK
+
+(define (BRK) (list #x00))
+
+(check-match (BRK)
+             '(#x00))
 
 ;; ================================================================================ LDA
 
@@ -137,12 +149,14 @@
     [(LDA op)
      (if (equal? (substring (syntax-e #'op) 0 1) "#")
          #'(LDA_i (parse-number-string (substring op 1)))
-         (if (>= 5 (syntax-span #'op))
-             #'(LDA_zp (parse-number-string op))
-             #'(LDA_abs (parse-number-string op))))]
+         (let ([op-number (parse-number-string (syntax->datum #'op))])
+           (if (> 256 op-number)
+               #'(LDA_zp (parse-number-string op))
+               #'(LDA_abs (parse-number-string op)))))]
     [(LDA op, idx)
-     (let ((indirect (syntax-e #'idx)))
-       (if (>= 5 (syntax-span #'op))
+     (let* ([indirect (syntax-e #'idx)]
+            [op-number (parse-number-string (syntax->datum #'op))])
+       (if (> 256 op-number)
            (case indirect
              [(x) #'(LDA_zpx (parse-number-string op))]
              [else (error "lda zero page index mode unknown" indirect)])
@@ -238,3 +252,6 @@
 
 (check-true (carry-flag? (execute-cpu-step (execute-cpu-step (assembler-program (initialize-cpu) 0 (list (LDA_i #x80) (ADC_i #x81))))))
             "carry should be set after adding 128 and 129")
+
+
+; (run (assembler-program (initialize-cpu) 0 (list (LDA_i #x41) (JSR_abs #xFFFF) (BRK))))

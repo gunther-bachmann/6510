@@ -19,48 +19,72 @@
   (syntax->datum
    (literal-read-syntax #f in)))
 
-(define hex-digit/p (or/p (char/p #\0)
-                          (char/p #\1)
-                          (char/p #\2)
-                          (char/p #\3)
-                          (char/p #\4)
-                          (char/p #\5)
-                          (char/p #\6)
-                          (char/p #\7)
-                          (char/p #\8)
-                          (char/p #\9)
-                          (char-ci/p #\A)
-                          (char-ci/p #\B)
-                          (char-ci/p #\C)
-                          (char-ci/p #\D)
-                          (char-ci/p #\E)
-                          (char-ci/p #\F)))
+(define space-or-tab/p
+  (or/p (char/p #\space) (char/p #\tab)))
 
-(define hex-string/p (do
-                         [digits <- (many+/p hex-digit/p)]
-                         (pure (list->string digits))))
+(define hex-digit/p
+  (or/p (char/p #\0)
+        (char/p #\1)
+        (char/p #\2)
+        (char/p #\3)
+        (char/p #\4)
+        (char/p #\5)
+        (char/p #\6)
+        (char/p #\7)
+        (char/p #\8)
+        (char/p #\9)
+        (char-ci/p #\A)
+        (char-ci/p #\B)
+        (char-ci/p #\C)
+        (char-ci/p #\D)
+        (char-ci/p #\E)
+        (char-ci/p #\F)))
 
-(define ml-whitespace/p (many/p (or/p (char/p #\newline) space/p)))
+(define hex-string/p
+  (do [digits <- (many+/p hex-digit/p)]
+      (pure (list->string digits))))
 
-(define hex-integer/p (do (char/p #\$)
-                          [x <-  hex-string/p]
-                        (pure (parse-number-string (string-append "$" x)))))
+(define ml-whitespace/p
+  (many/p (or/p (char/p #\newline)
+                space-or-tab/p
+                (do (char/p #\;)
+                    (many/p (char-not/p #\newline))))))
 
-(define 6510-integer/p (or/p integer/p hex-integer/p))
+(define hex-integer/p
+  (do (char/p #\$)
+      [x <-  hex-string/p]
+    (pure (parse-number-string (string-append "$" x)))))
 
-(define 6510-eol/p (do (many/p space/p)
-                       (or/p (do  (char/p #\;)
-                                 (many/p (or/p (char-not/p #\newline)
-                                               eof/p)))
-                             void/p)
-                     (or/p (char/p #\newline)
-                           eof/p)))
+(define 6510-integer/p
+  (or/p integer/p hex-integer/p))
+
+(define 6510-eol/p
+  (do (many/p space-or-tab/p)
+      (or/p (do  (char/p #\;)
+                (many/p (char-not/p #\newline)))
+            void/p)
+    (or/p (char/p #\newline)
+          eof/p)))
+
+(define (abs-opcode/p opcode)
+  (do
+      (string-ci/p opcode)
+      (many/p space-or-tab/p)
+    [x <- 6510-integer/p]
+    6510-eol/p
+    (pure (list (string->symbol (string-upcase opcode)) (number->string x))))
+  )
+(define (opcode/p opcode)
+  (do
+      (string-ci/p opcode)
+      6510-eol/p
+    (pure (list (string->symbol (string-upcase opcode))))))
 
 ;; immediate, indirect and absolute addressing
 (define (imm-ind-abs-opcode/p opcode)
   (do
       (string-ci/p opcode)
-      (many/p space/p)
+      (many/p space-or-tab/p)
     [immediate <- (or/p void/p (char/p #\#))]
     [x <- 6510-integer/p]
     [appendix <- (or/p (do (char/p #\,)
@@ -71,26 +95,43 @@
     (let* [(immediate-str (if (void? immediate) "" (string immediate)))
            (base-result-lst `(,(string->symbol (string-upcase opcode)) ,(string-append immediate-str (number->string x))))]
       (pure (cond [(void? appendix) base-result-lst]
-                  [else (append base-result-lst `(',(string->symbol (string-downcase appendix))))])))
-    ))
+                  [else (append base-result-lst `(',(string->symbol (string-downcase appendix))))])))))
 
-(define 6510-opcode/p (do (many/p space/p) (or/p (imm-ind-abs-opcode/p "adc"))))
+(define 6510-opcode/p
+  (do (or/p (imm-ind-abs-opcode/p "adc")
+            (imm-ind-abs-opcode/p "lda")
+            (opcode/p "brk")
+            (abs-opcode/p "jsr"))))
 
-(define 6510-program/p (do ml-whitespace/p
-                           (many/p 6510-opcode/p)
-                         ))
+(define 6510-program-origin/p
+  (do (char/p #\*) (many/p space-or-tab/p)
+    (char/p #\=) (many/p space-or-tab/p)
+    [origin <- hex-integer/p]
+    6510-eol/p
+    (pure origin)))
+
+(define 6510-program/p
+  (do ml-whitespace/p
+      [origin <- 6510-program-origin/p]
+    [opcodes <- (many/p (do ml-whitespace/p 6510-opcode/p))]
+    (pure (list origin opcodes))))
 
 (define (literal-read-syntax src in)
-  (with-syntax ([(str ...) (parse-result! (parse-string (syntax/p 6510-program/p) (port->string in)))])
-    (strip-context
-     #'(module anything racket
-         (require "6510.rkt")
-         (provide program raw-program)
-         ; str ...
-         (define program `(,str ...))
-         (define raw-program '(str ...))
-         (define data (assembler-program (initialize-cpu) 0 `(,str ...)))
-         (displayln "program parsed:")
-         (displayln program)
-         (displayln raw-program)
-         ))))
+  (let* ([parsed-string (parse-result! (parse-string (syntax/p 6510-program/p) (port->string in)))]
+         [origin (first (syntax->datum parsed-string))]
+         [parsed-opcodes (last (syntax->datum parsed-string))])
+    (with-syntax ([(str ...) parsed-opcodes]
+                  [org origin])
+      (strip-context
+       #'(module anything racket
+           (require "6510.rkt")
+           (provide program raw-program data)
+           ; str ...
+           (define program `(,str ...))
+           (define raw-program '(str ...))
+           (define data (assembler-program (initialize-cpu) org `(,str ...)))
+           (displayln "program parsed:")
+           (displayln program)
+           (displayln raw-program)
+           (run data)
+           )))))
