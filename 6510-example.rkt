@@ -11,7 +11,7 @@
 
 ;       lda $2000,x
 
-       lda #$41
-       jsr $FFFF
+       lda #$41   ; load character A (dec 65)
+       jsr $FFFF  ; print this character to screen
 
-       brk
+       brk        ; end of execution
