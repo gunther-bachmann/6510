@@ -86,7 +86,7 @@
     (map list commands byte-lengths/w-offset))
   )
 
-(define (replace-labels commands)
+(define (replace-labels commands address)
   (let* ([commands-bytes-list (commands-bytes-list commands)]
          [labels-bytes-list (collect-label-offset-map commands-bytes-list)])
     (filter (lambda (command) (case (first command) [('label) #f] [else #t]))
@@ -101,18 +101,18 @@
                                  (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
                                    `(,(append (drop-right command 2) `(,(- label-offset current-offset command-length))) ,(last command-byte-pair)))]
                                 [('label-ref-absolute)
-                                 (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
+                                 (let* ([label-offset (+ address (get-label-offset labels-bytes-list (last command)))])
                                    `(,(append (drop-right command 2) `(,(high-byte label-offset) ,(low-byte label-offset))) ,(last command-byte-pair)))
                                  ]
                                 [else command-byte-pair])
                               command-byte-pair)))
                       commands-bytes-list)))))
 
-(check-match (replace-labels '(('opcode 1 2)('label "some")('opcode 1 'label-ref-relative "some")('label "other")('opcode 5 'label-ref-absolute "some")('label "end")))
-             '(('opcode 1 2) ('opcode 1 -2) ('opcode 5 0 2)))
+(check-match (replace-labels '(('opcode 1 2)('label "some")('opcode 1 'label-ref-relative "some")('label "other")('opcode 5 'label-ref-absolute "some")('label "end")) 10)
+             '(('opcode 1 2) ('opcode 1 -2) ('opcode 5 0 12)))
 
-(check-match (replace-labels '(((quote label) some) ((quote opcode) 169 65) ((quote opcode) 32 (quote label-ref-absolute) some) ((quote opcode) 0)))
-             '(('opcode 169 65) ('opcode 32 0 0) ('opcode 0)))
+(check-match (replace-labels '(((quote label) some) ((quote opcode) 169 65) ((quote opcode) 32 (quote label-ref-absolute) some) ((quote opcode) 0)) 10)
+             '(('opcode 169 65) ('opcode 32 0 10) ('opcode 0)))
 
 ; '('label "label")
 ; '('opcode #x00 'label-ref-relative)
@@ -133,7 +133,7 @@
              '((1 2 3) ( 2 3 4) (0)))
 
 (define (assembler-program state memory-address commands)
-  (load state memory-address (flatten (remove-resolved-statements (replace-labels commands)))))
+  (load state memory-address (flatten (remove-resolved-statements (replace-labels commands memory-address)))))
 
 
 (define (JMP_abs absolute)

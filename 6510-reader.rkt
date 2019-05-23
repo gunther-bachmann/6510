@@ -141,7 +141,7 @@
            (displayln "program parsed:")
            (displayln program)
            (displayln raw-program)
-           (displayln (replace-labels program))
+           (displayln (replace-labels program org))
            ;(displayln (commands-bytes-list program))
            ;(displayln (collect-label-offset-map (commands-bytes-list program)))
            ;(displayln (get-label-offset  (collect-label-offset-map (commands-bytes-list program)) "some"))
