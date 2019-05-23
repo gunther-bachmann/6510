@@ -66,14 +66,21 @@
     (or/p (char/p #\newline)
           eof/p)))
 
+(define 6510-label/p
+  (do
+      (char/p #\:)
+      [new-label <- (many+/p (or/p letter/p digit/p))]
+    (pure (list (string->symbol "LABEL") (list->string new-label)))))
+
 (define (abs-opcode/p opcode)
   (do
       (string-ci/p opcode)
       (many/p space-or-tab/p)
-    [x <- 6510-integer/p]
+    [x <- (or/p 6510-integer/p
+                6510-label/p)]  ;; could be a string too
     6510-eol/p
-    (pure (list (string->symbol (string-upcase opcode)) (number->string x))))
-  )
+    (pure (append (list (string->symbol (string-upcase opcode))) (if (number? x) (list (number->string x)) (list ''label-ref-absolute (last x)))))))
+
 (define (opcode/p opcode)
   (do
       (string-ci/p opcode)
@@ -101,7 +108,8 @@
   (do (or/p (imm-ind-abs-opcode/p "adc")
             (imm-ind-abs-opcode/p "lda")
             (opcode/p "brk")
-            (abs-opcode/p "jsr"))))
+            (abs-opcode/p "jsr")
+            6510-label/p)))
 
 (define 6510-program-origin/p
   (do (char/p #\*) (many/p space-or-tab/p)
@@ -133,5 +141,9 @@
            (displayln "program parsed:")
            (displayln program)
            (displayln raw-program)
-           (run data)
+           (displayln (replace-labels program))
+           ;(displayln (commands-bytes-list program))
+           ;(displayln (collect-label-offset-map (commands-bytes-list program)))
+           ;(displayln (get-label-offset  (collect-label-offset-map (commands-bytes-list program)) "some"))
+           (run (set-pc-in-state data org))
            )))))

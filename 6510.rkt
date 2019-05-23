@@ -12,7 +12,7 @@
 (require (for-syntax "6510-utils.rkt"))
 (require "6510-utils.rkt")
 
-(provide parse-number-string ADC assembler-program initialize-cpu BRK run JSR LDA)
+(provide parse-number-string ADC assembler-program initialize-cpu BRK run JSR LDA LABEL replace-labels set-pc-in-state)
 
 
 (struct cpu-state (program-counter flags memory accumulator x-index y-index stack-pointer))
@@ -67,7 +67,12 @@
              '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7))))
 
 (define (get-label-offset labels-byte-list label)
-  (last (last (last (filter (lambda (label-byte-pair) (eq? label (last (first label-byte-pair)))) labels-byte-list)))))
+  (let ([filtered (filter (lambda (label-byte-pair)
+                            (equal? label (last (first label-byte-pair))))
+                            labels-byte-list)])
+    (when (empty? filtered)
+      (error "label not found in list" label filtered))
+    (last (last (last filtered)))))
 
 (check-match (get-label-offset '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7))) "some")
              2)
@@ -75,10 +80,14 @@
 (check-match (get-label-offset '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7))) "other")
              4)
 
-(define (replace-labels commands)
+(define (commands-bytes-list commands)
   (let* ([byte-lengths (map 6510-byte-length commands)]
-         [byte-lengths/w-offset (lo-sums byte-lengths 0)]
-         [commands-bytes-list (map list commands byte-lengths/w-offset)]
+         [byte-lengths/w-offset (lo-sums byte-lengths 0)])
+    (map list commands byte-lengths/w-offset))
+  )
+
+(define (replace-labels commands)
+  (let* ([commands-bytes-list (commands-bytes-list commands)]
          [labels-bytes-list (collect-label-offset-map commands-bytes-list)])
     (filter (lambda (command) (case (first command) [('label) #f] [else #t]))
             (map first
@@ -86,19 +95,24 @@
                         (let* ([command (first command-byte-pair)]
                                [current-offset (last (last command-byte-pair))]
                                [command-length (first (last command-byte-pair))])
-                          (case (last (drop-right command 1))
-                            [('label-ref-relative)
-                             (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
-                               `(,(append (drop-right command 2) `(,(- label-offset current-offset command-length))) ,(last command-byte-pair)))]
-                            [('label-ref-absolute)
-                             (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
-                               `(,(append (drop-right command 2) `(,label-offset)) ,(last command-byte-pair)))
-                             ]
-                            [else command-byte-pair])))
+                          (if (< 1 (length command))
+                              (case (last (drop-right command 1))
+                                [('label-ref-relative)
+                                 (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
+                                   `(,(append (drop-right command 2) `(,(- label-offset current-offset command-length))) ,(last command-byte-pair)))]
+                                [('label-ref-absolute)
+                                 (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
+                                   `(,(append (drop-right command 2) `(,(high-byte label-offset) ,(low-byte label-offset))) ,(last command-byte-pair)))
+                                 ]
+                                [else command-byte-pair])
+                              command-byte-pair)))
                       commands-bytes-list)))))
 
 (check-match (replace-labels '(('opcode 1 2)('label "some")('opcode 1 'label-ref-relative "some")('label "other")('opcode 5 'label-ref-absolute "some")('label "end")))
-             '(('opcode 1 2) ('opcode 1 -2) ('opcode 5 2)))
+             '(('opcode 1 2) ('opcode 1 -2) ('opcode 5 0 2)))
+
+(check-match (replace-labels '(((quote label) some) ((quote opcode) 169 65) ((quote opcode) 32 (quote label-ref-absolute) some) ((quote opcode) 0)))
+             '(('opcode 169 65) ('opcode 32 0 0) ('opcode 0)))
 
 ; '('label "label")
 ; '('opcode #x00 'label-ref-relative)
@@ -141,6 +155,9 @@
 
 (define (peek-pc+2 state)
   (peek state (+ 2 (cpu-state-program-counter state))))
+
+(define (set-pc-in-state state pc)
+  (struct-copy cpu-state state [program-counter pc]))
 
 (define (run state)
   (if (not (eq? 0 (peek-pc state)))
@@ -205,12 +222,16 @@
 
 ;; ================================================================================ JSR
 
+(define (JSR_abs_label ref str)
+  (list ''opcode #x20 ''label-ref-absolute str))
+
 (define (JSR_abs absolute)
   (list ''opcode #x20 (high-byte absolute) (low-byte absolute)))
 
 (define-syntax (JSR stx)
   (syntax-case stx ()
-    [(JSR op)  #'(JSR_abs (parse-number-string op))]))
+    [(JSR op)  #'(JSR_abs (parse-number-string op))]
+    [(JSR ref str) #'(JSR_abs_label ref str)]))
 
 ;; ================================================================================ BRK
 
@@ -218,6 +239,13 @@
 
 (check-match (BRK)
              '('opcode #x00))
+
+(define (LABEL_s label) (list ''label label))
+
+(define-syntax (LABEL stx)
+  (syntax-case stx ()
+    [(LABEL op)
+     #'(LABEL_s op)]))
 
 ;; ================================================================================ LDA
 

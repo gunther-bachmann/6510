@@ -1,6 +1,7 @@
 #lang reader "6510-reader.rkt"
 
-       *=$0000 ; origin
+       *=$C000 ; origin
+:some
 
 ;       adc $231A,y ; indexed y
 ;       adc $213C,X ; indexed x
@@ -12,6 +13,10 @@
 ;       lda $2000,x
 
        lda #$41   ; load character A (dec 65)
-       jsr $FFFF  ; print this character to screen
+;       jsr $FFFF  ; print this character to screen
+       jsr $FFFF
 
-       brk        ; end of execution
+:end   brk        ; end of execution
+
+       jsr :some
+       jsr :end
