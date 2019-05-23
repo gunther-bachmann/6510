@@ -23,12 +23,107 @@
 (define (peek state memory-address)
   (fxvector-ref (cpu-state-memory state) memory-address))
 
+(define (6510-byte-length command)
+  (case (first command)
+    [('opcode) (case (last (drop-right command 1))
+                 [('label-ref-relative) (- (length command) 2)]
+                 [('label-ref-absolute) (- (length command) 1)]
+                 [else (- (length command) 1)])]
+    [('label) 0]
+    [else (error "uknown command" (first command))]))
+
+(check-match (6510-byte-length '('opcode 1 'label-ref-relative "some"))
+             2)
+
+(check-match (6510-byte-length '('opcode 1 'label-ref-absolute "other"))
+             3)
+
+(check-match (6510-byte-length '('opcode 1 2 3))
+             3)
+
+(check-match (6510-byte-length '('label "test"))
+             0)
+
+(define (lo-sums list current-sum)
+  (if (empty? list)
+      '()
+      (let* ([first-num (first list)]
+             [new-sum (+ current-sum first-num)])
+        (append `((,first-num ,current-sum)) (lo-sums (drop list 1) new-sum)))))
+
+(define (collect-label-offset-map commands-bytes-list)
+  (let* ([labels-bytes-list (filter (lambda (command-byte-pair)
+                                      (case (first (first command-byte-pair))
+                                        [('label) #t]
+                                        [else #f])) commands-bytes-list)])
+    labels-bytes-list))
+
+(check-match (collect-label-offset-map '((('opcode 1 2) (2 0))
+                                         (('label "some") (0 2))
+                                         (('opcode 1 -2) (2 2))
+                                         (('label "other") (0 4))
+                                         (('opcode 5 'label-ref-absolute "some") (3 4))
+                                         (('label "end") (0 7))))
+             '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7))))
+
+(define (get-label-offset labels-byte-list label)
+  (last (last (last (filter (lambda (label-byte-pair) (eq? label (last (first label-byte-pair)))) labels-byte-list)))))
+
+(check-match (get-label-offset '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7))) "some")
+             2)
+
+(check-match (get-label-offset '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7))) "other")
+             4)
+
+(define (replace-labels commands)
+  (let* ([byte-lengths (map 6510-byte-length commands)]
+         [byte-lengths/w-offset (lo-sums byte-lengths 0)]
+         [commands-bytes-list (map list commands byte-lengths/w-offset)]
+         [labels-bytes-list (collect-label-offset-map commands-bytes-list)])
+    (filter (lambda (command) (case (first command) [('label) #f] [else #t]))
+            (map first
+                 (map (lambda (command-byte-pair)
+                        (let* ([command (first command-byte-pair)]
+                               [current-offset (last (last command-byte-pair))]
+                               [command-length (first (last command-byte-pair))])
+                          (case (last (drop-right command 1))
+                            [('label-ref-relative)
+                             (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
+                               `(,(append (drop-right command 2) `(,(- label-offset current-offset command-length))) ,(last command-byte-pair)))]
+                            [('label-ref-absolute)
+                             (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
+                               `(,(append (drop-right command 2) `(,label-offset)) ,(last command-byte-pair)))
+                             ]
+                            [else command-byte-pair])))
+                      commands-bytes-list)))))
+
+(check-match (replace-labels '(('opcode 1 2)('label "some")('opcode 1 'label-ref-relative "some")('label "other")('opcode 5 'label-ref-absolute "some")('label "end")))
+             '(('opcode 1 2) ('opcode 1 -2) ('opcode 5 2)))
+
+; '('label "label")
+; '('opcode #x00 'label-ref-relative)
+; '('opcode #x00 'label-ref-absolute)
+
+(define (resolve-statements commands)
+  (let* [(label-offsets (collect-label-offset-map commands))]
+    (replace-labels label-offsets commands)))
+
+(define (remove-resolved-statements commands)
+  (map (lambda (command)
+         (case (first command)
+           [('opcode) (drop command 1)]
+           [else command]))
+       commands))
+
+(check-match (remove-resolved-statements '((1 2 3) ('opcode 2 3 4) (0)))
+             '((1 2 3) ( 2 3 4) (0)))
+
 (define (assembler-program state memory-address commands)
-  (load state memory-address (flatten commands)))
+  (load state memory-address (flatten (remove-resolved-statements (replace-labels commands)))))
 
 
 (define (JMP_abs absolute)
-  (list #x4C (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #x4C (high-byte absolute) (low-byte absolute)))
 
 
 (define (load state memory-address program)
@@ -111,7 +206,7 @@
 ;; ================================================================================ JSR
 
 (define (JSR_abs absolute)
-  (list #x20 (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #x20 (high-byte absolute) (low-byte absolute)))
 
 (define-syntax (JSR stx)
   (syntax-case stx ()
@@ -119,30 +214,30 @@
 
 ;; ================================================================================ BRK
 
-(define (BRK) (list #x00))
+(define (BRK) (list ''opcode #x00))
 
 (check-match (BRK)
-             '(#x00))
+             '('opcode #x00))
 
 ;; ================================================================================ LDA
 
 (define (LDA_abs absolute)
-  (list #xad (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #xad (high-byte absolute) (low-byte absolute)))
 
 (define (LDA_zp zero-page-address)
-  (list #xA5 zero-page-address))
+  (list ''opcode #xA5 zero-page-address))
 
 (define (LDA_i immediate)
-  (list #xA9 immediate))
+  (list ''opcode #xA9 immediate))
 
 (define (LDA_zpx zero-page-address)
-  (list #xB5 zero-page-address))
+  (list ''opcode #xB5 zero-page-address))
 
 (define (LDA_absx absolute)
-  (list #xBD (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #xBD (high-byte absolute) (low-byte absolute)))
 
 (define (LDA_absy absolute)
-  (list #xB9 (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #xB9 (high-byte absolute) (low-byte absolute)))
 
 (define-syntax (LDA stx)
   (syntax-case stx ()
@@ -166,42 +261,42 @@
              [else (error "lda absolute index mode unknown" indirect)])))]))
 
 (check-match (LDA "#$10")
-             '(#xA9 16))
+             '('opcode #xA9 16))
 
 (check-match (LDA "$17")
-             '(#xa5 #x17))
+             '('opcode #xa5 #x17))
 
 (check-match (LDA "$178F")
-             '(#xad #x17 #x8F))
+             '('opcode #xad #x17 #x8F))
 
 (check-match (LDA "$10",x)
-             '(#xB5 16))
+             '('opcode #xB5 16))
 
 (check-match (LDA "$A000",x)
-             '(#xBD #xA0 #x00))
+             '('opcode #xBD #xA0 #x00))
 
 (check-match (LDA "$A000",y)
-             '(#xB9 #xA0 #x00))
+             '('opcode #xB9 #xA0 #x00))
 
 ;; ================================================================================ ADC
 
 (define (ADC_i immediate)
-  (list #x69 immediate))
+  (list ''opcode  #x69 immediate))
 
 (define (ADC_zpx zero-page-address)
-  (list #x75 zero-page-address))
+  (list ''opcode #x75 zero-page-address))
 
 (define (ADC_absx absolute)
-  (list #x7D (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #x7D (high-byte absolute) (low-byte absolute)))
 
 (define (ADC_absy absolute)
-  (list #x79 (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #x79 (high-byte absolute) (low-byte absolute)))
 
 (define (ADC_zp zero-page-address)
-  (list #x65 zero-page-address))
+  (list ''opcode #x65 zero-page-address))
 
 (define (ADC_abs absolute)
-  (list #x6D (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #x6D (high-byte absolute) (low-byte absolute)))
 
 (define-syntax (ADC stx)
   (syntax-case stx ()
@@ -225,18 +320,22 @@
              [else (error "adc absolute index mode unknown" indirect)])))]))
 
 (check-match (ADC "%10",x)
-             '(#x75 2))
-(check-match (ADC "$1237",y)
-             '(#x79 #x12 #x37))
-(check-match (ADC "#100")
-             '(#x69 100))
-(check-match (ADC "#$FF")
-             '(#x69 #xFF))
-(check-match (ADC "$FF")
-             '(#x65 #xFF))
-(check-match (ADC "$FFFF")
-             '(#x6d #xff #xff))
+             '('opcode #x75 2))
 
+(check-match (ADC "$1237",y)
+             '('opcode #x79 #x12 #x37))
+
+(check-match (ADC "#100")
+             '('opcode #x69 100))
+
+(check-match (ADC "#$FF")
+             '('opcode #x69 #xFF))
+
+(check-match (ADC "$FF")
+             '('opcode #x65 #xFF))
+
+(check-match (ADC "$FFFF")
+             '('opcode #x6d #xff #xff))
 
 (check-eq? (peek (assembler-program (initialize-cpu) 10 (list (ADC_i #x10) (ADC_i #x11))) 11)
            16
