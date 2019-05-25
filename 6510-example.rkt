@@ -17,6 +17,11 @@
        brk
 
        lda ($a000,x)
+       lda ($c000),y
+       adc ($c000),y
+       adc ($a000,x)
+
+
 
 ;; jsr :end
 

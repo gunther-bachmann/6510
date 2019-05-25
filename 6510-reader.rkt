@@ -22,23 +22,14 @@
 (define space-or-tab/p
   (or/p (char/p #\space) (char/p #\tab)))
 
+(define (char-hex? char)
+  (let ([char-int (char->integer char)])
+    (or (and (>= char-int 48) (<= char-int 57))
+        (and (>= char-int 65) (<= char-int 70))
+        (and (>= char-int 97) (<= char-int 102)))))
+
 (define hex-digit/p
-  (or/p (char/p #\0)
-        (char/p #\1)
-        (char/p #\2)
-        (char/p #\3)
-        (char/p #\4)
-        (char/p #\5)
-        (char/p #\6)
-        (char/p #\7)
-        (char/p #\8)
-        (char/p #\9)
-        (char-ci/p #\A)
-        (char-ci/p #\B)
-        (char-ci/p #\C)
-        (char-ci/p #\D)
-        (char-ci/p #\E)
-        (char-ci/p #\F)))
+  (label/p "hex-number" (satisfy/p char-hex?)))
 
 (define hex-string/p
   (do [digits <- (many+/p hex-digit/p)]
@@ -77,9 +68,12 @@
       (string-ci/p opcode)
       (many/p space-or-tab/p)
     [x <- (or/p 6510-integer/p
-                6510-label/p)]  ;; could be a string too
+               6510-label/p)]  ;; could be a string too
     6510-eol/p
-    (pure (append (list (string->symbol (string-upcase opcode))) (if (number? x) (list (number->string x)) (list ''label-ref-absolute (last x)))))))
+    (pure (append (list (string->symbol (string-upcase opcode)))
+                  (if (number? x)
+                      (list (number->string x))
+                      (list ''label-ref-absolute (last x)))))))
 
 (define (opcode/p opcode)
   (do
@@ -87,32 +81,49 @@
       6510-eol/p
     (pure (list (string->symbol (string-upcase opcode))))))
 
-;; immediate, indirect and absolute addressing
-(define (imm-ind-abs-opcode/p opcode)
+(define (iia-opcode/p opcode)
   (do
       (string-ci/p opcode)
       (many/p space-or-tab/p)
-    [immediate <- (or/p void/p (char/p #\#) (char/p #\())]
-    [x <- 6510-integer/p]
-    [closing <- (or/p void/p (char/p #\)))]
-    [appendix <- (or/p (do (char/p #\,)
-                           (or/p (string-ci/p "x")
-                                 (string-ci/p "y")))
-                       void/p)]
-    [closing2 <- (or/p void/p (char/p #\)))]
-    6510-eol/p
-    (let* [(immediate-str (if (void? immediate) "" "#"))
-           (base-result-lst `(,(string->symbol (string-upcase opcode)) ,(string-append immediate-str (number->string x))))]
-      (pure (cond [(void? appendix) base-result-lst]
-                  [(and (void? closing2) (void? closing)) (append base-result-lst `(',(string->symbol (string-downcase appendix))))]
-                  [else base-result-lst])))))
+    (or/p (iia-opcode-immediate opcode)
+          (or/p (iia-opcode-indirect opcode)
+                (iia-opcode-absolute opcode)))))
 
+(define (iia-opcode-immediate opcode)
+  (do
+      (char/p #\#)
+      [x <- 6510-integer/p]
+    (pure `(,(string->symbol (string-upcase opcode)) ,(string-append "#" (number->string x))))))
+
+(define (iia-opcode-absolute opcode)
+  (do
+      [x <- 6510-integer/p]
+      [appendix <- (or/p (string-ci/p ",x")
+                        (string-ci/p ",y")
+                        void/p)]
+    (let ([base-result-lst `(,(string->symbol (string-upcase opcode)) ,(number->string x))])
+      (if (void? appendix)
+          (pure base-result-lst)
+          (pure (append base-result-lst `(',(string->symbol (string-downcase appendix))))))
+      )))
+
+(define (iia-opcode-indirect opcode)
+  (do
+      (char/p #\()
+      [x <- 6510-integer/p]
+    [ind <-  (or/p (string-ci/p "),y")
+                  (string-ci/p ",x)"))]
+    (if (equal? ind "),y")
+        (pure `(,(string->symbol (string-upcase opcode)) < ,(number->string x) > y))
+        (pure `(,(string->symbol (string-upcase opcode)) < ,(number->string x) x >)))))
+
+;; immediate, indirect and absolute addressing
 (define 6510-opcode/p
-  (do (or/p (imm-ind-abs-opcode/p "adc")
-            (imm-ind-abs-opcode/p "lda")
+  (do (or/p (iia-opcode/p "adc")
             (opcode/p "brk")
-            (opcode/p "rts")
+            (iia-opcode/p "lda")
             (abs-opcode/p "jsr")
+            (opcode/p "rts")
             6510-label/p)))
 
 (define 6510-program-origin/p
@@ -143,10 +154,10 @@
            (define program `(,str ...))
            (define raw-program '(str ...))
            (define data (assembler-program (initialize-cpu) org `(,str ...)))
-           (displayln "program parsed:")
-           (displayln program)
-           (displayln raw-program)
-           (displayln (replace-labels program org))
+           ;; (displayln "program parsed:")
+           ;; (displayln program)
+           ;; (displayln raw-program)
+           ;; (displayln (replace-labels program org))
            (displayln "program execution:")
            (run (set-pc-in-state data org))
            )))))

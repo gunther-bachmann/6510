@@ -370,10 +370,11 @@
            (if (> 256 op-number)
                #'(LDA_zp (parse-number-string op))
                #'(LDA_abs (parse-number-string op)))))]
-    [(LDA < op, x > )
-     #'(LDA_indx (parse-number-string op))]
-    [(LDA < op > , y)
-     #'(LDA_indy (parse-number-string op))]
+    [(LDA open op close-or-var close-or-var2)
+     (let ([close (syntax-e #'close-or-var)])
+       (case close
+         [(>) #'(LDA_indy (parse-number-string op))]
+         [else #'(LDA_indx (parse-number-string op))]))]
     [(LDA op, idx)
      (let* ([indirect (syntax-e #'idx)]
             [op-number (parse-number-string (syntax->datum #'op))])
@@ -404,6 +405,12 @@
 (check-match (LDA "$A000",y)
              '('opcode #xB9 #x00 #xA0))
 
+(check-match (LDA < "$A000" >,y )
+             '('opcode #xB1 #x00 #xA0))
+
+(check-match (LDA < "$A000", x > )
+             '('opcode #xA1 #x00 #xA0))
+
 ;; ================================================================================ ADC
 
 (define (ADC_i immediate)
@@ -424,6 +431,12 @@
 (define (ADC_abs absolute)
   (list ''opcode #x6D (low-byte absolute) (high-byte absolute)))
 
+(define (ADC_indx absolute)
+  (list ''opcode #x61 (low-byte absolute) (high-byte absolute)))
+
+(define (ADC_indy absolute)
+  (list ''opcode #x71 (low-byte absolute) (high-byte absolute)))
+
 (define-syntax (ADC stx)
   (syntax-case stx ()
     [(ADC op)
@@ -433,6 +446,11 @@
            (if (> 256 op-number)
                #'(ADC_zp (parse-number-string op))
                #'(ADC_abs (parse-number-string op)))))]
+    [(ADC open op close-or-var close-or-var2)
+     (let ([close (syntax-e #'close-or-var)])
+       (case close
+         [(>) #'(ADC_indy (parse-number-string op))]
+         [else #'(ADC_indx (parse-number-string op))]))]
     [(ADC op, idx)
      (let* ([indirect (syntax-e #'idx)]
             [op-number (parse-number-string (syntax->datum #'op))])
@@ -462,6 +480,12 @@
 
 (check-match (ADC "$FFFF")
              '('opcode #x6d #xff #xff))
+
+(check-match (ADC < "$FFFF" > ,y)
+             '('opcode #x71 #xff #xff))
+
+(check-match (ADC < "$FFFF" ,x >)
+             '('opcode #x61 #xff #xff))
 
 (check-eq? (peek (assembler-program (initialize-cpu) 10 (list (ADC_i #x10) (ADC_i #x11))) 11)
            16
