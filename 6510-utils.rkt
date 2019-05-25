@@ -1,6 +1,6 @@
 #lang racket
 
-(provide parse-number-string low-byte high-byte absolute)
+(provide parse-number-string low-byte high-byte absolute word byte)
 
 (define (number-has-prefix? number-string)
   (string-contains? "%$" (substring number-string 0 1)))
@@ -23,3 +23,9 @@
 
 (define (absolute high low)
   (bitwise-ior (arithmetic-shift high 8) low))
+
+(define (word value)
+  (bitwise-and #xffff value))
+
+(define (byte value)
+  (bitwise-and #xff value))

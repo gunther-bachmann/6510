@@ -1,6 +1,5 @@
 #lang racket
 
-;; todo: add more unit tests
 ;; todo: add method descriptions
 ;; todo: realize with typed racket
 ;; todo: implement some syntax rules to make program-definition easier
@@ -9,19 +8,30 @@
 (require racket/fixnum)
 (require rackunit)
 (require scribble/srcdoc)
+(require threading)
+
 (require (for-syntax "6510-utils.rkt"))
 (require "6510-utils.rkt")
 
-(provide parse-number-string ADC assembler-program initialize-cpu BRK run JSR LDA LABEL replace-labels set-pc-in-state)
+(provide parse-number-string assembler-program initialize-cpu replace-labels set-pc-in-state run
+         ADC BRK LDA JSR RTS
+         LABEL)
 
 
 (struct cpu-state (program-counter flags memory accumulator x-index y-index stack-pointer))
 
 (define (initialize-cpu)
-  (cpu-state 0 0 (make-fxvector 65536) 0 0 0 0))
+  (cpu-state 0 0 (make-fxvector 65536) 0 0 0 #xff))
 
 (define (peek state memory-address)
   (fxvector-ref (cpu-state-memory state) memory-address))
+
+(define (poke state address value)
+  (fxvector-set! (cpu-state-memory state) address (byte value))
+  state)
+
+(check-match (peek (poke (initialize-cpu) #xc000 17) #xc000)
+             17)
 
 (define (6510-byte-length command)
   (case (first command)
@@ -69,71 +79,129 @@
 (define (get-label-offset labels-byte-list label)
   (let ([filtered (filter (lambda (label-byte-pair)
                             (equal? label (last (first label-byte-pair))))
-                            labels-byte-list)])
+                          labels-byte-list)])
     (when (empty? filtered)
       (error "label not found in list" label filtered))
     (last (last (last filtered)))))
 
-(check-match (get-label-offset '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7))) "some")
+(check-match (get-label-offset '((('label "some") (0 2))
+                                 (('label "other") (0 4))
+                                 (('label "end") (0 7)))
+                               "some")
              2)
 
-(check-match (get-label-offset '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7))) "other")
+(check-match (get-label-offset '((('label "some") (0 2))
+                                 (('label "other") (0 4))
+                                 (('label "end") (0 7)))
+                               "other")
              4)
+
+(check-exn
+ exn:fail?
+ (lambda () (get-label-offset '((('label "some") (0 2))
+                           (('label "other") (0 4))
+                           (('label "end") (0 7)))
+                         "unknown")))
 
 (define (commands-bytes-list commands)
   (let* ([byte-lengths (map 6510-byte-length commands)]
          [byte-lengths/w-offset (lo-sums byte-lengths 0)])
-    (map list commands byte-lengths/w-offset))
-  )
+    (map list commands byte-lengths/w-offset)))
+
+(check-match (commands-bytes-list '(('opcode 10 10 10)
+                                    ('label "some")
+                                    ('opcode 0)
+                                    ('opcode 10 10)))
+             '((('opcode 10 10 10) (3 0))
+               (('label "some") (0 3))
+               (('opcode 0) (1 3))
+               (('opcode 10 10) (2 4))))
+
+(define (replace-label command-byte-pair labels-bytes-list address)
+  (let* ([command (first command-byte-pair)]
+         [current-offset (last (last command-byte-pair))]
+         [command-length (first (last command-byte-pair))])
+    (if (< 1 (length command))
+        (case (last (drop-right command 1))
+          [('label-ref-relative)
+           (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
+             (list (append (drop-right command 2)
+                           (list (- label-offset current-offset command-length)))
+                   (last command-byte-pair)))]
+          [('label-ref-absolute)
+           (let* ([label-offset (+ address (get-label-offset labels-bytes-list (last command)))])
+             (list (append (drop-right command 2)
+                           (list (low-byte label-offset) (high-byte label-offset)))
+                   (last command-byte-pair)))
+           ]
+          [else command-byte-pair])
+        command-byte-pair)))
+
+(check-match (replace-label '(('opcode 20 'label-ref-absolute "some") (3 10))
+                            '((('label "some") (0 8)))
+                            100)
+             '(('opcode 20 108 0) (3 10)))
+
+(check-match (replace-label '(('opcode 20 30 80) (3 10))
+                            '((('label "some") (0 8)))
+                            100)
+             '(('opcode 20 30 80) (3 10)))
 
 (define (replace-labels commands address)
   (let* ([commands-bytes-list (commands-bytes-list commands)]
          [labels-bytes-list (collect-label-offset-map commands-bytes-list)])
-    (filter (lambda (command) (case (first command) [('label) #f] [else #t]))
-            (map first
-                 (map (lambda (command-byte-pair)
-                        (let* ([command (first command-byte-pair)]
-                               [current-offset (last (last command-byte-pair))]
-                               [command-length (first (last command-byte-pair))])
-                          (if (< 1 (length command))
-                              (case (last (drop-right command 1))
-                                [('label-ref-relative)
-                                 (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
-                                   `(,(append (drop-right command 2) `(,(- label-offset current-offset command-length))) ,(last command-byte-pair)))]
-                                [('label-ref-absolute)
-                                 (let* ([label-offset (+ address (get-label-offset labels-bytes-list (last command)))])
-                                   `(,(append (drop-right command 2) `(,(high-byte label-offset) ,(low-byte label-offset))) ,(last command-byte-pair)))
-                                 ]
-                                [else command-byte-pair])
-                              command-byte-pair)))
-                      commands-bytes-list)))))
+    (map first
+         (map (lambda (command-byte-pair) (replace-label command-byte-pair labels-bytes-list address))
+              commands-bytes-list))))
 
-(check-match (replace-labels '(('opcode 1 2)('label "some")('opcode 1 'label-ref-relative "some")('label "other")('opcode 5 'label-ref-absolute "some")('label "end")) 10)
-             '(('opcode 1 2) ('opcode 1 -2) ('opcode 5 0 12)))
+(check-match (replace-labels '(('opcode 1 2)
+                               ('label "some")
+                               ('opcode 1 'label-ref-relative "some")
+                               ('label "other")
+                               ('opcode 5 'label-ref-absolute "some")
+                               ('label "end"))
+                             10)
+             '(('opcode 1 2)
+               ('label "some")
+               ('opcode 1 -2)
+               ('label "other")
+               ('opcode 5 12 0)
+               ('label "end")))
 
-(check-match (replace-labels '(((quote label) some) ((quote opcode) 169 65) ((quote opcode) 32 (quote label-ref-absolute) some) ((quote opcode) 0)) 10)
-             '(('opcode 169 65) ('opcode 32 0 10) ('opcode 0)))
-
-; '('label "label")
-; '('opcode #x00 'label-ref-relative)
-; '('opcode #x00 'label-ref-absolute)
+(check-match (replace-labels '(((quote label) some)
+                               ((quote opcode) 169 65)
+                               ((quote opcode) 32 (quote label-ref-absolute) some)
+                               ((quote opcode) 0)) 10)
+             '(((quote label) some)
+               ('opcode 169 65)
+               ('opcode 32 10 0)
+               ('opcode 0)))
 
 (define (resolve-statements commands)
   (let* [(label-offsets (collect-label-offset-map commands))]
     (replace-labels label-offsets commands)))
 
-(define (remove-resolved-statements commands)
-  (map (lambda (command)
-         (case (first command)
-           [('opcode) (drop command 1)]
-           [else command]))
-       commands))
+(define (command-is-label? command)
+  (case (first command) [('label) #t] [else #f]))
 
-(check-match (remove-resolved-statements '((1 2 3) ('opcode 2 3 4) (0)))
-             '((1 2 3) ( 2 3 4) (0)))
+(define (remove-resolved-statements commands)
+  (filter-not command-is-label?
+              (map (lambda (command)
+                     (case (first command)
+                       [('opcode) (drop command 1)]
+                       [else command]))
+                   commands)))
+
+(check-match (remove-resolved-statements '((1 2 3)
+                                           ('opcode 2 3 4)
+                                           (0)))
+             '((1 2 3)
+               (2 3 4)
+               (0)))
 
 (define (assembler-program state memory-address commands)
-  (load state memory-address (flatten (remove-resolved-statements (replace-labels commands memory-address)))))
+  (load state memory-address (flatten (~>  (replace-labels commands memory-address)
+                                          remove-resolved-statements))))
 
 
 (define (JMP_abs absolute)
@@ -157,47 +225,56 @@
   (peek state (+ 2 (cpu-state-program-counter state))))
 
 (define (set-pc-in-state state pc)
-  (struct-copy cpu-state state [program-counter pc]))
+  (struct-copy cpu-state state [program-counter (word pc)]))
 
 (define (run state)
   (if (not (eq? 0 (peek-pc state)))
       (run (execute-cpu-step state))
       state))
 
-(define (execute-cpu-step state)
-  (case (peek-pc state)
-    [(#x20) (interpret-jsr-abs (peek-pc+1 state) (peek-pc+2 state) state)]
-    [(#x4C) (interpret-jmp-abs (peek-pc+1 state) (peek-pc+2 state) state)]
-    [(#x69) (interpret-adc-i (peek-pc+1 state) state)]
-    [(#xA9) (interpret-lda-i (peek-pc+1 state) state)]
-    [else state]))
+(define (interpret-rts state)
+  (let* ([sp (cpu-state-stack-pointer state)]
+         [low-ret (peek state (+ #x100 (byte (+ 2 sp))))]
+         [high-ret (peek state (+ #x100 (byte (+ 1 sp))))]
+         [new-state (struct-copy cpu-state state
+                                 [program-counter (word (+ 1 (absolute high-ret low-ret)))]
+                                 [stack-pointer (byte (+ sp 2))])])
+    new-state))
 
 (define (interpret-jsr-abs high low state)
   (case (absolute high low)
-    [(#xFFFF) (print (integer->char (cpu-state-accumulator state)))
-              (struct-copy cpu-state state [program-counter (+ 3 (cpu-state-program-counter state))])]
-    [else state])) ;; TODO: put return address onto the stack and jump to address
+    [(#xFFFF) (display (string (integer->char (cpu-state-accumulator state))))
+              (struct-copy cpu-state state [program-counter (word (+ 3 (cpu-state-program-counter state)))])]
+    [else (let* ([new-program-counter (absolute high low)]
+                 [return-address (+ 2 (cpu-state-program-counter state))]
+                 [sp (cpu-state-stack-pointer state)]
+                 [new-state (struct-copy cpu-state state
+                                         [program-counter (word new-program-counter)]
+                                         [stack-pointer (byte (- sp 2))])])
+            (poke new-state (+ #x100 sp) (low-byte return-address))
+            (poke new-state (+ #x100 (byte (- sp 1))) (high-byte return-address))
+            new-state)])) ;; TODO: put return address onto the stack and jump to address
 
 (define (interpret-jmp-abs high low state)
   (struct-copy cpu-state state
-               [program-counter (+ (* 256 high) low)]))
+               [program-counter (word (absolute high low))]))
 
 (define (interpret-adc-i immediate state)
   (let* ([old-accumulator (cpu-state-accumulator state)]
-         [intermediate-accumulator (modulo (+ immediate old-accumulator) 256)]
+         [intermediate-accumulator (+ immediate old-accumulator)]
          [new-accumulator (if (carry-flag? state) (+ 1 intermediate-accumulator) intermediate-accumulator)]
          [overflow        (> (+ immediate old-accumulator) 255 )])
     (struct-copy cpu-state state
-                 [program-counter (+ 2 (cpu-state-program-counter state))]
+                 [program-counter (word (+ 2 (cpu-state-program-counter state)))]
                  [flags           (if overflow
                                       (-set-carry-flag (cpu-state-flags state))
                                       (cpu-state-flags state))]
-                 [accumulator     new-accumulator])))
+                 [accumulator     (byte new-accumulator)])))
 
 (define (interpret-lda-i immediate state)
   (struct-copy cpu-state state
-               [program-counter (+ 2 (cpu-state-program-counter state))]
-               [accumulator     immediate]))
+               [program-counter (word (+ 2 (cpu-state-program-counter state)))]
+               [accumulator     (byte immediate)]))
 
 (define (carry-flag? state)
   (eq? 1 (bitwise-and 1 (cpu-state-flags state))))
@@ -219,6 +296,14 @@
   (printf "PC = ~a~n" (cpu-state-program-counter state))
   (printf "C = ~s" (if (carry-flag? state) "X" " " )))
 
+(define (execute-cpu-step state)
+  (case (peek-pc state)
+    [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    [(#x4C) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    [(#x60) (interpret-rts state)]
+    [(#x69) (interpret-adc-i (peek-pc+1 state) state)]
+    [(#xA9) (interpret-lda-i (peek-pc+1 state) state)]
+    [else state]))
 
 ;; ================================================================================ JSR
 
@@ -226,12 +311,15 @@
   (list ''opcode #x20 ''label-ref-absolute str))
 
 (define (JSR_abs absolute)
-  (list ''opcode #x20 (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #x20 (low-byte absolute) (high-byte absolute)))
 
 (define-syntax (JSR stx)
   (syntax-case stx ()
     [(JSR op)  #'(JSR_abs (parse-number-string op))]
     [(JSR ref str) #'(JSR_abs_label ref str)]))
+
+(define (RTS)
+  (list ''opcode #x60))
 
 ;; ================================================================================ BRK
 
@@ -250,22 +338,28 @@
 ;; ================================================================================ LDA
 
 (define (LDA_abs absolute)
-  (list ''opcode #xad (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #xad (low-byte absolute) (high-byte absolute)))
 
 (define (LDA_zp zero-page-address)
-  (list ''opcode #xA5 zero-page-address))
+  (list ''opcode #xA5 (byte zero-page-address)))
 
 (define (LDA_i immediate)
-  (list ''opcode #xA9 immediate))
+  (list ''opcode #xA9 (byte immediate)))
 
 (define (LDA_zpx zero-page-address)
-  (list ''opcode #xB5 zero-page-address))
+  (list ''opcode #xB5 (byte zero-page-address)))
 
 (define (LDA_absx absolute)
-  (list ''opcode #xBD (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #xBD (low-byte absolute) (high-byte absolute)))
 
 (define (LDA_absy absolute)
-  (list ''opcode #xB9 (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #xB9 (low-byte absolute) (high-byte absolute)))
+
+(define (LDA_indx absolute)
+  (list ''opcode #xa1 (low-byte absolute) (high-byte absolute)))
+
+(define (LDA_indy absolute)
+  (list ''opcode #xb1 (low-byte absolute) (high-byte absolute)))
 
 (define-syntax (LDA stx)
   (syntax-case stx ()
@@ -276,6 +370,10 @@
            (if (> 256 op-number)
                #'(LDA_zp (parse-number-string op))
                #'(LDA_abs (parse-number-string op)))))]
+    [(LDA < op, x > )
+     #'(LDA_indx (parse-number-string op))]
+    [(LDA < op > , y)
+     #'(LDA_indy (parse-number-string op))]
     [(LDA op, idx)
      (let* ([indirect (syntax-e #'idx)]
             [op-number (parse-number-string (syntax->datum #'op))])
@@ -295,36 +393,36 @@
              '('opcode #xa5 #x17))
 
 (check-match (LDA "$178F")
-             '('opcode #xad #x17 #x8F))
+             '('opcode #xad #x8F #x17))
 
 (check-match (LDA "$10",x)
              '('opcode #xB5 16))
 
 (check-match (LDA "$A000",x)
-             '('opcode #xBD #xA0 #x00))
+             '('opcode #xBD #x00 #xA0))
 
 (check-match (LDA "$A000",y)
-             '('opcode #xB9 #xA0 #x00))
+             '('opcode #xB9 #x00 #xA0))
 
 ;; ================================================================================ ADC
 
 (define (ADC_i immediate)
-  (list ''opcode  #x69 immediate))
+  (list ''opcode  #x69 (byte immediate)))
 
 (define (ADC_zpx zero-page-address)
-  (list ''opcode #x75 zero-page-address))
+  (list ''opcode #x75 (byte zero-page-address)))
 
 (define (ADC_absx absolute)
-  (list ''opcode #x7D (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #x7D (low-byte absolute) (high-byte absolute)))
 
 (define (ADC_absy absolute)
-  (list ''opcode #x79 (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #x79 (low-byte absolute) (high-byte absolute)))
 
 (define (ADC_zp zero-page-address)
-  (list ''opcode #x65 zero-page-address))
+  (list ''opcode #x65 (byte zero-page-address)))
 
 (define (ADC_abs absolute)
-  (list ''opcode #x6D (high-byte absolute) (low-byte absolute)))
+  (list ''opcode #x6D (low-byte absolute) (high-byte absolute)))
 
 (define-syntax (ADC stx)
   (syntax-case stx ()
@@ -351,7 +449,7 @@
              '('opcode #x75 2))
 
 (check-match (ADC "$1237",y)
-             '('opcode #x79 #x12 #x37))
+             '('opcode #x79 #x37 #x12))
 
 (check-match (ADC "#100")
              '('opcode #x69 100))

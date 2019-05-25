@@ -92,22 +92,26 @@
   (do
       (string-ci/p opcode)
       (many/p space-or-tab/p)
-    [immediate <- (or/p void/p (char/p #\#))]
+    [immediate <- (or/p void/p (char/p #\#) (char/p #\())]
     [x <- 6510-integer/p]
+    [closing <- (or/p void/p (char/p #\)))]
     [appendix <- (or/p (do (char/p #\,)
                            (or/p (string-ci/p "x")
                                  (string-ci/p "y")))
                        void/p)]
+    [closing2 <- (or/p void/p (char/p #\)))]
     6510-eol/p
-    (let* [(immediate-str (if (void? immediate) "" (string immediate)))
+    (let* [(immediate-str (if (void? immediate) "" "#"))
            (base-result-lst `(,(string->symbol (string-upcase opcode)) ,(string-append immediate-str (number->string x))))]
       (pure (cond [(void? appendix) base-result-lst]
-                  [else (append base-result-lst `(',(string->symbol (string-downcase appendix))))])))))
+                  [(and (void? closing2) (void? closing)) (append base-result-lst `(',(string->symbol (string-downcase appendix))))]
+                  [else base-result-lst])))))
 
 (define 6510-opcode/p
   (do (or/p (imm-ind-abs-opcode/p "adc")
             (imm-ind-abs-opcode/p "lda")
             (opcode/p "brk")
+            (opcode/p "rts")
             (abs-opcode/p "jsr")
             6510-label/p)))
 
@@ -121,7 +125,8 @@
 (define 6510-program/p
   (do ml-whitespace/p
       [origin <- 6510-program-origin/p]
-    [opcodes <- (many/p (do ml-whitespace/p 6510-opcode/p))]
+    ml-whitespace/p
+    [opcodes <- (many/p (do [op <- 6510-opcode/p] ml-whitespace/p (pure op)))]
     (pure (list origin opcodes))))
 
 (define (literal-read-syntax src in)
@@ -142,8 +147,6 @@
            (displayln program)
            (displayln raw-program)
            (displayln (replace-labels program org))
-           ;(displayln (commands-bytes-list program))
-           ;(displayln (collect-label-offset-map (commands-bytes-list program)))
-           ;(displayln (get-label-offset  (collect-label-offset-map (commands-bytes-list program)) "some"))
+           (displayln "program execution:")
            (run (set-pc-in-state data org))
            )))))
