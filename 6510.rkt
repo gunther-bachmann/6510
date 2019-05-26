@@ -35,26 +35,31 @@
   (check-match (peek (poke (initialize-cpu) #xc000 17) #xc000)
                17))
 
+;; todo absolute address mode = 2
+;; branches = 1 (e.g. beq)
+(define (opcode-argument-length opcode)
+  2)
+
+
 (define (6510-byte-length command)
   (case (first command)
-    [('opcode) (case (last (drop-right command 1))
-                 [('label-ref-relative) (- (length command) 2)]
-                 [('label-ref-absolute) (- (length command) 1)]
-                 [else (- (length command) 1)])]
+    [('opcode) (if (6510-label-string? (last command))
+                   (+ 1 (opcode-argument-length (second command)))
+                   (- (length command) 1))]
     [('label) 0]
     [else (error "uknown command" (first command))]))
 
 (module+ test
-  (check-match (6510-byte-length '('opcode 1 'label-ref-relative "some"))
-               2)
+  (check-match (6510-byte-length '('opcode 1 ":some"))
+               3)
 
-  (check-match (6510-byte-length '('opcode 1 'label-ref-absolute "other"))
+  (check-match (6510-byte-length '('opcode 1 ":other"))
                3)
 
   (check-match (6510-byte-length '('opcode 1 2 3))
                3)
 
-  (check-match (6510-byte-length '('label "test"))
+  (check-match (6510-byte-length '('label ":test"))
                0))
 
 (define (lo-sums list current-sum)
@@ -73,12 +78,12 @@
 
 (module+ test
   (check-match (collect-label-offset-map '((('opcode 1 2) (2 0))
-                                           (('label "some") (0 2))
+                                           (('label ":some") (0 2))
                                            (('opcode 1 -2) (2 2))
-                                           (('label "other") (0 4))
-                                           (('opcode 5 'label-ref-absolute "some") (3 4))
-                                           (('label "end") (0 7))))
-               '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7)))))
+                                           (('label ":other") (0 4))
+                                           (('opcode 5 ":some") (3 4))
+                                           (('label ":end") (0 7))))
+               '((('label ":some") (0 2)) (('label ":other") (0 4)) (('label ":end") (0 7)))))
 
 (define (get-label-offset labels-byte-list label)
   (let ([filtered (filter (lambda (label-byte-pair)
@@ -89,24 +94,24 @@
     (last (last (last filtered)))))
 
 (module+ test
-  (check-match (get-label-offset '((('label "some") (0 2))
-                                   (('label "other") (0 4))
-                                   (('label "end") (0 7)))
-                                 "some")
+  (check-match (get-label-offset '((('label ":some") (0 2))
+                                   (('label ":other") (0 4))
+                                   (('label ":end") (0 7)))
+                                 ":some")
                2)
 
-  (check-match (get-label-offset '((('label "some") (0 2))
-                                   (('label "other") (0 4))
-                                   (('label "end") (0 7)))
-                                 "other")
+  (check-match (get-label-offset '((('label ":some") (0 2))
+                                   (('label ":other") (0 4))
+                                   (('label ":end") (0 7)))
+                                 ":other")
                4)
 
   (check-exn
    exn:fail?
-   (lambda () (get-label-offset '((('label "some") (0 2))
-                             (('label "other") (0 4))
-                             (('label "end") (0 7)))
-                           "unknown"))))
+   (lambda () (get-label-offset '((('label ":some") (0 2))
+                             (('label ":other") (0 4))
+                             (('label ":end") (0 7)))
+                           ":unknown"))))
 
 (define (commands-bytes-list commands)
   (let* ([byte-lengths (map 6510-byte-length commands)]
@@ -116,11 +121,11 @@
 (module+ test
 
   (check-match (commands-bytes-list '(('opcode 10 10 10)
-                                      ('label "some")
+                                      ('label ":some")
                                       ('opcode 0)
                                       ('opcode 10 10)))
                '((('opcode 10 10 10) (3 0))
-                 (('label "some") (0 3))
+                 (('label ":some") (0 3))
                  (('opcode 0) (1 3))
                  (('opcode 10 10) (2 4)))))
 
@@ -130,28 +135,21 @@
          [command-length (first (last command-byte-pair))])
     (if (>= 1 (length command))
         command-byte-pair
-        (case (last (drop-right command 1))
-          [('label-ref-relative)
-           (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
-             (list (append (drop-right command 2)
-                           (list (- label-offset current-offset command-length)))
-                   (last command-byte-pair)))]
-          [('label-ref-absolute)
-           (let* ([label-offset (+ address (get-label-offset labels-bytes-list (last command)))])
-             (list (append (drop-right command 2)
-                           (list (low-byte label-offset) (high-byte label-offset)))
-                   (last command-byte-pair)))
-           ]
-          [else command-byte-pair]))))
+        (if (and (not (equal? ''label (first command))) (6510-label-string? (last command)))
+            (let* ([label-offset (+ address (get-label-offset labels-bytes-list (last command)))])
+              (list (append (drop-right command 1)
+                            (list (low-byte label-offset) (high-byte label-offset)))
+                    (last command-byte-pair)))
+            command-byte-pair))))
 
 (module+ test
-  (check-match (replace-label '(('opcode 20 'label-ref-absolute "some") (3 10))
-                              '((('label "some") (0 8)))
+  (check-match (replace-label '(('opcode 20 ":some") (3 10))
+                              '((('label ":some") (0 8)))
                               100)
                '(('opcode 20 108 0) (3 10)))
 
   (check-match (replace-label '(('opcode 20 30 80) (3 10))
-                              '((('label "some") (0 8)))
+                              '((('label ":some") (0 8)))
                               100)
                '(('opcode 20 30 80) (3 10))))
 
@@ -164,24 +162,24 @@
 
 (module+ test
   (check-match (replace-labels '(('opcode 1 2)
-                                 ('label "some")
-                                 ('opcode 1 'label-ref-relative "some")
-                                 ('label "other")
-                                 ('opcode 5 'label-ref-absolute "some")
-                                 ('label "end"))
+                                 ('label ":some")
+                                 ('opcode 1 ":some")
+                                 ('label ":other")
+                                 ('opcode 5 ":other")
+                                 ('label ":end"))
                                10)
                '(('opcode 1 2)
-                 ('label "some")
-                 ('opcode 1 -2)
-                 ('label "other")
-                 ('opcode 5 12 0)
-                 ('label "end")))
+                 ('label ":some")
+                 ('opcode 1 12 0)
+                 ('label ":other")
+                 ('opcode 5 15 0)
+                 ('label ":end")))
 
-  (check-match (replace-labels '(((quote label) some)
+  (check-match (replace-labels '(((quote label) ":some")
                                  ((quote opcode) 169 65)
-                                 ((quote opcode) 32 (quote label-ref-absolute) some)
+                                 ((quote opcode) 32 ":some")
                                  ((quote opcode) 0)) 10)
-               '(((quote label) some)
+               '(((quote label) ":some")
                  ('opcode 169 65)
                  ('opcode 32 10 0)
                  ('opcode 0))))
@@ -317,16 +315,18 @@
 
 ;; ================================================================================ JSR
 
-(define (JSR_abs_label ref str)
-  (list ''opcode #x20 ''label-ref-absolute str))
+(define (JSR_abs_label str)
+  (list ''opcode #x20 str))
 
 (define (JSR_abs absolute)
   (list ''opcode #x20 (low-byte absolute) (high-byte absolute)))
 
 (define-syntax (JSR stx)
   (syntax-case stx ()
-    [(JSR op)  #'(JSR_abs (parse-number-string op))]
-    [(JSR ref str) #'(JSR_abs_label ref str)]))
+    [(JSR op)
+     (if (6510-label-string? (syntax->datum #'op))
+         #'(JSR_abs_label op)
+         #'(JSR_abs (parse-number-string op)))]))
 
 (define (RTS)
   (list ''opcode #x60))

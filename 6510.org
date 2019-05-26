@@ -1,0 +1,22 @@
+#+title: 6510 Racket Experiments
+* racket: scheme (lisp) with facilities to create dsls
+* 6510: processor in my beloved c64
+* running example
+  #+begin_src racket :lang racket
+       (LDA "#$41")
+       (JSR 'outchar)
+       (ADC "#1")
+       (JSR 'outchar)
+       (BRK)
+
+    (LABEL 'outchar)
+       (JSR "$FFFF")
+       (RTS)
+  #+end_src
+* different phases during program evaluation
+* syntax macros carrying location etc.
+* composable syntax definition (via megaparsack, based on haskell megaparsec)
+* parse arbitrary syntax via megaparsack into racket ast, then use racket syntax transformations
+* usual workflow
+  - use racket to write your dsl most closely to what you expect it to look like
+  - in a last an final step, transform syntax to that representation

@@ -61,7 +61,7 @@
   (do
       (char/p #\:)
       [new-label <- (many+/p (or/p letter/p digit/p))]
-    (pure (list (string->symbol "LABEL") (list->string new-label)))))
+    (pure (list (string->symbol "LABEL") (string-append ":" (list->string new-label))))))
 
 (define (abs-opcode/p opcode)
   (do
@@ -73,7 +73,7 @@
     (pure (append (list (string->symbol (string-upcase opcode)))
                   (if (number? x)
                       (list (number->string x))
-                      (list ''label-ref-absolute (last x)))))))
+                      (list (last x)))))))
 
 (define (opcode/p opcode)
   (do
@@ -151,13 +151,13 @@
            (require "6510.rkt")
            (provide program raw-program data)
            ; str ...
-           (define program `(,str ...))
            (define raw-program '(str ...))
-           (define data (assembler-program (initialize-cpu) org `(,str ...)))
-           ;; (displayln "program parsed:")
-           ;; (displayln program)
-           ;; (displayln raw-program)
-           ;; (displayln (replace-labels program org))
+           ;(displayln "program parsed:")
+           ;(displayln raw-program)
+           (define program `(,str ...))
+           ;(displayln program)
+           ;(displayln (replace-labels program org))
            (displayln "program execution:")
+           (define data (assembler-program (initialize-cpu) org `(,str ...)))
            (run (set-pc-in-state data org))
            )))))
