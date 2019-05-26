@@ -6,12 +6,15 @@
 ;; todo: define macros to ease implementation of all assembler opcodes
 
 (require racket/fixnum)
-(require rackunit)
+; (require rackunit)
 (require scribble/srcdoc)
 (require threading)
 
 (require (for-syntax "6510-utils.rkt"))
 (require "6510-utils.rkt")
+
+(module+ test
+  (require rackunit))
 
 (provide parse-number-string assembler-program initialize-cpu replace-labels set-pc-in-state run
          ADC BRK LDA JSR RTS
@@ -30,8 +33,9 @@
   (fxvector-set! (cpu-state-memory state) address (byte value))
   state)
 
-(check-match (peek (poke (initialize-cpu) #xc000 17) #xc000)
-             17)
+(module+ test
+  (check-match (peek (poke (initialize-cpu) #xc000 17) #xc000)
+               17))
 
 (define (6510-byte-length command)
   (case (first command)
@@ -42,17 +46,18 @@
     [('label) 0]
     [else (error "uknown command" (first command))]))
 
-(check-match (6510-byte-length '('opcode 1 'label-ref-relative "some"))
-             2)
+(module+ test
+  (check-match (6510-byte-length '('opcode 1 'label-ref-relative "some"))
+               2)
 
-(check-match (6510-byte-length '('opcode 1 'label-ref-absolute "other"))
-             3)
+  (check-match (6510-byte-length '('opcode 1 'label-ref-absolute "other"))
+               3)
 
-(check-match (6510-byte-length '('opcode 1 2 3))
-             3)
+  (check-match (6510-byte-length '('opcode 1 2 3))
+               3)
 
-(check-match (6510-byte-length '('label "test"))
-             0)
+  (check-match (6510-byte-length '('label "test"))
+               0))
 
 (define (lo-sums list current-sum)
   (if (empty? list)
@@ -68,13 +73,14 @@
                                         [else #f])) commands-bytes-list)])
     labels-bytes-list))
 
-(check-match (collect-label-offset-map '((('opcode 1 2) (2 0))
-                                         (('label "some") (0 2))
-                                         (('opcode 1 -2) (2 2))
-                                         (('label "other") (0 4))
-                                         (('opcode 5 'label-ref-absolute "some") (3 4))
-                                         (('label "end") (0 7))))
-             '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7))))
+(module+ test
+  (check-match (collect-label-offset-map '((('opcode 1 2) (2 0))
+                                           (('label "some") (0 2))
+                                           (('opcode 1 -2) (2 2))
+                                           (('label "other") (0 4))
+                                           (('opcode 5 'label-ref-absolute "some") (3 4))
+                                           (('label "end") (0 7))))
+               '((('label "some") (0 2)) (('label "other") (0 4)) (('label "end") (0 7)))))
 
 (define (get-label-offset labels-byte-list label)
   (let ([filtered (filter (lambda (label-byte-pair)
@@ -84,44 +90,48 @@
       (error "label not found in list" label filtered))
     (last (last (last filtered)))))
 
-(check-match (get-label-offset '((('label "some") (0 2))
-                                 (('label "other") (0 4))
-                                 (('label "end") (0 7)))
-                               "some")
-             2)
+(module+ test
+  (check-match (get-label-offset '((('label "some") (0 2))
+                                   (('label "other") (0 4))
+                                   (('label "end") (0 7)))
+                                 "some")
+               2)
 
-(check-match (get-label-offset '((('label "some") (0 2))
-                                 (('label "other") (0 4))
-                                 (('label "end") (0 7)))
-                               "other")
-             4)
+  (check-match (get-label-offset '((('label "some") (0 2))
+                                   (('label "other") (0 4))
+                                   (('label "end") (0 7)))
+                                 "other")
+               4)
 
-(check-exn
- exn:fail?
- (lambda () (get-label-offset '((('label "some") (0 2))
-                           (('label "other") (0 4))
-                           (('label "end") (0 7)))
-                         "unknown")))
+  (check-exn
+   exn:fail?
+   (lambda () (get-label-offset '((('label "some") (0 2))
+                             (('label "other") (0 4))
+                             (('label "end") (0 7)))
+                           "unknown"))))
 
 (define (commands-bytes-list commands)
   (let* ([byte-lengths (map 6510-byte-length commands)]
          [byte-lengths/w-offset (lo-sums byte-lengths 0)])
     (map list commands byte-lengths/w-offset)))
 
-(check-match (commands-bytes-list '(('opcode 10 10 10)
-                                    ('label "some")
-                                    ('opcode 0)
-                                    ('opcode 10 10)))
-             '((('opcode 10 10 10) (3 0))
-               (('label "some") (0 3))
-               (('opcode 0) (1 3))
-               (('opcode 10 10) (2 4))))
+(module+ test
+
+  (check-match (commands-bytes-list '(('opcode 10 10 10)
+                                      ('label "some")
+                                      ('opcode 0)
+                                      ('opcode 10 10)))
+               '((('opcode 10 10 10) (3 0))
+                 (('label "some") (0 3))
+                 (('opcode 0) (1 3))
+                 (('opcode 10 10) (2 4)))))
 
 (define (replace-label command-byte-pair labels-bytes-list address)
   (let* ([command (first command-byte-pair)]
          [current-offset (last (last command-byte-pair))]
          [command-length (first (last command-byte-pair))])
-    (if (< 1 (length command))
+    (if (>= 1 (length command))
+        command-byte-pair
         (case (last (drop-right command 1))
           [('label-ref-relative)
            (let* ([label-offset (get-label-offset labels-bytes-list (last command))])
@@ -134,18 +144,18 @@
                            (list (low-byte label-offset) (high-byte label-offset)))
                    (last command-byte-pair)))
            ]
-          [else command-byte-pair])
-        command-byte-pair)))
+          [else command-byte-pair]))))
 
-(check-match (replace-label '(('opcode 20 'label-ref-absolute "some") (3 10))
-                            '((('label "some") (0 8)))
-                            100)
-             '(('opcode 20 108 0) (3 10)))
+(module+ test
+  (check-match (replace-label '(('opcode 20 'label-ref-absolute "some") (3 10))
+                              '((('label "some") (0 8)))
+                              100)
+               '(('opcode 20 108 0) (3 10)))
 
-(check-match (replace-label '(('opcode 20 30 80) (3 10))
-                            '((('label "some") (0 8)))
-                            100)
-             '(('opcode 20 30 80) (3 10)))
+  (check-match (replace-label '(('opcode 20 30 80) (3 10))
+                              '((('label "some") (0 8)))
+                              100)
+               '(('opcode 20 30 80) (3 10))))
 
 (define (replace-labels commands address)
   (let* ([commands-bytes-list (commands-bytes-list commands)]
@@ -154,28 +164,29 @@
          (map (lambda (command-byte-pair) (replace-label command-byte-pair labels-bytes-list address))
               commands-bytes-list))))
 
-(check-match (replace-labels '(('opcode 1 2)
-                               ('label "some")
-                               ('opcode 1 'label-ref-relative "some")
-                               ('label "other")
-                               ('opcode 5 'label-ref-absolute "some")
-                               ('label "end"))
-                             10)
-             '(('opcode 1 2)
-               ('label "some")
-               ('opcode 1 -2)
-               ('label "other")
-               ('opcode 5 12 0)
-               ('label "end")))
+(module+ test
+  (check-match (replace-labels '(('opcode 1 2)
+                                 ('label "some")
+                                 ('opcode 1 'label-ref-relative "some")
+                                 ('label "other")
+                                 ('opcode 5 'label-ref-absolute "some")
+                                 ('label "end"))
+                               10)
+               '(('opcode 1 2)
+                 ('label "some")
+                 ('opcode 1 -2)
+                 ('label "other")
+                 ('opcode 5 12 0)
+                 ('label "end")))
 
-(check-match (replace-labels '(((quote label) some)
-                               ((quote opcode) 169 65)
-                               ((quote opcode) 32 (quote label-ref-absolute) some)
-                               ((quote opcode) 0)) 10)
-             '(((quote label) some)
-               ('opcode 169 65)
-               ('opcode 32 10 0)
-               ('opcode 0)))
+  (check-match (replace-labels '(((quote label) some)
+                                 ((quote opcode) 169 65)
+                                 ((quote opcode) 32 (quote label-ref-absolute) some)
+                                 ((quote opcode) 0)) 10)
+               '(((quote label) some)
+                 ('opcode 169 65)
+                 ('opcode 32 10 0)
+                 ('opcode 0))))
 
 (define (resolve-statements commands)
   (let* [(label-offsets (collect-label-offset-map commands))]
@@ -192,12 +203,13 @@
                        [else command]))
                    commands)))
 
-(check-match (remove-resolved-statements '((1 2 3)
-                                           ('opcode 2 3 4)
-                                           (0)))
-             '((1 2 3)
-               (2 3 4)
-               (0)))
+(module+ test
+  (check-match (remove-resolved-statements '((1 2 3)
+                                             ('opcode 2 3 4)
+                                             (0)))
+               '((1 2 3)
+                 (2 3 4)
+                 (0))))
 
 (define (assembler-program state memory-address commands)
   (load state memory-address (flatten (~>  (replace-labels commands memory-address)
@@ -325,8 +337,9 @@
 
 (define (BRK) (list ''opcode #x00))
 
-(check-match (BRK)
-             '('opcode #x00))
+(module+ test
+  (check-match (BRK)
+               '('opcode #x00)))
 
 (define (LABEL_s label) (list ''label label))
 
@@ -387,29 +400,30 @@
              [(y) #'(LDA_absy (parse-number-string op))]
              [else (error "lda absolute index mode unknown" indirect)])))]))
 
-(check-match (LDA "#$10")
-             '('opcode #xA9 16))
+(module+ test
+  (check-match (LDA "#$10")
+               '('opcode #xA9 16))
 
-(check-match (LDA "$17")
-             '('opcode #xa5 #x17))
+  (check-match (LDA "$17")
+               '('opcode #xa5 #x17))
 
-(check-match (LDA "$178F")
-             '('opcode #xad #x8F #x17))
+  (check-match (LDA "$178F")
+               '('opcode #xad #x8F #x17))
 
-(check-match (LDA "$10",x)
-             '('opcode #xB5 16))
+  (check-match (LDA "$10",x)
+               '('opcode #xB5 16))
 
-(check-match (LDA "$A000",x)
-             '('opcode #xBD #x00 #xA0))
+  (check-match (LDA "$A000",x)
+               '('opcode #xBD #x00 #xA0))
 
-(check-match (LDA "$A000",y)
-             '('opcode #xB9 #x00 #xA0))
+  (check-match (LDA "$A000",y)
+               '('opcode #xB9 #x00 #xA0))
 
-(check-match (LDA < "$A000" >,y )
-             '('opcode #xB1 #x00 #xA0))
+  (check-match (LDA < "$A000" >,y )
+               '('opcode #xB1 #x00 #xA0))
 
-(check-match (LDA < "$A000", x > )
-             '('opcode #xA1 #x00 #xA0))
+  (check-match (LDA < "$A000", x > )
+               '('opcode #xA1 #x00 #xA0)))
 
 ;; ================================================================================ ADC
 
@@ -463,44 +477,46 @@
              [(y) #'(ADC_absy (parse-number-string op))]
              [else (error "adc absolute index mode unknown" indirect)])))]))
 
-(check-match (ADC "%10",x)
-             '('opcode #x75 2))
+(module+ test
+  (check-match (ADC "%10",x)
+               '('opcode #x75 2))
 
-(check-match (ADC "$1237",y)
-             '('opcode #x79 #x37 #x12))
+  (check-match (ADC "$1237",y)
+               '('opcode #x79 #x37 #x12))
 
-(check-match (ADC "#100")
-             '('opcode #x69 100))
+  (check-match (ADC "#100")
+               '('opcode #x69 100))
 
-(check-match (ADC "#$FF")
-             '('opcode #x69 #xFF))
+  (check-match (ADC "#$FF")
+               '('opcode #x69 #xFF))
 
-(check-match (ADC "$FF")
-             '('opcode #x65 #xFF))
+  (check-match (ADC "$FF")
+               '('opcode #x65 #xFF))
 
-(check-match (ADC "$FFFF")
-             '('opcode #x6d #xff #xff))
+  (check-match (ADC "$FFFF")
+               '('opcode #x6d #xff #xff))
 
-(check-match (ADC < "$FFFF" > ,y)
-             '('opcode #x71 #xff #xff))
+  (check-match (ADC < "$FFFF" > ,y)
+               '('opcode #x71 #xff #xff))
 
-(check-match (ADC < "$FFFF" ,x >)
-             '('opcode #x61 #xff #xff))
+  (check-match (ADC < "$FFFF" ,x >)
+               '('opcode #x61 #xff #xff)))
 
-(check-eq? (peek (assembler-program (initialize-cpu) 10 (list (ADC_i #x10) (ADC_i #x11))) 11)
-           16
-           "immediate operand 1 is $10 = 16")
+(module+ test
+  (check-eq? (peek (assembler-program (initialize-cpu) 10 (list (ADC_i #x10) (ADC_i #x11))) 11)
+             16
+             "immediate operand 1 is $10 = 16")
 
-(check-true (carry-flag? (set-carry-flag (initialize-cpu))) "after setting, carry is set")
+  (check-true (carry-flag? (set-carry-flag (initialize-cpu))) "after setting, carry is set")
 
-(check-false (carry-flag? (initialize-cpu)) "carry initially clear")
+  (check-false (carry-flag? (initialize-cpu)) "carry initially clear")
 
-(check-eq? (cpu-state-accumulator (execute-cpu-step (execute-cpu-step (assembler-program (initialize-cpu) 0 (list (LDA_i #x80) (ADC_i #x81))))))
-           1
-           "accumulator should be 1 after adding 128 and 129 (overflow)")
+  (check-eq? (cpu-state-accumulator (execute-cpu-step (execute-cpu-step (assembler-program (initialize-cpu) 0 (list (LDA_i #x80) (ADC_i #x81))))))
+             1
+             "accumulator should be 1 after adding 128 and 129 (overflow)")
 
-(check-true (carry-flag? (execute-cpu-step (execute-cpu-step (assembler-program (initialize-cpu) 0 (list (LDA_i #x80) (ADC_i #x81))))))
-            "carry should be set after adding 128 and 129")
+  (check-true (carry-flag? (execute-cpu-step (execute-cpu-step (assembler-program (initialize-cpu) 0 (list (LDA_i #x80) (ADC_i #x81))))))
+              "carry should be set after adding 128 and 129"))
 
 
 ; (run (assembler-program (initialize-cpu) 0 (list (LDA_i #x41) (JSR_abs #xFFFF) (BRK))))
