@@ -6,8 +6,6 @@
 ;; todo: define macros to ease implementation of all assembler opcodes
 
 (require racket/fixnum)
-; (require rackunit)
-(require scribble/srcdoc)
 (require threading)
 
 (require (for-syntax "6510-utils.rkt"))
