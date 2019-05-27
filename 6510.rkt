@@ -14,7 +14,7 @@
 (module+ test
   (require rackunit))
 
-(provide parse-number-string assembler-program initialize-cpu replace-labels set-pc-in-state run
+(provide parse-number-string assembler-program initialize-cpu replace-labels set-pc-in-state run commands->bytes create-prg run-emulator
          ADC BRK LDA JSR RTS
          LABEL)
 
@@ -207,10 +207,12 @@
                  (2 3 4)
                  (0))))
 
-(define (assembler-program state memory-address commands)
-  (load state memory-address (flatten (~>  (replace-labels commands memory-address)
-                                          remove-resolved-statements))))
+(define (commands->bytes memory-address commands )
+  (flatten (~>  (replace-labels commands memory-address)
+                                          remove-resolved-statements)))
 
+(define (assembler-program state memory-address commands)
+  (load state memory-address (commands->bytes memory-address commands)))
 
 (define (JMP_abs absolute)
   (list ''opcode #x4C (high-byte absolute) (low-byte absolute)))
@@ -251,7 +253,7 @@
 
 (define (interpret-jsr-abs high low state)
   (case (absolute high low)
-    [(#xFFFF) (display (string (integer->char (cpu-state-accumulator state))))
+    [(#xFFD2) (display (string (integer->char (cpu-state-accumulator state))))
               (struct-copy cpu-state state [program-counter (word (+ 3 (cpu-state-program-counter state)))])]
     [else (let* ([new-program-counter (absolute high low)]
                  [return-address (+ 2 (cpu-state-program-counter state))]
@@ -518,3 +520,12 @@
 
 
 ; (run (assembler-program (initialize-cpu) 0 (list (LDA_i #x41) (JSR_abs #xFFFF) (BRK))))
+
+(define (create-prg program org file-name)
+  (display-to-file (list->bytes (append `(,(low-byte org) ,(high-byte org)) program))
+                   file-name
+                   #:mode 'binary
+                   #:exists 'replace))
+
+(define (run-emulator file-name)
+  (system (string-append "x64 " file-name)))

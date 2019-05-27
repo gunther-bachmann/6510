@@ -98,8 +98,9 @@
 (define (iia-opcode-absolute opcode)
   (do
       [x <- 6510-integer/p]
-      [appendix <- (or/p (string-ci/p ",x")
-                        (string-ci/p ",y")
+      [appendix <- (or/p (do (char/p #\,)
+                            (or/p  (string-ci/p "x")
+                                   (string-ci/p "y")))
                         void/p)]
     (let ([base-result-lst `(,(string->symbol (string-upcase opcode)) ,(number->string x))])
       (if (void? appendix)
@@ -147,7 +148,7 @@
     (with-syntax ([(str ...) parsed-opcodes]
                   [org origin])
       (strip-context
-       #'(module anything racket
+       #'(module compiled6510 racket
            (require "6510.rkt")
            (provide program raw-program data)
            ; str ...
@@ -160,4 +161,6 @@
            (displayln "program execution:")
            (define data (assembler-program (initialize-cpu) org `(,str ...)))
            (run (set-pc-in-state data org))
+           ; (create-prg (commands->bytes org program) org "test.prg")
+           ; (run-emulator "test.prg")
            )))))
