@@ -4,6 +4,7 @@
 (require data/monad)
 (require data/applicative)
 (require "6510.rkt")
+(require "6510-interpreter.rkt")
 
 ; usage:
 ; - create file with content
@@ -150,6 +151,7 @@
       (strip-context
        #'(module compiled6510 racket
            (require "6510.rkt")
+           (require "6510-interpreter.rkt")
            (provide program raw-program data)
            ; str ...
            (define raw-program '(str ...))
@@ -158,8 +160,8 @@
            (define program `(,str ...))
            ;(displayln program)
            ;(displayln (replace-labels program org))
+           (define data (6510-load (initialize-cpu) org (commands->bytes org`(,str ...))))
            (displayln "program execution:")
-           (define data (assembler-program (initialize-cpu) org `(,str ...)))
            (run (set-pc-in-state data org))
            ; (create-prg (commands->bytes org program) org "test.prg")
            ; (run-emulator "test.prg")

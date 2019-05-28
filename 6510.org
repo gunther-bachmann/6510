@@ -4,12 +4,12 @@
 * running example
   #+begin_src racket :lang racket
        (LDA "#$41")
-       (JSR 'outchar)
+       (JSR ":outchar")
        (ADC "#1")
-       (JSR 'outchar)
-       (BRK)
+       (JSR ":outchar")
+       (RTS)
 
-    (LABEL 'outchar)
+    (LABEL ":outchar")
        (JSR "$FFFF")
        (RTS)
   #+end_src
