@@ -259,6 +259,68 @@
 (define (LDA_indy absolute)
   (list ''opcode #xb1 (low-byte absolute) (high-byte absolute)))
 
+(define-for-syntax (symbol-append symbol appendix)
+  (with-syntax ([new-symbol (string->symbol (string-append (symbol->string (syntax->datum symbol)) (symbol->string appendix)))])
+       #'new-symbol))
+
+(define-syntax-rule (iia_opcode opcode)
+  (define-syntax (opcode stx)
+    (syntax-case stx ()
+      [(opcode op)
+       (with-syntax ([symbol-i (symbol-append #'opcode '_i)]
+                     [symbol-zp (symbol-append #'opcode '_zp)]
+                     [symbol-abs (symbol-append #'opcode '_abs)])
+         (if (equal? (substring (syntax-e #'op) 0 1) "#")
+             #'(symbol-i (parse-number-string (substring op 1)))
+             (let ([op-number (parse-number-string (syntax->datum #'op))])
+               (if (> 256 op-number)
+                   #'(symbol-zp (parse-number-string op))
+                   #'(sumbol-abs (parse-number-string op))))))]
+      [(opcode open op close-or-var close-or-var2)
+       (with-syntax ([symbol-indx (symbol-append #'opcode '_indx)]
+                     [symbol-indy (symbol-append #'opcode '_indy)])
+         (let ([close (syntax-e #'close-or-var)])
+           (case close
+             [(>) #'(symbol-indy (parse-number-string op))]
+             [else #'(symbol-indx (parse-number-string op))])))]
+      [(opcode op, idx)
+       (with-syntax ([symbol-zpx (symbol-append #'opcode '_zpx)]
+                     [symbol-absx (symbol-append #'opcode '_absx)]
+                     [symbol-absy (symbol-append #'opcode '_absy)])
+         (let* ([indirect (syntax-e #'idx)]
+                [op-number (parse-number-string (syntax->datum #'op))])
+           (if (> 256 op-number)
+               (case indirect
+                 [(x) #'(symbol-zpx (parse-number-string op))]
+                 [else (error "? zero page index mode unknown" indirect)])
+               (case indirect
+                 [(x) #'(symbol-absx (parse-number-string op))]
+                 [(y) #'(symbol-absy (parse-number-string op))]
+                 [else (error "? absolute index mode unknown" indirect)]))))])))
+
+; (string->symbol (string-append (symbol->string (syntax->datum #'opcode)) "_i"))
+
+(define (STA_i value)
+  (list ''opcode #x00 value))
+(define (STA_zp value)
+  (list ''opcode #x01 value))
+(define (STA_abs value)
+  (list ''opcode #x02 value))
+(define (STA_indx value)
+  (list ''opcode #x03 value))
+(define (STA_indy value)
+  (list ''opcode #x04 value))
+(define (STA_absx value)
+  (list ''opcode #x05 value))
+(define (STA_absy value)
+  (list ''opcode #x06 value))
+(define (STA_zpx value)
+  (list ''opcode #x07 value))
+
+(iia_opcode STA)
+
+(STA "$17")
+
 (define-syntax (LDA stx)
   (syntax-case stx ()
     [(LDA op)
