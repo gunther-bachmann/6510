@@ -1,10 +1,11 @@
 #lang racket
 
+;; todo: rework iia_opcode into modularized macros
+;; todo: rewrite lda and adc given the modularized macros
 ;; todo: add .data command for byte arrays
 ;; todo: add branch commands
 ;; todo: add inc*/dec* commands
 ;; todo: add method descriptions (scrbl)
-;; todo: define macros to ease implementation of all assembler opcodes (addressing modes)
 ;; planned: realize with typed racket
 
 (require threading)
@@ -194,7 +195,7 @@
 
 (define (commands->bytes memory-address commands )
   (flatten (~>  (replace-labels commands memory-address)
-                                          remove-resolved-statements)))
+               remove-resolved-statements)))
 
 (define (JMP_abs absolute)
   (list ''opcode #x4C (high-byte absolute) (low-byte absolute)))
@@ -233,49 +234,47 @@
     [(LABEL op)
      #'(LABEL_s op)]))
 
-;; ================================================================================ LDA
-
-(define (LDA_abs absolute)
-  (list ''opcode #xad (low-byte absolute) (high-byte absolute)))
-
-(define (LDA_zp zero-page-address)
-  (list ''opcode #xA5 (byte zero-page-address)))
-
-(define (LDA_i immediate)
-  (list ''opcode #xA9 (byte immediate)))
-
-(define (LDA_zpx zero-page-address)
-  (list ''opcode #xB5 (byte zero-page-address)))
-
-(define (LDA_absx absolute)
-  (list ''opcode #xBD (low-byte absolute) (high-byte absolute)))
-
-(define (LDA_absy absolute)
-  (list ''opcode #xB9 (low-byte absolute) (high-byte absolute)))
-
-(define (LDA_indx absolute)
-  (list ''opcode #xa1 (low-byte absolute) (high-byte absolute)))
-
-(define (LDA_indy absolute)
-  (list ''opcode #xb1 (low-byte absolute) (high-byte absolute)))
+;; ================================================================================ STA
 
 (define-for-syntax (symbol-append symbol appendix)
   (with-syntax ([new-symbol (string->symbol (string-append (symbol->string (syntax->datum symbol)) (symbol->string appendix)))])
-       #'new-symbol))
+    #'new-symbol))
+
+(define-for-syntax (immediate-mode opcode operand)
+  (with-syntax ([operand-value (syntax->datum operand)]
+                [symbol-i (symbol-append opcode '_i)])
+    (when (is-immediate-number? (syntax->datum #'operand-value))
+      #'(symbol-i (parse-number-string (substring operand-value 1))))))
+
+(define-for-syntax (zero-page-mode opcode operand)
+  (with-syntax ([operand-value (syntax->datum operand)])
+    (when (is-number? (syntax->datum #'operand-value))
+      (with-syntax ([op-number (parse-number-string (syntax->datum operand))]
+                    [symbol-zp (symbol-append opcode '_zp)])
+        (when (> 256 (syntax->datum #'op-number))
+          #'(symbol-zp (parse-number-string operand-value)))))))
+
+(define-for-syntax (absolute-mode opcode operand)
+  (with-syntax ([operand-value (syntax->datum operand)])
+    (when (is-number? (syntax->datum #'operand-value))
+      (with-syntax ([op-number (parse-number-string (syntax->datum operand))]
+                    [symbol-abs (symbol-append opcode '_abs)])
+        (when (<= 256 (syntax->datum #'op-number))
+          #'(symbol-abs (low-byte op-number) (high-byte op-number)))))))
+
+(define-for-syntax (discard-void-syntax-object a b)
+  (if (void? (syntax->datum a))
+      b
+      a))
 
 (define-syntax-rule (iia_opcode opcode)
   (define-syntax (opcode stx)
     (syntax-case stx ()
       [(opcode op)
-       (with-syntax ([symbol-i (symbol-append #'opcode '_i)]
-                     [symbol-zp (symbol-append #'opcode '_zp)]
-                     [symbol-abs (symbol-append #'opcode '_abs)])
-         (if (equal? (substring (syntax-e #'op) 0 1) "#")
-             #'(symbol-i (parse-number-string (substring op 1)))
-             (let ([op-number (parse-number-string (syntax->datum #'op))])
-               (if (> 256 op-number)
-                   #'(symbol-zp (parse-number-string op))
-                   #'(sumbol-abs (parse-number-string op))))))]
+       (with-syntax ([ires (immediate-mode #'opcode #'op)]
+                     [zpres (zero-page-mode #'opcode #'op)]
+                     [absres (absolute-mode #'opcode #'op)])
+         (foldl discard-void-syntax-object #'()  (list #'ires #'zpres #'absres)))]
       [(opcode open op close-or-var close-or-var2)
        (with-syntax ([symbol-indx (symbol-append #'opcode '_indx)]
                      [symbol-indy (symbol-append #'opcode '_indy)])
@@ -304,8 +303,8 @@
   (list ''opcode #x00 value))
 (define (STA_zp value)
   (list ''opcode #x01 value))
-(define (STA_abs value)
-  (list ''opcode #x02 value))
+(define (STA_abs low-byte high-byte)
+  (list ''opcode #x02 low-byte high-byte))
 (define (STA_indx value)
   (list ''opcode #x03 value))
 (define (STA_indy value)
@@ -317,9 +316,43 @@
 (define (STA_zpx value)
   (list ''opcode #x07 value))
 
-(iia_opcode STA)
+(iia_opcode STA) ;; generate syntax for STA opcode
 
-(STA "$17")
+(module+ test
+  (check-match (STA "#$17")
+               '('opcode 0 23))
+
+  (check-match (STA "$17")
+               '('opcode 1 23))
+
+  (check-match (STA "$1728")
+               '('opcode 2 #x28 #x17)))
+
+;; ================================================================================ LDA
+
+(define (LDA_abs absolute)
+  (list ''opcode #xad (low-byte absolute) (high-byte absolute)))
+
+(define (LDA_zp zero-page-address)
+  (list ''opcode #xA5 (byte zero-page-address)))
+
+(define (LDA_i immediate)
+  (list ''opcode #xA9 (byte immediate)))
+
+(define (LDA_zpx zero-page-address)
+  (list ''opcode #xB5 (byte zero-page-address)))
+
+(define (LDA_absx absolute)
+  (list ''opcode #xBD (low-byte absolute) (high-byte absolute)))
+
+(define (LDA_absy absolute)
+  (list ''opcode #xB9 (low-byte absolute) (high-byte absolute)))
+
+(define (LDA_indx absolute)
+  (list ''opcode #xa1 (low-byte absolute) (high-byte absolute)))
+
+(define (LDA_indy absolute)
+  (list ''opcode #xb1 (low-byte absolute) (high-byte absolute)))
 
 (define-syntax (LDA stx)
   (syntax-case stx ()

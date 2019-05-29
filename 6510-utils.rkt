@@ -5,7 +5,7 @@
 (module+ test
   (require rackunit))
 
-(provide parse-number-string low-byte high-byte absolute word byte 6510-label-string?)
+(provide parse-number-string low-byte high-byte absolute word byte 6510-label-string? is-immediate-number? is-number?)
 
 (define (number-has-prefix? number-string)
   (string-contains? "%$" (substring number-string 0 1)))
@@ -61,3 +61,10 @@
 
 (define (byte value)
   (bitwise-and #xff value))
+
+(define (is-number? string)
+  (regexp-match? #rx"^([0-9]+|\\$[0-9a-fA-F]+|\\%[0-1]+)$" string))
+
+(define (is-immediate-number? string)
+  (and (equal? (substring string 0 1) "#")
+       (is-number? (substring string 1))))

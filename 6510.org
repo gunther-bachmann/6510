@@ -13,9 +13,11 @@
        (JSR "$FFFF")
        (RTS)
   #+end_src
-* different phases during program evaluation
+* TODO different phases during program evaluation (elaborate)
 * syntax macros carrying location etc.
+  - show examples of syntax objects
 * composable syntax definition (via megaparsack, based on haskell megaparsec)
+  - get information on composable parsers
 * parse arbitrary syntax via megaparsack into racket ast, then use racket syntax transformations
 * usual workflow
   - use racket to write your dsl most closely to what you expect it to look like
