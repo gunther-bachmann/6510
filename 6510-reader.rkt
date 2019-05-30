@@ -124,6 +124,7 @@
   (do (or/p (iia-opcode/p "adc")
             (opcode/p "brk")
             (iia-opcode/p "lda")
+            (iia-opcode/p "sta")
             (abs-opcode/p "jsr")
             (opcode/p "rts")
             6510-label/p)))

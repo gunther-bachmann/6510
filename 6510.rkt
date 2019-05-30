@@ -1,7 +1,6 @@
 #lang racket
 
-;; todo: rework iia_opcode into modularized macros
-;; todo: rewrite lda and adc given the modularized macros
+;; todo: remove immediate mode from STA
 ;; todo: add .data command for byte arrays
 ;; todo: add branch commands
 ;; todo: add inc*/dec* commands
@@ -18,7 +17,7 @@
   (require rackunit))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator
-         ADC BRK LDA JSR RTS
+         ADC BRK LDA JSR RTS STA
          LABEL)
 
 
@@ -260,7 +259,47 @@
       (with-syntax ([op-number (parse-number-string (syntax->datum operand))]
                     [symbol-abs (symbol-append opcode '_abs)])
         (when (<= 256 (syntax->datum #'op-number))
-          #'(symbol-abs (low-byte op-number) (high-byte op-number)))))))
+          #'(symbol-abs op-number))))))
+
+(define-for-syntax (indirect-x-mode opcode open operand close-or-x close-or-y)
+  (with-syntax ([symbol-indx (symbol-append opcode '_indx)]
+                [op-number (parse-number-string (syntax->datum operand))]
+                [x-idx (syntax->datum close-or-x)])
+    (when (or (equal? (syntax->datum #'x-idx) '(unquote x))
+              (equal? (syntax->datum #'x-idx) 'x))
+      #'(symbol-indx op-number))))
+
+(define-for-syntax (indirect-y-mode opcode open operand close-or-x close-or-y)
+  (with-syntax ([symbol-indy (symbol-append opcode '_indy)]
+                [op-number (parse-number-string (syntax->datum operand))]
+                [y-idx (syntax->datum close-or-y)])
+    (when (or (equal? (syntax->datum #'y-idx) '(unquote y))
+              (equal? (syntax->datum #'y-idx) 'y))
+      #'(symbol-indy op-number))))
+
+(define-for-syntax (absolute-x-mode opcode operand idx)
+  (with-syntax ([symbol-absx (symbol-append opcode '_absx)]
+                [op-number (parse-number-string (syntax->datum operand))]
+                [x-idx (syntax->datum idx)])
+    (when (and (< 255 (syntax->datum #'op-number))
+               (equal? (syntax->datum #'x-idx) 'x))
+      #'(symbol-absx op-number))))
+
+(define-for-syntax (absolute-y-mode opcode operand idx)
+  (with-syntax ([symbol-absy (symbol-append opcode '_absy)]
+                [op-number (parse-number-string (syntax->datum operand))]
+                [y-idx (syntax->datum idx)])
+    (when (and (< 255 (syntax->datum #'op-number))
+               (equal? (syntax->datum #'y-idx) 'y))
+      #'(symbol-absy op-number))))
+
+(define-for-syntax (zeropage-x-mode opcode operand idx)
+  (with-syntax ([symbol-zpx (symbol-append opcode '_zpx)]
+                [op-number (parse-number-string (syntax->datum operand))]
+                [x-idx (syntax->datum idx)])
+    (when (and (> 256 (syntax->datum #'op-number))
+               (equal? (syntax->datum #'x-idx) 'x))
+      #'(symbol-zpx op-number))))
 
 (define-for-syntax (discard-void-syntax-object a b)
   (if (void? (syntax->datum a))
@@ -274,45 +313,39 @@
        (with-syntax ([ires (immediate-mode #'opcode #'op)]
                      [zpres (zero-page-mode #'opcode #'op)]
                      [absres (absolute-mode #'opcode #'op)])
-         (foldl discard-void-syntax-object #'()  (list #'ires #'zpres #'absres)))]
-      [(opcode open op close-or-var close-or-var2)
-       (with-syntax ([symbol-indx (symbol-append #'opcode '_indx)]
-                     [symbol-indy (symbol-append #'opcode '_indy)])
-         (let ([close (syntax-e #'close-or-var)])
-           (case close
-             [(>) #'(symbol-indy (parse-number-string op))]
-             [else #'(symbol-indx (parse-number-string op))])))]
+         (let ([res (foldl discard-void-syntax-object #'()  (list #'ires #'zpres #'absres))])
+           (if (equal? '() (syntax->datum res))
+               (error (string-append  "invalid syntax.\nexpected:\n  (" (symbol->string (syntax->datum #'opcode)) " \"#$10\") # immediate addressing mode\n  (" (symbol->string (syntax->datum #'opcode))  " \"$10\") # zeropage addressing mode\n  (" (symbol->string (syntax->datum #'opcode)) " \"$1000\") # absolute addressing.\ngot: ") (syntax->datum stx))
+               res)))]
+      [(opcode open op close-or-x close-or-y)
+       (with-syntax ([indxres (indirect-x-mode #'opcode #'open #'op #'close-or-x #'close-or-y)]
+                     [indyres (indirect-y-mode #'opcode #'open #'op #'close-or-x #'close-or-y)])
+         (foldl discard-void-syntax-object #'()  (list #'indxres #'indyres)))]
       [(opcode op, idx)
-       (with-syntax ([symbol-zpx (symbol-append #'opcode '_zpx)]
-                     [symbol-absx (symbol-append #'opcode '_absx)]
-                     [symbol-absy (symbol-append #'opcode '_absy)])
-         (let* ([indirect (syntax-e #'idx)]
-                [op-number (parse-number-string (syntax->datum #'op))])
-           (if (> 256 op-number)
-               (case indirect
-                 [(x) #'(symbol-zpx (parse-number-string op))]
-                 [else (error "? zero page index mode unknown" indirect)])
-               (case indirect
-                 [(x) #'(symbol-absx (parse-number-string op))]
-                 [(y) #'(symbol-absy (parse-number-string op))]
-                 [else (error "? absolute index mode unknown" indirect)]))))])))
-
-; (string->symbol (string-append (symbol->string (syntax->datum #'opcode)) "_i"))
+       (with-syntax ([absxres (absolute-x-mode #'opcode #'op #'idx)]
+                     [absyres (absolute-y-mode #'opcode #'op #'idx)]
+                     [zpxres (zeropage-x-mode #'opcode #'op #'idx)])
+         (foldl discard-void-syntax-object #'()  (list #'absyres #'zpxres #'absxres)))]
+      [(opcode op idx)
+       (with-syntax ([absxres (absolute-x-mode #'opcode #'op #'idx)]
+                     [absyres (absolute-y-mode #'opcode #'op #'idx)]
+                     [zpxres (zeropage-x-mode #'opcode #'op #'idx)])
+         (foldl discard-void-syntax-object #'()  (list #'absyres #'zpxres #'absxres)))])))
 
 (define (STA_i value)
   (list ''opcode #x00 value))
 (define (STA_zp value)
   (list ''opcode #x01 value))
-(define (STA_abs low-byte high-byte)
-  (list ''opcode #x02 low-byte high-byte))
+(define (STA_abs value)
+  (list ''opcode #x02 (low-byte value) (high-byte value)))
 (define (STA_indx value)
-  (list ''opcode #x03 value))
+  (list ''opcode #x03 (low-byte value) (high-byte value)))
 (define (STA_indy value)
-  (list ''opcode #x04 value))
+  (list ''opcode #x04 (low-byte value) (high-byte value)))
 (define (STA_absx value)
-  (list ''opcode #x05 value))
+  (list ''opcode #x05 (low-byte value) (high-byte value)))
 (define (STA_absy value)
-  (list ''opcode #x06 value))
+  (list ''opcode #x06 (low-byte value) (high-byte value)))
 (define (STA_zpx value)
   (list ''opcode #x07 value))
 
@@ -326,7 +359,43 @@
                '('opcode 1 23))
 
   (check-match (STA "$1728")
-               '('opcode 2 #x28 #x17)))
+               '('opcode 2 #x28 #x17))
+
+  (check-match (STA < "$1728" ,x >)
+               '('opcode 3 #x28 #x17))
+
+  (check-match (STA < "$1728" > y)
+               '('opcode 4 #x28 #x17))
+
+  (check-match (STA < "$1728" > ,y)
+               '('opcode 4 #x28 #x17))
+
+  (check-match (STA "$1728" ,x)
+               '('opcode 5 #x28 #x17))
+
+  (check-match (STA "$1728" ,y)
+               '('opcode 6 #x28 #x17))
+
+  (check-match (STA "$28" ,x)
+               '('opcode 7 #x28))
+
+  (check-match (STA "$1728" 'x)
+               '('opcode 5 #x28 #x17))
+
+  (check-match (STA "$1728" 'y)
+               '('opcode 6 #x28 #x17))
+
+  (check-match (STA "$28" 'x)
+               '('opcode 7 #x28))
+
+  (check-match (STA "$1728" x)
+               '('opcode 5 #x28 #x17))
+
+  (check-match (STA "$1728" y)
+               '('opcode 6 #x28 #x17))
+
+  (check-match (STA "$28" x)
+               '('opcode 7 #x28)))
 
 ;; ================================================================================ LDA
 
@@ -354,31 +423,7 @@
 (define (LDA_indy absolute)
   (list ''opcode #xb1 (low-byte absolute) (high-byte absolute)))
 
-(define-syntax (LDA stx)
-  (syntax-case stx ()
-    [(LDA op)
-     (if (equal? (substring (syntax-e #'op) 0 1) "#")
-         #'(LDA_i (parse-number-string (substring op 1)))
-         (let ([op-number (parse-number-string (syntax->datum #'op))])
-           (if (> 256 op-number)
-               #'(LDA_zp (parse-number-string op))
-               #'(LDA_abs (parse-number-string op)))))]
-    [(LDA open op close-or-var close-or-var2)
-     (let ([close (syntax-e #'close-or-var)])
-       (case close
-         [(>) #'(LDA_indy (parse-number-string op))]
-         [else #'(LDA_indx (parse-number-string op))]))]
-    [(LDA op, idx)
-     (let* ([indirect (syntax-e #'idx)]
-            [op-number (parse-number-string (syntax->datum #'op))])
-       (if (> 256 op-number)
-           (case indirect
-             [(x) #'(LDA_zpx (parse-number-string op))]
-             [else (error "lda zero page index mode unknown" indirect)])
-           (case indirect
-             [(x) #'(LDA_absx (parse-number-string op))]
-             [(y) #'(LDA_absy (parse-number-string op))]
-             [else (error "lda absolute index mode unknown" indirect)])))]))
+(iia_opcode LDA)
 
 (module+ test
   (check-match (LDA "#$10")
@@ -431,31 +476,7 @@
 (define (ADC_indy absolute)
   (list ''opcode #x71 (low-byte absolute) (high-byte absolute)))
 
-(define-syntax (ADC stx)
-  (syntax-case stx ()
-    [(ADC op)
-     (if (equal? (substring (syntax-e #'op) 0 1) "#")
-         #'(ADC_i (parse-number-string (substring op 1)))
-         (let ([op-number (parse-number-string (syntax->datum #'op))])
-           (if (> 256 op-number)
-               #'(ADC_zp (parse-number-string op))
-               #'(ADC_abs (parse-number-string op)))))]
-    [(ADC open op close-or-var close-or-var2)
-     (let ([close (syntax-e #'close-or-var)])
-       (case close
-         [(>) #'(ADC_indy (parse-number-string op))]
-         [else #'(ADC_indx (parse-number-string op))]))]
-    [(ADC op, idx)
-     (let* ([indirect (syntax-e #'idx)]
-            [op-number (parse-number-string (syntax->datum #'op))])
-       (if (> 256 op-number)
-           (case indirect
-             [(x) #'(ADC_zpx (parse-number-string op))]
-             [else (error "adc zero page index mode unknown" indirect)])
-           (case indirect
-             [(x) #'(ADC_absx (parse-number-string op))]
-             [(y) #'(ADC_absy (parse-number-string op))]
-             [else (error "adc absolute index mode unknown" indirect)])))]))
+(iia_opcode ADC) ;; generate syntax for ADC opcode
 
 (module+ test
   (check-match (ADC "%10",x)

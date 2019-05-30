@@ -27,3 +27,11 @@
  adc ($c000),y
  adc ($a000,x)
 
+ sta $231A,y ; indexed y
+ sta $213C,x ; indexed x
+ sta #$10    ; immediate TODO: ILLEGAL
+ sta $07     ; absolute zero page
+ sta $21,x   ; zero page indexed x
+ sta $FFFf   ; absolute
+ sta ($c000),y
+ sta ($a000,x)
