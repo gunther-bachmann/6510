@@ -207,7 +207,7 @@
     [(LABEL op)
      #'(LABEL_s op)]))
 
-;; ================================================================================ opcode definition macros
+;; ================================================================================ opcode definition helper
 
 (define-for-syntax (symbol-append symbol appendix)
   (with-syntax ([new-symbol (string->symbol (string-append (symbol->string (syntax->datum symbol)) (symbol->string appendix)))])
@@ -280,6 +280,64 @@
       b
       a))
 
+(define-for-syntax (error-string/indirect indirect-x? indirect-y? opcode-string)
+  (string-append
+   "invalid syntax.\n"
+   (if (not (or indirect-x? indirect-y?)) (string-append opcode-string " cannot be used with indirect addressing\n") "expected:\n")
+   (if indirect-x? (string-append "  (" opcode-string  " \"($1000,x)\") # indirect x addressing mode\n") "")
+   (if indirect-y? (string-append "  (" opcode-string  " \"($1000),y\") # indirect y addressing mode\n") "")
+   "got: "))
+
+(define-for-syntax (error-string/indexed absolute-x? absolute-y? zero-page-x? opcode-string)
+  (string-append
+   "invalid syntax.\n"
+   (if (not (or absolute-x? absolute-y? zero-page-x?)) (string-append opcode-string " cannot use index\n") "expected:\n")
+   (if absolute-x? (string-append "  (" opcode-string " \"$1000\",x) # absolute x addressing mode\n") "")
+   (if absolute-y? (string-append "  (" opcode-string " \"$1000\",y) # absolute y addressing mode\n") "")
+   (if zero-page-x? (string-append "  (" opcode-string  " \"$10\",x)   # zero page x addressing mode\n") "")
+   "got: "))
+
+(define-for-syntax (error-string/single immediate? zero-page? absolute? opcode-string)
+  (string-append
+   "invalid syntax.\n"
+   (if (not (or immediate? zero-page? absolute?)) (string-append opcode-string " cannot have one operand\n") "expected:\n")
+   (if immediate? (string-append "  (" opcode-string " \"#$10\") # immediate addressing mode\n") "")
+   (if zero-page? (string-append "  (" opcode-string  " \"$10\") # zeropage addressing mode\n") "")
+   (if absolute? (string-append "  (" opcode-string " \"$1000\") # absolute addressing.\n") "")
+   "got: "))
+
+(define-for-syntax (opcode-with-addressing/single immediate? zero-page? absolute? opcode op stx)
+  (with-syntax ([ires (when immediate? (immediate-mode opcode op))]
+                [zpres (when zero-page? (zero-page-mode opcode op))]
+                [absres (when absolute? (absolute-mode opcode op))])
+    (let ([res (foldl discard-void-syntax-object #'()  (list #'ires #'zpres #'absres))]
+          [opcode-string (symbol->string (syntax->datum opcode))])
+      (if (equal? '() (syntax->datum res))
+          (error (error-string/single immediate? zero-page? absolute? opcode-string)
+                 (syntax->datum stx))
+          res))))
+
+(define-for-syntax (opcode-with-addressing/indirect indirect-x? indirect-y? opcode open op close-or-x close-or-y stx)
+  (with-syntax ([indxres (when indirect-x? (indirect-x-mode opcode open op close-or-x close-or-y))]
+                [indyres (when indirect-y? (indirect-y-mode opcode open op close-or-x close-or-y))])
+    (let ([res (foldl discard-void-syntax-object #'()  (list #'indxres #'indyres))]
+          [opcode-string (symbol->string (syntax->datum opcode))])
+      (if (equal? '() (syntax->datum res))
+          (error (error-string/indirect indirect-x? indirect-y? opcode-string)
+                 (syntax->datum stx))
+          res))))
+
+(define-for-syntax (opcode-with-addressing/indexed absolute-x? absolute-y? zero-page-x? opcode op idx stx)
+  (with-syntax ([absxres (when absolute-x? (absolute-x-mode opcode op idx))]
+                [absyres (when absolute-y? (absolute-y-mode opcode op idx))]
+                [zpxres (when zero-page-x? (zeropage-x-mode opcode op idx))])
+    (let ([res (foldl discard-void-syntax-object #'()  (list #'zpxres #'absxres #'absyres))]
+          [opcode-string (symbol->string (syntax->datum opcode))])
+      (if (equal? '() (syntax->datum res))
+          (error (error-string/indexed  absolute-x? absolute-y? zero-page-x? opcode-string)
+                 (syntax->datum stx))
+          res))))
+
 (define-syntax-rule (opcode-with-addressing opcode option-list)
   (define-syntax (opcode stx)
     (let ([immediate? (member 'immediate option-list)]
@@ -292,62 +350,16 @@
           [absolute-x? (member 'absolute-x option-list)])
       (syntax-case stx ()
         [(opcode op)
-         (with-syntax ([ires (when immediate? (immediate-mode #'opcode #'op))]
-                       [zpres (when zero-page? (zero-page-mode #'opcode #'op))]
-                       [absres (when absolute? (absolute-mode #'opcode #'op))])
-           (let ([res (foldl discard-void-syntax-object #'()  (list #'ires #'zpres #'absres))])
-             (if (equal? '() (syntax->datum res))
-                 (error (string-append  "invalid syntax.\n"
-                                        (if (not (or immediate? zero-page? absolute?)) (string-append (symbol->string (syntax->datum #'opcode)) " cannot have one operand\n") "expected:\n")
-                                        (if immediate? (string-append "  (" (symbol->string (syntax->datum #'opcode)) " \"#$10\") # immediate addressing mode\n") "")
-                                        (if zero-page? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$10\") # zeropage addressing mode\n") "")
-                                        (if absolute? (string-append "  (" (symbol->string (syntax->datum #'opcode)) " \"$1000\") # absolute addressing.\n") "")
-                                        "got: ")
-                        (syntax->datum stx))
-                 res)))]
+         (opcode-with-addressing/single immediate? zero-page? absolute? #'opcode #'op stx)]
         [(opcode open op close-or-x close-or-y)
-         (with-syntax ([indxres (when indirect-x? (indirect-x-mode #'opcode #'open #'op #'close-or-x #'close-or-y))]
-                       [indyres (when indirect-y? (indirect-y-mode #'opcode #'open #'op #'close-or-x #'close-or-y))])
-           (let ([res (foldl discard-void-syntax-object #'()  (list #'indxres #'indyres))])
-             (if (equal? '() (syntax->datum res))
-                 (error (string-append "invalid syntax.\n"
-                                       (if (not (or indirect-x? indirect-y?)) (string-append (symbol->string (syntax->datum #'opcode)) " cannot be used with indirect addressing\n") "expected:\n")
-                                       (if indirect-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"($1000,x)\") # indirect x addressing mode\n") "")
-                                       (if indirect-y? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"($1000),y\") # indirect y addressing mode\n") "")
-                                       "got: ")
-                        (syntax->datum stx))
-                 res)))]
+         (opcode-with-addressing/indirect indirect-x? indirect-y? #'opcode #'open #'op #'close-or-x #'close-or-y stx)]
         [(opcode op, idx)
-         (with-syntax ([absxres (when absolute-x? (absolute-x-mode #'opcode #'op #'idx))]
-                       [absyres (when absolute-y? (absolute-y-mode #'opcode #'op #'idx))]
-                       [zpxres (when zero-page-x? (zeropage-x-mode #'opcode #'op #'idx))])
-           (let ([res (foldl discard-void-syntax-object #'()  (list #'zpxres #'absxres #'absyres))])
-             (if (equal? '() (syntax->datum res))
-                 (error (string-append "invalid syntax.\n"
-                                       (if (not (or absolute-x? absolute-y? zero-page-x?)) (string-append (symbol->string (syntax->datum #'opcode)) " cannot use index\n") "expected:\n")
-                                       (if absolute-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$1000,x\") # absolute x addressing mode\n") "")
-                                       (if absolute-y? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$1000,y\") # absolute y addressing mode\n") "")
-                                       (if zero-page-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$10,x\")   # zero page x addressing mode\n") "")
-                                       "got: ")
-                        (syntax->datum stx))
-                 res)))]
+         (opcode-with-addressing/indexed absolute-x? absolute-y? zero-page-x? #'opcode #'op #'idx stx)]
         [(opcode op idx)
-         (with-syntax ([absxres (when absolute-x? (absolute-x-mode #'opcode #'op #'idx))]
-                       [absyres (when absolute-y? (absolute-y-mode #'opcode #'op #'idx))]
-                       [zpxres (when zero-page-x? (zeropage-x-mode #'opcode #'op #'idx))])
-           (let ([res (foldl discard-void-syntax-object #'()  (list #'zpxres #'absxres #'absyres))])
-             (if (equal? '() (syntax->datum res))
-                 (error (string-append "invalid syntax.\n"
-                                       (if (not (or absolute-x? absolute-y? zero-page-x?)) (string-append (symbol->string (syntax->datum #'opcode)) " cannot use index\n") "expected:\n")
-                                       (if absolute-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$1000,x\") # absolute x addressing mode\n") "")
-                                       (if absolute-y? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$1000,y\") # absolute y addressing mode\n") "")
-                                       (if zero-page-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$10,x\")   # zero page x addressing mode\n") "")
-                                       "got: ")
-                        (syntax->datum stx))
-                 res)))]))))
+         (opcode-with-addressing/indexed absolute-x? absolute-y? zero-page-x? #'opcode #'op #'idx stx)]))))
 
 (define-syntax (define-opcode-functions/macro stx)
-    (syntax-case stx ()
+  (syntax-case stx ()
     [(_ op option-list bytecode-list mode ext param body)
      (let* ([option-list-clean (second (syntax->datum #'option-list))]
             [bytecode-list-clean (second (syntax->datum #'bytecode-list))]
@@ -542,6 +554,8 @@
 
 (define (run-emulator file-name)
   (system (string-append "x64 " file-name)))
+
+;; ======================================== pretty print
 
 (define (hex-format a-number)
   (define digits "0123456789ABCDEF")
