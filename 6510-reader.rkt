@@ -88,7 +88,7 @@
       (many/p space-or-tab/p)
     (or/p (if immediate? (iia-opcode-immediate opcode) void/p)
           (or/p (iia-opcode-indirect opcode)
-                (iia-opcode-absolute opcode)))))
+                (iia-opcode-absolute opcode #t)))))
 
 (define (iia-opcode-immediate opcode)
   (do
@@ -96,18 +96,18 @@
       [x <- 6510-integer/p]
     (pure `(,(string->symbol (string-upcase opcode)) ,(string-append "#" (number->string x))))))
 
-(define (iia-opcode-absolute opcode)
+(define (iia-opcode-absolute opcode index-y?)
   (do
-      [x <- 6510-integer/p]
+      [operand <- 6510-integer/p]
       [appendix <- (or/p (do (char/p #\,)
                             (or/p  (string-ci/p "x")
-                                   (string-ci/p "y")))
+                                   (if index-y? (string-ci/p "y") void/p)))
                         void/p)]
-    (let ([base-result-lst `(,(string->symbol (string-upcase opcode)) ,(number->string x))])
+    (let ([base-result-lst `(,(string->symbol (string-upcase opcode)) ,(number->string operand))])
       (if (void? appendix)
           (pure base-result-lst)
-          (pure (append base-result-lst `(,(string->symbol (string-downcase appendix))))))
-      )))
+          (pure (append base-result-lst `(,(string->symbol (string-downcase appendix)))))))
+      ))
 
 (define (iia-opcode-indirect opcode)
   (do
@@ -119,12 +119,19 @@
         (pure `(,(string->symbol (string-upcase opcode)) < ,(number->string x) > y))
         (pure `(,(string->symbol (string-upcase opcode)) < ,(number->string x) x >)))))
 
+(define (zax-opcode/p opcode)
+  (do
+      (string-ci/p opcode)
+      (many/p space-or-tab/p)
+    (iia-opcode-absolute opcode #f)))
+
 ;; immediate, indirect and absolute addressing
 (define 6510-opcode/p
   (do (or/p (iia-opcode/p "adc" #t)
             (opcode/p "brk")
             (iia-opcode/p "lda" #t)
             (iia-opcode/p "sta" #f)
+            (zax-opcode/p "inc")
             (abs-opcode/p "jsr")
             (opcode/p "rts")
             6510-label/p)))

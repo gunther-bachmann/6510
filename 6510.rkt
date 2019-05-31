@@ -9,6 +9,7 @@
 (require racket/format)
 (require threading)
 (require (only-in rnrs/base-6 div mod))
+(require (for-syntax racket/list))
 
 (require (for-syntax "6510-utils.rkt"))
 (require "6510-utils.rkt")
@@ -18,7 +19,7 @@
   (require rackunit))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program
-         ADC BRK LDA JSR RTS STA
+         ADC BRK INC LDA JSR RTS STA
          LABEL)
 
 
@@ -197,36 +198,6 @@
   (flatten (~>  (replace-labels commands memory-address)
                remove-resolved-statements)))
 
-(define (JMP_abs absolute)
-  (list ''opcode #x4C (high-byte absolute) (low-byte absolute)))
-
-
-;; ================================================================================ JSR
-
-(define (JSR_abs_label str)
-  (list ''opcode #x20 str))
-
-(define (JSR_abs absolute)
-  (list ''opcode #x20 (low-byte absolute) (high-byte absolute)))
-
-(define-syntax (JSR stx)
-  (syntax-case stx ()
-    [(JSR op)
-     (if (6510-label-string? (syntax->datum #'op))
-         #'(JSR_abs_label op)
-         #'(JSR_abs (parse-number-string op)))]))
-
-(define (RTS)
-  (list ''opcode #x60))
-
-;; ================================================================================ BRK
-
-(define (BRK) (list ''opcode #x00))
-
-(module+ test
-  (check-match (BRK)
-               '('opcode #x00)))
-
 (define (LABEL_s label) (list ''label label))
 
 (define-syntax (LABEL stx)
@@ -307,147 +278,219 @@
       b
       a))
 
-(define-syntax-rule (iia_opcode opcode immediate?)
+(define-syntax-rule (opcode-with-addressing opcode option-list)
   (define-syntax (opcode stx)
+    (let ([immediate? (member 'immediate option-list)]
+          [zero-page? (member 'zero-page option-list)]
+          [zero-page-x? (member 'zero-page-x option-list)]
+          [absolute? (member 'absolute option-list)]
+          [indirect-x? (member 'indirect-x option-list)]
+          [indirect-y? (member 'indirect-y option-list)]
+          [absolute-y? (member 'absolute-y option-list)]
+          [absolute-x? (member 'absolute-x option-list)])
+      (syntax-case stx ()
+        [(opcode op)
+         (with-syntax ([ires (when immediate? (immediate-mode #'opcode #'op))]
+                       [zpres (when zero-page? (zero-page-mode #'opcode #'op))]
+                       [absres (when absolute? (absolute-mode #'opcode #'op))])
+           (let ([res (foldl discard-void-syntax-object #'()  (list #'ires #'zpres #'absres))])
+             (if (equal? '() (syntax->datum res))
+                 (error (string-append  "invalid syntax.\n"
+                                        (if (not (or immediate? zero-page? absolute?)) (string-append (symbol->string (syntax->datum #'opcode)) " cannot have one operand\n") "expected:\n")
+                                        (if immediate? (string-append "  (" (symbol->string (syntax->datum #'opcode)) " \"#$10\") # immediate addressing mode\n") "")
+                                        (if zero-page? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$10\") # zeropage addressing mode\n") "")
+                                        (if absolute? (string-append "  (" (symbol->string (syntax->datum #'opcode)) " \"$1000\") # absolute addressing.\n") "")
+                                        "got: ")
+                        (syntax->datum stx))
+                 res)))]
+        [(opcode open op close-or-x close-or-y)
+         (with-syntax ([indxres (when indirect-x? (indirect-x-mode #'opcode #'open #'op #'close-or-x #'close-or-y))]
+                       [indyres (when indirect-y? (indirect-y-mode #'opcode #'open #'op #'close-or-x #'close-or-y))])
+           (let ([res (foldl discard-void-syntax-object #'()  (list #'indxres #'indyres))])
+             (if (equal? '() (syntax->datum res))
+                 (error (string-append "invalid syntax.\n"
+                                       (if (not (or indirect-x? indirect-y?)) (string-append (symbol->string (syntax->datum #'opcode)) " cannot be used with indirect addressing\n") "expected:\n")
+                                       (if indirect-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"($1000,x)\") # indirect x addressing mode\n") "")
+                                       (if indirect-y? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"($1000),y\") # indirect y addressing mode\n") "")
+                                       "got: ")
+                        (syntax->datum stx))
+                 res)))]
+        [(opcode op, idx)
+         (with-syntax ([absxres (when absolute-x? (absolute-x-mode #'opcode #'op #'idx))]
+                       [absyres (when absolute-y? (absolute-y-mode #'opcode #'op #'idx))]
+                       [zpxres (when zero-page-x? (zeropage-x-mode #'opcode #'op #'idx))])
+           (let ([res (foldl discard-void-syntax-object #'()  (list #'zpxres #'absxres #'absyres))])
+             (if (equal? '() (syntax->datum res))
+                 (error (string-append "invalid syntax.\n"
+                                       (if (not (or absolute-x? absolute-y? zero-page-x?)) (string-append (symbol->string (syntax->datum #'opcode)) " cannot use index\n") "expected:\n")
+                                       (if absolute-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$1000,x\") # absolute x addressing mode\n") "")
+                                       (if absolute-y? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$1000,y\") # absolute y addressing mode\n") "")
+                                       (if zero-page-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$10,x\")   # zero page x addressing mode\n") "")
+                                       "got: ")
+                        (syntax->datum stx))
+                 res)))]
+        [(opcode op idx)
+         (with-syntax ([absxres (when absolute-x? (absolute-x-mode #'opcode #'op #'idx))]
+                       [absyres (when absolute-y? (absolute-y-mode #'opcode #'op #'idx))]
+                       [zpxres (when zero-page-x? (zeropage-x-mode #'opcode #'op #'idx))])
+           (let ([res (foldl discard-void-syntax-object #'()  (list #'zpxres #'absxres #'absyres))])
+             (if (equal? '() (syntax->datum res))
+                 (error (string-append "invalid syntax.\n"
+                                       (if (not (or absolute-x? absolute-y? zero-page-x?)) (string-append (symbol->string (syntax->datum #'opcode)) " cannot use index\n") "expected:\n")
+                                       (if absolute-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$1000,x\") # absolute x addressing mode\n") "")
+                                       (if absolute-y? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$1000,y\") # absolute y addressing mode\n") "")
+                                       (if zero-page-x? (string-append "  (" (symbol->string (syntax->datum #'opcode))  " \"$10,x\")   # zero page x addressing mode\n") "")
+                                       "got: ")
+                        (syntax->datum stx))
+                 res)))]))))
+
+(define-syntax (define-opcode-functions stx)
     (syntax-case stx ()
-      [(opcode op)
-       (with-syntax ([ires (immediate-mode #'opcode #'op)]
-                     [zpres (zero-page-mode #'opcode #'op)]
-                     [absres (absolute-mode #'opcode #'op)])
-         (let ([res (foldl discard-void-syntax-object #'()  (list (when immediate? #'ires) #'zpres #'absres))])
-           (if (equal? '() (syntax->datum res))
-               (error (string-append  "invalid syntax.\nexpected:\n  ("
-                                      (if immediate? (string-append (symbol->string (syntax->datum #'opcode)) " \"#$10\") # immediate addressing mode\n  (") "")
-                                      (symbol->string (syntax->datum #'opcode))  " \"$10\") # zeropage addressing mode\n  ("
-                                      (symbol->string (syntax->datum #'opcode)) " \"$1000\") # absolute addressing.\n"
-                                      "got: ")
-                      (syntax->datum stx))
-               res)))]
-      [(opcode open op close-or-x close-or-y)
-       (with-syntax ([indxres (indirect-x-mode #'opcode #'open #'op #'close-or-x #'close-or-y)]
-                     [indyres (indirect-y-mode #'opcode #'open #'op #'close-or-x #'close-or-y)])
-         (let ([res (foldl discard-void-syntax-object #'()  (list #'indxres #'indyres))])
-           (if (equal? '() (syntax->datum res))
-               (error (string-append "invalid syntax.\nexpected:\n  ("
-                                     (symbol->string (syntax->datum #'opcode))  " \"($1000,x)\") # indirect x addressing mode\n  ("
-                                     (symbol->string (syntax->datum #'opcode))  " \"($1000),y\") # indirect y addressing mode\n"
-                                     "got: ")
-                      (syntax->datum stx))
-               res)))]
-      [(opcode op, idx)
-       (with-syntax ([absxres (absolute-x-mode #'opcode #'op #'idx)]
-                     [absyres (absolute-y-mode #'opcode #'op #'idx)]
-                     [zpxres (zeropage-x-mode #'opcode #'op #'idx)])
-         (let ([res (foldl discard-void-syntax-object #'()  (list #'absyres #'zpxres #'absxres))])
-           (if (equal? '() (syntax->datum res))
-               (error (string-append "invalid syntax.\nexpected:\n  ("
-                                     (symbol->string (syntax->datum #'opcode))  " \"$1000,x\") # absolute x addressing mode\n  ("
-                                     (symbol->string (syntax->datum #'opcode))  " \"$1000,y\") # absolute y addressing mode\n  ("
-                                     (symbol->string (syntax->datum #'opcode))  " \"$10,x\")   # zero page x addressing mode\n"
-                                     "got: ")
-                      (syntax->datum stx))
-               res)))]
-      [(opcode op idx)
-       (with-syntax ([absxres (absolute-x-mode #'opcode #'op #'idx)]
-                     [absyres (absolute-y-mode #'opcode #'op #'idx)]
-                     [zpxres (zeropage-x-mode #'opcode #'op #'idx)])
-         (let ([res (foldl discard-void-syntax-object #'()  (list #'absyres #'zpxres #'absxres))])
-           (if (equal? '() (syntax->datum res))
-               (error (string-append "invalid syntax.\nexpected:\n  ("
-                                     (symbol->string (syntax->datum #'opcode))  " \"$1000,x\") # absolute x addressing mode\n  ("
-                                     (symbol->string (syntax->datum #'opcode))  " \"$1000,y\") # absolute y addressing mode\n  ("
-                                     (symbol->string (syntax->datum #'opcode))  " \"$10,x\")   # zero page x addressing mode\n"
-                                     "got: ")
-                      (syntax->datum stx))
-               res)))])))
+      [(_ op option-list bytecode-list)
+       (let* ([option-list-clean (second (syntax->datum #'option-list))]
+              [bytecode-list-clean (second (syntax->datum #'bytecode-list))]
+              [option-list-length (length option-list-clean)]
+              [immediate? (member 'immediate option-list-clean)]
+             [zero-page? (member 'zero-page option-list-clean)]
+             [zero-page-x? (member 'zero-page-x option-list-clean)]
+             [absolute? (member 'absolute option-list-clean)]
+             [absolute-x? (member 'absolute-x option-list-clean )]
+             [absolute-y? (member 'absolute-y option-list-clean )]
+             [indirect-x? (member 'indirect-x option-list-clean )]
+             [indirect-y? (member 'indirect-y option-list-clean )]
+             [immediate-code (when immediate? (list-ref bytecode-list-clean (- option-list-length (length immediate?))))]
+             [zero-page-code (when zero-page? (list-ref bytecode-list-clean (- option-list-length (length zero-page?))))]
+             [zero-page-x-code (when zero-page-x? (list-ref bytecode-list-clean (- option-list-length (length zero-page-x?))))]
+             [absolute-code (when absolute? (list-ref bytecode-list-clean (- option-list-length (length absolute?))))]
+             [absolute-x-code (when absolute-x? (list-ref bytecode-list-clean (- option-list-length (length absolute-x?))))]
+             [absolute-y-code (when absolute-y? (list-ref bytecode-list-clean (- option-list-length (length absolute-y?))))]
+             [indirect-x-code (when indirect-x? (list-ref bytecode-list-clean (- option-list-length (length indirect-x?))))]
+             [indirect-y-code (when indirect-y? (list-ref bytecode-list-clean (- option-list-length (length indirect-y?))))])
+       (with-syntax ([immediate-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_i")))]
+                     [zero-page-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_zp")))]
+                     [zero-page-x-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_zpx")))]
+                     [absolute-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_abs")))]
+                     [absolute-x-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_absx")))]
+                     [absolute-y-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_absy")))]
+                     [indirect-x-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_indx")))]
+                     [indirect-y-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_indy")))]
+                     [immediate-code-sy immediate-code]
+                     [zero-page-code-sy zero-page-code]
+                     [zero-page-x-code-sy zero-page-x-code]
+                     [absolute-code-sy absolute-code]
+                     [absolute-x-code-sy absolute-x-code]
+                     [absolute-y-code-sy absolute-y-code]
+                     [indirect-x-code-sy indirect-x-code]
+                     [indirect-y-code-sy indirect-y-code])
+         (with-syntax ([immediate-function
+                        (when immediate? #'(define (immediate-name value)
+                                             (list ''opcode immediate-code-sy value)) )]
+                       [zero-page-function
+                        (when zero-page? #'(define (zero-page-name value)
+                                             (list ''opcode zero-page-code-sy value)) )]
+                       [zero-page-x-function
+                        (when zero-page-x? #'(define (zero-page-x-name value)
+                                             (list ''opcode zero-page-x-code-sy value)) )]
+                       [absolute-function
+                        (when absolute? #'(define (absolute-name value)
+                                            (list ''opcode absolute-code-sy (low-byte value) (high-byte value))) )]
+                       [absolute-x-function
+                        (when absolute-x? #'(define (absolute-x-name value)
+                                            (list ''opcode absolute-x-code-sy (low-byte value) (high-byte value))) )]
+                       [absolute-y-function
+                        (when absolute-y? #'(define (absolute-y-name value)
+                                            (list ''opcode absolute-y-code-sy (low-byte value) (high-byte value))) )]
+                       [indirect-x-function
+                        (when indirect-x? #'(define (indirect-x-name value)
+                                            (list ''opcode indirect-x-code-sy (low-byte value) (high-byte value))) )]
+                       [indirect-y-function
+                        (when indirect-y? #'(define (indirect-y-name value)
+                                            (list ''opcode indirect-y-code-sy (low-byte value) (high-byte value))) )])
+           #'(begin
+               immediate-function
+               zero-page-function
+               zero-page-x-function
+               absolute-function
+               absolute-x-function
+               absolute-y-function
+               indirect-x-function
+               indirect-y-function
+               ))))]))
 
-(define (STA_zp value)
-  (list ''opcode #x01 value))
-(define (STA_abs value)
-  (list ''opcode #x02 (low-byte value) (high-byte value)))
-(define (STA_indx value)
-  (list ''opcode #x03 (low-byte value) (high-byte value)))
-(define (STA_indy value)
-  (list ''opcode #x04 (low-byte value) (high-byte value)))
-(define (STA_absx value)
-  (list ''opcode #x05 (low-byte value) (high-byte value)))
-(define (STA_absy value)
-  (list ''opcode #x06 (low-byte value) (high-byte value)))
-(define (STA_zpx value)
-  (list ''opcode #x07 value))
 
-(iia_opcode STA #f) ;; generate syntax for STA opcode
+(define-opcode-functions INC
+  '(zero-page absolute absolute-x zero-page-x)
+  '(#xe6      #xee     #xfe       #xf6))
+
+(opcode-with-addressing INC '(zero-page absolute absolute-x zero-page-x))
+
+(module+ test
+  (check-match (INC "$10")
+               '('opcode #xE6 #x10))
+
+  (check-match (INC "$10",x)
+               '('opcode #xF6 #x10))
+
+  (check-match (INC "$1000")
+               '('opcode #xEE #x00 #x10))
+
+  (check-match (INC "$1000",x)
+               '('opcode #xFE #x00 #x10)))
+
+(define-opcode-functions STA
+  '(zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
+  '(#x85      #x95        #x8D     #x9D       #x99       #x81       #x91))
+
+(opcode-with-addressing STA '(zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
 
 (module+ test
   (check-match (STA "$17")
-               '('opcode 1 23))
+               '('opcode #x85 23))
 
   (check-match (STA "$1728")
-               '('opcode 2 #x28 #x17))
+               '('opcode #x8d #x28 #x17))
 
   (check-match (STA < "$1728" ,x >)
-               '('opcode 3 #x28 #x17))
+               '('opcode #x81 #x28 #x17))
 
   (check-match (STA < "$1728" > y)
-               '('opcode 4 #x28 #x17))
+               '('opcode #x91 #x28 #x17))
 
   (check-match (STA < "$1728" > ,y)
-               '('opcode 4 #x28 #x17))
+               '('opcode #x91 #x28 #x17))
 
   (check-match (STA "$1728" ,x)
-               '('opcode 5 #x28 #x17))
+               '('opcode #x9d #x28 #x17))
 
   (check-match (STA "$1728" ,y)
-               '('opcode 6 #x28 #x17))
+               '('opcode #x99 #x28 #x17))
 
   (check-match (STA "$28" ,x)
-               '('opcode 7 #x28))
+               '('opcode #x95 #x28))
 
   (check-match (STA "$1728" 'x)
-               '('opcode 5 #x28 #x17))
+               '('opcode #x9d #x28 #x17))
 
   (check-match (STA "$1728" 'y)
-               '('opcode 6 #x28 #x17))
+               '('opcode #x99 #x28 #x17))
 
   (check-match (STA "$28" 'x)
-               '('opcode 7 #x28))
+               '('opcode #x95 #x28))
 
   (check-match (STA "$1728" x)
-               '('opcode 5 #x28 #x17))
+               '('opcode #x9d #x28 #x17))
 
   (check-match (STA "$1728" y)
-               '('opcode 6 #x28 #x17))
+               '('opcode #x99 #x28 #x17))
 
   (check-match (STA "$28" x)
-               '('opcode 7 #x28)))
+               '('opcode #x95 #x28)))
 
-;; ================================================================================ LDA
+(define-opcode-functions LDA
+  '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
+  '(#xA9      #xA5      #xB5        #xAD     #xBD       #xB9       #xA1       #xB1))
 
-(define (LDA_abs absolute)
-  (list ''opcode #xad (low-byte absolute) (high-byte absolute)))
-
-(define (LDA_zp zero-page-address)
-  (list ''opcode #xA5 (byte zero-page-address)))
-
-(define (LDA_i immediate)
-  (list ''opcode #xA9 (byte immediate)))
-
-(define (LDA_zpx zero-page-address)
-  (list ''opcode #xB5 (byte zero-page-address)))
-
-(define (LDA_absx absolute)
-  (list ''opcode #xBD (low-byte absolute) (high-byte absolute)))
-
-(define (LDA_absy absolute)
-  (list ''opcode #xB9 (low-byte absolute) (high-byte absolute)))
-
-(define (LDA_indx absolute)
-  (list ''opcode #xa1 (low-byte absolute) (high-byte absolute)))
-
-(define (LDA_indy absolute)
-  (list ''opcode #xb1 (low-byte absolute) (high-byte absolute)))
-
-(iia_opcode LDA #t)
+(opcode-with-addressing LDA '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
 
 (module+ test
   (check-match (LDA "#$10")
@@ -474,33 +517,11 @@
   (check-match (LDA < "$A000", x > )
                '('opcode #xA1 #x00 #xA0)))
 
-;; ================================================================================ ADC
+(define-opcode-functions ADC
+  '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
+  '(#x69      #x65      #x75        #x6D     #x7D       #x79       #x61       #x71))
 
-(define (ADC_i immediate)
-  (list ''opcode  #x69 (byte immediate)))
-
-(define (ADC_zpx zero-page-address)
-  (list ''opcode #x75 (byte zero-page-address)))
-
-(define (ADC_absx absolute)
-  (list ''opcode #x7D (low-byte absolute) (high-byte absolute)))
-
-(define (ADC_absy absolute)
-  (list ''opcode #x79 (low-byte absolute) (high-byte absolute)))
-
-(define (ADC_zp zero-page-address)
-  (list ''opcode #x65 (byte zero-page-address)))
-
-(define (ADC_abs absolute)
-  (list ''opcode #x6D (low-byte absolute) (high-byte absolute)))
-
-(define (ADC_indx absolute)
-  (list ''opcode #x61 (low-byte absolute) (high-byte absolute)))
-
-(define (ADC_indy absolute)
-  (list ''opcode #x71 (low-byte absolute) (high-byte absolute)))
-
-(iia_opcode ADC #t) ;; generate syntax for ADC opcode
+(opcode-with-addressing ADC '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
 
 (module+ test
   (check-match (ADC "%10",x)
@@ -526,6 +547,36 @@
 
   (check-match (ADC < "$FFFF" ,x >)
                '('opcode #x61 #xff #xff)))
+
+(define (JMP_abs absolute)
+  (list ''opcode #x4C (high-byte absolute) (low-byte absolute)))
+
+
+;; ================================================================================ JSR
+
+(define (JSR_abs_label str)
+  (list ''opcode #x20 str))
+
+(define (JSR_abs absolute)
+  (list ''opcode #x20 (low-byte absolute) (high-byte absolute)))
+
+(define-syntax (JSR stx)
+  (syntax-case stx ()
+    [(JSR op)
+     (if (6510-label-string? (syntax->datum #'op))
+         #'(JSR_abs_label op)
+         #'(JSR_abs (parse-number-string op)))]))
+
+(define (RTS)
+  (list ''opcode #x60))
+
+;; ================================================================================ BRK
+
+(define (BRK) (list ''opcode #x00))
+
+(module+ test
+  (check-match (BRK)
+               '('opcode #x00)))
 
 
 

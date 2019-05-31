@@ -17,6 +17,10 @@
         brk
 
 
+ inc $10
+ inc $10,x
+ inc $1000
+ inc $1000,x
 
  adc $231A,y ; indexed y
  adc $213C,X ; indexed x
