@@ -157,7 +157,7 @@
        #'(module compiled6510 racket
            (require "6510.rkt")
            (require "6510-interpreter.rkt")
-           (provide program raw-program data resolved-program)
+           (provide program raw-program data resolved-program pretty-program)
            ; str ...
            (define raw-program '(str ...))
            ;(displayln "program parsed:")
@@ -168,7 +168,8 @@
            (define data (6510-load (initialize-cpu) org (commands->bytes org`(,str ...))))
            (displayln "program execution:")
            (run (set-pc-in-state data org))
-           (displayln "(have a look at raw-program, program and resolved-program)")
+           (displayln "(have a look at raw-program, resolved-program and pretty-program)")
+           (define pretty-program (pretty-print-program resolved-program raw-program))
            ; (create-prg (commands->bytes org program) org "test.prg")
            ; (run-emulator "test.prg")
            )))))

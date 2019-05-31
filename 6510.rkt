@@ -6,7 +6,9 @@
 ;; todo: add method descriptions (scrbl)
 ;; planned: realize with typed racket
 
+(require racket/format)
 (require threading)
+(require (only-in rnrs/base-6 div mod))
 
 (require (for-syntax "6510-utils.rkt"))
 (require "6510-utils.rkt")
@@ -15,7 +17,7 @@
 (module+ test
   (require rackunit))
 
-(provide parse-number-string replace-labels commands->bytes create-prg run-emulator
+(provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program
          ADC BRK LDA JSR RTS STA
          LABEL)
 
@@ -538,3 +540,30 @@
 
 (define (run-emulator file-name)
   (system (string-append "x64 " file-name)))
+
+(define (hex-format a-number)
+  (define digits "0123456789ABCDEF")
+  (string (string-ref digits (div a-number 16))
+          (string-ref digits (mod a-number 16))))
+
+(define (format-raw-line slst)
+  (string-join (map (lambda (element) (if (symbol? element) (symbol->string element) element)) slst) " "))
+
+(define (pretty-print-line line)
+  (let* ([opcodes (first line)]
+         [syntax (last line)]
+         [compiled
+          (case (first opcodes)
+            [('opcode) (~a  (string-join (map hex-format (drop opcodes 1)) " ")
+                            #:min-width 12)]
+            [('label) (last opcodes)]
+            [else "?"])]
+         [syntax-str
+          (case (first opcodes)
+            [('opcode) (format-raw-line syntax)]
+            [else ""])])
+    (string-append compiled syntax-str)))
+
+(define (pretty-print-program resolved-program raw-program)
+  (let ([interleaved (map list resolved-program raw-program)])
+    (string-join (map pretty-print-line interleaved) "\n")))
