@@ -21,7 +21,7 @@
 
 
 ;; todo absolute address mode = 2
-;; branches = 1 (e.g. beq)
+;; relative branches = 1 (e.g. beq)
 (define (opcode-argument-length opcode)
   2)
 
@@ -324,17 +324,40 @@
       [(opcode open op close-or-x close-or-y)
        (with-syntax ([indxres (indirect-x-mode #'opcode #'open #'op #'close-or-x #'close-or-y)]
                      [indyres (indirect-y-mode #'opcode #'open #'op #'close-or-x #'close-or-y)])
-         (foldl discard-void-syntax-object #'()  (list #'indxres #'indyres)))]
+         (let ([res (foldl discard-void-syntax-object #'()  (list #'indxres #'indyres))])
+           (if (equal? '() (syntax->datum res))
+               (error (string-append "invalid syntax.\nexpected:\n  ("
+                                     (symbol->string (syntax->datum #'opcode))  " \"($1000,x)\") # indirect x addressing mode\n  ("
+                                     (symbol->string (syntax->datum #'opcode))  " \"($1000),y\") # indirect y addressing mode\n"
+                                     "got: ")
+                      (syntax->datum stx))
+               res)))]
       [(opcode op, idx)
        (with-syntax ([absxres (absolute-x-mode #'opcode #'op #'idx)]
                      [absyres (absolute-y-mode #'opcode #'op #'idx)]
                      [zpxres (zeropage-x-mode #'opcode #'op #'idx)])
-         (foldl discard-void-syntax-object #'()  (list #'absyres #'zpxres #'absxres)))]
+         (let ([res (foldl discard-void-syntax-object #'()  (list #'absyres #'zpxres #'absxres))])
+           (if (equal? '() (syntax->datum res))
+               (error (string-append "invalid syntax.\nexpected:\n  ("
+                                     (symbol->string (syntax->datum #'opcode))  " \"$1000,x\") # absolute x addressing mode\n  ("
+                                     (symbol->string (syntax->datum #'opcode))  " \"$1000,y\") # absolute y addressing mode\n  ("
+                                     (symbol->string (syntax->datum #'opcode))  " \"$10,x\")   # zero page x addressing mode\n"
+                                     "got: ")
+                      (syntax->datum stx))
+               res)))]
       [(opcode op idx)
        (with-syntax ([absxres (absolute-x-mode #'opcode #'op #'idx)]
                      [absyres (absolute-y-mode #'opcode #'op #'idx)]
                      [zpxres (zeropage-x-mode #'opcode #'op #'idx)])
-         (foldl discard-void-syntax-object #'()  (list #'absyres #'zpxres #'absxres)))])))
+         (let ([res (foldl discard-void-syntax-object #'()  (list #'absyres #'zpxres #'absxres))])
+           (if (equal? '() (syntax->datum res))
+               (error (string-append "invalid syntax.\nexpected:\n  ("
+                                     (symbol->string (syntax->datum #'opcode))  " \"$1000,x\") # absolute x addressing mode\n  ("
+                                     (symbol->string (syntax->datum #'opcode))  " \"$1000,y\") # absolute y addressing mode\n  ("
+                                     (symbol->string (syntax->datum #'opcode))  " \"$10,x\")   # zero page x addressing mode\n"
+                                     "got: ")
+                      (syntax->datum stx))
+               res)))])))
 
 (define (STA_zp value)
   (list ''opcode #x01 value))
