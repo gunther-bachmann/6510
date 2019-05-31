@@ -12,6 +12,7 @@
 (require (for-syntax (only-in racket/list second)))
 
 (require (for-syntax "6510-utils.rkt"))
+(require (for-syntax "6510-syntax-utils.rkt"))
 (require "6510-utils.rkt")
 (require "6510-interpreter.rkt")
 
@@ -209,10 +210,6 @@
 
 ;; ================================================================================ opcode definition helper
 
-(define-for-syntax (symbol-append symbol appendix)
-  (with-syntax ([new-symbol (string->symbol (string-append (symbol->string (syntax->datum symbol)) (symbol->string appendix)))])
-    #'new-symbol))
-
 (define-for-syntax (immediate-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
                 [symbol-i (symbol-append opcode '_i)])
@@ -274,11 +271,6 @@
     (when (and (> 256 (syntax->datum #'op-number))
                (equal? (syntax->datum #'x-idx) 'x))
       #'(symbol-zpx op-number))))
-
-(define-for-syntax (discard-void-syntax-object a b)
-  (if (or (void? a) (void? (syntax->datum a)))
-      b
-      a))
 
 (define-for-syntax (error-string/indirect indirect-x? indirect-y? opcode-string)
   (string-append
@@ -366,7 +358,7 @@
             [option-list-length (length option-list-clean)]
             [mode? (member `,(syntax->datum #'mode) option-list-clean)]
             [byte-code (when mode? (list-ref bytecode-list-clean (- option-list-length (length mode?))))])
-       (with-syntax ([func-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) (syntax->datum #'ext))))]
+       (with-syntax ([func-name (datum->syntax #'op (symbol-append #'op (syntax->datum #'ext)))]
                      [byte-code-sy byte-code])
          (with-syntax ([op-function
                         (when mode? #'(define (func-name param) (map (lambda (elt) (if (equal? elt 'byte-code-place) byte-code-sy elt)) body)))])
