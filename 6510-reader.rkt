@@ -106,15 +106,15 @@
     (let ([base-result-lst `(,(string->symbol (string-upcase opcode)) ,(number->string x))])
       (if (void? appendix)
           (pure base-result-lst)
-          (pure (append base-result-lst `(',(string->symbol (string-downcase appendix))))))
+          (pure (append base-result-lst `(,(string->symbol (string-downcase appendix))))))
       )))
 
 (define (iia-opcode-indirect opcode)
   (do
       (char/p #\()
       [x <- 6510-integer/p]
-    [ind <-  (or/p (string-ci/p "),y")
-                  (string-ci/p ",x)"))]
+    [ind <- (or/p (string-ci/p "),y")
+                 (string-ci/p ",x)"))]
     (if (equal? ind "),y")
         (pure `(,(string->symbol (string-upcase opcode)) < ,(number->string x) > y))
         (pure `(,(string->symbol (string-upcase opcode)) < ,(number->string x) x >)))))
