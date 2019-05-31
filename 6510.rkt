@@ -1,6 +1,5 @@
 #lang racket
 
-;; todo: remove immediate mode from STA
 ;; todo: add .data command for byte arrays
 ;; todo: add branch commands
 ;; todo: add inc*/dec* commands
@@ -302,20 +301,25 @@
       #'(symbol-zpx op-number))))
 
 (define-for-syntax (discard-void-syntax-object a b)
-  (if (void? (syntax->datum a))
+  (if (or (void? a) (void? (syntax->datum a)))
       b
       a))
 
-(define-syntax-rule (iia_opcode opcode)
+(define-syntax-rule (iia_opcode opcode immediate?)
   (define-syntax (opcode stx)
     (syntax-case stx ()
       [(opcode op)
        (with-syntax ([ires (immediate-mode #'opcode #'op)]
                      [zpres (zero-page-mode #'opcode #'op)]
                      [absres (absolute-mode #'opcode #'op)])
-         (let ([res (foldl discard-void-syntax-object #'()  (list #'ires #'zpres #'absres))])
+         (let ([res (foldl discard-void-syntax-object #'()  (list (when immediate? #'ires) #'zpres #'absres))])
            (if (equal? '() (syntax->datum res))
-               (error (string-append  "invalid syntax.\nexpected:\n  (" (symbol->string (syntax->datum #'opcode)) " \"#$10\") # immediate addressing mode\n  (" (symbol->string (syntax->datum #'opcode))  " \"$10\") # zeropage addressing mode\n  (" (symbol->string (syntax->datum #'opcode)) " \"$1000\") # absolute addressing.\ngot: ") (syntax->datum stx))
+               (error (string-append  "invalid syntax.\nexpected:\n  ("
+                                      (if immediate? (string-append (symbol->string (syntax->datum #'opcode)) " \"#$10\") # immediate addressing mode\n  (") "")
+                                      (symbol->string (syntax->datum #'opcode))  " \"$10\") # zeropage addressing mode\n  ("
+                                      (symbol->string (syntax->datum #'opcode)) " \"$1000\") # absolute addressing.\n"
+                                      "got: ")
+                      (syntax->datum stx))
                res)))]
       [(opcode open op close-or-x close-or-y)
        (with-syntax ([indxres (indirect-x-mode #'opcode #'open #'op #'close-or-x #'close-or-y)]
@@ -332,8 +336,6 @@
                      [zpxres (zeropage-x-mode #'opcode #'op #'idx)])
          (foldl discard-void-syntax-object #'()  (list #'absyres #'zpxres #'absxres)))])))
 
-(define (STA_i value)
-  (list ''opcode #x00 value))
 (define (STA_zp value)
   (list ''opcode #x01 value))
 (define (STA_abs value)
@@ -349,12 +351,9 @@
 (define (STA_zpx value)
   (list ''opcode #x07 value))
 
-(iia_opcode STA) ;; generate syntax for STA opcode
+(iia_opcode STA #f) ;; generate syntax for STA opcode
 
 (module+ test
-  (check-match (STA "#$17")
-               '('opcode 0 23))
-
   (check-match (STA "$17")
                '('opcode 1 23))
 
@@ -423,7 +422,7 @@
 (define (LDA_indy absolute)
   (list ''opcode #xb1 (low-byte absolute) (high-byte absolute)))
 
-(iia_opcode LDA)
+(iia_opcode LDA #t)
 
 (module+ test
   (check-match (LDA "#$10")
@@ -476,7 +475,7 @@
 (define (ADC_indy absolute)
   (list ''opcode #x71 (low-byte absolute) (high-byte absolute)))
 
-(iia_opcode ADC) ;; generate syntax for ADC opcode
+(iia_opcode ADC #t) ;; generate syntax for ADC opcode
 
 (module+ test
   (check-match (ADC "%10",x)

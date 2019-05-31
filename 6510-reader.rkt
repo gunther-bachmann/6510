@@ -82,11 +82,11 @@
       6510-eol/p
     (pure (list (string->symbol (string-upcase opcode))))))
 
-(define (iia-opcode/p opcode)
+(define (iia-opcode/p opcode immediate?)
   (do
       (string-ci/p opcode)
       (many/p space-or-tab/p)
-    (or/p (iia-opcode-immediate opcode)
+    (or/p (if immediate? (iia-opcode-immediate opcode) void/p)
           (or/p (iia-opcode-indirect opcode)
                 (iia-opcode-absolute opcode)))))
 
@@ -121,10 +121,10 @@
 
 ;; immediate, indirect and absolute addressing
 (define 6510-opcode/p
-  (do (or/p (iia-opcode/p "adc")
+  (do (or/p (iia-opcode/p "adc" #t)
             (opcode/p "brk")
-            (iia-opcode/p "lda")
-            (iia-opcode/p "sta")
+            (iia-opcode/p "lda" #t)
+            (iia-opcode/p "sta" #f)
             (abs-opcode/p "jsr")
             (opcode/p "rts")
             6510-label/p)))
@@ -141,29 +141,34 @@
       [origin <- 6510-program-origin/p]
     ml-whitespace/p
     [opcodes <- (many/p (do [op <- 6510-opcode/p] ml-whitespace/p (pure op)))]
+    eof/p
     (pure (list origin opcodes))))
 
+(define (list->values list)
+  (apply values list))
+
 (define (literal-read-syntax src in)
-  (let* ([parsed-string (parse-result! (parse-string (syntax/p 6510-program/p) (port->string in)))]
-         [origin (first (syntax->datum parsed-string))]
-         [parsed-opcodes (last (syntax->datum parsed-string))])
+  (let*-values ([(parsed-string) (parse-string (syntax/p 6510-program/p) (port->string in))]
+                [(parse-result) (parse-result! parsed-string)]
+                [(origin parsed-opcodes) (list->values (syntax->datum parse-result))])
     (with-syntax ([(str ...) parsed-opcodes]
                   [org origin])
       (strip-context
        #'(module compiled6510 racket
            (require "6510.rkt")
            (require "6510-interpreter.rkt")
-           (provide program raw-program data)
+           (provide program raw-program data resolved-program)
            ; str ...
            (define raw-program '(str ...))
            ;(displayln "program parsed:")
            ;(displayln raw-program)
            (define program `(,str ...))
            ;(displayln program)
-           ;(displayln (replace-labels program org))
+           (define resolved-program (replace-labels program org))
            (define data (6510-load (initialize-cpu) org (commands->bytes org`(,str ...))))
            (displayln "program execution:")
            (run (set-pc-in-state data org))
+           (displayln "(have a look at raw-program, program and resolved-program)")
            ; (create-prg (commands->bytes org program) org "test.prg")
            ; (run-emulator "test.prg")
            )))))
