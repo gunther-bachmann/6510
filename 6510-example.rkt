@@ -22,6 +22,11 @@
  inc $1000
  inc $1000,x
 
+ dec $10
+ dec $10,x
+ dec $1000
+ dec $1000,x
+
  adc $231A,y ; indexed y
  adc $213C,X ; indexed x
  adc #$10    ; immediate

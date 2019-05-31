@@ -1,8 +1,8 @@
 #lang racket
 
+;; todo: add possibility to use labels instead of values (in all addressing modes)
 ;; todo: add .data command for byte arrays
 ;; todo: add branch commands
-;; todo: add inc*/dec* commands
 ;; todo: add method descriptions (scrbl)
 ;; planned: realize with typed racket
 
@@ -19,9 +19,11 @@
   (require rackunit))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program
-         ADC BRK INC LDA JSR RTS STA
+         ADC BRK DEC INC LDA JSR RTS STA
          LABEL)
 
+
+;; ================================================================================ address resolution
 
 ;; todo absolute address mode = 2
 ;; relative branches = 1 (e.g. beq)
@@ -205,7 +207,7 @@
     [(LABEL op)
      #'(LABEL_s op)]))
 
-;; ================================================================================ STA
+;; ================================================================================ opcode definition macros
 
 (define-for-syntax (symbol-append symbol appendix)
   (with-syntax ([new-symbol (string->symbol (string-append (symbol->string (syntax->datum symbol)) (symbol->string appendix)))])
@@ -345,27 +347,27 @@
                  res)))]))))
 
 (define-syntax (define-opcode-functions stx)
-    (syntax-case stx ()
-      [(_ op option-list bytecode-list)
-       (let* ([option-list-clean (second (syntax->datum #'option-list))]
-              [bytecode-list-clean (second (syntax->datum #'bytecode-list))]
-              [option-list-length (length option-list-clean)]
-              [immediate? (member 'immediate option-list-clean)]
-             [zero-page? (member 'zero-page option-list-clean)]
-             [zero-page-x? (member 'zero-page-x option-list-clean)]
-             [absolute? (member 'absolute option-list-clean)]
-             [absolute-x? (member 'absolute-x option-list-clean )]
-             [absolute-y? (member 'absolute-y option-list-clean )]
-             [indirect-x? (member 'indirect-x option-list-clean )]
-             [indirect-y? (member 'indirect-y option-list-clean )]
-             [immediate-code (when immediate? (list-ref bytecode-list-clean (- option-list-length (length immediate?))))]
-             [zero-page-code (when zero-page? (list-ref bytecode-list-clean (- option-list-length (length zero-page?))))]
-             [zero-page-x-code (when zero-page-x? (list-ref bytecode-list-clean (- option-list-length (length zero-page-x?))))]
-             [absolute-code (when absolute? (list-ref bytecode-list-clean (- option-list-length (length absolute?))))]
-             [absolute-x-code (when absolute-x? (list-ref bytecode-list-clean (- option-list-length (length absolute-x?))))]
-             [absolute-y-code (when absolute-y? (list-ref bytecode-list-clean (- option-list-length (length absolute-y?))))]
-             [indirect-x-code (when indirect-x? (list-ref bytecode-list-clean (- option-list-length (length indirect-x?))))]
-             [indirect-y-code (when indirect-y? (list-ref bytecode-list-clean (- option-list-length (length indirect-y?))))])
+  (syntax-case stx ()
+    [(_ op option-list bytecode-list)
+     (let* ([option-list-clean (second (syntax->datum #'option-list))]
+            [bytecode-list-clean (second (syntax->datum #'bytecode-list))]
+            [option-list-length (length option-list-clean)]
+            [immediate? (member 'immediate option-list-clean)]
+            [zero-page? (member 'zero-page option-list-clean)]
+            [zero-page-x? (member 'zero-page-x option-list-clean)]
+            [absolute? (member 'absolute option-list-clean)]
+            [absolute-x? (member 'absolute-x option-list-clean )]
+            [absolute-y? (member 'absolute-y option-list-clean )]
+            [indirect-x? (member 'indirect-x option-list-clean )]
+            [indirect-y? (member 'indirect-y option-list-clean )]
+            [immediate-code (when immediate? (list-ref bytecode-list-clean (- option-list-length (length immediate?))))]
+            [zero-page-code (when zero-page? (list-ref bytecode-list-clean (- option-list-length (length zero-page?))))]
+            [zero-page-x-code (when zero-page-x? (list-ref bytecode-list-clean (- option-list-length (length zero-page-x?))))]
+            [absolute-code (when absolute? (list-ref bytecode-list-clean (- option-list-length (length absolute?))))]
+            [absolute-x-code (when absolute-x? (list-ref bytecode-list-clean (- option-list-length (length absolute-x?))))]
+            [absolute-y-code (when absolute-y? (list-ref bytecode-list-clean (- option-list-length (length absolute-y?))))]
+            [indirect-x-code (when indirect-x? (list-ref bytecode-list-clean (- option-list-length (length indirect-x?))))]
+            [indirect-y-code (when indirect-y? (list-ref bytecode-list-clean (- option-list-length (length indirect-y?))))])
        (with-syntax ([immediate-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_i")))]
                      [zero-page-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_zp")))]
                      [zero-page-x-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_zpx")))]
@@ -390,22 +392,22 @@
                                              (list ''opcode zero-page-code-sy value)) )]
                        [zero-page-x-function
                         (when zero-page-x? #'(define (zero-page-x-name value)
-                                             (list ''opcode zero-page-x-code-sy value)) )]
+                                               (list ''opcode zero-page-x-code-sy value)) )]
                        [absolute-function
                         (when absolute? #'(define (absolute-name value)
                                             (list ''opcode absolute-code-sy (low-byte value) (high-byte value))) )]
                        [absolute-x-function
                         (when absolute-x? #'(define (absolute-x-name value)
-                                            (list ''opcode absolute-x-code-sy (low-byte value) (high-byte value))) )]
+                                              (list ''opcode absolute-x-code-sy (low-byte value) (high-byte value))) )]
                        [absolute-y-function
                         (when absolute-y? #'(define (absolute-y-name value)
-                                            (list ''opcode absolute-y-code-sy (low-byte value) (high-byte value))) )]
+                                              (list ''opcode absolute-y-code-sy (low-byte value) (high-byte value))) )]
                        [indirect-x-function
                         (when indirect-x? #'(define (indirect-x-name value)
-                                            (list ''opcode indirect-x-code-sy (low-byte value) (high-byte value))) )]
+                                              (list ''opcode indirect-x-code-sy (low-byte value) (high-byte value))) )]
                        [indirect-y-function
                         (when indirect-y? #'(define (indirect-y-name value)
-                                            (list ''opcode indirect-y-code-sy (low-byte value) (high-byte value))) )])
+                                              (list ''opcode indirect-y-code-sy (low-byte value) (high-byte value))) )])
            #'(begin
                immediate-function
                zero-page-function
@@ -415,14 +417,54 @@
                absolute-y-function
                indirect-x-function
                indirect-y-function
+               (opcode-with-addressing op option-list)
                ))))]))
 
+
+;; ================================================================================ opcode definition
+
+(define-opcode-functions ADC
+  '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
+  '(#x69      #x65      #x75        #x6D     #x7D       #x79       #x61       #x71))
+
+(module+ test
+  (check-match (ADC "%10",x)
+               '('opcode #x75 2))
+
+  (check-match (ADC "$1237",y)
+               '('opcode #x79 #x37 #x12))
+
+  (check-match (ADC "#100")
+               '('opcode #x69 100))
+
+  (check-match (ADC "#$FF")
+               '('opcode #x69 #xFF))
+
+  (check-match (ADC "$FF")
+               '('opcode #x65 #xFF))
+
+  (check-match (ADC "$FFFF")
+               '('opcode #x6d #xff #xff))
+
+  (check-match (ADC < "$FFFF" > ,y)
+               '('opcode #x71 #xff #xff))
+
+  (check-match (ADC < "$FFFF" ,x >)
+               '('opcode #x61 #xff #xff)))
+
+(define (BRK) (list ''opcode #x00))
+
+(module+ test
+  (check-match (BRK)
+               '('opcode #x00)))
+
+(define-opcode-functions DEC
+  '(zero-page absolute absolute-x zero-page-x)
+  '(#xc6      #xce     #xde       #xd6))
 
 (define-opcode-functions INC
   '(zero-page absolute absolute-x zero-page-x)
   '(#xe6      #xee     #xfe       #xf6))
-
-(opcode-with-addressing INC '(zero-page absolute absolute-x zero-page-x))
 
 (module+ test
   (check-match (INC "$10")
@@ -437,11 +479,57 @@
   (check-match (INC "$1000",x)
                '('opcode #xFE #x00 #x10)))
 
+(define (JMP_abs absolute)
+  (list ''opcode #x4C (high-byte absolute) (low-byte absolute)))
+
+(define (JSR_abs_label str)
+  (list ''opcode #x20 str))
+
+(define (JSR_abs absolute)
+  (list ''opcode #x20 (low-byte absolute) (high-byte absolute)))
+
+(define-syntax (JSR stx)
+  (syntax-case stx ()
+    [(JSR op)
+     (if (6510-label-string? (syntax->datum #'op))
+         #'(JSR_abs_label op)
+         #'(JSR_abs (parse-number-string op)))]))
+
+(define-opcode-functions LDA
+  '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
+  '(#xA9      #xA5      #xB5        #xAD     #xBD       #xB9       #xA1       #xB1))
+
+(module+ test
+  (check-match (LDA "#$10")
+               '('opcode #xA9 16))
+
+  (check-match (LDA "$17")
+               '('opcode #xa5 #x17))
+
+  (check-match (LDA "$178F")
+               '('opcode #xad #x8F #x17))
+
+  (check-match (LDA "$10",x)
+               '('opcode #xB5 16))
+
+  (check-match (LDA "$A000",x)
+               '('opcode #xBD #x00 #xA0))
+
+  (check-match (LDA "$A000",y)
+               '('opcode #xB9 #x00 #xA0))
+
+  (check-match (LDA < "$A000" >,y )
+               '('opcode #xB1 #x00 #xA0))
+
+  (check-match (LDA < "$A000", x > )
+               '('opcode #xA1 #x00 #xA0)))
+
+(define (RTS)
+  (list ''opcode #x60))
+
 (define-opcode-functions STA
   '(zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
   '(#x85      #x95        #x8D     #x9D       #x99       #x81       #x91))
-
-(opcode-with-addressing STA '(zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
 
 (module+ test
   (check-match (STA "$17")
@@ -486,100 +574,8 @@
   (check-match (STA "$28" x)
                '('opcode #x95 #x28)))
 
-(define-opcode-functions LDA
-  '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
-  '(#xA9      #xA5      #xB5        #xAD     #xBD       #xB9       #xA1       #xB1))
 
-(opcode-with-addressing LDA '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
-
-(module+ test
-  (check-match (LDA "#$10")
-               '('opcode #xA9 16))
-
-  (check-match (LDA "$17")
-               '('opcode #xa5 #x17))
-
-  (check-match (LDA "$178F")
-               '('opcode #xad #x8F #x17))
-
-  (check-match (LDA "$10",x)
-               '('opcode #xB5 16))
-
-  (check-match (LDA "$A000",x)
-               '('opcode #xBD #x00 #xA0))
-
-  (check-match (LDA "$A000",y)
-               '('opcode #xB9 #x00 #xA0))
-
-  (check-match (LDA < "$A000" >,y )
-               '('opcode #xB1 #x00 #xA0))
-
-  (check-match (LDA < "$A000", x > )
-               '('opcode #xA1 #x00 #xA0)))
-
-(define-opcode-functions ADC
-  '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
-  '(#x69      #x65      #x75        #x6D     #x7D       #x79       #x61       #x71))
-
-(opcode-with-addressing ADC '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
-
-(module+ test
-  (check-match (ADC "%10",x)
-               '('opcode #x75 2))
-
-  (check-match (ADC "$1237",y)
-               '('opcode #x79 #x37 #x12))
-
-  (check-match (ADC "#100")
-               '('opcode #x69 100))
-
-  (check-match (ADC "#$FF")
-               '('opcode #x69 #xFF))
-
-  (check-match (ADC "$FF")
-               '('opcode #x65 #xFF))
-
-  (check-match (ADC "$FFFF")
-               '('opcode #x6d #xff #xff))
-
-  (check-match (ADC < "$FFFF" > ,y)
-               '('opcode #x71 #xff #xff))
-
-  (check-match (ADC < "$FFFF" ,x >)
-               '('opcode #x61 #xff #xff)))
-
-(define (JMP_abs absolute)
-  (list ''opcode #x4C (high-byte absolute) (low-byte absolute)))
-
-
-;; ================================================================================ JSR
-
-(define (JSR_abs_label str)
-  (list ''opcode #x20 str))
-
-(define (JSR_abs absolute)
-  (list ''opcode #x20 (low-byte absolute) (high-byte absolute)))
-
-(define-syntax (JSR stx)
-  (syntax-case stx ()
-    [(JSR op)
-     (if (6510-label-string? (syntax->datum #'op))
-         #'(JSR_abs_label op)
-         #'(JSR_abs (parse-number-string op)))]))
-
-(define (RTS)
-  (list ''opcode #x60))
-
-;; ================================================================================ BRK
-
-(define (BRK) (list ''opcode #x00))
-
-(module+ test
-  (check-match (BRK)
-               '('opcode #x00)))
-
-
-
+;; ================================================================================ whole program functions
 
 ; (run (assembler-program (initialize-cpu) 0 (list (LDA_i #x41) (JSR_abs #xFFFF) (BRK))))
 

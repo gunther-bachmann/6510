@@ -129,10 +129,11 @@
 (define 6510-opcode/p
   (do (or/p (iia-opcode/p "adc" #t)
             (opcode/p "brk")
-            (iia-opcode/p "lda" #t)
-            (iia-opcode/p "sta" #f)
+            (zax-opcode/p "dec")
             (zax-opcode/p "inc")
             (abs-opcode/p "jsr")
+            (iia-opcode/p "lda" #t)
+            (iia-opcode/p "sta" #f)
             (opcode/p "rts")
             6510-label/p)))
 
