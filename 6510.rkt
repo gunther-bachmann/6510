@@ -6,10 +6,10 @@
 ;; todo: add method descriptions (scrbl)
 ;; planned: realize with typed racket
 
-(require racket/format)
-(require threading)
+(require (only-in racket/format ~a))
+(require (only-in threading ~>))
 (require (only-in rnrs/base-6 div mod))
-(require (for-syntax racket/list))
+(require (for-syntax (only-in racket/list second)))
 
 (require (for-syntax "6510-utils.rkt"))
 (require "6510-utils.rkt")
