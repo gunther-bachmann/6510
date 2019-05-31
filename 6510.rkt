@@ -346,79 +346,34 @@
                         (syntax->datum stx))
                  res)))]))))
 
-(define-syntax (define-opcode-functions stx)
-  (syntax-case stx ()
-    [(_ op option-list bytecode-list)
+(define-syntax (define-opcode-functions/macro stx)
+    (syntax-case stx ()
+    [(_ op option-list bytecode-list mode ext param body)
      (let* ([option-list-clean (second (syntax->datum #'option-list))]
             [bytecode-list-clean (second (syntax->datum #'bytecode-list))]
             [option-list-length (length option-list-clean)]
-            [immediate? (member 'immediate option-list-clean)]
-            [zero-page? (member 'zero-page option-list-clean)]
-            [zero-page-x? (member 'zero-page-x option-list-clean)]
-            [absolute? (member 'absolute option-list-clean)]
-            [absolute-x? (member 'absolute-x option-list-clean )]
-            [absolute-y? (member 'absolute-y option-list-clean )]
-            [indirect-x? (member 'indirect-x option-list-clean )]
-            [indirect-y? (member 'indirect-y option-list-clean )]
-            [immediate-code (when immediate? (list-ref bytecode-list-clean (- option-list-length (length immediate?))))]
-            [zero-page-code (when zero-page? (list-ref bytecode-list-clean (- option-list-length (length zero-page?))))]
-            [zero-page-x-code (when zero-page-x? (list-ref bytecode-list-clean (- option-list-length (length zero-page-x?))))]
-            [absolute-code (when absolute? (list-ref bytecode-list-clean (- option-list-length (length absolute?))))]
-            [absolute-x-code (when absolute-x? (list-ref bytecode-list-clean (- option-list-length (length absolute-x?))))]
-            [absolute-y-code (when absolute-y? (list-ref bytecode-list-clean (- option-list-length (length absolute-y?))))]
-            [indirect-x-code (when indirect-x? (list-ref bytecode-list-clean (- option-list-length (length indirect-x?))))]
-            [indirect-y-code (when indirect-y? (list-ref bytecode-list-clean (- option-list-length (length indirect-y?))))])
-       (with-syntax ([immediate-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_i")))]
-                     [zero-page-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_zp")))]
-                     [zero-page-x-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_zpx")))]
-                     [absolute-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_abs")))]
-                     [absolute-x-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_absx")))]
-                     [absolute-y-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_absy")))]
-                     [indirect-x-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_indx")))]
-                     [indirect-y-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) "_indy")))]
-                     [immediate-code-sy immediate-code]
-                     [zero-page-code-sy zero-page-code]
-                     [zero-page-x-code-sy zero-page-x-code]
-                     [absolute-code-sy absolute-code]
-                     [absolute-x-code-sy absolute-x-code]
-                     [absolute-y-code-sy absolute-y-code]
-                     [indirect-x-code-sy indirect-x-code]
-                     [indirect-y-code-sy indirect-y-code])
-         (with-syntax ([immediate-function
-                        (when immediate? #'(define (immediate-name value)
-                                             (list ''opcode immediate-code-sy value)) )]
-                       [zero-page-function
-                        (when zero-page? #'(define (zero-page-name value)
-                                             (list ''opcode zero-page-code-sy value)) )]
-                       [zero-page-x-function
-                        (when zero-page-x? #'(define (zero-page-x-name value)
-                                               (list ''opcode zero-page-x-code-sy value)) )]
-                       [absolute-function
-                        (when absolute? #'(define (absolute-name value)
-                                            (list ''opcode absolute-code-sy (low-byte value) (high-byte value))) )]
-                       [absolute-x-function
-                        (when absolute-x? #'(define (absolute-x-name value)
-                                              (list ''opcode absolute-x-code-sy (low-byte value) (high-byte value))) )]
-                       [absolute-y-function
-                        (when absolute-y? #'(define (absolute-y-name value)
-                                              (list ''opcode absolute-y-code-sy (low-byte value) (high-byte value))) )]
-                       [indirect-x-function
-                        (when indirect-x? #'(define (indirect-x-name value)
-                                              (list ''opcode indirect-x-code-sy (low-byte value) (high-byte value))) )]
-                       [indirect-y-function
-                        (when indirect-y? #'(define (indirect-y-name value)
-                                              (list ''opcode indirect-y-code-sy (low-byte value) (high-byte value))) )])
-           #'(begin
-               immediate-function
-               zero-page-function
-               zero-page-x-function
-               absolute-function
-               absolute-x-function
-               absolute-y-function
-               indirect-x-function
-               indirect-y-function
-               (opcode-with-addressing op option-list)
-               ))))]))
+            [mode? (member `,(syntax->datum #'mode) option-list-clean)]
+            [byte-code (when mode? (list-ref bytecode-list-clean (- option-list-length (length mode?))))])
+       (with-syntax ([func-name (datum->syntax #'op (string->symbol (format "~a~a" (syntax->datum #'op) (syntax->datum #'ext))))]
+                     [byte-code-sy byte-code])
+         (with-syntax ([op-function
+                        (when mode? #'(define (func-name param) (map (lambda (elt) (if (equal? elt 'byte-code-place) byte-code-sy elt)) body)))])
+           #'op-function)))]))
+
+(define-syntax (define-opcode-functions stx)
+  (syntax-case stx ()
+    [(_ op option-list bytecode-list)
+     #'(begin
+         (define-opcode-functions/macro op option-list bytecode-list immediate "_i" value (list ''opcode 'byte-code-place value))
+         (define-opcode-functions/macro op option-list bytecode-list zero-page "_zp" value (list ''opcode 'byte-code-place value))
+         (define-opcode-functions/macro op option-list bytecode-list zero-page-x "_zpx" value (list ''opcode 'byte-code-place value))
+         (define-opcode-functions/macro op option-list bytecode-list absolute "_abs" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
+         (define-opcode-functions/macro op option-list bytecode-list absolute-x "_absx" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
+         (define-opcode-functions/macro op option-list bytecode-list absolute-y "_absy" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
+         (define-opcode-functions/macro op option-list bytecode-list indirect-x "_indx" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
+         (define-opcode-functions/macro op option-list bytecode-list indirect-y "_indy" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
+         (opcode-with-addressing op option-list)
+         )]))
 
 
 ;; ================================================================================ opcode definition
