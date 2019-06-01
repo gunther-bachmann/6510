@@ -16,6 +16,7 @@
         rts
         brk
 
+        .data $01, $2F
 
  inc $10
  inc $10,x

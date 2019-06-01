@@ -1,7 +1,6 @@
 #lang racket
 
 ;; todo: add possibility to use labels instead of values (in all addressing modes)
-;; todo: add .data command for byte arrays
 ;; todo: add branch commands
 ;; todo: add method descriptions (scrbl)
 ;; planned: realize with typed racket
@@ -21,7 +20,7 @@
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program
          ADC BRK DEC INC LDA JSR RTS STA
-         LABEL)
+         LABEL BYTES)
 
 
 ;; ================================================================================ address resolution
@@ -36,6 +35,7 @@
     [('opcode) (if (6510-label-string? (last command))
                    (+ 1 (opcode-argument-length (second command)))
                    (- (length command) 1))]
+    [('bytes) (length (last command))]
     [('label) 0]
     [else (error "uknown command" (first command))]))
 
@@ -44,6 +44,9 @@
                3)
 
   (check-match (6510-byte-length '('opcode 1 ":other"))
+               3)
+
+  (check-match (6510-byte-length '('bytes (1 2 3)))
                3)
 
   (check-match (6510-byte-length '('opcode 1 2 3))
@@ -186,15 +189,18 @@
               (map (lambda (command)
                      (case (first command)
                        [('opcode) (drop command 1)]
+                       [('bytes) (drop command 1)]
                        [else command]))
                    commands)))
 
 (module+ test
   (check-match (remove-resolved-statements '((1 2 3)
                                              ('opcode 2 3 4)
+                                             ('bytes (1 2 3))
                                              (0)))
                '((1 2 3)
                  (2 3 4)
+                 ((1 2 3))
                  (0))))
 
 (define (commands->bytes memory-address commands )
@@ -382,6 +388,15 @@
 
 ;; ================================================================================ opcode definition
 
+(define-syntax (BYTES stx)
+  (syntax-case stx ()
+    [(BYTES bytes)
+     #'(BYTES_list (quote bytes))]))
+
+
+(define (BYTES_list bytes)
+  (list ''bytes bytes))
+
 (define-opcode-functions ADC
   '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
   '(#x69      #x65      #x75        #x6D     #x7D       #x79       #x61       #x71))
@@ -565,10 +580,12 @@
             [('opcode) (~a  (string-join (map hex-format (drop opcodes 1)) " ")
                             #:min-width 12)]
             [('label) (last opcodes)]
+            [('bytes) (~a (string-join  (map hex-format (last opcodes)) " "))]
             [else "?"])]
          [syntax-str
           (case (first opcodes)
             [('opcode) (format-raw-line syntax)]
+            [('bytes) "   ; raw bytes"]
             [else ""])])
     (string-append compiled syntax-str)))
 

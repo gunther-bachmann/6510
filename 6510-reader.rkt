@@ -125,6 +125,13 @@
       (many/p space-or-tab/p)
     (iia-opcode-absolute opcode #f)))
 
+(define (data-bytes/p)
+  (do
+      (string-ci/p ".data")
+      (many/p space-or-tab/p)
+    [result <- (many/p 6510-integer/p #:sep (do (char/p #\,) ml-whitespace/p))]
+    (pure (list 'BYTES result))))
+
 ;; immediate, indirect and absolute addressing
 (define 6510-opcode/p
   (do (or/p (iia-opcode/p "adc" #t)
@@ -135,6 +142,7 @@
             (iia-opcode/p "lda" #t)
             (iia-opcode/p "sta" #f)
             (opcode/p "rts")
+            (data-bytes/p)
             6510-label/p)))
 
 (define 6510-program-origin/p
@@ -165,7 +173,7 @@
        #'(module compiled6510 racket
            (require "6510.rkt")
            (require "6510-interpreter.rkt")
-           (provide program raw-program data resolved-program pretty-program)
+           (provide program raw-program data resolved-program pretty-program raw-bytes)
            ; str ...
            (define raw-program '(str ...))
            ;(displayln "program parsed:")
@@ -173,10 +181,11 @@
            (define program `(,str ...))
            ;(displayln program)
            (define resolved-program (replace-labels program org))
-           (define data (6510-load (initialize-cpu) org (commands->bytes org`(,str ...))))
+           (define raw-bytes (commands->bytes org `(,str ...)))
+           (define data (6510-load (initialize-cpu) org raw-bytes))
            (displayln "program execution:")
            (run (set-pc-in-state data org))
-           (displayln "(have a look at raw-program, resolved-program and pretty-program)")
+           (displayln "(have a look at raw-program, resolved-program, raw-bytes and pretty-program)")
            (define pretty-program (pretty-print-program resolved-program raw-program))
            ; (create-prg (commands->bytes org program) org "test.prg")
            ; (run-emulator "test.prg")
