@@ -8,7 +8,7 @@
 (require (only-in racket/format ~a))
 (require (only-in threading ~>))
 (require (only-in rnrs/base-6 div mod))
-(require (for-syntax (only-in racket/list second)))
+(require (for-syntax (only-in racket/list second empty?)))
 
 (require (for-syntax "6510-utils.rkt"))
 (require (for-syntax "6510-syntax-utils.rkt"))
@@ -19,7 +19,7 @@
   (require rackunit))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program
-         ADC BRK DEC INC LDA JSR RTS STA
+         ADC ASL BRK DEC INC LDA JSR RTS STA
          LABEL BYTES)
 
 
@@ -216,6 +216,12 @@
 
 ;; ================================================================================ opcode definition helper
 
+(define-for-syntax (accumulator-mode opcode operand)
+  (with-syntax ([operand-value (syntax->datum operand)]
+                [symbol-acc (symbol-append opcode '_acc)])
+    (when (equal? 'A (syntax->datum #'operand-value))
+      #'(symbol-acc))))
+
 (define-for-syntax (immediate-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
                 [symbol-i (symbol-append opcode '_i)])
@@ -295,23 +301,25 @@
    (if zero-page-x? (string-append "  (" opcode-string  " \"$10\",x)   # zero page x addressing mode\n") "")
    "got: "))
 
-(define-for-syntax (error-string/single immediate? zero-page? absolute? opcode-string)
+(define-for-syntax (error-string/single accumulator? immediate? zero-page? absolute? opcode-string)
   (string-append
    "invalid syntax.\n"
-   (if (not (or immediate? zero-page? absolute?)) (string-append opcode-string " cannot have one operand\n") "expected:\n")
+   (if (not (or accumulator? immediate? zero-page? absolute?)) (string-append opcode-string " cannot have one operand\n") "expected:\n")
+   (if accumulator? (string-append "  (" opcode-string " A) # accumulator mode\n") "")
    (if immediate? (string-append "  (" opcode-string " \"#$10\") # immediate addressing mode\n") "")
    (if zero-page? (string-append "  (" opcode-string  " \"$10\") # zeropage addressing mode\n") "")
    (if absolute? (string-append "  (" opcode-string " \"$1000\") # absolute addressing.\n") "")
    "got: "))
 
-(define-for-syntax (opcode-with-addressing/single immediate? zero-page? absolute? opcode op stx)
+(define-for-syntax (opcode-with-addressing/single accumulator? immediate? zero-page? absolute? opcode op stx)
   (with-syntax ([ires (when immediate? (immediate-mode opcode op))]
                 [zpres (when zero-page? (zero-page-mode opcode op))]
-                [absres (when absolute? (absolute-mode opcode op))])
-    (let ([res (foldl discard-void-syntax-object #'()  (list #'ires #'zpres #'absres))]
+                [absres (when absolute? (absolute-mode opcode op))]
+                [accres (when accumulator? (accumulator-mode opcode op))])
+    (let ([res (foldl discard-void-syntax-object #'()  (list #'accres #'ires #'zpres #'absres))]
           [opcode-string (symbol->string (syntax->datum opcode))])
       (if (equal? '() (syntax->datum res))
-          (error (error-string/single immediate? zero-page? absolute? opcode-string)
+          (error (error-string/single accumulator? immediate? zero-page? absolute? opcode-string)
                  (syntax->datum stx))
           res))))
 
@@ -345,10 +353,11 @@
           [indirect-x? (member 'indirect-x option-list)]
           [indirect-y? (member 'indirect-y option-list)]
           [absolute-y? (member 'absolute-y option-list)]
-          [absolute-x? (member 'absolute-x option-list)])
+          [absolute-x? (member 'absolute-x option-list)]
+          [accumulator? (member 'accumulator option-list)])
       (syntax-case stx ()
         [(opcode op)
-         (opcode-with-addressing/single immediate? zero-page? absolute? #'opcode #'op stx)]
+         (opcode-with-addressing/single accumulator? immediate? zero-page? absolute? #'opcode #'op stx)]
         [(opcode open op close-or-x close-or-y)
          (opcode-with-addressing/indirect indirect-x? indirect-y? #'opcode #'open #'op #'close-or-x #'close-or-y stx)]
         [(opcode op, idx)
@@ -367,13 +376,17 @@
        (with-syntax ([func-name (datum->syntax #'op (symbol-append #'op (syntax->datum #'ext)))]
                      [byte-code-sy byte-code])
          (with-syntax ([op-function
-                        (when mode? #'(define (func-name param) (map (lambda (elt) (if (equal? elt 'byte-code-place) byte-code-sy elt)) body)))])
+                        (when mode?
+                          (if (equal? 'empty (syntax->datum #'param))
+                              #'(define (func-name) (map (lambda (elt) (if (equal? elt 'byte-code-place) byte-code-sy elt)) body))
+                              #'(define (func-name param) (map (lambda (elt) (if (equal? elt 'byte-code-place) byte-code-sy elt)) body))))])
            #'op-function)))]))
 
 (define-syntax (define-opcode-functions stx)
   (syntax-case stx ()
     [(_ op option-list bytecode-list)
      #'(begin
+         (define-opcode-functions/macro op option-list bytecode-list accumulator "_acc" empty (list ''opcode 'byte-code-place))
          (define-opcode-functions/macro op option-list bytecode-list immediate "_i" value (list ''opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list zero-page "_zp" value (list ''opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list zero-page-x "_zpx" value (list ''opcode 'byte-code-place value))
@@ -425,6 +438,27 @@
 
   (check-match (ADC < "$FFFF" ,x >)
                '('opcode #x61 #xff #xff)))
+
+(define-opcode-functions ASL
+  '(accumulator zero-page zero-page-x absolute absolute-x)
+  '(#x0a        #x06      #x16        #x0e     #x1e))
+
+(module+ test
+  ;; TODO add tests
+  (check-match (ASL A)
+               '('opcode #x0a))
+
+  (check-match (ASL "$10")
+               '('opcode #x06 #x10))
+
+  (check-match (ASL "$10",x)
+               '('opcode #x16 #x10))
+
+  (check-match (ASL "$1000")
+               '('opcode #x0e #x00 #x10))
+
+  (check-match (ASL "$1000",x)
+               '('opcode #x1e #x00 #x10)))
 
 (define (BRK) (list ''opcode #x00))
 

@@ -6,6 +6,9 @@
 (require "6510.rkt")
 (require "6510-interpreter.rkt")
 
+;; TODO add parser for ASL
+;; TODO writer parameterized parser for all addressing modes
+
 ; usage:
 ; - create file with content
 ;     #lang reader "6510-reader.rkt"

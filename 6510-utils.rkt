@@ -61,7 +61,7 @@
   (bitwise-and #xff value))
 
 (define (is-number? string)
-  (regexp-match? #rx"^([0-9]+|\\$[0-9a-fA-F]+|\\%[0-1]+)$" string))
+  (and (string? string) (regexp-match? #rx"^([0-9]+|\\$[0-9a-fA-F]+|\\%[0-1]+)$" string)))
 
 (define (is-immediate-number? string)
   (and (equal? (substring string 0 1) "#")
