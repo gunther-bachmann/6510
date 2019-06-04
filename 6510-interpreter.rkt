@@ -1,6 +1,7 @@
 #lang racket
 
-(require racket/fixnum)
+(require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
+(require (only-in threading ~>>))
 (require "6510-utils.rkt")
 
 (module+ test
@@ -71,6 +72,16 @@
             (poke new-state (+ #x100 (byte (- sp 1))) (high-byte return-address))
             new-state)])) ;; TODO: put return address onto the stack and jump to address
 
+(define (-adjust-carry-flag set flags)
+  (if set
+      (-set-carry-flag flags)
+      (-clear-carry-flag flags)))
+
+(define (-adjust-zero-flag set flags)
+  (if set
+      (-set-zero-flag flags)
+      (-clear-zero-flag flags)))
+
 (define (interpret-jmp-abs high low state)
   (struct-copy cpu-state state
                [program-counter (word (absolute high low))]))
@@ -79,18 +90,26 @@
   (let* ([old-accumulator (cpu-state-accumulator state)]
          [intermediate-accumulator (+ immediate old-accumulator)]
          [new-accumulator (if (carry-flag? state) (+ 1 intermediate-accumulator) intermediate-accumulator)]
-         [overflow        (> (+ immediate old-accumulator) 255 )])
+         [carry?          (> (+ immediate old-accumulator) 255 )]
+         [zero?           (= 0 (byte new-accumulator))]
+         [negative?       #f]
+         [overflow?       #f])
     (struct-copy cpu-state state
                  [program-counter (word (+ 2 (cpu-state-program-counter state)))]
-                 [flags           (if overflow
-                                      (-set-carry-flag (cpu-state-flags state))
-                                      (cpu-state-flags state))]
+                 [flags           (~>> (cpu-state-flags state)
+                                      (-adjust-carry-flag carry?)
+                                      (-adjust-zero-flag zero?)
+                                      ;TODO: negative flag, overflow
+                                      )]
                  [accumulator     (byte new-accumulator)])))
 
 (define (interpret-lda-i immediate state)
   (struct-copy cpu-state state
                [program-counter (word (+ 2 (cpu-state-program-counter state)))]
                [accumulator     (byte immediate)]))
+
+(define (zero-flag? state)
+  (eq? #x02 (bitwise-and #x02 (cpu-state-flags state))))
 
 (define (carry-flag? state)
   (eq? 1 (bitwise-and 1 (cpu-state-flags state))))
@@ -101,6 +120,12 @@
 (define (-clear-carry-flag flags)
   (bitwise-and #xfe flags))
 
+(define (-set-zero-flag flags)
+  (bitwise-xor 2 flags))
+
+(define (-clear-zero-flag flags)
+  (bitwise-and #xfd flags))
+
 (define (set-carry-flag state)
   (struct-copy cpu-state state [flags (-set-carry-flag (cpu-state-flags state))]))
 
@@ -110,7 +135,7 @@
   (printf "Y = ~a~n" (cpu-state-y-index state))
   (printf "SP = ~a~n" (cpu-state-stack-pointer state))
   (printf "PC = ~a~n" (cpu-state-program-counter state))
-  (printf "C = ~s" (if (carry-flag? state) "X" " " )))
+  (printf "C = ~s, Z = ~s" (if (carry-flag? state) "X" " " ) (if (zero-flag? state) "X" " " )))
 
 (define (execute-cpu-step state)
   (case (peek-pc state)
@@ -119,7 +144,16 @@
     [(#x60) (interpret-rts state)]
     [(#x69) (interpret-adc-i (peek-pc+1 state) state)]
     [(#xA9) (interpret-lda-i (peek-pc+1 state) state)]
+    [(#xD0) (interpret-bne-rel (peek-pc+1 state) state)]
     [else state]))
+
+(define (interpret-bne-rel rel state)
+  (let* ([pc (cpu-state-program-counter state)]
+         [new-pc-on-jump (+ pc 2 (if (>= #x80 rel) (- 256 rel) rel))]
+         [new-pc-no-jump (+ pc 2)]
+         [new-pc (if (zero-flag? (cpu-state-flags state)) new-pc-no-jump new-pc-on-jump)])
+    (struct-copy cpu-state state
+                 [program-counter new-pc])))
 
 (module+ test
   (check-eq? (peek (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)) 11)
