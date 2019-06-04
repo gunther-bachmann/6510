@@ -18,6 +18,15 @@
 
         .data $01, $2F
 
+ bcc $10
+ bcs $ff
+ beq :end
+ bmi $1
+ bne :end
+ bpl $FF
+ bvc :end
+ bvs $00
+
  inc $10
  inc $10,x
  inc $1000

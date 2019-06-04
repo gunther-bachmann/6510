@@ -1,7 +1,6 @@
 #lang racket
 
 ;; todo: add possibility to use labels instead of values (in all addressing modes)
-;; todo: add branch commands
 ;; todo: add method descriptions (scrbl)
 ;; planned: realize with typed racket
 
@@ -19,21 +18,19 @@
   (require rackunit))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program
-         ADC ASL BRK DEC INC LDA JSR RTS STA
+         ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC INC LDA JSR RTS STA
          LABEL BYTES)
 
 
 ;; ================================================================================ address resolution
 
-;; todo absolute address mode = 2
-;; relative branches = 1 (e.g. beq)
-(define (opcode-argument-length opcode)
-  2)
-
 (define (6510-byte-length command)
   (case (first command)
+    [('rel-opcode) (if (6510-label-string? (last command))
+                   2
+                   (- (length command) 1))]
     [('opcode) (if (6510-label-string? (last command))
-                   (+ 1 (opcode-argument-length (second command)))
+                   3
                    (- (length command) 1))]
     [('bytes) (length (last command))]
     [('label) 0]
@@ -129,10 +126,19 @@
     (if (>= 1 (length command))
         command-byte-pair
         (if (and (not (equal? ''label (first command))) (6510-label-string? (last command)))
-            (let* ([label-offset (+ address (get-label-offset labels-bytes-list (last command)))])
-              (list (append (drop-right command 1)
-                            (list (low-byte label-offset) (high-byte label-offset)))
-                    (last command-byte-pair)))
+            (let* ([label-offset (+ address (get-label-offset labels-bytes-list (last command)))]
+                   [rel-label-offset (- (get-label-offset labels-bytes-list (last command)) current-offset command-length)])
+              (case (first command)
+                [('rel-opcode)
+                 (list (append (drop-right command 1)
+                               (list (low-byte rel-label-offset)))
+                       (last command-byte-pair))]
+                [('opcode)
+                 (list (append (drop-right command 1)
+                               (list (low-byte label-offset) (high-byte label-offset)))
+                       (last command-byte-pair))]
+                [else (error (string-append "unknown label reference in opcode" (symbol->string (first (command)))))])
+              )
             command-byte-pair))))
 
 (module+ test
@@ -140,6 +146,16 @@
                               '((('label ":some") (0 8)))
                               100)
                '(('opcode 20 108 0) (3 10)))
+
+  (check-match (replace-label '(('rel-opcode #xf0 ":some") (2 10))
+                              '((('label ":some") (0 8)))
+                              100)
+               '(('rel-opcode #xf0 #xfc) (2 10)))
+
+  (check-match (replace-label '(('rel-opcode #xf0 ":some") (2 10))
+                              '((('label ":some") (0 20)))
+                              100)
+               '(('rel-opcode #xf0 8) (2 10)))
 
   (check-match (replace-label '(('opcode 20 30 80) (3 10))
                               '((('label ":some") (0 8)))
@@ -156,6 +172,7 @@
 (module+ test
   (check-match (replace-labels '(('opcode 1 2)
                                  ('label ":some")
+                                 ('rel-opcode #xf0 ":end")
                                  ('opcode 1 ":some")
                                  ('label ":other")
                                  ('opcode 5 ":other")
@@ -163,17 +180,20 @@
                                10)
                '(('opcode 1 2)
                  ('label ":some")
+                 ('rel-opcode #xf0 6)
                  ('opcode 1 12 0)
                  ('label ":other")
-                 ('opcode 5 15 0)
+                 ('opcode 5 17 0)
                  ('label ":end")))
 
   (check-match (replace-labels '(((quote label) ":some")
                                  ((quote opcode) 169 65)
+                                 ((quote rel-opcode) #xf0 ":some")
                                  ((quote opcode) 32 ":some")
                                  ((quote opcode) 0)) 10)
                '(((quote label) ":some")
                  ('opcode 169 65)
+                 ('rel-opcode #xf0 #xfc)
                  ('opcode 32 10 0)
                  ('opcode 0))))
 
@@ -190,16 +210,19 @@
                      (case (first command)
                        [('opcode) (drop command 1)]
                        [('bytes) (drop command 1)]
+                       [('rel-opcode) (drop command 1)]
                        [else command]))
                    commands)))
 
 (module+ test
   (check-match (remove-resolved-statements '((1 2 3)
                                              ('opcode 2 3 4)
+                                             ('rel-opcode #xF0 12)
                                              ('bytes (1 2 3))
                                              (0)))
                '((1 2 3)
                  (2 3 4)
+                 (#xF0 12)
                  ((1 2 3))
                  (0))))
 
@@ -276,6 +299,17 @@
                (equal? (syntax->datum #'y-idx) 'y))
       #'(symbol-absy op-number))))
 
+(define-for-syntax (relative-mode opcode operand)
+  (with-syntax ([operand-value (syntax->datum operand)]
+                [symbol-rel (symbol-append opcode '_rel)])
+    (if (6510-label-string? (syntax->datum #'operand-value))
+        #'(symbol-rel operand-value)
+        (when (and (is-number? (syntax->datum #'operand-value))
+                 (> 256 (parse-number-string (syntax->datum #'operand-value))))
+            (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+              #'(symbol-rel op-number)))
+      )))
+
 (define-for-syntax (zeropage-x-mode opcode operand idx)
   (with-syntax ([symbol-zpx (symbol-append opcode '_zpx)]
                 [op-number (parse-number-string (syntax->datum operand))]
@@ -301,25 +335,27 @@
    (if zero-page-x? (string-append "  (" opcode-string  " \"$10\",x)   # zero page x addressing mode\n") "")
    "got: "))
 
-(define-for-syntax (error-string/single accumulator? immediate? zero-page? absolute? opcode-string)
+(define-for-syntax (error-string/single relative? accumulator? immediate? zero-page? absolute? opcode-string)
   (string-append
    "invalid syntax.\n"
-   (if (not (or accumulator? immediate? zero-page? absolute?)) (string-append opcode-string " cannot have one operand\n") "expected:\n")
+   (if (not (or relative? accumulator? immediate? zero-page? absolute?)) (string-append opcode-string " cannot have one operand\n") "expected:\n")
+   (if relative? (string-append "  (" opcode-string " \":label\") # relative mode\n") "")
    (if accumulator? (string-append "  (" opcode-string " A) # accumulator mode\n") "")
    (if immediate? (string-append "  (" opcode-string " \"#$10\") # immediate addressing mode\n") "")
    (if zero-page? (string-append "  (" opcode-string  " \"$10\") # zeropage addressing mode\n") "")
    (if absolute? (string-append "  (" opcode-string " \"$1000\") # absolute addressing.\n") "")
    "got: "))
 
-(define-for-syntax (opcode-with-addressing/single accumulator? immediate? zero-page? absolute? opcode op stx)
+(define-for-syntax (opcode-with-addressing/single relative? accumulator? immediate? zero-page? absolute? opcode op stx)
   (with-syntax ([ires (when immediate? (immediate-mode opcode op))]
                 [zpres (when zero-page? (zero-page-mode opcode op))]
                 [absres (when absolute? (absolute-mode opcode op))]
-                [accres (when accumulator? (accumulator-mode opcode op))])
-    (let ([res (foldl discard-void-syntax-object #'()  (list #'accres #'ires #'zpres #'absres))]
+                [accres (when accumulator? (accumulator-mode opcode op))]
+                [relres (when relative? (relative-mode opcode op))])
+    (let ([res (foldl discard-void-syntax-object #'()  (list #'relres #'accres #'ires #'zpres #'absres))]
           [opcode-string (symbol->string (syntax->datum opcode))])
       (if (equal? '() (syntax->datum res))
-          (error (error-string/single accumulator? immediate? zero-page? absolute? opcode-string)
+          (error (error-string/single relative? accumulator? immediate? zero-page? absolute? opcode-string)
                  (syntax->datum stx))
           res))))
 
@@ -354,10 +390,11 @@
           [indirect-y? (member 'indirect-y option-list)]
           [absolute-y? (member 'absolute-y option-list)]
           [absolute-x? (member 'absolute-x option-list)]
-          [accumulator? (member 'accumulator option-list)])
+          [accumulator? (member 'accumulator option-list)]
+          [relative? (member 'relative option-list)])
       (syntax-case stx ()
         [(opcode op)
-         (opcode-with-addressing/single accumulator? immediate? zero-page? absolute? #'opcode #'op stx)]
+         (opcode-with-addressing/single relative? accumulator? immediate? zero-page? absolute? #'opcode #'op stx)]
         [(opcode open op close-or-x close-or-y)
          (opcode-with-addressing/indirect indirect-x? indirect-y? #'opcode #'open #'op #'close-or-x #'close-or-y stx)]
         [(opcode op, idx)
@@ -386,6 +423,7 @@
   (syntax-case stx ()
     [(_ op option-list bytecode-list)
      #'(begin
+         (define-opcode-functions/macro op option-list bytecode-list relative "_rel" value (list ''rel-opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list accumulator "_acc" empty (list ''opcode 'byte-code-place))
          (define-opcode-functions/macro op option-list bytecode-list immediate "_i" value (list ''opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list zero-page "_zp" value (list ''opcode 'byte-code-place value))
@@ -460,7 +498,27 @@
   (check-match (ASL "$1000",x)
                '('opcode #x1e #x00 #x10)))
 
+(define-opcode-functions BCC '(relative) '(#x90))
+(define-opcode-functions BCS '(relative) '(#xb0))
+
+(define-opcode-functions BEQ
+  '(relative)
+  '(#xf0))
+
+(module+ test
+  (check-match (BEQ "$FC")
+               '('rel-opcode #xF0 #xfc))
+  (check-match (BEQ ":some")
+               '('rel-opcode #xF0 ":some")))
+
+(define-opcode-functions BMI '(relative) '(#x30))
+(define-opcode-functions BNE '(relative) '(#xd0))
+(define-opcode-functions BPL '(relative) '(#x10))
+
 (define (BRK) (list ''opcode #x00))
+
+(define-opcode-functions BVC '(relative) '(#x50))
+(define-opcode-functions BVS '(relative) '(#x70))
 
 (module+ test
   (check-match (BRK)
@@ -611,14 +669,15 @@
          [syntax (last line)]
          [compiled
           (case (first opcodes)
-            [('opcode) (~a  (string-join (map hex-format (drop opcodes 1)) " ")
-                            #:min-width 12)]
+            [('opcode 'rel-opcode)
+             (~a  (string-join (map hex-format (drop opcodes 1)) " ")
+                  #:min-width 12)]
             [('label) (last opcodes)]
             [('bytes) (~a (string-join  (map hex-format (last opcodes)) " "))]
             [else "?"])]
          [syntax-str
           (case (first opcodes)
-            [('opcode) (format-raw-line syntax)]
+            [('opcode 'rel-opcode) (format-raw-line syntax)]
             [('bytes) "   ; raw bytes"]
             [else ""])])
     (string-append compiled syntax-str)))

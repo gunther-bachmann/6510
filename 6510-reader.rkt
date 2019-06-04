@@ -69,7 +69,7 @@
 
 (define (abs-opcode/p opcode)
   (do
-      (string-ci/p opcode)
+      (try/p (string-ci/p opcode))
       (many/p space-or-tab/p)
     [x <- (or/p 6510-integer/p
                6510-label/p)]  ;; could be a string too
@@ -79,15 +79,27 @@
                       (list (number->string x))
                       (list (last x)))))))
 
+(define (rel-opcode/p opcode)
+  (do
+      (try/p (string-ci/p opcode))
+      (many/p space-or-tab/p)
+    [x <- (or/p 6510-integer/p
+               6510-label/p)]
+    6510-eol/p
+    (pure (append (list (string->symbol (string-upcase opcode)))
+                  (if (number? x)
+                      (list (number->string x))
+                      (list (last x)))))))
+
 (define (opcode/p opcode)
   (do
-      (string-ci/p opcode)
+      (try/p (string-ci/p opcode))
       6510-eol/p
     (pure (list (string->symbol (string-upcase opcode))))))
 
 (define (iia-opcode/p opcode immediate?)
   (do
-      (string-ci/p opcode)
+      (try/p (string-ci/p opcode))
       (many/p space-or-tab/p)
     (or/p (if immediate? (iia-opcode-immediate opcode) void/p)
           (or/p (iia-opcode-indirect opcode)
@@ -124,13 +136,13 @@
 
 (define (zax-opcode/p opcode)
   (do
-      (string-ci/p opcode)
+      (try/p (string-ci/p opcode))
       (many/p space-or-tab/p)
     (iia-opcode-absolute opcode #f)))
 
 (define (data-bytes/p)
   (do
-      (string-ci/p ".data")
+      (try/p (string-ci/p ".data"))
       (many/p space-or-tab/p)
     [result <- (many/p 6510-integer/p #:sep (do (char/p #\,) ml-whitespace/p))]
     (pure (list 'BYTES result))))
@@ -138,7 +150,15 @@
 ;; immediate, indirect and absolute addressing
 (define 6510-opcode/p
   (do (or/p (iia-opcode/p "adc" #t)
+            (rel-opcode/p "beq")
+            (rel-opcode/p "bcc")
+            (rel-opcode/p "bcs")
+            (rel-opcode/p "bmi")
+            (rel-opcode/p "bne")
+            (rel-opcode/p "bpl")
             (opcode/p "brk")
+            (rel-opcode/p "bvc")
+            (rel-opcode/p "bvs")
             (zax-opcode/p "dec")
             (zax-opcode/p "inc")
             (abs-opcode/p "jsr")
