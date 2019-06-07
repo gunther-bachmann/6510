@@ -279,19 +279,27 @@
 
 (define-for-syntax (indirect-x-mode opcode open operand close-or-x close-or-y)
   (with-syntax ([symbol-indx (symbol-append opcode '_indx)]
-                [op-number (parse-number-string (syntax->datum operand))]
                 [x-idx (syntax->datum close-or-x)])
     (when (or (equal? (syntax->datum #'x-idx) '(unquote x))
               (equal? (syntax->datum #'x-idx) 'x))
-      #'(symbol-indx op-number))))
+      (if (6510-number-string? (syntax->datum operand))
+          (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+            #'(symbol-indx op-number))
+          (with-syntax ([op operand])
+            #'(symbol-indx op))))))
+
 
 (define-for-syntax (indirect-y-mode opcode open operand close-or-x close-or-y)
   (with-syntax ([symbol-indy (symbol-append opcode '_indy)]
-                [op-number (parse-number-string (syntax->datum operand))]
+
                 [y-idx (syntax->datum close-or-y)])
     (when (or (equal? (syntax->datum #'y-idx) '(unquote y))
               (equal? (syntax->datum #'y-idx) 'y))
-      #'(symbol-indy op-number))))
+      (if (6510-number-string? (syntax->datum operand))
+          (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+            #'(symbol-indy op-number))
+          (with-syntax ([op operand])
+            #'(symbol-indy op))))))
 
 (define-for-syntax (absolute-x-mode opcode operand idx)
   (with-syntax ([symbol-absx (symbol-append opcode '_absx)]
@@ -446,11 +454,11 @@
          (define-opcode-functions/macro op option-list bytecode-list immediate "_i" value (list ''opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list zero-page "_zp" value (list ''opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list zero-page-x "_zpx" value (list ''opcode 'byte-code-place value))
-         (define-opcode-functions/macro op option-list bytecode-list absolute "_abs" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
-         (define-opcode-functions/macro op option-list bytecode-list absolute-x "_absx" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
-         (define-opcode-functions/macro op option-list bytecode-list absolute-y "_absy" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
-         (define-opcode-functions/macro op option-list bytecode-list indirect-x "_indx" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
-         (define-opcode-functions/macro op option-list bytecode-list indirect-y "_indy" value (list ''opcode 'byte-code-place (low-byte value) (high-byte value)))
+         (define-opcode-functions/macro op option-list bytecode-list absolute "_abs" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
+         (define-opcode-functions/macro op option-list bytecode-list absolute-x "_absx" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
+         (define-opcode-functions/macro op option-list bytecode-list absolute-y "_absy" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
+         (define-opcode-functions/macro op option-list bytecode-list indirect-x "_indx" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
+         (define-opcode-functions/macro op option-list bytecode-list indirect-y "_indy" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
          (opcode-with-addressing op option-list)
          )]))
 

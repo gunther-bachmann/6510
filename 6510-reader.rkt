@@ -6,15 +6,13 @@
 (require "6510.rkt")
 (require "6510-interpreter.rkt")
 
-;; TODO add parser for ASL
-;; TODO writer parameterized parser for all addressing modes
-
 ; usage:
 ; - create file with content
 ;     #lang reader "6510-reader.rkt"
-;     10
+;     *=$C000
+;     lda #$40
 ; - C-c to open repl for this source file
-; - enter 'data' to see if 10 is successfully parsed
+; - follow the hints printed
 
 (module+ test
   (require rackunit)
@@ -144,16 +142,16 @@
 
 
 (define word/p
-    (guard/p 6510-integer/p (λ (x) (<= x 65535))
-             "integer in range [$0000,$FFFF]"))
+  (guard/p 6510-integer/p (λ (x) (<= x 65535))
+           "integer in range [$0000,$FFFF]"))
 
 (define byte/p
-    (guard/p 6510-integer/p (λ (x) (<= x 255))
-             "integer in range [$00,$FF]"))
+  (guard/p 6510-integer/p (λ (x) (<= x 255))
+           "integer in range [$00,$FF]"))
 
 (define (abs-opcode/p opcode)
   (do
-      (try/p (string-ci/p opcode))
+      (try/p (string-cia/p opcode))
       (many/p space-or-tab/p)
     [x <- (or/p word/p
                6510-label/p)]  ;; could be a string too
@@ -181,7 +179,7 @@
 
 (define (rel-opcode/p opcode)
   (do
-      (try/p (string-ci/p opcode))
+      (try/p (string-cia/p opcode))
       (many/p space-or-tab/p)
     [x <- (or/p byte/p
                6510-label/p)]
@@ -191,82 +189,89 @@
                       (list (number->string x))
                       (list (last x)))))))
 
-(define (opcode/p opcode)
-  (do
-      (try/p (string-ci/p opcode))
-      6510-eol/p
-    (pure (list (string->symbol (string-upcase opcode))))))
+(define (chars-ci/p str)
+  (if (zero? (string-length str))
+      (pure "")
+      (label/p str (do (char-ci/p (string-ref str 0))
+                       (string-cia/p (substring str 1))
+                     (pure str)))))
 
-(define (iia-opcode/p opcode immediate?)
-  (do
-      (try/p (string-ci/p opcode))
-      (many/p space-or-tab/p)
-    (or/p (if immediate? (iia-opcode-immediate opcode) void/p)
-          (or/p (iia-opcode-indirect opcode)
-                (iia-opcode-absolute opcode #t)))))
+(define (string-cia/p string)
+  (chars-ci/p string))
 
-(define (iia-opcode-immediate opcode)
-  (do
-      (char/p #\#)
-      [x <- byte/p]
-    (pure `(,(string->symbol (string-upcase opcode)) ,(string-append "#" (number->string x))))))
+(define accumulator/p (do (char-ci/p #\A) (pure '(A))))
+(define immediate/p (do (char/p #\#) [x <- byte/p] (pure (list (string-append "#" (number->string x))))))
+(define zero-page-or-relative/p (do [x <- byte/p] (pure (list (number->string x)))))
+(define absolute/p (do [x <- word/p] (pure (list (number->string x)))))
+(define indirect-x/p (do (char/p #\() [mem <- (or/p 6510-label/p word/p)] (string-cia/p ",x") (char/p #\))
+                         (pure `(< ,(if (number? mem) (number->string mem) (last mem)) x >))))
+(define indirect-y/p (do (char/p #\() [mem <- word/p] (char/p #\)) (string-cia/p ",y") (pure `(< ,(number->string mem) > y))))
+(define absolute-x/p (do [x <- word/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
+(define absolute-y/p (do [x <- word/p] (string-cia/p ",y") (pure (list (number->string x) 'y))))
+(define zero-page-x/p (do [x <- byte/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
 
-(define (iia-opcode-absolute opcode index-y?)
-  (do
-      [operand <- word/p]
-      [appendix <- (or/p (do (char/p #\,)
-                            (or/p  (string-ci/p "x")
-                                   (if index-y? (string-ci/p "y") void/p)))
-                        void/p)]
-    (let ([base-result-lst `(,(string->symbol (string-upcase opcode)) ,(number->string operand))])
-      (if (void? appendix)
-          (pure base-result-lst)
-          (pure (append base-result-lst `(,(string->symbol (string-downcase appendix)))))))
-      ))
+(define (opcode->list4pure opcode)
+  (list (string->symbol (string-upcase opcode))))
 
-(define (iia-opcode-indirect opcode)
+(define (adr-modes-opcode/p opcode adr-mode-list)
   (do
-      (char/p #\()
-      [x <- 6510-integer/p]
-    [ind <- (or/p (string-ci/p "),y")
-                 (string-ci/p ",x)"))]
-    (if (equal? ind "),y")
-        (pure `(,(string->symbol (string-upcase opcode)) < ,(number->string x) > y))
-        (pure `(,(string->symbol (string-upcase opcode)) < ,(number->string x) x >)))))
+      (try/p (string-cia/p opcode))
 
-(define (zax-opcode/p opcode)
-  (do
-      (try/p (string-ci/p opcode))
-      (many/p space-or-tab/p)
-    (iia-opcode-absolute opcode #f)))
+      ;; order is relevant (for parser to get the max matching string per line
+      [res <- (or/p (try/p (guard/p (do (many/p space-or-tab/p) [a-res <- accumulator/p] (pure (append (opcode->list4pure opcode) a-res)))
+                                   (lambda (x) (member 'accumulator adr-mode-list)) "no accumlator"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [i-res <- immediate/p] (pure (append (opcode->list4pure opcode) i-res)))
+                                   (lambda (x) (member 'immediate adr-mode-list)) "no immediate"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [indx-res <- indirect-x/p] (pure (append (opcode->list4pure opcode) indx-res)))
+                                   (lambda (x) (member 'indirect-x adr-mode-list)) "no indirect, x"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [indy-res <- indirect-y/p] (pure (append (opcode->list4pure opcode) indy-res)))
+                                   (lambda (x) (member 'indirect-y adr-mode-list)) "no indirect, y"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [absx-res <- absolute-x/p] (pure (append (opcode->list4pure opcode) absx-res)))
+                                   (lambda (x) (member 'absolute-x adr-mode-list)) "no absolute, x"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [absy-res <- absolute-y/p] (pure (append (opcode->list4pure opcode) absy-res)))
+                                   (lambda (x) (member 'absolute-y adr-mode-list)) "no absolute, y"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [zpx-res <- zero-page-x/p] (pure (append (opcode->list4pure opcode) zpx-res)))
+                                   (lambda (x) (member 'zero-page-x adr-mode-list)) "no zero page, x"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [abs-res <- absolute/p] (pure (append (opcode->list4pure opcode) abs-res)))
+                                   (lambda (x) (member 'absolute adr-mode-list)) "no absolute"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [zp-res <- zero-page-or-relative/p] (pure (append (opcode->list4pure opcode) zp-res)))
+                                   (lambda (x) (or (member 'zero-page adr-mode-list) (member 'relative adr-mode-list))) "no zero page nor relative"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [label-res <- 6510-label/p] (pure (append (opcode->list4pure opcode) (list (last label-res)))))
+                                   (lambda (x) (or (member 'relative adr-mode-list) (member 'absolute adr-mode-list))) "no relative label"))
+                   (try/p (guard/p (do void/p (pure (opcode->list4pure opcode)))
+                                   (lambda (x) (member 'implicit adr-mode-list) ) "no implicit"))
+                   )]
+    (pure res)))
 
-(define (data-bytes/p)
+(define data-bytes/p
   (do
-      (try/p (string-ci/p ".data"))
+      (try/p (string-cia/p ".data"))
       (many/p space-or-tab/p)
     [result <- (many/p byte/p #:sep (do (char/p #\,) ml-whitespace/p))]
     (pure (list 'BYTES result))))
 
 ;; immediate, indirect and absolute addressing
 (define 6510-opcode/p
-  (do (or/p (iia-opcode/p "adc" #t)
-            (rel-opcode/p "beq")
-            (rel-opcode/p "bcc")
-            (rel-opcode/p "bcs")
-            (rel-opcode/p "bmi")
-            (rel-opcode/p "bne")
-            (rel-opcode/p "bpl")
-            (opcode/p "brk")
-            (rel-opcode/p "bvc")
-            (rel-opcode/p "bvs")
-            (zax-opcode/p "dec")
-            (zax-opcode/p "inc")
-            (abs-opcode/p "jsr")
-            (iia-opcode/p "lda" #t)
-            (iia-opcode/p "sta" #f)
-            (opcode/p "rts")
-            (data-bytes/p)
-            6510-label/p)))
+  (do (or/p
+       (adr-modes-opcode/p "adc" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
+       (adr-modes-opcode/p "asl" '(accumulator zero-page zero-page-x absolute-x absolute))
+       (adr-modes-opcode/p "beq" '(relative))
+       (adr-modes-opcode/p "bcc" '(relative))
+       (adr-modes-opcode/p "bcs" '(relative))
+       (adr-modes-opcode/p "bmi" '(relative))
+       (adr-modes-opcode/p "bne" '(relative))
+       (adr-modes-opcode/p "bpl" '(relative))
+       (adr-modes-opcode/p "brk" '(implicit))
+       (adr-modes-opcode/p "bvc" '(relative))
+       (adr-modes-opcode/p "bvs" '(relative))
+       (adr-modes-opcode/p "dec" '(zero-page zero-page-x absolute absolute-x))
+       (adr-modes-opcode/p "inc" '(zero-page zero-page-x absolute absolute-x))
+       (adr-modes-opcode/p "jsr" '(absolute))
+       (adr-modes-opcode/p "lda" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
+       (adr-modes-opcode/p "sta" '(zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
+       (adr-modes-opcode/p "rts" '(implicit))
+       data-bytes/p
+       6510-label/p)))
 
 (define 6510-program-origin/p
   (do (char/p #\*) (many/p space-or-tab/p)

@@ -18,6 +18,11 @@
 
         .data $01, $2F, 255, %1001
 
+ asl a
+ asl $10
+ asl $1000
+ asl $10,x
+ asl $1000,x
  bcc $10
  bcs $ff
  beq :end
@@ -39,11 +44,12 @@
 
  adc $231A,y ; indexed y
  adc $213C,X ; indexed x
- adc #$10    ; immediate
+ ADC #$10    ; immediate
  Adc $07     ; absolute zero page
  adc $21,x   ; zero page indexed x
  adc $FFFf   ; absolute
  adc ($c000),y
+ adc (:out,x)
  adc ($a000,x)
 
  sta $231A,y ; indexed y
