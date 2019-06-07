@@ -16,6 +16,12 @@
 ; - C-c to open repl for this source file
 ; - enter 'data' to see if 10 is successfully parsed
 
+(module+ test
+  (require rackunit)
+
+  (define (parsed-string-result syntax string)
+    (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
+
 (provide (rename-out [literal-read read]
                      [literal-read-syntax read-syntax]))
 
@@ -50,8 +56,55 @@
       [x <-  hex-string/p]
     (pure (parse-number-string (string-append "$" x)))))
 
+(define (char-bin? char)
+  (or (eq? char #\0)
+      (eq? char #\1)))
+
+(define bin-digit/p
+  (label/p "bin-number" (satisfy/p char-bin?)))
+
+(define bin-string/p
+  (do [digits <- (many+/p bin-digit/p)]
+      (pure (list->string digits))))
+
+(define bin-integer/p
+  (do (char/p #\%)
+      [x <- bin-string/p]
+    (pure (parse-number-string (string-append "%" x)))))
+
+(module+ test
+  (check-true (char-bin? #\1))
+
+  (check-match (parsed-string-result bin-string/p "10")
+               "10")
+
+  (check-match (parsed-string-result bin-integer/p "%10")
+               2))
+
 (define 6510-integer/p
-  (or/p integer/p hex-integer/p))
+  (or/p integer/p hex-integer/p bin-integer/p))
+
+(module+ test
+  (check-match (parsed-string-result 6510-integer/p "%10")
+               2)
+
+  (check-match (parsed-string-result 6510-integer/p "$10")
+               16)
+
+  (check-match (parsed-string-result 6510-integer/p "10")
+               10)
+
+  (check-match (parsed-string-result 6510-integer/p "10ab") ;; ab is not parsed/yet
+               10)
+
+  (check-exn exn:fail?
+             (lambda () (parsed-string-result abs-opcode/p "-10")))
+
+  (check-exn exn:fail?
+             (lambda () (parsed-string-result abs-opcode/p "A0")))
+
+  (check-exn exn:fail?
+             (lambda () (parsed-string-result abs-opcode/p "_17"))))
 
 (define 6510-eol/p
   (do (many/p space-or-tab/p)
@@ -64,14 +117,45 @@
 (define 6510-label/p
   (do
       (char/p #\:)
-      [new-label <- (many+/p (or/p letter/p digit/p))]
+      [new-label <- (many+/p (or/p letter/p digit/p (char/p #\_)))]
     (pure (list (string->symbol "LABEL") (string-append ":" (list->string new-label))))))
+
+(module+ test
+  (check-match (parsed-string-result 6510-label/p ":abc")
+               '(LABEL ":abc"))
+
+  (check-match (parsed-string-result 6510-label/p ":abc12")
+               '(LABEL ":abc12"))
+
+  (check-match (parsed-string-result 6510-label/p ":ab1c2")
+               '(LABEL ":ab1c2"))
+
+  (check-match (parsed-string-result 6510-label/p ":1ab1c2")
+               '(LABEL ":1ab1c2"))
+
+  (check-match (parsed-string-result 6510-label/p ":1ab1_c2")
+               '(LABEL ":1ab1_c2"))
+
+  (check-match (parsed-string-result 6510-label/p ":1ab1_c2:8")
+               '(LABEL ":1ab1_c2"))
+
+  (check-exn exn:fail?
+             (lambda () (parsed-string-result 6510-label/p "abc"))))
+
+
+(define word/p
+    (guard/p 6510-integer/p (λ (x) (<= x 65535))
+             "integer in range [$0000,$FFFF]"))
+
+(define byte/p
+    (guard/p 6510-integer/p (λ (x) (<= x 255))
+             "integer in range [$00,$FF]"))
 
 (define (abs-opcode/p opcode)
   (do
       (try/p (string-ci/p opcode))
       (many/p space-or-tab/p)
-    [x <- (or/p 6510-integer/p
+    [x <- (or/p word/p
                6510-label/p)]  ;; could be a string too
     6510-eol/p
     (pure (append (list (string->symbol (string-upcase opcode)))
@@ -79,11 +163,27 @@
                       (list (number->string x))
                       (list (last x)))))))
 
+(module+ test
+  (check-match (parsed-string-result (abs-opcode/p "JSR") "JSR $1000")
+               '(JSR "4096"))
+
+  (check-match (parsed-string-result (abs-opcode/p "JSR") "JSR %0001000000000000")
+               '(JSR "4096"))
+
+  (check-match (parsed-string-result (abs-opcode/p "ADC") "ADC 4096")
+               '(ADC "4096"))
+
+  (check-match (parsed-string-result (abs-opcode/p "LDA") "LDA :some")
+               '(LDA ":some"))
+
+  (check-exn exn:fail?
+             (lambda () (parsed-string-result (abs-opcode/p "JSR") "JSR $10000"))))
+
 (define (rel-opcode/p opcode)
   (do
       (try/p (string-ci/p opcode))
       (many/p space-or-tab/p)
-    [x <- (or/p 6510-integer/p
+    [x <- (or/p byte/p
                6510-label/p)]
     6510-eol/p
     (pure (append (list (string->symbol (string-upcase opcode)))
@@ -108,12 +208,12 @@
 (define (iia-opcode-immediate opcode)
   (do
       (char/p #\#)
-      [x <- 6510-integer/p]
+      [x <- byte/p]
     (pure `(,(string->symbol (string-upcase opcode)) ,(string-append "#" (number->string x))))))
 
 (define (iia-opcode-absolute opcode index-y?)
   (do
-      [operand <- 6510-integer/p]
+      [operand <- word/p]
       [appendix <- (or/p (do (char/p #\,)
                             (or/p  (string-ci/p "x")
                                    (if index-y? (string-ci/p "y") void/p)))
@@ -144,7 +244,7 @@
   (do
       (try/p (string-ci/p ".data"))
       (many/p space-or-tab/p)
-    [result <- (many/p 6510-integer/p #:sep (do (char/p #\,) ml-whitespace/p))]
+    [result <- (many/p byte/p #:sep (do (char/p #\,) ml-whitespace/p))]
     (pure (list 'BYTES result))))
 
 ;; immediate, indirect and absolute addressing
@@ -171,7 +271,7 @@
 (define 6510-program-origin/p
   (do (char/p #\*) (many/p space-or-tab/p)
     (char/p #\=) (many/p space-or-tab/p)
-    [origin <- hex-integer/p]
+    [origin <- 6510-integer/p]
     6510-eol/p
     (pure origin)))
 
@@ -197,17 +297,14 @@
            (require "6510.rkt")
            (require "6510-interpreter.rkt")
            (provide program raw-program data resolved-program pretty-program raw-bytes)
-           ; str ...
            (define raw-program '(str ...))
-           ;(displayln "program parsed:")
-           ;(displayln raw-program)
            (define program `(,str ...))
-           ;(displayln program)
            (define resolved-program (replace-labels program org))
            (define raw-bytes (commands->bytes org `(,str ...)))
            (define data (6510-load (initialize-cpu) org raw-bytes))
            (displayln "program execution:")
-           (run (set-pc-in-state data org))
+           (let ([_ (run (set-pc-in-state data org))])
+             (void))
            (displayln "(have a look at raw-program, resolved-program, raw-bytes and pretty-program)")
            (define pretty-program (pretty-print-program resolved-program raw-program))
            ; (create-prg (commands->bytes org program) org "test.prg")

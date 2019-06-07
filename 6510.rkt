@@ -253,7 +253,7 @@
 
 (define-for-syntax (zero-page-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)])
-    (when (is-number? (syntax->datum #'operand-value))
+    (when (6510-number-string? (syntax->datum #'operand-value))
       (with-syntax ([op-number (parse-number-string (syntax->datum operand))]
                     [symbol-zp (symbol-append opcode '_zp)])
         (when (> 256 (syntax->datum #'op-number))
@@ -261,7 +261,7 @@
 
 (define-for-syntax (absolute-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)])
-    (when (is-number? (syntax->datum #'operand-value))
+    (when (6510-number-string? (syntax->datum #'operand-value))
       (with-syntax ([op-number (parse-number-string (syntax->datum operand))]
                     [symbol-abs (symbol-append opcode '_abs)])
         (when (<= 256 (syntax->datum #'op-number))
@@ -304,7 +304,7 @@
                 [symbol-rel (symbol-append opcode '_rel)])
     (if (6510-label-string? (syntax->datum #'operand-value))
         #'(symbol-rel operand-value)
-        (when (and (is-number? (syntax->datum #'operand-value))
+        (when (and (6510-number-string? (syntax->datum #'operand-value))
                  (> 256 (parse-number-string (syntax->datum #'operand-value))))
             (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
               #'(symbol-rel op-number)))
@@ -656,13 +656,23 @@
 
 ;; ======================================== pretty print
 
+(define (hex-format-any a-number-str)
+  (let ([parsed-number (parse-number-string a-number-str)])
+    (if (> parsed-number 255)
+        (string-append "$" (hex-format (high-byte parsed-number)) (hex-format (low-byte parsed-number)))
+        (string-append "$" (hex-format parsed-number)))))
+
 (define (hex-format a-number)
   (define digits "0123456789ABCDEF")
   (string (string-ref digits (div a-number 16))
           (string-ref digits (mod a-number 16))))
 
 (define (format-raw-line slst)
-  (string-join (map (lambda (element) (if (symbol? element) (symbol->string element) element)) slst) " "))
+  (string-join (map (lambda (element)
+                      (cond [(symbol? element) (symbol->string element)]
+                            [(6510-number-string? element) (hex-format-any element)]
+                            [(is-immediate-number? element) (string-append "#" (hex-format-any (substring element 1)))]
+                            [else  element])) slst) " "))
 
 (define (pretty-print-line line)
   (let* ([opcodes (first line)]

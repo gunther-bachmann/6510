@@ -8,7 +8,7 @@
         jsr :out   ; print this character to screen
         adc #1     ; load character B (dec 66)
         jsr :out   ; print this character to screen
-        lda #$0a
+        lda #%00001010 ; $0a
         jsr :out
  :end   rts        ; end of execution
 
@@ -16,7 +16,7 @@
         rts
         brk
 
-        .data $01, $2F
+        .data $01, $2F, 255, %1001
 
  bcc $10
  bcs $ff
@@ -27,7 +27,7 @@
  bvc :end
  bvs $00
 
- inc $10
+ inc %00010000
  inc $10,x
  inc $1000
  inc $1000,x
