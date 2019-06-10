@@ -430,6 +430,8 @@
 (define-syntax-rule (opcode-with-addressing opcode option-list)
   (define-syntax (opcode stx)
     (syntax-case stx ()
+      [(opcode)
+       (with-syntax ([symbol (symbol-append #'opcode (syntax->datum #'_impl))]) #'(symbol))]
       [(opcode op)
        (opcode-with-addressing/single (list->one-arg-adr-modes option-list) #'opcode #'op stx)]
       [(opcode open op close-or-x close-or-y)
@@ -460,6 +462,7 @@
   (syntax-case stx ()
     [(_ op option-list bytecode-list)
      #'(begin
+         (define-opcode-functions/macro op option-list bytecode-list implicit "_impl" empty (list ''rel-opcode 'byte-code-place))
          (define-opcode-functions/macro op option-list bytecode-list relative "_rel" value (list ''rel-opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list accumulator "_acc" empty (list ''opcode 'byte-code-place))
          (define-opcode-functions/macro op option-list bytecode-list immediate "_i" value (list ''opcode 'byte-code-place value))
@@ -481,9 +484,12 @@
     [(BYTES bytes)
      #'(BYTES_list (quote bytes))]))
 
-
 (define (BYTES_list bytes)
   (list ''bytes bytes))
+
+(module+ test
+  (check-match (BYTES '(10 20 30))
+               '('bytes '(10 20 30))))
 
 (define-opcode-functions ADC
   '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
@@ -537,10 +543,7 @@
 
 (define-opcode-functions BCC '(relative) '(#x90))
 (define-opcode-functions BCS '(relative) '(#xb0))
-
-(define-opcode-functions BEQ
-  '(relative)
-  '(#xf0))
+(define-opcode-functions BEQ '(relative) '(#xf0))
 
 (module+ test
   (check-match (BEQ "$FC")
@@ -552,7 +555,9 @@
 (define-opcode-functions BNE '(relative) '(#xd0))
 (define-opcode-functions BPL '(relative) '(#x10))
 
-(define (BRK) (list ''opcode #x00))
+;; (define (BRK) (list ''opcode #x00))
+
+(define-opcode-functions BRK '(implicit) '(#x00))
 
 (define-opcode-functions BVC '(relative) '(#x50))
 (define-opcode-functions BVS '(relative) '(#x70))
@@ -614,8 +619,7 @@
   (check-match (LDA < "$A000", x > )
                '('opcode #xA1 #x00 #xA0)))
 
-(define (RTS)
-  (list ''opcode #x60))
+(define-opcode-functions RTS '(implicit) '(#x60))
 
 (define-opcode-functions STA
   '(zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
