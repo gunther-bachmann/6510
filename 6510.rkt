@@ -248,7 +248,6 @@
      #'(LABEL_s op)]))
 
 ;; ================================================================================ opcode definition helper
-
 (define-for-syntax (accumulator-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
                 [symbol-acc (symbol-append opcode '_acc)])
@@ -270,12 +269,14 @@
           #'(symbol-zp (parse-number-string operand-value)))))))
 
 (define-for-syntax (absolute-mode opcode operand)
-  (with-syntax ([operand-value (syntax->datum operand)])
-    (when (6510-number-string? (syntax->datum #'operand-value))
-      (with-syntax ([op-number (parse-number-string (syntax->datum operand))]
-                    [symbol-abs (symbol-append opcode '_abs)])
-        (when (<= 256 (syntax->datum #'op-number))
-          #'(symbol-abs op-number))))))
+  (with-syntax ([operand-value (syntax->datum operand)]
+                [symbol-abs (symbol-append opcode '_abs)])
+    (if (6510-number-string? (syntax->datum #'operand-value))
+        (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+          (when (<= 256 (syntax->datum #'op-number))
+            #'(symbol-abs op-number)))
+        (when (6510-label-string? (syntax->datum #'operand-value))
+          #'(symbol-abs operand-value)))))
 
 (define-for-syntax (indirect-x-mode opcode open operand close-or-x close-or-y)
   (with-syntax ([symbol-indx (symbol-append opcode '_indx)]
@@ -287,7 +288,6 @@
             #'(symbol-indx op-number))
           (with-syntax ([op operand])
             #'(symbol-indx op))))))
-
 
 (define-for-syntax (indirect-y-mode opcode open operand close-or-x close-or-y)
   (with-syntax ([symbol-indy (symbol-append opcode '_indy)]
@@ -303,19 +303,27 @@
 
 (define-for-syntax (absolute-x-mode opcode operand idx)
   (with-syntax ([symbol-absx (symbol-append opcode '_absx)]
-                [op-number (parse-number-string (syntax->datum operand))]
                 [x-idx (syntax->datum idx)])
-    (when (and (< 255 (syntax->datum #'op-number))
-               (equal? (syntax->datum #'x-idx) 'x))
-      #'(symbol-absx op-number))))
+    (when (equal? (syntax->datum #'x-idx) 'x)
+      (if (6510-number-string? (syntax->datum operand))
+          (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+            (when (< 255 (syntax->datum #'op-number))
+              #'(symbol-absx op-number)))
+          (when (6510-label-string? (syntax->datum operand))
+            (with-syntax ([op operand])
+              #'(symbol-absx op)))))))
 
 (define-for-syntax (absolute-y-mode opcode operand idx)
   (with-syntax ([symbol-absy (symbol-append opcode '_absy)]
-                [op-number (parse-number-string (syntax->datum operand))]
                 [y-idx (syntax->datum idx)])
-    (when (and (< 255 (syntax->datum #'op-number))
-               (equal? (syntax->datum #'y-idx) 'y))
-      #'(symbol-absy op-number))))
+    (when (equal? (syntax->datum #'y-idx) 'y)
+      (if (6510-number-string? (syntax->datum operand))
+          (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+            (when (< 255 (syntax->datum #'op-number))
+              #'(symbol-absy op-number)))
+          (when (6510-label-string? (syntax->datum operand))
+            (with-syntax ([op operand])
+              #'(symbol-absy op)))))))
 
 (define-for-syntax (relative-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
@@ -335,6 +343,9 @@
     (when (and (> 256 (syntax->datum #'op-number))
                (equal? (syntax->datum #'x-idx) 'x))
       #'(symbol-zpx op-number))))
+
+
+
 
 (define-for-syntax (error-string/indirect adr-modes opcode-string)
   (string-append
@@ -571,21 +582,8 @@
   (check-match (INC "$1000",x)
                '('opcode #xFE #x00 #x10)))
 
-(define (JMP_abs absolute)
-  (list ''opcode #x4C (high-byte absolute) (low-byte absolute)))
-
-(define (JSR_abs_label str)
-  (list ''opcode #x20 str))
-
-(define (JSR_abs absolute)
-  (list ''opcode #x20 (low-byte absolute) (high-byte absolute)))
-
-(define-syntax (JSR stx)
-  (syntax-case stx ()
-    [(JSR op)
-     (if (6510-label-string? (syntax->datum #'op))
-         #'(JSR_abs_label op)
-         #'(JSR_abs (parse-number-string op)))]))
+(define-opcode-functions JMP '(absolute) '(#x4C))
+(define-opcode-functions JSR '(absolute) '(#x20))
 
 (define-opcode-functions LDA
   '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)

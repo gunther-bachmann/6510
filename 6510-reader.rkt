@@ -96,13 +96,13 @@
                10)
 
   (check-exn exn:fail?
-             (lambda () (parsed-string-result abs-opcode/p "-10")))
+             (lambda () (parsed-string-result 6510-integer/p "-10")))
 
   (check-exn exn:fail?
-             (lambda () (parsed-string-result abs-opcode/p "A0")))
+             (lambda () (parsed-string-result 6510-integer/p "A0")))
 
   (check-exn exn:fail?
-             (lambda () (parsed-string-result abs-opcode/p "_17"))))
+             (lambda () (parsed-string-result 6510-integer/p "_17"))))
 
 (define 6510-eol/p
   (do (many/p space-or-tab/p)
@@ -202,13 +202,21 @@
 (define accumulator/p (do (char-ci/p #\A) (pure '(A))))
 (define immediate/p (do (char/p #\#) [x <- byte/p] (pure (list (string-append "#" (number->string x))))))
 (define zero-page-or-relative/p (do [x <- byte/p] (pure (list (number->string x)))))
-(define absolute/p (do [x <- word/p] (pure (list (number->string x)))))
+(define absolute/p (do [mem <- (or/p 6510-label/p word/p)] (pure (list (if (number? mem) (number->string mem) (last mem))))))
 (define indirect-x/p (do (char/p #\() [mem <- (or/p 6510-label/p word/p)] (string-cia/p ",x") (char/p #\))
                          (pure `(< ,(if (number? mem) (number->string mem) (last mem)) x >))))
 (define indirect-y/p (do (char/p #\() [mem <- word/p] (char/p #\)) (string-cia/p ",y") (pure `(< ,(number->string mem) > y))))
 (define absolute-x/p (do [x <- word/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
 (define absolute-y/p (do [x <- word/p] (string-cia/p ",y") (pure (list (number->string x) 'y))))
 (define zero-page-x/p (do [x <- byte/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
+
+(module+ test
+  (check-match (parsed-string-result indirect-x/p "($1000,x)")
+               '(< "4096" x >))
+  (check-match (parsed-string-result absolute/p "$1000")
+               '("4096"))
+  (check-match (parsed-string-result absolute/p ":out")
+               '(":out")))
 
 (define (opcode->list4pure opcode)
   (list (string->symbol (string-upcase opcode))))
