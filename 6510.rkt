@@ -25,7 +25,9 @@
 (require "6510-interpreter.rkt")
 
 (module+ test
-  (require rackunit))
+  (require rackunit)
+  (begin-for-syntax
+    (require rackunit)))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program
          ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC INC LDA JSR RTS STA
@@ -268,6 +270,11 @@
         (when (> 256 (syntax->datum #'op-number))
           #'(symbol-zp (parse-number-string operand-value)))))))
 
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (zero-page-mode #'LDA #'"$10"))
+                 '(LDA_zp (parse-number-string "$10")))))
+
 (define-for-syntax (absolute-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
                 [symbol-abs (symbol-append opcode '_abs)])
@@ -277,6 +284,13 @@
             #'(symbol-abs op-number)))
         (when (6510-label-string? (syntax->datum #'operand-value))
           #'(symbol-abs operand-value)))))
+
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (absolute-mode #'JSR #'"$1000"))
+                 '(JSR_abs 4096))
+    (check-match (syntax->datum (absolute-mode #'JSR #'":out"))
+                 '(JSR_abs ":out"))))
 
 (define-for-syntax (indirect-x-mode opcode open operand close-or-x close-or-y)
   (with-syntax ([symbol-indx (symbol-append opcode '_indx)]
@@ -462,7 +476,7 @@
   (syntax-case stx ()
     [(_ op option-list bytecode-list)
      #'(begin
-         (define-opcode-functions/macro op option-list bytecode-list implicit "_impl" empty (list ''rel-opcode 'byte-code-place))
+         (define-opcode-functions/macro op option-list bytecode-list implicit "_impl" empty (list ''opcode 'byte-code-place))
          (define-opcode-functions/macro op option-list bytecode-list relative "_rel" value (list ''rel-opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list accumulator "_acc" empty (list ''opcode 'byte-code-place))
          (define-opcode-functions/macro op option-list bytecode-list immediate "_i" value (list ''opcode 'byte-code-place value))
