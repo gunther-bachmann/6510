@@ -71,6 +71,14 @@
              [new-sum (+ current-sum first-num)])
         (append `((,first-num ,current-sum)) (lo-sums (drop list 1) new-sum)))))
 
+(module+ test
+  (check-match (lo-sums '(1 2 2 0) 0)
+               '((1 0) (2 1) (2 3) (0 5)))
+  (check-match (lo-sums '() 0)
+               '())
+  (check-match (lo-sums '(1 2 2 0) 8)
+               '((1 8) (2 9) (2 11) (0 13))))
+
 (define (collect-label-offset-map commands-bytes-list)
   (let* ([labels-bytes-list (filter (lambda (command-byte-pair)
                                       (case (first (first command-byte-pair))
@@ -256,24 +264,59 @@
     (when (equal? 'A (syntax->datum #'operand-value))
       #'(symbol-acc))))
 
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (accumulator-mode #'LDA #'A))
+                 '(LDA_acc))
+    (check-eq? (accumulator-mode #'LDA #'B)
+               (void))
+    (check-eq? (accumulator-mode #'LDA #'"$10")
+               (void))))
+
 (define-for-syntax (immediate-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
                 [symbol-i (symbol-append opcode '_i)])
     (when (is-immediate-number? (syntax->datum #'operand-value))
-      #'(symbol-i (parse-number-string (substring operand-value 1))))))
+      (with-syntax ([op-number (parse-number-string (substring (syntax->datum operand) 1))])
+        #'(symbol-i op-number)))))
+
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (immediate-mode #'LDA #'"#$10"))
+                 '(LDA_i 16))
+    (check-eq? (immediate-mode #'LDA #'"$10")
+               (void))
+    (check-eq? (immediate-mode #'LDA #'"#A0")
+               (void))
+    (check-eq? (immediate-mode #'LDA #'"$10A0")
+               (void))
+    (check-match (syntax->datum (immediate-mode #'LDA #'"#$A0"))
+                 '(LDA_i 160))))
 
 (define-for-syntax (zero-page-mode opcode operand)
-  (with-syntax ([operand-value (syntax->datum operand)])
-    (when (6510-number-string? (syntax->datum #'operand-value))
-      (with-syntax ([op-number (parse-number-string (syntax->datum operand))]
-                    [symbol-zp (symbol-append opcode '_zp)])
-        (when (> 256 (syntax->datum #'op-number))
-          #'(symbol-zp (parse-number-string operand-value)))))))
+  (with-syntax ([operand-value (syntax->datum operand)]
+                [symbol-zp (symbol-append opcode '_zp)])
+    (if (6510-number-string? (syntax->datum operand))
+          (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+            (when (> 256 (parse-number-string (syntax->datum #'operand-value)))
+              #'(symbol-zp op-number)))
+          (when (6510-label-string? (syntax->datum #'operand-value))
+            #'(symbol-zp operand-value)))))
 
 (module+ test
   (begin-for-syntax
     (check-match (syntax->datum (zero-page-mode #'LDA #'"$10"))
-                 '(LDA_zp (parse-number-string "$10")))))
+                 '(LDA_zp 16))
+    (check-eq? (zero-page-mode #'LDA #'"#$10")
+               (void))
+    (check-eq? (zero-page-mode #'LDA #'"$Q0")
+               (void))
+    (check-eq? (zero-page-mode #'LDA #'"$10A0")
+               (void))
+    (check-match (syntax->datum (zero-page-mode #'LDA #'"$A0"))
+                 '(LDA_zp 160))
+    (check-match (syntax->datum (zero-page-mode #'LDA #'":out"))
+                 '(LDA_zp ":out"))))
 
 (define-for-syntax (absolute-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
@@ -289,6 +332,8 @@
   (begin-for-syntax
     (check-match (syntax->datum (absolute-mode #'JSR #'"$1000"))
                  '(JSR_abs 4096))
+    (check-eq? (absolute-mode #'LDA #'"$10")
+               (void))
     (check-match (syntax->datum (absolute-mode #'JSR #'":out"))
                  '(JSR_abs ":out"))))
 
@@ -299,9 +344,19 @@
               (equal? (syntax->datum #'x-idx) 'x))
       (if (6510-number-string? (syntax->datum operand))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
-            #'(symbol-indx op-number))
+            (when (<= 255 (syntax->datum #'op-number))
+              #'(symbol-indx op-number)))
           (with-syntax ([op operand])
             #'(symbol-indx op))))))
+
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (indirect-x-mode #'LDA #'#\( #'"$1000" #'x #'#\)))
+                 '(LDA_indx 4096))
+    (check-eq? (indirect-x-mode #'LDA #'#\( #'"$10" #'x #'#\))
+               (void))
+    (check-match (syntax->datum (indirect-x-mode #'LDA #'#\( #'":out" #'x #'#\)))
+                 '(LDA_indx ":out"))))
 
 (define-for-syntax (indirect-y-mode opcode open operand close-or-x close-or-y)
   (with-syntax ([symbol-indy (symbol-append opcode '_indy)]
@@ -311,9 +366,19 @@
               (equal? (syntax->datum #'y-idx) 'y))
       (if (6510-number-string? (syntax->datum operand))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
-            #'(symbol-indy op-number))
+            (when (<= 255 (syntax->datum #'op-number))
+              #'(symbol-indy op-number)))
           (with-syntax ([op operand])
             #'(symbol-indy op))))))
+
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (indirect-y-mode #'LDA #'#\( #'"$1000" #'#\) #'y))
+                 '(LDA_indy 4096))
+    (check-eq? (indirect-y-mode #'LDA #'#\( #'"$10" #'#\) #'y)
+               (void))
+    (check-match (syntax->datum (indirect-y-mode #'LDA #'#\( #'":out" #'#\) #'y))
+                 '(LDA_indy ":out"))))
 
 (define-for-syntax (absolute-x-mode opcode operand idx)
   (with-syntax ([symbol-absx (symbol-append opcode '_absx)]
@@ -327,6 +392,15 @@
             (with-syntax ([op operand])
               #'(symbol-absx op)))))))
 
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (absolute-x-mode #'LDA #'"$1000" #'x))
+                 '(LDA_absx 4096))
+    (check-eq? (absolute-x-mode #'LDA #'"$10" #'x)
+               (void))
+    (check-match (syntax->datum (absolute-x-mode #'LDA #'":out" #'x))
+                 '(LDA_absx ":out"))))
+
 (define-for-syntax (absolute-y-mode opcode operand idx)
   (with-syntax ([symbol-absy (symbol-append opcode '_absy)]
                 [y-idx (syntax->datum idx)])
@@ -339,6 +413,15 @@
             (with-syntax ([op operand])
               #'(symbol-absy op)))))))
 
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (absolute-y-mode #'LDA #'"$1000" #'y))
+                 '(LDA_absy 4096))
+    (check-eq? (absolute-y-mode #'LDA #'"$10" #'y)
+               (void))
+    (check-match (syntax->datum (absolute-y-mode #'LDA #'":out" #'y))
+                 '(LDA_absy ":out"))))
+
 (define-for-syntax (relative-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
                 [symbol-rel (symbol-append opcode '_rel)])
@@ -350,16 +433,36 @@
             #'(symbol-rel op-number)))
         )))
 
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (relative-mode #'BEQ #'"$10"))
+                 '(BEQ_rel 16))
+    (check-eq? (relative-mode #'BEQ #'"$1000")
+               (void))
+    (check-match (syntax->datum (relative-mode #'BEQ #'":out"))
+                 '(BEQ_rel ":out"))))
+
 (define-for-syntax (zeropage-x-mode opcode operand idx)
   (with-syntax ([symbol-zpx (symbol-append opcode '_zpx)]
-                [op-number (parse-number-string (syntax->datum operand))]
+                [operand-value (syntax->datum operand)]
                 [x-idx (syntax->datum idx)])
-    (when (and (> 256 (syntax->datum #'op-number))
-               (equal? (syntax->datum #'x-idx) 'x))
-      #'(symbol-zpx op-number))))
+    (when (equal? (syntax->datum #'x-idx) 'x)
+      (if (6510-number-string? (syntax->datum operand))
+          (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+            (when (> 256 (parse-number-string (syntax->datum #'operand-value)))
+              #'(symbol-zpx op-number)))
+          (when (6510-label-string? (syntax->datum #'operand-value))
+            #'(symbol-zpx operand-value))))))
 
 
-
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (zeropage-x-mode #'LDA #'"$10" #'x))
+                 '(LDA_zpx 16))
+    (check-eq? (zeropage-x-mode #'LDA #'"$1000" #'x)
+               (void))
+    (check-match (syntax->datum (zeropage-x-mode #'LDA #'":out" #'x))
+                 '(LDA_zpx ":out"))))
 
 (define-for-syntax (error-string/indirect adr-modes opcode-string)
   (string-append
@@ -404,6 +507,8 @@
                  (syntax->datum stx))
           res))))
 
+;; TODO: implement test for opcode-with-addressing/single
+
 (define-for-syntax (opcode-with-addressing/indirect adr-modes opcode open op close-or-x close-or-y stx)
   (with-syntax ([indxres (when (indirect-x? adr-modes) (indirect-x-mode opcode open op close-or-x close-or-y))]
                 [indyres (when (indirect-y? adr-modes) (indirect-y-mode opcode open op close-or-x close-or-y))])
@@ -413,6 +518,8 @@
           (error (error-string/indirect adr-modes opcode-string)
                  (syntax->datum stx))
           res))))
+
+;; TODO: implement test for opcode-with-addressing/indirect
 
 (define-for-syntax (opcode-with-addressing/indexed adr-modes opcode op idx stx)
   (with-syntax ([absxres (when (absolute-x? adr-modes) (absolute-x-mode opcode op idx))]
@@ -424,6 +531,8 @@
           (error (error-string/indexed adr-modes opcode-string)
                  (syntax->datum stx))
           res))))
+
+;; TODO: implement test for opcode-with-addressing/indexed
 
 (define-for-syntax (list->one-arg-adr-modes option-list)
   (one-arg-adr-modes (member 'relative option-list)
