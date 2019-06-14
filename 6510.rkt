@@ -29,7 +29,7 @@
   (begin-for-syntax
     (require rackunit)))
 
-(provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program
+(provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program create-image-with-program
          ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC INC LDA JSR RTS STA
          LABEL BYTES)
 
@@ -803,7 +803,18 @@
                    #:exists 'replace))
 
 (define (run-emulator file-name)
-  (system (string-append "x64 " file-name)))
+  (system (string-append "x64 -8 " file-name)))
+
+(define (create-d64 name)
+  (system (string-append "c1541 -format \"" name ",01\" d64 " name)))
+
+(define (add-prg-to-d64 prg-file-name d64 target-name)
+  (system (string-append "c1541 -attach " d64 " -write " prg-file-name " " target-name)))
+
+(define (create-image-with-program program org file-name d64 target-name)
+  (create-prg program org file-name)
+  (create-d64 d64)
+  (add-prg-to-d64 file-name d64 target-name))
 
 ;; ======================================== pretty print
 

@@ -321,5 +321,6 @@
            (displayln "(have a look at raw-program, resolved-program, raw-bytes and pretty-program)")
            (define pretty-program (pretty-print-program resolved-program raw-program))
            ; (create-prg (commands->bytes org program) org "test.prg")
-           ; (run-emulator "test.prg")
+           (create-image-with-program (commands->bytes org program) org "test.prg" "test.d64" "test")
+           (run-emulator "test.d64")
            )))))
