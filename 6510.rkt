@@ -504,7 +504,8 @@
           [opcode-string (symbol->string (syntax->datum opcode))])
       (if (equal? '() (syntax->datum res))
           (error (error-string/single adr-modes opcode-string)
-                 (syntax->datum stx))
+                 (syntax->datum stx)
+                 'in 'line (syntax-line opcode))
           res))))
 
 ;; TODO: implement test for opcode-with-addressing/single
@@ -516,7 +517,8 @@
           [opcode-string (symbol->string (syntax->datum opcode))])
       (if (equal? '() (syntax->datum res))
           (error (error-string/indirect adr-modes opcode-string)
-                 (syntax->datum stx))
+                 (syntax->datum stx)
+                 'in 'line (syntax-line opcode))
           res))))
 
 ;; TODO: implement test for opcode-with-addressing/indirect
@@ -529,7 +531,9 @@
           [opcode-string (symbol->string (syntax->datum opcode))])
       (if (equal? '() (syntax->datum res))
           (error (error-string/indexed adr-modes opcode-string)
-                 (syntax->datum stx))
+                 (syntax->datum stx)
+                 'in 'line (syntax-line opcode)
+                 )
           res))))
 
 ;; TODO: implement test for opcode-with-addressing/indexed

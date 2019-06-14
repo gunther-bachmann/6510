@@ -1,18 +1,18 @@
 #! /usr/bin/env racket
 #lang reader "6510-reader.rkt"
 
-       *=$C000 ; origin
+        *=$C000        ; origin
 
 :some
-        lda #$41   ; load character A (dec 65)
-        jsr :out   ; print this character to screen
-        adc #1     ; load character B (dec 66)
-        jsr :out   ; print this character to screen
+        lda #$41       ; load character A (dec 65)
+        jsr :cout      ; print this character to screen
+        adc #1         ; load character B (dec 66)
+        jsr :cout      ; print this character to screen
         lda #%00001010 ; $0a
-        jsr :out
- :end   rts        ; end of execution
+        jsr :cout
+ :end   rts            ; end of execution
 
- :out   jsr $ffd2
+ :cout  jsr $ffd2
         rts
         brk
 
@@ -49,7 +49,7 @@
  adc $21,x   ; zero page indexed x
  adc $FFFf   ; absolute
  adc ($c000),y
- adc (:out,x)
+ adc (:cout,x)
  adc ($a000,x)
 
  sta $231A,y ; indexed y
