@@ -1,23 +1,245 @@
 #+title: 6510 Racket Experiments
-* racket: scheme (lisp) with facilities to create dsls
-* 6510: processor in my beloved c64
-* running example
-  #+begin_src racket :lang racket
-       (LDA "#$41")
-       (JSR ":outchar")
-       (ADC "#1")
-       (JSR ":outchar")
-       (RTS)
+* motivation
+  - want to get more into functional programming
 
-    (LABEL ":outchar")
-       (JSR "$FFFF")
-       (RTS)
+    - *lisp* (John McCarthy: original definition 1958, second oldest programming language, fortran is older by one year)
+
+      /The most powerful programming language is Lisp. If you don't know Lisp (or its variant, Scheme), you don't appreciate what a powerful/
+      /language is. Once you learn Lisp you will see what is missing in most other languages./
+      ~ Richard Stallman
+
+    - *scheme* (Guy L. Steele and Gerald Jay Sussman: minimalistic lisp)
+
+    - *racket* (Matthias Felleisen: formerly PLT Scheme, is a general-purpose, multi-paradigm programming language based on the Scheme dialect of
+      Lisp. (wikipedia)
+
+      /Racket is about creating new programming languages quickly/
+      Racket Manifesto (https://www2.ccs.neu.edu/racket/pubs/manifesto.pdf)
+
+  - want to use *emacs*
+
+    /I'm using Linux. A library that emacs uses to communicate with Intel hardware./
+    <ERWIN>, https://www.emacswiki.org/emacs/EmacsChannelQuotes )
+
+  - want to program *dsls*
+
+    /DSLs are the ultimate abstractions/
+    Paul Hudak. Domain specific languages. In Peter H. Salas, editor, Handbook of Programming Languages, volume 3, pages 39–60. MacMillan,
+    Indianapolis, 1998.
+
+  - love old computers
+
+    /8-bit are clearly enough/
+    unknown
+
+  - any relevant program on the c64 that included graphics or sound was written in assembler
+  - high level languages (basic, pascal, c, ...) were NOT relevant for any of the above
+* 6510
+  - Eight bit parallel processing
+  - 8 Bit Bi-Directional Data Bus
+  - Addressable memory range of up to 65K bytes
+  - 56 Instructions
+  - Thirteen addressing modes
+  - True indexing capability
+  - Programmable stack pointer
+  - Variable length stack
+  - Interrupt capability
+  - Direct memory access capability
+  - Decimal and binary arithmetic
+  - Bus com patible with M6800
+  - Pipeline architecture
+  - 1 MHz, 2 MHz and 3 MHz operation
+  - Use with any type or speed memory
+  - 4 MHz operation availability expected in 1986.
+  - 8-Bit Bi-Directional I/O Port
+  - Single +5 volt supply
+  - HMOS, silicon gate, depletion load technology
+
+    [[file:~/Downloads/6510.jpeg]]
+* a little comparison
+  | feature            | ryzen threadripper 1950x                        | 6510     |
+  |--------------------+-------------------------------------------------+----------|
+  | cache              | l1:768K l2:512K/core L3:32MB                    | none     |
+  | addressable memory | (48bit address lines used)  281,474,976,710,656 | 65,536   |
+  | freq               | 3.4 - 4.0 GHz                                   | 1MHz     |
+  | registers          | 16 General Purpose + 6 Segment (64bit)          | 4 (8bit) |
+  |                    | 16 256bit YMM regs                              |          |
+  |                    | 16 128bit XMM regs                              |          |
+  |                    | 8 64 bit MMX regs                               |          |
+  |                    | 8 80bit floating point registers                |          |
+  | instruction set    | > 1000                                          | 53       |
+* c64
+  [[file:~/Downloads/300px-Commodore-64-Computer-FL.jpg]]
+  - 6510 @ 985kHz (pal edition)
+  - 64 kB RAM
+  - 20 kB ROM (8kB Kernel, 8kB Basic Interpreter, 4kB Character ROM)
+  - 40x25 text mode
+  - 320x200 pixel high resolution graphics, 8 sprites (per scan line), raster interrupt
+    - hires: (40x25 char blocks), 16 colors (2 per char block)
+    - multicolor: 160x200 pixel (40x25 char blocks), 16 colors (4 per char block)
+      [[file:~/Downloads/131048-elite-commodore-64-screenshot-title-screen.png]]
+  - three channel sound synthesizer (8 octaves)
+    - see [[file:~/Downloads/C64Music/GAMES/G-L/Impossible_Mission_II_v1.sid]]
+    - see file:/home/pe/Downloads/C64Music/DEMOS/G-L/Giana_Sisters_Collection_menu.sid
+    - see file:/home/pe/Downloads/C64Music/GAMES/S-Z/Spy_Hunter.sid
+    - stop the music
+      #+begin_src sh
+        pgrep sidplay | xargs kill
+      #+end_src
+
+      #+RESULTS:
+
+* original 6510 assembler program
+  #+begin_src text
+           ,*=$C000       ; origin
+
+           lda #$41       ; load character A (dec 65)
+           jsr cout       ; print this character to screen
+           adc #1         ; load character B (dec 66)
+           jsr cout       ; print this character to screen
+           lda #%00001010 ; $0a (line feed)
+           jsr cout
+    end:   rts            ; end of execution
+
+    cout:  jsr $ffd2
+           rts
   #+end_src
-* TODO different phases during program evaluation (elaborate)
+* commands
+** LDA : LoaD Accumulator
+** JSR : Jump SubRoutine
+** RTS : ReTurn (from) Subroutine
+** ADC : ADd with Carry
+* processor elements
+  - program counter (PC), 16 bit
+  - stack pointer (SP), 8 bit +1
+  - accumulator (A), 8 bit
+  - index register x (X), 8 bit
+  - index register y (Y), 8 bit
+  - status flags (register), 8 bit, one unused
+    - zero flag
+    - carry flag
+    - interrupt disable flag
+    - decimal mode flag
+    - break command flag
+    - overflow flag
+    - negative flag
+* show [[file:6510-example-rs.rkt]]
+* show [[file:6510-example.rkt]]
+* different phases during program evaluation (elaborate)
 * syntax macros carrying location etc.
-  - show examples of syntax objects
+  - simple syntax object
+    #+begin_src racket :lang racket :results verbatim
+      #'(+ 10 12)
+    #+end_src
+
+  - get information out of syntax objects
+
+    - the original data
+      #+begin_src racket :lang racket :results verbatim
+        (syntax->datum #'(+ 10 12))
+      #+end_src
+
+    - source, position, line
+      #+begin_src racket :lang racket :results verbatim
+        (define program #'(+ 10 20))
+
+        (syntax-line program)
+        (syntax-source program)
+        (syntax-column program)
+      #+end_src
+
+  - define syntax macros
+    #+begin_src racket :lang racket :results verbatim
+      (define-syntax-rule (swap x y)
+        (let ([tmp x])
+          (set! x y)
+          (set! y tmp)))
+
+      (let ([a 5]
+            [b 6])
+        (swap a b)
+        (list a b))
+    #+end_src
+
+  - macro expansion
+    Racket’s pattern-based macros automatically maintain lexical scope, so macro implementors can reason about variable
+    reference in macros and macro uses in the same way as for functions and function calls.
+    #+begin_src racket :lang racket :results verbatim
+      (define-syntax-rule (swap x y)
+        (let ([tmp x])
+          (set! x y)
+          (set! y tmp)))
+
+      (syntax->datum (expand-once #'(swap a b)))
+      ;; naively the following will fail, right
+      (syntax->datum (expand-once #'(swap tmp y)))
+
+      ;; But
+      (let ([tmp 5]
+            [y   6])
+        (swap tmp y)
+        (list tmp y))
+    #+end_src
+
+  - macros with sequences (and recursion)
+    #+begin_src racket :lang racket :results verbatim
+      (define-syntax-rule (swap x y)
+        (let ([tmp x])
+          (set! x y)
+          (set! y tmp)))
+
+      (define-syntax rotate
+        (syntax-rules ()
+          [(rotate a) (void)]
+          ;; if a template variable e.g. is followed by ...(indicating 0 or more occurrances), its usage must use ..., too
+          [(rotate a b c ...) (begin
+                              (swap a b)
+                              (rotate b c ...))]))
+
+      (syntax->datum (expand-once #'(rotate a1 a2 a3 a4)))
+      (syntax->datum (expand-once (expand-once #'(rotate a1 a2 a3 a4))))
+      (syntax->datum (expand #'(rotate a1 a2 a3 a4)))
+    #+end_src
+
+  - identifier macros (need not be in function position to be expanded!)
+    #+begin_src racket :lang racket :results verbatim
+      (define-syntax val
+          (lambda (stx)
+            (syntax-case stx ()
+              [val (identifier? #'val) #'(get-val)])))
+
+      (define-values (get-val put-val!)
+          (let ([private-val 0])
+            (values (lambda () private-val)
+                    (lambda (v) (set! private-val v)))))
+
+      val
+      (+ val 3)
+    #+end_src
+
 * composable syntax definition (via megaparsack, based on haskell megaparsec)
-  - get information on composable parsers
+  Megaparsack is a parser combinator library: a composable set of simple parsers that can be used to create larger parsing systems that can
+  parse arbitrary grammars, including context-sensitive ones. Megaparsack uses the gen:monad generic interface to provide a uniform
+  interface to sequence and compose different parsers using a base set of primitives.
+  - compose atomic parsers to more complex ones
+    #+begin_src racket :lang racket :results verbatim
+      (require megaparsack megaparsack/text data/monad data/applicative)
+
+      (define string-number/p
+        (do [s <- (string/p "SOME")]
+            (many/p (char/p #\ ))
+            [digits <- (many+/p digit/p)]
+           (pure (list s (list->string digits)))))
+
+      (syntax->datum (parse-result! (parse-string (syntax/p string-number/p) "SOME 17")))
+    #+end_src
+
+  - notable compositions
+    - (try/p)           allows backtracking
+    - (or/p)            alternatives
+    - (guard/p)         make assertions on parsed elements
+    - (list/p)          consume lists with given separator
+
 * parse arbitrary syntax via megaparsack into racket ast, then use racket syntax transformations
 * usual workflow
   - use racket to write your dsl most closely to what you expect it to look like
