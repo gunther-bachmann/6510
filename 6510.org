@@ -56,7 +56,7 @@
   - HMOS, silicon gate, depletion load technology
 
     [[file:~/Downloads/6510.jpeg]]
-* a little comparison
+* comparison
   | feature            | ryzen threadripper 1950x                        | 6510     |
   |--------------------+-------------------------------------------------+----------|
   | cache              | l1:768K l2:512K/core L3:32MB                    | none     |
