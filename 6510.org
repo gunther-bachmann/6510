@@ -14,31 +14,38 @@
       Lisp. (wikipedia)
 
       /Racket is about creating new programming languages quickly/
-      Racket Manifesto (https://www2.ccs.neu.edu/racket/pubs/manifesto.pdf)
+      ~ Racket Manifesto (https://www2.ccs.neu.edu/racket/pubs/manifesto.pdf)
 
   - want to use *emacs*
 
     /I'm using Linux. A library that emacs uses to communicate with Intel hardware./
-    <ERWIN>, https://www.emacswiki.org/emacs/EmacsChannelQuotes )
+    ~ <ERWIN>, https://www.emacswiki.org/emacs/EmacsChannelQuotes )
 
   - want to program *dsls*
 
     /DSLs are the ultimate abstractions/
-    Paul Hudak. Domain specific languages. In Peter H. Salas, editor, Handbook of Programming Languages, volume 3, pages 39–60. MacMillan,
+    ~ Paul Hudak. Domain specific languages. In Peter H. Salas, editor, Handbook of Programming Languages, volume 3, pages 39–60. MacMillan,
     Indianapolis, 1998.
 
   - love old computers
 
     /8-bit are clearly enough/
-    unknown
+    ~ unknown
 
   - any relevant program on the c64 that included graphics or sound was written in assembler
   - high level languages (basic, pascal, c, ...) were NOT relevant for any of the above
+
+  => Why not program a macro assembler for 6510 that may run on a c64?
+     Sounds like a good idea!
+     But wait. There have already been others ...
+     - https://docs.racket-lang.org/asi64/index.html
+     - https://github.com/tiagosr/Plasm
+     And check the online assembler at https://www.masswerk.at/6502/assembler.html
 * 6510
   - Eight bit parallel processing
   - 8 Bit Bi-Directional Data Bus
   - Addressable memory range of up to 65K bytes
-  - 56 Instructions
+  - 56 Instructions (see https://www.masswerk.at/6502/6502_instruction_set.html)
   - Thirteen addressing modes
   - True indexing capability
   - Programmable stack pointer
@@ -68,7 +75,7 @@
   |                    | 16 128bit XMM regs                              |          |
   |                    | 8 64 bit MMX regs                               |          |
   |                    | 8 80bit floating point registers                |          |
-  | instruction set    | > 1000                                          | 53       |
+  | instruction set    | > 1000                                          | 56       |
 * c64
   #+ATTR_ORG: :width 640
   [[file:~/Downloads/300px-Commodore-64-Computer-FL.jpg]]
@@ -94,13 +101,13 @@
     - (2.8k) see file:/home/pe/Downloads/C64Music/DEMOS/G-L/Ghostbusters_Theme.sid
     - (49k) see file:/home/pe/Downloads/C64Music/DEMOS/G-L/Instantfunk.sid
     - (3.8k) see file:/home/pe/Downloads/C64Music/DEMOS/UNKNOWN/Axel-F.sid
+    - (1.2k) see file:/home/pe/Downloads/C64Music/GAMES/G-L/James_Bond.sid
 
     - see [[file:~/Downloads/C64Music/GAMES/G-L/Impossible_Mission_II_v1.sid]]
     - see file:/home/pe/Downloads/C64Music/GAMES/S-Z/Spy_Hunter.sid
     - see [[file:~/Downloads/C64Music/GAMES/G-L/Gremlins.sid]]
     - see file:/home/pe/Downloads/C64Music/GAMES/G-L/Indiana_Jones_and_the_Temple_of_Doom.sid
     - see file:/home/pe/Downloads/C64Music/GAMES/G-L/International_Karate_Ultimate.sid
-    - see file:/home/pe/Downloads/C64Music/GAMES/G-L/James_Bond.sid
     - see file:/home/pe/Downloads/C64Music/GAMES/S-Z/Vendetta.sid
     - see file:/home/pe/Downloads/C64Music/GAMES/S-Z/Zak_McKracken.sid
     - see file:/home/pe/Downloads/C64Music/DEMOS/0-9/2Pac_Intro.sid
@@ -128,10 +135,10 @@
            rts
   #+end_src
 * commands
-** LDA : LoaD Accumulator
-** JSR : Jump SubRoutine
-** RTS : ReTurn (from) Subroutine
-** ADC : ADd with Carry
+  - LDA : LoaD Accumulator
+  - JSR : Jump SubRoutine
+  - RTS : ReTurn (from) Subroutine
+  - ADC : ADd with Carry
 * processor elements
   - program counter (PC), 16 bit
   - stack pointer (SP), 8 bit +1
@@ -148,6 +155,7 @@
     - negative flag
 * show [[file:6510-example-rs.rkt]]
 * show [[file:6510-example.rkt]]
+* execute in x64
 * different phases during program evaluation (elaborate)
 * syntax macros carrying location etc.
   - simple syntax object
