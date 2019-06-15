@@ -1,5 +1,6 @@
 #lang racket
 
+;; todo: make sure to expand label to 2 bytes (for absolutes) and 1 byte (for zero page) opcodes! (e.g. adc (:cout,x))!!
 ;; todo: add possibility to use labels instead of values (in all addressing modes)
 ;; todo: add method descriptions (scrbl)
 ;; planned: realize with typed racket
@@ -344,38 +345,37 @@
               (equal? (syntax->datum #'x-idx) 'x))
       (if (6510-number-string? (syntax->datum operand))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
-            (when (<= 255 (syntax->datum #'op-number))
+            (when (>= 255 (syntax->datum #'op-number))
               #'(symbol-indx op-number)))
           (with-syntax ([op operand])
             #'(symbol-indx op))))))
 
 (module+ test
   (begin-for-syntax
-    (check-match (syntax->datum (indirect-x-mode #'LDA #'#\( #'"$1000" #'x #'#\)))
-                 '(LDA_indx 4096))
-    (check-eq? (indirect-x-mode #'LDA #'#\( #'"$10" #'x #'#\))
+    (check-match (syntax->datum (indirect-x-mode #'LDA #'#\( #'"$10" #'x #'#\)))
+                 '(LDA_indx 16))
+    (check-eq? (indirect-x-mode #'LDA #'#\( #'"$1000" #'x #'#\))
                (void))
     (check-match (syntax->datum (indirect-x-mode #'LDA #'#\( #'":out" #'x #'#\)))
                  '(LDA_indx ":out"))))
 
 (define-for-syntax (indirect-y-mode opcode open operand close-or-x close-or-y)
   (with-syntax ([symbol-indy (symbol-append opcode '_indy)]
-
                 [y-idx (syntax->datum close-or-y)])
     (when (or (equal? (syntax->datum #'y-idx) '(unquote y))
               (equal? (syntax->datum #'y-idx) 'y))
       (if (6510-number-string? (syntax->datum operand))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
-            (when (<= 255 (syntax->datum #'op-number))
+            (when (>= 255 (syntax->datum #'op-number))
               #'(symbol-indy op-number)))
           (with-syntax ([op operand])
             #'(symbol-indy op))))))
 
 (module+ test
   (begin-for-syntax
-    (check-match (syntax->datum (indirect-y-mode #'LDA #'#\( #'"$1000" #'#\) #'y))
-                 '(LDA_indy 4096))
-    (check-eq? (indirect-y-mode #'LDA #'#\( #'"$10" #'#\) #'y)
+    (check-match (syntax->datum (indirect-y-mode #'LDA #'#\( #'"$10" #'#\) #'y))
+                 '(LDA_indy 16))
+    (check-eq? (indirect-y-mode #'LDA #'#\( #'"$1000" #'#\) #'y)
                (void))
     (check-match (syntax->datum (indirect-y-mode #'LDA #'#\( #'":out" #'#\) #'y))
                  '(LDA_indy ":out"))))
@@ -468,8 +468,8 @@
   (string-append
    "invalid syntax.\n"
    (if (not (or (indirect-x? adr-modes) (indirect-y? adr-modes))) (string-append opcode-string " cannot be used with indirect addressing\n") "expected:\n")
-   (if (indirect-x? adr-modes) (string-append "  (" opcode-string  " \"($1000,x)\") # indirect x addressing mode\n") "")
-   (if (indirect-y? adr-modes) (string-append "  (" opcode-string  " \"($1000),y\") # indirect y addressing mode\n") "")
+   (if (indirect-x? adr-modes) (string-append "  (" opcode-string  " \"($10,x)\") # indirect x addressing mode\n") "")
+   (if (indirect-y? adr-modes) (string-append "  (" opcode-string  " \"($10),y\") # indirect y addressing mode\n") "")
    "got: "))
 
 (define-for-syntax (error-string/indexed adr-modes opcode-string)
@@ -598,8 +598,8 @@
          (define-opcode-functions/macro op option-list bytecode-list absolute "_abs" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
          (define-opcode-functions/macro op option-list bytecode-list absolute-x "_absx" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
          (define-opcode-functions/macro op option-list bytecode-list absolute-y "_absy" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
-         (define-opcode-functions/macro op option-list bytecode-list indirect-x "_indx" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
-         (define-opcode-functions/macro op option-list bytecode-list indirect-y "_indy" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
+         (define-opcode-functions/macro op option-list bytecode-list indirect-x "_indx" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (byte value)) (list value))))
+         (define-opcode-functions/macro op option-list bytecode-list indirect-y "_indy" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (byte value)) (list value))))
          (opcode-with-addressing op option-list)
          )]))
 
@@ -641,11 +641,11 @@
   (check-match (ADC "$FFFF")
                '('opcode #x6d #xff #xff))
 
-  (check-match (ADC < "$FFFF" > ,y)
-               '('opcode #x71 #xff #xff))
+  (check-match (ADC < "$FF" > ,y)
+               '('opcode #x71 #xff))
 
-  (check-match (ADC < "$FFFF" ,x >)
-               '('opcode #x61 #xff #xff)))
+  (check-match (ADC < "$FF" ,x >)
+               '('opcode #x61 #xff)))
 
 (define-opcode-functions ASL
   '(accumulator zero-page zero-page-x absolute absolute-x)
@@ -740,11 +740,11 @@
   (check-match (LDA "$A000",y)
                '('opcode #xB9 #x00 #xA0))
 
-  (check-match (LDA < "$A000" >,y )
-               '('opcode #xB1 #x00 #xA0))
+  (check-match (LDA < "$A0" >,y )
+               '('opcode #xB1 #xA0))
 
-  (check-match (LDA < "$A000", x > )
-               '('opcode #xA1 #x00 #xA0)))
+  (check-match (LDA < "$A0", x > )
+               '('opcode #xA1 #xA0)))
 
 (define-opcode-functions RTS '(implicit) '(#x60))
 
@@ -759,14 +759,14 @@
   (check-match (STA "$1728")
                '('opcode #x8d #x28 #x17))
 
-  (check-match (STA < "$1728" ,x >)
-               '('opcode #x81 #x28 #x17))
+  (check-match (STA < "$17" ,x >)
+               '('opcode #x81 #x17))
 
-  (check-match (STA < "$1728" > y)
-               '('opcode #x91 #x28 #x17))
+  (check-match (STA < "$28" > y)
+               '('opcode #x91 #x28))
 
-  (check-match (STA < "$1728" > ,y)
-               '('opcode #x91 #x28 #x17))
+  (check-match (STA < "$17" > ,y)
+               '('opcode #x91 #x17))
 
   (check-match (STA "$1728" ,x)
                '('opcode #x9d #x28 #x17))

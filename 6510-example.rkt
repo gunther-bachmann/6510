@@ -18,6 +18,9 @@
 
         .data $01, $2F, 255, %1001
 
+
+
+; --- just to test the assembler
  asl a
  asl $10
  asl $1000
@@ -48,14 +51,13 @@
  Adc $07     ; absolute zero page
  adc $21,x   ; zero page indexed x
  adc $FFFf   ; absolute
- adc ($c000),y
- adc (:cout,x)
- adc ($a000,x)
+ adc ($c0),y
+ adc ($a0,x)
 
  sta $231A,y ; indexed y
  sta $213C,x ; indexed x
  sta $07     ; absolute zero page
  sta $21,x   ; zero page indexed x
  sta $FFFf   ; absolute
- sta ($c000),y
- sta ($a000,x)
+ sta ($c0),y
+ sta ($a0,x)
