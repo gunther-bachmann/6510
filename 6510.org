@@ -55,6 +55,7 @@
   - Single +5 volt supply
   - HMOS, silicon gate, depletion load technology
 
+    #+ATTR_ORG: :width 640
     [[file:~/Downloads/6510.jpeg]]
 * comparison
   | feature            | ryzen threadripper 1950x                        | 6510     |
@@ -69,6 +70,7 @@
   |                    | 8 80bit floating point registers                |          |
   | instruction set    | > 1000                                          | 53       |
 * c64
+  #+ATTR_ORG: :width 640
   [[file:~/Downloads/300px-Commodore-64-Computer-FL.jpg]]
   - 6510 @ 985kHz (pal edition)
   - 64 kB RAM
@@ -77,11 +79,32 @@
   - 320x200 pixel high resolution graphics, 8 sprites (per scan line), raster interrupt
     - hires: (40x25 char blocks), 16 colors (2 per char block)
     - multicolor: 160x200 pixel (40x25 char blocks), 16 colors (4 per char block)
+    - elite
+      #+ATTR_ORG: :width 640
       [[file:~/Downloads/131048-elite-commodore-64-screenshot-title-screen.png]]
-  - three channel sound synthesizer (8 octaves)
+    - ninja iii
+      #+ATTR_ORG: :width 640
+      [[file:~/Downloads/Last_Ninja_III.png]]
+    - ghost busters
+      #+ATTR_ORG: :width 640
+      [[file:~/Downloads/ghostb.jpeg]]
+  - three channel sound synthesizer (8 octaves, 0-4khz, 4 wave forms, 3 programmable filters )
+
+    - (2.3k) see file:/home/pe/Downloads/C64Music/DEMOS/G-L/Giana_Sisters_Collection_menu.sid
+    - (2.8k) see file:/home/pe/Downloads/C64Music/DEMOS/G-L/Ghostbusters_Theme.sid
+    - (49k) see file:/home/pe/Downloads/C64Music/DEMOS/G-L/Instantfunk.sid
+    - (3.8k) see file:/home/pe/Downloads/C64Music/DEMOS/UNKNOWN/Axel-F.sid
+
     - see [[file:~/Downloads/C64Music/GAMES/G-L/Impossible_Mission_II_v1.sid]]
-    - see file:/home/pe/Downloads/C64Music/DEMOS/G-L/Giana_Sisters_Collection_menu.sid
     - see file:/home/pe/Downloads/C64Music/GAMES/S-Z/Spy_Hunter.sid
+    - see [[file:~/Downloads/C64Music/GAMES/G-L/Gremlins.sid]]
+    - see file:/home/pe/Downloads/C64Music/GAMES/G-L/Indiana_Jones_and_the_Temple_of_Doom.sid
+    - see file:/home/pe/Downloads/C64Music/GAMES/G-L/International_Karate_Ultimate.sid
+    - see file:/home/pe/Downloads/C64Music/GAMES/G-L/James_Bond.sid
+    - see file:/home/pe/Downloads/C64Music/GAMES/S-Z/Vendetta.sid
+    - see file:/home/pe/Downloads/C64Music/GAMES/S-Z/Zak_McKracken.sid
+    - see file:/home/pe/Downloads/C64Music/DEMOS/0-9/2Pac_Intro.sid
+    - see file:/home/pe/Downloads/C64Music/DEMOS/S-Z/Zak_01.sid
     - stop the music
       #+begin_src sh
         pgrep sidplay | xargs kill
@@ -191,7 +214,9 @@
       (define-syntax rotate
         (syntax-rules ()
           [(rotate a) (void)]
-          ;; if a template variable e.g. is followed by ...(indicating 0 or more occurrances), its usage must use ..., too
+          ;; if a template variable e.g. is followed by ...
+          ;; (indicating 0 or more occurrances),
+          ;; its usage must use ..., too
           [(rotate a b c ...) (begin
                               (swap a b)
                               (rotate b c ...))]))
