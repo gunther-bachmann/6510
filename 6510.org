@@ -208,7 +208,8 @@
           (set! y tmp)))
 
       (syntax->datum (expand-once #'(swap a b)))
-      ;; naively the following will fail, right
+
+      ;; naively the following will fail, right?
       (syntax->datum (expand-once #'(swap tmp y)))
 
       ;; But
@@ -254,6 +255,8 @@
 
       val
       (+ val 3)
+      (put-val! 7)
+      (+ val 3)
     #+end_src
 
 * composable syntax definition (via megaparsack, based on haskell megaparsec)
@@ -261,17 +264,42 @@
   parse arbitrary grammars, including context-sensitive ones. Megaparsack uses the gen:monad generic interface to provide a uniform
   interface to sequence and compose different parsers using a base set of primitives.
   - compose atomic parsers to more complex ones
-    #+begin_src racket :lang racket :results verbatim
-      (require megaparsack megaparsack/text data/monad data/applicative)
+    - first attempt
+      #+begin_src racket :lang racket :results verbatim
+        (require megaparsack megaparsack/text data/monad data/applicative)
 
-      (define string-number/p
-        (do [s <- (string/p "SOME")]
-            (many/p (char/p #\ ))
+        (define string-number/p
+          (do (string/p "SOME")
+              (many+/p digit/p)))
+
+        (parse-string (syntax/p string-number/p) "SOME17")
+      #+end_src
+
+    - white spacing
+      #+begin_src racket :lang racket :results verbatim
+        (require megaparsack megaparsack/text data/monad data/applicative)
+
+        (define string-number/p
+          (do (string/p "SOME")
+              (many/p (char/p #\ ))
+             (many+/p digit/p)))
+
+        (parse-string (syntax/p string-number/p) "SOME 17")
+      #+end_src
+
+    - capture content
+      #+begin_src racket :lang racket :results verbatim
+        (require megaparsack megaparsack/text data/monad data/applicative)
+
+        (define string-number/p
+          (do [s <- (string/p "SOME")]
+              (many/p (char/p #\ ))
             [digits <- (many+/p digit/p)]
-           (pure (list s (list->string digits)))))
+            (pure (list (string->symbol s)
+                        (list->string digits)))))
 
-      (syntax->datum (parse-result! (parse-string (syntax/p string-number/p) "SOME 17")))
-    #+end_src
+        (syntax->datum (parse-result! (parse-string (syntax/p string-number/p) "SOME 17")))
+      #+end_src
 
   - notable compositions
     - (try/p)           allows backtracking

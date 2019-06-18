@@ -14,6 +14,7 @@
    (LDA "#%00001010") ; line feed
    (JSR ":COUT")
    (RTS)
+
    (LABEL ":COUT")
    (JSR "$FFD2")
    (RTS)))
@@ -26,8 +27,8 @@
    (LDA "$4000")          ;; absolute
    (LDA "$4000",x)        ;; absolute x
    (LDA "$4000",y)        ;; absolute y
-   (LDA < "$40",x >)    ;; indirect x (add x to $40, read pointer (low+high) from memory, read pointed to byte)
-   (LDA < "$40" >,y)    ;; indirect y (read pointer from $40, add y to pointer, read pointed to byte)
+   (LDA < "$40",x >)      ;; indirect x (add x to $40, read pointer (low+high) from memory, read pointed to byte)
+   (LDA < "$40" >,y)      ;; indirect y (read pointer from $40, add y to pointer, read pointed to byte)
    (LABEL ":NEXT")
    (ASL A)                ;; work on accumulator
    (BEQ "$10")            ;; relative to current program counter
