@@ -76,6 +76,12 @@
   |                    | 8 64 bit MMX regs                               |          |
   |                    | 8 80bit floating point registers                |          |
   | instruction set    | > 1000                                          | 56       |
+
+  | channel   | size [kb] | time [s] |
+  |-----------+-----------+----------|
+  | datasette |        16 |      330 |
+  | floppy    |        16 |       50 |
+  | ssd       |   550,000 |        1 |
 * c64
   #+ATTR_ORG: :width 640
   [[file:~/Downloads/300px-Commodore-64-Computer-FL.jpg]]
@@ -234,7 +240,7 @@
       (syntax->datum (expand #'(rotate a1 a2 a3 a4)))
     #+end_src
 
-  - identifier macros (need not be in function position to be expanded!)
+  - optional: identifier macros (need not be in function position to be expanded!)
     #+begin_src racket :lang racket :results verbatim
       (define-syntax val
           (lambda (stx)

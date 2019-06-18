@@ -508,7 +508,13 @@
                  'in 'line (syntax-line opcode))
           res))))
 
-;; TODO: implement test for opcode-with-addressing/single
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page)) #'LDA #'"$10" #'()))
+                 '(LDA_zp 16))
+    (check-exn exn:fail? (lambda () (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page)) #'LDA #'"#$10" #'())))
+    (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page immediate)) #'LDA #'"#$10" #'()))
+                 '(LDA_i 16))))
 
 (define-for-syntax (opcode-with-addressing/indirect adr-modes opcode open op close-or-x close-or-y stx)
   (with-syntax ([indxres (when (indirect-x? adr-modes) (indirect-x-mode opcode open op close-or-x close-or-y))]
@@ -521,7 +527,13 @@
                  'in 'line (syntax-line opcode))
           res))))
 
-;; TODO: implement test for opcode-with-addressing/indirect
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x)) #'LDA #'#\( #'"$10" #'x #'#\) #'()))
+                 '(LDA_indx 16))
+    (check-exn exn:fail? (lambda () (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x)) #'LDA #'#\( #'"$10" #'#\) #'y #'())))
+    (check-match (syntax->datum (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x indirect-y)) #'LDA #'#\( #'"$10" #'#\) #'y #'()))
+                 '(LDA_indy 16))))
 
 (define-for-syntax (opcode-with-addressing/indexed adr-modes opcode op idx stx)
   (with-syntax ([absxres (when (absolute-x? adr-modes) (absolute-x-mode opcode op idx))]
@@ -536,7 +548,13 @@
                  )
           res))))
 
-;; TODO: implement test for opcode-with-addressing/indexed
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'x #'()))
+                 '(LDA_absx 4096))
+    (check-exn exn:fail? (lambda () (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'y #'())))
+    (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x absolute-y)) #'LDA  #'"$1000" #'y #'()))
+                 '(LDA_absy 4096))))
 
 (define-for-syntax (list->one-arg-adr-modes option-list)
   (one-arg-adr-modes (member 'relative option-list)
@@ -567,6 +585,12 @@
        (opcode-with-addressing/indexed (list->idx-arg-adr-modes option-list) #'opcode #'op #'idx stx)]
       [(opcode op idx)
        (opcode-with-addressing/indexed (list->idx-arg-adr-modes option-list) #'opcode #'op #'idx stx)])))
+
+(define (test-FANTASTIC_abs ops) 'ok)
+(module+ test
+  (opcode-with-addressing test-FANTASTIC '(absolute))
+  (check-match (test-FANTASTIC "$1000")
+               'ok))
 
 (define-syntax (define-opcode-functions/macro stx)
   (syntax-case stx ()
