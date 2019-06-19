@@ -468,8 +468,8 @@
   (string-append
    "invalid syntax.\n"
    (if (not (or (indirect-x? adr-modes) (indirect-y? adr-modes))) (string-append opcode-string " cannot be used with indirect addressing\n") "expected:\n")
-   (if (indirect-x? adr-modes) (string-append "  (" opcode-string  " \"($10,x)\") # indirect x addressing mode\n") "")
-   (if (indirect-y? adr-modes) (string-append "  (" opcode-string  " \"($10),y\") # indirect y addressing mode\n") "")
+   (if (indirect-x? adr-modes) (string-append "  (" opcode-string  " < \"$10\",x >) # indirect x addressing mode\n") "")
+   (if (indirect-y? adr-modes) (string-append "  (" opcode-string  " < \"$10\" >,y) # indirect y addressing mode\n") "")
    "got: "))
 
 (define-for-syntax (error-string/indexed adr-modes opcode-string)

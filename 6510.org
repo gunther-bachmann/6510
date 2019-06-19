@@ -1,17 +1,19 @@
 #+title: 6510 Racket Experiments
 * motivation
-  - want to get more into functional programming
+  - want to get more into functional programming                                                  |
 
-    - *lisp* (John McCarthy: original definition 1958, second oldest programming language, fortran is older by one year)
+    - *lisp* (John McCarthy: original definition 1958, second oldest programming language,
+              fortran is older by one year)
 
-      /The most powerful programming language is Lisp. If you don't know Lisp (or its variant, Scheme), you don't appreciate what a powerful/
-      /language is. Once you learn Lisp you will see what is missing in most other languages./
+      /The most powerful programming language is Lisp. If you don't know Lisp (or its variant,/
+      /Scheme), you don't appreciate what a powerful language is. Once you learn Lisp you will/
+      /see what is missing in most other languages./
       ~ Richard Stallman
 
     - *scheme* (Guy L. Steele and Gerald Jay Sussman: minimalistic lisp)
 
-    - *racket* (Matthias Felleisen: formerly PLT Scheme, is a general-purpose, multi-paradigm programming language based on the Scheme dialect of
-      Lisp. (wikipedia)
+    - *racket* (Matthias Felleisen: formerly PLT Scheme, is a general-purpose, multi-paradigm
+                programming language based on the Scheme dialect of Lisp. wikipedia)
 
       /Racket is about creating new programming languages quickly/
       ~ Racket Manifesto (https://www2.ccs.neu.edu/racket/pubs/manifesto.pdf)
@@ -19,13 +21,13 @@
   - want to use *emacs*
 
     /I'm using Linux. A library that emacs uses to communicate with Intel hardware./
-    ~ <ERWIN>, https://www.emacswiki.org/emacs/EmacsChannelQuotes )
+    ~ <ERWIN>, https://www.emacswiki.org/emacs/EmacsChannelQuotes
 
   - want to program *dsls*
 
     /DSLs are the ultimate abstractions/
-    ~ Paul Hudak. Domain specific languages. In Peter H. Salas, editor, Handbook of Programming Languages, volume 3, pages 39–60. MacMillan,
-    Indianapolis, 1998.
+    ~ Paul Hudak. Domain specific languages. In Peter H. Salas, editor, Handbook of Programming
+      Languages, volume 3, pages 39–60. MacMillan, Indianapolis, 1998.
 
   - love old computers
 
@@ -192,15 +194,16 @@
           (set! x y)
           (set! y tmp)))
 
-      (let ([a 5]
-            [b 6])
+      (let ([a 1]
+            [b 2])
         (swap a b)
         (list a b))
     #+end_src
 
   - macro expansion
-    Racket’s pattern-based macros automatically maintain lexical scope, so macro implementors can reason about variable
-    reference in macros and macro uses in the same way as for functions and function calls.
+    Racket’s pattern-based macros automatically maintain lexical scope, so macro implementors
+    can reason about variable reference in macros and macro uses in the same way as for functions
+    and function calls.
     #+begin_src racket :lang racket :results verbatim
       (define-syntax-rule (swap x y)
         (let ([tmp x])
@@ -260,9 +263,11 @@
     #+end_src
 
 * composable syntax definition (via megaparsack, based on haskell megaparsec)
-  Megaparsack is a parser combinator library: a composable set of simple parsers that can be used to create larger parsing systems that can
-  parse arbitrary grammars, including context-sensitive ones. Megaparsack uses the gen:monad generic interface to provide a uniform
-  interface to sequence and compose different parsers using a base set of primitives.
+  Megaparsack is a parser combinator library: a composable set of simple parsers that can
+  be used to create larger parsing systems that can parse arbitrary grammars, including
+  context-sensitive ones. Megaparsack uses the gen:monad generic interface to provide a
+  uniform interface to sequence and compose different parsers using a base set of
+  primitives.
   - compose atomic parsers to more complex ones
     - first attempt
       #+begin_src racket :lang racket :results verbatim
@@ -311,3 +316,17 @@
 * usual workflow
   - use racket to write your dsl most closely to what you expect it to look like
   - in a last an final step, transform syntax to that representation
+* dive into actual code
+  - [[file:6510-reader.rkt][reader]]
+    - parser and test line 137
+    - guard in line 145 (integer <= 65535)
+    - parse absolute addressing in line 152 + test
+    - tests in 214 (parsing addressing modes)
+    - tests in 261 (parsing bytes)
+    - line 267 (define parsers for opcodes with addressing modes)
+    - line 307 combining everything into a new module
+  - [[file:6510.rkt][tranformer]]
+    - macro expand line 695 (BCC)
+    - show tests line 268
+    - show tests line 748
+    - experiment in repl with other lda operations (see error messages)

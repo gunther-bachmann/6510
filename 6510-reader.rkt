@@ -258,6 +258,11 @@
     [result <- (many/p byte/p #:sep (do (char/p #\,) ml-whitespace/p))]
     (pure (list 'BYTES result))))
 
+(module+ test
+  (check-match (parsed-string-result data-bytes/p ".data    2,3,4")
+               '(BYTES (2 3 4)))
+  (check-match (parsed-string-result data-bytes/p ".data $20,	%10,  4")
+               '(BYTES (32 2 4))))
 ;; immediate, indirect and absolute addressing
 (define 6510-opcode/p
   (do (or/p

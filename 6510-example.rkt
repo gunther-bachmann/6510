@@ -51,8 +51,8 @@
  Adc $07     ; absolute zero page
  adc $21,x   ; zero page indexed x
  adc $FFFf   ; absolute
- adc ($c0),y
- adc ($a0,x)
+ adc ($c0),y ; indirect y (load pointer in C1 C0, read from pointer + y)
+ adc ($a0,x) ; indirect x (load pointer in A1+x A0+x, read from pointer)
 
  sta $231A,y ; indexed y
  sta $213C,x ; indexed x
