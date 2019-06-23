@@ -1,14 +1,16 @@
 #lang racket
 
 ;; todo: make sure to expand label to 2 bytes (for absolutes) and 1 byte (for zero page) opcodes! (e.g. adc (:cout,x))!!
-;; todo: add possibility to use labels instead of values (in all addressing modes)
+;; ongoing: add possibility to use labels instead of values (in all addressing modes)
 ;; todo: add method descriptions (scrbl)
+;; todo: get more information about syntax object context, to allow propagation of syntax context of megaparsack to transformations in 6510.rkt
+;; todo: check whether ebnf + some is a dsl that could be used instead of programmatically constructing parsers with megaparsack (dsl to generate that)
 ;; planned: realize with typed racket
 
 (require (only-in racket/format ~a))
 (require (only-in threading ~>))
 (require (only-in rnrs/base-6 div mod))
-(require (for-syntax (only-in racket/list second empty?)))
+(require (for-syntax (only-in racket/list second empty? first)))
 
 (require (for-syntax "6510-utils.rkt"))
 (require (for-syntax (rename-in "6510-syntax-utils.rkt"
@@ -36,6 +38,16 @@
 
 
 ;; ================================================================================ address resolution
+
+(define-for-syntax (drop-meta-info line)
+  (filter (lambda (element) (not (and (list? element) (keyword? (first element))))) line))
+
+(define (drop-meta-info line)
+  (filter (lambda (element) (not (and (list? element) (keyword? (first element))))) line))
+
+(module+ test
+  (check-match (drop-meta-info '(ADC (#:line 5 #:org-cmd "some") "#$10"))
+               '(ADC "#$10")))
 
 (define (6510-byte-length command)
   (case (first command)
@@ -464,37 +476,42 @@
     (check-match (syntax->datum (zeropage-x-mode #'LDA #'":out" #'x))
                  '(LDA_zpx ":out"))))
 
-(define-for-syntax (error-string/indirect adr-modes opcode-string)
+(define-for-syntax (construct-example opcode argument qargument description within-non-racket-syntax)
+  (if within-non-racket-syntax
+      (string-append "  " opcode " " argument "  ; " description "\n")
+      (string-append "  (" opcode " " qargument  ") # " description "\n")))
+
+(define-for-syntax (error-string/indirect adr-modes opcode-string within-non-racket-syntax)
   (string-append
    "invalid syntax.\n"
    (if (not (or (indirect-x? adr-modes) (indirect-y? adr-modes))) (string-append opcode-string " cannot be used with indirect addressing\n") "expected:\n")
-   (if (indirect-x? adr-modes) (string-append "  (" opcode-string  " < \"$10\",x >) # indirect x addressing mode\n") "")
-   (if (indirect-y? adr-modes) (string-append "  (" opcode-string  " < \"$10\" >,y) # indirect y addressing mode\n") "")
+   (if (indirect-x? adr-modes) (construct-example opcode-string "($10,x)" "< \"$10\",x >)" "indirect x addressing mode"within-non-racket-syntax) "")
+   (if (indirect-y? adr-modes) (construct-example opcode-string "($10,y)" "< \"$10\" >,y)" "indirect y addressing mode" within-non-racket-syntax) "")
    "got: "))
 
-(define-for-syntax (error-string/indexed adr-modes opcode-string)
+(define-for-syntax (error-string/indexed adr-modes opcode-string within-non-racket-syntax)
   (string-append
    "invalid syntax.\n"
    (if (not (or (absolute-x? adr-modes) (absolute-y? adr-modes) (zero-page-x? adr-modes)))
        (string-append opcode-string " cannot use index\n") "expected:\n")
-   (if (absolute-x? adr-modes) (string-append "  (" opcode-string " \"$1000\",x) # absolute x addressing mode\n") "")
-   (if (absolute-y? adr-modes) (string-append "  (" opcode-string " \"$1000\",y) # absolute y addressing mode\n") "")
-   (if (zero-page-x? adr-modes) (string-append "  (" opcode-string  " \"$10\",x)   # zero page x addressing mode\n") "")
+   (if (absolute-x? adr-modes) (construct-example opcode-string "$1000,x" "\"$1000\",x" "absolute x addressing mode" within-non-racket-syntax) "")
+   (if (absolute-y? adr-modes) (construct-example opcode-string "$1000,y" "\"$1000\",y" "absolute y addressing mode" within-non-racket-syntax) "")
+   (if (zero-page-x? adr-modes) (construct-example opcode-string  "$10,x" "\"$10\",x" "zero page x addressing mode" within-non-racket-syntax) "")
    "got: "))
 
-(define-for-syntax (error-string/single adr-modes opcode-string)
+(define-for-syntax (error-string/single adr-modes opcode-string within-non-racket-syntax)
   (string-append
    "invalid syntax.\n"
    (if (not (or (relative? adr-modes) (accumulator? adr-modes) (immediate? adr-modes) (zero-page? adr-modes) (absolute? adr-modes)))
        (string-append opcode-string " cannot have one operand\n") "expected:\n")
    (if (relative? adr-modes) (string-append "  (" opcode-string " \":label\") # relative mode\n") "")
-   (if (accumulator? adr-modes) (string-append "  (" opcode-string " A) # accumulator mode\n") "")
-   (if (immediate? adr-modes) (string-append "  (" opcode-string " \"#$10\") # immediate addressing mode\n") "")
-   (if (zero-page? adr-modes) (string-append "  (" opcode-string  " \"$10\") # zeropage addressing mode\n") "")
-   (if (absolute? adr-modes) (string-append "  (" opcode-string " \"$1000\") # absolute addressing.\n") "")
+   (if (accumulator? adr-modes) (construct-example opcode-string "A" "A" "accumulator mode" within-non-racket-syntax) "")
+   (if (immediate? adr-modes) (construct-example opcode-string "#$10" "\"#$10\"" "immediate addressing mode" within-non-racket-syntax) "")
+   (if (zero-page? adr-modes) (construct-example opcode-string "$10" "\"$10\"" "zeropage addressing mode" within-non-racket-syntax) "")
+   (if (absolute? adr-modes) (construct-example opcode-string "$1000" "\"$1000\"" "absolute addressing mode" within-non-racket-syntax) "")
    "got: "))
 
-(define-for-syntax (opcode-with-addressing/single adr-modes opcode op stx)
+(define-for-syntax (opcode-with-addressing/single adr-modes opcode op stx non-racket-syn org-string)
   (with-syntax ([ires (when (immediate? adr-modes) (immediate-mode opcode op))]
                 [zpres (when (zero-page? adr-modes) (zero-page-mode opcode op))]
                 [absres (when (absolute? adr-modes) (absolute-mode opcode op))]
@@ -503,57 +520,68 @@
     (let ([res (foldl discard-void-syntax-object #'()  (list #'relres #'accres #'ires #'zpres #'absres))]
           [opcode-string (symbol->string (syntax->datum opcode))])
       (if (equal? '() (syntax->datum res))
-          (error (error-string/single adr-modes opcode-string)
-                 (syntax->datum stx)
-                 'in 'line (syntax-line opcode))
+          (error (error-string/single adr-modes opcode-string non-racket-syn)
+                 (if non-racket-syn
+                     (syntax->datum org-string)
+                     (drop-meta-info (syntax->datum stx)))
+                 'in 'line (if non-racket-syn
+                               (syntax->datum non-racket-syn)
+                               (syntax-line opcode)))
           res))))
 
 (module+ test
   (begin-for-syntax
-    (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page)) #'LDA #'"$10" #'()))
+    (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page)) #'LDA #'"$10" #'() 5 "lda $10"))
                  '(LDA_zp 16))
-    (check-exn exn:fail? (lambda () (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page)) #'LDA #'"#$10" #'())))
-    (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page immediate)) #'LDA #'"#$10" #'()))
+    (check-exn exn:fail? (lambda () (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page)) #'LDA #'"#$10" #'() 8 "lda #$10")))
+    (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page immediate)) #'LDA #'"#$10" #'() #f ""))
                  '(LDA_i 16))))
 
-(define-for-syntax (opcode-with-addressing/indirect adr-modes opcode open op close-or-x close-or-y stx)
+(define-for-syntax (opcode-with-addressing/indirect adr-modes opcode open op close-or-x close-or-y stx non-racket-syn org-string)
   (with-syntax ([indxres (when (indirect-x? adr-modes) (indirect-x-mode opcode open op close-or-x close-or-y))]
                 [indyres (when (indirect-y? adr-modes) (indirect-y-mode opcode open op close-or-x close-or-y))])
     (let ([res (foldl discard-void-syntax-object #'()  (list #'indxres #'indyres))]
           [opcode-string (symbol->string (syntax->datum opcode))])
       (if (equal? '() (syntax->datum res))
-          (error (error-string/indirect adr-modes opcode-string)
-                 (syntax->datum stx)
-                 'in 'line (syntax-line opcode))
+          (error (error-string/indirect adr-modes opcode-string non-racket-syn)
+                 (if non-racket-syn
+                     (syntax->datum org-string)
+                     (drop-meta-info (syntax->datum stx)))
+                 'in 'line (if non-racket-syn
+                               (syntax->datum non-racket-syn)
+                               (syntax-line opcode)))
           res))))
 
 (module+ test
   (begin-for-syntax
-    (check-match (syntax->datum (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x)) #'LDA #'#\( #'"$10" #'x #'#\) #'()))
+    (check-match (syntax->datum (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x)) #'LDA #'#\( #'"$10" #'x #'#\) #'() #f #'""))
                  '(LDA_indx 16))
-    (check-exn exn:fail? (lambda () (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x)) #'LDA #'#\( #'"$10" #'#\) #'y #'())))
-    (check-match (syntax->datum (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x indirect-y)) #'LDA #'#\( #'"$10" #'#\) #'y #'()))
+    (check-exn exn:fail? (lambda () (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x)) #'LDA #'#\( #'"$10" #'#\) #'y #'() #f #'"")))
+    (check-match (syntax->datum (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x indirect-y)) #'LDA #'#\( #'"$10" #'#\) #'y #'() #f #'""))
                  '(LDA_indy 16))))
 
-(define-for-syntax (opcode-with-addressing/indexed adr-modes opcode op idx stx)
+(define-for-syntax (opcode-with-addressing/indexed adr-modes opcode op idx stx non-racket-syn org-string)
   (with-syntax ([absxres (when (absolute-x? adr-modes) (absolute-x-mode opcode op idx))]
                 [absyres (when (absolute-y? adr-modes) (absolute-y-mode opcode op idx))]
                 [zpxres (when (zero-page-x? adr-modes) (zeropage-x-mode opcode op idx))])
     (let ([res (foldl discard-void-syntax-object #'()  (list #'zpxres #'absxres #'absyres))]
           [opcode-string (symbol->string (syntax->datum opcode))])
       (if (equal? '() (syntax->datum res))
-          (error (error-string/indexed adr-modes opcode-string)
-                 (syntax->datum stx)
-                 'in 'line (syntax-line opcode)
-                 )
+          (error (error-string/indexed adr-modes opcode-string non-racket-syn)
+                 (if non-racket-syn
+                     (syntax->datum org-string)
+                     (drop-meta-info (syntax->datum stx)))
+                 'in 'line (if non-racket-syn
+                               (syntax->datum non-racket-syn)
+                               (syntax-line opcode)))
           res))))
 
 (module+ test
   (begin-for-syntax
-    (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'x #'()))
+    (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'x #'() #f #'""))
                  '(LDA_absx 4096))
-    (check-exn exn:fail? (lambda () (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'y #'())))
-    (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x absolute-y)) #'LDA  #'"$1000" #'y #'()))
+    (check-exn exn:fail? (lambda () (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'y #'() #f #'"")))
+    (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x absolute-y)) #'LDA  #'"$1000" #'y #'() #f #'""))
                  '(LDA_absy 4096))))
 
 (define-for-syntax (list->one-arg-adr-modes option-list)
@@ -572,19 +600,47 @@
                      (member 'absolute-y option-list)
                      (member 'zero-page-x option-list)))
 
+(define-for-syntax (operands-indirect-y? open op close y)
+  (let ([open-i (syntax->datum open)]
+        [close-i (syntax->datum close)]
+        [y-i (syntax->datum y)])
+    (and (equal? open-i '<) (equal? close-i '>) (or (equal? y-i 'y) (equal? y-i '(unquote y))))))
+
+(define-for-syntax (operands-indirect-x? open op x close)
+         (let ([open-i (syntax->datum open)]
+             [x-i (syntax->datum x)]
+             [close-i (syntax->datum close)])
+         (and (equal? open-i '<) (equal? close-i '>) (or  (equal? x-i 'x) (equal? x-i '(unquote x))))))
+
 (define-syntax-rule (opcode-with-addressing opcode option-list)
   (define-syntax (opcode stx)
     (syntax-case stx ()
       [(opcode)
        (with-syntax ([symbol (symbol-append #'opcode (syntax->datum #'_impl))]) #'(symbol))]
       [(opcode op)
-       (opcode-with-addressing/single (list->one-arg-adr-modes option-list) #'opcode #'op stx)]
-      [(opcode open op close-or-x close-or-y)
-       (opcode-with-addressing/indirect (list->ind-arg-adr-modes option-list) #'opcode #'open #'op #'close-or-x #'close-or-y stx)]
+       (opcode-with-addressing/single (list->one-arg-adr-modes option-list) #'opcode #'op stx #f #'"")]
+      [(opcode (#:line line-number #:org-cmd org-string) op)
+       (opcode-with-addressing/single (list->one-arg-adr-modes option-list) #'opcode #'op stx #'line-number #'org-string)]
+      [(opcode open op close y)
+       (operands-indirect-y? #'open #'op #'close #'y)
+       (opcode-with-addressing/indirect (list->ind-arg-adr-modes option-list) #'opcode #'open #'op #'close #'y stx #f #'"")]
+      [(opcode (#:line line-number #:org-cmd org-string) open op close y)
+       (operands-indirect-y? #'open #'op #'close #'y)
+       (opcode-with-addressing/indirect (list->ind-arg-adr-modes option-list) #'opcode #'open #'op #'close #'y stx #'line-number #'org-string)]
+      [(opcode open op x close)
+       (operands-indirect-x? #'open #'op #'x #'close)
+       (opcode-with-addressing/indirect (list->ind-arg-adr-modes option-list) #'opcode #'open #'op #'x #'close stx #f #'"")]
+      [(opcode (#:line line-number #:org-cmd org-string) open op x close)
+       (operands-indirect-x? #'open #'op #'x #'close)
+       (opcode-with-addressing/indirect (list->ind-arg-adr-modes option-list) #'opcode #'open #'op #'x #'close stx #'line-number #'org-string)]
       [(opcode op, idx)
-       (opcode-with-addressing/indexed (list->idx-arg-adr-modes option-list) #'opcode #'op #'idx stx)]
+       (opcode-with-addressing/indexed (list->idx-arg-adr-modes option-list) #'opcode #'op #'idx stx #f #'"")]
+      [(opcode (#:line line-number #:org-cmd org-string) op, idx)
+       (opcode-with-addressing/indexed (list->idx-arg-adr-modes option-list) #'opcode #'op #'idx stx #'line-number #'org-string)]
       [(opcode op idx)
-       (opcode-with-addressing/indexed (list->idx-arg-adr-modes option-list) #'opcode #'op #'idx stx)])))
+       (opcode-with-addressing/indexed (list->idx-arg-adr-modes option-list) #'opcode #'op #'idx stx #f #'"")]
+      [(opcode (#:line line-number #:org-cmd org-string) op idx)
+       (opcode-with-addressing/indexed (list->idx-arg-adr-modes option-list) #'opcode #'op #'idx stx #'line-number #'org-string)])))
 
 (define (test-FANTASTIC_abs ops) 'ok)
 (module+ test
@@ -864,9 +920,10 @@
                             [(is-immediate-number? element) (string-append "#" (hex-format-any (substring element 1)))]
                             [else  element])) slst) " "))
 
+
 (define (pretty-print-line line)
-  (let* ([opcodes (first line)]
-         [syntax (last line)]
+  (let* ([opcodes (drop-meta-info (first line))]
+         [syntax (drop-meta-info (last line))]
          [compiled
           (case (first opcodes)
             [('opcode 'rel-opcode)

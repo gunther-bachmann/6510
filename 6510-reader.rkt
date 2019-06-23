@@ -223,30 +223,69 @@
 
 (define (adr-modes-opcode/p opcode adr-mode-list)
   (do
-      (try/p (string-cia/p opcode))
+      [actual-opcode <- (try/p (string-cia/p opcode))]
 
       ;; order is relevant (for parser to get the max matching string per line
-      [res <- (or/p (try/p (guard/p (do (many/p space-or-tab/p) [a-res <- accumulator/p] (pure (append (opcode->list4pure opcode) a-res)))
+      [res <- (or/p (try/p (guard/p (do (many/p space-or-tab/p) [a-res <- (syntax/p accumulator/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (list '#:line (syntax-line a-res)
+                                                               '#:org-cmd (string-append opcode " " (string-downcase (symbol->string (first (syntax->datum a-res)))))))
+                                                   `,(syntax->datum a-res))))
                                    (lambda (x) (member 'accumulator adr-mode-list)) "no accumlator"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [i-res <- immediate/p] (pure (append (opcode->list4pure opcode) i-res)))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [i-res <- (syntax/p immediate/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (list '#:line (syntax-line i-res)
+                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum i-res)))))
+                                                   (syntax->datum i-res))))
                                    (lambda (x) (member 'immediate adr-mode-list)) "no immediate"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [indx-res <- indirect-x/p] (pure (append (opcode->list4pure opcode) indx-res)))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [indx-res <- (syntax/p indirect-x/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (list '#:line (syntax-line indx-res)
+                                                               '#:org-cmd (string-append opcode " (" (second (syntax->datum indx-res)) ",x)")))
+                                                   (syntax->datum indx-res))))
                                    (lambda (x) (member 'indirect-x adr-mode-list)) "no indirect, x"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [indy-res <- indirect-y/p] (pure (append (opcode->list4pure opcode) indy-res)))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [indy-res <- (syntax/p indirect-y/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (list '#:line (syntax-line indy-res)
+                                                               '#:org-cmd (string-append opcode " (" (second (syntax->datum indy-res)) "),y")))
+                                                   (syntax->datum indy-res))))
                                    (lambda (x) (member 'indirect-y adr-mode-list)) "no indirect, y"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [absx-res <- absolute-x/p] (pure (append (opcode->list4pure opcode) absx-res)))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [absx-res <- (syntax/p absolute-x/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (list '#:line (syntax-line absx-res)
+                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum absx-res)) ",x")))
+                                                   (syntax->datum absx-res))))
                                    (lambda (x) (member 'absolute-x adr-mode-list)) "no absolute, x"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [absy-res <- absolute-y/p] (pure (append (opcode->list4pure opcode) absy-res)))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [absy-res <- (syntax/p absolute-y/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (list '#:line (syntax-line absy-res)
+                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum absy-res)) ",y")))
+                                                   (syntax->datum absy-res))))
                                    (lambda (x) (member 'absolute-y adr-mode-list)) "no absolute, y"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [zpx-res <- zero-page-x/p] (pure (append (opcode->list4pure opcode) zpx-res)))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [zpx-res <- (syntax/p zero-page-x/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (list '#:line (syntax-line zpx-res)
+                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum zpx-res)) ",x")))
+                                                   (syntax->datum zpx-res))))
                                    (lambda (x) (member 'zero-page-x adr-mode-list)) "no zero page, x"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [abs-res <- absolute/p] (pure (append (opcode->list4pure opcode) abs-res)))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [abs-res <- (syntax/p absolute/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (list '#:line (syntax-line abs-res)
+                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum abs-res)))))
+                                                   (syntax->datum abs-res))))
                                    (lambda (x) (member 'absolute adr-mode-list)) "no absolute"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [zp-res <- zero-page-or-relative/p] (pure (append (opcode->list4pure opcode) zp-res)))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [zp-res <- (syntax/p zero-page-or-relative/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (list '#:line (syntax-line zp-res)
+                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum zp-res)))))
+                                                   (syntax->datum zp-res))))
                                    (lambda (x) (or (member 'zero-page adr-mode-list) (member 'relative adr-mode-list))) "no zero page nor relative"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [label-res <- 6510-label/p] (pure (append (opcode->list4pure opcode) (list (last label-res)))))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [label-res <- (syntax/p 6510-label/p)]
+                                     (pure (append (opcode->list4pure opcode)
+                                                   (list (last (syntax->datum label-res))))))
                                    (lambda (x) (or (member 'relative adr-mode-list) (member 'absolute adr-mode-list))) "no relative label"))
-                   (try/p (guard/p (do void/p (pure (opcode->list4pure opcode)))
+                   (try/p (guard/p (do void/p
+                                       (pure (opcode->list4pure opcode)))
                                    (lambda (x) (member 'implicit adr-mode-list) ) "no implicit"))
                    )]
     (pure res)))

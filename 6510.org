@@ -37,16 +37,17 @@
   - any relevant program on the c64 that included graphics or sound was written in assembler
   - high level languages (basic, pascal, c, ...) were NOT relevant for any of the above
 
-  => Why not program a macro assembler for 6510 that may run on a c64?
-     Sounds like a good idea!
-     But wait. There have already been others ...
-     - https://docs.racket-lang.org/asi64/index.html
-     - https://github.com/tiagosr/Plasm
-     And check the online assembler at https://www.masswerk.at/6502/assembler.html
+  - thus
+    - Why not program a macro assembler for 6510 that may run on a c64?
+      Sounds like a good idea!
+      But wait. There have already been others ...
+      - https://docs.racket-lang.org/asi64/index.html
+      - https://github.com/tiagosr/Plasm
+      And check the online assembler at https://www.masswerk.at/6502/assembler.html
 * 6510
   - Eight bit parallel processing
   - 8 Bit Bi-Directional Data Bus
-  - Addressable memory range of up to 65K bytes
+  - Addressable memory range of up to 65Ki bytes
   - 56 Instructions (see https://www.masswerk.at/6502/6502_instruction_set.html)
   - Thirteen addressing modes
   - True indexing capability
@@ -171,12 +172,18 @@
       #'(+ 10 12)
     #+end_src
 
+    #+RESULTS:
+    : #<syntax:/tmp/babel-IFfsIx/ob-Z5Gzfh.rkt:3:2 (+ 10 12)>
+
   - get information out of syntax objects
 
     - the original data
       #+begin_src racket :lang racket :results verbatim
         (syntax->datum #'(+ 10 12))
       #+end_src
+
+      #+RESULTS:
+      : '(+ 10 12)
 
     - source, position, line
       #+begin_src racket :lang racket :results verbatim
@@ -186,6 +193,11 @@
         (syntax-source program)
         (syntax-column program)
       #+end_src
+
+      #+RESULTS:
+      : 3
+      : #<path:/tmp/babel-IFfsIx/ob-AGjmLY.rkt>
+      : 18
 
   - define syntax macros
     #+begin_src racket :lang racket :results verbatim
@@ -199,6 +211,9 @@
         (swap a b)
         (list a b))
     #+end_src
+
+    #+RESULTS:
+    : '(2 1)
 
   - macro expansion
     Racket’s pattern-based macros automatically maintain lexical scope, so macro implementors
@@ -216,11 +231,16 @@
       (syntax->datum (expand-once #'(swap tmp y)))
 
       ;; But
-      (let ([tmp 5]
-            [y   6])
+      (let ([tmp 1]
+            [y   2])
         (swap tmp y)
         (list tmp y))
     #+end_src
+
+    #+RESULTS:
+    : '(let ((tmp a)) (set! a b) (set! b tmp))
+    : '(let ((tmp tmp)) (set! tmp y) (set! y tmp))
+    : '(2 1)
 
   - macros with sequences (and recursion)
     #+begin_src racket :lang racket :results verbatim
@@ -243,6 +263,11 @@
       (syntax->datum (expand-once (expand-once #'(rotate a1 a2 a3 a4))))
       (syntax->datum (expand #'(rotate a1 a2 a3 a4)))
     #+end_src
+
+    #+RESULTS:
+    : '(begin (swap a1 a2) (rotate a2 a3 a4))
+    : '(begin (let ((tmp a1)) (set! a1 a2) (set! a2 tmp)) (begin (swap a2 a3) (rotate a3 a4)))
+    : '(begin (let-values (((tmp) (#%top . a1))) (set! a1 (#%top . a2)) (set! a2 tmp)) (begin (let-values (((tmp) (#%top . a2))) (set! a2 (#%top . a3)) (set! a3 tmp)) (begin (let-values (((tmp) (#%top . a3))) (set! a3 (#%top . a4)) (set! a4 tmp)) (#%app void))))
 
   - optional: identifier macros (need not be in function position to be expanded!)
     #+begin_src racket :lang racket :results verbatim
@@ -277,8 +302,11 @@
           (do (string/p "SOME")
               (many+/p digit/p)))
 
-        (parse-string (syntax/p string-number/p) "SOME17")
+        (parse-string (syntax/p string-number/p) "SOME 17")
       #+end_src
+
+      #+RESULTS:
+      : (success #<syntax:string:1:0 (#\1 #\7)>)
 
     - white spacing
       #+begin_src racket :lang racket :results verbatim
