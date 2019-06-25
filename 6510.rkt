@@ -580,7 +580,14 @@
   (begin-for-syntax
     (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'x #'() #f #'""))
                  '(LDA_absx 4096))
-    (check-exn exn:fail? (lambda () (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'y #'() #f #'"")))
+    (check-exn
+     #rx"invalid syntax.\nexpected.*\\(LDA \"\\$1000\",x\\) #.*got:  \\(LDA \"\\$1000\" y\\) in line"
+     (lambda () (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'y #'(LDA "$1000" y) #f #'""))
+     "check error message to use racket syntax")
+    (check-exn
+     #rx"invalid syntax.\nexpected.*LDA \\$1000,x  ;.*got:  \"org string\" in line"
+     (lambda () (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'y #'(LDA "$1000" y) #'some #'"org string"))
+     "check error message to use free syntax")
     (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x absolute-y)) #'LDA  #'"$1000" #'y #'() #f #'""))
                  '(LDA_absy 4096))))
 
