@@ -1,5 +1,7 @@
 #lang racket
 
+;; todo: implement compare, increment (x,y), and branch commands (using flags correctly)
+
 (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
 (require (only-in threading ~>>))
 (require "6510-utils.rkt")
@@ -82,23 +84,51 @@
       (-set-zero-flag flags)
       (-clear-zero-flag flags)))
 
+(define (-adjust-overflow-flag set flags)
+  (if set
+      (-set-overflow-flag flags)
+      (-clear-overflow-flag flags)))
+
+(define (-adjust-negative-flag set flags)
+  (if set
+      (-set-negative-flag flags)
+      (-clear-negative-flag flags)))
+
 (define (interpret-jmp-abs high low state)
   (struct-copy cpu-state state
                [program-counter (word (absolute high low))]))
+
+(define (derive-overflow acc oper new-acc)
+  (let* ([input-has-same-sign (bitwise-not (bitwise-and #x80 (bitwise-xor acc oper)))]
+         [in-out-has-different-sign (bitwise-and #x80 (bitwise-xor acc new-acc))])
+    (not (zero? (bitwise-and input-has-same-sign in-out-has-different-sign)))))
+
+(module+ test
+  (check-false (derive-overflow #x50 #x10 #x60))
+  (check-true (derive-overflow #x50 #x50 #xa0))
+  (check-false (derive-overflow #x50 #x90 #xe0))
+  (check-false (derive-overflow #x50 #xd0 #x120))
+  (check-false (derive-overflow #x50 #x10 #x60))
+  (check-false (derive-overflow #xd0 #x10 #xe0))
+  (check-false (derive-overflow #xd0 #x50 #x120))
+  (check-true (derive-overflow #xd0 #x90 #x160))
+  (check-false (derive-overflow #xd0 #xd0 #x1a0)))
 
 (define (interpret-adc-i immediate state)
   (let* ([old-accumulator (cpu-state-accumulator state)]
          [intermediate-accumulator (+ immediate old-accumulator)]
          [new-accumulator (if (carry-flag? state) (+ 1 intermediate-accumulator) intermediate-accumulator)]
-         [carry?          (> (+ immediate old-accumulator) 255 )]
-         [zero?           (= 0 (byte new-accumulator))]
-         [negative?       #f]
-         [overflow?       #f])
+         [carry?          (> new-accumulator 255 )]
+         [zero?           (zero? (byte new-accumulator))]
+         [negative?       (bitwise-and #x80 (byte new-accumulator))]
+         [overflow?       (derive-overflow old-accumulator immediate new-accumulator)])
     (struct-copy cpu-state state
                  [program-counter (word (+ 2 (cpu-state-program-counter state)))]
                  [flags           (~>> (cpu-state-flags state)
                                       (-adjust-carry-flag carry?)
                                       (-adjust-zero-flag zero?)
+                                      (-adjust-negative-flag negative?)
+                                      (-adjust-overflow-flag overflow?)
                                       ;TODO: negative flag, overflow
                                       )]
                  [accumulator     (byte new-accumulator)])))
@@ -114,6 +144,18 @@
 (define (carry-flag? state)
   (eq? 1 (bitwise-and 1 (cpu-state-flags state))))
 
+(define (interrupt-flag? state)
+  (eq? #x04 (bitwise-and #x04 (cpu-state-flags state))))
+
+(define (decimal-flag? state)
+  (eq? #x08 (bitwise-and #x08 (cpu-state-flags state))))
+
+(define (negative-flag? state)
+  (eq? #x80 (bitwise-and #x80 (cpu-state-flags state))))
+
+(define (overflow-flag? state)
+  (eq? #x40 (bitwise-and #x40 (cpu-state-flags state))))
+
 (define (-set-carry-flag flags)
   (bitwise-xor 1 flags))
 
@@ -125,6 +167,30 @@
 
 (define (-clear-zero-flag flags)
   (bitwise-and #xfd flags))
+
+(define (-set-overflow-flag flags)
+  (bitwise-xor #x40 flags))
+
+(define (-clear-overflow-flag flags)
+  (bitwise-and #xbf flags))
+
+(define (-set-negative-flag flags)
+  (bitwise-xor #x80 flags))
+
+(define (-clear-negative-flag flags)
+  (bitwise-and #x7f flags))
+
+(define (-set-interrupt-flag flags)
+  (bitwise-xor #x04 flags))
+
+(define (-clear-interrupt-flag flags)
+  (bitwise-and #xfb flags))
+
+(define (-set-decimal-flag flags)
+  (bitwise-xor #x08 flags))
+
+(define (-clear-decimal-flag flags)
+  (bitwise-and #xf7 flags))
 
 (define (set-carry-flag state)
   (struct-copy cpu-state state [flags (-set-carry-flag (cpu-state-flags state))]))
