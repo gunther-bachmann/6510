@@ -1,4 +1,4 @@
-#+title: 6510 Racket Experiments
+#+title: Presentation of 6510 Racket Experiments
 * motivation
   - want to get more into functional programming                                                  |
 
