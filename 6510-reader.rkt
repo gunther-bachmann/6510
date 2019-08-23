@@ -114,9 +114,9 @@
 
 (define 6510-label/p
   (do
-      (char/p #\:)
-      [new-label <- (many+/p (or/p letter/p digit/p (char/p #\_)))]
-    (pure (list (string->symbol "LABEL") (string-append ":" (list->string new-label))))))
+      [colon <- (syntax/p (char/p #\:))]
+      [new-label <- (syntax/p (many+/p (or/p letter/p digit/p (char/p #\_))))]
+    (pure (datum->syntax new-label (list (string->symbol "LABEL") (string-append ":" (list->string (syntax->datum new-label)))) colon))))
 
 (module+ test
   (check-match (parsed-string-result 6510-label/p ":abc")
@@ -159,7 +159,7 @@
     (pure (append (list (string->symbol (string-upcase opcode)))
                   (if (number? x)
                       (list (number->string x))
-                      (list (last x)))))))
+                      (list (last (syntax->datum x))))))))
 
 (module+ test
   (check-match (parsed-string-result (abs-opcode/p "JSR") "JSR $1000")
@@ -187,7 +187,7 @@
     (pure (append (list (string->symbol (string-upcase opcode)))
                   (if (number? x)
                       (list (number->string x))
-                      (list (last x)))))))
+                      (list (last (syntax->datum x))))))))
 
 (define (chars-ci/p str)
   (if (zero? (string-length str))
@@ -202,7 +202,7 @@
 (define accumulator/p (do (char-ci/p #\A) (pure '(A))))
 (define immediate/p (do (char/p #\#) [x <- byte/p] (pure (list (string-append "#" (number->string x))))))
 (define zero-page-or-relative/p (do [x <- byte/p] (pure (list (number->string x)))))
-(define absolute/p (do [mem <- (or/p 6510-label/p word/p)] (pure (list (if (number? mem) (number->string mem) (last mem))))))
+(define absolute/p (do [mem <- (or/p 6510-label/p word/p)] (pure (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))))))
 (define indirect-x/p (do (char/p #\() [mem <- (or/p 6510-label/p byte/p)] (string-cia/p ",x") (char/p #\))
                          (pure `(< ,(if (number? mem) (number->string mem) (last mem)) x >))))
 (define indirect-y/p (do (char/p #\() [mem <- byte/p] (char/p #\)) (string-cia/p ",y") (pure `(< ,(number->string mem) > y))))
@@ -223,69 +223,69 @@
 
 (define (adr-modes-opcode/p opcode adr-mode-list)
   (do
-      [actual-opcode <- (try/p (string-cia/p opcode))]
+      [actual-opcode <- (syntax/p (try/p (string-cia/p opcode)))]
 
       ;; order is relevant (for parser to get the max matching string per line
       [res <- (or/p (try/p (guard/p (do (many/p space-or-tab/p) [a-res <- (syntax/p accumulator/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (list '#:line (syntax-line a-res)
-                                                               '#:org-cmd (string-append opcode " " (string-downcase (symbol->string (first (syntax->datum a-res)))))))
-                                                   `,(syntax->datum a-res))))
+                                     (pure (datum->syntax a-res (append (opcode->list4pure opcode)
+                                                                  (list (list '#:line (syntax-line a-res)
+                                                                              '#:org-cmd (string-append opcode " " (string-downcase (symbol->string (first (syntax->datum a-res)))))))
+                                                                  `,(syntax->datum a-res)) actual-opcode)))
                                    (lambda (x) (member 'accumulator adr-mode-list)) "no accumlator"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [i-res <- (syntax/p immediate/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (list '#:line (syntax-line i-res)
-                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum i-res)))))
-                                                   (syntax->datum i-res))))
+                                     (pure (datum->syntax i-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line i-res)
+                                                                             '#:org-cmd (string-append opcode " " (first (syntax->datum i-res)))))
+                                                                 (syntax->datum i-res)) actual-opcode)))
                                    (lambda (x) (member 'immediate adr-mode-list)) "no immediate"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [indx-res <- (syntax/p indirect-x/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (list '#:line (syntax-line indx-res)
-                                                               '#:org-cmd (string-append opcode " (" (second (syntax->datum indx-res)) ",x)")))
-                                                   (syntax->datum indx-res))))
+                                     (pure (datum->syntax indx-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line indx-res)
+                                                                             '#:org-cmd (string-append opcode " (" (second (syntax->datum indx-res)) ",x)")))
+                                                                 (syntax->datum indx-res)) actual-opcode)))
                                    (lambda (x) (member 'indirect-x adr-mode-list)) "no indirect, x"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [indy-res <- (syntax/p indirect-y/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (list '#:line (syntax-line indy-res)
-                                                               '#:org-cmd (string-append opcode " (" (second (syntax->datum indy-res)) "),y")))
-                                                   (syntax->datum indy-res))))
+                                     (pure (datum->syntax indy-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line indy-res)
+                                                                             '#:org-cmd (string-append opcode " (" (second (syntax->datum indy-res)) "),y")))
+                                                                 (syntax->datum indy-res)) actual-opcode)))
                                    (lambda (x) (member 'indirect-y adr-mode-list)) "no indirect, y"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [absx-res <- (syntax/p absolute-x/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (list '#:line (syntax-line absx-res)
-                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum absx-res)) ",x")))
-                                                   (syntax->datum absx-res))))
+                                     (pure (datum->syntax absx-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line absx-res)
+                                                                             '#:org-cmd (string-append opcode " " (first (syntax->datum absx-res)) ",x")))
+                                                                 (syntax->datum absx-res)) actual-opcode)))
                                    (lambda (x) (member 'absolute-x adr-mode-list)) "no absolute, x"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [absy-res <- (syntax/p absolute-y/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (list '#:line (syntax-line absy-res)
-                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum absy-res)) ",y")))
-                                                   (syntax->datum absy-res))))
+                                     (pure (datum->syntax absy-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line absy-res)
+                                                                             '#:org-cmd (string-append opcode " " (first (syntax->datum absy-res)) ",y")))
+                                                                 (syntax->datum absy-res)) actual-opcode)))
                                    (lambda (x) (member 'absolute-y adr-mode-list)) "no absolute, y"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [zpx-res <- (syntax/p zero-page-x/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (list '#:line (syntax-line zpx-res)
-                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum zpx-res)) ",x")))
-                                                   (syntax->datum zpx-res))))
+                                     (pure (datum->syntax zpx-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line zpx-res)
+                                                                             '#:org-cmd (string-append opcode " " (first (syntax->datum zpx-res)) ",x")))
+                                                                 (syntax->datum zpx-res)) actual-opcode)))
                                    (lambda (x) (member 'zero-page-x adr-mode-list)) "no zero page, x"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [abs-res <- (syntax/p absolute/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (list '#:line (syntax-line abs-res)
-                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum abs-res)))))
-                                                   (syntax->datum abs-res))))
+                                     (pure (datum->syntax abs-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line abs-res)
+                                                                             '#:org-cmd (string-append opcode " " (first (syntax->datum abs-res)))))
+                                                                 (syntax->datum abs-res)) actual-opcode)))
                                    (lambda (x) (member 'absolute adr-mode-list)) "no absolute"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [zp-res <- (syntax/p zero-page-or-relative/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (list '#:line (syntax-line zp-res)
-                                                               '#:org-cmd (string-append opcode " " (first (syntax->datum zp-res)))))
-                                                   (syntax->datum zp-res))))
+                                     (pure (datum->syntax zp-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line zp-res)
+                                                                             '#:org-cmd (string-append opcode " " (first (syntax->datum zp-res)))))
+                                                                 (syntax->datum zp-res)) actual-opcode)))
                                    (lambda (x) (or (member 'zero-page adr-mode-list) (member 'relative adr-mode-list))) "no zero page nor relative"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [label-res <- (syntax/p 6510-label/p)]
-                                     (pure (append (opcode->list4pure opcode)
-                                                   (list (last (syntax->datum label-res))))))
+                                     (pure (datum->syntax label-res (append (opcode->list4pure opcode)
+                                                                           (list (last (syntax->datum label-res)))) label-res)))
                                    (lambda (x) (or (member 'relative adr-mode-list) (member 'absolute adr-mode-list))) "no relative label"))
                    (try/p (guard/p (do void/p
-                                       (pure (opcode->list4pure opcode)))
+                                       (pure (datum->syntax actual-opcode (opcode->list4pure opcode) actual-opcode)))
                                    (lambda (x) (member 'implicit adr-mode-list) ) "no implicit"))
                    )]
     (pure res)))
@@ -344,16 +344,19 @@
   (apply values list))
 
 (define (literal-read-syntax src in)
-  (let*-values ([(parsed-string) (parse-string (syntax/p 6510-program/p) (port->string in))]
+  (let*-values ([(syntaxed-program) (syntax/p 6510-program/p)]
+                [(parsed-string) (parse-string (syntax/p 6510-program/p) (port->string in))]
                 [(parse-result) (parse-result! parsed-string)]
-                [(origin parsed-opcodes) (list->values (syntax->datum parse-result))])
+                [(origin parsed-opcodes) (list->values (syntax->datum parse-result))]
+                [(unenc-prg) (syntax-e (last (syntax-e parse-result)))])
     (with-syntax ([(str ...) parsed-opcodes]
                   [org origin])
       (strip-context
-       #'(module compiled6510 racket
+       #`(module compiled6510 racket
            (require "6510.rkt")
            (require "6510-interpreter.rkt")
-           (provide program raw-program data resolved-program pretty-program raw-bytes)
+           (provide program raw-program data resolved-program pretty-program raw-bytes stx-program)
+           (define stx-program (syntax #,unenc-prg)) ;; examine how to pass source location into the generated racket program
            (define raw-program '(str ...))
            (define program `(,str ...))
            (define resolved-program (replace-labels program org))
