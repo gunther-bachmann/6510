@@ -116,26 +116,26 @@
   (do
       [colon <- (syntax/p (char/p #\:))]
       [new-label <- (syntax/p (many+/p (or/p letter/p digit/p (char/p #\_))))]
-    (pure (datum->syntax new-label (list (string->symbol "LABEL") (string-append ":" (list->string (syntax->datum new-label)))) colon))))
+    (pure (datum->syntax new-label (list (string->symbol "LABEL") '("<label>") (string-append ":" (list->string (syntax->datum new-label)))) colon))))
 
 (module+ test
   (check-match (parsed-string-result 6510-label/p ":abc")
-               '(LABEL ":abc"))
+               '(LABEL ("<label>") ":abc"))
 
   (check-match (parsed-string-result 6510-label/p ":abc12")
-               '(LABEL ":abc12"))
+               '(LABEL ("<label>") ":abc12"))
 
   (check-match (parsed-string-result 6510-label/p ":ab1c2")
-               '(LABEL ":ab1c2"))
+               '(LABEL ("<label>")  ":ab1c2"))
 
   (check-match (parsed-string-result 6510-label/p ":1ab1c2")
-               '(LABEL ":1ab1c2"))
+               '(LABEL ("<label>") ":1ab1c2"))
 
   (check-match (parsed-string-result 6510-label/p ":1ab1_c2")
-               '(LABEL ":1ab1_c2"))
+               '(LABEL ("<label>") ":1ab1_c2"))
 
   (check-match (parsed-string-result 6510-label/p ":1ab1_c2:8")
-               '(LABEL ":1ab1_c2"))
+               '(LABEL ("<label>") ":1ab1_c2"))
 
   (check-exn exn:fail?
              (lambda () (parsed-string-result 6510-label/p "abc"))))
@@ -295,13 +295,13 @@
       (try/p (string-cia/p ".data"))
       (many/p space-or-tab/p)
     [result <- (many/p byte/p #:sep (do (char/p #\,) ml-whitespace/p))]
-    (pure (list 'BYTES result))))
+    (pure (list 'BYTES '("bytes") result))))
 
 (module+ test
   (check-match (parsed-string-result data-bytes/p ".data    2,3,4")
-               '(BYTES (2 3 4)))
+               '(BYTES ("bytes") (2 3 4)))
   (check-match (parsed-string-result data-bytes/p ".data $20,	%10,  4")
-               '(BYTES (32 2 4))))
+               '(BYTES ("bytes") (32 2 4))))
 ;; immediate, indirect and absolute addressing
 (define 6510-opcode/p
   (do (or/p
@@ -350,13 +350,21 @@
                 [(origin parsed-opcodes) (list->values (syntax->datum parse-result))]
                 [(unenc-prg) (syntax-e (last (syntax-e parse-result)))])
     (with-syntax ([(str ...) parsed-opcodes]
+                  [(sy-str ...) unenc-prg]
                   [org origin])
       (strip-context
        #`(module compiled6510 racket
            (require "6510.rkt")
            (require "6510-interpreter.rkt")
-           (provide program raw-program data resolved-program pretty-program raw-bytes stx-program)
+           (provide program raw-program data resolved-program pretty-program raw-bytes stx-program sy-program)
            (define stx-program (syntax #,unenc-prg)) ;; examine how to pass source location into the generated racket program
+           ;; (define sy-program  `('hello (unquote-splicing (syntax-e (syntax #,unenc-prg)))))
+           ;; execute this construction of sy-program in the 'with-syntax clause outside this s-expr!! and splice it in here
+           (define sy-program `(,(let* ([datum (syntax->datum (syntax sy-str))]
+                                       [sy-datum (syntax sy-str)]) (append (list (first datum))
+                                                                           (list `(#:line ,(syntax-line sy-datum) #:org-cmd ,(if (and (> (length datum) 1) (list? (second datum))) (last (second datum)) (symbol->string (first datum)))))
+                                                                           (drop datum (min (length datum) 2)))) ...))
+
            (define raw-program '(str ...))
            (define program `(,str ...))
            (define resolved-program (replace-labels program org))

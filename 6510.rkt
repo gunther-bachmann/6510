@@ -69,13 +69,13 @@
   (check-match (6510-byte-length '('opcode 1 ":other"))
                3)
 
-  (check-match (6510-byte-length '('bytes (1 2 3)))
+  (check-match (6510-byte-length '('bytes () (1 2 3)))
                3)
 
   (check-match (6510-byte-length '('opcode 1 2 3))
                3)
 
-  (check-match (6510-byte-length '('label ":test"))
+  (check-match (6510-byte-length '('label () ":test"))
                0))
 
 (define (lo-sums list current-sum)
@@ -268,7 +268,7 @@
 
 (define-syntax (LABEL stx)
   (syntax-case stx ()
-    [(LABEL op)
+    [(LABEL meta op)
      #'(LABEL_s op)]))
 
 ;; ================================================================================ opcode definition helper
@@ -722,14 +722,14 @@
 
 (define-syntax (BYTES stx)
   (syntax-case stx ()
-    [(BYTES bytes)
+    [(BYTES meta bytes)
      #'(BYTES_list (quote bytes))]))
 
 (define (BYTES_list bytes)
   (list ''bytes bytes))
 
 (module+ test
-  (check-match (BYTES '(10 20 30))
+  (check-match (BYTES '() '(10 20 30))
                '('bytes '(10 20 30))))
 
 (define-opcode-functions ADC

@@ -1,20 +1,42 @@
-#lang racket
+#lang at-exp racket
 
 ;; todo: implement compare, increment (x,y), and branch commands (using flags correctly)
 
 (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
 (require (only-in threading ~>>))
 (require "6510-utils.rkt")
+(require scribble/srcdoc)
+(require (for-doc scribble/base scribble/manual))
 
-(module+ test
+(module+ test 
   (require rackunit))
 
-(provide cpu-state initialize-cpu peek poke run set-pc-in-state 6510-load)
+(provide initialize-cpu peek poke run set-pc-in-state 6510-load)
 
 (struct cpu-state (program-counter flags memory accumulator x-index y-index stack-pointer))
+(provide (struct-doc cpu-state ([program-counter any/c]
+                                [flags any/c]
+                                [memory any/c]
+                                [accumulator any/c]
+                                [x-index any/c]
+                                [y-index any/c]
+                                [stack-pointer any/c]) @{Doc test}))
 
 (define (initialize-cpu)
   (cpu-state 0 0 (make-fxvector 65536) 0 0 0 #xff))
+
+;; documentation test with testfun
+(define (testfun a)
+  a)
+
+(provide
+ (proc-doc/names
+  testfun
+  (-> number? any/c)
+  (a)
+  @{Doc test}
+  ))
+
 
 (define (peek state memory-address)
   (fxvector-ref (cpu-state-memory state) memory-address))
@@ -212,6 +234,7 @@
     [(#xA9) (interpret-lda-i (peek-pc+1 state) state)]
     [(#xD0) (interpret-bne-rel (peek-pc+1 state) state)]
     [else state]))
+
 
 (define (interpret-bne-rel rel state)
   (let* ([pc (cpu-state-program-counter state)]

@@ -2,3 +2,5 @@
 *.pdf
 *.tex
 auto/
+compiled/
+doc/
