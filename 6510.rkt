@@ -921,7 +921,7 @@
                    #:exists 'replace))
 
 (define (run-emulator file-name)
-  (system (string-append "x64 -8 " file-name)))
+  (system (string-append "LD_LIBRARY_PATH=  x64 -8 " file-name)))
 
 (define (create-d64 name)
   (system (string-append "c1541 -format \"" name ",01\" d64 " name)))

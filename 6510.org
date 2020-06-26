@@ -1,6 +1,6 @@
 #+title: Presentation of 6510 Racket Experiments
 * motivation
-  - want to get more into functional programming                                                  |
+  - want to get more into functional programming
 
     - *lisp* (John McCarthy: original definition 1958, second oldest programming language,
               fortran is older by one year)
