@@ -38,7 +38,7 @@
          LABEL BYTES)
 
 
-;; ================================================================================ address resolution
+;; -------------------------------------------------------------------------------- address resolution
 
 (define-for-syntax (drop-meta-info line)
   (filter (lambda (element) (not (and (list? element) (keyword? (first element))))) line))
@@ -718,7 +718,7 @@
          )]))
 
 
-;; ================================================================================ opcode definition
+;; -------------------------------------------------------------------------------- opcode definition
 
 (define-syntax (BYTES stx)
   (syntax-case stx ()
@@ -910,7 +910,7 @@
                '('opcode #x95 #x28)))
 
 
-;; ================================================================================ whole program functions
+;; -------------------------------------------------------------------------------- whole program functions
 
 ; (run (assembler-program (initialize-cpu) 0 (list (LDA_i #x41) (JSR_abs #xFFFF) (BRK))))
 
@@ -934,7 +934,7 @@
   (create-d64 d64)
   (add-prg-to-d64 file-name d64 target-name))
 
-;; ======================================== pretty print
+;; -------------------------------------------------- pretty print
 
 (define (hex-format-any a-number-str)
   (let ([parsed-number (parse-number-string a-number-str)])
