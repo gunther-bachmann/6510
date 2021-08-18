@@ -568,7 +568,7 @@
   (begin-for-syntax
     (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page)) #'LDA #'"$10" #'() #'5 #'"lda $10"))
                  '(LDA_zp 16))
-    (check-exn #rx"invalid syntax.\nexpected.*LDA \\$10  ;.*got:  \"lda #\\$10\" in line 8"
+    (check-exn #rx"invalid syntax.\nexpected.*LDA \\$10  ;.*got:  \"lda #\\$10\" 'in 'line 8"
                (lambda () (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page)) #'LDA #'"#$10" #'() #'8 #'"lda #$10")))
     (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page immediate)) #'LDA #'"#$10" #'() #f #'""))
                  '(LDA_i 16))))
@@ -587,7 +587,7 @@
   (begin-for-syntax
     (check-match (syntax->datum (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x)) #'LDA #'#\( #'"$10" #'x #'#\) #'() #f #'""))
                  '(LDA_indx 16))
-    (check-exn #rx"invalid syntax.\nexpected.*\\(LDA < \"\\$10\",x >\\) #.*got:  \\(some\\) in line "
+    (check-exn #rx"invalid syntax.\nexpected.*\\(LDA < \"\\$10\",x >\\) #.*got:  '\\(some\\) 'in 'line "
                (lambda () (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x)) #'LDA #'#\( #'"$10" #'#\) #'y #'(some) #f #'"")))
     (check-match (syntax->datum (opcode-with-addressing/indirect (list->ind-arg-adr-modes '(indirect-x indirect-y)) #'LDA #'#\( #'"$10" #'#\) #'y #'() #f #'""))
                  '(LDA_indy 16))))
@@ -608,11 +608,11 @@
     (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'x #'() #f #'""))
                  '(LDA_absx 4096))
     (check-exn
-     #rx"invalid syntax.\nexpected.*\\(LDA \"\\$1000\",x\\) #.*got:  \\(LDA \"\\$1000\" y\\) in line"
+     #rx"invalid syntax.\nexpected.*\\(LDA \"\\$1000\",x\\) #.*got:  '\\(LDA \"\\$1000\" y\\) 'in 'line"
      (lambda () (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'y #'(LDA "$1000" y) #f #'""))
      "check error message to use racket syntax")
     (check-exn
-     #rx"invalid syntax.\nexpected.*LDA \\$1000,x  ;.*got:  \"org string\" in line"
+     #rx"invalid syntax.\nexpected.*LDA \\$1000,x  ;.*got:  \"org string\" 'in 'line"
      (lambda () (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'y #'(LDA "$1000" y) #'some #'"org string"))
      "check error message to use free syntax")
     (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x absolute-y)) #'LDA  #'"$1000" #'y #'() #f #'""))
