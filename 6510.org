@@ -66,7 +66,7 @@
   - HMOS, silicon gate, depletion load technology
 
     #+ATTR_ORG: :width 640
-    [[file:~/Downloads/6510.jpeg]]
+    [[file:~/documents/roam/media/640px-KL_MOS_6510.jpg]]
 * comparison
   | feature            | ryzen threadripper 1950x                        | 6510     |
   |--------------------+-------------------------------------------------+----------|
@@ -87,7 +87,7 @@
   | ssd       |   550,000 |        1 |
 * c64
   #+ATTR_ORG: :width 640
-  [[file:~/Downloads/300px-Commodore-64-Computer-FL.jpg]]
+  [[file:~/documents/roam/c64.png]]
   - 6510 @ 985kHz (pal edition)
   - 64 kB RAM
   - 20 kB ROM (8kB Kernel, 8kB Basic Interpreter, 4kB Character ROM)
@@ -98,13 +98,13 @@
     - multicolor: 160x200 pixel (40x25 char blocks), 16 colors (4 per char block)
     - elite
       #+ATTR_ORG: :width 640
-      [[file:media/131048-elite-commodore-64-screenshot-title-screen.png]]
+      [[file:~/documents/roam/media/131048-elite-commodore-64-screenshot-title-screen.png]]
     - ninja iii
       #+ATTR_ORG: :width 640
-      [[file:media/Last_Ninja_III.png]]
+      [[file:~/documents/roam/media/Last_Ninja_III.png]]
     - ghost busters
       #+ATTR_ORG: :width 640
-      [[file:media/ghostb.jpeg]]
+      [[file:~/documents/roam/media/ghostb.jpeg]]
   - three channel sound synthesizer (8 octaves, 0-4khz, 4 wave forms, 3 programmable filters )
 
     - (2.3k) see [[file:media/Giana_Sisters_Collection_menu.sid]]
