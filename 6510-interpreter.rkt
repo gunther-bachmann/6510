@@ -244,6 +244,14 @@
     (struct-copy cpu-state state
                  [program-counter new-pc])))
 
+;; put the raw bytes into memory (at org) and start running at org
+(define (run-interpreter org raw-bytes)
+  (displayln (format "loading program into interpreter at ~a" org))
+  (define data (6510-load (initialize-cpu) org raw-bytes))
+  (displayln "program execution:")
+  (let ([_ (run (set-pc-in-state data org))])
+    (void)))
+
 (module+ test
   (check-eq? (peek (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)) 11)
              16

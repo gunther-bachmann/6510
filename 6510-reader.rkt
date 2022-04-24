@@ -356,7 +356,7 @@
        #`(module compiled6510 racket
            (require "6510.rkt")
            (require "6510-interpreter.rkt")
-           (provide program raw-program data resolved-program pretty-program raw-bytes stx-program sy-program)
+           (provide program raw-program resolved-program pretty-program raw-bytes stx-program sy-program)
            (define stx-program (syntax #,unenc-prg)) ;; examine how to pass source location into the generated racket program
            ;; (define sy-program  `('hello (unquote-splicing (syntax-e (syntax #,unenc-prg)))))
            ;; execute this construction of sy-program in the 'with-syntax clause outside this s-expr!! and splice it in here
@@ -369,14 +369,13 @@
            (define program `(,str ...))
            (define resolved-program (replace-labels program org))
            (define raw-bytes (commands->bytes org `(,str ...)))
-           (define data (6510-load (initialize-cpu) org raw-bytes))
-           (displayln "program execution:")
-           (let ([_ (run (set-pc-in-state data org))])
-             (void))
-           (displayln "(have a look at raw-program, resolved-program, raw-bytes and pretty-program)")
+           (run-interpreter org raw-bytes)
+           (displayln "(have a look at sy-program, raw-program, resolved-program, raw-bytes and pretty-program)")
            (define pretty-program (pretty-print-program resolved-program raw-program))
            ;; (create-prg (commands->bytes org program) org "test.prg")
            (create-image-with-program (commands->bytes org program) org "test.prg" "test.d64" "test")
            (displayln "execute the program in vice via (run-emulator \"test.d64\")")
            ;; (run-emulator "test.d64")
            )))))
+
+
