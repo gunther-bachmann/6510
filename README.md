@@ -75,16 +75,16 @@ BUT no implicit may be given (by the opcode identified, in that case it was a `j
 
 ## Structure
 
-The 6510-reader is parsing a non racket text file, transforming it into racket code. The resulting racket code is then transformed via
+The `6510-reader.rkt` is parsing a non racket text file, transforming it into racket code. The resulting racket code is then transformed via
 syntax macros into the final racket form which can then be interpreted.
 
-The 6510 holds all syntax transformation rules for the translation into 6510 byte/assembler code.
-* utils holds functions needed during syntax and execution phase of 6510.
-* syntax-utils holds functions useful during syntax phase of the transformation.
-* reader is the parser that takes the text file and produces racket 6510 dsl code.
-* example is an example file using arbitrary 6510 text syntax.
-* example-rs is an example file in racket syntax (no special reader involved)
-* interpreter holds the (currently minimal) interpreter of the bytecode
+The `6510.rkt` holds all syntax transformation rules for the translation into 6510 byte/assembler code.
+* `6510-utils` holds functions needed during syntax and execution phase of 6510.
+* `6510-syntax-utils` holds functions useful during syntax phase of the transformation.
+* `6510-reader` is the parser that takes the text file and produces racket 6510 dsl code.
+* `6510-example` is an example file using arbitrary 6510 text syntax.
+* `6510-example-rs` is an example file in racket syntax (no special reader involved)
+* `6510-interpreter` holds the (currently minimal) interpreter of the bytecode
 
 
 ## Status

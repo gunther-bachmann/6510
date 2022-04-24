@@ -8,19 +8,21 @@
          (struct-out ind-arg-adr-modes)
          (struct-out idx-arg-adr-modes))
 
+;; create a new symbol with the given appendix
 (define (symbol-append symbol appendix)
   (string->symbol (format "~a~a" (syntax->datum symbol) appendix)))
 
-(module+ test
+(module+ test #| symbol-append |#
   (check-match (symbol-append #'some '_or)
                'some_or))
 
+;; return the one of the two that is neither void nor its syntax->datum is void
 (define (discard-void-syntax-object a b)
   (if (or (void? a) (void? (syntax->datum a)))
       b
       a))
 
-(module+ test
+(module+ test #| discard-void-syntax-object |#
   (check-match (syntax->datum (discard-void-syntax-object (void) #'some))
                'some)
 

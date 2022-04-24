@@ -363,7 +363,7 @@
           (with-syntax ([op operand])
             #'(symbol-indx op))))))
 
-(module+ test
+(module+ test #| indirect-x-mode |#
   (begin-for-syntax
     (check-match (syntax->datum (indirect-x-mode #'LDA #'#\( #'"$10" #'x #'#\)))
                  '(LDA_indx 16))
