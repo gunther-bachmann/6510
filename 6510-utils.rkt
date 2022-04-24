@@ -3,7 +3,7 @@
 (module+ test
   (require rackunit))
 
-(provide parse-number-string low-byte high-byte absolute word byte 6510-label-string? is-immediate-number? 6510-number-string?)
+(provide two-complement-of parse-number-string low-byte high-byte absolute word byte 6510-label-string? is-immediate-number? 6510-number-string?)
 
 ;; is the given number-string prefixed with a valid number base prefix?
 (define (number-has-prefix? number-string)
@@ -78,6 +78,13 @@
 ;; restrict value to a 1 byte value (cutting off other bits)
 (define (byte value)
   (bitwise-and #xff value))
+
+;; return two complement of the given (possibly negative) number
+(define (two-complement-of num)
+  (when (or (> -127 num) (< 127 num)) (error "num out of range"))
+  (if (< num 0)
+      (+ 256 num)
+      num))
 
 ;; if the given string an immediate string, (6510 number string prefixed by '#')?
 (define (is-immediate-number? string)
