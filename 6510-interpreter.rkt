@@ -1,6 +1,8 @@
 #lang at-exp racket
 
 ;; todo: implement compare, increment (x,y), and branch commands (using flags correctly)
+;; todo: check whether lense implementation is better (more efficient) than struct-copy (see https://docs.racket-lang.org/lens/struct-guide.html)
+;; todo: check for mutation friendly persistent vector data, see (https://docs.racket-lang.org/pvector/index.html)
 
 (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
 (require (only-in threading ~>>))
@@ -56,9 +58,9 @@
 (define (peek state memory-address)
   (fxvector-ref (cpu-state-memory state) memory-address))
 
-;; set the byte at the given memory address
+;; set the byte at the given memory address (TODO replace with pvector pendant)
 (define (poke state address value)
-  (fxvector-set! (cpu-state-memory state) address (byte value))
+  (fxvector-set! (cpu-state-memory state) (word address) (byte value))
   state)
 
 (module+ test #| peek and poke |#
@@ -72,6 +74,11 @@
             (sequence->list (in-range memory-address (+ memory-address (length program))))
             program))
   state)
+
+(module+ test #| 6510-load |#
+  (check-eq? (peek (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)) 11)
+             16
+             "immediate operand 1 is $10 = 16"))
 
 ;; peek into memory at the location the program counter points to (current point of execution)
 (define (peek-pc state)
@@ -323,7 +330,7 @@
     [(#x69) (interpret-adc-i (peek-pc+1 state) state)]
     [(#xA9) (interpret-lda-i (peek-pc+1 state) state)]
     [(#xD0) (interpret-bne-rel (peek-pc+1 state) state)]
-    [else state]))
+    [else (error "unknown opcode")]))
 
 ;; interpret bne (branch on not equal)
 (define (interpret-bne-rel rel state)
@@ -337,23 +344,7 @@
 ;; put the raw bytes into memory (at org) and start running at org
 (define (run-interpreter org raw-bytes)
   (displayln (format "loading program into interpreter at ~a" org))
-  (define data (6510-load (initialize-cpu) org raw-bytes))
+  (define state (6510-load (initialize-cpu) org raw-bytes))
   (displayln "program execution:")
-  (let ([_ (run (set-pc-in-state data org))])
+  (let ([_ (run (set-pc-in-state state org))])
     (void)))
-
-(module+ test
-  (check-eq? (peek (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)) 11)
-             16
-             "immediate operand 1 is $10 = 16")
-
-  (check-true (carry-flag? (set-carry-flag (initialize-cpu))) "after setting, carry is set")
-
-  (check-false (carry-flag? (initialize-cpu)) "carry initially clear")
-
-  (check-eq? (cpu-state-accumulator (execute-cpu-step (execute-cpu-step (6510-load (initialize-cpu) 0 (list #x69 #x80 #x69 #x81)))))
-             1
-             "accumulator should be 1 after adding 128 and 129 (overflow)")
-
-  (check-true (carry-flag? (execute-cpu-step (execute-cpu-step (6510-load (initialize-cpu) 0 (list #x69 #x80 #x69 #x81)))))
-              "carry should be set after adding 128 and 129"))
