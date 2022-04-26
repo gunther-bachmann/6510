@@ -4,11 +4,13 @@
 ;; todo: check whether lense implementation is better (more efficient) than struct-copy (see https://docs.racket-lang.org/lens/struct-guide.html)
 ;; todo: check for mutation friendly persistent vector data, see (https://docs.racket-lang.org/pvector/index.html)
 
-(require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
+;; (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
 (require (only-in threading ~>>))
 (require "6510-utils.rkt")
 (require scribble/srcdoc)
 (require (for-doc scribble/base scribble/manual))
+(require data/pvector)
+(require data/collection)
 
 (module+ test 
   (require rackunit))
@@ -33,7 +35,7 @@
 
 ;; flags all negative, program counter at 0, registers all 0, sp = 0xFF
 (define (initialize-cpu)
-  (cpu-state 0 0 (make-fxvector 65536) 0 0 0 #xff))
+  (cpu-state 0 0 (make-pvector 65536 0) 0 0 0 #xff))
 
 ;; execute a reset on the cpu 
 (define (reset-cpu state)
@@ -56,12 +58,19 @@
 
 ;; give the byte at the given memory-address
 (define (peek state memory-address)
-  (fxvector-ref (cpu-state-memory state) memory-address))
+  (nth (cpu-state-memory state) memory-address))
 
 ;; set the byte at the given memory address (TODO replace with pvector pendant)
 (define (poke state address value)
-  (fxvector-set! (cpu-state-memory state) (word address) (byte value))
-  state)
+  (struct-copy cpu-state state 
+               [memory (set-nth (cpu-state-memory state)
+                                (word address)
+                                (byte value))]))
+
+(module+ test #| peek and poke |#
+  (check-equal? (nth (set-nth (cpu-state-memory (initialize-cpu)) 65535 1)
+                     65535)
+                1))
 
 (module+ test #| peek and poke |#
   (check-match (peek (poke (initialize-cpu) #xc000 17) #xc000)
@@ -69,16 +78,19 @@
 
 ;; load program into memory using the 6510 state
 (define (6510-load state memory-address program)
-  (map (lambda (pair) (fxvector-set! (cpu-state-memory state) (first pair) (last pair)))
-       (map list
-            (sequence->list (in-range memory-address (+ memory-address (length program))))
-            program))
-  state)
+  (foldl (lambda (state pair) 
+           (poke state (first pair) (last pair)))
+         state 
+         (map list
+              (sequence->list (in-range memory-address (+ memory-address (length program))))
+              program)))
 
 (module+ test #| 6510-load |#
   (check-eq? (peek (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)) 11)
              16
-             "immediate operand 1 is $10 = 16"))
+             "immediate operand 1 is $10 = 16")
+  (check-eq? (peek (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)) 13)
+             17))
 
 ;; peek into memory at the location the program counter points to (current point of execution)
 (define (peek-pc state)
@@ -119,14 +131,30 @@
     [(#xFFD2) (display (string (integer->char (cpu-state-accumulator state))))
               (struct-copy cpu-state state [program-counter (word (+ 3 (cpu-state-program-counter state)))])]
     [else (let* ([new-program-counter (absolute high low)]
-                 [return-address (+ 2 (cpu-state-program-counter state))]
+                 [return-address (word (+ 2 (cpu-state-program-counter state)))]
                  [sp (cpu-state-stack-pointer state)]
                  [new-state (struct-copy cpu-state state
                                          [program-counter (word new-program-counter)]
                                          [stack-pointer (byte (- sp 2))])])
-            (poke new-state (+ #x100 sp) (low-byte return-address))
-            (poke new-state (+ #x100 (byte (- sp 1))) (high-byte return-address))
-            new-state)]))
+            (~>> new-state
+                (poke _ (+ #x100 sp) (low-byte return-address))
+                (poke _ (+ #x100 (byte (- sp 1))) (high-byte return-address))))]))
+
+(module+ test #| jsr (jump to sub routine) |#
+  (check-equal? (cpu-state-program-counter
+                 (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001)))
+                #x4008)
+  (check-equal? (cpu-state-stack-pointer
+                 (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001)))
+                #xfd)
+  (check-equal? (peek
+                 (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001))
+                 #x1FF)
+                #x03)  
+  (check-equal? (peek
+                 (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001))
+                 #x1FE)
+                #x20))
 
 ;; set/clear carry flag
 (define (-adjust-carry-flag set flags)
