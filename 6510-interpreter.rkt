@@ -349,6 +349,27 @@
   (printf "PC = ~a~n" (cpu-state-program-counter state))
   (printf "C = ~s, Z = ~s" (if (carry-flag? state) "X" " " ) (if (zero-flag? state) "X" " " )))
 
+;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
+(define (dump-memory from to state)
+  (string-join
+   (stream->list
+    (map (lambda (it) (string-join
+                  (stream->list
+                   (append (list (~a (number->string (+ from (caar (stream->list it))) 16)
+                                     #:width 4 #:left-pad-string "0" #:align 'right))
+                           (map (lambda (pair) (cdr pair)) it)))
+                  " "))         
+         (chunk 16
+                 (indexed
+                    (map (lambda (idx) (~a (number->string (peek state idx) 16)
+                                      #:width 2 #:left-pad-string "0" #:align 'right))
+                         (range from to))))))
+   "\n"))
+
+(module+ test #| dump-memory |#
+  (check-equal? (dump-memory 10 30 (poke (initialize-cpu) 12 #xFE))
+                "000a 00 00 fe 00 00 00 00 00 00 00 00 00 00 00 00 00\n001a 00 00 00 00"))
+
 ;; execute one cpu opcode and return the next state
 (define (execute-cpu-step state)
   (case (peek-pc state)
