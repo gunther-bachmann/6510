@@ -114,15 +114,14 @@
       (run (execute-cpu-step state))
       state))
 
-;; interpret the RTS (return to subroutine) command
+;; interpret the RTS (return from subroutine) command
 (define (interpret-rts state)
   (let* ([sp (cpu-state-stack-pointer state)]
          [low-ret (peek state (+ #x100 (byte (+ 2 sp))))]
-         [high-ret (peek state (+ #x100 (byte (+ 1 sp))))]
-         [new-state (struct-copy cpu-state state
+         [high-ret (peek state (+ #x100 (byte (+ 1 sp))))])
+    (struct-copy cpu-state state
                                  [program-counter (word (+ 1 (absolute high-ret low-ret)))]
-                                 [stack-pointer (byte (+ sp 2))])])
-    new-state))
+                                 [stack-pointer (byte (+ sp 2))])))
 
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
