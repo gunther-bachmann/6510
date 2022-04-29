@@ -307,6 +307,61 @@
                 255))
 
 
+(define (-push-on-stack value state)
+  (let* ((old-sp (cpu-state-stack-pointer state)))
+    (struct-copy cpu-state state
+                 [stack-pointer (byte (- old-sp 1))]
+                 [memory (set-nth (cpu-state-memory state)
+                                  (word (+ #x100 old-sp))
+                                  (byte value))])))
+(define (-pop-from-stack state)
+  (let* ((new-sp (byte (+ 1 (cpu-state-stack-pointer state))))
+         (value (peek state (word (+ #x100 new-sp)))))
+    `(,(struct-copy cpu-state state
+                    [stack-pointer new-sp]) . ,value)))
+
+(module+ test #| push and pop |#
+  (check-eq? (cdr (-pop-from-stack (-push-on-stack #x56 (initialize-cpu))))
+             #x56))
+
+(define (interpret-rti state)
+  (let* ((old-sp (cpu-state-stack-pointer state))
+         (new-status-byte (peek state (+ #x101 old-sp)))
+         (new-program-counter (absolute (peek state (+ #x102 old-sp))
+                                        (peek state (+ #x103 old-sp)))))
+    (struct-copy cpu-state state
+                 [stack-pointer (byte (+ old-sp 3))]
+                 [flags new-status-byte]
+                 [program-counter new-program-counter])))
+
+(module+ test #| rti |#
+  (check-eq? (cpu-state-stack-pointer (interpret-rti (interpret-brk (initialize-cpu))))
+             #xFF)
+  (check-eq? (cpu-state-program-counter (interpret-rti (set-pc-in-state (interpret-brk (initialize-cpu)) #xABCD)))
+             #x0000)
+  (check-eq? (cpu-state-program-counter (interpret-rti (interpret-brk (set-pc-in-state (initialize-cpu) #xABCD))))
+             #xABCD))
+
+(define (interpret-brk state)
+  (let* ((old-status-byte (cpu-state-flags state))
+         (old-pc (cpu-state-program-counter state)))
+    (~>>
+     (struct-copy cpu-state state
+                  [program-counter (absolute (peek state #xFFFE) (peek state #xFFFF))]
+                  [flags (-set-brk-flag (cpu-state-flags state))])
+     (-push-on-stack (low-byte old-pc) _)
+     (-push-on-stack (high-byte old-pc) _)
+     (-push-on-stack old-status-byte _))))
+
+(module+ test #| brk |#
+  (check-eq? (cpu-state-program-counter
+              (interpret-brk (~>> (initialize-cpu)
+                                 (poke _ #xFFFE #x01)
+                                 (poke _ #xFFFF #x02))))
+             #x0102)
+  (check-eq? (cpu-state-stack-pointer
+              (interpret-brk (~>> (initialize-cpu))))
+             (- #xFF 3)))
 
 ;; flags N O - B D I Z C
 ;;       negative               : result is negative (2 complements)
@@ -394,7 +449,9 @@
 ;; execute one cpu opcode and return the next state
 (define (execute-cpu-step state)
   (case (peek-pc state)
+    [(#x00) (interpret-brk state)]
     [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    [(#x40) (interpret-rti state)]
     [(#x4C) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
     [(#x60) (interpret-rts state)]
     [(#x69) (interpret-adc-i (peek-pc+1 state) state)]
