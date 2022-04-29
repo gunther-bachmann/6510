@@ -306,11 +306,22 @@
   (check-equal? (cpu-state-accumulator (interpret-lda-i 255 (initialize-cpu)))
                 255))
 
+
+
+;; flags N O - B D I Z C
+;;       negative               : result is negative (2 complements)
+;;        overflow              : result produces an over/underflow
+;;         unused               : unused
+;;          break               : set when executing BRK (0x00)
+;;           decimal            : when set, arithmetic is interpreted as bcd arithmetic
+;;            interrupt disable : set to prevent interrupts
+;;             zero             : result is zero
+;;              carry           : carry over result bit otherwise lost
+(define (carry-flag? state)
+  (eq? #x01 (bitwise-and #x01 (cpu-state-flags state))))
+
 (define (zero-flag? state)
   (eq? #x02 (bitwise-and #x02 (cpu-state-flags state))))
-
-(define (carry-flag? state)
-  (eq? 1 (bitwise-and 1 (cpu-state-flags state))))
 
 (define (interrupt-flag? state)
   (eq? #x04 (bitwise-and #x04 (cpu-state-flags state))))
@@ -318,20 +329,29 @@
 (define (decimal-flag? state)
   (eq? #x08 (bitwise-and #x08 (cpu-state-flags state))))
 
-(define (negative-flag? state)
-  (eq? #x80 (bitwise-and #x80 (cpu-state-flags state))))
+(define (break-flag? state)
+  (eq? #x10 (bitwise-and #x10 (cpu-state-flags state))))
 
 (define (overflow-flag? state)
   (eq? #x40 (bitwise-and #x40 (cpu-state-flags state))))
 
+(define (negative-flag? state)
+  (eq? #x80 (bitwise-and #x80 (cpu-state-flags state))))
+
 (define (-set-carry-flag flags)
-  (bitwise-xor 1 flags))
+  (bitwise-xor #x01 flags))
 
 (define (-clear-carry-flag flags)
   (bitwise-and #xfe flags))
 
 (define (-set-zero-flag flags)
-  (bitwise-xor 2 flags))
+  (bitwise-xor #x02 flags))
+
+(define (-set-brk-flag flags)
+  (bitwise-xor #x10 flags))
+
+(define (-clear-brk-flag flags)
+  (bitwise-and #xEF flags))
 
 (define (-clear-zero-flag flags)
   (bitwise-and #xfd flags))
