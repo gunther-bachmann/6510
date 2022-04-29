@@ -90,7 +90,7 @@
   (check-equal? (dump-memory 268 268 (poke (initialize-cpu) #x10C #xFE))
                 "010c fe"))
 
-(module+ test #| peek and poke |#
+(module+ test #| set-nth |#
   (check-equal? (nth (set-nth (cpu-state-memory (initialize-cpu)) 65535 1)
                      65535)
                 1))
@@ -109,11 +109,9 @@
               program)))
 
 (module+ test #| 6510-load |#
-  (check-eq? (peek (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)) 11)
-             16
-             "immediate operand 1 is $10 = 16")
-  (check-eq? (peek (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)) 13)
-             17))
+  (check-equal? (dump-memory 10 13 (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)))
+             "000a 00 10 00 11"
+             "load will put all bytes into memory"))
 
 ;; peek into memory at the location the program counter points to (current point of execution)
 (define (peek-pc state)
@@ -358,10 +356,12 @@
               (interpret-brk (~>> (initialize-cpu)
                                  (poke _ #xFFFE #x01)
                                  (poke _ #xFFFF #x02))))
-             #x0102)
+             #x0102
+             "ensure brk will continue at adress $(FFFE)")
   (check-eq? (cpu-state-stack-pointer
               (interpret-brk (~>> (initialize-cpu))))
-             (- #xFF 3)))
+             (- #xFF 3)
+             "ensure SP is reduced by 3"))
 
 ;; flags N O - B D I Z C
 ;;       negative               : result is negative (2 complements)
