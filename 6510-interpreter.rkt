@@ -525,7 +525,7 @@
   (let* ([pc (cpu-state-program-counter state)]
          [new-pc-on-jump (+ pc 2 (if (>= #x80 rel) (- 256 rel) rel))]
          [new-pc-no-jump (+ pc 2)]
-         [new-pc (if (zero-flag? (cpu-state-flags state)) new-pc-no-jump new-pc-on-jump)])
+         [new-pc (if (zero-flag? state) new-pc-no-jump new-pc-on-jump)])
     (struct-copy cpu-state state
                  [program-counter new-pc])))
 
