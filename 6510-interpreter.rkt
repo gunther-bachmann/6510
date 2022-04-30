@@ -445,18 +445,63 @@
   (printf "SP = ~a~n" (cpu-state-stack-pointer state))
   (printf "PC = ~a~n" (cpu-state-program-counter state))
   (printf "C = ~s, Z = ~s" (if (carry-flag? state) "X" " " ) (if (zero-flag? state) "X" " " )))
+;; flags N O - B D I Z C
+
+(define (interpret-clc state)
+  (struct-copy cpu-state state
+               [flags (-clear-carry-flag (cpu-state-flags state))]))
+
+(define (interpret-sec state)
+  (set-carry-flag state))
+
+(define (interpret-cli state)
+  (struct-copy cpu-state state
+               [flags (-clear-interrupt-flag (cpu-state-flags state))]))
+
+(define (interpret-sei state)
+  (struct-copy cpu-state state
+               [flags (-set-interrupt-flag (cpu-state-flags state))]))
+
+(define (interpret-clv state)
+  (struct-copy cpu-state state
+               [flags (-clear-overflow-flag (cpu-state-flags state))]))
+
+(define (interpret-cld state)
+  (struct-copy cpu-state state
+               [flags (-clear-decimal-flag (cpu-state-flags state))]))
+
+(define (interpret-sed state)
+  (struct-copy cpu-state state
+               [flags (-set-decimal-flag (cpu-state-flags state))]))
+
+(module+ test #| flags |#
+  (check-true (carry-flag? (interpret-sec (initialize-cpu))))
+  (check-false (carry-flag? (interpret-clc (interpret-sec (initialize-cpu)))))
+  (check-true (interrupt-flag? (interpret-sei (initialize-cpu))))
+  (check-false (interrupt-flag? (interpret-cli (interpret-sei (initialize-cpu)))))
+  (check-true (decimal-flag? (interpret-sed (initialize-cpu))))
+  (check-false (decimal-flag? (interpret-cld (interpret-sed (initialize-cpu)))))
+  (check-true (overflow-flag? (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))
+  (check-false (overflow-flag? (interpret-clv (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))))
 
 ;; execute one cpu opcode and return the next state
 (define (execute-cpu-step state)
   (case (peek-pc state)
     [(#x00) (interpret-brk state)]
+    [(#x18) (interpret-clc state)]
     [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    [(#x38) (interpret-sec state)]
     [(#x40) (interpret-rti state)]
     [(#x4C) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    [(#x58) (interpret-cli state)]
     [(#x60) (interpret-rts state)]
     [(#x69) (interpret-adc-i (peek-pc+1 state) state)]
+    [(#x78) (interpret-sei state)]
     [(#xA9) (interpret-lda-i (peek-pc+1 state) state)]
+    [(#xB9) (interpret-clv state)]
     [(#xD0) (interpret-bne-rel (peek-pc+1 state) state)]
+    [(#xD8) (interpret-cld state)]
+    [(#xF8) (interpret-sed state)]
     [else (error "unknown opcode")]))
 
 ;; interpret bne (branch on not equal)
