@@ -150,11 +150,12 @@
 (define (set-pc-in-state state pc)
   (struct-copy cpu-state state [program-counter (word pc)]))
 
-;; execute if pc does not point at a 0 byte
+;; execute if pc does not point at a 0 byte (brk)
 (define (run state)
-  (if (not (eq? 0 (peek-pc state)))
-      (run (execute-cpu-step state))
-      state))
+  (if  (eq? 0 (peek-pc state))
+      state
+      (let ((next-state (execute-cpu-step state)))
+        (run next-state))))
 
 ;; interpret the RTS (return from subroutine) command
 (define (interpret-rts state)
