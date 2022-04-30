@@ -2,7 +2,7 @@
 
 ;; todo: implement compare, increment (x,y), and branch commands (using flags correctly)
 ;; todo: check whether lense implementation is better (more efficient) than struct-copy (see https://docs.racket-lang.org/lens/struct-guide.html)
-;; todo: check for mutation friendly persistent vector data, see (https://docs.racket-lang.org/pvector/index.html)
+;; reference: see c64os.com/post/6502instructions
 
 ;; (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
 (require (only-in threading ~>>))
@@ -67,20 +67,26 @@
                                 (word address)
                                 (byte value))]))
 
+(define (byte->hex-string num)
+  (~a (number->string num 16)
+      #:width 2 #:left-pad-string "0" #:align 'right))
+
+(define (word->hex-string num)
+  (~a (number->string num 16)
+      #:width 4 #:left-pad-string "0" #:align 'right))
+
 ;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
 (define (dump-memory from to state)
   (string-join
    (stream->list
     (map (lambda (it) (string-join
                   (stream->list
-                   (append (list (~a (number->string (+ from (caar (stream->list it))) 16)
-                                     #:width 4 #:left-pad-string "0" #:align 'right))
+                   (append (list (word->hex-string (+ from (caar (stream->list it)))))
                            (map (lambda (pair) (cdr pair)) it)))
                   " "))
          (chunk 16
                  (indexed
-                    (map (lambda (idx) (~a (number->string (peek state idx) 16)
-                                      #:width 2 #:left-pad-string "0" #:align 'right))
+                  (map (lambda (idx) (byte->hex-string (peek state idx)))
                          (range from (+ 1 to)))))))
    "\n"))
 
@@ -89,6 +95,21 @@
                 "010a 00 00 fe 00 00 00 00 00 00 00 00 00 00 00 00 00\n011a 00 00 00 00 00")
   (check-equal? (dump-memory 268 268 (poke (initialize-cpu) #x10C #xFE))
                 "010c fe"))
+
+(define (print-state state)
+  (printf "A  = x~a,   " (byte->hex-string (cpu-state-accumulator state)))
+  (printf " X = x~a, " (byte->hex-string (cpu-state-x-index state)))
+  (printf "Y = x~a~n" (byte->hex-string (cpu-state-y-index state)))
+  (printf "PC = x~a, " (word->hex-string (cpu-state-program-counter state)))
+  (printf "SP = x~a~n" (byte->hex-string (cpu-state-stack-pointer state)))
+  (printf "N=~a, O=~a, B=~a, D=~a, I=~a, Z=~a, C=~a"
+          (if (negative-flag? state) "X" "_" )
+          (if (overflow-flag? state) "X" "_" )
+          (if (break-flag? state) "X" "_" )
+          (if (decimal-flag? state) "X" "_" )
+          (if (interrupt-flag? state) "X" "_" )
+          (if (zero-flag? state) "X" "_" )
+          (if (carry-flag? state) "X" "_" )))
 
 (module+ test #| set-nth |#
   (check-equal? (nth (set-nth (cpu-state-memory (initialize-cpu)) 65535 1)
@@ -438,13 +459,7 @@
 (define (set-carry-flag state)
   (struct-copy cpu-state state [flags (-set-carry-flag (cpu-state-flags state))]))
 
-(define (print-state state)
-  (printf "A = ~a~n" (cpu-state-accumulator state))
-  (printf "X = ~a~n" (cpu-state-x-index state))
-  (printf "Y = ~a~n" (cpu-state-y-index state))
-  (printf "SP = ~a~n" (cpu-state-stack-pointer state))
-  (printf "PC = ~a~n" (cpu-state-program-counter state))
-  (printf "C = ~s, Z = ~s" (if (carry-flag? state) "X" " " ) (if (zero-flag? state) "X" " " )))
+
 ;; flags N O - B D I Z C
 
 (define (interpret-clc state)
