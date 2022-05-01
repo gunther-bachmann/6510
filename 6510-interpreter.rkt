@@ -342,6 +342,10 @@
   (struct-copy cpu-state state
                [accumulator (byte new-accumulator)]))
 
+(define (-set-x-index new-x-index state)
+  (struct-copy cpu-state state
+               [x-index (byte new-x-index)]))
+
 ;; interpret lda (load accumulator immediate)
 (define (interpret-lda-i immediate state)
   (struct-copy cpu-state state
@@ -530,6 +534,47 @@
   (check-true (overflow-flag? (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))
   (check-false (overflow-flag? (interpret-clv (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))))
 
+(define (interpret-ora-izx state)
+  (let* [(zero-page-idx       (peek-pc+1 state))
+         (idx                 (cpu-state-x-index state))
+         (low-fetched         (peek state (+ idx zero-page-idx)))
+         (high-fetched        (peek state (+ idx zero-page-idx 1)))
+         (address             (absolute high-fetched low-fetched))
+         (mem-fetched         (peek state address))
+         (raw-accumulator     (bitwise-ior mem-fetched (cpu-state-accumulator state)))
+         (new-accumulator     (byte raw-accumulator))
+         (zero?               (zero? new-accumulator))
+         (negative?           (derive-negative raw-accumulator))
+         (new-flags           (~>> (cpu-state-flags state)
+                                  (-adjust-zero-flag zero?)
+                                  (-adjust-negative-flag negative?)))
+         (new-program-counter (+ 2 (cpu-state-program-counter state)))]
+    (struct-copy cpu-state state
+                 [accumulator     new-accumulator]
+                 [flags           new-flags]
+                 [program-counter new-program-counter])))
+
+(module+ test #| ora immediate zero page x - ora ($I,X) ) |#
+  (define (-prepare-ora-izx acc operand)
+    (~>> (initialize-cpu)
+        (-set-accumulator acc _)
+        (-set-x-index #x02 _)
+        (poke _ #x01 #x70 ) ;; pc of ora itself is x0000 => operand at x0001
+        (poke _ #x72 #x11)
+        (poke _ #x73 #x21)
+        (poke _ #x2111 operand)))
+
+  (check-eq? (~>> (-prepare-ora-izx #xa5 #x5a)
+                 (interpret-ora-izx _)
+                 (cpu-state-accumulator _))
+             #xff)
+  (check-true (~>> (-prepare-ora-izx #xa5 #x5a)
+                  (interpret-ora-izx _)
+                  (negative-flag? _)))
+  (check-false (~>> (-prepare-ora-izx #xa5 #x5a)
+                   (interpret-ora-izx _)
+                   (zero-flag? _))))
+
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
 ;; zp = $00
@@ -546,7 +591,7 @@
 (define (execute-cpu-step state)
   (case (peek-pc state)
     [(#x00) (interpret-brk state)]
-    ;; #x01 ORA ixz (indirect zero page,x)
+    [(#x01) (interpret-ora-izx state)]
     ;; #x02 -io KIL
     ;; #x03 -io SLO izx
     ;; #x04 -io NOP zp
