@@ -580,6 +580,20 @@
                    (interpret-ora-izx _)
                    (zero-flag? _))))
 
+(define (interpret-and-izx state)
+  (let* [(raw-accumulator     (bitwise-and (peek-for-izx state) (cpu-state-accumulator state)))
+         (new-accumulator     (byte raw-accumulator))
+         (zero?               (zero? new-accumulator))
+         (negative?           (derive-negative raw-accumulator))
+         (new-flags           (~>> (cpu-state-flags state)
+                                  (-adjust-zero-flag zero?)
+                                  (-adjust-negative-flag negative?)))
+         (new-program-counter (+ 2 (cpu-state-program-counter state)))]
+    (struct-copy cpu-state state
+                 [accumulator     new-accumulator]
+                 [flags           new-flags]
+                 [program-counter new-program-counter])))
+
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
 ;; zp = $00
@@ -628,7 +642,7 @@
     ;; #x1e ASL abx
     ;; #x1f -io SLO abx
     [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state)]
-    ;; #x21 AND izx
+    [(#x21) (interpret-and-izx state)]
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
     ;; #x24 BIT zp
