@@ -93,7 +93,7 @@
   (check-equal? (word->hex-string #x5e5f) "5e5f"))
 
 ;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
-(define (dump-memory from to state)
+(define (memory->string from to state)
   (string-join
    (stream->list
     (map (lambda (it) (string-join
@@ -107,10 +107,14 @@
                          (range from (+ 1 to)))))))
    "\n"))
 
+(define (print-memory from to state)
+  (printf "~a\n" (memory->string from to state))
+  state)
+
 (module+ test #| dump-memory |#
-  (check-equal? (dump-memory 266 286 (poke (initialize-cpu) #x10C #xFE))
+  (check-equal? (memory->string 266 286 (poke (initialize-cpu) #x10C #xFE))
                 "010a 00 00 fe 00 00 00 00 00 00 00 00 00 00 00 00 00\n011a 00 00 00 00 00")
-  (check-equal? (dump-memory 268 268 (poke (initialize-cpu) #x10C #xFE))
+  (check-equal? (memory->string 268 268 (poke (initialize-cpu) #x10C #xFE))
                 "010c fe"))
 
 (define (state->string state)
@@ -134,7 +138,8 @@
   (check-equal? (state->string (initialize-cpu))
                 "A  = x00,    X = x00, Y = x00\nPC = x0000, SP = xff\nN=_, O=_, B=_, D=_, I=_, Z=_, C=_"))
 (define (print-state state)
-  (printf (state->string state)))
+  (printf "~a\n "(state->string state))
+  state)
 
 (module+ test #| set-nth |#
   (check-equal? (nth (set-nth (cpu-state-memory (initialize-cpu)) 65535 1)
@@ -155,7 +160,7 @@
               program)))
 
 (module+ test #| 6510-load |#
-  (check-equal? (dump-memory 10 13 (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)))
+  (check-equal? (memory->string 10 13 (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)))
              "000a 00 10 00 11"
              "load will put all bytes into memory"))
 
