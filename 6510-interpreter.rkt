@@ -534,14 +534,19 @@
   (check-true (overflow-flag? (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))
   (check-false (overflow-flag? (interpret-clv (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))))
 
-(define (interpret-ora-izx state)
+(define (peek-indirect state address)
+  (let* [(low-fetched         (peek state address))
+         (high-fetched        (peek state (+ address 1)))
+         (address             (absolute high-fetched low-fetched))]
+    (peek state address)))
+
+(define (peek-for-izx state)
   (let* [(zero-page-idx       (peek-pc+1 state))
-         (idx                 (cpu-state-x-index state))
-         (low-fetched         (peek state (+ idx zero-page-idx)))
-         (high-fetched        (peek state (+ idx zero-page-idx 1)))
-         (address             (absolute high-fetched low-fetched))
-         (mem-fetched         (peek state address))
-         (raw-accumulator     (bitwise-ior mem-fetched (cpu-state-accumulator state)))
+         (idx                 (cpu-state-x-index state))]
+    (peek-indirect state (+ idx zero-page-idx))))
+
+(define (interpret-ora-izx state)
+  (let* [(raw-accumulator     (bitwise-ior (peek-for-izx state) (cpu-state-accumulator state)))
          (new-accumulator     (byte raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
