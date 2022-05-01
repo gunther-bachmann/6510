@@ -102,9 +102,9 @@
                            (map (lambda (pair) (cdr pair)) it)))
                   " "))
          (chunk 16
-                 (indexed
-                  (map (lambda (idx) (byte->hex-string (peek state idx)))
-                         (range from (+ 1 to)))))))
+                (indexed
+                 (map (lambda (idx) (byte->hex-string (peek state idx)))
+                      (range from (+ 1 to)))))))
    "\n"))
 
 (define (print-memory from to state)
@@ -161,8 +161,8 @@
 
 (module+ test #| 6510-load |#
   (check-equal? (memory->string 10 13 (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)))
-             "000a 00 10 00 11"
-             "load will put all bytes into memory"))
+                "000a 00 10 00 11"
+                "load will put all bytes into memory"))
 
 ;; peek into memory at the location the program counter points to (current point of execution)
 (define (peek-pc state)
@@ -183,9 +183,9 @@
 ;; execute if pc does not point at a 0 byte (brk)
 (define (run state)
   (if  (eq? 0 (peek-pc state))
-      state
-      (let ((next-state (execute-cpu-step state)))
-        (run next-state))))
+       state
+       (let ((next-state (execute-cpu-step state)))
+         (run next-state))))
 
 ;; interpret the RTS (return from subroutine) command
 (define (interpret-rts state)
@@ -193,8 +193,8 @@
          [low-ret (peek state (+ #x100 (byte (+ 2 sp))))]
          [high-ret (peek state (+ #x100 (byte (+ 1 sp))))])
     (struct-copy cpu-state state
-                                 [program-counter (word (+ 1 (absolute high-ret low-ret)))]
-                                 [stack-pointer (byte (+ sp 2))])))
+                 [program-counter (word (+ 1 (absolute high-ret low-ret)))]
+                 [stack-pointer (byte (+ sp 2))])))
 
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
