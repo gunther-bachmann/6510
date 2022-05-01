@@ -525,24 +525,277 @@
   (check-true (overflow-flag? (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))
   (check-false (overflow-flag? (interpret-clv (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))))
 
-;; execute one cpu opcode and return the next state
+;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
+;; imm = #$00
+;; zp = $00
+;; zpx = $00,X
+;; zpy = $00,Y
+;; izx = ($00,X)
+;; izy = ($00),Y
+;; abs = $0000
+;; abx = $0000,X
+;; aby = $0000,Y
+;; ind = ($0000)
+;; rel = $0000 (PC-relative)
+;; io = illegal opcode
 (define (execute-cpu-step state)
   (case (peek-pc state)
     [(#x00) (interpret-brk state)]
+    ;; #x01 ORA ixz (indirect zero page,x)
+    ;; #x02 -io KIL
+    ;; #x03 -io SLO izx
+    ;; #x04 -io NOP zp
+    ;; #x05 ORA zp
+    ;; #x06 ASL zp
+    ;; #x07 -io SLO zp
+    ;; #x08 PHP
+    ;; #x09 ORA imm
+    ;; #x0a ASL
+    ;; #x0b -io ANC imm
+    ;; #x0c -io NOP abs
+    ;; #x0d ORA abs
+    ;; #x0e ASL abs
+    ;; #x0f -io SLO abs
+    ;; #x10 BPL rel
+    ;; #x11 ORA izy
+    ;; #x12 -io KIL
+    ;; #x13 -io SLO izy
+    ;; #x14 -io NOP zpx
+    ;; #x15 ORA zpx
+    ;; #x16 ASL zpx
+    ;; #x17 -io SLO zpx
     [(#x18) (interpret-clc state)]
+    ;; #x19 ORA aby
+    ;; #x1a -io NOP
+    ;; #x1b -io SLO abt
+    ;; #x1c -io NOP abx
+    ;; #x1d ORA abx
+    ;; #x1e ASL abx
+    ;; #x1f -io SLO abx
     [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    ;; #x21 AND izx
+    ;; #x22 -io KIL
+    ;; #x23 -io RLA izx
+    ;; #x24 BIT zp
+    ;; #x25 AND zp
+    ;; #x26 ROL zp
+    ;; #x27 -io RLA zp
+    ;; #x28 PLP zp
+    ;; #x29 AND imm
+    ;; #x2a ROL
+    ;; #x2b -io ANC imm
+    ;; #x2c BIT abs
+    ;; #x2d AND abs
+    ;; #x2e ROL bas
+    ;; #x2f -io RIA abs
+    ;; #x30 BMI rel
+    ;; #x31 AND izy
+    ;; #x32 -io KIL
+    ;; #x33 -io RIA izy
+    ;; #x34 -io NOP zpx 
+    ;; #x35 AND zpx
+    ;; #x36 ROL zpx
+    ;; #x37 -io RLA zpx
     [(#x38) (interpret-sec state)]
+    ;; #x39 AND aby
+    ;; #x3a -io NOP
+    ;; #x3b -io RLA aby
+    ;; #x3c -io NOP abx
+    ;; #x3d AND abx
+    ;; #x3e ROL abx
+    ;; #x3f -io RLA abx
     [(#x40) (interpret-rti state)]
+    ;; #x41 EOR izx
+    ;; #x42 -io KIL
+    ;; #x43 -io SRE izx
+    ;; #x44 -io NOP zp
+    ;; #x45 EOR zp
+    ;; #x46 LSR zp
+    ;; #x47 -io SRE zp
+    ;; #x48 PHA
+    ;; #x49 EOR imm
+    ;; #x4a LSR
+    ;; #x4b -io ALR imm
     [(#x4C) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    ;; #x4d EOR abs
+    ;; #x4e LSR abs
+    ;; #x4f -io SRE abs
+    ;; #x50 BVC rel
+    ;; #x51 EOR izy
+    ;; #x52 -io KIL
+    ;; #x53 -io SRE izy
+    ;; #x54 -io NOP zpx
+    ;; #x55 EOR zpx
+    ;; #x56 LSR zpx
+    ;; #x57 -io SRE zpx
     [(#x58) (interpret-cli state)]
+    ;; #x59 EOR aby
+    ;; #x5a -io NOP
+    ;; #x5b -io SRE aby
+    ;; #x5c -io NOP abx
+    ;; #x5d EOR abx
+    ;; #x5e LSR abx
+    ;; #x5f -io SRE abx
     [(#x60) (interpret-rts state)]
+    ;; #x61 ADC izx
+    ;; #x62 -io KIL
+    ;; #x63 -io RRA izx
+    ;; #x64 -io NOP zp
+    ;; #x65 ADC zp
+    ;; #x66 ROR zp
+    ;; #x67 -io RRA zp
+    ;; #x68 PLA
     [(#x69) (interpret-adc-i (peek-pc+1 state) state)]
+    ;; #x6a ROR
+    ;; #x6b -io ARR imm
+    ;; #x6c JMP ind
+    ;; #x6d ADC abs
+    ;; #x6e ROR abs
+    ;; #x6f -io RRA abs
+    ;; #x70 BVS rel
+    ;; #x71 ADC izy
+    ;; #x72 -io KIL
+    ;; #x73 -io RRA izy
+    ;; #x74 -io NOP zpx
+    ;; #x75 ADC zpx
+    ;; #x76 ROR zpx
+    ;; #x77 -io RRA zpx
     [(#x78) (interpret-sei state)]
+    ;; #x79 ADC aby
+    ;; #x7a -io NOP
+    ;; #x7b -io RRA aby
+    ;; #x7c -io NOP abx
+    ;; #x7d ADC abx
+    ;; #x7e ROR abx
+    ;; #x7f -io RRA abx
+    ;; #x80 -io NOP imm
+    ;; #x81 STA izx
+    ;; #x82 -io NOP imm
+    ;; #x83 -io SAX izx
+    ;; #x84 STY zp
+    ;; #x85 STA zp
+    ;; #x86 STX zp
+    ;; #x87 -io SAX zp
+    ;; #x88 DEY
+    ;; #x89 -io NOP imm
+    ;; #x8a TXA
+    ;; #x8b -io XAA imm
+    ;; #x8c STY abs
+    ;; #x8d STA abs
+    ;; #x8e STX abs
+    ;; #x8f -io SAX abs
+    ;; #x90 BCC rel
+    ;; #x91 STA izy
+    ;; #x92 -io KIL
+    ;; #x93 0io AHX izy
+    ;; #x94 STY zpx
+    ;; #x95 STA zpx
+    ;; #x96 STX zpx
+    ;; #x97 -io SAX zpy
+    ;; #x98 TYA
+    ;; #x99 STA aby
+    ;; #x9a TXS
+    ;; #x9b -io TAS avt
+    ;; #x9c -io SHY abx
+    ;; #x9d STA abx
+    ;; #x9e -io SHX aby
+    ;; #x9f -io AHX aby
+    ;; #xa0 LDY imm
+    ;; #xa1 LDA izx
+    ;; #xa2 LDX imm
+    ;; #xa3 -io LAX izx
+    ;; #xa4 LDY zp
+    ;; #xa5 LDA zp
+    ;; #xa6 LDX zp
+    ;; #xa7 -io LAX zp
+    ;; #xa8 TAY
     [(#xA9) (interpret-lda-i (peek-pc+1 state) state)]
-    [(#xB9) (interpret-clv state)]
+    ;; #xaa TAX
+    ;; #xab -io LAX imm
+    ;; #xac LDY abs
+    ;; #xad LDA abs
+    ;; #xae LDX abs
+    ;; #xaf -io LAX abs
+    ;; #xb0 BCS rel
+    ;; #xb1 LDA izy
+    ;; #xb2 -io KIL
+    ;; #xb3 -io LAX izy
+    ;; #xb4 LDY zpx
+    ;; #xb5 LDA zpx
+    ;; #xb6 LDX zpy
+    ;; #xb7 -io LAX zpy
+    [(#xB8) (interpret-clv state)]
+    ;; #xb9 LDA aby
+    ;; #xba TSX
+    ;; #xbb -io LAS aby
+    ;; #xbc LDY abx
+    ;; #xbd LDA abx
+    ;; #xbe LDX aby
+    ;; #xbf -io LAX aby
+    ;; #xc0 CPY imm
+    ;; #xc1 CMP izx
+    ;; #xc2 -io NOP imm
+    ;; #xc3 -io DCP izx
+    ;; #xc4 CPY zp
+    ;; #xc5 CMP zp
+    ;; #xc6 DEC zp
+    ;; #xc7 -io DCP zp
+    ;; #xc8 INY
+    ;; #xc9 CMP imm
+    ;; #xca DEX
+    ;; #xcb -io AXS imm
+    ;; #xcc CPY abs
+    ;; #xcd CMP abs
+    ;; #xce DEC abs
+    ;; #xcf -io DCP abs
     [(#xD0) (interpret-bne-rel (peek-pc+1 state) state)]
+    ;; #xd1 CMP izy
+    ;; #xd2 -io KIL
+    ;; #xd3 -io DCP izy
+    ;; #xd4 -io NOP zpx
+    ;; #xd5 CMP zpx
+    ;; #xd6 DEC zpx
+    ;; #xd7 -io DCP zpx
     [(#xD8) (interpret-cld state)]
+    ;; #xd9 CMP aby
+    ;; #xda -io NOP 
+    ;; #xdb -io DCP aby
+    ;; #xdc -io NOP abx
+    ;; #xdd CMP abx
+    ;; #xde DEC abx
+    ;; #xdf -io DCP abx
+    ;; #xe0 CPX imm
+    ;; #xe1 SBC izx
+    ;; #xe2 -io NOP imm
+    ;; #xe3 -io ISC izx
+    ;; #xe4 CPX zp
+    ;; #xe5 SBC zp
+    ;; #xe6 INC zp
+    ;; #xe7 -io ISC zp
+    ;; #xe8 INX
+    ;; #xe9 SBC imm
+    ;; #xea NOP
+    ;; #xeb -io SBC imm
+    ;; #xec CPX abs
+    ;; #xed SBC abs
+    ;; #xee INC abs
+    ;; #xef -io ISC abs
+    ;; #xf0 BEQ rel
+    ;; #xf1 SBC izy
+    ;; #xf2 -io KIL
+    ;; #xf3 -io ISC izy
+    ;; #xf4 -io NOP zpx
+    ;; #xf5 SBC zpx
+    ;; #xf6 INC zpx
+    ;; #xf7 -io ISC zpx
     [(#xF8) (interpret-sed state)]
+    ;; #xf9 SBC aby
+    ;; #xfa -io NOP
+    ;; #xfb -io ISC aby
+    ;; #xfc -io NOP abx
+    ;; #xfd SBC abx
+    ;; #xfe INC abx
+    ;; #xff -io ISC abx
     [else (error "unknown opcode")]))
 
 ;; interpret bne (branch on not equal)
