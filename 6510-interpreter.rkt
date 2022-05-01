@@ -75,6 +75,23 @@
   (~a (number->string num 16)
       #:width 4 #:left-pad-string "0" #:align 'right))
 
+(module+ test #| byte->hex-string, word->hex-string |#
+  (check-equal? (byte->hex-string #x00) "00")
+  (check-equal? (byte->hex-string #x01) "01")
+  (check-equal? (byte->hex-string #x7f) "7f")
+  (check-equal? (byte->hex-string #x80) "80")
+  (check-equal? (byte->hex-string #x81) "81")
+  (check-equal? (byte->hex-string #xa0) "a0")
+  (check-equal? (byte->hex-string #xff) "ff")
+  (check-equal? (word->hex-string #x0000) "0000")
+  (check-equal? (word->hex-string #x0001) "0001")
+  (check-equal? (word->hex-string #x0020) "0020")
+  (check-equal? (word->hex-string #x0300) "0300")
+  (check-equal? (word->hex-string #x4000) "4000")
+  (check-equal? (word->hex-string #xffff) "ffff")
+  (check-equal? (word->hex-string #x9999) "9999")
+  (check-equal? (word->hex-string #x5e5f) "5e5f"))
+
 ;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
 (define (dump-memory from to state)
   (string-join
@@ -96,20 +113,28 @@
   (check-equal? (dump-memory 268 268 (poke (initialize-cpu) #x10C #xFE))
                 "010c fe"))
 
+(define (state->string state)
+  (string-join (list
+                (format "A  = x~a,   " (byte->hex-string (cpu-state-accumulator state)))
+                (format " X = x~a, " (byte->hex-string (cpu-state-x-index state)))
+                (format "Y = x~a~n" (byte->hex-string (cpu-state-y-index state)))
+                (format "PC = x~a, " (word->hex-string (cpu-state-program-counter state)))
+                (format "SP = x~a~n" (byte->hex-string (cpu-state-stack-pointer state)))
+                (format "N=~a, O=~a, B=~a, D=~a, I=~a, Z=~a, C=~a"
+                        (if (negative-flag? state) "X" "_" )
+                        (if (overflow-flag? state) "X" "_" )
+                        (if (break-flag? state) "X" "_" )
+                        (if (decimal-flag? state) "X" "_" )
+                        (if (interrupt-flag? state) "X" "_" )
+                        (if (zero-flag? state) "X" "_" )
+                        (if (carry-flag? state) "X" "_" )))
+               ""))
+
+(module+ test #| state->string |#
+  (check-equal? (state->string (initialize-cpu))
+                "A  = x00,    X = x00, Y = x00\nPC = x0000, SP = xff\nN=_, O=_, B=_, D=_, I=_, Z=_, C=_"))
 (define (print-state state)
-  (printf "A  = x~a,   " (byte->hex-string (cpu-state-accumulator state)))
-  (printf " X = x~a, " (byte->hex-string (cpu-state-x-index state)))
-  (printf "Y = x~a~n" (byte->hex-string (cpu-state-y-index state)))
-  (printf "PC = x~a, " (word->hex-string (cpu-state-program-counter state)))
-  (printf "SP = x~a~n" (byte->hex-string (cpu-state-stack-pointer state)))
-  (printf "N=~a, O=~a, B=~a, D=~a, I=~a, Z=~a, C=~a"
-          (if (negative-flag? state) "X" "_" )
-          (if (overflow-flag? state) "X" "_" )
-          (if (break-flag? state) "X" "_" )
-          (if (decimal-flag? state) "X" "_" )
-          (if (interrupt-flag? state) "X" "_" )
-          (if (zero-flag? state) "X" "_" )
-          (if (carry-flag? state) "X" "_" )))
+  (printf (state->string state)))
 
 (module+ test #| set-nth |#
   (check-equal? (nth (set-nth (cpu-state-memory (initialize-cpu)) 65535 1)
