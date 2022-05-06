@@ -209,8 +209,8 @@
                                          [program-counter (word new-program-counter)]
                                          [stack-pointer (byte (- sp 2))])])
             (~>> new-state
-                (poke _ (+ #x100 sp) (low-byte return-address))
-                (poke _ (+ #x100 (byte (- sp 1))) (high-byte return-address))))]))
+                 (poke _ (+ #x100 sp) (low-byte return-address))
+                 (poke _ (+ #x100 (byte (- sp 1))) (high-byte return-address))))]))
 
 (module+ test #| jsr (jump to sub routine) |#
   (check-equal? (cpu-state-program-counter
@@ -300,11 +300,7 @@
          [overflow?       (derive-overflow old-accumulator immediate raw-new-accumulator)])
     (struct-copy cpu-state state
                  [program-counter (word (+ 2 (cpu-state-program-counter state)))]
-                 [flags           (~>> (cpu-state-flags state)
-                                      (-adjust-carry-flag carry?)
-                                      (-adjust-zero-flag zero?)
-                                      (-adjust-negative-flag negative?)
-                                      (-adjust-overflow-flag overflow?))]
+                 [flags           (set-flags-cznv state carry? zero? negative? overflow?)]
                  [accumulator     new-accumulator])))
 
 (module+ test #| interpret-adc-i - checking carry flag related|#
@@ -495,6 +491,18 @@
   (struct-copy cpu-state state [flags (-set-carry-flag (cpu-state-flags state))]))
 
 
+(define (set-flags-cznv state carry? zero? negative? overflow?)
+  (~>> (cpu-state-flags state)
+      (-adjust-zero-flag zero?)
+      (-adjust-negative-flag negative?)
+      (-adjust-carry-flag carry?)
+      (-adjust-overflow-flag overflow?)))
+
+(define (set-flags-zn state zero? negative?)
+  (~>> (cpu-state-flags state)
+      (-adjust-zero-flag zero?)
+      (-adjust-negative-flag negative?)))
+
 ;; flags N O - B D I Z C
 
 (define (interpret-clc state)
@@ -540,27 +548,55 @@
          (address             (absolute high-fetched low-fetched))]
     (peek state address)))
 
+(define (poke-indirect state address value)
+  (let* [(low-fetched         (peek state address))
+         (high-fetched        (peek state (+ address 1)))
+         (address             (absolute high-fetched low-fetched))]
+    (poke state address value)))
+
 (define (peek-for-izx state)
   (let* [(zero-page-idx       (peek-pc+1 state))
          (idx                 (cpu-state-x-index state))]
     (peek-indirect state (+ idx zero-page-idx))))
 
-(define (interpret-ora-izx state)
-  (let* [(raw-accumulator     (bitwise-ior (peek-for-izx state) (cpu-state-accumulator state)))
+(define (poke-izx state value)
+  (let* [(zero-page-idx       (peek-pc+1 state))
+         (idx                 (cpu-state-x-index state))]
+    (poke-indirect state (+ idx zero-page-idx) value)))
+
+(define (interpret-logic-op-izx state operation)
+  (let* [(raw-accumulator     (operation (peek-for-izx state) (cpu-state-accumulator state)))
          (new-accumulator     (byte raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
-         (new-flags           (~>> (cpu-state-flags state)
-                                  (-adjust-zero-flag zero?)
-                                  (-adjust-negative-flag negative?)))
+         (new-flags           (set-flags-zn state zero? negative?))
          (new-program-counter (+ 2 (cpu-state-program-counter state)))]
     (struct-copy cpu-state state
                  [accumulator     new-accumulator]
                  [flags           new-flags]
                  [program-counter new-program-counter])))
 
+(define (interpret-calc-op-izx state operation add-calc-op)
+  (let* [(op1                 (cpu-state-accumulator state))
+         (op2                 (peek-for-izx state))
+         (raw-accumulator     (operation op1 op2 add-calc-op))
+         (new-accumulator     (byte raw-accumulator))
+         (carry?              (< 255 raw-accumulator))
+         (zero?               (zero? new-accumulator))
+         (negative?           (derive-negative raw-accumulator))
+         [overflow?           (derive-overflow op1 op2 raw-accumulator)]
+         (new-flags           (set-flags-cznv state carry? zero? negative? overflow?))
+         (new-program-counter (+ 2 (cpu-state-program-counter state)))]
+    (struct-copy cpu-state state
+                 [accumulator     new-accumulator]
+                 [flags           new-flags]
+                 [program-counter new-program-counter])))
+
+(define (interpret-ora-izx state)
+  (interpret-logic-op-izx state bitwise-ior))
+
 (module+ test #| ora immediate zero page x - ora ($I,X) ) |#
-  (define (-prepare-ora-izx acc operand)
+  (define (-prepare-op-izx acc operand)
     (~>> (initialize-cpu)
         (-set-accumulator acc _)
         (-set-x-index #x02 _)
@@ -569,30 +605,136 @@
         (poke _ #x73 #x21)
         (poke _ #x2111 operand)))
 
-  (check-eq? (~>> (-prepare-ora-izx #xa5 #x5a)
+  (check-eq? (~>> (-prepare-op-izx #xa5 #x5a)
                  (interpret-ora-izx _)
                  (cpu-state-accumulator _))
              #xff)
-  (check-true (~>> (-prepare-ora-izx #xa5 #x5a)
+  (check-true (~>> (-prepare-op-izx #xa5 #x5a)
                   (interpret-ora-izx _)
                   (negative-flag? _)))
-  (check-false (~>> (-prepare-ora-izx #xa5 #x5a)
+  (check-false (~>> (-prepare-op-izx #xa5 #x5a)
                    (interpret-ora-izx _)
                    (zero-flag? _))))
 
 (define (interpret-and-izx state)
-  (let* [(raw-accumulator     (bitwise-and (peek-for-izx state) (cpu-state-accumulator state)))
+  (interpret-logic-op-izx state bitwise-and))
+
+(module+ test #| and izx |#
+  (check-eq? (~>> (-prepare-op-izx #xa5 #x5a)
+                 (interpret-and-izx _)
+                 (cpu-state-accumulator _))
+             #x00)
+  (check-false (~>> (-prepare-op-izx #xa5 #x5a)
+                   (interpret-and-izx _)
+                   (negative-flag? _)))
+  (check-true (~>> (-prepare-op-izx #xa5 #x5a)
+                  (interpret-and-izx _)
+                  (zero-flag? _))))
+
+(define (interpret-eor-izx state)
+  (interpret-logic-op-izx state bitwise-xor))
+
+(module+ test #| eor izx |#
+  (check-eq? (~>> (-prepare-op-izx #xff #x5a)
+                 (interpret-eor-izx _)
+                 (cpu-state-accumulator _))
+             #xa5)
+  (check-true (~>> (-prepare-op-izx #xa5 #x5a)
+                  (interpret-eor-izx _)
+                  (negative-flag? _)))
+  (check-false (~>> (-prepare-op-izx #xa5 #x5a)
+                   (interpret-eor-izx _)
+                   (zero-flag? _))))
+
+(define (interpret-adc-izx state)
+  (let* [(cf-addon (if (carry-flag? state) 1 0))]
+    (interpret-calc-op-izx state + cf-addon)))
+
+(module+ test #| adc izx |#
+  (check-eq? (~>> (-prepare-op-izx #x1f #x22)
+                 (interpret-adc-izx _)
+                 (cpu-state-accumulator _))
+             #x41)
+  (check-eq? (~>> (-prepare-op-izx #x1f #x22)
+                 (set-carry-flag _)
+                 (interpret-adc-izx _)
+                 (cpu-state-accumulator _))
+             #x42
+             "adding numbers with carry set will increase the result by 1")
+  (check-eq? (~>> (-prepare-op-izx #xf8 #x08)
+                 (interpret-adc-izx _)
+                 (cpu-state-accumulator _))
+             #x00
+             "addition resulting in 256 will zield 0 in the accumulator")
+  (check-true (~>> (-prepare-op-izx #xf8 #x08)
+                  (interpret-adc-izx _)
+                  (carry-flag? _))
+              "when addition > 255, carry flag should be set")
+  (check-false (~>> (-prepare-op-izx #xf8 #x07)
+                  (interpret-adc-izx _)
+                  (carry-flag? _))
+              "when addition <= 255, carry flag should NOT be set")
+  (check-false (~>> (-prepare-op-izx #x1f #x22)
+                  (interpret-adc-izx _)
+                  (negative-flag? _)))
+  (check-false (~>> (-prepare-op-izx #x1f #x22)
+                   (interpret-adc-izx _)
+                   (zero-flag? _))))
+
+(define (interpret-sbc-izx state)
+  (let* [(op1                 (cpu-state-accumulator state))
+         (op2                 (peek-for-izx state))
+         (raw-accumulator     (- op1 op2))
          (new-accumulator     (byte raw-accumulator))
+         (carry?              (>= 0 raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
-         (new-flags           (~>> (cpu-state-flags state)
-                                  (-adjust-zero-flag zero?)
-                                  (-adjust-negative-flag negative?)))
+         [overflow?           (derive-overflow op1 op2 raw-accumulator)]
+         (new-flags           (set-flags-cznv state carry? zero? negative? overflow?))
          (new-program-counter (+ 2 (cpu-state-program-counter state)))]
     (struct-copy cpu-state state
                  [accumulator     new-accumulator]
                  [flags           new-flags]
                  [program-counter new-program-counter])))
+
+(define (interpret-lda-izx state)
+  (struct-copy cpu-state state
+               [accumulator     (peek-for-izx state)]
+               [program-counter (+ 2 (cpu-state-program-counter state))]))
+
+(define (interpret-sta-izx state)
+  (poke-izx state (cpu-state-accumulator state))
+  (struct-copy cpu-state state
+               [program-counter (+ 2 (cpu-state-program-counter state))]))
+
+(module+ test #| sbc izx |#
+  (check-eq? (~>> (-prepare-op-izx #x1f #x22)
+                 (interpret-sbc-izx _)
+                 (cpu-state-accumulator _))
+             (two-complement-of (- #x1f #x22)))
+  (check-eq? (~>> (-prepare-op-izx #x1f #x22)
+                 (set-carry-flag _)
+                 (interpret-sbc-izx _)
+                 (cpu-state-accumulator _))
+             (two-complement-of (- #x1f #x22))
+             "subtracting two numbers with carry set will not change the result")
+  (check-false (~>> (-prepare-op-izx #x1f #x22)
+                   (set-carry-flag _)
+                   (interpret-sbc-izx _)
+                   (carry-flag? _))
+               "subtracting a larger from a smaller number will clear the carry since it borrows")
+  (check-true (~>> (-prepare-op-izx #x1f #x22)
+                  (interpret-sbc-izx _)
+                  (negative-flag? _)))
+  (check-false (~>> (-prepare-op-izx #x22 #x1f)
+                   (interpret-sbc-izx _)
+                   (negative-flag? _)))
+  (check-false (~>> (-prepare-op-izx #x1f #x22)
+                   (interpret-sbc-izx _)
+                   (zero-flag? _)))
+  (check-true (~>> (-prepare-op-izx #x1f #x1f)
+                  (interpret-sbc-izx _)
+                  (zero-flag? _))))
 
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
@@ -674,7 +816,7 @@
     ;; #x3e ROL abx
     ;; #x3f -io RLA abx
     [(#x40) (interpret-rti state)]
-    ;; #x41 EOR izx
+    [(#x41) (interpret-eor-izx state)]
     ;; #x42 -io KIL
     ;; #x43 -io SRE izx
     ;; #x44 -io NOP zp
@@ -706,7 +848,7 @@
     ;; #x5e LSR abx
     ;; #x5f -io SRE abx
     [(#x60) (interpret-rts state)]
-    ;; #x61 ADC izx
+    [(#x61) (interpret-adc-izx state)]
     ;; #x62 -io KIL
     ;; #x63 -io RRA izx
     ;; #x64 -io NOP zp
@@ -738,7 +880,7 @@
     ;; #x7e ROR abx
     ;; #x7f -io RRA abx
     ;; #x80 -io NOP imm
-    ;; #x81 STA izx
+    [(#x81) (interpret-sta-izx state)]
     ;; #x82 -io NOP imm
     ;; #x83 -io SAX izx
     ;; #x84 STY zp
@@ -770,7 +912,7 @@
     ;; #x9e -io SHX aby
     ;; #x9f -io AHX aby
     ;; #xa0 LDY imm
-    ;; #xa1 LDA izx
+    [(#xa1) (interpret-lda-izx state)]
     ;; #xa2 LDX imm
     ;; #xa3 -io LAX izx
     ;; #xa4 LDY zp
@@ -834,7 +976,7 @@
     ;; #xde DEC abx
     ;; #xdf -io DCP abx
     ;; #xe0 CPX imm
-    ;; #xe1 SBC izx
+    [(#xe1) (interpret-sbc-izx state)]
     ;; #xe2 -io NOP imm
     ;; #xe3 -io ISC izx
     ;; #xe4 CPX zp
