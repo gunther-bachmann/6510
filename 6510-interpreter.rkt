@@ -342,6 +342,10 @@
   (struct-copy cpu-state state
                [x-index (byte new-x-index)]))
 
+(define (-set-y-index new-y-index state)
+  (struct-copy cpu-state state
+               [y-index (byte new-y-index)]))
+
 ;; interpret lda (load accumulator immediate)
 (define (interpret-lda-i immediate state)
   (struct-copy cpu-state state
@@ -542,30 +546,59 @@
   (check-true (overflow-flag? (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))
   (check-false (overflow-flag? (interpret-clv (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))))
 
+(define (indirect-address state address)
+    (let* [(low-byte  (peek state address))
+           (high-byte (peek state (+ address 1)))]
+    (absolute high-byte low-byte)))
+
+;; get the byte that is stored at the memory address
+;; that is stored low, high byte ordered at the given address
+;;
+;; address -> [ low ][ high ]
+;; @high,low-> [ value ]
 (define (peek-indirect state address)
-  (let* [(low-fetched         (peek state address))
-         (high-fetched        (peek state (+ address 1)))
-         (address             (absolute high-fetched low-fetched))]
-    (peek state address)))
+  (peek state (indirect-address state address)))
 
+(define (peek-indirect-woffset state address offset)
+  (peek state (word (+ offset (indirect-address state address)))))
+
+;; put the value at the address constructed from reading
+;; low, high byte order from the address provided
+;;
+;; address -> [ low ][ high ]
+;; @high, low <- value
 (define (poke-indirect state address value)
-  (let* [(low-fetched         (peek state address))
-         (high-fetched        (peek state (+ address 1)))
-         (address             (absolute high-fetched low-fetched))]
-    (poke state address value)))
+  (poke state (indirect-address state address) value))
 
-(define (peek-for-izx state)
-  (let* [(zero-page-idx       (peek-pc+1 state))
-         (idx                 (cpu-state-x-index state))]
-    (peek-indirect state (+ idx zero-page-idx))))
+(define (poke-indirect-woffset state address offset value)  
+  (poke state (word (+ offset (indirect-address state address))) value))
 
+;; (zp,x) ->
+(define (peek-izx state)
+  (let* [(zero-page-idx (peek-pc+1 state))
+         (x             (cpu-state-x-index state))]
+    (peek-indirect state (+ x zero-page-idx))))
+
+;; (zp,x) <-
 (define (poke-izx state value)
-  (let* [(zero-page-idx       (peek-pc+1 state))
-         (idx                 (cpu-state-x-index state))]
-    (poke-indirect state (+ idx zero-page-idx) value)))
+  (let* [(zero-page-idx (peek-pc+1 state))
+         (x             (cpu-state-x-index state))]
+    (poke-indirect state (+ x zero-page-idx) value)))
 
-(define (interpret-logic-op-izx state operation)
-  (let* [(raw-accumulator     (operation (peek-for-izx state) (cpu-state-accumulator state)))
+;; (zp),y ->
+(define (peek-izy state)
+  (let* [(zero-page-idx (peek-pc+1 state))
+         (y             (cpu-state-y-index state))]
+    (peek-indirect-woffset state zero-page-idx y)))
+
+(define (poke-izy state value)
+  (let* [(zero-page-idx (peek-pc+1 state))
+         (idy           (cpu-state-y-index state))]
+    (poke-indirect-woffset state zero-page-idx idy value)))
+
+
+(define (interpret-logic-op-iz_ state operation peeker)
+  (let* [(raw-accumulator     (operation (peeker state) (cpu-state-accumulator state)))
          (new-accumulator     (byte raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
@@ -576,15 +609,21 @@
                  [flags           new-flags]
                  [program-counter new-program-counter])))
 
-(define (interpret-calc-op-izx state operation add-calc-op)
-  (let* [(op1                 (cpu-state-accumulator state))
-         (op2                 (peek-for-izx state))
-         (raw-accumulator     (operation op1 op2 add-calc-op))
+(define (interpret-logic-op-izx state operation)
+  (interpret-logic-op-iz_ state operation peek-izx))
+
+(define (interpret-logic-op-izy state operation)
+  (interpret-logic-op-iz_ state operation peek-izy))
+
+(define (interpret-calc-op-iz_ state operation add-calc-op peeker)
+  (let* [(accumulator         (cpu-state-accumulator state))
+         (op                  (peeker state))
+         (raw-accumulator     (operation accumulator op add-calc-op))
          (new-accumulator     (byte raw-accumulator))
          (carry?              (< 255 raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
-         [overflow?           (derive-overflow op1 op2 raw-accumulator)]
+         [overflow?           (derive-overflow accumulator op raw-accumulator)]
          (new-flags           (set-flags-cznv state carry? zero? negative? overflow?))
          (new-program-counter (+ 2 (cpu-state-program-counter state)))]
     (struct-copy cpu-state state
@@ -592,10 +631,13 @@
                  [flags           new-flags]
                  [program-counter new-program-counter])))
 
+(define (interpret-calc-op-izx state operation add-calc-op)
+  (interpret-calc-op-iz_ state operation add-calc-op peek-izx))
+
 (define (interpret-ora-izx state)
   (interpret-logic-op-izx state bitwise-ior))
 
-(module+ test #| ora immediate zero page x - ora ($I,X) ) |#
+(module+ test #| ora indirect zero page x - ora ($I,X) ) |#
   (define (-prepare-op-izx acc operand)
     (~>> (initialize-cpu)
         (-set-accumulator acc _)
@@ -614,6 +656,30 @@
                   (negative-flag? _)))
   (check-false (~>> (-prepare-op-izx #xa5 #x5a)
                    (interpret-ora-izx _)
+                   (zero-flag? _))))
+
+(define (interpret-ora-izy state)
+  (interpret-logic-op-izy state bitwise-ior))
+
+(module+ test #| ora indirect zero page y - ora ($I),Y ) |#
+  (define (-prepare-op-izy acc operand)
+    (~>> (initialize-cpu)
+        (-set-accumulator acc _)
+        (-set-y-index #x02 _)
+        (poke _ #x01 #x70 ) ;; pc of ora itself is x0000 => operand at x0001
+        (poke _ #x70 #x11)
+        (poke _ #x71 #x21)
+        (poke _ #x2113 operand)))
+
+  (check-eq? (~>> (-prepare-op-izy #xa5 #x5a)
+                 (interpret-ora-izy _)
+                 (cpu-state-accumulator _))
+             #xff)
+  (check-true (~>> (-prepare-op-izy #xa5 #x5a)
+                  (interpret-ora-izy _)
+                  (negative-flag? _)))
+  (check-false (~>> (-prepare-op-izy #xa5 #x5a)
+                   (interpret-ora-izy _)
                    (zero-flag? _))))
 
 (define (interpret-and-izx state)
@@ -683,10 +749,10 @@
 
 (define (interpret-sbc-izx state)
   (let* [(op1                 (cpu-state-accumulator state))
-         (op2                 (peek-for-izx state))
+         (op2                 (peek-izx state))
          (raw-accumulator     (- op1 op2))
          (new-accumulator     (byte raw-accumulator))
-         (carry?              (>= 0 raw-accumulator))
+         (carry?              (> 0 raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
          [overflow?           (derive-overflow op1 op2 raw-accumulator)]
@@ -699,7 +765,7 @@
 
 (define (interpret-lda-izx state)
   (struct-copy cpu-state state
-               [accumulator     (peek-for-izx state)]
+               [accumulator     (peek-izx state)]
                [program-counter (+ 2 (cpu-state-program-counter state))]))
 
 (define (interpret-sta-izx state)
@@ -768,7 +834,7 @@
     ;; #x0e ASL abs
     ;; #x0f -io SLO abs
     ;; #x10 BPL rel
-    ;; #x11 ORA izy
+    [(#x11) (interpret-ora-izy state)]
     ;; #x12 -io KIL
     ;; #x13 -io SLO izy
     ;; #x14 -io NOP zpx
