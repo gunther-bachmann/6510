@@ -609,18 +609,30 @@
                  [flags           new-flags]
                  [program-counter new-program-counter])))
 
+(define (peek-zp state)
+  (peek state (peek-pc+1 state)))
+
+(define (interpret-logic-op-zp state operation)
+  (interpret-logic-op-iz_ state operation peek-zp))
+
 (define (interpret-logic-op-izx state operation)
   (interpret-logic-op-iz_ state operation peek-izx))
 
 (define (interpret-logic-op-izy state operation)
   (interpret-logic-op-iz_ state operation peek-izy))
 
-(define (interpret-calc-op-iz_ state operation add-calc-op peeker)
+(define (derive-carry-after-addition raw-accumulator)
+  (< 255 raw-accumulator))
+
+(define (derive-carry-after-subtraction raw-accumulator)
+  (> 0 raw-accumulator))
+
+(define (interpret-calc-op-iz_ state operation add-calc-op peeker carry-deriver)
   (let* [(accumulator         (cpu-state-accumulator state))
          (op                  (peeker state))
          (raw-accumulator     (operation accumulator op add-calc-op))
          (new-accumulator     (byte raw-accumulator))
-         (carry?              (< 255 raw-accumulator))
+         (carry?              (carry-deriver raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
          [overflow?           (derive-overflow accumulator op raw-accumulator)]
@@ -631,8 +643,8 @@
                  [flags           new-flags]
                  [program-counter new-program-counter])))
 
-(define (interpret-calc-op-izx state operation add-calc-op)
-  (interpret-calc-op-iz_ state operation add-calc-op peek-izx))
+(define (interpret-add-calc-op-izx state operation add-calc-op)
+  (interpret-calc-op-iz_ state operation add-calc-op peek-izx derive-carry-after-addition))
 
 (define (interpret-ora-izx state)
   (interpret-logic-op-izx state bitwise-ior))
@@ -660,6 +672,12 @@
 
 (define (interpret-ora-izy state)
   (interpret-logic-op-izy state bitwise-ior))
+
+(define (interpret-and-izy state)
+  (interpret-logic-op-izy state bitwise-and))
+
+(define (interpret-eor-izy state)
+  (interpret-logic-op-izy state bitwise-xor))
 
 (module+ test #| ora indirect zero page y - ora ($I),Y ) |#
   (define (-prepare-op-izy acc operand)
@@ -714,7 +732,7 @@
 
 (define (interpret-adc-izx state)
   (let* [(cf-addon (if (carry-flag? state) 1 0))]
-    (interpret-calc-op-izx state + cf-addon)))
+    (interpret-add-calc-op-izx state + cf-addon)))
 
 (module+ test #| adc izx |#
   (check-eq? (~>> (-prepare-op-izx #x1f #x22)
@@ -748,20 +766,10 @@
                    (zero-flag? _))))
 
 (define (interpret-sbc-izx state)
-  (let* [(op1                 (cpu-state-accumulator state))
-         (op2                 (peek-izx state))
-         (raw-accumulator     (- op1 op2))
-         (new-accumulator     (byte raw-accumulator))
-         (carry?              (> 0 raw-accumulator))
-         (zero?               (zero? new-accumulator))
-         (negative?           (derive-negative raw-accumulator))
-         [overflow?           (derive-overflow op1 op2 raw-accumulator)]
-         (new-flags           (set-flags-cznv state carry? zero? negative? overflow?))
-         (new-program-counter (+ 2 (cpu-state-program-counter state)))]
-    (struct-copy cpu-state state
-                 [accumulator     new-accumulator]
-                 [flags           new-flags]
-                 [program-counter new-program-counter])))
+  (interpret-calc-op-iz_ state - 0 peek-izx derive-carry-after-subtraction))
+
+(define (interpret-sbc-izy state)
+  (interpret-calc-op-iz_ state - 0 peek-izy derive-carry-after-subtraction))
 
 (define (interpret-lda-izx state)
   (struct-copy cpu-state state
@@ -770,6 +778,16 @@
 
 (define (interpret-sta-izx state)
   (poke-izx state (cpu-state-accumulator state))
+  (struct-copy cpu-state state
+               [program-counter (+ 2 (cpu-state-program-counter state))]))
+
+(define (interpret-lda-izy state)
+  (struct-copy cpu-state state
+               [accumulator     (peek-izy state)]
+               [program-counter (+ 2 (cpu-state-program-counter state))]))
+
+(define (interpret-sta-izy state)
+  (poke-izy state (cpu-state-accumulator state))
   (struct-copy cpu-state state
                [program-counter (+ 2 (cpu-state-program-counter state))]))
 
@@ -822,7 +840,7 @@
     ;; #x02 -io KIL
     ;; #x03 -io SLO izx
     ;; #x04 -io NOP zp
-    ;; #x05 ORA zp
+    [(#x05) (interpret-logic-op-zp state bitwise-ior)]
     ;; #x06 ASL zp
     ;; #x07 -io SLO zp
     ;; #x08 PHP
@@ -854,7 +872,7 @@
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
     ;; #x24 BIT zp
-    ;; #x25 AND zp
+    [(#x25) (interpret-logic-op-zp state bitwise-and)]
     ;; #x26 ROL zp
     ;; #x27 -io RLA zp
     ;; #x28 PLP zp
@@ -866,7 +884,7 @@
     ;; #x2e ROL bas
     ;; #x2f -io RIA abs
     ;; #x30 BMI rel
-    ;; #x31 AND izy
+    [(#x31) (interpret-and-izy state)]
     ;; #x32 -io KIL
     ;; #x33 -io RIA izy
     ;; #x34 -io NOP zpx 
@@ -886,7 +904,7 @@
     ;; #x42 -io KIL
     ;; #x43 -io SRE izx
     ;; #x44 -io NOP zp
-    ;; #x45 EOR zp
+    [(#x45) (interpret-logic-op-zp state bitwise-xor)]
     ;; #x46 LSR zp
     ;; #x47 -io SRE zp
     ;; #x48 PHA
@@ -898,7 +916,7 @@
     ;; #x4e LSR abs
     ;; #x4f -io SRE abs
     ;; #x50 BVC rel
-    ;; #x51 EOR izy
+    [(#x51) (interpret-eor-izy state)]
     ;; #x52 -io KIL
     ;; #x53 -io SRE izy
     ;; #x54 -io NOP zpx
@@ -962,7 +980,7 @@
     ;; #x8e STX abs
     ;; #x8f -io SAX abs
     ;; #x90 BCC rel
-    ;; #x91 STA izy
+    [(#x91) (interpret-sta-izy state)]
     ;; #x92 -io KIL
     ;; #x93 0io AHX izy
     ;; #x94 STY zpx
@@ -994,7 +1012,7 @@
     ;; #xae LDX abs
     ;; #xaf -io LAX abs
     ;; #xb0 BCS rel
-    ;; #xb1 LDA izy
+    [(#xb1) (interpret-lda-izy state)]
     ;; #xb2 -io KIL
     ;; #xb3 -io LAX izy
     ;; #xb4 LDY zpx
@@ -1058,7 +1076,7 @@
     ;; #xee INC abs
     ;; #xef -io ISC abs
     ;; #xf0 BEQ rel
-    ;; #xf1 SBC izy
+    [(#xf1) (interpret-sbc-izy state)]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
     ;; #xf4 -io NOP zpx
