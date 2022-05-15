@@ -45,6 +45,7 @@
  dec $1000
  dec $1000,x
 
+ ;; using different cases in some places!
  adc $231A,y ; indexed y
  adc $213C,X ; indexed x
  ADC #$10    ; immediate
