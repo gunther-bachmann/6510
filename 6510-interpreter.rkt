@@ -564,6 +564,12 @@
 (define (peek-zp state)
   (peek state (peek-pc+1 state)))
 
+(define (peek-zpx state)
+  (peek state (+ (cpu-state-x-index state) (peek-pc+1 state))))
+
+(define (peek-zpy state)
+  (peek state (+ (cpu-state-y-index state) (peek-pc+1 state))))
+
 (define (derive-carry-after-addition raw-accumulator)
   (< 255 raw-accumulator))
 
@@ -822,7 +828,7 @@
     ;; #x06 ASL zp
     ;; #x07 -io SLO zp
     ;; #x08 PHP
-    ;; #x09 ORA imm
+    [(#x09) (interpret-logic-op state bitwise-ior peek-pc+1)]
     ;; #x0a ASL
     ;; #x0b -io ANC imm
     ;; #x0c -io NOP abs
@@ -834,7 +840,7 @@
     ;; #x12 -io KIL
     ;; #x13 -io SLO izy
     ;; #x14 -io NOP zpx
-    ;; #x15 ORA zpx
+    [(#x15) (interpret-logic-op state bitwise-ior peek-zpx)]
     ;; #x16 ASL zpx
     ;; #x17 -io SLO zpx
     [(#x18) (interpret-clc state)]
@@ -854,7 +860,7 @@
     ;; #x26 ROL zp
     ;; #x27 -io RLA zp
     ;; #x28 PLP zp
-    ;; #x29 AND imm
+    [(#x29) (interpret-logic-op state bitwise-and peek-pc+1)]
     ;; #x2a ROL
     ;; #x2b -io ANC imm
     ;; #x2c BIT abs
@@ -866,7 +872,7 @@
     ;; #x32 -io KIL
     ;; #x33 -io RIA izy
     ;; #x34 -io NOP zpx 
-    ;; #x35 AND zpx
+    [(#x35) (interpret-logic-op state bitwise-and peek-zpx)]
     ;; #x36 ROL zpx
     ;; #x37 -io RLA zpx
     [(#x38) (interpret-sec state)]
@@ -886,7 +892,7 @@
     ;; #x46 LSR zp
     ;; #x47 -io SRE zp
     ;; #x48 PHA
-    ;; #x49 EOR imm
+    [(#x49) (interpret-logic-op state bitwise-xor peek-pc+1)]
     ;; #x4a LSR
     ;; #x4b -io ALR imm
     [(#x4C) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
@@ -898,7 +904,7 @@
     ;; #x52 -io KIL
     ;; #x53 -io SRE izy
     ;; #x54 -io NOP zpx
-    ;; #x55 EOR zpx
+    [(#x55) (interpret-logic-op state bitwise-xor peek-zpx)]
     ;; #x56 LSR zpx
     ;; #x57 -io SRE zpx
     [(#x58) (interpret-cli state)]
@@ -914,7 +920,7 @@
     ;; #x62 -io KIL
     ;; #x63 -io RRA izx
     ;; #x64 -io NOP zp
-    ;; #x65 ADC zp
+    [(#x65) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition)]
     ;; #x66 ROR zp
     ;; #x67 -io RRA zp
     ;; #x68 PLA
@@ -926,11 +932,11 @@
     ;; #x6e ROR abs
     ;; #x6f -io RRA abs
     ;; #x70 BVS rel
-    ;; #x71 ADC izy
+    [(#x71) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition)]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
     ;; #x74 -io NOP zpx
-    ;; #x75 ADC zpx
+    [(#x75) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition)]
     ;; #x76 ROR zpx
     ;; #x77 -io RRA zpx
     [(#x78) (interpret-sei state)]
@@ -1042,7 +1048,7 @@
     ;; #xe2 -io NOP imm
     ;; #xe3 -io ISC izx
     ;; #xe4 CPX zp
-    ;; #xe5 SBC zp
+    [(#xe5) (interpret-calc-op state - 0 peek-zp derive-carry-after-subtraction)]
     ;; #xe6 INC zp
     ;; #xe7 -io ISC zp
     ;; #xe8 INX
@@ -1058,7 +1064,7 @@
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
     ;; #xf4 -io NOP zpx
-    ;; #xf5 SBC zpx
+    [(#xf5) (interpret-calc-op state - 0 peek-zpx derive-carry-after-subtraction)]
     ;; #xf6 INC zpx
     ;; #xf7 -io ISC zpx
     [(#xF8) (interpret-sed state)]
