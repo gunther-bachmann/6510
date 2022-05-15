@@ -628,7 +628,7 @@
 (define (derive-carry-after-subtraction raw-accumulator)
   (> 0 raw-accumulator))
 
-(define (interpret-calc-op-iz_ state operation add-calc-op peeker carry-deriver)
+(define (interpret-calc-op state operation add-calc-op peeker carry-deriver)
   (let* [(accumulator         (cpu-state-accumulator state))
          (op                  (peeker state))
          (raw-accumulator     (operation accumulator op add-calc-op))
@@ -733,7 +733,7 @@
 
 (define (interpret-adc-izx state)
   (let* [(cf-addon (if (carry-flag? state) 1 0))]
-    (interpret-add-calc-op-izx state + cf-addon)))
+    (interpret-calc-op state + cf-addon peek-izx derive-carry-after-addition)))
 
 (module+ test #| adc izx |#
   (check-eq? (~>> (-prepare-op-izx #x1f #x22)
@@ -767,10 +767,13 @@
                    (zero-flag? _))))
 
 (define (interpret-sbc-izx state)
-  (interpret-calc-op-iz_ state - 0 peek-izx derive-carry-after-subtraction))
+  (interpret-calc-op state - 0 peek-izx derive-carry-after-subtraction))
+
+(define (interpret-sbc-i state)
+  (interpret-calc-op state - 0 peek-pc+1 derive-carry-after-subtraction))
 
 (define (interpret-sbc-izy state)
-  (interpret-calc-op-iz_ state - 0 peek-izy derive-carry-after-subtraction))
+  (interpret-calc-op state - 0 peek-izy derive-carry-after-subtraction))
 
 (define (interpret-lda-izx state)
   (struct-copy cpu-state state
