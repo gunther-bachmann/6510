@@ -1055,7 +1055,7 @@
     ;; #xe6 INC zp
     ;; #xe7 -io ISC zp
     ;; #xe8 INX
-    ;; #xe9 SBC imm
+    [(#xe9) (interpret-sbc-i state)]
     ;; #xea NOP
     ;; #xeb -io SBC imm
     ;; #xec CPX abs
