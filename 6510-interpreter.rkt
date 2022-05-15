@@ -188,10 +188,11 @@
          (run next-state))))
 
 ;; interpret the RTS (return from subroutine) command
+;; pop low-byte, then high-byte form stack, inc by one and write this into the pc
 (define (interpret-rts state)
   (let* ([sp (cpu-state-stack-pointer state)]
-         [low-ret (peek state (+ #x100 (byte (+ 2 sp))))]
-         [high-ret (peek state (+ #x100 (byte (+ 1 sp))))])
+         [low-ret  (peek state (+ #x100 (byte (+ 1 sp))))]
+         [high-ret (peek state (+ #x100 (byte (+ 2 sp))))])
     (struct-copy cpu-state state
                  [program-counter (word (+ 1 (absolute high-ret low-ret)))]
                  [stack-pointer (byte (+ sp 2))])))
@@ -209,8 +210,8 @@
                                          [program-counter (word new-program-counter)]
                                          [stack-pointer (byte (- sp 2))])])
             (~>> new-state
-                 (poke _ (+ #x100 sp) (low-byte return-address))
-                 (poke _ (+ #x100 (byte (- sp 1))) (high-byte return-address))))]))
+                 (poke _ (+ #x100 sp) (high-byte return-address))
+                 (poke _ (+ #x100 (byte (- sp 1))) (low-byte return-address))))]))
 
 (module+ test #| jsr (jump to sub routine) |#
   (check-equal? (cpu-state-program-counter
@@ -222,11 +223,11 @@
   (check-equal? (peek
                  (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001))
                  #x1FF)
-                #x03)  
+                #x20)
   (check-equal? (peek
                  (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001))
                  #x1FE)
-                #x20))
+                #x03))
 
 ;; set/clear carry flag
 (define (-adjust-carry-flag set flags)
