@@ -285,55 +285,6 @@
   (check-true (derive-overflow #xd0 #x90 #x160))
   (check-false (derive-overflow #xd0 #xd0 #x1a0)))
 
-;; interpret ADC immediate (add with carry)
-;; c is set if result > 255
-;; v is set if two complements interpretation produces overflow (e.g. 127 + 1 = $80 = two complements -127)
-;; n is set if result is negative
-;; z is set if result is zero (TODO check if this is also true for results with carry)
-(define (interpret-adc-i immediate state)
-  (let* ([old-accumulator (cpu-state-accumulator state)]
-         [intermediate-accumulator (+ immediate old-accumulator)]
-         [raw-new-accumulator (if (carry-flag? state) (+ 1 intermediate-accumulator) intermediate-accumulator)]
-         [new-accumulator (byte raw-new-accumulator)]
-         [carry?          (> raw-new-accumulator 255 )]
-         [zero?           (zero? new-accumulator)]
-         [negative?       (derive-negative raw-new-accumulator)]
-         [overflow?       (derive-overflow old-accumulator immediate raw-new-accumulator)])
-    (struct-copy cpu-state state
-                 [program-counter (word (+ 2 (cpu-state-program-counter state)))]
-                 [flags           (set-flags-cznv state carry? zero? negative? overflow?)]
-                 [accumulator     new-accumulator])))
-
-(module+ test #| interpret-adc-i - checking carry flag related|#
-  (check-equal? (cpu-state-accumulator (interpret-adc-i 10 (initialize-cpu)))
-                10)
-
-  (check-false (carry-flag? (interpret-adc-i 10 (set-carry-flag (initialize-cpu)))))
-  (check-equal? (cpu-state-accumulator (interpret-adc-i 10 (set-carry-flag (initialize-cpu))))
-                11)
-  (check-true (carry-flag? (interpret-adc-i 10 (-set-accumulator 246 (initialize-cpu)))))
-  (check-false (carry-flag? (interpret-adc-i 10 (-set-accumulator 245 (initialize-cpu))))))
-
-(module+ test #| interpret-adc-i - checking zero flag related|#
-  (check-true (zero-flag? (interpret-adc-i 10 (-set-accumulator 246 (initialize-cpu)))))
-  (check-false (zero-flag? (interpret-adc-i 10 (-set-accumulator 245 (initialize-cpu)))))
-  (check-true (zero-flag? (interpret-adc-i 10 (set-carry-flag (-set-accumulator 245 (initialize-cpu)))))))
-
-(module+ test #| interpret-adc-i - checking overflow flag related|#
-  (check-true (overflow-flag? (interpret-adc-i 10 (-set-accumulator 118 (initialize-cpu)))))
-  (check-true (overflow-flag? (interpret-adc-i 10 (-set-accumulator 120 (initialize-cpu)))))
-  (check-false (overflow-flag? (interpret-adc-i 10 (-set-accumulator 117 (initialize-cpu)))))
-  (check-false (overflow-flag? (interpret-adc-i 10 (-set-accumulator 20 (initialize-cpu)))))
-
-  (check-true (overflow-flag? (interpret-adc-i 1 (-set-accumulator 127 (initialize-cpu)))))
-  (check-false (overflow-flag? (interpret-adc-i 1 (-set-accumulator 126 (initialize-cpu))))))
-
-(module+ test #| interpret-adc-i - checking negative flag related|#
-  (check-true (negative-flag?  (interpret-adc-i 1 (-set-accumulator (two-complement-of -2) (initialize-cpu)))))
-  (check-false (negative-flag? (interpret-adc-i 1 (-set-accumulator (two-complement-of -1) (initialize-cpu)))))
-  (check-false (negative-flag? (interpret-adc-i 1 (-set-accumulator (two-complement-of 1) (initialize-cpu)))))
-  (check-false (negative-flag? (interpret-adc-i 1 (-set-accumulator (two-complement-of 0) (initialize-cpu))))))
-
 ;; return a state with accumulator set
 (define (-set-accumulator new-accumulator state)
   (struct-copy cpu-state state
@@ -544,8 +495,8 @@
   (check-false (interrupt-flag? (interpret-cli (interpret-sei (initialize-cpu)))))
   (check-true (decimal-flag? (interpret-sed (initialize-cpu))))
   (check-false (decimal-flag? (interpret-cld (interpret-sed (initialize-cpu)))))
-  (check-true (overflow-flag? (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))
-  (check-false (overflow-flag? (interpret-clv (interpret-adc-i 1 (interpret-adc-i #x7f (initialize-cpu)))))))
+  (check-true (overflow-flag? (interpret-adc-i (poke  (interpret-adc-i (poke  (initialize-cpu) 1 #x7f)) 3 1))))
+  (check-false (overflow-flag? (interpret-clv (interpret-adc-i (poke  (interpret-adc-i (poke  (initialize-cpu) 1 #x7f)) 3 1))))))
 
 (define (indirect-address state address)
     (let* [(low-byte  (peek state address))
@@ -644,8 +595,40 @@
                  [flags           new-flags]
                  [program-counter new-program-counter])))
 
-(define (interpret-add-calc-op-izx state operation add-calc-op)
-  (interpret-calc-op-iz_ state operation add-calc-op peek-izx derive-carry-after-addition))
+;; interpret ADC immediate (add with carry)
+(define (interpret-adc-i state)
+  (let* [(cf-addon (if (carry-flag? state) 1 0))]
+    (interpret-calc-op state + cf-addon peek-pc+1 derive-carry-after-addition)))
+
+(module+ test #| interpret-adc-i - checking carry flag related|#
+  (check-equal? (cpu-state-accumulator (interpret-adc-i (poke (initialize-cpu) 1 10)))
+                10)
+
+  (check-false (carry-flag? (interpret-adc-i (poke  (set-carry-flag (initialize-cpu)) 1 10))))
+  (check-equal? (cpu-state-accumulator (interpret-adc-i (poke  (set-carry-flag (initialize-cpu)) 1 10)))
+                11)
+  (check-true (carry-flag? (interpret-adc-i (poke  (-set-accumulator 246 (initialize-cpu)) 1 10))))
+  (check-false (carry-flag? (interpret-adc-i (poke  (-set-accumulator 245 (initialize-cpu)) 1 10)))))
+
+(module+ test #| interpret-adc-i - checking zero flag related|#
+  (check-true (zero-flag? (interpret-adc-i (poke  (-set-accumulator 246 (initialize-cpu)) 1 10))))
+  (check-false (zero-flag? (interpret-adc-i (poke  (-set-accumulator 245 (initialize-cpu)) 1 10))))
+  (check-true (zero-flag? (interpret-adc-i (poke  (set-carry-flag (-set-accumulator 245 (initialize-cpu))) 1 10)))))
+
+(module+ test #| interpret-adc-i - checking overflow flag related|#
+  (check-true (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 118 (initialize-cpu)) 1 10))))
+  (check-true (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 120 (initialize-cpu)) 1 10))))
+  (check-false (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 117 (initialize-cpu)) 1 10))))
+  (check-false (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 20 (initialize-cpu)) 1 10))))
+
+  (check-true (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 127 (initialize-cpu)) 1 1))))
+  (check-false (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 126 (initialize-cpu)) 1 1)))))
+
+(module+ test #| interpret-adc-i - checking negative flag related|#
+  (check-true (negative-flag?  (interpret-adc-i (poke  (-set-accumulator (two-complement-of -2) (initialize-cpu)) 1 1))))
+  (check-false (negative-flag? (interpret-adc-i (poke  (-set-accumulator (two-complement-of -1) (initialize-cpu)) 1 1))))
+  (check-false (negative-flag? (interpret-adc-i (poke  (-set-accumulator (two-complement-of 1) (initialize-cpu)) 1 1))))
+  (check-false (negative-flag? (interpret-adc-i (poke  (-set-accumulator (two-complement-of 0) (initialize-cpu)) 1 1)))))
 
 (define (interpret-ora-izx state)
   (interpret-logic-op-izx state bitwise-ior))
@@ -944,7 +927,7 @@
     ;; #x66 ROR zp
     ;; #x67 -io RRA zp
     ;; #x68 PLA
-    [(#x69) (interpret-adc-i (peek-pc+1 state) state)]
+    [(#x69) (interpret-adc-i state)]
     ;; #x6a ROR
     ;; #x6b -io ARR imm
     ;; #x6c JMP ind
