@@ -549,7 +549,7 @@
     (poke-indirect-woffset state zero-page-idx idy value)))
 
 
-(define (interpret-logic-op-iz_ state operation peeker)
+(define (interpret-logic-op state operation peeker)
   (let* [(raw-accumulator     (operation (peeker state) (cpu-state-accumulator state)))
          (new-accumulator     (byte raw-accumulator))
          (zero?               (zero? new-accumulator))
@@ -563,15 +563,6 @@
 
 (define (peek-zp state)
   (peek state (peek-pc+1 state)))
-
-(define (interpret-logic-op-zp state operation)
-  (interpret-logic-op-iz_ state operation peek-zp))
-
-(define (interpret-logic-op-izx state operation)
-  (interpret-logic-op-iz_ state operation peek-izx))
-
-(define (interpret-logic-op-izy state operation)
-  (interpret-logic-op-iz_ state operation peek-izy))
 
 (define (derive-carry-after-addition raw-accumulator)
   (< 255 raw-accumulator))
@@ -631,7 +622,7 @@
   (check-false (negative-flag? (interpret-adc-i (poke  (-set-accumulator (two-complement-of 0) (initialize-cpu)) 1 1)))))
 
 (define (interpret-ora-izx state)
-  (interpret-logic-op-izx state bitwise-ior))
+  (interpret-logic-op state bitwise-ior peek-izx))
 
 (module+ test #| ora indirect zero page x - ora ($I,X) ) |#
   (define (-prepare-op-izx acc operand)
@@ -655,13 +646,13 @@
                    (zero-flag? _))))
 
 (define (interpret-ora-izy state)
-  (interpret-logic-op-izy state bitwise-ior))
+  (interpret-logic-op state bitwise-ior peek-izy))
 
 (define (interpret-and-izy state)
-  (interpret-logic-op-izy state bitwise-and))
+  (interpret-logic-op state bitwise-and peek-izy))
 
 (define (interpret-eor-izy state)
-  (interpret-logic-op-izy state bitwise-xor))
+  (interpret-logic-op state bitwise-xor peek-izy))
 
 (module+ test #| ora indirect zero page y - ora ($I),Y ) |#
   (define (-prepare-op-izy acc operand)
@@ -685,7 +676,7 @@
                    (zero-flag? _))))
 
 (define (interpret-and-izx state)
-  (interpret-logic-op-izx state bitwise-and))
+  (interpret-logic-op state bitwise-and peek-izx))
 
 (module+ test #| and izx |#
   (check-eq? (~>> (-prepare-op-izx #xa5 #x5a)
@@ -700,7 +691,7 @@
                   (zero-flag? _))))
 
 (define (interpret-eor-izx state)
-  (interpret-logic-op-izx state bitwise-xor))
+  (interpret-logic-op state bitwise-xor peek-izx))
 
 (module+ test #| eor izx |#
   (check-eq? (~>> (-prepare-op-izx #xff #x5a)
@@ -827,7 +818,7 @@
     ;; #x02 -io KIL
     ;; #x03 -io SLO izx
     ;; #x04 -io NOP zp
-    [(#x05) (interpret-logic-op-zp state bitwise-ior)]
+    [(#x05) (interpret-logic-op state bitwise-ior peek-zp)]
     ;; #x06 ASL zp
     ;; #x07 -io SLO zp
     ;; #x08 PHP
@@ -859,7 +850,7 @@
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
     ;; #x24 BIT zp
-    [(#x25) (interpret-logic-op-zp state bitwise-and)]
+    [(#x25) (interpret-logic-op state bitwise-and peek-zp)]
     ;; #x26 ROL zp
     ;; #x27 -io RLA zp
     ;; #x28 PLP zp
@@ -891,7 +882,7 @@
     ;; #x42 -io KIL
     ;; #x43 -io SRE izx
     ;; #x44 -io NOP zp
-    [(#x45) (interpret-logic-op-zp state bitwise-xor)]
+    [(#x45) (interpret-logic-op state bitwise-xor peek-zp)]
     ;; #x46 LSR zp
     ;; #x47 -io SRE zp
     ;; #x48 PHA
