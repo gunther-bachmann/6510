@@ -454,6 +454,12 @@
       (-adjust-carry-flag carry?)
       (-adjust-overflow-flag overflow?)))
 
+(define (set-flags-czn state carry? zero? negative?)
+  (~>> (cpu-state-flags state)
+      (-adjust-zero-flag zero?)
+      (-adjust-negative-flag negative?)
+      (-adjust-carry-flag carry?)))
+
 (define (set-flags-zn state zero? negative?)
   (~>> (cpu-state-flags state)
       (-adjust-zero-flag zero?)
@@ -564,8 +570,26 @@
 (define (peek-zp state)
   (peek state (peek-pc+1 state)))
 
+(define (poke-zp state value)
+  (peek state (peek-pc+1 state) value))
+
 (define (peek-zpx state)
   (peek state (+ (cpu-state-x-index state) (peek-pc+1 state))))
+
+(define (poke-zpx state value)
+  (poke state (+ (cpu-state-x-index state) (peek-pc+1 state)) value))
+
+(define (peek-absx state)
+  (peek state (+ (cpu-state-x-index state) (absolute (peek-pc+2 state) (peek-pc+1 state)))))
+
+(define (poke-absx state value)
+  (poke state (+ (cpu-state-x-index state) (absolute (peek-pc+2 state) (peek-pc+1 state))) value))
+
+(define (peek-abs state)
+  (peek state (absolute (peek-pc+2 state) (peek-pc+1 state))))
+
+(define (poke-abs state value)
+  (poke state (absolute (peek-pc+2 state) (peek-pc+1 state)) value))
 
 (define (peek-zpy state)
   (peek state (+ (cpu-state-y-index state) (peek-pc+1 state))))
@@ -804,6 +828,44 @@
                   (interpret-sbc-izx _)
                   (zero-flag? _))))
 
+(define (compute-asl-result-n-flags state peeker)
+    (let* ((operand (peeker state))
+         (raw-result (* 2 operand))
+         (result (byte raw-result))
+         (carry? (< 255 raw-result))
+         (zero? (= 0 result))
+         (negative? (< 127 result)))
+      (list result (set-flags-czn state carry? zero? negative?))))
+
+(define (interpret-asl state)
+  (match-let (((list result new-flags) (compute-asl-result-n-flags state cpu-state-accumulator)))
+    (struct-copy cpu-state state
+                 [accumulator result]
+                 [flags new-flags]
+                 [program-counter (+ 1 (cpu-state-program-counter state))])))
+
+(module+ test #| asl |#
+  (check-eq? (~>> (initialize-cpu)
+                 (-set-accumulator #x11 _)
+                 (interpret-asl _)
+                 (cpu-state-accumulator _))
+             #x22))
+
+(define (interpret-asl-mem state peeker poker opcode-len)
+  (match-let (((list result new-flags) (compute-asl-result-n-flags state peeker)))
+    (struct-copy cpu-state (poker state result)
+                 [flags new-flags]
+                 [program-counter (+ opcode-len (cpu-state-program-counter state))])))
+
+(module+ test #| interpret asl mem |#
+  (check-eq? (~>> (initialize-cpu)
+                 (poke _ #x01 #x0F)
+                 (poke _ #x02 #xF0)
+                 (poke _ #xF00F #x11)
+                 (interpret-asl-mem _ peek-abs poke-abs 3)
+                 (peek _ #xF00F))
+             #x22))
+
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
 ;; zp = $00
@@ -825,15 +887,15 @@
     ;; #x03 -io SLO izx
     ;; #x04 -io NOP zp
     [(#x05) (interpret-logic-op state bitwise-ior peek-zp)]
-    ;; #x06 ASL zp
+    [(#x06) (interpret-asl-mem state peek-zp poke-zp 2)]
     ;; #x07 -io SLO zp
     ;; #x08 PHP
     [(#x09) (interpret-logic-op state bitwise-ior peek-pc+1)]
-    ;; #x0a ASL
+    [(#x0a) (interpret-asl state)]
     ;; #x0b -io ANC imm
     ;; #x0c -io NOP abs
     ;; #x0d ORA abs
-    ;; #x0e ASL abs
+    [(#x0e) (interpret-asl-mem state peek-abs poke-abs 3)]
     ;; #x0f -io SLO abs
     ;; #x10 BPL rel
     [(#x11) (interpret-ora-izy state)]
@@ -841,7 +903,7 @@
     ;; #x13 -io SLO izy
     ;; #x14 -io NOP zpx
     [(#x15) (interpret-logic-op state bitwise-ior peek-zpx)]
-    ;; #x16 ASL zpx
+    [(#x16) (interpret-asl-mem state peek-zpx poke-zpx 2)]
     ;; #x17 -io SLO zpx
     [(#x18) (interpret-clc state)]
     ;; #x19 ORA aby
@@ -849,7 +911,7 @@
     ;; #x1b -io SLO abt
     ;; #x1c -io NOP abx
     ;; #x1d ORA abx
-    ;; #x1e ASL abx
+    [(#x1e) (interpret-asl-mem state peek-absx poke-absx 3)]
     ;; #x1f -io SLO abx
     [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state)]
     [(#x21) (interpret-and-izx state)]
