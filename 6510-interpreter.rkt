@@ -854,13 +854,15 @@
                  [flags new-flags]
                  [program-counter (+ opcode-len (cpu-state-program-counter state))])))
 
-(module+ test #| interpret asl mem |#
+
+(module+ test #| interpret asl abs |#
+  (define opcode-asl-abs #x0e)
+
   (check-eq? (~>> (initialize-cpu)
-                 (poke _ #x01 #x0F)
-                 (poke _ #x02 #xF0)
-                 (poke _ #xF00F #x11)
-                 (interpret-asl-mem _ peek-abs poke-abs 3)
-                 (peek _ #xF00F))
+                 (poke _ #x0000 opcode-asl-abs #x0f #xf0)
+                 (poke _ #xf00f #x11)
+                 (execute-cpu-step _)
+                 (peek _ #xf00f))
              #x22))
 
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
