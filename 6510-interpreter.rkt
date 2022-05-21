@@ -61,11 +61,21 @@
   (nth (cpu-state-memory state) memory-address))
 
 ;; set the byte at the given memory address (TODO replace with pvector pendant)
-(define (poke state address value)
+(define (-poke state address value)
   (struct-copy cpu-state state 
                [memory (set-nth (cpu-state-memory state)
                                 (word address)
                                 (byte value))]))
+
+(define (-pokem state address values)
+  (if (empty? values)
+      state
+      (-pokem (-poke state address (car values))
+              (+ 1 address)
+              (cdr values))))
+
+(define (poke state address . values)
+  (-pokem state address values))
 
 (define (byte->hex-string num)
   (~a (number->string num 16)
@@ -651,17 +661,16 @@
   (check-false (negative-flag? (interpret-adc-i (poke  (-set-accumulator (two-complement-of 1) (initialize-cpu)) 1 1))))
   (check-false (negative-flag? (interpret-adc-i (poke  (-set-accumulator (two-complement-of 0) (initialize-cpu)) 1 1)))))
 
-(define (interpret-ora-izx state)
-  (interpret-logic-op state bitwise-ior peek-izx))
-
 (module+ test #| ora indirect zero page x - ora ($I,X) ) |#
+  (define (interpret-ora-izx state)
+    (interpret-logic-op state bitwise-ior peek-izx))
+
   (define (-prepare-op-izx acc operand)
     (~>> (initialize-cpu)
         (-set-accumulator acc _)
         (-set-x-index #x02 _)
         (poke _ #x01 #x70 ) ;; pc of ora itself is x0000 => operand at x0001
-        (poke _ #x72 #x11)
-        (poke _ #x73 #x21)
+        (poke _ #x72 #x11 #x21)
         (poke _ #x2111 operand)))
 
   (check-eq? (~>> (-prepare-op-izx #xa5 #x5a)
