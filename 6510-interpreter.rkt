@@ -684,16 +684,10 @@
                    (interpret-ora-izx _)
                    (zero-flag? _))))
 
-(define (interpret-ora-izy state)
-  (interpret-logic-op state bitwise-ior peek-izy))
-
-(define (interpret-and-izy state)
-  (interpret-logic-op state bitwise-and peek-izy))
-
-(define (interpret-eor-izy state)
-  (interpret-logic-op state bitwise-xor peek-izy))
-
 (module+ test #| ora indirect zero page y - ora ($I),Y ) |#
+  (define (interpret-ora-izy state)
+    (interpret-logic-op state bitwise-ior peek-izy))
+
   (define (-prepare-op-izy acc operand)
     (~>> (initialize-cpu)
         (-set-accumulator acc _)
@@ -714,10 +708,10 @@
                    (interpret-ora-izy _)
                    (zero-flag? _))))
 
-(define (interpret-and-izx state)
-  (interpret-logic-op state bitwise-and peek-izx))
-
 (module+ test #| and izx |#
+  (define (interpret-and-izx state)
+    (interpret-logic-op state bitwise-and peek-izx))
+
   (check-eq? (~>> (-prepare-op-izx #xa5 #x5a)
                  (interpret-and-izx _)
                  (cpu-state-accumulator _))
@@ -729,10 +723,10 @@
                   (interpret-and-izx _)
                   (zero-flag? _))))
 
-(define (interpret-eor-izx state)
-  (interpret-logic-op state bitwise-xor peek-izx))
-
 (module+ test #| eor izx |#
+  (define (interpret-eor-izx state)
+    (interpret-logic-op state bitwise-xor peek-izx))
+
   (check-eq? (~>> (-prepare-op-izx #xff #x5a)
                  (interpret-eor-izx _)
                  (cpu-state-accumulator _))
@@ -744,11 +738,11 @@
                    (interpret-eor-izx _)
                    (zero-flag? _))))
 
-(define (interpret-adc-izx state)
-  (let* [(cf-addon (if (carry-flag? state) 1 0))]
-    (interpret-calc-op state + cf-addon peek-izx derive-carry-after-addition)))
-
 (module+ test #| adc izx |#
+  (define (interpret-adc-izx state)
+    (let* [(cf-addon (if (carry-flag? state) 1 0))]
+      (interpret-calc-op state + cf-addon peek-izx derive-carry-after-addition)))
+
   (check-eq? (~>> (-prepare-op-izx #x1f #x22)
                  (interpret-adc-izx _)
                  (cpu-state-accumulator _))
@@ -779,15 +773,6 @@
                    (interpret-adc-izx _)
                    (zero-flag? _))))
 
-(define (interpret-sbc-izx state)
-  (interpret-calc-op state - 0 peek-izx derive-carry-after-subtraction))
-
-(define (interpret-sbc-i state)
-  (interpret-calc-op state - 0 peek-pc+1 derive-carry-after-subtraction))
-
-(define (interpret-sbc-izy state)
-  (interpret-calc-op state - 0 peek-izy derive-carry-after-subtraction))
-
 (define (interpret-lda-izx state)
   (struct-copy cpu-state state
                [accumulator     (peek-izx state)]
@@ -809,6 +794,9 @@
                [program-counter (+ 2 (cpu-state-program-counter state))]))
 
 (module+ test #| sbc izx |#
+  (define (interpret-sbc-izx state)
+    (interpret-calc-op state - 0 peek-izx derive-carry-after-subtraction))
+
   (check-eq? (~>> (-prepare-op-izx #x1f #x22)
                  (interpret-sbc-izx _)
                  (cpu-state-accumulator _))
@@ -891,7 +879,7 @@
 (define (execute-cpu-step state)
   (case (peek-pc state)
     [(#x00) (interpret-brk state)]
-    [(#x01) (interpret-ora-izx state)]
+    [(#x01) (interpret-logic-op state bitwise-ior peek-izx)]
     ;; #x02 -io KIL
     ;; #x03 -io SLO izx
     ;; #x04 -io NOP zp
@@ -907,7 +895,7 @@
     [(#x0e) (interpret-asl-mem state peek-abs poke-abs 3)]
     ;; #x0f -io SLO abs
     ;; #x10 BPL rel
-    [(#x11) (interpret-ora-izy state)]
+    [(#x11) (interpret-logic-op state bitwise-ior peek-izy)]
     ;; #x12 -io KIL
     ;; #x13 -io SLO izy
     ;; #x14 -io NOP zpx
@@ -923,7 +911,7 @@
     [(#x1e) (interpret-asl-mem state peek-absx poke-absx 3)]
     ;; #x1f -io SLO abx
     [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state)]
-    [(#x21) (interpret-and-izx state)]
+    [(#x21) (interpret-logic-op state bitwise-and peek-izx)]
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
     ;; #x24 BIT zp
@@ -939,7 +927,7 @@
     ;; #x2e ROL bas
     ;; #x2f -io RIA abs
     ;; #x30 BMI rel
-    [(#x31) (interpret-and-izy state)]
+    [(#x31) (interpret-logic-op state bitwise-and peek-izy)]
     ;; #x32 -io KIL
     ;; #x33 -io RIA izy
     ;; #x34 -io NOP zpx 
@@ -955,7 +943,7 @@
     ;; #x3e ROL abx
     ;; #x3f -io RLA abx
     [(#x40) (interpret-rti state)]
-    [(#x41) (interpret-eor-izx state)]
+    [(#x41) (interpret-logic-op state bitwise-xor peek-izx)]
     ;; #x42 -io KIL
     ;; #x43 -io SRE izx
     ;; #x44 -io NOP zp
@@ -971,7 +959,7 @@
     ;; #x4e LSR abs
     ;; #x4f -io SRE abs
     ;; #x50 BVC rel
-    [(#x51) (interpret-eor-izy state)]
+    [(#x51) (interpret-logic-op state bitwise-xor peek-izy)]
     ;; #x52 -io KIL
     ;; #x53 -io SRE izy
     ;; #x54 -io NOP zpx
@@ -987,7 +975,7 @@
     ;; #x5e LSR abx
     ;; #x5f -io SRE abx
     [(#x60) (interpret-rts state)]
-    [(#x61) (interpret-adc-izx state)]
+    [(#x61) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition)]
     ;; #x62 -io KIL
     ;; #x63 -io RRA izx
     ;; #x64 -io NOP zp
@@ -995,7 +983,7 @@
     ;; #x66 ROR zp
     ;; #x67 -io RRA zp
     ;; #x68 PLA
-    [(#x69) (interpret-adc-i state)]
+    [(#x69) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition)]
     ;; #x6a ROR
     ;; #x6b -io ARR imm
     ;; #x6c JMP ind
@@ -1115,7 +1103,7 @@
     ;; #xde DEC abx
     ;; #xdf -io DCP abx
     ;; #xe0 CPX imm
-    [(#xe1) (interpret-sbc-izx state)]
+    [(#xe1) (interpret-calc-op state - 0 peek-izx derive-carry-after-subtraction)]
     ;; #xe2 -io NOP imm
     ;; #xe3 -io ISC izx
     ;; #xe4 CPX zp
@@ -1123,7 +1111,7 @@
     ;; #xe6 INC zp
     ;; #xe7 -io ISC zp
     ;; #xe8 INX
-    [(#xe9) (interpret-sbc-i state)]
+    [(#xe9) (interpret-calc-op state - 0 peek-pc+1 derive-carry-after-subtraction)]
     ;; #xea NOP
     ;; #xeb -io SBC imm
     ;; #xec CPX abs
@@ -1131,7 +1119,7 @@
     ;; #xee INC abs
     ;; #xef -io ISC abs
     ;; #xf0 BEQ rel
-    [(#xf1) (interpret-sbc-izy state)]
+    [(#xf1) (interpret-calc-op state - 0 peek-izy derive-carry-after-subtraction)]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
     ;; #xf4 -io NOP zpx
