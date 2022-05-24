@@ -869,6 +869,15 @@
   (struct-copy cpu-state (poke (+ #x100 (cpu-state-stack-pointer state)) (cpu-state-flags state))
                [stack-pointer (-1 (cpu-state-stack-pointer state))]))
 
+(define (interpret-bit-mem state peeker pc-inc)
+  (let* ((peeked (peeker state))
+         (zero?  (not (zero? (bitwise-and (cpu-state-accumulator state) peeked))))
+         (bit6   (not (zero? (bitwise-and #x40 peeked))))
+         (bit7   (not (zero? (bitwise-and #x80 peeked)))))
+    (struct-copy cpu-state state
+                 [flags (set-flags-cznv (carry-flag? state) zero? bit7 bit6)]
+                 [program-counter (+ pc-inc (cpu-state-program-counter state))])))
+
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
 ;; zp = $00
@@ -920,15 +929,15 @@
     [(#x21) (interpret-logic-op-mem state bitwise-and peek-izx 2)]
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
-    ;; #x24 BIT zp
     ;; #x26 ROL zp
+    [(#x24) (interpret-bit-mem state peek-zp 2)]
     [(#x25) (interpret-logic-op-mem state bitwise-and peek-zp 2)]
     ;; #x27 -io RLA zp
     ;; #x28 PLP zp
     [(#x29) (interpret-logic-op-mem state bitwise-and peek-pc+1 2)]
     ;; #x2a ROL
     ;; #x2b -io ANC imm
-    ;; #x2c BIT abs
+    [(#x2c) (interpret-bit-mem state peek-abs 3)]
     ;; #x2d AND abs
     ;; #x2e ROL bas
     ;; #x2f -io RIA abs
