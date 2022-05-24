@@ -11,6 +11,7 @@
 (require (for-doc scribble/base scribble/manual))
 (require data/pvector)
 (require data/collection)
+(require racket/fixnum)
 
 (module+ test 
   (require rackunit))
@@ -884,6 +885,22 @@
                  [flags (set-flags-cznv (carry-flag? state) zero? bit7 bit6)]
                  [program-counter (+ pc-inc (cpu-state-program-counter state))])))
 
+(define (interpret-ror-mem state peeker poker pc-inc)
+  (let* ((pre-value (peeker state))
+         (value (bitwise-xor (if (carry-flag? state) #x80 0)
+                             (byte (fxquotient pre-value 2)))))
+    (struct-copy cpu-state (poker state value)
+                 [flags (-adjust-carry-flag (not (zero? (bitwise-and #x01 pre-value))) (cpu-state-flags state))]
+                 [program-counter (+ pc-inc (cpu-state-program-counter state))])))
+
+(define (interpret-rol-mem state peeker poker pc-inc)
+  (let* ((pre-value (peeker state))
+         (value (bitwise-xor (if (carry-flag? state) 1 0)
+                             (byte (fx* pre-value 2)))))
+    (struct-copy cpu-state (poker state value)
+                 [flags (-adjust-carry-flag (not (zero? (bitwise-and #x80 pre-value))) (cpu-state-flags state))]
+                 [program-counter (+ pc-inc (cpu-state-program-counter state))])))
+
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
 ;; zp = $00
@@ -935,9 +952,9 @@
     [(#x21) (interpret-logic-op-mem state bitwise-and peek-izx 2)]
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
-    ;; #x26 ROL zp
     [(#x24) (interpret-bit-mem state peek-zp 2)]
     [(#x25) (interpret-logic-op-mem state bitwise-and peek-zp 2)]
+    [(#x26) (interpret-rol-mem state peek-zp poke-zp 2)]
     ;; #x27 -io RLA zp
     ;; #x28 PLP zp
     [(#x29) (interpret-logic-op-mem state bitwise-and peek-pc+1 2)]
@@ -945,23 +962,23 @@
     ;; #x2b -io ANC imm
     [(#x2c) (interpret-bit-mem state peek-abs 3)]
     ;; #x2d AND abs
-    ;; #x2e ROL bas
+    [(#x2e) (interpret-rol-mem state peek-abs poke-abs 3)]
     ;; #x2f -io RIA abs
     ;; #x30 BMI rel
     [(#x31) (interpret-logic-op-mem state bitwise-and peek-izy 2)]
     ;; #x32 -io KIL
     ;; #x33 -io RIA izy
     ;; #x34 -io NOP zpx 
-    ;; #x36 ROL zpx
     [(#x35) (interpret-logic-op-mem state bitwise-and peek-zpx 2)]
+    [(#x36) (interpret-rol-mem state peek-zpx poke-abs 2)]
     ;; #x37 -io RLA zpx
     [(#x38) (interpret-sec state)]
     [(#x39) (interpret-logic-op-mem state bitwise-and peek-absy 3)]
     ;; #x3a -io NOP
     ;; #x3b -io RLA aby
     ;; #x3c -io NOP abx
-    ;; #x3e ROL abx
     [(#x3d) (interpret-logic-op-mem state bitwise-and peek-absx 3)]
+    [(#x3e) (interpret-rol-mem state peek-zpx poke-absx 3)]
     ;; #x3f -io RLA abx
     [(#x40) (interpret-rti state)]
     [(#x41) (interpret-logic-op-mem state bitwise-xor peek-izx 2)]
@@ -1000,32 +1017,32 @@
     ;; #x62 -io KIL
     ;; #x63 -io RRA izx
     ;; #x64 -io NOP zp
-    ;; #x66 ROR zp
     [(#x65) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition 2)]
+    [(#x66) (interpret-ror-mem state peek-zp poke-zp 2)]
     ;; #x67 -io RRA zp
     ;; #x68 PLA
     [(#x69) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2)]
     ;; #x6a ROR
     ;; #x6b -io ARR imm
     ;; #x6c JMP ind
-    ;; #x6e ROR abs
     [(#x6d) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3)]
+    [(#x6e) (interpret-ror-mem state peek-abs poke-abs 3)]
     ;; #x6f -io RRA abs
     ;; #x70 BVS rel
     [(#x71) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2)]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
     ;; #x74 -io NOP zpx
-    ;; #x76 ROR zpx
     [(#x75) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition 2)]
+    [(#x76) (interpret-ror-mem state peek-zpx poke-zpx 2)]
     ;; #x77 -io RRA zpx
     [(#x78) (interpret-sei state)]
     [(#x79) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-absy derive-carry-after-addition 3)]
     ;; #x7a -io NOP
     ;; #x7b -io RRA aby
     ;; #x7c -io NOP abx
-    ;; #x7e ROR abx
     [(#x7d) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-absx derive-carry-after-addition 3)]
+    [(#x7e) (interpret-ror-mem state peek-absx poke-absx 2)]
     ;; #x7f -io RRA abx
     ;; #x80 -io NOP imm
     [(#x81) (interpret-sta-izx state)]
