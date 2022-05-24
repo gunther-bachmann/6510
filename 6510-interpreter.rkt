@@ -865,6 +865,10 @@
                  (peek _ #xf00f))
              #x22))
 
+(define (interpret-php state)
+  (struct-copy cpu-state (poke (+ #x100 (cpu-state-stack-pointer state)) (cpu-state-flags state))
+               [stack-pointer (-1 (cpu-state-stack-pointer state))]))
+
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
 ;; zp = $00
@@ -888,7 +892,7 @@
     [(#x05) (interpret-logic-op-mem state bitwise-ior peek-zp 2)]
     [(#x06) (interpret-asl-mem state peek-zp poke-zp 2)]
     ;; #x07 -io SLO zp
-    ;; #x08 PHP
+    [(#x08) (interpret-php state)]
     [(#x09) (interpret-logic-op-mem state bitwise-ior peek-pc+1 2)]
     [(#x0a) (interpret-asl state)]
     ;; #x0b -io ANC imm
