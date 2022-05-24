@@ -3,6 +3,7 @@
 ;; todo: implement compare, increment (x,y), and branch commands (using flags correctly)
 ;; todo: check whether lense implementation is better (more efficient) than struct-copy (see https://docs.racket-lang.org/lens/struct-guide.html)
 ;; reference: see c64os.com/post/6502instructions
+;; or: https://www.middle-engine.com/blog/posts/2020/06/23/programming-the-nes-the-6502-in-detail
 
 ;; (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
 (require (only-in threading ~>>))
@@ -876,6 +877,15 @@
   (struct-copy cpu-state (poke (+ #x100 (cpu-state-stack-pointer state)) (cpu-state-flags state))
                [stack-pointer (-1 (cpu-state-stack-pointer state))]))
 
+;; interpret bne (branch on not equal)
+(define (interpret-bne-rel rel state)
+  (let* ([pc (cpu-state-program-counter state)]
+         [new-pc-on-jump (+ pc 2 (if (>= #x80 rel) (- 256 rel) rel))]
+         [new-pc-no-jump (+ pc 2)]
+         [new-pc (if (zero-flag? state) new-pc-no-jump new-pc-on-jump)])
+    (struct-copy cpu-state state
+                 [program-counter new-pc])))
+
 (define (interpret-bit-mem state peeker pc-inc)
   (let* ((peeked (peeker state))
          (zero?  (not (zero? (bitwise-and (cpu-state-accumulator state) peeked))))
@@ -992,7 +1002,7 @@
     [(#x49) (interpret-logic-op-mem state bitwise-xor peek-pc+1 2)]
     ;; #x4a LSR
     ;; #x4b -io ALR imm
-    [(#x4C) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    [(#x4c) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
     [(#x4d) (interpret-logic-op-mem state bitwise-xor peek-abs 3)]
     ;; #x4e LSR abs
     ;; #x4f -io SRE abs
@@ -1164,7 +1174,7 @@
     [(#xf5) (interpret-calc-op state - 0 peek-zpx derive-carry-after-subtraction 2)]
     ;; #xf6 INC zpx
     ;; #xf7 -io ISC zpx
-    [(#xF8) (interpret-sed state)]
+    [(#xf8) (interpret-sed state)]
     [(#xf9) (interpret-calc-op state - 0 peek-absy derive-carry-after-subtraction 3)]
     ;; #xfa -io NOP
     ;; #xfb -io ISC aby
@@ -1173,15 +1183,6 @@
     ;; #xfe INC abx
     ;; #xff -io ISC abx
     [else (error "unknown opcode")]))
-
-;; interpret bne (branch on not equal)
-(define (interpret-bne-rel rel state)
-  (let* ([pc (cpu-state-program-counter state)]
-         [new-pc-on-jump (+ pc 2 (if (>= #x80 rel) (- 256 rel) rel))]
-         [new-pc-no-jump (+ pc 2)]
-         [new-pc (if (zero-flag? state) new-pc-no-jump new-pc-on-jump)])
-    (struct-copy cpu-state state
-                 [program-counter new-pc])))
 
 ;; put the raw bytes into memory (at org) and start running at org
 (define (run-interpreter org raw-bytes)
