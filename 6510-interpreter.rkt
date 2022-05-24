@@ -565,13 +565,13 @@
     (poke-indirect-woffset state zero-page-idx idy value)))
 
 
-(define (interpret-logic-op state operation peeker)
+(define (interpret-logic-op-mem state operation peeker pc-inc)
   (let* [(raw-accumulator     (operation (peeker state) (cpu-state-accumulator state)))
          (new-accumulator     (byte raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
          (new-flags           (set-flags-zn state zero? negative?))
-         (new-program-counter (+ 2 (cpu-state-program-counter state)))]
+         (new-program-counter (+ pc-inc (cpu-state-program-counter state)))]
     (struct-copy cpu-state state
                  [accumulator     new-accumulator]
                  [flags           new-flags]
@@ -663,7 +663,7 @@
 
 (module+ test #| ora indirect zero page x - ora ($I,X) ) |#
   (define (interpret-ora-izx state)
-    (interpret-logic-op state bitwise-ior peek-izx))
+    (interpret-logic-op-mem state bitwise-ior peek-izx 2))
 
   (define (-prepare-op-izx acc operand)
     (~>> (initialize-cpu)
@@ -686,7 +686,7 @@
 
 (module+ test #| ora indirect zero page y - ora ($I),Y ) |#
   (define (interpret-ora-izy state)
-    (interpret-logic-op state bitwise-ior peek-izy))
+    (interpret-logic-op-mem state bitwise-ior peek-izy 2))
 
   (define (-prepare-op-izy acc operand)
     (~>> (initialize-cpu)
@@ -710,7 +710,7 @@
 
 (module+ test #| and izx |#
   (define (interpret-and-izx state)
-    (interpret-logic-op state bitwise-and peek-izx))
+    (interpret-logic-op-mem state bitwise-and peek-izx 2))
 
   (check-eq? (~>> (-prepare-op-izx #xa5 #x5a)
                  (interpret-and-izx _)
@@ -725,7 +725,7 @@
 
 (module+ test #| eor izx |#
   (define (interpret-eor-izx state)
-    (interpret-logic-op state bitwise-xor peek-izx))
+    (interpret-logic-op-mem state bitwise-xor peek-izx 2))
 
   (check-eq? (~>> (-prepare-op-izx #xff #x5a)
                  (interpret-eor-izx _)
@@ -881,47 +881,47 @@
 (define (execute-cpu-step state)
   (case (peek-pc state)
     [(#x00) (interpret-brk state)]
-    [(#x01) (interpret-logic-op state bitwise-ior peek-izx)]
+    [(#x01) (interpret-logic-op-mem state bitwise-ior peek-izx 2)]
     ;; #x02 -io KIL
     ;; #x03 -io SLO izx
     ;; #x04 -io NOP zp
-    [(#x05) (interpret-logic-op state bitwise-ior peek-zp)]
+    [(#x05) (interpret-logic-op-mem state bitwise-ior peek-zp 2)]
     [(#x06) (interpret-asl-mem state peek-zp poke-zp 2)]
     ;; #x07 -io SLO zp
     ;; #x08 PHP
-    [(#x09) (interpret-logic-op state bitwise-ior peek-pc+1)]
+    [(#x09) (interpret-logic-op-mem state bitwise-ior peek-pc+1 2)]
     [(#x0a) (interpret-asl state)]
     ;; #x0b -io ANC imm
     ;; #x0c -io NOP abs
-    ;; #x0d ORA abs
+    [(#x0d) (interpret-logic-op-mem state bitwise-ior peek-abs 3)]
     [(#x0e) (interpret-asl-mem state peek-abs poke-abs 3)]
     ;; #x0f -io SLO abs
     ;; #x10 BPL rel
-    [(#x11) (interpret-logic-op state bitwise-ior peek-izy)]
+    [(#x11) (interpret-logic-op-mem state bitwise-ior peek-izy 2)]
     ;; #x12 -io KIL
     ;; #x13 -io SLO izy
     ;; #x14 -io NOP zpx
-    [(#x15) (interpret-logic-op state bitwise-ior peek-zpx)]
+    [(#x15) (interpret-logic-op-mem state bitwise-ior peek-zpx 2)]
     [(#x16) (interpret-asl-mem state peek-zpx poke-zpx 2)]
     ;; #x17 -io SLO zpx
     [(#x18) (interpret-clc state)]
-    ;; #x19 ORA aby
+    [(#x19) (interpret-logic-op-mem state bitwise-ior peek-absy 3)]
     ;; #x1a -io NOP
     ;; #x1b -io SLO abt
     ;; #x1c -io NOP abx
-    ;; #x1d ORA abx
+    [(#x1d) (interpret-logic-op-mem state bitwise-ior peek-absx 3)]
     [(#x1e) (interpret-asl-mem state peek-absx poke-absx 3)]
     ;; #x1f -io SLO abx
     [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state)]
-    [(#x21) (interpret-logic-op state bitwise-and peek-izx)]
+    [(#x21) (interpret-logic-op-mem state bitwise-and peek-izx 2)]
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
     ;; #x24 BIT zp
-    [(#x25) (interpret-logic-op state bitwise-and peek-zp)]
     ;; #x26 ROL zp
+    [(#x25) (interpret-logic-op-mem state bitwise-and peek-zp 2)]
     ;; #x27 -io RLA zp
     ;; #x28 PLP zp
-    [(#x29) (interpret-logic-op state bitwise-and peek-pc+1)]
+    [(#x29) (interpret-logic-op-mem state bitwise-and peek-pc+1 2)]
     ;; #x2a ROL
     ;; #x2b -io ANC imm
     ;; #x2c BIT abs
@@ -929,51 +929,51 @@
     ;; #x2e ROL bas
     ;; #x2f -io RIA abs
     ;; #x30 BMI rel
-    [(#x31) (interpret-logic-op state bitwise-and peek-izy)]
+    [(#x31) (interpret-logic-op-mem state bitwise-and peek-izy 2)]
     ;; #x32 -io KIL
     ;; #x33 -io RIA izy
     ;; #x34 -io NOP zpx 
-    [(#x35) (interpret-logic-op state bitwise-and peek-zpx)]
     ;; #x36 ROL zpx
+    [(#x35) (interpret-logic-op-mem state bitwise-and peek-zpx 2)]
     ;; #x37 -io RLA zpx
     [(#x38) (interpret-sec state)]
-    ;; #x39 AND aby
+    [(#x39) (interpret-logic-op-mem state bitwise-and peek-absy 3)]
     ;; #x3a -io NOP
     ;; #x3b -io RLA aby
     ;; #x3c -io NOP abx
-    ;; #x3d AND abx
     ;; #x3e ROL abx
+    [(#x3d) (interpret-logic-op-mem state bitwise-and peek-absx 3)]
     ;; #x3f -io RLA abx
     [(#x40) (interpret-rti state)]
-    [(#x41) (interpret-logic-op state bitwise-xor peek-izx)]
+    [(#x41) (interpret-logic-op-mem state bitwise-xor peek-izx 2)]
     ;; #x42 -io KIL
     ;; #x43 -io SRE izx
     ;; #x44 -io NOP zp
-    [(#x45) (interpret-logic-op state bitwise-xor peek-zp)]
+    [(#x45) (interpret-logic-op-mem state bitwise-xor peek-zp 2)]
     ;; #x46 LSR zp
     ;; #x47 -io SRE zp
     ;; #x48 PHA
-    [(#x49) (interpret-logic-op state bitwise-xor peek-pc+1)]
+    [(#x49) (interpret-logic-op-mem state bitwise-xor peek-pc+1 2)]
     ;; #x4a LSR
     ;; #x4b -io ALR imm
     [(#x4C) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
-    ;; #x4d EOR abs
+    [(#x4d) (interpret-logic-op-mem state bitwise-xor peek-abs 3)]
     ;; #x4e LSR abs
     ;; #x4f -io SRE abs
     ;; #x50 BVC rel
-    [(#x51) (interpret-logic-op state bitwise-xor peek-izy)]
+    [(#x51) (interpret-logic-op-mem state bitwise-xor peek-izy 2)]
     ;; #x52 -io KIL
     ;; #x53 -io SRE izy
     ;; #x54 -io NOP zpx
-    [(#x55) (interpret-logic-op state bitwise-xor peek-zpx)]
+    [(#x55) (interpret-logic-op-mem state bitwise-xor peek-zpx 2)]
     ;; #x56 LSR zpx
     ;; #x57 -io SRE zpx
     [(#x58) (interpret-cli state)]
-    ;; #x59 EOR aby
+    [(#x59) (interpret-logic-op-mem state bitwise-xor peek-absy 3)]
     ;; #x5a -io NOP
     ;; #x5b -io SRE aby
     ;; #x5c -io NOP abx
-    ;; #x5d EOR abx
+    [(#x5d) (interpret-logic-op-mem state bitwise-xor peek-absx 3)]
     ;; #x5e LSR abx
     ;; #x5f -io SRE abx
     [(#x60) (interpret-rts state)]
