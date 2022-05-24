@@ -592,8 +592,14 @@
 (define (peek-absx state)
   (peek state (+ (cpu-state-x-index state) (absolute (peek-pc+2 state) (peek-pc+1 state)))))
 
+(define (peek-absy state)
+  (peek state (+ (cpu-state-y-index state) (absolute (peek-pc+2 state) (peek-pc+1 state)))))
+
 (define (poke-absx state value)
   (poke state (+ (cpu-state-x-index state) (absolute (peek-pc+2 state) (peek-pc+1 state))) value))
+
+(define (poke-absy state value)
+  (poke state (+ (cpu-state-y-index state) (absolute (peek-pc+2 state) (peek-pc+1 state))) value))
 
 (define (peek-abs state)
   (peek state (absolute (peek-pc+2 state) (peek-pc+1 state))))
