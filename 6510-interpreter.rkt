@@ -620,19 +620,6 @@
          (idy           (cpu-state-y-index state))]
     (poke-indirect-woffset state zero-page-idx idy value)))
 
-
-(define (interpret-logic-op-mem state operation peeker pc-inc)
-  (let* [(raw-accumulator     (operation (peeker state) (cpu-state-accumulator state)))
-         (new-accumulator     (byte raw-accumulator))
-         (zero?               (zero? new-accumulator))
-         (negative?           (derive-negative raw-accumulator))
-         (new-flags           (set-flags-zn state zero? negative?))
-         (new-program-counter (+ pc-inc (cpu-state-program-counter state)))]
-    (struct-copy cpu-state state
-                 [accumulator     new-accumulator]
-                 [flags           new-flags]
-                 [program-counter new-program-counter])))
-
 (define (peek-zp state)
   (peek state
         (peek-pc+1 state)))
@@ -699,6 +686,18 @@
 
 (define (derive-carry-after-subtraction raw-accumulator)
   (> 0 raw-accumulator))
+
+(define (interpret-logic-op-mem state operation peeker pc-inc)
+  (let* [(raw-accumulator     (operation (peeker state) (cpu-state-accumulator state)))
+         (new-accumulator     (byte raw-accumulator))
+         (zero?               (zero? new-accumulator))
+         (negative?           (derive-negative raw-accumulator))
+         (new-flags           (set-flags-zn state zero? negative?))
+         (new-program-counter (word (+ pc-inc (cpu-state-program-counter state))))]
+    (struct-copy cpu-state state
+                 [accumulator     new-accumulator]
+                 [flags           new-flags]
+                 [program-counter new-program-counter])))
 
 (define (interpret-calc-op state operation add-calc-op peeker carry-deriver pc-inc)
   (let* [(accumulator         (cpu-state-accumulator state))
@@ -924,12 +923,12 @@
                   (zero-flag? _))))
 
 (define (compute-asl-result-n-flags state peeker)
-    (let* ((operand (peeker state))
+  (let* ((operand    (peeker state))
          (raw-result (* 2 operand))
-         (result (byte raw-result))
-         (carry? (< 255 raw-result))
-         (zero? (= 0 result))
-         (negative? (< 127 result)))
+         (result     (byte raw-result))
+         (carry?     (< 255 raw-result))
+         (zero?      (= 0 result))
+         (negative?  (< 127 result)))
       (list result (set-flags-czn state carry? zero? negative?))))
 
 (define (interpret-asl state)
