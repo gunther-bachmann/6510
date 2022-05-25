@@ -335,13 +335,12 @@
   (struct-copy cpu-state state
                [y-index (byte new-y-index)]))
 
-;; interpret lda (load accumulator immediate)
-(define (interpret-lda-i immediate state)
-  (struct-copy cpu-state state
-               [program-counter (word (+ 2 (cpu-state-program-counter state)))]
-               [accumulator     (byte immediate)]))
 
 (module+ test #| lda immediate |#
+
+  (define (interpret-lda-i immediate state)
+    (interpret-lda-mem state (lambda (_) (byte immediate)) 2))
+
   (check-equal? (cpu-state-accumulator (interpret-lda-i 10 (initialize-cpu)))
                 10)
   (check-equal? (cpu-state-accumulator (interpret-lda-i 0 (initialize-cpu)))
@@ -544,6 +543,12 @@
                [flags (-set-decimal-flag (cpu-state-flags state))]))
 
 (module+ test #| flags |#
+
+  ;; interpret ADC immediate (add with carry)
+  (define (interpret-adc-i state)
+    (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2))
+
+
   (check-true (carry-flag? (interpret-sec (initialize-cpu))))
   (check-false (carry-flag? (interpret-clc (interpret-sec (initialize-cpu)))))
   (check-true (interrupt-flag? (interpret-sei (initialize-cpu))))
@@ -710,11 +715,6 @@
                  [accumulator     new-accumulator]
                  [flags           new-flags]
                  [program-counter new-program-counter])))
-
-;; interpret ADC immediate (add with carry)
-(define (interpret-adc-i state)
-  (let* [(cf-addon (if (carry-flag? state) 1 0))]
-    (interpret-calc-op state + cf-addon peek-pc+1 derive-carry-after-addition 2)))
 
 (module+ test #| interpret-adc-i - checking carry flag related|#
   (check-equal? (cpu-state-accumulator (interpret-adc-i (poke (initialize-cpu) 1 10)))
