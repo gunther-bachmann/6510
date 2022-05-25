@@ -79,6 +79,32 @@
 (define (poke state address . values)
   (-pokem state address values))
 
+(define (peek-stack state)
+  (peek state
+        (+ #x100 (cpu-state-stack-pointer state))))
+
+(define (peek-stack+1 state)
+  (peek state
+        (+ #x100 (byte (+ 1 (cpu-state-stack-pointer state))))))
+
+(define (peek-stack+2 state)
+  (peek state
+        (+ #x100 (byte (+ 2 (cpu-state-stack-pointer state))))))
+
+(define (peek-stack+3 state)
+  (peek state
+        (+ #x100 (byte (+ 3 (cpu-state-stack-pointer state))))))
+
+(define (poke-stack state value)
+  (poke state
+        (+ #x100 (cpu-state-stack-pointer state))
+        value))
+
+(define (poke-stack-1 state value)
+  (poke state
+        (+ #x100 (byte (- (cpu-state-stack-pointer state) 1)))
+        value))
+
 (define (byte->hex-string num)
   (~a (number->string num 16)
       #:width 2 #:left-pad-string "0" #:align 'right))
@@ -203,8 +229,8 @@
 ;; pop low-byte, then high-byte form stack, inc by one and write this into the pc
 (define (interpret-rts state)
   (let* ([sp (cpu-state-stack-pointer state)]
-         [low-ret  (peek state (+ #x100 (byte (+ 1 sp))))]
-         [high-ret (peek state (+ #x100 (byte (+ 2 sp))))])
+         [low-ret  (peek-stack+1 state)]
+         [high-ret (peek-stack+2 state)])
     (struct-copy cpu-state state
                  [program-counter (word (+ 1 (absolute high-ret low-ret)))]
                  [stack-pointer (byte (+ sp 2))])))
@@ -217,13 +243,12 @@
               (struct-copy cpu-state state [program-counter (word (+ 3 (cpu-state-program-counter state)))])]
     [else (let* ([new-program-counter (absolute high low)]
                  [return-address (word (+ 2 (cpu-state-program-counter state)))]
-                 [sp (cpu-state-stack-pointer state)]
-                 [new-state (struct-copy cpu-state state
-                                         [program-counter (word new-program-counter)]
-                                         [stack-pointer (byte (- sp 2))])])
-            (~>> new-state
-                 (poke _ (+ #x100 sp) (high-byte return-address))
-                 (poke _ (+ #x100 (byte (- sp 1))) (low-byte return-address))))]))
+                 [sp (cpu-state-stack-pointer state)])
+            (struct-copy cpu-state (~>> state
+                                       (poke-stack _ (high-byte return-address))
+                                       (poke-stack-1 _ (low-byte return-address)))
+                         [program-counter (word new-program-counter)]
+                         [stack-pointer (byte (- sp 2))]))]))
 
 (module+ test #| jsr (jump to sub routine) |#
   (check-equal? (cpu-state-program-counter
@@ -344,9 +369,9 @@
 
 (define (interpret-rti state)
   (let* ((old-sp (cpu-state-stack-pointer state))
-         (new-status-byte (peek state (+ #x101 old-sp)))
-         (new-program-counter (absolute (peek state (+ #x102 old-sp))
-                                        (peek state (+ #x103 old-sp)))))
+         (new-status-byte (peek-stack+1 state))
+         (new-program-counter (absolute (peek-stack+2 state)
+                                        (peek-stack+3 state))))
     (struct-copy cpu-state state
                  [stack-pointer (byte (+ old-sp 3))]
                  [flags new-status-byte]
@@ -516,9 +541,15 @@
   (check-true (overflow-flag? (interpret-adc-i (poke  (interpret-adc-i (poke  (initialize-cpu) 1 #x7f)) 3 1))))
   (check-false (overflow-flag? (interpret-clv (interpret-adc-i (poke  (interpret-adc-i (poke  (initialize-cpu) 1 #x7f)) 3 1))))))
 
-(define (indirect-address state address)
+(define (peek-word-at-address state address)
     (let* [(low-byte  (peek state address))
-           (high-byte (peek state (+ address 1)))]
+           (high-byte (peek state (word (+ address 1))))]
+    (absolute high-byte low-byte)))
+
+(define (peek-word-at-pc+1 state)
+  (let* [(pc        (cpu-state-program-counter state))
+         (low-byte  (peek state (word (+ 1 pc))))
+         (high-byte (peek state (word (+ 2 pc))))]
     (absolute high-byte low-byte)))
 
 ;; get the byte that is stored at the memory address
@@ -527,10 +558,12 @@
 ;; address -> [ low ][ high ]
 ;; @high,low-> [ value ]
 (define (peek-indirect state address)
-  (peek state (indirect-address state address)))
+  (peek state
+        (peek-word-at-address state address)))
 
 (define (peek-indirect-woffset state address offset)
-  (peek state (word (+ offset (indirect-address state address)))))
+  (peek state
+        (word (+ offset (peek-word-at-address state address)))))
 
 ;; put the value at the address constructed from reading
 ;; low, high byte order from the address provided
@@ -538,10 +571,14 @@
 ;; address -> [ low ][ high ]
 ;; @high, low <- value
 (define (poke-indirect state address value)
-  (poke state (indirect-address state address) value))
+  (poke state
+        (peek-word-at-address state address)
+        value))
 
 (define (poke-indirect-woffset state address offset value)  
-  (poke state (word (+ offset (indirect-address state address))) value))
+  (poke state
+        (word (+ offset (peek-word-at-address state address)))
+        value))
 
 ;; (zp,x) ->
 (define (peek-izx state)
@@ -580,37 +617,65 @@
                  [program-counter new-program-counter])))
 
 (define (peek-zp state)
-  (peek state (peek-pc+1 state)))
+  (peek state
+        (peek-pc+1 state)))
 
 (define (poke-zp state value)
-  (peek state (peek-pc+1 state) value))
+  (poke state
+        (peek-pc+1 state)
+        value))
 
 (define (peek-zpx state)
-  (peek state (+ (cpu-state-x-index state) (peek-pc+1 state))))
+  (peek state
+        (+ (cpu-state-x-index state)
+           (peek-pc+1 state))))
 
 (define (poke-zpx state value)
-  (poke state (+ (cpu-state-x-index state) (peek-pc+1 state)) value))
+  (poke state
+        (+ (cpu-state-x-index state)
+           (peek-pc+1 state))
+        value))
+
+(define (poke-zpy state value)
+  (poke state
+        (+ (cpu-state-y-index state)
+           (peek-pc+1 state))
+        value))
 
 (define (peek-absx state)
-  (peek state (+ (cpu-state-x-index state) (absolute (peek-pc+2 state) (peek-pc+1 state)))))
+  (peek state
+        (word (+ (cpu-state-x-index state)
+                 (peek-word-at-pc+1 state)))))
 
 (define (peek-absy state)
-  (peek state (+ (cpu-state-y-index state) (absolute (peek-pc+2 state) (peek-pc+1 state)))))
+  (peek state
+        (word (+ (cpu-state-y-index state)
+                 (peek-word-at-pc+1 state)))))
 
 (define (poke-absx state value)
-  (poke state (+ (cpu-state-x-index state) (absolute (peek-pc+2 state) (peek-pc+1 state))) value))
+  (poke state
+        (word (+ (cpu-state-x-index state)
+                 (peek-word-at-pc+1 state)))
+        value))
 
 (define (poke-absy state value)
-  (poke state (+ (cpu-state-y-index state) (absolute (peek-pc+2 state) (peek-pc+1 state))) value))
+  (poke state
+        (word (+ (cpu-state-y-index state)
+                 (peek-word-at-pc+1 state)))
+        value))
 
 (define (peek-abs state)
-  (peek state (absolute (peek-pc+2 state) (peek-pc+1 state))))
+  (peek state (peek-word-at-pc+1 state)))
 
 (define (poke-abs state value)
-  (poke state (absolute (peek-pc+2 state) (peek-pc+1 state)) value))
+  (poke state
+        (peek-word-at-pc+1 state)
+        value))
 
 (define (peek-zpy state)
-  (peek state (+ (cpu-state-y-index state) (peek-pc+1 state))))
+  (peek state
+        (+ (cpu-state-y-index state)
+           (peek-pc+1 state))))
 
 (define (derive-carry-after-addition raw-accumulator)
   (< 255 raw-accumulator))
