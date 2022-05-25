@@ -858,25 +858,38 @@
                    (interpret-adc-izx _)
                    (zero-flag? _))))
 
-(define (interpret-lda-izx state)
-  (struct-copy cpu-state state
-               [accumulator     (peek-izx state)]
-               [program-counter (+ 2 (cpu-state-program-counter state))]))
+(define (interpret-lda-mem state peeker pc-inc)
+  (let ((value (peeker state)))
+    (struct-copy cpu-state state
+                 [accumulator     value]
+                 [flags           (set-flags-zn state (zero? value) (< 127 value))]
+                 [program-counter (word (+ pc-inc (cpu-state-program-counter state)))])))
 
-(define (interpret-sta-izx state)
-  (poke-izx state (cpu-state-accumulator state))
-  (struct-copy cpu-state state
-               [program-counter (+ 2 (cpu-state-program-counter state))]))
+(define (interpret-ldx-mem state peeker pc-inc)
+  (let ((value (peeker state)))
+    (struct-copy cpu-state state
+                 [x-index         value]
+                 [flags           (set-flags-zn state (zero? value) (< 127 value))]
+                 [program-counter (word (+ pc-inc (cpu-state-program-counter state)))])))
 
-(define (interpret-lda-izy state)
-  (struct-copy cpu-state state
-               [accumulator     (peek-izy state)]
-               [program-counter (+ 2 (cpu-state-program-counter state))]))
+(define (interpret-ldy-mem state peeker pc-inc)
+  (let ((value (peeker state)))
+    (struct-copy cpu-state state
+                 [y-index         value]
+                 [flags           (set-flags-zn state (zero? value) (< 127 value))]
+                 [program-counter (word (+ pc-inc (cpu-state-program-counter state)))])))
 
-(define (interpret-sta-izy state)
-  (poke-izy state (cpu-state-accumulator state))
-  (struct-copy cpu-state state
-               [program-counter (+ 2 (cpu-state-program-counter state))]))
+(define (interpret-sta-mem state poker pc-inc)  
+  (struct-copy cpu-state (poker state (cpu-state-accumulator state))
+               [program-counter (word (+ pc-inc (cpu-state-program-counter state)))]))
+
+(define (interpret-sty-mem state poker pc-inc)  
+  (struct-copy cpu-state (poker state (cpu-state-y-index state))
+               [program-counter (word (+ pc-inc (cpu-state-program-counter state)))]))
+
+(define (interpret-stx-mem state poker pc-inc)  
+  (struct-copy cpu-state (poker state (cpu-state-x-index state))
+               [program-counter (word (+ pc-inc (cpu-state-program-counter state)))]))
 
 (module+ test #| sbc izx |#
   (define (interpret-sbc-izx state)
