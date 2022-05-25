@@ -420,8 +420,14 @@
 (define (carry-flag? state)
   (eq? #x01 (bitwise-and #x01 (cpu-state-flags state))))
 
+(define (not-carry-flag? state)
+  (not (carry-flag? state)))
+
 (define (zero-flag? state)
   (eq? #x02 (bitwise-and #x02 (cpu-state-flags state))))
+
+(define (not-zero-flag? state)
+  (not (zero-flag? state)))
 
 (define (interrupt-flag? state)
   (eq? #x04 (bitwise-and #x04 (cpu-state-flags state))))
@@ -435,8 +441,14 @@
 (define (overflow-flag? state)
   (eq? #x40 (bitwise-and #x40 (cpu-state-flags state))))
 
+(define (not-overflow-flag? state)
+  (not (overflow-flag? state)))
+
 (define (negative-flag? state)
   (eq? #x80 (bitwise-and #x80 (cpu-state-flags state))))
+
+(define (not-negative-flag? state)
+  (not (negative-flag? state)))
 
 (define (-set-carry-flag flags)
   (bitwise-xor #x01 flags))
