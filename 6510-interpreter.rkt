@@ -1038,7 +1038,7 @@
     [(#x0d) (interpret-logic-op-mem state bitwise-ior peek-abs 3)]
     [(#x0e) (interpret-asl-mem state peek-abs poke-abs 3)]
     ;; #x0f -io SLO abs
-    ;; #x10 BPL rel
+    [(#x10) (interpret-branch-rel state not-negative-flag?)]
     [(#x11) (interpret-logic-op-mem state bitwise-ior peek-izy 2)]
     ;; #x12 -io KIL
     ;; #x13 -io SLO izy
@@ -1062,7 +1062,7 @@
     [(#x25) (interpret-logic-op-mem state bitwise-and peek-zp 2)]
     [(#x26) (interpret-rol-mem state peek-zp poke-zp 2)]
     ;; #x27 -io RLA zp
-    ;; #x28 PLP zp
+    [(#x28) (interpret-plp state)]
     [(#x29) (interpret-logic-op-mem state bitwise-and peek-pc+1 2)]
     ;; #x2a ROL
     ;; #x2b -io ANC imm
@@ -1070,7 +1070,7 @@
     ;; #x2d AND abs
     [(#x2e) (interpret-rol-mem state peek-abs poke-abs 3)]
     ;; #x2f -io RIA abs
-    ;; #x30 BMI rel
+    [(#x30) (interpret-branch-rel state negative-flag?)]
     [(#x31) (interpret-logic-op-mem state bitwise-and peek-izy 2)]
     ;; #x32 -io KIL
     ;; #x33 -io RIA izy
@@ -1102,7 +1102,7 @@
     [(#x4d) (interpret-logic-op-mem state bitwise-xor peek-abs 3)]
     ;; #x4e LSR abs
     ;; #x4f -io SRE abs
-    ;; #x50 BVC rel
+    [(#x50) (interpret-branch-rel state not-overflow-flag?)]
     [(#x51) (interpret-logic-op-mem state bitwise-xor peek-izy 2)]
     ;; #x52 -io KIL
     ;; #x53 -io SRE izy
@@ -1135,6 +1135,7 @@
     [(#x6e) (interpret-ror-mem state peek-abs poke-abs 3)]
     ;; #x6f -io RRA abs
     ;; #x70 BVS rel
+    [(#x70) (interpret-branch-rel state overflow-flag?)]
     [(#x71) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2)]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
@@ -1151,68 +1152,68 @@
     [(#x7e) (interpret-ror-mem state peek-absx poke-absx 2)]
     ;; #x7f -io RRA abx
     ;; #x80 -io NOP imm
-    [(#x81) (interpret-sta-izx state)]
+    [(#x81) (interpret-sta-mem state poke-izx 2)]
     ;; #x82 -io NOP imm
     ;; #x83 -io SAX izx
-    ;; #x84 STY zp
-    ;; #x85 STA zp
-    ;; #x86 STX zp
+    [(#x84) (interpret-sty-mem state poke-zp 2)]
+    [(#x85) (interpret-sta-mem state poke-zp 2)]
+    [(#x86) (interpret-stx-mem state poke-zp 2)]
     ;; #x87 -io SAX zp
     ;; #x88 DEY
     ;; #x89 -io NOP imm
     ;; #x8a TXA
     ;; #x8b -io XAA imm
-    ;; #x8c STY abs
-    ;; #x8d STA abs
-    ;; #x8e STX abs
+    [(#x8c) (interpret-sty-mem state poke-abs 3)]
+    [(#x8d) (interpret-sta-mem state poke-abs 3)]
+    [(#x8e) (interpret-stx-mem state poke-abs 3)]
     ;; #x8f -io SAX abs
-    ;; #x90 BCC rel
-    [(#x91) (interpret-sta-izy state)]
+    [(#x90) (interpret-branch-rel state not-carry-flag?)]
+    [(#x91) (interpret-sta-mem state peek-izy 2)]
     ;; #x92 -io KIL
-    ;; #x93 0io AHX izy
-    ;; #x94 STY zpx
-    ;; #x95 STA zpx
-    ;; #x96 STX zpx
+    ;; #x93 -io AHX izy
+    [(#x94) (interpret-sty-mem state poke-zpx 2)]
+    [(#x95) (interpret-sta-mem state poke-zpx 2)]
+    [(#x96) (interpret-stx-mem state poke-zpy 2)]
     ;; #x97 -io SAX zpy
     ;; #x98 TYA
-    ;; #x99 STA aby
+    [(#x99) (interpret-sta-mem state poke-absy 3)]
     ;; #x9a TXS
     ;; #x9b -io TAS avt
     ;; #x9c -io SHY abx
-    ;; #x9d STA abx
+    [(#x9d) (interpret-sta-mem state poke-absx 3)]
     ;; #x9e -io SHX aby
     ;; #x9f -io AHX aby
-    ;; #xa0 LDY imm
-    [(#xa1) (interpret-lda-izx state)]
-    ;; #xa2 LDX imm
+    [(#xa0) (interpret-ldy-mem state peek-pc+1 2)]
+    [(#xa1) (interpret-lda-mem state peek-izx 2)]
+    [(#xa2) (interpret-ldx-mem state peek-pc+1 2)]
     ;; #xa3 -io LAX izx
-    ;; #xa4 LDY zp
-    ;; #xa5 LDA zp
-    ;; #xa6 LDX zp
+    [(#xa4) (interpret-ldy-mem state peek-zp 2)]
+    [(#xa5) (interpret-lda-mem state peek-zp 2)]
+    [(#xa6) (interpret-ldx-mem state peek-zp 2)]
     ;; #xa7 -io LAX zp
     ;; #xa8 TAY
-    [(#xA9) (interpret-lda-i (peek-pc+1 state) state)]
+    [(#xA9) (interpret-lda-mem state peek-pc+1 2)]
     ;; #xaa TAX
     ;; #xab -io LAX imm
-    ;; #xac LDY abs
-    ;; #xad LDA abs
-    ;; #xae LDX abs
+    [(#xac) (interpret-ldy-mem state peek-abs 3)]
+    [(#xad) (interpret-lda-mem state peek-abs 3)]
+    [(#xae) (interpret-ldx-mem state peek-abs 3)]
     ;; #xaf -io LAX abs
-    ;; #xb0 BCS rel
-    [(#xb1) (interpret-lda-izy state)]
+    [(#xb0) (interpret-branch-rel state carry-flag?)]
+    [(#xb1) (interpret-lda-mem state peek-izy 2)]
     ;; #xb2 -io KIL
     ;; #xb3 -io LAX izy
-    ;; #xb4 LDY zpx
-    ;; #xb5 LDA zpx
-    ;; #xb6 LDX zpy
+    [(#xb4) (interpret-ldy-mem state peek-zpx 2)]
+    [(#xb5) (interpret-lda-mem state peek-zpx 2)]
+    [(#xb6) (interpret-ldx-mem state peek-zpy 2)]
     ;; #xb7 -io LAX zpy
     [(#xB8) (interpret-clv state)]
     ;; #xb9 LDA aby
     ;; #xba TSX
     ;; #xbb -io LAS aby
-    ;; #xbc LDY abx
-    ;; #xbd LDA abx
-    ;; #xbe LDX aby
+    [(#xbc) (interpret-ldy-mem state peek-absx 3)]
+    [(#xbd) (interpret-lda-mem state peek-absx 3)]
+    [(#xbe) (interpret-ldx-mem state peek-absy 3)]
     ;; #xbf -io LAX aby
     ;; #xc0 CPY imm
     ;; #xc1 CMP izx
@@ -1230,7 +1231,7 @@
     ;; #xcd CMP abs
     ;; #xce DEC abs
     ;; #xcf -io DCP abs
-    [(#xD0) (interpret-bne-rel (peek-pc+1 state) state)]
+    [(#xd0) (interpret-branch-rel state not-zero-flag?)]
     ;; #xd1 CMP izy
     ;; #xd2 -io KIL
     ;; #xd3 -io DCP izy
@@ -1262,7 +1263,7 @@
     [(#xed) (interpret-calc-op state - 0 peek-abs derive-carry-after-subtraction 3)]
     ;; #xee INC abs
     ;; #xef -io ISC abs
-    ;; #xf0 BEQ rel
+    [(#xf0) (interpret-branch-rel state zero-flag?)]
     [(#xf1) (interpret-calc-op state - 0 peek-izy derive-carry-after-subtraction 2)]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
