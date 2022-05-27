@@ -1,3 +1,4 @@
+#! /usr/bin/env racket
 #lang racket
 
 (require "6510.rkt")
