@@ -1044,6 +1044,26 @@
                  [flags           new-flags]
                  [program-counter (next-program-counter state pc-inc)])))
 
+(define (compute-lsr-result-n-flags state peeker)
+  (let* ((pre-value (peeker state))
+        (value (fxrshift pre-value 1)))
+    (list
+     value
+     (set-flags-czn state (bit0? pre-value) (zero? value) (bit7? value)))))
+
+(define (interpret-lsr state peeker)
+  (match-let (((list result new-flags) (compute-lsr-result-n-flags state peeker)))
+    (struct-copy cpu-state state
+                 [accumulator     result]
+                 [flags           new-flags]
+                 [program-counter (next-program-counter state 1)])))
+
+(define (interpret-lsr-mem state peeker poker pc-inc)
+  (match-let (((list result new-flags) (compute-lsr-result-n-flags state peeker)))
+    (struct-copy cpu-state (poker state result)
+                 [flags           new-flags]
+                 [program-counter (next-program-counter state pc-inc)])))
+
 (define (interpret-plp state)
   (struct-copy cpu-state state
                [flags           (peek-stack state)]
@@ -1118,6 +1138,29 @@
                (struct-copy cpu-state (initialize-cpu) [y-index 11])
                cpu-state-y-index))
              11))
+
+(define (interpret-jmp-ind state)
+  (struct-copy cpu-state state
+               [program-counter (peek-word-at-address state (peek-abs state))]))
+
+(define (interpret-compare state peeker1 peeker2 pc-inc)
+  (let* ((value1 (peeker1 state))
+         (value2 (peeker2 state))
+         (diff (fx- value1 value2)))
+    (struct-copy cpu-state state
+                 [flags (set-flags-czn state (not-bit7? diff) (zero? diff) (bit7? diff))]
+                 [program-counter (next-program-counter state pc-inc)])))
+
+(define (interpret-crement-mem state op peeker poker pc-inc)
+  (let* ((pre-value (peeker state))
+         (value (byte (op pre-value 1))))
+    (struct-copy cpu-state (poker state value)
+                 [flags (set-flags-zn state (zero? value) (bit7? value))]
+                 [program-counter (next-program-counter state pc-inc)])))
+
+(define (interpret-nop state)
+  (struct-copy cpu-state state
+               [program-counter (next-program-counter state 1)]))
 
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
@@ -1204,15 +1247,15 @@
     ;; #x43 -io SRE izx
     ;; #x44 -io NOP zp
     [(#x45) (interpret-logic-op-mem state bitwise-xor peek-zp 2)]
-    ;; #x46 LSR zp
+    [(#x46) (interpret-lsr-mem state peek-zp poke-zp 2)]
     ;; #x47 -io SRE zp
     [(#x48) (interpret-pha state)]
     [(#x49) (interpret-logic-op-mem state bitwise-xor peek-pc+1 2)]
-    ;; #x4a LSR
+    [(#x4a) (interpret-lsr state peek-zp)]
     ;; #x4b -io ALR imm
     [(#x4c) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
     [(#x4d) (interpret-logic-op-mem state bitwise-xor peek-abs 3)]
-    ;; #x4e LSR abs
+    [(#x4e) (interpret-lsr-mem state peek-abs poke-abs 3)]
     ;; #x4f -io SRE abs
     [(#x50) (interpret-branch-rel state not-overflow-flag?)]
     [(#x51) (interpret-logic-op-mem state bitwise-xor peek-izy 2)]
@@ -1220,7 +1263,7 @@
     ;; #x53 -io SRE izy
     ;; #x54 -io NOP zpx
     [(#x55) (interpret-logic-op-mem state bitwise-xor peek-zpx 2)]
-    ;; #x56 LSR zpx
+    [(#x56) (interpret-lsr-mem state peek-zpx poke-zpx 2)]
     ;; #x57 -io SRE zpx
     [(#x58) (interpret-cli state)]
     [(#x59) (interpret-logic-op-mem state bitwise-xor peek-absy 3)]
@@ -1228,7 +1271,7 @@
     ;; #x5b -io SRE aby
     ;; #x5c -io NOP abx
     [(#x5d) (interpret-logic-op-mem state bitwise-xor peek-absx 3)]
-    ;; #x5e LSR abx
+    [(#x5e) (interpret-lsr-mem state peek-absx poke-absx 3)]
     ;; #x5f -io SRE abx
     [(#x60) (interpret-rts state)]
     [(#x61) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition 2)]
@@ -1242,7 +1285,7 @@
     [(#x69) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2)]
     [(#x6a) (interpret-ror state)]
     ;; #x6b -io ARR imm
-    ;; #x6c JMP ind
+    [(#x6c) (interpret-jmp-ind state)]
     [(#x6d) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3)]
     [(#x6e) (interpret-ror-mem state peek-abs poke-abs 3)]
     ;; #x6f -io RRA abs
@@ -1326,69 +1369,69 @@
     [(#xbd) (interpret-lda-mem state peek-absx 3)]
     [(#xbe) (interpret-ldx-mem state peek-absy 3)]
     ;; #xbf -io LAX aby
-    ;; #xc0 CPY imm
-    ;; #xc1 CMP izx
+    [(#xc0) (interpret-compare state cpu-state-y-index peek-pc+1 2)]
+    [(#xc1) (interpret-compare state cpu-state-accumulator peek-izx 2)]
     ;; #xc2 -io NOP imm
     ;; #xc3 -io DCP izx
-    ;; #xc4 CPY zp
-    ;; #xc5 CMP zp
-    ;; #xc6 DEC zp
+    [(#xc4) (interpret-compare state cpu-state-y-index peek-zp 2)]
+    [(#xc5) (interpret-compare state cpu-state-accumulator peek-zp 2)]
+    [(#xc6) (interpret-crement-mem state fx- peek-zp poke-zp 2)]
     ;; #xc7 -io DCP zp
     [(#xc8) (interpret-modify-y-index state 1)]
-    ;; #xc9 CMP imm
+    [(#xc9) (interpret-compare state cpu-state-accumulator peek-pc+1 2)]
     [(#xca) (interpret-modify-x-index state -1)]
     ;; #xcb -io AXS imm
-    ;; #xcc CPY abs
-    ;; #xcd CMP abs
-    ;; #xce DEC abs
+    [(#xcc) (interpret-compare state cpu-state-y-index peek-abs 3)]
+    [(#xcd) (interpret-compare state cpu-state-accumulator peek-abs 3)]
+    [(#xce) (interpret-crement-mem state fx- peek-abs poke-abs 3)]
     ;; #xcf -io DCP abs
     [(#xd0) (interpret-branch-rel state not-zero-flag?)]
-    ;; #xd1 CMP izy
+    [(#xd1) (interpret-compare state cpu-state-accumulator peek-izy 3)]
     ;; #xd2 -io KIL
     ;; #xd3 -io DCP izy
     ;; #xd4 -io NOP zpx
-    ;; #xd5 CMP zpx
-    ;; #xd6 DEC zpx
+    [(#xd5) (interpret-compare state cpu-state-accumulator peek-zpx 3)]
+    [(#xd6) (interpret-crement-mem state fx- peek-zpx poke-zpx 2)]
     ;; #xd7 -io DCP zpx
-    [(#xD8) (interpret-cld state)]
-    ;; #xd9 CMP aby
-    ;; #xda -io NOP 
+    [(#xd8) (interpret-cld state)]
+    [(#xd9) (interpret-compare state cpu-state-accumulator peek-absy 3)]
+    ;; #xda -io NOP
     ;; #xdb -io DCP aby
     ;; #xdc -io NOP abx
-    ;; #xdd CMP abx
-    ;; #xde DEC abx
+    [(#xdd) (interpret-compare state cpu-state-accumulator peek-absx 3)]
+    [(#xde) (interpret-crement-mem state fx- peek-absx poke-absx 3)]
     ;; #xdf -io DCP abx
-    ;; #xe0 CPX imm
+    [(#xe0) (interpret-compare state cpu-state-x-index peek-pc+1 2)]
     [(#xe1) (interpret-calc-op state fx- 0 peek-izx derive-carry-after-subtraction 2)]
     ;; #xe2 -io NOP imm
     ;; #xe3 -io ISC izx
-    ;; #xe4 CPX zp
-    ;; #xe6 INC zp
+    [(#xe4) (interpret-compare state cpu-state-x-index peek-zp 2)]
     [(#xe5) (interpret-calc-op state fx- 0 peek-zp derive-carry-after-subtraction 2)]
+    [(#xe6) (interpret-crement-mem state fx+ peek-zp poke-zp 2)]
     ;; #xe7 -io ISC zp
     [(#xe8) (interpret-modify-x-index state 1)]
-    ;; #xea NOP
     [(#xe9) (interpret-calc-op state fx- 0 peek-pc+1 derive-carry-after-subtraction 2)]
+    [(#xea) (interpret-nop state)]
     ;; #xeb -io SBC imm
-    ;; #xec CPX abs
-    ;; #xee INC abs
+    [(#xec) (interpret-compare state cpu-state-x-index peek-abs 3)]
     [(#xed) (interpret-calc-op state fx- 0 peek-abs derive-carry-after-subtraction 3)]
+    [(#xee) (interpret-crement-mem state fx+ peek-abs poke-abs 3)]
     ;; #xef -io ISC abs
     [(#xf0) (interpret-branch-rel state zero-flag?)]
     [(#xf1) (interpret-calc-op state fx- 0 peek-izy derive-carry-after-subtraction 2)]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
     ;; #xf4 -io NOP zpx
-    ;; #xf6 INC zpx
     [(#xf5) (interpret-calc-op state fx- 0 peek-zpx derive-carry-after-subtraction 2)]
+    [(#xf6) (interpret-crement-mem state fx+ peek-zpx poke-zpx 2)]
     ;; #xf7 -io ISC zpx
     [(#xf8) (interpret-sed state)]
     [(#xf9) (interpret-calc-op state fx- 0 peek-absy derive-carry-after-subtraction 3)]
     ;; #xfa -io NOP
     ;; #xfb -io ISC aby
     ;; #xfc -io NOP abx
-    ;; #xfe INC abx
     [(#xfd) (interpret-calc-op state fx- 0 peek-absx derive-carry-after-subtraction 3)]
+    [(#xfe) (interpret-crement-mem state fx+ peek-absx poke-absx 3)]
     ;; #xff -io ISC abx
     [else (error "unknown opcode")]))
 
