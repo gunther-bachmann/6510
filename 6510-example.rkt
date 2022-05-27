@@ -3,6 +3,7 @@
 
         *=$C000        ; origin
 
+        ldx #$05       ; repeat .. times
 :some
         lda #$41       ; load character A (dec 65)
         jsr :cout      ; print this character to screen
@@ -10,11 +11,12 @@
         jsr :cout      ; print this character to screen
         lda #%00001010 ; $0a
         jsr :cout
- :end   rts            ; end of execution
+ :end   dex
+        bne :some
+        brk            ; end of execution
 
  :cout  jsr $ffd2
         rts
-        brk
 
         .data $01, $2F, 255, %1001
 
