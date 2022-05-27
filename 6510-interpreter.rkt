@@ -189,6 +189,7 @@
 (module+ test #| state->string |#
   (check-equal? (state->string (initialize-cpu))
                 "A  = x00,    X = x00, Y = x00\nPC = x0000, SP = xff\nN=_, O=_, B=_, D=_, I=_, Z=_, C=_"))
+
 (define (print-state state)
   (printf "~a\n "(state->string state))
   state)
@@ -568,7 +569,7 @@
 
   ;; interpret ADC immediate (add with carry)
   (define (interpret-adc-i state)
-    (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2))
+    (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2))
 
 
   (check-true (carry-flag? (interpret-sec (initialize-cpu))))
@@ -845,7 +846,7 @@
 (module+ test #| adc izx |#
   (define (interpret-adc-izx state)
     (let* [(cf-addon (if (carry-flag? state) 1 0))]
-      (interpret-calc-op state + cf-addon peek-izx derive-carry-after-addition 2)))
+      (interpret-calc-op state fx+ cf-addon peek-izx derive-carry-after-addition 2)))
 
   (check-eq? (~>> (-prepare-op-izx #x1f #x22)
                  (interpret-adc-izx _)
@@ -912,7 +913,7 @@
 
 (module+ test #| sbc izx |#
   (define (interpret-sbc-izx state)
-    (interpret-calc-op state - 0 peek-izx derive-carry-after-subtraction 2))
+    (interpret-calc-op state fx- 0 peek-izx derive-carry-after-subtraction 2))
 
   (check-eq? (~>> (-prepare-op-izx #x1f #x22)
                  (interpret-sbc-izx _)
@@ -1228,35 +1229,35 @@
     ;; #x5e LSR abx
     ;; #x5f -io SRE abx
     [(#x60) (interpret-rts state)]
-    [(#x61) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition 2)]
+    [(#x61) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition 2)]
     ;; #x62 -io KIL
     ;; #x63 -io RRA izx
     ;; #x64 -io NOP zp
-    [(#x65) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition 2)]
+    [(#x65) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition 2)]
     [(#x66) (interpret-ror-mem state peek-zp poke-zp 2)]
     ;; #x67 -io RRA zp
     [(#x68) (interpret-pla state)]
-    [(#x69) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2)]
+    [(#x69) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2)]
     [(#x6a) (interpret-ror state)]
     ;; #x6b -io ARR imm
     ;; #x6c JMP ind
-    [(#x6d) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3)]
+    [(#x6d) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3)]
     [(#x6e) (interpret-ror-mem state peek-abs poke-abs 3)]
     ;; #x6f -io RRA abs
     [(#x70) (interpret-branch-rel state overflow-flag?)]
-    [(#x71) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2)]
+    [(#x71) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2)]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
     ;; #x74 -io NOP zpx
-    [(#x75) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition 2)]
+    [(#x75) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition 2)]
     [(#x76) (interpret-ror-mem state peek-zpx poke-zpx 2)]
     ;; #x77 -io RRA zpx
     [(#x78) (interpret-sei state)]
-    [(#x79) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-absy derive-carry-after-addition 3)]
+    [(#x79) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absy derive-carry-after-addition 3)]
     ;; #x7a -io NOP
     ;; #x7b -io RRA aby
     ;; #x7c -io NOP abx
-    [(#x7d) (interpret-calc-op state + (if (carry-flag? state) 1 0) peek-absx derive-carry-after-addition 3)]
+    [(#x7d) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absx derive-carry-after-addition 3)]
     [(#x7e) (interpret-ror-mem state peek-absx poke-absx 2)]
     ;; #x7f -io RRA abx
     ;; #x80 -io NOP imm
@@ -1356,36 +1357,36 @@
     ;; #xde DEC abx
     ;; #xdf -io DCP abx
     ;; #xe0 CPX imm
-    [(#xe1) (interpret-calc-op state - 0 peek-izx derive-carry-after-subtraction 2)]
+    [(#xe1) (interpret-calc-op state fx- 0 peek-izx derive-carry-after-subtraction 2)]
     ;; #xe2 -io NOP imm
     ;; #xe3 -io ISC izx
     ;; #xe4 CPX zp
-    [(#xe5) (interpret-calc-op state - 0 peek-zp derive-carry-after-subtraction 2)]
     ;; #xe6 INC zp
+    [(#xe5) (interpret-calc-op state fx- 0 peek-zp derive-carry-after-subtraction 2)]
     ;; #xe7 -io ISC zp
     [(#xe8) (interpret-modify-x-index state 1)]
-    [(#xe9) (interpret-calc-op state - 0 peek-pc+1 derive-carry-after-subtraction 2)]
     ;; #xea NOP
+    [(#xe9) (interpret-calc-op state fx- 0 peek-pc+1 derive-carry-after-subtraction 2)]
     ;; #xeb -io SBC imm
     ;; #xec CPX abs
-    [(#xed) (interpret-calc-op state - 0 peek-abs derive-carry-after-subtraction 3)]
     ;; #xee INC abs
+    [(#xed) (interpret-calc-op state fx- 0 peek-abs derive-carry-after-subtraction 3)]
     ;; #xef -io ISC abs
     [(#xf0) (interpret-branch-rel state zero-flag?)]
-    [(#xf1) (interpret-calc-op state - 0 peek-izy derive-carry-after-subtraction 2)]
+    [(#xf1) (interpret-calc-op state fx- 0 peek-izy derive-carry-after-subtraction 2)]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
     ;; #xf4 -io NOP zpx
-    [(#xf5) (interpret-calc-op state - 0 peek-zpx derive-carry-after-subtraction 2)]
     ;; #xf6 INC zpx
+    [(#xf5) (interpret-calc-op state fx- 0 peek-zpx derive-carry-after-subtraction 2)]
     ;; #xf7 -io ISC zpx
     [(#xf8) (interpret-sed state)]
-    [(#xf9) (interpret-calc-op state - 0 peek-absy derive-carry-after-subtraction 3)]
+    [(#xf9) (interpret-calc-op state fx- 0 peek-absy derive-carry-after-subtraction 3)]
     ;; #xfa -io NOP
     ;; #xfb -io ISC aby
     ;; #xfc -io NOP abx
-    [(#xfd) (interpret-calc-op state - 0 peek-absx derive-carry-after-subtraction 3)]
     ;; #xfe INC abx
+    [(#xfd) (interpret-calc-op state fx- 0 peek-absx derive-carry-after-subtraction 3)]
     ;; #xff -io ISC abx
     [else (error "unknown opcode")]))
 
