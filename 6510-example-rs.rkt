@@ -7,13 +7,17 @@
 
 (define program
   (list
+   (LDX "#$05")
+   (LABEL ("<label>") ":NEXT")
    (LDA "#$41" )
    (JSR ":COUT")
    (ADC "#$01")
    (JSR ":COUT")
    (LDA "#%00001010") ; line feed
    (JSR ":COUT")
-   (RTS)
+   (DEX)
+   (BNE ":NEXT")
+   (BRK)
 
    (LABEL ("<label>") ":COUT")
    (JSR "$FFD2")
@@ -38,8 +42,9 @@
 (define resolved-program (replace-labels program org))
 (define raw-bytes (commands->bytes org program))
 (define data (6510-load (initialize-cpu) org raw-bytes))
-(define executable-program (set-pc-in-state data org))
+(define executable-program (with-program-counter data org))
 
-;; (displayln "program execution:")
-;; (let ([_ (run executable-program))])
+(displayln "program execution:")
+(print-state (run executable-program))
+;; (let ([_ (run executable-program)])
 ;;   (void))

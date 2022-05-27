@@ -34,7 +34,7 @@
     (require rackunit)))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program create-image-with-program
-         ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC INC LDA JSR RTS STA
+         ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC DEX INC LDA LDX JSR RTS STA
          LABEL BYTES)
 
 
@@ -703,6 +703,7 @@
   (syntax-case stx ()
     [(_ op option-list bytecode-list)
      #'(begin
+         (define-opcode-functions/macro op option-list bytecode-list no-arg "" empty (list ''opcode 'byte-code-place))
          (define-opcode-functions/macro op option-list bytecode-list implicit "_impl" empty (list ''opcode 'byte-code-place))
          (define-opcode-functions/macro op option-list bytecode-list relative "_rel" value (list ''rel-opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list accumulator "_acc" empty (list ''opcode 'byte-code-place))
@@ -811,6 +812,10 @@
   '(zero-page absolute absolute-x zero-page-x)
   '(#xc6      #xce     #xde       #xd6))
 
+(define-opcode-functions DEX
+  '(implicit)
+  '(#xCA))
+
 (define-opcode-functions INC
   '(zero-page absolute absolute-x zero-page-x)
   '(#xe6      #xee     #xfe       #xf6))
@@ -835,7 +840,7 @@
   '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
   '(#xA9      #xA5      #xB5        #xAD     #xBD       #xB9       #xA1       #xB1))
 
-(module+ test
+(module+ test #| lda |#
   (check-match (LDA "#$10")
                '('opcode #xA9 16))
 
@@ -859,6 +864,14 @@
 
   (check-match (LDA < "$A0", x > )
                '('opcode #xA1 #xA0)))
+
+(define-opcode-functions LDX
+  '(immediate zero-page zero-page-y absolute absolute-y)
+  '(#xA2      #xA6      #xB6        #xAE     #xBE))
+
+(module+ test #| ldx |#
+  (check-match (LDX "#$10")
+               '('opcode #xA2 16)))
 
 (define-opcode-functions RTS '(implicit) '(#x60))
 
