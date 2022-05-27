@@ -1003,11 +1003,12 @@
                  [program-counter (next-program-counter state pc-inc)])))
 
 (define (compute-ror-result-n-flags state peeker)
-  (let ((pre-value (peeker state)))
+  (let* ((pre-value (peeker state))
+        (value (bitwise-xor (if (carry-flag? state) #x80 0)
+                            (fxrshift pre-value 1))))
     (list
-     (bitwise-xor (if (carry-flag? state) #x80 0)
-                  (byte (fxquotient pre-value 2)))
-     (-adjust-carry-flag (bit0? pre-value) (cpu-state-flags state)))))
+     value
+     (set-flags-czn state (bit0? pre-value) (zero? value) (bit7? value)))))
 
 (define (interpret-ror state)
   (match-let (((list result new-flags) (compute-ror-result-n-flags state cpu-state-accumulator)))    
@@ -1023,11 +1024,12 @@
                  [program-counter (next-program-counter state pc-inc)])))
 
 (define (compute-rol-result-n-flags state peeker)
-  (let ((pre-value (peeker state)))
+  (let* ((pre-value (peeker state))
+        (value (bitwise-xor (if (carry-flag? state) 1 0)
+                  (byte (fxlshift pre-value 1)))))
     (list
-     (bitwise-xor (if (carry-flag? state) 1 0)
-                  (byte (fx* pre-value 2)))
-     (-adjust-carry-flag (bit7? pre-value) (cpu-state-flags state)))))
+     value
+     (set-flags-czn state (bit7? pre-value) (zero? value) (bit7? value)))))
 
 (define (interpret-rol state)
   (match-let (((list result new-flags) (compute-rol-result-n-flags state cpu-state-accumulator)))    
@@ -1055,12 +1057,12 @@
                [program-counter (next-program-counter state 1)]))
 
 (define (interpret-pha state)
-  (struct-copy cpu-state (poke-stack (cpu-state-accumulator state))
+  (struct-copy cpu-state (poke-stack state (cpu-state-accumulator state))
                [stack-pointer   (byte (fx- (cpu-state-stack-pointer state) 1))]
                [program-counter (next-program-counter state 1)]))
 
 (define (interpret-php state)
-  (struct-copy cpu-state (poke-stack (cpu-state-flags state))
+  (struct-copy cpu-state (poke-stack state (cpu-state-flags state))
                [stack-pointer   (byte (fx- (cpu-state-stack-pointer state) 1))]
                [program-counter (next-program-counter state 1)]))
 
