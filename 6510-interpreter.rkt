@@ -17,7 +17,7 @@
 (module+ test 
   (require rackunit))
 
-(provide run-interpreter reset-cpu initialize-cpu peek poke run set-pc-in-state 6510-load)
+(provide print-state run-interpreter reset-cpu initialize-cpu peek poke run with-program-counter 6510-load)
 
 (struct cpu-state (program-counter ;; pointer to current program execution (16 bit)
                    flags           ;; flag register (8 bit)
@@ -38,6 +38,26 @@
 ;; flags all negative, program counter at 0, registers all 0, sp = 0xFF
 (define (initialize-cpu)
   (cpu-state 0 0 (make-pvector 65536 0) 0 0 0 #xff))
+
+(define (with-program-counter state word)
+  (struct-copy cpu-state state
+               [program-counter word]))
+
+(define (with-flags state word)
+  (struct-copy cpu-state state
+               [flags word]))
+
+(define (with-accumulator state word)
+  (struct-copy cpu-state state
+               [accumulator word]))
+
+(define (with-x-index state word)
+  (struct-copy cpu-state state
+               [x-index word]))
+
+(define (with-y-index state word)
+  (struct-copy cpu-state state
+               [y-index word]))
 
 (define (next-program-counter state delta)
   (word (fx+ delta (cpu-state-program-counter state))))
@@ -229,10 +249,6 @@
 (define (peek-pc+2 state)
   (peek state (word (fx+ 2 (cpu-state-program-counter state)))))
 
-;; return state with modified program counter
-(define (set-pc-in-state state pc)
-  (struct-copy cpu-state state [program-counter (word pc)]))
-
 ;; execute if pc does not point at a 0 byte (brk)
 (define (run state)
   (if  (eq? 0 (peek-pc state))
@@ -255,7 +271,7 @@
 (define (interpret-jsr-abs high low state)
   (case (absolute high low)
     [(#xFFD2) (display (string (integer->char (cpu-state-accumulator state))))
-              (struct-copy cpu-state state [program-counter (word (fx+ 3 (cpu-state-program-counter state)))])]
+              (struct-copy cpu-state state [program-counter (next-program-counter state 3)])]
     [else (let* ([new-program-counter (absolute high low)]
                  [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
                  [sp (cpu-state-stack-pointer state)])
@@ -267,17 +283,17 @@
 
 (module+ test #| jsr (jump to sub routine) |#
   (check-equal? (cpu-state-program-counter
-                 (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001)))
+                 (interpret-jsr-abs #x40 #x08 (with-program-counter (initialize-cpu) #x2001)))
                 #x4008)
   (check-equal? (cpu-state-stack-pointer
-                 (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001)))
+                 (interpret-jsr-abs #x40 #x08 (with-program-counter (initialize-cpu) #x2001)))
                 #xfd)
   (check-equal? (peek
-                 (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001))
+                 (interpret-jsr-abs #x40 #x08 (with-program-counter (initialize-cpu) #x2001))
                  #x1FF)
                 #x20)
   (check-equal? (peek
-                 (interpret-jsr-abs #x40 #x08 (set-pc-in-state (initialize-cpu) #x2001))
+                 (interpret-jsr-abs #x40 #x08 (with-program-counter (initialize-cpu) #x2001))
                  #x1FE)
                 #x03))
 
@@ -290,7 +306,7 @@
 (module+ test #| -adjust-carry-flag |#
   (check-eq? (-adjust-carry-flag #t 0)
              1)
-  (check-eq? (-adjust-carry-flag null 1)
+  (check-eq? (-adjust-carry-flag #f 1)
              0))
 
 ;; set/clear zero flag
@@ -383,20 +399,20 @@
 
 (define (interpret-rti state)
   (let* ((old-sp (cpu-state-stack-pointer state))
-         (new-status-byte (peek-stack+1 state))
+         (new-flags (peek-stack+3 state))
          (new-program-counter (absolute (peek-stack+2 state)
-                                        (peek-stack+3 state))))
+                                        (peek-stack+1 state))))
     (struct-copy cpu-state state
                  [stack-pointer (byte (fx+ old-sp 3))]
-                 [flags new-status-byte]
+                 [flags new-flags]
                  [program-counter new-program-counter])))
 
 (module+ test #| rti |#
   (check-eq? (cpu-state-stack-pointer (interpret-rti (interpret-brk (initialize-cpu))))
              #xFF)
-  (check-eq? (cpu-state-program-counter (interpret-rti (set-pc-in-state (interpret-brk (initialize-cpu)) #xABCD)))
+  (check-eq? (cpu-state-program-counter (interpret-rti (with-program-counter (interpret-brk (initialize-cpu)) #xABCD)))
              #x0000)
-  (check-eq? (cpu-state-program-counter (interpret-rti (interpret-brk (set-pc-in-state (initialize-cpu) #xABCD))))
+  (check-eq? (cpu-state-program-counter (interpret-rti (interpret-brk (with-program-counter (initialize-cpu) #xABCD))))
              #xABCD))
 
 (define (interpret-brk state)
@@ -406,9 +422,9 @@
      (struct-copy cpu-state state
                   [program-counter (absolute (peek state #xFFFE) (peek state #xFFFF))]
                   [flags (-set-brk-flag (cpu-state-flags state))])
-     (-push-on-stack (low-byte old-pc) _)
+     (-push-on-stack old-status-byte _)
      (-push-on-stack (high-byte old-pc) _)
-     (-push-on-stack old-status-byte _))))
+     (-push-on-stack (low-byte old-pc) _))))
 
 (module+ test #| brk |#
   (check-eq? (cpu-state-program-counter
@@ -465,16 +481,16 @@
   (not (negative-flag? state)))
 
 (define (-set-carry-flag flags)
-  (bitwise-xor #x01 flags))
+  (bitwise-ior #x01 flags))
 
 (define (-clear-carry-flag flags)
   (bitwise-and #xfe flags))
 
 (define (-set-zero-flag flags)
-  (bitwise-xor #x02 flags))
+  (bitwise-ior #x02 flags))
 
 (define (-set-brk-flag flags)
-  (bitwise-xor #x10 flags))
+  (bitwise-ior #x10 flags))
 
 (define (-clear-brk-flag flags)
   (bitwise-and #xEF flags))
@@ -483,25 +499,25 @@
   (bitwise-and #xfd flags))
 
 (define (-set-overflow-flag flags)
-  (bitwise-xor #x40 flags))
+  (bitwise-ior #x40 flags))
 
 (define (-clear-overflow-flag flags)
   (bitwise-and #xbf flags))
 
 (define (-set-negative-flag flags)
-  (bitwise-xor #x80 flags))
+  (bitwise-ior #x80 flags))
 
 (define (-clear-negative-flag flags)
   (bitwise-and #x7f flags))
 
 (define (-set-interrupt-flag flags)
-  (bitwise-xor #x04 flags))
+  (bitwise-ior #x04 flags))
 
 (define (-clear-interrupt-flag flags)
   (bitwise-and #xfb flags))
 
 (define (-set-decimal-flag flags)
-  (bitwise-xor #x08 flags))
+  (bitwise-ior #x08 flags))
 
 (define (-clear-decimal-flag flags)
   (bitwise-and #xf7 flags))
@@ -708,7 +724,7 @@
   (< 255 raw-accumulator))
 
 (define (derive-carry-after-subtraction raw-accumulator)
-  (> 0 raw-accumulator))
+  (<= 0 raw-accumulator))
 
 (define (interpret-logic-op-mem state operation peeker pc-inc)
   (let* [(raw-accumulator     (operation (peeker state) (cpu-state-accumulator state)))
@@ -723,13 +739,13 @@
 
 (define (interpret-calc-op state operation add-calc-op peeker carry-deriver pc-inc)
   (let* [(accumulator         (cpu-state-accumulator state))
-         (op                  (peeker state))
-         (raw-accumulator     (operation accumulator op add-calc-op))
+         (operand             (peeker state))
+         (raw-accumulator     (operation accumulator operand add-calc-op))
          (new-accumulator     (byte raw-accumulator))
          (carry?              (carry-deriver raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
-         [overflow?           (derive-overflow accumulator op raw-accumulator)]
+         [overflow?           (derive-overflow accumulator operand raw-accumulator)]
          (new-flags           (set-flags-cznv state carry? zero? negative? overflow?))]
     (struct-copy cpu-state state
                  [accumulator     new-accumulator]
@@ -987,9 +1003,9 @@
 (define (interpret-branch-rel state test)
   (let* ([pc             (cpu-state-program-counter state)]
          [rel            (peek-pc+1 state)]
-         [new-pc-jump    (word (fx+ pc 2 (if (>= #x80 rel) (fx- 256 rel) rel)))]
+         [new-pc-jump    (word (fx+ pc 2 (if (< #x80 rel) (fx- rel 256) rel)))]
          [new-pc-no-jump (word (fx+ pc 2))]
-         [new-pc (if (test state) new-pc-no-jump new-pc-jump)])
+         [new-pc (if (test state) new-pc-jump new-pc-no-jump)])
     (struct-copy cpu-state state
                  [program-counter new-pc])))
 
@@ -1114,7 +1130,7 @@
                  [program-counter (next-program-counter state 1)])))
 
 (define (interpret-modify-x-index state delta)
-  (let ((value (byte (fx+ delta (cpu-state-x-index)))))
+  (let ((value (byte (fx+ delta (cpu-state-x-index state)))))
     (struct-copy cpu-state state
                  [x-index value]
                  [flags (set-flags-zn state (zero? value) (bit7? value))]
@@ -1435,10 +1451,61 @@
     ;; #xff -io ISC abx
     [else (error "unknown opcode")]))
 
+(module+ test #| fd SBC abs,x |#
+  (define (at-2000_sbc-2000-x_with-x-3 accumulator at-2003-value)
+    (~>> (initialize-cpu)
+        (with-program-counter _ #x2000)              ;; *=$2000
+        (with-flags _ #xff)                          ;; carry set
+        (with-accumulator     _ accumulator)         ;; LDA #,accumulator
+        (poke _ #x2000 #xfd #x00 #x20 at-2003-value) ;; SBC $2000,X
+                                                     ;; .byte ,at-2003-value
+        (with-x-index _ #x03)))
+
+  (let ((result (~>> (at-2000_sbc-2000-x_with-x-3 #x21 #x10)
+                    (execute-cpu-step _))))
+    (check-eq? (cpu-state-accumulator result) #x11 "#x21 - #x10 = #x11")
+    (check-eq? (cpu-state-program-counter result) #x2003 "this was a 3 byte command")
+    (check-true (carry-flag? result) "carry flag is still set, no borrow took place")
+    (check-false (zero-flag? result) "zero flag is false since != $00")
+    (check-false (negative-flag? result) "negative flag false, bit7, sign flag not set"))
+
+  (let ((result (~>> (at-2000_sbc-2000-x_with-x-3 #x10 #x21)
+                    (execute-cpu-step _))))
+    (check-eq? (cpu-state-accumulator result) #xef "#x10 - #x21 = #xef")
+    (check-false (carry-flag? result) "carry flag is false, borrow took place!")
+    (check-false (zero-flag? result) "zero flag is false since != $00")
+    (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")))
+
+(module+ test #| fe INC abs,x |#
+  (define (at-2000_inc-2000-x_with-x-3 at-2003-value)
+    (~>> (initialize-cpu)
+        (with-flags _ #xff)
+        (with-program-counter _ #x2000)              ;; *=$2000
+        (poke _ #x2000 #xfe #x00 #x20 at-2003-value) ;; INC $2000,X
+                                                     ;; .byte ,at-2003-value
+        (with-x-index _ #x03)))                      ;; LDX #x03
+  
+  (let ((result (~>> (at-2000_inc-2000-x_with-x-3 #x10)
+                    (execute-cpu-step _))))
+    (check-eq? (peek-word-at-address result #x2003) #x11 "incremented byte at location $2000+x")
+    (check-eq? (cpu-state-program-counter result) #x2003 "this was a 3 byte command")
+    (check-false (zero-flag? result) "zero flag is false since ($10 + 1) != $00")
+    (check-false (negative-flag? result) "negative flag false, bit7, sign flag not set"))
+
+    (let ((result (~>> (at-2000_inc-2000-x_with-x-3 #xff)
+                    (execute-cpu-step _))))
+    (check-true (zero-flag? result) "zero flag is true since ($FF + 1) == $00")
+    (check-false (negative-flag? result) "negative flag false, bit7, sign flag not set"))
+
+    (let ((result (~>> (at-2000_inc-2000-x_with-x-3 #x7f)
+                    (execute-cpu-step _))))
+    (check-false (zero-flag? result) "zero flag is false since ($7f + 1) != $00")
+    (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")))
+
 ;; put the raw bytes into memory (at org) and start running at org
 (define (run-interpreter org raw-bytes)
   (displayln (format "loading program into interpreter at ~a" org))
   (define state (6510-load (initialize-cpu) org raw-bytes))
   (displayln "program execution:")
-  (let ([_ (run (set-pc-in-state state org))])
+  (let ([_ (run (with-program-counter state org))])
     (void)))
