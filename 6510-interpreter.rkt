@@ -264,7 +264,7 @@
          [high-ret (peek-stack+2 state)])
     (struct-copy cpu-state state
                  [program-counter (word (fx+ 1 (absolute high-ret low-ret)))]
-                 [stack-pointer (byte (fx+ sp 2))])))
+                 [stack-pointer   (byte (fx+ sp 2))])))
 
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
@@ -279,7 +279,7 @@
                                        (poke-stack _ (high-byte return-address))
                                        (poke-stack-1 _ (low-byte return-address)))
                          [program-counter (word new-program-counter)]
-                         [stack-pointer (byte (fx- sp 2))]))]))
+                         [stack-pointer   (byte (fx- sp 2))]))]))
 
 (module+ test #| jsr (jump to sub routine) |#
   (check-equal? (cpu-state-program-counter
@@ -353,20 +353,6 @@
   (check-true (derive-overflow #xd0 #x90 #x160))
   (check-false (derive-overflow #xd0 #xd0 #x1a0)))
 
-;; return a state with accumulator set
-(define (-set-accumulator new-accumulator state)
-  (struct-copy cpu-state state
-               [accumulator (byte new-accumulator)]))
-
-(define (-set-x-index new-x-index state)
-  (struct-copy cpu-state state
-               [x-index (byte new-x-index)]))
-
-(define (-set-y-index new-y-index state)
-  (struct-copy cpu-state state
-               [y-index (byte new-y-index)]))
-
-
 (module+ test #| lda immediate |#
 
   (define (interpret-lda-i immediate state)
@@ -379,7 +365,6 @@
   (check-equal? (cpu-state-accumulator (interpret-lda-i 255 (initialize-cpu)))
                 255))
 
-
 (define (-push-on-stack value state)
   (let* ((old-sp (cpu-state-stack-pointer state)))
     (struct-copy cpu-state state
@@ -387,24 +372,15 @@
                  [memory (set-nth (cpu-state-memory state)
                                   (fx+ #x100 old-sp)
                                   (byte value))])))
-(define (-pop-from-stack state)
-  (let* ((new-sp (byte (fx+ 1 (cpu-state-stack-pointer state))))
-         (value (peek state (fx+ #x100 new-sp))))
-    `(,(struct-copy cpu-state state
-                    [stack-pointer new-sp]) . ,value)))
-
-(module+ test #| push and pop |#
-  (check-eq? (cdr (-pop-from-stack (-push-on-stack #x56 (initialize-cpu))))
-             #x56))
 
 (define (interpret-rti state)
-  (let* ((old-sp (cpu-state-stack-pointer state))
-         (new-flags (peek-stack+3 state))
+  (let* ((old-sp              (cpu-state-stack-pointer state))
+         (new-flags           (peek-stack+3 state))
          (new-program-counter (absolute (peek-stack+2 state)
                                         (peek-stack+1 state))))
     (struct-copy cpu-state state
-                 [stack-pointer (byte (fx+ old-sp 3))]
-                 [flags new-flags]
+                 [stack-pointer   (byte (fx+ old-sp 3))]
+                 [flags           new-flags]
                  [program-counter new-program-counter])))
 
 (module+ test #| rti |#
@@ -417,11 +393,11 @@
 
 (define (interpret-brk state)
   (let* ((old-status-byte (cpu-state-flags state))
-         (old-pc (cpu-state-program-counter state)))
+         (old-pc          (cpu-state-program-counter state)))
     (~>>
      (struct-copy cpu-state state
                   [program-counter (absolute (peek state #xFFFE) (peek state #xFFFF))]
-                  [flags (-set-brk-flag (cpu-state-flags state))])
+                  [flags           (-set-brk-flag (cpu-state-flags state))])
      (-push-on-stack old-status-byte _)
      (-push-on-stack (high-byte old-pc) _)
      (-push-on-stack (low-byte old-pc) _))))
@@ -548,37 +524,37 @@
 
 (define (interpret-clc state)
   (struct-copy cpu-state state
-               [flags (-clear-carry-flag (cpu-state-flags state))]
+               [flags           (-clear-carry-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 (define (interpret-sec state)
     (struct-copy cpu-state state
-               [flags (-set-carry-flag (cpu-state-flags state))]
+               [flags           (-set-carry-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 (define (interpret-cli state)
   (struct-copy cpu-state state
-               [flags (-clear-interrupt-flag (cpu-state-flags state))]
+               [flags           (-clear-interrupt-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 (define (interpret-sei state)
   (struct-copy cpu-state state
-               [flags (-set-interrupt-flag (cpu-state-flags state))]
+               [flags           (-set-interrupt-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 (define (interpret-clv state)
   (struct-copy cpu-state state
-               [flags (-clear-overflow-flag (cpu-state-flags state))]
+               [flags           (-clear-overflow-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 (define (interpret-cld state)
   (struct-copy cpu-state state
-               [flags (-clear-decimal-flag (cpu-state-flags state))]
+               [flags           (-clear-decimal-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 (define (interpret-sed state)
   (struct-copy cpu-state state
-               [flags (-set-decimal-flag (cpu-state-flags state))]
+               [flags           (-set-decimal-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 (module+ test #| flags |#
@@ -759,28 +735,28 @@
   (check-false (carry-flag? (interpret-adc-i (poke  (set-carry-flag (initialize-cpu)) 1 10))))
   (check-equal? (cpu-state-accumulator (interpret-adc-i (poke  (set-carry-flag (initialize-cpu)) 1 10)))
                 11)
-  (check-true (carry-flag? (interpret-adc-i (poke  (-set-accumulator 246 (initialize-cpu)) 1 10))))
-  (check-false (carry-flag? (interpret-adc-i (poke  (-set-accumulator 245 (initialize-cpu)) 1 10)))))
+  (check-true (carry-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 246) 1 10))))
+  (check-false (carry-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 245) 1 10)))))
 
 (module+ test #| interpret-adc-i - checking zero flag related|#
-  (check-true (zero-flag? (interpret-adc-i (poke  (-set-accumulator 246 (initialize-cpu)) 1 10))))
-  (check-false (zero-flag? (interpret-adc-i (poke  (-set-accumulator 245 (initialize-cpu)) 1 10))))
-  (check-true (zero-flag? (interpret-adc-i (poke  (set-carry-flag (-set-accumulator 245 (initialize-cpu))) 1 10)))))
+  (check-true (zero-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 246) 1 10))))
+  (check-false (zero-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 245) 1 10))))
+  (check-true (zero-flag? (interpret-adc-i (poke  (set-carry-flag (with-accumulator (initialize-cpu) 245)) 1 10)))))
 
 (module+ test #| interpret-adc-i - checking overflow flag related|#
-  (check-true (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 118 (initialize-cpu)) 1 10))))
-  (check-true (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 120 (initialize-cpu)) 1 10))))
-  (check-false (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 117 (initialize-cpu)) 1 10))))
-  (check-false (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 20 (initialize-cpu)) 1 10))))
+  (check-true (overflow-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 118) 1 10))))
+  (check-true (overflow-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 120) 1 10))))
+  (check-false (overflow-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 117) 1 10))))
+  (check-false (overflow-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 20) 1 10))))
 
-  (check-true (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 127 (initialize-cpu)) 1 1))))
-  (check-false (overflow-flag? (interpret-adc-i (poke  (-set-accumulator 126 (initialize-cpu)) 1 1)))))
+  (check-true (overflow-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 127) 1 1))))
+  (check-false (overflow-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) 126) 1 1)))))
 
 (module+ test #| interpret-adc-i - checking negative flag related|#
-  (check-true (negative-flag?  (interpret-adc-i (poke  (-set-accumulator (two-complement-of -2) (initialize-cpu)) 1 1))))
-  (check-false (negative-flag? (interpret-adc-i (poke  (-set-accumulator (two-complement-of -1) (initialize-cpu)) 1 1))))
-  (check-false (negative-flag? (interpret-adc-i (poke  (-set-accumulator (two-complement-of 1) (initialize-cpu)) 1 1))))
-  (check-false (negative-flag? (interpret-adc-i (poke  (-set-accumulator (two-complement-of 0) (initialize-cpu)) 1 1)))))
+  (check-true (negative-flag?  (interpret-adc-i (poke  (with-accumulator (initialize-cpu) (two-complement-of -2)) 1 1))))
+  (check-false (negative-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) (two-complement-of -1)) 1 1))))
+  (check-false (negative-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) (two-complement-of 1)) 1 1))))
+  (check-false (negative-flag? (interpret-adc-i (poke  (with-accumulator (initialize-cpu) (two-complement-of 0)) 1 1)))))
 
 (module+ test #| ora indirect zero page x - ora ($I,X) ) |#
   (define (interpret-ora-izx state)
@@ -788,8 +764,8 @@
 
   (define (-prepare-op-izx acc operand)
     (~>> (initialize-cpu)
-        (-set-accumulator acc _)
-        (-set-x-index #x02 _)
+        (with-accumulator _ acc)
+        (with-x-index _ #x02)
         (poke _ #x01 #x70 ) ;; pc of ora itself is x0000 => operand at x0001
         (poke _ #x72 #x11 #x21)
         (poke _ #x2111 operand)))
@@ -811,8 +787,8 @@
 
   (define (-prepare-op-izy acc operand)
     (~>> (initialize-cpu)
-        (-set-accumulator acc _)
-        (-set-y-index #x02 _)
+        (with-accumulator _ acc)
+        (with-y-index _ #x02)
         (poke _ #x01 #x70 ) ;; pc of ora itself is x0000 => operand at x0001
         (poke _ #x70 #x11)
         (poke _ #x71 #x21)
@@ -898,21 +874,21 @@
   (let ((value (peeker state)))
     (struct-copy cpu-state state
                  [accumulator     value]
-                 [flags           (set-flags-zn state (zero? value) (< 127 value))]
+                 [flags           (set-flags-zn state (zero? value) (bit7? value))]
                  [program-counter (next-program-counter state pc-inc)])))
 
 (define (interpret-ldx-mem state peeker pc-inc)
   (let ((value (peeker state)))
     (struct-copy cpu-state state
                  [x-index         value]
-                 [flags           (set-flags-zn state (zero? value) (< 127 value))]
+                 [flags           (set-flags-zn state (zero? value) (bit7? value))]
                  [program-counter (next-program-counter state pc-inc)])))
 
 (define (interpret-ldy-mem state peeker pc-inc)
   (let ((value (peeker state)))
     (struct-copy cpu-state state
                  [y-index         value]
-                 [flags           (set-flags-zn state (zero? value) (< 127 value))]
+                 [flags           (set-flags-zn state (zero? value) (bit7? value))]
                  [program-counter (next-program-counter state pc-inc)])))
 
 (define (interpret-sta-mem state poker pc-inc)  
@@ -960,16 +936,13 @@
                   (zero-flag? _))))
 
 (define (compute-asl-result-n-flags state peeker)
-  (let* ((operand    (peeker state))
-         (raw-result (fx* 2 operand))
-         (result     (byte raw-result))
-         (carry?     (< 255 raw-result))
-         (zero?      (= 0 result))
-         (negative?  (bit7? result)))
-    (list result (set-flags-czn state carry? zero? negative?))))
+  (let* ((operand (peeker state))
+         (result  (byte (fxlshift operand 1)))
+         (flags   (set-flags-czn state (bit7? operand) (zero? result) (bit7? result))))
+    (values result flags)))
 
 (define (interpret-asl state)
-  (match-let (((list result new-flags) (compute-asl-result-n-flags state cpu-state-accumulator)))
+  (let-values (((result new-flags) (compute-asl-result-n-flags state cpu-state-accumulator)))
     (struct-copy cpu-state state
                  [accumulator     result]
                  [flags           new-flags]
@@ -977,13 +950,13 @@
 
 (module+ test #| asl |#
   (check-eq? (~>> (initialize-cpu)
-                 (-set-accumulator #x11 _)
+                 (with-accumulator _ #x11)
                  (interpret-asl _)
                  (cpu-state-accumulator _))
              #x22))
 
 (define (interpret-asl-mem state peeker poker pc-inc)
-  (match-let (((list result new-flags) (compute-asl-result-n-flags state peeker)))
+  (let-values (((result new-flags) (compute-asl-result-n-flags state peeker)))
     (struct-copy cpu-state (poker state result)
                  [flags           new-flags]
                  [program-counter (next-program-counter state pc-inc)])))
@@ -1005,7 +978,7 @@
          [rel            (peek-pc+1 state)]
          [new-pc-jump    (word (fx+ pc 2 (if (< #x80 rel) (fx- rel 256) rel)))]
          [new-pc-no-jump (word (fx+ pc 2))]
-         [new-pc (if (test state) new-pc-jump new-pc-no-jump)])
+         [new-pc         (if (test state) new-pc-jump new-pc-no-jump)])
     (struct-copy cpu-state state
                  [program-counter new-pc])))
 
@@ -1020,42 +993,40 @@
 
 (define (compute-ror-result-n-flags state peeker)
   (let* ((pre-value (peeker state))
-        (value (bitwise-xor (if (carry-flag? state) #x80 0)
-                            (fxrshift pre-value 1))))
-    (list
-     value
-     (set-flags-czn state (bit0? pre-value) (zero? value) (bit7? value)))))
+        (value      (bitwise-xor (if (carry-flag? state) #x80 0)
+                                 (fxrshift pre-value 1)))
+        (flags      (set-flags-czn state (bit0? pre-value) (zero? value) (bit7? value))))
+    (values value flags)))
 
 (define (interpret-ror state)
-  (match-let (((list result new-flags) (compute-ror-result-n-flags state cpu-state-accumulator)))    
+  (let-values (((result new-flags) (compute-ror-result-n-flags state cpu-state-accumulator)))
     (struct-copy cpu-state state
                  [accumulator     result]
                  [flags           new-flags]
                  [program-counter (next-program-counter state 1)])))
 
 (define (interpret-ror-mem state peeker poker pc-inc)
-  (match-let (((list result new-flags) (compute-ror-result-n-flags state peeker)))    
+  (let-values (((result new-flags) (compute-ror-result-n-flags state peeker)))
     (struct-copy cpu-state (poker state result)
                  [flags           new-flags]
                  [program-counter (next-program-counter state pc-inc)])))
 
 (define (compute-rol-result-n-flags state peeker)
   (let* ((pre-value (peeker state))
-        (value (bitwise-xor (if (carry-flag? state) 1 0)
-                  (byte (fxlshift pre-value 1)))))
-    (list
-     value
-     (set-flags-czn state (bit7? pre-value) (zero? value) (bit7? value)))))
+         (value     (bitwise-xor (if (carry-flag? state) 1 0)
+                                 (byte (fxlshift pre-value 1))))
+         (flags     (set-flags-czn state (bit7? pre-value) (zero? value) (bit7? value))))
+    (values value flags)))
 
 (define (interpret-rol state)
-  (match-let (((list result new-flags) (compute-rol-result-n-flags state cpu-state-accumulator)))    
+  (let-values (((result new-flags) (compute-rol-result-n-flags state cpu-state-accumulator)))
     (struct-copy cpu-state state
                  [accumulator     result]
                  [flags           new-flags]
                  [program-counter (next-program-counter state 1)])))
 
 (define (interpret-rol-mem state peeker poker pc-inc)
-  (match-let (((list result new-flags) (compute-rol-result-n-flags state peeker)))    
+  (let-values (((result new-flags) (compute-rol-result-n-flags state peeker)))
     (struct-copy cpu-state (poker state result)
                  [flags           new-flags]
                  [program-counter (next-program-counter state pc-inc)])))
@@ -1063,19 +1034,19 @@
 (define (compute-lsr-result-n-flags state peeker)
   (let* ((pre-value (peeker state))
         (value (fxrshift pre-value 1)))
-    (list
+    (values
      value
      (set-flags-czn state (bit0? pre-value) (zero? value) (bit7? value)))))
 
 (define (interpret-lsr state peeker)
-  (match-let (((list result new-flags) (compute-lsr-result-n-flags state peeker)))
+  (let-values (((result new-flags) (compute-lsr-result-n-flags state peeker)))
     (struct-copy cpu-state state
                  [accumulator     result]
                  [flags           new-flags]
                  [program-counter (next-program-counter state 1)])))
 
 (define (interpret-lsr-mem state peeker poker pc-inc)
-  (match-let (((list result new-flags) (compute-lsr-result-n-flags state peeker)))
+  (let-values (((result new-flags) (compute-lsr-result-n-flags state peeker)))
     (struct-copy cpu-state (poker state result)
                  [flags           new-flags]
                  [program-counter (next-program-counter state pc-inc)])))
@@ -1105,42 +1076,42 @@
 (define (interpret-t_a state source)
   (let ((value (source state)))
     (struct-copy cpu-state state
-                 [accumulator value]
-                 [flags (set-flags-zn state (zero? value) (< 127 value))]
+                 [accumulator     value]
+                 [flags           (set-flags-zn state (zero? value) (< 127 value))]
                  [program-counter (next-program-counter state 1)])))
 
 (define (interpret-t_s state source)
   (let ((value (source state)))
     (struct-copy cpu-state state
-                 [stack-pointer value]
+                 [stack-pointer   value]
                  [program-counter (next-program-counter state 1)])))
 
 (define (interpret-t_x state source)
   (let ((value (source state)))
     (struct-copy cpu-state state
-                 [x-index value]
-                 [flags (set-flags-zn state (zero? value) (bit7? value))]
+                 [x-index         value]
+                 [flags           (set-flags-zn state (zero? value) (bit7? value))]
                  [program-counter (next-program-counter state 1)])))
 
 (define (interpret-t_y state source)
   (let ((value (source state)))
     (struct-copy cpu-state state
-                 [y-index value]
-                 [flags (set-flags-zn state (zero? value) (bit7? value))]
+                 [y-index         value]
+                 [flags           (set-flags-zn state (zero? value) (bit7? value))]
                  [program-counter (next-program-counter state 1)])))
 
 (define (interpret-modify-x-index state delta)
   (let ((value (byte (fx+ delta (cpu-state-x-index state)))))
     (struct-copy cpu-state state
-                 [x-index value]
-                 [flags (set-flags-zn state (zero? value) (bit7? value))]
+                 [x-index         value]
+                 [flags           (set-flags-zn state (zero? value) (bit7? value))]
                  [program-counter (next-program-counter state 1)])))
 
 (define (interpret-modify-y-index state delta)
   (let ((value (byte (fx+ delta (cpu-state-y-index)))))
     (struct-copy cpu-state state
-                 [y-index value]
-                 [flags (set-flags-zn state (zero? value) (bit7? value))]
+                 [y-index         value]
+                 [flags           (set-flags-zn state (zero? value) (bit7? value))]
                  [program-counter (next-program-counter state 1)])))
 
 (module+ test #| t_a |#
@@ -1162,16 +1133,16 @@
 (define (interpret-compare state peeker1 peeker2 pc-inc)
   (let* ((value1 (peeker1 state))
          (value2 (peeker2 state))
-         (diff (fx- value1 value2)))
+         (diff   (fx- value1 value2)))
     (struct-copy cpu-state state
-                 [flags (set-flags-czn state (not-bit7? diff) (zero? diff) (bit7? diff))]
+                 [flags           (set-flags-czn state (not-bit7? diff) (zero? diff) (bit7? diff))]
                  [program-counter (next-program-counter state pc-inc)])))
 
 (define (interpret-crement-mem state op peeker poker pc-inc)
   (let* ((pre-value (peeker state))
-         (value (byte (op pre-value 1))))
+         (value     (byte (op pre-value 1))))
     (struct-copy cpu-state (poker state value)
-                 [flags (set-flags-zn state (zero? value) (bit7? value))]
+                 [flags           (set-flags-zn state (zero? value) (bit7? value))]
                  [program-counter (next-program-counter state pc-inc)])))
 
 (define (interpret-nop state)
