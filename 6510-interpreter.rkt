@@ -13,11 +13,18 @@
 (require data/pvector)
 (require data/collection)
 (require racket/fixnum)
+(require racket/contract)
 
 (module+ test #| include rackunit |#
   (require rackunit))
 
 (provide print-state run-interpreter reset-cpu initialize-cpu peek poke run with-program-counter 6510-load)
+
+(define (in-word-range? word)
+  (and (<= word 65535) (>= word 0)))
+
+(define (in-byte-range? byte)
+  (and (<= byte 255) (>= byte 0)))
 
 (struct cpu-state (program-counter ;; pointer to current program execution (16 bit)
                    flags           ;; flag register (8 bit)
@@ -25,8 +32,16 @@
                    accumulator     ;; accumulator register (8 bit)
                    x-index         ;; x index register (8 bit)
                    y-index         ;; y index register (8 bit)
-                   stack-pointer   ;; current stack pointer (8+1 bit) 1xx
-                   ))
+                   stack-pointer)  ;; current stack pointer (8+1 bit) 1xx
+  #:guard (struct-guard/c
+           (and/c exact-nonnegative-integer? in-word-range?)
+           (and/c exact-nonnegative-integer? in-byte-range?)
+           pvector?
+           (and/c exact-nonnegative-integer? in-byte-range?)
+           (and/c exact-nonnegative-integer? in-byte-range?)
+           (and/c exact-nonnegative-integer? in-byte-range?)
+           (and/c exact-nonnegative-integer? in-byte-range?)))
+
 (provide (struct-doc cpu-state ([program-counter any/c]
                                 [flags any/c]
                                 [memory any/c]
@@ -53,6 +68,14 @@
 (define (with-accumulator state byte)
   (struct-copy cpu-state state
                [accumulator byte]))
+
+(module+ test #| with-accumulator contract checks |#
+  (check-exn exn:fail:contract? (lambda () (with-accumulator (initialize-cpu) 256)))
+  (check-exn exn:fail:contract? (lambda () (with-accumulator (initialize-cpu) -1)))
+  (check-eq? (cpu-state-accumulator (with-accumulator (initialize-cpu) 255))
+             255)
+  (check-eq? (cpu-state-accumulator (with-accumulator (initialize-cpu) 0))
+             0))
 
 ;; return state with x-index set to byte
 (define (with-x-index state byte)
