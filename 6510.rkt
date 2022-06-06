@@ -34,7 +34,7 @@
     (require rackunit)))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program create-image-with-program
-         ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC DEX INC LDA LDX JSR RTS STA
+         ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC DEX INC LDA LDX JSR RTS STA PHA
          LABEL BYTES)
 
 
@@ -872,6 +872,8 @@
 (module+ test #| ldx |#
   (check-match (LDX "#$10")
                '('opcode #xA2 16)))
+
+(define-opcode-functions PHA '(implicit) '(#x48))
 
 (define-opcode-functions RTS '(implicit) '(#x60))
 

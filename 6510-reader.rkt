@@ -322,6 +322,7 @@
        (adr-modes-opcode/p "jsr" '(absolute))
        (adr-modes-opcode/p "lda" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
        (adr-modes-opcode/p "ldx" '(immediate zero-page zero-page-y absolute absolute-y))
+       (adr-modes-opcode/p "pha" '(implicit))
        (adr-modes-opcode/p "sta" '(zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
        (adr-modes-opcode/p "rts" '(implicit))
        data-bytes/p
