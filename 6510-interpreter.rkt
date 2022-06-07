@@ -13,7 +13,7 @@
 (require data/pvector)
 (require data/collection)
 (require racket/fixnum)
-(require racket/contract)
+(require (rename-in  racket/contract [define/contract define/c]))
 
 (module+ test #| include rackunit |#
   (require rackunit))
@@ -55,9 +55,17 @@
   (cpu-state 0 0 (make-pvector 65536 0) 0 0 0 #xff))
 
 ;; return state with program-counter set to word
-(define (with-program-counter state word)
+(define/c (with-program-counter state word)
+  (-> cpu-state? (and/c nonnegative-integer? in-word-range? ) cpu-state?)
   (struct-copy cpu-state state
                [program-counter word]))
+
+(module+ test #| with-program-counter |#
+  (check-exn exn:fail:contract? (lambda () (with-program-counter (initialize-cpu) #xfffff)))
+  (check-eq? (~>> (initialize-cpu)
+                 (with-program-counter _ #xff00)
+                 (cpu-state-program-counter _))
+             #xff00))
 
 ;; return state with flags set to byte
 (define (with-flags state byte)
@@ -109,27 +117,33 @@
   ))
 
 ;; is bit7 set in value?
-(define (bit7? value)
+(define/c (bit7? value)
+  (-> nonnegative-integer? boolean?)
   (not (not-bit7? value)))
 
 ;; is bit0 set in value?
-(define (bit0? value)
+(define/c (bit0? value)
+  (-> nonnegative-integer? boolean?)
   (not (not-bit0? value)))
 
 ;; is bit7 blank in value?
-(define (not-bit7? value)
+(define/c (not-bit7? value)
+  (-> nonnegative-integer? boolean?)
   (zero? (bitwise-and #x80 value)))
 
 ;; is bit0 blank in value?
-(define (not-bit0? value)
+(define/c (not-bit0? value)
+  (-> nonnegative-integer? boolean?)
   (zero? (bitwise-and #x1 value)))
 
 ;; give the byte at the given memory-address
-(define (peek state memory-address)
+(define/c (peek state memory-address)
+  (-> cpu-state? (and/c nonnegative-integer? in-word-range?) (and/c nonnegative-integer? in-byte-range?))
   (nth (cpu-state-memory state) memory-address))
 
 ;; set the byte at the given memory address (TODO replace with pvector pendant)
-(define (-poke state address value)
+(define/c (-poke state address value)
+  (-> cpu-state? (and/c nonnegative-integer? in-word-range?) (and/c nonnegative-integer? in-byte-range?) cpu-state?)
   (struct-copy cpu-state state 
                [memory (set-nth (cpu-state-memory state)
                                 (word address)
@@ -148,44 +162,52 @@
   (-pokem state address values))
 
 ;; peek byte at current stack pointer
-(define (peek-stack state)
+(define/c (peek-stack state)
+  (-> cpu-state? (and/c nonnegative-integer? in-byte-range?)) 
   (peek state
         (fx+ #x100 (cpu-state-stack-pointer state))))
 
 ;; peek byte at current stack pointer + 1 (the value that would be popped off the stack)
-(define (peek-stack+1 state)
+(define/c (peek-stack+1 state)
+  (-> cpu-state? (and/c nonnegative-integer? in-byte-range?)) 
   (peek state
         (fx+ #x100 (byte (fx+ 1 (cpu-state-stack-pointer state))))))
 
 ;; peek byte at current stack pointer + 2 (the value that would be popped second off the stack)
-(define (peek-stack+2 state)
+(define/c (peek-stack+2 state)
+  (-> cpu-state? (and/c nonnegative-integer? in-byte-range?)) 
   (peek state
         (fx+ #x100 (byte (fx+ 2 (cpu-state-stack-pointer state))))))
 
 ;; peek byte at current stack pointer + 3 (the value that would be popped third off the stack)
-(define (peek-stack+3 state)
+(define/c (peek-stack+3 state)
+  (-> cpu-state? (and/c nonnegative-integer? in-byte-range?)) 
   (peek state
         (fx+ #x100 (byte (fx+ 3 (cpu-state-stack-pointer state))))))
 
 ;; put value onto the stack (w/o adjusting the stack pointer)
-(define (poke-stack state value)
+(define/c (poke-stack state value)
+  (-> cpu-state? (and/c nonnegative-integer? in-byte-range?) cpu-state?) 
   (poke state
         (fx+ #x100 (cpu-state-stack-pointer state))
         value))
 
 ;; put the second value onto the stack (w/o adjusting the stack pointer)
-(define (poke-stack-1 state value)
+(define/c (poke-stack-1 state value)
+  (-> cpu-state? (and/c nonnegative-integer? in-byte-range?) cpu-state?) 
   (poke state
         (fx+ #x100 (byte (fx- (cpu-state-stack-pointer state) 1)))
         value))
 
 ;; transform a byte to a 2 digit hex string
-(define (byte->hex-string num)
+(define/c (byte->hex-string num)
+  (-> (and/c nonnegative-integer? in-byte-range?) string?)
   (~a (number->string num 16)
       #:width 2 #:left-pad-string "0" #:align 'right))
 
 ;; transform a word (2 bytes) to a 4 digit hex string
-(define (word->hex-string num)
+(define/c (word->hex-string num)
+  (-> (and/c nonnegative-integer? in-word-range?) string?)
   (~a (number->string num 16)
       #:width 4 #:left-pad-string "0" #:align 'right))
 
@@ -207,7 +229,8 @@
   (check-equal? (word->hex-string #x5e5f) "5e5f"))
 
 ;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
-(define (memory->string from to state)
+(define/c (memory->string from to state)
+  (-> (and/c nonnegative-integer? in-word-range?) (and/c nonnegative-integer? in-word-range?) cpu-state? string?) 
   (string-join
    (stream->list
     (map (lambda (it) (string-join
@@ -222,7 +245,8 @@
    "\n"))
 
 ;; print memory starting at address FROM to address TO of STATE
-(define (print-memory from to state)
+(define/c (print-memory from to state)
+  (-> (and/c nonnegative-integer? in-word-range?) (and/c nonnegative-integer? in-word-range?) cpu-state? cpu-state?)
   (printf "~a\n" (memory->string from to state))
   state)
 
@@ -233,7 +257,8 @@
                 "010c fe"))
 
 ;; create the processor state as string (without the memory)
-(define (state->string state)
+(define/c (state->string state)
+  (-> cpu-state? string?)
   (string-join (list
                 (format "A  = x~a,   " (byte->hex-string (cpu-state-accumulator state)))
                 (format " X = x~a, " (byte->hex-string (cpu-state-x-index state)))
@@ -255,7 +280,8 @@
                 "A  = x00,    X = x00, Y = x00\nPC = x0000, SP = xff\nN=_, O=_, B=_, D=_, I=_, Z=_, C=_"))
 
 ;; print the state 
-(define (print-state state)
+(define/c (print-state state)
+  (-> cpu-state? cpu-state?)
   (printf "~a\n "(state->string state))
   state)
 
@@ -269,7 +295,8 @@
                17))
 
 ;; load program into memory using the 6510 state
-(define (6510-load state memory-address program)
+(define/c (6510-load state memory-address program)
+  (-> cpu-state? (and/c nonnegative-integer? in-word-range?) (listof (and/c nonnegative-integer? in-byte-range?)) cpu-state?)
   (foldl (lambda (state pair) 
            (poke state (first pair) (last pair)))
          state 
@@ -283,19 +310,23 @@
                 "load will put all bytes into memory"))
 
 ;; peek into memory at the location the program counter points to (current point of execution)
-(define (peek-pc state)
+(define/c (peek-pc state)
+  (-> cpu-state? (and/c nonnegative-integer? in-byte-range?))
   (peek state (cpu-state-program-counter state)))
 
 ;; peek into memory at the location the program counter+1 points to (current point of execution+1)
-(define (peek-pc+1 state)
+(define/c (peek-pc+1 state)
+  (-> cpu-state? (and/c nonnegative-integer? in-byte-range?))
   (peek state (word (fx+ 1 (cpu-state-program-counter state)))))
 
 ;; peek into memory at the location the program counter+2 points to (current point of execution+2)
-(define (peek-pc+2 state)
+(define/c (peek-pc+2 state)
+  (-> cpu-state? (and/c nonnegative-integer? in-byte-range?))
   (peek state (word (fx+ 2 (cpu-state-program-counter state)))))
 
 ;; execute if pc does not point at a 0 byte (brk)
-(define (run state)
+(define/c (run state)
+  (-> cpu-state? cpu-state?)
   (if  (eq? 0 (peek-pc state))
        state
        (let ((next-state (execute-cpu-step state)))
@@ -351,7 +382,8 @@
                 #x03))
 
 ;; set/clear carry flag
-(define (-adjust-carry-flag set flags)
+(define/c (-adjust-carry-flag set flags)
+  (-> boolean? (and/c nonnegative-integer? in-byte-range?) (and/c nonnegative-integer? in-byte-range?))
   (if set
       (-set-carry-flag flags)
       (-clear-carry-flag flags)))
