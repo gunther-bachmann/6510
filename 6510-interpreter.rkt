@@ -55,7 +55,8 @@
                                 [stack-pointer any/c]) @{Doc test}))
 
 ;; flags all negative, program counter at 0, registers all 0, sp = 0xFF
-(define (initialize-cpu)
+(define/c (initialize-cpu)
+  (-> cpu-state?)
   (cpu-state 0 0 (make-pvector 65536 0) 0 0 0 #xff))
 
 ;; return state with program-counter set to word
@@ -72,12 +73,14 @@
              #xff00))
 
 ;; return state with flags set to byte
-(define (with-flags state byte)
+(define/c (with-flags state byte)
+  (-> cpu-state? byte/c cpu-state?)
   (struct-copy cpu-state state
                [flags byte]))
 
 ;; return state with accumulator set to byte
-(define (with-accumulator state byte)
+(define/c (with-accumulator state byte)
+  (-> cpu-state? byte/c cpu-state?)
   (struct-copy cpu-state state
                [accumulator byte]))
 
@@ -90,21 +93,25 @@
              0))
 
 ;; return state with x-index set to byte
-(define (with-x-index state byte)
+(define/c (with-x-index state byte)
+  (-> cpu-state? byte/c cpu-state?)
   (struct-copy cpu-state state
                [x-index byte]))
 
 ;; return state with y-index set to byte
-(define (with-y-index state byte)
+(define/c (with-y-index state byte)
+  (-> cpu-state? byte/c cpu-state?)
   (struct-copy cpu-state state
                [y-index byte]))
 
 ;; return program-counter incremented by delta
-(define (next-program-counter state delta)
+(define/c (next-program-counter state delta)
+  (-> cpu-state? integer? word/c)
   (word (fx+ delta (cpu-state-program-counter state))))
 
 ;; execute a reset on the cpu 
-(define (reset-cpu state)
+(define/c (reset-cpu state)
+  (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
                [program-counter (peek-word-at-address state #xFFFC)]))
 
@@ -158,7 +165,8 @@
                                 (byte value))]))
 
 ;; poke values starting at address into memory
-(define (-pokem state address values)
+(define/c (-pokem state address values)
+  (-> cpu-state? word/c (listof byte/c) cpu-state?)
   (if (empty? values)
       state
       (-pokem (-poke state address (car values))
@@ -166,7 +174,8 @@
               (cdr values))))
 
 ;; poke values starting at address into memory
-(define (poke state address . values)
+(define/c (poke state address . values)
+  (->* (cpu-state? word/c) () #:rest (listof byte/c) cpu-state?)
   (-pokem state address values))
 
 ;; peek byte at current stack pointer
@@ -342,7 +351,8 @@
 
 ;; interpret the RTS (return from subroutine) command
 ;; pop low-byte, then high-byte form stack, inc by one and write this into the pc
-(define (interpret-rts state)
+(define/c (interpret-rts state)
+  (-> cpu-state? cpu-state?)
   (let* ([sp (cpu-state-stack-pointer state)]
          [low-ret  (peek-stack+1 state)]
          [high-ret (peek-stack+2 state)])
@@ -351,19 +361,21 @@
                  [stack-pointer   (byte (fx+ sp 2))])))
 
 ;; https://www.c64-wiki.com/wiki/control_character
-(define (display-c64charcode byte)
+(define/c (display-c64charcode byte)
+  (-> byte/c any/c)
   (case byte
     [(#x0d) (displayln "")]
     [else (display (string (integer->char byte)))]))
 
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
-(define (interpret-jsr-abs high low state)
+(define/c (interpret-jsr-abs high low state)
+  (-> byte/c byte/c cpu-state? cpu-state?)
   (case (absolute high low)
     [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
-              (~>> (cpu-state-accumulator state)
-                  (display-c64charcode _))
-              (struct-copy cpu-state state [program-counter (next-program-counter state 3)])]
+     (~>> (cpu-state-accumulator state)
+         (display-c64charcode _))
+     (struct-copy cpu-state state [program-counter (next-program-counter state 3)])]
     [else (let* ([new-program-counter (absolute high low)]
                  [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
                  [sp (cpu-state-stack-pointer state)])
@@ -403,36 +415,42 @@
              0))
 
 ;; set/clear zero flag
-(define (-adjust-zero-flag set flags)
+(define/c (-adjust-zero-flag set flags)
+  (-> boolean? byte/c byte/c)
   (if set
       (-set-zero-flag flags)
       (-clear-zero-flag flags)))
 
 ;; set/clear overflow flag
-(define (-adjust-overflow-flag set flags)
+(define/c (-adjust-overflow-flag set flags)
+  (-> boolean? byte/c byte/c)
   (if set
       (-set-overflow-flag flags)
       (-clear-overflow-flag flags)))
 
 ;; set/clear negative flag
-(define (-adjust-negative-flag set flags)
+(define/c (-adjust-negative-flag set flags)
+  (-> boolean? byte/c byte/c)
   (if set
       (-set-negative-flag flags)
       (-clear-negative-flag flags)))
 
 ;; interpret JMP absolute (jump)
-(define (interpret-jmp-abs high low state)
+(define/c (interpret-jmp-abs high low state)
+  (-> byte/c byte/c cpu-state? cpu-state?)
   (struct-copy cpu-state state
                [program-counter (word (absolute high low))]))
 
 ;; derive overflow by looking at accumulator, operand and result
-(define (derive-overflow acc oper new-acc)
+(define/c (derive-overflow acc oper new-acc)
+  (-> integer? integer? integer? boolean?)
   (let* ([input-has-same-sign (bitwise-not (bitwise-and #x80 (bitwise-xor acc oper)))]
          [in-out-has-different-sign (bitwise-and #x80 (bitwise-xor acc new-acc))])
     (not (zero? (bitwise-and input-has-same-sign in-out-has-different-sign)))))
 
 ;; interprets numbers a two complements
-(define (derive-negative acc)
+(define/c (derive-negative acc)
+  (-> integer? boolean?)
   (not (zero? (bitwise-and 128 (byte acc)))))
 
 (module+ test #| derive-overlow |#
@@ -459,7 +477,8 @@
                 255))
 
 ;; write the value into the stack and then increment the stack pointer
-(define (-push-on-stack value state)
+(define/c (-push-on-stack value state)
+  (-> byte/c cpu-state? cpu-state?)
   (let* ((old-sp (cpu-state-stack-pointer state)))
     (struct-copy cpu-state state
                  [stack-pointer (byte (fx- old-sp 1))]
@@ -468,7 +487,8 @@
                                   (byte value))])))
 
 ;; pop return address and flags register from the stack
-(define (interpret-rti state)
+(define/c (interpret-rti state)
+  (-> cpu-state? cpu-state?)
   (let* ((old-sp              (cpu-state-stack-pointer state))
          (new-flags           (peek-stack+3 state))
          (new-program-counter (absolute (peek-stack+2 state)
@@ -487,7 +507,8 @@
              #xABCD))
 
 ;; push return address and flags onto the stack and continue at vector stored at FFFE
-(define (interpret-brk state)
+(define/c (interpret-brk state)
+  (-> cpu-state? cpu-state?)
   (let* ((old-status-byte (cpu-state-flags state))
          (old-pc          (cpu-state-program-counter state)))
     (~>>
@@ -521,112 +542,139 @@
 ;;              carry           : carry over result bit otherwise lost
 
 ;; is the carry flag set?
-(define (carry-flag? state)
+(define/c (carry-flag? state)
+  (-> cpu-state? boolean?)
   (eq? #x01 (bitwise-and #x01 (cpu-state-flags state))))
 
 ;; is the carry flag clear?
-(define (not-carry-flag? state)
+(define/c (not-carry-flag? state)
+  (-> cpu-state? boolean?)
   (not (carry-flag? state)))
 
 ;; is the zero flag set?
-(define (zero-flag? state)
+(define/c (zero-flag? state)
+  (-> cpu-state? boolean?)
   (eq? #x02 (bitwise-and #x02 (cpu-state-flags state))))
 
 ;; is the zero flag clear?
-(define (not-zero-flag? state)
+(define/c (not-zero-flag? state)
+  (-> cpu-state? boolean?)
   (not (zero-flag? state)))
 
 ;; is the interrupt flag set?
-(define (interrupt-flag? state)
+(define/c (interrupt-flag? state)
+  (-> cpu-state? boolean?)
   (eq? #x04 (bitwise-and #x04 (cpu-state-flags state))))
 
 ;; is the decimal flag set?
-(define (decimal-flag? state)
+(define/c (decimal-flag? state)
+  (-> cpu-state? boolean?)
   (eq? #x08 (bitwise-and #x08 (cpu-state-flags state))))
 
 ;; is the break flag set?
-(define (break-flag? state)
+(define/c (break-flag? state)
+  (-> cpu-state? boolean?)
   (eq? #x10 (bitwise-and #x10 (cpu-state-flags state))))
 
 ;; is the overflow flag set?
-(define (overflow-flag? state)
+(define/c (overflow-flag? state)
+  (-> cpu-state? boolean?)
   (eq? #x40 (bitwise-and #x40 (cpu-state-flags state))))
 
 ;; is the overflow flag clear?
-(define (not-overflow-flag? state)
+(define/c (not-overflow-flag? state)
+  (-> cpu-state? boolean?)
   (not (overflow-flag? state)))
 
 ;; is the negative flag set?
-(define (negative-flag? state)
+(define/c (negative-flag? state)
+  (-> cpu-state? boolean?)
   (eq? #x80 (bitwise-and #x80 (cpu-state-flags state))))
 
 ;; is the negative flag clear?
-(define (not-negative-flag? state)
+(define/c (not-negative-flag? state)
+  (-> cpu-state? boolean?)
   (not (negative-flag? state)))
 
 ;; return flags with carry flag set
-(define (-set-carry-flag flags)
+(define/c (-set-carry-flag flags)
+  (-> byte/c byte/c)
   (bitwise-ior #x01 flags))
 
 ;; return flags with carry flag cleared
-(define (-clear-carry-flag flags)
+(define/c (-clear-carry-flag flags)
+  (-> byte/c byte/c)
   (bitwise-and #xfe flags))
 
 ;; return flags with zero flag set
-(define (-set-zero-flag flags)
+(define/c (-set-zero-flag flags)
+  (-> byte/c byte/c)
   (bitwise-ior #x02 flags))
 
 ;; return flags with break flag set
-(define (-set-brk-flag flags)
+(define/c (-set-brk-flag flags)
+  (-> byte/c byte/c)
   (bitwise-ior #x10 flags))
 
 ;; return flags with break flag cleared
-(define (-clear-brk-flag flags)
+(define/c (-clear-brk-flag flags)
+  (-> byte/c byte/c)
   (bitwise-and #xEF flags))
 
 ;; return flags with zero flag cleared
-(define (-clear-zero-flag flags)
+(define/c (-clear-zero-flag flags)
+  (-> byte/c byte/c)
   (bitwise-and #xfd flags))
 
 ;; return flags with overflow flag set
-(define (-set-overflow-flag flags)
+(define/c (-set-overflow-flag flags)
+  (-> byte/c byte/c)
   (bitwise-ior #x40 flags))
 
 ;; return flags with overflow flag cleared
-(define (-clear-overflow-flag flags)
+(define/c (-clear-overflow-flag flags)
+  (-> byte/c byte/c)
   (bitwise-and #xbf flags))
 
 ;; return flags with negative flag set
-(define (-set-negative-flag flags)
+(define/c (-set-negative-flag flags)
+  (-> byte/c byte/c)
   (bitwise-ior #x80 flags))
 
 ;; return flags with negative flag cleared
-(define (-clear-negative-flag flags)
+(define/c (-clear-negative-flag flags)
+  (-> byte/c byte/c)
   (bitwise-and #x7f flags))
 
 ;; return flags with interrupt flag set
-(define (-set-interrupt-flag flags)
+(define/c (-set-interrupt-flag flags)
+  (-> byte/c byte/c)
   (bitwise-ior #x04 flags))
 
 ;; return flags with interrupt flag cleared
-(define (-clear-interrupt-flag flags)
+(define/c (-clear-interrupt-flag flags)
+  (-> byte/c byte/c)
   (bitwise-and #xfb flags))
 
 ;; return flags with decimal flag set
-(define (-set-decimal-flag flags)
+(define/c (-set-decimal-flag flags)
+  (-> byte/c byte/c)
   (bitwise-ior #x08 flags))
 
 ;; return flags with decimal flag cleared
-(define (-clear-decimal-flag flags)
+(define/c (-clear-decimal-flag flags)
+  (-> byte/c byte/c)
   (bitwise-and #xf7 flags))
 
 ;; return the state with carry flag set
-(define (set-carry-flag state)
+(define/c (set-carry-flag state)
+  (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state [flags (-set-carry-flag (cpu-state-flags state))]))
 
 
 ;; return flags with carry, zero, negative and overflow flag set to the parameter values
-(define (set-flags-cznv state carry? zero? negative? overflow?)
+(define/c (set-flags-cznv state carry? zero? negative? overflow?)
+  (-> cpu-state? boolean? boolean? boolean? boolean? byte/c)
   (~>> (cpu-state-flags state)
       (-adjust-zero-flag zero?)
       (-adjust-negative-flag negative?)
@@ -634,14 +682,16 @@
       (-adjust-overflow-flag overflow?)))
 
 ;; return flags with carry, zero and negative flag set to the parameter values
-(define (set-flags-czn state carry? zero? negative?)
+(define/c (set-flags-czn state carry? zero? negative?)
+  (-> cpu-state? boolean? boolean? boolean? byte/c)
   (~>> (cpu-state-flags state)
       (-adjust-zero-flag zero?)
       (-adjust-negative-flag negative?)
       (-adjust-carry-flag carry?)))
 
 ;; return flags with zero and negative flag set to the parameter values
-(define (set-flags-zn state zero? negative?)
+(define/c (set-flags-zn state zero? negative?)
+  (-> cpu-state? boolean? boolean? byte/c)
   (~>> (cpu-state-flags state)
       (-adjust-zero-flag zero?)
       (-adjust-negative-flag negative?)))
@@ -649,44 +699,51 @@
 ;; flags N O - B D I Z C
 
 ;; clear carry flag
-(define (interpret-clc state)
+(define/c (interpret-clc state)
+  (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
                [flags           (-clear-carry-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 ;; set carry flag
-(define (interpret-sec state)
-    (struct-copy cpu-state state
+(define/c (interpret-sec state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state
                [flags           (-set-carry-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 ;; clear interrupt flag
-(define (interpret-cli state)
+(define/c (interpret-cli state)
+  (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
                [flags           (-clear-interrupt-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 
 ;; set interrupt flag
-(define (interpret-sei state)
+(define/c (interpret-sei state)
+  (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
                [flags           (-set-interrupt-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 ;; clear overflow flag
-(define (interpret-clv state)
+(define/c (interpret-clv state)
+  (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
                [flags           (-clear-overflow-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 ;; clear decimal flag
-(define (interpret-cld state)
+(define/c (interpret-cld state)
+  (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
                [flags           (-clear-decimal-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
 
 ;; set decimal flag
-(define (interpret-sed state)
+(define/c (interpret-sed state)
+  (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
                [flags           (-set-decimal-flag (cpu-state-flags state))]
                [program-counter (next-program-counter state 1)]))
