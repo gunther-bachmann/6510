@@ -63,7 +63,7 @@
 
 ;; return state with program-counter set to word
 (define/c (with-program-counter state word)
-  (-> cpu-state? (and/c exact-nonnegative-integer? in-word-range? ) cpu-state?)
+  (-> cpu-state? word/c cpu-state?)
   (struct-copy cpu-state state
                [program-counter word]))
 

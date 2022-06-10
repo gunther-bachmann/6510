@@ -5,6 +5,7 @@
 (require data/applicative)
 (require "6510.rkt")
 (require "6510-interpreter.rkt")
+(require (rename-in  racket/contract [define/contract define/c]))
 
 ; usage:
 ; - create file with content
@@ -13,6 +14,9 @@
 ;     lda #$40
 ; - C-c to open repl for this source file
 ; - follow the hints printed
+
+; naming convention:
+;   .../p is or returns a parser
 
 (module+ test
   (require rackunit)
@@ -23,18 +27,21 @@
 (provide (rename-out [literal-read read]
                      [literal-read-syntax read-syntax]))
 
-(define (literal-read in)
+(define/c (literal-read in)
+  (-> any/c (or/c list? #f))
   (syntax->datum
    (literal-read-syntax #f in)))
 
 (define space-or-tab/p
   (or/p (char/p #\space) (char/p #\tab)))
 
-(define (char-hex? char)
+;; is the given char a hexadecimal number digit?
+(define/c (char-hex? char)
+  (-> char? boolean?)
   (let ([char-int (char->integer char)])
     (or (and (>= char-int 48) (<= char-int 57))
-        (and (>= char-int 65) (<= char-int 70))
-        (and (>= char-int 97) (<= char-int 102)))))
+       (and (>= char-int 65) (<= char-int 70))
+       (and (>= char-int 97) (<= char-int 102)))))
 
 (define hex-digit/p
   (label/p "hex-number" (satisfy/p char-hex?)))
@@ -54,9 +61,11 @@
       [x <-  hex-string/p]
     (pure (parse-number-string (string-append "$" x)))))
 
-(define (char-bin? char)
+;; is the given char a binary number digit?
+(define/c (char-bin? char)
+  (-> char? boolean?)
   (or (eq? char #\0)
-      (eq? char #\1)))
+     (eq? char #\1)))
 
 (define bin-digit/p
   (label/p "bin-number" (satisfy/p char-bin?)))
@@ -142,14 +151,16 @@
 
 
 (define word/p
-  (guard/p 6510-integer/p (λ (x) (<= x 65535))
+  (guard/p 6510-integer/p (λ (x) (and (>= x 0) (<= x 65535)))
            "integer in range [$0000,$FFFF]"))
 
 (define byte/p
-  (guard/p 6510-integer/p (λ (x) (<= x 255))
+  (guard/p 6510-integer/p (λ (x) (and (>= x 0) (<= x 255)))
            "integer in range [$00,$FF]"))
 
-(define (abs-opcode/p opcode)
+;; return a parser that will parse the given opcode with absolute addressing
+(define/c (abs-opcode/p opcode)
+  (-> string? parser?)
   (do
       (try/p (string-cia/p opcode))
       (many/p space-or-tab/p)
@@ -177,7 +188,9 @@
   (check-exn exn:fail?
              (lambda () (parsed-string-result (abs-opcode/p "JSR") "JSR $10000"))))
 
-(define (rel-opcode/p opcode)
+;; return a parser that will parse the given opcode with relative addressing (e.g. branches)
+(define/c (rel-opcode/p opcode)
+  (-> string? parser?)
   (do
       (try/p (string-cia/p opcode))
       (many/p space-or-tab/p)
@@ -189,14 +202,32 @@
                       (list (number->string x))
                       (list (last (syntax->datum x))))))))
 
-(define (chars-ci/p str)
+;; return parser to match the given string or fail
+(define/c (chars-ci/p str)
+  (-> (or/c string? char?) parser?)
   (if (zero? (string-length str))
       (pure "")
       (label/p str (do (char-ci/p (string-ref str 0))
                        (string-cia/p (substring str 1))
                      (pure str)))))
 
-(define (string-cia/p string)
+(module+ test
+  (check-match (parsed-string-result (chars-ci/p "abc") "abc")
+               "abc")
+  (check-match (parsed-string-result (chars-ci/p "abc") "abcd")
+               "abc")
+  (check-match (parsed-string-result (chars-ci/p "") "")
+               "")
+  (check-match (parsed-string-result (chars-ci/p "") "a")
+               "")  
+  (check-exn exn:fail?
+             (lambda () (parsed-string-result (chars-ci/p "abc") "  abc  d")))
+  (check-exn exn:fail?
+             (lambda () (parsed-string-result (chars-ci/p "abc") "dabc"))))
+
+;; return parser to match the given string or fail
+(define/c (string-cia/p string)
+  (-> string? parser?)
   (chars-ci/p string))
 
 (define accumulator/p (do (char-ci/p #\A) (pure '(A))))
@@ -218,10 +249,18 @@
   (check-match (parsed-string-result absolute/p ":out")
                '(":out")))
 
-(define (opcode->list4pure opcode)
+;; transform opcode string to a list w/ capitalized opcode as symbol
+(define/c (opcode->list4pure opcode)
+  (-> string? (listof symbol?))
   (list (string->symbol (string-upcase opcode))))
 
-(define (adr-modes-opcode/p opcode adr-mode-list)
+(module+ test #| opcode->list4pure |#
+  (check-equal? (opcode->list4pure "jmp")
+                '(JMP)))
+
+;; return a parser that will parse the given opcode combined with the available addressing modes
+(define/c (adr-modes-opcode/p opcode adr-mode-list)
+  (-> string? (listof symbol?) parser?)
   (do
       [actual-opcode <- (syntax/p (try/p (string-cia/p opcode)))]
 
@@ -290,6 +329,7 @@
                    )]
     (pure res)))
 
+;; parser for ".data" (byte/p (","|ml_whitespace/p) ...)
 (define data-bytes/p
   (do
       (try/p (string-cia/p ".data"))
@@ -297,12 +337,13 @@
     [result <- (many/p byte/p #:sep (do (char/p #\,) ml-whitespace/p))]
     (pure (list 'BYTES '("bytes") result))))
 
-(module+ test
+(module+ test #| data-bytes/p |#
   (check-match (parsed-string-result data-bytes/p ".data    2,3,4")
                '(BYTES ("bytes") (2 3 4)))
   (check-match (parsed-string-result data-bytes/p ".data $20,	%10,  4")
                '(BYTES ("bytes") (32 2 4))))
-;; immediate, indirect and absolute addressing
+
+;; parser for valid assembler lines (including bytes and labels)
 (define 6510-opcode/p
   (do (or/p
        (adr-modes-opcode/p "adc" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
@@ -328,6 +369,7 @@
        data-bytes/p
        6510-label/p)))
 
+;; parser for origin definition
 (define 6510-program-origin/p
   (do (char/p #\*) (many/p space-or-tab/p)
     (char/p #\=) (many/p space-or-tab/p)
@@ -335,6 +377,7 @@
     6510-eol/p
     (pure origin)))
 
+;; parser for a complete assembler program
 (define 6510-program/p
   (do ml-whitespace/p
       [origin <- 6510-program-origin/p]
@@ -343,9 +386,11 @@
     eof/p
     (pure (list origin opcodes))))
 
+;; apply the method 'values' to all list elements
 (define (list->values list)
   (apply values list))
 
+;; read and compile assembler program
 (define (literal-read-syntax src in)
   (let*-values ([(syntaxed-program) (syntax/p 6510-program/p)]
                 [(parsed-string) (parse-string (syntax/p 6510-program/p) (port->string in))]
