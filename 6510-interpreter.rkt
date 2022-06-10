@@ -18,7 +18,7 @@
 (module+ test #| include rackunit |#
   (require rackunit))
 
-(provide print-state run-interpreter reset-cpu initialize-cpu peek poke run with-program-counter 6510-load)
+(provide print-state run-interpreter reset-cpu initialize-cpu peek poke run with-program-counter 6510-load byte->hex-string word->hex-string)
 
 (define/c (in-word-range? word)
   (-> integer? boolean?)

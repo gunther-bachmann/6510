@@ -954,13 +954,8 @@
 (define (hex-format-any a-number-str)
   (let ([parsed-number (parse-number-string a-number-str)])
     (if (> parsed-number 255)
-        (string-append "$" (hex-format (high-byte parsed-number)) (hex-format (low-byte parsed-number)))
-        (string-append "$" (hex-format parsed-number)))))
-
-(define (hex-format a-number)
-  (define digits "0123456789ABCDEF")
-  (string (string-ref digits (div a-number 16))
-          (string-ref digits (mod a-number 16))))
+        (string-append "$" (word->hex-string parsed-number) )
+        (string-append "$" (byte->hex-string parsed-number)))))
 
 (define (format-raw-line slst)
   (string-join (map (lambda (element)
@@ -976,10 +971,10 @@
          [compiled
           (case (first opcodes)
             [('opcode 'rel-opcode)
-             (~a  (string-join (map hex-format (drop opcodes 1)) " ")
+             (~a  (string-join (map byte->hex-string (drop opcodes 1)) " ")
                   #:min-width 12)]
             [('label) (last opcodes)]
-            [('bytes) (~a (string-join  (map hex-format (last opcodes)) " "))]
+            [('bytes) (~a (string-join  (map byte->hex-string (last opcodes)) " "))]
             [else "?"])]
          [syntax-str
           (case (first opcodes)
