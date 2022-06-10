@@ -20,10 +20,12 @@
 
 (provide print-state run-interpreter reset-cpu initialize-cpu peek poke run with-program-counter 6510-load)
 
-(define (in-word-range? word)
+(define/c (in-word-range? word)
+  (-> integer? boolean?)
   (and (<= word 65535) (>= word 0)))
 
-(define (in-byte-range? byte)
+(define/c (in-byte-range? byte)
+  (-> integer? boolean?)
   (and (<= byte 255) (>= byte 0)))
 
 (define byte/c (and/c nonnegative-integer? in-byte-range?))
@@ -38,21 +40,21 @@
                    y-index         ;; y index register (8 bit)
                    stack-pointer)  ;; current stack pointer (8+1 bit) 1xx
   #:guard (struct-guard/c
-           (and/c exact-nonnegative-integer? in-word-range?)
-           (and/c exact-nonnegative-integer? in-byte-range?)
+           word/c
+           byte/c
            pvector?
-           (and/c exact-nonnegative-integer? in-byte-range?)
-           (and/c exact-nonnegative-integer? in-byte-range?)
-           (and/c exact-nonnegative-integer? in-byte-range?)
-           (and/c exact-nonnegative-integer? in-byte-range?)))
+           byte/c
+           byte/c
+           byte/c
+           byte/c))
 
-(provide (struct-doc cpu-state ([program-counter any/c]
-                                [flags any/c]
-                                [memory any/c]
-                                [accumulator any/c]
-                                [x-index any/c]
-                                [y-index any/c]
-                                [stack-pointer any/c]) @{Doc test}))
+(provide (struct-doc cpu-state ([program-counter word/c]
+                                [flags byte/c]
+                                [memory byte/c]
+                                [accumulator byte/c]
+                                [x-index byte/c]
+                                [y-index byte/c]
+                                [stack-pointer byte/c]) @{Doc test}))
 
 ;; flags all negative, program counter at 0, registers all 0, sp = 0xFF
 (define/c (initialize-cpu)
@@ -765,13 +767,15 @@
   (check-false (overflow-flag? (interpret-clv (interpret-adc-i (poke  (interpret-adc-i (poke  (initialize-cpu) 1 #x7f)) 3 1))))))
 
 ;; return word (2 byte) value stored at ADDRESS
-(define (peek-word-at-address state address)
+(define/c (peek-word-at-address state address)
+  (-> cpu-state? word/c word/c)
   (let* [(low-byte  (peek state address))
          (high-byte (peek state (word (fx+ address 1))))]
     (absolute high-byte low-byte)))
 
 ;; return word (2 bytes) stored at program-counter + 1
-(define (peek-word-at-pc+1 state)
+(define/c (peek-word-at-pc+1 state)
+  (-> cpu-state? word/c)
   (peek-word-at-address state (word (fx+ 1 (cpu-state-program-counter state)))))
 
 ;; get the byte that is stored at the memory address
@@ -779,11 +783,13 @@
 ;;
 ;; address -> [ low ][ high ]
 ;; @high,low-> [ value ]
-(define (peek-indirect state address)
+(define/c (peek-indirect state address)
+  (-> cpu-state? word/c word/c)
   (peek state
         (peek-word-at-address state address)))
 
-(define (peek-indirect-woffset state address offset)
+(define/c (peek-indirect-woffset state address offset)
+  (-> cpu-state? word/c integer? word/c)
   (peek state
         (word (fx+ offset (peek-word-at-address state address)))))
 
@@ -792,113 +798,133 @@
 ;;
 ;; address -> [ low ][ high ]
 ;; @high, low <- value
-(define (poke-indirect state address value)
+(define/c (poke-indirect state address value)
+  (-> cpu-state? word/c byte/c cpu-state?)
   (poke state
         (peek-word-at-address state address)
         value))
 
-(define (poke-indirect-woffset state address offset value)  
+(define/c (poke-indirect-woffset state address offset value)
+  (-> cpu-state? word/c integer? byte/c cpu-state?)
   (poke state
         (word (fx+ offset (peek-word-at-address state address)))
         value))
 
 ;; (zp,x) ->
-(define (peek-izx state)
+(define/c (peek-izx state)
+  (-> cpu-state? byte/c)
   (let* [(zero-page-idx (peek-pc+1 state))
          (x             (cpu-state-x-index state))]
     (peek-indirect state (fx+ x zero-page-idx))))
 
 ;; (zp,x) <-
-(define (poke-izx state value)
+(define/c (poke-izx state value)
+  (-> cpu-state? byte/c cpu-state?)
   (let* [(zero-page-idx (peek-pc+1 state))
          (x             (cpu-state-x-index state))]
     (poke-indirect state (fx+ x zero-page-idx) value)))
 
 ;; (zp),y ->
-(define (peek-izy state)
+(define/c (peek-izy state)
+  (-> cpu-state? byte/c)
   (let* [(zero-page-idx (peek-pc+1 state))
          (y             (cpu-state-y-index state))]
     (peek-indirect-woffset state zero-page-idx y)))
 
-(define (poke-izy state value)
+(define/c (poke-izy state value)
+  (-> cpu-state? byte/c cpu-state?)
   (let* [(zero-page-idx (peek-pc+1 state))
          (idy           (cpu-state-y-index state))]
     (poke-indirect-woffset state zero-page-idx idy value)))
 
 ;; peek the value stored at the zero page given at pc+1
-(define (peek-zp state)
+(define/c (peek-zp state)
+  (-> cpu-state? byte/c)
   (peek state
         (peek-pc+1 state)))
 
 ;; poke a value at the zero page given at pc+1
-(define (poke-zp state value)
+(define/c (poke-zp state value)
+  (-> cpu-state? byte/c cpu-state?)
   (poke state
         (peek-pc+1 state)
         value))
 
 ;; peek the value stored in the zero page given at pc+1 + x-index
-(define (peek-zpx state)
+(define/c (peek-zpx state)
+  (-> cpu-state? byte/c)
   (peek state
         (fx+ (cpu-state-x-index state)
              (peek-pc+1 state))))
 
 ;; poke the given value into the zero page given at pc+1 + x-index
-(define (poke-zpx state value)
+(define/c (poke-zpx state value)
+  (-> cpu-state? byte/c cpu-state?)
   (poke state
         (fx+ (cpu-state-x-index state)
              (peek-pc+1 state))
         value))
 
 ;; poke the given value into the zero page given at pc+1 + y-index
-(define (poke-zpy state value)
+(define/c (poke-zpy state value)
+  (-> cpu-state? byte/c cpu-state?)
   (poke state
         (fx+ (cpu-state-y-index state)
              (peek-pc+1 state))
         value))
 
 ;; peek the given value at memory address given by the word at pc+1, pc+2  + x-index
-(define (peek-absx state)
+(define/c (peek-absx state)
+  (-> cpu-state? word/c)
   (peek state
         (word (fx+ (cpu-state-x-index state)
                    (peek-word-at-pc+1 state)))))
 
 ;; peek the given value at memory address given by the word at pc+1, pc+2  + y-index
-(define (peek-absy state)
+(define/c (peek-absy state)
+  (-> cpu-state? word/c)
   (peek state
         (word (fx+ (cpu-state-y-index state)
                    (peek-word-at-pc+1 state)))))
 
 ;; poke the given value at memory address given by the word at pc+1, pc+2  + x-index
-(define (poke-absx state value)
+(define/c (poke-absx state value)
+  (-> cpu-state? byte/c cpu-state?)
   (poke state
         (word (fx+ (cpu-state-x-index state)
                    (peek-word-at-pc+1 state)))
         value))
 
 ;; poke the given value at memory address given by the word at pc+1, pc+2  + y-index
-(define (poke-absy state value)
+(define/c (poke-absy state value)
+  (-> cpu-state? byte/c cpu-state?)
   (poke state
         (word (fx+ (cpu-state-y-index state)
                    (peek-word-at-pc+1 state)))
         value))
 
-(define (peek-abs state)
+(define/c (peek-abs state)
+  (-> cpu-state? word/c)
   (peek state (peek-word-at-pc+1 state)))
 
-(define (poke-abs state value)
+(define/c (poke-abs state value)
+  (-> cpu-state? byte/c cpu-state?)
   (poke state
         (peek-word-at-pc+1 state)
         value))
 
-(define (peek-zpy state)
+(define/c (peek-zpy state)
+  (-> cpu-state? byte/c)
   (peek state
         (fx+ (cpu-state-y-index state)
              (peek-pc+1 state))))
 
-(define (derive-carry-after-addition raw-accumulator)
+(define/c (derive-carry-after-addition raw-accumulator)
+  (-> integer? boolean?)
   (< 255 raw-accumulator))
 
-(define (derive-carry-after-subtraction raw-accumulator)
+(define/c (derive-carry-after-subtraction raw-accumulator)
+  (-> integer? boolean?)
   (<= 0 raw-accumulator))
 
 ;; interpret logical operators like AND, ORA, EOR
@@ -1431,7 +1457,7 @@
 ;; rel = $0000 (PC-relative)
 ;; io = illegal opcode
 (define/c (execute-cpu-step state)
-  (-> cpu-state? cpu-state?)  
+  (-> cpu-state? cpu-state?)
   (case (peek-pc state)
     [(#x00) (interpret-brk state)]
     [(#x01) (interpret-logic-op-mem state bitwise-ior peek-izx 2)]
@@ -1743,9 +1769,14 @@
     (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")))
 
 ;; put the raw bytes into memory (at org) and start running at org
-(define (run-interpreter org raw-bytes)
+(define/c (run-interpreter org raw-bytes)
+  (-> word/c (listof byte/c) any/c)  
   (displayln (format "loading program into interpreter at ~a" org))
-  (define state (6510-load (initialize-cpu) org raw-bytes))
   (displayln "program execution starting:")
+  (collect-garbage)
+  (displayln (format "memory: ~a" (current-memory-use)))
+  (define state (6510-load (initialize-cpu) org raw-bytes))
   (run (with-program-counter state org))
-  (displayln "\nprogram execution done."))
+  (collect-garbage)
+  (displayln (format "\nmemory: ~a" (current-memory-use)))
+  (displayln "program execution done."))
