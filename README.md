@@ -98,6 +98,64 @@ To run tests, run `raco test 6510-reader.rkt` for example.
 
 ### Next
 
+#### context debugger
+
+* step-wise debugger
+** step
+** inspect/change state
+** continue
+** continue to next rts/rti
+** back
+** back to previous jmp/jsr interrupt
+** Inspect/change stack
+** inspect/change memory
+** set additional break points
+* break points
+** static break point (on pc)
+** conditional break points 
+*** conditional elements ::
+    - hit#,
+    - memory content comparison,
+    - flag test,
+    - stack height (sp),
+    - stack value comparison,
+    - pc value (code line),
+    - current opcode (set),
+    - current addressing mode
+* time travel debugging (backwards)
+* time portal (points) :: spots to remember state and navigate to (later)
+
+#### context mil (minimal lisp)
+
+* (done) extend interpreter to run all (documented) opcodes
+* extend interpreter to load/link and run several modules
+* extend interpreter to breakpoints/debugging/timetravel etc.
+* keep a clean bootstrapping process in mind
+* define lisp concepts to initially support
+  - 1st be able to interpret itself
+  - 2nd be able compile itself
+  - minimal operations
+    - operations/definitions: def, car, cdr, list, quote, quasi-quote, unquote, 
+  - elements
+    - byte, nil, string, symbol, operation
+  - map symbol -> code
+  
+* manually translate source -> byte coded ast
+* implement reader (string -> ast)
+  - ( a . b ) :: pair
+  - ( a . ( b . ( c . nil ) ) :: (list a b c)
+  - `( ... ) :: (quasi-quote ... )
+  - ,( ... ) :: (unquote ...)
+  - '( ... ) :: (quote ... )
+  data structure pair:
+    encoding
+      - 0 = nil
+* write lisp interpreter in (c/6510 code)
+* define lisp extension to allow compilation
+  - this lisp should then be used to compile itself to assembly
+* define lisp extensions to incrementally support
+  - hygenic macros
+
 #### implementation without new knowledge
 * Warp multitude of flag-methods in 6510-interpreter into simple set of functions working on arbitrary flags, stored in a register, at some
   arbitrary position
@@ -121,7 +179,6 @@ To run tests, run `raco test 6510-reader.rkt` for example.
    This will probably include to export/import symbols.
 
 ### Some day
-* Extend interpreter to be able to interpret more up to all opcodes
 * Write a language to generate parser combination using an extended ebnf syntax, enriched with code, to allow a more compact and less
   verbose definition of the syntax/parser used here.
 
