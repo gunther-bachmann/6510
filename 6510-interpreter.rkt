@@ -675,6 +675,57 @@
   (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state [flags (-set-carry-flag (cpu-state-flags state))]))
 
+(define/c (clear-carry-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-clear-carry-flag (cpu-state-flags state))]))
+
+(define/c (set-brk-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-set-brk-flag (cpu-state-flags state))]))
+
+(define/c (clear-brk-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-clear-brk-flag (cpu-state-flags state))]))
+
+(define/c (set-decimal-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-set-decimal-flag (cpu-state-flags state))]))
+
+(define/c (clear-decimal-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-clear-decimal-flag (cpu-state-flags state))]))
+
+(define/c (set-interrupt-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-set-interrupt-flag (cpu-state-flags state))]))
+
+(define/c (clear-interrupt-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-clear-interrupt-flag (cpu-state-flags state))]))
+
+(define/c (set-overflow-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-set-overflow-flag (cpu-state-flags state))]))
+
+(define/c (clear-overflow-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-clear-overflow-flag (cpu-state-flags state))]))
+
+(define/c (set-negative-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-set-negative-flag (cpu-state-flags state))]))
+
+(define/c (clear-negative-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-clear-negative-flag (cpu-state-flags state))]))
+
+(define/c (set-zero-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-set-zero-flag (cpu-state-flags state))]))
+
+(define/c (clear-zero-flag state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state [flags (-clear-zero-flag (cpu-state-flags state))]))
 
 ;; return flags with carry, zero, negative and overflow flag set to the parameter values
 (define/c (set-flags-cznv state carry? zero? negative? overflow?)
@@ -2079,8 +2130,21 @@
                (set! states (cons (with-accumulator (car states) (string->number value 16)) states))))
             ((regexp-match? spc-regex input)             
              (match-let (((list _ value) (regexp-match spc-regex input)))
-               (set! states (cons (with-program-counter (car states) (string->number value 16)) states))))            
-            ;; {s|c}f[{c|b|n|v|d|z|i}] :: set/clear flag
+               (set! states (cons (with-program-counter (car states) (string->number value 16)) states))))
+            ((string=? input "sfc") (set! states (cons (set-carry-flag  (car states)) states)))
+            ((string=? input "cfc") (set! states (cons (clear-carry-flag  (car states)) states)))
+            ((string=? input "sfb") (set! states (cons (set-brk-flag  (car states)) states)))
+            ((string=? input "cfb") (set! states (cons (clear-brk-flag  (car states)) states)))
+            ((string=? input "sfn") (set! states (cons (set-negative-flag  (car states)) states)))
+            ((string=? input "cfn") (set! states (cons (clear-negative-flag  (car states)) states)))
+            ((string=? input "sfv") (set! states (cons (set-overflow-flag  (car states)) states)))
+            ((string=? input "cfv") (set! states (cons (clear-overflow-flag  (car states)) states)))
+            ((string=? input "sfd") (set! states (cons (set-decimal-flag  (car states)) states)))
+            ((string=? input "cfd") (set! states (cons (clear-decimal-flag  (car states)) states)))
+            ((string=? input "sfz") (set! states (cons (set-zero-flag  (car states)) states)))
+            ((string=? input "cfz") (set! states (cons (clear-zero-flag  (car states)) states)))
+            ((string=? input "sfi") (set! states (cons (set-interrupt-flag  (car states)) states)))
+            ((string=? input "cfi") (set! states (cons (clear-interrupt-flag  (car states)) states)))
             ;; stop pc=c000 :: stop at pc = c000
             ;; stop a=ff :: stop at accumulator = ff
             ;; stop sp=ff :: stop at stack pointer = fff
