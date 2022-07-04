@@ -1776,6 +1776,276 @@
     (check-false (zero-flag? result) "zero flag is false since ($7f + 1) != $00")
     (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")))
 
+(module+ test #| disassemble |#
+  (check-equal?
+   (let-values (((str len) (disassemble (~>> (initialize-cpu)
+                                             (with-flags _ #xff)
+                                             (with-program-counter _ #x2000)              ;; *=$2000
+                                             (poke _ #x2000 #x01 #xcd)))))
+     str)
+   "ORA ($cd,x)"))
+
+(define (disassemble state)
+;;  (-> cpu-state? (values string bytes))
+  (case (peek-pc state)
+    [(#x00) (values "BRK" 1)]
+    [(#x01) (values (format "ORA ($~a,x)" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; #x02 -io KIL
+    ;; #x03 -io SLO izx
+    ;; #x04 -io NOP zp
+    [(#x05) (values (format "ORA $~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    [(#x06) (values (format "ASL $~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; #x07 -io SLO zp
+    [(#x08) (values "PHP" 1)]
+    [(#x09) (values (format "ORA #$~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    [(#x0a) (values "ASL" 1)]
+    ;; #x0b -io ANC imm
+    ;; #x0c -io NOP abs
+    [(#x0d) (values (format "ORA $~a" (word->hex-string (peek-word-at-pc+1 state))) 3)]
+    [(#x0e) (values (format "ASL $~a" (word->hex-string (peek-word-at-pc+1 state))) 3)]
+    ;; #x0f -io SLO abs
+    [(#x10) (values (format "BPL $~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    [(#x11) (values (format "ORA ($~a),y" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; #x12 -io KIL
+    ;; #x13 -io SLO izy
+    ;; #x14 -io NOP zpx
+    [(#x15) (values (format "ORA $~a,x" (byte->hex-string (peek-pc+1 state))) 2)]
+    [(#x16) (values (format "ASL $~a,x" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; #x17 -io SLO zpx
+    [(#x18) (values "CLC" 1)]
+    [(#x19) (values (format "ORA $~a,y" (word->hex-string (peek-word-at-pc+1 state))) 3)]
+    ;; #x1a -io NOP
+    ;; #x1b -io SLO abt
+    ;; #x1c -io NOP abx
+    [(#x1d) (values (format "ORA $~a,x" (word->hex-string (peek-word-at-pc+1 state))) 3)]
+    [(#x1e) (values (format "ASL $~a,x" (word->hex-string (peek-word-at-pc+1 state))) 3)]
+    ;; #x1f -io SLO abx
+    [(#x20) (values (format "JSR $~a" (word->hex-string (peek-word-at-pc+1 state))) 3)]
+    [(#x21) (values (format "AND ($~a,x)" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; #x22 -io KIL
+    ;; #x23 -io RLA izx
+    [(#x24) (values (format "BIT $~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    [(#x25) (values (format "AND $~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    [(#x26) (values (format "ROL $~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; #x27 -io RLA zp
+    [(#x28) (values "PLP" 1)]
+    [(#x29) (values (format "AND #$~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    [(#x2a) (values "ROL" 1)]
+    ;; #x2b -io ANC imm
+    [(#x2c) (values (format "BIT $~a" (word->hex-string (peek-word-at-pc+1))) 3)]
+    [(#x2d) (values (format "AND $~a" (word->hex-string (peek-word-at-pc+1))) 3)]
+    [(#x2e) (values (format "ROL $~a" (word->hex-string (peek-word-at-pc+1))) 3)]
+    ;; #x2f -io RIA abs
+    [(#x30) (values (format "BMI $~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    [(#x31) (values (format "AND ($~a),y" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; #x32 -io KIL
+    ;; #x33 -io RIA izy
+    ;; #x34 -io NOP zpx 
+    [(#x35) (values (format "AND $~a,x" (byte->hex-string (peek-pc+1 state))) 2)]
+    [(#x36) (values (format "ROL $~a,x" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; #x37 -io RLA zpx
+    [(#x38) (values "SEC" 1)]
+    [(#x39) (values (format "AND $~a,y" (word->hex-string (peek-word-at-pc+1 state))) 3)]
+    ;; #x3a -io NOP
+    ;; #x3b -io RLA aby
+    ;; #x3c -io NOP abx
+    [(#x3d) (values (format "AND $~a,x" (word->hex-string (peek-word-at-pc+1 state))) 3)]
+    [(#x3e) (values (format "ROL $~a,x" (word->hex-string (peek-word-at-pc+1 state))) 3)]
+    ;; #x3f -io RLA abx
+    [(#x40) (values "RTI" 1)]
+    [(#x41) (values (format "EOR ($~a,x)" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; #x42 -io KIL
+    ;; #x43 -io SRE izx
+    ;; #x44 -io NOP zp
+    ;; [(#x45) (interpret-logic-op-mem state bitwise-xor peek-zp 2)]
+    ;; [(#x46) (interpret-lsr-mem state peek-zp poke-zp 2)]
+    ;; #x47 -io SRE zp
+    ;; [(#x48) (interpret-pha state)]
+    ;; [(#x49) (interpret-logic-op-mem state bitwise-xor peek-pc+1 2)]
+    ;; [(#x4a) (interpret-lsr state peek-zp)]
+    ;; #x4b -io ALR imm
+    ;; [(#x4c) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    ;; [(#x4d) (interpret-logic-op-mem state bitwise-xor peek-abs 3)]
+    ;; [(#x4e) (interpret-lsr-mem state peek-abs poke-abs 3)]
+    ;; #x4f -io SRE abs
+    ;; [(#x50) (interpret-branch-rel state not-overflow-flag?)]
+    ;; [(#x51) (interpret-logic-op-mem state bitwise-xor peek-izy 2)]
+    ;; #x52 -io KIL
+    ;; #x53 -io SRE izy
+    ;; #x54 -io NOP zpx
+    ;; [(#x55) (interpret-logic-op-mem state bitwise-xor peek-zpx 2)]
+    ;; [(#x56) (interpret-lsr-mem state peek-zpx poke-zpx 2)]
+    ;; #x57 -io SRE zpx
+    ;; [(#x58) (interpret-cli state)]
+    ;; [(#x59) (interpret-logic-op-mem state bitwise-xor peek-absy 3)]
+    ;; #x5a -io NOP
+    ;; #x5b -io SRE aby
+    ;; #x5c -io NOP abx
+    ;; [(#x5d) (interpret-logic-op-mem state bitwise-xor peek-absx 3)]
+    ;; [(#x5e) (interpret-lsr-mem state peek-absx poke-absx 3)]
+    ;; #x5f -io SRE abx
+    ;; [(#x60) (interpret-rts state)]
+    ;; [(#x61) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition 2)]
+    ;; #x62 -io KIL
+    ;; #x63 -io RRA izx
+    ;; #x64 -io NOP zp
+    ;; [(#x65) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition 2)]
+    ;; [(#x66) (interpret-ror-mem state peek-zp poke-zp 2)]
+    ;; #x67 -io RRA zp
+    ;; [(#x68) (interpret-pla state)]
+    ;; [(#x69) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2)]
+    ;; [(#x6a) (interpret-ror state)]
+    ;; #x6b -io ARR imm
+    ;; [(#x6c) (interpret-jmp-ind state)]
+    ;; [(#x6d) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3)]
+    ;; [(#x6e) (interpret-ror-mem state peek-abs poke-abs 3)]
+    ;; #x6f -io RRA abs
+    ;; [(#x70) (interpret-branch-rel state overflow-flag?)]
+    ;; [(#x71) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2)]
+    ;; #x72 -io KIL
+    ;; #x73 -io RRA izy
+    ;; #x74 -io NOP zpx
+    ;; [(#x75) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition 2)]
+    ;; [(#x76) (interpret-ror-mem state peek-zpx poke-zpx 2)]
+    ;; #x77 -io RRA zpx
+    ;; [(#x78) (interpret-sei state)]
+    ;; [(#x79) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absy derive-carry-after-addition 3)]
+    ;; #x7a -io NOP
+    ;; #x7b -io RRA aby
+    ;; #x7c -io NOP abx
+    ;; [(#x7d) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absx derive-carry-after-addition 3)]
+    ;; [(#x7e) (interpret-ror-mem state peek-absx poke-absx 2)]
+    ;; #x7f -io RRA abx
+    ;; #x80 -io NOP imm
+    ;; [(#x81) (interpret-sta-mem state poke-izx 2)]
+    ;; #x82 -io NOP imm
+    ;; #x83 -io SAX izx
+    ;; [(#x84) (interpret-sty-mem state poke-zp 2)]
+    ;; [(#x85) (interpret-sta-mem state poke-zp 2)]
+    ;; [(#x86) (interpret-stx-mem state poke-zp 2)]
+    ;; #x87 -io SAX zp
+    ;; [(#x88) (interpret-modify-y-index state -1)]
+    ;; #x89 -io NOP imm
+    ;; [(#x8a) (interpret-t_a state cpu-state-x-index)]
+    ;; #x8b -io XAA imm
+    ;; [(#x8c) (interpret-sty-mem state poke-abs 3)]
+    ;; [(#x8d) (interpret-sta-mem state poke-abs 3)]
+    ;; [(#x8e) (interpret-stx-mem state poke-abs 3)]
+    ;; #x8f -io SAX abs
+    ;; [(#x90) (interpret-branch-rel state not-carry-flag?)]
+    ;; [(#x91) (interpret-sta-mem state peek-izy 2)]
+    ;; #x92 -io KIL
+    ;; #x93 -io AHX izy
+    ;; [(#x94) (interpret-sty-mem state poke-zpx 2)]
+    ;; [(#x95) (interpret-sta-mem state poke-zpx 2)]
+    ;; [(#x96) (interpret-stx-mem state poke-zpy 2)]
+    ;; #x97 -io SAX zpy
+    ;; [(#x98) (interpret-t_a state cpu-state-y-index)]
+    ;; [(#x99) (interpret-sta-mem state poke-absy 3)]
+    ;; [(#x9a) (interpret-t_s state cpu-state-x-index)]
+    ;; #x9b -io TAS avt
+    ;; #x9c -io SHY abx
+    ;; [(#x9d) (interpret-sta-mem state poke-absx 3)]
+    ;; #x9e -io SHX aby
+    ;; #x9f -io AHX aby
+    ;; [(#xa0) (interpret-ldy-mem state peek-pc+1 2)]
+    ;; [(#xa1) (interpret-lda-mem state peek-izx 2)]
+    ;; [(#xa2) (interpret-ldx-mem state peek-pc+1 2)]
+    ;; #xa3 -io LAX izx
+    ;; [(#xa4) (interpret-ldy-mem state peek-zp 2)]
+    ;; [(#xa5) (interpret-lda-mem state peek-zp 2)]
+    ;; [(#xa6) (interpret-ldx-mem state peek-zp 2)]
+    ;; #xa7 -io LAX zp
+    ;; [(#xa8) (interpret-t_y state cpu-state-accumulator)]
+    [(#xa9) (values (format "LDA #$~a" (byte->hex-string (peek-pc+1 state))) 2)]
+    ;; [(#xaa) (interpret-t_x state cpu-state-accumulator)]
+    ;; #xab -io LAX imm
+    ;; [(#xac) (interpret-ldy-mem state peek-abs 3)]
+    ;; [(#xad) (interpret-lda-mem state peek-abs 3)]
+    ;; [(#xae) (interpret-ldx-mem state peek-abs 3)]
+    ;; #xaf -io LAX abs
+    ;; [(#xb0) (interpret-branch-rel state carry-flag?)]
+    ;; [(#xb1) (interpret-lda-mem state peek-izy 2)]
+    ;; #xb2 -io KIL
+    ;; #xb3 -io LAX izy
+    ;; [(#xb4) (interpret-ldy-mem state peek-zpx 2)]
+    ;; [(#xb5) (interpret-lda-mem state peek-zpx 2)]
+    ;; [(#xb6) (interpret-ldx-mem state peek-zpy 2)]
+    ;; #xb7 -io LAX zpy
+    ;; [(#xb8) (interpret-clv state)]
+    ;; [(#xb9) (interpret-lda-mem state peek-absy 3)]
+    ;; [(#xba) (interpret-t_x state cpu-state-stack-pointer)]
+    ;; #xbb -io LAS aby
+    ;; [(#xbc) (interpret-ldy-mem state peek-absx 3)]
+    ;; [(#xbd) (interpret-lda-mem state peek-absx 3)]
+    ;; [(#xbe) (interpret-ldx-mem state peek-absy 3)]
+    ;; #xbf -io LAX aby
+    ;; [(#xc0) (interpret-compare state cpu-state-y-index peek-pc+1 2)]
+    ;; [(#xc1) (interpret-compare state cpu-state-accumulator peek-izx 2)]
+    ;; #xc2 -io NOP imm
+    ;; #xc3 -io DCP izx
+    ;; [(#xc4) (interpret-compare state cpu-state-y-index peek-zp 2)]
+    ;; [(#xc5) (interpret-compare state cpu-state-accumulator peek-zp 2)]
+    ;; [(#xc6) (interpret-crement-mem state fx- peek-zp poke-zp 2)]
+    ;; #xc7 -io DCP zp
+    ;; [(#xc8) (interpret-modify-y-index state 1)]
+    ;; [(#xc9) (interpret-compare state cpu-state-accumulator peek-pc+1 2)]
+    ;; [(#xca) (interpret-modify-x-index state -1)]
+    ;; #xcb -io AXS imm
+    ;; [(#xcc) (interpret-compare state cpu-state-y-index peek-abs 3)]
+    ;; [(#xcd) (interpret-compare state cpu-state-accumulator peek-abs 3)]
+    ;; [(#xce) (interpret-crement-mem state fx- peek-abs poke-abs 3)]
+    ;; #xcf -io DCP abs
+    ;; [(#xd0) (interpret-branch-rel state not-zero-flag?)]
+    ;; [(#xd1) (interpret-compare state cpu-state-accumulator peek-izy 3)]
+    ;; #xd2 -io KIL
+    ;; #xd3 -io DCP izy
+    ;; #xd4 -io NOP zpx
+    ;; [(#xd5) (interpret-compare state cpu-state-accumulator peek-zpx 3)]
+    ;; [(#xd6) (interpret-crement-mem state fx- peek-zpx poke-zpx 2)]
+    ;; #xd7 -io DCP zpx
+    ;; [(#xd8) (interpret-cld state)]
+    ;; [(#xd9) (interpret-compare state cpu-state-accumulator peek-absy 3)]
+    ;; #xda -io NOP
+    ;; #xdb -io DCP aby
+    ;; #xdc -io NOP abx
+    ;; [(#xdd) (interpret-compare state cpu-state-accumulator peek-absx 3)]
+    ;; [(#xde) (interpret-crement-mem state fx- peek-absx poke-absx 3)]
+    ;; #xdf -io DCP abx
+    ;; [(#xe0) (interpret-compare state cpu-state-x-index peek-pc+1 2)]
+    ;; [(#xe1) (interpret-calc-op state fx- 0 peek-izx derive-carry-after-subtraction 2)]
+    ;; #xe2 -io NOP imm
+    ;; #xe3 -io ISC izx
+    ;; [(#xe4) (interpret-compare state cpu-state-x-index peek-zp 2)]
+    ;; [(#xe5) (interpret-calc-op state fx- 0 peek-zp derive-carry-after-subtraction 2)]
+    ;; [(#xe6) (interpret-crement-mem state fx+ peek-zp poke-zp 2)]
+    ;; #xe7 -io ISC zp
+    ;; [(#xe8) (interpret-modify-x-index state 1)]
+    ;; [(#xe9) (interpret-calc-op state fx- 0 peek-pc+1 derive-carry-after-subtraction 2)]
+    ;; [(#xea) (interpret-nop state)]
+    ;; #xeb -io SBC imm
+    ;; [(#xec) (interpret-compare state cpu-state-x-index peek-abs 3)]
+    ;; [(#xed) (interpret-calc-op state fx- 0 peek-abs derive-carry-after-subtraction 3)]
+    ;; [(#xee) (interpret-crement-mem state fx+ peek-abs poke-abs 3)]
+    ;; #xef -io ISC abs
+    ;; [(#xf0) (interpret-branch-rel state zero-flag?)]
+    ;; [(#xf1) (interpret-calc-op state fx- 0 peek-izy derive-carry-after-subtraction 2)]
+    ;; #xf2 -io KIL
+    ;; #xf3 -io ISC izy
+    ;; #xf4 -io NOP zpx
+    ;; [(#xf5) (interpret-calc-op state fx- 0 peek-zpx derive-carry-after-subtraction 2)]
+    ;; [(#xf6) (interpret-crement-mem state fx+ peek-zpx poke-zpx 2)]
+    ;; #xf7 -io ISC zpx
+    ;; [(#xf8) (interpret-sed state)]
+    ;; [(#xf9) (interpret-calc-op state fx- 0 peek-absy derive-carry-after-subtraction 3)]
+    ;; #xfa -io NOP
+    ;; #xfb -io ISC aby
+    ;; #xfc -io NOP abx
+    ;; [(#xfd) (interpret-calc-op state fx- 0 peek-absx derive-carry-after-subtraction 3)]
+    ;; [(#xfe) (interpret-crement-mem state fx+ peek-absx poke-absx 3)]
+    ;; #xff -io ISC abx
+    [else (values "unknown" 0)]))
+
 ;; put the raw bytes into memory (at org) and start running at org
 (define/c (run-interpreter org raw-bytes)
   (-> word/c (listof byte/c) any/c)  
