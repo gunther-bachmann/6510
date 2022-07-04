@@ -932,21 +932,28 @@
 ;; interpret logical operators like AND, ORA, EOR
 ;; setting zero and negative flags (ZN)
 (define/c (interpret-logic-op-mem state operation peeker pc-inc)
-  (-> cpu-state? (-> exact-integer? exact-integer? exact-integer?) peeker/c exact-nonnegative-integer? cpu-state?)
+  (-> cpu-state?
+     (-> exact-integer? exact-integer? exact-integer?)
+     peeker/c
+     exact-nonnegative-integer?
+     cpu-state?)
   (let* [(raw-accumulator     (operation (peeker state) (cpu-state-accumulator state)))
          (new-accumulator     (byte raw-accumulator))
          (zero?               (zero? new-accumulator))
-         (negative?           (derive-negative raw-accumulator))
-         (new-flags           (set-flags-zn state zero? negative?))]
+         (negative?           (derive-negative raw-accumulator))]
     (struct-copy cpu-state state
                  [accumulator     new-accumulator]
-                 [flags           new-flags]
+                 [flags           (set-flags-zn state zero? negative?)]
                  [program-counter (next-program-counter state pc-inc)])))
 
 ;; interpret calculating operations like ADC, SBC (currently without heeding the decimal flag
 ;; settting carry, zero, negative, overflow flag (CZNV)
 (define/c (interpret-calc-op state operation add-calc-op peeker carry-deriver pc-inc)
-  (-> cpu-state? (-> exact-integer? exact-integer? exact-integer? exact-integer?) exact-integer? peeker/c (-> exact-integer? boolean?) exact-nonnegative-integer? cpu-state?)
+  (-> cpu-state?
+     (-> exact-integer? exact-integer? exact-integer? exact-integer?)
+     exact-integer?
+     peeker/c
+     (-> exact-integer? boolean?) exact-nonnegative-integer? cpu-state?)
   (let* [(accumulator         (cpu-state-accumulator state))
          (operand             (peeker state))
          (raw-accumulator     (operation accumulator operand add-calc-op))
@@ -954,11 +961,10 @@
          (carry?              (carry-deriver raw-accumulator))
          (zero?               (zero? new-accumulator))
          (negative?           (derive-negative raw-accumulator))
-         [overflow?           (derive-overflow accumulator operand raw-accumulator)]
-         (new-flags           (set-flags-cznv state carry? zero? negative? overflow?))]
+         [overflow?           (derive-overflow accumulator operand raw-accumulator)]]
     (struct-copy cpu-state state
                  [accumulator     new-accumulator]
-                 [flags           new-flags]
+                 [flags           (set-flags-cznv state carry? zero? negative? overflow?)]
                  [program-counter (next-program-counter state pc-inc)])))
 
 (module+ test #| interpret-adc-i - checking carry flag related|#
