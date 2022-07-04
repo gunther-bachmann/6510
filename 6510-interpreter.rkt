@@ -2046,6 +2046,52 @@
     ;; #xff -io ISC abx
     [else (values "unknown" 0)]))
 
+(require readline/readline)
+
+;; run an read eval print loop debugger on the passed program
+(define/c (run-interpreter-single-step-loop org raw-bytes)
+  (-> word/c (listof byte/c) any/c)
+  (displayln (format "loading program into debugger at ~a" org))
+  (define states (list (6510-load (initialize-cpu) org raw-bytes)))
+  (readline ">")
+  (for ([i (in-naturals)])
+    (displayln "")
+    (display "Step-Debugger> ") 
+    (let ((input (begin (readline ">"))))
+      (define pm-regex #px"^pm *\\[([[:xdigit:]]{1,4}), *([[:xdigit:]]{1,2})\\]$")
+      (define sm-regex #px"^sm *\\[([[:xdigit:]]{1,4})\\] *= *([[:xdigit:]]{1,2})$")
+      (define sa-regex #px"^sa *= *([[:xdigit:]]{1,2})$")
+      (define spc-regex #px"^spc *= *([[:xdigit:]]{1,4})$")
+      (cond ((string=? input "q") (exit))
+            ((string=? input "b") (set! states (cdr states)))
+            ((string=? input "s") (set! states (cons (execute-cpu-step (car states)) states)))
+            ((string=? input "p") (displayln "") (print-state (car states)))
+            ((regexp-match? pm-regex input)             
+             (match-let (((list _ addr len) (regexp-match pm-regex input)))
+               (displayln (memory->string (string->number addr 16)
+                                         (+ -1 (string->number addr 16) (string->number len 16))
+                                         (car states)))))
+            ((regexp-match? sm-regex input)             
+             (match-let (((list _ addr value) (regexp-match sm-regex input)))
+               (set! states (cons (poke (car states) (string->number addr 16) (string->number value 16)) states))))
+            ((regexp-match? sa-regex input)             
+             (match-let (((list _ value) (regexp-match sa-regex input)))
+               (set! states (cons (with-accumulator (car states) (string->number value 16)) states))))
+            ((regexp-match? spc-regex input)             
+             (match-let (((list _ value) (regexp-match spc-regex input)))
+               (set! states (cons (with-program-counter (car states) (string->number value 16)) states))))            
+            ;; {s|c}f[{c|b|n|v|d|z|i}] :: set/clear flag
+            ;; stop pc=c000 :: stop at pc = c000
+            ;; stop a=ff :: stop at accumulator = ff
+            ;; stop sp=ff :: stop at stack pointer = fff
+            ;; r :: run until stopping
+            ;; so :: step over (jsr)
+            ((string=? input "pp") (displayln (let-values (((str _) (disassemble (car states)))) str)))
+            ((or (string=? input "h")
+                (string=? input "?")) (displayln " q = quit,\n s = single step forward,\n p = print cpu state,\n b = backward step,\n pp = pretty print current command"))
+            (#t (display "? not understood ?"))))))
+
+;; (run-interpreter-single-step-loop #xc000 (list #xa9 #x41 #x20 #xd2 #xff #x60))
 ;; put the raw bytes into memory (at org) and start running at org
 (define/c (run-interpreter org raw-bytes)
   (-> word/c (listof byte/c) any/c)  
