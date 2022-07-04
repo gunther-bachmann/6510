@@ -316,12 +316,14 @@
 ;; load program into memory using the 6510 state
 (define/c (6510-load state memory-address program)
   (-> cpu-state? word/c (listof byte/c) cpu-state?)
-  (foldl (lambda (state pair) 
-           (poke state (first pair) (last pair)))
-         state 
-         (map list
-              (sequence->list (in-range memory-address (fx+ memory-address (length program))))
-              program)))
+  (with-program-counter  
+    (foldl (lambda (state pair) 
+             (poke state (first pair) (last pair)))
+           state 
+           (map list
+                (sequence->list (in-range memory-address (fx+ memory-address (length program))))
+                program))
+    memory-address))
 
 (module+ test #| 6510-load |#
   (check-equal? (memory->string 10 13 (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)))
