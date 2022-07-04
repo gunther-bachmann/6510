@@ -1,0 +1,126 @@
+#+title: MIL Requirements
+* optimize on byte code size
+* optimize on speed
+* design decisions
+  - just tail call recursion (no other type of recursion)
+    -> looping instead of recursion
+    -> no uncontrolled stack growth
+  - parameters are NOT passed through the stack (except for single parameters)
+    -> small stack footprint for calls
+    -> need parameters frames on the heap
+  - use native 6510 data types where possible
+    -> execution speed
+  - use call stack of 6510
+    -> execution speed
+    -> restricted call depth [256 bytes / (2 return address + 1-2? parameter frame/actual parameter) == 64 max call depth!]
+       maybe this is not strictly necessary
+  - use c64 basic rom / kernal rom to implement runtime (e.g. floating point arithmetic, string output etc.)
+  - use persistent data structures as default <- can this be implemented on top?
+* minimal language constructs / concepts
+  - namespacing / modules
+    (module name "documentation"? imports? exports? definitions)
+    (module+ test ...)
+  - special modules (e.g. test)
+  - constants
+    - 'nil, 't, 'f
+  - symbol definition
+    #+begin_src elisp
+      (def symbol type? "documentation"? value) ;; ? indicating optional parameters
+      (def untyped-symbol "documentation" value)
+      (def symbol value)
+    #+end_src
+  - anonymous function
+    #+begin_src elisp
+      (lambda (param1 param2)(body ...))
+    #+end_src
+  - function definition (could be derived)
+    #+begin_src elisp      
+      (def (func-name param1 param2 untyped-param3)
+           (type-param1 type-param2 type-param3 type-return)? ;; optional
+           "documentation"?
+           (body))
+
+      (def func-name (func/t type-param1 type-param2 type-param3 type-return) "documentation" (lambda (param1 param2 param3) (body)))
+    #+end_src
+  - special forms
+    #+begin_src elisp
+      (if bool-exp then-form else-form)
+      (when bool-exp when-forms) ;; derived (if bool-exp (begin when-forms) nil)
+      (unless bool-exp unless-forms) ;; derived
+
+      (begin ...) ;; form grouping
+      (identical? a b ...) ;; pointing to the same memory location
+      (equal? a b  ...) ;; value equal (deep by default)
+      (shallow-equal? ...) ;; ...
+    #+end_src
+    
+  - function application
+    #+begin_src elisp
+      (apply 'func-name param1 param2 param3)
+    #+end_src
+  - function call (could be derived)
+    #+begin_src elisp
+      (func-name param1 param2 param3)
+    #+end_src
+  - native data types
+    - 'byte8, 'byte16,
+    - 'char, 'string     
+  - data types
+    - 'bool
+  - optional typing ('any)
+  - type definition
+    #+begin_src elisp
+      (func/t bool byte8) ;; function type with one parameter of type bool returning byte8
+      (or/t bool nil) ;; type that can be boolean or nil
+      (and/t ...) ;; must be of all of these types
+      (guard/t (lambda (value) 't)) ;; runtime guard type on this
+      (struct/t ...) ;; maybe use only one of them (map/struct), since r/o by default -> optimization posssible?
+      (map/t ...)
+    #+end_src
+  - structure definition (could be derived as special list)
+    #+begin_src elips
+      (def-struct (struct-name "documentation"? (symbol1 type "doc"?)(symbol2 type "doc"?) ...))
+    #+end_src
+  - structure construction (could be derived as list)
+    #+begin_src elisp
+      (struct value1 value2 ...)
+    #+end_src
+  - structure access (could be derived by automatic access functions on a list, but natively the cpu is able to access at any point, maybe
+    array is more accurate to use here)
+    #+begin_src elisp
+      (struct-name-symbol1 structure)
+      (with struct-name (symbol1 structure)) ;; ??
+    #+end_src
+  - cell construction
+    #+begin_src elisp
+      (cons 'car 'cdr)
+    #+end_src
+  - cell access
+    #+begin_src elisp
+      (car (cons 'car 'cdr))
+      (cdr (cons 'car 'cdr))
+    #+end_src
+  - list construction
+    #+begin_src elisp
+      (list 'a 'b 'c 'd) ;; (cons 'a (cons 'b (cons 'c (cons 'd nil))))
+    #+end_src
+  - list access
+    #+begin_src elisp
+      (car (list 'a 'b 'c 'd))
+      (cdr (list 'a 'b 'c 'd))
+    #+end_src
+  - map (is a (dynamic) structure)
+    #+begin_src elisp
+      (def my-map (map/t value-type1 value-type2)  "some" { (key value) (key value) })
+      (zip2map keys-list values-list) ;; returns a map
+      (my-map-get map key) ;; return value
+      (my-map-has? map key) ;; returns boolean
+      (my-map-keys map) ;; list of keys
+      (my-map-values map) ;; list of values
+    #+end_src
+  - set (is a list)
+    - contains, union, intersection
+  - tree (is a list of lists)
+  - queue (is a (inversed?) list)
+  - stack (is a list)
+  - array (is a (static) list)

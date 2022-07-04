@@ -279,11 +279,11 @@
 (define/c (state->string state)
   (-> cpu-state? string?)
   (string-join (list
-                (format "A  = x~a,   " (byte->hex-string (cpu-state-accumulator state)))
-                (format " X = x~a, " (byte->hex-string (cpu-state-x-index state)))
-                (format "Y = x~a~n" (byte->hex-string (cpu-state-y-index state)))
-                (format "PC = x~a, " (word->hex-string (cpu-state-program-counter state)))
-                (format "SP = x~a~n" (byte->hex-string (cpu-state-stack-pointer state)))
+                (format "A  = $~a,   " (byte->hex-string (cpu-state-accumulator state)))
+                (format " X = $~a, " (byte->hex-string (cpu-state-x-index state)))
+                (format "Y = $~a~n" (byte->hex-string (cpu-state-y-index state)))
+                (format "PC = $~a, " (word->hex-string (cpu-state-program-counter state)))
+                (format "SP = $~a~n" (byte->hex-string (cpu-state-stack-pointer state)))
                 (format "N=~a, O=~a, B=~a, D=~a, I=~a, Z=~a, C=~a"
                         (if (negative-flag? state) "X" "_" )
                         (if (overflow-flag? state) "X" "_" )
@@ -296,7 +296,7 @@
 
 (module+ test #| state->string |#
   (check-equal? (state->string (initialize-cpu))
-                "A  = x00,    X = x00, Y = x00\nPC = x0000, SP = xff\nN=_, O=_, B=_, D=_, I=_, Z=_, C=_"))
+                "A  = $00,    X = $00, Y = $00\nPC = $0000, SP = $ff\nN=_, O=_, B=_, D=_, I=_, Z=_, C=_"))
 
 ;; print the state 
 (define/c (print-state state)
