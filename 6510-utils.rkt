@@ -1,9 +1,23 @@
 #lang racket
+(require (rename-in  racket/contract [define/contract define/c]))
 
 (module+ test
   (require rackunit))
 
-(provide two-complement-of parse-number-string low-byte high-byte absolute word byte 6510-label-string? is-immediate-number? 6510-number-string?)
+(provide byte/c word/c two-complement-of parse-number-string low-byte high-byte absolute word byte 6510-label-string? is-immediate-number? 6510-number-string?)
+
+(define/c (in-word-range? word)
+  (-> exact-integer? boolean?)
+  (and (<= word 65535) (>= word 0)))
+
+(define/c (in-byte-range? byte)
+  (-> exact-integer? boolean?)
+  (and (<= byte 255) (>= byte 0)))
+
+(define byte/c (and/c exact-nonnegative-integer? in-byte-range?))
+
+(define word/c (and/c exact-nonnegative-integer? in-word-range?))
+
 
 ;; is the given number-string prefixed with a valid number base prefix?
 (define (number-has-prefix? number-string)

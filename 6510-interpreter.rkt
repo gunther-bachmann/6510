@@ -18,19 +18,30 @@
 (module+ test #| include rackunit |#
   (require rackunit))
 
-(provide print-state run-interpreter reset-cpu initialize-cpu peek poke run with-program-counter 6510-load byte->hex-string word->hex-string)
-
-(define/c (in-word-range? word)
-  (-> exact-integer? boolean?)
-  (and (<= word 65535) (>= word 0)))
-
-(define/c (in-byte-range? byte)
-  (-> exact-integer? boolean?)
-  (and (<= byte 255) (>= byte 0)))
-
-(define byte/c (and/c exact-nonnegative-integer? in-byte-range?))
-
-(define word/c (and/c exact-nonnegative-integer? in-word-range?))
+(provide memory->string
+         with-accumulator
+         disassemble
+         execute-cpu-step
+         print-state
+         run-interpreter
+         reset-cpu
+         initialize-cpu
+         peek
+         peek-pc
+         poke
+         -pokem
+         run
+         with-program-counter
+         6510-load
+         byte->hex-string
+         word->hex-string
+         set-carry-flag clear-carry-flag
+         set-brk-flag clear-brk-flag
+         set-negative-flag clear-negative-flag
+         set-overflow-flag clear-overflow-flag
+         set-decimal-flag clear-decimal-flag
+         set-zero-flag clear-zero-flag
+         set-interrupt-flag clear-interrupt-flag)
 
 (struct cpu-state (program-counter ;; pointer to current program execution (16 bit)
                    flags           ;; flag register (8 bit)
@@ -2097,65 +2108,6 @@
     ;; #xff -io ISC abx
     [else (values "unknown" 0)]))
 
-(require readline/readline)
-
-;; run an read eval print loop debugger on the passed program
-(define/c (run-interpreter-single-step-loop org raw-bytes)
-  (-> word/c (listof byte/c) any/c)
-  (displayln (format "loading program into debugger at ~a" org))
-  (define states (list (6510-load (initialize-cpu) org raw-bytes)))
-  (readline ">")
-  (for ([i (in-naturals)])
-    (displayln "")
-    (display "Step-Debugger> ") 
-    (let ((input (begin (readline ">"))))
-      (define pm-regex #px"^pm *\\[([[:xdigit:]]{1,4}), *([[:xdigit:]]{1,2})\\]$")
-      (define sm-regex #px"^sm *\\[([[:xdigit:]]{1,4})\\] *= *([[:xdigit:]]{1,2})$")
-      (define sa-regex #px"^sa *= *([[:xdigit:]]{1,2})$")
-      (define spc-regex #px"^spc *= *([[:xdigit:]]{1,4})$")
-      (cond ((string=? input "q") (exit))
-            ((string=? input "b") (set! states (cdr states)))
-            ((string=? input "s") (set! states (cons (execute-cpu-step (car states)) states)))
-            ((string=? input "p") (displayln "") (print-state (car states)))
-            ((regexp-match? pm-regex input)             
-             (match-let (((list _ addr len) (regexp-match pm-regex input)))
-               (displayln (memory->string (string->number addr 16)
-                                         (+ -1 (string->number addr 16) (string->number len 16))
-                                         (car states)))))
-            ((regexp-match? sm-regex input)             
-             (match-let (((list _ addr value) (regexp-match sm-regex input)))
-               (set! states (cons (poke (car states) (string->number addr 16) (string->number value 16)) states))))
-            ((regexp-match? sa-regex input)             
-             (match-let (((list _ value) (regexp-match sa-regex input)))
-               (set! states (cons (with-accumulator (car states) (string->number value 16)) states))))
-            ((regexp-match? spc-regex input)             
-             (match-let (((list _ value) (regexp-match spc-regex input)))
-               (set! states (cons (with-program-counter (car states) (string->number value 16)) states))))
-            ((string=? input "sfc") (set! states (cons (set-carry-flag  (car states)) states)))
-            ((string=? input "cfc") (set! states (cons (clear-carry-flag  (car states)) states)))
-            ((string=? input "sfb") (set! states (cons (set-brk-flag  (car states)) states)))
-            ((string=? input "cfb") (set! states (cons (clear-brk-flag  (car states)) states)))
-            ((string=? input "sfn") (set! states (cons (set-negative-flag  (car states)) states)))
-            ((string=? input "cfn") (set! states (cons (clear-negative-flag  (car states)) states)))
-            ((string=? input "sfv") (set! states (cons (set-overflow-flag  (car states)) states)))
-            ((string=? input "cfv") (set! states (cons (clear-overflow-flag  (car states)) states)))
-            ((string=? input "sfd") (set! states (cons (set-decimal-flag  (car states)) states)))
-            ((string=? input "cfd") (set! states (cons (clear-decimal-flag  (car states)) states)))
-            ((string=? input "sfz") (set! states (cons (set-zero-flag  (car states)) states)))
-            ((string=? input "cfz") (set! states (cons (clear-zero-flag  (car states)) states)))
-            ((string=? input "sfi") (set! states (cons (set-interrupt-flag  (car states)) states)))
-            ((string=? input "cfi") (set! states (cons (clear-interrupt-flag  (car states)) states)))
-            ;; stop pc=c000 :: stop at pc = c000
-            ;; stop a=ff :: stop at accumulator = ff
-            ;; stop sp=ff :: stop at stack pointer = fff
-            ;; r :: run until stopping
-            ;; so :: step over (jsr)
-            ((string=? input "pp") (displayln (let-values (((str _) (disassemble (car states)))) str)))
-            ((or (string=? input "h")
-                (string=? input "?")) (displayln " q = quit,\n s = single step forward,\n p = print cpu state,\n b = backward step,\n pp = pretty print current command"))
-            (#t (display "? not understood ?"))))))
-
-;; (run-interpreter-single-step-loop #xc000 (list #xa9 #x41 #x20 #xd2 #xff #x60))
 ;; put the raw bytes into memory (at org) and start running at org
 (define/c (run-interpreter org raw-bytes)
   (-> word/c (listof byte/c) any/c)  

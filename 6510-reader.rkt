@@ -25,7 +25,8 @@
     (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
 
 (provide (rename-out [literal-read read]
-                     [literal-read-syntax read-syntax]))
+                     [literal-read-syntax read-syntax])
+         compile-opcode)
 
 (define/c (literal-read in)
   (-> any/c (or/c list? #f))
@@ -385,6 +386,28 @@
     [opcodes <- (many/p (do [op <- 6510-opcode/p] ml-whitespace/p (pure op)))]
     eof/p
     (pure (list origin opcodes))))
+
+(define 6510-opcodes/p
+  (do [opcodes <- (many/p (do [op <- 6510-opcode/p] ml-whitespace/p (pure op)))]
+      (pure opcodes)))
+
+;; compile one opcode to a list of bytes
+(define (compile-opcode str)
+  (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcode/p) str))))
+  (define stripped-src-location-data (filter (lambda (el) (not (list? el))) parsed))
+  (commands->bytes 0 (list (eval stripped-src-location-data))))
+
+(module+ test #| compile-opcode |#
+  (require "6510.rkt")
+  (check-eq? (compile-opcode "JSR $FFD2")
+             '(32 210 255)))
+
+;; (compile-opcode "JSR $FFD2")
+;; (eval (compile-opcodes "JSR $FFD2") (current-namespace))
+;; (format "~a" (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcode/p) "DEX"))))
+;; (filter (lambda (el) (not (list? el))) (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcode/p) "BNE $20"))))
+;; (commands->bytes 49152 (list (eval (read (open-input-string "(JSR  \"65490\")"))))) 
+;; (commands->bytes 49152 (list (eval (filter (lambda (el) (not (list? el))) (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcode/p) "JSR $FFDE"))))))) 
 
 ;; apply the method 'values' to all list elements
 (define (list->values list)
