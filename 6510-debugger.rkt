@@ -5,6 +5,7 @@
 (require "6510-reader.rkt")
 (require "6510-utils.rkt")
 (require "6510.rkt")
+(require "6510-disassembler.rkt")
 
 ;; run an read eval print loop debugger on the passed program
 (define/c (run-interpreter-single-step-loop org raw-bytes)
@@ -23,6 +24,7 @@
       (define spc-regex #px"^spc *= *([[:xdigit:]]{1,4})$")
       (define x-regex #px"^xf? *\\{(.*)\\}$")
       (define stop-pc-regex #px"^stop *pc *= *([[:xdigit:]]{1,4})$")
+      (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4})?")
       (cond ((string=? input "q") (exit))
             ((string=? input "b") (set! states (cdr states)))
             ((string=? input "s") (set! states (cons (execute-cpu-step (car states)) states)))
@@ -59,7 +61,7 @@
              (match-let (((list _ value) (regexp-match x-regex input)))
                (let ((byteList (compile-opcode (string-trim value))))
                  (if (or (string-prefix? input "xf")
-                        (eq? (let-values (((_ commandBytes) (disassemble (car states)))) commandBytes)
+                        (eq? (let-values (((_ commandBytes) (disassemble-single (car states)))) commandBytes)
                              (length byteList)))
                      (set! states (cons (-pokem (car states) (cpu-state-program-counter (car states)) byteList) states))
                      (displayln "byte length differs (use xf to force)")))))
@@ -69,7 +71,6 @@
                (set! breakpoints (cons (lambda (state) (eq? (cpu-state-program-counter state) (string->number value 16))) breakpoints))))
             ;; ((string=? input "stop") (set! breakpoints (cons (lambda (state) (eq? (cpu-state-program-counter state) #xC002)) breakpoints)))
             ((string=? input "clear") (set! breakpoints '()))
-            ;; stop pc=c000 :: stop at pc = c000
             ;; stop a=ff :: stop at accumulator = ff
             ;; stop sp=ff :: stop at stack pointer = fff
             ((string=? input "r") (let-values (((breakpoint new-states) (run-until-breakpoint states breakpoints)))
@@ -80,12 +81,15 @@
                (let-values (((breakpoint new-states) (run-until-breakpoint states breakpoints)))
                  (set! states new-states))))
             ;; so :: step over (jsr)
-            ((string=? input "pp") (displayln (let-values (((str _) (disassemble (car states)))) str)))
+            ((regexp-match? pp-regex input)
+             (match-let (((list _ len address) (regexp-match pp-regex input)))
+               (displayln (disassemble (car states) (if address (string->number address 16)  (cpu-state-program-counter (car states))) (if len (string->number len 16) 1) ))))
+            ;; ((string=? input "pp") (displayln (let-values (((str _) (disassemble (car states)))) str)))
             ((or (string=? input "h")
                 (string=? input "?")) (displayln " q = quit,\n s = single step forward,\n p = print cpu state,\n b = backward step,\n pp = pretty print current command"))
             (#t (display "? not understood ?"))))))
 
-;; (run-interpreter-single-step-loop #xc000 (list #xa9 #x41 #x20 #xd2 #xff #x00))
+;; (run-interpreter-single-step-loop #xc000 (list #xa9 #x41 #x48 #x20 #xd2 #xff #x00))
 
 ;; return nil or the breakpoint that hit
 ;; breakpoint is a function that takes a single argument the state
