@@ -1,5 +1,3 @@
-
-
 #lang racket
 
 (require (only-in threading ~>>))
