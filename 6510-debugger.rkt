@@ -71,6 +71,7 @@
                (set! breakpoints (cons (lambda (state) (eq? (cpu-state-program-counter state) (string->number value 16))) breakpoints))))
             ;; ((string=? input "stop") (set! breakpoints (cons (lambda (state) (eq? (cpu-state-program-counter state) #xC002)) breakpoints)))
             ((string=? input "clear") (set! breakpoints '()))
+            ((string=? input "commit") (set! states (take states (min (length states) 10))))
             ;; stop a=ff :: stop at accumulator = ff
             ;; stop sp=ff :: stop at stack pointer = fff
             ((string=? input "r") (let-values (((breakpoint new-states) (run-until-breakpoint states breakpoints)))
