@@ -7,6 +7,16 @@
 (require "6510.rkt")
 (require "6510-disassembler.rkt")
 
+;; TODO allow execution of arbirtray racket with values explicitly set into the namespace to evaluate breakpoint conditions (or do calculations)
+;; (namespace-set-variable-value! 'some 25)
+;; (namespace-variable-value 25)
+;; (eval '(+ some 5)) ;; => 30
+
+;; enable/disable breakpoints
+;; give breakpoints names
+;; list breakpoints
+;; delete single breakpoints (by name)
+
 ;; set or clear flags
 (define/c (modify-flag set flag c-state)
   (-> boolean? string? cpu-state? cpu-state?)
@@ -113,13 +123,22 @@ EOF
           (begin (displayln "byte length differs (use xf to force)")
                  d-state)))))
 
-(define/c (debugger--set-breakpoint address d-state)
-  (-> string? debug-state? debug-state?)
+(define/c (debugger--set-breakpoint d-state fun)
+  (-> debug-state? any/c debug-state?)
   (struct-copy debug-state d-state
-               [breakpoints (cons (lambda (state)
-                                    (eq? (cpu-state-program-counter state)
-                                         (string->number address 16)))
+               [breakpoints (cons fun
                                   (debug-state-breakpoints d-state))]))
+
+(define/c (debugger--run d-state)
+  (-> debug-state? debug-state?)
+  (let-values (((breakpoint new-states) (run-until-breakpoint (debug-state-states d-state) (debug-state-breakpoints d-state))))
+    (struct-copy debug-state d-state [states new-states])))
+(define/c (debugger--continue d-state)
+  (-> debug-state? debug-state?)
+  (define c-states (debug-state-states d-state))
+  (define next-states (cons (execute-cpu-step (car c-states)) c-states))
+  (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state))))
+    (struct-copy debug-state d-state [states new-states])))
 
 (define/c (dispatch-debugger-command command d-state)
   (-> string? debug-state? debug-state?)
@@ -127,14 +146,21 @@ EOF
   (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4})?")
   (define pm-regex #px"^pm *([[:xdigit:]]{1,4}) *([[:xdigit:]]{1,2})")
   (define sm-regex #px"^sm *([[:xdigit:]]{1,4}) *= *([[:xdigit:]]{1,2})")
+  (define b-regex #px"^b *([[:xdigit:]]{1,2})?")
   (define sa-regex #px"^sa *= *([[:xdigit:]]{1,2})$")
   (define spc-regex #px"^spc *= *([[:xdigit:]]{1,4})$")
   (define x-regex #px"^xf? *\\{(.*)\\}$")
   (define stop-pc-regex #px"^stop *pc *= *([[:xdigit:]]{1,4})$")
+  (define stop-a-regex #px"^stop *a *= *([[:xdigit:]]{1,2})$")
+  (define stop-sp-regex #px"^stop *sp *= *([[:xdigit:]]{1,2})$")
   (define commit-regex #px"^commit *([[:xdigit:]]{1,2})?")
   (define flags-regex #px"^([sc])f([cbnvzi])$")
   (cond ((or (string=? command "?") (string=? command "h")) (debugger--help d-state))
-        ((string=? command "b") (struct-copy debug-state d-state [states (cdr c-states)]))
+        ;; ((string=? command "b") (struct-copy debug-state d-state [states (cdr c-states)]))
+        ((regexp-match? b-regex command)
+         (match-let (((list _ value) (regexp-match b-regex command)))
+           (define states (debug-state-states d-state))
+           (struct-copy debug-state d-state [states (list-tail states (min (- (length states) 1) (if value (string->number value 16) 1)))])))
         ((string=? command "s") (struct-copy debug-state d-state [states (cons (execute-cpu-step (car c-states)) c-states)]))
         ((string=? command "p") (displayln "") (print-state (car c-states)) d-state)
         ;; pp - disassemble (pretty print)
@@ -168,8 +194,31 @@ EOF
         ;; stop - stop at program counter (breakpoint)
         ((regexp-match? stop-pc-regex command)
          (match-let (((list _ value) (regexp-match stop-pc-regex command)))
-           (displayln (format "set breakpoint at $~a" value))
-           (debugger--set-breakpoint value d-state)))
+           (displayln (format "set breakpoint at pc = $~a" value))
+           (debugger--set-breakpoint d-state
+                                     (lambda (state)
+                                       (eq? (cpu-state-program-counter state)
+                                            (string->number value 16))))))
+        ;; stop a=ff - stop at accumulator = ff
+        ((regexp-match? stop-a-regex command)
+         (match-let (((list _ value) (regexp-match stop-a-regex command)))
+           (displayln (format "set breakpoint at accumluator = $~a" value))
+           (debugger--set-breakpoint d-state
+                                     (lambda (state)
+                                       (eq? (cpu-state-accumulator state)
+                                            (string->number value 16))))))
+        ;; stop sp=ff - stop at stack pointer = fff
+        ((regexp-match? stop-sp-regex command)
+         (match-let (((list _ value) (regexp-match stop-sp-regex command)))
+           (displayln (format "set breakpoint at sp = $(1)~a" value))
+           (debugger--set-breakpoint d-state
+                                     (lambda (state)
+                                       (eq? (cpu-state-stack-pointer state)
+                                            (string->number value 16))))))
+        ;; stop cf = 0 - stop when carry is cleared
+        ;; stop zf = 1 - stop when zero is set
+        ;; stop x = 20 - stop if x (turns) 20
+        ;; stop y = 21 - stop if y (turns) 21
         ;; clear - clear breakpoints
         ((string=? command "clear")
          (struct-copy debug-state d-state [breakpoints '()]))
@@ -178,18 +227,10 @@ EOF
          (match-let (((list _ value) (regexp-match commit-regex command)))
            (define states (debug-state-states d-state))
            (struct-copy debug-state d-state [states (take states (min (length states) (string->number value 16)))])))
-        ;; stop a=ff :: stop at accumulator = ff
-        ;; stop sp=ff :: stop at stack pointer = fff
         ;; r - run
-        ((string=? command "r")
-         (let-values (((breakpoint new-states) (run-until-breakpoint c-states (debug-state-breakpoints d-state))))
-           (struct-copy debug-state d-state [states new-states])))
+        ((string=? command "r") (debugger--run d-state))
         ;; c - continue over current breakpoint to the next one
-        ((string=? command "c")
-         (begin
-           (define next-states (cons (execute-cpu-step (car c-states)) c-states))
-           (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state))))
-             (struct-copy debug-state d-state [states new-states]))))
+        ((string=? command "c") (debugger--continue d-state))
         ;; so :: step over (jsr)
         (#t (begin (displayln "? unknown command?") d-state))))
 
