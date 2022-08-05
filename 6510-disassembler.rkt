@@ -249,7 +249,7 @@
     [(#xcd) (values (format "CMP $~a" (word-at-pc+1 use-state)) 3)]
     [(#xce) (values (format "DEC $~a" (word-at-pc+1 use-state)) 3)]
     ;; #xcf -io DCP abs
-    [(#xd0) (values "BNE" 1)]
+    [(#xd0) (values (format "BNE $~a" (byte-at-pc+1 use-state)) 2)]
     [(#xd1) (values (format "CMP ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #xd2 -io KIL
     ;; #xd3 -io DCP izy

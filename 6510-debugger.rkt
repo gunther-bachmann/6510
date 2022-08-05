@@ -2,10 +2,11 @@
 (require (rename-in  racket/contract [define/contract define/c]))
 (require readline/readline)
 (require "6510-interpreter.rkt")
-(require "6510-reader.rkt")
+(require "6510-parser.rkt")
 (require "6510-utils.rkt")
-(require "6510.rkt")
 (require "6510-disassembler.rkt")
+
+(provide run-debugger)
 
 ;; TODO allow execution of arbirtray racket with values explicitly set into the namespace to evaluate breakpoint conditions (or do calculations)
 ;; (namespace-set-variable-value! 'some 25)
@@ -235,7 +236,7 @@ EOF
         (#t (begin (displayln "? unknown command?") d-state))))
 
 ;; run an read eval print loop debugger on the passed program
-(define/c (run-interpreter-single-step-loop org raw-bytes)
+(define/c (run-debugger org raw-bytes)
   (-> word/c (listof byte/c) any/c)
   (displayln (format "loading program into debugger at ~a" org))
   (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '()))
@@ -248,7 +249,7 @@ EOF
     (set! d-state
           (dispatch-debugger-command input d-state))))
 
-;; (run-interpreter-single-step-loop #xc000 (list #xa9 #x41 #x48 #x20 #xd2 #xff #x00))
+;; (run-debugger #xc000 (list #xa9 #x41 #x48 #x20 #xd2 #xff #x00))
 
 ;; return nil or the breakpoint that hit
 ;; breakpoint is a function that takes a single argument the state
