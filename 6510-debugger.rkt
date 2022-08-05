@@ -18,6 +18,26 @@
     (displayln "")
     (display "Step-Debugger> ")
     (let ((input (begin (readline ">"))))
+      (define help #<<EOF
+pm <A>, <B>           print memory starting @A (hex) for B bytes (hex)
+sm <A> = <B>          set memory @A (hex) to byte B (hex)
+sa = <B>              set accumulator to byte B (hex)
+spc = <A>             set program counter to address A (hex)
+s                     single step forward
+b                     backward step
+p                     print cpu state
+pp <B?> <A?>          pretty print the next B (hex) commands starting at address A (hex)
+xf? { <command> }     eXecute Force? the given 6510 command (force if byte len differs)
+stop pc = <A>         set break point to stop at pc = address A (hex)
+cf[cbnvzi]            clear flag (Carry,Break,Negative,Overflow,Zero,Interrupt)
+sf[cbnvzi]            set flag (Carry,Break,Negative,Overflow,Zero,Interrupt)
+clear                 clear all breakpoints
+commit                keep only the last 10 states
+r                     run until a break point is hit
+c                     continue over the currently halted on breakpoint
+q                     quit
+EOF
+)
       (define pm-regex #px"^pm *\\[([[:xdigit:]]{1,4}), *([[:xdigit:]]{1,2})\\]$")
       (define sm-regex #px"^sm *\\[([[:xdigit:]]{1,4})\\] *= *([[:xdigit:]]{1,2})$")
       (define sa-regex #px"^sa *= *([[:xdigit:]]{1,2})$")
@@ -87,7 +107,7 @@
                (displayln (disassemble (car states) (if address (string->number address 16)  (cpu-state-program-counter (car states))) (if len (string->number len 16) 1) ))))
             ;; ((string=? input "pp") (displayln (let-values (((str _) (disassemble (car states)))) str)))
             ((or (string=? input "h")
-                (string=? input "?")) (displayln " q = quit,\n s = single step forward,\n p = print cpu state,\n b = backward step,\n pp = pretty print current command"))
+                (string=? input "?")) (displayln help))
             (#t (display "? not understood ?"))))))
 
 ;; (run-interpreter-single-step-loop #xc000 (list #xa9 #x41 #x48 #x20 #xd2 #xff #x00))
