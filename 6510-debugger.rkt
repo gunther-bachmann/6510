@@ -107,16 +107,18 @@ EOF
                [states (cons (modify-flag (string=? set-or-clear "s") flag c-state)
                              (debug-state-states d-state))]))
 
+(define/c (instruction-byte-len c-state)
+  (-> cpu-state? exact-positive-integer?)
+  (let-values (((_ commandBytes) (disassemble-single c-state))) commandBytes))
+
 (define/c (debugger--execute-command command force d-state)
   (-> string? boolean? debug-state? debug-state?)
   (with-handlers ([exn:fail? ;; catch parse error of the 6510 opcode
-                   (lambda (e)
-                     (displayln e)
-                     d-state)])
+                   (lambda (e) (displayln e) d-state)])
     (define c-state (car (debug-state-states d-state)))
     (let ((byteList (compile-opcode (string-trim command))))
       (if (or force
-             (eq? (let-values (((_ commandBytes) (disassemble-single c-state))) commandBytes)
+             (eq? (instruction-byte-len c-state)
                   (length byteList)))
           (struct-copy debug-state d-state
                        [states (cons (-pokem c-state (cpu-state-program-counter c-state) byteList)
@@ -124,16 +126,23 @@ EOF
           (begin (displayln "byte length differs (use xf to force)")
                  d-state)))))
 
-(define/c (debugger--set-breakpoint d-state fun)
+(define/c (debugger--push-breakpoint d-state fun)
   (-> debug-state? any/c debug-state?)
   (struct-copy debug-state d-state
                [breakpoints (cons fun
                                   (debug-state-breakpoints d-state))]))
 
-(define/c (debugger--run d-state)
+(define/c (debugger--pop-breakpoint d-state)
   (-> debug-state? debug-state?)
+  (struct-copy debug-state d-state [breakpoints (cdr (debug-state-breakpoints d-state))]))
+
+(define/c (debugger--run d-state [display #t])
+  (-> debug-state? boolean? debug-state?)
   (let-values (((breakpoint new-states) (run-until-breakpoint (debug-state-states d-state) (debug-state-breakpoints d-state))))
+    (when (and breakpoint display)
+      (displayln (format "hit breakpoint ~a" breakpoint)))
     (struct-copy debug-state d-state [states new-states])))
+
 (define/c (debugger--continue d-state)
   (-> debug-state? debug-state?)
   (define c-states (debug-state-states d-state))
@@ -157,12 +166,14 @@ EOF
   (define commit-regex #px"^commit *([[:xdigit:]]{1,2})?")
   (define flags-regex #px"^([sc])f([cbnvzi])$")
   (cond ((or (string=? command "?") (string=? command "h")) (debugger--help d-state))
-        ;; ((string=? command "b") (struct-copy debug-state d-state [states (cdr c-states)]))
+        ;; b - go back in history
         ((regexp-match? b-regex command)
          (match-let (((list _ value) (regexp-match b-regex command)))
            (define states (debug-state-states d-state))
            (struct-copy debug-state d-state [states (list-tail states (min (- (length states) 1) (if value (string->number value 16) 1)))])))
+        ;; s - single step
         ((string=? command "s") (struct-copy debug-state d-state [states (cons (execute-cpu-step (car c-states)) c-states)]))
+        ;; p - print processor state
         ((string=? command "p") (displayln "") (print-state (car c-states)) d-state)
         ;; pp - disassemble (pretty print)
         ((regexp-match? pp-regex command)
@@ -196,26 +207,26 @@ EOF
         ((regexp-match? stop-pc-regex command)
          (match-let (((list _ value) (regexp-match stop-pc-regex command)))
            (displayln (format "set breakpoint at pc = $~a" value))
-           (debugger--set-breakpoint d-state
-                                     (lambda (state)
-                                       (eq? (cpu-state-program-counter state)
-                                            (string->number value 16))))))
+           (debugger--push-breakpoint d-state
+                                      (lambda (c-state)
+                                        (eq? (cpu-state-program-counter c-state)
+                                             (string->number value 16))))))
         ;; stop a=ff - stop at accumulator = ff
         ((regexp-match? stop-a-regex command)
          (match-let (((list _ value) (regexp-match stop-a-regex command)))
            (displayln (format "set breakpoint at accumluator = $~a" value))
-           (debugger--set-breakpoint d-state
-                                     (lambda (state)
-                                       (eq? (cpu-state-accumulator state)
-                                            (string->number value 16))))))
+           (debugger--push-breakpoint d-state
+                                      (lambda (c-state)
+                                        (eq? (cpu-state-accumulator c-state)
+                                             (string->number value 16))))))
         ;; stop sp=ff - stop at stack pointer = fff
         ((regexp-match? stop-sp-regex command)
          (match-let (((list _ value) (regexp-match stop-sp-regex command)))
            (displayln (format "set breakpoint at sp = $(1)~a" value))
-           (debugger--set-breakpoint d-state
-                                     (lambda (state)
-                                       (eq? (cpu-state-stack-pointer state)
-                                            (string->number value 16))))))
+           (debugger--push-breakpoint d-state
+                                      (lambda (c-state)
+                                        (eq? (cpu-state-stack-pointer c-state)
+                                             (string->number value 16))))))
         ;; stop cf = 0 - stop when carry is cleared
         ;; stop zf = 1 - stop when zero is set
         ;; stop x = 20 - stop if x (turns) 20
@@ -239,8 +250,8 @@ EOF
 (define/c (run-debugger org raw-bytes)
   (-> word/c (listof byte/c) any/c)
   (displayln (format "loading program into debugger at ~a" org))
+  (displayln "enter '?' to get help, enter 'q' to quit")
   (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '()))
-  (readline ">")
   (for ([_ (in-naturals)])
     (displayln "")
     (display (format "Step-Debugger[~a]> " (length (debug-state-states d-state))))
@@ -253,24 +264,23 @@ EOF
 
 ;; return nil or the breakpoint that hit
 ;; breakpoint is a function that takes a single argument the state
-(define/c (breakpoint-hits state breakpoints)
+(define/c (breakpoint-hits c-state breakpoints)
   (-> cpu-state? list? any/c)
   (if (empty? breakpoints)
       #f
       (begin
         (if (apply
              (car breakpoints)
-             (list state))
+             (list c-state))
             (car breakpoints)
-            (breakpoint-hits state (cdr breakpoints))))))
+            (breakpoint-hits c-state (cdr breakpoints))))))
 
 ;; run until a break point hits or the cpu is on a BRK statement
 (define (run-until-breakpoint states breakpoints)
-  (-> cpu-state? list? (values any/c (listof cpu-state?)))
+  (-> (listof cpu-state?) list? (values any/c (listof cpu-state?)))
   (let ((breakpoint (breakpoint-hits (car states) breakpoints)))
     (if (or breakpoint (eq? 0 (peek-pc (car states))))
         (begin
-          (displayln (format "hit breakpoint ~a" breakpoint))
           (values breakpoint states))
         (begin
           (let ((next-states (cons (execute-cpu-step (car states)) states)))            
