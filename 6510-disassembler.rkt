@@ -31,6 +31,9 @@
         (string-join (list formatted-str (disassemble state (+ address len) (sub1 lines))) "\n")
         formatted-str)))
 
+(define (byte-at-pc state)
+  (byte->hex-string (peek-pc state)))
+
 (define (byte-at-pc+1 state)
   (byte->hex-string (peek-pc+1 state)))
 
@@ -297,4 +300,4 @@
     [(#xfd) (values (format "SBC $~a,x" (word-at-pc+1 use-state)) 3)]
     [(#xfe) (values (format "INC $~a,x" (word-at-pc+1 use-state)) 3)]
     ;; #xff -io ISC abx
-    [else (values "unknown" 0)]))
+    [else (values (format ".byte $~a" (byte-at-pc use-state)) 1)]))
