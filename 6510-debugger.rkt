@@ -1,6 +1,7 @@
 #lang racket
 (require (rename-in  racket/contract [define/contract define/c]))
 (require readline/readline)
+(require threading)
 (require "6510-interpreter.rkt")
 (require "6510-parser.rkt")
 (require "6510-utils.rkt")
@@ -150,6 +151,23 @@ EOF
   (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state))))
     (struct-copy debug-state d-state [states new-states])))
 
+;; step over the current instruction and stop at the next one
+;; relevant only for jump instructions
+(define/c (debugger--step-over d-state)
+  (-> debug-state? debug-state?)
+  (define c-states (debug-state-states d-state))
+  (define byte-len (instruction-byte-len (car c-states)))
+  (define next-instruction-address (+ byte-len (cpu-state-program-counter (car c-states))))
+  (~> d-state
+     (debugger--push-breakpoint
+      _
+      (lambda (c-state)
+        (eq? (cpu-state-program-counter c-state)
+             next-instruction-address)))
+     (debugger--run _ #f)
+     (debugger--pop-breakpoint _)))
+
+;; decode the given debugger command and dispatch to the debugger
 (define/c (dispatch-debugger-command command d-state)
   (-> string? debug-state? debug-state?)
   (define c-states (debug-state-states d-state))
@@ -243,8 +261,11 @@ EOF
         ((string=? command "r") (debugger--run d-state))
         ;; c - continue over current breakpoint to the next one
         ((string=? command "c") (debugger--continue d-state))
-        ;; so :: step over (jsr)
-        (#t (begin (displayln "? unknown command?") d-state))))
+        ;; so - step over the next instruction
+        ((string=? "so" command) (debugger--step-over d-state))
+        (#t (begin (unless (eq? 0 (string-length command))
+                     (displayln "(unknown command, enter '?' to get help)") )
+                   d-state))))
 
 ;; run an read eval print loop debugger on the passed program
 (define/c (run-debugger org raw-bytes)
