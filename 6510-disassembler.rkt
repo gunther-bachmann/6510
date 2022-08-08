@@ -156,7 +156,7 @@
     [(#x6d) (values (format "ADC $~a" (word-at-pc+1 use-state)) 3)]
     [(#x6e) (values (format "ROR $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x6f -io RRA abs
-    [(#x70) (values "BVS" 1)]
+    [(#x70) (values (format "BVS $~a" (byte-at-pc+1 use-state)) 2)]
     [(#x71) (values (format "ADC ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
@@ -192,9 +192,9 @@
     [(#x91) (values (format "STA ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x92 -io KIL
     ;; #x93 -io AHX izy
-    [(#x94) (values (format "STY $~a,x" ) 2)]
-    [(#x95) (values (format "STA $~a,x" ) 2)]
-    [(#x96) (values (format "STX $~a,y" ) 2)]
+    [(#x94) (values (format "STY $~a,x" (byte-at-pc+1 use-state)) 2)]
+    [(#x95) (values (format "STA $~a,x" (byte-at-pc+1 use-state)) 2)]
+    [(#x96) (values (format "STX $~a,y" (byte-at-pc+1 use-state)) 2)]
     ;; #x97 -io SAX zpy
     [(#x98) (values "TYA" 1)]
     [(#x99) (values (format "STA $~a,y" (word-at-pc+1 use-state)) 3)]
@@ -282,7 +282,7 @@
     ;; #xeb -io SBC imm
     [(#xec) (values (format "CPX $~a" (word-at-pc+1 use-state)) 3)]
     [(#xed) (values (format "SBC $~a" (word-at-pc+1 use-state)) 3) ]
-    [(#xee) (values (format "INC $~a" (word-at-pc+1 use-state)) 2)]
+    [(#xee) (values (format "INC $~a" (word-at-pc+1 use-state)) 3)]
     ;; #xef -io ISC abs
     [(#xf0) (values (format "BEQ $~a" (byte-at-pc+1 use-state)) 2)]
     [(#xf1) (values (format "SBC ($~a),y" (byte-at-pc+1 use-state)) 2)]
