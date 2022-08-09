@@ -795,7 +795,7 @@
   '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
   '(#x69      #x65      #x75        #x6D     #x7D       #x79       #x61       #x71))
 
-(module+ test
+(module+ test #| ADC |#
   (check-match (ADC "%10",x)
                '('opcode #x75 2))
 
@@ -819,6 +819,10 @@
 
   (check-match (ADC < "$FF" ,x >)
                '('opcode #x61 #xff)))
+
+(define-opcode-functions AND
+  '(indirect-x zero-page immediate absolute indirect-y zero-page-x absolute-y absolute-x)
+  '(#x21       #x25      #x29      #x2d     #x31       #x35        #x39       #x3d))
 
 (define-opcode-functions ASL
   '(accumulator zero-page zero-page-x absolute absolute-x)
@@ -845,6 +849,10 @@
 (define-opcode-functions BCS '(relative) '(#xb0))
 (define-opcode-functions BEQ '(relative) '(#xf0))
 
+(define-opcode-functions BIT
+  '(zero-page absolute)
+  '(#x24      #x2c))
+
 (module+ test
   (check-match (BEQ "$FC")
                '('rel-opcode #xF0 #xfc))
@@ -860,6 +868,8 @@
 (define-opcode-functions BVC '(relative) '(#x50))
 (define-opcode-functions BVS '(relative) '(#x70))
 
+(define-opcode-functions CLC '(implicit) '(#x18))
+
 (module+ test
   (check-match (BRK)
                '('opcode #x00)))
@@ -872,9 +882,17 @@
   '(implicit)
   '(#xCA))
 
+(define-opcode-functions EOR
+  '(indirect-x zero-page immediate absolute indirect-y zero-page-x absolute-y absolute-x)
+  '(#x41       #x45      #x49      #x4d     #x51       #x55        #x59       #x5d))
+
 (define-opcode-functions INC
   '(zero-page absolute absolute-x zero-page-x)
   '(#xe6      #xee     #xfe       #xf6))
+
+(define-opcode-functions LSR
+  '(zero-page implicit absolute zero-page-x absolute-x)
+  '(#x46      #x4a     #x4e     #x56        #x5e))
 
 (module+ test
   (check-match (INC "$10")
@@ -889,7 +907,36 @@
   (check-match (INC "$1000",x)
                '('opcode #xFE #x00 #x10)))
 
-(define-opcode-functions JMP '(absolute) '(#x4C))
+(define-opcode-functions ORA
+  '(indirect-x zero-page immediate absolute indirect-y zero-page-x absolute-y absolute-x )
+  '(#x01       #x05      #x09      #x0d     #x11       #x15        #x19       #x1d))
+
+(module+ test #| ora |#
+    (check-match (ORA < "$10" ,x >)
+                 '('opcode #x01 #x10))
+    (check-match (ORA "$10")
+                 '('opcode #x05 #x10))
+    (check-match (ORA "#$10")
+                 '('opcode #x09 #x10))
+    (check-match (ORA "$1011")
+                 '('opcode #x0d #x11 #x10))
+    (check-match (ORA <"$10">,y)
+                 '('opcode #x11 #x10))
+    (check-match (ORA "$10",x)
+                 '('opcode #x15 #x10))
+    (check-match (ORA "$1011",y)
+                 '('opcode #x19 #x11 #x10))
+    (check-match (ORA "$1011",x)
+                 '('opcode #x1d #x11 #x10)))
+
+(define-opcode-functions ROL
+  '(zero-page implicit absolute zero-page-x absolute-x)
+  '(#x26      #x2a     #x2e     #x36        #x3e))
+
+(define-opcode-functions ROR
+  '(zero-page implicit absolute zero-page-x absolute-x)
+  '(#x66      #x6a     #x6e     #x76        #x7e))
+
 (define-opcode-functions JMP
   '(absolute indirect)
   '(#x4C     #x6c))
@@ -940,6 +987,12 @@
                '('opcode #xA2 16)))
 
 (define-opcode-functions PHA '(implicit) '(#x48))
+
+(define-opcode-functions PHP '(implicit) '(#x08))
+
+(define-opcode-functions PLP '(implicit) '(#x28))
+
+(define-opcode-functions RTI '(implicit) '(#x40))
 
 (define-opcode-functions RTS '(implicit) '(#x60))
 
