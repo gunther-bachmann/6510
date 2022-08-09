@@ -1,4 +1,28 @@
 #+title: MIL Requirements
+* brainstorming
+  - write minimal lisp compiler in 6502 assembler
+  - write minimal lisp compiler in c
+  - design runtime environment for lisp (reuse as much c64 stuff as possible, putting that behind abstractions?)
+* preparations
+  - read about other implementations
+  - find minimal set of features
+  - use different kind of brackets for semantics
+  - pair, list (immutable=array), map, tree
+* goals
+  - write lisp on c64
+    - editor
+    - compiler
+    - interpreter?
+  - compile lisp down to (efficient) 6510 assembler
+    - tail call recursion
+    - work around stack limitation of 6510
+    - find efficient data structures for memory restrictions
+    - immutability as default
+    - typing
+  - design a lisp that grows to
+    - macros
+    - syntax rules (as in racket)
+    - run on larger machines
 * optimize on byte code size
 * optimize on speed
 * design decisions
@@ -365,3 +389,36 @@
     - [:
 
     - [id0-0: ->(id0-1)] [1000 0001] [id0-1: ->(id1-0) ] [: ->(id2-0)]
+* references
+** [[https://bernsteinbear.com/blog/compiling-a-lisp-1/][compiling a lisp]]
+** [[https://github.com/oskarth/sai][minimal lisp immplemented in racket]] (see repo [[file:repo/+1/sai/][here]])
+** [[https://github.com/arclanguage/anarki/tree/master][arc-lisp implemented in racket]]
+** [[https://bernsteinbear.com/blog/compiling-a-lisp-1/][compiling a lisp]]
+** sector lisp https://justine.lol/sectorlisp2/
+** make your own lisp, original c/perl implementation https://github.com/leonita79/mal-leonita79/tree/master/impls/c
+** honeylisp (apple2 live coding env)
+   - https://bitbucket.org/SpindleyQ/honeylisp/src/main/
+   - https://spindleyq.itch.io/8-bitsy
+   - https://dwheeler.com/6502/
+*** honeylisp https://www.youtube.com/watch?v=Q9TG1G0l3xY&list=PLPWFbl2QwQaZM5DxmIDNCrN3CuTiSTg8q&index=1
+** apple2 -> lisp machine https://blog.nullspace.io/apple-2-lisp-part-1.html
+** minimal lisp impl https://github.com/kanaka/mal/tree/master/impls/rust
+** https://piumarta.com/software/lysp/
+** https://github.com/jaoswald/cl-comfy-6502/tree/master
+** https://github.com/hl80/mu-lisp
+** mulisp (small lisp in c) https://github.com/MattX/mulisp
+** https://github.com/OpenProgger/LISP
+** http://leohetsch.com/create-a-minimal-lisp-like-interpreter-in-c/
+** https://dev.to/vonhyou/my-minimal-lisp-interpreter-5abn
+** https://github.com/kanaka/miniMAL
+** https://carld.github.io/2017/06/20/lisp-in-less-than-200-lines-of-c.html
+** video: byrd on the most beautiful program ever written (maxwell equations of software)
+   - https://www.youtube.com/watch?v=OyfBQmvr2Hc
+** c64 disk copiers https://commodore.software/downloads/category/24-disk-copiers
+** c64 text games with cc65 https://retrogamecoders.com/retro-c-code-text-games/
+** blog about hw close scheme - https://dustycloud.org/blog/guile-steel-smelting-pot/
+** project concept new os based on lisp - https://3lproject.org/
+** pre scheme - a scheme like language without gc, close to c, useful for implementing a scheme runtime - https://thintz.com/resources/prescheme-documentation
+** pre scheme to guile compiler - https://gitlab.com/flatwhatson/guile-prescheme
+** scopes, a systemlevel lisp (implementation in cpp) - https://sr.ht/~duangle/scopes/
+** carp, a systemlevel lisp (implementation in haskell) - https://github.com/carp-lang/Carp
