@@ -138,7 +138,7 @@ EOF
   (struct-copy debug-state d-state [breakpoints (cdr (debug-state-breakpoints d-state))]))
 
 (define/c (debugger--run d-state [display #t])
-  (-> debug-state? boolean? debug-state?)
+  (->* (debug-state?) (boolean?) debug-state?)
   (let-values (((breakpoint new-states) (run-until-breakpoint (debug-state-states d-state) (debug-state-breakpoints d-state))))
     (when (and breakpoint display)
       (displayln (format "hit breakpoint ~a" breakpoint)))
