@@ -118,7 +118,7 @@
     ;; #x47 -io SRE zp
     [(#x48) (values "PHA" 1)]
     [(#x49) (values (format "EOR #$~a" (byte-at-pc+1 use-state)) 2)]
-    [(#x4a) (values (format "LSR $~a" (byte-at-pc+1 use-state)) 2)]
+    [(#x4a) (values "LSR" 1)]
     ;; #x4b -io ALR imm
     [(#x4c) (values (format "JMP $~a" (word-at-pc+1 use-state)) 3)]
     [(#x4d) (values (format "EOR $~a" (word-at-pc+1 use-state)) 3)]
