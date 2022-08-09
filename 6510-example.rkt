@@ -25,6 +25,8 @@
 
 
 ; --- just to test the assembler
+ jmp ($1000)
+ jmp $1011
  asl a
  asl $10
  asl $1000

@@ -152,7 +152,7 @@
     [(#x69) (values (format "ADC #$~a" (byte-at-pc+1 use-state)) 2)]
     [(#x6a) (values "ROR" 1)]
     ;; #x6b -io ARR imm
-    [(#x6c) (values (format "JMP $~a" (word-at-pc+1 use-state)) 3)]
+    [(#x6c) (values (format "JMP ($~a)" (word-at-pc+1 use-state)) 3)]
     [(#x6d) (values (format "ADC $~a" (word-at-pc+1 use-state)) 3)]
     [(#x6e) (values (format "ROR $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x6f -io RRA abs

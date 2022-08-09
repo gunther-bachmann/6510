@@ -37,6 +37,6 @@
 
 (struct one-arg-adr-modes (relative? accumulator? immediate? zero-page? absolute?))
 
-(struct ind-arg-adr-modes (indirect-x? indirect-y?))
+(struct ind-arg-adr-modes (indirect-x? indirect-y? indirect?))
 
 (struct idx-arg-adr-modes (absolute-x? absolute-y? zero-page-x?))

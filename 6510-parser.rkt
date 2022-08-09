@@ -170,6 +170,9 @@
                       (list (last (syntax->datum x))))))))
 
 (module+ test
+  (check-match (parsed-string-result (abs-opcode/p "JMP") "JMP $1000")
+               '(JMP "4096"))
+
   (check-match (parsed-string-result (abs-opcode/p "JSR") "JSR $1000")
                '(JSR "4096"))
 
@@ -233,14 +236,19 @@
 (define absolute/p (do [mem <- (or/p 6510-label/p word/p)] (pure (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))))))
 (define indirect-x/p (do (char/p #\() [mem <- (or/p 6510-label/p byte/p)] (string-cia/p ",x") (char/p #\))
                          (pure `(< ,(if (number? mem) (number->string mem) (last mem)) x >))))
-(define indirect-y/p (do (char/p #\() [mem <- byte/p] (char/p #\)) (string-cia/p ",y") (pure `(< ,(number->string mem) > y))))
+(define indirect-y/p (do (char/p #\() [mem <- (or/p 6510-label/p byte/p)] (char/p #\)) (string-cia/p ",y")  (pure `(< ,(number->string mem) > y))))
+(define indirect/p (do (char/p #\() [mem <- (or/p 6510-label/p word/p)] (char/p #\)) (pure `(< ,(if (number? mem) (number->string mem) (last (syntax->datum mem))) >))))
 (define absolute-x/p (do [x <- word/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
 (define absolute-y/p (do [x <- word/p] (string-cia/p ",y") (pure (list (number->string x) 'y))))
 (define zero-page-x/p (do [x <- byte/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
 
-(module+ test
+(module+ test #| indirect/p indirect-x/p absolute/p |#
+  (check-match (parsed-string-result indirect/p "($1000)")
+               '(< "4096" >))
   (check-match (parsed-string-result indirect-x/p "($10,x)")
                '(< "16" x >))
+  (check-match (parsed-string-result indirect-y/p "($10),y")
+               '(< "16" > y))
   (check-match (parsed-string-result absolute/p "$1000")
                '("4096"))
   (check-match (parsed-string-result absolute/p ":out")
@@ -286,6 +294,12 @@
                                                                              '#:org-cmd (string-append opcode " (" (second (syntax->datum indy-res)) "),y")))
                                                                  (syntax->datum indy-res)) actual-opcode)))
                                    (lambda (x) (member 'indirect-y adr-mode-list)) "no indirect, y"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [ind-res <- (syntax/p indirect/p)]
+                                     (pure (datum->syntax ind-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line ind-res)
+                                                                             '#:org-cmd (string-append opcode " (" (second (syntax->datum ind-res)) ")")))
+                                                                 (syntax->datum ind-res)) actual-opcode)))
+                                   (lambda (x) (member 'indirect adr-mode-list)) "no indirect"))  
                    (try/p (guard/p (do (many/p space-or-tab/p) [absx-res <- (syntax/p absolute-x/p)]
                                      (pure (datum->syntax absx-res (append (opcode->list4pure opcode)
                                                                  (list (list '#:line (syntax-line absx-res)
@@ -340,6 +354,12 @@
   (check-match (parsed-string-result data-bytes/p ".data $20,	%10,  4")
                '(BYTES ("bytes") (32 2 4))))
 
+(module+ test
+  (check-match (parsed-string-result (adr-modes-opcode/p "jmp" '(indirect)) "jmp ($1000)")
+               '(JMP (#:line 1 #:org-cmd "jmp (4096)") < "4096" >))
+  (check-match (parsed-string-result (adr-modes-opcode/p "jmp" '(absolute)) "jmp $1000")
+               '(JMP (#:line 1 #:org-cmd "jmp 4096")  "4096" )))
+
 ;; parser for valid assembler lines (including bytes and labels)
 (define 6510-opcode/p
   (do (or/p
@@ -357,6 +377,7 @@
        (adr-modes-opcode/p "dec" '(zero-page zero-page-x absolute absolute-x))
        (adr-modes-opcode/p "dex" '(implicit))
        (adr-modes-opcode/p "inc" '(zero-page zero-page-x absolute absolute-x))
+       (adr-modes-opcode/p "jmp" '(absolute indirect))
        (adr-modes-opcode/p "jsr" '(absolute))
        (adr-modes-opcode/p "lda" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
        (adr-modes-opcode/p "ldx" '(immediate zero-page zero-page-y absolute absolute-y))

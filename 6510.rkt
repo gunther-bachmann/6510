@@ -20,6 +20,7 @@
                                 (one-arg-adr-modes-immediate? immediate?)
                                 (one-arg-adr-modes-absolute? absolute?)
                                 (one-arg-adr-modes-zero-page? zero-page?)
+                                (ind-arg-adr-modes-indirect? indirect?)
                                 (ind-arg-adr-modes-indirect-x? indirect-x?)
                                 (ind-arg-adr-modes-indirect-y? indirect-y?)
                                 (idx-arg-adr-modes-absolute-x? absolute-x?)
@@ -35,7 +36,7 @@
     (require rackunit)))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program create-image-with-program
-         ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC DEX INC LDA LDX JSR RTS STA PHA
+         ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC DEX INC LDA LDX JMP JSR RTS STA PHA
          LABEL BYTES)
 
 
@@ -362,11 +363,29 @@
     (check-match (syntax->datum (absolute-mode #'JSR #'":out"))
                  '(JSR_abs ":out"))))
 
+(define-for-syntax (indirect-mode opcode open operand close)
+  (with-syntax ([operand-value (syntax->datum operand)]
+                [symbol-ind (symbol-append opcode '_ind)])    
+    (if (6510-number-string? (syntax->datum #'operand-value))
+        (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+          (when (<= 256 (syntax->datum #'op-number))
+            #'(symbol-ind op-number)))
+        (when (6510-label-string? (syntax->datum #'operand-value))
+          #'(symbol-ind operand-value)))))
+
+(module+ test #| indirect-mode |#
+  (begin-for-syntax
+    (check-match (syntax->datum (indirect-mode #'JMP #'#\( #'"$1011" #'#\)))
+                 '(JMP_ind 4113))
+
+    (check-match (syntax->datum (indirect-mode #'JMP #'#\( #'":out" #'#\)))
+                 '(JMP_ind ":out"))))
+
 (define-for-syntax (indirect-x-mode opcode open operand close-or-x close-or-y)
   (with-syntax ([symbol-indx (symbol-append opcode '_indx)]
                 [x-idx (syntax->datum close-or-x)])
     (when (or (equal? (syntax->datum #'x-idx) '(unquote x))
-              (equal? (syntax->datum #'x-idx) 'x))
+             (equal? (syntax->datum #'x-idx) 'x))
       (if (6510-number-string? (syntax->datum operand))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
             (when (>= 255 (syntax->datum #'op-number))
@@ -478,7 +497,6 @@
           (when (6510-label-string? (syntax->datum #'operand-value))
             #'(symbol-zpx operand-value))))))
 
-
 (module+ test
   (begin-for-syntax
     (check-match (syntax->datum (zeropage-x-mode #'LDA #'"$10" #'x))
@@ -507,13 +525,15 @@
   (string-append-l
    (list
     "invalid syntax.\n"
-    (if (or (indirect-x? adr-modes) (indirect-y? adr-modes))
+    (if (or (indirect-x? adr-modes) (indirect-y? adr-modes) (indirect? adr-modes))
         "expected:\n"
         (string-append opcode-string " cannot be used with indirect addressing\n"))
     (when (indirect-x? adr-modes)
       (construct-example opcode-string "($10,x)" "< \"$10\",x >" "indirect x addressing mode" within-non-racket-syntax))
     (when (indirect-y? adr-modes)
       (construct-example opcode-string "($10),y" "< \"$10\" >,y" "indirect y addressing mode" within-non-racket-syntax))
+    (when (indirect? adr-modes)
+      (construct-example opcode-string "($1000)" "< \"($1000)\" >" "indirect addressing mode" within-non-racket-syntax))
     "got: ")))
 
 (define-for-syntax (error-string/indexed adr-modes opcode-string within-non-racket-syntax)
@@ -584,6 +604,20 @@
     (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page immediate)) #'LDA #'"#$10" #'() #f #'""))
                  '(LDA_i 16))))
 
+(define-for-syntax (opcode-with-addressing/just-indirect adr-modes opcode open op close stx non-racket-syn org-string)
+  (with-syntax ([ind (when (indirect? adr-modes) (indirect-mode opcode open op close))])
+    (let* ([res (collect-syntax-result (list #'ind))]
+           [opcode-string (symbol->string (syntax->datum opcode))]
+           [error-string (error-string/indirect adr-modes opcode-string non-racket-syn)])
+      (if (equal? '() (syntax->datum res))
+          (raise-syntax-error error-string opcode non-racket-syn org-string stx)
+          res))))
+
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (opcode-with-addressing/just-indirect (list->ind-arg-adr-modes '(indirect)) #'JMP #'#\( #'"$1011" #'#\) #'() #f #'""))
+                 '(JMP_ind 4113))))
+
 (define-for-syntax (opcode-with-addressing/indirect adr-modes opcode open op close-or-x close-or-y stx non-racket-syn org-string)
   (with-syntax ([indxres (when (indirect-x? adr-modes) (indirect-x-mode opcode open op close-or-x close-or-y))]
                 [indyres (when (indirect-y? adr-modes) (indirect-y-mode opcode open op close-or-x close-or-y))])
@@ -638,7 +672,8 @@
 
 (define-for-syntax (list->ind-arg-adr-modes option-list)
   (ind-arg-adr-modes (member 'indirect-x option-list)
-                     (member 'indirect-y option-list)))
+                     (member 'indirect-y option-list)
+                     (member 'indirect option-list)))
 
 (define-for-syntax (list->idx-arg-adr-modes option-list)
   (idx-arg-adr-modes (member 'absolute-x option-list)
@@ -652,10 +687,15 @@
     (and (equal? open-i '<) (equal? close-i '>) (or (equal? y-i 'y) (equal? y-i '(unquote y))))))
 
 (define-for-syntax (operands-indirect-x? open op x close)
-         (let ([open-i (syntax->datum open)]
-             [x-i (syntax->datum x)]
-             [close-i (syntax->datum close)])
-         (and (equal? open-i '<) (equal? close-i '>) (or  (equal? x-i 'x) (equal? x-i '(unquote x))))))
+  (let ([open-i (syntax->datum open)]
+        [x-i (syntax->datum x)]
+        [close-i (syntax->datum close)])
+    (and (equal? open-i '<) (equal? close-i '>) (or  (equal? x-i 'x) (equal? x-i '(unquote x))))))
+
+(define-for-syntax (operands-indirect? open op close)
+  (let ([open-i (syntax->datum open)]
+        [close-i (syntax->datum close)])
+    (and (equal? open-i '<) (equal? close-i '>))))
 
 (define-syntax-rule (opcode-with-addressing opcode option-list)
   (define-syntax (opcode stx)
@@ -678,6 +718,12 @@
       [(opcode (#:line line-number #:org-cmd org-string) open op x close)
        (operands-indirect-x? #'open #'op #'x #'close)
        (opcode-with-addressing/indirect (list->ind-arg-adr-modes option-list) #'opcode #'open #'op #'x #'close stx #'line-number #'org-string)]
+      [(opcode open op close)
+       (operands-indirect? #'open #'op #'close)
+       (opcode-with-addressing/just-indirect (list->ind-arg-adr-modes option-list) #'opcode #'open #'op #'close stx #f #'"")]
+      [(opcode (#:line line-number #:org-cmd org-string) open op close)
+       (operands-indirect? #'open #'op #'close)
+       (opcode-with-addressing/just-indirect (list->ind-arg-adr-modes option-list) #'opcode #'open #'op #'close stx #'line-number #'org-string)]      
       [(opcode op, idx)
        (opcode-with-addressing/indexed (list->idx-arg-adr-modes option-list) #'opcode #'op #'idx stx #f #'"")]
       [(opcode (#:line line-number #:org-cmd org-string) op, idx)
@@ -724,6 +770,7 @@
          (define-opcode-functions/macro op option-list bytecode-list absolute "_abs" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
          (define-opcode-functions/macro op option-list bytecode-list absolute-x "_absx" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
          (define-opcode-functions/macro op option-list bytecode-list absolute-y "_absy" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
+         (define-opcode-functions/macro op option-list bytecode-list indirect "_ind" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
          (define-opcode-functions/macro op option-list bytecode-list indirect-x "_indx" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (byte value)) (list value))))
          (define-opcode-functions/macro op option-list bytecode-list indirect-y "_indy" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (byte value)) (list value))))
          (opcode-with-addressing op option-list)
@@ -843,6 +890,16 @@
                '('opcode #xFE #x00 #x10)))
 
 (define-opcode-functions JMP '(absolute) '(#x4C))
+(define-opcode-functions JMP
+  '(absolute indirect)
+  '(#x4C     #x6c))
+
+(module+ test #| jmp |#
+  (check-match (JMP < "$1011" >)
+               '('opcode #x6c #x11 #x10))
+  (check-match (JMP "$1011")
+               '('opcode #x4c #x11 #x10)))
+
 (define-opcode-functions JSR '(absolute) '(#x20))
 
 (define-opcode-functions LDA
