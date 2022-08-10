@@ -36,7 +36,20 @@
     (require rackunit)))
 
 (provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program create-image-with-program
-         ADC ASL BCC BCS BEQ BMI BNE BPL BRK BVC BVS DEC DEX INC LDA LDX JMP JSR RTS STA PHA
+         ADC AND ASL
+         BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS
+         CLC CLD CLI CLV CMP CPX CPY
+         DEC DEX DEY 
+         EOR
+         INC INX INY
+         JMP JSR         
+         LDA LDX LDY LSR
+         NOP
+         ORA
+         PHA PHP PLA PLP
+         ROL ROR RTI RTS
+         SBC SEC SED SEI STA STX STY
+         TAX TAY TSX TXA TXS TYA        
          LABEL BYTES)
 
 
@@ -870,6 +883,24 @@
 
 (define-opcode-functions CLC '(implicit) '(#x18))
 
+(define-opcode-functions CLD '(implicit) '(#xd8))
+
+(define-opcode-functions CLI '(implicit) '(#x58))
+
+(define-opcode-functions CLV '(implicit) '(#xb8))
+
+(define-opcode-functions CMP
+  '(indirect-x zero-page immediate absolute indirect-y zero-page-x absolute-y absolute-x)
+  '(#xc1       #xc5      #xc9      #xcd     #xd1       #xd5        #xd9       #xdd))
+
+(define-opcode-functions CPX
+  '(immediate zero-page absolute )
+  '(#xe0      #xe4      #xec))
+
+(define-opcode-functions CPY
+  '(immediate zero-page absolute )
+  '(#xc0      #xc4      #xcc))
+
 (module+ test
   (check-match (BRK)
                '('opcode #x00)))
@@ -878,9 +909,9 @@
   '(zero-page absolute absolute-x zero-page-x)
   '(#xc6      #xce     #xde       #xd6))
 
-(define-opcode-functions DEX
-  '(implicit)
-  '(#xCA))
+(define-opcode-functions DEX '(implicit) '(#xCA))
+
+(define-opcode-functions DEY '(implicit) '(#x88))
 
 (define-opcode-functions EOR
   '(indirect-x zero-page immediate absolute indirect-y zero-page-x absolute-y absolute-x)
@@ -890,9 +921,15 @@
   '(zero-page absolute absolute-x zero-page-x)
   '(#xe6      #xee     #xfe       #xf6))
 
+(define-opcode-functions INX '(implicit) '(#xe8))
+
+(define-opcode-functions INY '(implicit) '(#xc8))
+
 (define-opcode-functions LSR
   '(zero-page implicit absolute zero-page-x absolute-x)
   '(#x46      #x4a     #x4e     #x56        #x5e))
+
+(define-opcode-functions NOP '(implicit) '(#xea))
 
 (module+ test
   (check-match (INC "$10")
@@ -982,6 +1019,10 @@
   '(immediate zero-page zero-page-y absolute absolute-y)
   '(#xA2      #xA6      #xB6        #xAE     #xBE))
 
+(define-opcode-functions LDY
+  '(immediate zero-page zero-page-x absolute absolute-x)
+  '(#xA0      #xA4      #xB4        #xAC     #xBC))
+
 (module+ test #| ldx |#
   (check-match (LDX "#$10")
                '('opcode #xA2 16)))
@@ -990,11 +1031,23 @@
 
 (define-opcode-functions PHP '(implicit) '(#x08))
 
+(define-opcode-functions PLA '(implicit) '(#x68))
+
 (define-opcode-functions PLP '(implicit) '(#x28))
 
 (define-opcode-functions RTI '(implicit) '(#x40))
 
 (define-opcode-functions RTS '(implicit) '(#x60))
+
+(define-opcode-functions SBC
+  '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
+  '(#xe9      #xe5      #xf5        #xed     #xfd       #xf9       #xe1       #xf1))
+
+(define-opcode-functions SEC '(implicit) '(#x38))
+
+(define-opcode-functions SED '(implicit) '(#xf8))
+
+(define-opcode-functions SEI '(implicit) '(#x78))
 
 (define-opcode-functions STA
   '(zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y)
@@ -1043,6 +1096,25 @@
   (check-match (STA "$28" x)
                '('opcode #x95 #x28)))
 
+(define-opcode-functions STX
+  '(zero-page absolute zero-page-y)
+  '(#x86      #x8e     #x96))
+
+(define-opcode-functions STY
+  '(zero-page absolute zero-page-x)
+  '(#x84      #x8c     #x94))
+
+(define-opcode-functions TAX '(implicit) '(#xaa))
+
+(define-opcode-functions TAY '(implicit) '(#xa8))
+
+(define-opcode-functions TSX '(implicit) '(#xba))
+
+(define-opcode-functions TXA '(implicit) '(#x8a))
+
+(define-opcode-functions TXS '(implicit) '(#x9a))
+
+(define-opcode-functions TYA '(implicit) '(#x98))
 
 ;; -------------------------------------------------------------------------------- whole program functions
 
