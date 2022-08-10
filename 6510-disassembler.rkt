@@ -237,7 +237,7 @@
     [(#xbe) (values (format "LDX $~a,y" (word-at-pc+1 use-state)) 3)]
     ;; #xbf -io LAX aby
     [(#xc0) (values (format "CPY #$~a" (byte-at-pc+1 use-state)) 2)]
-    [(#xc1) (values (format "CMP ($~a,x" (byte-at-pc+1 use-state)) 2)]
+    [(#xc1) (values (format "CMP ($~a,x)" (byte-at-pc+1 use-state)) 2)]
     ;; #xc2 -io NOP imm
     ;; #xc3 -io DCP izx
     [(#xc4) (values (format "CPY $~a" (byte-at-pc+1 use-state)) 2)]
