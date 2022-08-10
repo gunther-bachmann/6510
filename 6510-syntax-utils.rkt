@@ -39,4 +39,4 @@
 
 (struct ind-arg-adr-modes (indirect-x? indirect-y? indirect?))
 
-(struct idx-arg-adr-modes (absolute-x? absolute-y? zero-page-x?))
+(struct idx-arg-adr-modes (absolute-x? absolute-y? zero-page-x? zero-page-y?))

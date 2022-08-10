@@ -88,9 +88,9 @@
     [(#x29) (values (format "AND #$~a" (byte-at-pc+1 use-state)) 2)]
     [(#x2a) (values "ROL" 1)]
     ;; #x2b -io ANC imm
-    [(#x2c) (values (format "BIT $~a" (word->hex-string (peek-word-at-pc+1))) 3)]
-    [(#x2d) (values (format "AND $~a" (word->hex-string (peek-word-at-pc+1))) 3)]
-    [(#x2e) (values (format "ROL $~a" (word->hex-string (peek-word-at-pc+1))) 3)]
+    [(#x2c) (values (format "BIT $~a" (word->hex-string (peek-word-at-pc+1 use-state))) 3)]
+    [(#x2d) (values (format "AND $~a" (word->hex-string (peek-word-at-pc+1 use-state))) 3)]
+    [(#x2e) (values (format "ROL $~a" (word->hex-string (peek-word-at-pc+1 use-state))) 3)]
     ;; #x2f -io RIA abs
     [(#x30) (values (format "BMI $~a" (byte-at-pc+1 use-state)) 2)]
     [(#x31) (values (format "AND ($~a),y" (byte-at-pc+1 use-state)) 2)]

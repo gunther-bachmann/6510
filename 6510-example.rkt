@@ -25,6 +25,98 @@
 
 
 ; --- just to test the assembler
+
+brk
+ora ($10,x)
+ora $10
+asl $10
+php
+ora #$10
+asl a
+ora $ffff
+asl $ffff
+bpl $a0
+ora ($10),y
+ora $10,x
+asl $10,x
+clc
+ora $ffff,y
+ora $ffff,x
+asl $ffff,x
+jsr $fffd
+and ($10,x)
+bit $10
+and $10
+rol $10
+plp
+and #$10
+rol
+bit $fffd
+and $fffd
+rol $fffd
+bmi $a9
+and ($10),y
+and $10,x
+rol $10,x
+sec
+and $fffd,y
+and $fffd,x
+rol $fffd,x
+rti
+eor ($10,x)
+eor $10
+lsr $10
+pha
+eor #$10
+lsr
+jmp $fff2
+eor $fffd
+lsr $ffff
+bvc $b9
+eor ($10),y
+eor $10,x
+lsr $10,x
+cli
+eor $ffff,y
+eor $fffd,x
+lsr $fffd,x
+rts
+adc ($10,x)
+adc $10
+ror $10
+pla
+adc #$ff
+ror
+jmp ($1000)
+adc $1000
+ror $1000
+bvs $10
+adc ($10),y
+adc $10,x
+ror $10,x
+sei
+adc $ffff,y
+adc $ffff,x
+ror $ffff,x
+sta ($10,x)
+sty $10
+sta $10
+stx $10
+dey
+txa
+sty $1000
+sta $1000
+stx $1000
+bcc $20
+sta ($10),y
+sty $10,x
+sta $10,x
+stx $10,y
+tya
+sta $ffff,y
+txs ;; 9a
+
+; --- some additional tests
  jmp ($1000)
  jmp $1011
  asl a

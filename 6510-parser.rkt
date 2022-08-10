@@ -241,6 +241,7 @@
 (define absolute-x/p (do [x <- word/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
 (define absolute-y/p (do [x <- word/p] (string-cia/p ",y") (pure (list (number->string x) 'y))))
 (define zero-page-x/p (do [x <- byte/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
+(define zero-page-y/p (do [x <- byte/p] (string-cia/p ",y") (pure (list (number->string x) 'y))))
 
 (module+ test #| indirect/p indirect-x/p absolute/p |#
   (check-match (parsed-string-result indirect/p "($1000)")
@@ -318,6 +319,12 @@
                                                                              '#:org-cmd (string-append opcode " " (first (syntax->datum zpx-res)) ",x")))
                                                                  (syntax->datum zpx-res)) actual-opcode)))
                                    (lambda (x) (member 'zero-page-x adr-mode-list)) "no zero page, x"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [zpy-res <- (syntax/p zero-page-y/p)]
+                                     (pure (datum->syntax zpy-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line zpy-res)
+                                                                             '#:org-cmd (string-append opcode " " (first (syntax->datum zpy-res)) ",y")))
+                                                                 (syntax->datum zpy-res)) actual-opcode)))
+                                   (lambda (x) (member 'zero-page-y adr-mode-list)) "no zero page, y"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [abs-res <- (syntax/p absolute/p)]
                                      (pure (datum->syntax abs-res (append (opcode->list4pure opcode)
                                                                  (list (list '#:line (syntax-line abs-res)
@@ -386,6 +393,7 @@
        (adr-modes-opcode/p "dec" '(zero-page zero-page-x absolute absolute-x))
        (adr-modes-opcode/p "dex" '(implicit))
        (adr-modes-opcode/p "dey" '(implicit))
+       (adr-modes-opcode/p "eor" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
        (adr-modes-opcode/p "inc" '(zero-page zero-page-x absolute absolute-x))
        (adr-modes-opcode/p "inx" '(implicit))
        (adr-modes-opcode/p "iny" '(implicit))
@@ -394,6 +402,7 @@
        (adr-modes-opcode/p "lda" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
        (adr-modes-opcode/p "ldx" '(immediate zero-page zero-page-y absolute absolute-y))
        (adr-modes-opcode/p "ldy" '(immediate zero-page zero-page-x absolute absolute-x))
+       (adr-modes-opcode/p "lsr" '(zero-page implicit absolute zero-page-x absolute-x))
        (adr-modes-opcode/p "nop" '(implicit))
        (adr-modes-opcode/p "ora" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
        (adr-modes-opcode/p "pha" '(implicit))

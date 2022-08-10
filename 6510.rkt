@@ -25,7 +25,8 @@
                                 (ind-arg-adr-modes-indirect-y? indirect-y?)
                                 (idx-arg-adr-modes-absolute-x? absolute-x?)
                                 (idx-arg-adr-modes-absolute-y? absolute-y?)
-                                (idx-arg-adr-modes-zero-page-x? zero-page-x?) )))
+                                (idx-arg-adr-modes-zero-page-x? zero-page-x?)
+                                (idx-arg-adr-modes-zero-page-y? zero-page-y?))))
 (require "6510-utils.rkt")
 (require "6510-interpreter.rkt")
 (require (rename-in  racket/contract [define/contract define/c]))
@@ -510,6 +511,18 @@
           (when (6510-label-string? (syntax->datum #'operand-value))
             #'(symbol-zpx operand-value))))))
 
+(define-for-syntax (zeropage-y-mode opcode operand idx)
+  (with-syntax ([symbol-zpy (symbol-append opcode '_zpy)]
+                [operand-value (syntax->datum operand)]
+                [y-idx (syntax->datum idx)])
+    (when (equal? (syntax->datum #'y-idx) 'y)
+      (if (6510-number-string? (syntax->datum operand))
+          (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+            (when (> 256 (parse-number-string (syntax->datum #'operand-value)))
+              #'(symbol-zpy op-number)))
+          (when (6510-label-string? (syntax->datum #'operand-value))
+            #'(symbol-zpy operand-value))))))
+
 (module+ test
   (begin-for-syntax
     (check-match (syntax->datum (zeropage-x-mode #'LDA #'"$10" #'x))
@@ -562,6 +575,8 @@
       (construct-example opcode-string "$1000,y" "\"$1000\",y" "absolute y addressing mode" within-non-racket-syntax))
     (when (zero-page-x? adr-modes)
       (construct-example opcode-string  "$10,x" "\"$10\",x" "zero page x addressing mode" within-non-racket-syntax))
+    (when (zero-page-y? adr-modes)
+      (construct-example opcode-string  "$10,y" "\"$10\",y" "zero page y addressing mode" within-non-racket-syntax))
     "got: ")))
 
 (define-for-syntax (error-string/single adr-modes opcode-string within-non-racket-syntax)
@@ -653,8 +668,9 @@
 (define-for-syntax (opcode-with-addressing/indexed adr-modes opcode op idx stx non-racket-syn org-string)
   (with-syntax ([absxres (when (absolute-x? adr-modes) (absolute-x-mode opcode op idx))]
                 [absyres (when (absolute-y? adr-modes) (absolute-y-mode opcode op idx))]
-                [zpxres (when (zero-page-x? adr-modes) (zeropage-x-mode opcode op idx))])
-    (let* ([res (collect-syntax-result (list #'zpxres #'absxres #'absyres))]
+                [zpxres (when (zero-page-x? adr-modes) (zeropage-x-mode opcode op idx))]
+                [zpyres (when (zero-page-y? adr-modes) (zeropage-y-mode opcode op idx))])
+    (let* ([res (collect-syntax-result (list #'zpxres #'zpyres #'absxres #'absyres))]
            [opcode-string (symbol->string (syntax->datum opcode))]
            [error-string (error-string/indexed adr-modes opcode-string non-racket-syn)])
       (if (equal? '() (syntax->datum res))
@@ -691,7 +707,8 @@
 (define-for-syntax (list->idx-arg-adr-modes option-list)
   (idx-arg-adr-modes (member 'absolute-x option-list)
                      (member 'absolute-y option-list)
-                     (member 'zero-page-x option-list)))
+                     (member 'zero-page-x option-list)
+                     (member 'zero-page-y option-list)))
 
 (define-for-syntax (operands-indirect-y? open op close y)
   (let ([open-i (syntax->datum open)]
@@ -780,6 +797,7 @@
          (define-opcode-functions/macro op option-list bytecode-list immediate "_i" value (list ''opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list zero-page "_zp" value (list ''opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list zero-page-x "_zpx" value (list ''opcode 'byte-code-place value))
+         (define-opcode-functions/macro op option-list bytecode-list zero-page-y "_zpy" value (list ''opcode 'byte-code-place value))
          (define-opcode-functions/macro op option-list bytecode-list absolute "_abs" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
          (define-opcode-functions/macro op option-list bytecode-list absolute-x "_absx" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
          (define-opcode-functions/macro op option-list bytecode-list absolute-y "_absy" value (append (list ''opcode 'byte-code-place) (if (number? value) (list (low-byte value) (high-byte value)) (list value))))
