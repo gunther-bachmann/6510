@@ -54,7 +54,7 @@
     ;; #x07 -io SLO zp
     [(#x08) (values "PHP" 1)]
     [(#x09) (values (format "ORA #$~a" (byte-at-pc+1 use-state)) 2)]
-    [(#x0a) (values "ASL" 1)]
+    [(#x0a) (values "ASL A" 1)]
     ;; #x0b -io ANC imm
     ;; #x0c -io NOP abs
     [(#x0d) (values (format "ORA $~a" (word-at-pc+1 use-state)) 3)]
@@ -300,4 +300,4 @@
     [(#xfd) (values (format "SBC $~a,x" (word-at-pc+1 use-state)) 3)]
     [(#xfe) (values (format "INC $~a,x" (word-at-pc+1 use-state)) 3)]
     ;; #xff -io ISC abx
-    [else (values (format ".byte $~a" (byte-at-pc use-state)) 1)]))
+    [else (values (format ".data $~a" (byte-at-pc use-state)) 1)]))

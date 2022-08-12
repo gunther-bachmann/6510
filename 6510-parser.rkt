@@ -347,7 +347,7 @@
                    )]
     (pure res)))
 
-;; parser for ".data" (byte/p (","|ml_whitespace/p) ...)
+;; parser for ".data (byte/p (","|ml_whitespace/p) ...)
 (define data-bytes/p
   (do
       (try/p (string-cia/p ".data"))
@@ -457,14 +457,16 @@
 ;; compile one opcode to a list of bytes
 (define (compile-opcode str)
   (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcode/p) str))))
-  (define stripped-src-location-data (filter (lambda (el) (not (list? el))) parsed))
+  (define stripped-src-location-data (filter (lambda (el) (not (and (list? el) (equal? (car el) '#:line)))) parsed))
   (commands->bytes 0 (list (eval stripped-src-location-data eval-ns))))
 
 (module+ test #| compile-opcode |#
   (check-equal? (JSR "$2000")
                 '('opcode 32 0 32))
   (check-equal? (compile-opcode "JSR $FFD2")
-                '(32 210 255)))
+                '(32 210 255))
+  (check-equal? (compile-opcode ".data $FF, $10")
+                '(255 16)))
 
 ;; apply the method 'values' to all list elements
 (define (list->values list)

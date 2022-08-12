@@ -9,6 +9,11 @@
 
 (provide run-debugger)
 
+(module+ test
+  (require threading)
+  (require rackunit))
+
+
 ;; TODO allow execution of arbirtray racket with values explicitly set into the namespace to evaluate breakpoint conditions (or do calculations)
 ;; (namespace-set-variable-value! 'some 25)
 ;; (namespace-variable-value 25)
@@ -306,3 +311,19 @@ EOF
         (begin
           (let ((next-states (cons (execute-cpu-step (car states)) states)))            
             (run-until-breakpoint next-states breakpoints))))))
+
+(module+ test #| assemble/dissassemble roundrip |#
+  (for [(opcode (range #x00 #x100))]
+    (define state
+      (~> (initialize-cpu)
+         (6510-load _ #xc000 `(,opcode #x10 #x20))
+         (with-program-counter _ #xc000)))
+    (define-values (mnemonic bytes) (disassemble-single state))
+    (with-handlers ((exn:fail?
+                     (lambda (e) (displayln (format "error: ~a,\nfailure on: opcode: ~a, mnemonic: '~a'" e opcode mnemonic)))))
+      (let ((roundtrip-bytes (compile-opcode mnemonic)))
+        (check-equal?
+         roundtrip-bytes
+         (take `(,opcode #x10 #x20)
+               (length roundtrip-bytes))
+         (format "opcode: ~a, mnemonic: ~a, bytes: ~a" opcode mnemonic roundtrip-bytes))))))
