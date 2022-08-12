@@ -939,16 +939,6 @@
   '(zero-page absolute absolute-x zero-page-x)
   '(#xe6      #xee     #xfe       #xf6))
 
-(define-opcode-functions INX '(implicit) '(#xe8))
-
-(define-opcode-functions INY '(implicit) '(#xc8))
-
-(define-opcode-functions LSR
-  '(zero-page implicit absolute zero-page-x absolute-x)
-  '(#x46      #x4a     #x4e     #x56        #x5e))
-
-(define-opcode-functions NOP '(implicit) '(#xea))
-
 (module+ test
   (check-match (INC "$10")
                '('opcode #xE6 #x10))
@@ -962,35 +952,9 @@
   (check-match (INC "$1000",x)
                '('opcode #xFE #x00 #x10)))
 
-(define-opcode-functions ORA
-  '(indirect-x zero-page immediate absolute indirect-y zero-page-x absolute-y absolute-x )
-  '(#x01       #x05      #x09      #x0d     #x11       #x15        #x19       #x1d))
+(define-opcode-functions INX '(implicit) '(#xe8))
 
-(module+ test #| ora |#
-    (check-match (ORA < "$10" ,x >)
-                 '('opcode #x01 #x10))
-    (check-match (ORA "$10")
-                 '('opcode #x05 #x10))
-    (check-match (ORA "#$10")
-                 '('opcode #x09 #x10))
-    (check-match (ORA "$1011")
-                 '('opcode #x0d #x11 #x10))
-    (check-match (ORA <"$10">,y)
-                 '('opcode #x11 #x10))
-    (check-match (ORA "$10",x)
-                 '('opcode #x15 #x10))
-    (check-match (ORA "$1011",y)
-                 '('opcode #x19 #x11 #x10))
-    (check-match (ORA "$1011",x)
-                 '('opcode #x1d #x11 #x10)))
-
-(define-opcode-functions ROL
-  '(zero-page implicit absolute zero-page-x absolute-x)
-  '(#x26      #x2a     #x2e     #x36        #x3e))
-
-(define-opcode-functions ROR
-  '(zero-page implicit absolute zero-page-x absolute-x)
-  '(#x66      #x6a     #x6e     #x76        #x7e))
+(define-opcode-functions INY '(implicit) '(#xc8))
 
 (define-opcode-functions JMP
   '(absolute indirect)
@@ -1045,6 +1009,34 @@
   (check-match (LDX "#$10")
                '('opcode #xA2 16)))
 
+(define-opcode-functions LSR
+  '(zero-page implicit absolute zero-page-x absolute-x)
+  '(#x46      #x4a     #x4e     #x56        #x5e))
+
+(define-opcode-functions NOP '(implicit) '(#xea))
+
+(define-opcode-functions ORA
+  '(indirect-x zero-page immediate absolute indirect-y zero-page-x absolute-y absolute-x )
+  '(#x01       #x05      #x09      #x0d     #x11       #x15        #x19       #x1d))
+
+(module+ test #| ora |#
+    (check-match (ORA < "$10" ,x >)
+                 '('opcode #x01 #x10))
+    (check-match (ORA "$10")
+                 '('opcode #x05 #x10))
+    (check-match (ORA "#$10")
+                 '('opcode #x09 #x10))
+    (check-match (ORA "$1011")
+                 '('opcode #x0d #x11 #x10))
+    (check-match (ORA <"$10">,y)
+                 '('opcode #x11 #x10))
+    (check-match (ORA "$10",x)
+                 '('opcode #x15 #x10))
+    (check-match (ORA "$1011",y)
+                 '('opcode #x19 #x11 #x10))
+    (check-match (ORA "$1011",x)
+                 '('opcode #x1d #x11 #x10)))
+
 (define-opcode-functions PHA '(implicit) '(#x48))
 
 (define-opcode-functions PHP '(implicit) '(#x08))
@@ -1052,6 +1044,14 @@
 (define-opcode-functions PLA '(implicit) '(#x68))
 
 (define-opcode-functions PLP '(implicit) '(#x28))
+
+(define-opcode-functions ROL
+  '(zero-page implicit absolute zero-page-x absolute-x)
+  '(#x26      #x2a     #x2e     #x36        #x3e))
+
+(define-opcode-functions ROR
+  '(zero-page implicit absolute zero-page-x absolute-x)
+  '(#x66      #x6a     #x6e     #x76        #x7e))
 
 (define-opcode-functions RTI '(implicit) '(#x40))
 

@@ -313,17 +313,29 @@ EOF
             (run-until-breakpoint next-states breakpoints))))))
 
 (module+ test #| assemble/dissassemble roundrip |#
+
+  ;; test that every opcode from $00 .. $ff will disassemble to a string
+  ;; that, if compiled, will produce the same bytes
+  ;; this ensures the symmetry of assembler and disassembler
   (for [(opcode (range #x00 #x100))]
-    (define state
+    (define state-with-opcode
       (~> (initialize-cpu)
          (6510-load _ #xc000 `(,opcode #x10 #x20))
          (with-program-counter _ #xc000)))
-    (define-values (mnemonic bytes) (disassemble-single state))
-    (with-handlers ((exn:fail?
-                     (lambda (e) (displayln (format "error: ~a,\nfailure on: opcode: ~a, mnemonic: '~a'" e opcode mnemonic)))))
+    (define-values (mnemonic bytes) (disassemble-single state-with-opcode))
+    (with-handlers
+      ((exn:fail?
+        (lambda (e) (displayln
+                (format "error: ~a,\nfailure on: opcode: ~a, mnemonic: '~a'"
+                        e opcode mnemonic)))))
       (let ((roundtrip-bytes (compile-opcode mnemonic)))
+        (check-equal?
+         (length roundtrip-bytes)
+         bytes
+         "the disassembler reports different number of bytes than the assembler produces")
         (check-equal?
          roundtrip-bytes
          (take `(,opcode #x10 #x20)
                (length roundtrip-bytes))
-         (format "opcode: ~a, mnemonic: ~a, bytes: ~a" opcode mnemonic roundtrip-bytes))))))
+         (format "assembler/disassemble roundtrip failed\nopcode: ~a, mnemonic: ~a, bytes: ~a"
+                 opcode mnemonic roundtrip-bytes))))))
