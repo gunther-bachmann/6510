@@ -81,16 +81,16 @@ syntax macros into the final racket form which can then be interpreted.
 The `6510.rkt` holds all syntax transformation rules for the translation into 6510 byte/assembler code.
 * `6510-utils` holds functions needed during syntax and execution phase of 6510.
 * `6510-syntax-utils` holds functions useful during syntax phase of the transformation.
-* `6510-reader` is the parser that takes the text file and produces racket 6510 dsl code.
-* `6510-example` is an example file using arbitrary 6510 text syntax.
+* `6510-parser` is the parser that takes the text file and produces racket 6510 dsl code.
+* `6510-reader` is used to parse complete files automatically (using the 6510-parser)
+* `6510-example` is an example file using arbitrary 6510 text syntax (making use of the 6510-reader).
 * `6510-example-rs` is an example file in racket syntax (no special reader involved)
-* `6510-interpreter` holds the (currently minimal) interpreter of the bytecode
+* `6510-interpreter` holds the interpreter of the bytecode
+* `6510-disassembler` allows to produce source code from bytes
+* `6510-debugger` allows stepwise execution of code
 
 
 ## Status
-
-Open 6510-reader.rkt and execute a repl on that file (emacs: C-c C-c).
-It provides some info what data is of interest for closer inspection.
 
 To run tests, run `raco test 6510-reader.rkt` for example.
 
