@@ -15,6 +15,7 @@
          byte
          6510-label-string?
          6510-label-byte-string?
+         6510-label-immediate-byte-string?
          is-immediate-number?
          6510-number-string?)
 
@@ -45,6 +46,11 @@
 (define (6510-label-byte-string? value)
   (and (string? value)
      (regexp-match? #rx"^(:[A-Z][A-Z0-9]*(-H|-L))$"
+                    (string-upcase value))))
+
+(define (6510-label-immediate-byte-string? value)
+  (and (string? value)
+     (regexp-match? #rx"^#(:[A-Z][A-Z0-9]*(-H|-L))$"
                     (string-upcase value))))
 
 (module+ test #| 6510-label-string? |#

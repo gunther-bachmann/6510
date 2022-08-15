@@ -27,7 +27,7 @@
    (JMP ":COUT")
    (JMP < ":COUT" >)
    (ADC ":COUT-L")
-   ;; (ADC "#:COUT-L") ; impossible because #<Label> is not detected as immediate and label to be replaced
+   (ADC "#:COUT-L")
    (STA ":COUT-H")
    (STA ":COUT-H" ,x)
    (LDX ":COUT-H" ,y)

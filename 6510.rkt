@@ -177,10 +177,7 @@
 (define label-high-byte-suffix "-H")
 (define label-low-byte-suffix "-L")
 (define (main-label-string label-string)
-  (if (or (string-suffix? label-string label-high-byte-suffix)
-         (string-suffix? label-string label-low-byte-suffix))
-      (substring label-string 0 (- (string-length label-string) 2))
-      label-string))
+  (regexp-replace #rx"#?(:[a-zA-Z][a-zA-Z0-9_]*)(-H|-L)?" label-string "\\1"))
 
 (module+ test #| main-label-string |#
   (check-equal? (main-label-string ":some")
@@ -188,6 +185,8 @@
   (check-equal? (main-label-string ":some-H")
                 ":some")
   (check-equal? (main-label-string ":some-L")
+                ":some")
+  (check-equal? (main-label-string "#:some-L")
                 ":some"))
 
 ;; replace label references in opcode list command-len-absolute-offset pairs with their absolute / relative offsets
@@ -197,7 +196,9 @@
          [command-length (first (last command-byte-pair))])
     (if (>= 1 (length command))
         command-byte-pair
-        (if (and (not (equal? ''label (first command))) (or (6510-label-string? (last command)) (6510-label-byte-string? (last command))))
+        (if (and (not (equal? ''label (first command))) (or (6510-label-string? (last command))
+                                                       (6510-label-byte-string? (last command))
+                                                       (6510-label-immediate-byte-string? (last command))))
             (let* ([label-string (last command)]
                    [main-label-string (main-label-string label-string)]
                    [label-offset (+ address (get-label-offset labels-bytes-list main-label-string))]
@@ -353,9 +354,11 @@
 (define-for-syntax (immediate-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
                 [symbol-i (symbol-append opcode '_i)])
-    (when (is-immediate-number? (syntax->datum #'operand-value))
+    (if (is-immediate-number? (syntax->datum #'operand-value))                     
       (with-syntax ([op-number (parse-number-string (substring (syntax->datum operand) 1))])
-        #'(symbol-i op-number)))))
+        #'(symbol-i op-number))
+      (when (6510-label-immediate-byte-string? (syntax->datum #'operand-value))
+        #'(symbol-i operand-value)))))
 
 (module+ test
   (begin-for-syntax
