@@ -26,6 +26,8 @@
 
 ; --- just to test the assembler
 
+adc :end-l
+
 adc #$ff
 adc $10
 adc $10,x

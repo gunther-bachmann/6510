@@ -3,6 +3,7 @@
 
 (require "6510.rkt")
 (require "6510-interpreter.rkt")
+(require "6510-debugger.rkt")
 
 (define org #xc000)
 
@@ -22,7 +23,8 @@
 
    (LABEL ("<label>") ":COUT")
    (JSR "$FFD2")
-   (RTS)))
+   (RTS)
+   (ADC ":COUT-L")))
 
 (define addressing-program
   (list
@@ -46,6 +48,7 @@
 (define executable-program (with-program-counter data org))
 
 (displayln "program execution:")
-(print-state (run executable-program))
+(run-debugger org raw-bytes)
+;; (print-state (run executable-program))
 ;; (let ([_ (run executable-program)])
 ;;   (void))

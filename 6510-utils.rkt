@@ -4,7 +4,19 @@
 (module+ test
   (require rackunit))
 
-(provide byte/c word/c two-complement-of parse-number-string low-byte high-byte absolute word byte 6510-label-string? is-immediate-number? 6510-number-string?)
+(provide byte/c
+         word/c
+         two-complement-of
+         parse-number-string
+         low-byte
+         high-byte
+         absolute
+         word
+         byte
+         6510-label-string?
+         6510-label-byte-string?
+         is-immediate-number?
+         6510-number-string?)
 
 (define/c (in-word-range? word)
   (-> exact-integer? boolean?)
@@ -23,10 +35,16 @@
 (define (number-has-prefix? number-string)
   (string-contains? "%$" (substring number-string 0 1)))
 
-;; is the given string a valid label?
+;; is the given string a valid label (for word labels or relatives)?
 (define (6510-label-string? value)
   (and (string? value)
      (regexp-match? #rx"^(:[A-Z][A-Z0-9]*)$"
+                    (string-upcase value))))
+
+;; is the given string a valid label (for byte labels)?
+(define (6510-label-byte-string? value)
+  (and (string? value)
+     (regexp-match? #rx"^(:[A-Z][A-Z0-9]*(-H|-L))$"
                     (string-upcase value))))
 
 (module+ test #| 6510-label-string? |#
@@ -37,7 +55,11 @@
   (check-true (6510-label-string? ":s1ome"))
   (check-false (6510-label-string? "some"))
   (check-false (6510-label-string? ":"))
-  (check-true (6510-label-string? ":s")))
+  (check-true (6510-label-string? ":s"))
+  (check-false (6510-label-string? ":s-H"))
+  (check-true (6510-label-byte-string? ":s-H"))
+  (check-true (6510-label-byte-string? ":s-L"))
+  (check-false (6510-label-byte-string? ":s-x")))
 
 ;; is the given string a valid binary, hex or regular number
 (define (6510-number-string? value)

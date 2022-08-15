@@ -34,7 +34,7 @@
 ;; read and compile assembler program
 (define (literal-read-syntax src in)
   (let*-values ([(syntaxed-program) (syntax/p 6510-program/p)]
-                [(parsed-string) (parse-string (syntax/p 6510-program/p) (port->string in))]
+                [(parsed-string) (parse-string syntaxed-program (port->string in))]
                 [(parse-result) (parse-result! parsed-string)]
                 [(origin parsed-opcodes) (list->values (syntax->datum parse-result))]
                 [(unenc-prg) (syntax-e (last (syntax-e parse-result)))])

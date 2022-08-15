@@ -174,6 +174,22 @@
                  (('opcode 0) (1 3))
                  (('opcode 10 10) (2 4)))))
 
+(define label-high-byte-suffix "-H")
+(define label-low-byte-suffix "-L")
+(define (main-label-string label-string)
+  (if (or (string-suffix? label-string label-high-byte-suffix)
+         (string-suffix? label-string label-low-byte-suffix))
+      (substring label-string 0 (- (string-length label-string) 2))
+      label-string))
+
+(module+ test #| main-label-string |#
+  (check-equal? (main-label-string ":some")
+                ":some")
+  (check-equal? (main-label-string ":some-H")
+                ":some")
+  (check-equal? (main-label-string ":some-L")
+                ":some"))
+
 ;; replace label references in opcode list command-len-absolute-offset pairs with their absolute / relative offsets
 (define (replace-label command-byte-pair labels-bytes-list address)
   (let* ([command (first command-byte-pair)]
@@ -181,18 +197,29 @@
          [command-length (first (last command-byte-pair))])
     (if (>= 1 (length command))
         command-byte-pair
-        (if (and (not (equal? ''label (first command))) (6510-label-string? (last command)))
-            (let* ([label-offset (+ address (get-label-offset labels-bytes-list (last command)))]
-                   [rel-label-offset (- (get-label-offset labels-bytes-list (last command)) current-offset command-length)])
+        (if (and (not (equal? ''label (first command))) (or (6510-label-string? (last command)) (6510-label-byte-string? (last command))))
+            (let* ([label-string (last command)]
+                   [main-label-string (main-label-string label-string)]
+                   [label-offset (+ address (get-label-offset labels-bytes-list main-label-string))]
+                   [rel-label-offset (- (get-label-offset labels-bytes-list main-label-string) current-offset command-length)])
               (case (first command)
                 [('rel-opcode)
                  (list (append (drop-right command 1)
                                (list (low-byte rel-label-offset)))
                        (last command-byte-pair))]
                 [('opcode)
-                 (list (append (drop-right command 1)
-                               (list (low-byte label-offset) (high-byte label-offset)))
-                       (last command-byte-pair))]
+                 (cond ((string-suffix? label-string label-low-byte-suffix)
+                        (list (append (drop-right command 1)
+                                      (list (low-byte label-offset)))
+                              (last command-byte-pair)))
+                       ((string-suffix? label-string label-high-byte-suffix)
+                        (list (append (drop-right command 1)
+                                      (list (high-byte label-offset)))
+                              (last command-byte-pair)))
+                       (else
+                        (list (append (drop-right command 1)
+                                      (list (low-byte label-offset) (high-byte label-offset)))
+                              (last command-byte-pair))))]
                 [else (error (string-append "unknown label reference in opcode" (symbol->string (first (command)))))])
               )
             command-byte-pair))))
@@ -202,6 +229,16 @@
                               '((('label ":some") (0 8)))
                               100)
                '(('opcode 20 108 0) (3 10)))
+
+  (check-match (replace-label '(('opcode #xa9 ":some-L") (2 10))
+                              '((('label ":some") (0 8)))
+                              100)
+               '(('opcode #xa9 108) (2 10)))
+
+  (check-match (replace-label '(('opcode #xa9 ":some-H") (2 10))
+                              '((('label ":some") (0 8)))
+                              #xc000)
+               '(('opcode #xa9 #xc0) (2 10)))
 
   (check-match (replace-label '(('rel-opcode #xf0 ":some") (2 10))
                               '((('label ":some") (0 8)))
@@ -340,7 +377,7 @@
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
             (when (> 256 (parse-number-string (syntax->datum #'operand-value)))
               #'(symbol-zp op-number)))
-          (when (6510-label-string? (syntax->datum #'operand-value))
+          (when (6510-label-byte-string? (syntax->datum #'operand-value))
             #'(symbol-zp operand-value)))))
 
 (module+ test
@@ -353,10 +390,12 @@
                (void))
     (check-eq? (zero-page-mode #'LDA #'"$10A0")
                (void))
+    (check-eq? (zero-page-mode #'LDA #'":out")
+               (void))
     (check-match (syntax->datum (zero-page-mode #'LDA #'"$A0"))
                  '(LDA_zp 160))
-    (check-match (syntax->datum (zero-page-mode #'LDA #'":out"))
-                 '(LDA_zp ":out"))))
+    (check-match (syntax->datum (zero-page-mode #'LDA #'":out-L"))
+                 '(LDA_zp ":out-L"))))
 
 (define-for-syntax (absolute-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
@@ -689,6 +728,8 @@
      #rx"invalid syntax.\nexpected.*LDA \\$1000,x  ;.*got:  \"org string\" 'in 'line"
      (lambda () (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x)) #'LDA #'"$1000" #'y #'(LDA "$1000" y) #'some #'"org string"))
      "check error message to use free syntax")
+    (check-match (syntax->datum (opcode-with-addressing/single (list->one-arg-adr-modes '(zero-page)) #'LDA  #'":some-L" #'() #f #'""))
+                 '(LDA_zp ":some-L"))
     (check-match (syntax->datum (opcode-with-addressing/indexed (list->idx-arg-adr-modes '(absolute-x absolute-y)) #'LDA  #'"$1000" #'y #'() #f #'""))
                  '(LDA_absy 4096))))
 

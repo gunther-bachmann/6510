@@ -118,14 +118,54 @@
     (or/p (char/p #\newline)
           eof/p)))
 
+(define 6510-label-letter/p
+  (satisfy/p (lambda (c) (or (and (char>=? c #\A)
+                          (char<=? c #\Z))
+                       (and (char>=? c #\a)
+                          (char<=? c #\z))
+                       (char=? c #\_)))))
+
 (define 6510-label/p
   (do
       [colon <- (syntax/p (char/p #\:))]
-      [new-label <- (syntax/p (many+/p (or/p letter/p digit/p (char/p #\_))))]
-    (pure (datum->syntax new-label (list (string->symbol "LABEL") '("<label>") (string-append ":" (list->string (syntax->datum new-label)))) colon))))
+      [first-letter <- (syntax/p 6510-label-letter/p)]
+    [new-label <- (syntax/p (many+/p (or/p 6510-label-letter/p digit/p)))]
+    (pure (datum->syntax new-label
+                        (list (string->symbol "LABEL")
+                              '("<label>")
+                              (string-append ":"
+                                             (string (syntax->datum first-letter))
+                                             (list->string (syntax->datum new-label))))
+                        colon))))
+
+(define 6510-label-byte/p
+  (do
+      [colon <- (syntax/p (char/p #\:))]
+      [first-letter <- (syntax/p 6510-label-letter/p)]
+    [new-label <- (syntax/p (many+/p (or/p 6510-label-letter/p digit/p)))]
+    (char/p #\-)
+    [hl-indicator <- (syntax/p (or/p (char-ci/p #\H) (char-ci/p #\L)))]
+    (pure (datum->syntax new-label
+                        (list (string->symbol "LABEL")
+                              '("<label>")
+                              (string-append ":"
+                                             (string (syntax->datum first-letter))
+                                             (list->string (syntax->datum new-label))
+                                             "-"
+                                             (string-upcase (string (syntax->datum hl-indicator)))))
+                        colon))))
 
 (module+ test
   (check-match (parsed-string-result 6510-label/p ":abc")
+               '(LABEL ("<label>") ":abc"))
+
+  (check-match (parsed-string-result 6510-label-byte/p ":abc-h")
+               '(LABEL ("<label>") ":abc-H"))
+
+  (check-match (parsed-string-result 6510-label-byte/p ":abc-L")
+               '(LABEL ("<label>") ":abc-L"))
+
+  (check-match (parsed-string-result 6510-label/p ":abc-x")
                '(LABEL ("<label>") ":abc"))
 
   (check-match (parsed-string-result 6510-label/p ":abc12")
@@ -134,14 +174,11 @@
   (check-match (parsed-string-result 6510-label/p ":ab1c2")
                '(LABEL ("<label>")  ":ab1c2"))
 
-  (check-match (parsed-string-result 6510-label/p ":1ab1c2")
-               '(LABEL ("<label>") ":1ab1c2"))
+  (check-match (parsed-string-result 6510-label/p ":_aB1c2")
+               '(LABEL ("<label>")  ":_aB1c2"))
 
-  (check-match (parsed-string-result 6510-label/p ":1ab1_c2")
-               '(LABEL ("<label>") ":1ab1_c2"))
-
-  (check-match (parsed-string-result 6510-label/p ":1ab1_c2:8")
-               '(LABEL ("<label>") ":1ab1_c2"))
+  (check-exn exn:fail?
+             (lambda () (parsed-string-result 6510-label-byte/p ":abc-x")))
 
   (check-exn exn:fail?
              (lambda () (parsed-string-result 6510-label/p "abc"))))
@@ -231,9 +268,16 @@
   (chars-ci/p string))
 
 (define accumulator/p (do (char-ci/p #\A) (pure '(A))))
-(define immediate/p (do (char/p #\#) [x <- byte/p] (pure (list (string-append "#" (number->string x))))))
-(define zero-page-or-relative/p (do [x <- byte/p] (pure (list (number->string x)))))
-(define absolute/p (do [mem <- (or/p 6510-label/p word/p)] (pure (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))))))
+(define immediate/p
+  (do (char/p #\#)
+      [x <- byte/p]
+    (pure (list (string-append "#" (number->string x))))))
+(define zero-page-or-relative/p
+  (do
+      [b <- (or/p byte/p 6510-label-byte/p)]
+      (pure (list (if (number? b) (number->string b) (last (syntax->datum b)))))))
+(define absolute/p (do [mem <- (or/p 6510-label/p word/p)]
+                       (pure (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))))))
 (define indirect-x/p (do (char/p #\() [mem <- (or/p 6510-label/p byte/p)] (string-cia/p ",x") (char/p #\))
                          (pure `(< ,(if (number? mem) (number->string mem) (last mem)) x >))))
 (define indirect-y/p (do (char/p #\() [mem <- (or/p 6510-label/p byte/p)] (char/p #\)) (string-cia/p ",y")  (pure `(< ,(number->string mem) > y))))
@@ -244,6 +288,12 @@
 (define zero-page-y/p (do [x <- byte/p] (string-cia/p ",y") (pure (list (number->string x) 'y))))
 
 (module+ test #| indirect/p indirect-x/p absolute/p |#
+  (check-match (parsed-string-result immediate/p "#$10")
+               '("#16"))
+  (check-match (parsed-string-result zero-page-or-relative/p ":some-l")
+               '(":some-L"))
+  (check-match (parsed-string-result zero-page-or-relative/p "$11")
+               '("17"))
   (check-match (parsed-string-result indirect/p "($1000)")
                '(< "4096" >))
   (check-match (parsed-string-result indirect-x/p "($10,x)")
@@ -325,18 +375,18 @@
                                                                              '#:org-cmd (string-append opcode " " (first (syntax->datum zpy-res)) ",y")))
                                                                  (syntax->datum zpy-res)) actual-opcode)))
                                    (lambda (x) (member 'zero-page-y adr-mode-list)) "no zero page, y"))
-                   (try/p (guard/p (do (many/p space-or-tab/p) [abs-res <- (syntax/p absolute/p)]
-                                     (pure (datum->syntax abs-res (append (opcode->list4pure opcode)
-                                                                 (list (list '#:line (syntax-line abs-res)
-                                                                             '#:org-cmd (string-append opcode " " (first (syntax->datum abs-res)))))
-                                                                 (syntax->datum abs-res)) actual-opcode)))
-                                   (lambda (x) (member 'absolute adr-mode-list)) "no absolute"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [zp-res <- (syntax/p zero-page-or-relative/p)]
                                      (pure (datum->syntax zp-res (append (opcode->list4pure opcode)
                                                                  (list (list '#:line (syntax-line zp-res)
                                                                              '#:org-cmd (string-append opcode " " (first (syntax->datum zp-res)))))
                                                                  (syntax->datum zp-res)) actual-opcode)))
                                    (lambda (x) (or (member 'zero-page adr-mode-list) (member 'relative adr-mode-list))) "no zero page nor relative"))
+                   (try/p (guard/p (do (many/p space-or-tab/p) [abs-res <- (syntax/p absolute/p)]
+                                     (pure (datum->syntax abs-res (append (opcode->list4pure opcode)
+                                                                 (list (list '#:line (syntax-line abs-res)
+                                                                             '#:org-cmd (string-append opcode " " (first (syntax->datum abs-res)))))
+                                                                 (syntax->datum abs-res)) actual-opcode)))
+                                   (lambda (x) (member 'absolute adr-mode-list)) "no absolute"))
                    (try/p (guard/p (do (many/p space-or-tab/p) [label-res <- (syntax/p 6510-label/p)]
                                      (pure (datum->syntax label-res (append (opcode->list4pure opcode)
                                                                            (list (last (syntax->datum label-res)))) label-res)))
@@ -471,5 +521,3 @@
 ;; apply the method 'values' to all list elements
 (define (list->values list)
   (apply values list))
-
-

@@ -1526,7 +1526,7 @@
 ;; abx = $0000,X
 ;; aby = $0000,Y
 ;; ind = ($0000)
-;; rel = $0000 (PC-relative)
+;; rel = $00 (PC-relative)
 ;; io = illegal opcode
 (define/c (execute-cpu-step state)
   (-> cpu-state? cpu-state?)
