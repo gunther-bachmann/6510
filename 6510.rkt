@@ -526,8 +526,7 @@
         (when (and (6510-number-string? (syntax->datum #'operand-value))
                    (> 256 (parse-number-string (syntax->datum #'operand-value))))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
-            #'(symbol-rel op-number)))
-        )))
+            #'(symbol-rel op-number))))))
 
 (module+ test
   (begin-for-syntax
@@ -545,10 +544,9 @@
     (when (equal? (syntax->datum #'x-idx) 'x)
       (if (6510-number-string? (syntax->datum operand))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
-            (when (> 256 (parse-number-string (syntax->datum #'operand-value)))
+            (when (> 256 (syntax->datum #'op-number))
               #'(symbol-zpx op-number)))
-          (when (6510-label-string? (syntax->datum #'operand-value))
-            #'(symbol-zpx operand-value))))))
+          #'(symbol-zpx operand-value)))))
 
 (define-for-syntax (zeropage-y-mode opcode operand idx)
   (with-syntax ([symbol-zpy (symbol-append opcode '_zpy)]
@@ -557,10 +555,9 @@
     (when (equal? (syntax->datum #'y-idx) 'y)
       (if (6510-number-string? (syntax->datum operand))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
-            (when (> 256 (parse-number-string (syntax->datum #'operand-value)))
-              #'(symbol-zpy op-number)))
-          (when (6510-label-string? (syntax->datum #'operand-value))
-            #'(symbol-zpy operand-value))))))
+            (when (> 256 (syntax->datum #'op-number))
+              #'(symbol-zpy op-number)))          
+          #'(symbol-zpy operand-value)))))
 
 (module+ test
   (begin-for-syntax
@@ -705,10 +702,10 @@
                  '(LDA_indy 16))))
 
 (define-for-syntax (opcode-with-addressing/indexed adr-modes opcode op idx stx non-racket-syn org-string)
-  (with-syntax ([absxres (when (absolute-x? adr-modes) (absolute-x-mode opcode op idx))]
-                [absyres (when (absolute-y? adr-modes) (absolute-y-mode opcode op idx))]
-                [zpxres (when (zero-page-x? adr-modes) (zeropage-x-mode opcode op idx))]
-                [zpyres (when (zero-page-y? adr-modes) (zeropage-y-mode opcode op idx))])
+  (with-syntax ([zpxres (when (zero-page-x? adr-modes) (zeropage-x-mode opcode op idx))]
+                [zpyres (when (zero-page-y? adr-modes) (zeropage-y-mode opcode op idx))]
+                [absxres (when (absolute-x? adr-modes) (absolute-x-mode opcode op idx))]
+                [absyres (when (absolute-y? adr-modes) (absolute-y-mode opcode op idx))])
     (let* ([res (collect-syntax-result (list #'zpxres #'zpyres #'absxres #'absyres))]
            [opcode-string (symbol->string (syntax->datum opcode))]
            [error-string (error-string/indexed adr-modes opcode-string non-racket-syn)])

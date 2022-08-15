@@ -24,7 +24,19 @@
    (LABEL ("<label>") ":COUT")
    (JSR "$FFD2")
    (RTS)
-   (ADC ":COUT-L")))
+   (JMP ":COUT")
+   (JMP < ":COUT" >)
+   (ADC ":COUT-L")
+   ;; (ADC "#:COUT-L") ; impossible because #<Label> is not detected as immediate and label to be replaced
+   (STA ":COUT-H")
+   (STA ":COUT-H" ,x)
+   (LDX ":COUT-H" ,y)
+   (STA < ":COUT-H" ,x >)
+   (STA < ":COUT-H" > ,y)
+   (STA ":COUT")
+   (STA ":COUT" ,x)
+   (STA ":COUT" ,y)
+))
 
 (define addressing-program
   (list
