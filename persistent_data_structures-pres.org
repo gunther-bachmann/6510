@@ -7,7 +7,7 @@
     - fat nodes
     - path copies
     - sleater, tarjan: combination of fat nodes and path copies
-    - see [[file:Downloads/persistent-data-structures.pdf]]
+    - see [[pdfview:~/Downloads/persistent-data-structures.pdf]]
   - advantages
     - thread safe
     - versioning
@@ -57,3 +57,4 @@
   - http://www.allitebooks.com/clojure-data-structures-and-algorithms-cookbook/
   - http://fox.ucw.cz/papers/thesis/thesis.pdf
   - https://coderprog.com/advanced-functional-data-structures-algorithms/
+  - [[pdfview:/home/pe/Downloads/vdoc.pub_handbook-of-data-structures-and-applications.pdf::624++0.00][20220813 19:59 - vdoc.pub_handbook-of-data-structures-and-applications : 624]]
