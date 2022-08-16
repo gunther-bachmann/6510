@@ -72,9 +72,12 @@
     [('rel-opcode) (if (6510-label-string? (last command))
                        2
                        (- (length command) 1))]
-    [('opcode) (if (6510-label-string? (last command))
-                   3
-                   (- (length command) 1))]
+    [('opcode) (cond ((6510-label-string? (last command))
+                      3)
+                     ((6510-label-byte-string? (last command)) ;; TODO don't make this dependent on the string (use some map to find type)
+                      2)
+                     (else
+                      (- (length command) 1)))]
     [('bytes) (length (last command))]
     [('label) 0]
     [else (error "uknown command" (first command))]))
@@ -85,6 +88,9 @@
 
   (check-match (6510-byte-length '('opcode 1 ":other"))
                3)
+
+  (check-match (6510-byte-length '('opcode 1 ":other-L"))
+               2)
 
   (check-match (6510-byte-length '('bytes () (1 2 3)))
                3)
