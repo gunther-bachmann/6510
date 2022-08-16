@@ -43,6 +43,7 @@
                     (string-upcase value))))
 
 ;; is the given string a valid label (for byte labels)?
+;; TODO: use other information to decide on type of the label use
 (define (6510-label-byte-string? value)
   (and (string? value)
      (regexp-match? #rx"^(:[A-Z][A-Z0-9]*(-H|-L))$"

@@ -21,12 +21,13 @@
    (BNE ":NEXT")
    (BRK)
 
-   ;; (IMPORT-BYTE ":IMPORTEDBVAL")
+   ;; (IMPORT-BYTE ":IMPORTEDBVAL-L")     ;; in order to not use -L qualifier, there needs to be a function that will return the type (e.g. through an environment
    ;; (IMPORT-WORD ":IMPORTEDWORD")
-   ;; (EXPORT-WORD ":EXPORTED" ":COUT"
-   ;; (CONSTANT-BYTE  ":MYVAL" "$42") ;; define label with byte constant: :myval = $42
+   ;; (EXPORT-WORD ":EXPORTED" ":COUT")
+   ;; (EXPORT-BYTE ":EXPORTED" ":COUT-L") ;;
+   ;; (CONSTANT-BYTE  ":MYVAL" "$42")     ;; define label with byte constant: :myval = $42
    ;; (CONSTANT-WORD  ":M16BVAL" "$C842") ;; define label with word constant: :m16bval = $c842
-   ;; (ASC "Hello World") ;; define bytes by ascii encoding: .asc "Hello World"
+   ;; (ASC "Hello World")                 ;; define bytes by ascii encoding: .asc "Hello World"
 
    (LABEL ("<label>") ":COUT")
    (JSR "$FFD2")

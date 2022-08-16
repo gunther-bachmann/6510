@@ -24,7 +24,7 @@
 
 
 
-; --- just to test the assembler
+; --- use labels as operands
 
 adc #:end-L
 adc :end-l
@@ -36,6 +36,8 @@ adc :end,y
 adc (:end-l),y
 adc (:end-l,x)
 
+; --- all available opcodes
+
 adc #$ff
 adc $10
 adc $10,x
@@ -44,7 +46,6 @@ adc $ffff,x
 adc $ffff,y
 adc ($10),y
 adc ($10,x)
-
 and #$10
 and $10
 and $10,x
