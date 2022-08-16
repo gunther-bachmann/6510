@@ -26,7 +26,15 @@
 
 ; --- just to test the assembler
 
+adc #:end-L
 adc :end-l
+adc :end-l,x
+ldx :end-l,y
+adc :end
+adc :end,x
+adc :end,y
+adc (:end-l),y
+adc (:end-l,x)
 
 adc #$ff
 adc $10
@@ -36,6 +44,7 @@ adc $ffff,x
 adc $ffff,y
 adc ($10),y
 adc ($10,x)
+
 and #$10
 and $10
 and $10,x

@@ -267,25 +267,62 @@
   (-> string? parser?)
   (chars-ci/p string))
 
-(define accumulator/p (do (char-ci/p #\A) (pure '(A))))
+(define accumulator/p
+  (do (char-ci/p #\A) (pure '(A))))
+
 (define immediate/p
   (do (char/p #\#)
-      [x <- byte/p]
-    (pure (list (string-append "#" (number->string x))))))
+      [x <- (or/p 6510-label-byte/p byte/p)]
+    (pure (list (string-append "#" (if (number? x) (number->string x) (last (syntax->datum x))))))))
+
 (define zero-page-or-relative/p
-  (do
-      [b <- (or/p byte/p 6510-label-byte/p)]
+  (do [b <- (or/p byte/p 6510-label-byte/p)]
       (pure (list (if (number? b) (number->string b) (last (syntax->datum b)))))))
-(define absolute/p (do [mem <- (or/p 6510-label/p word/p)]
-                       (pure (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))))))
-(define indirect-x/p (do (char/p #\() [mem <- (or/p 6510-label/p byte/p)] (string-cia/p ",x") (char/p #\))
-                         (pure `(< ,(if (number? mem) (number->string mem) (last mem)) x >))))
-(define indirect-y/p (do (char/p #\() [mem <- (or/p 6510-label/p byte/p)] (char/p #\)) (string-cia/p ",y")  (pure `(< ,(number->string mem) > y))))
-(define indirect/p (do (char/p #\() [mem <- (or/p 6510-label/p word/p)] (char/p #\)) (pure `(< ,(if (number? mem) (number->string mem) (last (syntax->datum mem))) >))))
-(define absolute-x/p (do [x <- word/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
-(define absolute-y/p (do [x <- word/p] (string-cia/p ",y") (pure (list (number->string x) 'y))))
-(define zero-page-x/p (do [x <- byte/p] (string-cia/p ",x") (pure (list (number->string x) 'x))))
-(define zero-page-y/p (do [x <- byte/p] (string-cia/p ",y") (pure (list (number->string x) 'y))))
+
+(define absolute/p
+  (do [mem <- (or/p 6510-label/p word/p)]
+      (pure (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))))))
+
+(define indirect-x/p
+  (do (char/p #\()
+      [mem <- (or/p 6510-label-byte/p byte/p)]
+    (string-cia/p ",x")
+    (char/p #\))                       
+    (pure `(< ,(if (number? mem) (number->string mem) (last (syntax->datum mem))) x >))))
+
+(define indirect-y/p
+  (do 
+      (char/p #\()
+      [mem <- (or/p 6510-label-byte/p byte/p)]
+    (char/p #\))
+    (string-cia/p ",y")
+    (pure `(< ,(if (number? mem) (number->string mem) (last (syntax->datum mem))) > y))))
+
+(define indirect/p
+  (do (char/p #\()
+      [mem <- (or/p 6510-label/p word/p)]
+    (char/p #\))
+    (pure `(< ,(if (number? mem) (number->string mem) (last (syntax->datum mem))) >))))
+
+(define absolute-x/p
+  (do [x <- (or/p word/p 6510-label/p)]
+      (string-cia/p ",x")
+    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) 'x))))
+
+(define absolute-y/p
+  (do [x <- (or/p word/p 6510-label/p)]
+      (string-cia/p ",y")
+    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) 'y))))
+
+(define zero-page-x/p
+  (do [x <- (or/p byte/p 6510-label-byte/p)]
+      (string-cia/p ",x")
+    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) 'x))))
+
+(define zero-page-y/p
+  (do [x <- (or/p byte/p 6510-label-byte/p)]
+      (string-cia/p ",y")
+    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) 'y))))
 
 (module+ test #| indirect/p indirect-x/p absolute/p |#
   (check-match (parsed-string-result immediate/p "#$10")
