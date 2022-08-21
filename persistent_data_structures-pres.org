@@ -36,6 +36,7 @@
            https://github.com/tobgu/pyrsistent
    Haskell's HAMT library: http://hackage.haskell.org/package/unordered-containers
    Java: https://code.google.com/p/pcollections/
+   C++: https://github.com/arximboldi/immer
    C#: http://www.itu.dk/research/c5/
        https://github.com/6gales/persistent-data-structure
    JavaScript: https://github.com/isaacbw/immutable-collections/

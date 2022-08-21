@@ -422,3 +422,6 @@
 ** pre scheme to guile compiler - https://gitlab.com/flatwhatson/guile-prescheme
 ** scopes, a systemlevel lisp (implementation in cpp) - https://sr.ht/~duangle/scopes/
 ** carp, a systemlevel lisp (implementation in haskell) - https://github.com/carp-lang/Carp
+** jank, a llvm impl of clojure - https://github.com/jeaye/jank
+** pico lisp - https://github.com/picolisp/pil21
+** cakelisp - transpile lisp to c++ - https://github.com/makuto/cakelisp
