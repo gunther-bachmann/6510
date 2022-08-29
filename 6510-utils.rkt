@@ -7,6 +7,7 @@
 (provide byte/c
          word/c
          two-complement-of
+         decimal-from-two-complement
          parse-number-string
          low-byte
          high-byte
@@ -124,10 +125,35 @@
 
 ;; return two complement of the given (possibly negative) number
 (define (two-complement-of num)
-  (when (or (> -127 num) (< 127 num)) (error "num out of range"))
+  (when (or (> -128 num) (< 127 num)) (error "num out of range"))
   (if (< num 0)
       (+ 256 num)
       num))
+
+(define (decimal-from-two-complement num)
+  (when (or (> 0 num) (< 256 num)) (error "num out of range"))
+  (define abs-val (bitwise-and num #x7f))
+  (if (> num 127)
+      (- abs-val #x80)
+      abs-val))
+
+(module+ test #| two-complements |#
+  (check-eq? (two-complement-of -1)
+             #xff)
+  (check-eq? (two-complement-of -128)
+             #x80)
+  (check-eq? (two-complement-of -2)
+             #xfe)
+  (check-eq? (two-complement-of 0)
+             0)
+  (check-eq? (two-complement-of 1)
+             1)
+  (check-eq? (two-complement-of 127)
+             #x7f)
+
+  (for ((b  (range -128 127)))
+    (check-eq? (decimal-from-two-complement (two-complement-of b))
+               b)))
 
 ;; if the given string an immediate string, (6510 number string prefixed by '#')?
 (define (is-immediate-number? string)

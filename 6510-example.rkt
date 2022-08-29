@@ -20,6 +20,10 @@
  :cout  jsr $ffd2
         rts
 
+:lab1   bne :lab1
+:lab2   bne :lab3
+:lab3   bne :lab2 
+
         .data $01, $2F, 255, %1001
 
 
@@ -28,7 +32,7 @@
 
 adc #:end-L
 adc :end-l
-adc :end-l,x
+adc :end-h,x
 ldx :end-l,y
 adc :end
 adc :end,x

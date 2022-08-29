@@ -2,6 +2,7 @@
 
 (require (only-in threading ~>>))
 (require "6510-interpreter.rkt")
+(require "6510-utils.rkt")
 
 (provide disassemble disassemble-single)
 
@@ -40,6 +41,14 @@
 (define (word-at-pc+1 state)
   (word->hex-string (peek-word-at-pc+1 state)))
 
+;; format the disassembled relative branch 
+(define (format-relative-branch state branch-mnemonic)
+  (format "~a $~a (->$~a)" branch-mnemonic
+          (byte-at-pc+1 state)
+          (word->hex-string (+ 2 (cpu-state-program-counter state)
+                              (decimal-from-two-complement
+                               (peek-pc+1 state))))))
+
 (define (disassemble-single state [address (cpu-state-program-counter state)])
 ;;  (-> cpu-state? (values string bytes))
   (define use-state (with-program-counter state address))
@@ -60,7 +69,7 @@
     [(#x0d) (values (format "ORA $~a" (word-at-pc+1 use-state)) 3)]
     [(#x0e) (values (format "ASL $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x0f -io SLO abs
-    [(#x10) (values (format "BPL $~a" (byte-at-pc+1 use-state)) 2)]
+    [(#x10) (values (format-relative-branch use-state "BPL") 2)]
     [(#x11) (values (format "ORA ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x12 -io KIL
     ;; #x13 -io SLO izy
@@ -92,7 +101,7 @@
     [(#x2d) (values (format "AND $~a" (word->hex-string (peek-word-at-pc+1 use-state))) 3)]
     [(#x2e) (values (format "ROL $~a" (word->hex-string (peek-word-at-pc+1 use-state))) 3)]
     ;; #x2f -io RIA abs
-    [(#x30) (values (format "BMI $~a" (byte-at-pc+1 use-state)) 2)]
+    [(#x30) (values (format-relative-branch use-state "BMI") 2)]
     [(#x31) (values (format "AND ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x32 -io KIL
     ;; #x33 -io RIA izy
@@ -124,7 +133,7 @@
     [(#x4d) (values (format "EOR $~a" (word-at-pc+1 use-state)) 3)]
     [(#x4e) (values (format "LSR $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x4f -io SRE abs
-    [(#x50) (values (format "BVC $~a" (byte-at-pc+1 use-state)) 2)]
+    [(#x50) (values (format-relative-branch use-state "BVC") 2)]
     [(#x51) (values (format "EOR ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x52 -io KIL
     ;; #x53 -io SRE izy
@@ -156,7 +165,7 @@
     [(#x6d) (values (format "ADC $~a" (word-at-pc+1 use-state)) 3)]
     [(#x6e) (values (format "ROR $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x6f -io RRA abs
-    [(#x70) (values (format "BVS $~a" (byte-at-pc+1 use-state)) 2)]
+    [(#x70) (values (format-relative-branch use-state "BVS") 2)]
     [(#x71) (values (format "ADC ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
@@ -188,7 +197,7 @@
     [(#x8d) (values (format "STA $~a" (word-at-pc+1 use-state)) 3)]
     [(#x8e) (values (format "STX $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x8f -io SAX abs
-    [(#x90) (values (format "BCC $~a" (byte-at-pc+1 use-state)) 2)]
+    [(#x90) (values (format-relative-branch use-state "BCC") 2)]
     [(#x91) (values (format "STA ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x92 -io KIL
     ;; #x93 -io AHX izy
@@ -220,7 +229,7 @@
     [(#xad) (values (format "LDA $~a" (word-at-pc+1 use-state)) 3)]
     [(#xae) (values (format "LDX $~a" (word-at-pc+1 use-state)) 3)]
     ;; #xaf -io LAX abs
-    [(#xb0) (values (format "BCS $~a" (byte-at-pc+1 use-state)) 2)]
+    [(#xb0) (values (format-relative-branch use-state "BCS") 2)]
     [(#xb1) (values (format "LDA ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #xb2 -io KIL
     ;; #xb3 -io LAX izy
@@ -252,7 +261,7 @@
     [(#xcd) (values (format "CMP $~a" (word-at-pc+1 use-state)) 3)]
     [(#xce) (values (format "DEC $~a" (word-at-pc+1 use-state)) 3)]
     ;; #xcf -io DCP abs
-    [(#xd0) (values (format "BNE $~a (->$~a)" (byte-at-pc+1 use-state) (word->hex-string (- (cpu-state-program-counter use-state) (- #xfe (peek-pc+1 use-state))))) 2)]
+    [(#xd0) (values (format-relative-branch use-state "BNE") 2)]
     [(#xd1) (values (format "CMP ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #xd2 -io KIL
     ;; #xd3 -io DCP izy
@@ -284,7 +293,7 @@
     [(#xed) (values (format "SBC $~a" (word-at-pc+1 use-state)) 3) ]
     [(#xee) (values (format "INC $~a" (word-at-pc+1 use-state)) 3)]
     ;; #xef -io ISC abs
-    [(#xf0) (values (format "BEQ $~a" (byte-at-pc+1 use-state)) 2)]
+    [(#xf0) (values (format-relative-branch use-state "BEQ") 2)]
     [(#xf1) (values (format "SBC ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
