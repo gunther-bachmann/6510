@@ -1486,7 +1486,7 @@
   (-> cpu-state? peeker/c peeker/c exact-nonnegative-integer? cpu-state?)
   (let* ((value1 (peeker1 state))
          (value2 (peeker2 state))
-         (diff   (fx- value1 value2)))
+         (diff   (byte (fx- value1 value2))))
     (struct-copy cpu-state state
                  [flags           (set-flags-czn state (not-bit7? diff) (zero? diff) (bit7? diff))]
                  [program-counter (next-program-counter state pc-inc)])))

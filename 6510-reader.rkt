@@ -64,9 +64,11 @@
            ;; (create-prg (commands->bytes org program) org "test.prg")
            (create-image-with-program (commands->bytes org program) org "test.prg" "test.d64" "test")
            (displayln "execute the program in vice via (run-emulator \"test.d64\")")
+           (displayln (format "execute interpreter via (run-interpreter ~a raw-bytes)" org))
+           (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes)" org))
            ;; (run-emulator "test.d64")
            ;; (run-interpreter org raw-bytes)
-           (run-debugger org raw-bytes)
+           ;; (run-debugger org raw-bytes)
            )))))
 
 

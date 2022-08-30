@@ -47,7 +47,7 @@
 (define/c (debugger--help d-state)
   (-> debug-state? debug-state?)
   (define help #<<EOF
-pm <A> <B>           print memory starting @A (hex) for B bytes (hex)
+pm <A> <B>            print memory starting @A (hex) for B bytes (hex)
 sm <A> = <B>          set memory @A (hex) to byte B (hex)
 sa = <B>              set accumulator to byte B (hex)
 spc = <A>             set program counter to address A (hex)
