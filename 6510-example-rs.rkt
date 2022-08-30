@@ -27,7 +27,7 @@
    ;; (EXPORT-BYTE ":EXPORTED" ":COUT-L") ;;
    ;; (CONSTANT-BYTE  ":MYVAL" "$42")     ;; define label with byte constant: :myval = $42
    ;; (CONSTANT-WORD  ":M16BVAL" "$C842") ;; define label with word constant: :m16bval = $c842
-   ;; (ASC "Hello World")                 ;; define bytes by ascii encoding: .asc "Hello World"
+   (ASC "Hello World")                 ;; define bytes by ascii encoding: .asc "Hello World"
 
    (LABEL ("<label>") ":COUT")
    (JSR "$FFD2")

@@ -434,6 +434,23 @@
                    )]
     (pure res)))
 
+;; parser for '.asc "some string"'
+(define asc-string/p
+  (do
+      (try/p (string-cia/p ".asc"))
+      (many/p space-or-tab/p)
+    (char/p #\")
+    [result <- (many/p (char-not/p #\"))]
+    (char/p #\")
+    (pure (list 'ASC (list->string result)))
+    ))
+
+(module+ test #| asc-string/p |#
+  (check-match (parsed-string-result asc-string/p ".asc  \"some\"")
+               '(ASC ("asc") "some"))
+  (check-match (parsed-string-result asc-string/p ".asc  \"some 'other'\"")
+               '(ASC ("asc") "some 'other'")))
+
 ;; parser for ".data (byte/p (","|ml_whitespace/p) ...)
 (define data-bytes/p
   (do
@@ -514,6 +531,7 @@
        (adr-modes-opcode/p "txs" '(implicit))
        (adr-modes-opcode/p "tya" '(implicit))
        data-bytes/p
+       asc-string/p
        6510-label/p)))
 
 ;; parser for origin definition

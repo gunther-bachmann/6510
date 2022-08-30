@@ -3,6 +3,14 @@
 
         *=$C000        ; origin
 
+        ldx #$00
+:sout   lda :hello,x
+        jsr $ffd2
+        inx
+        cpx #$0d
+        bne :sout
+
+        clc
         ldx #$05       ; repeat .. times
 :some
         lda #$41       ; load character A (dec 65)
@@ -20,13 +28,12 @@
  :cout  jsr $ffd2
         rts
 
-:lab1   bne :lab1
-:lab2   bne :lab3
-:lab3   bne :lab2 
-
-        .data $01, $2F, 255, %1001
+:hello  .asc "HELLO WORLD!"
+        .data $0d
 
 
+
+.data $01, $2F, 255, %1001
 
 ; --- use labels as operands
 

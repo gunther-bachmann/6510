@@ -51,7 +51,7 @@
          ROL ROR RTI RTS
          SBC SEC SED SEI STA STX STY
          TAX TAY TSX TXA TXS TYA        
-         LABEL BYTES)
+         LABEL BYTES ASC)
 
 
 ;; -------------------------------------------------------------------------------- address resolution
@@ -864,6 +864,10 @@
 
 (define (BYTES_list bytes)
   (list ''bytes bytes))
+
+
+(define (ASC str)
+  (list ''bytes (bytes->list (string->bytes/latin-1 str))))
 
 (module+ test
   (check-match (BYTES '() '(10 20 30))
