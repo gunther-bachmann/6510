@@ -281,8 +281,9 @@ EOF
   (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '()))
   (for ([_ (in-naturals)])
     (displayln "")
-    (display (format "Step-Debugger[~a]> " (length (debug-state-states d-state))))
-    (define input (begin (readline ">")))
+    (display (format "Step-Debugger[~a] > " (length (debug-state-states d-state))))
+    (flush-output)
+    (define input (begin (readline "")))
     #:break (string=? input "q")
     (set! d-state
           (dispatch-debugger-command input d-state))))
