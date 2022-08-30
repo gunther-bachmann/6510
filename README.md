@@ -6,8 +6,9 @@ rackets' capabilities to define (and interpret) languages, in this case: 6510 as
 ## prerequisites
 
 * racket 7.3+ (`nix-env -i racket`)
-* megaparsack (`raco pkg install megaparsack-lib`)
-* threading library (`raco pkg install threading`)
+* megaparsack (`raco pkg install megaparsack-lib`) 
+* threading library (`raco pkg install threading`) 
+* pvector (`raco pkg install pvector`)
 
 ## usage
 
@@ -19,11 +20,12 @@ You may execute the example program directly:
 ```
 This will
 1. translate the given assembler program into the 6510 codes
-2. run an interpreter on that code (printing out 'AB' as a result)
+2. run a debugger on that code (executing `r` will print 'ABC' five times)
 3. and write a `test.d64` disk image, usable by vice (c64 emulator)
 (take a look at the commands actually executed by `6510-reader.rkt`)
 
 Another way to run the example is to open `6510-example.rkt` in emacs and start racket via `C-c C-c`.
+It will open the debugger which allows for close inspection of the assembled program (hit `?` then `enter` to get help)
 After the program is run you can in addition do one of the following
 - print out a prettified internal representation of the compiled program
   via `(display pretty-program)`
@@ -42,7 +44,7 @@ Error message are somewhat cryptic so I collected some examples to make reading 
 If illegal opcodes or other elements are used that are not understood by the compiler, the following error message may occur:
 
 The following error is given, if on line 12 (it's always -1 because of the swallowed first she-bang line),
-an unknown opcode (starting with k) is given:
+an unknown opcode (e.g. starting with k in column 8) is given:
 
     ; .../6510/string:11:8: parse error
     ;   unexpected: k
@@ -50,12 +52,12 @@ an unknown opcode (starting with k) is given:
     ; Context:
     ;  .../6510-reader.rkt:346:0 literal-read-syntax
 
-The following error is given, if on line 12 (off by one, see above) an opcode operand is expected
+The following error is given, if on line 12 (off by one, see above), column 14 an opcode operand is expected
 that may either start with `$` (hex number), `%` (dual number), `(` for indirect addressing operands
 `:` for label references, `A` for accumluator operand, an integer for a decimal number operand
 BUT no implicit may be given (by the opcode identified, in that case it was a `jsr`)
 
-    ; .../6510/string:11:12: parse error
+    ; .../6510/string:11:14: parse error
     ;   unexpected: #
     ;   expected: '$', '%', '(', ':', 'A', integer, or no implicit
     ; Context:
@@ -78,7 +80,7 @@ BUT no implicit may be given (by the opcode identified, in that case it was a `j
 The `6510-reader.rkt` is parsing a non racket text file, transforming it into racket code. The resulting racket code is then transformed via
 syntax macros into the final racket form which can then be interpreted.
 
-The `6510.rkt` holds all syntax transformation rules for the translation into 6510 byte/assembler code.
+* `6510.rkt` holds all syntax transformation rules for the translation into 6510 byte/assembler code.
 * `6510-utils` holds functions needed during syntax and execution phase of 6510.
 * `6510-syntax-utils` holds functions useful during syntax phase of the transformation.
 * `6510-parser` is the parser that takes the text file and produces racket 6510 dsl code.
@@ -92,28 +94,30 @@ The `6510.rkt` holds all syntax transformation rules for the translation into 65
 
 ## Status
 
-To run tests, run `raco test 6510-reader.rkt` for example.
+To run tests, run `raco test -y --drdr 6510-parser.rkt` for example.
 
-To run all tests, run `raco test -x .`
+To run all tests, run `raco test -y --drdr -x -j 8 .`
+
+To build all, run `raco make -v -j 8 *.rkt`
 
 ## Todos
 
 ### Next
 
-#### context debugger
+#### debugger
 
 * step-wise debugger
-** step
-** inspect/change state
-** continue
-** continue to next rts/rti
-** back
-** back to previous jmp/jsr interrupt
+** [X] step
+** [X] inspect/change state
+** [X] continue
+** [ ] continue to next rts/rti
+** [X] back
+** [ ] back to previous jmp/jsr interrupt
 ** Inspect/change stack
 ** inspect/change memory
-** set additional break points
+** [X] set additional break points
 * break points
-** static break point (on pc)
+** [X] static break point (on pc)
 ** conditional break points 
 *** conditional elements ::
     - hit#,
@@ -124,12 +128,12 @@ To run all tests, run `raco test -x .`
     - pc value (code line),
     - current opcode (set),
     - current addressing mode
-* time travel debugging (backwards)
+* [X] time travel debugging (backwards)
 * time portal (points) :: spots to remember state and navigate to (later)
 
-#### context mil (minimal lisp)
+#### mil (minimal lisp)
 
-* (done) extend interpreter to run all (documented) opcodes
+* [X] extend interpreter to run all (documented) opcodes
 * extend interpreter to load/link and run several modules
 * extend interpreter to breakpoints/debugging/timetravel etc.
 * keep a clean bootstrapping process in mind
@@ -159,7 +163,7 @@ To run all tests, run `raco test -x .`
   - hygenic macros
 
 #### implementation without new knowledge
-* Warp multitude of flag-methods in 6510-interpreter into simple set of functions working on arbitrary flags, stored in a register, at some
+* wrap multitude of flag-methods in 6510-interpreter into simple set of functions working on arbitrary flags, stored in a register, at some
   arbitrary position
 * extend pretty print to write comments, too
 #### ... with some new knowledge
@@ -184,4 +188,4 @@ To run all tests, run `raco test -x .`
 
 ### Maybe
 * Extend interpreter to allow for c64-like output functions when calling rom addresses
-* Emulate text mode (fixed charset) of c64
+* [-] Emulate text mode (fixed charset) of c64
