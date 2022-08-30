@@ -261,7 +261,8 @@ EOF
         ((regexp-match? commit-regex command)
          (match-let (((list _ value) (regexp-match commit-regex command)))
            (define states (debug-state-states d-state))
-           (struct-copy debug-state d-state [states (take states (min (length states) (string->number value 16)))])))
+           (struct-copy debug-state d-state
+                        [states (take states (min (length states) (string->number (or value "0a") 16)))])))
         ;; r - run
         ((string=? command "r") (debugger--run d-state))
         ;; c - continue over current breakpoint to the next one

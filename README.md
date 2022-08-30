@@ -94,6 +94,8 @@ The `6510.rkt` holds all syntax transformation rules for the translation into 65
 
 To run tests, run `raco test 6510-reader.rkt` for example.
 
+To run all tests, run `raco test -x .`
+
 ## Todos
 
 ### Next
@@ -159,9 +161,7 @@ To run tests, run `raco test 6510-reader.rkt` for example.
 #### implementation without new knowledge
 * Warp multitude of flag-methods in 6510-interpreter into simple set of functions working on arbitrary flags, stored in a register, at some
   arbitrary position
-* extend pretty print to show in memory location in the first 4 characters (e.g. C000 A9 41    LDA #$41
 * extend pretty print to write comments, too
-* extend pretty print to write round instead of angular brackets
 #### ... with some new knowledge
 * Increase test coverage
 * Implement macros (as in macro assemblers)
