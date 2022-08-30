@@ -1,13 +1,16 @@
 #! /usr/bin/env racket
 #lang reader "6510-reader.rkt"
 
-        *=$C000        ; origin
+        *=$0810        ; origin
+
+        ;; lda #23
+        ;; sta 53272
 
         ldx #$00
 :sout   lda :hello,x
         jsr $ffd2
         inx
-        cpx #$0d
+        cpx #$0e
         bne :sout
 
         clc
@@ -28,8 +31,9 @@
  :cout  jsr $ffd2
         rts
 
-:hello  .asc "HELLO WORLD!"
-        .data $0d
+:hello  .data $0e ; switch to lower letter mode
+        .asc "hELLO wORLD!"
+        .data $0d ; line feed
 
 
 

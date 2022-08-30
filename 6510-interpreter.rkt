@@ -378,9 +378,10 @@
                  [stack-pointer   (byte (fx+ sp 2))])))
 
 ;; https://www.c64-wiki.com/wiki/control_character
-(define/c (display-c64charcode byte)
-  (-> byte/c any/c)
+(define/c (display-c64charcode byte state)
+  (-> byte/c cpu-state? any/c)
   (case byte
+    [(#x0e) (display "")] ;; switch to lower letter mode
     [(#x0d) (displayln "")]
     [else (display (string (integer->char byte)))]))
 
@@ -391,7 +392,7 @@
   (case (absolute high low)
     [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
      (~>> (cpu-state-accumulator state)
-         (display-c64charcode _))
+         (display-c64charcode _ state))
      (struct-copy cpu-state state [program-counter (next-program-counter state 3)])]
     [else (let* ([new-program-counter (absolute high low)]
                  [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
