@@ -260,21 +260,61 @@
   (check-equal? (word->hex-string #x9999) "9999")
   (check-equal? (word->hex-string #x5e5f) "5e5f"))
 
+(define/c (byte->dump-char dump-byte)
+  (-> byte/c string?)
+  (define dump-char (integer->char dump-byte))
+  (cond
+    ((char-graphic? dump-char) (string dump-char)
+     )
+    (else ".")))
+
 ;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
+(define/c (indexed-memory-list state from to)
+  (-> cpu-state? word/c word/c (stream/c pair?))
+  (indexed
+   (map (lambda (idx) (peek state idx))
+        (range from (fx+ 1 to)))))
+
+;; adress for dump
+(define/c (chunk-address--indexed-memory-list idx-mem-list from)
+  (-> (stream/c pair?) word/c string?)
+  (word->hex-string (fx+ from (caar (stream->list idx-mem-list)))))
+
+;; address + hex bytes for dump
+(define/c (memory->addr-bytes-string--indexed-memory-list idx-mem-list from)
+  (-> (stream/c pair?) word/c string?)
+  (string-join
+   (stream->list
+    (append (list (chunk-address--indexed-memory-list idx-mem-list from))
+            (map (lambda (pair) (byte->hex-string (cdr pair))) idx-mem-list)))
+   " "))
+
+;; string of bytes converted to visible chars or '.'
+(define/c (memory->vis-bytes-string--indexed-memory-list state idx-mem-list from)
+  (-> cpu-state? (stream/c pair?) word/c string?)
+  (string-join
+   (stream->list
+    (append
+     (map (lambda (pair) (byte->dump-char (peek state (fx+ from (car pair))))) idx-mem-list)))
+   ""))
+
 (define/c (memory->string from to state)
   (-> word/c word/c cpu-state? string?) 
   (string-join
    (stream->list
-    (map (lambda (it) (string-join
-                  (stream->list
-                   (append (list (word->hex-string (fx+ from (caar (stream->list it)))))
-                           (map (lambda (pair) (cdr pair)) it)))
-                  " "))
-         (chunk 16
-                (indexed
-                 (map (lambda (idx) (byte->hex-string (peek state idx)))
-                      (range from (fx+ 1 to)))))))
+    (map (lambda (it)
+           (string-append
+            (memory->addr-bytes-string--indexed-memory-list it from)
+            "  "
+            (memory->vis-bytes-string--indexed-memory-list state it from)))
+         (chunk 16 (indexed-memory-list state from to))))
    "\n"))
+
+(module+ test #| indexed-memory-list |#
+  (check-equal? (chunk-address--indexed-memory-list (stream '(10 . 0) '(11 . 65)) #xa000)
+             "a00a")
+  (check-equal? (stream->list (indexed-memory-list (poke (initialize-cpu) #x0100 #x41) #x00ff #x0101))
+                '((0 . 0) (1 . #x41) (2 . 0))))
 
 ;; print memory starting at address FROM to address TO of STATE
 (define/c (print-memory from to state)
@@ -283,10 +323,10 @@
   state)
 
 (module+ test #| dump-memory |#
-  (check-equal? (memory->string 266 286 (poke (initialize-cpu) #x10C #xFE))
-                "010a 00 00 fe 00 00 00 00 00 00 00 00 00 00 00 00 00\n011a 00 00 00 00 00")
-  (check-equal? (memory->string 268 268 (poke (initialize-cpu) #x10C #xFE))
-                "010c fe"))
+  (check-equal? (memory->string 266 286 (poke (poke (initialize-cpu) #x10C #x41) #x011b #x42))
+                "010a 00 00 41 00 00 00 00 00 00 00 00 00 00 00 00 00  ..A.............\n011a 00 42 00 00 00  .B...")
+  (check-equal? (memory->string 268 268 (poke (initialize-cpu) #x10C #x41))
+                "010c 41  A"))
 
 ;; create the processor state as string (without the memory)
 (define/c (state->string state)
@@ -339,8 +379,8 @@
     memory-address))
 
 (module+ test #| 6510-load |#
-  (check-equal? (memory->string 10 13 (6510-load (initialize-cpu) 10 (list #x00 #x10 #x00 #x11)))
-                "000a 00 10 00 11"
+  (check-equal? (memory->string 10 13 (6510-load (initialize-cpu) 10 (list #x00 #x10 #x41 #x11)))
+                "000a 00 10 41 11  ..A."
                 "load will put all bytes into memory"))
 
 ;; peek into memory at the location the program counter points to (current point of execution)
