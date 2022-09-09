@@ -66,8 +66,13 @@
   (check-match (drop-meta-info '(ADC (#:line 5 #:org-cmd "some") "#$10"))
                '(ADC "#$10")))
 
+(define label/c (list/c any/c string?))
+(define length-offset-list/c (list/c byte/c word/c))
+(define command/c (listof any/c))
+(define command-len-offset-pair/c (list/c command/c length-offset-list/c))
+
 (define/c (6510-byte-length command)
-  (-> (listof any/c) exact-nonnegative-integer?)
+  (-> command/c byte/c)
   (case (first command)
     [('rel-opcode) (if (6510-label-string? (last command))
                        2
@@ -92,6 +97,9 @@
   (check-match (6510-byte-length '('opcode 1 ":other-L"))
                2)
 
+  (check-match (6510-byte-length '('opcode 1 ":other-H"))
+               2)
+
   (check-match (6510-byte-length '('bytes () (1 2 3)))
                3)
 
@@ -103,7 +111,9 @@
 
 ;; translates a list of command lengths into a list of pairs, each holding one command length and its absolute position (relative to current-sum)
 (define/c (lo-sums list current-sum)
-  (-> (listof any/c) exact-nonnegative-integer? (listof (listof exact-nonnegative-integer?)))
+  (-> (listof byte/c)
+     word/c
+     (listof length-offset-list/c))
   (if (empty? list)
       '()
       (let* ([first-num (first list)]
@@ -119,11 +129,13 @@
                '((1 8) (2 9) (2 11) (0 13))))
 
 ;; collect from the list of pairs of command definition and command-len-absolute-offset pairs, only the labels (and their lenght-offset pairs)
-(define (collect-label-offset-map commands-bytes-list)
+(define/c (collect-label-offset-map commands-bytes-list)
+  (-> (listof (list/c command/c length-offset-list/c))
+     (listof (list/c label/c length-offset-list/c)))
   (filter (lambda (command-byte-pair)
-              (case (first (first command-byte-pair))
-                [('label) #t]
-                [else #f])) commands-bytes-list))
+            (case (first (first command-byte-pair))
+              [('label) #t]
+              [else #f])) commands-bytes-list))
 
 (module+ test #| collect-label-offset-map |#
   (check-match (collect-label-offset-map '((('opcode 1 2) (2 0))
@@ -135,7 +147,10 @@
                '((('label ":some") (0 2)) (('label ":other") (0 4)) (('label ":end") (0 7)))))
 
 ;; get the offset of a given label
-(define (get-label-offset labels-byte-list label)
+(define/c (get-label-offset labels-byte-list label)
+  (-> (listof (list/c label/c length-offset-list/c))
+     string?
+     word/c)
   (let ([filtered (filter (lambda (label-byte-pair)
                             (equal? label (last (first label-byte-pair))))
                           labels-byte-list)])
@@ -164,7 +179,8 @@
                            ":unknown"))))
 
 ;; construct a list of commands and their command-length-absolute-offset pairs
-(define (commands-bytes-list commands)
+(define/c (commands-bytes-list commands)
+  (-> (listof command/c) (listof command-len-offset-pair/c))
   (let* ([byte-lengths (map 6510-byte-length commands)]
          [byte-lengths/w-offset (lo-sums byte-lengths 0)])
     (map list commands byte-lengths/w-offset)))
@@ -196,7 +212,8 @@
                 ":some"))
 
 ;; replace label references in opcode list command-len-absolute-offset pairs with their absolute / relative offsets
-(define (replace-label command-byte-pair labels-bytes-list address)
+(define/c (replace-label command-byte-pair labels-bytes-list address)
+  (-> command-len-offset-pair/c any/c word/c (listof any/c))
   (let* ([command (first command-byte-pair)]
          [current-offset (last (last command-byte-pair))]
          [command-length (first (last command-byte-pair))])
@@ -231,7 +248,7 @@
               )
             command-byte-pair))))
 
-(module+ test
+(module+ test #| replace-label |#
   (check-match (replace-label '(('opcode 20 ":some") (3 10))
                               '((('label ":some") (0 8)))
                               100)
@@ -307,7 +324,8 @@
   (case (first command) [('label) #t] [else #f]))
 
 ;; remove information from command list (leaving just a list of byte lists for each command line)
-(define (remove-resolved-statements commands)
+(define/c (remove-resolved-statements commands)
+  (-> (listof command/c) (listof (listof (or/c byte/c (listof byte/c)))))
   (filter-not command-is-label?
               (map (lambda (command)
                      (case (first command)
@@ -330,7 +348,8 @@
                  (0))))
 
 ;; translate commands to bytes
-(define (commands->bytes memory-address commands )
+(define/c (commands->bytes memory-address commands )
+  (-> word/c (listof command/c) (listof byte/c))
   (flatten (~>  (replace-labels commands memory-address)
                remove-resolved-statements)))
 
