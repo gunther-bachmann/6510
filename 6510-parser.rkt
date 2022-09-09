@@ -447,9 +447,9 @@
 
 (module+ test #| asc-string/p |#
   (check-match (parsed-string-result asc-string/p ".asc  \"some\"")
-               '(ASC ("asc") "some"))
+               '(ASC "some"))
   (check-match (parsed-string-result asc-string/p ".asc  \"some 'other'\"")
-               '(ASC ("asc") "some 'other'")))
+               '(ASC "some 'other'")))
 
 ;; parser for ".data (byte/p (","|ml_whitespace/p) ...)
 (define data-bytes/p
