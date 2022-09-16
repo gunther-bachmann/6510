@@ -323,6 +323,33 @@
 (define (command-is-label? command)
   (case (first command) [('label) #t] [else #f]))
 
+(define/c (label-of-command command)
+  (-> command/c (or/c string? void? byte/c))
+  (last command))
+
+(define/c (label-string-of-label command)
+  (-> command/c (or/c string? void?))
+  (when (command-is-label? command)
+    (last command)))
+
+;; is this command using a label?
+(define/c (command-uses-label? command)
+  (-> command/c boolean?)
+  (let ((operand (label-of-command command)))
+    (and (string? operand)
+       (or  (6510-label-string? operand)
+           (6510-label-byte-string? operand)
+           (6510-label-immediate-byte-string? operand)))))
+
+(module+ test #| command-uses-label? |#
+  (check-true (command-uses-label? '('opcode 20 ":some")))
+  (check-true (command-uses-label? '('rel-opcode #xd0 ":some")))
+  (check-true (command-uses-label? '('opcode #xe6 ":some-L")))
+  (check-true (command-uses-label? '('opcode #xee ":some")))
+  (check-true (command-uses-label? '('opcode #x69 "#:some-H")))
+  (check-false (command-uses-label? '('opcode 20 #xff #xa0)))
+  (check-false (command-uses-label? '('rel-opcode #xd0 #xfe))))
+
 ;; remove information from command list (leaving just a list of byte lists for each command line)
 (define/c (remove-resolved-statements commands)
   (-> (listof command/c) (listof (listof (or/c byte/c (listof byte/c)))))
@@ -352,6 +379,255 @@
   (-> word/c (listof command/c) (listof byte/c))
   (flatten (~>  (replace-labels commands memory-address)
                remove-resolved-statements)))
+
+(module+ test #| commands->bytes |#
+  (check-equal? (commands->bytes #xa000 '(('opcode 20 #xff #xa0)))
+                '(20 #xff #xa0))
+  (check-equal? (commands->bytes #xa000 '(('opcode #x14 ":absadr")
+                                         ('label ":absadr")))
+                '(20 #x03 #xa0))
+  (check-equal? (commands->bytes #xa000 '(('label ":before")
+                                         ('rel-opcode #xd0 ":before")))
+                '(#xd0 #xfe)))
+
+(define-struct reloc-entry
+  (label         ;; label used   
+   use-position  ;; relative to code start (which is 0)
+   byte-width    ;; target entry width (1 or 2 bytes)
+   )
+  #:transparent)
+
+;; collect all absolute references to labels w/i commands
+(define/c (collect-absolute-reloc-entries commands)
+  (-> (listof command/c) (listof reloc-entry?))
+  (unless (empty? commands)
+    (let* ([commands-bytes-list (commands-bytes-list commands)]
+           [cbl-with-labels
+            (filter (lambda (cb) (and (command-uses-label? (car cb))
+                               (equal? ''opcode (caar cb))))
+                    commands-bytes-list)])
+      (map (lambda (cb) (reloc-entry (label-of-command (car cb))
+                                (add1 (cadadr cb))
+                                (sub1 (caadr cb))))
+           cbl-with-labels))))
+
+(module+ test #| collect-absolute-reloc-entries |#
+  (check-equal? (collect-absolute-reloc-entries '(('opcode 20 ":some")))
+                (list (reloc-entry ":some" 1 2)))
+  (check-equal? (collect-absolute-reloc-entries '(('opcode 20 ":some")
+                                                  ('rel-opcode #xd0 ":before")
+                                                  ('opcode #x69 "#:some-H")
+                                                  ('opcode #x14 ":absadr")))
+                (list (reloc-entry ":some" 1 2) ;;      0 [1 2]
+                      ;;    3 [4]
+                      (reloc-entry "#:some-H" 6 1) ;;   5 [6]
+                      (reloc-entry ":absadr" 8 2)))) ;; 7 [8 9]
+
+(define/c (get-label-byte label-str offset)
+  (-> string? word/c byte/c)
+  (cond ((string-suffix? label-str "-H")
+         (high-byte offset))
+        ((string-suffix? label-str "-L")
+         (low-byte offset))
+        (else (raise-user-error (format "not a byte label ~a" label-str)))))
+
+;; generate the bytes of the relocation table of these commands
+;; offset       data
+;; 0            rel-position-low, rel-position-high, width (byte), (if width = 1 0:lowbyte 1:highbyte)?, rel-value-low, rel-value-high
+(define/c (commands->reloc-table-bytes commands-bytes-list reloc-entries)
+  (-> (listof command-len-offset-pair/c) (listof reloc-entry?) (listof byte/c))
+  (flatten
+   (map (lambda (reloc-entry)
+          (define labels (filter (lambda (command-bytes) (and (command-is-label? (car command-bytes))
+                                                       (string=? (main-label-string (reloc-entry-label reloc-entry))
+                                                                 (label-string-of-label (car command-bytes)))))
+                                 commands-bytes-list))
+          (define offset (car (cdadar labels)))
+          (define label-str (reloc-entry-label reloc-entry))
+          (list (low-byte (reloc-entry-use-position reloc-entry))
+                (high-byte (reloc-entry-use-position reloc-entry))
+                (reloc-entry-byte-width reloc-entry)
+                (cond ((= 1 (reloc-entry-byte-width reloc-entry))
+                       (list (if (string-suffix? label-str "-H") 1 0) (low-byte offset) (high-byte offset) ))
+                      ((= 2 (reloc-entry-byte-width reloc-entry))
+                       (list (low-byte offset) (high-byte offset)))
+                      (else raise-user-error (format "unknown byte width  ~a for label" (reloc-entry-byte-width reloc-entry))))))
+        reloc-entries)))
+
+(module+ test #| commands->reloc-table-bytes |#
+  (check-equal? (commands->reloc-table-bytes
+                 '((('opcode 20 ":some")   (3 0))
+                   (('label '()  ":some")    (0 3))
+                   (('opcode 55 ":some-L") (2 3))
+                   (('opcode 56 ":some-H") (2 5)))
+                 `(,(reloc-entry ":some" 1 2)
+                   ,(reloc-entry ":some-L" 4 1)
+                   ,(reloc-entry ":some-H" 6 1)))
+                '(1 0 2 3 0
+                    4 0 1 0 3 0
+                    6 0 1 1 3 0)))
+
+;; write commands into this structure
+;; offset       data
+;; 0            rl = reloc-len (word, low-then-high byte)
+;; 2            relocation table
+;; 2+rl         cbl = cmd-bytes-len (word, low-then-high byte)
+;; 4+rl         command bytes
+;; 4+rl+cbl-1
+(define/c (commands->relocatable-bytes commands)
+  (-> (listof command/c) (listof byte?))
+  (define cbl (commands-bytes-list commands))
+  (define reloc-entries (collect-absolute-reloc-entries commands))
+  (define reloc-table-bytes (commands->reloc-table-bytes cbl reloc-entries))
+  (define reloc-table-bytes-len (length reloc-table-bytes))
+  (define command-bytes (commands->bytes 0 commands))
+  (define command-bytes-len (length command-bytes))
+  (flatten
+   (list
+    (low-byte reloc-table-bytes-len)
+    (high-byte reloc-table-bytes-len)
+    reloc-table-bytes
+    (low-byte command-bytes-len)
+    (high-byte command-bytes-len)
+    command-bytes)))
+
+(module+ test #| commands->relocatable-bytes |#
+  (check-equal? (commands->relocatable-bytes '(('opcode 20 #xff #xa0)))
+                (list 0 0
+                      3 0 20 #xff #xa0))
+  (check-equal? (commands->relocatable-bytes '(('opcode #x14 ":absadr")
+                                              ('label ":absadr")))
+                (list 5 0 1 0 2 3 0
+                      3 0 #x14 3 0))
+  (check-equal? (commands->relocatable-bytes '(('label ":before")
+                                              ('rel-opcode #xd0 ":before")))
+                (list 0 0
+                      2 0 #xd0 #xfe)))
+
+;; read relocatable bytes and locate them at origin
+(define/c (relocatable-bytes->bytes origin reloc-bytes)
+  (-> word/c (listof byte/c) (listof byte/c))
+  ;; (loop over relocation table and apply modification to command bytes)
+  (define reloc-table-len (absolute (second reloc-bytes) (first reloc-bytes)))
+  (if (zero? reloc-table-len)
+      (cddr reloc-bytes)
+      (let ((reloc-table-start (cddr reloc-bytes)))
+        (define command-bytes (drop reloc-table-start (+ 2 reloc-table-len)))
+        (apply-reloc-table-to origin (take reloc-table-start reloc-table-len) command-bytes))))
+
+;; rel-position-low[byte], rel-position-high[byte], width[byte], (if width = 1 0:lowbyte 1:highbyte)? rel-value-low[byte] rel-value-high[byte] ...
+;; -> ((rel-pos[word] width[1/2] (if width = 1 0:lowbyte 1:highbyte)? rel-value-low[byte] rel-value-high[byte]) ...)
+(define (list-of-reloc-entries reloc-table)
+  (if (empty? reloc-table)
+      '()
+      (let* ((byte-ind (third reloc-table))
+             (rel-entry
+              (list (absolute (second reloc-table) (first reloc-table))
+                    byte-ind
+                    (cond ((= 1 byte-ind)
+                           (list (fourth reloc-table) (fifth reloc-table) (sixth reloc-table)))
+                          ((= 2 byte-ind)
+                           (list (fourth reloc-table) (fifth reloc-table)))
+                          (else (raise-user-error (format "unknown byte indicator ~a" byte-ind)))))))
+        (cons (flatten rel-entry) (list-of-reloc-entries (drop reloc-table (- 7 byte-ind)))))))
+
+(module+ test #| list-of-reloc-entries |#
+  (check-equal? (list-of-reloc-entries (list 3  0 1 0 15 0
+                                             5  2 2 0 255
+                                             10 0 1 1 12 10))
+                '((3 1 0 15 0)
+                  (517 2 0 255)
+                  (10 1 1 12 10))))
+
+(define/c (apply-reloc-table-to origin reloc-table command-bytes)
+  (-> word/c (listof byte/c) (listof byte/c) (listof byte/c))
+  (define sorted-reloc-entries (sort (list-of-reloc-entries reloc-table) < #:key (lambda (entry) (first entry))))
+  (apply-reloc-entries-to- origin 0 sorted-reloc-entries command-bytes))
+
+(define (apply-reloc-entries-to- origin at reloc-entries command-bytes)
+  (if (empty? command-bytes)
+      '()
+      (if (empty? reloc-entries)
+          command-bytes
+          (let ((reloc-entry (first reloc-entries)))
+            (if (not (= at (first reloc-entry)))
+                (cons (car command-bytes) (apply-reloc-entries-to- origin (add1 at) reloc-entries (cdr command-bytes)))
+                (let ((byte-ind (second reloc-entry)))
+                  (cond ((= byte-ind 1)
+                         (let ((rel-offset (absolute (fifth reloc-entry)(fourth reloc-entry))))
+                           (if (zero? (third reloc-entry))
+                               (cons (low-byte (+ origin rel-offset))
+                                     (apply-reloc-entries-to- origin (+ 1 at) (cdr reloc-entries) (cdr command-bytes)))
+                               (cons (high-byte (+ origin rel-offset))
+                                     (apply-reloc-entries-to- origin (+ 1 at) (cdr reloc-entries) (cdr command-bytes))))))
+                        ((= byte-ind 2)
+                         (let ((rel-offset (absolute (fourth reloc-entry)(third reloc-entry))))
+                           (cons (low-byte (+ origin rel-offset))
+                                 (cons (high-byte (+ origin rel-offset))
+                                       (apply-reloc-entries-to- origin (+ 2 at) (cdr reloc-entries) (cddr command-bytes))))))
+                        (else (raise (format "unknown byte indicator ~a" byte-ind))))))))))
+
+(module+ test #| apply-reloc-entries-to- |#
+  (check-equal? (apply-reloc-entries-to- #xc000 0
+                                         '((1 2 3 0)
+                                           (4 2 8 1))
+                                         '(#x4c 0 0
+                                           #x14 0 0
+                                           #xea))
+                (list #x4c #x03 #xc0
+                      #x14 #x08 #xc1
+                      #xea))
+  (check-equal? (apply-reloc-entries-to- #xc000 0
+                                         '((1 1 0 3 0)
+                                           (3 1 1 8 1))
+                                         '(#xa2 0 
+                                           #xa2 0
+                                           #xea))
+                (list #xa2 #x03
+                      #xa2 #xc1
+                      #xea)))
+
+(module+ test #| relocatable-bytes->bytes |# 
+  (check-equal? (relocatable-bytes->bytes #xc000 (commands->relocatable-bytes  '(('opcode #x14 #xd2 #xff)
+                                                                               ('label ":some")
+                                                                               ('opcode #xca)
+                                                                               ('rel-opcode #xd0 ":some")
+                                                                               ('opcode #x4c ":some")
+                                                                               ('opcode #xa2 "#:some-H")
+                                                                               ('opcode #xa2 "#:some-L"))))
+                (list #x14 #xd2 #xff
+                      #xca
+                      #xd0 #xfd
+                      #x4c #x03 #xc0
+                      #xa2 #xc0
+                      #xa2 #x03))
+  (check-equal? (relocatable-bytes->bytes #xf0fe (commands->relocatable-bytes  '(('opcode #x14 #xd2 #xff)
+                                                                               ('label ":some")
+                                                                               ('opcode #xca)
+                                                                               ('rel-opcode #xd0 ":some")
+                                                                               ('opcode #x4c ":some")
+                                                                               ('opcode #xa2 "#:some-H")
+                                                                               ('opcode #xa2 "#:some-L"))))
+                (list #x14 #xd2 #xff
+                      #xca
+                      #xd0 #xfd
+                      #x4c #x01 #xf1
+                      #xa2 #xf1
+                      #xa2 #x01))
+  (check-equal? (relocatable-bytes->bytes #xf0fe (commands->relocatable-bytes '(('opcode #x14 #xd2 #xff)
+                                                                              ('label ":some")
+                                                                              ('opcode #xca)
+                                                                              ('rel-opcode #xd0 ":some")
+                                                                              ('opcode #x4c ":some")
+                                                                              ('opcode #xa2 "#:some-H")
+                                                                              ('opcode #xa2 "#:some-L"))))
+                (commands->bytes #xf0fe '(('opcode #x14 #xd2 #xff)
+                                         ('label ":some")
+                                         ('opcode #xca)
+                                         ('rel-opcode #xd0 ":some")
+                                         ('opcode #x4c ":some")
+                                         ('opcode #xa2 "#:some-H")
+                                         ('opcode #xa2 "#:some-L")))))
 
 (define (LABEL_s label) (list ''label label))
 
