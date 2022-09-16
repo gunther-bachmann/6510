@@ -1,8 +1,5 @@
 #lang racket
 
-;; todo: implement increment x and increment y and compare
-;; todo: make sure to expand label to 2 bytes (for absolutes) and 1 byte (for zero page) opcodes! (e.g. adc (:cout,x))!!
-;; ongoing: add possibility to use labels instead of values (in all addressing modes)
 ;; todo: add method descriptions (scrbl)
 ;; todo: get more information about syntax object context, to allow propagation of syntax context of megaparsack to transformations in 6510.rkt
 ;; todo: check whether ebnf + some is a dsl that could be used instead of programmatically constructing parsers with megaparsack (dsl to generate that)
@@ -656,10 +653,10 @@
   (with-syntax ([operand-value (syntax->datum operand)]
                 [symbol-i (symbol-append opcode '_i)])
     (if (is-immediate-number? (syntax->datum #'operand-value))                     
-      (with-syntax ([op-number (parse-number-string (substring (syntax->datum operand) 1))])
-        #'(symbol-i op-number))
-      (when (6510-label-immediate-byte-string? (syntax->datum #'operand-value))
-        #'(symbol-i operand-value)))))
+        (with-syntax ([op-number (parse-number-string (substring (syntax->datum operand) 1))])
+          #'(symbol-i op-number))
+        (when (6510-label-immediate-byte-string? (syntax->datum #'operand-value))
+          #'(symbol-i operand-value)))))
 
 (module+ test
   (begin-for-syntax
@@ -678,11 +675,11 @@
   (with-syntax ([operand-value (syntax->datum operand)]
                 [symbol-zp (symbol-append opcode '_zp)])
     (if (6510-number-string? (syntax->datum operand))
-          (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
-            (when (> 256 (parse-number-string (syntax->datum #'operand-value)))
-              #'(symbol-zp op-number)))
-          (when (6510-label-byte-string? (syntax->datum #'operand-value))
-            #'(symbol-zp operand-value)))))
+        (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
+          (when (> 256 (parse-number-string (syntax->datum #'operand-value)))
+            #'(symbol-zp op-number)))
+        (when (6510-label-byte-string? (syntax->datum #'operand-value))
+          #'(symbol-zp operand-value)))))
 
 (module+ test
   (begin-for-syntax
@@ -763,7 +760,7 @@
   (with-syntax ([symbol-indy (symbol-append opcode '_indy)]
                 [y-idx (syntax->datum close-or-y)])
     (when (or (equal? (syntax->datum #'y-idx) '(unquote y))
-              (equal? (syntax->datum #'y-idx) 'y))
+             (equal? (syntax->datum #'y-idx) 'y))
       (if (6510-number-string? (syntax->datum operand))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
             (when (>= 255 (syntax->datum #'op-number))
@@ -828,7 +825,7 @@
     (if (6510-label-string? (syntax->datum #'operand-value))
         #'(symbol-rel operand-value)
         (when (and (6510-number-string? (syntax->datum #'operand-value))
-                   (> 256 (parse-number-string (syntax->datum #'operand-value))))
+                 (> 256 (parse-number-string (syntax->datum #'operand-value))))
           (with-syntax ([op-number (parse-number-string (syntax->datum operand))])
             #'(symbol-rel op-number))))))
 
@@ -1366,22 +1363,22 @@
   '(#x01       #x05      #x09      #x0d     #x11       #x15        #x19       #x1d))
 
 (module+ test #| ora |#
-    (check-match (ORA < "$10" ,x >)
-                 '('opcode #x01 #x10))
-    (check-match (ORA "$10")
-                 '('opcode #x05 #x10))
-    (check-match (ORA "#$10")
-                 '('opcode #x09 #x10))
-    (check-match (ORA "$1011")
-                 '('opcode #x0d #x11 #x10))
-    (check-match (ORA <"$10">,y)
-                 '('opcode #x11 #x10))
-    (check-match (ORA "$10",x)
-                 '('opcode #x15 #x10))
-    (check-match (ORA "$1011",y)
-                 '('opcode #x19 #x11 #x10))
-    (check-match (ORA "$1011",x)
-                 '('opcode #x1d #x11 #x10)))
+  (check-match (ORA < "$10" ,x >)
+               '('opcode #x01 #x10))
+  (check-match (ORA "$10")
+               '('opcode #x05 #x10))
+  (check-match (ORA "#$10")
+               '('opcode #x09 #x10))
+  (check-match (ORA "$1011")
+               '('opcode #x0d #x11 #x10))
+  (check-match (ORA <"$10">,y)
+               '('opcode #x11 #x10))
+  (check-match (ORA "$10",x)
+               '('opcode #x15 #x10))
+  (check-match (ORA "$1011",y)
+               '('opcode #x19 #x11 #x10))
+  (check-match (ORA "$1011",x)
+               '('opcode #x1d #x11 #x10)))
 
 (define-opcode-functions PHA '(implicit) '(#x48))
 
