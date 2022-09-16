@@ -106,6 +106,41 @@ To build all, run `raco make -v -j 8 *.rkt`
 
 #### debugger
 
+idea: use same commands as vice monitor (see https://vice-emu.sourceforge.io/vice_12.html)
+- (g)oto <address> :: goto / jump to the given address
+- (n)ext <count> :: execute the next <count> number of instructions
+- r <reg> = <value> :: assign a value to a register (pc, sp, a, x, y)
+- reset <type> :: reset the cpu (0 = soft, 1 = hard ...)
+- (ret)urn :: execute up to (including) the next rts/rti
+- (z) / step <count> :: same as next
+- (c)ompare <address> .. <address> <address> :: compare memory
+- (f)ill <address> .. <address> <byte> (, <byte>)* :: fill the address range with bytes, repeating
+- (h)unt <address> .. <address> <byte> (, <byte>)* :: find the given byte sequence in the address range
+- i <address> .. <address> :: display memory as PETSCII text
+- ii <address> .. <address> :: display memory as screen code text
+- (m)em <address> .. <address> display memory
+- (t)/move <address> .. <address> <address> :: move/copy memory
+- > <address> <byte> (, <byte>)* :: write into address
+- a <address> <instruction> (, <instruction>)* :: assemble
+- (d)isass <address> .. <address> :: disassemble
+- break (load|store|exec) (<address> (.. <address>)? (if <condition>)?)? :: (list or) set break point, when loading/storing or executing (within) the given address, when condition hits
+- enable <breakpoint-id>
+- disable <breakpoint-id>
+- cond <breakpoint-id> if <condition> :: set condition on breakpoint
+- (del)ete <breakpoint-id> :: remove the breakpoint
+- ignore <breakpoint-id> (<count>)? :: ignore the given breakpoint for count times
+- (tr)ace (load|store|exec) (<address> (.. <address>)? (if <condition>)?)? :: (list or) set trace point, when loading/storing or executing (within) the given address, when condition hits
+- (un)til <address> :: create temporary breakpoint at address and run until there
+- (w)atch (load|store) (<address> (.. <address>)? (if <condition>)?)? :: (list or) set watch point, when loading/storing or executing (within) the given address, when condition hits
+- e(x)it :: exit monitor and return to execution
+- (q)uit :: exit monitor
+- help <command> :: print help
+- ~ <number> : display number in decimal, hex, octal and binary
+
+ break point = stop in monitor / debugger on read or write or execute
+ trace point = print status but continue running on read or write or execute
+ watch point = stop into monitor / debugger on read or write
+ 
 * step-wise debugger
 ** [X] step
 ** [X] inspect/change state
@@ -128,8 +163,8 @@ To build all, run `raco make -v -j 8 *.rkt`
     - pc value (code line),
     - current opcode (set),
     - current addressing mode
-* [X] time travel debugging (backwards)
-* time portal (points) :: spots to remember state and navigate to (later)
+** [X] time travel debugging (backwards)
+** time portal (points) :: spots to remember state and navigate to (later)
 
 #### mil (minimal lisp)
 
