@@ -1,11 +1,9 @@
 #lang racket
-(require syntax/strip-context)
 (require megaparsack megaparsack/text)
 (require data/monad)
 (require data/applicative)
 (require "6510.rkt")
-(require "6510-interpreter.rkt")
-;; (require "6510-debugger.rkt")
+(require "6510-utils.rkt")
 (require (rename-in  racket/contract [define/contract define/c]))
 
 ; usage:

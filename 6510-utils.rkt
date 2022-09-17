@@ -4,21 +4,24 @@
 (module+ test
   (require rackunit))
 
-(provide byte/c
-         word/c
-         two-complement-of
-         decimal-from-two-complement
-         parse-number-string
-         low-byte
-         high-byte
-         absolute
-         word
-         byte
-         6510-label-string?
-         6510-label-byte-string?
-         6510-label-immediate-byte-string?
-         is-immediate-number?
-         6510-number-string?)
+(provide
+ 6510-label-byte-string?
+ 6510-label-immediate-byte-string?
+ 6510-label-string?
+ 6510-number-string?
+ absolute
+ byte
+ byte->hex-string
+ byte/c
+ decimal-from-two-complement
+ high-byte
+ is-immediate-number?
+ low-byte
+ parse-number-string
+ two-complement-of
+ word
+ word->hex-string
+ word/c)
 
 (define/c (in-word-range? word)
   (-> exact-integer? boolean?)
@@ -168,3 +171,32 @@
   (check-false (is-immediate-number? "$2001"))
   (check-false (is-immediate-number? "# $2001"))
   (check-false (is-immediate-number? "#&2001")))
+
+;; transform a byte to a 2 digit hex string
+(define/c (byte->hex-string num)
+  (-> byte/c string?)
+  (~a (number->string num 16)
+      #:width 2 #:left-pad-string "0" #:align 'right))
+
+;; transform a word (2 bytes) to a 4 digit hex string
+(define/c (word->hex-string num)
+  (-> word/c string?)
+  (~a (number->string num 16)
+      #:width 4 #:left-pad-string "0" #:align 'right))
+
+(module+ test #| byte->hex-string, word->hex-string |#
+  (check-equal? (byte->hex-string #x00) "00")
+  (check-equal? (byte->hex-string #x01) "01")
+  (check-equal? (byte->hex-string #x7f) "7f")
+  (check-equal? (byte->hex-string #x80) "80")
+  (check-equal? (byte->hex-string #x81) "81")
+  (check-equal? (byte->hex-string #xa0) "a0")
+  (check-equal? (byte->hex-string #xff) "ff")
+  (check-equal? (word->hex-string #x0000) "0000")
+  (check-equal? (word->hex-string #x0001) "0001")
+  (check-equal? (word->hex-string #x0020) "0020")
+  (check-equal? (word->hex-string #x0300) "0300")
+  (check-equal? (word->hex-string #x4000) "4000")
+  (check-equal? (word->hex-string #xffff) "ffff")
+  (check-equal? (word->hex-string #x9999) "9999")
+  (check-equal? (word->hex-string #x5e5f) "5e5f"))

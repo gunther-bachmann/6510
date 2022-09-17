@@ -19,7 +19,6 @@
   (require rackunit))
 
 (provide 6510-load
-         byte->hex-string
          execute-cpu-step
          initialize-cpu
          memory->string
@@ -42,8 +41,7 @@
          set-zero-flag clear-zero-flag
          with-accumulator
          with-program-counter
-         with-flags
-         word->hex-string)
+         with-flags)
 
 (struct cpu-state (program-counter ;; pointer to current program execution (16 bit)
                    flags           ;; flag register (8 bit)
@@ -171,7 +169,7 @@
   (-> cpu-state? word/c byte/c)
   (nth (cpu-state-memory state) memory-address))
 
-;; set the byte at the given memory address (TODO replace with pvector pendant)
+;; set the byte at the given memory address
 (define/c (-poke state address value)
   (-> cpu-state? word/c byte/c cpu-state?)
   (struct-copy cpu-state state 
@@ -231,41 +229,11 @@
         (fx+ #x100 (byte (fx- (cpu-state-stack-pointer state) 1)))
         value))
 
-;; transform a byte to a 2 digit hex string
-(define/c (byte->hex-string num)
-  (-> byte/c string?)
-  (~a (number->string num 16)
-      #:width 2 #:left-pad-string "0" #:align 'right))
-
-;; transform a word (2 bytes) to a 4 digit hex string
-(define/c (word->hex-string num)
-  (-> word/c string?)
-  (~a (number->string num 16)
-      #:width 4 #:left-pad-string "0" #:align 'right))
-
-(module+ test #| byte->hex-string, word->hex-string |#
-  (check-equal? (byte->hex-string #x00) "00")
-  (check-equal? (byte->hex-string #x01) "01")
-  (check-equal? (byte->hex-string #x7f) "7f")
-  (check-equal? (byte->hex-string #x80) "80")
-  (check-equal? (byte->hex-string #x81) "81")
-  (check-equal? (byte->hex-string #xa0) "a0")
-  (check-equal? (byte->hex-string #xff) "ff")
-  (check-equal? (word->hex-string #x0000) "0000")
-  (check-equal? (word->hex-string #x0001) "0001")
-  (check-equal? (word->hex-string #x0020) "0020")
-  (check-equal? (word->hex-string #x0300) "0300")
-  (check-equal? (word->hex-string #x4000) "4000")
-  (check-equal? (word->hex-string #xffff) "ffff")
-  (check-equal? (word->hex-string #x9999) "9999")
-  (check-equal? (word->hex-string #x5e5f) "5e5f"))
-
 (define/c (byte->dump-char dump-byte)
   (-> byte/c string?)
   (define dump-char (integer->char dump-byte))
   (cond
-    ((char-graphic? dump-char) (string dump-char)
-     )
+    ((char-graphic? dump-char) (string dump-char))
     (else ".")))
 
 ;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
@@ -1880,8 +1848,6 @@
                     (execute-cpu-step _))))
     (check-false (zero-flag? result) "zero flag is false since ($7f + 1) != $00")
     (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")))
-
-
 
 ;; put the raw bytes into memory (at org) and start running at org
 (define/c (run-interpreter org raw-bytes)

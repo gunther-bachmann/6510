@@ -1,12 +1,8 @@
 #lang racket
 (require syntax/strip-context)
 (require megaparsack megaparsack/text)
-(require data/monad)
-(require data/applicative)
 (require "6510.rkt")
 (require "6510-parser.rkt")
-(require "6510-interpreter.rkt")
-;; (require "6510-debugger.rkt")
 (require (rename-in  racket/contract [define/contract define/c]))
 
 ; usage:
@@ -19,9 +15,6 @@
 
 ; naming convention:
 ;   .../p is or returns a parser
-
-(module+ test
-  (require rackunit))
 
 (provide (rename-out [literal-read read]
                      [literal-read-syntax read-syntax]))
@@ -46,9 +39,13 @@
            (require "6510.rkt")
            (require "6510-interpreter.rkt")
            (require "6510-debugger.rkt")
-           (provide program raw-program resolved-program pretty-program raw-bytes stx-program sy-program)
+           (provide program
+                    raw-program
+                    resolved-program 
+                    raw-bytes
+                    stx-program
+                    sy-program)
            (define stx-program (syntax #,unenc-prg)) ;; examine how to pass source location into the generated racket program
-           ;; (define sy-program  `('hello (unquote-splicing (syntax-e (syntax #,unenc-prg)))))
            ;; execute this construction of sy-program in the 'with-syntax clause outside this s-expr!! and splice it in here
            (define sy-program `(,(let* ([datum (syntax->datum (syntax sy-str))]
                                        [sy-datum (syntax sy-str)]) (append (list (first datum))
@@ -60,7 +57,6 @@
            (define resolved-program (replace-labels program org))
            (define raw-bytes (commands->bytes org `(,str ...)))
            (displayln "(have a look at sy-program, raw-program, resolved-program, raw-bytes and pretty-program)")
-           (define pretty-program (pretty-print-program resolved-program raw-program))
            ;; (create-prg (commands->bytes org program) org "test.prg")
            (create-image-with-program (commands->bytes org program) org "test.prg" "test.d64" "test")
            (displayln "execute the program in vice via (run-emulator \"test.d64\")")

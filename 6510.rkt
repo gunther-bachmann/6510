@@ -5,9 +5,7 @@
 ;; todo: check whether ebnf + some is a dsl that could be used instead of programmatically constructing parsers with megaparsack (dsl to generate that)
 ;; planned: realize with typed racket
 
-(require (only-in racket/format ~a))
 (require (only-in threading ~>))
-(require (only-in rnrs/base-6 div mod))
 (require (for-syntax (only-in racket/list second empty? first)))
 
 (require (for-syntax "6510-utils.rkt"))
@@ -25,7 +23,6 @@
                                 (idx-arg-adr-modes-zero-page-x? zero-page-x?)
                                 (idx-arg-adr-modes-zero-page-y? zero-page-y?))))
 (require "6510-utils.rkt")
-(require "6510-interpreter.rkt")
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (module+ test
@@ -33,7 +30,13 @@
   (begin-for-syntax
     (require rackunit)))
 
-(provide parse-number-string replace-labels commands->bytes create-prg run-emulator pretty-print-program create-image-with-program
+(provide ;; parse-number-string
+         replace-labels
+         commands->bytes
+         create-prg
+         run-emulator
+         create-image-with-program
+
          ADC AND ASL
          BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS
          CLC CLD CLI CLV CMP CPX CPY
@@ -1514,41 +1517,3 @@
   (create-prg program org file-name)
   (create-d64 d64)
   (add-prg-to-d64 file-name d64 target-name))
-
-;; -------------------------------------------------- pretty print
-
-(define (hex-format-any a-number-str)
-  (let ([parsed-number (parse-number-string a-number-str)])
-    (if (> parsed-number 255)
-        (string-append "$" (word->hex-string parsed-number) )
-        (string-append "$" (byte->hex-string parsed-number)))))
-
-(define (format-raw-line slst)
-  (string-join (map (lambda (element)
-                      (cond [(symbol? element) (symbol->string element)]
-                            [(6510-number-string? element) (hex-format-any element)]
-                            [(is-immediate-number? element) (string-append "#" (hex-format-any (substring element 1)))]
-                            [else  element])) slst) " "))
-
-
-(define (pretty-print-line line)
-  (let* ([opcodes (drop-meta-info (first line))]
-         [syntax (drop-meta-info (last line))]
-         [compiled
-          (case (first opcodes)
-            [('opcode 'rel-opcode)
-             (~a  (string-join (map byte->hex-string (drop opcodes 1)) " ")
-                  #:min-width 12)]
-            [('label) (last opcodes)]
-            [('bytes) (~a (string-join  (map byte->hex-string (last opcodes)) " "))]
-            [else "?"])]
-         [syntax-str
-          (case (first opcodes)
-            [('opcode 'rel-opcode) (format-raw-line syntax)]
-            [('bytes) "   ; raw bytes"]
-            [else ""])])
-    (string-append compiled syntax-str)))
-
-(define (pretty-print-program resolved-program raw-program)
-  (let ([interleaved (map list resolved-program raw-program)])
-    (string-join (map pretty-print-line interleaved) "\n")))
