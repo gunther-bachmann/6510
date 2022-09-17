@@ -6,11 +6,10 @@
         ;; lda #23
         ;; sta 53272
 
-        ldx #$00
+        ldx :hello
 :sout   lda :hello,x
         jsr $ffd2
-        inx
-        cpx #$0e
+        dex
         bne :sout
 
         clc
@@ -31,9 +30,10 @@
  :cout  jsr $ffd2
         rts
 
-:hello  .data $0e ; switch to lower letter mode
-        .asc "hELLO wORLD!"
+:hello  .data 14 ; number of bytes to print (string length)
         .data $0d ; line feed
+        .asc "!DLROw OLLEh"
+        .data $0e ; switch to lower letter mode
 
 
 

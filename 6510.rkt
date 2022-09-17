@@ -129,9 +129,9 @@
 (define/c (collect-label-offset-map commands-bytes-list)
   (-> (listof command-len-offset-pair/c) (listof command-len-offset-pair/c))
   (filter (lambda (command-byte-pair)
-            (case (first (first command-byte-pair))
-              [('label) #t]
-              [else #f])) commands-bytes-list))
+            (match-let ([(list (list command-type _ ...) _) command-byte-pair])
+              (equal? ''label command-type)))
+          commands-bytes-list))
 
 (module+ test #| collect-label-offset-map |#
   (check-match (collect-label-offset-map '((('opcode 1 2) (2 0))
@@ -283,7 +283,7 @@
          (map (lambda (command-byte-pair) (replace-label command-byte-pair labels-bytes-list address))
               commands-bytes-list))))
 
-(module+ test
+(module+ test #| replace-labels |#
   (check-match (replace-labels '(('opcode 1 2)
                                  ('label ":some")
                                  ('rel-opcode #xf0 ":end")
@@ -310,10 +310,6 @@
                  ('rel-opcode #xf0 #xfc)
                  ('opcode 32 10 0)
                  ('opcode 0))))
-
-(define (resolve-statements commands)
-  (let* [(label-offsets (collect-label-offset-map commands))]
-    (replace-labels label-offsets commands)))
 
 ;; is the given command a label (placeholder)
 (define (command-is-label? command)
@@ -410,8 +406,7 @@
     (let* ([commands-bytes-list (commands-bytes-list commands)]
            [cbl-with-labels (collect-commands-using-labels commands-bytes-list)])
       (map (lambda (cb)
-             (match-let* ([(list command bytelist) cb]
-                          [(list command-width rel-address) bytelist])
+             (match-let ([(list command (list command-width rel-address)) cb])
                (reloc-entry (label-of-command command)
                             (add1 rel-address)
                             (sub1 command-width))))
@@ -446,8 +441,7 @@
   (flatten
    (map (lambda (reloc-entry)
           (define labels (collect-labels-matching-reloc-entry commands-bytes-list reloc-entry))
-          (match-let* ([(list _ len-offset-pair) (first labels)]
-                       [(list _ offset) len-offset-pair])
+          (match-let ([(list _ (list _ offset)) (first labels)])
             (define label-str (reloc-entry-label reloc-entry))
             (list (low-byte (reloc-entry-use-position reloc-entry))
                   (high-byte (reloc-entry-use-position reloc-entry))
@@ -522,7 +516,8 @@
 
 ;; rel-position-low[byte], rel-position-high[byte], width[byte], (if width = 1 0:lowbyte 1:highbyte)? rel-value-low[byte] rel-value-high[byte] ...
 ;; -> ((rel-pos[word] width[1/2] (if width = 1 0:lowbyte 1:highbyte)? rel-value-low[byte] rel-value-high[byte]) ...)
-(define (list-of-reloc-entries reloc-table)
+(define/c (list-of-reloc-entries reloc-table)
+  (-> (listof byte/c) (listof (listof word/c)))
   (if (empty? reloc-table)
       '()
       (let* ((byte-ind (third reloc-table))
