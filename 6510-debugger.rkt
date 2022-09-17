@@ -122,7 +122,7 @@ EOF
   (with-handlers ([exn:fail? ;; catch parse error of the 6510 opcode
                    (lambda (e) (displayln e) d-state)])
     (define c-state (car (debug-state-states d-state)))
-    (let ((byteList (compile-opcode (string-trim command))))
+    (let ((byteList (compile-opcodes (string-trim command))))
       (if (or force
              (eq? (instruction-byte-len c-state)
                   (length byteList)))
@@ -330,7 +330,7 @@ EOF
         (lambda (e) (displayln
                 (format "error: ~a,\nfailure on: opcode: ~a, mnemonic: '~a'"
                         e opcode mnemonic)))))
-      (let ((roundtrip-bytes (compile-opcode mnemonic)))
+      (let ((roundtrip-bytes (compile-opcodes mnemonic)))
         (check-equal?
          (length roundtrip-bytes)
          bytes

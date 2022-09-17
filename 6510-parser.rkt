@@ -25,7 +25,7 @@
   (define (parsed-string-result syntax string)
     (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
 
-(provide compile-opcode 6510-program/p list->values)
+(provide 6510-program/p list->values compile-opcodes)
 
 (define space-or-tab/p
   (or/p (char/p #\space) (char/p #\tab)))
@@ -557,19 +557,23 @@
 (define-namespace-anchor eval-ns-anchor)
 (define eval-ns (namespace-anchor->namespace eval-ns-anchor))
 
-;; compile one opcode to a list of bytes
-(define (compile-opcode str)
-  (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcode/p) str))))
-  (define stripped-src-location-data (filter (lambda (el) (not (and (list? el) (equal? (car el) '#:line)))) parsed))
-  (commands->bytes 0 (list (eval stripped-src-location-data eval-ns))))
+(define (filter-meta-data command)
+  (filter (lambda (el) (not (and (list? el) (equal? (car el) '#:line)))) command))
 
-(module+ test #| compile-opcode |#
+(define (compile-opcodes str)
+  (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcodes/p) str))))
+  (define stripped-src-location-data (map (lambda (command) (filter-meta-data command)) parsed))
+  (commands->bytes 0 (map (lambda (command) (eval command eval-ns)) stripped-src-location-data)))
+
+(module+ test #| compile-opcodes |#
   (check-equal? (JSR "$2000")
                 '('opcode 32 0 32))
-  (check-equal? (compile-opcode "JSR $FFD2")
+  (check-equal? (compile-opcodes "JSR $FFD2")
                 '(32 210 255))
-  (check-equal? (compile-opcode ".data $FF, $10")
-                '(255 16)))
+  (check-equal? (compile-opcodes ".data $FF, $10")
+                '(255 16))
+  (check-equal? (compile-opcodes "LDX $ff00\n:some JSR :some")
+                '(174 0 255 32 3 0)))
 
 ;; apply the method 'values' to all list elements
 (define (list->values list)
