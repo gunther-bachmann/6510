@@ -127,8 +127,7 @@
 
 ;; collect from the list of pairs of command definition and command-len-absolute-offset pairs, only the labels (and their lenght-offset pairs)
 (define/c (collect-label-offset-map commands-bytes-list)
-  (-> (listof (list/c command/c length-offset-list/c))
-     (listof (list/c label/c length-offset-list/c)))
+  (-> (listof command-len-offset-pair/c) (listof command-len-offset-pair/c))
   (filter (lambda (command-byte-pair)
             (case (first (first command-byte-pair))
               [('label) #t]
@@ -394,18 +393,28 @@
    )
   #:transparent)
 
+;; filter the list of commands-bytes-list to only those commands using labels
+(define/c (collect-commands-using-labels commands-bytes-list)
+  (-> (listof command-len-offset-pair/c) (listof command-len-offset-pair/c))
+  (filter (lambda (cb)
+            (match-let* ([(list command _) cb]
+                         [(list opcode _ ...) command])
+              (and (command-uses-label? command)
+                 (equal? ''opcode opcode))))
+          commands-bytes-list))
+
 ;; collect all absolute references to labels w/i commands
 (define/c (collect-absolute-reloc-entries commands)
   (-> (listof command/c) (listof reloc-entry?))
   (unless (empty? commands)
     (let* ([commands-bytes-list (commands-bytes-list commands)]
-           [cbl-with-labels
-            (filter (lambda (cb) (and (command-uses-label? (car cb))
-                               (equal? ''opcode (caar cb))))
-                    commands-bytes-list)])
-      (map (lambda (cb) (reloc-entry (label-of-command (car cb))
-                                (add1 (cadadr cb))
-                                (sub1 (caadr cb))))
+           [cbl-with-labels (collect-commands-using-labels commands-bytes-list)])
+      (map (lambda (cb)
+             (match-let* ([(list command bytelist) cb]
+                          [(list command-width rel-address) bytelist])
+               (reloc-entry (label-of-command command)
+                            (add1 rel-address)
+                            (sub1 command-width))))
            cbl-with-labels))))
 
 (module+ test #| collect-absolute-reloc-entries |#
@@ -420,13 +429,14 @@
                       (reloc-entry "#:some-H" 6 1) ;;   5 [6]
                       (reloc-entry ":absadr" 8 2)))) ;; 7 [8 9]
 
-(define/c (get-label-byte label-str offset)
-  (-> string? word/c byte/c)
-  (cond ((string-suffix? label-str "-H")
-         (high-byte offset))
-        ((string-suffix? label-str "-L")
-         (low-byte offset))
-        (else (raise-user-error (format "not a byte label ~a" label-str)))))
+(define/c (collect-labels-matching-reloc-entry commands-bytes-list reloc-entry)
+  (-> (listof command-len-offset-pair/c) reloc-entry? (listof command-len-offset-pair/c))
+  (filter (lambda (command-bytes)
+            (match-let ([(list command _) command-bytes])
+              (and (command-is-label? command)
+                 (string=? (main-label-string (reloc-entry-label reloc-entry))
+                           (label-string-of-label command)))))
+          commands-bytes-list))
 
 ;; generate the bytes of the relocation table of these commands
 ;; offset       data
@@ -435,20 +445,18 @@
   (-> (listof command-len-offset-pair/c) (listof reloc-entry?) (listof byte/c))
   (flatten
    (map (lambda (reloc-entry)
-          (define labels (filter (lambda (command-bytes) (and (command-is-label? (car command-bytes))
-                                                       (string=? (main-label-string (reloc-entry-label reloc-entry))
-                                                                 (label-string-of-label (car command-bytes)))))
-                                 commands-bytes-list))
-          (define offset (car (cdadar labels)))
-          (define label-str (reloc-entry-label reloc-entry))
-          (list (low-byte (reloc-entry-use-position reloc-entry))
-                (high-byte (reloc-entry-use-position reloc-entry))
-                (reloc-entry-byte-width reloc-entry)
-                (cond ((= 1 (reloc-entry-byte-width reloc-entry))
-                       (list (if (string-suffix? label-str "-H") 1 0) (low-byte offset) (high-byte offset) ))
-                      ((= 2 (reloc-entry-byte-width reloc-entry))
-                       (list (low-byte offset) (high-byte offset)))
-                      (else raise-user-error (format "unknown byte width  ~a for label" (reloc-entry-byte-width reloc-entry))))))
+          (define labels (collect-labels-matching-reloc-entry commands-bytes-list reloc-entry))
+          (match-let* ([(list _ len-offset-pair) (first labels)]
+                       [(list _ offset) len-offset-pair])
+            (define label-str (reloc-entry-label reloc-entry))
+            (list (low-byte (reloc-entry-use-position reloc-entry))
+                  (high-byte (reloc-entry-use-position reloc-entry))
+                  (reloc-entry-byte-width reloc-entry)
+                  (cond ((= 1 (reloc-entry-byte-width reloc-entry))
+                         (list (if (string-suffix? label-str "-H") 1 0) (low-byte offset) (high-byte offset) ))
+                        ((= 2 (reloc-entry-byte-width reloc-entry))
+                         (list (low-byte offset) (high-byte offset)))
+                        (else raise-user-error (format "unknown byte width  ~a for label" (reloc-entry-byte-width reloc-entry)))))))
         reloc-entries)))
 
 (module+ test #| commands->reloc-table-bytes |#
@@ -541,7 +549,8 @@
   (define sorted-reloc-entries (sort (list-of-reloc-entries reloc-table) < #:key (lambda (entry) (first entry))))
   (apply-reloc-entries-to- origin 0 sorted-reloc-entries command-bytes))
 
-(define (apply-reloc-entries-to- origin at reloc-entries command-bytes)
+(define/c (apply-reloc-entries-to- origin at reloc-entries command-bytes)
+  (-> word/c word/c (listof (listof byte/c)) (listof byte/c) (listof byte/c))
   (if (empty? command-bytes)
       '()
       (if (empty? reloc-entries)
