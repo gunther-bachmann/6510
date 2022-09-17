@@ -25,7 +25,7 @@
   (define (parsed-string-result syntax string)
     (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
 
-(provide 6510-program/p list->values compile-opcodes)
+(provide 6510-program/p list->values parse-opcodes)
 
 (define space-or-tab/p
   (or/p (char/p #\space) (char/p #\tab)))
@@ -545,7 +545,7 @@
   (do ml-whitespace/p
       [origin <- 6510-program-origin/p]
     ml-whitespace/p
-    [opcodes <- (many/p (do [op <- 6510-opcode/p] ml-whitespace/p (pure op)))]
+    [opcodes <- 6510-opcodes/p]
     eof/p
     (pure (list origin opcodes))))
 
@@ -553,27 +553,26 @@
   (do [opcodes <- (many/p (do [op <- 6510-opcode/p] ml-whitespace/p (pure op)))]
       (pure opcodes)))
 
-
 (define-namespace-anchor eval-ns-anchor)
 (define eval-ns (namespace-anchor->namespace eval-ns-anchor))
 
 (define (filter-meta-data command)
   (filter (lambda (el) (not (and (list? el) (equal? (car el) '#:line)))) command))
 
-(define (compile-opcodes str)
+(define (parse-opcodes str)
   (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcodes/p) str))))
   (define stripped-src-location-data (map (lambda (command) (filter-meta-data command)) parsed))
-  (commands->bytes 0 (map (lambda (command) (eval command eval-ns)) stripped-src-location-data)))
+  (map (lambda (command) (eval command eval-ns)) stripped-src-location-data))
 
 (module+ test #| compile-opcodes |#
   (check-equal? (JSR "$2000")
                 '('opcode 32 0 32))
-  (check-equal? (compile-opcodes "JSR $FFD2")
-                '(32 210 255))
-  (check-equal? (compile-opcodes ".data $FF, $10")
-                '(255 16))
-  (check-equal? (compile-opcodes "LDX $ff00\n:some JSR :some")
-                '(174 0 255 32 3 0)))
+  (check-equal? (parse-opcodes "JSR $FFD2")
+                '(('opcode 32 210 255)))
+  (check-equal? (parse-opcodes ".data $FF, $10")
+                '(('bytes (255 16))))
+  (check-equal? (parse-opcodes "LDX $ff00\n:some JSR :some")
+                '(('opcode 174 0 255) ('label ":some") ('opcode 32 ":some"))))
 
 ;; apply the method 'values' to all list elements
 (define (list->values list)

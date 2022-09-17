@@ -6,6 +6,7 @@
 (require "6510-parser.rkt")
 (require "6510-utils.rkt")
 (require "6510-disassembler.rkt")
+(require (only-in "6510.rkt" commands->bytes))
 
 (provide run-debugger)
 
@@ -313,6 +314,9 @@ EOF
         (begin
           (let ((next-states (cons (execute-cpu-step (car states)) states)))            
             (run-until-breakpoint next-states breakpoints))))))
+
+(define (compile-opcodes str)
+  (commands->bytes 0 (parse-opcodes str)))
 
 (module+ test #| assemble/dissassemble roundrip |#
 
