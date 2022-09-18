@@ -80,17 +80,16 @@ BUT no implicit may be given (by the opcode identified, in that case it was a `j
 The `6510-reader.rkt` is parsing a non racket text file, transforming it into racket code. The resulting racket code is then transformed via
 syntax macros into the final racket form which can then be interpreted.
 
-* `6510.rkt` holds all syntax transformation rules for the translation into 6510 byte/assembler code.
+* `6510.rkt` holds all syntax transformation rules for the translation from 6510 dsl code into 6510 byte/assembler code.
 * `6510-utils` holds functions needed during syntax and execution phase of 6510.
 * `6510-syntax-utils` holds functions useful during syntax phase of the transformation.
-* `6510-parser` is the parser that takes the text file and produces racket 6510 dsl code.
+* `6510-parser` is the parser that takes the text and produces racket 6510 dsl code.
 * `6510-reader` is used to parse complete files automatically (using the 6510-parser)
 * `6510-example` is an example file using arbitrary 6510 text syntax (making use of the 6510-reader).
 * `6510-example-rs` is an example file in racket syntax (no special reader involved)
 * `6510-interpreter` holds the interpreter of the bytecode
 * `6510-disassembler` allows to produce source code from bytes
-* `6510-debugger` allows stepwise execution of code
-
+* `6510-debugger` allows stepwise execution and inspection of code
 
 ## Status
 
@@ -103,6 +102,30 @@ To build all, run `raco make -v -j 8 *.rkt`
 ## Todos
 
 ### Next
+
+- allow for constants (absolute/ relative?)
+ - TODO: add new command-type (existing: opcode, rel-opcode, bytes, label) that behaves similar to label but resolves to absolute value
+ 
+- allow for import / export of symbols
+ - generate import/export table
+ - TODO: define import/export table format
+ 
+- write racket code to resolve multiple files w/ export/import and relocation table (linker)
+  one option is to create a basic loadable program (as done currently for the example)
+  
+- write a mil reader in 6510 code that transforms a string (of arbitrary length) into
+  lisp byte-code
+  - TODO: define lisp byte code (see mil)
+- write an interpreter of lisp byte-code in 6510 code
+- write an interpreter of lisp byte-code in mil (bootstrap)
+- write mil reader in lisp-byte-code in mil (bootstrap)
+- write mil compiler, generating 6510 assembly 
+  
+- optional: write 6510 code that allows for relocation of code (racket code exists) (loader)
+  this would be helpful to have some kind of os that loads program(s) to execute
+ - TODO: find compact representation of relocation table
+- optional: write 6510 code  to resolve multiple files w/ export/import and relocation table
+ - TODO: find compact representation of import/export table
 
 #### debugger
 
@@ -168,9 +191,6 @@ idea: use same commands as vice monitor (see https://vice-emu.sourceforge.io/vic
 
 #### mil (minimal lisp)
 
-* [X] extend interpreter to run all (documented) opcodes
-* extend interpreter to load/link and run several modules
-* extend interpreter to breakpoints/debugging/timetravel etc.
 * keep a clean bootstrapping process in mind
 * define lisp concepts to initially support
   - 1st be able to interpret itself
@@ -214,8 +234,6 @@ idea: use same commands as vice monitor (see https://vice-emu.sourceforge.io/vic
    available at macro expansion time, to provide better error messaging etc.
    This is currently implemented (rather awkwardly I might add) by explicitly passing
    this information from parser to macro.
-* Implement multi file assembler programs with references crossing file boundaries  
-   This will probably include to export/import symbols.
 
 ### Some day
 * Write a language to generate parser combination using an extended ebnf syntax, enriched with code, to allow a more compact and less
