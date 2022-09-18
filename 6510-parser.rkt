@@ -2,9 +2,12 @@
 (require megaparsack megaparsack/text)
 (require data/monad)
 (require data/applicative)
-(require "6510.rkt")
-(require "6510-utils.rkt")
-(require (rename-in  racket/contract [define/contract define/c]))
+(require (rename-in racket/contract [define/contract define/c]))
+
+(require (only-in "6510-utils.rkt" parse-number-string))
+(require "6510.rkt") ;; necessary to resolve all syntax macros of 6510 dsl
+
+(provide 6510-program/p parse-opcodes)
 
 ; usage:
 ; - create file with content
@@ -25,8 +28,6 @@
   (define (parsed-string-result syntax string)
     (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
 
-(provide 6510-program/p list->values parse-opcodes)
-
 (define space-or-tab/p
   (or/p (char/p #\space) (char/p #\tab)))
 
@@ -45,6 +46,7 @@
   (do [digits <- (many+/p hex-digit/p)]
       (pure (list->string digits))))
 
+;; considered whitespace (space, newline, tab, all chars behind ';')
 (define ml-whitespace/p
   (many/p (or/p (char/p #\newline)
                 space-or-tab/p
@@ -181,7 +183,6 @@
   (check-exn exn:fail?
              (lambda () (parsed-string-result 6510-label/p "abc"))))
 
-
 (define word/p
   (guard/p 6510-integer/p (λ (x) (and (>= x 0) (<= x 65535)))
            "integer in range [$0000,$FFFF]"))
@@ -237,7 +238,7 @@
                       (list (number->string x))
                       (list (last (syntax->datum x))))))))
 
-;; return parser to match the given string or fail
+;; return parser to match the given string (case insensitive) or fail
 (define/c (chars-ci/p str)
   (-> (or/c string? char?) parser?)
   (if (zero? (string-length str))
@@ -565,15 +566,9 @@
   (map (lambda (command) (eval command eval-ns)) stripped-src-location-data))
 
 (module+ test #| compile-opcodes |#
-  (check-equal? (JSR "$2000")
-                '('opcode 32 0 32))
   (check-equal? (parse-opcodes "JSR $FFD2")
                 '(('opcode 32 210 255)))
   (check-equal? (parse-opcodes ".data $FF, $10")
                 '(('bytes (255 16))))
   (check-equal? (parse-opcodes "LDX $ff00\n:some JSR :some")
                 '(('opcode 174 0 255) ('label ":some") ('opcode 32 ":some"))))
-
-;; apply the method 'values' to all list elements
-(define (list->values list)
-  (apply values list))

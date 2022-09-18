@@ -6,8 +6,8 @@
 ;; planned: realize with typed racket
 
 (require (only-in threading ~>))
-(require (for-syntax (only-in racket/list second empty? first)))
 
+(require (for-syntax (only-in racket/list second empty? first)))
 (require (for-syntax "6510-utils.rkt"))
 (require (for-syntax (rename-in "6510-syntax-utils.rkt"
                                 (one-arg-adr-modes-relative? relative?)
@@ -25,12 +25,7 @@
 (require "6510-utils.rkt")
 (require (rename-in  racket/contract [define/contract define/c]))
 
-(module+ test
-  (require rackunit)
-  (begin-for-syntax
-    (require rackunit)))
-
-(provide ;; parse-number-string
+(provide
          replace-labels
          commands->bytes
          create-prg
@@ -40,18 +35,23 @@
          ADC AND ASL
          BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS
          CLC CLD CLI CLV CMP CPX CPY
-         DEC DEX DEY 
+         DEC DEX DEY
          EOR
          INC INX INY
-         JMP JSR         
+         JMP JSR
          LDA LDX LDY LSR
          NOP
          ORA
          PHA PHP PLA PLP
          ROL ROR RTI RTS
          SBC SEC SED SEI STA STX STY
-         TAX TAY TSX TXA TXS TYA        
+         TAX TAY TSX TXA TXS TYA
          LABEL BYTES ASC)
+
+(module+ test
+  (require rackunit)
+  (begin-for-syntax
+    (require rackunit)))
 
 
 ;; -------------------------------------------------------------------------------- address resolution

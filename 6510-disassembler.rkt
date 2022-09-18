@@ -1,12 +1,13 @@
 #lang racket
 
 (require (only-in threading ~>>))
-(require "6510-interpreter.rkt")
 (require "6510-utils.rkt")
+(require (only-in "6510-interpreter.rkt" with-program-counter cpu-state-program-counter peek-pc peek-pc+1 peek-word-at-pc+1))
 
 (provide disassemble disassemble-single)
 
 (module+ test #| rackunit |#
+  (require (only-in "6510-interpreter.rkt" poke with-flags initialize-cpu))
   (require rackunit))
 
 (module+ test #| disassemble |#

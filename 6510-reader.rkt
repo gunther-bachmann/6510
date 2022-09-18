@@ -1,9 +1,11 @@
 #lang racket
 (require syntax/strip-context)
 (require megaparsack megaparsack/text)
-(require "6510.rkt")
-(require "6510-parser.rkt")
+(require (only-in "6510-parser.rkt" 6510-program/p))
 (require (rename-in  racket/contract [define/contract define/c]))
+
+(provide (rename-out [literal-read read]
+                     [literal-read-syntax read-syntax]))
 
 ; usage:
 ; - create file with content
@@ -16,13 +18,14 @@
 ; naming convention:
 ;   .../p is or returns a parser
 
-(provide (rename-out [literal-read read]
-                     [literal-read-syntax read-syntax]))
-
 (define/c (literal-read in)
   (-> any/c (or/c list? #f))
   (syntax->datum
    (literal-read-syntax #f in)))
+
+;; apply the method 'values' to all list elements
+(define (list->values list)
+  (apply values list))
 
 ;; read and compile assembler program
 (define (literal-read-syntax src in)
@@ -48,15 +51,20 @@
            (define stx-program (syntax #,unenc-prg)) ;; examine how to pass source location into the generated racket program
            ;; execute this construction of sy-program in the 'with-syntax clause outside this s-expr!! and splice it in here
            (define sy-program `(,(let* ([datum (syntax->datum (syntax sy-str))]
-                                       [sy-datum (syntax sy-str)]) (append (list (first datum))
-                                                                           (list `(#:line ,(syntax-line sy-datum) #:org-cmd ,(if (and (> (length datum) 1) (list? (second datum))) (last (second datum)) (symbol->string (first datum)))))
-                                                                           (drop datum (min (length datum) 2)))) ...))
+                                        [sy-datum (syntax sy-str)])
+                                   (append (list (first datum))
+                                           (list `(#:line ,(syntax-line sy-datum)
+                                                   #:org-cmd ,(if (and (> (length datum) 1)
+                                                                     (list? (second datum)))
+                                                                  (last (second datum))
+                                                                  (symbol->string (first datum)))))
+                                           (drop datum (min (length datum) 2)))) ...))
 
            (define raw-program '(str ...))
            (define program `(,str ...))
            (define resolved-program (replace-labels program org))
            (define raw-bytes (commands->bytes org `(,str ...)))
-           (displayln "(have a look at sy-program, raw-program, resolved-program, raw-bytes and pretty-program)")
+           (displayln "(have a look at sy-program, raw-program, resolved-program or raw-bytes)")
            ;; (create-prg (commands->bytes org program) org "test.prg")
            (create-image-with-program (commands->bytes org program) org "test.prg" "test.d64" "test")
            (displayln "execute the program in vice via (run-emulator \"test.d64\")")

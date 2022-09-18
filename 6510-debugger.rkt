@@ -2,10 +2,10 @@
 (require (rename-in  racket/contract [define/contract define/c]))
 (require readline/readline)
 (require threading)
-(require "6510-interpreter.rkt")
-(require "6510-parser.rkt")
 (require "6510-utils.rkt")
-(require "6510-disassembler.rkt")
+(require "6510-interpreter.rkt")
+(require (only-in "6510-parser.rkt" parse-opcodes))
+(require (only-in "6510-disassembler.rkt" disassemble disassemble-single))
 (require (only-in "6510.rkt" commands->bytes))
 
 (provide run-debugger)
@@ -13,7 +13,6 @@
 (module+ test
   (require threading)
   (require rackunit))
-
 
 ;; TODO allow execution of arbirtray racket with values explicitly set into the namespace to evaluate breakpoint conditions (or do calculations)
 ;; (namespace-set-variable-value! 'some 25)
