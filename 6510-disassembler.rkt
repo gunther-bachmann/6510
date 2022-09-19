@@ -1,8 +1,15 @@
 #lang racket
 
 (require (only-in threading ~>>))
+(require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-utils.rkt")
-(require (only-in "6510-interpreter.rkt" with-program-counter cpu-state-program-counter peek-pc peek-pc+1 peek-word-at-pc+1))
+(require (only-in "6510-interpreter.rkt"
+                  cpu-state?
+                  with-program-counter
+                  cpu-state-program-counter
+                  peek-pc
+                  peek-pc+1
+                  peek-word-at-pc+1))
 
 (provide disassemble disassemble-single)
 
@@ -18,14 +25,16 @@
                     (poke _ #x2000 #x01 #xcd)))
    "2000 01 cd   \tORA ($cd,x)"))
 
-(define (code-bytes state address len)
+(define/c (code-bytes state address len)
+  (-> cpu-state? word/c word/c string?)
   (define use-state (with-program-counter state address))
   (define byte (byte->hex-string (peek-pc use-state)))
   (if (> len 1)
       (string-join (list byte (code-bytes state (add1 address) (sub1 len))) " ")
       byte))
 
-(define (disassemble state [address (cpu-state-program-counter state)] [lines 1])  
+(define/c (disassemble state [address (cpu-state-program-counter state)] [lines 1])
+  (->* (cpu-state?) (word/c word/c) string?)
   (let-values (((str len) (disassemble-single state address)))
     (define code-byte-str (code-bytes state address len))
     (define formatted-str (format "~a ~a\t~a" (word->hex-string address) (~a code-byte-str #:width 8) str))
@@ -33,25 +42,29 @@
         (string-join (list formatted-str (disassemble state (+ address len) (sub1 lines))) "\n")
         formatted-str)))
 
-(define (byte-at-pc state)
+(define/c (byte-at-pc state)
+  (-> cpu-state? string?)
   (byte->hex-string (peek-pc state)))
 
-(define (byte-at-pc+1 state)
+(define/c (byte-at-pc+1 state)
+  (-> cpu-state? string?)
   (byte->hex-string (peek-pc+1 state)))
 
-(define (word-at-pc+1 state)
+(define/c (word-at-pc+1 state)
+  (-> cpu-state? string?)
   (word->hex-string (peek-word-at-pc+1 state)))
 
 ;; format the disassembled relative branch 
-(define (format-relative-branch state branch-mnemonic)
+(define/c (format-relative-branch state branch-mnemonic)
+  (-> cpu-state? string? string?)
   (format "~a $~a (->$~a)" branch-mnemonic
           (byte-at-pc+1 state)
           (word->hex-string (+ 2 (cpu-state-program-counter state)
                               (decimal-from-two-complement
                                (peek-pc+1 state))))))
 
-(define (disassemble-single state [address (cpu-state-program-counter state)])
-;;  (-> cpu-state? (values string bytes))
+(define/c (disassemble-single state [address (cpu-state-program-counter state)])
+  (->* (cpu-state?) (word/c) (values string? byte/c))
   (define use-state (with-program-counter state address))
   (case (peek-pc use-state)
     [(#x00) (values "BRK" 1)]
