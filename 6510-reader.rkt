@@ -42,6 +42,7 @@
            (require "6510.rkt")
            (require "6510-interpreter.rkt")
            (require "6510-prg-generator.rkt")
+           (require "6510-dsl-utils.rkt")
            (require "6510-debugger.rkt")
            (provide program
                     raw-program

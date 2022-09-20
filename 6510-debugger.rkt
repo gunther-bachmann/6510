@@ -6,7 +6,7 @@
 (require "6510-interpreter.rkt")
 (require (only-in "6510-parser.rkt" parse-opcodes))
 (require (only-in "6510-disassembler.rkt" disassemble disassemble-single))
-(require (only-in "6510.rkt" commands->bytes))
+(require (only-in "6510-dsl-utils.rkt" commands->bytes))
 
 (provide run-debugger)
 
