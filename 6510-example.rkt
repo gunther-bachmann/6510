@@ -30,9 +30,9 @@
  :cout  jsr $ffd2
         rts
 
-:hello  .data 14 ; number of bytes to print (string length)
+:hello  .data 18 ; number of bytes to print (string length)
         .data $0d ; line feed
-        .asc "!DLROw OLLEh"
+        .asc "!DLROw WEN OLLEh"
         .data $0e ; switch to lower letter mode
 
 
