@@ -1,7 +1,9 @@
 #! /usr/bin/env racket
 #lang reader "6510-reader.rkt"
 
-        *=$0810        ; origin
+; this program is an example of how the assembler can be used
+
+        *=$0810        ; origin (basic start, to make loading and executing easier)
 
         ;; lda #23
         ;; sta 53272

@@ -1,6 +1,8 @@
 #! /usr/bin/env racket
 #lang racket
 
+; file is intended to document dsl possibilities
+
 (require "6510.rkt")
 (require "6510-dsl-utils.rkt")
 (require "6510-interpreter.rkt")
