@@ -23,8 +23,6 @@
 (require (for-syntax "6510-utils.rkt"))
 (require (for-syntax "6510-dsl-utils.rkt"))
 
-(include "6510-command-utils.rkt" )
-
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-utils.rkt")
 
@@ -63,20 +61,20 @@
 ;; ================================================================================ opcode definition helper
 
 
-;; (define-for-syntax (accumulator-mode opcode operand)
-;;   (with-syntax ([operand-value (syntax->datum operand)]
-;;                 [symbol-acc (symbol-append opcode '_acc)])
-;;     (when (equal? 'A (syntax->datum #'operand-value))
-;;       #'(symbol-acc))))
+(define-for-syntax (accumulator-mode opcode operand)
+  (with-syntax ([operand-value (syntax->datum operand)]
+                [symbol-acc (symbol-append opcode '_acc)])
+    (when (equal? 'A (syntax->datum #'operand-value))
+      #'(symbol-acc))))
  
-;; (module+ test
-;;   (begin-for-syntax
-;;     (check-match (syntax->datum (accumulator-mode #'LDA #'A))
-;;                  '(LDA_acc))
-;;     (check-eq? (accumulator-mode #'LDA #'B)
-;;                (void))
-;;     (check-eq? (accumulator-mode #'LDA #'"$10")
-;;                (void))))
+(module+ test
+  (begin-for-syntax
+    (check-match (syntax->datum (accumulator-mode #'LDA #'A))
+                 '(LDA_acc))
+    (check-eq? (accumulator-mode #'LDA #'B)
+               (void))
+    (check-eq? (accumulator-mode #'LDA #'"$10")
+               (void))))
 
 (define-for-syntax (immediate-mode opcode operand)
   (with-syntax ([operand-value (syntax->datum operand)]
