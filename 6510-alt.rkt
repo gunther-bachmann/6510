@@ -13,6 +13,11 @@
   (let ([str (apply format id-template (map syntax->datum ids))])
     (datum->syntax stx (string->symbol str))))
 
+;; https://docs.racket-lang.org/reference/syntax-util.html
+;; (format-id ...)
+
+;; https://blog.racket-lang.org/2011/04/writing-syntax-case-macros.html
+
 
 (define-syntax (define-opcode-function stx)
   (syntax-case stx ()
@@ -59,48 +64,11 @@
      (with-syntax ((mnemonic (datum->syntax stx (car (syntax->datum #'pair))))
                    (bytecode (datum->syntax stx (cdr (syntax->datum #'pair))))
                    (nstx (make-id stx "~a" #'nstx)))
-       ;; (datum->syntax stx `(define-syntax (,#'mnemonic ,#'nstx)
-       ;;                     (syntax-case ,#'nstx ()
-       ;;                       ([_ op]
-       ;;                        ;; (eq? (syntax->datum #'op) 'A) ;; will show error in editor when not eq
-       ;;                        #''('opcode ,#'bytecode)))))
-
-       #'(begin
-           (define-syntax (mnemonic nstx)
-             (syntax-case nstx ()
-               ([_ op]
-                ;; (eq? (syntax->datum #'op) 'A) ;; will show error in editor when not eq
-                #''('opcode bytecode))))
-           (mnemonic A))
-       ))))
-
-(define-syntax (create-mnemonic-for-accumulator-pair2 stx)
-  (syntax-case stx ()
-    ([_ ( mnemonic . bytecode) ]     
-     #'(define-syntax (mnemonic stx)
-         (syntax-case stx ()
+       #'(define-syntax (mnemonic nstx)
+         (syntax-case nstx ()
            ([_ op]
             (eq? (syntax->datum #'op) 'A) ;; will show error in editor when not eq
-            #''('opcode bytecode)))))))
-
-(define-syntax (create-mnemonic-for-accumulator stx)
-  (syntax-case stx ()
-    ([_ mnemonic bytecode ]
-     #'(define-syntax (mnemonic stx)
-         (syntax-case stx ()
-           ([_ op]
-            (eq? (syntax->datum #'op) 'A) ;; will show error in editor when not eq
-            #''('opcode bytecode)))))))
-
-
-
-
-(require (for-syntax syntax/parse))
-
-(define-syntax (cm4a5 stx)
-  (syntax-case stx ()
-    [(_ some)
-     (datum->syntax stx '(create-mnemonic-for-accumulator-pair (LSX . 17)))]))
+            #''('opcode bytecode))))))))
 
 (define-syntax (cm4a4 stx)
   (syntax-case stx  ()
@@ -134,38 +102,32 @@
 ;;          (LSY . #x12)
 ;;          (LSZ . #x13)))
 
-(expand-once #'(create-mnemonic-for-accumulator-pair (LSR . #x4a )))
-(expand-once (expand-once (expand-once #'(cm4a4 ((LSX . #x11))))))
-(expand-once (expand-once (expand-once #'(cm4a5 ((LSX . #x11))))))
+;; (expand-once #'(create-mnemonic-for-accumulator-pair (LSR . #x4a )))
+;; (expand-once (expand-once (expand-once #'(cm4a4 ((LSX . #x11))))))
+;; (expand-once (expand-once (expand-once #'(cm4a5 ((LSX . #x11))))))
 
 
 ;; (expand-once (expand-once (expand-once #'(cm4a5 ((LSX . #x11))))))
 ;; (cm4a5 ((LSX . #x11)))
-(cm4a4 ((LSX . #x11)
-        (LSY . #x12)))
-(LSX A)
-(LSY A)
-(create-mnemonic-for-accumulator-pair (LSR . #x0a))
+;; (def-addressing-mode-accumulator ((LSR . #x4a))) ;; (LSR A)
+;; (def-addressing-mode-immediate   ((ADC . #x77))) ;; (ADC #$25) (ADC #18) (ADC #%01001) (ADC #:<LABEL) (ADC #:>LABEL) (ADC #:LABEL)
 
+(cm4a4 ((LSR . #x4a)
+        (LSX . #x11)
+        (LSY . #x12)
+        (TSA . #x13)))
 
-;; (begin
-;;   (create-mnemonic-for-accumulator-pair (LSX . 17)))
+;; (create-mnemonic-for-accumulator-pair (LSR . #x0a))
 
-;; (begin
-;;   (define-syntax (LSX stx)
-;;     (syntax-case stx ()
-;;       ((_ op) #''('opcode 17))))
-;;   (define-syntax (LSY stx)
-;;     (syntax-case stx ()
-;;       ((_ op) #''('opcode 18)))))
-
-;; (LSX A)
-;; (LSY A)
-
-(module+ test
+(module+ test #| cm4a4 |#
+  (check-equal? (LSX A)
+                '('opcode #x11))
   (check-equal? (LSR A)
                 '('opcode #x4a))
-  )
+  (check-equal? (LSY A)
+                '('opcode #x12))
+  (check-equal? (TSA A)
+                '('opcode #x13)))
 
 (define-syntax (ASL stx)
   (syntax-case stx ()
@@ -177,7 +139,30 @@
            [(twobytenum? (syntax->datum #'op))
             (with-syntax ((op-num (twobytenum (syntax->datum #'op))))
               #''('opcode #x0b op-num))]
-           ))))
+           ))
+    ([_ op1 op2]
+     (raise-syntax-error 'ASL (format "three operand addressing mode is not available line ~a:~a" (syntax-line stx) (syntax-column stx)))
+     ;; #''('opcode #x00)
+     )))
+
+;; (ASL A B) ;; raises error
+
+(define-syntax (define-opcode stx)
+  (syntax-case stx ()
+    ([_ mnemonic addressing-modes]
+     #''())))
+
+;; wanted syntax, non wanted adressing modes are not available / produce errors
+(define-opcode ASL ((accumultator . #x00)
+                    (immediate    . #x01)
+                    (zero-page-x  . #x02)))
+
+;; idea: delayed decision about byte/word operand
+
+'('decision-byte-word ":label" ('opcode #x00 #x00) ('opcode #x01 #x00 #x00)) ;; if :label is byte value use first opcode, else use second
+;; is transformed to
+'('opcode #x00 #x00) ;; in case label is a byte value
+'('opcode #x01 #x00 #x00) ;; in case label is a word value
 
 (module+ test
   (check-equal? (ASL "$ab")
