@@ -32,7 +32,14 @@
         (eq? 3 (string-length num-str))
         (string-prefix? num-str "$"))))
 
+
+
 (define-for-syntax (byte-operand num-str)
+  (if (symbol? num-str)
+      (byte-operand (symbol->string num-str))
+      (string->number (substring num-str 1) 16)))
+
+(define (byte-operand num-str)
   (if (symbol? num-str)
       (byte-operand (symbol->string num-str))
       (string->number (substring num-str 1) 16)))
@@ -138,8 +145,23 @@
 (define (addressing-opcode addressing-mode)
   (cdr (or (syntax->datum addressing-mode) '(0.0))))
 
+(define-for-syntax (addressing-opcode addressing-mode)
+  (cdr (or (syntax->datum addressing-mode) '(0.0))))
+
 ;; add line information to opcode definition
 ;; enable labels instead of values, leaving byte/word length open
+
+(define-for-syntax (is-accumulator-addressing addressing op)
+  (and (pair? (syntax->datum addressing))
+     (eq?  (syntax->datum op) 'A)))
+;; (and (pair? (syntax->datum #'accumulator-addressing))
+;;      (eq? (syntax->datum #'op) 'A))
+
+(define-for-syntax (is-zero-page-addressing addressing op)
+  (and (pair? (syntax->datum addressing))
+     (byte-operand? (syntax->datum op))))
+;; (and (pair? (syntax->datum #'zero-page-addressing))
+;;      (byte-operand? (syntax->datum #'op)))
 
 (define-syntax (define-opcode stx)
   (syntax-case stx ()
@@ -171,13 +193,14 @@
                                   (syntax-column nstx))
                           nstx)]))
              ([_ op]
-              (cond [(and (pair? (syntax->datum #'accumulator-addressing))
-                        (eq? (syntax->datum #'op) 'A))
+              (cond [;; (and (pair? (syntax->datum #'accumulator-addressing))
+                     ;;    (eq? (syntax->datum #'op) 'A))
+                     (is-accumulator-addressing #'accumulator-addressing #'op)
                      #'`(opcode ,(addressing-opcode #'accumulator-addressing))]
-                    [(and (pair? (syntax->datum #'zero-page-addressing))
-                        (byte-operand? (syntax->datum #'op)))
-                     (with-syntax ((op-num (byte-operand (syntax->datum #'op))))
-                       #'`(opcode ,(addressing-opcode #'zero-page-addressing)  op-num))]
+                [(and (pair? (syntax->datum #'zero-page-addressing))
+                    (byte-operand? (syntax->datum #'op)))
+                 (with-syntax ((op-num (byte-operand (syntax->datum #'op))))
+                   #'`(opcode ,(addressing-opcode #'zero-page-addressing)  op-num))]
                     [(and (pair? (syntax->datum #'relative-addressing))
                         (byte-operand? (syntax->datum #'op)))
                      (with-syntax ((op-num (byte-operand (syntax->datum #'op))))
@@ -238,6 +261,55 @@
                                  (syntax-column nstx))
                          nstx)]))))))))
 
+
+(define (opcode-for-accumulator-addressing addressing)
+  `(opcode ,(addressing-opcode addressing)))
+
+(define (opcode-for-zero-page-addressing addressing op)
+  `(opcode ,(addressing-opcode addressing) ,(byte-operand (syntax->datum op))))
+
+;; #'`(opcode ,(addressing-opcode #'zero-page-addressing) ,(byte-operand (syntax->datum #'op)))
+
+;; `(opcode ,(addressing-opcode #'accumulator-addressing))
+(define-syntax (define-opcode-tst stx)
+    (syntax-case stx ()
+      ([_ mnemonic addressing-modes]
+       (with-syntax ((scoped-mnemonic (datum->syntax stx (syntax->datum #'mnemonic)))
+                     (accumulator-addressing (addressing-mode 'accumulator #'addressing-modes))
+                     (zero-page-addressing (addressing-mode 'zero-page #'addressing-modes))
+                     (nstx (make-id stx "~a" #'nstx)))
+         #`(define-syntax (scoped-mnemonic nstx)
+             (syntax-case nstx ()
+               ([_ op]
+                (cond ;; [(and (pair? (syntax->datum #'accumulator-addressing))
+                  ;;     (eq? (syntax->datum #'op) 'A))
+                  ;;  #'`(opcode ,(addressing-opcode #'accumulator-addressing))]
+                  [(is-accumulator-addressing #'accumulator-addressing #'op)
+                   #'(opcode-for-accumulator-addressing #'accumulator-addressing)
+                   ;; #'`(opcode ,(addressing-opcode #'accumulator-addressing))
+                   ]
+                  [;; (and (pair? (syntax->datum #'zero-page-addressing))
+                   ;;    (byte-operand? (syntax->datum #'op)))
+                   (is-zero-page-addressing #'zero-page-addressing #'op)                   
+                   #'(opcode-for-zero-page-addressing #'zero-page-addressing #'op)
+                   ;; #'`(opcode ,(addressing-opcode #'zero-page-addressing) ,(byte-operand (syntax->datum #'op)))
+                   ;; (with-syntax ((op-num (byte-operand (syntax->datum #'op))))
+                   ;;   #'`(opcode ,(addressing-opcode #'zero-page-addressing)  op-num))
+                   ]
+
+                  [#t (raise-syntax-error
+                       'mnemonic
+                       ;; report available addressing modes expected for one op
+                       (format "addressing mode with one op not defined. line ~a:~a"
+                               (syntax-line nstx)
+                               (syntax-column nstx))
+                       nstx)]))))))))
+
+(define-opcode-tst POX ((accumulator . #xfe)
+                        (zero-page . #xfc)))
+(POX A)
+(POX $10)
+
 (define-opcode SBC
   ((immediate   . #xe9)
    (zero-page   . #xe5)
@@ -249,17 +321,21 @@
    (indirect-y  . #xf1)))
 
 (module+ test #| SBC |#
-  ;; (check-equal? (SBC some)
-  ;;               '(decide (word . (opcode #xed "some:2"))
-  ;;                        (byte . (opcode #xe5 "some:1"))))
   (check-equal? (SBC !$11)
                 '(opcode #xe9 #x11))
   (check-equal? (SBC $10)
                 '(opcode #xe5 #x10))
+  ;; (check-equal? (SBC >some)
+  ;;               '(opcode #xe5 "some:1:h"))
+  ;; (check-equal? (SBC <some)
+  ;;               '(opcode #xe5 "some:1:l"))
   (check-equal? (SBC $10,x)
                 '(opcode #xf5 #x10))
   (check-equal? (SBC $FF10)
                 '(opcode #xed #x10 #xff))
+  ;; (check-equal? (SBC some)
+  ;;               '(decide (word . (opcode #xed "some:2"))
+  ;;                        (byte . (opcode #xe5 "some:1"))))
   (check-equal? (SBC $1112,x)
                 '(opcode #xfd #x12 #x11))
   (check-equal? (SBC $1000,y)
