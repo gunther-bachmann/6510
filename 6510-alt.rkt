@@ -21,7 +21,7 @@
 
 ;;--------------------------------------------------------------------------------
 (define (NOP)
-  '('opcode #xea))
+  '(opcode #xea))
 
 (require (for-syntax racket))
 
@@ -76,19 +76,6 @@
 (define-for-syntax (indirect-y-operand sym)  
   (byte-operand (car sym)))
 
-(begin-for-syntax
-  (define (create-mnemonic-for-accumulator-pair-f2 pair)
-    (with-syntax ((lpair pair))
-      #'(create-mnemonic-for-accumulator-pair lpair))
-    ;; (datum->syntax stx #'(create-mnemonic-for-accumulator-pair lpair))
-    ))
-(begin-for-syntax
-  (define (create-mnemonic-for-accumulator-pair-f stx pair)
-    (with-syntax ((lpair (datum->syntax stx (syntax->datum pair))))
-      ;; #'(create-mnemonic-for-accumulator-pair lpair)
-      (datum->syntax stx #'(create-mnemonic-for-accumulator-pair lpair))
-      )))
-
 ;; (map (lambda (pair) (with-syntax ((mn (car pair))
 ;;                                (op (cdr pair)))
 ;;                    #'(create-mnemonic-for-accumulator mn op)))
@@ -118,7 +105,7 @@
          (syntax-case nstx ()
            ([_ op]
             (eq? (syntax->datum #'op) 'A) ;; will show error in editor when not eq
-            #''('opcode bytecode))))))))
+            #''(opcode bytecode))))))))
 
 (define-syntax (cm4a4 stx)
   (syntax-case stx  ()
@@ -128,149 +115,128 @@
                     ;; (map create-mnemonic-for-accumulator-pair-f2 (syntax->list #'(pair ...)))
                     (map (lambda (lpair) `(create-mnemonic-for-accumulator-pair ,(datum->syntax stx lpair))) (syntax->list #'(pair ...)))
                     ])
-;;       (datum->syntax stx #'(begin transformed-pair ...))
        (datum->syntax stx (syntax->datum #'(begin transformed-pair ...))))]))
 
-(cm4a4 ((LSR . #x4a)
-        (LSX . #x11)
-        (LSY . #x12)
-        (TSA . #x13)))
+(cm4a4 ((MNEMONIC1 . #x4a)
+        (MNEMONIC2 . #x11)
+        (MNEMONIC3 . #x12)
+        (MNEMONIC4 . #x13)))
 
 (module+ test #| cm4a4 |#
-  (check-equal? (LSX A)
-                '('opcode #x11))
-  (check-equal? (LSR A)
-                '('opcode #x4a))
-  (check-equal? (LSY A)
-                '('opcode #x12))
-  (check-equal? (TSA A)
-                '('opcode #x13)))
+  (check-equal? (MNEMONIC1 A)
+                '(opcode #x4a))
+  (check-equal? (MNEMONIC2 A)
+                '(opcode #x11))
+  (check-equal? (MNEMONIC3 A)
+                '(opcode #x12))
+  (check-equal? (MNEMONIC4 A)
+                '(opcode #x13)))
 
 (define-for-syntax (addressing-mode sym addressing-modes)
   (findf (lambda (el) (eq? (car el) sym)) (syntax->datum addressing-modes)))
+
+(define (addressing-opcode addressing-mode)
+  (cdr (or (syntax->datum addressing-mode) '(0.0))))
+
+;; add line information to opcode definition
+;; enable labels instead of values, leaving byte/word length open
 
 (define-syntax (define-opcode stx)
   (syntax-case stx ()
     ([_ mnemonic addressing-modes]
      (with-syntax ((scoped-mnemonic (datum->syntax stx (syntax->datum #'mnemonic)))
-                   (accumulator-addressing ;; (findf (lambda (el) (eq? (car el) 'accumulator)) (syntax->datum #'addressing-modes))
-                    (addressing-mode 'accumulator #'addressing-modes)
-                                           )
-                   (zero-page-addressing (findf (lambda (el) (eq? (car el) 'zero-page)) (syntax->datum #'addressing-modes)))
-                   (relative-addressing (findf (lambda (el) (eq? (car el) 'relative)) (syntax->datum #'addressing-modes)))
-                   (absolute-addressing (findf (lambda (el) (eq? (car el) 'absolute)) (syntax->datum #'addressing-modes)))
-                   (absolute-x-addressing (findf (lambda (el) (eq? (car el) 'absolute-x)) (syntax->datum #'addressing-modes)))
-                   (absolute-y-addressing (findf (lambda (el) (eq? (car el) 'absolute-y)) (syntax->datum #'addressing-modes)))
-                   (zero-page-x-addressing (findf (lambda (el) (eq? (car el) 'zero-page-x)) (syntax->datum #'addressing-modes)))
-                   (zero-page-y-addressing (findf (lambda (el) (eq? (car el) 'zero-page-y)) (syntax->datum #'addressing-modes)))
-                   (indirect-x-addressing (findf (lambda (el) (eq? (car el) 'indirect-x)) (syntax->datum #'addressing-modes)))
-                   (indirect-y-addressing (findf (lambda (el) (eq? (car el) 'indirect-y)) (syntax->datum #'addressing-modes)))
-                   (immediate-addressing (findf (lambda (el) (eq? (car el) 'immediate)) (syntax->datum #'addressing-modes)))
-                   (implicit-addressing (findf (lambda (el) (eq? (car el) 'implicit)) (syntax->datum #'addressing-modes)))
+                   (accumulator-addressing (addressing-mode 'accumulator #'addressing-modes))
+                   (zero-page-addressing (addressing-mode 'zero-page #'addressing-modes))
+                   (relative-addressing (addressing-mode 'relative #'addressing-modes))
+                   (absolute-addressing (addressing-mode 'absolute #'addressing-modes))
+                   (absolute-x-addressing (addressing-mode 'absolute-x #'addressing-modes))
+                   (absolute-y-addressing (addressing-mode 'absolute-y #'addressing-modes))
+                   (zero-page-x-addressing (addressing-mode 'zero-page-x #'addressing-modes))
+                   (zero-page-y-addressing (addressing-mode 'zero-page-y #'addressing-modes))
+                   (indirect-x-addressing (addressing-mode 'indirect-x #'addressing-modes))
+                   (indirect-y-addressing (addressing-mode 'indirect-y #'addressing-modes))
+                   (immediate-addressing (addressing-mode 'immediate #'addressing-modes))
+                   (implicit-addressing (addressing-mode 'implicit #'addressing-modes))
                    (nstx (make-id stx "~a" #'nstx)))
-       (with-syntax ((acc-adr-p (datum->syntax stx (if (syntax->datum #'accumulator-addressing) #t #f)))
-                     (acc-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'accumulator-addressing) '(0.0)))))
-                     (zp-adr-p (datum->syntax stx (if (syntax->datum #'zero-page-addressing) #t #f)))
-                     (zp-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'zero-page-addressing) '(0.0)))))
-                     (rel-adr-p (datum->syntax stx (if (syntax->datum #'relative-addressing) #t #f)))
-                     (rel-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'relative-addressing) '(0.0)))))
-                     (abs-adr-p (datum->syntax stx (if (syntax->datum #'absolute-addressing) #t #f)))
-                     (abs-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'absolute-addressing) '(0.0)))))
-                     (absx-adr-p (datum->syntax stx (if (syntax->datum #'absolute-x-addressing) #t #f)))
-                     (absx-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'absolute-x-addressing) '(0.0)))))
-                     (absy-adr-p (datum->syntax stx (if (syntax->datum #'absolute-y-addressing) #t #f)))
-                     (absy-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'absolute-y-addressing) '(0.0)))))
-                     (zpx-adr-p (datum->syntax stx (if (syntax->datum #'zero-page-x-addressing) #t #f)))
-                     (zpx-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'zero-page-x-addressing) '(0.0)))))
-                     (zpy-adr-p (datum->syntax stx (if (syntax->datum #'zero-page-y-addressing) #t #f)))
-                     (zpy-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'zero-page-y-addressing) '(0.0)))))
-                     (indx-adr-p (datum->syntax stx (if (syntax->datum #'indirect-x-addressing) #t #f)))
-                     (indx-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'indirect-x-addressing) '(0.0)))))
-                     (indy-adr-p (datum->syntax stx (if (syntax->datum #'indirect-y-addressing) #t #f)))
-                     (indy-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'indirect-y-addressing) '(0.0)))))
-                     (imm-adr-p (datum->syntax stx (if (syntax->datum #'immediate-addressing) #t #f)))
-                     (imm-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'immediate-addressing) '(0.0)))))
-                     (impl-adr-p (datum->syntax stx (if (syntax->datum #'implicit-addressing) #t #f)))
-                     (impl-adr-opcode (datum->syntax stx (cdr (or (syntax->datum #'implicit-addressing) '(0.0))))))
-         #'(define-syntax (scoped-mnemonic nstx)
-             (syntax-case nstx ()
-               ([_]
-                (cond [(and impl-adr-p)
-                       #''('opcode impl-adr-opcode)]
-                      [#t  (raise-syntax-error
-                           'mnemonic
-                           ;; report available addressing modes expected for one op
-                           (format "implicit addressing mode is not defined for this opcode. line ~a:~a"
-                                   (syntax-line nstx)
-                                   (syntax-column nstx))
-                           nstx)]))
-               ([_ op]
-                (cond [(and acc-adr-p
-                          (eq? (syntax->datum #'op) 'A))
-                       #''('opcode acc-adr-opcode)]
-                      [(and zp-adr-p
-                          (byte-operand? (syntax->datum #'op)))
-                       (with-syntax ((op-num (byte-operand (syntax->datum #'op))))
-                         #''('opcode zp-adr-opcode op-num))]
-                      [(and rel-adr-p
-                          (byte-operand? (syntax->datum #'op)))
-                       (with-syntax ((op-num (byte-operand (syntax->datum #'op))))
-                         #''('rel-opcode rel-adr-opcode op-num))]                      
-                      [(and abs-adr-p
-                          (word-operand? (syntax->datum #'op)))
-                       (with-syntax ((op-low (low-byte (word-operand (syntax->datum #'op))))
-                                     (op-high (high-byte (word-operand (syntax->datum #'op)))))
-                         #''('opcode abs-adr-opcode op-low op-high))]
-                      [(and imm-adr-p
-                          (immediate-byte-operand? (syntax->datum #'op)))
-                       (with-syntax ((op-num (immediate-byte-operand (syntax->datum #'op))))
-                         #''('opcode imm-adr-opcode op-num))]
-                      [(and indx-adr-p
-                          (indirect-x-operand? (syntax->datum #'op)))
-                       (with-syntax ((op-num (indirect-x-operand (syntax->datum #'op))))
-                         #''('opcode indx-adr-opcode op-num))]
-                      [#t (raise-syntax-error
-                           'mnemonic
-                           ;; report available addressing modes expected for one op
-                           (format "addressing mode with one op not defined. line ~a:~a"
-                                   (syntax-line nstx)
-                                   (syntax-column nstx))
-                           nstx)]))
-               ([_ op1 op2]
-                (cond [(and zpx-adr-p
-                          (byte-operand? (syntax->datum #'op1))
-                          (equal? (syntax->datum #'op2) '(unquote x)))
-                       (with-syntax ((op-num (byte-operand (syntax->datum #'op1))))
-                         #''('opcode zpx-adr-opcode op-num))]
-                      [(and zpy-adr-p
-                          (byte-operand? (syntax->datum #'op1))
-                          (equal? (syntax->datum #'op2) '(unquote y)))
-                       (with-syntax ((op-num (byte-operand (syntax->datum #'op1))))
-                         #''('opcode zpy-adr-opcode op-num))]
-                      [(and absx-adr-p
-                          (word-operand? (syntax->datum #'op1))
-                          (equal? (syntax->datum #'op2) '(unquote x)))
-                       (with-syntax ((op-low (low-byte (word-operand (syntax->datum #'op1))))
-                                     (op-high (high-byte (word-operand (syntax->datum #'op1)))))
-                         #''('opcode absx-adr-opcode op-low op-high))]
-                     [(and absy-adr-p
-                          (word-operand? (syntax->datum #'op1))
-                          (equal? (syntax->datum #'op2) '(unquote y)))
-                       (with-syntax ((op-low (low-byte (word-operand (syntax->datum #'op1))))
-                                     (op-high (high-byte (word-operand (syntax->datum #'op1)))))
-                         #''('opcode absy-adr-opcode op-low op-high))]
-                     [(and indy-adr-p
-                         (indirect-y-operand? (syntax->datum #'op1))
-                         (equal? (syntax->datum #'op2) '(unquote y)))
-                      (with-syntax ((op-num (indirect-y-operand (syntax->datum #'op1))))
-                         #''('opcode indy-adr-opcode op-num))]
-                     [#t (raise-syntax-error
+       #`(define-syntax (scoped-mnemonic nstx)
+           (syntax-case nstx ()
+             ([_]
+              (cond [(pair? (syntax->datum #'implicit-addressing)) 
+                     #'`(opcode ,(addressing-opcode #'implicit-addressing))]
+                    [#t  (raise-syntax-error
                           'mnemonic
                           ;; report available addressing modes expected for one op
-                          (format "addressing mode with two op not defined. line ~a:~a"
+                          (format "implicit addressing mode is not defined for this opcode. line ~a:~a"
                                   (syntax-line nstx)
                                   (syntax-column nstx))
-                          nstx)])))))))))
+                          nstx)]))
+             ([_ op]
+              (cond [(and (pair? (syntax->datum #'accumulator-addressing))
+                        (eq? (syntax->datum #'op) 'A))
+                     #'`(opcode ,(addressing-opcode #'accumulator-addressing))]
+                    [(and (pair? (syntax->datum #'zero-page-addressing))
+                        (byte-operand? (syntax->datum #'op)))
+                     (with-syntax ((op-num (byte-operand (syntax->datum #'op))))
+                       #'`(opcode ,(addressing-opcode #'zero-page-addressing)  op-num))]
+                    [(and (pair? (syntax->datum #'relative-addressing))
+                        (byte-operand? (syntax->datum #'op)))
+                     (with-syntax ((op-num (byte-operand (syntax->datum #'op))))
+                       #'`(rel-opcode ,(addressing-opcode #'relative-addressing) op-num))]                      
+                    [(and (pair? (syntax->datum #'absolute-addressing)) 
+                        (word-operand? (syntax->datum #'op)))
+                     (with-syntax ((op-low (low-byte (word-operand (syntax->datum #'op))))
+                                   (op-high (high-byte (word-operand (syntax->datum #'op)))))
+                       #'`(opcode ,(addressing-opcode #'absolute-addressing) op-low op-high))]
+                    [(and (pair? (syntax->datum #'immediate-addressing))
+                        (immediate-byte-operand? (syntax->datum #'op)))
+                     (with-syntax ((op-num (immediate-byte-operand (syntax->datum #'op))))
+                       #'`(opcode ,(addressing-opcode #'immediate-addressing) op-num))]
+                    [(and (pair? (syntax->datum #'indirect-x-addressing)) 
+                        (indirect-x-operand? (syntax->datum #'op)))
+                     (with-syntax ((op-num (indirect-x-operand (syntax->datum #'op))))
+                       #'`(opcode ,(addressing-opcode #'indirect-x-addressing) op-num))]
+                    [#t (raise-syntax-error
+                         'mnemonic
+                         ;; report available addressing modes expected for one op
+                         (format "addressing mode with one op not defined. line ~a:~a"
+                                 (syntax-line nstx)
+                                 (syntax-column nstx))
+                         nstx)]))
+             ([_ op1 op2]
+              (cond [(and (pair? (syntax->datum #'zero-page-x-addressing))
+                        (byte-operand? (syntax->datum #'op1))
+                        (equal? (syntax->datum #'op2) '(unquote x)))
+                     (with-syntax ((op-num (byte-operand (syntax->datum #'op1))))
+                       #'`(opcode ,(addressing-opcode #'zero-page-x-addressing) op-num))]
+                    [(and (pair? (syntax->datum #'zero-page-y-addressing))
+                        (byte-operand? (syntax->datum #'op1))
+                        (equal? (syntax->datum #'op2) '(unquote y)))
+                     (with-syntax ((op-num (byte-operand (syntax->datum #'op1))))
+                       #'`(opcode ,(addressing-opcode #'zero-page-y-addressing) op-num))]
+                    [(and (pair? (syntax->datum #'absolute-x-addressing))
+                        (word-operand? (syntax->datum #'op1))
+                        (equal? (syntax->datum #'op2) '(unquote x)))
+                     (with-syntax ((op-low (low-byte (word-operand (syntax->datum #'op1))))
+                                   (op-high (high-byte (word-operand (syntax->datum #'op1)))))
+                       #'`(opcode ,(addressing-opcode #'absolute-x-addressing) op-low op-high))]
+                    [(and (pair? (syntax->datum #'absolute-y-addressing))
+                        (word-operand? (syntax->datum #'op1))
+                        (equal? (syntax->datum #'op2) '(unquote y)))
+                     (with-syntax ((op-low (low-byte (word-operand (syntax->datum #'op1))))
+                                   (op-high (high-byte (word-operand (syntax->datum #'op1)))))
+                       #'`(opcode ,(addressing-opcode #'absolute-y-addressing) op-low op-high))]
+                    [(and (pair? (syntax->datum #'indirect-y-addressing))
+                        (indirect-y-operand? (syntax->datum #'op1))
+                        (equal? (syntax->datum #'op2) '(unquote y)))
+                     (with-syntax ((op-num (indirect-y-operand (syntax->datum #'op1))))
+                       #'`(opcode ,(addressing-opcode #'indirect-y-addressing) op-num))]
+                    [#t (raise-syntax-error
+                         'mnemonic
+                         ;; report available addressing modes expected for one op
+                         (format "addressing mode with two op not defined. line ~a:~a"
+                                 (syntax-line nstx)
+                                 (syntax-column nstx))
+                         nstx)]))))))))
 
 (define-opcode SBC
   ((immediate   . #xe9)
@@ -283,22 +249,25 @@
    (indirect-y  . #xf1)))
 
 (module+ test #| SBC |#
+  ;; (check-equal? (SBC some)
+  ;;               '(decide (word . (opcode #xed "some:2"))
+  ;;                        (byte . (opcode #xe5 "some:1"))))
   (check-equal? (SBC !$11)
-                '('opcode #xe9 #x11))
+                '(opcode #xe9 #x11))
   (check-equal? (SBC $10)
-                '('opcode #xe5 #x10))
+                '(opcode #xe5 #x10))
   (check-equal? (SBC $10,x)
-                '('opcode #xf5 #x10))
+                '(opcode #xf5 #x10))
   (check-equal? (SBC $FF10)
-                '('opcode #xed #x10 #xff))
+                '(opcode #xed #x10 #xff))
   (check-equal? (SBC $1112,x)
-                '('opcode #xfd #x12 #x11))
+                '(opcode #xfd #x12 #x11))
   (check-equal? (SBC $1000,y)
-                '('opcode #xf9 #x00 #x10))
+                '(opcode #xf9 #x00 #x10))
   (check-equal? (SBC ($11,x))
-                '('opcode #xe1 #x11))
+                '(opcode #xe1 #x11))
   (check-equal? (SBC ($11),y)
-                '('opcode #xf1 #x11)))
+                '(opcode #xf1 #x11)))
 
 (define-opcode ASL
   ((accumulator . #x0a)
@@ -309,33 +278,33 @@
 
 (module+ test #| ASL |#
   (check-equal? (ASL A)
-                '('opcode #x0a))
+                '(opcode #x0a))
   (check-equal? (ASL $10)
-                '('opcode #x06 #x10))
+                '(opcode #x06 #x10))
   (check-equal? (ASL $10,x)
-                '('opcode #x16 #x10))
+                '(opcode #x16 #x10))
   (check-equal? (ASL $1000)
-                '('opcode #x0e #x00 #x10))
+                '(opcode #x0e #x00 #x10))
   (check-equal? (ASL $1000,x)
-                '('opcode #x1e #x00 #x10)))
+                '(opcode #x1e #x00 #x10)))
 
 (define-opcode BRK ((implicit . #x00)))
 
 (module+ test #| BRK |#
   (check-equal?  (BRK)
-                 '('opcode #x00)))
+                 '(opcode #x00)))
 
 (define-opcode BEQ ((relative . #xf0)))
 
 (module+ test #| BEQ |#
   (check-equal? (BEQ $10)
-                '('rel-opcode #xf0 #x10)))
+                '(rel-opcode #xf0 #x10)))
 
 ;; idea: delayed decision about byte/word operand
 
-;; '('decision-byte-word ":label" ('opcode #x00 #x00) ('opcode #x01 #x00 #x00)) ;; if :label is byte value use first opcode, else use second
+;; '('decision-byte-word ":label" (opcode #x00 #x00) (opcode #x01 #x00 #x00)) ;; if :label is byte value use first opcode, else use second
 ;; is transformed to
-;; '('opcode #x00 #x00) ;; in case label is a byte value
-;; '('opcode #x01 #x00 #x00) ;; in case label is a word value
+;; '(opcode #x00 #x00) ;; in case label is a byte value
+;; '(opcode #x01 #x00 #x00) ;; in case label is a word value
 
 
