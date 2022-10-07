@@ -7,6 +7,7 @@
 (require (for-syntax "6510-utils.rkt"))
 
 (provide ASL BEQ BRK JMP NOP SBC STX)
+(provide (all-from-out "6510-alt-utils.rkt"))
 
 (module+ test
   (require rackunit))

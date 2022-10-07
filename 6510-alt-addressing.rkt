@@ -4,6 +4,9 @@
 
 (provide one-op two-op no-op)
 
+(module+ test
+  (require rackunit))
+
 (define (resyntax new-context stx)
   (datum->syntax new-context (syntax->datum stx)))
 
@@ -49,14 +52,19 @@
         #'`,result)]
      [#t (raise-addressing-error stx addressings-defs)])))
 
+(module+ test #|one-op|#
+  (check-equal?
+     (syntax->datum (one-op #f #'((accumulator . #x10)) #'A))
+     (quote (quasiquote (unquote (opcode-for-addressing 'accumulator #'((accumulator . #x10))))))))
+
 (define (two-op stx addressings-defs op1 op2)
-  (resyntax 
-   stx 
+  (resyntax
+   stx
    (cond
-     [(zero-page-x-addr-applies? addressings-defs op1 op2)
+     [(zero-page-indexed-addr-applies? 'zero-page-x ',x addressings-defs op1 op2)
       (with-syntax ((result `(opcode-for-zero-page-indexed-addr 'zero-page-x #',addressings-defs #',op1)))
         #'`,result)]
-     [(zero-page-y-addr-applies? addressings-defs op1 op2)
+     [(zero-page-indexed-addr-applies? 'zero-page-y ',y addressings-defs op1 op2)
       (with-syntax ((result `(opcode-for-zero-page-indexed-addr 'zero-page-y #',addressings-defs #',op1)))
         #'`,result)]
      [(absolute-indexed-addr-applies? 'absolute-x ',x addressings-defs op1 op2)
@@ -64,16 +72,8 @@
         #'`,result)]
      [(absolute-indexed-addr-applies? 'absolute-y ',y addressings-defs op1 op2)
       (with-syntax ((result `(opcode-for-absolute-indexed-addr 'absolute-y #',addressings-defs #',op1)))
-        #'`,result)]   
+        #'`,result)]
      [(indirect-y-addr-applies? addressings-defs op1 op2)
       (with-syntax ((result (quasiquote (opcode-for-indirect-y-addr #',addressings-defs #',op1))))
-        #'`,result)]   
+        #'`,result)]
      [#t (raise-addressing-error stx addressings-defs)])))
-
-(module+ test
-  (require rackunit))
-
-(module+ test #|one-op|#
-  (check-equal?
-     (syntax->datum (one-op #f #'((accumulator . #x10)) #'A))
-     (quote (quasiquote (unquote (opcode-for-addressing 'accumulator #'((accumulator . #x10))))))))

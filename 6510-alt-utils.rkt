@@ -21,9 +21,8 @@
          indirect-x-addr-applies?
          immediate-addr-applies?
          opcode-for-absolute-addr
-         zero-page-x-addr-applies?
          opcode-for-zero-page-indexed-addr
-         zero-page-y-addr-applies?
+         zero-page-indexed-addr-applies?
          absolute-indexed-addr-applies?
          opcode-for-absolute-indexed-addr
          indirect-y-addr-applies?
@@ -137,11 +136,6 @@
            ,(low-byte (word-operand (syntax->datum op-stx)))
            ,(high-byte (word-operand (syntax->datum op-stx)))))
 
-(define (opcode-for-absolute-indexed-addr sym addressing-modes-stx op-stx)
-    `(opcode ,(cdr (extract-def sym (syntax->datum addressing-modes-stx)))
-           ,(low-byte (word-operand (syntax->datum op-stx)))
-           ,(high-byte (word-operand (syntax->datum op-stx)))))
-
 (define (opcode-for-indirect-y-addr addressing-modes-stx op-stx)
     `(opcode ,(cdr (extract-def 'indirect-y (syntax->datum addressing-modes-stx)))
            ,(indirect-y-operand (syntax->datum op-stx))))
@@ -176,20 +170,20 @@
      (indirect-y-operand? (syntax->datum op-stx1))
      (equal? (syntax->datum op-stx2) ',y)))
 
-(define (zero-page-x-addr-applies? addressing-modes-stx op1-stx op2-stx)
-  (and (pair? (extract-def 'zero-page-x (syntax->datum addressing-modes-stx)))
+(define (zero-page-indexed-addr-applies? sym op-sym addressing-modes-stx op1-stx op2-stx)
+  (and (pair? (extract-def sym (syntax->datum addressing-modes-stx)))
      (byte-operand? (syntax->datum op1-stx))
-     (equal? (syntax->datum op2-stx) ',x)))
-
-(define (zero-page-y-addr-applies? addressing-modes-stx op1-stx op2-stx)
-  (and (pair? (extract-def 'zero-page-y (syntax->datum addressing-modes-stx)))
-     (byte-operand? (syntax->datum op1-stx))
-     (equal? (syntax->datum op2-stx) ',y)))
+     (equal? (syntax->datum op2-stx) op-sym)))
 
 (define (absolute-indexed-addr-applies? sym op-sym addressing-modes-stx op1-stx op2-stx)
     (and (pair? (extract-def sym (syntax->datum addressing-modes-stx)))
      (word-operand? (syntax->datum op1-stx))
      (equal? (syntax->datum op2-stx) op-sym)))
+
+(define (opcode-for-absolute-indexed-addr sym addressing-modes-stx op-stx)
+    `(opcode ,(cdr (extract-def sym (syntax->datum addressing-modes-stx)))
+           ,(low-byte (word-operand (syntax->datum op-stx)))
+           ,(high-byte (word-operand (syntax->datum op-stx)))))
 
 (define (raise-addressing-error stx addressing-modes-stx)
   (raise-syntax-error

@@ -1,6 +1,5 @@
 #lang racket
 
-(require "6510-alt-utils.rkt")
 (require "6510-alt.rkt")
 
 (module+ test
