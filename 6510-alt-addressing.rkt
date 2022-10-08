@@ -14,66 +14,66 @@
   (resyntax
    stx
    (cond
-     [(implicit-addr-applies? addressings-defs)
+     [(implicit-addressing? addressings-defs)
       (with-syntax
-        ((result `(opcode-without-operand 'implicit #',addressings-defs)))
+        ((result `(no-operand-opcode 'implicit #',addressings-defs)))
         #'`,result)]
      [#t (raise-addressing-error stx addressings-defs)])))
 
 (module+ test #| no-op |#
   (check-equal?
    (syntax->datum (no-op #f #'((implicit . #x10))))
-   '`,(opcode-without-operand 'implicit #'((implicit . #x10)))))
+   '`,(no-operand-opcode 'implicit #'((implicit . #x10)))))
 
 (define (one-op stx addressings-defs op)
   (resyntax
    stx
    (cond
-     [(accumulator-addr-applies? addressings-defs op)
-      (with-syntax ((result `(opcode-without-operand 'accumulator #',addressings-defs)))
+     [(accumulator-addressing? addressings-defs op)
+      (with-syntax ((result `(no-operand-opcode 'accumulator #',addressings-defs)))
         #'`,result)]
-     [(byte-addr-applies? 'zero-page addressings-defs op)
-      (with-syntax ((result `(opcode-for-zero-page-addr #',addressings-defs #',op)))
+     [(byte-addressing? 'zero-page addressings-defs op)
+      (with-syntax ((result `(zero-page-opcode #',addressings-defs #',op)))
         #'`,result)]
-     [(byte-addr-applies? 'relative addressings-defs op)
-      (with-syntax ((result `(opcode-for-relative-addr #',addressings-defs #',op)))
+     [(byte-addressing? 'relative addressings-defs op)
+      (with-syntax ((result `(relative-opcode #',addressings-defs #',op)))
         #'`,result)]
-     [(word-addr-applies? 'absolute addressings-defs op)
-      (with-syntax ((result `(opcode-for-absolute-addr #',addressings-defs #',op)))
+     [(word-addressing? 'absolute addressings-defs op)
+      (with-syntax ((result `(absolute-opcode #',addressings-defs #',op)))
         #'`,result)]
-     [(immediate-addr-applies? addressings-defs op)
-      (with-syntax ((result `(opcode-for-immediate-addr #',addressings-defs #',op)))
+     [(immediate-addressing? addressings-defs op)
+      (with-syntax ((result `(immediate-opcode #',addressings-defs #',op)))
         #'`,result)]
-     [(indirect-x-addr-applies? addressings-defs op)
-      (with-syntax ((result `(opcode-for-indirect-x-addr #',addressings-defs #',op)))
+     [(indirect-x-addressing? addressings-defs op)
+      (with-syntax ((result `(indirect-x-opcode #',addressings-defs #',op)))
         #'`,result)]
-     [(indirect-addr-applies? addressings-defs op)
-      (with-syntax ((result `(opcode-for-indirect-addr #',addressings-defs #',op)))
+     [(indirect-addressing? addressings-defs op)
+      (with-syntax ((result `(indirect-opcode #',addressings-defs #',op)))
         #'`,result)]
      [#t (raise-addressing-error stx addressings-defs)])))
 
 (module+ test #|one-op|#
   (check-equal?
      (syntax->datum (one-op #f #'((accumulator . #x10)) #'A))
-     (quote (quasiquote (unquote (opcode-without-operand 'accumulator #'((accumulator . #x10))))))))
+     (quote (quasiquote (unquote (no-operand-opcode 'accumulator #'((accumulator . #x10))))))))
 
 (define (two-op stx addressings-defs op1 op2)
   (resyntax
    stx
    (cond
-     [(zero-page-indexed-addr-applies? 'zero-page-x ',x addressings-defs op1 op2)
-      (with-syntax ((result `(opcode-for-zero-page-indexed-addr 'zero-page-x #',addressings-defs #',op1)))
+     [(zero-page-indexed-addressing? 'zero-page-x ',x addressings-defs op1 op2)
+      (with-syntax ((result `(zero-page-indexed-opcode 'zero-page-x #',addressings-defs #',op1)))
         #'`,result)]
-     [(zero-page-indexed-addr-applies? 'zero-page-y ',y addressings-defs op1 op2)
-      (with-syntax ((result `(opcode-for-zero-page-indexed-addr 'zero-page-y #',addressings-defs #',op1)))
+     [(zero-page-indexed-addressing? 'zero-page-y ',y addressings-defs op1 op2)
+      (with-syntax ((result `(zero-page-indexed-opcode 'zero-page-y #',addressings-defs #',op1)))
         #'`,result)]
-     [(absolute-indexed-addr-applies? 'absolute-x ',x addressings-defs op1 op2)
-      (with-syntax ((result `(opcode-for-absolute-indexed-addr 'absolute-x #',addressings-defs #',op1)))
+     [(absolute-indexed-addressing? 'absolute-x ',x addressings-defs op1 op2)
+      (with-syntax ((result `(absolute-indexed-opcode 'absolute-x #',addressings-defs #',op1)))
         #'`,result)]
-     [(absolute-indexed-addr-applies? 'absolute-y ',y addressings-defs op1 op2)
-      (with-syntax ((result `(opcode-for-absolute-indexed-addr 'absolute-y #',addressings-defs #',op1)))
+     [(absolute-indexed-addressing? 'absolute-y ',y addressings-defs op1 op2)
+      (with-syntax ((result `(absolute-indexed-opcode 'absolute-y #',addressings-defs #',op1)))
         #'`,result)]
-     [(indirect-y-addr-applies? addressings-defs op1 op2)
-      (with-syntax ((result (quasiquote (opcode-for-indirect-y-addr #',addressings-defs #',op1))))
+     [(indirect-y-addressing? addressings-defs op1 op2)
+      (with-syntax ((result (quasiquote (indirect-y-opcode #',addressings-defs #',op1))))
         #'`,result)]
      [#t (raise-addressing-error stx addressings-defs)])))
