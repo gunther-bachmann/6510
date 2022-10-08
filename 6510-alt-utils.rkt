@@ -41,8 +41,12 @@
      (and (number? any-num)
         (in-byte-range? any-num))
      (and (string? any-num)
-        (6510-number-string? any-num)
-        (in-byte-range? (parse-number-string any-num)))))
+        (or (and (6510-number-string? any-num)
+              (in-byte-range? (parse-number-string any-num)))
+           (byte-label? any-num)))))
+
+(define (byte-label? str)
+  (regexp-match #rx"^[><][a-zA-Z_-][a-zA-Z0-9_-]*$" str))
 
 (module+ test #| byte-operand? |#
   (for ((byte '(10 0 255 "10" "0" "255" |10| |$10| |$FF| |%101|)))
@@ -54,21 +58,24 @@
   (cond [(symbol? any-num)
          (byte-operand (symbol->string any-num))]
         [(number? any-num) any-num]
-        [#t (parse-number-string any-num)]))
+        [(6510-number-string? any-num) (parse-number-string any-num)]
+        [(byte-label? any-num) `(resolve-byte ,any-num)]
+        [#t (raise-syntax-error #f (format "unknown byte operand ~a" any-num))]))
 
 (module+ test #| byte-operand |#
   (for ((byte-expectation
-         '((10     . 10)
-           (0      . 0)
-           (255    . 255)
-           ("10"   . 10)
-           ("0"    . 0)
-           ("255"  . 255)
-           (|10|   . 10)
-           (|$10|  . 16)
-           (|$FF|  . 255)
-           (|%101| . 5))))
-    (check-eq? (byte-operand (car byte-expectation))
+         '((10      . 10)
+           (0       . 0)
+           (255     . 255)
+           ("10"    . 10)
+           ("0"     . 0)
+           ("255"   . 255)
+           (|10|    . 10)
+           (|$10|   . 16)
+           (|$FF|   . 255)
+           (|%101|  . 5)
+           (">some" . (resolve-byte ">some")))))
+    (check-equal? (byte-operand (car byte-expectation))
                (cdr byte-expectation)
                (format "expected: ~a == ~a"
                        (car byte-expectation)

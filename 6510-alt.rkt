@@ -86,27 +86,47 @@
 (module+ test #| SBC |#
   (check-equal? (SBC !$11)
                 '(opcode #xe9 #x11))
+  (check-equal? (SBC !>some)
+                '(opcode #xe9 (resolve-byte ">some")))
+  ;; (check-equal? (SBC !some)
+  ;;               '(opcode #xe9 (resolve-byte "some")))  
   (check-equal? (SBC $10)
                 '(opcode #xe5 #x10))
-  ;; (check-equal? (SBC >some)
-  ;;               '(opcode #xe5 "some:1:h"))
-  ;; (check-equal? (SBC <some)
-  ;;               '(opcode #xe5 "some:1:l"))
+  (check-equal? (SBC >some)
+                '(opcode #xe5 (resolve-byte ">some")))
+  (check-equal? (SBC <some)
+                '(opcode #xe5 (resolve-byte "<some")))
   (check-equal? (SBC $10,x)
                 '(opcode #xf5 #x10))
+  (check-equal? (SBC <some,x)
+                '(opcode #xf5 (resolve-byte "<some")))
   (check-equal? (SBC $FF10)
                 '(opcode #xed #x10 #xff))
   ;; (check-equal? (SBC some)
-  ;;               '(decide (word . (opcode #xed "some:2"))
-  ;;                        (byte . (opcode #xe5 "some:1"))))
+  ;;               '(decide ((resolve-word "some") . (opcode #xed))
+  ;;                        ((resolve-byte "some") . (opcode #xe5))))
   (check-equal? (SBC $1112,x)
                 '(opcode #xfd #x12 #x11))
   (check-equal? (SBC $1000,y)
                 '(opcode #xf9 #x00 #x10))
+  ;; (check-equal? (SBC some,x)
+  ;;               '(decide ((resolve-word "some") . (opcode #xfd))
+  ;;                        ((resolve-byte "some") . (opcode #xf5))))
+  ;; (check-equal? (SBC some,y)
+  ;;               '(opcode #xf9 (resolve-word "some"))
   (check-equal? (SBC ($11,x))
                 '(opcode #xe1 #x11))
+  ;; (check-equal? (SBC (some,x))
+  ;;               '(opcode #xe1 (resolve-byte "some"))
+  (check-equal? (SBC (<some,x))
+                '(opcode #xe1 (resolve-byte "<some")))
   (check-equal? (SBC ($11),y)
-                '(opcode #xf1 #x11)))
+                '(opcode #xf1 #x11))
+  (check-equal? (SBC (>some),y)
+                '(opcode #xf1 (resolve-byte ">some")))  
+  ;; (check-equal? (SBC (some),y)
+  ;;               '(opcode #xf1 (resolve-byte "some"))
+  )
 
 (define-opcode STX
   ((zero-page   . #x86)
@@ -120,12 +140,21 @@
                 '(opcode #x8e #x12 #x10))
   (check-equal? (STX $10,y)
                 '(opcode #x96 #x10)))
-
-;; idea: delayed decision about byte/word operand
-
-;; '('decision-byte-word ":label" (opcode #x00 #x00) (opcode #x01 #x00 #x00)) ;; if :label is byte value use first opcode, else use second
-;; is transformed to
-;; '(opcode #x00 #x00) ;; in case label is a byte value
-;; '(opcode #x01 #x00 #x00) ;; in case label is a word value
+;; --------------------------------------------------------------------------------
+;; additional syntax (ideas)
+;;
+;; (label some)
+;; (byte-const some $10)
+;; (word-const other $FFD2)
+;; (byte $10 %1010)
+;; (word $FFD2 49152 %1001100110011001)
+;; (asc "some")
+;; (require-byte some other more)
+;; (require-word just-one)
+;; (provide-byte (as label-high >local-label)
+;;               (as label-low <local-label)
+;;               a-byte-const)
+;; (provide-word local-label)
+;; (origin C000)
 
 
