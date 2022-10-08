@@ -26,7 +26,6 @@
          zero-page-opcode
          zero-page-indexed-opcode
          no-operand-opcode
-
          raise-addressing-error)
 
 (module+ test
@@ -150,7 +149,7 @@
                        (cdr byte-expectation)))))
 
 (define (find-addressing-mode sym addressing-modes)
-  (findf (lambda (el) (eq? (car el) sym)) addressing-modes))
+  (findf (lambda (el) (and (pair? el) (eq? (car el) sym))) addressing-modes))
 
 (module+ test #| find-addressing-mode |#
   (check-equal? (find-addressing-mode 'accumulator '((immediate . #x10) (accumulator . #x20)))
@@ -218,51 +217,51 @@
      (word-operand? (syntax->datum op1-stx))
      (equal? (syntax->datum op2-stx) op-sym)))
 
-(define (no-operand-opcode addressing addressing-modes-stx)
-  `(opcode ,(cdr (find-addressing-mode addressing (syntax->datum addressing-modes-stx)))))
+(define (no-operand-opcode addressing addressing-modes)
+  `(opcode ,(cdr (find-addressing-mode addressing addressing-modes))))
 
 (module+ test #| opcode-without-operand |#
-  (check-equal? (no-operand-opcode 'implicit #'((accumulator . #x20) (implicit . #x10)))
+  (check-equal? (no-operand-opcode 'implicit '((accumulator . #x20) (implicit . #x10)))
                 '(opcode #x10)))
 
-(define (zero-page-opcode addressing-modes-stx op-stx)
-  `(opcode ,(cdr (find-addressing-mode 'zero-page (syntax->datum addressing-modes-stx)))
-           ,(byte-operand (syntax->datum op-stx))))
+(define (zero-page-opcode addressing-modes op)
+  `(opcode ,(cdr (find-addressing-mode 'zero-page addressing-modes))
+           ,(byte-operand  op)))
 
-(define (zero-page-indexed-opcode sym addressing-modes-stx op-stx)
-  `(opcode ,(cdr (find-addressing-mode sym (syntax->datum addressing-modes-stx)))
-           ,(byte-operand (syntax->datum op-stx))))
+(define (zero-page-indexed-opcode sym addressing-modes op)
+  `(opcode ,(cdr (find-addressing-mode sym addressing-modes))
+           ,(byte-operand op)))
 
-(define (immediate-opcode addressing-modes-stx op-stx)
-  `(opcode ,(cdr (find-addressing-mode 'immediate (syntax->datum addressing-modes-stx)))
-           ,(immediate-byte-operand (syntax->datum op-stx))))
+(define (immediate-opcode addressing-modes op)
+  `(opcode ,(cdr (find-addressing-mode 'immediate addressing-modes))
+           ,(immediate-byte-operand op)))
 
-(define (indirect-x-opcode addressing-modes-stx op-stx)
-  `(opcode ,(cdr (find-addressing-mode 'indirect-x (syntax->datum addressing-modes-stx)))
-           ,(byte-operand (car (syntax->datum op-stx)))))
+(define (indirect-x-opcode addressing-modes op)
+  `(opcode ,(cdr (find-addressing-mode 'indirect-x addressing-modes))
+           ,(byte-operand (car op))))
 
-(define (relative-opcode addressing-modes-stx op-stx)
-  `(rel-opcode ,(cdr (find-addressing-mode 'relative (syntax->datum addressing-modes-stx)))
-               ,(byte-operand (syntax->datum op-stx))))
+(define (relative-opcode addressing-modes op)
+  `(rel-opcode ,(cdr (find-addressing-mode 'relative addressing-modes))
+               ,(byte-operand op)))
 
-(define (absolute-opcode addressing-modes-stx op-stx)
-  `(opcode ,(cdr (find-addressing-mode 'absolute (syntax->datum addressing-modes-stx)))
-           ,(low-byte (word-operand (syntax->datum op-stx)))
-           ,(high-byte (word-operand (syntax->datum op-stx)))))
+(define (absolute-opcode addressing-modes op)
+  `(opcode ,(cdr (find-addressing-mode 'absolute addressing-modes))
+           ,(low-byte (word-operand  op))
+           ,(high-byte (word-operand  op))))
 
-(define (indirect-y-opcode addressing-modes-stx op-stx)
-  `(opcode ,(cdr (find-addressing-mode 'indirect-y (syntax->datum addressing-modes-stx)))
-           ,(byte-operand (car (syntax->datum op-stx)))))
+(define (indirect-y-opcode addressing-modes op)
+  `(opcode ,(cdr (find-addressing-mode 'indirect-y  addressing-modes))
+           ,(byte-operand (car op))))
 
-(define (indirect-opcode addressing-modes-stx op-stx)
-  `(opcode ,(cdr (find-addressing-mode 'indirect (syntax->datum addressing-modes-stx)))
-           ,(low-byte (word-operand (car (syntax->datum op-stx))))
-           ,(high-byte (word-operand (car (syntax->datum op-stx))))))
+(define (indirect-opcode addressing-modes op)
+  `(opcode ,(cdr (find-addressing-mode 'indirect addressing-modes))
+           ,(low-byte (word-operand (car op)))
+           ,(high-byte (word-operand (car op)))))
 
-(define (absolute-indexed-opcode sym addressing-modes-stx op-stx)
-    `(opcode ,(cdr (find-addressing-mode sym (syntax->datum addressing-modes-stx)))
-             ,(low-byte (word-operand (syntax->datum op-stx)))
-             ,(high-byte (word-operand (syntax->datum op-stx)))))
+(define (absolute-indexed-opcode sym addressing-modes op)
+  `(opcode ,(cdr (find-addressing-mode sym addressing-modes))
+           ,(low-byte (word-operand op))
+           ,(high-byte (word-operand op))))
 
 (define (raise-addressing-error stx addressing-modes-stx)
   (raise-syntax-error
