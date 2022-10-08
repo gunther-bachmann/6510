@@ -46,9 +46,16 @@
      (quote (no-operand-opcode 'accumulator '((accumulator . #x10))))))
 
 (define (two-op stx addressings-defs op1 op2)
+  (define ambiguous-indexed-addressing '((zero-page-x . ,x) (zero-page-y . ,y) (absolute-x . ,x) (absolute-y . ,y)))
   (datum->syntax
    stx
    (cond
+     [(abs-or-zero-page-indexed-addressing? 
+       ambiguous-indexed-addressing
+       addressings-defs op1 op2)
+      `(abs-or-zero-page-indexed-opcode
+        ',ambiguous-indexed-addressing
+        ',addressings-defs ',op1 ',op2)]
      [(zero-page-indexed-addressing? 'zero-page-x ',x addressings-defs op1 op2)
       `(zero-page-indexed-opcode 'zero-page-x ',addressings-defs ',op1)]
      [(zero-page-indexed-addressing? 'zero-page-y ',y addressings-defs op1 op2)
