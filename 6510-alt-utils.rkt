@@ -3,33 +3,29 @@
 (require "6510-utils.rkt")
 
 (provide make-id
-         byte-operand? byte-operand
-         word-operand? word-operand
-         indirect-x-operand? indirect-x-operand
-         indirect-y-operand? indirect-y-operand
-         immediate-byte-operand? immediate-byte-operand
-
-         accumulator-addr-applies?
-         opcode-for-addressing
-         byte-addr-applies?
-         word-addr-applies?
-         relative-addr-applies?
-         opcode-for-zero-page-addr
-         opcode-for-indirect-x-addr
-         opcode-for-relative-addr
-         opcode-for-immediate-addr
-         indirect-x-addr-applies?
-         immediate-addr-applies?
-         opcode-for-absolute-addr
-         opcode-for-zero-page-indexed-addr
-         zero-page-indexed-addr-applies?
+         
          absolute-indexed-addr-applies?
-         opcode-for-absolute-indexed-addr
-         indirect-y-addr-applies?
-         opcode-for-indirect-y-addr
+         accumulator-addr-applies?
+         byte-addr-applies?
+         immediate-addr-applies?
          implicit-addr-applies?
          indirect-addr-applies?
+         indirect-x-addr-applies?
+         indirect-y-addr-applies?
+         relative-addr-applies?
+         word-addr-applies?
+         zero-page-indexed-addr-applies?
+
+         opcode-for-absolute-addr
+         opcode-for-absolute-indexed-addr
+         opcode-for-immediate-addr
          opcode-for-indirect-addr
+         opcode-for-indirect-x-addr
+         opcode-for-indirect-y-addr
+         opcode-for-relative-addr
+         opcode-for-zero-page-addr
+         opcode-for-zero-page-indexed-addr
+         opcode-without-operand
 
          raise-addressing-error)
 
@@ -40,29 +36,83 @@
   (let ([str (apply format id-template (map syntax->datum ids))])
     (datum->syntax stx (string->symbol str))))
 
-(define (byte-operand? num-str)
-  (or (and (symbol? num-str)
-        (byte-operand? (symbol->string num-str)))
-     (and (string? num-str)
-        (eq? 3 (string-length num-str))
-        (string-prefix? num-str "$"))))
+(define (byte-operand? any-num)
+  (or (and (symbol? any-num)
+        (byte-operand? (symbol->string any-num)))
+     (and (number? any-num)
+        (in-byte-range? any-num))
+     (and (string? any-num)
+        (6510-number-string? any-num)
+        (in-byte-range? (parse-number-string any-num)))))
 
-(define (byte-operand num-str)
-  (if (symbol? num-str)
-      (byte-operand (symbol->string num-str))
-      (string->number (substring num-str 1) 16)))
+(module+ test #| byte-operand? |#
+  (for ((byte '(10 0 255 "10" "0" "255" |10| |$10| |$FF| |%101|)))
+    (check-true (byte-operand? byte) (format "~a not a byte" byte)))
+  (for ((byte '(-1 256 "-1" "256" |-1| |$101|)))
+    (check-false (byte-operand? byte) (format "~a is a byte" byte))))
 
-(define (word-operand num-str)
-  (if (symbol? num-str)
-      (word-operand (symbol->string num-str))
-      (string->number (substring num-str 1) 16)))
+(define (byte-operand any-num)
+  (cond [(symbol? any-num)
+         (byte-operand (symbol->string any-num))]
+        [(number? any-num) any-num]
+        [#t (parse-number-string any-num)]))
 
-(define (word-operand? num-str)
-  (or (and (symbol? num-str)
-        (word-operand? (symbol->string num-str)))
-     (and (string? num-str)
-        (eq? 5 (string-length num-str))
-        (string-prefix? num-str "$"))))
+(module+ test #| byte-operand |#
+  (for ((byte-expectation
+         '((10     . 10)
+           (0      . 0)
+           (255    . 255)
+           ("10"   . 10)
+           ("0"    . 0)
+           ("255"  . 255)
+           (|10|   . 10)
+           (|$10|  . 16)
+           (|$FF|  . 255)
+           (|%101| . 5))))
+    (check-eq? (byte-operand (car byte-expectation))
+               (cdr byte-expectation)
+               (format "expected: ~a == ~a"
+                       (car byte-expectation)
+                       (cdr byte-expectation)))))
+
+(define (word-operand any-num)
+  (cond [(symbol? any-num)
+         (word-operand (symbol->string any-num))]
+        [(number? any-num) any-num]
+        [#t (parse-number-string any-num)]))
+
+(module+ test #| word-operand |#
+  (for ((word-expectation
+         '((10       . 10)
+           (0        . 0)
+           (65535    . 65535)
+           ("10"     . 10)
+           ("0"      . 0)
+           ("65535"  . 65535)
+           (|10|     . 10)
+           (|$10|    . 16)
+           (|$FFff|  . 65535)
+           (|%10001| . 17))))
+    (check-eq? (word-operand (car word-expectation))
+               (cdr word-expectation)
+               (format "expected: ~a == ~a"
+                       (car word-expectation)
+                       (cdr word-expectation)))))
+
+(define (word-operand? any-num)
+  (or (and (symbol? any-num)
+        (word-operand? (symbol->string any-num)))
+     (and (number? any-num)
+        (in-word-range? any-num))
+     (and (string? any-num)
+        (6510-number-string? any-num)
+        (in-word-range? (parse-number-string any-num)))))
+
+(module+ test #| word-operand? |#
+  (for ((word '(10 0 65535 "10" "0" "65535" |10| |$10| |$FFFF| |%10001|)))
+    (check-true (word-operand? word) (format "~a not a word" word)))
+  (for ((word '(-1 65536 "-1" "65536" |-1| |$10001|)))
+    (check-false (word-operand? word) (format "~a is a word" word))))
 
 (define (immediate-byte-operand? sym)
   (or (and (symbol? sym)
@@ -71,119 +121,148 @@
         (string-prefix? sym "!")
         (byte-operand? (substring sym 1)))))
 
+(module+ test #| immediate-byte-operand? |#
+  (for ((immediate-byte '("!10" "!0" "!255" |!10| |!$10| |!$FF| |!%101|)))
+    (check-true (immediate-byte-operand? immediate-byte)
+                (format "~a not an immediate byte" immediate-byte)))
+  (for ((immediate-byte '("!-1" "!256" |!-1| |!$101|)))
+    (check-false (immediate-byte-operand? immediate-byte)
+                 (format "~a is a byte" immediate-byte))))
+
 (define (immediate-byte-operand sym)
   (if (symbol? sym)
         (immediate-byte-operand (symbol->string sym))
         (byte-operand (substring sym 1))))
 
-(define (indirect-x-operand? sym)
-  (and (list? sym)
-     (byte-operand? (car sym))
-     (equal? (cadr sym) ',x)))
+(module+ test #| immediate-byte-operand |#
+  (for ((byte-expectation
+         '(("!10"   . 10)
+           ("!0"    . 0)
+           ("!255"  . 255)
+           (|!10|   . 10)
+           (|!$10|  . 16)
+           (|!$FF|  . 255)
+           (|!%101| . 5))))
+    (check-eq? (immediate-byte-operand (car byte-expectation))
+               (cdr byte-expectation)
+               (format "expected: ~a == ~a"
+                       (car byte-expectation)
+                       (cdr byte-expectation)))))
 
-(define (indirect-y-operand? sym)
-  (and (list? sym)
-     (byte-operand? (car sym))))
-
-(define (indirect-x-operand sym)
-  (byte-operand (car sym)))
-
-(define (indirect-y-operand sym)
-  (byte-operand (car sym)))
-
-
-(define (extract-def sym addressing-modes)
+(define (find-addressing-mode sym addressing-modes)
   (findf (lambda (el) (eq? (car el) sym)) addressing-modes))
 
+(module+ test #| find-addressing-mode |#
+  (check-equal? (find-addressing-mode 'accumulator '((immediate . #x10) (accumulator . #x20)))
+                '(accumulator . #x20)))
+
+(define (has-addressing-mode? sym addressing-modes)
+  (pair? (find-addressing-mode sym addressing-modes)))
+
+(module+ test #| has-addressing-mode? |#
+  (check-true (has-addressing-mode? 'accumulator '((immediate . #x10) (accumulator . #x20))))
+  (check-false (has-addressing-mode? 'zero-page-x '((immediate . #x10) (accumulator . #x20)))))
+
 (define (accumulator-addr-applies? addressing-modes-stx op-stx)
-    (and (pair? (extract-def 'accumulator (syntax->datum addressing-modes-stx)))
-     (eq?  (syntax->datum op-stx) 'A)))
+  (and (has-addressing-mode? 'accumulator (syntax->datum addressing-modes-stx)) 
+     (eq? (syntax->datum op-stx) 'A)))
 
-(define (opcode-for-addressing addressing addressing-modes-stx)
-  `(opcode ,(cdr (extract-def addressing (syntax->datum addressing-modes-stx)))))
-
-(module+ test #| opcode-for-addressing |#
-  (check-equal? (opcode-for-addressing 'implicit #'((accumulator . #x20) (implicit . #x10)))
-                '(opcode #x10)))
+(module+ test #| accumulator-addr-applies |#
+  (check-true (accumulator-addr-applies? #'((accumulator . #x20)) #'A)))
 
 (define (byte-addr-applies? addr-sym addressing-modes-stx op-stx)
-  (and (pair? (extract-def addr-sym (syntax->datum addressing-modes-stx)))
+  (and (has-addressing-mode? addr-sym (syntax->datum addressing-modes-stx))
      (byte-operand? (syntax->datum op-stx))))
 
 (define (word-addr-applies? addr-sym addressing-modes-stx op-stx)
-  (and (pair? (extract-def addr-sym (syntax->datum addressing-modes-stx)))
+  (and (has-addressing-mode? addr-sym (syntax->datum addressing-modes-stx))
      (word-operand? (syntax->datum op-stx))))
 
 (define (relative-addr-applies? addressing-modes-stx op-stx)
-  (and (pair? (extract-def 'relative (syntax->datum addressing-modes-stx)))
+  (and (has-addressing-mode? 'relative (syntax->datum addressing-modes-stx))
      (byte-operand? (syntax->datum op-stx))))
 
-(define (opcode-for-zero-page-addr addressing-modes-stx op-stx)
-  `(opcode ,(cdr (extract-def 'zero-page (syntax->datum addressing-modes-stx))) ,(byte-operand (syntax->datum op-stx))))
-
-(define (opcode-for-immediate-addr addressing-modes-stx op-stx)
-  `(opcode ,(cdr (extract-def 'immediate (syntax->datum addressing-modes-stx))) ,(immediate-byte-operand (syntax->datum op-stx))))
-
-(define (opcode-for-indirect-x-addr addressing-modes-stx op-stx)
-  `(opcode ,(cdr (extract-def 'indirect-x (syntax->datum addressing-modes-stx)))
-           ,(indirect-x-operand (syntax->datum op-stx))))
-
-(define (opcode-for-relative-addr addressing-modes-stx op-stx)
-  `(rel-opcode ,(cdr (extract-def 'relative (syntax->datum addressing-modes-stx))) ,(byte-operand (syntax->datum op-stx))))
-
-(define (opcode-for-absolute-addr addressing-modes-stx op-stx)
-  `(opcode ,(cdr (extract-def 'absolute (syntax->datum addressing-modes-stx)))
-           ,(low-byte (word-operand (syntax->datum op-stx)))
-           ,(high-byte (word-operand (syntax->datum op-stx)))))
-
-(define (opcode-for-indirect-y-addr addressing-modes-stx op-stx)
-    `(opcode ,(cdr (extract-def 'indirect-y (syntax->datum addressing-modes-stx)))
-           ,(indirect-y-operand (syntax->datum op-stx))))
-
-(define (opcode-for-zero-page-indexed-addr sym addressing-modes-stx op-stx)
-    `(opcode ,(cdr (extract-def sym (syntax->datum addressing-modes-stx)))
-             ,(byte-operand (syntax->datum op-stx))))
-
-(define (opcode-for-indirect-addr addressing-modes-stx op-stx)
-      `(opcode ,(cdr (extract-def 'indirect (syntax->datum addressing-modes-stx)))
-             ,(low-byte (word-operand (car (syntax->datum op-stx))))
-             ,(high-byte (word-operand (car (syntax->datum op-stx))))))
-
 (define (immediate-addr-applies? addressing-modes-stx op-stx)
-  (and (pair? (extract-def 'immediate (syntax->datum addressing-modes-stx)))
+  (and (has-addressing-mode? 'immediate (syntax->datum addressing-modes-stx))
      (immediate-byte-operand? (syntax->datum op-stx))))
 
 (define (implicit-addr-applies? addressing-modes-stx)
-  (pair? (extract-def 'implicit (syntax->datum addressing-modes-stx))))
+  (has-addressing-mode? 'implicit (syntax->datum addressing-modes-stx)))
 
 (define (indirect-addr-applies? addressing-modes-stx op-stx)
-    (and (pair? (extract-def 'indirect (syntax->datum addressing-modes-stx)))
+  (and (has-addressing-mode? 'indirect (syntax->datum addressing-modes-stx))
      (list? (syntax->datum op-stx))
      (word-operand (car (syntax->datum op-stx)))))
 
 (define (indirect-x-addr-applies? addressing-modes-stx op-stx)
-  (and (pair? (extract-def 'indirect-x (syntax->datum addressing-modes-stx)))
-     (indirect-x-operand? (syntax->datum op-stx))))
+  (define op (syntax->datum op-stx))
+  (and (has-addressing-mode? 'indirect-x (syntax->datum addressing-modes-stx))
+     (list? op)
+     (byte-operand? (car op))
+     (pair? (cdr op))
+     (equal? (cadr op) ',x)))
 
 (define (indirect-y-addr-applies? addressing-modes-stx op-stx1 op-stx2)
-  (and (pair? (extract-def 'indirect-y (syntax->datum addressing-modes-stx)))
-     (indirect-y-operand? (syntax->datum op-stx1))
+  (and (has-addressing-mode? 'indirect-y (syntax->datum addressing-modes-stx))
+     (list (syntax->datum op-stx1))
+     (byte-operand? (car (syntax->datum op-stx1)))
      (equal? (syntax->datum op-stx2) ',y)))
 
 (define (zero-page-indexed-addr-applies? sym op-sym addressing-modes-stx op1-stx op2-stx)
-  (and (pair? (extract-def sym (syntax->datum addressing-modes-stx)))
+  (and (has-addressing-mode? sym (syntax->datum addressing-modes-stx))
      (byte-operand? (syntax->datum op1-stx))
      (equal? (syntax->datum op2-stx) op-sym)))
 
 (define (absolute-indexed-addr-applies? sym op-sym addressing-modes-stx op1-stx op2-stx)
-    (and (pair? (extract-def sym (syntax->datum addressing-modes-stx)))
+  (and (has-addressing-mode? sym (syntax->datum addressing-modes-stx))
      (word-operand? (syntax->datum op1-stx))
      (equal? (syntax->datum op2-stx) op-sym)))
 
-(define (opcode-for-absolute-indexed-addr sym addressing-modes-stx op-stx)
-    `(opcode ,(cdr (extract-def sym (syntax->datum addressing-modes-stx)))
+(define (opcode-without-operand addressing addressing-modes-stx)
+  `(opcode ,(cdr (find-addressing-mode addressing (syntax->datum addressing-modes-stx)))))
+
+(module+ test #| opcode-without-operand |#
+  (check-equal? (opcode-without-operand 'implicit #'((accumulator . #x20) (implicit . #x10)))
+                '(opcode #x10)))
+
+(define (opcode-for-zero-page-addr addressing-modes-stx op-stx)
+  `(opcode ,(cdr (find-addressing-mode 'zero-page (syntax->datum addressing-modes-stx)))
+           ,(byte-operand (syntax->datum op-stx))))
+
+(define (opcode-for-zero-page-indexed-addr sym addressing-modes-stx op-stx)
+  `(opcode ,(cdr (find-addressing-mode sym (syntax->datum addressing-modes-stx)))
+           ,(byte-operand (syntax->datum op-stx))))
+
+(define (opcode-for-immediate-addr addressing-modes-stx op-stx)
+  `(opcode ,(cdr (find-addressing-mode 'immediate (syntax->datum addressing-modes-stx)))
+           ,(immediate-byte-operand (syntax->datum op-stx))))
+
+(define (opcode-for-indirect-x-addr addressing-modes-stx op-stx)
+  `(opcode ,(cdr (find-addressing-mode 'indirect-x (syntax->datum addressing-modes-stx)))
+           ,(byte-operand (car (syntax->datum op-stx)))))
+
+(define (opcode-for-relative-addr addressing-modes-stx op-stx)
+  `(rel-opcode ,(cdr (find-addressing-mode 'relative (syntax->datum addressing-modes-stx)))
+               ,(byte-operand (syntax->datum op-stx))))
+
+(define (opcode-for-absolute-addr addressing-modes-stx op-stx)
+  `(opcode ,(cdr (find-addressing-mode 'absolute (syntax->datum addressing-modes-stx)))
            ,(low-byte (word-operand (syntax->datum op-stx)))
            ,(high-byte (word-operand (syntax->datum op-stx)))))
+
+(define (opcode-for-indirect-y-addr addressing-modes-stx op-stx)
+  `(opcode ,(cdr (find-addressing-mode 'indirect-y (syntax->datum addressing-modes-stx)))
+           ,(byte-operand (car (syntax->datum op-stx)))))
+
+(define (opcode-for-indirect-addr addressing-modes-stx op-stx)
+  `(opcode ,(cdr (find-addressing-mode 'indirect (syntax->datum addressing-modes-stx)))
+           ,(low-byte (word-operand (car (syntax->datum op-stx))))
+           ,(high-byte (word-operand (car (syntax->datum op-stx))))))
+
+(define (opcode-for-absolute-indexed-addr sym addressing-modes-stx op-stx)
+    `(opcode ,(cdr (find-addressing-mode sym (syntax->datum addressing-modes-stx)))
+             ,(low-byte (word-operand (syntax->datum op-stx)))
+             ,(high-byte (word-operand (syntax->datum op-stx)))))
 
 (define (raise-addressing-error stx addressing-modes-stx)
   (raise-syntax-error

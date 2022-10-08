@@ -16,21 +16,21 @@
    (cond
      [(implicit-addr-applies? addressings-defs)
       (with-syntax
-        ((result `(opcode-for-addressing 'implicit #',addressings-defs)))
+        ((result `(opcode-without-operand 'implicit #',addressings-defs)))
         #'`,result)]
      [#t (raise-addressing-error stx addressings-defs)])))
 
 (module+ test #| no-op |#
   (check-equal?
    (syntax->datum (no-op #f #'((implicit . #x10))))
-   '`,(opcode-for-addressing 'implicit #'((implicit . #x10)))))
+   '`,(opcode-without-operand 'implicit #'((implicit . #x10)))))
 
 (define (one-op stx addressings-defs op)
   (resyntax
    stx
    (cond
      [(accumulator-addr-applies? addressings-defs op)
-      (with-syntax ((result `(opcode-for-addressing 'accumulator #',addressings-defs)))
+      (with-syntax ((result `(opcode-without-operand 'accumulator #',addressings-defs)))
         #'`,result)]
      [(byte-addr-applies? 'zero-page addressings-defs op)
       (with-syntax ((result `(opcode-for-zero-page-addr #',addressings-defs #',op)))
@@ -55,7 +55,7 @@
 (module+ test #|one-op|#
   (check-equal?
      (syntax->datum (one-op #f #'((accumulator . #x10)) #'A))
-     (quote (quasiquote (unquote (opcode-for-addressing 'accumulator #'((accumulator . #x10))))))))
+     (quote (quasiquote (unquote (opcode-without-operand 'accumulator #'((accumulator . #x10))))))))
 
 (define (two-op stx addressings-defs op1 op2)
   (resyntax

@@ -21,14 +21,14 @@
  two-complement-of
  word
  word->hex-string
- word/c)
+ word/c
+ in-word-range?
+ in-byte-range?)
 
-(define/c (in-word-range? word)
-  (-> exact-integer? boolean?)
+(define (in-word-range? word)
   (and (<= word 65535) (>= word 0)))
 
-(define/c (in-byte-range? byte)
-  (-> exact-integer? boolean?)
+(define (in-byte-range? byte)
   (and (<= byte 255) (>= byte 0)))
 
 (define byte/c (and/c exact-nonnegative-integer? in-byte-range?))
