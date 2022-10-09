@@ -16,6 +16,7 @@
          word-addressing?
          zero-page-indexed-addressing?
          abs-or-zero-page-indexed-addressing?
+         abs-or-zero-page-addressing?
 
          absolute-opcode
          absolute-indexed-opcode
@@ -28,6 +29,7 @@
          zero-page-indexed-opcode
          no-operand-opcode
          abs-or-zero-page-indexed-opcode
+         abs-or-zero-page-opcode
 
          raise-addressing-error)
 
@@ -58,7 +60,8 @@
   (regexp-match #rx"^[><][a-zA-Z_-][a-zA-Z0-9_-]*$" str))
 
 (define (label? str)
-  (regexp-match #rx"^[a-zA-Z_-][a-zA-Z0-9_-]*$" str))
+  (and (not (equal? str "A")) ;; reserved for accumulator addressing
+     (regexp-match #rx"^[a-zA-Z_-][a-zA-Z0-9_-]*$" str)))
 
 (module+ test #| byte-operand? |#
   (for ((byte '(10 0 255 "10" "0" "255" |10| |$10| |$FF| |%101|)))
@@ -238,11 +241,15 @@
      (byte-operand? (car (syntax->datum op-stx1)))
      (equal? (syntax->datum op-stx2) ',y)))
 
-(define (abs-or-zero-page-indexed-addressing? addressing-list addressing-modes-stx op1-stx op2-stx)
-  (define possible-addressing-sym-pairs (filter (lambda (addressing-sym-pair) (has-addressing-mode? (car addressing-sym-pair) (syntax->datum addressing-modes-stx)))
-                                            addressing-list))
-  (define possible-symbol-list (map (lambda (addressing-sym-pair) (cdr addressing-sym-pair))
-                                    possible-addressing-sym-pairs))
+(define (abs-or-zero-page-indexed-addressing? addressing-sym-list addressing-modes-stx op1-stx op2-stx)
+  (define possible-addressing-sym-pairs
+    (filter (lambda (addressing-sym-pair)
+              (has-addressing-mode? (car addressing-sym-pair)
+                                    (syntax->datum addressing-modes-stx)))
+            addressing-sym-list))
+  (define possible-symbol-list
+    (map (lambda (addressing-sym-pair) (cdr addressing-sym-pair))
+         possible-addressing-sym-pairs))
   (and (not (empty? possible-addressing-sym-pairs))
      (ambiguous-operand? (syntax->datum op1-stx))
      (member (syntax->datum op2-stx) possible-symbol-list)
@@ -286,6 +293,34 @@
                 #'some
                 #',x)))
 
+(define (abs-or-zero-page-addressing? addressing-list addressing-modes-stx op-stx )
+  (define possible-addressing-sym-pairs
+    (filter (lambda (addressing)
+              (has-addressing-mode? addressing (syntax->datum addressing-modes-stx)))
+            addressing-list))
+  (and (not (empty? possible-addressing-sym-pairs))
+     (ambiguous-operand? (syntax->datum op-stx))
+     #t))
+
+(module+ test #| abs-or-zero-page-addressing? |#
+  (check-true (abs-or-zero-page-addressing?
+               '(absolute zero-page)
+               #'((absolute . #x20)
+                  (zero-page . #x30))
+               #'some))
+  (check-false (abs-or-zero-page-addressing?
+                '(absolute zero-page)
+                #'((absolute-x . #x20)
+                   (zero-page-x . #x30))
+                #'some)
+               "there is no matching addresing mode available")
+  (check-false (abs-or-zero-page-addressing?
+                '(absolute zero-page)
+                #'((absolute . #x20)
+                   (zero-page . #x30))
+                #'<some)
+               "operand is definitively only byte"))
+
 (define (zero-page-indexed-addressing? sym op-sym addressing-modes-stx op1-stx op2-stx)
   (and (has-addressing-mode? sym (syntax->datum addressing-modes-stx))
      (byte-operand? (syntax->datum op1-stx))
@@ -323,19 +358,35 @@
   `(rel-opcode ,(cdr (find-addressing-mode 'relative addressing-modes))
                ,(byte-operand op)))
 
+(module+ test #| relative-opcode |#
+  (check-equal? (relative-opcode '((relative . #x20)) '$10)
+                '(rel-opcode #x20 #x10)))
+
 (define (absolute-opcode addressing-modes op)
   `(opcode ,(cdr (find-addressing-mode 'absolute addressing-modes))
            ,(low-byte (word-operand  op))
            ,(high-byte (word-operand  op))))
 
+(module+ test #| absolute-opcode |#
+  (check-equal? (absolute-opcode '((absolute . #x20)) '$1000)
+                '(opcode #x20 #x00 #x10)))
+
 (define (indirect-y-opcode addressing-modes op)
   `(opcode ,(cdr (find-addressing-mode 'indirect-y  addressing-modes))
            ,(byte-operand (car op))))
+
+(module+ test #| indirect-y-opcode |#
+  (check-equal? (indirect-y-opcode '((indirect-y . #x20)) '($10))
+                '(opcode #x20 #x10)))
 
 (define (indirect-opcode addressing-modes op)
   `(opcode ,(cdr (find-addressing-mode 'indirect addressing-modes))
            ,(low-byte (word-operand (car op)))
            ,(high-byte (word-operand (car op)))))
+
+(module+ test #| indirect-opcode |#
+  (check-equal? (indirect-opcode '((indirect . #x20)) '($1000))
+                '(opcode #x20 #x00 #x10)))
 
 (define (absolute-indexed-opcode sym addressing-modes op)
   `(opcode ,(cdr (find-addressing-mode sym addressing-modes))
@@ -346,32 +397,62 @@
   (check-equal? (absolute-indexed-opcode 'absolute-x '((absolute-x . #x20)) '$1000)
                 '(opcode #x20 0 16)))
 
-(define (possible-addressings addressing-list addressing-modes op1 op2)
-    (map (lambda (addressing-sym-pair) (car addressing-sym-pair))
-         (filter (lambda (addressing-sym-pair)
-                   (and (has-addressing-mode? (car addressing-sym-pair) addressing-modes)
-                      (equal? op2 (cdr addressing-sym-pair))))
-                 addressing-list)))
+(define (possible-addressings addressing-sym-list addressing-modes op1 op2)
+  (map (lambda (addressing-sym-pair) (car addressing-sym-pair))
+       (filter (lambda (addressing-sym-pair)
+                 (and (has-addressing-mode? (car addressing-sym-pair) addressing-modes)
+                    (equal? op2 (cdr addressing-sym-pair))))
+               addressing-sym-list)))
 
-(define (abs-or-zero-page-indexed-opcode addressing-list addressing-modes op1 op2)
-  (define pos-addressings (possible-addressings addressing-list addressing-modes op1 op2))
-  (define possible-addressing-modes
-    (filter (lambda (addressing-mode)
-              (member (car addressing-mode) pos-addressings))
-            addressing-modes))
+(module+ test #|  possible-addressings |#
+  (check-equal? (possible-addressings
+                 '((zero-page-x . ,x)
+                   (absolute-x . ,x)
+                   (zero-page-y . ,y))
+                 '((absolute-x . #x20)
+                   (zero-page-y . #x30))
+                 'some
+                 ',x)
+                '(absolute-x))
+  (check-equal? (possible-addressings
+                 '((zero-page-x . ,x)
+                   (zero-page-y . ,y))
+                 '((zero-page-y . #x30))
+                 'some
+                 ',x)
+                '())
+  (check-equal? (possible-addressings
+                 '((zero-page-x . ,x)
+                   (absolute-x . ,x)
+                   (zero-page-y . ,y))
+                 '((absolute-x . #x20)
+                   (zero-page-x . #x30)
+                   (accumulator . #x40))
+                 'some
+                 ',x)
+                '(zero-page-x absolute-x)))
+
+(define (ambiguous-addressing-opcode possible-addressing-modes op)
   (cond [(empty? possible-addressing-modes)
-         (raise-syntax-error 'ambiguous-addressiong "no possible addressing mode found")]
+         (raise-syntax-error 'ambiguous-addressing "no possible addressing mode found")]
         [(= 1 (length possible-addressing-modes))
          `(opcode ,(cdar possible-addressing-modes)
                   (,(hash-ref address-mode-definitions (caar possible-addressing-modes))
-                   ,(->string op1)))]
+                   ,(->string op)))]
         [(< 1 (length possible-addressing-modes))
          `(decide ,(map (lambda (addressing-mode)
                           `((,(hash-ref address-mode-definitions (car addressing-mode))
-                             ,(->string op1)) . (opcode ,(cdr addressing-mode))))
+                             ,(->string op)) . (opcode ,(cdr addressing-mode))))
                         possible-addressing-modes) )]
-        [#t (raise-syntax-error 'ambiguous-addressing "no option found for ambiguous address resolution")])
-  )
+        [#t (raise-syntax-error 'ambiguous-addressing "no option found for ambiguous address resolution")]))
+
+(define (abs-or-zero-page-indexed-opcode addressing-sym-list addressing-modes op1 op2)
+  (define pos-addressings (possible-addressings addressing-sym-list addressing-modes op1 op2))
+  (define possible-addressing-modes
+    (filter (λ (addressing-mode)
+              (member (car addressing-mode) pos-addressings))
+            addressing-modes))
+  (ambiguous-addressing-opcode possible-addressing-modes op1))
 
 (module+ test #| abs-or-zero-page-indexed-opcode |#
   (check-equal? (abs-or-zero-page-indexed-opcode
@@ -385,9 +466,26 @@
                  ',x)
                 '(opcode #x20 (resolve-word "some"))))
 
+(define (abs-or-zero-page-opcode addressing-list addressing-modes op)
+  (define pos-addressings
+    (filter (lambda (addressing)
+              (has-addressing-mode? addressing addressing-modes))
+            addressing-list))
+  (define possible-addressing-modes
+    (filter (λ (addressing-mode)
+              (member (car addressing-mode) pos-addressings))
+            addressing-modes))
+  (ambiguous-addressing-opcode possible-addressing-modes op))
+
 (define (->string el)
   (cond [(string? el) el]
         [(symbol? el) (symbol->string el)]))
+
+(module+ test #| ->string |#
+    (check-equal? (->string 'some)
+                  "some")
+    (check-equal? (->string "some")
+                  "some"))
 
 (define address-mode-definitions
   (hash 'absolute 'resolve-word
