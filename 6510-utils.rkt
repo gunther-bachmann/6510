@@ -75,13 +75,13 @@
 ;; is the given string a valid binary, hex or regular number
 (define (6510-number-string? value)
   (and (string? value)
-     (regexp-match? #rx"^(\\%(0|1)+|\\$([0-9]|A|B|C|D|E|F)+|[0-9]+)$"
+     (regexp-match? #rx"^(\\%(0|1)+|\\$[0-9A-Fa-f]+|[0-9]+)$"
                     value)))
 
 (module+ test #| 6510-number-string? |#
   (check-true (6510-number-string? "234"))
   (check-true (6510-number-string? "%1001100"))
-  (check-true (6510-number-string? "$234ABF"))
+  (check-true (6510-number-string? "$234ABf"))
   (check-false (6510-number-string? "-234"))
   (check-false (6510-number-string? "$234AG"))
   (check-false (6510-number-string? "%120")))

@@ -61,7 +61,7 @@
 
 (define (label? str)
   (and (not (equal? str "A")) ;; reserved for accumulator addressing
-     (regexp-match #rx"^[a-zA-Z_-][a-zA-Z0-9_-]*$" str)))
+     (regexp-match #rx"^[a-zA-Z_][a-zA-Z0-9_-]*$" str)))
 
 (module+ test #| byte-operand? |#
   (for ((byte '(10 0 255 "10" "0" "255" |10| |$10| |$FF| |%101|)))
@@ -69,15 +69,27 @@
   (for ((byte '(-1 256 "-1" "256" |-1| |$101|)))
     (check-false (byte-operand? byte) (format "~a is a byte" byte))))
 
-(define (byte-operand any-num)
+(define (byte-operand any-num (force true) (relative false))
   (cond [(symbol? any-num)
-         (byte-operand (symbol->string any-num))]
+         (byte-operand (symbol->string any-num) force relative)]
         [(number? any-num) any-num]
         [(6510-number-string? any-num) (parse-number-string any-num)]
         [(byte-label? any-num) `(resolve-byte ,any-num)]
+        [(and force
+            (label? any-num)
+            (not relative))
+         `(resolve-byte ,any-num)]
+        [(and force
+            (label? any-num)
+            relative)
+         `(resolve-relative ,any-num)]
         [#t (raise-syntax-error #f (format "unknown byte operand ~a" any-num))]))
 
 (module+ test #| byte-operand |#
+  (check-equal? (byte-operand "some" #t)
+                '(resolve-byte "some"))
+  (check-equal? (byte-operand "some" #t #t)
+                '(resolve-relative "some"))
   (for ((byte-expectation
          '((10      . 10)
            (0       . 0)
@@ -91,28 +103,18 @@
            (|%101|  . 5)
            (">some" . (resolve-byte ">some")))))
     (check-equal? (byte-operand (car byte-expectation))
-               (cdr byte-expectation)
-               (format "expected: ~a == ~a"
-                       (car byte-expectation)
-                       (cdr byte-expectation)))))
+                  (cdr byte-expectation)
+                  (format "expected: ~a == ~a"
+                          (car byte-expectation)
+                          (cdr byte-expectation)))))
 
-(define (word-operand any-num)
+(define (word-operand any-num (force #f))
   (cond [(symbol? any-num)
-         (word-operand (symbol->string any-num))]
+         (word-operand (symbol->string any-num) force)]
         [(number? any-num) any-num]
-        [#t (parse-number-string any-num)]))
-
-(define (possibly-word-operand? any-num)
-  (or (and (symbol? any-num)
-        (possibly-word-operand? (symbol->string any-num)))
-     (word-operand?)
-     (ambiguous-operand? any-num)))
-
-(define (ambiguous-operand? any-num)
-  (or (and (symbol? any-num)
-        (ambiguous-operand? (symbol->string any-num)))
-     (and (string? any-num)
-        (label? any-num))))
+        [(6510-number-string? any-num) (parse-number-string any-num)]        
+        [force `(resolve-word ,any-num)]
+        [#t (raise-syntax-error 'word-operand (format "'~a' is no valid word operand" any-num))]))
 
 (module+ test #| word-operand |#
   (for ((word-expectation
@@ -123,14 +125,26 @@
            ("0"      . 0)
            ("65535"  . 65535)
            (|10|     . 10)
-           (|$10|    . 16)
-           (|$FFff|  . 65535)
-           (|%10001| . 17))))
+           ($10      . 16)
+           ($FFff    . 65535)
+           (%10001   . 17))))
     (check-eq? (word-operand (car word-expectation))
                (cdr word-expectation)
                (format "expected: ~a == ~a"
                        (car word-expectation)
                        (cdr word-expectation)))))
+
+(define (possibly-word-operand? any-num)
+  (or (and (symbol? any-num)
+        (possibly-word-operand? (symbol->string any-num)))
+     (word-operand? any-num)
+     (ambiguous-operand? any-num)))
+
+(define (ambiguous-operand? any-num)
+  (or (and (symbol? any-num)
+        (ambiguous-operand? (symbol->string any-num)))
+     (and (string? any-num)
+        (label? any-num))))
 
 (define (word-operand? any-num)
   (or (and (symbol? any-num)
@@ -152,7 +166,7 @@
         (immediate-byte-operand? (symbol->string sym)))
      (and (string? sym)
         (string-prefix? sym "!")
-        (byte-operand? (substring sym 1)))))
+        (possibly-byte-operand? (substring sym 1)))))
 
 (module+ test #| immediate-byte-operand? |#
   (for ((immediate-byte '("!10" "!0" "!255" |!10| |!$10| |!$FF| |!%101|)))
@@ -165,7 +179,7 @@
 (define (immediate-byte-operand sym)
   (if (symbol? sym)
         (immediate-byte-operand (symbol->string sym))
-        (byte-operand (substring sym 1))))
+        (byte-operand (substring sym 1) #t)))
 
 (module+ test #| immediate-byte-operand |#
   (for ((byte-expectation
@@ -211,9 +225,15 @@
   (and (has-addressing-mode? addr-sym (syntax->datum addressing-modes-stx))
      (word-operand? (syntax->datum op-stx))))
 
+(define (relative-addressing-operand? elem)
+  (if (symbol? elem)
+      (relative-addressing-operand? (symbol->string elem))
+      (or (byte-operand? elem)
+         (label? elem))))
+
 (define (relative-addressing? addressing-modes-stx op-stx)
   (and (has-addressing-mode? 'relative (syntax->datum addressing-modes-stx))
-     (byte-operand? (syntax->datum op-stx))))
+     (relative-addressing-operand? (syntax->datum op-stx))))
 
 (define (immediate-addressing? addressing-modes-stx op-stx)
   (and (has-addressing-mode? 'immediate (syntax->datum addressing-modes-stx))
@@ -225,20 +245,20 @@
 (define (indirect-addressing? addressing-modes-stx op-stx)
   (and (has-addressing-mode? 'indirect (syntax->datum addressing-modes-stx))
      (list? (syntax->datum op-stx))
-     (word-operand (car (syntax->datum op-stx)))))
+     (possibly-word-operand? (car (syntax->datum op-stx)))))
 
 (define (indirect-x-addressing? addressing-modes-stx op-stx)
   (define op (syntax->datum op-stx))
   (and (has-addressing-mode? 'indirect-x (syntax->datum addressing-modes-stx))
      (list? op)
-     (byte-operand? (car op))
+     (possibly-byte-operand? (car op))
      (pair? (cdr op))
      (equal? (cadr op) ',x)))
 
 (define (indirect-y-addressing? addressing-modes-stx op-stx1 op-stx2)
   (and (has-addressing-mode? 'indirect-y (syntax->datum addressing-modes-stx))
      (list (syntax->datum op-stx1))
-     (byte-operand? (car (syntax->datum op-stx1)))
+     (possibly-byte-operand? (car (syntax->datum op-stx1)))
      (equal? (syntax->datum op-stx2) ',y)))
 
 (define (abs-or-zero-page-indexed-addressing? addressing-sym-list addressing-modes-stx op1-stx op2-stx)
@@ -352,15 +372,17 @@
 
 (define (indirect-x-opcode addressing-modes op)
   `(opcode ,(cdr (find-addressing-mode 'indirect-x addressing-modes))
-           ,(byte-operand (car op))))
+           ,(byte-operand (car op) #t)))
 
 (define (relative-opcode addressing-modes op)
   `(rel-opcode ,(cdr (find-addressing-mode 'relative addressing-modes))
-               ,(byte-operand op)))
+               ,(byte-operand op #t #t)))
 
 (module+ test #| relative-opcode |#
   (check-equal? (relative-opcode '((relative . #x20)) '$10)
-                '(rel-opcode #x20 #x10)))
+                '(rel-opcode #x20 #x10))
+  (check-equal? (relative-opcode '((relative . #x20)) 'some)
+                '(rel-opcode #x20 (resolve-relative "some"))))
 
 (define (absolute-opcode addressing-modes op)
   `(opcode ,(cdr (find-addressing-mode 'absolute addressing-modes))
@@ -373,16 +395,20 @@
 
 (define (indirect-y-opcode addressing-modes op)
   `(opcode ,(cdr (find-addressing-mode 'indirect-y  addressing-modes))
-           ,(byte-operand (car op))))
+           ,(byte-operand (car op) #t)))
 
 (module+ test #| indirect-y-opcode |#
   (check-equal? (indirect-y-opcode '((indirect-y . #x20)) '($10))
                 '(opcode #x20 #x10)))
 
 (define (indirect-opcode addressing-modes op)
-  `(opcode ,(cdr (find-addressing-mode 'indirect addressing-modes))
-           ,(low-byte (word-operand (car op)))
-           ,(high-byte (word-operand (car op)))))
+  (let ((word (word-operand (car op) #t)))
+    (if (number? word)
+        `(opcode ,(cdr (find-addressing-mode 'indirect addressing-modes))                                 
+                 ,(low-byte word)
+                 ,(high-byte word))
+        `(opcode ,(cdr (find-addressing-mode 'indirect addressing-modes))
+                 ,word))))
 
 (module+ test #| indirect-opcode |#
   (check-equal? (indirect-opcode '((indirect . #x20)) '($1000))

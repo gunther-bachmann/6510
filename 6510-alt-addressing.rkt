@@ -31,7 +31,7 @@
       `(no-operand-opcode 'accumulator ',addressings-defs)]
      [(byte-addressing? 'zero-page addressings-defs op)
       `(zero-page-opcode ',addressings-defs ',op)]
-     [(byte-addressing? 'relative addressings-defs op)
+     [(relative-addressing? addressings-defs op)
       `(relative-opcode ',addressings-defs ',op)]
      [(word-addressing? 'absolute addressings-defs op)
       `(absolute-opcode ',addressings-defs ',op)]
