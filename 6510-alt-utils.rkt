@@ -2,9 +2,7 @@
 
 (require "6510-utils.rkt")
 
-(provide make-id
-         
-         absolute-indexed-addressing?
+(provide absolute-indexed-addressing?
          accumulator-addressing?
          byte-addressing?
          immediate-addressing?
@@ -33,12 +31,17 @@
 
          raise-addressing-error)
 
+
+(define address-mode-to-resolve-map
+  (hash 'absolute 'resolve-word
+        'absolute-x 'resolve-word
+        'absolute-y 'resolve-word
+        'zero-page 'resolve-byte
+        'zero-page-x 'resolve-byte
+        'zero-page-y 'resolve-byte))
+
 (module+ test
   (require rackunit))
-
-(define (make-id stx id-template . ids)
-  (let ([str (apply format id-template (map syntax->datum ids))])
-    (datum->syntax stx (string->symbol str))))
 
 (define (possibly-byte-operand? any-num)
   (or (and (symbol? any-num)
@@ -463,11 +466,11 @@
          (raise-syntax-error 'ambiguous-addressing "no possible addressing mode found")]
         [(= 1 (length possible-addressing-modes))
          `(opcode ,(cdar possible-addressing-modes)
-                  (,(hash-ref address-mode-definitions (caar possible-addressing-modes))
+                  (,(hash-ref address-mode-to-resolve-map (caar possible-addressing-modes))
                    ,(->string op)))]
         [(< 1 (length possible-addressing-modes))
          `(decide ,(map (lambda (addressing-mode)
-                          `((,(hash-ref address-mode-definitions (car addressing-mode))
+                          `((,(hash-ref address-mode-to-resolve-map (car addressing-mode))
                              ,(->string op)) . (opcode ,(cdr addressing-mode))))
                         possible-addressing-modes) )]
         [#t (raise-syntax-error 'ambiguous-addressing "no option found for ambiguous address resolution")]))
@@ -502,24 +505,6 @@
               (member (car addressing-mode) pos-addressings))
             addressing-modes))
   (ambiguous-addressing-opcode possible-addressing-modes op))
-
-(define (->string el)
-  (cond [(string? el) el]
-        [(symbol? el) (symbol->string el)]))
-
-(module+ test #| ->string |#
-    (check-equal? (->string 'some)
-                  "some")
-    (check-equal? (->string "some")
-                  "some"))
-
-(define address-mode-definitions
-  (hash 'absolute 'resolve-word
-        'absolute-x 'resolve-word
-        'absolute-y 'resolve-word
-        'zero-page 'resolve-byte
-        'zero-page-x 'resolve-byte
-        'zero-page-y 'resolve-byte))
 
 (define (raise-addressing-error stx addressing-modes-stx)
   (raise-syntax-error

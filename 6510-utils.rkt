@@ -23,7 +23,18 @@
  word->hex-string
  word/c
  in-word-range?
- in-byte-range?)
+ in-byte-range?
+ ->string)
+
+(define (->string el)
+  (cond [(string? el) el]
+        [(symbol? el) (symbol->string el)]))
+
+(module+ test #| ->string |#
+    (check-equal? (->string 'some)
+                  "some")
+    (check-equal? (->string "some")
+                  "some"))
 
 (define (in-word-range? word)
   (and (<= word 65535) (>= word 0)))

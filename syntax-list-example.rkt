@@ -1,6 +1,6 @@
 #lang racket
 
-(require (for-syntax "6510-alt-utils.rkt"))
+(require (for-syntax "6510-syntax-utils.rkt"))
 
 (module+ test
   (require rackunit))

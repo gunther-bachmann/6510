@@ -1,7 +1,8 @@
 #lang racket
 
 (require "6510-alt-utils.rkt")
-(require (for-syntax "6510-alt-utils.rkt"))
+;; (require (for-syntax "6510-alt-utils.rkt"))
+(require (for-syntax "6510-syntax-utils.rkt"))
 (require (for-syntax "6510-alt-addressing.rkt"))
 
 (require (for-syntax "6510-utils.rkt"))

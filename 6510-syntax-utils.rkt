@@ -3,10 +3,14 @@
 (module+ test
   (require rackunit))
 
-(provide symbol-append discard-void-syntax-object
+(provide symbol-append discard-void-syntax-object make-id
          (struct-out one-arg-adr-modes)
          (struct-out ind-arg-adr-modes)
          (struct-out idx-arg-adr-modes))
+
+(define (make-id stx id-template . ids)
+  (let ([str (apply format id-template (map syntax->datum ids))])
+    (datum->syntax stx (string->symbol str))))
 
 ;; create a new symbol with the given appendix
 (define (symbol-append symbol appendix)
