@@ -158,21 +158,33 @@
   (check-equal? (STX some,y)
                 '(opcode #x96 (resolve-byte "some"))))
 
+(require "6510-utils.rkt")
+
+(define-syntax (label stx)
+  (syntax-case stx ()
+    ([_ str]
+     #'`(label-def ,(->string (syntax->datum #'str))))))
+
+(module+ test #| label |#
+  (check-equal?
+   (label some)
+   '(label-desf "some"))
+    (check-equal?
+   (label "some")
+   '(label-def "some")))
+
 ;; --------------------------------------------------------------------------------
 ;; additional syntax (ideas)
 ;;
-;; (label some)
-;; (byte-const some $10)
-;; (word-const other $FFD2)
-;; (byte $10 %1010)
-;; (word $FFD2 49152 %1001100110011001)
-;; (asc "some")
-;; (require-byte some other more)
-;; (require-word just-one)
-;; (provide-byte (as label-high >local-label)
+;; (byte-const some $10)                        -> (byte-const-def "some" 16)
+;; (word-const other $FFD2)                     -> (word-const-def "other" 65490)
+;; (byte $10 %1010)                             -> (byte-values 16 10)
+;; (word $FFD2 49152 %1001100110011001)         -> (word-values 65490 49152 39321)
+;; (asc "some")                                 -> (byte-values 115 111 109 101)
+;; (require-byte some other more)               -> (resolve-required-byte "some" "other" "more")
+;; (require-word just-one)                      -> (resolve-required-word "just-one")
+;; (provide-byte (as label-high >local-label)   -> (resolve-provided-byte "label-high" (resolve-byte ">some"))
 ;;               (as label-low <local-label)
 ;;               a-byte-const)
 ;; (provide-word local-label)
-;; (origin C000)
-
-
+;; (origin $C000)
