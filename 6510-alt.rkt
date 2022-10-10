@@ -168,18 +168,103 @@
 (module+ test #| label |#
   (check-equal?
    (label some)
-   '(label-desf "some"))
-    (check-equal?
+   '(label-def "some"))
+  (check-equal?
    (label "some")
    '(label-def "some")))
+
+(define-syntax (byte-const stx)
+  (syntax-case stx ()
+    ([_ label byte]
+     (and (6510-number-string? (->string (syntax->datum #'byte)))
+        (in-byte-range? (parse-number-string (->string (syntax->datum #'byte)))))
+     #'`(byte-const-def
+         ,(->string (syntax->datum #'label))
+         ,(parse-number-string (->string (syntax->datum #'byte)))))))
+
+(module+ test #| byte-const |#
+  (check-equal?
+   (byte-const some 10)
+   '(byte-const-def "some" 10))
+  (check-equal?
+   (byte-const some %10)
+   '(byte-const-def "some" #b10))
+  (check-equal?
+   (byte-const some $10)
+   '(byte-const-def "some" #x10))
+  (check-exn exn:fail:syntax? (λ () (expand #'(byte-const some $100)))))
+
+(define-syntax (word-const stx)
+  (syntax-case stx ()
+    ([_ label word]
+     (and (6510-number-string? (->string (syntax->datum #'word)))
+        (in-word-range? (parse-number-string (->string (syntax->datum #'word)))))
+     #'`(word-const-def
+         ,(->string (syntax->datum #'label))
+         ,(parse-number-string (->string (syntax->datum #'word)))))))
+
+(module+ test #| word-const |#
+  (check-equal?
+   (word-const some 1000)
+   '(word-const-def "some" 1000))
+  (check-equal?
+   (word-const some %100010001000)
+   '(word-const-def "some" #b100010001000))
+  (check-equal?
+   (word-const some $2000)
+   '(word-const-def "some" #x2000))
+  (check-exn exn:fail:syntax? (λ () (expand #'(word-const some $10000)))))
+
+(define-syntax (byte stx)
+  (syntax-case stx ()
+    ([_ byte ...]
+     (with-syntax (((is-byte-number ...)
+                    (map (λ (val)
+                           (let ((str-val (->string (syntax->datum val))))
+                             (and (6510-number-string? str-val)
+                                (in-byte-range? (parse-number-string str-val)))))
+                         (syntax->list #'(byte ...)))))
+       (all #'(is-byte-number ...)))
+     #'`(byte-value ,(parse-number-string (->string (syntax->datum #'byte))) ...))))
+
+(module+ test #| byte |#
+  (check-equal? (byte $10 $FF $D2 %10010000 %11111111)
+                '(byte-value #x10 #xFF #xD2 #b10010000 #b11111111))
+  (check-exn exn:fail:syntax? (λ () (expand #'(byte $10 $100)))))
+
+(define-for-syntax (parse-syntax-number val-stx)
+  (parse-number-string (->string (syntax->datum val-stx))))
+
+(define-for-syntax (all stx-list)
+  (foldl (λ (l r) (and (syntax->datum l) r))
+         #t
+         (syntax->list stx-list)))
+
+(define-syntax (word stx)
+  (syntax-case stx ()
+    ([_ word ...]
+     (with-syntax (((is-word-number ...)
+                    (map (λ (val)                           
+                           (and (6510-number-string? (->string (syntax->datum val)))
+                              (in-word-range? (parse-syntax-number val))))
+                         (syntax->list #'(word ...)))))
+       (all #'(is-word-number ...)))
+     (with-syntax (((low-bytes ...) (map (λ (word-num) (low-byte (parse-syntax-number word-num)))
+                                       (syntax->list #'(word ...))))
+                   ((high-bytes ...) (map (λ (word-num) (high-byte (parse-syntax-number word-num)))
+                                        (syntax->list #'(word ...)))))
+       #'`(byte-value ,@(map syntax->datum
+                             (flatten (map list (syntax->list #'(low-bytes ...))
+                                           (syntax->list #'(high-bytes ...))))))))))
+
+(module+ test #| word |#
+  (check-equal? (word $1000 $FFD2 %1001000011111111)
+                '(byte-value #x00 #x10 #xD2 #xFF #b11111111 #b10010000))
+  (check-exn exn:fail:syntax? (λ () (expand #'(word $1000 $10000)))))
 
 ;; --------------------------------------------------------------------------------
 ;; additional syntax (ideas)
 ;;
-;; (byte-const some $10)                        -> (byte-const-def "some" 16)
-;; (word-const other $FFD2)                     -> (word-const-def "other" 65490)
-;; (byte $10 %1010)                             -> (byte-values 16 10)
-;; (word $FFD2 49152 %1001100110011001)         -> (word-values 65490 49152 39321)
 ;; (asc "some")                                 -> (byte-values 115 111 109 101)
 ;; (require-byte some other more)               -> (resolve-required-byte "some" "other" "more")
 ;; (require-word just-one)                      -> (resolve-required-word "just-one")

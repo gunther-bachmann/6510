@@ -28,7 +28,8 @@
 
 (define (->string el)
   (cond [(string? el) el]
-        [(symbol? el) (symbol->string el)]))
+        [(symbol? el) (symbol->string el)]
+        [(number? el) (number->string el)]))
 
 (module+ test #| ->string |#
     (check-equal? (->string 'some)
