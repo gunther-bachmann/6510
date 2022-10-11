@@ -6,8 +6,10 @@
 
 (require (for-syntax "6510-utils.rkt"))
 
-(provide ASL BEQ BRK JMP NOP SBC STX) ;; 6510 commands
-(provide label word-const byte-const byte word asc) ;; meta commands
+(provide ASL BEQ BRK JMP JSR LDA LDX NOP SBC STX) ;; 6510 commands
+(provide label word-const byte-const byte word asc
+         ;; opcode
+         ) ;; meta commands
 
 (provide (all-from-out "6510-alt-utils.rkt"))
 
@@ -77,6 +79,59 @@
                 '(opcode #x6c #xd2 #xff))
   (check-equal? (JMP (some))
                 '(opcode #x6c (resolve-word "some"))))
+
+(define-opcode JSR ((absolute . #x20)))
+
+(module+ test #| JSR |#
+  (check-equal? (JSR $FFD2)
+                '(opcode #x20 #xd2 #xff)))
+
+(define-opcode LDA
+  ((immediate   . #xA9)
+   (zero-page   . #xA5)
+   (zero-page-x . #xB5)
+   (absolute    . #xAD)
+   (absolute-x  . #xBD)
+   (absolute-y  . #xB9)
+   (indirect-x  . #xA1)
+   (indirect-y  . #xB1)))
+
+(module+ test #| lda |#
+  (check-match (LDA "!$10")
+               '(opcode #xA9 16))
+  (check-match (LDA "$17")
+               '(opcode #xa5 #x17))
+  (check-match (LDA "$178F")
+               '(opcode #xad #x8F #x17))
+  (check-match (LDA "$10",x)
+               '(opcode #xB5 16))
+  (check-match (LDA "$A000",x)
+               '(opcode #xBD #x00 #xA0))
+  (check-match (LDA "$A000",y)
+               '(opcode #xB9 #x00 #xA0))
+  (check-match (LDA ("$A0"),y )
+               '(opcode #xB1 #xA0))
+  (check-match (LDA ("$A0",x) )
+               '(opcode #xA1 #xA0)))
+
+(define-opcode LDX
+  ((immediate   . #xA2)
+   (zero-page   . #xA6)
+   (zero-page-y . #xB6)
+   (absolute    . #xAE)
+   (absolute-y  . #xBE)))
+
+(module+ test #| LDX |#
+  (check-equal? (LDX !$10)
+                '(opcode #xA2 #x10))
+  (check-equal? (LDX $10)
+                '(opcode #xA6 #x10))
+  (check-equal? (LDX $10,y)
+                '(opcode #xB6 #x10))
+  (check-equal? (LDX $1020)
+                '(opcode #xAE #x20 #x10))
+  (check-equal? (LDX $1020,y)
+                '(opcode #xBE #x20 #x10)))
 
 (define (NOP)
   '(opcode #xea))
@@ -275,6 +330,10 @@
 (module+ test #| asc |#
   (check-equal? (asc "some")
                 '(byte 115 111 109 101)))
+
+;; (define (opcode . args) (append (list 'opcode) args))
+
+
 
 ;; --------------------------------------------------------------------------------
 ;; additional syntax (ideas)
