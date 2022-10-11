@@ -29,13 +29,18 @@
 (define (->string el)
   (cond [(string? el) el]
         [(symbol? el) (symbol->string el)]
-        [(number? el) (number->string el)]))
+        [(number? el) (number->string el)]
+        [(syntax? el) (->string (syntax->datum el))]))
 
 (module+ test #| ->string |#
-    (check-equal? (->string 'some)
-                  "some")
-    (check-equal? (->string "some")
-                  "some"))
+  (check-equal? (->string 'some)
+                "some")
+  (check-equal? (->string "some")
+                "some")
+  (check-equal? (->string 45)
+                "45")
+  (check-equal? (->string #'45)
+                "45"))
 
 (define (in-word-range? word)
   (and (<= word 65535) (>= word 0)))

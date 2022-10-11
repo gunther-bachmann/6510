@@ -381,7 +381,7 @@
                 [accres (when (accumulator? adr-modes) (accumulator-mode opcode op))]
                 [relres (when (relative? adr-modes) (relative-mode opcode op))])
     (let* ([res (collect-syntax-result (list #'relres #'accres #'ires #'zpres #'absres))]
-           [opcode-string (symbol->string (syntax->datum opcode))]
+           [opcode-string (->string opcode)]
            [error-string (error-string/single adr-modes opcode-string non-racket-syn)])
       (if (empty? (syntax->datum res))
           (raise-syntax-error error-string opcode non-racket-syn org-string stx)
@@ -399,7 +399,7 @@
 (define-for-syntax (opcode-with-addressing/just-indirect adr-modes opcode open op close stx non-racket-syn org-string)
   (with-syntax ([ind (when (indirect? adr-modes) (indirect-mode opcode open op close))])
     (let* ([res (collect-syntax-result (list #'ind))]
-           [opcode-string (symbol->string (syntax->datum opcode))]
+           [opcode-string (->string opcode)]
            [error-string (error-string/indirect adr-modes opcode-string non-racket-syn)])
       (if (equal? '() (syntax->datum res))
           (raise-syntax-error error-string opcode non-racket-syn org-string stx)
@@ -414,7 +414,7 @@
   (with-syntax ([indxres (when (indirect-x? adr-modes) (indirect-x-mode opcode open op close-or-x close-or-y))]
                 [indyres (when (indirect-y? adr-modes) (indirect-y-mode opcode open op close-or-x close-or-y))])
     (let* ([res (collect-syntax-result (list #'indxres #'indyres))]
-           [opcode-string (symbol->string (syntax->datum opcode))]
+           [opcode-string (->string opcode)]
            [error-string (error-string/indirect adr-modes opcode-string non-racket-syn)])
       (if (equal? '() (syntax->datum res))
           (raise-syntax-error error-string opcode non-racket-syn org-string stx)
@@ -435,7 +435,7 @@
                 [absxres (when (absolute-x? adr-modes) (absolute-x-mode opcode op idx))]
                 [absyres (when (absolute-y? adr-modes) (absolute-y-mode opcode op idx))])
     (let* ([res (collect-syntax-result (list #'zpxres #'zpyres #'absxres #'absyres))]
-           [opcode-string (symbol->string (syntax->datum opcode))]
+           [opcode-string (->string opcode)]
            [error-string (error-string/indexed adr-modes opcode-string non-racket-syn)])
       (if (equal? '() (syntax->datum res))
           (raise-syntax-error error-string opcode non-racket-syn org-string stx)

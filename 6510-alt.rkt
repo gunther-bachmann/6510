@@ -164,7 +164,7 @@
 (define-syntax (label stx)
   (syntax-case stx ()
     ([_ str]
-     #'`(label-def ,(->string (syntax->datum #'str))))))
+     #'`(label-def ,(->string #'str)))))
 
 (module+ test #| label |#
   (check-equal?
@@ -177,11 +177,11 @@
 (define-syntax (byte-const stx)
   (syntax-case stx ()
     ([_ label byte]
-     (and (6510-number-string? (->string (syntax->datum #'byte)))
-        (in-byte-range? (parse-number-string (->string (syntax->datum #'byte)))))
+     (and (6510-number-string? (->string #'byte))
+        (in-byte-range? (parse-number-string (->string #'byte))))
      #'`(byte-const-def
-         ,(->string (syntax->datum #'label))
-         ,(parse-number-string (->string (syntax->datum #'byte)))))))
+         ,(->string #'label)
+         ,(parse-number-string (->string #'byte))))))
 
 (module+ test #| byte-const |#
   (check-equal?
@@ -198,11 +198,11 @@
 (define-syntax (word-const stx)
   (syntax-case stx ()
     ([_ label word]
-     (and (6510-number-string? (->string (syntax->datum #'word)))
-        (in-word-range? (parse-number-string (->string (syntax->datum #'word)))))
+     (and (6510-number-string? (->string #'word))
+        (in-word-range? (parse-number-string (->string #'word))))
      #'`(word-const-def
-         ,(->string (syntax->datum #'label))
-         ,(parse-number-string (->string (syntax->datum #'word)))))))
+         ,(->string #'label)
+         ,(parse-number-string (->string #'word))))))
 
 (module+ test #| word-const |#
   (check-equal?
@@ -221,12 +221,12 @@
     ([_ byte ...]
      (with-syntax (((is-byte-number ...)
                     (map (λ (val)
-                           (let ((str-val (->string (syntax->datum val))))
+                           (let ((str-val (->string val)))
                              (and (6510-number-string? str-val)
                                 (in-byte-range? (parse-number-string str-val)))))
                          (syntax->list #'(byte ...)))))
        (all #'(is-byte-number ...)))
-     #'`(byte-value ,(parse-number-string (->string (syntax->datum #'byte))) ...))))
+     #'`(byte-value ,(parse-number-string (->string #'byte)) ...))))
 
 (module+ test #| byte |#
   (check-equal? (byte $10 $FF $D2 %10010000 %11111111)
@@ -234,7 +234,7 @@
   (check-exn exn:fail:syntax? (λ () (expand #'(byte $10 $100)))))
 
 (define-for-syntax (parse-syntax-number val-stx)
-  (parse-number-string (->string (syntax->datum val-stx))))
+  (parse-number-string (->string val-stx)))
 
 (define-for-syntax (all stx-list)
   (foldl (λ (l r) (and (syntax->datum l) r))
@@ -246,7 +246,7 @@
     ([_ word ...]
      (with-syntax (((is-word-number ...)
                     (map (λ (val)                           
-                           (and (6510-number-string? (->string (syntax->datum val)))
+                           (and (6510-number-string? (->string val))
                               (in-word-range? (parse-syntax-number val))))
                          (syntax->list #'(word ...)))))
        (all #'(is-word-number ...)))
@@ -263,14 +263,14 @@
                 '(byte-value #x00 #x10 #xD2 #xFF #b11111111 #b10010000))
   (check-exn exn:fail:syntax? (λ () (expand #'(word $1000 $10000)))))
 
-(define (c64-char-byte char)
+(define (c64-char->byte char)
   (char->integer char))
 
 (define-syntax (asc stx)
   (syntax-case stx ()
     ([_ str]
      (string? (syntax->datum #'str))
-     #'`(byte ,@(map c64-char-byte (string->list (->string (syntax->datum #'str))))))))
+     #'`(byte ,@(map c64-char->byte (string->list (->string #'str)))))))
 
 (module+ test
   (require ansi-color)
