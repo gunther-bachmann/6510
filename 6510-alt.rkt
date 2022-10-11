@@ -1,13 +1,14 @@
 #lang racket
 
 (require "6510-alt-utils.rkt")
-;; (require (for-syntax "6510-alt-utils.rkt"))
 (require (for-syntax "6510-syntax-utils.rkt"))
 (require (for-syntax "6510-alt-addressing.rkt"))
 
 (require (for-syntax "6510-utils.rkt"))
 
-(provide ASL BEQ BRK JMP NOP SBC STX)
+(provide ASL BEQ BRK JMP NOP SBC STX) ;; 6510 commands
+(provide label word-const byte-const byte word asc) ;; meta commands
+
 (provide (all-from-out "6510-alt-utils.rkt"))
 
 (module+ test
@@ -262,10 +263,31 @@
                 '(byte-value #x00 #x10 #xD2 #xFF #b11111111 #b10010000))
   (check-exn exn:fail:syntax? (λ () (expand #'(word $1000 $10000)))))
 
+(define (c64-char-byte char)
+  (char->integer char))
+
+(define-syntax (asc stx)
+  (syntax-case stx ()
+    ([_ str]
+     (string? (syntax->datum #'str))
+     #'`(byte ,@(map c64-char-byte (string->list (->string (syntax->datum #'str))))))))
+
+(module+ test
+  (require ansi-color)
+  (define-syntax (skip stx)
+    (syntax-case stx ()
+      ([_ body]
+       #'(check-true (begin
+                       (with-colors 'red
+                         (lambda () (color-displayln "test skipped.")))
+                       #t))))))
+
+(module+ test #| asc |#
+  (check-equal? (asc "some")
+                  '(byte 115 111 109 101)))
 ;; --------------------------------------------------------------------------------
 ;; additional syntax (ideas)
 ;;
-;; (asc "some")                                 -> (byte-values 115 111 109 101)
 ;; (require-byte some other more)               -> (resolve-required-byte "some" "other" "more")
 ;; (require-word just-one)                      -> (resolve-required-word "just-one")
 ;; (provide-byte (as label-high >local-label)   -> (resolve-provided-byte "label-high" (resolve-byte ">some"))
