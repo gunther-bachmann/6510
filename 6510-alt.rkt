@@ -12,7 +12,7 @@
 (provide (all-from-out "6510-alt-utils.rkt"))
 
 (module+ test
-  (require rackunit))
+  (require "6510-test-utils.rkt"))
 
 ;;--------------------------------------------------------------------------------
 ;; https://docs.racket-lang.org/reference/syntax-util.html
@@ -272,19 +272,10 @@
      (string? (syntax->datum #'str))
      #'`(byte ,@(map c64-char->byte (string->list (->string #'str)))))))
 
-(module+ test
-  (require ansi-color)
-  (define-syntax (skip stx)
-    (syntax-case stx ()
-      ([_ body]
-       #'(check-true (begin
-                       (with-colors 'red
-                         (lambda () (color-displayln "test skipped.")))
-                       #t))))))
-
 (module+ test #| asc |#
   (check-equal? (asc "some")
-                  '(byte 115 111 109 101)))
+                '(byte 115 111 109 101)))
+
 ;; --------------------------------------------------------------------------------
 ;; additional syntax (ideas)
 ;;
