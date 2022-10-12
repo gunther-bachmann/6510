@@ -46,8 +46,8 @@
            (require "6510-debugger.rkt")
            (provide program
                     raw-program
-                    resolved-program 
-                    raw-bytes
+                    ;; resolved-program
+                    ;; raw-bytes
                     stx-program
                     sy-program)
            (define stx-program (syntax #,unenc-prg)) ;; examine how to pass source location into the generated racket program

@@ -4,14 +4,23 @@
 (require (for-syntax "6510-syntax-utils.rkt"))
 (require (for-syntax "6510-alt-addressing.rkt"))
 
+(require "6510-utils.rkt")
 (require (for-syntax "6510-utils.rkt"))
 
-(provide ADC ASL
-         BEQ BNE BPL BRK BVC BVS
-         CLC CLD CLI CLV
-         DEX JMP JSR LDA LDX NOP
-         RTS
-         SBC STX) ;; 6510 commands
+(provide ADC AND ASL
+         BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS
+         CLC CLD CLI CLV CMP CPX CPY
+         DEC DEX DEY
+         EOR
+         INC INX INY
+         JMP JSR
+         LDA LDX LDY LSR
+         NOP
+         ORA
+         PHA PHP PLA PLP 
+         ROL ROR RTI RTS
+         SBC SEC SED SEI STA STX STY
+         TAX TAY TSX TXA TXS TYA) 
 (provide label word-const byte-const byte word asc
          ;; opcode
          ) ;; meta commands
@@ -48,6 +57,16 @@
    (indirect-x  . #x61)
    (indirect-y  . #x71)))
 
+(define-opcode AND
+  ((indirect-x   . #x21)
+    (zero-page   . #x25)
+    (immediate   . #x29)
+    (absolute    . #x2d)
+    (indirect-y  . #x31)
+    (zero-page-x . #x35)
+    (absolute-y  . #x39)
+    (absolute-x  . #x3d)))
+
 (define-opcode ASL
   ((accumulator . #x0a)
    (zero-page   . #x06)
@@ -67,6 +86,8 @@
   (check-equal? (ASL $1000,x)
                 '(opcode #x1e #x00 #x10)))
 
+(define-opcode BCC ((relative . #x90)))
+(define-opcode BCS ((relative . #xb0)))
 (define-opcode BEQ ((relative . #xf0)))
 
 (module+ test #| BEQ |#
@@ -75,8 +96,26 @@
   (check-equal? (BEQ some)
                 '(rel-opcode #xf0 (resolve-relative "some"))))
 
+(define-opcode BIT
+  ((zero-page . #x24)
+   (absolute . #x2c)))
+
+(module+ test
+  (check-match (BEQ "$FC")
+               '(rel-opcode #xF0 #xfc))
+  (check-match (BEQ "some")
+               '(rel-opcode #xF0 (resolve-relative "some"))))
+
+(define-opcode BMI ((relative . #x30)))
+
 (define-opcode BNE ((relative . #xd0)))
 (define-opcode BPL ((relative  . #x10)))
+
+(define-opcode BRK ((implicit . #x00)))
+
+(module+ test #| BRK |#
+  (check-equal?  (BRK)
+                 '(opcode #x00)))
 
 (define-opcode BVC ((relative . #x50)))
 (define-opcode BVS ((relative . #x70)))
@@ -86,19 +125,63 @@
 (define-opcode CLI ((implicit . #x58)))
 (define-opcode CLV ((implicit . #xb8)))
 
+(define-opcode CMP
+  ((indirect-x . #xc1)
+  (zero-page   . #xc5)
+  (immediate   . #xc9)
+  (absolute    . #xcd)
+  (indirect-y  . #xd1)
+  (zero-page-x . #xd5)
+  (absolute-y  . #xd9)
+  (absolute-x  . #xdd)))
 
+(define-opcode CPX
+  ((immediate . #xe0) (zero-page . #xe4) (absolute #xec)))
 
-(define-opcode BRK ((implicit . #x00)))
+(define-opcode CPY
+  ((immediate . #xc0) (zero-page . #xc4) (absolute . #xcc)))
 
-(module+ test #| BRK |#
-  (check-equal?  (BRK)
-                 '(opcode #x00)))
+(define-opcode DEC
+  ((zero-page . #xc6) (absolute . #xce) (absolute-x . #xde)  (zero-page-x . #xd6)))
 
 (define-opcode DEX ((implicit . #xCA)))
 
 (module+ test #| DEX |#
   (check-equal? (DEX)
                 '(opcode #xca)))
+
+(define-opcode DEY ((implicit . #x88)))
+
+(define-opcode EOR
+  ((indirect-x  . #x41)
+   (zero-page   . #x45)
+   (immediate   . #x49)
+   (absolute    . #x4d)
+   (indirect-y  . #x51)
+   (zero-page-x . #x55)
+   (absolute-y  . #x59)
+   (absolute-x  . #x5d)))
+
+(define-opcode INC
+  ((zero-page . #xe6) (absolute . #xee) (absolute-x . #xfe) (zero-page-x . #xf6)))
+
+(module+ test
+  (check-match (INC "$10")
+               '(opcode #xE6 #x10))
+
+  (check-match (INC "$10",x)
+               '(opcode #xF6 #x10))
+
+  (check-match (INC "$1000")
+               '(opcode #xEE #x00 #x10))
+
+  (check-match (INC "$1000",x)
+               '(opcode #xFE #x00 #x10)))
+
+(define-opcode INX ((implicit . #xe8)))
+
+(define-opcode INY ((implicit . #xc8)))
+
 
 (define-opcode JMP
   ((absolute . #x4C)
@@ -167,8 +250,74 @@
   (check-equal? (LDX $1020,y)
                 '(opcode #xBE #x20 #x10)))
 
+(define-opcode LDY
+  ((immediate   . #xA0)
+   (zero-page   . #xA4)
+   (zero-page-x . #xB4)
+   (absolute    . #xAC)
+   (absolute-x  . #xBC)))
+
+(define-opcode LSR
+  ((zero-page   . #x46)
+   (implicit    . #x4a)
+   (absolute    . #x4e)
+   (zero-page-x . #x56)
+   (absolute-x  . #x5e)))
+
 (define (NOP)
   '(opcode #xea))
+
+(define-opcode ORA
+  ((indirect-x  . #x01)
+   (zero-page   . #x05)
+   (immediate   . #x09)
+   (absolute    . #x0d)
+   (indirect-y  . #x11)
+   (zero-page-x . #x15)
+   (absolute-y  . #x19)
+   (absolute-x  . #x1d)))
+
+(module+ test #| ora |#
+  (check-match (ORA ("$10",x))
+               '(opcode #x01 #x10))
+  (check-match (ORA "$10")
+               '(opcode #x05 #x10))
+  (check-match (ORA "!$10")
+               '(opcode #x09 #x10))
+  (check-match (ORA "$1011")
+               '(opcode #x0d #x11 #x10))
+  (check-match (ORA ("$10"),y)
+               '(opcode #x11 #x10))
+  (check-match (ORA "$10",x)
+               '(opcode #x15 #x10))
+  (check-match (ORA "$1011",y)
+               '(opcode #x19 #x11 #x10))
+  (check-match (ORA "$1011",x)
+               '(opcode #x1d #x11 #x10)))
+
+(define-opcode PHA ((implicit . #x48)))
+
+(define-opcode PHP ((implicit . #x08)))
+
+(define-opcode PLA ((implicit . #x68)))
+
+(define-opcode PLP ((implicit . #x28)))
+
+(define-opcode ROL
+  ((zero-page   . #x26)
+   (implicit    . #x2a)
+   (absolute    . #x2e)
+   (zero-page-x . #x36)
+   (absolute-x  . #x3e)))
+
+(define-opcode ROR
+  ((zero-page   . #x66)
+   (implicit    . #x6a)
+   (absolute    . #x6e)
+   (zero-page-x . #x76)
+   (absolute-x  . #x7e)))
+
+(define-opcode RTI ((implicit . #x40)))
 
 (define-opcode RTS ((implicit . #x60)))
 
@@ -232,6 +381,43 @@
                 '(opcode #xf1 (resolve-byte "some"))
                 "only option is to resolve to byte"))
 
+(define-opcode SEC ((implicit . #x38)))
+
+(define-opcode SED ((implicit . #xf8)))
+
+(define-opcode SEI ((implicit . #x78)))
+
+(define-opcode STA
+  ((zero-page   . #x85)
+   (zero-page-x . #x95)
+   (absolute    . #x8d)
+   (absolute-x  . #x9d)
+   (absolute-y  . #x99)
+   (indirect-x  . #x81)
+   (indirect-y  . #x91)))
+
+(module+ test
+  (check-match (STA "$17")
+               '(opcode #x85 23))
+
+  (check-match (STA "$1728")
+               '(opcode #x8d #x28 #x17))
+
+  (check-match (STA ("$17",x))
+               '(opcode #x81 #x17))
+
+  (check-match (STA ("$28"),y)
+               '(opcode #x91 #x28))
+
+  (check-match (STA "$1728",x)
+               '(opcode #x9d #x28 #x17))
+
+  (check-match (STA "$1728",y)
+               '(opcode #x99 #x28 #x17))
+
+  (check-match (STA "$28",x)
+               '(opcode #x95 #x28)))
+
 (define-opcode STX
   ((zero-page   . #x86)
    (absolute    . #x8e)
@@ -250,7 +436,23 @@
   (check-equal? (STX some,y)
                 '(opcode #x96 (resolve-byte "some"))))
 
-(require "6510-utils.rkt")
+(define-opcode STY
+  ((zero-page   . #x84)
+   (absolute    . #x8c)
+   (zero-page-x . #x94)))
+
+(define-opcode TAX ((implicit . #xaa)))
+
+(define-opcode TAY ((implicit . #xa8)))
+
+(define-opcode TSX ((implicit . #xba)))
+
+(define-opcode TXA ((implicit . #x8a)))
+
+(define-opcode TXS ((implicit . #x9a)))
+
+(define-opcode TYA ((implicit . #x98)))
+
 
 (define-syntax (label stx)
   (syntax-case stx ()
@@ -367,7 +569,7 @@
 
 (module+ test #| asc |#
   (check-equal? (asc "some")
-                '(byte 115 111 109 101)))
+                '(byte-value 115 111 109 101)))
 
 ;; (define (opcode . args) (append (list 'opcode) args))
 

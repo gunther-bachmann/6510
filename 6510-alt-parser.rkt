@@ -326,7 +326,7 @@
 (define zero-page-y/p
   (do [x <- (or/p byte/p 6510-label-byte/p)]
       (string-cia/p ",y")
-    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) 'y))))
+    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',y))))
 
 (module+ test #| indirect/p indirect-x/p absolute/p |#
   (check-match (parsed-string-result immediate/p "#$10")
