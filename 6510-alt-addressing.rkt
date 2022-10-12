@@ -1,13 +1,25 @@
 #lang racket
 
-(require "6510-alt-utils.rkt")
+(require (for-syntax "6510-alt-utils.rkt"))
+(require (for-syntax "6510-syntax-utils.rkt"))
 
-(provide one-op two-op no-op)
+(provide define-opcode)
 
 (module+ test
-  (require rackunit))
+  (begin-for-syntax
+    (require rackunit)))
 
-(define (no-op stx addressings-defs)
+(define-syntax (define-opcode stx)
+    (syntax-case stx ()
+      ([_ mnemonic addressing-modes]
+       (with-syntax ((nstx (make-id stx "~a" #'nstx)))
+         #`(define-syntax (mnemonic nstx)
+             (syntax-case nstx ()
+               ([_]         (no-op  nstx #'addressing-modes))
+               ([_ op]      (one-op nstx #'addressing-modes #'op))
+               ([_ op1 op2] (two-op nstx #'addressing-modes #'op1 #'op2))))))))
+
+(define-for-syntax (no-op stx addressings-defs)
   (datum->syntax
    stx
    (cond
@@ -16,11 +28,12 @@
      [#t (raise-addressing-error stx addressings-defs)])))
 
 (module+ test #| no-op |#
-  (check-equal?
-   (syntax->datum (no-op #f #'((implicit . #x10))))
-   '(no-operand-opcode 'implicit '((implicit . #x10)))))
+  (begin-for-syntax
+    (check-equal?
+     (syntax->datum (no-op #f #'((implicit . #x10))))
+     '(no-operand-opcode 'implicit '((implicit . #x10))))))
 
-(define (one-op stx addressings-defs op)
+(define-for-syntax (one-op stx addressings-defs op)
   (define possible-ambiguous-addressing '(zero-page  absolute))
   (datum->syntax
    stx
@@ -44,11 +57,12 @@
      [#t (raise-addressing-error stx addressings-defs)])))
 
 (module+ test #|one-op|#
-  (check-equal?
+  (begin-for-syntax
+    (check-equal?
      (syntax->datum (one-op #f #'((accumulator . #x10)) #'A))
-     (quote (no-operand-opcode 'accumulator '((accumulator . #x10))))))
+     (quote (no-operand-opcode 'accumulator '((accumulator . #x10)))))))
 
-(define (two-op stx addressings-defs op1 op2)
+(define-for-syntax (two-op stx addressings-defs op1 op2)
   (define possible-ambiguous-indexed-addressing
     '((zero-page-x . ,x) (zero-page-y . ,y) (absolute-x . ,x) (absolute-y . ,y)))
   (datum->syntax

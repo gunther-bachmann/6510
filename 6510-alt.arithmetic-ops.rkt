@@ -1,0 +1,86 @@
+#lang racket
+
+(require "6510-alt-utils.rkt")
+(require "6510-alt-addressing.rkt")
+
+(provide ADC SBC) 
+
+(module+ test
+  (require "6510-test-utils.rkt"))
+
+;;--------------------------------------------------------------------------------
+;; https://docs.racket-lang.org/reference/syntax-util.html
+;; (format-id ...)
+
+;; https://blog.racket-lang.org/2011/04/writing-syntax-case-macros.html
+;;--------------------------------------------------------------------------------
+
+(define-opcode ADC
+  ((immediate  . #x69)
+   (zero-page  . #x65)
+   (zero-page-x . #x75)
+   (absolute    . #x6d)
+   (absolute-x  . #x7d)
+   (absolute-y  . #x79)
+   (indirect-x  . #x61)
+   (indirect-y  . #x71)))
+
+(define-opcode SBC
+  ((immediate   . #xe9)
+   (zero-page   . #xe5)
+   (zero-page-x . #xf5)
+   (absolute    . #xed)
+   (absolute-x  . #xfd)
+   (absolute-y  . #xf9)
+   (indirect-x  . #xe1)
+   (indirect-y  . #xf1)))
+
+(module+ test #| SBC |#
+  (check-equal? (SBC !$11)
+                '(opcode #xe9 #x11))
+  (check-equal? (SBC !>some)
+                '(opcode #xe9 (resolve-byte ">some")))
+  (check-equal? (SBC !some)
+                '(opcode #xe9 (resolve-byte "some"))
+                "only option is to resolve to byte")
+  (check-equal? (SBC $10)
+                '(opcode #xe5 #x10))
+  (check-equal? (SBC >some)
+                '(opcode #xe5 (resolve-byte ">some")))
+  (check-equal? (SBC <some)
+                '(opcode #xe5 (resolve-byte "<some")))
+  (check-equal? (SBC $10,x)
+                '(opcode #xf5 #x10))
+  (check-equal? (SBC <some,x)
+                '(opcode #xf5 (resolve-byte "<some")))
+  (check-equal? (SBC $FF10)
+                '(opcode #xed #x10 #xff))
+  (check-equal? (SBC some)
+                '(decide (((resolve-byte "some") . (opcode #xe5))
+                          ((resolve-word "some") . (opcode #xed))))
+                "two options resolve to byte (zero page) or word (absolute)")
+  (check-equal? (SBC $1112,x)
+                '(opcode #xfd #x12 #x11))
+  (check-equal? (SBC $1000,y)
+                '(opcode #xf9 #x00 #x10))
+  (check-equal? (SBC some,x)
+                '(decide (((resolve-byte "some") . (opcode #xf5))
+                          ((resolve-word "some") . (opcode #xfd))))
+                "two options resolve to byte (zero page-x) or word (absolute-x)")
+  (check-equal? (SBC some,y)
+                '(opcode #xf9 (resolve-word "some"))
+                "only option is to resolve to byte (zero-page-y)")
+  (check-equal? (SBC ($11,x))
+                '(opcode #xe1 #x11))
+  (check-equal? (SBC (some,x))
+                '(opcode #xe1 (resolve-byte "some"))
+                "only option is to resolve to byte")
+  (check-equal? (SBC (<some,x))
+                '(opcode #xe1 (resolve-byte "<some")))
+  (check-equal? (SBC ($11),y)
+                '(opcode #xf1 #x11))
+  (check-equal? (SBC (>some),y)
+                '(opcode #xf1 (resolve-byte ">some")))  
+  (check-equal? (SBC (some),y)
+                '(opcode #xf1 (resolve-byte "some"))
+                "only option is to resolve to byte"))

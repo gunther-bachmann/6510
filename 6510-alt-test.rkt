@@ -37,4 +37,4 @@
      (opcode 234)
      (opcode 245 16)
      (opcode 150 58)
-     (byte 115 111 109 101))))
+     (byte-value 115 111 109 101))))
