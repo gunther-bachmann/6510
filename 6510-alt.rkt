@@ -6,7 +6,12 @@
 
 (require (for-syntax "6510-utils.rkt"))
 
-(provide ASL BEQ BRK JMP JSR LDA LDX NOP SBC STX) ;; 6510 commands
+(provide ADC ASL
+         BEQ BNE BPL BRK BVC BVS
+         CLC CLD CLI CLV
+         DEX JMP JSR LDA LDX NOP
+         RTS
+         SBC STX) ;; 6510 commands
 (provide label word-const byte-const byte word asc
          ;; opcode
          ) ;; meta commands
@@ -32,6 +37,16 @@
                ([_]         (no-op  nstx #'addressing-modes))
                ([_ op]      (one-op nstx #'addressing-modes #'op))
                ([_ op1 op2] (two-op nstx #'addressing-modes #'op1 #'op2))))))))
+
+(define-opcode ADC
+  ((immediate  . #x69)
+   (zero-page  . #x65)
+   (zero-page-x . #x75)
+   (absolute    . #x6d)
+   (absolute-x  . #x7d)
+   (absolute-y  . #x79)
+   (indirect-x  . #x61)
+   (indirect-y  . #x71)))
 
 (define-opcode ASL
   ((accumulator . #x0a)
@@ -60,11 +75,30 @@
   (check-equal? (BEQ some)
                 '(rel-opcode #xf0 (resolve-relative "some"))))
 
+(define-opcode BNE ((relative . #xd0)))
+(define-opcode BPL ((relative  . #x10)))
+
+(define-opcode BVC ((relative . #x50)))
+(define-opcode BVS ((relative . #x70)))
+
+(define-opcode CLC ((implicit . #x18)))
+(define-opcode CLD ((implicit . #xd8)))
+(define-opcode CLI ((implicit . #x58)))
+(define-opcode CLV ((implicit . #xb8)))
+
+
+
 (define-opcode BRK ((implicit . #x00)))
 
 (module+ test #| BRK |#
   (check-equal?  (BRK)
                  '(opcode #x00)))
+
+(define-opcode DEX ((implicit . #xCA)))
+
+(module+ test #| DEX |#
+  (check-equal? (DEX)
+                '(opcode #xca)))
 
 (define-opcode JMP
   ((absolute . #x4C)
@@ -135,6 +169,8 @@
 
 (define (NOP)
   '(opcode #xea))
+
+(define-opcode RTS ((implicit . #x60)))
 
 (define-opcode SBC
   ((immediate   . #xe9)
@@ -286,6 +322,8 @@
 (module+ test #| byte |#
   (check-equal? (byte $10 $FF $D2 %10010000 %11111111)
                 '(byte-value #x10 #xFF #xD2 #b10010000 #b11111111))
+  (check-equal? (byte "$10" "$FF" "$D2" "%10010000" "%11111111")
+                '(byte-value #x10 #xFF #xD2 #b10010000 #b11111111))
   (check-exn exn:fail:syntax? (λ () (expand #'(byte $10 $100)))))
 
 (define-for-syntax (parse-syntax-number val-stx)
@@ -325,7 +363,7 @@
   (syntax-case stx ()
     ([_ str]
      (string? (syntax->datum #'str))
-     #'`(byte ,@(map c64-char->byte (string->list (->string #'str)))))))
+     #'`(byte-value ,@(map c64-char->byte (string->list (->string #'str)))))))
 
 (module+ test #| asc |#
   (check-equal? (asc "some")

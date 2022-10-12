@@ -273,7 +273,7 @@
 (define immediate/p
   (do (char/p #\#)
       [x <- (or/p 6510-label-byte/p byte/p)]
-    (pure (list (string-append "#" (if (number? x) (number->string x) (last (syntax->datum x))))))))
+    (pure (list (string-append "!" (if (number? x) (number->string x) (last (syntax->datum x))))))))
 
 (define zero-page-or-relative/p
   (do [b <- (or/p byte/p 6510-label-byte/p)]
@@ -289,6 +289,10 @@
     (string-cia/p ",x")
     (char/p #\))                       
     (pure (list (list (if (number? mem) (number->string mem) (last (syntax->datum mem))) ',x )))))
+
+(module+ test #| indirect-x |#
+    (check-match (parsed-string-result indirect-x/p "($11,x)")
+                 '(("17",x))))
 
 (define indirect-y/p
   (do 
@@ -307,17 +311,17 @@
 (define absolute-x/p
   (do [x <- (or/p word/p 6510-label/p)]
       (string-cia/p ",x")
-    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) 'x))))
+    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',x))))
 
 (define absolute-y/p
   (do [x <- (or/p word/p 6510-label/p)]
       (string-cia/p ",y")
-    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) 'y))))
+    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',y))))
 
 (define zero-page-x/p
   (do [x <- (or/p byte/p 6510-label-byte/p)]
       (string-cia/p ",x")
-    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) 'x))))
+    (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',x))))
 
 (define zero-page-y/p
   (do [x <- (or/p byte/p 6510-label-byte/p)]
@@ -326,7 +330,7 @@
 
 (module+ test #| indirect/p indirect-x/p absolute/p |#
   (check-match (parsed-string-result immediate/p "#$10")
-               '("#16"))
+               '("!16"))
   ;; (check-match (parsed-string-result zero-page-or-relative/p "<some")
   ;;              '("<some"))
   (check-match (parsed-string-result zero-page-or-relative/p "$11")
@@ -446,14 +450,14 @@
     (char/p #\")
     [result <- (many/p (char-not/p #\"))]
     (char/p #\")
-    (pure (list 'ASC (list->string result)))
+    (pure (list 'asc (list->string result)))
     ))
 
 (module+ test #| asc-string/p |#
   (check-match (parsed-string-result asc-string/p ".asc  \"some\"")
-               '(ASC "some"))
+               '(asc "some"))
   (check-match (parsed-string-result asc-string/p ".asc  \"some 'other'\"")
-               '(ASC "some 'other'")))
+               '(asc "some 'other'")))
 
 ;; parser for ".data (byte/p (","|ml_whitespace/p) ...)
 (define data-bytes/p
@@ -587,48 +591,83 @@
                 '((byte-value 255 16)))
   (check-equal? (parse-opcodes "LDX $ff00\nsome: JSR some")
                 '((opcode 174 0 255) (label-def "some") (opcode 32 (resolve-word "some"))))
-;;   (check-equal? (parse-program #<<EOF
-;;        *=$0810        ; origin (basic start, to make loading and executing easier)
+  (check-equal? (parse-program #<<EOF
+       *=$0810        ; origin (basic start, to make loading and executing easier)
 
-;; ;        ;; lda #23
-;; ;        ;; sta 53272
-;; ;
-;;          ldx $c000  ;; hello
-;;  sout:   lda hello,x
-;;          jsr $ffd2
-;;          dex
-;;          bne sout
+;        ;; lda #23
+;        ;; sta 53272
+;
+         ldx hello
+ sout:   lda hello,x
+         jsr $ffd2
+         dex
+         bne sout
 
-;;          clc
-;; ;         ldx #$05       ; repeat .. times
-;;  some:
-;; ;         lda #$41       ; load character A (dec 65)
-;;          jsr cout      ; print this character to screen
-;; ;         adc #1         ; load character B (dec 66)
-;;          jsr cout      ; print this character to screen
-;; ;         adc #1
-;;          jsr cout      ; print this character to screen
-;; ;         lda #%00001101 ; $0d
-;;          jsr cout
-;;  end:    dex
-;;          bne some
-;;          rts            ; end of execution
+         clc
+         ldx #$05       ; repeat .. times
+ some:
+         lda #$41       ; load character A (dec 65)
+         jsr cout      ; print this character to screen
+         adc #1         ; load character B (dec 66)
+         jsr cout      ; print this character to screen
+         adc #1
+         jsr cout      ; print this character to screen
+         lda #%00001101 ; $0d
+         jsr cout
+ end:    dex
+         bne some
+         rts            ; end of execution
 
-;;  cout:   jsr $ffd2
-;;          rts
+ cout:   jsr $ffd2
+         rts
 
-;;  hello:  .data 18 ; number of bytes to print (string length)
-;;          .data $0d ; line feed
-;;          .asc "!DLROw WEN OLLEh"
-;;          .data $0e ; switch to lower letter mode
-;; EOF
-;; )
-;;                                '((opcode 10)))
+ hello:  .data 18 ; number of bytes to print (string length)
+         .data $0d ; line feed
+         .asc "!DLROw WEN OLLEh"
+         .data $0e ; switch to lower letter mode
+EOF
+)
+  '((decide (((resolve-byte "hello") opcode 166)
+             ((resolve-word "hello") opcode 174)))
+    (label-def "sout")
+    (decide (((resolve-byte "hello") opcode 181)
+             ((resolve-word "hello") opcode 189)))
+    (opcode 32 210 255)
+    (opcode 202)
+    (rel-opcode 208 (resolve-relative "sout"))
+    (opcode 24)
+    (opcode 162 5)
+    (label-def "some")
+    (opcode 169 65)
+    (opcode 32 (resolve-word "cout"))
+    (opcode 105 1)
+    (opcode 32 (resolve-word "cout"))
+    (opcode 105 1)
+    (opcode 32 (resolve-word "cout"))
+    (opcode 169 13)
+    (opcode 32 (resolve-word "cout"))
+    (label-def "end")
+    (opcode 202)
+    (rel-opcode 208 (resolve-relative "some"))
+    (opcode 96)
+    (label-def "cout")
+    (opcode 32 210 255)
+    (opcode 96)
+    (label-def "hello")
+    (byte-value 18)
+    (byte-value 13)
+    (byte-value 33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104)
+    (byte-value 14)))
+
   (check-equal? (parse-program #<<EOF
         *=$0810        ; origin (basic start, to make loading and executing easier)
         LDX $c000
-hello:  LDA $10
+hello:  LDA #$10
         LDA hello
 EOF
 )
-                               '((opcode 10))))
+                '((opcode 174 0 192)
+                  (label-def "hello")
+                  (opcode 169 16)
+                  (decide (((resolve-byte "hello") opcode 165)
+                           ((resolve-word "hello") opcode 173))))))
