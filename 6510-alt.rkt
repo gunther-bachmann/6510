@@ -1,9 +1,6 @@
 #lang racket
 
 (require "6510-alt-utils.rkt")
-(require (for-syntax "6510-syntax-utils.rkt"))
-(require "6510-alt-addressing.rkt")
-
 (require "6510-utils.rkt")
 (require (for-syntax "6510-utils.rkt"))
 
@@ -14,6 +11,11 @@
 (require "6510-alt.flag-ops.rkt")
 (require "6510-alt.memory-ops.rkt")
 (require "6510-alt.transfer-ops.rkt")
+(require "6510-alt.shift-ops.rkt")
+(require "6510-alt.misc-ops.rkt")
+(require "6510-alt.compare-ops.rkt")
+(require "6510-alt.subroutine-ops.rkt")
+(require "6510-alt.stack-ops.rkt")
 
 (provide (all-from-out "6510-alt.logic-ops.rkt"))
 (provide (all-from-out "6510-alt.branch-ops.rkt"))
@@ -22,13 +24,11 @@
 (provide (all-from-out "6510-alt.flag-ops.rkt"))
 (provide (all-from-out "6510-alt.memory-ops.rkt"))
 (provide (all-from-out "6510-alt.transfer-ops.rkt"))
-
-(provide ASL LSR ROL ROR;; shift
-         BIT BRK NOP ;; misc
-         CMP CPX CPY ;; compare
-         JMP JSR RTI RTS ;; sub routines
-         PHA PHP PLA PLP  ;; stack
-         ) 
+(provide (all-from-out "6510-alt.shift-ops.rkt"))
+(provide (all-from-out "6510-alt.misc-ops.rkt"))
+(provide (all-from-out "6510-alt.compare-ops.rkt"))
+(provide (all-from-out "6510-alt.subroutine-ops.rkt"))
+(provide (all-from-out "6510-alt.stack-ops.rkt"))
 
 (provide label word-const byte-const byte word asc) ;; meta commands
 
@@ -43,107 +43,6 @@
 
 ;; https://blog.racket-lang.org/2011/04/writing-syntax-case-macros.html
 ;;--------------------------------------------------------------------------------
-
-(define-opcode ASL
-  ((accumulator . #x0a)
-   (zero-page   . #x06)
-   (zero-page-x . #x16)
-   (absolute    . #x0e)
-   (absolute-x  . #x1e)))
-
-(module+ test #| ASL |#
-  (check-equal? (ASL A)
-                '(opcode #x0a))
-  (check-equal? (ASL $10)
-                '(opcode #x06 #x10))
-  (check-equal? (ASL $10,x)
-                '(opcode #x16 #x10))
-  (check-equal? (ASL $1000)
-                '(opcode #x0e #x00 #x10))
-  (check-equal? (ASL $1000,x)
-                '(opcode #x1e #x00 #x10)))
-
-(define-opcode BIT
-  ((zero-page . #x24)
-   (absolute . #x2c)))
-
-(define-opcode BRK ((implicit . #x00)))
-
-(module+ test #| BRK |#
-  (check-equal?  (BRK)
-                 '(opcode #x00)))
-
-(define-opcode CMP
-  ((indirect-x . #xc1)
-  (zero-page   . #xc5)
-  (immediate   . #xc9)
-  (absolute    . #xcd)
-  (indirect-y  . #xd1)
-  (zero-page-x . #xd5)
-  (absolute-y  . #xd9)
-  (absolute-x  . #xdd)))
-
-(define-opcode CPX
-  ((immediate . #xe0) (zero-page . #xe4) (absolute #xec)))
-
-(define-opcode CPY
-  ((immediate . #xc0) (zero-page . #xc4) (absolute . #xcc)))
-
-(define-opcode JMP
-  ((absolute . #x4C)
-   (indirect . #x6c)))
-
-(module+ test #| JMP |#
-  (check-equal? (JMP $FFD2)
-                '(opcode #x4c #xd2 #xff))
-  (check-equal? (JMP some)
-                '(opcode #x4c (resolve-word "some")))
-  (check-equal? (JMP ($FFD2))
-                '(opcode #x6c #xd2 #xff))
-  (check-equal? (JMP (some))
-                '(opcode #x6c (resolve-word "some"))))
-
-(define-opcode JSR ((absolute . #x20)))
-
-(module+ test #| JSR |#
-  (check-equal? (JSR $FFD2)
-                '(opcode #x20 #xd2 #xff)))
-
-(define-opcode LSR
-  ((zero-page   . #x46)
-   (implicit    . #x4a)
-   (absolute    . #x4e)
-   (zero-page-x . #x56)
-   (absolute-x  . #x5e)))
-
-(define (NOP)
-  '(opcode #xea))
-
-(define-opcode PHA ((implicit . #x48)))
-
-(define-opcode PHP ((implicit . #x08)))
-
-(define-opcode PLA ((implicit . #x68)))
-
-(define-opcode PLP ((implicit . #x28)))
-
-(define-opcode ROL
-  ((zero-page   . #x26)
-   (implicit    . #x2a)
-   (absolute    . #x2e)
-   (zero-page-x . #x36)
-   (absolute-x  . #x3e)))
-
-(define-opcode ROR
-  ((zero-page   . #x66)
-   (implicit    . #x6a)
-   (absolute    . #x6e)
-   (zero-page-x . #x76)
-   (absolute-x  . #x7e)))
-
-(define-opcode RTI ((implicit . #x40)))
-
-(define-opcode RTS ((implicit . #x60)))
 
 (define-syntax (label stx)
   (syntax-case stx ()
@@ -261,10 +160,6 @@
 (module+ test #| asc |#
   (check-equal? (asc "some")
                 '(byte-value 115 111 109 101)))
-
-;; (define (opcode . args) (append (list 'opcode) args))
-
-
 
 ;; --------------------------------------------------------------------------------
 ;; additional syntax (ideas)

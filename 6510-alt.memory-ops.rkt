@@ -8,12 +8,6 @@
 (module+ test
   (require "6510-test-utils.rkt"))
 
-;;--------------------------------------------------------------------------------
-;; https://docs.racket-lang.org/reference/syntax-util.html
-;; (format-id ...)
-
-;; https://blog.racket-lang.org/2011/04/writing-syntax-case-macros.html
-;;--------------------------------------------------------------------------------
 (define-opcode LDA
   ((immediate   . #xA9)
    (zero-page   . #xA5)

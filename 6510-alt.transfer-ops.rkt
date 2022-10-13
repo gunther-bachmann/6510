@@ -3,7 +3,8 @@
 (require "6510-alt-utils.rkt")
 (require "6510-alt-addressing.rkt")
 
-(provide TAX TAY TSX TXA TXS TYA) 
+(provide TAX TAY TSX TXA TXS TYA)
+
 (define-opcode TAX ((implicit . #xaa)))
 
 (define-opcode TAY ((implicit . #xa8)))
