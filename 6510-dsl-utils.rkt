@@ -209,7 +209,7 @@
                         (list (append (drop-right command 1)
                                       (list (low-byte label-offset) (high-byte label-offset)))
                               (last command-byte-pair))))]
-                [else (error (string-append "unknown label reference in opcode" (symbol->string (first (command)))))])
+                [else (error (string-append "unknown label reference in opcode" (->string (first (command)))))])
               )
             command-byte-pair))))
 

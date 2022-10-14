@@ -53,7 +53,13 @@
   (check-equal? (LDX $1020)
                 '(opcode #xAE #x20 #x10))
   (check-equal? (LDX $1020,y)
-                '(opcode #xBE #x20 #x10)))
+                '(opcode #xBE #x20 #x10))
+  (check-equal? (LDX hello)
+                '(decide (((resolve-byte "hello") opcode #xa6)
+                          ((resolve-word "hello") opcode #xae))))
+  (check-equal? (LDX (#:line 17 :#org-cmd "ldx hello") hello)
+                '(decide (((resolve-byte "hello") opcode #xa6)
+                          ((resolve-word "hello") opcode #xae)))))
 
 (define-opcode LDY
   ((immediate   . #xA0)

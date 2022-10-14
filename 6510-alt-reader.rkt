@@ -49,18 +49,19 @@
                     ;; resolved-program
                     ;; raw-bytes
                     stx-program
-                    sy-program)
+                    ;; sy-program
+                    )
            (define stx-program (syntax #,unenc-prg)) ;; examine how to pass source location into the generated racket program
            ;; execute this construction of sy-program in the 'with-syntax clause outside this s-expr!! and splice it in here
-           (define sy-program `(,(let* ([datum (syntax->datum (syntax sy-str))]
-                                        [sy-datum (syntax sy-str)])
-                                   (append (list (first datum))
-                                           (list `(#:line ,(syntax-line sy-datum)
-                                                   #:org-cmd ,(if (and (> (length datum) 1)
-                                                                     (list? (second datum)))
-                                                                  (last (second datum))
-                                                                  (symbol->string (first datum)))))
-                                           (drop datum (min (length datum) 2)))) ...))
+           ;; (define sy-program `(,(let* ([datum (syntax->datum (syntax sy-str))]
+           ;;                              [sy-datum (syntax sy-str)])
+           ;;                         (append (list (first datum))
+           ;;                                 (list `(#:line ,(syntax-line sy-datum)
+           ;;                                         #:org-cmd ,(if (and (> (length datum) 1)
+           ;;                                                           (list? (second datum)))
+           ;;                                                        (last (second datum))
+           ;;                                                        (symbol->string (first datum)))))
+           ;;                                 (drop datum (min (length datum) 2)))) ...))
 
            (define raw-program '(str ...))
            (define program `(,str ...))

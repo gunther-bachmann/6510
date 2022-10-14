@@ -6,8 +6,19 @@
 (provide define-opcode)
 
 (module+ test
+  (require rackunit)
   (begin-for-syntax
     (require rackunit)))
+
+(define-for-syntax (is-meta-info stx) 
+  (let ((datum (syntax->datum stx)))
+    (and (list? datum)
+       (equal? (car datum)
+               '#:line))))
+
+(module+ test #| is-meta-info |#
+  (begin-for-syntax
+    (check-true (is-meta-info #'(#:line 1 #:org-cmd "some")))))
 
 (define-syntax (define-opcode stx)
     (syntax-case stx ()
@@ -15,17 +26,57 @@
        (with-syntax ((nstx (make-id stx "~a" #'nstx)))
          #`(define-syntax (mnemonic nstx)
              (syntax-case nstx ()
-               ([_]         (no-op  nstx #'addressing-modes))
-               ([_ op]      (one-op nstx #'addressing-modes #'op))
-               ([_ op1 op2] (two-op nstx #'addressing-modes #'op1 #'op2))))))))
+               ([_]              (no-op nstx #'addressing-modes))
+               ([_ op]           (if (is-meta-info #'op)
+                                     (no-op  nstx #'addressing-modes)
+                                     (one-op nstx #'addressing-modes #'op)))
+               ([_ op1 op2]      (if (is-meta-info #'op1)
+                                     (one-op nstx #'addressing-modes #'op2)
+                                     (two-op nstx #'addressing-modes #'op1 #'op2)))
+               ([_ meta op1 op2] (if (is-meta-info #'meta)
+                                     (two-op nstx #'addressing-modes #'op1 #'op2)
+                                     (raise-addressing-error nstx #'addressings-modes 2)))))))))
+
+(module+ test #| define-opcode |#
+  ;; used by macro
+  (require (only-in "6510-alt-utils.rkt"
+                    no-operand-opcode
+                    zero-page-opcode
+                    indirect-x-opcode
+                    indirect-y-opcode)) 
+
+  (define-opcode XYZ ((implicit   . #xff)
+                      (zero-page  . #xfe)
+                      (indirect-x . #xfd)
+                      (indirect-y . #xfc)))
+
+  (check-equal? (XYZ)
+                '(opcode #xff))
+  (check-equal? (XYZ (#:line 17 #:org-cmd))
+                '(opcode #xff))
+  (check-exn exn:fail? (λ () (expand #'(XYZ $))))
+  (check-equal? (XYZ $10)
+                '(opcode #xfe #x10))
+  (check-equal? (XYZ (#:line 17 #:org-cmd) $10)
+                '(opcode #xfe #x10))
+  (check-exn exn:fail? (λ () (expand #'(XYZ no no))))
+  (check-equal? (XYZ ($10,x))
+                '(opcode #xfd #x10))
+  (check-equal? (XYZ (#:line 17 #:org-cmd) ($10,x))
+                '(opcode #xfd #x10))
+  (check-equal? (XYZ  ($10),y)
+                '(opcode #xfc #x10))
+  (check-equal? (XYZ (#:line 17 #:org-cmd) ($10),y)
+                '(opcode #xfc #x10))
+  (check-exn exn:fail? (λ () (expand #'(XYZ no ($10),y)))))
 
 (define-for-syntax (no-op stx addressings-defs)
   (datum->syntax
    stx
    (cond
-     [(implicit-addressing? addressings-defs)
+     [(implicit-addressing? addressings-defs)         
       `(no-operand-opcode 'implicit ',addressings-defs)]
-     [#t (raise-addressing-error stx addressings-defs)])))
+     [#t (raise-addressing-error stx addressings-defs 0)])))
 
 (module+ test #| no-op |#
   (begin-for-syntax
@@ -54,7 +105,7 @@
       `(indirect-x-opcode ',addressings-defs ',op)]
      [(indirect-addressing? addressings-defs op)
       `(indirect-opcode ',addressings-defs ',op)]
-     [#t (raise-addressing-error stx addressings-defs)])))
+     [#t (raise-addressing-error stx addressings-defs 1)])))
 
 (module+ test #|one-op|#
   (begin-for-syntax
@@ -80,4 +131,4 @@
       `(absolute-indexed-opcode 'absolute-y ',addressings-defs ',op1)]
      [(indirect-y-addressing? addressings-defs op1 op2)      
       `(indirect-y-opcode ',addressings-defs ',op1)]
-     [#t (raise-addressing-error stx addressings-defs)])))
+     [#t (raise-addressing-error stx addressings-defs 2)])))

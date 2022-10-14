@@ -18,13 +18,19 @@
 (module+ test #| ASL |#
   (check-equal? (ASL A)
                 '(opcode #x0a))
+  (check-equal? (ASL (#:line 17 #:org-cmd "asl a") A)
+                '(opcode #x0a))
   (check-equal? (ASL $10)
+                '(opcode #x06 #x10))
+  (check-equal? (ASL (#:line 17 #:org-cmd "asl $10") $10)
                 '(opcode #x06 #x10))
   (check-equal? (ASL $10,x)
                 '(opcode #x16 #x10))
   (check-equal? (ASL $1000)
                 '(opcode #x0e #x00 #x10))
   (check-equal? (ASL $1000,x)
+                '(opcode #x1e #x00 #x10))
+  (check-equal? (ASL (#:line 17 #:org-cmd "asl $1000,x") $1000,x)
                 '(opcode #x1e #x00 #x10)))
 
 (define-opcode LSR

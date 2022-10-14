@@ -28,11 +28,21 @@
 
 (define (->string el)
   (cond [(string? el) el]
+        [(char? el) (string el)]
         [(symbol? el) (symbol->string el)]
         [(number? el) (number->string el)]
-        [(syntax? el) (->string (syntax->datum el))]))
+        [(syntax? el) (->string (syntax->datum el))]
+        [(list? el)
+         (cond [(equal? (car el) 'unquote)
+                (format ",~a" (cadr el))]
+               [#t (format "(~a)" (string-join (map (λ (iel) (->string iel)) el) ""))])]
+        [#t (raise-argument-error '->string (format "cannot convert ~a to string" el))]))
 
 (module+ test #| ->string |#
+  (check-equal? (->string '(($1000)))
+                "(($1000))")
+  (check-equal? (->string '(unquote x))
+                ",x")
   (check-equal? (->string 'some)
                 "some")
   (check-equal? (->string "some")

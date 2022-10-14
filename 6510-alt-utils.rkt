@@ -506,11 +506,12 @@
             addressing-modes))
   (ambiguous-addressing-opcode possible-addressing-modes op))
 
-(define (raise-addressing-error stx addressing-modes-stx)
+(define (raise-addressing-error stx addressing-modes-stx num)
   (raise-syntax-error
    'mnemonic
    ;; report available addressing modes expected for one op
-   (format "addressing mode not recognized.\nallowed addressing modes are ~a.\n  in line ~a:~a"
+   (format "addressing mode not recognized.\nexpecting ~a operand(s).\nallowed addressing modes are ~a.\n  in line ~a:~a"
+           num
            (string-join (map (lambda (addr-pair) (symbol->string (car addr-pair))) (syntax->datum addressing-modes-stx))
                         ", ")
            (syntax-line stx)
