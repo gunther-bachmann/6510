@@ -40,11 +40,15 @@
       (strip-context
        #`(module compiled6510 racket
            (require "6510-alt.rkt")
+           (require "6510-alt-resolver.rkt")
+           (require "6510-alt-relocator.rkt")
            (require "6510-interpreter.rkt")
            (require "6510-prg-generator.rkt")
            (require "6510-dsl-utils.rkt")
            (require "6510-debugger.rkt")
            (provide program
+                    program-p1
+                    program-p2
                     raw-program
                     ;; resolved-program
                     ;; raw-bytes
@@ -65,6 +69,8 @@
 
            (define raw-program '(str ...))
            (define program `(,str ...))
+           (define program-p1 (->resolved-decisions (label-instructions program) program))
+           (define program-p2 (label-string-offsets 0 '() program-p1))
            ;; (define resolved-program (replace-labels program org))
            ;; (define raw-bytes (commands->bytes org `(,str ...)))
            (displayln "(have a look at sy-program, raw-program, resolved-program or raw-bytes)")
