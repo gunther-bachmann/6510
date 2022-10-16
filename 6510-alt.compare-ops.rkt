@@ -19,7 +19,7 @@
   (absolute-x  . #xdd)))
 
 (define-opcode CPX
-  ((immediate . #xe0) (zero-page . #xe4) (absolute #xec)))
+  ((immediate . #xe0) (zero-page . #xe4) (absolute . #xec)))
 
 (define-opcode CPY
   ((immediate . #xc0) (zero-page . #xc4) (absolute . #xcc)))
