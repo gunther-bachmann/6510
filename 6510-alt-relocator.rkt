@@ -6,18 +6,7 @@
 
 (provide label-string-offsets)
 
-(define-struct reloc-entry
-  (label         ;; label used
-   use-position  ;; relative to code start (which is 0)
-   byte-width    ;; target entry width (1 or 2 bytes)
-   )
-  #:transparent)
-
 (define command/c (listof any/c))
-
-;; (define/c (collect-reloc-entries program)
-;;   (-> (listof command/c) (listof reloc-entry))
-;;   '())
 
 (define/c (command-len command)
   (-> command/c nonnegative-integer?)
@@ -85,20 +74,6 @@
                 '#hash(("some" . 13)
                   ("hello" . 10))))
 
-;; write commands into this structure
-;; offset       data
-;; 0            rl = reloc-len (word, low-then-high byte)
-;; 2            relocation table
-;; 2+rl         cbl = cmd-bytes-len (word, low-then-high byte)
-;; 4+rl         command bytes
-;; 4+rl+cbl-1
-
-;; generate the bytes of the relocation table of these commands
-;; offset       data
-;; 0            rel-position-low, rel-position-high,
-;; 2            width (byte), (if width = 1 0:lowbyte 1:highbyte)?, 
-;; 4            rel-value-low, rel-value-high
-
 (define (base-label-str full-label)
   (cond [(or (eq? #\> (string-ref full-label 0)) 
             (eq? #\< (string-ref full-label 0)))
@@ -113,54 +88,73 @@
   (check-equal? (base-label-str "<hello")
                 "hello"))
 
-(define (label-prefix->byte full-label)
+(define (label->hilo-indicator full-label)
   (cond [(eq? #\> (string-ref full-label 0)) 1]
         [(eq? #\< (string-ref full-label 0)) 0]
         [#t (raise-user-error (format "full-label ~a has no hi/low prefix" full-label))]))
 
-(define (relocation-table offset collected-entries label-offsets commands)
+;; relocation table format
+;; offset       data
+;; 0            rel-position-low, rel-position-high, : position where the value has to be written to
+;; 2            width (byte), (if width = 1 0:lowbyte 1:highbyte)?,
+;; 3/4          rel-value-low, rel-value-high        : (val + origin) is the value to be written
+(define (reloc-entry-bytes offset rel-offset . bytes)
+  (append (list (low-byte (+ 1 offset))
+                (high-byte (+ 1 offset)))
+          bytes
+          (list (low-byte rel-offset)
+                (high-byte rel-offset))))
+
+(define (resolve-word->reloc-bytes resolve label-offsets offset)
+  (let ((rel-offset (hash-ref label-offsets (cadr resolve))))                 
+    (reloc-entry-bytes offset rel-offset 2)))
+
+(module+ test #| resolve-word->reloc-bytes |#
+  (check-equal? (resolve-word->reloc-bytes '(resolve-word "some")
+                                          '#hash(("some" . #x01d2))
+                                          #xc040)
+                '(#x41 #xc0 2 #xd2 #x01)))
+
+(define (resolve-byte->reloc-bytes resolve label-offsets offset)
+  (let* ((full-label (cadr resolve))
+         (hilo-ind   (label->hilo-indicator full-label))
+         (label      (base-label-str full-label))
+         (rel-offset (hash-ref label-offsets label)))
+    (reloc-entry-bytes offset rel-offset 1 hilo-ind)))
+
+(module+ test #| resolve-byte->reloc-bytes |#
+  (check-equal? (resolve-byte->reloc-bytes '(resolve-byte ">some")
+                                          '#hash(("some" . #x01fa))
+                                          #x0005)
+                '(#x06 #x00 1 1 #xfa #x01))
+  (check-equal? (resolve-byte->reloc-bytes '(resolve-byte "<some")
+                                          '#hash(("some" . #x01fa))
+                                          #x0005)
+                '(#x06 #x00 1 0 #xfa #x01)))
+
+(define (reloc-table-bytes offset collected-entries label-offsets commands)
   (if (empty? commands)
       collected-entries
-      (let* ((command (car commands))
-             (res (last command)))
-        (cond [(and (list? res)
-                  (eq? 'resolve-word (car res)))
-               (let ((rel-offset (hash-ref label-offsets (cadr res))))
-                 (relocation-table (+ offset (command-len command)) 
-                                   (append (list (low-byte (+ 1 offset))
-                                                 (high-byte (+ 1 offset))
-                                                 2 
-                                                 (low-byte rel-offset)
-                                                 (high-byte rel-offset))
-                                           collected-entries)
-                                   label-offsets
-                                   (cdr commands)))]
-              [(and (list? res)
-                  (eq? 'resolve-byte (car res)))
-               (let* ((full-label (cadr res))
-                      (hilo-ind (label-prefix->byte full-label))
-                      (label (base-label-str full-label))
-                      (rel-offset (hash-ref label-offsets label)))
-                 (relocation-table (+ offset (command-len command)) 
-                                   (append (list (low-byte (+ 1 offset))
-                                                 (high-byte (+ 1 offset))
-                                                 1 hilo-ind
-                                                 (if (eq? 0 hilo-ind)
-                                                     (low-byte rel-offset)
-                                                     (high-byte rel-offset)))
-                                           collected-entries)
-                                   label-offsets
-                                   (cdr commands)))]
-              [#t
-               (relocation-table (+ offset (command-len command)) collected-entries label-offsets (cdr commands))]))))
+      (let* ((command     (car commands))
+             (res         (last command))
+             (next-offset (+ offset (command-len command)))
+             (next-entries
+              (cond [(and (list? res)
+                        (eq? 'resolve-word (car res)))
+                     (append collected-entries
+                             (resolve-word->reloc-bytes res label-offsets offset))]
+                    [(and (list? res)
+                        (eq? 'resolve-byte (car res)))
+                     (append collected-entries
+                             (resolve-byte->reloc-bytes res label-offsets offset))]
+                    [#t collected-entries])))
+        (reloc-table-bytes next-offset next-entries label-offsets (cdr commands)))))
 
-(module+ test #| relocation-table |#
-  (check-equal? (relocation-table #xc040 '() '#hash(("some" . #xffd2))
-                                  '((opcode 20 (resolve-word "some"))))
-                '(#x41 #xc0 2 #xd2 #xff))
-  (check-equal? (relocation-table #xc040 '() '#hash(("some" . #xffd2))
-                                  '((opcode 20 (resolve-byte "<some"))))
-                '(#x41 #xc0 1 0 #xd2))
-  (check-equal? (relocation-table #xc040 '() '#hash(("some" . #xffd2))
-                                  '((opcode 20 (resolve-byte ">some"))))
-                '(#x41 #xc0 1 1 #xff)))
+(module+ test #| reloc-table-bytes |#
+  (check-equal? (reloc-table-bytes #xc040 '() '#hash(("some" . #x01d2)("other" . #x01d9))
+                                  '((opcode 20 (resolve-byte ">some"))
+                                    (opcode 20 (resolve-word "other"))
+                                    (opcode 20 (resolve-byte "<some"))))
+                '(#x41 #xc0 1 1 #xd2 #x01
+                  #x43 #xc0 2 #xd9 #x01
+                  #x46 #xc0 1 0 #xd2 #x01)))
