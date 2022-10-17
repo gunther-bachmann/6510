@@ -24,7 +24,8 @@
  word/c
  in-word-range?
  in-byte-range?
- ->string)
+ ->string
+ base-label-str)
 
 (define (->string el)
   (cond [(string? el) el]
@@ -98,6 +99,20 @@
   (check-true (6510-label-byte-string? ":s-H"))
   (check-true (6510-label-byte-string? ":s-L"))
   (check-false (6510-label-byte-string? ":s-x")))
+
+(define (base-label-str full-label)
+  (cond [(or (eq? #\> (string-ref full-label 0))
+            (eq? #\< (string-ref full-label 0)))
+         (substring full-label 1)]
+        [#t full-label]))
+
+(module+ test #| base-label-str |#
+  (check-equal? (base-label-str "hello")
+                "hello")
+  (check-equal? (base-label-str ">hello")
+                "hello")
+  (check-equal? (base-label-str "<hello")
+                "hello"))
 
 ;; is the given string a valid binary, hex or regular number
 (define (6510-number-string? value)

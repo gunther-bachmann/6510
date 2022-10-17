@@ -74,20 +74,6 @@
                 '#hash(("some" . 13)
                   ("hello" . 10))))
 
-(define (base-label-str full-label)
-  (cond [(or (eq? #\> (string-ref full-label 0)) 
-            (eq? #\< (string-ref full-label 0)))
-         (substring full-label 1)]
-        [#t full-label]))
-
-(module+ test #| base-label-str |#
-  (check-equal? (base-label-str "hello")
-                "hello")
-  (check-equal? (base-label-str ">hello")
-                "hello")
-  (check-equal? (base-label-str "<hello")
-                "hello"))
-
 (define (label->hilo-indicator full-label)
   (cond [(eq? #\> (string-ref full-label 0)) 1]
         [(eq? #\< (string-ref full-label 0)) 0]
