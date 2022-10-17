@@ -127,6 +127,22 @@ To build all, run `raco make -v -j 8 *.rkt`
 - optional: write 6510 code  to resolve multiple files w/ export/import and relocation table
  - TODO: find compact representation of import/export table
 
+
+#### alt
+
+ phase 1: (x) parse -> (ASL ..)
+ phase 2: (x) macro -> 'opcode, 'byte-value, 'rel-opcode, 'decide
+ phase 3: (x) eliminate decide
+ phase 4: ( ) resolve constants
+ phase 5: (x) resolve word/byte label references (construct relocation table)
+ phase 6: ( ) construct import/export resolve tables
+ 
+ commands->linkable-binary-file (lbf)
+ 
+ linker->prg
+ 
+ loader
+  
 #### debugger
 
 idea: use same commands as vice monitor (see https://vice-emu.sourceforge.io/vice_12.html)
