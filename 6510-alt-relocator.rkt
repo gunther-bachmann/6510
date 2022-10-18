@@ -3,6 +3,7 @@
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-utils.rkt")
 (require "6510-test-utils.rkt")
+(require (only-in "6510-alt-resolver.rkt" resolve-word? resolve-byte?))
 
 (provide label-string-offsets)
 
@@ -16,8 +17,7 @@
         [(eq? tag 'byte-value) (- (length command) 1)]
         [(eq? tag 'opcode)
          (+ (- (length command) 1)
-            (if (and (list? last-el)
-                   (eq? 'resolve-word (car last-el)))
+            (if (and (resolve-word? last-el))
                 1
                 0))]
         [#t 0]))
@@ -49,17 +49,11 @@
   (if (empty? commands)
       collected-results
       (let* ((command (car commands))
-             (tag (car command)))
-        (cond [(eq? tag 'label-def)
-               (label-string-offsets
-                offset
-                (hash-set collected-results (cadr command) offset)
-                (cdr commands))]
-              [#t
-               (label-string-offsets
-                (+ offset (command-len command))
-                collected-results
-                (cdr commands))]))))
+             (tag     (car command))
+             (next    (if (eq? tag 'label-def)
+                          (hash-set collected-results (cadr command) offset)
+                          collected-results)))
+        (label-string-offsets (+ offset (command-len command)) next (cdr commands)))))
 
 (module+ test #| collect-label-offsets |#
   (check-equal? (label-string-offsets 10 (hash) '((label-def "some")))
@@ -75,8 +69,8 @@
                   ("hello" . 10))))
 
 (define (label->hilo-indicator full-label)
-  (cond [(eq? #\> (string-ref full-label 0)) 1]
-        [(eq? #\< (string-ref full-label 0)) 0]
+  (cond [(string-prefix? full-label ">") 1]
+        [(string-prefix? full-label "<") 0]
         [#t (raise-user-error (format "full-label ~a has no hi/low prefix" full-label))]))
 
 ;; relocation table format
@@ -121,19 +115,15 @@
 (define (reloc-table-bytes offset collected-entries label-offsets commands)
   (if (empty? commands)
       collected-entries
-      (let* ((command     (car commands))
-             (res         (last command))
-             (next-offset (+ offset (command-len command)))
-             (next-entries
-              (cond [(and (list? res)
-                        (eq? 'resolve-word (car res)))
-                     (append collected-entries
-                             (resolve-word->reloc-bytes res label-offsets offset))]
-                    [(and (list? res)
-                        (eq? 'resolve-byte (car res)))
-                     (append collected-entries
-                             (resolve-byte->reloc-bytes res label-offsets offset))]
-                    [#t collected-entries])))
+      (let* ((command      (car commands))
+             (res          (last command))
+             (next-offset  (+ offset (command-len command)))
+             (entry        (cond [(resolve-word? res)
+                                  (resolve-word->reloc-bytes res label-offsets offset)]
+                                 [(resolve-byte? res)
+                                  (resolve-byte->reloc-bytes res label-offsets offset)]
+                                 [#t '()]))
+             (next-entries (append collected-entries entry)))
         (reloc-table-bytes next-offset next-entries label-offsets (cdr commands)))))
 
 (module+ test #| reloc-table-bytes |#

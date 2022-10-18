@@ -3,7 +3,15 @@
 (module+ test
   (require "6510-test-utils.rkt"))
 
-(provide ->resolved-decisions label-instructions)
+(provide ->resolved-decisions label-instructions resolve-word? resolve-byte?)
+
+(define (resolve-word? res)
+  (and (list? res)
+     (eq? (car res) 'resolve-word)))
+
+(define (resolve-byte? res)
+  (and (list? res)
+     (eq? (car res) 'resolve-byte)))
 
 (define label-types '(byte word))
 (define label-definitions

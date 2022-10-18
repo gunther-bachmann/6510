@@ -208,53 +208,6 @@
   (guard/p 6510-integer/p (λ (x) (and (>= x 0) (<= x 255)))
            "integer in range [$00,$FF]"))
 
-;; return a parser that will parse the given opcode with absolute addressing
-(define/c (abs-opcode/p opcode)
-  (-> string? parser?)
-  (do
-      (try/p (string-cia/p opcode))
-      (many/p space-or-tab/p)
-    [x <- (or/p word/p
-               6510-label/p)]  ;; could be a string too
-    6510-eol/p
-    (pure (append (list (string->symbol (string-upcase opcode)))
-                  (if (number? x)
-                      (list (number->string x))
-                      (list (last (syntax->datum x))))))))
-
-(module+ test
-  (check-match (parsed-string-result (abs-opcode/p "JMP") "JMP $1000")
-               '(JMP "4096"))
-
-  (check-match (parsed-string-result (abs-opcode/p "JSR") "JSR $1000")
-               '(JSR "4096"))
-
-  (check-match (parsed-string-result (abs-opcode/p "JSR") "JSR %0001000000000000")
-               '(JSR "4096"))
-
-  (check-match (parsed-string-result (abs-opcode/p "ADC") "ADC 4096")
-               '(ADC "4096"))
-
-  (check-match (parsed-string-result (abs-opcode/p "LDA") "LDA some")
-               '(LDA "some"))
-
-  (check-exn exn:fail?
-             (lambda () (parsed-string-result (abs-opcode/p "JSR") "JSR $10000"))))
-
-;; return a parser that will parse the given opcode with relative addressing (e.g. branches)
-(define/c (rel-opcode/p opcode)
-  (-> string? parser?)
-  (do
-      (try/p (string-cia/p opcode))
-      (many/p space-or-tab/p)
-    [x <- (or/p byte/p
-               6510-label/p)]
-    6510-eol/p
-    (pure (append (list (string->symbol (string-upcase opcode)))
-                  (if (number? x)
-                      (list (number->string x))
-                      (list (last (syntax->datum x))))))))
-
 ;; return parser to match the given string (case insensitive) or fail
 (define/c (chars-ci/p str)
   (-> (or/c string? char?) parser?)
