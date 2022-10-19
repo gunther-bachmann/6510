@@ -1,5 +1,8 @@
 #lang racket
 
+(require "6510-alt-resolver.rkt")
+(require "6510-alt-relocator.rkt")
+
 (require "6510-test-utils.rkt")
 (require "6510-utils.rkt")
 
@@ -97,8 +100,83 @@
 ;; 4/5              string 
 ;; 4/5+strlen       ...next entry
 
-(define (import-table-bytes offset collected-entries label-offsets commands)
-  '())
+(define (encode-import-word-entry offset label)
+  (append
+   (list (low-byte offset)
+         (high-byte offset)
+         2)
+   (string->bytes label)))
+
+(define (encode-import-byte-entry offset hilo-ind label)
+  (append
+   (list (low-byte offset)
+         (high-byte offset)
+         1 hilo-ind)
+   (string->bytes label)))
+
+(define (import-word-entry-bytes label req-hashes offset)
+  (let* ((value (hash-ref req-hashes label)))
+    (if (eq? 'word value)
+        (encode-import-word-entry offset label)
+        (encode-import-byte-entry offset 0 label))))
+
+(define (import-byte-entry-bytes label req-hashes offset)
+  (let* ((base-label (base-label-str label))
+         (value      (hash-ref req-hashes base-label)))
+    (if (eq? 'word value)
+        (encode-import-byte-entry offset (label->hilo-indicator label) base-label)
+        (encode-import-byte-entry offset 0 base-label))))
+
+(define (import-table-bytes offset collected-entries req-hashes commands)
+  (if (empty? commands)
+      collected-entries
+      (let* ((command  (car commands))
+             (last-el  (last command))
+             (offset+1 (+ offset 1))
+             (new-entry 
+              (cond [(resolve-word? last-el)
+                     (import-word-entry-bytes (cadr last-el) req-hashes offset+1)]
+                    [(resolve-byte? last-el)
+                     (import-byte-entry-bytes (cadr last-el) req-hashes offset+1)]
+                    [#t '()])))
+        (import-table-bytes (+ offset (command-len command))
+                            (append collected-entries new-entry)
+                            req-hashes
+                            (cdr commands)))))
+
+(module+ test #| import-table-bytes |#
+  (check-equal? (import-table-bytes #xfe '() '#hash(("some" . word) ("other" . byte))
+                                    '((opcode #x20 (resolve-word "some"))
+                                      (opcode #xea (resolve-byte "other"))
+                                      (opcode #xea (resolve-byte "<some"))
+                                      (opcode #xea (resolve-byte ">some"))))
+                '(#xff #x00 2 4 115 111 109 101
+                  #x02 #x01 1 0 5 111 116 104 101 114
+                  #x04 #x01 1 0 4 115 111 109 101
+                  #x06 #x01 1 1 4 115 111 109 101)))
+
+(define (require-command? command)
+  (and (list? command)
+     (or (eq? 'require-word (car command))
+        (eq? 'require-byte (car command)))))
+
+(define (require-hash command hash)
+  (if (require-command? command)
+      (hash-set hash (last command)
+                (if (eq? 'require-word (car command))
+                    'word
+                    'byte))
+      hash))
+
+(define (require-hashes commands)
+  (foldl require-hash (hash) commands))
+
+(module+ test #| require-hashes |#
+  (check-equal? (require-hashes '((require-word "some")
+                                  (require-byte "other")
+                                  (opcode #x20)))
+                '#hash(("some" . word)
+                       ("other" . byte))))
 
 (define providing-program
   '((provide-word aout)

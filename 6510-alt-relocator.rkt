@@ -5,7 +5,7 @@
 (require "6510-test-utils.rkt")
 (require (only-in "6510-alt-resolver.rkt" resolve-word? resolve-byte?))
 
-(provide label-string-offsets)
+(provide label-string-offsets command-len label->hilo-indicator)
 
 (define command/c (listof any/c))
 
