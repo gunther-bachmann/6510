@@ -63,7 +63,7 @@
   (check-equal? (constant-definitions-hash (list (ast-const-byte-cmd "some" #x30)))
                 '#hash(("some" . #x30)))
   (check-equal? (constant-definitions-hash (list (ast-const-byte-cmd "some" #x30)
-                                             (ast-const-word-cmd "other" #x3020)))
+                                                 (ast-const-word-cmd "other" #x3020)))
                 '#hash(("some" . #x30)
                        ("other" . #x3020))))
 
@@ -71,7 +71,7 @@
   (if (empty? commands)
       result
       (let* ((command (car commands))
-             (res         (last command))
+             (res     (last command))
              (next-result
               (cond [(resolve-word? res)
                      (resolve-known-word->command (cadr res) constants command)]

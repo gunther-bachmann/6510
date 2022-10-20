@@ -54,30 +54,26 @@
   (-> nonnegative-integer? hash? (listof command/c) hash?)
   (if (empty? commands)
       collected-results
-      (let ((command (car commands)))
-        (cond
-          [(ast-label-def-cmd? command)
-           (label-string-offsets (+ offset (command-len command))
-                                 (hash-set collected-results (ast-label-def-cmd-label command) offset) (cdr commands))]
-          [(list? command)
-           (let* ((tag     (car command))
-                  (next    (if (eq? tag 'label-def)
-                               (hash-set collected-results (cadr command) offset)
-                               collected-results)))
-             (label-string-offsets (+ offset (command-len command)) next (cdr commands)))]))))
+      (let* ((command (car commands))
+             (next-results
+              (cond
+                [(ast-label-def-cmd? command)
+                 (hash-set collected-results (ast-label-def-cmd-label command) offset)]
+                [#t collected-results])))
+        (label-string-offsets (+ offset (command-len command)) next-results (cdr commands)))))
 
 (module+ test #| collect-label-offsets |#
   (check-equal? (label-string-offsets 10 (hash) (list (ast-label-def-cmd "some")))
                 '#hash(("some" . 10)))
   (check-equal? (label-string-offsets 10 (hash) `((opcode #x20 #xd2 #xff)
-                                              ,(ast-label-def-cmd "some")))
+                                                  ,(ast-label-def-cmd "some")))
                 '#hash(("some" . 13)))
   (check-equal? (label-string-offsets 10 (hash) (list (ast-label-def-cmd "hello")
-                                              '(opcode #x20 #xd2 #xff)
-                                              (ast-label-def-cmd "some")
-                                              '(opcode #x20 (resolve-word "hello"))))
+                                                      '(opcode #x20 #xd2 #xff)
+                                                      (ast-label-def-cmd "some")
+                                                      '(opcode #x20 (resolve-word "hello"))))
                 '#hash(("some" . 13)
-                  ("hello" . 10))))
+                       ("hello" . 10))))
 
 (define (label->hilo-indicator full-label)
   (cond [(string-prefix? full-label ">") 1]
@@ -139,9 +135,9 @@
 
 (module+ test #| reloc-table-bytes |#
   (check-equal? (reloc-table-bytes #xc040 '() '#hash(("some" . #x01d2)("other" . #x01d9))
-                                  '((opcode 20 (resolve-byte ">some"))
-                                    (opcode 20 (resolve-word "other"))
-                                    (opcode 20 (resolve-byte "<some"))))
+                                   '((opcode 20 (resolve-byte ">some"))
+                                     (opcode 20 (resolve-word "other"))
+                                     (opcode 20 (resolve-byte "<some"))))
                 '(#x41 #xc0 1 1 #xd2 #x01
                   #x43 #xc0 2 #xd9 #x01
                   #x46 #xc0 1 0 #xd2 #x01)))

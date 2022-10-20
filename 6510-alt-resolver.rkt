@@ -15,14 +15,6 @@
   (and (list? res)
      (eq? (car res) 'resolve-byte)))
 
-(define label-types '(byte word))
-;; (define label-definitions
-;;   '(
-;;     label-def
-;;     byte-const-def
-;;     word-const-def
-;;     ))
-
 (define (is-byte-label? instruction)
   (ast-const-byte-cmd? instruction))
 
