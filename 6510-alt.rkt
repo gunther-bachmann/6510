@@ -52,15 +52,15 @@
 (define-syntax (label stx)
   (syntax-case stx ()
     ([_ str]
-     #'`(label-def ,(->string #'str)))))
+     #'(ast-label-def-cmd (->string #'str)))))
 
 (module+ test #| label |#
   (check-equal?
    (label some)
-   '(label-def "some"))
+   (ast-label-def-cmd "some"))
   (check-equal?
    (label "some")
-   '(label-def "some")))
+   (ast-label-def-cmd "some")))
 
 (define-syntax (byte-const stx)
   (syntax-case stx ()

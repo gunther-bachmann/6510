@@ -5,6 +5,7 @@
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (provide (struct-out ast-program)
+         (struct-out ast-command)
          (struct-out ast-decide-cmd)
          (struct-out ast-resolve-word-scmd)
          (struct-out ast-resolve-byte-scmd)

@@ -3,35 +3,41 @@
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-utils.rkt")
 (require "6510-test-utils.rkt")
+(require "6510-alt-command.rkt")
 (require (only-in "6510-alt-resolver.rkt" resolve-word? resolve-byte?))
 
 (provide label-string-offsets command-len label->hilo-indicator)
 
-(define command/c (listof any/c))
+(define command/c (or/c ast-command? (listof any/c)))
 
 (define/c (command-len command)
   (-> command/c nonnegative-integer?)
-  (define tag (car command))
-  (define last-el (last command))
-  (cond [(eq? tag 'rel-opcode) 2]
-        [(eq? tag 'byte-value) (- (length command) 1)]
-        [(eq? tag 'opcode)
-         (+ (- (length command) 1)
-            (if (and (resolve-word? last-el))
-                1
-                0))]
-        [#t 0]))
+  (cond
+    [(ast-bytes-cmd? command)
+     (length (ast-bytes-cmd-bytes command))]
+    [(list? command)
+     (define tag (car command))
+     (define last-el (last command))
+     (cond [(eq? tag 'rel-opcode) 2]
+           [(eq? tag 'byte-value) (- (length command) 1)]
+           [(eq? tag 'opcode)
+            (+ (- (length command) 1)
+               (if (and (resolve-word? last-el))
+                   1
+                   0))]
+           [#t 0])]
+    [#t 0]))
 
 (module+ test #| command-len |#
   (check-equal? (command-len '(opcode 100))
                 1)
-  (check-equal? (command-len '(label-def "some"))
+  (check-equal? (command-len (ast-label-def-cmd "some"))
                 0)
-  (check-equal? (command-len '(word-const-def "some" #x2000))
+  (check-equal? (command-len (ast-const-word-cmd "some" #x2000))
                 0)
-  (check-equal? (command-len '(byte-const-def "some" #x20))
+  (check-equal? (command-len (ast-const-byte-cmd "some" #x20))
                 0)
-  (check-equal? (command-len '(byte-value #xd2 #xff))
+  (check-equal? (command-len (ast-bytes-cmd '(#xd2 #xff)))
                 2)
   (check-equal? (command-len '(opcode #x20 #xff #xd2))
                 3)
@@ -48,23 +54,28 @@
   (-> nonnegative-integer? hash? (listof command/c) hash?)
   (if (empty? commands)
       collected-results
-      (let* ((command (car commands))
-             (tag     (car command))
-             (next    (if (eq? tag 'label-def)
-                          (hash-set collected-results (cadr command) offset)
-                          collected-results)))
-        (label-string-offsets (+ offset (command-len command)) next (cdr commands)))))
+      (let ((command (car commands)))
+        (cond
+          [(ast-label-def-cmd? command)
+           (label-string-offsets (+ offset (command-len command))
+                                 (hash-set collected-results (ast-label-def-cmd-label command) offset) (cdr commands))]
+          [(list? command)
+           (let* ((tag     (car command))
+                  (next    (if (eq? tag 'label-def)
+                               (hash-set collected-results (cadr command) offset)
+                               collected-results)))
+             (label-string-offsets (+ offset (command-len command)) next (cdr commands)))]))))
 
 (module+ test #| collect-label-offsets |#
-  (check-equal? (label-string-offsets 10 (hash) '((label-def "some")))
+  (check-equal? (label-string-offsets 10 (hash) (list (ast-label-def-cmd "some")))
                 '#hash(("some" . 10)))
-  (check-equal? (label-string-offsets 10 (hash) '((opcode #x20 #xd2 #xff)
-                                              (label-def "some")))
+  (check-equal? (label-string-offsets 10 (hash) `((opcode #x20 #xd2 #xff)
+                                              ,(ast-label-def-cmd "some")))
                 '#hash(("some" . 13)))
-  (check-equal? (label-string-offsets 10 (hash) '((label-def "hello")
-                                              (opcode #x20 #xd2 #xff)
-                                              (label-def "some")
-                                              (opcode #x20 (resolve-word "hello"))))
+  (check-equal? (label-string-offsets 10 (hash) (list (ast-label-def-cmd "hello")
+                                              '(opcode #x20 #xd2 #xff)
+                                              (ast-label-def-cmd "some")
+                                              '(opcode #x20 (resolve-word "hello"))))
                 '#hash(("some" . 13)
                   ("hello" . 10))))
 

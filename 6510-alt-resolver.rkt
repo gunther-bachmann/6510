@@ -1,5 +1,7 @@
 #lang racket
 
+(require "6510-alt-command.rkt")
+
 (module+ test
   (require "6510-test-utils.rkt"))
 
@@ -14,59 +16,66 @@
      (eq? (car res) 'resolve-byte)))
 
 (define label-types '(byte word))
-(define label-definitions
-  '(
-    label-def
-    byte-const-def
-    word-const-def
-    ))
+;; (define label-definitions
+;;   '(
+;;     label-def
+;;     byte-const-def
+;;     word-const-def
+;;     ))
 
 (define (is-byte-label? instruction)
-  (define tag (car instruction))
-  (or (eq? tag 'byte-const-def)))
+  (ast-const-byte-cmd? instruction))
 
 (define (is-word-label? instruction)
-  (define tag (car instruction))
-  (or (eq? tag 'label-def)
-     (eq? tag 'word-const-def)))
+  (or (ast-const-word-cmd? instruction)
+     (ast-label-def-cmd? instruction)))
 
 (module+ test #| is-word-label? |#
-  (check-true (is-word-label? '(label-def "some")))
-  (check-true (is-word-label? '(word-const-def "some" #x2000)))
-  (check-false (is-word-label? '(byte-const-def "some" #x20)))
-  (for ((label-def-symbol label-definitions))
-    (check-not-eq? (is-byte-label? (list label-def-symbol "some"))
-                   (is-word-label? (list label-def-symbol "some")))))
+  (check-true (is-word-label? (ast-label-def-cmd "some")))
+  (check-true (is-word-label? (ast-const-word-cmd "some" #x2000)))
+  (check-false (is-word-label? (ast-const-byte-cmd "some" #x20))))
 
 (define (first-word-label-in label program)
   (findf (λ (instruction)
-           (and (is-word-label? instruction)
-              (equal? label (second instruction))))
+           (define instruction-word-label
+             (cond [(ast-const-word-cmd? instruction)
+                    (ast-const-word-cmd-label instruction)]
+                   [(ast-label-def-cmd? instruction)
+                    (ast-label-def-cmd-label instruction)]
+                   [#t '()]))
+           (equal? label instruction-word-label))
          program))
 
 (module+ test #| is-word-label? |#
-  (check-equal? (first-word-label-in "some" '((label-def "some")))
-                '(label-def "some"))
-  (check-equal? (first-word-label-in "other" '((label-def "some")))
+  (check-equal? (first-word-label-in "some" (list (ast-label-def-cmd "some")))
+                (ast-label-def-cmd "some"))
+  (check-equal? (first-word-label-in "other" (list (ast-label-def-cmd "some")))
                 #f)
-  (check-equal? (first-word-label-in "some" '((label-def "other")
-                                              (word-const-def "some" #x3000)))
-                '(word-const-def "some" #x3000)))
+  (check-equal? (first-word-label-in "some" (list (ast-label-def-cmd "other")
+                                              (ast-const-word-cmd "some" #x3000)))
+                (ast-const-word-cmd "some" #x3000)))
 
-(define (first-label-in label-str program)
+(define (first-label-in label program)
   (findf (λ (instruction)
-           (and (is-label-instruction? instruction)
-              (equal? label-str (second instruction))))
+           (define label-str
+             (cond   [(ast-label-def-cmd? instruction)
+                      (ast-label-def-cmd-label instruction)]
+                     [(ast-const-word-cmd? instruction)
+                      (ast-const-word-cmd-label instruction)]
+                     [(ast-const-byte-cmd? instruction)
+                      (ast-const-byte-cmd-label instruction)]))
+           (equal? label label-str))
          program))
 
 (define (is-label-instruction? instruction)
-  (define tag (car instruction))
-  (memq tag label-definitions))
+  (or (ast-label-def-cmd? instruction)
+     (ast-const-word-cmd? instruction)
+     (ast-const-byte-cmd? instruction)))
 
 (module+ test #| is-label-instruction? |#
-  (check-not-false (is-label-instruction? '(label-def "some")))
-  (check-not-false (is-label-instruction? '(word-const-def "some" #x2000)))
-  (check-not-false (is-label-instruction? '(byte-const-def "some" #x20)))
+  (check-not-false (is-label-instruction? (ast-label-def-cmd "some")))
+  (check-not-false (is-label-instruction? (ast-const-word-cmd "some" #x2000)))
+  (check-not-false (is-label-instruction? (ast-const-byte-cmd "some" #x20)))
   (check-false (is-label-instruction? '(opcode #xea))))
 
 (define (label-instructions program)
@@ -86,15 +95,15 @@
          decide-options))
 
 (module+ test #| matching-decide-option |#
-  (check-equal? (matching-decide-option '((label-def "hello"))
+  (check-equal? (matching-decide-option (list (ast-label-def-cmd "hello"))
                                         '(((resolve-byte "hello") opcode 166)
                                           ((resolve-word "hello") opcode 174)))
                 '((resolve-word "hello") opcode 174))
-  (check-equal? (matching-decide-option '((word-const-def "hello" #x2000))
+  (check-equal? (matching-decide-option (list (ast-const-word-cmd "hello" #x2000))
                                         '(((resolve-byte "hello") opcode 166)
                                           ((resolve-word "hello") opcode 174)))
                 '((resolve-word "hello") opcode 174))
-  (check-equal? (matching-decide-option '((byte-const-def "hello" #x200))
+  (check-equal? (matching-decide-option (list (ast-const-byte-cmd "hello" #x20))
                                         '(((resolve-byte "hello") opcode 166)
                                           ((resolve-word "hello") opcode 174)))
                 '((resolve-byte "hello") opcode 166)))
@@ -118,20 +127,20 @@
                (default-result-f)]))))
 
 (module+ test #| ->resolved-decisions |#
-  (check-equal? (->resolved-decisions '((label-def "hello"))
+  (check-equal? (->resolved-decisions (list (ast-label-def-cmd "hello"))
                                     '((decide (((resolve-byte "hello") opcode 166)
                                                ((resolve-word "hello") opcode 174)))))
                 '((opcode 174 (resolve-word "hello"))))
-  (check-equal? (->resolved-decisions '((byte-const-def "hello" #x20))
+  (check-equal? (->resolved-decisions (list (ast-const-byte-cmd "hello" #x20))
                                     '((decide (((resolve-byte "hello") opcode 166)
                                                ((resolve-word "hello") opcode 174)))))
                 '((opcode 166 (resolve-byte "hello"))))
-  (check-equal? (->resolved-decisions '((word-const-def "hello" #x2000))
+  (check-equal? (->resolved-decisions (list (ast-const-word-cmd "hello" #x2000))
                                     '((decide (((resolve-byte "hello") opcode 166)
                                                ((resolve-word "hello") opcode 174)))))
                 '((opcode 174 (resolve-word "hello")))
                 "decide for word if referencing word label")
-  (check-equal? (->resolved-decisions '((label-def "not-found"))
+  (check-equal? (->resolved-decisions (list (ast-label-def-cmd "not-found"))
                                     '((decide (((resolve-byte "hello") opcode 166)
                                                ((resolve-word "hello") opcode 174)))))
                 '((decide (((resolve-byte "hello") opcode 166)
