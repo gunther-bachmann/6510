@@ -67,20 +67,20 @@
     ([_ label byte]
      (and (6510-number-string? (->string #'byte))
         (in-byte-range? (parse-number-string (->string #'byte))))
-     #'`(byte-const-def
-         ,(->string #'label)
-         ,(parse-number-string (->string #'byte))))))
+     #'(ast-const-byte-cmd
+         (->string #'label)
+         (parse-number-string (->string #'byte))))))
 
 (module+ test #| byte-const |#
   (check-equal?
    (byte-const some 10)
-   '(byte-const-def "some" 10))
+   (ast-const-byte-cmd "some" 10))
   (check-equal?
    (byte-const some %10)
-   '(byte-const-def "some" #b10))
+   (ast-const-byte-cmd "some" #b10))
   (check-equal?
    (byte-const some $10)
-   '(byte-const-def "some" #x10))
+   (ast-const-byte-cmd "some" #x10))
   (check-exn exn:fail:syntax? (λ () (expand #'(byte-const some $100)))))
 
 (define-syntax (word-const stx)
@@ -88,20 +88,20 @@
     ([_ label word]
      (and (6510-number-string? (->string #'word))
         (in-word-range? (parse-number-string (->string #'word))))
-     #'`(word-const-def
-         ,(->string #'label)
-         ,(parse-number-string (->string #'word))))))
+     #'(ast-const-word-cmd
+        (->string #'label)
+        (parse-number-string (->string #'word))))))
 
 (module+ test #| word-const |#
   (check-equal?
    (word-const some 1000)
-   '(word-const-def "some" 1000))
+   (ast-const-word-cmd "some" 1000))
   (check-equal?
    (word-const some %100010001000)
-   '(word-const-def "some" #b100010001000))
+   (ast-const-word-cmd "some" #b100010001000))
   (check-equal?
    (word-const some $2000)
-   '(word-const-def "some" #x2000))
+   (ast-const-word-cmd "some" #x2000))
   (check-exn exn:fail:syntax? (λ () (expand #'(word-const some $10000)))))
 
 (define-syntax (byte stx)
