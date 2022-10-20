@@ -1,6 +1,7 @@
 #lang racket
 
 (require "6510-utils.rkt")
+(require "6510-alt-command.rkt")
 
 (provide absolute-indexed-addressing?
          accumulator-addressing?
@@ -378,14 +379,19 @@
            ,(byte-operand (car op) #t)))
 
 (define (relative-opcode addressing-modes op)
-  `(rel-opcode ,(cdr (find-addressing-mode 'relative addressing-modes))
-               ,(byte-operand op #t #t)))
+  (let ((operand (byte-operand op #t #t))
+        (opcode  (cdr (find-addressing-mode 'relative addressing-modes))))
+    (if (number? operand)
+        (ast-rel-opcode-cmd (list opcode operand))
+        (ast-unresolved-rel-opcode-cmd
+         (list opcode)
+         (ast-resolve-byte-scmd (cadr operand) 'relative)))))
 
 (module+ test #| relative-opcode |#
   (check-equal? (relative-opcode '((relative . #x20)) '$10)
-                '(rel-opcode #x20 #x10))
+                (ast-rel-opcode-cmd '(#x20 #x10)))
   (check-equal? (relative-opcode '((relative . #x20)) 'some)
-                '(rel-opcode #x20 (resolve-relative "some"))))
+                (ast-unresolved-rel-opcode-cmd '(#x20) (ast-resolve-byte-scmd "some" 'relative))))
 
 (define (absolute-opcode addressing-modes op)
   `(opcode ,(cdr (find-addressing-mode 'absolute addressing-modes))

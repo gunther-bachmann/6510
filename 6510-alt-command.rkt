@@ -10,6 +10,10 @@
          (struct-out ast-resolve-word-scmd)
          (struct-out ast-resolve-byte-scmd)
          (struct-out ast-opcode-cmd)
+         (struct-out ast-rel-opcode-cmd)
+         (struct-out ast-unresolved-opcode-cmd)
+         (struct-out ast-unresolved-rel-opcode-cmd)
+         ast-unresolved-command?
          (struct-out ast-bytes-cmd)
          (struct-out ast-label-def-cmd)
          (struct-out ast-import-byte-cmd)
@@ -18,6 +22,10 @@
          (struct-out ast-export-word-cmd)
          (struct-out ast-const-byte-cmd)
          (struct-out ast-const-word-cmd))
+
+(define (ast-unresolved-command? command)
+  (or (ast-unresolved-rel-opcode-cmd? command)
+     (ast-unresolved-opcode-cmd? command)))
 
 (struct ast-command
   ()
@@ -33,7 +41,7 @@
 (struct ast-decide-cmd ast-command
   (options)
   #:transparent
-  #:guard (struct-guard/c (listof ast-command?)))
+  #:guard (struct-guard/c (listof ast-unresolved-command?)))
 
 ;; a resolve sub command, referencing this label (use word/byte sub structure)
 (struct ast-resolve-sub-cmd
@@ -46,13 +54,25 @@
   ()
   #:transparent)
 
+(define (addressing-mode? mode)
+  (or (eq? mode 'high-byte)
+     (eq? mode 'low-byte)
+     (eq? mode 'relative)))
+
 ;; resolving to a byte
 (struct ast-resolve-byte-scmd ast-resolve-sub-cmd
-  ()
-  #:transparent)
+  (mode)
+  #:transparent
+  #:guard (struct-guard/c string? addressing-mode?))
 
 ;; resolved opcode (just bytes)
 (struct ast-opcode-cmd ast-command
+  (bytes)
+  #:transparent
+  #:guard (struct-guard/c
+           (listof byte?)))
+
+(struct ast-rel-opcode-cmd ast-command
   (bytes)
   #:transparent
   #:guard (struct-guard/c
@@ -76,6 +96,14 @@
   #:guard (struct-guard/c
            (listof byte?)
            ast-resolve-sub-cmd?))
+
+;; opcode including unresolved resolve subcommand
+(struct ast-unresolved-rel-opcode-cmd ast-rel-opcode-cmd
+  (resolve-sub-command)
+  #:transparent
+  #:guard (struct-guard/c
+           (listof byte?)
+           ast-resolve-byte-scmd?))
 
 ;; label definition
 (struct ast-label-def-cmd ast-command

@@ -15,10 +15,13 @@
   (cond
     [(ast-bytes-cmd? command)
      (length (ast-bytes-cmd-bytes command))]
+    [(or (ast-unresolved-rel-opcode-cmd? command)
+        (ast-rel-opcode-cmd? command))
+     2]
     [(list? command)
      (define tag (car command))
      (define last-el (last command))
-     (cond [(eq? tag 'rel-opcode) 2]
+     (cond ;; [(eq? tag 'rel-opcode) 2]
            [(eq? tag 'byte-value) (- (length command) 1)]
            [(eq? tag 'opcode)
             (+ (- (length command) 1)
@@ -41,9 +44,9 @@
                 2)
   (check-equal? (command-len '(opcode #x20 #xff #xd2))
                 3)
-  (check-equal? (command-len '(rel-opcode #x20 #xff))
+  (check-equal? (command-len (ast-rel-opcode-cmd '(#x20 #xff)))
                 2)
-  (check-equal? (command-len '(rel-opcode #x20 (resolve-relative "some")))
+  (check-equal? (command-len (ast-unresolved-rel-opcode-cmd '(#x20) (ast-resolve-byte-scmd "some" 'relative)))
                 2)
   (check-equal? (command-len '(opcode #x20 (resolve-word "some")))
                 3)

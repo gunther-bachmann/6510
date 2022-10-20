@@ -3,6 +3,8 @@
 (require "6510-alt-utils.rkt")
 (require "6510-alt-addressing.rkt")
 
+(require "6510-alt-command.rkt")
+
 (provide BCC BCS BEQ BMI BNE BPL BVC BVS) 
 
 (module+ test
@@ -14,9 +16,9 @@
 
 (module+ test #| BEQ |#
   (check-equal? (BEQ $10)
-                '(rel-opcode #xf0 #x10))
+                (ast-rel-opcode-cmd '(#xf0 #x10)))
   (check-equal? (BEQ some)
-                '(rel-opcode #xf0 (resolve-relative "some"))))
+                (ast-unresolved-rel-opcode-cmd '(#xf0) (ast-resolve-byte-scmd "some" 'relative))))
 
 
 (define-opcode BMI ((relative . #x30)))
