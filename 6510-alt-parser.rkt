@@ -549,7 +549,7 @@
   (check-equal? (parse-opcodes "JSR $FFD2")
                 '((opcode 32 210 255)))
   (check-equal? (parse-opcodes ".data $FF, $10")
-                '((byte-value 255 16)))
+                (list (ast-bytes-cmd '(255 16))))
   (check-equal? (parse-opcodes "LDX $ff00\nsome: JSR some")
                 '((opcode 174 0 255) (label-def "some") (opcode 32 (resolve-word "some"))))
   (check-equal? (parse-program #<<EOF
@@ -590,7 +590,7 @@
          adc (<end),y
 EOF
 )
-  '((decide (((resolve-byte "hello") opcode 166)
+  `((decide (((resolve-byte "hello") opcode 166)
              ((resolve-word "hello") opcode 174)))
     (label-def "sout")
     (decide (((resolve-byte "hello") opcode 181)
@@ -617,10 +617,10 @@ EOF
     (opcode 32 210 255)
     (opcode 96)
     (label-def "hello")
-    (byte-value 18)
-    (byte-value 13)
-    (byte-value 33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104)
-    (byte-value 14)
+   ,(ast-bytes-cmd '(18))
+   ,(ast-bytes-cmd '(13))
+   ,(ast-bytes-cmd '(33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104))
+   ,(ast-bytes-cmd '(14))
     (opcode 113 (resolve-byte "<end"))))
 
   (check-equal? (parse-program #<<EOF

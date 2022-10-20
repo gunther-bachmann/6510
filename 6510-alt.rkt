@@ -4,6 +4,9 @@
 (require "6510-utils.rkt")
 (require (for-syntax "6510-utils.rkt"))
 
+(require (for-syntax "6510-alt-command.rkt"))
+(require "6510-alt-command.rkt")
+
 (require "6510-alt.logic-ops.rkt")
 (require "6510-alt.branch-ops.rkt")
 (require "6510-alt.arithmetic-ops.rkt")
@@ -16,6 +19,8 @@
 (require "6510-alt.compare-ops.rkt")
 (require "6510-alt.subroutine-ops.rkt")
 (require "6510-alt.stack-ops.rkt")
+
+(provide (all-from-out "6510-alt-command.rkt"))
 
 (provide (all-from-out "6510-alt.logic-ops.rkt"))
 (provide (all-from-out "6510-alt.branch-ops.rkt"))
@@ -109,13 +114,13 @@
                                 (in-byte-range? (parse-number-string str-val)))))
                          (syntax->list #'(byte ...)))))
        (all #'(is-byte-number ...)))
-     #'`(byte-value ,(parse-number-string (->string #'byte)) ...))))
+     #'(ast-bytes-cmd (list (parse-number-string (->string #'byte)) ...)))))
 
 (module+ test #| byte |#
   (check-equal? (byte $10 $FF $D2 %10010000 %11111111)
-                '(byte-value #x10 #xFF #xD2 #b10010000 #b11111111))
+                (ast-bytes-cmd '(#x10 #xFF #xD2 #b10010000 #b11111111)))
   (check-equal? (byte "$10" "$FF" "$D2" "%10010000" "%11111111")
-                '(byte-value #x10 #xFF #xD2 #b10010000 #b11111111))
+                (ast-bytes-cmd '(#x10 #xFF #xD2 #b10010000 #b11111111)))
   (check-exn exn:fail:syntax? (λ () (expand #'(byte $10 $100)))))
 
 (define-for-syntax (parse-syntax-number val-stx)
@@ -139,13 +144,13 @@
                                        (syntax->list #'(word ...))))
                    ((high-bytes ...) (map (λ (word-num) (high-byte (parse-syntax-number word-num)))
                                         (syntax->list #'(word ...)))))
-       #'`(byte-value ,@(map syntax->datum
+       #'(ast-bytes-cmd (map syntax->datum
                              (flatten (map list (syntax->list #'(low-bytes ...))
                                            (syntax->list #'(high-bytes ...))))))))))
 
 (module+ test #| word |#
   (check-equal? (word $1000 $FFD2 %1001000011111111)
-                '(byte-value #x00 #x10 #xD2 #xFF #b11111111 #b10010000))
+                (ast-bytes-cmd '(#x00 #x10 #xD2 #xFF #b11111111 #b10010000)))
   (check-exn exn:fail:syntax? (λ () (expand #'(word $1000 $10000)))))
 
 (define (c64-char->byte char)
@@ -155,11 +160,11 @@
   (syntax-case stx ()
     ([_ str]
      (string? (syntax->datum #'str))
-     #'`(byte-value ,@(map c64-char->byte (string->list (->string #'str)))))))
+     #'(ast-bytes-cmd (map c64-char->byte (string->list (->string #'str)))))))
 
 (module+ test #| asc |#
   (check-equal? (asc "some")
-                '(byte-value 115 111 109 101)))
+                (ast-bytes-cmd '(115 111 109 101))))
 
 ;; --------------------------------------------------------------------------------
 ;; additional syntax (ideas)
