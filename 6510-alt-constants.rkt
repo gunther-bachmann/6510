@@ -2,6 +2,7 @@
 
 (require "6510-test-utils.rkt")
 (require "6510-utils.rkt")
+(require "6510-alt-command.rkt")
 (require (only-in "6510-alt-resolver.rkt" resolve-word? resolve-byte?))
 
 (provide constant-definitions-hash resolve-constants)
@@ -39,27 +40,30 @@
            (lobyte-constant->command command value)]
           [#t command])))
 
-(define (const-def-tag? tag)
-  (or (eq? tag 'word-const-def)
-     (eq? tag 'byte-const-def)))
-
 (define (constant-definition-commands commands)
   (filter
-   (λ (command) (const-def-tag? (car command)))
+   (λ (command) (or (ast-const-word-cmd? command)
+                   (ast-const-byte-cmd? command)))
    commands))
 
 (define (constant-definitions-hash commands)
   (foldl (λ (command hash)
-           (match-let (((list _ label value) command))
-             (hash-set hash label value)))
+           (define-values (label value)
+             (cond [(ast-const-word-cmd? command)
+                    (values (ast-const-word-cmd-label command)
+                            (ast-const-word-cmd-word command))]
+                   [(ast-const-byte-cmd? command)
+                    (values (ast-const-byte-cmd-label command)
+                            (ast-const-byte-cmd-byte command))]))
+           (hash-set hash label value))
          (hash)
          (constant-definition-commands commands)))
 
 (module+ test #| constant-definitions |#
-  (check-equal? (constant-definitions-hash '((byte-const-def "some" #x30)))
+  (check-equal? (constant-definitions-hash (list (ast-const-byte-cmd "some" #x30)))
                 '#hash(("some" . #x30)))
-  (check-equal? (constant-definitions-hash '((byte-const-def "some" #x30)
-                                             (word-const-def "other" #x3020)))
+  (check-equal? (constant-definitions-hash (list (ast-const-byte-cmd "some" #x30)
+                                             (ast-const-word-cmd "other" #x3020)))
                 '#hash(("some" . #x30)
                        ("other" . #x3020))))
 
