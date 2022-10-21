@@ -117,7 +117,7 @@
          (word-operand (symbol->string any-num) force)]
         [(number? any-num) any-num]
         [(6510-number-string? any-num) (parse-number-string any-num)]        
-        [force `(resolve-word ,any-num)]
+        [force (ast-resolve-word-scmd any-num)]
         [#t (raise-syntax-error 'word-operand (format "'~a' is no valid word operand" any-num))]))
 
 (module+ test #| word-operand |#
@@ -447,7 +447,7 @@
                (low-byte word)
                (high-byte word)))
         (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'indirect addressing-modes)))
-                                   (ast-resolve-word-scmd word)))))
+                                   word))))
 
 (module+ test #| indirect-opcode |#
   (check-equal? (indirect-opcode '((indirect . #x20)) '($1000))
@@ -505,7 +505,7 @@
            (ast-unresolved-opcode-cmd (list (cdar possible-addressing-modes))
                                       (if (eq? res 'resolve-word)
                                           (ast-resolve-word-scmd (->string op))
-                                          (ast-resolve-byte-scmd (->string op)))))]
+                                          (ast-resolve-byte-scmd (->string op) 'low-byte))))]
         [(< 1 (length possible-addressing-modes))
          `(decide ,(map (lambda (addressing-mode)
                           `((,(hash-ref address-mode-to-resolve-map (car addressing-mode))

@@ -16,13 +16,12 @@
 (module+ test #| JMP |#
   (check-equal? (JMP $FFD2)
                 (ast-opcode-cmd '(#x4c #xd2 #xff)))
-  ;; (check-equal? (JMP some)
-  ;;               '(opcode #x4c (resolve-word "some")))
+  (check-equal? (JMP some)
+                (ast-unresolved-opcode-cmd '(#x4c) (ast-resolve-word-scmd "some")))
   (check-equal? (JMP ($FFD2))
                 (ast-opcode-cmd '(#x6c #xd2 #xff)))
-  ;; (check-equal? (JMP (some))
-  ;;               '(opcode #x6c (resolve-word "some")))
-  )
+  (check-equal? (JMP (some))
+                (ast-unresolved-opcode-cmd '(#x6c) (ast-resolve-word-scmd "some"))))
 
 (define-opcode JSR ((absolute . #x20)))
 

@@ -115,9 +115,8 @@
                 (ast-opcode-cmd '(#x8e #x12 #x10)))
   (check-equal? (STX $10,y)
                 (ast-opcode-cmd '(#x96 #x10)))
-  ;; (check-equal? (STX some,y)
-  ;;               '(opcode #x96 (resolve-byte "some")))
-  )
+  (check-equal? (STX some,y)
+                (ast-unresolved-opcode-cmd '(#x96) (ast-resolve-byte-scmd "some" 'low-byte))))
 
 (define-opcode STY
   ((zero-page   . #x84)
