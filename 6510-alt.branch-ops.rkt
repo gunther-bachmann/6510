@@ -20,7 +20,6 @@
   (check-equal? (BEQ some)
                 (ast-unresolved-rel-opcode-cmd '(#xf0) (ast-resolve-byte-scmd "some" 'relative))))
 
-
 (define-opcode BMI ((relative . #x30)))
 
 (define-opcode BNE ((relative . #xd0)))

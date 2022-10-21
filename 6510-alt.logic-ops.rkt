@@ -2,6 +2,7 @@
 
 (require "6510-alt-utils.rkt")
 (require "6510-alt-addressing.rkt")
+(require "6510-alt-command.rkt")
 
 (provide AND EOR ORA) 
 
@@ -40,18 +41,18 @@
 
 (module+ test #| ora |#
   (check-match (ORA ("$10",x))
-               '(opcode #x01 #x10))
+               (ast-opcode-cmd '(#x01 #x10)))
   (check-match (ORA "$10")
-               '(opcode #x05 #x10))
+               (ast-opcode-cmd '(#x05 #x10)))
   (check-match (ORA "!$10")
-               '(opcode #x09 #x10))
+               (ast-opcode-cmd '(#x09 #x10)))
   (check-match (ORA "$1011")
-               '(opcode #x0d #x11 #x10))
+               (ast-opcode-cmd '(#x0d #x11 #x10)))
   (check-match (ORA ("$10"),y)
-               '(opcode #x11 #x10))
+               (ast-opcode-cmd '(#x11 #x10)))
   (check-match (ORA "$10",x)
-               '(opcode #x15 #x10))
+               (ast-opcode-cmd '(#x15 #x10)))
   (check-match (ORA "$1011",y)
-               '(opcode #x19 #x11 #x10))
+               (ast-opcode-cmd '(#x19 #x11 #x10)))
   (check-match (ORA "$1011",x)
-               '(opcode #x1d #x11 #x10)))
+               (ast-opcode-cmd '(#x1d #x11 #x10))))

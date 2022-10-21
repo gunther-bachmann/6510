@@ -3,6 +3,8 @@
 (require (for-syntax "6510-alt-utils.rkt"))
 (require (for-syntax "6510-syntax-utils.rkt"))
 
+(require "6510-alt-command.rkt")
+
 (provide define-opcode)
 
 (module+ test
@@ -51,23 +53,23 @@
                       (indirect-y . #xfc)))
 
   (check-equal? (XYZ)
-                '(opcode #xff))
+                (ast-opcode-cmd '(#xff)))
   (check-equal? (XYZ (#:line 17 #:org-cmd))
-                '(opcode #xff))
+                (ast-opcode-cmd '(#xff)))
   (check-exn exn:fail? (λ () (expand #'(XYZ $))))
   (check-equal? (XYZ $10)
-                '(opcode #xfe #x10))
+                (ast-opcode-cmd '(#xfe #x10)))
   (check-equal? (XYZ (#:line 17 #:org-cmd) $10)
-                '(opcode #xfe #x10))
+                (ast-opcode-cmd '(#xfe #x10)))
   (check-exn exn:fail? (λ () (expand #'(XYZ no no))))
   (check-equal? (XYZ ($10,x))
-                '(opcode #xfd #x10))
+                (ast-opcode-cmd '(#xfd #x10)))
   (check-equal? (XYZ (#:line 17 #:org-cmd) ($10,x))
-                '(opcode #xfd #x10))
+                (ast-opcode-cmd '(#xfd #x10)))
   (check-equal? (XYZ  ($10),y)
-                '(opcode #xfc #x10))
+                (ast-opcode-cmd '(#xfc #x10)))
   (check-equal? (XYZ (#:line 17 #:org-cmd) ($10),y)
-                '(opcode #xfc #x10))
+                (ast-opcode-cmd '(#xfc #x10)))
   (check-exn exn:fail? (λ () (expand #'(XYZ no ($10),y)))))
 
 (define-for-syntax (no-op stx addressings-defs)

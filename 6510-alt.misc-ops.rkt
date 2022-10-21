@@ -2,6 +2,7 @@
 
 (require "6510-alt-utils.rkt")
 (require "6510-alt-addressing.rkt")
+(require "6510-alt-command.rkt")
 
 (provide BIT BRK NOP) 
 
@@ -16,7 +17,7 @@
 
 (module+ test #| BRK |#
   (check-equal?  (BRK)
-                 '(opcode #x00)))
+                 (ast-opcode-cmd '(#x00))))
 
 (define (NOP)
-  '(opcode #xea))
+  (ast-opcode-cmd '(#xea)))

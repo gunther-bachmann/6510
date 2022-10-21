@@ -2,6 +2,7 @@
 
 (require "6510-alt-utils.rkt")
 (require "6510-alt-addressing.rkt")
+(require "6510-alt-command.rkt")
 
 (provide DEC DEX DEY INC INX INY) 
 
@@ -15,7 +16,7 @@
 
 (module+ test #| DEX |#
   (check-equal? (DEX)
-                '(opcode #xca)))
+                (ast-opcode-cmd '(#xca))))
 
 (define-opcode DEY ((implicit . #x88)))
 
@@ -24,16 +25,16 @@
 
 (module+ test
   (check-match (INC "$10")
-               '(opcode #xE6 #x10))
+               (ast-opcode-cmd '(#xE6 #x10)))
 
   (check-match (INC "$10",x)
-               '(opcode #xF6 #x10))
+               (ast-opcode-cmd '(#xF6 #x10)))
 
   (check-match (INC "$1000")
-               '(opcode #xEE #x00 #x10))
+               (ast-opcode-cmd '(#xEE #x00 #x10)))
 
   (check-match (INC "$1000",x)
-               '(opcode #xFE #x00 #x10)))
+               (ast-opcode-cmd '(#xFE #x00 #x10))))
 
 (define-opcode INX ((implicit . #xe8)))
 
