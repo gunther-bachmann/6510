@@ -7,6 +7,7 @@
 (provide (struct-out ast-program)
          (struct-out ast-command)
          (struct-out ast-decide-cmd)
+         (struct-out ast-resolve-sub-cmd)
          (struct-out ast-resolve-word-scmd)
          (struct-out ast-resolve-byte-scmd)
          (struct-out ast-opcode-cmd)
