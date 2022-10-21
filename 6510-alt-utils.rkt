@@ -78,24 +78,24 @@
          (byte-operand (symbol->string any-num) force relative)]
         [(number? any-num) any-num]
         [(6510-number-string? any-num) (parse-number-string any-num)]
-        [(byte-label? any-num) `(resolve-byte ,any-num)]
+        [(byte-label? any-num) (ast-resolve-byte-scmd (base-label-str any-num) (label->hilo-mode any-num))]
         [(and force
             (label? any-num)
             (not relative))
-         `(resolve-byte ,any-num)]
+         (ast-resolve-byte-scmd (base-label-str any-num) (label->hilo-mode any-num))]
         [(and force
             (label? any-num)
             relative)
-         `(resolve-relative ,any-num)]
+         (ast-resolve-byte-scmd any-num 'relative)]
         [#t (raise-syntax-error #f (format "unknown byte operand ~a" any-num))]))
 
 (module+ test #| byte-operand |#
   (check-equal? (byte-operand "some" #t)
-                '(resolve-byte "some"))
+                (ast-resolve-byte-scmd "some" 'low-byte))
   (check-equal? (byte-operand "some" #t #t)
-                '(resolve-relative "some"))
+                (ast-resolve-byte-scmd "some" 'relative))
   (for ((byte-expectation
-         '((10      . 10)
+         `((10      . 10)
            (0       . 0)
            (255     . 255)
            ("10"    . 10)
@@ -105,7 +105,7 @@
            (|$10|   . 16)
            (|$FF|   . 255)
            (|%101|  . 5)
-           (">some" . (resolve-byte ">some")))))
+           (">some" . ,(ast-resolve-byte-scmd "some" 'high-byte)))))
     (check-equal? (byte-operand (car byte-expectation))
                   (cdr byte-expectation)
                   (format "expected: ~a == ~a"
@@ -187,18 +187,19 @@
 
 (module+ test #| immediate-byte-operand |#
   (for ((byte-expectation
-         '(("!10"   . 10)
+         `(("!10"   . 10)
            ("!0"    . 0)
            ("!255"  . 255)
            (|!10|   . 10)
            (|!$10|  . 16)
            (|!$FF|  . 255)
-           (|!%101| . 5))))
-    (check-eq? (immediate-byte-operand (car byte-expectation))
-               (cdr byte-expectation)
-               (format "expected: ~a == ~a"
-                       (car byte-expectation)
-                       (cdr byte-expectation)))))
+           (|!%101| . 5)
+           ("!>some" . ,(ast-resolve-byte-scmd "some" 'high-byte)))))
+    (check-equal? (immediate-byte-operand (car byte-expectation))
+                  (cdr byte-expectation)
+                  (format "expected: ~a == ~a"
+                          (car byte-expectation)
+                          (cdr byte-expectation)))))
 
 (define (find-addressing-mode sym addressing-modes)
   (findf (lambda (el) (and (pair? el) (eq? (car el) sym))) addressing-modes))
@@ -363,20 +364,44 @@
                 (ast-opcode-cmd '(#x10))))
 
 (define (zero-page-opcode addressing-modes op)
-  (ast-opcode-cmd (list (cdr (find-addressing-mode 'zero-page addressing-modes))
-                        (byte-operand  op))))
+  (define operand (byte-operand op))
+  (if (number? operand)
+      (ast-opcode-cmd (list (cdr (find-addressing-mode 'zero-page addressing-modes))
+                            operand))
+      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'zero-page addressing-modes)))
+                                 operand)))
 
 (define (zero-page-indexed-opcode sym addressing-modes op)
-  (ast-opcode-cmd (list (cdr (find-addressing-mode sym addressing-modes))
-                        (byte-operand op))))
+  (define operand (byte-operand op))
+  (if (number? operand)
+      (ast-opcode-cmd (list (cdr (find-addressing-mode sym addressing-modes))
+                            operand))
+      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode sym addressing-modes)))
+                                 operand)))
 
 (define (immediate-opcode addressing-modes op)
-  (ast-opcode-cmd (list (cdr (find-addressing-mode 'immediate addressing-modes))
-                        (immediate-byte-operand op))))
+  (define operand (immediate-byte-operand op))
+  (if (number? operand)
+      (ast-opcode-cmd (list (cdr (find-addressing-mode 'immediate addressing-modes))
+                            operand))
+      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'immediate addressing-modes)))
+                                 operand)))
+
+(module+ test #| immediate opcode |#
+  (check-equal? (immediate-opcode '((immediate . #x33)) "!$20")
+                (ast-opcode-cmd '(#x33 #x20)))
+  (check-equal? (immediate-opcode '((immediate . #x33)) "!<some")
+                (ast-unresolved-opcode-cmd '(#x33) (ast-resolve-byte-scmd "some" 'low-byte)))
+  (check-equal? (immediate-opcode '((immediate . #x33)) "!>some")
+                (ast-unresolved-opcode-cmd '(#x33) (ast-resolve-byte-scmd "some" 'high-byte))))
 
 (define (indirect-x-opcode addressing-modes op)
-  (ast-opcode-cmd (list (cdr (find-addressing-mode 'indirect-x addressing-modes))
-                        (byte-operand (car op) #t))))
+  (define operand (byte-operand (car op) #t))
+  (if (number? operand)
+      (ast-opcode-cmd (list (cdr (find-addressing-mode 'indirect-x addressing-modes))
+                            operand))
+      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'indirect-x addressing-modes)))
+                                 operand)))
 
 (define (relative-opcode addressing-modes op)
   (let ((operand (byte-operand op #t #t))
@@ -385,7 +410,7 @@
         (ast-rel-opcode-cmd (list opcode operand))
         (ast-unresolved-rel-opcode-cmd
          (list opcode)
-         (ast-resolve-byte-scmd (cadr operand) 'relative)))))
+         (ast-resolve-byte-scmd (ast-resolve-sub-cmd-label operand) 'relative)))))
 
 (module+ test #| relative-opcode |#
   (check-equal? (relative-opcode '((relative . #x20)) '$10)
@@ -403,8 +428,12 @@
                 (ast-opcode-cmd '(#x20 #x00 #x10))))
 
 (define (indirect-y-opcode addressing-modes op)
-  (ast-opcode-cmd (list (cdr (find-addressing-mode 'indirect-y  addressing-modes))
-                        (byte-operand (car op) #t))))
+  (define operand (byte-operand (car op) #t))
+  (if (number? operand)
+      (ast-opcode-cmd (list (cdr (find-addressing-mode 'indirect-y  addressing-modes))
+                            operand))
+      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'indirect-y  addressing-modes)))
+                                 operand)))
 
 (module+ test #| indirect-y-opcode |#
   (check-equal? (indirect-y-opcode '((indirect-y . #x20)) '($10))

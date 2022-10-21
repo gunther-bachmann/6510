@@ -15,6 +15,7 @@
          (struct-out ast-unresolved-opcode-cmd)
          (struct-out ast-unresolved-rel-opcode-cmd)
          ast-unresolved-command?
+         label->hilo-mode
          (struct-out ast-bytes-cmd)
          (struct-out ast-label-def-cmd)
          (struct-out ast-import-byte-cmd)
@@ -59,6 +60,10 @@
   (or (eq? mode 'high-byte)
      (eq? mode 'low-byte)
      (eq? mode 'relative)))
+
+(define (label->hilo-mode label)
+  (cond [(string-prefix? label ">") 'high-byte]
+        [#t 'low-byte]))
 
 ;; resolving to a byte
 (struct ast-resolve-byte-scmd ast-resolve-sub-cmd
