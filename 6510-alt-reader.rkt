@@ -70,7 +70,7 @@
            (define raw-program '(str ...))
            (define program `(,str ...))
            (define program-p1 (->resolved-decisions (label-instructions program) program))
-           (define program-p2 (label-string-offsets 0 '() program-p1))
+           (define program-p2 (label-string-offsets 0 (hash) program-p1))
            ;; (define resolved-program (replace-labels program org))
            ;; (define raw-bytes (commands->bytes org `(,str ...)))
            (displayln "(have a look at sy-program, raw-program, resolved-program or raw-bytes)")

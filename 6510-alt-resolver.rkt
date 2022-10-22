@@ -66,7 +66,7 @@
   (check-not-false (is-label-instruction? (ast-label-def-cmd "some")))
   (check-not-false (is-label-instruction? (ast-const-word-cmd "some" #x2000)))
   (check-not-false (is-label-instruction? (ast-const-byte-cmd "some" #x20)))
-  (check-false (is-label-instruction? '(opcode #xea))))
+  (check-false (is-label-instruction? (ast-opcode-cmd '(#xea)))))
 
 (define (label-instructions program)
   (filter is-label-instruction? program))
