@@ -31,8 +31,9 @@
     (ast-opcode-cmd '(#x4c #xD2 #xFF))
     (ast-opcode-cmd '(#x6c #xFE #xFF))
     (ast-unresolved-opcode-cmd '(#x6c) (ast-resolve-word-scmd "some"))
-    '(decide (((resolve-byte "some") opcode 229)
-              ((resolve-word "some") opcode 237)))
+    (ast-decide-cmd
+    (list (ast-unresolved-opcode-cmd '(229) (ast-resolve-byte-scmd "some" 'low-byte))
+          (ast-unresolved-opcode-cmd '(237) (ast-resolve-word-scmd "some"))))
     (ast-unresolved-opcode-cmd '(229) (ast-resolve-byte-scmd "some" 'high-byte))
     (ast-unresolved-rel-opcode-cmd '(240) (ast-resolve-byte-scmd "some" 'relative))
     (ast-opcode-cmd '(234))

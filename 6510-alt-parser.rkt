@@ -557,9 +557,9 @@
   (check-equal? (parse-program #<<EOF
        *=$0810        ; origin (basic start, to make loading and executing easier)
 
-;        ;; lda #23
-;        ;; sta 53272
-;
+        ;; lda #23
+        ;; sta 53272
+
          ldx hello
  sout:   lda hello,x
          jsr $ffd2
@@ -589,15 +589,17 @@
          .asc "!DLROw WEN OLLEh"
          .data $0e ; switch to lower letter mode
 
-         ;adc (<end),y
+         adc (<end),y
 EOF
 )
   (list
-   '(decide (((resolve-byte "hello") opcode 166)
-            ((resolve-word "hello") opcode 174)))
+   (ast-decide-cmd
+    (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+          (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
    (ast-label-def-cmd "sout")
-   '(decide (((resolve-byte "hello") opcode 181)
-             ((resolve-word "hello") opcode 189)))
+   (ast-decide-cmd
+    (list (ast-unresolved-opcode-cmd '(181) (ast-resolve-byte-scmd "hello" 'low-byte))
+          (ast-unresolved-opcode-cmd '(189) (ast-resolve-word-scmd "hello"))))
    (ast-opcode-cmd '(32 210 255))
    (ast-opcode-cmd '(202))
    (ast-unresolved-rel-opcode-cmd '(208) (ast-resolve-byte-scmd "sout" 'relative))
@@ -624,8 +626,7 @@ EOF
    (ast-bytes-cmd '(13))
    (ast-bytes-cmd '(33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104))
    (ast-bytes-cmd '(14))
-    ;; (opcode 113 (resolve-byte "<end"))
-    ))
+   (ast-unresolved-opcode-cmd '(113) (ast-resolve-byte-scmd "end" 'low-byte))))
 
   (check-equal? (parse-program #<<EOF
         *=$0810        ; origin (basic start, to make loading and executing easier)
@@ -638,5 +639,6 @@ EOF
                  (ast-opcode-cmd '(174 0 192))
                  (ast-label-def-cmd "hello")
                  (ast-opcode-cmd '(169 16))
-                 '(decide (((resolve-byte "hello") opcode 165)
-                           ((resolve-word "hello") opcode 173))))))
+                 (ast-decide-cmd
+                  (list (ast-unresolved-opcode-cmd '(165) (ast-resolve-byte-scmd "hello" 'low-byte))
+                        (ast-unresolved-opcode-cmd '(173) (ast-resolve-word-scmd "hello")))))))

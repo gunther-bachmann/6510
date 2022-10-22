@@ -507,10 +507,14 @@
                                           (ast-resolve-word-scmd (->string op))
                                           (ast-resolve-byte-scmd (->string op) 'low-byte))))]
         [(< 1 (length possible-addressing-modes))
-         `(decide ,(map (lambda (addressing-mode)
-                          `((,(hash-ref address-mode-to-resolve-map (car addressing-mode))
-                             ,(->string op)) . (opcode ,(cdr addressing-mode))))
-                        possible-addressing-modes) )]
+         (ast-decide-cmd (map (lambda (addressing-mode)
+                                (let ((resolve-strategy (hash-ref address-mode-to-resolve-map (car addressing-mode))))
+                                  (ast-unresolved-opcode-cmd
+                                   (list (cdr addressing-mode))
+                                   (cond [(eq? resolve-strategy 'resolve-word)
+                                          (ast-resolve-word-scmd (->string op))]
+                                         [#t (ast-resolve-byte-scmd (->string op) 'low-byte)]))))
+                              possible-addressing-modes) )]
         [#t (raise-syntax-error 'ambiguous-addressing "no option found for ambiguous address resolution")]))
 
 (define (abs-or-zero-page-indexed-opcode addressing-sym-list addressing-modes op1 op2)
@@ -531,7 +535,18 @@
                    (absolute-y . #x30))
                  'some
                  ',x)
-                (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "some"))))
+                (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "some")))
+  (check-equal? (abs-or-zero-page-indexed-opcode
+                 '((zero-page-x . ,x)
+                   (absolute-x . ,x))
+                 '((absolute-x . #x20)
+                   (zero-page-x . #x30))
+                 'some
+                 ',x)
+                (ast-decide-cmd
+                 (list
+                  (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "some"))
+                  (ast-unresolved-opcode-cmd '(#x30) (ast-resolve-byte-scmd "some" 'low-byte))))))
 
 (define (abs-or-zero-page-opcode addressing-list addressing-modes op)
   (define pos-addressings

@@ -56,11 +56,13 @@
   (check-equal? (LDX $1020,y)
                 (ast-opcode-cmd '(#xBE #x20 #x10)))
   (check-equal? (LDX hello)
-                '(decide (((resolve-byte "hello") opcode #xa6)
-                          ((resolve-word "hello") opcode #xae))))
+                (ast-decide-cmd
+                 (list (ast-unresolved-opcode-cmd '(#xa6) (ast-resolve-byte-scmd "hello" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(#xae) (ast-resolve-word-scmd "hello")))))
   (check-equal? (LDX (#:line 17 :#org-cmd "ldx hello") hello)
-                '(decide (((resolve-byte "hello") opcode #xa6)
-                          ((resolve-word "hello") opcode #xae)))))
+                (ast-decide-cmd
+                 (list (ast-unresolved-opcode-cmd '(#xa6) (ast-resolve-byte-scmd "hello" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(#xae) (ast-resolve-word-scmd "hello"))))))
 
 (define-opcode LDY
   ((immediate   . #xA0)
@@ -108,9 +110,10 @@
 (module+ test #| STX |#  
   (check-equal? (STX $10)
                 (ast-opcode-cmd '(#x86 #x10)))
-  (check-equal? (STX some)
-                '(decide (((resolve-byte "some") opcode #x86)
-                          ((resolve-word "some") opcode #x8e))))
+  (check-equal? (STX some) 
+                (ast-decide-cmd
+                 (list (ast-unresolved-opcode-cmd '(#x86) (ast-resolve-byte-scmd "some" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(#x8e) (ast-resolve-word-scmd "some")))))
   (check-equal? (STX $1012)
                 (ast-opcode-cmd '(#x8e #x12 #x10)))
   (check-equal? (STX $10,y)

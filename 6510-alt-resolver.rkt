@@ -59,6 +59,12 @@
            (equal? label label-str))
          program))
 
+(module+ test #| first-label-in |#
+  (check-equal? (first-label-in "some" (list (ast-label-def-cmd "hello")))
+                #f)
+  (check-equal? (first-label-in "hello" (list (ast-label-def-cmd "hello")))
+                (ast-label-def-cmd "hello")))
+
 (define (is-label-instruction? instruction)
   (or (ast-label-def-cmd? instruction)
      (ast-const-word-cmd? instruction)
@@ -75,66 +81,79 @@
 
 (define (matching-decide-option labels decide-options)
   (findf (λ (decide-option)
-           (match-let (((list (list resolver-tag label) _ ...) decide-option))
-             (define label-entry (first-label-in label labels))
-             (if label-entry
-                 (cond [(eq? 'resolve-byte resolver-tag)
-                        (is-byte-label? label-entry)]
-                       [(eq? 'resolve-word resolver-tag)
-                        (is-word-label? label-entry)]
-                       [#t #f])
-                 #f)))
+           (define resolve-scmd (ast-unresolved-opcode-cmd-resolve-sub-command decide-option))
+           (define label (ast-resolve-sub-cmd-label resolve-scmd))
+           (define label-entry (first-label-in label labels))
+           (if label-entry
+               (cond [(ast-resolve-byte-scmd? resolve-scmd)
+                      (is-byte-label? label-entry)]
+                     [(ast-resolve-word-scmd? resolve-scmd)
+                      (is-word-label? label-entry)]
+                     [#t #f])
+               #f))
          decide-options))
 
 (module+ test #| matching-decide-option |#
-  (check-equal? (matching-decide-option (list (ast-label-def-cmd "hello"))
-                                        '(((resolve-byte "hello") opcode 166)
-                                          ((resolve-word "hello") opcode 174)))
-                '((resolve-word "hello") opcode 174))
-  (check-equal? (matching-decide-option (list (ast-const-word-cmd "hello" #x2000))
-                                        '(((resolve-byte "hello") opcode 166)
-                                          ((resolve-word "hello") opcode 174)))
-                '((resolve-word "hello") opcode 174))
-  (check-equal? (matching-decide-option (list (ast-const-byte-cmd "hello" #x20))
-                                        '(((resolve-byte "hello") opcode 166)
-                                          ((resolve-word "hello") opcode 174)))
-                '((resolve-byte "hello") opcode 166)))
-
-(define (decide-option->instruction decide-option)
-  (append (cdr decide-option) (list (car decide-option))))
+  (check-equal? (matching-decide-option
+                 (list (ast-label-def-cmd "hello"))
+                 (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
+                (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello")))
+  (check-equal? (matching-decide-option
+                 (list (ast-const-word-cmd "hello" #x2000))
+                 (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
+                (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello")))
+  (check-equal? (matching-decide-option
+                 (list (ast-const-byte-cmd "hello" #x20))
+                 (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
+                (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))))
 
 (define (->resolved-decisions labels program)
   (if (empty? program)
       '()
       (let* ((instruction (car program))
-             (tag (car instruction))
              (default-result-f (λ () (cons instruction (->resolved-decisions labels (cdr program))))))
-        (cond [(eq? tag 'decide)
-               (let* ((options (cadr instruction))
+        (cond [(ast-decide-cmd? instruction)
+               (let* ((options (ast-decide-cmd-options instruction))
                       (moption (matching-decide-option labels options)))
                  (if moption
-                     (cons (decide-option->instruction moption) (->resolved-decisions labels (cdr program)))
+                     (cons moption (->resolved-decisions labels (cdr program)))
                      (default-result-f)))]
               [#t
                (default-result-f)]))))
 
 (module+ test #| ->resolved-decisions |#
-  (check-equal? (->resolved-decisions (list (ast-label-def-cmd "hello"))
-                                    '((decide (((resolve-byte "hello") opcode 166)
-                                               ((resolve-word "hello") opcode 174)))))
-                '((opcode 174 (resolve-word "hello"))))
-  (check-equal? (->resolved-decisions (list (ast-const-byte-cmd "hello" #x20))
-                                    '((decide (((resolve-byte "hello") opcode 166)
-                                               ((resolve-word "hello") opcode 174)))))
-                '((opcode 166 (resolve-byte "hello"))))
-  (check-equal? (->resolved-decisions (list (ast-const-word-cmd "hello" #x2000))
-                                    '((decide (((resolve-byte "hello") opcode 166)
-                                               ((resolve-word "hello") opcode 174)))))
-                '((opcode 174 (resolve-word "hello")))
-                "decide for word if referencing word label")
-  (check-equal? (->resolved-decisions (list (ast-label-def-cmd "not-found"))
-                                    '((decide (((resolve-byte "hello") opcode 166)
-                                               ((resolve-word "hello") opcode 174)))))
-                '((decide (((resolve-byte "hello") opcode 166)
-                           ((resolve-word "hello") opcode 174))))
+  (check-equal? (->resolved-decisions
+                 (list (ast-label-def-cmd "hello"))
+                 (list
+                  (ast-decide-cmd
+                   (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                         (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))))
+                (list (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
+  (check-equal? (->resolved-decisions
+                 (list (ast-const-byte-cmd "hello" #x20))
+                 (list
+                  (ast-decide-cmd
+                   (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                         (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))))
+                (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))))
+  (check-equal? (->resolved-decisions
+                 (list (ast-const-word-cmd "hello" #x2000))
+                 (list
+                  (ast-decide-cmd
+                   (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                         (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))))
+                (list (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
+  (check-equal? (->resolved-decisions
+                 (list (ast-label-def-cmd "not-found"))
+                 (list
+                  (ast-decide-cmd
+                   (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                         (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))))
+                (list
+                 (ast-decide-cmd
+                  (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                        (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello")))))
                 "nothing is decided if label is not found"))
