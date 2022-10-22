@@ -18,10 +18,10 @@
          label->hilo-mode
          (struct-out ast-bytes-cmd)
          (struct-out ast-label-def-cmd)
-         (struct-out ast-import-byte-cmd)
-         (struct-out ast-import-word-cmd)
-         (struct-out ast-export-byte-cmd)
-         (struct-out ast-export-word-cmd)
+         (struct-out ast-require-byte-cmd)
+         (struct-out ast-require-word-cmd)
+         (struct-out ast-provide-byte-cmd)
+         (struct-out ast-provide-word-cmd)
          (struct-out ast-const-byte-cmd)
          (struct-out ast-const-word-cmd))
 
@@ -118,25 +118,25 @@
   #:guard (struct-guard/c string?))
 
 ;; import word definition
-(struct ast-import-word-cmd ast-command
+(struct ast-require-word-cmd ast-command
   (label)
   #:transparent
   #:guard (struct-guard/c string?))
 
 ;; import byte definition
-(struct ast-import-byte-cmd ast-command
+(struct ast-require-byte-cmd ast-command
   (label)
   #:transparent
   #:guard (struct-guard/c string?))
 
 ;; export word definition
-(struct ast-export-word-cmd ast-command
+(struct ast-provide-word-cmd ast-command
   (label)
   #:transparent
   #:guard (struct-guard/c string?))
 
 ;; export byte definition
-(struct ast-export-byte-cmd ast-command
+(struct ast-provide-byte-cmd ast-command
   (label)
   #:transparent
   #:guard (struct-guard/c string?))

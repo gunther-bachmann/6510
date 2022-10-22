@@ -3,7 +3,6 @@
 (require "6510-test-utils.rkt")
 (require "6510-utils.rkt")
 (require "6510-alt-command.rkt")
-(require (only-in "6510-alt-resolver.rkt" resolve-word? resolve-byte?))
 
 (provide constant-definitions-hash resolve-constants)
 

@@ -2,6 +2,7 @@
 
 (require "6510-utils.rkt")
 (require "6510-alt-command.rkt")
+(require (rename-in racket/contract [define/contract define/c]))
 
 (provide absolute-indexed-addressing?
          accumulator-addressing?
@@ -60,8 +61,9 @@
               (in-byte-range? (parse-number-string any-num)))
            (byte-label? any-num)))))
 
-(define (byte-label? str)
-  (regexp-match #rx"^[><][a-zA-Z_-][a-zA-Z0-9_-]*$" str))
+(define/c (byte-label? str)
+  (-> string? boolean?)
+  (and (regexp-match #rx"^[><][a-zA-Z_-][a-zA-Z0-9_-]*$" str) #t))
 
 (define (label? str)
   (and (not (equal? str "A")) ;; reserved for accumulator addressing

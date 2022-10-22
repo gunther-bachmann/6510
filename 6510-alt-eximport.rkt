@@ -5,6 +5,7 @@
 
 (require "6510-test-utils.rkt")
 (require "6510-utils.rkt")
+(require "6510-alt-command.rkt")
 
 (provide import-table-bytes export-table-bytes)
 
@@ -34,27 +35,30 @@
           (string->bytes label)))
 
 (define (provide-entry provide-command labels constants)
-  (match-let* (((list tag label) provide-command)
-               (const-value      (hash-ref constants label #f))
-               (rel-label        (hash-ref labels label #f)))
-    (cond [(and const-value (eq? tag 'provide-word))
+  (let* ((label (or (and (ast-provide-word-cmd? provide-command)
+                      (ast-provide-word-cmd-label provide-command))
+                   (and (ast-provide-byte-cmd? provide-command)
+                      (ast-provide-byte-cmd-label provide-command))))
+         (const-value      (hash-ref constants label #f))
+         (rel-label        (hash-ref labels label #f)))
+    (cond [(and const-value (ast-provide-word-cmd? provide-command))
            (encode-word-const const-value label)]
-          [(and const-value (eq? tag 'provide-byte))
+          [(and const-value (ast-provide-byte-cmd? provide-command))
            (encode-byte-const const-value label)]
-          [(and rel-label (eq? tag 'provide-word))
+          [(and rel-label (ast-provide-word-cmd? provide-command))
            (encode-word-relative rel-label label)]
           [#t (raise-user-error "cannot be converted")])))
 
 (module+ test #| provide-entry |#
-  (check-equal? (provide-entry '(provide-word "some")
+  (check-equal? (provide-entry (ast-provide-word-cmd "some")
                                (hash)
                                '#hash(("some" . #xFFD2)))
                  '(2 0 #xD2 #xFF 4 115 111 109 101))
-  (check-equal? (provide-entry '(provide-byte "some")
+  (check-equal? (provide-entry (ast-provide-byte-cmd "some")
                                (hash)
                                '#hash(("some" . #xD2)))
                  '(1 #xD2 4 115 111 109 101))
-  (check-equal? (provide-entry '(provide-word "some")
+  (check-equal? (provide-entry (ast-provide-word-cmd "some")
                                '#hash(("some" . #x01D2))
                                (hash))
                 '(2 1 #xD2 #x01 4 115 111 109 101)))
@@ -71,9 +75,8 @@
   (if (empty? commands)
       collected-bytes
       (let* ((command (car commands))
-             (tag     (car command))
-             (bytes   (if (or (eq? tag 'provide-byte)
-                             (eq? tag 'provide-word))
+             (bytes   (if (or (ast-provide-byte-cmd? command)
+                             (ast-provide-word-cmd? command))
                           (provide-entry command labels constants)
                           '())))        
         (export-table-bytes (append collected-bytes bytes)
@@ -85,9 +88,9 @@
                  '#hash(("none" . #x01E0))
                  '#hash(("some" . #xFFD2)
                         ("other" . #xC0))
-                 '((provide-word "some")
-                   (provide-word "none")
-                   (provide-byte "other")))
+                 (list (ast-provide-word-cmd "some")
+                       (ast-provide-word-cmd "none")
+                       (ast-provide-byte-cmd "other")))
                  '(2 0 #xD2 #xFF 4 115 111 109 101
                    2 1 #xE0 #x01 4 110 111 110 101
                    1 #xC0 5 111 116 104 101 114)))
@@ -120,24 +123,25 @@
         (encode-import-word-entry offset label)
         (encode-import-byte-entry offset 0 label))))
 
-(define (import-byte-entry-bytes label req-hashes offset)
-  (let* ((base-label (base-label-str label))
-         (value      (hash-ref req-hashes base-label)))
+(define (import-byte-entry-bytes label req-hashes offset hilo-ind)
+  (let* ((value      (hash-ref req-hashes label)))
     (if (eq? 'word value)
-        (encode-import-byte-entry offset (label->hilo-indicator label) base-label)
-        (encode-import-byte-entry offset 0 base-label))))
+        (encode-import-byte-entry offset (if (eq? 'high-byte hilo-ind) 1 0) label)
+        (encode-import-byte-entry offset 0 label))))
 
 (define (import-table-bytes offset collected-entries req-hashes commands)
   (if (empty? commands)
       collected-entries
       (let* ((command  (car commands))
-             (last-el  (last command))
+             (res      (and (ast-unresolved-opcode-cmd? command)
+                          (ast-unresolved-opcode-cmd-resolve-sub-command command)))
              (offset+1 (+ offset 1))
              (new-entry 
-              (cond [(resolve-word? last-el)
-                     (import-word-entry-bytes (cadr last-el) req-hashes offset+1)]
-                    [(resolve-byte? last-el)
-                     (import-byte-entry-bytes (cadr last-el) req-hashes offset+1)]
+              (cond [(ast-resolve-word-scmd? res)
+                     (import-word-entry-bytes (ast-resolve-sub-cmd-label res) req-hashes offset+1)]
+                    [(ast-resolve-byte-scmd? res)
+                     (import-byte-entry-bytes (ast-resolve-sub-cmd-label res) req-hashes offset+1
+                                              (ast-resolve-byte-scmd-mode res))]
                     [#t '()])))
         (import-table-bytes (+ offset (command-len command))
                             (append collected-entries new-entry)
@@ -146,35 +150,29 @@
 
 (module+ test #| import-table-bytes |#
   (check-equal? (import-table-bytes #xfe '() '#hash(("some" . word) ("other" . byte))
-                                    '((opcode #x20 (resolve-word "some"))
-                                      (opcode #xea (resolve-byte "other"))
-                                      (opcode #xea (resolve-byte "<some"))
-                                      (opcode #xea (resolve-byte ">some"))))
+                                    (list(ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "some"))
+                                         (ast-unresolved-opcode-cmd '(#xea) (ast-resolve-byte-scmd "other" 'low-byte))
+                                         (ast-unresolved-opcode-cmd '(#xea) (ast-resolve-byte-scmd "some" 'low-byte))
+                                         (ast-unresolved-opcode-cmd '(#xea) (ast-resolve-byte-scmd "some" 'high-byte))))
                 '(#xff #x00 2 4 115 111 109 101
                   #x02 #x01 1 0 5 111 116 104 101 114
                   #x04 #x01 1 0 4 115 111 109 101
                   #x06 #x01 1 1 4 115 111 109 101)))
 
-(define (require-command? command)
-  (and (list? command)
-     (or (eq? 'require-word (car command))
-        (eq? 'require-byte (car command)))))
-
 (define (require-hash command hash)
-  (if (require-command? command)
-      (hash-set hash (last command)
-                (if (eq? 'require-word (car command))
-                    'word
-                    'byte))
-      hash))
+  (cond [(ast-require-word-cmd? command)
+         (hash-set hash (ast-require-word-cmd-label command) 'word)]
+        [(ast-require-byte-cmd? command)
+         (hash-set hash (ast-require-byte-cmd-label command) 'byte)]
+        [#t hash]))
 
 (define (require-hashes commands)
   (foldl require-hash (hash) commands))
 
 (module+ test #| require-hashes |#
-  (check-equal? (require-hashes '((require-word "some")
-                                  (require-byte "other")
-                                  (opcode #x20)))
+  (check-equal? (require-hashes (list (ast-require-word-cmd "some")
+                                      (ast-require-byte-cmd "other")
+                                      (ast-opcode-cmd '(#x20))))
                 '#hash(("some" . word)
                        ("other" . byte))))
 

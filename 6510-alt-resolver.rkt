@@ -5,27 +5,19 @@
 (module+ test
   (require "6510-test-utils.rkt"))
 
-(provide ->resolved-decisions label-instructions resolve-word? resolve-byte?)
+(provide ->resolved-decisions label-instructions)
 
-(define (resolve-word? res)
-  (and (list? res)
-     (eq? (car res) 'resolve-word)))
-
-(define (resolve-byte? res)
-  (and (list? res)
-     (eq? (car res) 'resolve-byte)))
-
-(define (is-byte-label? instruction)
+(define (is-byte-label-cmd? instruction)
   (ast-const-byte-cmd? instruction))
 
-(define (is-word-label? instruction)
+(define (is-word-label-cmd? instruction)
   (or (ast-const-word-cmd? instruction)
      (ast-label-def-cmd? instruction)))
 
 (module+ test #| is-word-label? |#
-  (check-true (is-word-label? (ast-label-def-cmd "some")))
-  (check-true (is-word-label? (ast-const-word-cmd "some" #x2000)))
-  (check-false (is-word-label? (ast-const-byte-cmd "some" #x20))))
+  (check-true (is-word-label-cmd? (ast-label-def-cmd "some")))
+  (check-true (is-word-label-cmd? (ast-const-word-cmd "some" #x2000)))
+  (check-false (is-word-label-cmd? (ast-const-byte-cmd "some" #x20))))
 
 (define (first-word-label-in label program)
   (findf (λ (instruction)
@@ -86,9 +78,9 @@
            (define label-entry (first-label-in label labels))
            (if label-entry
                (cond [(ast-resolve-byte-scmd? resolve-scmd)
-                      (is-byte-label? label-entry)]
+                      (is-byte-label-cmd? label-entry)]
                      [(ast-resolve-word-scmd? resolve-scmd)
-                      (is-word-label? label-entry)]
+                      (is-word-label-cmd? label-entry)]
                      [#t #f])
                #f))
          decide-options))
