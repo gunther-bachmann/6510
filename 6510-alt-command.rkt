@@ -15,7 +15,7 @@
          (struct-out ast-unresolved-opcode-cmd)
          (struct-out ast-unresolved-rel-opcode-cmd)
          ast-unresolved-command?
-         label->hilo-mode
+         label->byte-resolve-mode
          (struct-out ast-bytes-cmd)
          (struct-out ast-label-def-cmd)
          (struct-out ast-require-byte-cmd)
@@ -29,6 +29,7 @@
   (or (ast-unresolved-rel-opcode-cmd? command)
      (ast-unresolved-opcode-cmd? command)))
 
+;; generic root of all ast commands
 (struct ast-command
   ()
   #:transparent)
@@ -56,12 +57,12 @@
   ()
   #:transparent)
 
-(define (addressing-mode? mode)
+(define (byte-resolve-mode? mode)
   (or (eq? mode 'high-byte)
      (eq? mode 'low-byte)
      (eq? mode 'relative)))
 
-(define (label->hilo-mode label)
+(define (label->byte-resolve-mode label)
   (cond [(string-prefix? label ">") 'high-byte]
         [#t 'low-byte]))
 
@@ -69,7 +70,7 @@
 (struct ast-resolve-byte-scmd ast-resolve-sub-cmd
   (mode)
   #:transparent
-  #:guard (struct-guard/c string? addressing-mode?))
+  #:guard (struct-guard/c string? byte-resolve-mode?))
 
 ;; resolved opcode (just bytes)
 (struct ast-opcode-cmd ast-command
@@ -90,10 +91,6 @@
   #:transparent
   #:guard (struct-guard/c
            (listof byte?)))
-
-(module+ test #| ast-bytes-cmd |#
-  (check-equal? (ast-bytes-cmd '(1 2 3))
-                (ast-bytes-cmd '(1 2 3))))
 
 ;; opcode including unresolved resolve subcommand
 (struct ast-unresolved-opcode-cmd ast-opcode-cmd

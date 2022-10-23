@@ -1,5 +1,7 @@
 #lang racket
 
+(require (rename-in  racket/contract [define/contract define/c]))
+
 (require "6510-alt-resolver.rkt")
 (require "6510-alt-relocator.rkt")
 
@@ -12,35 +14,43 @@
 ;; constants hash label->const
 ;; labels hash label->rel-pos to load-pos
 
-(define (string->bytes string)
+(define/c (string->bytes string)
+  (-> string? (listof byte/c))
   (cons
-    (low-byte (string-length string))
-    (map char->integer (string->list string))))
+   (low-byte (string-length string))
+   (map char->integer (string->list string))))
 
-(define (encode-word-const const-value label)
+(define/c (encode-word-const const-value label)
+  (-> word/c string? (listof byte/c))
   (append (list 2 0
                 (low-byte const-value)
                 (high-byte const-value))
           (string->bytes label)))
 
-(define (encode-byte-const const-value label)
-  (append (list 1
-                (low-byte const-value))
+(define/c (encode-byte-const const-value label)
+  (-> byte/c string? (listof byte/c))
+  (append (list 1 const-value)
           (string->bytes label)))
 
-(define (encode-word-relative rel-label label)
+(define/c (encode-word-relative rel-label label)
+  (-> word/c string? (listof byte/c))
   (append (list 2 1
                 (low-byte rel-label)
                 (high-byte rel-label))
           (string->bytes label)))
 
-(define (provide-entry provide-command labels constants)
-  (let* ((label (or (and (ast-provide-word-cmd? provide-command)
-                      (ast-provide-word-cmd-label provide-command))
-                   (and (ast-provide-byte-cmd? provide-command)
-                      (ast-provide-byte-cmd-label provide-command))))
-         (const-value      (hash-ref constants label #f))
-         (rel-label        (hash-ref labels label #f)))
+(define/c (ast-provide-cmd-label command)
+  (-> (or/c ast-provide-word-cmd? ast-provide-byte-cmd?) string?)
+  (or (and (ast-provide-word-cmd? command)
+        (ast-provide-word-cmd-label command))
+     (and (ast-provide-byte-cmd? command)
+        (ast-provide-byte-cmd-label command))))
+
+(define/c (provide-entry provide-command labels constants)
+  (-> (or/c ast-provide-word-cmd? ast-provide-byte-cmd?) hash? hash? (listof byte/c))
+  (let* ((label       (ast-provide-cmd-label provide-command))
+         (const-value (hash-ref constants label #f))
+         (rel-label   (hash-ref labels label #f)))
     (cond [(and const-value (ast-provide-word-cmd? provide-command))
            (encode-word-const const-value label)]
           [(and const-value (ast-provide-byte-cmd? provide-command))

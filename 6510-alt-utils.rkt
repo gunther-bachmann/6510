@@ -80,11 +80,11 @@
          (byte-operand (symbol->string any-num) force relative)]
         [(number? any-num) any-num]
         [(6510-number-string? any-num) (parse-number-string any-num)]
-        [(byte-label? any-num) (ast-resolve-byte-scmd (base-label-str any-num) (label->hilo-mode any-num))]
+        [(byte-label? any-num) (ast-resolve-byte-scmd (base-label-str any-num) (label->byte-resolve-mode any-num))]
         [(and force
             (label? any-num)
             (not relative))
-         (ast-resolve-byte-scmd (base-label-str any-num) (label->hilo-mode any-num))]
+         (ast-resolve-byte-scmd (base-label-str any-num) (label->byte-resolve-mode any-num))]
         [(and force
             (label? any-num)
             relative)

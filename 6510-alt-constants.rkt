@@ -3,30 +3,39 @@
 (require "6510-test-utils.rkt")
 (require "6510-utils.rkt")
 (require "6510-alt-command.rkt")
+(require (rename-in  racket/contract [define/contract define/c]))
 
 (provide constant-definitions-hash resolve-constants)
 
-(define (constant->command command res-byte-list)
-  (cond [(ast-unresolved-command? command)
+(define/c (constant->command command res-byte-list)
+  (-> ast-command? (listof byte/c) ast-command?)
+  (cond [(ast-unresolved-opcode-cmd? command)
          (ast-opcode-cmd (append (ast-opcode-cmd-bytes command) res-byte-list))]
+        [(ast-unresolved-rel-opcode-cmd? command)
+         (ast-rel-opcode-cmd (append (ast-rel-opcode-cmd-bytes command) res-byte-list))]
         [#t (raise-user-error "unknown unresolved command")]))
 
-(define (word-constant->command command value)
+(define/c (word-constant->command command value)
+  (-> ast-command? word/c ast-command?)
   (constant->command command (list (low-byte value) (high-byte value))))
 
-(define (hibyte-constant->command command value)
+(define/c (hibyte-constant->command command value)
+  (-> ast-command? word/c ast-command?)
   (constant->command command (list (high-byte value))))
 
-(define (lobyte-constant->command command value)
+(define/c (lobyte-constant->command command value)
+  (-> ast-command? word/c ast-command?)
   (constant->command command (list (low-byte value))))
 
-(define (resolve-known-word->command label constants command)
+(define/c (resolve-known-word->command label constants command)
+  (-> string? hash? ast-command? ast-command?)
   (let* ((value (hash-ref constants label #f)))
     (if value
         (word-constant->command command value)
         command)))
 
-(define (resolve-known-byte->command label hilo-ind constants command)  
+(define/c (resolve-known-byte->command label hilo-ind constants command)
+  (-> string? (or/c 'high-byte 'low-byte) hash? ast-command? ast-command?)
   (let* ((value (hash-ref constants label #f)))
     (cond [(and value (eq? hilo-ind 'high-byte))
            (hibyte-constant->command command value)]
@@ -34,13 +43,15 @@
            (lobyte-constant->command command value)]
           [#t command])))
 
-(define (constant-definition-commands commands)
+(define/c (constant-definition-commands commands)
+  (-> (listof ast-command?) (listof (or/c ast-const-word-cmd? ast-const-byte-cmd?)))
   (filter
    (λ (command) (or (ast-const-word-cmd? command)
                    (ast-const-byte-cmd? command)))
    commands))
 
-(define (constant-definitions-hash commands)
+(define/c (constant-definitions-hash commands)
+  (-> (listof ast-command?) hash?)
   (foldl (λ (command hash)
            (define-values (label value)
              (cond [(ast-const-word-cmd? command)
@@ -61,14 +72,16 @@
                 '#hash(("some" . #x30)
                        ("other" . #x3020))))
 
-(define (ast-unresolved-command-res command)
+(define/c (ast-unresolved-command-res command)
+  (-> ast-command? ast-resolve-sub-cmd?)
   (cond [(ast-unresolved-opcode-cmd? command)
          (ast-unresolved-opcode-cmd-resolve-sub-command command)]
         [(ast-unresolved-rel-opcode-cmd? command)
          (ast-unresolved-rel-opcode-cmd-resolve-sub-command command)]
         [#t (raise-user-error "unknown unresolved command")]))
 
-(define (resolve-constants result constants commands)
+(define/c (resolve-constants result constants commands)
+  (-> (listof ast-command?) hash? (listof ast-command?) (listof ast-command?))
   (if (empty? commands)
       result
       (let* ((command (car commands))

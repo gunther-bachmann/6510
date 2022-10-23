@@ -12,15 +12,15 @@
   (begin-for-syntax
     (require rackunit)))
 
-(define-for-syntax (is-meta-info stx) 
+(define-for-syntax (meta-info? stx) 
   (let ((datum (syntax->datum stx)))
     (and (list? datum)
        (equal? (car datum)
                '#:line))))
 
-(module+ test #| is-meta-info |#
+(module+ test #| meta-info? |#
   (begin-for-syntax
-    (check-true (is-meta-info #'(#:line 1 #:org-cmd "some")))))
+    (check-true (meta-info? #'(#:line 1 #:org-cmd "some")))))
 
 (define-syntax (define-opcode stx)
     (syntax-case stx ()
@@ -29,13 +29,13 @@
          #`(define-syntax (mnemonic nstx)
              (syntax-case nstx ()
                ([_]              (no-op nstx #'addressing-modes))
-               ([_ op]           (if (is-meta-info #'op)
+               ([_ op]           (if (meta-info? #'op)
                                      (no-op  nstx #'addressing-modes)
                                      (one-op nstx #'addressing-modes #'op)))
-               ([_ op1 op2]      (if (is-meta-info #'op1)
+               ([_ op1 op2]      (if (meta-info? #'op1)
                                      (one-op nstx #'addressing-modes #'op2)
                                      (two-op nstx #'addressing-modes #'op1 #'op2)))
-               ([_ meta op1 op2] (if (is-meta-info #'meta)
+               ([_ meta op1 op2] (if (meta-info? #'meta)
                                      (two-op nstx #'addressing-modes #'op1 #'op2)
                                      (raise-addressing-error nstx #'addressings-modes 2)))))))))
 
