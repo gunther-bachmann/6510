@@ -28,7 +28,8 @@
   (define (parsed-string-result syntax string)
     (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
 
-(define space-or-tab/p
+(define/c space-or-tab/p
+  (-> parser?)
   (or/p (char/p #\space) (char/p #\tab)))
 
 ;; is the given char a hexadecimal number digit?
@@ -39,21 +40,25 @@
        (and (>= char-int 65) (<= char-int 70))
        (and (>= char-int 97) (<= char-int 102)))))
 
-(define hex-digit/p
+(define/c hex-digit/p
+  (-> parser?)
   (label/p "hex-number" (satisfy/p char-hex?)))
 
-(define hex-string/p
+(define/c hex-string/p
+  (-> parser?)
   (do [digits <- (many+/p hex-digit/p)]
       (pure (list->string digits))))
 
 ;; considered whitespace (space, newline, tab, all chars behind ';')
-(define ml-whitespace/p
+(define/c ml-whitespace/p
+  (-> parser?)
   (many/p (or/p (char/p #\newline)
                 space-or-tab/p
                 (do (char/p #\;)
                     (many/p (char-not/p #\newline))))))
 
-(define hex-integer/p
+(define/c hex-integer/p
+  (-> parser?)
   (do (char/p #\$)
       [x <-  hex-string/p]
     (pure (parse-number-string (string-append "$" (->string x))))))
@@ -64,14 +69,17 @@
   (or (eq? char #\0)
      (eq? char #\1)))
 
-(define bin-digit/p
+(define/c bin-digit/p
+  (-> parser?)
   (label/p "bin-number" (satisfy/p char-bin?)))
 
-(define bin-string/p
+(define/c bin-string/p
+  (-> parser?)
   (do [digits <- (many+/p bin-digit/p)]
       (pure (list->string digits))))
 
-(define bin-integer/p
+(define/c bin-integer/p
+  (-> parser?)
   (do (char/p #\%)
       [x <- bin-string/p]
     (pure (parse-number-string (string-append "%" (->string x))))))
@@ -85,7 +93,8 @@
   (check-match (parsed-string-result bin-integer/p "%10")
                2))
 
-(define 6510-integer/p
+(define/c 6510-integer/p
+  (-> parser?)
   (or/p integer/p hex-integer/p bin-integer/p))
 
 (module+ test
@@ -110,7 +119,8 @@
   (check-exn exn:fail?
              (lambda () (parsed-string-result 6510-integer/p "_17"))))
 
-(define 6510-eol/p
+(define/c 6510-eol/p
+  (-> parser?)
   (do (many/p space-or-tab/p)
       (or/p (do  (char/p #\;)
                 (many/p (char-not/p #\newline)))
@@ -118,27 +128,31 @@
     (or/p (char/p #\newline)
           eof/p)))
 
-(define 6510-label-letter/p
+(define/c 6510-label-letter/p
+  (-> parser?)
   (satisfy/p (lambda (c) (or (and (char>=? c #\A)
                           (char<=? c #\Z))
                        (and (char>=? c #\a)
                           (char<=? c #\z))
                        (char=? c #\_)))))
 
-(define 6510-label-byte-ind/p
+(define/c 6510-label-byte-ind/p
+  (-> parser?)
   (or/p (char/p #\>) (char/p #\<)))
 
-(define 6510-label/p
+(define/c 6510-label/p
+  (-> parser?)
   (do      
       [first-letter <- (syntax/p 6510-label-letter/p)]
-    [new-label <- (syntax/p (many+/p (or/p 6510-label-letter/p digit/p (char/p #\-))))]
+      [new-label <- (syntax/p (many+/p (or/p 6510-label-letter/p digit/p (char/p #\-))))]
     (pure (datum->syntax new-label
                         (list (string->symbol "label")
                               (string-append (->string first-letter)
                                              (list->string (syntax->datum new-label))))))))
 
 
-(define 6510-label-def/p
+(define/c 6510-label-def/p
+  (-> parser?)
   (do
       [result <- (syntax/p 6510-label/p)]
       (char/p #\:)
@@ -148,7 +162,8 @@
   (check-match (parsed-string-result 6510-label-def/p "abc-x:")
                '(label "abc-x")))
 
-(define 6510-label-byte/p
+(define/c 6510-label-byte/p
+  (-> parser?)
   (do
       [lowhigh <- (syntax/p 6510-label-byte-ind/p)]
       [first-letter <- (syntax/p 6510-label-letter/p)]
@@ -160,10 +175,11 @@
                                              (list->string (syntax->datum new-label))
                                              ))))))
 
-(define 6510-any-label/p
+(define/c 6510-any-label/p
+  (-> parser?)
   (do
       [label <- (or/p (syntax/p 6510-label/p)
-                    (syntax/p 6510-label-byte/p))]
+                     (syntax/p 6510-label-byte/p))]
       (pure label)))
 
 (module+ test #| label-def |#
@@ -176,11 +192,11 @@
   (check-match (parsed-string-result 6510-label/p "abc")
                '(label "abc"))
 
-  ;; (check-match (parsed-string-result 6510-label-byte/p ">abc")
-  ;;              '(label ">abc"))
+  (check-match (parsed-string-result 6510-label-byte/p ">abc")
+               '(label ">abc"))
 
-  ;; (check-match (parsed-string-result 6510-label-byte/p "<abc")
-  ;;              '(label "<abc"))
+  (check-match (parsed-string-result 6510-label-byte/p "<abc")
+               '(label "<abc"))
 
   (check-match (parsed-string-result 6510-label/p "abc-x")
                '(label "abc-x"))
@@ -200,11 +216,13 @@
   (check-exn exn:fail?
              (lambda () (parsed-string-result 6510-label/p "!bc"))))
 
-(define word/p
+(define/c word/p
+  (-> parser?)
   (guard/p 6510-integer/p (λ (x) (and (>= x 0) (<= x 65535)))
            "integer in range [$0000,$FFFF]"))
 
-(define byte/p
+(define/c byte/p
+  (-> parser?)
   (guard/p 6510-integer/p (λ (x) (and (>= x 0) (<= x 255)))
            "integer in range [$00,$FF]"))
 
@@ -236,23 +254,28 @@
   (-> string? parser?)
   (chars-ci/p string))
 
-(define accumulator/p
+(define/c accumulator/p
+  (-> parser?)
   (do (char-ci/p #\A) (pure '(A))))
 
-(define immediate/p
+(define/c immediate/p
+  (-> parser?)
   (do (char/p #\#)
       [x <- (or/p 6510-any-label/p byte/p)]
     (pure (list (string-append "!" (if (number? x) (number->string x) (->string (last (syntax->datum x)))))))))
 
-(define zero-page-or-relative/p
+(define/c zero-page-or-relative/p
+  (-> parser?)
   (do [b <- (or/p byte/p 6510-any-label/p)]
       (pure (list (if (number? b) (number->string b) (last (syntax->datum b)))))))
 
-(define absolute/p
+(define/c absolute/p
+  (-> parser?)
   (do [mem <- (or/p 6510-any-label/p word/p)]
       (pure (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))))))
 
-(define indirect-x/p
+(define/c indirect-x/p
+  (-> parser?)
   (do (char/p #\()
       [mem <- (or/p 6510-any-label/p byte/p)]
     (string-cia/p ",x")
@@ -263,7 +286,8 @@
     (check-match (parsed-string-result indirect-x/p "($11,x)")
                  '(("17",x))))
 
-(define indirect-y/p
+(define/c indirect-y/p
+  (-> parser?)
   (do 
       (char/p #\()
       [mem <- (or/p 6510-any-label/p byte/p)]
@@ -271,28 +295,33 @@
     (string-cia/p ",y")
     (pure (list (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))) ',y))))
 
-(define indirect/p
+(define/c indirect/p
+  (-> parser?)
   (do (char/p #\()
       [mem <- (or/p 6510-any-label/p word/p)]
     (char/p #\))
     (pure `(( ,(if (number? mem) (number->string mem) (last (syntax->datum mem))) )))))
 
-(define absolute-x/p
+(define/c absolute-x/p
+  (-> parser?)
   (do [x <- (or/p word/p 6510-any-label/p)]
       (string-cia/p ",x")
     (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',x))))
 
-(define absolute-y/p
+(define/c absolute-y/p
+  (-> parser?)
   (do [x <- (or/p word/p 6510-any-label/p)]
       (string-cia/p ",y")
     (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',y))))
 
-(define zero-page-x/p
+(define/c zero-page-x/p
+  (-> parser?)
   (do [x <- (or/p byte/p 6510-any-label/p)]
       (string-cia/p ",x")
     (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',x))))
 
-(define zero-page-y/p
+(define/c zero-page-y/p
+  (-> parser?)
   (do [x <- (or/p byte/p 6510-any-label/p)]
       (string-cia/p ",y")
     (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',y))))
@@ -344,23 +373,40 @@
    (list '#:line (syntax-line operands-stx)
          '#:org-cmd (format "~a ~a" (syntax->datum opcode-stx) (args->string operands-stx))))
 
-(define (result->syntax operands-stx actual-opcode-stx)
+(define/c (result->syntax operands-stx actual-opcode-stx)
+  (-> syntax? syntax? syntax?)
   (datum->syntax actual-opcode-stx
                 (append (opcode->list4pure (syntax->datum actual-opcode-stx))
                         (list (construct-ref-meta-info actual-opcode-stx operands-stx))
                         (syntax->datum operands-stx))
                 actual-opcode-stx))
 
-(define (opcode-addressing/p actual-opcode addressing adr-mode-list rule/p)
+(define (addressing-symbol? sym)
+  (memq sym '(accumulator
+              implicit
+              immediate
+              indirect-x
+              indirect-y
+              indirect
+              absolute-x
+              absolute-y
+              absolute
+              zero-page-x
+              zero-page-y
+              zero-page
+              relative)))
+
+(define/c (opcode-addressing/p actual-opcode addressing adr-mode-list rule/p)
+  (-> syntax? (or/c addressing-symbol? (listof addressing-symbol?)) (listof addressing-symbol?) parser? parser?)
   (let ((addressings (flatten (list addressing))))
-        (try/p (guard/p (do (many/p space-or-tab/p) [a-res <- (syntax/p rule/p)]
-                          (pure (result->syntax a-res actual-opcode)))
-                        (lambda (_) (ormap (λ (addr) (member addr adr-mode-list)) addressings))
-                        (format "addressing ~a not applicable" addressing)))))
+    (try/p (guard/p (do (many/p space-or-tab/p) [a-res <- (syntax/p rule/p)]
+                      (pure (result->syntax a-res actual-opcode)))
+                    (lambda (_) (ormap (λ (addr) (member addr adr-mode-list)) addressings))
+                    (format "addressing ~a not applicable" addressing)))))
 
 ;; return a parser that will parse the given opcode combined with the available addressing modes
 (define/c (adr-modes-opcode/p opcode adr-mode-list)
-  (-> string? (listof symbol?) parser?)
+  (-> string? (listof addressing-symbol?) parser?)
   (do
       [actual-opcode <- (syntax/p (try/p (string-cia/p opcode)))]
 
@@ -389,7 +435,8 @@
     (pure res)))
 
 ;; parser for '.asc "some string"'
-(define asc-string/p
+(define/c asc-string/p
+  (-> parser?)
   (do
       (try/p (string-cia/p ".asc"))
       (many/p space-or-tab/p)
@@ -406,7 +453,8 @@
                '(asc "some 'other'")))
 
 ;; parser for ".data (byte/p (","|ml_whitespace/p) ...)
-(define data-bytes/p
+(define/c data-bytes/p
+  (-> parser?)
   (do
       (try/p (string-cia/p ".data"))
       (many/p space-or-tab/p)
@@ -443,7 +491,8 @@
                      "4096" )))
 
 ;; parser for valid assembler lines (including bytes and labels)
-(define 6510-opcode/p
+(define/c 6510-opcode/p
+  (-> parser?)
   (do (or/p
        (try/p 6510-label-def/p)
        (adr-modes-opcode/p "adc" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
@@ -507,7 +556,8 @@
        )))
 
 ;; parser for origin definition
-(define 6510-program-origin/p
+(define/c 6510-program-origin/p
+  (-> parser?)
   (do (char/p #\*) (many/p space-or-tab/p)
     (char/p #\=) (many/p space-or-tab/p)
     [origin <- 6510-integer/p]
@@ -515,7 +565,8 @@
     (pure origin)))
 
 ;; parser for a complete assembler program
-(define 6510-program/p
+(define/c 6510-program/p
+  (-> parser?)
   (do ml-whitespace/p
       [origin <- 6510-program-origin/p]
     ml-whitespace/p
@@ -523,27 +574,30 @@
     eof/p
     (pure (list origin opcodes))))
 
-(define 6510-opcodes/p
+(define/c 6510-opcodes/p
+  (-> parser?)
   (do [opcodes <- (many/p (do [op <- 6510-opcode/p] ml-whitespace/p (pure op)))]
       (pure opcodes)))
 
 (define-namespace-anchor eval-ns-anchor)
 (define eval-ns (namespace-anchor->namespace eval-ns-anchor))
 
-(define (filter-meta-data command)
+(define/c (filter-meta-data command)
+  (-> (listof any/c) (listof any/c))
   (filter (lambda (el) (not (and (list? el) (equal? (car el) '#:line)))) command))
 
-(define (parse-opcodes str)
+(define/c (parse-opcodes str)
+  (-> string? (listof ast-command?))
   (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcodes/p) str))))
   (define stripped-src-location-data (map (lambda (command) (filter-meta-data command)) parsed))
   (map (lambda (command) (eval command eval-ns)) stripped-src-location-data))
 
-(define (parse-program str)
+(define/c (parse-program str)
+  (-> string? (listof ast-command?))
   (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-program/p) str))))
   (define stripped-src-location-data (map (lambda (command) (filter-meta-data command)) (cadr parsed)))
 
-  (map (lambda (command) (eval command eval-ns)) stripped-src-location-data)
-  )
+  (map (lambda (command) (eval command eval-ns)) stripped-src-location-data))
 
 (module+ test #| compile-opcodes |#
   (check-equal? (parse-opcodes "JSR $FFD2")

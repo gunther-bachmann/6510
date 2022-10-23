@@ -1,5 +1,6 @@
 #lang racket
 
+(require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-alt-command.rkt")
 
 (module+ test
@@ -7,19 +8,26 @@
 
 (provide ->resolved-decisions label-instructions)
 
-(define (is-byte-label-cmd? instruction)
+(define/c (byte-label-cmd? instruction)
+  (-> ast-command? boolean?)
   (ast-const-byte-cmd? instruction))
 
-(define (is-word-label-cmd? instruction)
+(define/c (word-label-cmd? instruction)
+  (-> ast-command? boolean?)
   (or (ast-const-word-cmd? instruction)
      (ast-label-def-cmd? instruction)))
 
 (module+ test #| is-word-label? |#
-  (check-true (is-word-label-cmd? (ast-label-def-cmd "some")))
-  (check-true (is-word-label-cmd? (ast-const-word-cmd "some" #x2000)))
-  (check-false (is-word-label-cmd? (ast-const-byte-cmd "some" #x20))))
+  (check-true (word-label-cmd? (ast-label-def-cmd "some")))
+  (check-true (word-label-cmd? (ast-const-word-cmd "some" #x2000)))
+  (check-false (word-label-cmd? (ast-const-byte-cmd "some" #x20))))
 
-(define (first-word-label-in label program)
+(define/c (first-word-label-in label program)
+  (-> string?
+     (listof ast-command?)
+     (or/c ast-const-word-cmd?
+           ast-label-def-cmd?
+           #f))
   (findf (λ (instruction)
            (define instruction-word-label
              (cond [(ast-const-word-cmd? instruction)
@@ -39,7 +47,13 @@
                                               (ast-const-word-cmd "some" #x3000)))
                 (ast-const-word-cmd "some" #x3000)))
 
-(define (first-label-in label program)
+(define/c (first-label-in label program)
+  (-> string?
+     (listof ast-command?)
+     (or/c ast-const-word-cmd?
+           ast-const-byte-cmd?
+           ast-label-def-cmd?
+           #f))
   (findf (λ (instruction)
            (define label-str
              (cond   [(ast-label-def-cmd? instruction)
@@ -57,30 +71,33 @@
   (check-equal? (first-label-in "hello" (list (ast-label-def-cmd "hello")))
                 (ast-label-def-cmd "hello")))
 
-(define (is-label-instruction? instruction)
+(define/c (label-instruction? instruction)
+  (-> ast-command? boolean?)
   (or (ast-label-def-cmd? instruction)
      (ast-const-word-cmd? instruction)
      (ast-const-byte-cmd? instruction)))
 
 (module+ test #| is-label-instruction? |#
-  (check-not-false (is-label-instruction? (ast-label-def-cmd "some")))
-  (check-not-false (is-label-instruction? (ast-const-word-cmd "some" #x2000)))
-  (check-not-false (is-label-instruction? (ast-const-byte-cmd "some" #x20)))
-  (check-false (is-label-instruction? (ast-opcode-cmd '(#xea)))))
+  (check-not-false (label-instruction? (ast-label-def-cmd "some")))
+  (check-not-false (label-instruction? (ast-const-word-cmd "some" #x2000)))
+  (check-not-false (label-instruction? (ast-const-byte-cmd "some" #x20)))
+  (check-false (label-instruction? (ast-opcode-cmd '(#xea)))))
 
-(define (label-instructions program)
-  (filter is-label-instruction? program))
+(define/c (label-instructions program)
+  (-> (listof ast-command?) (listof label-instruction?))
+  (filter label-instruction? program))
 
-(define (matching-decide-option labels decide-options)
+(define/c (matching-decide-option labels decide-options)
+  (-> (listof label-instruction?) (listof ast-unresolved-command?) (or/c ast-unresolved-command? #f))
   (findf (λ (decide-option)
            (define resolve-scmd (ast-unresolved-opcode-cmd-resolve-sub-command decide-option))
-           (define label (ast-resolve-sub-cmd-label resolve-scmd))
-           (define label-entry (first-label-in label labels))
+           (define label        (ast-resolve-sub-cmd-label resolve-scmd))
+           (define label-entry  (first-label-in label labels))
            (if label-entry
                (cond [(ast-resolve-byte-scmd? resolve-scmd)
-                      (is-byte-label-cmd? label-entry)]
+                      (byte-label-cmd? label-entry)]
                      [(ast-resolve-word-scmd? resolve-scmd)
-                      (is-word-label-cmd? label-entry)]
+                      (word-label-cmd? label-entry)]
                      [#t #f])
                #f))
          decide-options))
@@ -102,10 +119,11 @@
                        (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
                 (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))))
 
-(define (->resolved-decisions labels program)
+(define/c (->resolved-decisions labels program)
+  (-> (listof label-instruction?) (listof ast-command?) (listof ast-command?))
   (if (empty? program)
       '()
-      (let* ((instruction (car program))
+      (let* ((instruction      (car program))
              (default-result-f (λ () (cons instruction (->resolved-decisions labels (cdr program))))))
         (cond [(ast-decide-cmd? instruction)
                (let* ((options (ast-decide-cmd-options instruction))

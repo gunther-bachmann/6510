@@ -74,7 +74,8 @@
                 '#hash(("some" . 13)
                        ("hello" . 10))))
 
-(define (label->hilo-indicator full-label)
+(define/c (label->hilo-indicator full-label)
+  (-> string? byte/c)
   (cond [(string-prefix? full-label ">") 1]
         [(string-prefix? full-label "<") 0]
         [#t (raise-user-error (format "full-label ~a has no hi/low prefix" full-label))]))
@@ -84,14 +85,16 @@
 ;; 0            rel-position-low, rel-position-high, : position where the value has to be written to
 ;; 2            width (byte), (if width = 1 0:lowbyte 1:highbyte)?,
 ;; 3/4          rel-value-low, rel-value-high        : (val + origin) is the value to be written
-(define (reloc-entry-bytes offset rel-offset . bytes)
+(define/c (reloc-entry-bytes offset rel-offset . bytes)
+  (->* (word/c word/c) (listof byte/c) (listof byte/c))
   (append (list (low-byte (+ 1 offset))
                 (high-byte (+ 1 offset)))
           bytes
           (list (low-byte rel-offset)
                 (high-byte rel-offset))))
 
-(define (resolve-word->reloc-bytes resolve label-offsets offset)
+(define/c (resolve-word->reloc-bytes resolve label-offsets offset)
+  (-> ast-resolve-sub-cmd? hash? word/c (listof byte/c))
   (let ((rel-offset (hash-ref label-offsets (ast-resolve-sub-cmd-label resolve))))                 
     (reloc-entry-bytes offset rel-offset 2)))
 
@@ -101,7 +104,8 @@
                                           #xc040)
                 '(#x41 #xc0 2 #xd2 #x01)))
 
-(define (resolve-byte->reloc-bytes resolve label-offsets offset)
+(define/c (resolve-byte->reloc-bytes resolve label-offsets offset)
+  (-> ast-resolve-sub-cmd? hash? word/c (listof byte/c))
   (let* ((label (ast-resolve-sub-cmd-label resolve))
          (rel-offset (hash-ref label-offsets label)))
     (reloc-entry-bytes offset rel-offset 1 (if (eq? 'high-byte (ast-resolve-byte-scmd-mode resolve)) 1 0))))
@@ -116,7 +120,8 @@
                                           #x0005)
                 '(#x06 #x00 1 0 #xfa #x01)))
 
-(define (reloc-table-bytes offset collected-entries label-offsets commands)
+(define/c (reloc-table-bytes offset collected-entries label-offsets commands)
+  (-> word/c (listof byte/c) hash? (listof ast-command?) (listof byte/c))
   (if (empty? commands)
       collected-entries
       (let* ((command      (car commands))

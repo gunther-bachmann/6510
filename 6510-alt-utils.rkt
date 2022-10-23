@@ -45,13 +45,15 @@
 (module+ test
   (require rackunit))
 
-(define (possibly-byte-operand? any-num)
+(define/c (possibly-byte-operand? any-num)
+  (-> (or/c symbol? number? string?) (or/c (listof string?) boolean?))
   (or (and (symbol? any-num)
         (possibly-byte-operand? (symbol->string any-num)))
      (byte-operand? any-num)
      (ambiguous-operand? any-num)))
 
-(define (byte-operand? any-num)
+(define/c (byte-operand? any-num)
+  (-> any/c boolean?)
   (or (and (symbol? any-num)
         (byte-operand? (symbol->string any-num)))
      (and (number? any-num)
@@ -65,7 +67,8 @@
   (-> string? boolean?)
   (and (regexp-match #rx"^[><][a-zA-Z_-][a-zA-Z0-9_-]*$" str) #t))
 
-(define (label? str)
+(define/c (label? str)
+  (-> string? (or/c (listof string?) #f))
   (and (not (equal? str "A")) ;; reserved for accumulator addressing
      (regexp-match #rx"^[a-zA-Z_][a-zA-Z0-9_-]*$" str)))
 
@@ -75,7 +78,8 @@
   (for ((byte '(-1 256 "-1" "256" |-1| |$101|)))
     (check-false (byte-operand? byte) (format "~a is a byte" byte))))
 
-(define (byte-operand any-num (force true) (relative false))
+(define/c (byte-operand any-num (force true) (relative false))
+  (->* ((or/c symbol? number? string?)) (boolean? boolean?) (or/c number? ast-resolve-byte-scmd?))
   (cond [(symbol? any-num)
          (byte-operand (symbol->string any-num) force relative)]
         [(number? any-num) any-num]
@@ -114,7 +118,8 @@
                           (car byte-expectation)
                           (cdr byte-expectation)))))
 
-(define (word-operand any-num (force #f))
+(define/c (word-operand any-num (force #f))
+  (->* ((or/c symbol? number? string?)) (boolean?) (or/c number? ast-resolve-sub-cmd?))
   (cond [(symbol? any-num)
          (word-operand (symbol->string any-num) force)]
         [(number? any-num) any-num]
@@ -140,19 +145,22 @@
                        (car word-expectation)
                        (cdr word-expectation)))))
 
-(define (possibly-word-operand? any-num)
+(define/c (possibly-word-operand? any-num)
+  (-> (or/c symbol? number? string?) (or/c (listof string?) boolean?))
   (or (and (symbol? any-num)
         (possibly-word-operand? (symbol->string any-num)))
      (word-operand? any-num)
      (ambiguous-operand? any-num)))
 
-(define (ambiguous-operand? any-num)
+(define/c (ambiguous-operand? any-num)
+  (-> any/c (or/c (listof string?) #f))
   (or (and (symbol? any-num)
         (ambiguous-operand? (symbol->string any-num)))
      (and (string? any-num)
         (label? any-num))))
 
-(define (word-operand? any-num)
+(define/c (word-operand? any-num)
+  (-> any/c boolean?)
   (or (and (symbol? any-num)
         (word-operand? (symbol->string any-num)))
      (and (number? any-num)
@@ -167,7 +175,8 @@
   (for ((word '(-1 65536 "-1" "65536" |-1| |$10001|)))
     (check-false (word-operand? word) (format "~a is a word" word))))
 
-(define (immediate-byte-operand? sym)
+(define/c (immediate-byte-operand? sym)
+  (-> any/c (or/c (listof string?) boolean?))
   (or (and (symbol? sym)
         (immediate-byte-operand? (symbol->string sym)))
      (and (string? sym)
@@ -182,10 +191,11 @@
     (check-false (immediate-byte-operand? immediate-byte)
                  (format "~a is a byte" immediate-byte))))
 
-(define (immediate-byte-operand sym)
+(define/c (immediate-byte-operand sym)
+  (-> (or/c symbol? string?) (or/c number? ast-resolve-sub-cmd?))
   (if (symbol? sym)
-        (immediate-byte-operand (symbol->string sym))
-        (byte-operand (substring sym 1) #t)))
+      (immediate-byte-operand (symbol->string sym))
+      (byte-operand (substring sym 1) #t)))
 
 (module+ test #| immediate-byte-operand |#
   (for ((byte-expectation

@@ -81,7 +81,8 @@
 ;; 2/3+width        string
 ;; 1/2+width+strlen ... next entry
 
-(define (export-table-bytes collected-bytes labels constants commands)
+(define/c (export-table-bytes collected-bytes labels constants commands)
+  (-> (listof byte/c) hash? hash? (listof ast-command?) (listof byte/c))
   (if (empty? commands)
       collected-bytes
       (let* ((command (car commands))
@@ -113,33 +114,38 @@
 ;; 4/5              string 
 ;; 4/5+strlen       ...next entry
 
-(define (encode-import-word-entry offset label)
+(define/c (encode-import-word-entry offset label)
+  (-> word/c string? (listof byte/c))
   (append
    (list (low-byte offset)
          (high-byte offset)
          2)
    (string->bytes label)))
 
-(define (encode-import-byte-entry offset hilo-ind label)
+(define/c (encode-import-byte-entry offset hilo-ind label)
+  (-> word/c byte/c string? (listof byte/c))
   (append
    (list (low-byte offset)
          (high-byte offset)
          1 hilo-ind)
    (string->bytes label)))
 
-(define (import-word-entry-bytes label req-hashes offset)
+(define/c (import-word-entry-bytes label req-hashes offset)
+  (-> string? hash? word/c (listof byte/c))
   (let* ((value (hash-ref req-hashes label)))
     (if (eq? 'word value)
         (encode-import-word-entry offset label)
         (encode-import-byte-entry offset 0 label))))
 
-(define (import-byte-entry-bytes label req-hashes offset hilo-ind)
-  (let* ((value      (hash-ref req-hashes label)))
+(define/c (import-byte-entry-bytes label req-hashes offset hilo-ind)
+  (-> string? hash? word/c (or/c 'high-byte 'low-byte) (listof byte/c))
+  (let* ((value (hash-ref req-hashes label)))
     (if (eq? 'word value)
         (encode-import-byte-entry offset (if (eq? 'high-byte hilo-ind) 1 0) label)
         (encode-import-byte-entry offset 0 label))))
 
-(define (import-table-bytes offset collected-entries req-hashes commands)
+(define/c (import-table-bytes offset collected-entries req-hashes commands)
+  (-> word/c (listof byte/c) hash? (listof ast-command?) (listof byte/c))
   (if (empty? commands)
       collected-entries
       (let* ((command  (car commands))
@@ -169,14 +175,16 @@
                   #x04 #x01 1 0 4 115 111 109 101
                   #x06 #x01 1 1 4 115 111 109 101)))
 
-(define (require-hash command hash)
+(define/c (require-hash command hash)
+  (-> ast-command? hash? hash?)
   (cond [(ast-require-word-cmd? command)
          (hash-set hash (ast-require-word-cmd-label command) 'word)]
         [(ast-require-byte-cmd? command)
          (hash-set hash (ast-require-byte-cmd-label command) 'byte)]
         [#t hash]))
 
-(define (require-hashes commands)
+(define/c (require-hashes commands)
+  (-> (listof ast-command?) hash?)
   (foldl require-hash (hash) commands))
 
 (module+ test #| require-hashes |#
