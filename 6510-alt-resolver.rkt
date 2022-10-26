@@ -2,6 +2,8 @@
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-alt-command.rkt")
+(require "6510-utils.rkt")
+(require "6510-alt-relocator.rkt")
 
 (module+ test
   (require "6510-test-utils.rkt"))
@@ -167,3 +169,97 @@
                   (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
                         (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello")))))
                 "nothing is decided if label is not found"))
+
+(define/c (encode-opcode-cmd instruction . bytes)
+  (->* (ast-unresolved-opcode-cmd?) (listof byte/c) ast-opcode-cmd?)
+  (ast-opcode-cmd (append (ast-opcode-cmd-bytes instruction) bytes)))
+
+(define/c (encode-label-word-value instruction value)
+  (-> ast-unresolved-opcode-cmd? word/c ast-opcode-cmd?)
+  (encode-opcode-cmd instruction (low-byte value) (high-byte value)))
+
+(define/c (encode-label-hbyte-value instruction value)
+  (-> ast-unresolved-opcode-cmd? word/c ast-opcode-cmd?)
+  (encode-opcode-cmd instruction (high-byte value)))
+
+(define/c (encode-label-lbyte-value instruction value)
+  (-> ast-unresolved-opcode-cmd? word/c ast-opcode-cmd?)
+  (encode-opcode-cmd instruction (low-byte value)))
+
+(define/c (encode-label-rel-value instruction rel-value)
+  (-> ast-unresolved-rel-opcode-cmd? word/c ast-rel-opcode-cmd?)
+  (ast-rel-opcode-cmd (append (ast-rel-opcode-cmd-bytes instruction) (list rel-value))))
+
+(define/c (resolve-opcode-cmd instruction labels)
+  (-> ast-unresolved-opcode-cmd? hash? ast-opcode-cmd?)
+  (let* ((subcmd (ast-unresolved-opcode-cmd-resolve-sub-command instruction))
+         (label  (ast-resolve-sub-cmd-label subcmd))
+         (value  (hash-ref labels label #f)))
+    (if value
+        (cond [(ast-resolve-word-scmd? subcmd)
+               (encode-label-word-value instruction value)]
+              [(and (ast-resolve-byte-scmd? subcmd)
+                  (eq? 'high-byte (ast-resolve-byte-scmd-mode subcmd)))
+               (encode-label-hbyte-value instruction value)]
+              [(and (ast-resolve-byte-scmd? subcmd)
+                  (eq? 'low-byte (ast-resolve-byte-scmd-mode subcmd)))
+               (encode-label-lbyte-value instruction value)])
+        instruction)))
+
+(define/c (resolve-rel-opcode-cmd instruction offset labels)
+  (-> ast-unresolved-rel-opcode-cmd? word/c hash? ast-rel-opcode-cmd?)
+  (let* ((subcmd (ast-unresolved-rel-opcode-cmd-resolve-sub-command instruction))
+         (label  (ast-resolve-sub-cmd-label subcmd))
+         (value  (hash-ref labels label #f)))
+    (if value
+        (let ((rel-value (two-complement-of (- value (+ offset 2)))))
+          (encode-label-rel-value instruction rel-value))
+        instruction)))
+
+(define/c (->resolve-labels offset labels program resolved-program)
+  (-> word/c hash? (listof ast-command?) (listof ast-command?) (listof ast-command?)) 
+  (if (empty? program)
+      resolved-program
+      (let* ((instruction  (car program))
+             (next-offset  (+ offset (command-len instruction)))
+             (resolved-cmd (cond [(ast-unresolved-opcode-cmd? instruction)
+                                  (resolve-opcode-cmd instruction labels)]
+                                 [(ast-unresolved-rel-opcode-cmd? instruction)
+                                  (resolve-rel-opcode-cmd instruction offset labels)]
+                                 [#t instruction]))
+             (new-res-prg  (append resolved-program (list resolved-cmd))))        
+        (->resolve-labels next-offset labels (cdr program) new-res-prg))))
+
+(module+ test #| resolve-labels |#
+  (check-equal?
+   (->resolve-labels 0 '#hash(("some" . #x10) ("other" . #x0) ("sowo" . #xFFD2))
+                    (list (ast-unresolved-opcode-cmd '(30) (ast-resolve-word-scmd "some"))
+                          (ast-unresolved-rel-opcode-cmd '(40) (ast-resolve-byte-scmd "some" 'low-byte))
+                          (ast-unresolved-rel-opcode-cmd '(40) (ast-resolve-byte-scmd "other" 'low-byte))
+                          (ast-unresolved-opcode-cmd '(30) (ast-resolve-byte-scmd "sowo" 'low-byte))
+                          (ast-unresolved-opcode-cmd '(30) (ast-resolve-byte-scmd "sowo" 'high-byte))
+                          (ast-unresolved-opcode-cmd '(30) (ast-resolve-byte-scmd "unknown" 'high-byte))
+                          (ast-unresolved-opcode-cmd '(30) (ast-resolve-word-scmd "unknown")))
+                    '())
+   (list (ast-opcode-cmd '(30 #x10 #x00))
+         (ast-rel-opcode-cmd '(40 11))
+         (ast-rel-opcode-cmd '(40 249))
+         (ast-opcode-cmd '(30 #xD2))
+         (ast-opcode-cmd '(30 #xFF))
+         (ast-unresolved-opcode-cmd '(30) (ast-resolve-byte-scmd "unknown" 'high-byte))
+         (ast-unresolved-opcode-cmd '(30) (ast-resolve-word-scmd "unknown"))))
+  (check-equal?
+   (->resolve-labels 0 '#hash(("sout" . 3))
+                    (list (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "sout"))
+                          (ast-label-def-cmd "sout")
+                          (ast-unresolved-opcode-cmd '(189) (ast-resolve-word-scmd "sout"))
+                          (ast-opcode-cmd '(#x20 #xd2 #xff))
+                          (ast-opcode-cmd '(202))
+                          (ast-unresolved-rel-opcode-cmd '(208) (ast-resolve-byte-scmd "sout" 'low-byte)))
+                    '())
+   (list (ast-opcode-cmd '(174 3 0))
+         (ast-label-def-cmd "sout")
+         (ast-opcode-cmd '(189 3 0) )
+         (ast-opcode-cmd '(#x20 #xd2 #xff))
+         (ast-opcode-cmd '(202))
+         (ast-rel-opcode-cmd '(208 247)))))
