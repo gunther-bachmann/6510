@@ -1,11 +1,13 @@
 #lang racket
 
 (require (rename-in  racket/contract [define/contract define/c]))
-(require "6510-utils.rkt")
-(require "6510-test-utils.rkt")
+(require (only-in "6510-utils.rkt" byte/c word/c low-byte high-byte))
 (require "6510-alt-command.rkt")
 
 (provide label-string-offsets command-len label->hilo-indicator)
+
+(module+ test
+  (require "6510-test-utils.rkt"))
 
 (define command/c (or/c ast-command? (listof any/c)))
 

@@ -1,15 +1,14 @@
 #lang racket
 
 (require (rename-in  racket/contract [define/contract define/c]))
-
-(require "6510-alt-resolver.rkt")
-(require "6510-alt-relocator.rkt")
-
-(require "6510-test-utils.rkt")
-(require "6510-utils.rkt")
+(require (only-in "6510-alt-relocator.rkt" command-len))
+(require (only-in "6510-utils.rkt" low-byte high-byte byte/c word/c))
 (require "6510-alt-command.rkt")
 
 (provide import-table-bytes export-table-bytes)
+
+(module+ test
+  (require "6510-test-utils.rkt"))
 
 ;; constants hash label->const
 ;; labels hash label->rel-pos to load-pos

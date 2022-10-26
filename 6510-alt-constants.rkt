@@ -1,11 +1,13 @@
 #lang racket
 
-(require "6510-test-utils.rkt")
-(require "6510-utils.rkt")
 (require "6510-alt-command.rkt")
+(require (only-in "6510-utils.rkt" high-byte low-byte byte/c word/c))
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (provide constant-definitions-hash resolve-constants)
+
+(module+ test
+  (require "6510-test-utils.rkt"))
 
 (define/c (constant->command command res-byte-list)
   (-> ast-command? (listof byte/c) ast-command?)

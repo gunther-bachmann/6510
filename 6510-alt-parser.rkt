@@ -1,7 +1,27 @@
 #lang racket
-(require megaparsack megaparsack/text)
-(require data/monad)
-(require data/applicative)
+(require (only-in megaparsack parser?
+                  eof/p
+                  guard/p
+                  label/p
+                  many+/p
+                  many/p
+                  or/p
+                  parse-result!
+                  satisfy/p
+                  syntax/p
+                  try/p
+                  void/p)
+
+         (only-in megaparsack/text
+                  char-ci/p
+                  char-not/p
+                  char/p
+                  digit/p
+                  integer/p
+                  parse-string))
+
+(require (only-in data/monad do <-))
+(require (only-in data/applicative pure))
 (require (rename-in racket/contract [define/contract define/c]))
 
 (require (only-in "6510-utils.rkt" parse-number-string ->string))

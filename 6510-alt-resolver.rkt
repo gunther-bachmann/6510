@@ -2,8 +2,8 @@
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-alt-command.rkt")
-(require "6510-utils.rkt")
-(require "6510-alt-relocator.rkt")
+(require (only-in "6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of))
+(require (only-in "6510-alt-relocator.rkt" command-len))
 
 (module+ test
   (require "6510-test-utils.rkt"))
