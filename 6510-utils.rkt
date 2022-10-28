@@ -5,9 +5,6 @@
   (require rackunit))
 
 (provide
- 6510-label-byte-string?
- 6510-label-immediate-byte-string?
- 6510-label-string?
  6510-number-string?
  absolute
  byte
@@ -25,7 +22,8 @@
  in-word-range?
  in-byte-range?
  ->string
- base-label-str)
+ base-label-str
+ )
 
 (define (->string el)
   (cond [(string? el) el]
@@ -67,38 +65,6 @@
 ;; is the given number-string prefixed with a valid number base prefix?
 (define (number-has-prefix? number-string)
   (string-contains? "%$" (substring number-string 0 1)))
-
-;; is the given string a valid label (for word labels or relatives)?
-(define (6510-label-string? value)
-  (and (string? value)
-     (regexp-match? #rx"^(:[A-Z][A-Z0-9]*)$"
-                    (string-upcase value))))
-
-;; is the given string a valid label (for byte labels)?
-;; TODO: use other information to decide on type of the label use
-(define (6510-label-byte-string? value)
-  (and (string? value)
-     (regexp-match? #rx"^(:[A-Z][A-Z0-9]*(-H|-L))$"
-                    (string-upcase value))))
-
-(define (6510-label-immediate-byte-string? value)
-  (and (string? value)
-     (regexp-match? #rx"^#(:[A-Z][A-Z0-9]*(-H|-L))$"
-                    (string-upcase value))))
-
-(module+ test #| 6510-label-string? |#
-  (check-true (6510-label-string? ":some"))
-  (check-true (6510-label-string? ":some12"))
-  (check-false (6510-label-string? ":12some"))
-  (check-false (6510-label-string? ":123"))
-  (check-true (6510-label-string? ":s1ome"))
-  (check-false (6510-label-string? "some"))
-  (check-false (6510-label-string? ":"))
-  (check-true (6510-label-string? ":s"))
-  (check-false (6510-label-string? ":s-H"))
-  (check-true (6510-label-byte-string? ":s-H"))
-  (check-true (6510-label-byte-string? ":s-L"))
-  (check-false (6510-label-byte-string? ":s-x")))
 
 (define (base-label-str full-label)
   (cond [(or (eq? #\> (string-ref full-label 0))

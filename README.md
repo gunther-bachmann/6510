@@ -80,8 +80,22 @@ BUT no implicit may be given (by the opcode identified, in that case it was a `j
 The `6510-reader.rkt` is parsing a non racket text file, transforming it into racket code. The resulting racket code is then transformed via
 syntax macros into the final racket form which can then be interpreted.
 
-* `6510.rkt` holds all syntax transformation rules for the translation from 6510 dsl code into 6510 byte/assembler code.
-* `6510-utils` holds functions needed during syntax and execution phase of 6510.
+* `6510.rkt` central entry for syntax transformation rules for the translation from 6510 dsl code
+  into 6510 byte/assembler code.
+* `6510.arithmetic-ops.rkt` defines arithmetic ops like adc, sbc
+* `6510.branch-ops.rkt`defines branch ops like beq, bne
+* `6510.compare-ops.rkt` defines comparison ops like cmp, cpx, cpy
+* `6510.flag-ops.rkt` defines set/clear flag ops like sed, cld, clc
+* `6510.increment-ops.rkt` defines decrementing/incrementing ops like inc, dex
+* `6510.logic-ops.rkt` defines logical ops like and, ora, eor
+* `6510.memory-ops.rkt` defines memory access ops like lda, sta
+* `6510.misc-ops.rkt` defines miscellenous ops like brk
+* `6510.shift-ops.rkt` defines shifting / rotating ops ror, lsl
+* `6510.stack-ops.rkt`defines stack operations php, pla
+* `6510.subroutine-ops.rkt` defines jump and return ops like jsr, rts, jmp
+* `6510.transfer-ops.rkt` defines transfer ops like txa, txa
+
+* `6510-utils` holds conversion functions and others needed during syntax and execution phase of 6510.
 * `6510-syntax-utils` holds functions useful during syntax phase of the transformation.
 * `6510-parser` is the parser that takes the text and produces racket 6510 dsl code.
 * `6510-reader` is used to parse complete files automatically (using the 6510-parser)
