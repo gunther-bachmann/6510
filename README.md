@@ -133,9 +133,9 @@ To build all, run `raco make -v -j 8 *.rkt`
  phase 1: (x) parse -> (ASL ..)
  phase 2: (x) macro -> 'opcode, 'byte-value, 'rel-opcode, 'decide
  phase 3: (x) eliminate decide
- phase 4: ( ) resolve constants
+ phase 4: (x) resolve constants
  phase 5: (x) resolve word/byte label references (construct relocation table)
- phase 6: ( ) construct import/export resolve tables
+ phase 6: (x) construct import/export resolve tables
  
  commands->linkable-binary-file (lbf)
  

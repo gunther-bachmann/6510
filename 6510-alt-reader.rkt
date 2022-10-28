@@ -51,7 +51,7 @@
                     program-p2
                     raw-program
                     ;; resolved-program
-                    ;; raw-bytes
+                    raw-bytes
                     stx-program
                     ;; sy-program
                     )
@@ -70,12 +70,11 @@
            (define raw-program '(str ...))
            (define program `(,str ...))
            (define program-p1 (->resolved-decisions (label-instructions program) program))
-           (define program-p2 (label-string-offsets 0 (hash) program-p1))
-           ;; (define resolved-program (replace-labels program org))
-           ;; (define raw-bytes (commands->bytes org `(,str ...)))
-           (displayln "(have a look at sy-program, raw-program, resolved-program or raw-bytes)")
-           ;; (create-prg (commands->bytes org program) org "test.prg")
-           ;; (create-image-with-program (commands->bytes org program) org "test.prg" "test.d64" "test")
+           (define program-p2 (->resolve-labels org (label-string-offsets org (hash) program-p1) program-p1 '()))
+           (define raw-bytes (resolved-program->bytes program-p2 '()))
+           (displayln "(have a look at raw-program, program, program-p1, program-p2 or raw-bytes)")
+           (create-prg raw-bytes org "test.prg")
+           (create-image-with-program raw-bytes org "test.prg" "test.d64" "test")
            (displayln "execute the program in vice via (run-emulator \"test.d64\")")
            (displayln (format "execute interpreter via (run-interpreter ~a raw-bytes)" org))
            (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes)" org))

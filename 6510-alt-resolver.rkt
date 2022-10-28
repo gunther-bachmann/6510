@@ -8,7 +8,7 @@
 (module+ test
   (require "6510-test-utils.rkt"))
 
-(provide ->resolved-decisions label-instructions)
+(provide ->resolved-decisions label-instructions ->resolve-labels resolved-program->bytes)
 
 (define/c (byte-label-cmd? instruction)
   (-> ast-command? boolean?)
@@ -263,3 +263,75 @@
          (ast-opcode-cmd '(#x20 #xd2 #xff))
          (ast-opcode-cmd '(202))
          (ast-rel-opcode-cmd '(208 247)))))
+
+(define/c (resolved-program->bytes program resolved)
+  (-> (listof ast-command?) (listof byte/c) (listof byte/c))
+  (if (empty? program)
+      resolved
+      (let* ((instruction (car program))
+             (bytes       (cond [(ast-opcode-cmd? instruction)
+                                 (ast-opcode-cmd-bytes instruction)]
+                                [(ast-rel-opcode-cmd? instruction)
+                                 (ast-rel-opcode-cmd-bytes instruction)]
+                                [(ast-bytes-cmd? instruction)
+                                 (ast-bytes-cmd-bytes instruction)]
+                                [#t '()])))
+        (resolved-program->bytes (cdr program) (append resolved bytes)))))
+
+(module+ test #| resolve-program->bytes |#
+  (check-equal? (resolved-program->bytes
+                 (list
+                  (ast-opcode-cmd '(174 59 8))
+                  (ast-label-def-cmd "sout")
+                  (ast-opcode-cmd '(189 59 8))
+                  (ast-opcode-cmd '(32 210 255))
+                  (ast-opcode-cmd '(202))
+                  (ast-rel-opcode-cmd '(208 247))
+                  (ast-opcode-cmd '(24))
+                  (ast-opcode-cmd '(162 5))
+                  (ast-label-def-cmd "some")
+                  (ast-opcode-cmd '(169 65))
+                  (ast-opcode-cmd '(32 55 8))
+                  (ast-opcode-cmd '(105 1))
+                  (ast-opcode-cmd '(32 55 8))
+                  (ast-opcode-cmd '(105 1))
+                  (ast-opcode-cmd '(32 55 8))
+                  (ast-opcode-cmd '(169 13))
+                  (ast-opcode-cmd '(32 55 8))
+                  (ast-label-def-cmd "end")
+                  (ast-opcode-cmd '(202))
+                  (ast-rel-opcode-cmd '(208 233))
+                  (ast-opcode-cmd '(96))
+                  (ast-label-def-cmd "cout")
+                  (ast-opcode-cmd '(32 210 255))
+                  (ast-opcode-cmd '(96))
+                  (ast-label-def-cmd "hello")
+                  (ast-bytes-cmd '(18))
+                  (ast-bytes-cmd '(13))
+                  (ast-bytes-cmd '(33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104))
+                  (ast-bytes-cmd '(14))
+                  ) '())
+                '(174 59 8
+                  189 59 8
+                  32 210 255
+                  202
+                  208 247
+                  24
+                  162 5
+                  169 65
+                  32 55 8
+                  105 1
+                  32 55 8
+                  105 1
+                  32 55 8
+                  169 13
+                  32 55 8
+                  202
+                  208 233
+                  96
+                  32 210 255
+                  96
+                  18
+                  13
+                  33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104
+                  14)))

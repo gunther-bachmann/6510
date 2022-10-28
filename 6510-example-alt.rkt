@@ -43,7 +43,7 @@ hello:  .data 18 ; number of bytes to print (string length)
 
 ; --- use labels as operands
 
-adc <end
+adc #<end
 adc <end
 adc >end,x
 ldx <end,y
