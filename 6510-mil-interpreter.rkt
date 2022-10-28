@@ -11,7 +11,7 @@
        brk
 
 ;; jump to function with index in x register
-:inter ; index to function is in x register 0 <= x <= 15
+inter: ; index to function is in x register 0 <= x <= 15
        lda $80,x
        pha
        lda $90,x

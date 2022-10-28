@@ -1,9 +1,9 @@
 #lang racket
 
-(require (for-syntax "6510-alt-utils.rkt"))
+(require (for-syntax "6510-addressing-utils.rkt"))
 (require (for-syntax "6510-syntax-utils.rkt"))
 
-(require "6510-alt-command.rkt")
+(require "6510-command.rkt")
 
 (provide define-opcode)
 
@@ -41,7 +41,7 @@
 
 (module+ test #| define-opcode |#
   ;; used by macro
-  (require (only-in "6510-alt-utils.rkt"
+  (require (only-in "6510-addressing-utils.rkt"
                     no-operand-opcode
                     zero-page-opcode
                     indirect-x-opcode

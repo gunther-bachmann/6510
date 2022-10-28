@@ -1,9 +1,9 @@
 #lang racket
 
-(require "6510-alt-utils.rkt")
-(require "6510-alt-addressing.rkt")
+(require "6510-addressing-utils.rkt")
+(require "6510-addressing.rkt")
 
-(require "6510-alt-command.rkt")
+(require "6510-command.rkt")
 
 (provide BCC BCS BEQ BMI BNE BPL BVC BVS) 
 

@@ -1,7 +1,7 @@
 #lang racket
 
 (require "6510-utils.rkt")
-(require "6510-alt-command.rkt")
+(require "6510-command.rkt")
 (require (rename-in racket/contract [define/contract define/c]))
 
 (provide absolute-indexed-addressing?

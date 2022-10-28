@@ -8,31 +8,31 @@
         ;; lda #23
         ;; sta 53272
 
-        ldx :hello
-:sout   lda :hello,x
+        ldx hello
+sout:   lda hello,x
         jsr $ffd2
         dex
-        bne :sout
+        bne sout
 
         clc
         ldx #$05       ; repeat .. times
-:some
+some:
         lda #$41       ; load character A (dec 65)
-        jsr :cout      ; print this character to screen
+        jsr cout      ; print this character to screen
         adc #1         ; load character B (dec 66)
-        jsr :cout      ; print this character to screen
+        jsr cout      ; print this character to screen
         adc #1
-        jsr :cout      ; print this character to screen
+        jsr cout      ; print this character to screen
         lda #%00001101 ; $0d
-        jsr :cout
- :end   dex
-        bne :some
+        jsr cout
+end:    dex
+        bne some
         rts            ; end of execution
 
- :cout  jsr $ffd2
+cout:   jsr $ffd2
         rts
 
-:hello  .data 18 ; number of bytes to print (string length)
+hello:  .data 18 ; number of bytes to print (string length)
         .data $0d ; line feed
         .asc "!DLROw WEN OLLEh"
         .data $0e ; switch to lower letter mode
@@ -43,15 +43,15 @@
 
 ; --- use labels as operands
 
-adc #:end-L
-adc :end-l
-adc :end-h,x
-ldx :end-l,y
-adc :end
-adc :end,x
-adc :end,y
-adc (:end-l),y
-adc (:end-l,x)
+adc #<end
+adc <end
+adc >end,x
+ldx <end,y
+adc end
+adc end,x
+adc end,y
+adc (<end),y
+adc (<end,x)
 
 ; --- all available opcodes
 

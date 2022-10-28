@@ -40,35 +40,40 @@
       (strip-context
        #`(module compiled6510 racket
            (require "6510.rkt")
+           (require "6510-resolver.rkt")
+           (require "6510-relocator.rkt")
            (require "6510-interpreter.rkt")
            (require "6510-prg-generator.rkt")
-           (require "6510-dsl-utils.rkt")
            (require "6510-debugger.rkt")
            (provide program
+                    program-p1
+                    program-p2
                     raw-program
-                    resolved-program 
+                    ;; resolved-program
                     raw-bytes
                     stx-program
-                    sy-program)
+                    ;; sy-program
+                    )
            (define stx-program (syntax #,unenc-prg)) ;; examine how to pass source location into the generated racket program
            ;; execute this construction of sy-program in the 'with-syntax clause outside this s-expr!! and splice it in here
-           (define sy-program `(,(let* ([datum (syntax->datum (syntax sy-str))]
-                                        [sy-datum (syntax sy-str)])
-                                   (append (list (first datum))
-                                           (list `(#:line ,(syntax-line sy-datum)
-                                                   #:org-cmd ,(if (and (> (length datum) 1)
-                                                                     (list? (second datum)))
-                                                                  (last (second datum))
-                                                                  (symbol->string (first datum)))))
-                                           (drop datum (min (length datum) 2)))) ...))
+           ;; (define sy-program `(,(let* ([datum (syntax->datum (syntax sy-str))]
+           ;;                              [sy-datum (syntax sy-str)])
+           ;;                         (append (list (first datum))
+           ;;                                 (list `(#:line ,(syntax-line sy-datum)
+           ;;                                         #:org-cmd ,(if (and (> (length datum) 1)
+           ;;                                                           (list? (second datum)))
+           ;;                                                        (last (second datum))
+           ;;                                                        (symbol->string (first datum)))))
+           ;;                                 (drop datum (min (length datum) 2)))) ...))
 
            (define raw-program '(str ...))
            (define program `(,str ...))
-           (define resolved-program (replace-labels program org))
-           (define raw-bytes (commands->bytes org `(,str ...)))
-           (displayln "(have a look at sy-program, raw-program, resolved-program or raw-bytes)")
-           ;; (create-prg (commands->bytes org program) org "test.prg")
-           (create-image-with-program (commands->bytes org program) org "test.prg" "test.d64" "test")
+           (define program-p1 (->resolved-decisions (label-instructions program) program))
+           (define program-p2 (->resolve-labels org (label-string-offsets org (hash) program-p1) program-p1 '()))
+           (define raw-bytes (resolved-program->bytes program-p2 '()))
+           (displayln "(have a look at raw-program, program, program-p1, program-p2 or raw-bytes)")
+           (create-prg raw-bytes org "test.prg")
+           (create-image-with-program raw-bytes org "test.prg" "test.d64" "test")
            (displayln "execute the program in vice via (run-emulator \"test.d64\")")
            (displayln (format "execute interpreter via (run-interpreter ~a raw-bytes)" org))
            (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes)" org))

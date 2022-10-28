@@ -1,6 +1,6 @@
 #lang racket
 
-(require "6510-alt-command.rkt")
+(require "6510-command.rkt")
 (require (only-in "6510-utils.rkt" high-byte low-byte byte/c word/c))
 (require (rename-in  racket/contract [define/contract define/c]))
 

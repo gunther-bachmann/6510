@@ -2,7 +2,7 @@
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require (only-in "6510-utils.rkt" byte/c word/c low-byte high-byte))
-(require "6510-alt-command.rkt")
+(require "6510-command.rkt")
 
 (provide label-string-offsets command-len label->hilo-indicator)
 

@@ -1,14 +1,14 @@
 #lang racket
 
 (require (rename-in  racket/contract [define/contract define/c]))
-(require "6510-alt-command.rkt")
+(require "6510-command.rkt")
 (require (only-in "6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of))
-(require (only-in "6510-alt-relocator.rkt" command-len))
+(require (only-in "6510-relocator.rkt" command-len label-string-offsets))
 
 (module+ test
   (require "6510-test-utils.rkt"))
 
-(provide ->resolved-decisions label-instructions ->resolve-labels resolved-program->bytes)
+(provide ->resolved-decisions label-instructions ->resolve-labels resolved-program->bytes commands->bytes)
 
 (define/c (byte-label-cmd? instruction)
   (-> ast-command? boolean?)
@@ -335,3 +335,23 @@
                   13
                   33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104
                   14)))
+
+
+(define/c (commands->bytes memory-address commands )
+  (-> word/c (listof ast-command?) (listof byte/c))
+
+  (define program-p1 (->resolved-decisions (label-instructions commands) commands))
+  (define program-p2 (->resolve-labels memory-address (label-string-offsets memory-address (hash) program-p1) program-p1 '()))
+  (define raw-bytes (resolved-program->bytes program-p2 '()))
+  raw-bytes)
+
+(module+ test #| commands->bytes |#
+  (check-equal? (commands->bytes #xa000 (list (ast-opcode-cmd '(20 #xff #xa0))))
+                '(20 #xff #xa0))
+  (check-equal? (commands->bytes #xa000 (list (ast-unresolved-opcode-cmd '(#x14) (ast-resolve-word-scmd "absadr"))
+                                         (ast-label-def-cmd "absadr")))
+                '(20 #x03 #xa0))
+  (check-equal? (commands->bytes #xa000 (list (ast-label-def-cmd "before")
+                                             (ast-unresolved-rel-opcode-cmd '(#xd0) (ast-resolve-byte-scmd "before" 'low-byte))))
+                '(#xd0 #xfe)))
+

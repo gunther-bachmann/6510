@@ -4,24 +4,66 @@
 ; file is intended to document dsl possibilities
 
 (require "6510.rkt")
-(require "6510-dsl-utils.rkt")
+(require "6510-resolver.rkt")
+(require "6510-relocator.rkt")
+
 (require "6510-interpreter.rkt")
 (require "6510-debugger.rkt")
+
+
+(module+ test
+  (require rackunit))
+
+(module+ test #| smoke test |#
+  #| test that the first step in compilation workds
+   | even when used in a totally different file (importing the macros)
+   |#
+  (check-equal?
+   (list
+    (ASL $10)
+    (BEQ $F0)
+    (BRK)
+    (JMP $FFD2)
+    (JMP ($FFFE))
+    (JMP (some))
+    (SBC some)
+    (SBC >some)
+    (BEQ some)
+    (NOP)
+    (SBC $10,x)
+    (STX $3A,y)
+    (asc "some"))
+   (list
+    (ast-opcode-cmd '(#x06 #x10))
+    (ast-rel-opcode-cmd '(240 240))
+    (ast-opcode-cmd '(#x00))
+    (ast-opcode-cmd '(#x4c #xD2 #xFF))
+    (ast-opcode-cmd '(#x6c #xFE #xFF))
+    (ast-unresolved-opcode-cmd '(#x6c) (ast-resolve-word-scmd "some"))
+    (ast-decide-cmd
+     (list (ast-unresolved-opcode-cmd '(#xe5) (ast-resolve-byte-scmd "some" 'low-byte))
+           (ast-unresolved-opcode-cmd '(#xed) (ast-resolve-word-scmd "some"))))
+    (ast-unresolved-opcode-cmd '(#xe5) (ast-resolve-byte-scmd "some" 'high-byte))
+    (ast-unresolved-rel-opcode-cmd '(#xf0) (ast-resolve-byte-scmd "some" 'relative))
+    (ast-opcode-cmd '(#xea))
+    (ast-opcode-cmd '(#xf5 #x10))
+    (ast-opcode-cmd '(#x96 #x3a))
+    (ast-bytes-cmd '(#x73 #x6f #x6d #x65)))))
 
 (define org #xc000)
 
 (define program
   (list
-   (LDX "#$05")
-   (LABEL ("<label>") ":NEXT")
-   (LDA "#$41" )
-   (JSR ":COUT")
-   (ADC "#$01")
-   (JSR ":COUT")
-   (LDA "#%00001010") ; line feed
-   (JSR ":COUT")
+   (LDX !$05)
+   (label "NEXT")
+   (LDA "!$41" )
+   (JSR "COUT")
+   (ADC "!$01")
+   (JSR "COUT")
+   (LDA "!%00001010") ; line feed
+   (JSR "COUT")
    (DEX)
-   (BNE ":NEXT")
+   (BNE "NEXT")
    (BRK)
 
    ;; (IMPORT-BYTE ":IMPORTEDBVAL-L")     ;; in order to not use -L qualifier, there needs to be a function that will return the type (e.g. through an environment
@@ -32,48 +74,49 @@
    ;; (CONSTANT-WORD  ":M16BVAL" "$C842") ;; define label with word constant: :m16bval = $c842
    ;; (EXPORT-BYTE ":EXPORTED-VAL" ":MYVAL") ;; export a defined byte constant
    ;; (EXPORT-WORD ":EXPORTED-16BVAL" ":MY16BVAL") ;; export a defined word constant
-   (ASC "HELLO WORLD")
+   (asc "HELLO WORLD")
 
-   (LABEL ("<label>") ":COUT")
+   (label "COUT")
    (JSR "$FFD2")
    (RTS)
-   (JMP ":COUT")
-   (JMP < ":COUT" >)
-   (ADC ":COUT-L")
-   (ADC "#:COUT-L")
-   (STA ":COUT-H")
-   (STA ":COUT-H" ,x)
-   (LDX ":COUT-H" ,y)
-   (STA < ":COUT-H" ,x >)
-   (STA < ":COUT-H" > ,y)
-   (STA ":COUT")
-   (STA ":COUT" ,x)
-   (STA ":COUT" ,y)
+   (JMP "COUT")
+   (JMP ("COUT"))
+   (ADC "<COUT")
+   (ADC "!<COUT")
+   (STA ">COUT")
+   (STA ">COUT",x)
+   (LDX ">COUT" ,y)
+   (STA (">COUT",x) )
+   (STA (">COUT"),y)
+   (STA "COUT")
+   (STA "COUT",x)
+   (STA "COUT",y)
 ))
 
 (define addressing-program
   (list
-   (LDA "#$40")           ;; immediate
+   (LDA "!$40")           ;; immediate
    (LDA "$40")            ;; zero-page
    (LDA "$40",x)          ;; zero-page-x (add reg x to $40, read memory from there)
    (LDA "$4000")          ;; absolute
    (LDA "$4000",x)        ;; absolute x
    (LDA "$4000",y)        ;; absolute y
-   (LDA < "$40",x >)      ;; indirect x (add x to $40, read pointer (low+high) from memory, read pointed to byte)
-   (LDA < "$40" >,y)      ;; indirect y (read pointer from $40, add y to pointer, read pointed to byte)
-   (LABEL ("<label>") ":NEXT")
+   (LDA ("$40",x))        ;; indirect x (add x to $40, read pointer (low+high) from memory, read pointed to byte)
+   (LDA ("$40"),y)        ;; indirect y (read pointer from $40, add y to pointer, read pointed to byte)
+   (label "NEXT")
    (ASL A)                ;; work on accumulator
    (BEQ "$10")            ;; relative to current program counter
-   (BEQ ":NEXT")))
+   (BEQ "NEXT")))
 
+(define program-p1 (->resolved-decisions (label-instructions program) program))
+(define program-p2 (->resolve-labels org (label-string-offsets org (hash) program-p1) program-p1 '()))
+(define raw-bytes (resolved-program->bytes program-p2 '()))
 
-(define resolved-program (replace-labels program org))
-(define raw-bytes (commands->bytes org program))
 (define data (6510-load (initialize-cpu) org raw-bytes))
 (define executable-program (with-program-counter data org))
 
-(displayln "program execution:")
-(run-debugger org raw-bytes)
+;; (displayln "program execution:")
+;; (run-debugger org raw-bytes)
 ;; (print-state (run executable-program))
 ;; (let ([_ (run executable-program)])
 ;;   (void))

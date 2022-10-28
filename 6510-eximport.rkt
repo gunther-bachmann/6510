@@ -1,9 +1,9 @@
 #lang racket
 
 (require (rename-in  racket/contract [define/contract define/c]))
-(require (only-in "6510-alt-relocator.rkt" command-len))
+(require (only-in "6510-relocator.rkt" command-len))
 (require (only-in "6510-utils.rkt" low-byte high-byte byte/c word/c))
-(require "6510-alt-command.rkt")
+(require "6510-command.rkt")
 
 (provide import-table-bytes export-table-bytes)
 
