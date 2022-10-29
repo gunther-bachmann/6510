@@ -1,6 +1,5 @@
 #lang racket
 
-(require "6510-addressing-utils.rkt")
 (require "6510-addressing.rkt")
 
 (provide TAX TAY TSX TXA TXS TYA)

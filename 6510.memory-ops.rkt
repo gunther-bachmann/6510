@@ -1,12 +1,11 @@
 #lang racket
 
-(require "6510-addressing-utils.rkt")
 (require "6510-addressing.rkt")
-(require "6510-command.rkt")
 
-(provide LDA LDX LDY STA STX STY) 
+(provide LDA LDX LDY STA STX STY)
 
 (module+ test
+  (require "6510-command.rkt")
   (require "6510-test-utils.rkt"))
 
 (define-opcode LDA

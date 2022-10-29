@@ -304,7 +304,7 @@ EOF
             (breakpoint-hits c-state (cdr breakpoints))))))
 
 ;; run until a break point hits or the cpu is on a BRK statement
-(define (run-until-breakpoint states breakpoints)
+(define/c (run-until-breakpoint states breakpoints)
   (-> (listof cpu-state?) list? (values any/c (listof cpu-state?)))
   (let ((breakpoint (breakpoint-hits (car states) breakpoints)))
     (if (or breakpoint (eq? 0 (peek-pc (car states))))
@@ -314,7 +314,8 @@ EOF
           (let ((next-states (cons (execute-cpu-step (car states)) states)))            
             (run-until-breakpoint next-states breakpoints))))))
 
-(define (compile-opcodes str)
+(define/c (compile-opcodes str)
+  (-> string? (listof byte/c))
   (commands->bytes 0 (parse-opcodes str)))
 
 (module+ test #| assemble/dissassemble roundrip |#

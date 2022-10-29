@@ -1,17 +1,16 @@
 #lang racket
 
-(require "6510-addressing-utils.rkt")
 (require "6510-addressing.rkt")
-(require "6510-command.rkt")
 
-(provide ADC SBC) 
+(provide ADC SBC)
 
 (module+ test
+  (require "6510-command.rkt")
   (require "6510-test-utils.rkt"))
 
 (define-opcode ADC
-  ((immediate  . #x69)
-   (zero-page  . #x65)
+  ((immediate   . #x69)
+   (zero-page   . #x65)
    (zero-page-x . #x75)
    (absolute    . #x6d)
    (absolute-x  . #x7d)

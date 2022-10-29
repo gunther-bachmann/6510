@@ -1,12 +1,11 @@
 #lang racket
 
-(require "6510-addressing-utils.rkt")
 (require "6510-addressing.rkt")
-(require "6510-command.rkt")
 
-(provide AND EOR ORA) 
+(provide AND EOR ORA)
 
 (module+ test
+  (require "6510-command.rkt")
   (require "6510-test-utils.rkt"))
 
 (define-opcode AND

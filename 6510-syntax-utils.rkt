@@ -3,10 +3,7 @@
 (module+ test
   (require rackunit))
 
-(provide symbol-append discard-void-syntax-object make-id
-         (struct-out one-arg-adr-modes)
-         (struct-out ind-arg-adr-modes)
-         (struct-out idx-arg-adr-modes))
+(provide symbol-append discard-void-syntax-object make-id)
 
 (define (make-id stx id-template . ids)
   (let ([str (apply format id-template (map syntax->datum ids))])
@@ -38,9 +35,3 @@
 
   (check-match (syntax->datum (with-syntax ([void-syn (void)]) (discard-void-syntax-object #'some #'void-syn)))
                'some))
-
-(struct one-arg-adr-modes (relative? accumulator? immediate? zero-page? absolute?))
-
-(struct ind-arg-adr-modes (indirect-x? indirect-y? indirect?))
-
-(struct idx-arg-adr-modes (absolute-x? absolute-y? zero-page-x? zero-page-y?))
