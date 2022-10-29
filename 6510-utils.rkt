@@ -2,7 +2,7 @@
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (module+ test
-  (require rackunit))
+  (require "6510-test-utils.rkt"))
 
 (provide
  6510-number-string?
@@ -25,7 +25,8 @@
  base-label-str
  )
 
-(define (->string el)
+(define/c (->string el)
+  (-> (or/c string? char? symbol? number? syntax? list?) string?)
   (cond [(string? el) el]
         [(char? el) (string el)]
         [(symbol? el) (symbol->string el)]
@@ -51,22 +52,25 @@
   (check-equal? (->string #'45)
                 "45"))
 
-(define (in-word-range? word)
+(define/c (in-word-range? word)
+  (-> exact-integer? boolean?)
   (and (<= word 65535) (>= word 0)))
 
-(define (in-byte-range? byte)
+(define/c (in-byte-range? byte)
+  (-> exact-integer? boolean?)
   (and (<= byte 255) (>= byte 0)))
 
 (define byte/c (and/c exact-nonnegative-integer? in-byte-range?))
 
 (define word/c (and/c exact-nonnegative-integer? in-word-range?))
 
-
 ;; is the given number-string prefixed with a valid number base prefix?
-(define (number-has-prefix? number-string)
+(define/c (number-has-prefix? number-string)
+  (-> string? boolean?)
   (string-contains? "%$" (substring number-string 0 1)))
 
-(define (base-label-str full-label)
+(define/c (base-label-str full-label)
+  (-> string? string?)
   (cond [(or (eq? #\> (string-ref full-label 0))
             (eq? #\< (string-ref full-label 0)))
          (substring full-label 1)]
@@ -81,7 +85,8 @@
                 "hello"))
 
 ;; is the given string a valid binary, hex or regular number
-(define (6510-number-string? value)
+(define/c (6510-number-string? value)
+  (-> string? boolean?)
   (and (string? value)
      (regexp-match? #rx"^(\\%(0|1)+|\\$[0-9A-Fa-f]+|[0-9]+)$"
                     value)))
@@ -95,16 +100,18 @@
   (check-false (6510-number-string? "%120")))
 
 ;; get the number base of a valid number string
-(define (prefix->number-base prefix)
+(define/c (prefix->number-base prefix)
+  (-> string? exact-nonnegative-integer?)
   (case prefix
     [("$") 16]
     [("%") 2]
     [else 10]))
 
 ;; parse a number (binary, hex ...) string and return the number
-(define (parse-number-string number-string)
+(define/c (parse-number-string number-string)
+  (-> string? exact-integer?)
   (exact-floor (string->number (substring  number-string (if (number-has-prefix? number-string) 1 0))
-                               (prefix->number-base (substring number-string 0 1)))))
+                              (prefix->number-base (substring number-string 0 1)))))
 
 (module+ test #| parse-number-string |#
   (check-eq? (parse-number-string "%101")
@@ -115,33 +122,40 @@
              102))
 
 ;; get the low byte of a (2 byte) number
-(define (low-byte absolute)
+(define/c (low-byte absolute)
+  (-> exact-integer? byte/c)
   (bitwise-and #xFF absolute))
 
 ;; get the high byte of a (2 byte) number
-(define (high-byte absolute)
+(define/c (high-byte absolute)
+  (-> exact-integer? byte/c)
   (bitwise-and #xFF (arithmetic-shift absolute -8)))
 
 ;; construct a 2 byte number for high byte and low byte
-(define (absolute high low)
+(define/c (absolute high low)
+  (-> byte/c byte/c word/c)
   (bitwise-ior (arithmetic-shift high 8) low))
 
 ;; restrict value to a 2 byte value (cutting off other bits)
-(define (word value)
+(define/c (word value)
+  (-> exact-integer? word/c)
   (bitwise-and #xffff value))
 
 ;; restrict value to a 1 byte value (cutting off other bits)
-(define (byte value)
+(define/c (byte value)
+  (-> exact-integer? byte/c)
   (bitwise-and #xff value))
 
 ;; return two complement of the given (possibly negative) number
-(define (two-complement-of num)
+(define/c (two-complement-of num)
+  (-> exact-integer? byte/c)
   (when (or (> -128 num) (< 127 num)) (error "num out of range"))
   (if (< num 0)
       (+ 256 num)
       num))
 
-(define (decimal-from-two-complement num)
+(define/c (decimal-from-two-complement num)
+  (-> byte/c exact-integer?)
   (when (or (> 0 num) (< 256 num)) (error "num out of range"))
   (define abs-val (bitwise-and num #x7f))
   (if (> num 127)

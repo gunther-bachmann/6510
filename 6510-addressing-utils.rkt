@@ -68,9 +68,10 @@
   (and (regexp-match #rx"^[><][a-zA-Z_-][a-zA-Z0-9_-]*$" str) #t))
 
 (define/c (label? str)
-  (-> string? (or/c (listof string?) #f))
+  (-> string? boolean?)
   (and (not (equal? str "A")) ;; reserved for accumulator addressing
-     (regexp-match #rx"^[a-zA-Z_][a-zA-Z0-9_-]*$" str)))
+     (regexp-match #rx"^[a-zA-Z_][a-zA-Z0-9_-]*$" str)
+     #t))
 
 (module+ test #| byte-operand? |#
   (for ((byte '(10 0 255 "10" "0" "255" |10| |$10| |$FF| |%101|)))
@@ -146,14 +147,14 @@
                        (cdr word-expectation)))))
 
 (define/c (possibly-word-operand? any-num)
-  (-> (or/c symbol? number? string?) (or/c (listof string?) boolean?))
+  (-> (or/c symbol? number? string?) boolean?)
   (or (and (symbol? any-num)
         (possibly-word-operand? (symbol->string any-num)))
      (word-operand? any-num)
      (ambiguous-operand? any-num)))
 
 (define/c (ambiguous-operand? any-num)
-  (-> any/c (or/c (listof string?) #f))
+  (-> any/c boolean?)
   (or (and (symbol? any-num)
         (ambiguous-operand? (symbol->string any-num)))
      (and (string? any-num)
@@ -213,58 +214,77 @@
                           (car byte-expectation)
                           (cdr byte-expectation)))))
 
-(define (find-addressing-mode sym addressing-modes)
+(define/c (addressing-mode? mode-el)
+  (-> any/c boolean?)
+  (and (pair? mode-el)
+     (symbol? (car mode-el))
+     (byte? (cdr mode-el))))
+
+(define/c (find-addressing-mode sym addressing-modes)
+  (-> any/c (listof addressing-mode?) (or/c addressing-mode? #f))
   (findf (lambda (el) (and (pair? el) (eq? (car el) sym))) addressing-modes))
 
 (module+ test #| find-addressing-mode |#
   (check-equal? (find-addressing-mode 'accumulator '((immediate . #x10) (accumulator . #x20)))
                 '(accumulator . #x20)))
 
-(define (has-addressing-mode? sym addressing-modes)
+(define/c (has-addressing-mode? sym addressing-modes)
+  (-> any/c (listof addressing-mode?) boolean?)
   (pair? (find-addressing-mode sym addressing-modes)))
 
 (module+ test #| has-addressing-mode? |#
   (check-true (has-addressing-mode? 'accumulator '((immediate . #x10) (accumulator . #x20))))
   (check-false (has-addressing-mode? 'zero-page-x '((immediate . #x10) (accumulator . #x20)))))
 
-(define (accumulator-addressing? addressing-modes-stx op-stx)
+(define/c (accumulator-addressing? addressing-modes-stx op-stx)
+  (-> any/c syntax? boolean?)
   (and (has-addressing-mode? 'accumulator (syntax->datum addressing-modes-stx)) 
      (eq? (syntax->datum op-stx) 'A)))
 
 (module+ test #| accumulator-addressing? |#
   (check-true (accumulator-addressing? #'((accumulator . #x20)) #'A)))
 
-(define (byte-addressing? addr-sym addressing-modes-stx op-stx)
+(define/c (byte-addressing? addr-sym addressing-modes-stx op-stx)
+  (-> any/c syntax? syntax? boolean?)
   (and (has-addressing-mode? addr-sym (syntax->datum addressing-modes-stx))
      (byte-operand? (syntax->datum op-stx))))
 
-(define (word-addressing? addr-sym addressing-modes-stx op-stx)
+(define/c (word-addressing? addr-sym addressing-modes-stx op-stx)
+  (-> any/c syntax? syntax? boolean?)
   (and (has-addressing-mode? addr-sym (syntax->datum addressing-modes-stx))
      (word-operand? (syntax->datum op-stx))))
 
-(define (relative-addressing-operand? elem)
-  (if (symbol? elem)
-      (relative-addressing-operand? (symbol->string elem))
-      (or (byte-operand? elem)
-         (label? elem))))
+(define/c (relative-addressing-operand? elem)
+  (-> any/c boolean?)
+  (and
+   (if (symbol? elem)
+       (relative-addressing-operand? (symbol->string elem))
+       (or (byte-operand? elem)
+          (label? elem)))
+   #t))
 
-(define (relative-addressing? addressing-modes-stx op-stx)
+(define/c (relative-addressing? addressing-modes-stx op-stx)
+  (-> syntax? syntax? boolean?)
   (and (has-addressing-mode? 'relative (syntax->datum addressing-modes-stx))
      (relative-addressing-operand? (syntax->datum op-stx))))
 
-(define (immediate-addressing? addressing-modes-stx op-stx)
+(define/c (immediate-addressing? addressing-modes-stx op-stx)
+  (-> syntax? syntax? boolean?)
   (and (has-addressing-mode? 'immediate (syntax->datum addressing-modes-stx))
      (immediate-byte-operand? (syntax->datum op-stx))))
 
-(define (implicit-addressing? addressing-modes-stx)
+(define/c (implicit-addressing? addressing-modes-stx)
+  (-> syntax? boolean?)
   (has-addressing-mode? 'implicit (syntax->datum addressing-modes-stx)))
 
-(define (indirect-addressing? addressing-modes-stx op-stx)
+(define/c (indirect-addressing? addressing-modes-stx op-stx)
+  (-> syntax? syntax? boolean?)
   (and (has-addressing-mode? 'indirect (syntax->datum addressing-modes-stx))
      (list? (syntax->datum op-stx))
      (possibly-word-operand? (car (syntax->datum op-stx)))))
 
-(define (indirect-x-addressing? addressing-modes-stx op-stx)
+(define/c (indirect-x-addressing? addressing-modes-stx op-stx)
+  (-> syntax? syntax? boolean?)
   (define op (syntax->datum op-stx))
   (and (has-addressing-mode? 'indirect-x (syntax->datum addressing-modes-stx))
      (list? op)
@@ -272,13 +292,15 @@
      (pair? (cdr op))
      (equal? (cadr op) ',x)))
 
-(define (indirect-y-addressing? addressing-modes-stx op-stx1 op-stx2)
+(define/c (indirect-y-addressing? addressing-modes-stx op-stx1 op-stx2)
+  (-> syntax? syntax? syntax? boolean?)
   (and (has-addressing-mode? 'indirect-y (syntax->datum addressing-modes-stx))
      (list (syntax->datum op-stx1))
      (possibly-byte-operand? (car (syntax->datum op-stx1)))
      (equal? (syntax->datum op-stx2) ',y)))
 
-(define (abs-or-zero-page-indexed-addressing? addressing-sym-list addressing-modes-stx op1-stx op2-stx)
+(define/c (abs-or-zero-page-indexed-addressing? addressing-sym-list addressing-modes-stx op1-stx op2-stx)
+  (-> (listof (cons/c symbol? any/c)) syntax? syntax? syntax? boolean?)
   (define possible-addressing-sym-pairs
     (filter (lambda (addressing-sym-pair)
               (has-addressing-mode? (car addressing-sym-pair)
@@ -330,7 +352,8 @@
                 #'some
                 #',x)))
 
-(define (abs-or-zero-page-addressing? addressing-list addressing-modes-stx op-stx )
+(define/c (abs-or-zero-page-addressing? addressing-list addressing-modes-stx op-stx )
+  (-> (listof symbol?) syntax? syntax? boolean?)
   (define possible-addressing-sym-pairs
     (filter (lambda (addressing)
               (has-addressing-mode? addressing (syntax->datum addressing-modes-stx)))
@@ -358,24 +381,28 @@
                 #'<some)
                "operand is definitively only byte"))
 
-(define (zero-page-indexed-addressing? sym op-sym addressing-modes-stx op1-stx op2-stx)
+(define/c (zero-page-indexed-addressing? sym op-sym addressing-modes-stx op1-stx op2-stx)
+  (-> any/c any/c syntax? syntax? syntax? boolean?)
   (and (has-addressing-mode? sym (syntax->datum addressing-modes-stx))
      (byte-operand? (syntax->datum op1-stx))
      (equal? (syntax->datum op2-stx) op-sym)))
 
-(define (absolute-indexed-addressing? sym op-sym addressing-modes-stx op1-stx op2-stx)
+(define/c (absolute-indexed-addressing? sym op-sym addressing-modes-stx op1-stx op2-stx)
+  (-> any/c any/c syntax? syntax? syntax? boolean?)
   (and (has-addressing-mode? sym (syntax->datum addressing-modes-stx))
      (word-operand? (syntax->datum op1-stx))
      (equal? (syntax->datum op2-stx) op-sym)))
 
-(define (no-operand-opcode addressing addressing-modes)
+(define/c (no-operand-opcode addressing addressing-modes)
+  (-> symbol? (listof addressing-mode?) ast-opcode-cmd?)
   (ast-opcode-cmd (list (cdr (find-addressing-mode addressing addressing-modes)))))
 
 (module+ test #| opcode-without-operand |#
   (check-equal? (no-operand-opcode 'implicit '((accumulator . #x20) (implicit . #x10)))
                 (ast-opcode-cmd '(#x10))))
 
-(define (zero-page-opcode addressing-modes op)
+(define/c (zero-page-opcode addressing-modes op)
+  (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (byte-operand op))
   (if (number? operand)
       (ast-opcode-cmd (list (cdr (find-addressing-mode 'zero-page addressing-modes))
@@ -383,7 +410,8 @@
       (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'zero-page addressing-modes)))
                                  operand)))
 
-(define (zero-page-indexed-opcode sym addressing-modes op)
+(define/c (zero-page-indexed-opcode sym addressing-modes op)
+  (-> any/c (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (byte-operand op))
   (if (number? operand)
       (ast-opcode-cmd (list (cdr (find-addressing-mode sym addressing-modes))
@@ -391,7 +419,8 @@
       (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode sym addressing-modes)))
                                  operand)))
 
-(define (immediate-opcode addressing-modes op)
+(define/c (immediate-opcode addressing-modes op)
+  (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (immediate-byte-operand op))
   (if (number? operand)
       (ast-opcode-cmd (list (cdr (find-addressing-mode 'immediate addressing-modes))
@@ -407,7 +436,8 @@
   (check-equal? (immediate-opcode '((immediate . #x33)) "!>some")
                 (ast-unresolved-opcode-cmd '(#x33) (ast-resolve-byte-scmd "some" 'high-byte))))
 
-(define (indirect-x-opcode addressing-modes op)
+(define/c (indirect-x-opcode addressing-modes op)
+  (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (byte-operand (car op) #t))
   (if (number? operand)
       (ast-opcode-cmd (list (cdr (find-addressing-mode 'indirect-x addressing-modes))
@@ -415,7 +445,8 @@
       (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'indirect-x addressing-modes)))
                                  operand)))
 
-(define (relative-opcode addressing-modes op)
+(define/c (relative-opcode addressing-modes op)
+  (-> (listof addressing-mode?) any/c (or/c ast-rel-opcode-cmd? ast-unresolved-rel-opcode-cmd?))
   (let ((operand (byte-operand op #t #t))
         (opcode  (cdr (find-addressing-mode 'relative addressing-modes))))
     (if (number? operand)
@@ -430,7 +461,8 @@
   (check-equal? (relative-opcode '((relative . #x20)) 'some)
                 (ast-unresolved-rel-opcode-cmd '(#x20) (ast-resolve-byte-scmd "some" 'relative))))
 
-(define (absolute-opcode addressing-modes op)
+(define/c (absolute-opcode addressing-modes op)
+  (-> (listof addressing-mode?) any/c ast-opcode-cmd?)
   (ast-opcode-cmd (list (cdr (find-addressing-mode 'absolute addressing-modes))
                         (low-byte (word-operand  op))
                         (high-byte (word-operand  op)))))
@@ -439,7 +471,8 @@
   (check-equal? (absolute-opcode '((absolute . #x20)) '$1000)
                 (ast-opcode-cmd '(#x20 #x00 #x10))))
 
-(define (indirect-y-opcode addressing-modes op)
+(define/c (indirect-y-opcode addressing-modes op)
+  (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (byte-operand (car op) #t))
   (if (number? operand)
       (ast-opcode-cmd (list (cdr (find-addressing-mode 'indirect-y  addressing-modes))
@@ -451,7 +484,8 @@
   (check-equal? (indirect-y-opcode '((indirect-y . #x20)) '($10))
                 (ast-opcode-cmd '(#x20 #x10))))
 
-(define (indirect-opcode addressing-modes op)
+(define/c (indirect-opcode addressing-modes op)
+  (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (let ((word (word-operand (car op) #t)))
     (if (number? word)
         (ast-opcode-cmd
@@ -465,7 +499,8 @@
   (check-equal? (indirect-opcode '((indirect . #x20)) '($1000))
                 (ast-opcode-cmd '(#x20 #x00 #x10))))
 
-(define (absolute-indexed-opcode sym addressing-modes op)
+(define/c (absolute-indexed-opcode sym addressing-modes op)
+  (-> any/c (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (ast-opcode-cmd (list (cdr (find-addressing-mode sym addressing-modes))
                         (low-byte (word-operand op))
                         (high-byte (word-operand op)))))
@@ -475,6 +510,11 @@
                 (ast-opcode-cmd '(#x20 0 16))))
 
 (define (possible-addressings addressing-sym-list addressing-modes op1 op2)
+  (-> (listof (cons/c symbol? any/c))
+     (listof addressing-mode?)
+     any/c
+     any/c
+     (listof (cons/c symbol? any/c)))
   (map (lambda (addressing-sym-pair) (car addressing-sym-pair))
        (filter (lambda (addressing-sym-pair)
                  (and (has-addressing-mode? (car addressing-sym-pair) addressing-modes)
@@ -509,7 +549,8 @@
                  ',x)
                 '(zero-page-x absolute-x)))
 
-(define (ambiguous-addressing-opcode possible-addressing-modes op)
+(define/c (ambiguous-addressing-opcode possible-addressing-modes op)
+  (-> (listof (cons/c symbol? any/c)) any/c (or/c ast-unresolved-opcode-cmd? ast-decide-cmd?))
   (cond [(empty? possible-addressing-modes)
          (raise-syntax-error 'ambiguous-addressing "no possible addressing mode found")]
         [(= 1 (length possible-addressing-modes))
@@ -529,7 +570,8 @@
                               possible-addressing-modes) )]
         [#t (raise-syntax-error 'ambiguous-addressing "no option found for ambiguous address resolution")]))
 
-(define (abs-or-zero-page-indexed-opcode addressing-sym-list addressing-modes op1 op2)
+(define/c (abs-or-zero-page-indexed-opcode addressing-sym-list addressing-modes op1 op2)
+  (-> (listof (cons/c symbol? any/c)) (listof addressing-mode?) any/c any/c (or/c ast-unresolved-opcode-cmd? ast-decide-cmd?))
   (define pos-addressings (possible-addressings addressing-sym-list addressing-modes op1 op2))
   (define possible-addressing-modes
     (filter (λ (addressing-mode)
@@ -560,7 +602,8 @@
                   (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "some"))
                   (ast-unresolved-opcode-cmd '(#x30) (ast-resolve-byte-scmd "some" 'low-byte))))))
 
-(define (abs-or-zero-page-opcode addressing-list addressing-modes op)
+(define/c (abs-or-zero-page-opcode addressing-list addressing-modes op)
+  (-> (listof symbol?) (listof addressing-mode?) any/c (or/c ast-unresolved-opcode-cmd? ast-decide-cmd?))
   (define pos-addressings
     (filter (lambda (addressing)
               (has-addressing-mode? addressing addressing-modes))
@@ -571,7 +614,8 @@
             addressing-modes))
   (ambiguous-addressing-opcode possible-addressing-modes op))
 
-(define (raise-addressing-error stx addressing-modes-stx num)
+(define/c (raise-addressing-error stx addressing-modes-stx num)
+  (-> syntax? syntax? exact-integer? syntax?)
   (raise-syntax-error
    'mnemonic
    ;; report available addressing modes expected for one op
