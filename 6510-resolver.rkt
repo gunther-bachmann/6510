@@ -336,7 +336,6 @@
                   33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104
                   14)))
 
-
 (define/c (commands->bytes memory-address commands )
   (-> word/c (listof ast-command?) (listof byte/c))
 

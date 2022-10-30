@@ -1,7 +1,7 @@
 #lang racket
 
 (require (rename-in  racket/contract [define/contract define/c]))
-(require (only-in "6510-utils.rkt" byte/c word/c low-byte high-byte))
+(require (only-in "6510-utils.rkt" byte/c word/c low-byte high-byte absolute))
 (require "6510-command.rkt")
 
 (provide label-string-offsets command-len label->hilo-indicator)
@@ -146,3 +146,41 @@
                 '(#x41 #xc0 1 1 #xd2 #x01
                   #x43 #xc0 2 #xd9 #x01
                   #x46 #xc0 1 0 #xd2 #x01)))
+
+(define/c (value-by-hilo-ind hilo-ind value)
+  (-> byte/c word/c byte/c)
+  (cond [(= 1 hilo-ind) (high-byte value)]
+        [#t (low-byte value)]))
+
+(module+ test #| value-by-hilo-ind |#
+  (check-eq? (value-by-hilo-ind 0 #xffd2)
+             #xd2)
+  (check-eq? (value-by-hilo-ind 1 #xffd2)
+             #xff))
+
+(define/c (relocate-program delta offset reloc-table bytes result)
+  (-> word/c word/c (listof byte/c) (listof byte/c) (listof byte/c) (listof byte/c))
+  (if (empty? bytes)
+      result      
+      (if (empty? reloc-table)
+          (relocate-program delta (+ offset (length bytes)) reloc-table '() (append result bytes))
+          (match-let (((list offset-low offset-high width _ ...) reloc-table))
+            (if (not (eq? offset (absolute offset-high offset-low)))
+                (relocate-program delta (+ offset 1) reloc-table (cdr bytes) (append result (list (car bytes))))
+                (cond [(= 1 width)
+                       (match-let* (((list _ _ _ hilo-ind low high) reloc-table)
+                                    (value (+ delta (absolute high low))))
+                         (relocate-program delta (+ offset 1) (drop reloc-table 6) (cdr bytes) (append result (list (value-by-hilo-ind hilo-ind value)))))]
+                      [(= 2 width)
+                       (match-let* (((list _ _ _ low high) reloc-table)
+                                    (value (+ delta (absolute high low))))
+                         (relocate-program delta (+ offset 2) (drop reloc-table 5) (cddr bytes) (append result (list (low-byte value) (high-byte value)))))]
+                      [#t (raise-user-error "some")]))))))
+
+(module+ test #| relocate-program |#
+  (check-equal? (relocate-program +10 0 '(#x01 #x00 1 1 #xfe #x34) '(#x20 #xc1 #xc2 #x09) '())
+                '(#x20 #x35 #xc2 #x09))
+  (check-equal? (relocate-program +10 0 '(#x01 #x00 1 0 #xfe #x34) '(#x20 #xc1 #xc2 #x09) '())
+                '(#x20 #x08 #xc2 #x09))
+  (check-equal? (relocate-program +10 0 '(#x01 #x00 2 #xfe #x34) '(#x20 #xc1 #xc2 #x09) '())
+                '(#x20 #x08 #x35 #x09)))
