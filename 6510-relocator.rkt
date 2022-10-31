@@ -1,7 +1,8 @@
 #lang racket
 
 (require (rename-in  racket/contract [define/contract define/c]))
-(require (only-in "6510-utils.rkt" byte/c word/c low-byte high-byte absolute))
+(require (only-in  racket/fixnum fx+))
+(require (only-in "6510-utils.rkt" byte/c word/c low-byte high-byte absolute word))
 (require "6510-command.rkt")
 
 (provide label-string-offsets command-len label->hilo-indicator)
@@ -158,29 +159,44 @@
   (check-eq? (value-by-hilo-ind 1 #xffd2)
              #xff))
 
-(define/c (relocate-program delta offset reloc-table bytes result)
+(define/c (relocated-bytes width reloc-table delta)
+  (-> byte/c (listof byte/c) word/c (listof byte/c))
+  (cond [(= 1 width)
+         (match-let* (((list _ _ _ hilo-ind low high) (take reloc-table 6))
+                      (value (word (fx+ delta (absolute high low)))))
+           (list (value-by-hilo-ind hilo-ind value)))]
+        [(= 2 width)
+         (match-let* (((list _ _ _ low high) (take reloc-table 5))
+                      (value (word (fx+ delta (absolute high low)))))
+           (list (low-byte value) (high-byte value)))]
+        [#t (raise-user-error (format "relocated-bytes width ~a is unknown" width))]))
+
+(define/c (relocate-program delta reloc-table bytes)
+  (-> word/c  (listof byte/c) (listof byte/c) (listof byte/c))
+  (-relocate-program delta 0 reloc-table bytes '()))
+
+(define/c (-relocate-program delta offset reloc-table bytes result)
   (-> word/c word/c (listof byte/c) (listof byte/c) (listof byte/c) (listof byte/c))
-  (if (empty? bytes)
-      result      
-      (if (empty? reloc-table)
-          (relocate-program delta (+ offset (length bytes)) reloc-table '() (append result bytes))
-          (match-let (((list offset-low offset-high width _ ...) reloc-table))
-            (if (not (eq? offset (absolute offset-high offset-low)))
-                (relocate-program delta (+ offset 1) reloc-table (cdr bytes) (append result (list (car bytes))))
-                (cond [(= 1 width)
-                       (match-let* (((list _ _ _ hilo-ind low high) reloc-table)
-                                    (value (+ delta (absolute high low))))
-                         (relocate-program delta (+ offset 1) (drop reloc-table 6) (cdr bytes) (append result (list (value-by-hilo-ind hilo-ind value)))))]
-                      [(= 2 width)
-                       (match-let* (((list _ _ _ low high) reloc-table)
-                                    (value (+ delta (absolute high low))))
-                         (relocate-program delta (+ offset 2) (drop reloc-table 5) (cddr bytes) (append result (list (low-byte value) (high-byte value)))))]
-                      [#t (raise-user-error "some")]))))))
+  (cond
+    [(empty? bytes)       result]
+    [(empty? reloc-table) (append result bytes)]
+    [#t
+     (match-let*
+         (((list offset-low offset-high width) (take reloc-table 3))
+          (reloc-applies (eq? offset (absolute offset-high offset-low)))
+          ((list offset-inc rem-reloc rem-bytes reloc-bytes)
+           (if reloc-applies
+               (list width
+                     (drop reloc-table (- 7 width))
+                     (drop bytes width)
+                     (relocated-bytes width reloc-table delta))
+               (list 1 reloc-table (cdr bytes) (take bytes 1)))))
+       (-relocate-program delta (+ offset offset-inc) rem-reloc rem-bytes (append result reloc-bytes)))]))
 
 (module+ test #| relocate-program |#
-  (check-equal? (relocate-program +10 0 '(#x01 #x00 1 1 #xfe #x34) '(#x20 #xc1 #xc2 #x09) '())
+  (check-equal? (relocate-program +10 '(#x01 #x00 1 1 #xfe #x34) '(#x20 #xc1 #xc2 #x09))
                 '(#x20 #x35 #xc2 #x09))
-  (check-equal? (relocate-program +10 0 '(#x01 #x00 1 0 #xfe #x34) '(#x20 #xc1 #xc2 #x09) '())
+  (check-equal? (relocate-program +10 '(#x01 #x00 1 0 #xfe #x34) '(#x20 #xc1 #xc2 #x09))
                 '(#x20 #x08 #xc2 #x09))
-  (check-equal? (relocate-program +10 0 '(#x01 #x00 2 #xfe #x34) '(#x20 #xc1 #xc2 #x09) '())
+  (check-equal? (relocate-program +10 '(#x01 #x00 2 #xfe #x34) '(#x20 #xc1 #xc2 #x09))
                 '(#x20 #x08 #x35 #x09)))
