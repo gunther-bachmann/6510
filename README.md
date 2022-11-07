@@ -9,6 +9,7 @@ rackets' capabilities to define (and interpret) languages, in this case: 6510 as
 * megaparsack (`raco pkg install megaparsack-lib`) 
 * threading library (`raco pkg install threading`) 
 * pvector (`raco pkg install pvector`)
+* cover (`raco pkg install cover`)
 
 ## usage
 
@@ -107,15 +108,23 @@ syntax macros into the final racket form which can then be interpreted.
 
 ## Status
 
-To run tests, run `raco test -y --drdr 6510-parser.rkt` for example.
+To run tests, run `raco test -y --drdr 6510-parser.rkt` for example. 
 
-To run all tests, run `raco test -y --drdr -x -j 8 .`
+To run all tests, run `raco test -y -t -x -j 8  .` If direnv is installed, you can use `t` to run all tests.
 
-To build all, run `raco make -v -j 8 *.rkt`
+To build all, run `raco make -v -j 8 *.rkt` (direnv: `m`)
+
+To generate coverage for all racket files, run `raco cover *.rkt` and open `coverage/index.html`
 
 ## Todos
 
 ### Next
+
+- translate one module (list of commands) to a linkable binary format (lbf)
+ 
+- write a linker that links (statically) multiple modules to one executable prg, resolving all symbols etc.
+ 
+- write a loader that dynamically loads modules, and links them in memory
 
 - allow for constants (absolute/ relative?)
  - TODO: add new command-type (existing: opcode, rel-opcode, bytes, label) that behaves similar to label but resolves to absolute value
@@ -140,22 +149,6 @@ To build all, run `raco make -v -j 8 *.rkt`
  - TODO: find compact representation of relocation table
 - optional: write 6510 code  to resolve multiple files w/ export/import and relocation table
  - TODO: find compact representation of import/export table
-
-
-#### alt
-
- phase 1: (x) parse -> (ASL ..)
- phase 2: (x) macro -> 'opcode, 'byte-value, 'rel-opcode, 'decide
- phase 3: (x) eliminate decide
- phase 4: (x) resolve constants
- phase 5: (x) resolve word/byte label references (construct relocation table)
- phase 6: (x) construct import/export resolve tables
- 
- commands->linkable-binary-file (lbf)
- 
- linker->prg
- 
- loader
   
 #### debugger
 
@@ -198,9 +191,11 @@ idea: use same commands as vice monitor (see https://vice-emu.sourceforge.io/vic
 ** [X] step
 ** [X] inspect/change state
 ** [X] continue
+** [X] continue to brealpoint
 ** [ ] continue to next rts/rti
 ** [X] back
 ** [ ] back to previous jmp/jsr interrupt
+** [ ] back to breakpoint
 ** Inspect/change stack
 ** inspect/change memory
 ** [X] set additional break points
