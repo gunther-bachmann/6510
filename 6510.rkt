@@ -1,5 +1,8 @@
 #lang racket
 
+;; central entry for syntax transformation rules for the translation from 6510 dsl code
+;; into 6510 byte/assembler code.
+
 (require "6510-addressing-utils.rkt")
 (require "6510-utils.rkt")
 (require (for-syntax "6510-utils.rkt"))

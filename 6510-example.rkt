@@ -18,11 +18,11 @@ sout:   lda hello,x
         ldx #$05       ; repeat .. times
 some:
         lda #$41       ; load character A (dec 65)
-        jsr cout      ; print this character to screen
+        jsr cout       ; print this character to screen
         adc #1         ; load character B (dec 66)
-        jsr cout      ; print this character to screen
+        jsr cout       ; print this character to screen
         adc #1
-        jsr cout      ; print this character to screen
+        jsr cout       ; print this character to screen
         lda #%00001101 ; $0d
         jsr cout
 end:    dex

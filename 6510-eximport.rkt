@@ -193,24 +193,29 @@
                 '#hash(("some" . word)
                        ("other" . byte))))
 
-(define providing-program
-  '((provide-word aout)
-    (provide-byte char)
-    (byte-const char $65)
-    (label aout)
-    (LDA !char)
-    (JMP $FFD2)))
+(module+ test #| |#
 
-(define requiring-program
-  '((require-word aout)
-    (require-byte char)
-    (LDX !$05)
-    (label repeat)
-    (JSR aout)
-    (DEX)
-    (BNE repeat)
-    (CLC)
-    (LDA !char)
-    (ADC !#01)
-    (JSR $FFD2)
-    (BRK)))
+  (define providing-program
+    '((provide-word aout)
+      (provide-byte char)
+      (byte-const char $65)
+      (label aout)
+      (LDA !char)
+      (JMP $FFD2)))
+
+  (define requiring-program
+    '((require-word aout)
+      (require-byte char)
+      (LDX !$05)
+      (label repeat)
+      (JSR aout)
+      (DEX)
+      (BNE repeat)
+      (CLC)
+      (LDA !char)
+      (ADC !#01)
+      (JSR $FFD2)
+      (BRK)))
+
+  (skip (check-equal? (link-programs (list providing-program requiring-program))
+                      (list #x00))))
