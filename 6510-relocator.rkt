@@ -52,7 +52,13 @@
   (check-equal? (command-len (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-byte-scmd "some" 'low-byte)))
                 2))
 
-(define/c (label-string-offsets offset collected-results commands)
+(define/c (label-string-offsets offset commands)
+  (-> nonnegative-integer? (listof command/c) hash?)
+  (-label-string-offsets offset (hash) commands))
+
+;; collect all labels with their respective offset into the given hash
+;; make sure that the commands do NOT contain any decisions (they must be resolved)
+(define/c (-label-string-offsets offset collected-results commands)
   (-> nonnegative-integer? hash? (listof command/c) hash?)
   (if (empty? commands)
       collected-results
@@ -62,15 +68,15 @@
                 [(ast-label-def-cmd? command)
                  (hash-set collected-results (ast-label-def-cmd-label command) offset)]
                 [#t collected-results])))
-        (label-string-offsets (+ offset (command-len command)) next-results (cdr commands)))))
+        (-label-string-offsets (+ offset (command-len command)) next-results (cdr commands)))))
 
 (module+ test #| collect-label-offsets |#
-  (check-equal? (label-string-offsets 10 (hash) (list (ast-label-def-cmd "some")))
+  (check-equal? (label-string-offsets 10 (list (ast-label-def-cmd "some")))
                 '#hash(("some" . 10)))
-  (check-equal? (label-string-offsets 10 (hash) (list (ast-opcode-cmd '(#x20 #xd2 #xff))
+  (check-equal? (label-string-offsets 10 (list (ast-opcode-cmd '(#x20 #xd2 #xff))
                                                       (ast-label-def-cmd "some")))
                 '#hash(("some" . 13)))
-  (check-equal? (label-string-offsets 10 (hash) (list (ast-label-def-cmd "hello")
+  (check-equal? (label-string-offsets 10 (list (ast-label-def-cmd "hello")
                                                       (ast-opcode-cmd '(#x20 #xd2 #xff))
                                                       (ast-label-def-cmd "some")
                                                       (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "hello"))))

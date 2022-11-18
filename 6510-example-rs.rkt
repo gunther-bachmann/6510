@@ -109,8 +109,8 @@
    (BEQ "NEXT")))
 
 (define program-p1 (->resolved-decisions (label-instructions program) program))
-(define program-p2 (->resolve-labels org (label-string-offsets org (hash) program-p1) program-p1 '()))
-(define raw-bytes (resolved-program->bytes program-p2 '()))
+(define program-p2 (->resolve-labels org (label-string-offsets org program-p1) program-p1 '()))
+(define raw-bytes (resolved-program->bytes program-p2))
 
 (define data (6510-load (initialize-cpu) org raw-bytes))
 (define executable-program (with-program-counter data org))

@@ -264,7 +264,12 @@
          (ast-opcode-cmd '(202))
          (ast-rel-opcode-cmd '(208 247)))))
 
-(define/c (resolved-program->bytes program resolved)
+;; transform a resolved PROGRAM into a list of bytes
+(define/c (resolved-program->bytes program)
+  (-> (listof ast-command?) (listof byte/c))
+  (-resolved-program->bytes program '()))
+
+(define/c (-resolved-program->bytes program resolved)
   (-> (listof ast-command?) (listof byte/c) (listof byte/c))
   (if (empty? program)
       resolved
@@ -276,7 +281,7 @@
                                 [(ast-bytes-cmd? instruction)
                                  (ast-bytes-cmd-bytes instruction)]
                                 [#t '()])))
-        (resolved-program->bytes (cdr program) (append resolved bytes)))))
+        (-resolved-program->bytes (cdr program) (append resolved bytes)))))
 
 (module+ test #| resolve-program->bytes |#
   (check-equal? (resolved-program->bytes
@@ -310,7 +315,7 @@
                   (ast-bytes-cmd '(13))
                   (ast-bytes-cmd '(33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104))
                   (ast-bytes-cmd '(14))
-                  ) '())
+                  ))
                 '(174 59 8
                   189 59 8
                   32 210 255
@@ -336,13 +341,17 @@
                   33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104
                   14)))
 
+;; translate raw program COMMANDS with possibly undecided decisions
+;; to resolved program bytes at MEMORY-ADDRESS
 (define/c (commands->bytes memory-address commands )
   (-> word/c (listof ast-command?) (listof byte/c))
-
-  (define program-p1 (->resolved-decisions (label-instructions commands) commands))
-  (define program-p2 (->resolve-labels memory-address (label-string-offsets memory-address (hash) program-p1) program-p1 '()))
-  (define raw-bytes (resolved-program->bytes program-p2 '()))
-  raw-bytes)
+  (define resolved-decisions (->resolved-decisions (label-instructions commands) commands))
+  (define resolved-labels
+    (->resolve-labels memory-address
+                     (label-string-offsets memory-address resolved-decisions)
+                     resolved-decisions
+                     '()))
+  (resolved-program->bytes resolved-labels))
 
 (module+ test #| commands->bytes |#
   (check-equal? (commands->bytes #xa000 (list (ast-opcode-cmd '(20 #xff #xa0))))
@@ -353,4 +362,3 @@
   (check-equal? (commands->bytes #xa000 (list (ast-label-def-cmd "before")
                                              (ast-unresolved-rel-opcode-cmd '(#xd0) (ast-resolve-byte-scmd "before" 'low-byte))))
                 '(#xd0 #xfe)))
-
