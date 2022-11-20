@@ -10,6 +10,7 @@ rackets' capabilities to define (and interpret) languages, in this case: 6510 as
 * threading library (`raco pkg install threading`) 
 * pvector (`raco pkg install pvector`)
 * cover (`raco pkg install cover`)
+* ansi-color (`raco pkg install ansi-color`)
 
 ## usage
 
@@ -108,7 +109,9 @@ syntax macros into the final racket form which can then be interpreted.
 
 ## Status
 
-To run tests, run `raco test -y --drdr 6510-parser.rkt` for example. 
+If using direnv and guix, aliases are automatically installed. Execute `a` to print help.
+
+To run tests of a single file, run `raco test -y --drdr 6510-parser.rkt` for example. 
 
 To run all tests, run `raco test -y -t -x -j 8  .` If direnv is installed, you can use `t` to run all tests.
 
