@@ -1,7 +1,9 @@
 *.prg
+*.d64
 *.pdf
 *.tex
 auto/
 compiled/
 doc/
 /.direnv/
+/coverage/

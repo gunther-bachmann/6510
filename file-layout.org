@@ -1,0 +1,37 @@
+#+title: File Layout
+* executable file
+  tbd
+* linkable file
+  - [exported symbols + values]
+    export table format
+    | offset           | # bytes | data                                                                      |                                       |                    |
+    |------------------+---------+---------------------------------------------------------------------------+---------------------------------------+--------------------|
+    | 0                |       2 | width (byte), (if width = 2 0: absolute-const, 1:relative-load-address)?. |                                       |                    |
+    | 1/2              |  1 or 2 | value-low                                                                 | rel-position-low (optional value-high | rel-position-high) |
+    | 1/2+width        |       1 | strlen (byte)                                                             |                                       |                    |
+    | 2/3+width        |  1..255 | string                                                                    |                                       |                    |
+    | 1/2+width+strlen |       * | ... next entry                                                            |                                       |                    |
+  - [imported symbols + patch location]
+    import table format:
+    [low][high]: total length of import table
+    * number of import table entries
+    one entry of the import table format:
+    | offset         | # bytes | data                                                                                 |
+    |----------------+---------+--------------------------------------------------------------------------------------|
+    | 0              |       2 | rel-position-low, rel-position-high, : position where the value has to be written to |
+    | 2              |  1 or 2 | width (byte), (if width = 1 0:lowbyte 1:highbyte)?,                                  |
+    | 3 or 4         |       1 | strlen (byte)                                                                        |
+    | 4 or 5         |  1..255 | string                                                                               |
+    | 4 or 5 +strlen |       * | ...next entry                                                                        |
+
+  - [relocation table] (result of function ~reloc-table-bytes~ from ~6510-relocator.rkt~)
+    format:
+    [low][high]: total length of relocation table
+    * number of relocation entries
+    one relocation entry has the format:
+    | offset | # bytes | data                                              | description                                   |
+    |--------+---------+---------------------------------------------------+-----------------------------------------------|
+    |      0 |       2 | rel-position-low, rel-position-high,              | position where the value has to be written to |
+    |      2 |  1 or 2 | width (byte), only if width = 1: hi/low indicator | 0:lowbyte 1:highbyte                          |
+    | 3 or 4 |       2 | rel-value-low, rel-value-high                     | (val + origin) is the value to be written     |
+  - [raw code]
