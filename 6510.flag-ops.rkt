@@ -5,9 +5,15 @@
 (provide CLC CLD CLI CLV SEC SED SEI) 
 
 (module+ test
+  (require "6510-command.rkt")
   (require "6510-test-utils.rkt"))
 
 (define-opcode CLC ((implicit . #x18)))
+
+(module+ test
+  (check-equal? (CLC (#:line 10 #:org-cmd "clc"))
+                (ast-opcode-cmd '(#x18))))
+
 (define-opcode CLD ((implicit . #xd8)))
 (define-opcode CLI ((implicit . #x58)))
 (define-opcode CLV ((implicit . #xb8)))

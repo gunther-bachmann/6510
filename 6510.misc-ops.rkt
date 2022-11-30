@@ -18,5 +18,4 @@
   (check-equal?  (BRK)
                  (ast-opcode-cmd '(#x00))))
 
-(define (NOP)
-  (ast-opcode-cmd '(#xea)))
+(define-opcode NOP ((implicit . #xea)))

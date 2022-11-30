@@ -55,23 +55,11 @@
                     program-p1
                     program-p2
                     raw-program
-                    ;; resolved-program
+                    org-program
                     raw-bytes
-                    stx-program
-                    ;; sy-program
-                    )
-           (define stx-program (syntax #,unenc-prg)) ;; examine how to pass source location into the generated racket program
-           ;; execute this construction of sy-program in the 'with-syntax clause outside this s-expr!! and splice it in here
-           ;; (define sy-program `(,(let* ([datum (syntax->datum (syntax sy-str))]
-           ;;                              [sy-datum (syntax sy-str)])
-           ;;                         (append (list (first datum))
-           ;;                                 (list `(#:line ,(syntax-line sy-datum)
-           ;;                                         #:org-cmd ,(if (and (> (length datum) 1)
-           ;;                                                           (list? (second datum)))
-           ;;                                                        (last (second datum))
-           ;;                                                        (symbol->string (first datum)))))
-           ;;                                 (drop datum (min (length datum) 2)))) ...))
-
+                    stx-program)
+           (define stx-program (syntax #,unenc-prg))
+           (define org-program '(sy-str ...))
            (define raw-program '(str ...))
            (define program `(,str ...))
            (define program-p1 (->resolved-decisions (label-instructions program) program))
@@ -83,6 +71,7 @@
            (displayln (format "execute the program in vice via (run-emulator \"~a\")" d64-name))
            (displayln (format "execute interpreter via (run-interpreter ~a raw-bytes)" org))
            (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes)" org))
+
            ;; (run-emulator "test.d64")
            ;; (run-interpreter org raw-bytes)
            ;; (run-debugger org raw-bytes)

@@ -388,17 +388,19 @@
   (check-equal? (args->string #'(label $2000 ,x))
                 "label$2000,x"))
 
-(define/c (construct-ref-meta-info opcode-stx operands-stx)
-  (-> syntax? syntax? list?)
-   (list '#:line (syntax-line operands-stx)
-         '#:org-cmd (format "~a ~a" (syntax->datum opcode-stx) (args->string operands-stx))))
+(define/c (construct-ref-meta-info opcode-stx [operands-stx (datum->syntax #f (void))])
+  (->* (syntax?) (syntax?) list?)
+   (list '#:line (syntax-line opcode-stx)
+         '#:org-cmd (if (void? (syntax->datum operands-stx))
+                        (format "~a" (syntax->datum opcode-stx))
+                        (format "~a ~a" (syntax->datum opcode-stx) (args->string operands-stx)))))
 
-(define/c (result->syntax operands-stx actual-opcode-stx)
-  (-> syntax? syntax? syntax?)
+(define/c (result->syntax actual-opcode-stx [operands-stx (datum->syntax #f (void))])
+  (->* (syntax?) (syntax?) syntax?)
   (datum->syntax actual-opcode-stx
                 (append (opcode->list4pure (syntax->datum actual-opcode-stx))
                         (list (construct-ref-meta-info actual-opcode-stx operands-stx))
-                        (syntax->datum operands-stx))
+                        (if (void? (syntax->datum operands-stx)) (list) (syntax->datum operands-stx)))
                 actual-opcode-stx))
 
 (define (addressing-symbol? sym)
@@ -420,7 +422,7 @@
   (-> syntax? (or/c addressing-symbol? (listof addressing-symbol?)) (listof addressing-symbol?) parser? parser?)
   (let ((addressings (flatten (list addressing))))
     (try/p (guard/p (do (many/p space-or-tab/p) [a-res <- (syntax/p rule/p)]
-                      (pure (result->syntax a-res actual-opcode)))
+                      (pure (result->syntax actual-opcode a-res)))
                     (lambda (_) (ormap (λ (addr) (member addr adr-mode-list)) addressings))
                     (format "addressing ~a not applicable" addressing)))))
 
@@ -442,16 +444,8 @@
                    (opcode-addressing/p actual-opcode 'zero-page-y adr-mode-list zero-page-y/p)
                    (opcode-addressing/p actual-opcode '(zero-page relative) adr-mode-list zero-page-or-relative/p)
                    (opcode-addressing/p actual-opcode 'absolute adr-mode-list absolute/p)
-                   (try/p (guard/p (do (many/p space-or-tab/p) [label-res <- (syntax/p 6510-label/p)]
-                                     (pure (datum->syntax label-res (append (opcode->list4pure opcode)
-                                                                           (list (last (syntax->datum label-res)))) label-res)))
-                                   (lambda (x) (or (member 'relative adr-mode-list) (member 'absolute adr-mode-list)))
-                                   "no relative label"))
-                   (try/p (guard/p (do void/p
-                                       (pure (datum->syntax actual-opcode (opcode->list4pure opcode) actual-opcode)))
-                                   (lambda (x) (member 'implicit adr-mode-list) )
-                                   "no implicit"))
-                   )]
+                   (opcode-addressing/p actual-opcode '(absolute relative)  adr-mode-list 6510-label/p)
+                   (opcode-addressing/p actual-opcode 'implicit adr-mode-list void/p))]
     (pure res)))
 
 ;; parser for '.asc "some string"'
@@ -463,8 +457,7 @@
     (char/p #\")
     [result <- (many/p (char-not/p #\"))]
     (char/p #\")
-    (pure (list 'asc (list->string result)))
-    ))
+    (pure (list 'asc (list->string result)))))
 
 (module+ test #| asc-string/p |#
   (check-match (parsed-string-result asc-string/p ".asc  \"some\"")
@@ -488,6 +481,8 @@
                '(byte 32 2 4)))
 
 (module+ test #| adr-modes-opcode/p |#
+  (check-match (parsed-string-result (adr-modes-opcode/p "php" '(implicit)) "php")
+               '(PHP (#:line 1 #:org-cmd "php")))
   (check-match (parsed-string-result (adr-modes-opcode/p "lda" '(immediate)) "lda #$10")
                '(LDA (#:line 1 #:org-cmd "lda !16")
                      "!16"))
@@ -606,6 +601,10 @@
   (-> (listof any/c) (listof any/c))
   (filter (lambda (el) (not (and (list? el) (equal? (car el) '#:line)))) command))
 
+(module+ test #| filter-meta-data |#
+  (check-equal? (filter-meta-data '(PHP (#:line 1 #:org-cmd "php")))
+                '(PHP)))
+
 (define/c (parse-opcodes str)
   (-> string? (listof ast-command?))
   (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcodes/p) str))))
@@ -620,6 +619,8 @@
   (map (lambda (command) (eval command eval-ns)) stripped-src-location-data))
 
 (module+ test #| compile-opcodes |#
+  (check-equal? (parse-opcodes "PHP")
+                (list (ast-opcode-cmd '(8))))
   (check-equal? (parse-opcodes "JSR $FFD2")
                 (list (ast-opcode-cmd '(32 210 255))))
   (check-equal? (parse-opcodes ".data $FF, $10")

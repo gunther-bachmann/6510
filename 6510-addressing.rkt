@@ -57,7 +57,7 @@
 
   (check-equal? (XYZ)
                 (ast-opcode-cmd '(#xff)))
-  (check-equal? (XYZ (#:line 17 #:org-cmd))
+  (check-equal? (XYZ (#:line 17 #:org-cmd "xyz"))
                 (ast-opcode-cmd '(#xff)))
   (check-exn exn:fail? (λ () (expand #'(XYZ $))))
   (check-equal? (XYZ $10)
