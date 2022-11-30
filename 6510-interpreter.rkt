@@ -5,6 +5,40 @@
 ;; or: https://www.middle-engine.com/blog/posts/2020/06/23/programming-the-nes-the-6502-in-detail
 ;; control characters: https://www.c64-wiki.com/wiki/control_character
 
+
+
+;; set cursor speed = poke 56341,x (where x = 0 to 255)
+;; switch to uppercase/graphics =poke 53272,21
+;; switch to lowercase/uppercase = poke 53272,23
+;; set border colour = poke 53280,x (where x = 0 to 15)
+;; set background colour = poke 53281,x (where x = 0 to 15)
+;; set cursor color = poke 646,x (where x = 0 to 15)
+;; disable list = poke 775,200
+;; enable list = poke 775,167
+;; hide line numbers = poke 22,35
+;; show line number = poke 22,25
+;; turn cursor on during get = poke 204,0
+;; turn cursor back off = poke 204,255
+;; turn off question mark during input = poke 19,65
+;; turn question mark back on = poke 19,0
+;; make a click sound = poke 54296,15:POKE 54296,0
+;; disable keyboard = poke 649,0
+;; enable keyboard = poke 649,10
+;; disable keyboard buffer = poke 649,1
+;; increase keyboard buffer = poke 649,15
+;; clear keyboard buffer = poke 198,0
+;; no keys repeat = poke 650,127
+;; all keys repeat = poke 650,128
+;; normal repeat = poke 650,0
+;; disable SHIFT-Commodore = poke 657,128
+;; enable SHIFT-Commodore = poke 657,0
+;; disable RUN/STOP = poke 808,239
+;; disable RESTORE = poke 792,193
+;; disable RUN-STOP/RESTORE = poke 808,239:poke 792,193
+;; disable RUN-STOP/RESTORE and list = poke 808,234
+;; enable RUN-STOP/RESTORE and list = poke 808,237:poke 792,71
+;; poke 1,0 = disable OS (default value 1,1)
+
 ;; (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
 (require (only-in threading ~>>))
 (require "6510-utils.rkt")
@@ -387,11 +421,21 @@
 
 ;; https://www.c64-wiki.com/wiki/control_character
 (define/c (display-c64charcode byte state)
-  (-> byte/c cpu-state? any/c)
+  (-> byte/c cpu-state? cpu-state?)
   (case byte
-    [(#x0e) (display "")] ;; switch to lower letter mode
-    [(#x0d) (displayln "")]
-    [else (display (string (integer->char byte)))]))
+    [(#x0e) (display "") (poke state 53272 23)] ;; switch to lower letter mode
+    [(#x0d) (displayln "") state]
+    [else (display (string (c64-translate-char (integer->char byte) state)))
+          state]))
+
+(define (c64-translate-char char state)
+  (let ((peeked (peek state 53272)))
+    (case peeked
+      [(23) (cond
+              [(char-lower-case? char) (char-upcase char)]
+              [(char-upper-case? char) (char-downcase char)]
+              [else char]) ] ;; translate
+      [else char])))
 
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
@@ -399,9 +443,10 @@
   (-> byte/c byte/c cpu-state? cpu-state?)
   (case (absolute high low)
     [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
-     (~>> (cpu-state-accumulator state)
-         (display-c64charcode _ state))
-     (struct-copy cpu-state state [program-counter (next-program-counter state 3)])]
+     (let ((print-state (~>> (cpu-state-accumulator state)
+                            (display-c64charcode _ state)
+                            )))
+       (struct-copy cpu-state print-state [program-counter (next-program-counter print-state 3)]))]
     [else (let* ([new-program-counter (absolute high low)]
                  [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
                  [sp (cpu-state-stack-pointer state)])
