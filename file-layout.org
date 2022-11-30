@@ -35,3 +35,9 @@
     |      2 |  1 or 2 | width (byte), only if width = 1: hi/low indicator | 0:lowbyte 1:highbyte                          |
     | 3 or 4 |       2 | rel-value-low, rel-value-high                     | (val + origin) is the value to be written     |
   - [raw code]
+* sourcemap
+  - references
+    source maps library (js) https://github.com/mozilla/source-map
+    base64 vlq https://www.lucidchart.com/techblog/2019/08/22/decode-encoding-base64-vlqs-source-maps/
+    source map explained https://www.bugsnag.com/blog/source-maps
+    source map specs https://github.com/source-map/source-map-spec
