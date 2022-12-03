@@ -33,9 +33,14 @@ end:    dex
 cout:   jsr $ffd2
         rts
 
-hello:  .data 18 ; number of bytes to print (string length)
+hello:  .data 22 ; number of bytes to print (string length)
         .data $0d ; line feed
-        .asc "!DLROw WEN OLLEh"
+        .data $a7; right one eigth
+        .data $12; reverse
+        .data $0d
+        .data $a7; left half block
+        .data $0d
+        .asc "DLROw WEN OLLEh"
         .data $0e ; switch to lower letter mode
 
 

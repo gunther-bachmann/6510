@@ -1,0 +1,10 @@
+#+title: c64 information
+
+* memory map and description of each location
+  https://sta.c64.org/cbm64mem.html
+* screen codes and character codes
+  https://sta.c64.org/cbm64scr.html
+* peeks and pokes
+  https://retrogamecoders.com/c64-poke-peek/
+* c64 codes -> unicode translation
+  https://dflund.se/~triad/krad/recode/petscii.html
