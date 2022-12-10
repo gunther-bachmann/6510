@@ -1,7 +1,10 @@
 #! /usr/bin/env racket
 #lang racket
 
-; file is intended to document dsl possibilities
+;; file is intended to document dsl possibilities
+;; new language features are tested here first
+;
+;; C-c C-c and inspect program-p1, program-p2 and raw-bytes
 
 (require "6510.rkt")
 (require "6510-resolver.rkt")
@@ -15,7 +18,7 @@
   (require rackunit))
 
 (module+ test #| smoke test |#
-  #| test that the first step in compilation workds
+  #| test that the first step in compilation works
    | even when used in a totally different file (importing the macros)
    |#
   (check-equal?
@@ -70,8 +73,8 @@
    ;; (IMPORT-WORD ":IMPORTEDWORD")
    ;; (EXPORT-WORD ":EXPORTED" ":COUT")
    ;; (EXPORT-BYTE ":EXPORTED" ":COUT-L") ;;
-   ;; (CONSTANT-BYTE  ":MYVAL" "$42")     ;; define label with byte constant: :myval = $42
-   ;; (CONSTANT-WORD  ":M16BVAL" "$C842") ;; define label with word constant: :m16bval = $c842
+   (byte-const  "MYVAL" "$42")     ;; define label with byte constant: myval = $42
+   (word-const  "M16BVAL" "$C842") ;; define label with word constant: m16bval = $c842
    ;; (EXPORT-BYTE ":EXPORTED-VAL" ":MYVAL") ;; export a defined byte constant
    ;; (EXPORT-WORD ":EXPORTED-16BVAL" ":MY16BVAL") ;; export a defined word constant
    (asc "HELLO WORLD")
