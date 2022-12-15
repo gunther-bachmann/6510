@@ -25,6 +25,7 @@
   (begin-for-syntax
     (check-true (meta-info? #'(#:line 1 #:org-cmd "some")))))
 
+;; define an opcode with a list of addressing modes and their respecitve byte encoding
 (define-syntax (define-opcode stx)
     (syntax-case stx ()
       ([_ mnemonic addressing-modes]
@@ -75,6 +76,7 @@
                 (ast-opcode-cmd '(#xfc #x10)))
   (check-exn exn:fail? (λ () (expand #'(XYZ no ($10),y)))))
 
+;; transform the given to a no-operand (implicit) command
 (define-for-syntax (no-op stx addressings-defs)
   (datum->syntax
    stx
@@ -89,6 +91,7 @@
      (syntax->datum (no-op #f #'((implicit . #x10))))
      '(no-operand-opcode 'implicit '((implicit . #x10))))))
 
+;; transform the given (having one operand) to a valid operand command given the possible addressing-modes
 (define-for-syntax (one-op stx addressings-defs op)
   (define possible-ambiguous-addressing '(zero-page  absolute))
   (datum->syntax
@@ -118,6 +121,7 @@
      (syntax->datum (one-op #f #'((accumulator . #x10)) #'A))
      (quote (no-operand-opcode 'accumulator '((accumulator . #x10)))))))
 
+;; transform the given (having two operands) to a vliad operand command given the possible addressing-modes 
 (define-for-syntax (two-op stx addressings-defs op1 op2)
   (define possible-ambiguous-indexed-addressing
     '((zero-page-x . ,x) (zero-page-y . ,y) (absolute-x . ,x) (absolute-y . ,y)))

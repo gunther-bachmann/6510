@@ -4,7 +4,8 @@
 (require "6510-command.rkt")
 (require (rename-in racket/contract [define/contract define/c]))
 
-(provide absolute-indexed-addressing?
+(provide ;; all addressing mode checks
+         absolute-indexed-addressing?
          accumulator-addressing?
          byte-addressing?
          immediate-addressing?
@@ -18,6 +19,7 @@
          abs-or-zero-page-indexed-addressing?
          abs-or-zero-page-addressing?
 
+         ;; opcode transformers 
          absolute-opcode
          absolute-indexed-opcode
          immediate-opcode
@@ -30,10 +32,10 @@
          no-operand-opcode
          abs-or-zero-page-indexed-opcode
          abs-or-zero-page-opcode
-
+         
          raise-addressing-error)
 
-
+;; map addressing mode to the respective resolve-<width> 
 (define address-mode-to-resolve-map
   (hash 'absolute 'resolve-word
         'absolute-x 'resolve-word
@@ -45,6 +47,7 @@
 (module+ test
   (require rackunit))
 
+;; is the given operand possibly of byte length?
 (define/c (possibly-byte-operand? any-num)
   (-> (or/c symbol? number? string?) (or/c (listof string?) boolean?))
   (or (and (symbol? any-num)
@@ -52,6 +55,7 @@
      (byte-operand? any-num)
      (ambiguous-operand? any-num)))
 
+;; is the given operand definitively of byte length?
 (define/c (byte-operand? any-num)
   (-> any/c boolean?)
   (or (and (symbol? any-num)
@@ -63,22 +67,25 @@
               (in-byte-range? (parse-number-string any-num)))
            (byte-label? any-num)))))
 
+(module+ test #| byte-operand? |#
+  (for ((byte `(10 0 255 "10" "0" "255" "%101" ,(string->symbol "10") |10| |$10| |$FF| |%101| ">some" "<other")))
+    (check-true (byte-operand? byte) (format "~a not a byte" byte)))
+  (for ((no-byte '(-1 256 "-1" "256" |-1| |$101| "some" "other")))
+    (check-false (byte-operand? no-byte) (format "~a is a byte" no-byte))))
+
+;; is the given string a byte label?
 (define/c (byte-label? str)
   (-> string? boolean?)
   (and (regexp-match #rx"^[><][a-zA-Z_-][a-zA-Z0-9_-]*$" str) #t))
 
+;; is the given string a label
 (define/c (label? str)
   (-> string? boolean?)
   (and (not (equal? str "A")) ;; reserved for accumulator addressing
      (regexp-match #rx"^[a-zA-Z_][a-zA-Z0-9_-]*$" str)
      #t))
 
-(module+ test #| byte-operand? |#
-  (for ((byte '(10 0 255 "10" "0" "255" |10| |$10| |$FF| |%101|)))
-    (check-true (byte-operand? byte) (format "~a not a byte" byte)))
-  (for ((byte '(-1 256 "-1" "256" |-1| |$101|)))
-    (check-false (byte-operand? byte) (format "~a is a byte" byte))))
-
+;; resolve the given operand to a byte or to an open to resolve-to-byte ast command
 (define/c (byte-operand any-num (force true) (relative false))
   (->* ((or/c symbol? number? string?)) (boolean? boolean?) (or/c number? ast-resolve-byte-scmd?))
   (cond [(symbol? any-num)
@@ -119,6 +126,7 @@
                           (car byte-expectation)
                           (cdr byte-expectation)))))
 
+;; resolve the given operand to a word or an open to resolve-to-word ast command
 (define/c (word-operand any-num (force #f))
   (->* ((or/c symbol? number? string?)) (boolean?) (or/c number? ast-resolve-sub-cmd?))
   (cond [(symbol? any-num)
@@ -129,6 +137,8 @@
         [#t (raise-syntax-error 'word-operand (format "'~a' is no valid word operand" any-num))]))
 
 (module+ test #| word-operand |#
+  (check-equal? (word-operand "some" #t)
+                (ast-resolve-word-scmd "some"))
   (for ((word-expectation
          '((10       . 10)
            (0        . 0)
@@ -146,6 +156,7 @@
                        (car word-expectation)
                        (cdr word-expectation)))))
 
+;; it the given operator possibly a word operand?
 (define/c (possibly-word-operand? any-num)
   (-> (or/c symbol? number? string?) boolean?)
   (or (and (symbol? any-num)
@@ -153,13 +164,18 @@
      (word-operand? any-num)
      (ambiguous-operand? any-num)))
 
+;; the given operand is neither definitively a byte nor definitively a word operand?
+;; it could be one of both!
 (define/c (ambiguous-operand? any-num)
   (-> any/c boolean?)
   (or (and (symbol? any-num)
         (ambiguous-operand? (symbol->string any-num)))
      (and (string? any-num)
-        (label? any-num))))
+        (label? any-num)
+        (not (byte-label? any-num)))))
 
+;; is the given operand definitively a word operand?
+;; (it could also be a byte operand if it is number and in byte range, too)
 (define/c (word-operand? any-num)
   (-> any/c boolean?)
   (or (and (symbol? any-num)
@@ -176,6 +192,8 @@
   (for ((word '(-1 65536 "-1" "65536" |-1| |$10001|)))
     (check-false (word-operand? word) (format "~a is a word" word))))
 
+;; is this operand an immediate byte value operand?
+;; immediate values are always of byte length, so if a prefix ! is given, even a label must be of byte length
 (define/c (immediate-byte-operand? sym)
   (-> any/c (or/c (listof string?) boolean?))
   (or (and (symbol? sym)
@@ -185,13 +203,14 @@
         (possibly-byte-operand? (substring sym 1)))))
 
 (module+ test #| immediate-byte-operand? |#
-  (for ((immediate-byte '("!10" "!0" "!255" |!10| |!$10| |!$FF| |!%101|)))
+  (for ((immediate-byte '("!10" "!0" "!255" |!10| |!$10| |!$FF| |!%101| "!<some" "!some")))
     (check-true (immediate-byte-operand? immediate-byte)
                 (format "~a not an immediate byte" immediate-byte)))
   (for ((immediate-byte '("!-1" "!256" |!-1| |!$101|)))
     (check-false (immediate-byte-operand? immediate-byte)
                  (format "~a is a byte" immediate-byte))))
 
+;; resolve immediate operand to a byte or a resolve to byte ast command
 (define/c (immediate-byte-operand sym)
   (-> (or/c symbol? string?) (or/c number? ast-resolve-sub-cmd?))
   (if (symbol? sym)
@@ -214,12 +233,15 @@
                           (car byte-expectation)
                           (cdr byte-expectation)))))
 
+;; mode-element is an addressing-mode definition
+;; of the form  ''
 (define/c (addressing-mode? mode-el)
   (-> any/c boolean?)
   (and (pair? mode-el)
      (symbol? (car mode-el))
      (byte? (cdr mode-el))))
 
+;; get the first addressing mode that matches the sym
 (define/c (find-addressing-mode sym addressing-modes)
   (-> any/c (listof addressing-mode?) (or/c addressing-mode? #f))
   (findf (lambda (el) (and (pair? el) (eq? (car el) sym))) addressing-modes))
@@ -228,6 +250,7 @@
   (check-equal? (find-addressing-mode 'accumulator '((immediate . #x10) (accumulator . #x20)))
                 '(accumulator . #x20)))
 
+;; is the given symbol in the addressing-modes?
 (define/c (has-addressing-mode? sym addressing-modes)
   (-> any/c (listof addressing-mode?) boolean?)
   (pair? (find-addressing-mode sym addressing-modes)))
@@ -236,6 +259,8 @@
   (check-true (has-addressing-mode? 'accumulator '((immediate . #x10) (accumulator . #x20))))
   (check-false (has-addressing-mode? 'zero-page-x '((immediate . #x10) (accumulator . #x20)))))
 
+;; is the given operand syntax of accumulator addressing and is accumulator addressing part of the 
+;; addressing modes?
 (define/c (accumulator-addressing? addressing-modes-stx op-stx)
   (-> any/c syntax? boolean?)
   (and (has-addressing-mode? 'accumulator (syntax->datum addressing-modes-stx)) 
@@ -244,16 +269,21 @@
 (module+ test #| accumulator-addressing? |#
   (check-true (accumulator-addressing? #'((accumulator . #x20)) #'A)))
 
+;; is the given operand syntax of byte-addressing
+;; and the addressing-modes contains the addr-sym?
 (define/c (byte-addressing? addr-sym addressing-modes-stx op-stx)
   (-> any/c syntax? syntax? boolean?)
   (and (has-addressing-mode? addr-sym (syntax->datum addressing-modes-stx))
      (byte-operand? (syntax->datum op-stx))))
 
+;; is the given operand syntax of word-addressing
+;; and the addressing-modes contains the addr-sym?
 (define/c (word-addressing? addr-sym addressing-modes-stx op-stx)
   (-> any/c syntax? syntax? boolean?)
   (and (has-addressing-mode? addr-sym (syntax->datum addressing-modes-stx))
      (word-operand? (syntax->datum op-stx))))
 
+;; is the given operand symbol a relative addressing operand?
 (define/c (relative-addressing-operand? elem)
   (-> any/c boolean?)
   (and
@@ -263,16 +293,22 @@
           (label? elem)))
    #t))
 
+;; is the given operand syntax of relative addressing
+;; and is relative addressing in the given addressing-modes-stx?
 (define/c (relative-addressing? addressing-modes-stx op-stx)
   (-> syntax? syntax? boolean?)
   (and (has-addressing-mode? 'relative (syntax->datum addressing-modes-stx))
      (relative-addressing-operand? (syntax->datum op-stx))))
 
+;; is the given operand syntax of immediate addressing
+;; and is immediate addressing in the addressing-modes-stx?
 (define/c (immediate-addressing? addressing-modes-stx op-stx)
   (-> syntax? syntax? boolean?)
   (and (has-addressing-mode? 'immediate (syntax->datum addressing-modes-stx))
      (immediate-byte-operand? (syntax->datum op-stx))))
 
+;; is this (without operand) of implicit addressing (yes)
+;; and is implicit addressing in the addressing-modes-stx?
 (define/c (implicit-addressing? addressing-modes-stx)
   (-> syntax? boolean?)
   (has-addressing-mode? 'implicit (syntax->datum addressing-modes-stx)))
