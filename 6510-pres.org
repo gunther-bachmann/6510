@@ -2,7 +2,7 @@
 * motivation
   - want to get more into functional programming
 
-    - *lisp* (John McCarthy: original definition 1958, second oldest programming language,
+    - *lisp* (John McCarthy: original definition 1958, second oldest programming language in use,
               fortran is older by one year)
 
       /The most powerful programming language is Lisp. If you don't know Lisp (or its variant,/
@@ -45,10 +45,10 @@
       - https://github.com/tiagosr/Plasm
       And check the online assembler at https://www.masswerk.at/6502/assembler.html
 * 6510
-  - Eight bit parallel processing
+  - 8 Bit parallel processing
   - 8 Bit Bi-Directional Data Bus
-  - Addressable memory range of up to 65Ki bytes
-  - 56 Instructions (see https://www.masswerk.at/6502/6502_instruction_set.html)
+  - Addressable memory range of up to 64Ki bytes
+  - 56 Instructions (see [[https://www.masswerk.at/6502/6502_instruction_set.html][6502 instruction set]])
   - Thirteen addressing modes
   - True indexing capability
   - Programmable stack pointer
@@ -56,7 +56,7 @@
   - Interrupt capability
   - Direct memory access capability
   - Decimal and binary arithmetic
-  - Bus com patible with M6800
+  - Bus compatible with M6800
   - Pipeline architecture
   - 1 MHz, 2 MHz and 3 MHz operation
   - Use with any type or speed memory
@@ -64,7 +64,6 @@
   - 8-Bit Bi-Directional I/O Port
   - Single +5 volt supply
   - HMOS, silicon gate, depletion load technology
-
     #+ATTR_ORG: :width 640
     [[file:~/documents/roam/media/640px-KL_MOS_6510.jpg]]
 * comparison
@@ -89,12 +88,13 @@
    | ssd       |   550,000 |        1 |
 
 * c64
-  #+ATTR_ORG: :width 640
-  [[file:~/documents/roam/c64.png]]
-  - 6510 @ 985kHz (pal edition)
-  - 64 kB RAM
-  - 20 kB ROM (8kB Kernel, 8kB Basic Interpreter, 4kB Character ROM)
-  - 40x25 text mode
+  - specs
+    #+ATTR_ORG: :width 640
+    [[file:~/documents/roam/c64.png]]
+    - 6510 @ 985kHz (pal edition)
+    - 64 kB RAM
+    - 20 kB ROM (8kB Kernel, 8kB Basic Interpreter, 4kB Character ROM)
+    - 40x25 text mode
   - 320x200 pixel high resolution graphics, 8 sprites (per scan line), raster interrupt
     - hires: (40x25 char blocks), 16 colors (2 per char block)
     - [[id:49f39c67-7028-4306-a39f-7d78c94dfc1c][composite-video]] or rgbi output
@@ -130,8 +130,8 @@
         pkill sidplay &2>/dev/null
       #+end_src
 * original 6510 assembler program
-  #+begin_src text
-           ,*=$C000       ; origin
+  #+begin_src asm
+           *=$C000        ; origin
 
            lda #$41       ; load character A (dec 65)
            jsr cout       ; print this character to screen
@@ -163,10 +163,11 @@
     - break command flag
     - overflow flag
     - negative flag
-* show [[file:6510-example-rs.rkt]]
-* show [[file:6510-example.rkt]]
-* execute in x64
-* different phases during program evaluation (elaborate)
+* own implementation
+  - show [[file:6510-example-rs.rkt]]
+  - show [[file:6510-example.rkt]]
+  - execute in x64
+  - different phases during program evaluation (elaborate)
 * syntax macros carrying location etc.
   - simple syntax object
     #+begin_src racket :lang racket :results verbatim
