@@ -68,23 +68,26 @@
     #+ATTR_ORG: :width 640
     [[file:~/documents/roam/media/640px-KL_MOS_6510.jpg]]
 * comparison
-  | feature            | ryzen threadripper 1950x                        | 6510     |
-  |--------------------+-------------------------------------------------+----------|
-  | cache              | l1:768K l2:512K/core L3:32MB                    | none     |
-  | addressable memory | (48bit address lines used)  281,474,976,710,656 | 65,536   |
-  | freq               | 3.4 - 4.0 GHz                                   | 1MHz     |
-  | registers          | 16 General Purpose + 6 Segment (64bit)          | 4 (8bit) |
-  |                    | 16 256bit YMM regs                              |          |
-  |                    | 16 128bit XMM regs                              |          |
-  |                    | 8 64 bit MMX regs                               |          |
-  |                    | 8 80bit floating point registers                |          |
-  | instruction set    | > 1000                                          | 56       |
+  - cpu
+   | feature            | ryzen threadripper 1950x                        | 6510     |
+   |--------------------+-------------------------------------------------+----------|
+   | cache              | l1:768K l2:512K/core L3:32MB                    | none     |
+   | addressable memory | (48bit address lines used)  281,474,976,710,656 | 65,536   |
+   | freq               | 3.4 - 4.0 GHz                                   | 1MHz     |
+   | registers          | 16 General Purpose + 6 Segment (64bit)          | 4 (8bit) |
+   |                    | 16 256bit YMM regs                              |          |
+   |                    | 16 128bit XMM regs                              |          |
+   |                    | 8 64 bit MMX regs                               |          |
+   |                    | 8 80bit floating point registers                |          |
+   | instruction set    | > 1000                                          | 56       |
+  
+  - I/O
+   | channel   | size [kb] | time [s] |
+   |-----------+-----------+----------|
+   | datasette |        16 |      330 |
+   | floppy    |        16 |       50 |
+   | ssd       |   550,000 |        1 |
 
-  | channel   | size [kb] | time [s] |
-  |-----------+-----------+----------|
-  | datasette |        16 |      330 |
-  | floppy    |        16 |       50 |
-  | ssd       |   550,000 |        1 |
 * c64
   #+ATTR_ORG: :width 640
   [[file:~/documents/roam/c64.png]]
