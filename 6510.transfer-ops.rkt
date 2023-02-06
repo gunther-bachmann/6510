@@ -1,4 +1,16 @@
 #lang racket
+#|
+
+ provide 6510 register transfer instructions:
+  TAX
+  TAY
+  TSX
+  TXA
+  TXS
+  TYA
+
+ |#
+
 
 (require "6510-addressing.rkt")
 

@@ -1,4 +1,9 @@
 #lang racket
+#|
+
+ provide functions for code (re)location, based on resolved/calculated command len
+
+ |#
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require (only-in  racket/fixnum fx+))

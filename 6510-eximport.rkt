@@ -1,5 +1,10 @@
 #lang racket
 
+#|
+
+
+ |#
+
 (require (rename-in  racket/contract [define/contract define/c]))
 (require (only-in "6510-relocator.rkt" command-len))
 (require (only-in "6510-utils.rkt" low-byte high-byte byte/c word/c))
@@ -217,5 +222,6 @@
       (JSR $FFD2)
       (BRK)))
 
-  (skip (check-equal? (link-programs (list providing-program requiring-program))
+  (skip ": linking programs is not supported yet"
+        (check-equal? (link-programs (list providing-program requiring-program))
                       (list #x00))))

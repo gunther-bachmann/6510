@@ -19,4 +19,13 @@
           (begin
             (with-colors 'red
               (lambda () (color-displayln "test skipped.")))
+            #t)))))
+    ([_ msg body]
+     (datum->syntax
+      stx
+      (syntax->datum
+       #'(check-true
+          (begin
+            (with-colors 'red
+              (lambda () (color-displayln (format "test skipped ~a." msg))))
             #t)))))))

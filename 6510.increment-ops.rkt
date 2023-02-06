@@ -1,4 +1,15 @@
 #lang racket
+#|
+
+ provide 6510 in-/decrement instructions:
+  DEC
+  DEX
+  DEY
+  INC
+  INX
+  INY
+
+ |#
 
 (require "6510-addressing.rkt")
 

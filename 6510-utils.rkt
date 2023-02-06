@@ -1,4 +1,10 @@
 #lang racket
+#|
+
+ provide utilities for byte/word manipulation and more
+
+ |#
+
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (module+ test

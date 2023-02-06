@@ -1,4 +1,10 @@
 #lang racket
+#|
+
+ provide a reader for 6510 syntax, making heavy use of the parser
+
+ |#
+
 (require syntax/strip-context)
 (require megaparsack megaparsack/text)
 (require (only-in "6510-parser.rkt" 6510-program/p))

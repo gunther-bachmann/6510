@@ -1,17 +1,20 @@
 #lang racket
+#|
 
-;; allow constant definitions in opcodes and resolve these constants 
-;; accordingly. e.g.
-;;   (word-const label #xFFD2) =>
-;;     (ast-const-word-cmd "label" #xFFD2)
-;;
-;;   (byte-const label #x20) =>
-;;     (ast-const-byte-cmd "label" #x20)
-;;
-;; label can then be used anywhere a value is expected
-;; e.g.:
-;;   (jsr label)
-;;   (lda #<label)
+ allow constant definitions in opcodes and resolve these constants 
+ accordingly. e.g.
+   (word-const label #xFFD2) =>
+     (ast-const-word-cmd "label" #xFFD2)
+
+   (byte-const label #x20) =>
+     (ast-const-byte-cmd "label" #x20)
+
+ label can then be used anywhere a value is expected
+ e.g.:
+   (jsr label)
+   (lda #<label)
+
+|#
 
 (require "6510-command.rkt")
 (require (only-in "6510-utils.rkt" high-byte low-byte byte/c word/c))

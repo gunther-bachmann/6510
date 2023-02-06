@@ -1,4 +1,10 @@
 #lang racket
+#|
+
+ generate .prg, .d64 file for c64 vice execution
+
+ |#
+
 
 (require (only-in "6510-utils.rkt" high-byte low-byte))
 (require (rename-in  racket/contract [define/contract define/c]))

@@ -1,4 +1,13 @@
 #lang racket
+#|
+
+ provide 6510 miscellaneous instructions:
+  BIT
+  BRK
+  NOP
+
+ |#
+
 
 (require "6510-command.rkt")
 (require "6510-addressing.rkt")

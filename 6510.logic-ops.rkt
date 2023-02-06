@@ -1,4 +1,12 @@
 #lang racket
+#|
+
+ provide 6510 logical instructions:
+  AND
+  EOR
+  ORA
+
+|#
 
 (require "6510-addressing.rkt")
 

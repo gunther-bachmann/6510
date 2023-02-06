@@ -1,5 +1,14 @@
 #lang at-exp racket
 
+
+#|
+
+ basic 6510 interpreter
+
+ e.g. (run-interpreter org raw-bytes)
+
+ |#
+
 ;; todo: check whether lense implementation is better (more efficient) than struct-copy (see https://docs.racket-lang.org/lens/struct-guide.html)
 ;; reference: see c64os.com/post/6502instructions
 ;; or: https://www.middle-engine.com/blog/posts/2020/06/23/programming-the-nes-the-6502-in-detail
@@ -2387,10 +2396,10 @@
   (-> word/c (listof byte/c) any/c)  
   (displayln (format "loading program into interpreter at ~a" org))
   (displayln "program execution starting:")
-  (collect-garbage)
-  (displayln (format "memory: ~a" (current-memory-use)))
+  ;; (collect-garbage)
+  ;; (displayln (format "memory: ~a" (current-memory-use)))
   (define state (6510-load (initialize-cpu) org raw-bytes))
   (run (with-program-counter state org))
-  (collect-garbage)
-  (displayln (format "\nmemory: ~a" (current-memory-use)))
+  ;; (collect-garbage)
+  ;; (displayln (format "\nmemory: ~a" (current-memory-use)))
   (displayln "program execution done."))

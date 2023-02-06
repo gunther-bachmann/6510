@@ -1,4 +1,10 @@
 #lang racket
+#|
+
+ decide how to resolve 6510 commands.
+ decision is made depending on the width of a resolved label, for example
+
+ |#
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-command.rkt")

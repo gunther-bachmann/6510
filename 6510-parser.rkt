@@ -1,4 +1,21 @@
 #lang racket
+#|
+
+ parser for 6510 assembler code
+
+ usage:
+ - create file with content
+     #lang reader "6510-reader.rkt"
+     *=$C000
+     lda #$40
+ - C-c to open repl for this source file
+ - follow the hints printed
+
+ naming convention:
+   .../p is or returns a parser
+
+ |#
+
 (require (only-in megaparsack parser?
                   eof/p
                   guard/p
@@ -28,17 +45,6 @@
 (require "6510.rkt") ;; necessary to resolve all syntax macros of 6510 dsl
 
 (provide 6510-program/p parse-opcodes)
-
-; usage:
-; - create file with content
-;     #lang reader "6510-reader.rkt"
-;     *=$C000
-;     lda #$40
-; - C-c to open repl for this source file
-; - follow the hints printed
-
-; naming convention:
-;   .../p is or returns a parser
 
 (module+ test
   (require rackunit)
@@ -104,7 +110,7 @@
       [x <- bin-string/p]
     (pure (parse-number-string (string-append "%" (->string x))))))
 
-(module+ test
+(module+ test #| char-bin?,  bin-string/p,  bin-integer/p |#
   (check-true (char-bin? #\1))
 
   (check-match (parsed-string-result bin-string/p "10")
@@ -117,7 +123,7 @@
   (-> parser?)
   (or/p integer/p hex-integer/p bin-integer/p))
 
-(module+ test
+(module+ test #| 6510-integer/p |#
   (check-match (parsed-string-result 6510-integer/p "%10")
                2)
 
@@ -178,7 +184,7 @@
       (char/p #\:)
     (pure (datum->syntax result result))))
 
-(module+ test #| label-def |#
+(module+ test #| 6510-label-def |#
   (check-match (parsed-string-result 6510-label-def/p "abc-x:")
                '(label "abc-x")))
 
@@ -202,13 +208,13 @@
                      (syntax/p 6510-label-byte/p))]
       (pure label)))
 
-(module+ test #| label-def |#
+(module+ test #| 6510-label/p,  6510-any-label/p |#
   (check-match (parsed-string-result 6510-label/p "abc-x")
                '(label "abc-x"))
   (check-match (parsed-string-result 6510-any-label/p "<abc-x")
                '(label "<abc-x")))
 
-(module+ test
+(module+ test #| 6510-label/p,  6510-label-byte/p |#
   (check-match (parsed-string-result 6510-label/p "abc")
                '(label "abc"))
 
@@ -255,7 +261,7 @@
                        (string-cia/p (substring str 1))
                      (pure str)))))
 
-(module+ test
+(module+ test #| chars-ci/p |#
   (check-match (parsed-string-result (chars-ci/p "abc") "abc")
                "abc")
   (check-match (parsed-string-result (chars-ci/p "abc") "abcd")
@@ -346,7 +352,7 @@
       (string-cia/p ",y")
     (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',y))))
 
-(module+ test #| indirect/p indirect-x/p absolute/p |#
+(module+ test #| immedapte/p,  zero-page-or-relative/p,  indirect/p,  indirect-x/p,  indirect-y/p,  absolute/p |#
   (check-match (parsed-string-result immediate/p "#$10")
                '("!16"))
   (check-match (parsed-string-result zero-page-or-relative/p "<some")

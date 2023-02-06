@@ -1,4 +1,11 @@
 #lang racket
+#|
+
+ provide 6510 arithmetic instructions:
+  ADC
+  SBC
+
+ |#
 
 (require "6510-addressing.rkt")
 

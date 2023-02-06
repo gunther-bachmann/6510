@@ -1,4 +1,20 @@
 #lang racket
+#|
+
+ provide syntax for all addressing modes available to the 6510.
+
+ usage: (define-opcode XYZ ((implicit   . #xff)
+                            (zero-page  . #xfe)
+                            (indirect-x . #xfd)
+                            (indirect-y . #xfc)))
+
+ defines an opcode 'XYZ' with implicit, zero-page, indirect-x and indirect-y addressing modes
+ implicit  : XYZ
+ zero-page : XYZ $10
+ indirect-x: XYZ ($10,x)
+ indirect-y: XYZ ($10),y
+
+|#
 
 (require (for-syntax "6510-addressing-utils.rkt"))
 (require (for-syntax "6510-syntax-utils.rkt"))

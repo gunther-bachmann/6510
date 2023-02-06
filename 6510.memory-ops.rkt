@@ -1,4 +1,15 @@
 #lang racket
+#|
+
+ provide 6510 memory load/store instructions:
+  LDA
+  LDX
+  LDY
+  STA
+  STX
+  STY
+
+ |#
 
 (require "6510-addressing.rkt")
 

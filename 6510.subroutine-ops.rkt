@@ -1,4 +1,13 @@
 #lang racket
+#|
+
+ provide 6510 jump/return instructions:
+  JMP
+  JSR
+  RTI
+  RTS
+
+ |#
 
 (require "6510-addressing.rkt")
 

@@ -1,4 +1,13 @@
 #lang racket
+#|
+
+ provide 6510 shift instructions:
+  ASL
+  LSR
+  ROL
+  ROR
+
+ |#
 
 (require "6510-addressing-utils.rkt")
 (require "6510-addressing.rkt")

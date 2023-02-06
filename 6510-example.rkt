@@ -6,9 +6,6 @@
 
         *=$0810        ; origin (basic start, to make loading and executing easier)
 
-        ;; lda #23
-        ;; sta 53272
-
         ldx hello
 sout:   lda hello,x
         jsr $ffd2

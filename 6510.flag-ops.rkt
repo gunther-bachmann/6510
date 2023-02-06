@@ -1,4 +1,15 @@
 #lang racket
+#|
+
+ provide 6510 flag manipulation instructions:
+  CLC
+  CLD
+  CLV
+  SEC
+  SED
+  SEI
+
+ |#
 
 (require "6510-addressing.rkt")
 

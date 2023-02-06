@@ -1,5 +1,14 @@
 #lang racket
 
+#|
+
+ disassemble programs or single instructions
+
+ (disassemble state [address (cpu-state-program-counter state)] [lines 1])
+ (disassemble-single state [address (cpu-state-program-counter state)])
+
+ |#
+
 (require (only-in threading ~>>))
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-utils.rkt")

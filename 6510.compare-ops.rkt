@@ -1,4 +1,12 @@
 #lang racket
+#|
+
+ provide 6510 compare instructions:
+  CMP
+  CPX
+  CPY 
+
+ |#
 
 (require "6510-addressing-utils.rkt")
 (require "6510-addressing.rkt")

@@ -1,4 +1,13 @@
 #lang racket
+#|
+
+ allow to interactively debug 6510 opcodes (makeing use of readline)
+
+ (run-debugger org raw-bytes)
+
+ |#
+
+
 (require (rename-in  racket/contract [define/contract define/c]))
 (require readline/readline)
 (require threading)

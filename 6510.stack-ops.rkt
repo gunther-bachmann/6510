@@ -1,4 +1,13 @@
 #lang racket
+#|
+
+ provide 6510 stack push/pop instructions:
+  PHA
+  PHP
+  PLA
+  PLP
+
+ |#
 
 (require "6510-addressing.rkt")
 
@@ -14,7 +23,3 @@
 (define-opcode PLA ((implicit . #x68)))
 
 (define-opcode PLP ((implicit . #x28)))
-
-(define-opcode RTI ((implicit . #x40)))
-
-(define-opcode RTS ((implicit . #x60)))
