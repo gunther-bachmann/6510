@@ -60,8 +60,8 @@ pm <A> <B>            print memory starting @A (hex) for B bytes (hex)
 sm <A> = <B>          set memory @A (hex) to byte B (hex)
 sa = <B>              set accumulator to byte B (hex)
 spc = <A>             set program counter to address A (hex)
-s                     single step forward
-b                     backward step
+s <N?>                step forward (single or N times)
+b <N?>                backward step (single or N times)
 p                     print cpu state
 pp <B?> <A?>          pretty print the next B (hex) commands starting at address A (hex)
 xf? { <command> }     eXecute Force? the given 6510 command (force if byte len differs)
@@ -181,6 +181,17 @@ EOF
      (debugger--run _ #f)
      (debugger--pop-breakpoint _)))
 
+;; run len steps (1 if len is false)
+(define/c (debugger--run-steps d-state len)
+  (-> debug-state? exact-nonnegative-integer? debug-state?)
+  (define c-states (debug-state-states d-state))
+  (if (<= len 0)
+      d-state
+      (debugger--run-steps
+       (struct-copy debug-state d-state
+                    [states (cons (execute-cpu-step (car c-states)) c-states)])
+       (- len 1))))
+
 ;; decode the given debugger command and dispatch to the debugger
 (define/c (dispatch-debugger-command command d-state)
   (-> string? debug-state? debug-state?)
@@ -188,6 +199,7 @@ EOF
   (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4})?")
   (define pm-regex #px"^pm *([[:xdigit:]]{1,4}) *([[:xdigit:]]{1,2})")
   (define sm-regex #px"^sm *([[:xdigit:]]{1,4}) *= *([[:xdigit:]]{1,2})")
+  (define s-regex #px"^s *([[:xdigit:]]{1,2})?")
   (define b-regex #px"^b *([[:xdigit:]]{1,2})?")
   (define sa-regex #px"^sa *= *([[:xdigit:]]{1,2})$")
   (define spc-regex #px"^spc *= *([[:xdigit:]]{1,4})$")
@@ -204,7 +216,9 @@ EOF
            (define states (debug-state-states d-state))
            (struct-copy debug-state d-state [states (list-tail states (min (- (length states) 1) (if value (string->number value 16) 1)))])))
         ;; s - single step
-        ((string=? command "s") (struct-copy debug-state d-state [states (cons (execute-cpu-step (car c-states)) c-states)]))
+        ((regexp-match? s-regex command)
+         (match-let (((list _ len) (regexp-match s-regex command)))
+           (debugger--run-steps d-state (if len (string->number len 16) 1))))
         ;; p - print processor state
         ((string=? command "p") (displayln "") (print-state (car c-states)) d-state)
         ;; pp - disassemble (pretty print)
