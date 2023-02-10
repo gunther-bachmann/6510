@@ -12,6 +12,7 @@
 
 (require "6510-interpreter.rkt")
 (require "6510-debugger.rkt")
+(require "6510-constants.rkt")
 
 
 (module+ test
@@ -57,6 +58,8 @@
 
 (define program
   (list
+   (byte-const  "MYVAL" "$42")     ;; define label with byte constant: myval = $42
+
    (LDX !$05)
    (label "NEXT")
    (LDA "!$41" )
@@ -64,6 +67,8 @@
    (ADC "!$01")
    (JSR "COUT")
    (LDA "!%00001010") ; line feed
+   (JSR "COUT")
+   (LDA "!MYVAL")
    (JSR "COUT")
    (DEX)
    (BNE "NEXT")
@@ -73,7 +78,6 @@
    ;; (IMPORT-WORD ":IMPORTEDWORD")
    ;; (EXPORT-WORD ":EXPORTED" ":COUT")
    ;; (EXPORT-BYTE ":EXPORTED" ":COUT-L") ;;
-   (byte-const  "MYVAL" "$42")     ;; define label with byte constant: myval = $42
    (word-const  "M16BVAL" "$C842") ;; define label with word constant: m16bval = $c842
    ;; (EXPORT-BYTE ":EXPORTED-VAL" ":MYVAL") ;; export a defined byte constant
    ;; (EXPORT-WORD ":EXPORTED-16BVAL" ":MY16BVAL") ;; export a defined word constant
@@ -113,7 +117,8 @@
 
 (define program-p1 (->resolved-decisions (label-instructions program) program))
 (define program-p2 (->resolve-labels org (label-string-offsets org program-p1) program-p1 '()))
-(define raw-bytes (resolved-program->bytes program-p2))
+(define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
+(define raw-bytes (resolved-program->bytes program-p3))
 
 (define data (6510-load (initialize-cpu) org raw-bytes))
 (define executable-program (with-program-counter data org))
