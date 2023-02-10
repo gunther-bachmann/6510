@@ -177,6 +177,27 @@
                                              (list->string (syntax->datum new-label))))))))
 
 
+(define/c 6510-constant-def/p
+  (-> parser?)
+    (do
+      [label <- (syntax/p 6510-label/p)]
+        ml-whitespace/p
+        (char/p #\=)
+        ml-whitespace/p
+      [value <- (syntax/p word/p)]
+      6510-eol/p
+      (pure (datum->syntax label
+                          (let ((num (syntax->datum value)))
+                            (list (string->symbol (if (byte? num) "byte-const" "word-const"))
+                                  (cadr (syntax->datum label))
+                                  (number->string num)))))))
+
+(module+ test #| 6510-constant-def |#
+  (check-match (parsed-string-result 6510-constant-def/p "abc-x = $10")
+               '(byte-const "abc-x" "16"))
+    (check-match (parsed-string-result 6510-constant-def/p "x-abc = $100")
+               '(word-const "x-abc" "256")))
+
 (define/c 6510-label-def/p
   (-> parser?)
   (do
@@ -515,6 +536,7 @@
 (define/c 6510-opcode/p
   (-> parser?)
   (do (or/p
+       (try/p 6510-constant-def/p)
        (try/p 6510-label-def/p)
        (adr-modes-opcode/p "adc" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))
        (adr-modes-opcode/p "and" '(immediate zero-page zero-page-x absolute absolute-x absolute-y indirect-x indirect-y))

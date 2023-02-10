@@ -57,6 +57,7 @@
            (require "6510-interpreter.rkt")
            (require "6510-prg-generator.rkt")
            (require "6510-debugger.rkt")
+           (require "6510-constants.rkt")
            (provide program
                     program-p1
                     program-p2
@@ -70,8 +71,9 @@
            (define program `(,str ...))
            (define program-p1 (->resolved-decisions (label-instructions program) program))
            (define program-p2 (->resolve-labels org (label-string-offsets org program-p1) program-p1 '()))
-           (define raw-bytes (resolved-program->bytes program-p2))
-           (displayln "(have a look at raw-program, program, program-p1, program-p2 or raw-bytes)")
+           (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
+           (define raw-bytes (resolved-program->bytes program-p3))
+           (displayln "(have a look at raw-program, program, program-p1, program-p2, program-p3 or raw-bytes)")
            (create-prg raw-bytes org prg-name)
            (create-image-with-program raw-bytes org prg-name d64-name (path->string (path-replace-extension f-name "")))
            (displayln (format "execute the program in vice via (run-emulator \"~a\")" d64-name))
