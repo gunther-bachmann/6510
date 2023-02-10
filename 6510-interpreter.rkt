@@ -934,24 +934,33 @@
        (hash-ref unicode->c64-high-map byte)]
       [else byte])))
 
+(define/c (c64-rom-routine? high low)
+  (-> byte? byte? boolean?)
+  (= (absolute high low) #xFFD2))
+
+(define/c (interpret-c64-rom-routine high low state)
+  (-> byte? byte? cpu-state? cpu-state?)
+  (case (absolute high low)
+    [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
+     (~>> (cpu-state-accumulator state)
+         (display-c64charcode _ state)
+         )]))
+
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
 (define/c (interpret-jsr-abs high low state)
   (-> byte/c byte/c cpu-state? cpu-state?)
-  (case (absolute high low)
-    [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
-     (let ((print-state (~>> (cpu-state-accumulator state)
-                            (display-c64charcode _ state)
-                            )))
-       (struct-copy cpu-state print-state [program-counter (next-program-counter print-state 3)]))]
-    [else (let* ([new-program-counter (absolute high low)]
+  (if (c64-rom-routine? high low)
+      (let ((after-rom-state (interpret-c64-rom-routine high low state)))
+        (struct-copy cpu-state after-rom-state [program-counter (next-program-counter after-rom-state 3)]))
+      (let* ([new-program-counter (absolute high low)]
                  [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
                  [sp (cpu-state-stack-pointer state)])
             (struct-copy cpu-state (~>> state
                                        (poke-stack _ (high-byte return-address))
                                        (poke-stack-1 _ (low-byte return-address)))
                          [program-counter (word new-program-counter)]
-                         [stack-pointer   (byte (fx- sp 2))]))]))
+                         [stack-pointer   (byte (fx- sp 2))]))))
 
 (module+ test #| jsr (jump to sub routine) |#
   (check-equal? (cpu-state-program-counter
@@ -1006,8 +1015,10 @@
 ;; interpret JMP absolute (jump)
 (define/c (interpret-jmp-abs high low state)
   (-> byte/c byte/c cpu-state? cpu-state?)
-  (struct-copy cpu-state state
-               [program-counter (word (absolute high low))]))
+  (if (c64-rom-routine? high low)
+      (interpret-rts (interpret-c64-rom-routine high low state))      
+      (struct-copy cpu-state state
+                   [program-counter (word (absolute high low))])))
 
 ;; derive overflow by looking at accumulator, operand and result
 (define/c (derive-overflow acc oper new-acc)
@@ -2030,8 +2041,13 @@
 
 (define/c (interpret-jmp-ind state)
   (-> cpu-state? cpu-state?)
-  (struct-copy cpu-state state
-               [program-counter (peek-word-at-address state (peek-abs state))]))
+  (let* ((new-abs-address (peek-word-at-address state (peek-word-at-pc+1 state)))
+         (hi              (high-byte new-abs-address))
+         (lo              (low-byte new-abs-address)))
+    (if (c64-rom-routine? hi lo)
+        (interpret-rts (interpret-c64-rom-routine hi lo state))
+        (struct-copy cpu-state state
+                     [program-counter new-abs-address]))))
 
 (define/c (interpret-compare state peeker1 peeker2 pc-inc)
   (-> cpu-state? peeker/c peeker/c exact-nonnegative-integer? cpu-state?)
