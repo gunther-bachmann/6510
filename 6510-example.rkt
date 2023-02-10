@@ -6,14 +6,18 @@
 
         *=$0810        ; origin (basic start, to make loading and executing easier)
 
+ROM-COUT  = $ffd2
+REPEAT    = 5
+LINE-FEED = %00001101 ; $0d
+
         ldx hello
 sout:   lda hello,x
-        jsr $ffd2
+        jsr ROM-COUT
         dex
         bne sout
 
         clc
-        ldx #$05       ; repeat .. times
+        ldx #REPEAT    ; repeat .. times
 some:
         lda #$41       ; load character A (dec 65)
         jsr cout       ; print this character to screen
@@ -21,14 +25,15 @@ some:
         jsr cout       ; print this character to screen
         adc #1
         jsr cout       ; print this character to screen
-        lda #%00001101 ; $0d
+        lda #LINE-FEED
         jsr cout
 end:    dex
         bne some
         rts            ; end of execution
 
-cout:   jsr $ffd2
-        rts
+cout:   jmp (table)
+
+table:  .data $d2, $ff
 
 hello:  .data 22 ; number of bytes to print (string length)
         .data $0d ; line feed
