@@ -92,6 +92,28 @@
   (append (list 1 const-value)
           (string->bytes label)))
 
+(define/c (encoded-byte-const? bytes)
+  (-> (listof byte/c) boolean?)
+  (eq? (car bytes)
+       1))
+
+(define/c (decode-byte-const bytes)
+  (-> (listof byte/c) (values byte/c string?))
+  (values (cadr bytes) (bytes->string (drop bytes 2))))
+
+(module+ test #| encode/decode-byte-const |#
+  (let-values (((value label) (decode-byte-const (list 1 #xf8 3 65 66 67))))
+    (check-equal? value #xf8)
+    (check-equal? label "ABC"))
+
+  (check-equal? (encode-byte-const #x21 "AC")
+                (list 1 #x21 2 65 67))
+
+  (let-values (((value label) (decode-byte-const (encode-byte-const #x17 "label"))))
+    (check-equal? value #x17)
+    (check-equal? label "label"))
+  )
+
 ;; encode entry for a relative word reference
 (define/c (encode-word-relative rel-label label)
   (-> word/c string? (listof byte/c))
@@ -99,6 +121,31 @@
                 (low-byte rel-label)
                 (high-byte rel-label))
           (string->bytes label)))
+
+;; check whether the next bytes indicate an encoded word relative
+(define/c (encoded-word-relative? bytes)
+  (-> (listof byte/c) boolean?)
+  (equal? (take bytes 2)
+       (list 2 1)))
+
+;; decode entry of word relative
+(define/c (decode-word-relative bytes)
+  (-> (listof byte/c) (values word/c string?))
+  (define hi (list-ref bytes 3))
+  (define lo (list-ref bytes 2))
+  (values (+ lo (* 256 hi)) (bytes->string (drop bytes 4))))
+
+(module+ test #| encode-word/decode-word |#
+  (check-equal? (encode-word-relative #xC010 "ABC")
+                (list 2 1 #x10 #xc0 3 65 66 67))
+
+  (let-values (((address string) (decode-word-relative (list 2 1 #x20 #xd1 2 65 67))))
+    (check-equal? address #xd120)
+    (check-equal? string "AC"))
+
+  (let-values (((address string) (decode-word-relative (encode-word-relative #xC010 "some"))))
+    (check-equal? address #xc010)
+    (check-equal? string "some")))
 
 ;; get the label of the provide command (both word and byte commands supported)
 (define/c (ast-provide-cmd-label command)
@@ -144,6 +191,58 @@
                                (hash))
                 '(2 1 #xD2 #x01 4 115 111 109 101)))
 
+(define/c (retrieve-entry bytes labels constants)
+  (-> (listof byte/c) hash? hash? (values exact-nonnegative-integer? hash? hash?))
+  (cond ((encoded-word-const? bytes)
+         (let-values (((const label) (decode-word-const bytes)))
+           (values (+ 5 (string-length label)) labels (hash-set constants label const))))
+        ((encoded-byte-const? bytes)
+         (let-values (((const label) (decode-byte-const bytes)))
+           (values (+ 3 (string-length label)) labels (hash-set constants label const))))
+        ((encoded-word-relative? bytes)
+         (let-values (((rel label) (decode-word-const bytes)))
+           (values (+ 5 (string-length label)) (hash-set labels label rel) constants)))
+        [#t (raise-user-error "cannot be converted")]))
+
+(module+ test #| provide-entry retrieve-entry |#
+  (let-values (((len labels constants)
+                (retrieve-entry (provide-entry (ast-provide-word-cmd "some")
+                                               (hash)
+                                               '#hash(("some" . #xFFD2)))
+                                #hash() #hash())))
+    (check-equal? len 9)
+    (check-equal? (hash-ref constants "some")
+                  #xffd2))
+  (let-values (((len labels constants)
+                (retrieve-entry (provide-entry (ast-provide-byte-cmd "some")
+                                               (hash)
+                                               '#hash(("some" . #xD2)))
+                                #hash() #hash())))
+    (check-equal? len 7)
+    (check-equal? (hash-ref constants "some")
+                  #xd2))
+  (let-values (((len labels constants)
+                (retrieve-entry (provide-entry (ast-provide-word-cmd "some")
+                                               '#hash(("some" . #x01D2))
+                                               (hash))
+                                #hash() #hash())))
+    (check-equal? len 9)
+    (check-equal? (hash-ref labels "some")
+                  #x01d2))
+
+  (let-values (((len labels constants) (retrieve-entry '(2 0 #xD2 #xFF 4 115 111 109 101) #hash() #hash())))
+    (check-equal? len 9)
+    (check-equal? (hash-ref constants "some")
+                  #xffd2))
+  (let-values (((len labels constants) (retrieve-entry '(1 #xD2 4 115 111 109 101) #hash() #hash())))
+    (check-equal? len 7)
+    (check-equal? (hash-ref constants "some")
+                  #xd2))
+  (let-values (((len labels constants) (retrieve-entry '(2 1 #xD2 #x01 4 115 111 109 101) #hash() #hash())))
+    (check-equal? len 9)
+    (check-equal? (hash-ref labels "some")
+                  #x01d2)))
+
 ;; export table format
 ;; offset           data
 ;; 0                width (byte), (if width = 2 0: absolute-const, 1:relative-load-address)?.
@@ -179,6 +278,27 @@
                  '(2 0 #xD2 #xFF 4 115 111 109 101
                    2 1 #xE0 #x01 4 110 111 110 101
                    1 #xC0 5 111 116 104 101 114)))
+
+;; decode the bytes of an export table again in two hashes,
+;;   the label hash: label->rel-word-value
+;;   and the constants hash map: constant-name->byte|word-value
+(define/c (decode-export-table-bytes bytes labels constants)
+  (-> (listof byte/c) hash? hash? (values hash? hash?))
+  (if (empty? bytes)
+      (values labels constants)
+      (let-values (((len new-labels new-constants) (retrieve-entry bytes labels constants)))
+        (decode-export-table-bytes (drop bytes len) new-labels new-constants))))
+
+(module+ test #| decode-export-table-bytes |#
+  (let-values (((labels constants)
+                (decode-export-table-bytes
+                 '(2 0 #xD2 #xFF 4 115 111 109 101
+                     2 1 #xE0 #x01 4 110 111 110 101
+                     1 #xC0 5 111 116 104 101 114)
+                 #hash() #hash())))
+    (check-equal? labels #hash(("none"  . #x01e0)))
+    (check-equal? constants #hash(("some"  . #xffd2)
+                                  ("other" . #xc0)))))
 
 ;; import table format
 ;; offset           data
