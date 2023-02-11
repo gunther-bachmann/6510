@@ -2,12 +2,14 @@
 
 #|
 
+ create export table bytes and import table bytes of a list of ast commands
 
  |#
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require (only-in "6510-relocator.rkt" command-len))
 (require (only-in "6510-utils.rkt" low-byte high-byte byte/c word/c))
+(require (only-in threading ~>>))
 (require "6510-command.rkt")
 
 (provide import-table-bytes export-table-bytes)
@@ -18,12 +20,40 @@
 ;; constants hash label->const
 ;; labels hash label->rel-pos to load-pos
 
+;; encode a string into bytes
 (define/c (string->bytes string)
   (-> string? (listof byte/c))
   (cons
    (low-byte (string-length string))
    (map char->integer (string->list string))))
 
+(module+ test #| string->bytes |#
+  (check-equal? (string->bytes "A")
+                (list 1 65))
+  (check-equal? (string->bytes "AB")
+                (list 2 65 66))
+  (check-equal? (string->bytes "")
+                (list 0)))
+
+(define/c (bytes->string bytes)
+  (-> (listof byte/c) string?)
+  (define len (car bytes))
+  (~>> (drop bytes 1)
+     (take _ len)
+     (map integer->char)
+     (apply string)))
+
+(module+ test #|bytes->string|#
+  (check-equal? (bytes->string (list 2 65 66 67))
+                "AB")
+  (check-equal? (bytes->string (list 1 65 66))
+                "A")
+  (check-equal? (bytes->string (list 0 1 2))
+                "")
+  (check-equal? (bytes->string (string->bytes "Hello World"))
+                "Hello World"))
+
+;; encode entry for word constant
 (define/c (encode-word-const const-value label)
   (-> word/c string? (listof byte/c))
   (append (list 2 0
@@ -31,11 +61,38 @@
                 (high-byte const-value))
           (string->bytes label)))
 
+;; check whether the next bytes indicate an encoded word constant
+(define/c (encoded-word-const? bytes)
+  (-> (listof byte/c) boolean?)
+  (equal? (take bytes 2)
+       (list 2 0)))
+
+;; decode entry of word constant
+(define/c (decode-word-const bytes)
+  (-> (listof byte/c) (values word/c string?))
+  (define hi (list-ref bytes 3))
+  (define lo (list-ref bytes 2))
+  (values (+ lo (* 256 hi)) (bytes->string (drop bytes 4))))
+
+(module+ test #| encode-word/decode-word |#
+  (check-equal? (encode-word-const #xC010 "ABC")
+                (list 2 0 #x10 #xc0 3 65 66 67))
+
+  (let-values (((address string) (decode-word-const (list 2 0 #x20 #xd1 2 65 67))))
+    (check-equal? address #xd120)
+    (check-equal? string "AC"))  
+
+  (let-values (((address string) (decode-word-const (encode-word-const #xC010 "some"))))
+    (check-equal? address #xc010)
+    (check-equal? string "some")))
+
+;; encode entry for byte constant
 (define/c (encode-byte-const const-value label)
   (-> byte/c string? (listof byte/c))
   (append (list 1 const-value)
           (string->bytes label)))
 
+;; encode entry for a relative word reference
 (define/c (encode-word-relative rel-label label)
   (-> word/c string? (listof byte/c))
   (append (list 2 1
@@ -43,6 +100,7 @@
                 (high-byte rel-label))
           (string->bytes label)))
 
+;; get the label of the provide command (both word and byte commands supported)
 (define/c (ast-provide-cmd-label command)
   (-> (or/c ast-provide-word-cmd? ast-provide-byte-cmd?) string?)
   (or (and (ast-provide-word-cmd? command)
@@ -50,6 +108,15 @@
      (and (ast-provide-byte-cmd? command)
         (ast-provide-byte-cmd-label command))))
 
+(module+ test #| ast-provide-cmd-label |#
+  (check-equal? (ast-provide-cmd-label (ast-provide-byte-cmd "some-byte"))
+                "some-byte")
+  (check-equal? (ast-provide-cmd-label (ast-provide-word-cmd "some-word"))
+                "some-word"))
+
+;; encode one entry of the export table for the provide-command
+;;   using label -> word-value hash-map
+;;   and constant -> word|byte-value hash-map
 (define/c (provide-entry provide-command labels constants)
   (-> (or/c ast-provide-word-cmd? ast-provide-byte-cmd?) hash? hash? (listof byte/c))
   (let* ((label       (ast-provide-cmd-label provide-command))
@@ -85,6 +152,9 @@
 ;; 2/3+width        string
 ;; 1/2+width+strlen ... next entry
 
+;; encode export table bytes into collected-bytes
+;;   using a hash for label -> word-value, and constants -> word|byte-value hash maps
+;;   reading through all commands
 (define/c (export-table-bytes collected-bytes labels constants commands)
   (-> (listof byte/c) hash? hash? (listof ast-command?) (listof byte/c))
   (if (empty? commands)
@@ -179,6 +249,7 @@
                   #x04 #x01 1 0 4 115 111 109 101
                   #x06 #x01 1 1 4 115 111 109 101)))
 
+;; extend the given hash-map of required label -> 'word | 'byte from this command if applicable
 (define/c (require-hash command hash)
   (-> ast-command? hash? hash?)
   (cond [(ast-require-word-cmd? command)
@@ -187,6 +258,7 @@
          (hash-set hash (ast-require-byte-cmd-label command) 'byte)]
         [#t hash]))
 
+;; get the complete hash of label -> 'word | 'byte that are required by the given commands
 (define/c (require-hashes commands)
   (-> (listof ast-command?) hash?)
   (foldl require-hash (hash) commands))
