@@ -8,7 +8,7 @@
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require (only-in "6510-relocator.rkt" command-len))
-(require (only-in "6510-utils.rkt" low-byte high-byte byte/c word/c))
+(require (only-in "6510-utils.rkt" low-byte high-byte byte/c word/c absolute))
 (require (only-in threading ~>>))
 (require "6510-command.rkt")
 
@@ -368,6 +368,62 @@
                   #x02 #x01 1 0 5 111 116 104 101 114
                   #x04 #x01 1 0 4 115 111 109 101
                   #x06 #x01 1 1 4 115 111 109 101)))
+
+(define/c (decode-import-table-byte-entry-values bytes)
+  (-> (listof byte/c) (values byte/c string? symbol?))
+  (let* ((hilo-ind     (fourth bytes))
+         (label        (bytes->string (drop bytes 4)))
+         (entry-len    (+ 5 (string-length label)))
+         (hilo-ind-sym (if (eq? 1 hilo-ind) 'high-byte 'low-byte)))
+    (values entry-len label hilo-ind-sym)))
+
+(define/c (decode-import-table-word-entry-values bytes)
+  (-> (listof byte/c) (values byte/c string? symbol?))
+  (let* ((label     (bytes->string (drop bytes 3)))
+         (entry-len (+ 4 (string-length label))))
+    (values entry-len label 'word)))
+
+(define import-entry/c (list/c string? word/c symbol?))
+
+;; collect a list of label, address and hilo/word indicator from decoding the import table bytes
+(define/c (decode-import-table-bytes bytes import-entries)
+  (-> (listof byte/c) (listof import-entry/c) (listof import-entry/c))
+  (if (empty? bytes)
+      import-entries
+      (let* ((lo    (first bytes))
+             (hi    (second bytes))
+             (addr  (absolute hi lo))
+             (width (third bytes)))
+        (let-values
+            (((entry-len label sym)
+              (cond [(eq? width 2) (decode-import-table-word-entry-values bytes)]
+                    [(eq? width 1) (decode-import-table-byte-entry-values bytes)]
+                    [ #t (raise-user-error "illegal width (neither 1 nor 2)")])))
+          (decode-import-table-bytes
+           (drop bytes entry-len)
+           (cons (list label addr sym)
+                 import-entries))))))
+
+(module+ test #| decode-import-table-bytes |#
+  (check-not-false (member (decode-import-table-bytes
+                            '(#xff #x00 2 4 115 111 109 101
+                              #x02 #x01 1 0 5 111 116 104 101 114
+                              #x04 #x01 1 0 4 115 111 109 101
+                              #x06 #x01 1 1 4 115 111 109 101)
+                            '())
+                           (permutations '(("some"  #x0106 high-byte)
+                                           ("some"  #x0104 low-byte)
+                                           ("other" #x0102 low-byte)
+                                           ("some"  #x00ff word)))))
+  (check-exn exn:fail?
+             (lambda () (decode-import-table-bytes
+                            '(#xff #x00 0 4 115 111 109 101)
+                            '())))
+  (check-exn exn:fail?
+             (lambda () (decode-import-table-bytes
+                            '(#xff #x00 2 4 115 111 109 101
+                              #x02 #x01 3 0 5 111 116 104 101 114)
+                            '()))))
 
 ;; extend the given hash-map of required label -> 'word | 'byte from this command if applicable
 (define/c (require-hash command hash)
