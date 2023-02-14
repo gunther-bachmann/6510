@@ -7,10 +7,14 @@
  |#
 
 (require (rename-in  racket/contract [define/contract define/c]))
-(require (only-in "6510-relocator.rkt" command-len))
+(require (only-in "6510-relocator.rkt" command-len label-string-offsets))
 (require (only-in "6510-utils.rkt" low-byte high-byte byte/c word/c absolute))
 (require (only-in threading ~>>))
 (require "6510-command.rkt")
+(require (only-in "6510-resolver.rkt" ->resolve-labels ->resolved-decisions label-instructions resolved-program->bytes))
+(require (only-in "6510-constants.rkt" resolve-constants constant-definitions-hash))
+
+(require "6510.rkt")
 
 (provide import-table-bytes export-table-bytes)
 
@@ -338,6 +342,7 @@
         (encode-import-byte-entry offset (if (eq? 'high-byte hilo-ind) 1 0) label)
         (encode-import-byte-entry offset 0 label))))
 
+;; write the import table based on unresolved ast commands encoded into bytes
 (define/c (import-table-bytes offset collected-entries req-hashes commands)
   (-> word/c (listof byte/c) hash? (listof ast-command?) (listof byte/c))
   (if (empty? commands)
@@ -369,6 +374,7 @@
                   #x04 #x01 1 0 4 115 111 109 101
                   #x06 #x01 1 1 4 115 111 109 101)))
 
+;; decode values of a byte import in encoded import table
 (define/c (decode-import-table-byte-entry-values bytes)
   (-> (listof byte/c) (values byte/c string? symbol?))
   (let* ((hilo-ind     (fourth bytes))
@@ -377,6 +383,7 @@
          (hilo-ind-sym (if (eq? 1 hilo-ind) 'high-byte 'low-byte)))
     (values entry-len label hilo-ind-sym)))
 
+;; decode values of a word import in encoded import table
 (define/c (decode-import-table-word-entry-values bytes)
   (-> (listof byte/c) (values byte/c string? symbol?))
   (let* ((label     (bytes->string (drop bytes 3)))
@@ -446,18 +453,20 @@
                 '#hash(("some" . word)
                        ("other" . byte))))
 
-(module+ test #| |#
+(module+ test #| linking two programs together|#
 
   (define providing-program
-    '((provide-word aout)
+    (list
+      (provide-word aout)
       (provide-byte char)
-      (byte-const char $65)
-      (label aout)
+      (byte-const "char" "$65")
       (LDA !char)
+      (label aout)
       (JMP $FFD2)))
 
   (define requiring-program
-    '((require-word aout)
+    (list
+      (require-word aout)
       (require-byte char)
       (LDX !$05)
       (label repeat)
@@ -466,9 +475,24 @@
       (BNE repeat)
       (CLC)
       (LDA !char)
-      (ADC !#01)
+      (ADC !$01)
       (JSR $FFD2)
       (BRK)))
+
+  (define providing-program-p1 (->resolved-decisions (label-instructions providing-program) providing-program))
+  (define providing-program-p2 (->resolve-labels #xc000 (label-string-offsets #xc000 providing-program-p1) providing-program-p1 '()))
+  (define providing-program-p3 (resolve-constants (constant-definitions-hash providing-program-p1) providing-program-p2))
+  (define providing-raw-bytes (resolved-program->bytes providing-program-p3))
+
+  (define providing-label-offsets-program (label-string-offsets #xc000 providing-program-p3))
+  (define providing-constants (constant-definitions-hash providing-program-p3))
+  (define providing-export-table (export-table-bytes '() providing-label-offsets-program providing-constants providing-program-p3))
+
+  (define requiring-program-p1 (->resolved-decisions (label-instructions requiring-program) requiring-program))
+  (define requiring-program-p2 (->resolve-labels #xc000 (label-string-offsets #xc000 requiring-program-p1) requiring-program-p1 '()))
+  (define requiring-program-p3 (resolve-constants (constant-definitions-hash requiring-program-p1) requiring-program-p2))
+  ;; currently no placeholders are encoded into the raw bytes -> this function works only on already resolved programs
+  (define requiring-raw-bytes (resolved-program->bytes requiring-program-p3))
 
   (skip ": linking programs is not supported yet"
         (check-equal? (link-programs (list providing-program requiring-program))
