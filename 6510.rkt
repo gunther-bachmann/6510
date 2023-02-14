@@ -38,7 +38,7 @@
 (provide (all-from-out "6510.subroutine-ops.rkt"))
 (provide (all-from-out "6510.stack-ops.rkt"))
 
-(provide label word-const byte-const byte word asc) ;; meta commands
+(provide label word-const byte-const byte word asc provide-byte provide-word require-byte require-word) ;; meta commands
 
 (provide (all-from-out "6510-addressing-utils.rkt"))
 
@@ -125,6 +125,50 @@
   (check-equal? (byte "$10" "$FF" "$D2" "%10010000" "%11111111")
                 (ast-bytes-cmd '(#x10 #xFF #xD2 #b10010000 #b11111111)))
   (check-exn exn:fail:syntax? (λ () (expand #'(byte $10 $100)))))
+
+(define-syntax (provide-word stx)
+  (syntax-case stx ()
+    ([_ label]
+     #'(ast-provide-word-cmd (->string #'label)))))
+
+(module+ test #| |#
+  (check-equal? (provide-word "some")
+                (ast-provide-word-cmd "some"))
+  (check-equal? (provide-word some)
+                (ast-provide-word-cmd "some")))
+
+(define-syntax (provide-byte stx)
+  (syntax-case stx ()
+    ([_ label]
+     #'(ast-provide-byte-cmd (->string #'label)))))
+
+(module+ test #| |#
+  (check-equal? (provide-byte "some")
+                (ast-provide-byte-cmd "some"))
+  (check-equal? (provide-byte some)
+                (ast-provide-byte-cmd "some")))
+
+(define-syntax (require-byte stx)
+  (syntax-case stx ()
+    ([_ label]
+     #'(ast-require-byte-cmd (->string #'label)))))
+
+(module+ test #| |#
+  (check-equal? (require-byte "some")
+                (ast-require-byte-cmd "some"))
+  (check-equal? (require-byte some)
+                (ast-require-byte-cmd "some")))
+
+(define-syntax (require-word stx)
+  (syntax-case stx ()
+    ([_ label]
+     #'(ast-require-word-cmd (->string #'label)))))
+
+(module+ test #| |#
+  (check-equal? (require-word "some")
+                (ast-require-word-cmd "some"))
+  (check-equal? (require-word some)
+                (ast-require-word-cmd "some")))
 
 (define-for-syntax (parse-syntax-number val-stx)
   (parse-number-string (->string val-stx)))
