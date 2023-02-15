@@ -487,12 +487,21 @@
   (define providing-label-offsets-program (label-string-offsets #xc000 providing-program-p3))
   (define providing-constants (constant-definitions-hash providing-program-p3))
   (define providing-export-table (export-table-bytes '() providing-label-offsets-program providing-constants providing-program-p3))
+  (define-values (providing-decoded-export-labels providing-decoded-export-constants) (decode-export-table-bytes providing-export-table #hash() #hash()))
 
   (define requiring-program-p1 (->resolved-decisions (label-instructions requiring-program) requiring-program))
-  (define requiring-program-p2 (->resolve-labels #xc000 (label-string-offsets #xc000 requiring-program-p1) requiring-program-p1 '()))
-  (define requiring-program-p3 (resolve-constants (constant-definitions-hash requiring-program-p1) requiring-program-p2))
+  (define requiring-program-p2 (->resolve-labels #xc100 (label-string-offsets #xc100 requiring-program-p1) requiring-program-p1 '()))
+  (define requiring-program-p2-1 (->resolve-labels #xc100 providing-decoded-export-labels requiring-program-p2 '()))
+  (define requiring-program-p3 (resolve-constants (constant-definitions-hash requiring-program-p2-1) requiring-program-p2-1))
+  (define requiring-program-p3-1 (resolve-constants providing-decoded-export-constants requiring-program-p3))
   ;; currently no placeholders are encoded into the raw bytes -> this function works only on already resolved programs
-  (define requiring-raw-bytes (resolved-program->bytes requiring-program-p3))
+  (define requiring-raw-bytes (resolved-program->bytes requiring-program-p3-1))
+
+  ;; (resolvable? requiring-progam-p3) => true
+  ;; (resolved? requiring-progam-p3) => false
+  ;; (resolved? providing-progam-p3) => true
+  ;; 
+
 
   (skip ": linking programs is not supported yet"
         (check-equal? (link-programs (list providing-program requiring-program))
