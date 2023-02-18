@@ -19,6 +19,7 @@
          (struct-out ast-unresolved-opcode-cmd)
          (struct-out ast-unresolved-rel-opcode-cmd)
          ast-unresolved-command?
+         ast-unresolved-command-resolve-sub-command
          label->byte-resolve-mode
          (struct-out ast-bytes-cmd)
          (struct-out ast-label-def-cmd)
@@ -35,6 +36,13 @@
 (define (ast-unresolved-command? command)
   (or (ast-unresolved-rel-opcode-cmd? command)
      (ast-unresolved-opcode-cmd? command)))
+
+(define (ast-unresolved-command-resolve-sub-command command)
+  (cond ([ast-unresolved-opcode-cmd? command]
+         (ast-unresolved-opcode-cmd-resolve-sub-command command))
+        ([ast-unresolved-rel-opcode-cmd? command]
+         (ast-unresolved-rel-opcode-cmd-resolve-sub-command command))
+        [#t (raise-user-error "unknown unresolved ast command")]))
 
 ;; generic root of all ast commands
 (struct ast-command

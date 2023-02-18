@@ -197,15 +197,15 @@
 
 (define/c (retrieve-entry bytes labels constants)
   (-> (listof byte/c) hash? hash? (values exact-nonnegative-integer? hash? hash?))
-  (cond ((encoded-word-const? bytes)
+  (cond [(encoded-word-const? bytes)
          (let-values (((const label) (decode-word-const bytes)))
-           (values (+ 5 (string-length label)) labels (hash-set constants label const))))
-        ((encoded-byte-const? bytes)
+           (values (+ 5 (string-length label)) labels (hash-set constants label const)))]
+        [(encoded-byte-const? bytes)
          (let-values (((const label) (decode-byte-const bytes)))
-           (values (+ 3 (string-length label)) labels (hash-set constants label const))))
-        ((encoded-word-relative? bytes)
+           (values (+ 3 (string-length label)) labels (hash-set constants label const)))]
+        [(encoded-word-relative? bytes)
          (let-values (((rel label) (decode-word-const bytes)))
-           (values (+ 5 (string-length label)) (hash-set labels label rel) constants)))
+           (values (+ 5 (string-length label)) (hash-set labels label rel) constants))]
         [#t (raise-user-error "cannot be converted")]))
 
 (module+ test #| provide-entry retrieve-entry |#
@@ -374,6 +374,35 @@
                   #x04 #x01 1 0 4 115 111 109 101
                   #x06 #x01 1 1 4 115 111 109 101)))
 
+(define/c (collect-import-hash commands collected)
+  (-> (listof ast-command?) hash? hash?)
+  (if (empty? commands)
+      collected
+      (let ((command (first commands)))
+        (collect-import-hash
+         (cdr commands)
+         (cond [(ast-require-byte-cmd? command)
+                (hash-set collected (ast-require-byte-cmd-label command) 'byte)]
+               [(ast-require-word-cmd? command)
+                (hash-set collected (ast-require-word-cmd-label command) 'word)]
+               [#t collected])))))
+
+(module+ test #| collect-import-hash |#
+  (check-equal? (collect-import-hash (list (ast-require-byte-cmd "some")) #hash())
+                #hash(("some" . byte)))
+  (check-equal? (collect-import-hash (list) #hash())
+                #hash())
+  (check-equal? (collect-import-hash (list (ast-require-word-cmd "some")) #hash())
+                #hash(("some" . word)))
+  (check-equal? (collect-import-hash
+                 (list (ast-require-byte-cmd "some")
+                       (ast-opcode-cmd '(0 1 2))
+                       (ast-require-word-cmd "other")
+                       (ast-label-def-cmd "label"))
+                 #hash())
+                #hash(("some" . byte)
+                      ("other" . word))))
+
 ;; decode values of a byte import in encoded import table
 (define/c (decode-import-table-byte-entry-values bytes)
   (-> (listof byte/c) (values byte/c string? symbol?))
@@ -453,21 +482,128 @@
                 '#hash(("some" . word)
                        ("other" . byte))))
 
+;; is the given value resolvable given the imports, labels and constants?
+(define/c (-resolvable-cmd? imports-hash labels constants-hash command)
+  (-> hash? (listof string?) hash? ast-command? boolean?)
+  (if (ast-unresolved-command? command)
+      (let ((unresolved-label (ast-resolve-sub-cmd-label (ast-unresolved-command-resolve-sub-command command))))
+        (or (and (hash-ref imports-hash unresolved-label #f) #t)
+           (and (hash-ref constants-hash unresolved-label #f) #t)
+           (and (member unresolved-label labels) #t)))
+      #t))
+
+(module+ test #| -resolvable-cmd |#
+  (check-true (-resolvable-cmd? #hash() '() #hash() (ast-label-def-cmd "sout")))
+  (check-true (-resolvable-cmd? #hash() '() #hash() (ast-opcode-cmd '(#x20 #x10 #x00))))
+  (check-false (-resolvable-cmd? #hash() '() #hash() (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label"))))
+  (check-true (-resolvable-cmd? #hash(("label" . 'byte)) '() #hash() (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label"))))
+  (check-true (-resolvable-cmd? #hash() '() #hash(("label" . 'byte)) (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label"))))
+  (check-true (-resolvable-cmd? #hash() '("label") #hash() (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label"))))
+  (check-true (-resolvable-cmd? #hash() (list (symbol->string 'label)) #hash() (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label")))))
+
+;; are the ast-commands resolvable using the given imports, labels and constants
+(define/c (-resolvable? imports-hash labels constants-hash ast-commands)
+  (-> hash? (listof string?) hash? (listof ast-command?) boolean?)
+  (if (empty? ast-commands)
+      #t
+      (and (-resolvable-cmd? imports-hash labels constants-hash (car ast-commands))
+         (-resolvable? imports-hash labels constants-hash (cdr ast-commands)))))
+
+;; are all values used in the commands are either known/defined or imported?
+(define/c (resolvable? ast-commands)
+  (-> (listof ast-command?) boolean?)
+  (-resolvable? (collect-import-hash ast-commands #hash())
+                (map (lambda (label-cmd) (ast-label-def-cmd-label label-cmd))
+                     (filter ast-label-def-cmd? ast-commands))
+                (constant-definitions-hash ast-commands)
+                ast-commands))
+
+(define/c (-unresolved-commands imports-hash labels constants-hash ast-commands collected-unresolved)
+  (-> hash? (listof string?) hash? (listof ast-command?) (listof ast-command?) (listof ast-command?))
+  (if (empty? ast-commands)
+      collected-unresolved
+      (let* ((command       (car ast-commands))
+             (new-collected (if (-resolvable-cmd? imports-hash labels constants-hash command)
+                                collected-unresolved
+                                (cons command collected-unresolved))))
+        (-unresolved-commands imports-hash labels constants-hash (cdr ast-commands) new-collected))))
+
+;; list all commands that could not be resolved through imports, labels or constants
+(define/c (unresolved-commands ast-commands)
+  (-> (listof ast-command?) (listof ast-command?))
+  (-unresolved-commands (collect-import-hash ast-commands #hash())
+                (map (lambda (label-cmd) (ast-label-def-cmd-label label-cmd))
+                     (filter ast-label-def-cmd? ast-commands))
+                (constant-definitions-hash ast-commands)
+                ast-commands
+                (list)))
+
+;; all ast commands are resolved
+(define/c (resolved? ast-commands)
+  (-> (listof ast-command?) boolean?)
+  (empty? (filter ast-unresolved-command? ast-commands)))
+
+(module+ test #| resolvable? |#
+  (check-true (resolvable? (list)))
+  (check-false (resolvable? (list (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label")))))
+  (check-false (resolvable? (list (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "sout" 'relative)))))
+  (check-true (resolvable?
+               (list (ast-label-def-cmd "sout")
+                     (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "sout" 'relative)))))
+  (check-true (resolvable?
+               (list (ast-label-def-cmd "sout")
+                     (ast-const-byte-cmd "my-byte" 65)
+                     (ast-const-word-cmd "my-word" #xffd2)
+                     (require-word "req-word")
+                     (require-byte "req-byte")
+                     (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "sout" 'relative))
+                     (ast-unresolved-opcode-cmd '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte))
+                     (ast-unresolved-opcode-cmd '(#xa5) (ast-resolve-word-scmd "my-word"))
+                     (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-sub-cmd "req-word"))
+                     (ast-unresolved-opcode-cmd '(#xa1) (ast-resolve-byte-scmd "req-byte" 'low-byte)))))
+  (check-equal? (unresolved-commands
+                 (list (ast-label-def-cmd "repeat")
+                       (ast-const-byte-cmd "my-byte" 65)
+                       (ast-const-word-cmd "my-word" #xffd2)
+                       (require-word req-word)
+                       (require-byte "req-byte")
+                       (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "repeat" 'relative))
+                       (ast-unresolved-opcode-cmd '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(#xa5) (ast-resolve-word-scmd "my-word"))
+                       (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-sub-cmd "req-word"))
+                       (ast-unresolved-opcode-cmd '(#xa1) (ast-resolve-byte-scmd "req-byte" 'low-byte))))
+                (list))
+  (check-equal? (unresolved-commands
+                 (list (ast-label-def-cmd "sout")
+                       (ast-const-word-cmd "my-word" #xffd2)
+                       (require-word "req-word")
+                       (require-byte "req-byte")
+                       (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "sout" 'relative))
+                       (ast-unresolved-opcode-cmd '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(#xa5) (ast-resolve-word-scmd "my-word"))
+                       (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-sub-cmd "req-word"))
+                       (ast-unresolved-opcode-cmd '(#xa1) (ast-resolve-byte-scmd "req-byte" 'low-byte))))
+                (list
+                 (ast-unresolved-opcode-cmd '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte)))))
+
 (module+ test #| linking two programs together|#
 
   (define providing-program
     (list
       (provide-word aout)
       (provide-byte char)
+      (provide-word clong)
       (byte-const "char" "$65")
+      (word-const clong "$FFD2")
       (LDA !char)
       (label aout)
-      (JMP $FFD2)))
+      (JMP clong)))
 
   (define requiring-program
     (list
       (require-word aout)
       (require-byte char)
+      (byte-const "bc" "$65")
       (LDX !$05)
       (label repeat)
       (JSR aout)
@@ -480,29 +616,54 @@
       (BRK)))
 
   (define providing-program-p1 (->resolved-decisions (label-instructions providing-program) providing-program))
-  (define providing-program-p2 (->resolve-labels #xc000 (label-string-offsets #xc000 providing-program-p1) providing-program-p1 '()))
+  (define providing-program-p2 (->resolve-labels 0 (label-string-offsets 0 providing-program-p1) providing-program-p1 '()))
   (define providing-program-p3 (resolve-constants (constant-definitions-hash providing-program-p1) providing-program-p2))
   (define providing-raw-bytes (resolved-program->bytes providing-program-p3))
 
-  (define providing-label-offsets-program (label-string-offsets #xc000 providing-program-p3))
+  (define providing-label-offsets (label-string-offsets 0 providing-program-p3))
   (define providing-constants (constant-definitions-hash providing-program-p3))
-  (define providing-export-table (export-table-bytes '() providing-label-offsets-program providing-constants providing-program-p3))
+  (define providing-export-table (export-table-bytes '() providing-label-offsets providing-constants providing-program-p3))
   (define-values (providing-decoded-export-labels providing-decoded-export-constants) (decode-export-table-bytes providing-export-table #hash() #hash()))
+  ;; simply add to the providing-decoded-export-labels (string->offset) org to the offset, where org is the origin of the providing program
+
+  (define requiring-import-hash (collect-import-hash requiring-program #hash()))
+  (define requiring-program-labels (map (lambda (label-cmd) (ast-label-def-cmd-label label-cmd))
+                                        (filter ast-label-def-cmd? requiring-program)))
+  (define requiring-import-table-bytes (import-table-bytes 0 '() requiring-import-hash requiring-program))
+  (define requiring-import-table-decoded (decode-import-table-bytes requiring-import-table-bytes '()))
+  ;; in requiring-import-table-decoded a list of "label", offset, indicator, the code is "patched"
+  ;; by setting the next word, low-byte or high-byte (indicator) at the given offset to the value
+  ;; retrieved by the label
 
   (define requiring-program-p1 (->resolved-decisions (label-instructions requiring-program) requiring-program))
-  (define requiring-program-p2 (->resolve-labels #xc100 (label-string-offsets #xc100 requiring-program-p1) requiring-program-p1 '()))
-  (define requiring-program-p2-1 (->resolve-labels #xc100 providing-decoded-export-labels requiring-program-p2 '()))
-  (define requiring-program-p3 (resolve-constants (constant-definitions-hash requiring-program-p2-1) requiring-program-p2-1))
+  (define requiring-program-p2 (->resolve-labels 0 (label-string-offsets 0 requiring-program-p1) requiring-program-p1 '()))
+
+  ;; the following step fills the data bytes accordingly, these values however are overwritten, once
+  ;; the actual linking takes place
+  (define requiring-program-p2-1 (->resolve-labels 0 providing-decoded-export-labels requiring-program-p2 '()))
+  (define requiring-program-constants (constant-definitions-hash requiring-program-p2-1))
+  (define requiring-program-p3 (resolve-constants requiring-program-constants requiring-program-p2-1))
   (define requiring-program-p3-1 (resolve-constants providing-decoded-export-constants requiring-program-p3))
   ;; currently no placeholders are encoded into the raw bytes -> this function works only on already resolved programs
   (define requiring-raw-bytes (resolved-program->bytes requiring-program-p3-1))
 
-  ;; (resolvable? requiring-progam-p3) => true
-  ;; (resolved? requiring-progam-p3) => false
-  ;; (resolved? providing-progam-p3) => true
-  ;; 
+  (check-true (resolvable? requiring-program-p3))
+  (check-false (resolved? requiring-program-p3))
+  (check-true (resolved? providing-program-p3))
+  (check-equal? (unresolved-commands requiring-program-p3)
+                (list))
+  ;; bin filelayout:
+  ;; 0:    word: total size = 8 + export table size + import table size + code size
+  ;; 2:    word: ioff = # bytes to first relocatable code = 6 + export table size
+  ;; 4:    word: coff = # bytes to first import table byte = 6 + export table size + import table size
+  ;; 6:    export table bytes
+  ;; ioff: import table bytes
+  ;; coff: relocatable code bytes
+
+  (define providing-program-bin (list)) ;; relocatable code + import + export table
+  (define requiring-program-bin (list))
 
 
   (skip ": linking programs is not supported yet"
-        (check-equal? (link-programs (list providing-program requiring-program))
+        (check-equal? (link-programs (list providing-program-bin requiring-program-bin))
                       (list #x00))))
