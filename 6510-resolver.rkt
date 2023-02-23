@@ -16,10 +16,12 @@
 
 (provide ->resolved-decisions label-instructions ->resolve-labels resolved-program->bytes commands->bytes)
 
+;; is this instruction introducing a label referencing a byte value (e.g. constant def)?
 (define/c (byte-label-cmd? instruction)
   (-> ast-command? boolean?)
   (ast-const-byte-cmd? instruction))
 
+;; is this instruction introducing a label referencing a word value (e.g. constant or code label)?
 (define/c (word-label-cmd? instruction)
   (-> ast-command? boolean?)
   (or (ast-const-word-cmd? instruction)
@@ -30,6 +32,7 @@
   (check-true (word-label-cmd? (ast-const-word-cmd "some" #x2000)))
   (check-false (word-label-cmd? (ast-const-byte-cmd "some" #x20))))
 
+;; first instruction that introduces the given label as word
 (define/c (first-word-label-in label program)
   (-> string?
      (listof ast-command?)
@@ -55,6 +58,7 @@
                                               (ast-const-word-cmd "some" #x3000)))
                 (ast-const-word-cmd "some" #x3000)))
 
+;; first instruction that introduces the given label
 (define/c (first-label-in label program)
   (-> string?
      (listof ast-command?)
@@ -79,6 +83,7 @@
   (check-equal? (first-label-in "hello" (list (ast-label-def-cmd "hello")))
                 (ast-label-def-cmd "hello")))
 
+;; is the given instruction introducing a label?
 (define/c (label-instruction? instruction)
   (-> ast-command? boolean?)
   (or (ast-label-def-cmd? instruction)
@@ -91,10 +96,12 @@
   (check-not-false (label-instruction? (ast-const-byte-cmd "some" #x20)))
   (check-false (label-instruction? (ast-opcode-cmd '(#xea)))))
 
+;; all instructions that introduce labels
 (define/c (label-instructions program)
   (-> (listof ast-command?) (listof label-instruction?))
   (filter label-instruction? program))
 
+;; find first unresolved command that contains an option to decide on that may be resolved by the first matching label
 (define/c (matching-decide-option labels decide-options)
   (-> (listof label-instruction?) (listof ast-unresolved-command?) (or/c ast-unresolved-command? #f))
   (findf (λ (decide-option)
@@ -127,6 +134,7 @@
                        (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
                 (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))))
 
+;; given program with all decisions resolved that can be resolved with the given list of labels
 (define/c (->resolved-decisions labels program)
   (-> (listof label-instruction?) (listof ast-command?) (listof ast-command?))
   (if (empty? program)
@@ -176,26 +184,32 @@
                         (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello")))))
                 "nothing is decided if label is not found"))
 
+;; encode this regular opcode cmd adding bytes to the command
 (define/c (encode-opcode-cmd instruction . bytes)
   (->* (ast-unresolved-opcode-cmd?) (listof byte/c) ast-opcode-cmd?)
   (ast-opcode-cmd (append (ast-opcode-cmd-bytes instruction) bytes)))
 
+;; encode this opcode cmd adding bytes (low, high byte) of the word value
 (define/c (encode-label-word-value instruction value)
   (-> ast-unresolved-opcode-cmd? word/c ast-opcode-cmd?)
   (encode-opcode-cmd instruction (low-byte value) (high-byte value)))
 
+;; encode this opcode cmd adding high byte of the word value
 (define/c (encode-label-hbyte-value instruction value)
   (-> ast-unresolved-opcode-cmd? word/c ast-opcode-cmd?)
   (encode-opcode-cmd instruction (high-byte value)))
 
+;; encode this opcode cmd adding low byte of the word value
 (define/c (encode-label-lbyte-value instruction value)
   (-> ast-unresolved-opcode-cmd? word/c ast-opcode-cmd?)
   (encode-opcode-cmd instruction (low-byte value)))
 
+;; encode this opcode cmd adding relative byte value
 (define/c (encode-label-rel-value instruction rel-value)
-  (-> ast-unresolved-rel-opcode-cmd? word/c ast-rel-opcode-cmd?)
+  (-> ast-unresolved-rel-opcode-cmd? byte/c ast-rel-opcode-cmd?)
   (ast-rel-opcode-cmd (append (ast-rel-opcode-cmd-bytes instruction) (list rel-value))))
 
+;; resolve this regular opcode (if applicable) 
 (define/c (resolve-opcode-cmd instruction labels)
   (-> ast-unresolved-opcode-cmd? hash? ast-opcode-cmd?)
   (let* ((subcmd (ast-unresolved-opcode-cmd-resolve-sub-command instruction))
@@ -212,6 +226,7 @@
                (encode-label-lbyte-value instruction value)])
         instruction)))
 
+;; resolve this relative opcode command (if applicable) using the given current offset of the code
 (define/c (resolve-rel-opcode-cmd instruction offset labels)
   (-> ast-unresolved-rel-opcode-cmd? word/c hash? ast-rel-opcode-cmd?)
   (let* ((subcmd (ast-unresolved-rel-opcode-cmd-resolve-sub-command instruction))
@@ -222,6 +237,7 @@
           (encode-label-rel-value instruction rel-value))
         instruction)))
 
+;; resolve labels to bytes in the given program, using offset as absolute program start
 (define/c (->resolve-labels offset labels program resolved-program)
   (-> word/c hash? (listof ast-command?) (listof ast-command?) (listof ast-command?)) 
   (if (empty? program)
@@ -236,7 +252,7 @@
              (new-res-prg  (append resolved-program (list resolved-cmd))))        
         (->resolve-labels next-offset labels (cdr program) new-res-prg))))
 
-(module+ test #| resolve-labels |#
+(module+ test #| ->resolve-labels |#
   (check-equal?
    (->resolve-labels 0 '#hash(("some" . #x10) ("other" . #x0) ("sowo" . #xFFD2))
                     (list (ast-unresolved-opcode-cmd '(30) (ast-resolve-word-scmd "some"))
@@ -270,11 +286,6 @@
          (ast-opcode-cmd '(202))
          (ast-rel-opcode-cmd '(208 247)))))
 
-;; transform a resolved PROGRAM into a list of bytes
-(define/c (resolved-program->bytes program)
-  (-> (listof ast-command?) (listof byte/c))
-  (-resolved-program->bytes program '()))
-
 (define/c (-resolved-program->bytes program resolved)
   (-> (listof ast-command?) (listof byte/c) (listof byte/c))
   (if (empty? program)
@@ -288,6 +299,11 @@
                                  (ast-bytes-cmd-bytes instruction)]
                                 [#t '()])))
         (-resolved-program->bytes (cdr program) (append resolved bytes)))))
+
+;; transform a resolved PROGRAM into a list of bytes
+(define/c (resolved-program->bytes program)
+  (-> (listof ast-command?) (listof byte/c))
+  (-resolved-program->bytes program '()))
 
 (module+ test #| resolve-program->bytes |#
   (check-equal? (resolved-program->bytes
