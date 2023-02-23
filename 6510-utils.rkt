@@ -31,6 +31,7 @@
  base-label-str
  )
 
+;; convert given element to string
 (define/c (->string el)
   (-> (or/c string? char? symbol? number? syntax? list?) string?)
   (cond [(string? el) el]
@@ -58,10 +59,12 @@
   (check-equal? (->string #'45)
                 "45"))
 
+;; is this exact integer in word range?
 (define/c (in-word-range? word)
   (-> exact-integer? boolean?)
   (and (<= word 65535) (>= word 0)))
 
+;; is this exact integer in byte range?
 (define/c (in-byte-range? byte)
   (-> exact-integer? boolean?)
   (and (<= byte 255) (>= byte 0)))
@@ -75,6 +78,7 @@
   (-> string? boolean?)
   (string-contains? "%$" (substring number-string 0 1)))
 
+;; get the base label string (removing any prefix of > or <)
 (define/c (base-label-str full-label)
   (-> string? string?)
   (cond [(or (eq? #\> (string-ref full-label 0))
@@ -160,14 +164,6 @@
       (+ 256 num)
       num))
 
-(define/c (decimal-from-two-complement num)
-  (-> byte/c exact-integer?)
-  (when (or (> 0 num) (< 256 num)) (error "num out of range"))
-  (define abs-val (bitwise-and num #x7f))
-  (if (> num 127)
-      (- abs-val #x80)
-      abs-val))
-
 (module+ test #| two-complements |#
   (check-eq? (two-complement-of -1)
              #xff)
@@ -180,17 +176,26 @@
   (check-eq? (two-complement-of 1)
              1)
   (check-eq? (two-complement-of 127)
-             #x7f)
+             #x7f))
 
-  (for ((b  (range -128 127)))
+(define/c (decimal-from-two-complement num)
+  (-> byte/c exact-integer?)
+  (when (or (> 0 num) (< 256 num)) (error "num out of range"))
+  (define abs-val (bitwise-and num #x7f))
+  (if (> num 127)
+      (- abs-val #x80)
+      abs-val))
+
+(module+ test #| decimal-from-two-complements |#
+  (for ((b (range -128 127)))
     (check-eq? (decimal-from-two-complement (two-complement-of b))
                b)))
 
 ;; if the given string an immediate string, (6510 number string prefixed by '#')?
 (define (is-immediate-number? string)
   (and (string? string)
-       (equal? (substring string 0 1) "#")
-       (6510-number-string? (substring string 1))))
+     (equal? (substring string 0 1) "#")
+     (6510-number-string? (substring string 1))))
 
 (module+ test #| is-immediate-number? |#
   (check-true (is-immediate-number? "#$2001"))

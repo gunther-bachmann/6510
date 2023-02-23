@@ -9,6 +9,10 @@
 (provide (all-from-out rackunit))
 (provide (all-from-out ansi-color))
 
+;; skip a test case, reporting it
+;; usage:
+;;   (skip (check...   ))              ;; skips the given test
+;;   (skip "skip message" (check... )) ;; skip the test and write "skip message"
 (define-syntax (skip stx)
   (syntax-case stx ()
     ([_ body]
