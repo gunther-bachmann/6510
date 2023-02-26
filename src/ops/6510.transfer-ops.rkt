@@ -12,7 +12,7 @@
  |#
 
 
-(require "6510-addressing.rkt")
+(require "../6510-addressing.rkt")
 
 (provide TAX TAY TSX TXA TXS TYA)
 

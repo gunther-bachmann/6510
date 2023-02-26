@@ -7,13 +7,13 @@
 
  |#
 
-(require "6510-addressing.rkt")
+(require "../6510-addressing.rkt")
 
 (provide ADC SBC)
 
 (module+ test
-  (require "6510-command.rkt")
-  (require "6510-test-utils.rkt"))
+  (require "../6510-command.rkt")
+  (require "../6510-test-utils.rkt"))
 
 (define-opcode ADC
   ((immediate   . #x69)

@@ -11,13 +11,13 @@
 
  |#
 
-(require "6510-addressing.rkt")
+(require "../6510-addressing.rkt")
 
 (provide LDA LDX LDY STA STX STY)
 
 (module+ test
-  (require "6510-command.rkt")
-  (require "6510-test-utils.rkt"))
+  (require "../6510-command.rkt")
+  (require "../6510-test-utils.rkt"))
 
 (define-opcode LDA
   ((immediate   . #xA9)

@@ -9,15 +9,14 @@
 
  |#
 
-(require "6510-addressing-utils.rkt")
-(require "6510-addressing.rkt")
-(require "6510-command.rkt")
+(require "../6510-addressing.rkt")
+(require "../6510-command.rkt")
 
 
 (provide ASL LSR ROL ROR) 
 
 (module+ test
-  (require "6510-test-utils.rkt"))
+  (require "../6510-test-utils.rkt"))
 
 (define-opcode ASL
   ((accumulator . #x0a)

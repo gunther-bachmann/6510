@@ -8,13 +8,13 @@
 
 |#
 
-(require "6510-addressing.rkt")
+(require "../6510-addressing.rkt")
 
 (provide AND EOR ORA)
 
 (module+ test
-  (require "6510-command.rkt")
-  (require "6510-test-utils.rkt"))
+  (require "../6510-command.rkt")
+  (require "../6510-test-utils.rkt"))
 
 (define-opcode AND
   ((indirect-x   . #x21)

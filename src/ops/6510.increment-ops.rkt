@@ -11,13 +11,13 @@
 
  |#
 
-(require "6510-addressing.rkt")
+(require "../6510-addressing.rkt")
 
 (provide DEC DEX DEY INC INX INY)
 
 (module+ test
-  (require "6510-command.rkt")
-  (require "6510-test-utils.rkt"))
+  (require "../6510-command.rkt")
+  (require "../6510-test-utils.rkt"))
 
 (define-opcode DEC
   ((zero-page . #xc6) (absolute . #xce) (absolute-x . #xde)  (zero-page-x . #xd6)))

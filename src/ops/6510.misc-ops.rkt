@@ -9,13 +9,13 @@
  |#
 
 
-(require "6510-command.rkt")
-(require "6510-addressing.rkt")
+(require "../6510-command.rkt")
+(require "../6510-addressing.rkt")
 
 (provide BIT BRK NOP)
 
 (module+ test
-  (require "6510-test-utils.rkt"))
+  (require "../6510-test-utils.rkt"))
 
 (define-opcode BIT
   ((zero-page . #x24)

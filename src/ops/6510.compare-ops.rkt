@@ -8,13 +8,12 @@
 
  |#
 
-(require "6510-addressing-utils.rkt")
-(require "6510-addressing.rkt")
+(require "../6510-addressing.rkt")
 
 (provide CMP CPX CPY) 
 
 (module+ test
-  (require "6510-test-utils.rkt"))
+  (require "../6510-test-utils.rkt"))
 
 (define-opcode CMP
   ((indirect-x . #xc1)
