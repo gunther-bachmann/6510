@@ -7,3 +7,4 @@ compiled/
 doc/
 /.direnv/
 /coverage/
+/git-stats.html

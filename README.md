@@ -18,7 +18,7 @@ rackets' capabilities to define (and interpret) languages, in this case: 6510 as
 
 You may execute the example program directly:
 ```sh
-  ./6510-example.rkt
+  ./src/example/6510-example.rkt
 ```
 This will
 1. translate the given assembler program into the 6510 codes
@@ -115,9 +115,9 @@ To run tests of a single file, run `raco test -y --drdr 6510-parser.rkt` for exa
 
 To run all tests, run `raco test -y -t -x -j 8  .` If direnv is installed, you can use `t` to run all tests.
 
-To build all, run `raco make -v -j 8 *.rkt` (direnv: `m`)
+To build run `raco make -v -j 8 src/*.rkt src/ops/*.rkt src/example/*.rkt` (direnv: `m`)
 
-To generate coverage for all racket files, run `raco cover *.rkt` and open `coverage/index.html`
+To generate coverage for all racket files, run `raco cover src/*.rkt` and open `coverage/index.html`
 
 ## Todos
 
