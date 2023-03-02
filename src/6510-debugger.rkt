@@ -56,7 +56,7 @@
 (define/c (debugger--help d-state)
   (-> debug-state? debug-state?)
   (define help #<<EOF
-pm <A> <B>            print memory starting @A (hex) for B bytes (hex)
+pm <A?> <B?>          print memory starting @A (hex) for B bytes (hex)
 sm <A> = <B>          set memory @A (hex) to byte B (hex)
 sa = <B>              set accumulator to byte B (hex)
 spc = <A>             set program counter to address A (hex)
@@ -89,8 +89,9 @@ EOF
 (define/c (debugger--print-memory address len d-state)
   (-> (or/c string? false?) (or/c string? false?) debug-state? debug-state?)
   (define c-state (car (debug-state-states d-state)))
-  (displayln (memory->string (string->number address 16)
-                            (+ -1 (string->number address 16) (string->number len 16))
+  (define adr (if address (string->number address 16)  (cpu-state-program-counter c-state)))
+  (displayln (memory->string adr
+                            (+ -1 adr (if len (string->number len 16) 1))
                             c-state))
   d-state)
 
@@ -197,7 +198,7 @@ EOF
   (-> string? debug-state? debug-state?)
   (define c-states (debug-state-states d-state))
   (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4})?")
-  (define pm-regex #px"^pm *([[:xdigit:]]{1,4}) *([[:xdigit:]]{1,2})")
+  (define pm-regex #px"^pm *([[:xdigit:]]{1,4})? *([[:xdigit:]]{1,2})?")
   (define sm-regex #px"^sm *([[:xdigit:]]{1,4}) *= *([[:xdigit:]]{1,2})")
   (define s-regex #px"^s *([[:xdigit:]]{1,2})?")
   (define b-regex #px"^b *([[:xdigit:]]{1,2})?")
