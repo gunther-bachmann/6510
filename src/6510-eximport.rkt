@@ -24,14 +24,19 @@
 ;; constants hash label->const
 ;; labels hash label->rel-pos to load-pos
 
+;; string of length <= 255, that can be encoded 
+(define byte-len-string? (and/c string? (lambda (str) (< (string-length str) 256))))
+
 ;; encode a string into bytes
 (define/c (string->bytes string)
-  (-> string? (listof byte/c))
+  (-> byte-len-string? (listof byte/c))
   (cons
    (low-byte (string-length string))
    (map char->integer (string->list string))))
 
 (module+ test #| string->bytes |#
+  (check-exn exn:fail:contract? (lambda () (string->bytes (make-string 256 #\a))))
+  (check-not-exn (lambda () (string->bytes (make-string 255 #\a))))
   (check-equal? (string->bytes "A")
                 (list 1 65))
   (check-equal? (string->bytes "AB")
@@ -40,7 +45,7 @@
                 (list 0)))
 
 (define/c (bytes->string bytes)
-  (-> (listof byte/c) string?)
+  (-> (listof byte/c) byte-len-string?)
   (define len (car bytes))
   (~>> (drop bytes 1)
      (take _ len)
