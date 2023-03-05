@@ -16,7 +16,7 @@
 (provide DEC DEX DEY INC INX INY)
 
 (module+ test
-  (require "../6510-command.rkt")
+  (require "../ast/6510-command.rkt")
   (require "../6510-test-utils.rkt"))
 
 (define-opcode DEC

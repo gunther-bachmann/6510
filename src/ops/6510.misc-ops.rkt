@@ -9,7 +9,7 @@
  |#
 
 
-(require "../6510-command.rkt")
+(require "../ast/6510-command.rkt")
 (require "../6510-addressing.rkt")
 
 (provide BIT BRK NOP)

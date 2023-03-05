@@ -84,6 +84,9 @@ syntax macros into the final racket form which can then be interpreted.
 
 * `6510.rkt` central entry for syntax transformation rules for the translation from 6510 dsl code
   into 6510 byte/assembler code.
+  
+Operations
+  
 * `6510.arithmetic-ops.rkt` defines arithmetic ops like adc, sbc
 * `6510.branch-ops.rkt`defines branch ops like beq, bne
 * `6510.compare-ops.rkt` defines comparison ops like cmp, cpx, cpy

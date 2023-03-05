@@ -10,7 +10,7 @@
  |#
 
 (require "../6510-addressing.rkt")
-(require "../6510-command.rkt")
+(require "../ast/6510-command.rkt")
 
 
 (provide ASL LSR ROL ROR) 

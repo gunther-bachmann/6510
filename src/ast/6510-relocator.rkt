@@ -7,13 +7,13 @@
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require (only-in  racket/fixnum fx+))
-(require (only-in "6510-utils.rkt" byte/c word/c low-byte high-byte absolute word))
+(require (only-in "../6510-utils.rkt" byte/c word/c low-byte high-byte absolute word))
 (require "6510-command.rkt")
 
 (provide label-string-offsets command-len label->hilo-indicator)
 
 (module+ test
-  (require "6510-test-utils.rkt"))
+  (require "../6510-test-utils.rkt"))
 
 (define command/c (or/c ast-command? (listof any/c)))
 

@@ -8,11 +8,11 @@
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-command.rkt")
-(require (only-in "6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of))
+(require (only-in "../6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of))
 (require (only-in "6510-relocator.rkt" command-len label-string-offsets))
 
 (module+ test
-  (require "6510-test-utils.rkt"))
+  (require "../6510-test-utils.rkt"))
 
 (provide ->resolved-decisions label-instructions ->resolve-labels resolved-program->bytes commands->bytes)
 

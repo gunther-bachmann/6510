@@ -16,7 +16,7 @@
 (provide LDA LDX LDY STA STX STY)
 
 (module+ test
-  (require "../6510-command.rkt")
+  (require "../ast/6510-command.rkt")
   (require "../6510-test-utils.rkt"))
 
 (define-opcode LDA

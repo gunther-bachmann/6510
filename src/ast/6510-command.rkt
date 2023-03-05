@@ -5,7 +5,7 @@
 
 |#
 
-(require (only-in "6510-utils.rkt" word/c byte/c))
+(require (only-in "../6510-utils.rkt" word/c byte/c))
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (provide (struct-out ast-program)
@@ -31,7 +31,7 @@
          (struct-out ast-const-word-cmd))
 
 (module+ test
-  (require "6510-test-utils.rkt"))
+  (require "../6510-test-utils.rkt"))
 
 (define (ast-unresolved-command? command)
   (or (ast-unresolved-rel-opcode-cmd? command)

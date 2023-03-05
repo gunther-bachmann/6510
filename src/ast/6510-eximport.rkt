@@ -8,18 +8,18 @@
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require (only-in "6510-relocator.rkt" command-len label-string-offsets))
-(require (only-in "6510-utils.rkt" low-byte high-byte byte/c word/c absolute))
+(require (only-in "../6510-utils.rkt" low-byte high-byte byte/c word/c absolute))
 (require (only-in threading ~>>))
 (require "6510-command.rkt")
 (require (only-in "6510-resolver.rkt" ->resolve-labels ->resolved-decisions label-instructions resolved-program->bytes))
 (require (only-in "6510-constants.rkt" resolve-constants constant-definitions-hash))
 
-(require "6510.rkt")
+(require "../6510.rkt")
 
 (provide import-table-bytes export-table-bytes)
 
 (module+ test
-  (require "6510-test-utils.rkt"))
+  (require "../6510-test-utils.rkt"))
 
 ;; constants hash label->const
 ;; labels hash label->rel-pos to load-pos

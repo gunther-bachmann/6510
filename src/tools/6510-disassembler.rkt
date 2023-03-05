@@ -11,7 +11,7 @@
 
 (require (only-in threading ~>>))
 (require (rename-in  racket/contract [define/contract define/c]))
-(require "6510-utils.rkt")
+(require "../6510-utils.rkt")
 (require (only-in "6510-interpreter.rkt"
                   cpu-state?
                   with-program-counter

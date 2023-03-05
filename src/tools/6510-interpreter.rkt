@@ -50,7 +50,7 @@
 
 ;; (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
 (require (only-in threading ~>>))
-(require "6510-utils.rkt")
+(require "../6510-utils.rkt")
 (require scribble/srcdoc)
 (require (for-doc scribble/base scribble/manual))
 (require data/pvector)

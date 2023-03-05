@@ -17,13 +17,13 @@
 |#
 
 (require "6510-command.rkt")
-(require (only-in "6510-utils.rkt" high-byte low-byte byte/c word/c))
+(require (only-in "../6510-utils.rkt" high-byte low-byte byte/c word/c))
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (provide constant-definitions-hash resolve-constants)
 
 (module+ test
-  (require "6510-test-utils.rkt"))
+  (require "../6510-test-utils.rkt"))
 
 ;; use the byte-code of the command, appending the res-byte-list
 (define/c (constant->command command res-byte-list)

@@ -7,12 +7,12 @@
 ;; C-c C-c and inspect program-p1, program-p2 and raw-bytes
 
 (require "../6510.rkt")
-(require "../6510-resolver.rkt")
-(require "../6510-relocator.rkt")
+(require "../ast/6510-resolver.rkt")
+(require "../ast/6510-relocator.rkt")
 
-(require "../6510-interpreter.rkt")
-(require "../6510-debugger.rkt")
-(require "../6510-constants.rkt")
+(require "../tools/6510-interpreter.rkt")
+(require "../tools/6510-debugger.rkt")
+(require "../ast/6510-constants.rkt")
 
 
 (module+ test

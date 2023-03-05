@@ -7,8 +7,8 @@
 (require "6510-utils.rkt")
 (require (for-syntax "6510-utils.rkt"))
 
-(require (for-syntax "6510-command.rkt"))
-(require "6510-command.rkt")
+(require (for-syntax "ast/6510-command.rkt"))
+(require "ast/6510-command.rkt")
 
 (require "ops/6510.logic-ops.rkt")
 (require "ops/6510.branch-ops.rkt")
@@ -23,7 +23,7 @@
 (require "ops/6510.subroutine-ops.rkt")
 (require "ops/6510.stack-ops.rkt")
 
-(provide (all-from-out "6510-command.rkt"))
+(provide (all-from-out "ast/6510-command.rkt"))
 
 (provide (all-from-out "ops/6510.logic-ops.rkt"))
 (provide (all-from-out "ops/6510.branch-ops.rkt"))

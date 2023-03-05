@@ -18,7 +18,7 @@
 (provide BCC BCS BEQ BMI BNE BPL BVC BVS)
 
 (module+ test
-  (require "../6510-command.rkt")
+  (require "../ast/6510-command.rkt")
   (require "../6510-test-utils.rkt"))
 
 (define-opcode BCC ((relative . #x90)))
