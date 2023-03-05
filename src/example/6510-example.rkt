@@ -1,5 +1,5 @@
 #! /usr/bin/env racket
-#lang reader "../6510-reader.rkt"
+#lang reader "../asm/6510-reader.rkt"
 
 
 ; this program is an example of how the assembler can be used

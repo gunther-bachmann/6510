@@ -1,5 +1,5 @@
 #! /usr/bin/env racket
-#lang reader "../6510-reader.rkt"
+#lang reader "../asm/6510-reader.rkt"
 
 ; this file is (some day) intended to interpret minimal lisp programs on the 6510
 

@@ -13,7 +13,7 @@
 (require threading)
 (require "../6510-utils.rkt")
 (require "6510-interpreter.rkt")
-(require (only-in "../6510-parser.rkt" asm->ast))
+(require (only-in "../asm/6510-parser.rkt" asm->ast))
 (require (only-in "6510-disassembler.rkt" disassemble disassemble-single))
 (require (only-in "../ast/6510-resolver.rkt" commands->bytes))
 

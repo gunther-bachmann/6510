@@ -17,7 +17,7 @@
 |#
 
 (require (for-syntax "6510-addressing-utils.rkt"))
-(require (for-syntax "../6510-syntax-utils.rkt"))
+(require (for-syntax "6510-syntax-utils.rkt"))
 
 (require "6510-addressing-utils.rkt")
 (provide (all-from-out "6510-addressing-utils.rkt"))

@@ -8,7 +8,7 @@
 (require syntax/strip-context)
 (require megaparsack megaparsack/text)
 (require (only-in "6510-parser.rkt" 6510-program/p))
-(require (only-in "root.rkt" project-root))
+(require (only-in "../root.rkt" project-root))
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (provide (rename-out [literal-read read]

@@ -42,8 +42,8 @@
 (require (only-in data/applicative pure))
 (require (rename-in racket/contract [define/contract define/c]))
 
-(require (only-in "6510-utils.rkt" parse-number-string ->string))
-(require "6510.rkt") ;; necessary to resolve all syntax macros of 6510 dsl
+(require (only-in "../6510-utils.rkt" parse-number-string ->string))
+(require "../6510.rkt") ;; necessary to resolve all syntax macros of 6510 dsl
 
 (provide 6510-program/p asm->ast scheme-asm->ast)
 
