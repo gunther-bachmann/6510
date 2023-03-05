@@ -37,6 +37,7 @@
                   integer/p
                   parse-string))
 
+(require (only-in threading ~>>))
 (require (only-in data/monad do <-))
 (require (only-in data/applicative pure))
 (require (rename-in racket/contract [define/contract define/c]))
@@ -44,7 +45,7 @@
 (require (only-in "6510-utils.rkt" parse-number-string ->string))
 (require "6510.rkt") ;; necessary to resolve all syntax macros of 6510 dsl
 
-(provide 6510-program/p parse-opcodes)
+(provide 6510-program/p asm->ast scheme-asm->ast)
 
 (module+ test
   (require rackunit)
@@ -633,27 +634,50 @@
   (check-equal? (filter-meta-data '(PHP (#:line 1 #:org-cmd "php")))
                 '(PHP)))
 
-(define/c (parse-opcodes str)
-  (-> string? (listof ast-command?))
-  (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-opcodes/p) str))))
-  (define stripped-src-location-data (map (lambda (command) (filter-meta-data command)) parsed))
-  (map (lambda (command) (eval command eval-ns)) stripped-src-location-data))
+;; convert native assembler -> assember with scheme syntax
+(define/c (asm->scheme-asm str [parse-rule 6510-opcodes/p])
+  (->* (string?) (parser?) list?)
+  (define parsed (syntax->datum (parse-result! (parse-string (syntax/p parse-rule) str))))
+  (map (lambda (command) (filter-meta-data command)) parsed))
 
+(module+ test #| asm->scheme-asm |#
+  (check-equal? (asm->scheme-asm "LDA #$20") '((LDA "!32")))
+  (check-equal? (asm->scheme-asm "LDA #$20\nJSR $FFD2") '((LDA "!32") (JSR "65490"))))
+
+;; convert scheme assembler -> ast commands
+(define/c (scheme-asm->ast scheme-asm-command-list)
+  (-> list? (listof ast-command?))
+  ;; this eval will result in macro expansion
+  (map (lambda (command) (eval command eval-ns)) scheme-asm-command-list))
+
+(module+ test #| scheme-asm->ast |#
+  (check-equal? (scheme-asm->ast '((LDA "!32")))
+                (list (ast-opcode-cmd '(169 32))))
+  (check-equal? (scheme-asm->ast '((LDA "!32")(JSR "65490")))
+                (list (ast-opcode-cmd '(169 32))
+                      (ast-opcode-cmd '(32 210 255)))))
+
+;; convert native assembler into ast 
+(define/c (asm->ast str [parse-rule 6510-opcodes/p])
+  (->* (string?) (parser?) (listof ast-command?))
+  (~>> (asm->scheme-asm str parse-rule)
+     (scheme-asm->ast _)))
+
+;; convert native whole assembler program into ast commands (ignoring origin aka *=)
 (define/c (parse-program str)
   (-> string? (listof ast-command?))
   (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-program/p) str))))
   (define stripped-src-location-data (map (lambda (command) (filter-meta-data command)) (cadr parsed)))
+  (scheme-asm->ast stripped-src-location-data))
 
-  (map (lambda (command) (eval command eval-ns)) stripped-src-location-data))
-
-(module+ test #| compile-opcodes |#
-  (check-equal? (parse-opcodes "PHP")
+(module+ test #| asm->ast, parse-program |#
+  (check-equal? (asm->ast "PHP")
                 (list (ast-opcode-cmd '(8))))
-  (check-equal? (parse-opcodes "JSR $FFD2")
+  (check-equal? (asm->ast "JSR $FFD2")
                 (list (ast-opcode-cmd '(32 210 255))))
-  (check-equal? (parse-opcodes ".data $FF, $10")
+  (check-equal? (asm->ast ".data $FF, $10")
                 (list (ast-bytes-cmd '(255 16))))
-  (check-equal? (parse-opcodes "LDX $ff00\nsome: JSR some")
+  (check-equal? (asm->ast "LDX $ff00\nsome: JSR some")
                 (list (ast-opcode-cmd '(174 0 255))
                       (ast-label-def-cmd "some")
                       (ast-unresolved-opcode-cmd '(32) (ast-resolve-word-scmd "some"))))

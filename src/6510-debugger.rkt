@@ -13,7 +13,7 @@
 (require threading)
 (require "6510-utils.rkt")
 (require "6510-interpreter.rkt")
-(require (only-in "6510-parser.rkt" parse-opcodes))
+(require (only-in "6510-parser.rkt" asm->ast))
 (require (only-in "6510-disassembler.rkt" disassemble disassemble-single))
 (require (only-in "6510-resolver.rkt" commands->bytes))
 
@@ -340,7 +340,7 @@ EOF
 
 (define/c (compile-opcodes str)
   (-> string? (listof byte/c))
-  (commands->bytes 0 (parse-opcodes str)))
+  (commands->bytes 0 (asm->ast str)))
 
 (module+ test #| assemble/dissassemble roundrip |#
 
