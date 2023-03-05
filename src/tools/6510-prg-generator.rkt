@@ -6,7 +6,7 @@
  |#
 
 
-(require (only-in "6510-utils.rkt" high-byte low-byte))
+(require (only-in "../6510-utils.rkt" high-byte low-byte))
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (provide

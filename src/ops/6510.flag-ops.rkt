@@ -11,7 +11,7 @@
 
  |#
 
-(require "../6510-addressing.rkt")
+(require "../scheme-asm/6510-addressing.rkt")
 
 (provide CLC CLD CLI CLV SEC SED SEI) 
 

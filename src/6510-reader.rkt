@@ -61,7 +61,7 @@
                 [(6510-resolver-folder) (string-append folder-prefix "/src/ast/6510-resolver.rkt")]
                 [(6510-relocator-folder) (string-append folder-prefix "/src/ast/6510-relocator.rkt")]
                 [(6510-interpreter-folder) (string-append folder-prefix "/src/tools/6510-interpreter.rkt")]
-                [(6510-prg-generator-folder) (string-append folder-prefix "/src/6510-prg-generator.rkt")]
+                [(6510-prg-generator-folder) (string-append folder-prefix "/src/tools/6510-prg-generator.rkt")]
                 [(6510-debugger-folder) (string-append folder-prefix "/src/tools/6510-debugger.rkt")]
                 [(6510-constants-folder) (string-append folder-prefix "/src/ast/6510-constants.rkt")])
     (with-syntax ([(str ...) parsed-opcodes]

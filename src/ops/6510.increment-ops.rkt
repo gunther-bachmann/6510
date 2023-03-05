@@ -11,7 +11,7 @@
 
  |#
 
-(require "../6510-addressing.rkt")
+(require "../scheme-asm/6510-addressing.rkt")
 
 (provide DEC DEX DEY INC INX INY)
 

@@ -10,7 +10,7 @@
 
 
 (require "../ast/6510-command.rkt")
-(require "../6510-addressing.rkt")
+(require "../scheme-asm/6510-addressing.rkt")
 
 (provide BIT BRK NOP)
 
