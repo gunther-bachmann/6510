@@ -6,7 +6,7 @@
  |#
 
 (module+ test
-(require rackunit))
+  (require rackunit))
 
 (provide symbol-append discard-void-syntax-object make-id)
 

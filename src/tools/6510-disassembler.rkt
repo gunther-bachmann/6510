@@ -42,6 +42,7 @@
       (string-join (list byte (code-bytes state (add1 address) (sub1 len))) " ")
       byte))
 
+;; disassemble lines instructions
 (define/c (disassemble state [address (cpu-state-program-counter state)] [lines 1])
   (->* (cpu-state?) (word/c word/c) string?)
   (let-values (((str len) (disassemble-single state address)))
@@ -51,14 +52,17 @@
         (string-join (list formatted-str (disassemble state (+ address len) (sub1 lines))) "\n")
         formatted-str)))
 
+;; hex string of byte at memory address pc points to
 (define/c (byte-at-pc state)
   (-> cpu-state? string?)
   (byte->hex-string (peek-pc state)))
 
+;; hex string of byte at memory address pc+1 points to
 (define/c (byte-at-pc+1 state)
   (-> cpu-state? string?)
   (byte->hex-string (peek-pc+1 state)))
 
+;; hex string of word (lo,hi) at memory address pc+1 points to
 (define/c (word-at-pc+1 state)
   (-> cpu-state? string?)
   (word->hex-string (peek-word-at-pc+1 state)))
@@ -72,6 +76,7 @@
                               (decimal-from-two-complement
                                (peek-pc+1 state))))))
 
+;; disassemble a single instruction at pc (default), returning disassembled string and byte length of command
 (define/c (disassemble-single state [address (cpu-state-program-counter state)])
   (->* (cpu-state?) (word/c) (values string? byte/c))
   (define use-state (with-program-counter state address))
@@ -120,9 +125,9 @@
     [(#x29) (values (format "AND #$~a" (byte-at-pc+1 use-state)) 2)]
     [(#x2a) (values "ROL" 1)]
     ;; #x2b -io ANC imm
-    [(#x2c) (values (format "BIT $~a" (word->hex-string (peek-word-at-pc+1 use-state))) 3)]
-    [(#x2d) (values (format "AND $~a" (word->hex-string (peek-word-at-pc+1 use-state))) 3)]
-    [(#x2e) (values (format "ROL $~a" (word->hex-string (peek-word-at-pc+1 use-state))) 3)]
+    [(#x2c) (values (format "BIT $~a" (word-at-pc+1 use-state)) 3)]
+    [(#x2d) (values (format "AND $~a" (word-at-pc+1 use-state)) 3)]
+    [(#x2e) (values (format "ROL $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x2f -io RIA abs
     [(#x30) (values (format-relative-branch use-state "BMI") 2)]
     [(#x31) (values (format "AND ($~a),y" (byte-at-pc+1 use-state)) 2)]

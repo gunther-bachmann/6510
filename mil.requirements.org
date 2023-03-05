@@ -1,7 +1,10 @@
 #+title: MIL Requirements
 * brainstorming
-  - write minimal lisp compiler in 6502 assembler
-  - write minimal lisp compiler in c
+  - OPTION write minimal lisp compiler in 6502 assembler
+  - OPTION write minimal lisp compiler in c
+  - write minimal lisp compiler in minimal racket that compiles to 6502 assembler
+  - then port this compiler to that the minimal lisp (self hosting)
+  - extend this lisp step by step to fit minimalism while keeping usability
   - design runtime environment for lisp (reuse as much c64 stuff as possible, putting that behind abstractions?)
 * preparations
   - read about other implementations
@@ -29,7 +32,7 @@
   - just tail call recursion (no other type of recursion)
     -> looping instead of recursion
     -> no uncontrolled stack growth
-  - parameters are NOT passed through the stack (except for single parameters)
+  - parameters are NOT passed through the stack (except perhaps for single parameters)
     -> small stack footprint for calls
     -> need parameters frames on the heap
   - use native 6510 data types where possible
@@ -38,6 +41,7 @@
     -> execution speed
     -> restricted call depth [256 bytes / (2 return address + 1-2? parameter frame/actual parameter) == 64 max call depth!]
        maybe this is not strictly necessary
+    -> swap out/in calling stack when reaching the limit (detection?)
   - use c64 basic rom / kernal rom to implement runtime (e.g. floating point arithmetic, string output etc.)
   - use persistent data structures as default <- can this be implemented on top?
 * minimal language constructs / concepts
@@ -51,8 +55,8 @@
     - "string" -> native strings
     - 123      -> integer (incl sign), binary and hex allowed (postfix b h)
     - 1.2      -> floating point
-    - \a       -> character
-    - a-b?     -> anything without space except " \ ( ) { } [ ] ; and space
+    - \#a      -> character
+    - a-b?     -> identifier, anything without space except " \ ( ) { } [ ] ; and space
     - ;        -> comment until end of line
   - special ids
     - nil (identical nil nil) -> f
@@ -93,7 +97,7 @@
     
   - function application
     #+begin_src elisp
-      (apply 'func-name param1 param2 param3)
+      (apply #'func-name param1 param2 param3)
     #+end_src
   - function call (could be derived)
     #+begin_src elisp
@@ -120,7 +124,7 @@
     #+end_src
   - structure construction (could be derived as list)
     #+begin_src elisp
-      (struct value1 value2 ...)
+      (struct-name value1 value2 ...)
     #+end_src
   - structure access (could be derived by automatic access functions on a list, but natively the cpu is able to access at any point, maybe
     array is more accurate to use here)

@@ -1,6 +1,6 @@
 #+title: File Layout
 * executable file
-  tbd
+tbd
 * linkable file
   - [exported symbols + values]
     export table format

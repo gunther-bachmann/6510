@@ -412,7 +412,7 @@
 ;; execute if pc does not point at a 0 byte (brk)
 (define/c (run state)
   (-> cpu-state? cpu-state?)
-  (if  (eq? 0 (peek-pc state))
+  (if  (zero? (peek-pc state))
        state
        (let ((next-state (execute-cpu-step state)))
          (run next-state))))

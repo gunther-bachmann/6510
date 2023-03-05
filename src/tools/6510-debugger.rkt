@@ -293,7 +293,7 @@ EOF
         ((string=? command "c") (debugger--continue d-state))
         ;; so - step over the next instruction
         ((string=? "so" command) (debugger--step-over d-state))
-        (#t (begin (unless (eq? 0 (string-length command))
+        (#t (begin (unless (zero? (string-length command))
                      (displayln "(unknown command, enter '?' to get help)") )
                    d-state))))
 
@@ -331,7 +331,7 @@ EOF
 (define/c (run-until-breakpoint states breakpoints)
   (-> (listof cpu-state?) list? (values any/c (listof cpu-state?)))
   (let ((breakpoint (breakpoint-hits (car states) breakpoints)))
-    (if (or breakpoint (eq? 0 (peek-pc (car states))))
+    (if (or breakpoint (zero? (peek-pc (car states))))
         (begin
           (values breakpoint states))
         (begin

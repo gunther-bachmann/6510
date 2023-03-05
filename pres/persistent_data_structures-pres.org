@@ -32,21 +32,21 @@
   - example libraries for programming languages
 * uses of persistent data structures (immutable)
 * persistent data structure libraries
-  | Python                 | https://github.com/halgari/clojure-py                                                       |
-  | -                      | https://github.com/tobgu/pyrsistent                                                         |
-  | Haskell's HAMT library | http://hackage.haskell.org/package/unordered-containers                                     |
-  | Java                   | https://code.google.com/p/pcollections/                                                     |
-  | C++                     | https://github.com/arximboldi/immer                                                         |
-  | C#                     | http://www.itu.dk/research/c5/                                                              |
-  | -                      | https://github.com/6gales/persistent-data-structure                                         |
-  | JavaScript             | https://github.com/isaacbw/immutable-collections/                                           |
-  | -                      | https://github.com/swannodette/mori                                                         |
-  | Racket                 | pvector                                                                                    |
-  | Kotlin                 | https://github.com/Kotlin/kotlinx.collections.immutable                                     |
-  | Clojure                | http://clojure.org/data_structures                                                          |
+  | Python                 | https://github.com/halgari/clojure-py                                                  |
+  | -                      | https://github.com/tobgu/pyrsistent                                                    |
+  | Haskell's HAMT library | http://hackage.haskell.org/package/unordered-containers                                |
+  | Java                   | https://code.google.com/p/pcollections/                                                |
+  | C++                    | https://github.com/arximboldi/immer                                                    |
+  | C#                     | http://www.itu.dk/research/c5/                                                         |
+  | -                      | https://github.com/6gales/persistent-data-structure                                    |
+  | JavaScript             | https://github.com/isaacbw/immutable-collections/                                      |
+  | -                      | https://github.com/swannodette/mori                                                    |
+  | Racket                 | pvector                                                                                |
+  | Kotlin                 | https://github.com/Kotlin/kotlinx.collections.immutable                                |
+  | Clojure                | http://clojure.org/data_structures                                                     |
   | Scala                  | http://docs.scala-lang.org/overviews/collections/concrete-immutable-collection-classes.html |
-  | Ruby                   | https://github.com/hamstergem/hamster                                                       |
-  | Java                   | http://pcollections.org/                                                                    |
+  | Ruby                   | https://github.com/hamstergem/hamster                                                  |
+  | Java                   | http://pcollections.org/                                                               |
 
 * references
   - https://cstheory.stackexchange.com/questions/1539/whats-new-in-purely-functional-data-structures-since-okasaki
@@ -59,4 +59,5 @@
   - http://www.allitebooks.com/clojure-data-structures-and-algorithms-cookbook/
   - http://fox.ucw.cz/papers/thesis/thesis.pdf
   - https://coderprog.com/advanced-functional-data-structures-algorithms/
-  - [[pdfview:/home/pe/Downloads/vdoc.pub_handbook-of-data-structures-and-applications.pdf::624++0.00][20220813 19:59 - vdoc.pub_handbook-of-data-structures-and-applications : 624]]
+  - [[pdfview:handbook-of-data-structures-and-applications.pdf::624]]
+  - [[pdfview:persistent-data-structures.pdf::1]]
