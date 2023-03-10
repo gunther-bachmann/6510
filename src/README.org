@@ -1,0 +1,13 @@
+#+title: README
+/6510 assembler and tools to write, debug, execute assembler targeted at the c64/
+
+The assembly is transformed in several steps
+1. Translate orignal 6510 assembler using a parser to scheme syntax (see file:asm)
+2. Macro expand scheme syntax to ast command structure (see file:scheme-asm)
+3. Resolve ast commands that contain references that cannot be resolved right away  (INCOMPLETE)
+   1. resolve decision based labels (local labels and required from other modules)
+   2. resolve local labels
+   3. resolve local constants
+   4. resolve lables required from other modules (files)
+   5. resolve constants required from other modules (files)
+4. Write bytes (INCOMPLETE)

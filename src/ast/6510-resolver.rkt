@@ -19,13 +19,15 @@
 ;; is this instruction introducing a label referencing a byte value (e.g. constant def)?
 (define/c (byte-label-cmd? instruction)
   (-> ast-command? boolean?)
-  (ast-const-byte-cmd? instruction))
+  (or (ast-const-byte-cmd? instruction)
+     (ast-require-byte-cmd? instruction)))
 
 ;; is this instruction introducing a label referencing a word value (e.g. constant or code label)?
 (define/c (word-label-cmd? instruction)
   (-> ast-command? boolean?)
   (or (ast-const-word-cmd? instruction)
-     (ast-label-def-cmd? instruction)))
+     (ast-label-def-cmd? instruction)
+     (ast-require-word-cmd? instruction)))
 
 (module+ test #| is-word-label? |#
   (check-true (word-label-cmd? (ast-label-def-cmd "some")))
@@ -65,6 +67,8 @@
      (or/c ast-const-word-cmd?
            ast-const-byte-cmd?
            ast-label-def-cmd?
+           ast-require-byte-cmd?
+           ast-require-word-cmd?
            #f))
   (findf (λ (instruction)
            (define label-str
@@ -73,7 +77,11 @@
                      [(ast-const-word-cmd? instruction)
                       (ast-const-word-cmd-label instruction)]
                      [(ast-const-byte-cmd? instruction)
-                      (ast-const-byte-cmd-label instruction)]))
+                      (ast-const-byte-cmd-label instruction)]
+                     [(ast-require-word-cmd? instruction)
+                      (ast-require-word-cmd-label instruction)]
+                     [(ast-require-byte-cmd? instruction)
+                      (ast-require-byte-cmd-label instruction)]))
            (equal? label label-str))
          program))
 
@@ -88,7 +96,9 @@
   (-> ast-command? boolean?)
   (or (ast-label-def-cmd? instruction)
      (ast-const-word-cmd? instruction)
-     (ast-const-byte-cmd? instruction)))
+     (ast-const-byte-cmd? instruction)
+     (ast-require-word-cmd? instruction)
+     (ast-require-byte-cmd? instruction)))
 
 (module+ test #| is-label-instruction? |#
   (check-not-false (label-instruction? (ast-label-def-cmd "some")))
@@ -132,6 +142,16 @@
                  (list (ast-const-byte-cmd "hello" #x20))
                  (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
                        (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
+                (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte)))
+  (check-equal? (matching-decide-option
+                 (list (ast-require-word-cmd "hello"))
+                 (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
+                (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello")))
+  (check-equal? (matching-decide-option
+                 (list (ast-require-byte-cmd "hello"))
+                 (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
                 (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))))
 
 ;; given program with all decisions resolved that can be resolved with the given list of labels
@@ -151,6 +171,20 @@
                (default-result-f)]))))
 
 (module+ test #| ->resolved-decisions |#
+  (check-equal? (->resolved-decisions
+                 (list (ast-require-word-cmd "hello"))
+                 (list
+                  (ast-decide-cmd
+                   (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                         (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))))
+                (list (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))
+  (check-equal? (->resolved-decisions
+                 (list (ast-require-byte-cmd "hello"))
+                 (list
+                  (ast-decide-cmd
+                   (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))
+                         (ast-unresolved-opcode-cmd '(174) (ast-resolve-word-scmd "hello"))))))
+                (list (ast-unresolved-opcode-cmd '(166) (ast-resolve-byte-scmd "hello" 'low-byte))))
   (check-equal? (->resolved-decisions
                  (list (ast-label-def-cmd "hello"))
                  (list

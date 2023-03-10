@@ -618,7 +618,10 @@
       (LDA !char)
       (ADC !$01)
       (JSR $FFD2)
-      (BRK)))
+      (BRK)
+      (LDA "aout")
+      (LDA ">aout")
+      (LDA "char")))
 
   (define providing-program-p1 (->resolved-decisions (label-instructions providing-program) providing-program))
   (define providing-program-p2 (->resolve-labels 0 (label-string-offsets 0 providing-program-p1) providing-program-p1 '()))
