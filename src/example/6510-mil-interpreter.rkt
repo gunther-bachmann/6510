@@ -3,7 +3,7 @@
 
 ; this file is (some day) intended to interpret minimal lisp programs on the 6510
 
-        *=$C000        ; origin
+        *=$0810        ; origin
 
 ; in zero page $80+x $90+x is stored high byte, low byte of the function
 ; in zero page $a0, $a1 is the lisp program counter

@@ -1,0 +1,2 @@
+#+title: README
+/definition of all 6510 operations, their addressing modes and their byte code/

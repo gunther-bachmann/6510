@@ -1,0 +1,19 @@
+#+title: ASM
+/functions that translate actual 6510 assembler syntax/
+
+Syntax for the assembler is e.g.
+#+begin_src asm
+          LDA #$20
+  some:   BNE some
+#+end_src
+
+* parser
+definition of the actual parse with mega-parsec
+
+* reader
+provide function to interpret shell scripts as asm (see [[file:../example/6510-example.rkt]])
+put the following prefix into your shell script file:
+#+begin_src sh
+  #! /usr/bin/env racket
+  #lang reader "../asm/6510-reader.rkt"
+#+end_src

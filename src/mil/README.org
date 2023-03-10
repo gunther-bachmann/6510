@@ -1,0 +1,107 @@
+#+title: MIL
+/ideas and plans on how and what to implement as minimal lisp/
+
+* minimal lisp with (reduced) racket
+this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
+lisp itself
+** core features of mil
+*** constants
+** driving examples
+*** constant definitions, atoms
+#+begin_src lisp
+  (def letterA #\A)
+  (def stringABC "ABC")
+  (def eightBitNumber #x20)
+  (def sexteenBitNumber #xFFD2)
+  (def floatNumber 1.23e5)
+  (def symbol 'aSymbol)
+  (def emptyList '())
+  (def true #t)
+  (def false #f)
+#+end_src
+*** quote, quasiquote, list
+- '() is shorthand for (list)
+- 'some is shorthand for (quote some)
+- `(,some) is shorthand for (quasiquote (list (unquote some)))
+#+begin_src lisp
+  (list) => '()
+  (list some) => '(some)
+  (quote some) => 'some
+  (quote (list)) => '(list)
+  (quote ()) => '()
+  (quasiquote (list (unqote other))) => `(,other)
+#+end_src
+*** splice operator
+#+begin_src lisp
+  (def aList (list a b c))
+  (def bList (@aList d e f)) => (a b c d e f)
+
+  (def aMap (map a va b vb c vc))
+  (def bMap (map @aMap c oc d vd e ve)) => (map a va b vb c oc d vd e ve)
+
+  (def aArray (array a b c))
+  (def bArray (array @aArray d e f)) => (array a b c d e f)
+
+  (def aStruct (struct idA #:fieldA valueFieldA #:fieldB valueFieldB))
+  (def bStruct (struct idB @aStruct #:fieldC valueFieldC #:fieldD valueFieldD))
+#+end_src
+*** orthogonal concepts
+all defaults to immutable data
+list, map, array and struct can be converted into another.
+list: variable length o(1) to prepend a value (mutable)
+map: variable length o(1) to read by key
+struct: fixed length o(1) to read by key and write by key (mutable)
+array: fixed length o(1) to read by index and write by index (mutable)
+- a struct is a map of fields -> values
+- a struct is a list of fieldId value ...
+- an array is a list (of fixed len)
+- a map is a list of key value ...
+*** function definition
+only tailcall recursion allowed (no check, yet)
+#+begin_src lisp
+  (def fn (lambda ([param1 typeA] [param2 typeB]) (fn param1 param2)))
+#+end_src
+*** let, let*
+#+begin_src lisp
+  (let ((nameA valueA)
+        (nameB valueB))
+    (useNameA nameA nameB))
+#+end_src
+#+begin_src lisp
+  (let* ((nameA valueA)
+         (nameB (fn valueA)))
+    (fn nameA nameB))
+#+end_src
+*** if [when, unless]
+#+begin_src lisp
+  (if booleanExpr
+      (fnA)
+      (fnB))
+#+end_src
+*** mutable value (ideas)
+#+begin_src lisp
+  (mutable-byte #x00 byteId)
+  (mutate:= byteId #x20)
+  (mitable-word #xc000 wordId)
+  (mutate:= wordId #xFFD2)
+#+end_src
+*** types
+#+begin_src lisp
+  (deftype id (sumtype a b c)) ;; a x b x c
+  (deftype id (uniontype a b c)) ;; a | b | c
+  void ;;
+  any  ;; is subtype of all types
+  none ;; is supertype of all types
+#+end_src
+*** structures
+#+begin_src lisp
+  (defstruct id
+    field1
+    field2)
+#+end_src
+*** lists, arrays, maps
+#+begin_src lisp
+  (def aList (a b c))
+  (def aHash {a: valueA b: valueB c: valueC})
+  (def anArray [a b c d])
+#+end_src

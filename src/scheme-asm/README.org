@@ -1,0 +1,14 @@
+#+title: README
+/utility functions to define scheme-asm functions/
+
+Scheme asm is the assembler code using scheme syntax.
+e.g.
+#+begin_src racket
+  (LDA "#$20")
+  (label "some")
+  (BNE "some")
+#+end_src
+
+This syntax is used in [[file:../example/6510-example-rs.rkt]]
+
+
