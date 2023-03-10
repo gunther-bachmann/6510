@@ -101,17 +101,20 @@
            (define program-p2 (->resolve-labels org (label-string-offsets org program-p1) program-p1 '()))
            (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
            (define raw-bytes (resolved-program->bytes program-p3))
-           (displayln 6510-folder)
-           (displayln "(have a look at raw-program, program, program-p1, program-p2, program-p3 or raw-bytes)")
            (create-prg raw-bytes org prg-name)
            (create-image-with-program raw-bytes org prg-name d64-name (path->string (path-replace-extension f-name "")))
-           (displayln (format "execute the program in vice via (run-emulator \"~a\")" d64-name))
-           (displayln (format "execute interpreter via (run-interpreter ~a raw-bytes)" org))
-           (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes)" org))
 
-           ;; (run-emulator "test.d64")
-           ;; (run-interpreter org raw-bytes)
-           ;; (run-debugger org raw-bytes)
+           ;; run when called from racket (C-c C-c)
+           (when (not (getenv "INSIDE_EMACS"))
+             (displayln "(have a look at raw-program, program, program-p1, program-p2, program-p3 or raw-bytes)")
+             (displayln (format "execute the program in vice via (run-emulator \"~a\")" d64-name))
+             (displayln (format "execute interpreter via (run-interpreter ~a raw-bytes)" org))
+             (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes)" org)))
+
+           ;; run when called from cli
+           (module+ main
+             ;; (run-emulator "test.d64")
+             (run-interpreter org raw-bytes)
+             ;; (run-debugger org raw-bytes)
+             )
            )))))
-
-

@@ -22,11 +22,11 @@ You may execute the example program directly:
 ```
 This will
 1. translate the given assembler program into the 6510 codes
-2. run a debugger on that code (executing `r` will print 'ABC' five times)
-3. and write a `test.d64` disk image, usable by vice (c64 emulator)
-(take a look at the commands actually executed by `6510-reader.rkt`)
+2. run a debugger on that code (executing `r` will print some to the console)
+3. and write a `6510-example.d64` disk image and a `6510-example.prg`, usable by vice (c64 emulator)
+(take a look at the commands actually executed by `src/asm/6510-reader.rkt`)
 
-Another way to run the example is to open `6510-example.rkt` in emacs and start racket via `C-c C-c`.
+Another way to run the example is to open `src/example/6510-example.rkt` in emacs and start racket via `C-c C-c`.
 It will open the debugger which allows for close inspection of the assembled program (hit `?` then `enter` to get help)
 After the program is run you can in addition do one of the following
 - print out a prettified internal representation of the compiled program
