@@ -123,8 +123,15 @@
 (define data (6510-load (initialize-cpu) org raw-bytes))
 (define executable-program (with-program-counter data org))
 
-;; (displayln "program execution:")
-;; (run-debugger org raw-bytes)
+(when (not (getenv "INSIDE_EMACS"))
+  (displayln "examine variables e.g.\n  program\n  program-p1\n  program-p2\n  program-p3\n")
+  (displayln "execute program\n  (run executable-program)")
+  (displayln "debug program\n  (run-debugger org raw-bytes)"))
+
 ;; (print-state (run executable-program))
 ;; (let ([_ (run executable-program)])
 ;;   (void))
+
+(module+ main
+  (let ([_ (run executable-program)])
+    (void)))

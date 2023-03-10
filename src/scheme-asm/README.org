@@ -4,11 +4,14 @@
 Scheme asm is the assembler code using scheme syntax.
 e.g.
 #+begin_src racket
-  (LDA "#$20")
-  (label "some")
-  (BNE "some")
+  (LDA "!$20")    ;; LDA #$20
+  (label "some")  ;; some:
+  (BNE "some")    ;; BNE some
 #+end_src
 
 This syntax is used in [[file:../example/6510-example-rs.rkt]]
+
+The assembler commands in scheme syntax are actually syntax macros that are rewritten to ast commands as defined in
+[[file:../ast/6510-command.rkt]].
 
 

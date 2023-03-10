@@ -2,3 +2,31 @@
 /tooling to work with 6510 / c64 assembler code/
 
 including a debugger, an interpreter and functions to write vice compatible executables
+
+* ideas
+** c64 lisp editor
+- is written in mil! => extend mil such that this editor can be written
+  - including efficient string manipulation (rope algorithms)
+  - efficient mapping source-code (text) -> screen
+  - efficient search and s/r algorithms
+- use 40 character display to the best
+  - combine the following
+    ((, )), (), )( :: can be combined into one character
+    single parenthesis (, are right aligned
+    single parenthesis ), are left aligned
+    ) followed by space can be combined to left aligned )
+    space followed by ( can be combined to right aligned (
+  - use short names (e.g. ~def~ for definitions)
+  - allow for contextual short names
+    import with rename
+    contextual prefixes (with-prefix ...) or (w/p ...)
+  - (just) vertical splitting of buffers (maybe even graphics), use /raster zeilen interrupt/ to switch
+  - use sprites for contextual overlay or emphasis in text buffer
+    - e.g. use colored sprite to mark matching braces
+  - use sprite for cursor bar (to allow inter parenthesis positioning)
+- make it emacs lispy
+- make it the only interface to the system
+- output goes into other buffer
+- allow for quick buffer switches
+- keep buffers in memory pages (extension)
+- each displayed line holds a pointer to the actual textline hold in memory

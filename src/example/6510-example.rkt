@@ -6,7 +6,7 @@
 
         *=$0810        ; origin (basic start, to make loading and executing easier)
 
-        ; currently not require/provide can be parsed or resolved here
+        ; currently require/provide cannot be parsed or resolved here
 
 ROM-COUT  = $ffd2
 REPEAT    = 5
