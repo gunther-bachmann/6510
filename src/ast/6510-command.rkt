@@ -1,7 +1,7 @@
 #lang racket
 #|
 
- provide all structures needed to define ast-commnds
+ provide all structures needed to define ast-commands
 
 |#
 

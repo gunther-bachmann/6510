@@ -6,7 +6,7 @@ this is a minimal lisp implementation that makes use of a reduced set of racket 
 lisp itself
 ** core features of mil
 *** constants
-** driving examples
+** driving samples
 *** constant definitions, atoms
 #+begin_src lisp
   (def letterA #\A)
@@ -105,3 +105,47 @@ only tailcall recursion allowed (no check, yet)
   (def aHash {a: valueA b: valueB c: valueC})
   (def anArray [a b c d])
 #+end_src
+** plan
+- define scheme-syntax for mil (concepts), e.g. use ~mil-~​prefix ast
+  - overview
+    #+begin_src lisp
+      (mil-module 
+       modname
+       (mil-import ...)
+       (mil-export ...)
+          (mil-def cname type "documentation for const" const-expression)
+   
+       (mil-def
+        (list fname param param2)
+        (mil-> type1 type2 result-type)
+        "documentation for fname"
+        some-expression))
+    #+end_src
+  - byte arithmetic
+    #+begin_src lisp
+      ;; integer arithmetic
+      (mil-+ op1 op2 ... op-m)
+
+      ;; type signature
+      (-> (mil-listof mil-byte) mil-byte)
+
+      ;; mil--
+    #+end_src
+  - binary bit operators
+    #+begin_src lisp
+      ;; mil-bxor
+      ;; mil-bor
+      ;; mil-band
+
+    #+end_src
+  - logical operators
+    #+begin_src lisp
+      ;; logical operators
+      ;; mil-lor
+      ;; mil-land
+      ;; mil-lxor
+      ;; mil-lnot
+    #+end_src
+- define interpreter for mil scheme-syntax ast
+- define parser for actual syntax
+- define translation: parsed -> mil ast
