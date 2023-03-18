@@ -22,6 +22,9 @@
          (struct-out mil-cell)
          (struct-out mil-if)
          (struct-out mil-let)
+         (struct-out mil-progn)
+         (struct-out mil-and)
+         (struct-out mil-or)
          (struct-out mil-let-binding)
          (struct-out mil-typed-expression))
 
@@ -59,6 +62,21 @@
 
 (struct mil-list mil-expression
   (elements)
+  #:transparent
+  #:guard (struct-guard/c (listof mil-expression?)))
+
+(struct mil-progn mil-list
+  ()
+  #:transparent
+  #:guard (struct-guard/c (listof mil-expression?)))
+
+(struct mil-and mil-list
+  ()
+  #:transparent
+  #:guard (struct-guard/c (listof mil-expression?)))
+
+(struct mil-or mil-list
+  ()
   #:transparent
   #:guard (struct-guard/c (listof mil-expression?)))
 
@@ -115,10 +133,10 @@
   #:transparent
   #:guard (struct-guard/c mil-typed-expression? symbol?))
 
-(struct mil-parameter mil-typed-expression
+(struct mil-parameter
   (id)
   #:transparent
-  #:guard (struct-guard/c mil-typed-expression? symbol?))
+  #:guard (struct-guard/c symbol?))
 
 (struct mil-definition mil-expression
   (id
