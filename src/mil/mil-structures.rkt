@@ -13,10 +13,16 @@
          (struct-out mil-uint8)
          (struct-out mil-string)
          (struct-out mil-char)
+         (struct-out mil-bool)
          (struct-out mil-definition)
          (struct-out mil-parameter)
          (struct-out mil-module)
          (struct-out mil-void)
+         (struct-out mil-quote)
+         (struct-out mil-cell)
+         (struct-out mil-if)
+         (struct-out mil-let)
+         (struct-out mil-let-binding)
          (struct-out mil-typed-expression))
 
 (struct mil-expression
@@ -34,6 +40,22 @@
 (struct mil-void mil-atomic-value
   ()
   #:transparent)
+
+(struct mil-bool mil-atomic-value
+  (value)
+  #:transparent
+  #:guard (struct-guard/c boolean?))
+
+(struct mil-quote mil-expression
+  (quoted)
+  #:transparent
+  #:guard (struct-guard/c mil-expression?))
+
+(struct mil-cell mil-expression
+  (head
+   tail)
+  #:transparent
+  #:guard (struct-guard/c mil-expression? mil-expression?))
 
 (struct mil-list mil-expression
   (elements)
