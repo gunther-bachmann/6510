@@ -13,13 +13,13 @@
   (mil-definition
    'times2 (list (mil-parameter 'a))
    "returns 2 * a"
-   (mil-list (list (mil-symbol '+) (mil-symbol 'a) (mil-symbol 'a)))))
+   (mil-l (mil-symbol '+) (mil-symbol 'a) (mil-symbol 'a))))
 
 (define mil-definition-age-comment
   (mil-definition
    'age-comment (list (mil-parameter 'age))
    "return a comment about your age"
-   (mil-if (mil-list (list (mil-symbol '>) (mil-symbol 'age) (mil-uint8 17)))
+   (mil-if (mil-l (mil-symbol '>) (mil-symbol 'age) (mil-uint8 17))
            (mil-string "erwachsen")
            (mil-string "kind"))))
 
@@ -34,25 +34,25 @@
               (list)))
 
 (module+ main
-  (interpret (mil-list (list (mil-symbol 'display)
-                               (mil-string "some ~a\n")
-                               (mil-uint8 #x80)))
+  (interpret (mil-l (mil-symbol 'display)
+                    (mil-string "some ~a\n")
+                    (mil-uint8 #x80))
                (list))
 
   (interpret
-   (mil-list (list (mil-symbol '+)
-                   (mil-uint8 2)
-                   (mil-list (list (mil-symbol 'funx80)))))
+   (mil-l (mil-symbol '+)
+          (mil-uint8 2)
+          (mil-l (mil-symbol 'funx80)))
    (list (module-ctx mil-module-a)))
 
   (interpret
-   (mil-list (list (mil-symbol 'times2) (mil-uint8 #x10)))
+   (mil-l (mil-symbol 'times2) (mil-uint8 #x10))
    (list (module-ctx mil-module-a)))
 
   (interpret
-   (mil-list (list (mil-symbol 'age-comment) (mil-uint8 #x10)))
+   (mil-l (mil-symbol 'age-comment) (mil-uint8 #x10))
    (list (module-ctx mil-module-a)))
 
   (interpret
-   (mil-list (list (mil-symbol 'age-comment) (mil-uint8 #x20)))
+   (mil-l (mil-symbol 'age-comment) (mil-uint8 #x20))
    (list (module-ctx mil-module-a))))

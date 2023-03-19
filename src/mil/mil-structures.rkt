@@ -8,6 +8,7 @@
 (provide (struct-out mil-expression)
          (struct-out mil-symbol)
          (struct-out mil-list)
+         mil-l
          (struct-out mil-value)
          (struct-out mil-atomic-value)
          (struct-out mil-uint8)
@@ -64,6 +65,9 @@
   (elements)
   #:transparent
   #:guard (struct-guard/c (listof mil-expression?)))
+
+(define (mil-l . params)
+  (mil-list params))
 
 (struct mil-progn mil-list
   ()
