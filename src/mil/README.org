@@ -106,46 +106,111 @@ only tailcall recursion allowed (no check, yet)
   (def anArray [a b c d])
 #+end_src
 ** plan
-- define scheme-syntax for mil (concepts), e.g. use ~mil-~​prefix ast
+- [-] define scheme-syntax for mil (concepts), e.g. use ~mil-~​prefix ast
   - overview
-    #+begin_src lisp
-      (mil-module 
+    #+begin_src racket
+      (mil-module
        modname
        (mil-import ...)
        (mil-export ...)
-          (mil-def cname type "documentation for const" const-expression)
-   
-       (mil-def
-        (list fname param param2)
-        (mil-> type1 type2 result-type)
-        "documentation for fname"
-        some-expression))
+
+       (mil-definition
+        'age-comment (list (mil-parameter 'age))
+        "return a comment about your age"
+        (mil-if (mil-l (mil-symbol '>) (mil-symbol 'age) (mil-uint8 17))
+                (mil-string "erwachsen")
+                (mil-string "kind"))))
     #+end_src
   - byte arithmetic
     #+begin_src lisp
       ;; integer arithmetic
       (mil-+ op1 op2 ... op-m)
 
-      ;; type signature
-      (-> (mil-listof mil-byte) mil-byte)
-
       ;; mil--
-    #+end_src
-  - binary bit operators
-    #+begin_src lisp
-      ;; mil-bxor
-      ;; mil-bor
-      ;; mil-band
-
     #+end_src
   - logical operators
     #+begin_src lisp
-      ;; logical operators
-      ;; mil-lor
-      ;; mil-land
-      ;; mil-lxor
-      ;; mil-lnot
+      ;; mil-or
+      ;; mil-and
+      ;; not
     #+end_src
-- define interpreter for mil scheme-syntax ast
-- define parser for actual syntax
-- define translation: parsed -> mil ast
+  - binary bit operators
+    #+begin_src lisp
+    #+end_src
+- [X] define interpreter for mil scheme-syntax ast
+- [ ] define compiler mil scheme ast -> c64 assembler
+  - expression stack?
+  - implement most simple function
+    function no parameter returning atomic value
+  - function call = expression reduction
+  - variable / function - lookup / environment
+  - memory layout for normal forms (list, cons + atomic values),
+    special forms are translated into code
+    table of strings (ptr - >str)
+    table of symbols (ptr/id -> symbol string)
+    function table (ptr/id -> function code)
+
+- [ ] define parser for actual syntax
+- [ ] define translation: parsed -> mil ast
+** mil-ast -> c64
+*** simple function
+#+begin_src racket
+  (mil-definition
+   'const-a
+   '()
+   "constant a = 42"
+   (mil-uint8 42))
+
+  (mil-l (mil-symbol 'display) (mil-symbol 'const-a)) ;; print const-a
+#+end_src
+#+begin_src asm
+                  ; put uint8 42 on expression stack, register A destroyed, probably some flags, too
+  const-a:        lda #42
+                  jmp PUT_MIL_CONST_ON_EXPR_STACK
+
+  main:           jsr const-a ; eager eval of parameters
+                  jsr DISPLAY ; runtime library to display last object(s) on the expression stack
+#+end_src
+*** value (expression) stack
+- tos = ptr to top element of the stack
+- tos = atomic value or string
+- data representation [not optimized, simple]
+  - e.g.
+    - bool/char/byte value: [type-byte][value] (in sum 16 bits)
+    - string value: [type-string][string-id] (in sum 16 bits), id into string table
+    - cons-cell(list): [type-cons-cell][a][b]  (in sum 8 bit + len(a) + len(b))
+      - a, b can be a bool/char/byte/string value or a cell-ptr
+      - cell-ptr: [type-cell-pointer][low][high] (in sum 24 bits, with 16 bit ptr to next cell)
+      - nil-cell-ptr: [type-nil-cell-pointer] (in sum 8 bit)
+- value list construction (e.g. '(a b c)):
+  - push nil-cell-ptr  on the expression stack [expression stack: [nil-cell-ptr]]
+  - push value c on expression stack [expression stack: [c][nil-cell-ptr]]
+  - call cons (replacing tos and tos-1 with cell-ptr to cons-cell [c][nil-cell-ptr])
+  - push value b on expression stack
+  - call cons (replacing tos and tos-1 with cell-ptr to cons-cell [b][cell-ptr, pointing to [c][nil-cell-ptr]] )
+  - push value a on expression stack
+  - call cons  (replacing tos and tos-1 with cell-ptr to cons-cell [a][cell-ptr, pointing to [b][cell-ptr, pointing to [c][nil-cell-ptr]]])
+*** runtime methods for value stack
+- push atomic value on the stack
+- push nil-cell-ptr
+- cons tos with tos-1
+- (store tos-loc (for cleanup after function-call))?
+
+*** memory layout for value stack
+stack of pointers (e.g. just 256 bytes = 128 values)
+| cell0     | cell1     | ... | cell n-1   | cell n   |
+|-----------+-----------+-----+------------+----------|
+| ptr->tos0 | ptr->tos1 | ... | ptr->tos-1 | ptr->tos |
+
+heap of values pointed to by value stack (pointers)
+| ptr        | *value stack heap* | size                    | layout                                                              |
+|------------+------------------+-------------------------+---------------------------------------------------------------------|
+| ptr->tos   | (list a b c)     | 4 +len(a)+len(b)+len(c) | [type-cons-cell[a][type-cons-cell[b][type cons-cell[c][nil-cell]]]] |
+| ptr->tos-1 | byte #$42        | 2                       | [type-byte-const][$42]                                              |
+| ...        |                  |                         |                                                                     |
+
+- pop on the stack means:
+  - cell-n is dropped,
+  - data ptr->tos points to is free again
+  - new value stack allocation starts at ptr->tos
+  => for allocation, the next free value stack heap location needs to be kept somewhere (or can be calculated)

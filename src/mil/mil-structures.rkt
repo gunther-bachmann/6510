@@ -3,6 +3,48 @@
 
  provide all structures needed to define mil-commands
 
+  +------------+   +-------+   +--------------+    +-------+
+  | expression |-+-| value |---| atomic-value |-+--| uint8 |                    ; unsigned int 8 bits width (byte)
+  +------------+ | +-------+   +--------------+ |  +-------+
+                 |                              |  +--------+
+                 |                              +--| string |                   ; string of characters
+                 |                              |  +--------+
+                 |                              |  +------+
+                 |                              +--| char |                     ; character (byte)
+                 |                              |  +------+
+                 |                              |  +------+
+                 |                              +--| bool |                     ; boolean (true or false)
+                 |                                 +------+
+                 | +-------+
+                 +-| quote |                                                    ; quoted expression
+                 | +-------+
+                 | +------+
+                 +-| cell |                                                     ; cons cell
+                 | +------+
+                 | +------+   +-------+
+                 +-| list |-+-| progn |                                         ; list of expressions, only last one is result 
+                 | +------+ | +-------+
+                 |          | +-----+
+                 |          +-| and |                                           ; short circuit and
+                 |          | +-----+
+                 |          | +----+
+                 |          +-| or |                                            ; short circuit or
+                 |            +----+
+                 | +--------+
+                 +-| symbol |                                                   ; symbol
+                 | +--------+
+                 | +-----+   +-------------+
+                 +-| let |o--| let-binding |                                    ; let with bindings
+                 | +-----+   +-------------+
+                 | +----+
+                 +-| if |                                                       ; short circuit if
+                 | +----+
+                 | +------------+
+                 +-| definition |                                               ; function definition
+                 | +------------+
+                 | +--------+
+                 +-| module |                                                   ; module definition
+                   +--------+
 |#
 
 (provide (struct-out mil-expression)
@@ -163,7 +205,7 @@
 
 (struct mil-module mil-expression
   (id
-   required 
+   required
    provided
    definitions
    sub-modules
@@ -174,5 +216,5 @@
                           (listof mil-provide?)
                           (listof mil-definition?)
                           (listof mil-expression?) ;; mil-sub-module
-                          (listof mil-expression?) ;; 
+                          (listof mil-expression?) ;;
                           ))
