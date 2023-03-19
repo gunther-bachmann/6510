@@ -214,3 +214,49 @@ heap of values pointed to by value stack (pointers)
   - data ptr->tos points to is free again
   - new value stack allocation starts at ptr->tos
   => for allocation, the next free value stack heap location needs to be kept somewhere (or can be calculated)
+*** c64 program layout
+| address    | function                                  |
+|------------+-------------------------------------------|
+| E000..FFFF | Kernal                                    |
+| D000..DFFF | unused, char rom, etc.                    |
+| C200..CFFF | Strings (currently not garbage collected) |
+| C000..C1FF | String ID -> ptr to Strings               |
+| A000..BFFF | Basic                                     |
+| 9F00..9FFF | value stack (growing down)                |
+| 9EFF       | value heap (growing down)                 |
+| 3000       | mil program start                         |
+| 2000..2FFF | mil runtime (size not known yet)          |
+| 0200..1FFF | basic area (not used)                     |
+| 0100..01FF | 6510 call stack                           |
+| 0000..00FF | zero page                                 |
+
+*** hello world
+#+begin_src racket
+  (module
+      'some
+      ;; no provide no require
+      (mil-definition 'hello-world
+                      '()
+                      "print hello world"
+                      (mil-l (mil-symbol 'display) (mil-string "Hello World!")))
+    (mil-l (mil-symbol 'hello-world)))
+
+  ;; which corresponds to
+
+  (define (hello-world)
+    (display "Hello World!"))
+
+  (hello-world)
+#+end_src
+should compile to
+#+begin_src asm
+                  jmp HELLO_WORLD
+
+  HELLO_WORLD:    lda #STRING-ID_HELLO_WORLD
+                  jsr MILRT_push_string
+                  jmp MILRT_display
+#+end_src
+String table should hold one entry: "Hello World!" with ID 1 (STRING-ID_HELLO_WORLD
+Symbol Table is not necessary yet (maybe if 'eval' is implemented)
+
+
