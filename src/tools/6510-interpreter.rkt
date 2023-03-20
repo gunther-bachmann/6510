@@ -2021,7 +2021,7 @@
 
 (define/c (interpret-modify-y-index state delta)
   (-> cpu-state? exact-integer? cpu-state?)
-  (let ((value (byte (fx+ delta (cpu-state-y-index)))))
+  (let ((value (byte (fx+ delta (cpu-state-y-index state)))))
     (struct-copy cpu-state state
                  [y-index         value]
                  [flags           (set-flags-zn state (zero? value) (bit7? value))]
@@ -2243,7 +2243,7 @@
     [(#x8e) (interpret-stx-mem state poke-abs 3)]
     ;; #x8f -io SAX abs
     [(#x90) (interpret-branch-rel state not-carry-flag?)]
-    [(#x91) (interpret-sta-mem state peek-izy 2)]
+    [(#x91) (interpret-sta-mem state poke-izy 2)]
     ;; #x92 -io KIL
     ;; #x93 -io AHX izy
     [(#x94) (interpret-sty-mem state poke-zpx 2)]
