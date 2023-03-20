@@ -1,6 +1,15 @@
 #+title: MIL
 /ideas and plans on how and what to implement as minimal lisp/
 
+- references
+  - http://6502.org/source/
+  - https://github.com/davidgiven/cpm65
+  - https://beebwiki.mdfs.net/Number_output_in_6502_machine_code#Print_8-bit_decimal
+  - https://www.pagetable.com/?p=793
+  - http://sta.c64.org/cbm64krnfunc.html
+  - https://sta.c64.org/cbm64mem.html
+  - http://www.ffd2.com/fridge/docs/c64-diss.html
+  - https://www.c64-wiki.com/wiki/BASIC-ROM
 * minimal lisp with (reduced) racket
 this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
 lisp itself
@@ -259,4 +268,17 @@ should compile to
 String table should hold one entry: "Hello World!" with ID 1 (STRING-ID_HELLO_WORLD
 Symbol Table is not necessary yet (maybe if 'eval' is implemented)
 
-
+* additional routines
+** times 10
+#+begin_src asm
+  mul10:  PHA; save an in the stack
+          ASL; multiply a by 8 shifting 3 times to the left
+          ASL
+          ASL
+          STA temp; save an*8 in temp
+          PLA; recover old A value from the stack
+          ASL; multiply by 2 shiftings once to the left
+          CLC ; clear carry
+          ADC temp; add an*8 to a*2 to get a*10
+          RTS ; return
+#+end_src

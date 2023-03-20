@@ -20,9 +20,12 @@ this file is an example of how the native compilation of a mil could look like
 
 (define program
   (list
-   (byte-const "STRING_ID_HELLO-WORLD" 1)
+   (byte-const "STRING_ID_HELLO-WORLD"  1)
+   (byte-const "STRING_ID_FORMAT_ERROR" 2)
 
    (byte-const "MILRT_STRING_TYPE" 1)
+   (byte-const "MILRT_UINT8_TYPE" 2)
+
    (word-const "MILRT_VAL_HEAP" #x9eff)
    (byte-const "MILRT_ZP_VAL_HEAP_PTR" #x80)
    (byte-const "MILRT_ZP_VAL_HEAP_PTRP1" #x81)
@@ -33,18 +36,38 @@ this file is an example of how the native compilation of a mil could look like
                                      (STA "MILRT_ZP_VAL_HEAP_PTR")
                                      (LDA "!>MILRT_VAL_HEAP")
                                      (STA "MILRT_ZP_VAL_HEAP_PTRP1")
+
+                                     ; copy strings
+                                     ; copy STRING-TABLE-ID2PTR -> C000..C1FF
+                                     ; copy STRING-TABLE        -> C200..CFFF
                                      (JMP "MAIN")
 
+                                     ;; push the STRING_ID in A onto the value stack
+                                     ;; A = MILRT_STRING_TYPE, Y = 0
    (label "MILRT_PUSH_STRING")       (LDY "!2")
                                      (JSR "MILRT_DEC_VAL_HEAP_BY_Y")
                                      (LDY "!2")
                                      (STA ("MILRT_ZP_VAL_HEAP_PTR"),y)
                                      (DEY)
                                      (LDA "!MILRT_STRING_TYPE")
-                                     (STA ("MILRT_ZP_VAL_HEAP_PTRP1"),y)
+                                     (STA ("MILRT_ZP_VAL_HEAP_PTR"),y)
                                      (DEY) ;; return w/ Y=0
                                      (RTS)
 
+                                     ;; push the STRING_ID in A onto the value stack
+                                     ;; A = MILRT_STRING_TYPE, Y = 0
+   (label "MILRT_PUSH_UINT8")        (LDY "!2")
+                                     (JSR "MILRT_DEC_VAL_HEAP_BY_Y")
+                                     (LDY "!2")
+                                     (STA ("MILRT_ZP_VAL_HEAP_PTR"),y)
+                                     (DEY)
+                                     (LDA "!MILRT_UINT8_TYPE")
+                                     (STA ("MILRT_ZP_VAL_HEAP_PTR"),y)
+                                     (DEY) ;; return w/ Y=0
+                                     (RTS)
+
+                                      ;; decrement ptr to free tos of value stack (push) by Y
+                                      ;; Y = 0  
    (label "MILRT_DEC_VAL_HEAP_BY_Y") (DEC "MILRT_ZP_VAL_HEAP_PTR")
                                      (BNE "MILRT_DVHBY_DONE")
                                      (DEC "MILRT_ZP_VAL_HEAP_PTRP1")
@@ -52,6 +75,8 @@ this file is an example of how the native compilation of a mil could look like
                                      (BNE "MILRT_DEC_VAL_HEAP_BY_Y")
                                      (RTS)
 
+                                     ;; increment ptr to free tos of value stack (pop) by Y
+                                     ;; Y = 0
    (label "MILRT_INC_VAL_HEAP_BY_Y") (INC "MILRT_ZP_VAL_HEAP_PTR")
                                      (BNE "MILRT_IVHBY_DONE")
                                      (INC "MILRT_ZP_VAL_HEAP_PTRP1")
@@ -59,32 +84,112 @@ this file is an example of how the native compilation of a mil could look like
                                      (BNE "MILRT_INC_VAL_HEAP_BY_Y")
                                      (RTS)
 
+                                     ;; DISPLAY string with STRING_ID on the value stack
+                                     ;; Y = 0, A = last char of string
    (label "MILRT_DISPLAY")           (LDY "!2")  ;; expecting bytes on the stack
                                      (LDA ("MILRT_ZP_VAL_HEAP_PTR"),y) ;; get string id
                                      (JSR "MILRT_STRING_ID2PTR")
-                                     (JSR "MILRT_INC_VAL_HEAP_BY_Y")
+                                     (JSR "MILRT_INC_VAL_HEAP_BY_Y") ;; drop string from value stack
                                      (LDA ("MILRT_ZP_STRING_PTR"),y) ;; y should be 0, a= strlen
                                      (TAY);;  y = strlen
    (label "MILRT_DISPLAY_NEXT")      (LDA ("MILRT_ZP_STRING_PTR"),y)
-                                     (JSR "$FFD2")
+                                     ;; if A = #\^, then special (up arrow)
+                                     (CMP "!$5E")
+                                     (BNE "MILRT_DISPLAY_REGULAR")
                                      (DEY)
+                                     (LDA ("MILRT_ZP_STRING_PTR"),y)
+                                     (CMP "!$5E")
+                                     (BNE "MILRT_DISPLAY_OTHER")
+   (label "MILRT_DISPLAY_REGULAR")   (JSR "$FFD2")
+   (label "MILRT_DISPLAY_REGULAR_C") (DEY)
                                      (BNE "MILRT_DISPLAY_NEXT")
                                      (RTS)
+                                     
+  (label "MILRT_DISPLAY_OTHER")      (CMP "!97") ;; 'a'
+                                     (BNE "STR_FORMAT_ERROR")
+                                     ;; keep y
+                                     (TYA)
+                                     (PHA)
+                                     (JSR "MILRT_DISPLAY_OBJECT")
+                                     (PLA)
+                                     (TAY)
+                                     (JMP "MILRT_DISPLAY_REGULAR_C") ;; continue with rest of string
+  (label "STR_FORMAT_ERROR")         (LDA "!STRING_ID_FORMAT_ERROR")
+                                     (JSR "MILRT_PUSH_STRING")
+                                     (JSR "MILRT_DISPLAY")
+                                     (BRK) ; stop
 
+                                     ;; print object tos as string and pop
+                                     ;; uint8 => 0..255, string => string, char => char, bool => true/false
+                                     ;; cons-cell => (a . b), list => (a b ... )
+                                     ;; Y = *, A = *
+   (label "MILRT_DISPLAY_OBJECT")    (LDY "!1")  ;;
+                                     (LDA ("MILRT_ZP_VAL_HEAP_PTR"),y) ;; get type descriptor
+                                     (CMP "!MILRT_UINT8_TYPE")
+                                     (BNE "MILRT_DISPLAY_NONUINT")
+   (label "MILRT_DISPLAY_UINT")      (INY)
+                                     (LDA !36) ;; prefix with '$'
+                                     (JSR $FFD2)
+                                     (LDA ("MILRT_ZP_VAL_HEAP_PTR"),y) ;; get uint value
+                                     (JSR "MILRT_INC_VAL_HEAP_BY_Y") ;; pop uint incl. type descriptor from stack
+
+                                     ;; basic routine to write byte !
+
+                                     ;; print byte in A as Hex
+                                     ;; A = last Digit, need 1 stack slot
+   (label "MILRT_DISPLAY_UINT8")     (PHA)                            ; Save A
+                                     (LSR) (LSR) (LSR) (LSR)          ; Move top nybble to bottom nybble
+                                     (JSR "MILRT_DISPLAY_NIBBLE")     ; Print this nybble
+                                     (PLA)                            ; Get A back and print bottom nybble
+   (label "MILRT_DISPLAY_NIBBLE")    (AND !15)                        ; Keep bottom four bits
+                                     (CMP !10) 
+                                     (BCC "MILRT_DISPLAY_DIGIT")      ; If 0-9, jump to print
+                                     (ADC !6)                         ; Convert ':' to 'A'
+   (label "MILRT_DISPLAY_DIGIT")     (ADC !48) ; 0 -> "0"
+                                     (JMP $FFD2)  
+
+   (label "MILRT_DISPLAY_NONUINT")
+                                     (RTS)
+
+                                     ;; load ptr to string with A = STRING ID
+                                     ;; into zero page MILRT_ZP_STRING_PTR, MILRT_ZP_STRING_PTRP1 (low, high)
+                                     ;; A = *
    (label "MILRT_STRING_ID2PTR")     (LDA "!<STRING_PTR") ;; work around
                                      (STA "MILRT_ZP_STRING_PTR")
                                      (LDA "!>STRING_PTR")
                                      (STA "MILRT_ZP_STRING_PTRP1")
                                      (RTS)
+   
+                                     ;; copy bytes from [MILRT_ZP_MEMCPY_SPTR] -> [MILRT_ZP_MEMCPY_TPTR]
+                                     ;; # = [MILRT_ZP_MEMCPY_LEN_LOW][MILRT_ZP_MEMCPY_LEN_HIGH+1]
+   (label "MILRT_MEM_COPY")          
+   (label "MILRT_MEM_COPY_IN_LOOP")  
+                                     (RTS)
 
    (label "MAIN")                    (JMP "HELLO_WORLD")
-   (label "HELLO_WORLD")             (LDA "!STRING_ID_HELLO-WORLD")
+   (label "HELLO_WORLD")             (LDA !$a3)
+                                     (JSR "MILRT_PUSH_UINT8")
+                                     (LDA "!STRING_ID_HELLO-WORLD")
                                      (JSR "MILRT_PUSH_STRING")
                                      (JMP "MILRT_DISPLAY")
 
-   (label "STRING_PTR")              (byte 11)
-                                     (asc "DLROW OLLEH")
-))
+   (label "STRING-TABLE-ID2PTR")
+                                     ; id -> ptr to c000..c1ff
+                                     ; copy string to c200..cfff
+                                     ; (byte ">STRING_PTR")             ID = 1
+                                     ; (byte "<STRING_PTR")
+                                     ; (byte ">STRING_FORMAT_ERROR")    ID = 2
+                                     ; (byte "<STRING_FORMAT_ERROR")
+
+   (label "STRING-TABLE")
+   (label "STRING_PTR")              (byte 15)
+                                     ;; (byte $5E)
+                                     (asc "!a")
+                                     (byte $5E)
+                                     (asc " DLROW OLLEH")
+   (label "STRING_FORMAT_ERROR")     (byte 19)
+                                     (asc "rorre tamrof gnirts")
+                                     ))
 
 (define org 2064)
 
