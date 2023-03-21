@@ -1957,14 +1957,14 @@
 (define/c (interpret-plp state)
   (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
-               [flags           (peek-stack state)]
+               [flags           (peek-stack+1 state)]
                [stack-pointer   (byte (fx+ 1 (cpu-state-stack-pointer state)))]
                [program-counter (next-program-counter state 1)]))
 
 (define/c (interpret-pla state)
   (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
-               [accumulator     (peek-stack state)]
+               [accumulator     (peek-stack+1 state)]
                [stack-pointer   (byte (fx+ 1 (cpu-state-stack-pointer state)))]
                [program-counter (next-program-counter state 1)]))
 
@@ -2172,7 +2172,7 @@
     ;; #x47 -io SRE zp
     [(#x48) (interpret-pha state)]
     [(#x49) (interpret-logic-op-mem state bitwise-xor peek-pc+1 2)]
-    [(#x4a) (interpret-lsr state peek-zp)]
+    [(#x4a) (interpret-lsr state cpu-state-accumulator)] ; peek-zp
     ;; #x4b -io ALR imm
     [(#x4c) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
     [(#x4d) (interpret-logic-op-mem state bitwise-xor peek-abs 3)]
