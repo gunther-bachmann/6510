@@ -10,6 +10,7 @@ this file is an example of how the native compilation of a mil could look like
 (require "../6510.rkt")
 (require "../ast/6510-resolver.rkt")
 (require "../ast/6510-relocator.rkt")
+(require "../tools/6510-prg-generator.rkt")
 
 (require "../tools/6510-interpreter.rkt")
 (require "../tools/6510-debugger.rkt")
@@ -198,7 +199,11 @@ this file is an example of how the native compilation of a mil could look like
 (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
 (define raw-bytes (resolved-program->bytes program-p3))
 
-(define data (6510-load (initialize-cpu) org raw-bytes))
-(define executable-program (with-program-counter data org))
+;; (define data (6510-load (initialize-cpu) org raw-bytes))
+;; (define executable-program (with-program-counter data org))
 
-(run-debugger org raw-bytes)
+(module+ main
+  (create-prg raw-bytes org "example-mil-asm.prg")
+  (create-image-with-program raw-bytes org "example-mil-asm.prg" "example-mil-asm.d64" ".")
+
+  (run-debugger org raw-bytes))
