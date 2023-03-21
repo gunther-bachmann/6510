@@ -50,8 +50,12 @@
          (if set (set-zero-flag c-state) (clear-zero-flag c-state)))
         (#t c-state)))
 
+(struct breakpoint (description fn)
+  #:transparent
+  #:guard (struct-guard/c string? any/c))
+
 (struct debug-state (states breakpoints)
-  #:guard ((listof cpu-state?) list?))
+  #:guard ((listof cpu-state?) (listof breakpoint?)))
 
 (define/c (debugger--help d-state)
   (-> debug-state? debug-state?)
@@ -142,10 +146,10 @@ EOF
           (begin (displayln "byte length differs (use xf to force)")
                  d-state)))))
 
-(define/c (debugger--push-breakpoint d-state fun)
-  (-> debug-state? any/c debug-state?)
+(define/c (debugger--push-breakpoint d-state fun description)
+  (-> debug-state? any/c string? debug-state?)
   (struct-copy debug-state d-state
-               [breakpoints (cons fun
+               [breakpoints (cons (breakpoint description fun)
                                   (debug-state-breakpoints d-state))]))
 
 (define/c (debugger--pop-breakpoint d-state)
@@ -156,7 +160,7 @@ EOF
   (->* (debug-state?) (boolean?) debug-state?)
   (let-values (((breakpoint new-states) (run-until-breakpoint (debug-state-states d-state) (debug-state-breakpoints d-state))))
     (when (and breakpoint display)
-      (displayln (format "hit breakpoint ~a" breakpoint)))
+      (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))
     (struct-copy debug-state d-state [states new-states])))
 
 (define/c (debugger--continue d-state)
@@ -208,6 +212,7 @@ EOF
   (define stop-pc-regex #px"^stop *pc *= *([[:xdigit:]]{1,4})$")
   (define stop-a-regex #px"^stop *a *= *([[:xdigit:]]{1,2})$")
   (define stop-sp-regex #px"^stop *sp *= *([[:xdigit:]]{1,2})$")
+  (define list-bp-regex #px"^l(ist)? *s(top)?$")
   (define commit-regex #px"^commit *([[:xdigit:]]{1,2})?$")
   (define flags-regex #px"^([sc])f([cbnvzi])$")
   (cond ((or (string=? command "?") (string=? command "h")) (debugger--help d-state))
@@ -257,7 +262,8 @@ EOF
            (debugger--push-breakpoint d-state
                                       (lambda (c-state)
                                         (eq? (cpu-state-program-counter c-state)
-                                             (string->number value 16))))))
+                                             (string->number value 16)))
+                                      (format "stop at pc = $~a" value))))
         ;; stop a=ff - stop at accumulator = ff
         ((regexp-match? stop-a-regex command)
          (match-let (((list _ value) (regexp-match stop-a-regex command)))
@@ -265,7 +271,8 @@ EOF
            (debugger--push-breakpoint d-state
                                       (lambda (c-state)
                                         (eq? (cpu-state-accumulator c-state)
-                                             (string->number value 16))))))
+                                             (string->number value 16)))
+                                      (format "stop when register A = $~a" value))))
         ;; stop sp=ff - stop at stack pointer = fff
         ((regexp-match? stop-sp-regex command)
          (match-let (((list _ value) (regexp-match stop-sp-regex command)))
@@ -273,7 +280,14 @@ EOF
            (debugger--push-breakpoint d-state
                                       (lambda (c-state)
                                         (eq? (cpu-state-stack-pointer c-state)
-                                             (string->number value 16))))))
+                                             (string->number value 16)))
+                                      (format "stop when sp = $~a" value))))
+        ;; list stop
+        ((regexp-match? list-bp-regex command)
+         (begin
+           (for ((description (map breakpoint-description (debug-state-breakpoints d-state))))
+             (display description))
+           d-state))
         ;; stop cf = 0 - stop when carry is cleared
         ;; stop zf = 1 - stop when zero is set
         ;; stop x = 20 - stop if x (turns) 20
@@ -317,19 +331,19 @@ EOF
 ;; return nil or the breakpoint that hit
 ;; breakpoint is a function that takes a single argument the state
 (define/c (breakpoint-hits c-state breakpoints)
-  (-> cpu-state? list? any/c)
+  (-> cpu-state? list? (or/c boolean? breakpoint?))
   (if (empty? breakpoints)
       #f
       (begin
         (if (apply
-             (car breakpoints)
+             (breakpoint-fn (car breakpoints))
              (list c-state))
             (car breakpoints)
             (breakpoint-hits c-state (cdr breakpoints))))))
 
 ;; run until a break point hits or the cpu is on a BRK statement
 (define/c (run-until-breakpoint states breakpoints)
-  (-> (listof cpu-state?) list? (values any/c (listof cpu-state?)))
+  (-> (listof cpu-state?) list? (values (or/c boolean? breakpoint?) (listof cpu-state?)))
   (let ((breakpoint (breakpoint-hits (car states) breakpoints)))
     (if (or breakpoint (zero? (peek-pc (car states))))
         (begin
