@@ -10,6 +10,9 @@
   - https://sta.c64.org/cbm64mem.html
   - http://www.ffd2.com/fridge/docs/c64-diss.html
   - https://www.c64-wiki.com/wiki/BASIC-ROM
+  - https://www.codebase64.org/doku.php?id=base:6502_6510_maths
+  - http://www.6502.org/tutorials/decimal_mode.html
+  - http://www.6502.org/tutorials/decimal_mode.html#A
 * minimal lisp with (reduced) racket
 this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
 lisp itself
@@ -269,7 +272,7 @@ String table should hold one entry: "Hello World!" with ID 1 (STRING-ID_HELLO_WO
 Symbol Table is not necessary yet (maybe if 'eval' is implemented)
 
 * additional routines
-** times 10
+** times 10 (decimal)
 #+begin_src asm
   mul10:  PHA; save an in the stack
           ASL; multiply a by 8 shifting 3 times to the left

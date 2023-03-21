@@ -2082,6 +2082,51 @@
   (struct-copy cpu-state state
                [program-counter (next-program-counter state 1)]))
 
+(define/c (bcd-+ state peeker pc-inc)  
+  (-> cpu-state? peeker/c byte? cpu-state?)
+  (define carry (carry-flag? state))
+  (define op-a (cpu-state-accumulator state))
+  (define op-b (peeker state))
+  (define high-nibble-a (fxrshift op-a 4))
+  (define high-nibble-b (fxrshift op-b 4))
+  (define low-nibble-a (bitwise-and #x0F op-a))
+  (define low-nibble-b (bitwise-and #x0F op-b))
+  (define zero-flag (= 0 (bitwise-and #xFF (fx+ op-a op-b (if carry 1 0)))))
+  (define new-low (fx+ low-nibble-a low-nibble-b (if carry 1 0)))
+  (define low-corrected (if (> new-low 9) (fx+ new-low 6) new-low))
+  (define new-high (fx+ high-nibble-a high-nibble-b (if (> low-corrected 15) 1 0)))
+  (define negative-flag (< 0 (bitwise-and #x08 new-high)))
+  (define overflow-flag (and (= 0 (bitwise-and #x80 (bitwise-xor (fxlshift new-high 4) op-a)))
+                             (< 0 (bitwise-and #x80 (bitwise-xor op-a op-b)))))
+  (define high-corrected (if (> new-high 9) (fx+ new-high 6) new-high))
+  (define carry-flag  (> high-corrected 15))
+  (define new-accumulator (bitwise-and #xff (bitwise-ior (fxlshift high-corrected 4) (bitwise-and #x0f low-corrected))))
+  (struct-copy cpu-state state
+               [accumulator new-accumulator]
+               [flags 
+                (set-flags-cznv state carry-flag zero-flag negative-flag overflow-flag)]
+               [program-counter (next-program-counter state pc-inc)]))
+
+(module+ test
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x10) (lambda (s) #x01) 2))
+                #x11)
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x19) (lambda (s) #x01) 2))
+                #x20)
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x60) (lambda (s) #x0a) 2))
+                #x70)
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x60) (lambda (s) #x0f) 2))
+                #x75)
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x5a) (lambda (s) #x01) 2))
+                #x61)
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x5f) (lambda (s) #x01) 2))
+                #x66)
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2))
+                #x00)
+  (check-false (zero-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2)))
+  (check-true (overflow-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2)))
+  (check-true (carry-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2)))
+  (check-true (negative-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2))))
+
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
 ;; zp = $00
@@ -2195,35 +2240,51 @@
     [(#x5e) (interpret-lsr-mem state peek-absx poke-absx 3)]
     ;; #x5f -io SRE abx
     [(#x60) (interpret-rts state)]
-    [(#x61) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition 2)]
+    [(#x61) (if (decimal-flag? state)
+                (bcd-+ state peek-izx 2)
+                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition 2))]
     ;; #x62 -io KIL
     ;; #x63 -io RRA izx
     ;; #x64 -io NOP zp
-    [(#x65) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition 2)]
+    [(#x65) (if (decimal-flag? state)
+                (bcd-+ state peek-zp 2)
+                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition 2))]
     [(#x66) (interpret-ror-mem state peek-zp poke-zp 2)]
     ;; #x67 -io RRA zp
     [(#x68) (interpret-pla state)]
-    [(#x69) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2)]
+    [(#x69) (if (decimal-flag? state)
+                (bcd-+ state peek-pc+1 2)
+                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2))]
     [(#x6a) (interpret-ror state)]
     ;; #x6b -io ARR imm
     [(#x6c) (interpret-jmp-ind state)]
-    [(#x6d) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3)]
+    [(#x6d) (if (decimal-flag? state)
+                (bcd-+ state peek-abs 3)
+                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3))]
     [(#x6e) (interpret-ror-mem state peek-abs poke-abs 3)]
     ;; #x6f -io RRA abs
     [(#x70) (interpret-branch-rel state overflow-flag?)]
-    [(#x71) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2)]
+    [(#x71) (if (decimal-flag? state)
+                (bcd-+ state peek-izy 2)
+                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2))]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
     ;; #x74 -io NOP zpx
-    [(#x75) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition 2)]
+    [(#x75) (if (decimal-flag? state)
+                (bcd-+ state peek-zpx 2)
+                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition 2))]
     [(#x76) (interpret-ror-mem state peek-zpx poke-zpx 2)]
     ;; #x77 -io RRA zpx
     [(#x78) (interpret-sei state)]
-    [(#x79) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absy derive-carry-after-addition 3)]
+    [(#x79) (if (decimal-flag? state)
+                (bcd-+ state peek-absy 3)
+                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absy derive-carry-after-addition 3))]
     ;; #x7a -io NOP
     ;; #x7b -io RRA aby
     ;; #x7c -io NOP abx
-    [(#x7d) (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absx derive-carry-after-addition 3)]
+    [(#x7d) (if (decimal-flag? state)
+                (bcd-+ state peek-absx 3)
+                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absx derive-carry-after-addition 3))]
     [(#x7e) (interpret-ror-mem state peek-absx poke-absx 2)]
     ;; #x7f -io RRA abx
     ;; #x80 -io NOP imm
