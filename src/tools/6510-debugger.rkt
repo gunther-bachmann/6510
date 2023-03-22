@@ -193,12 +193,19 @@ EOF
          breakpoint)
       d-state
       (let ((next-step-jsr (next-cpu-step? #x20 (car c-states)))
-            (next-step-rts (next-cpu-step? #x60 (car c-states))))
+            (next-step-rts (next-cpu-step? #x60 (car c-states)))
+            (sp            (cpu-state-stack-pointer (car c-states)))
+            (new-states    (cons (execute-cpu-step (car c-states)) c-states)))
         (debugger--run-steps
          (struct-copy debug-state d-state
-                      [states (cons (execute-cpu-step (car c-states)) c-states)])
+                      [states new-states])
          (- len 1)
-         (+ depth (if next-step-jsr 1 0) (if next-step-rts -1 0))
+         (+ depth
+            (if (and (> sp (cpu-state-stack-pointer (car new-states)))
+                   next-step-jsr)
+                1
+                0)
+            (if next-step-rts -1 0))
          follow-jsr
          #f))))
 
