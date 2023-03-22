@@ -2082,6 +2082,44 @@
   (struct-copy cpu-state state
                [program-counter (next-program-counter state 1)]))
 
+(define/c (bcd-- state peeker pc-inc)
+  (-> cpu-state? peeker/c byte? cpu-state?)
+  (define carry (carry-flag? state))
+  (define op-a (cpu-state-accumulator state))
+  (define op-b (peeker state))
+  (define high-nibble-a (fxrshift op-a 4))
+  (define high-nibble-b (fxrshift op-b 4))
+  (define low-nibble-a (bitwise-and #x0F op-a))
+  (define low-nibble-b (bitwise-and #x0F op-b))
+  (define new-low (fx- low-nibble-a low-nibble-b (if carry 1 0)))
+  (define new-high (fx- high-nibble-a high-nibble-b (if (< 0 (bitwise-and #x10 new-low)) 1 0)))
+  (define corrected-low (bitwise-and #x0f (if (< 0 (bitwise-and #x10 new-low)) (fx- (bitwise-and #x0f new-low) 6) new-low))) ;  (if (> 0  new-low) (fx+ new-low 10) new-low)
+  (define corrected-high (bitwise-and #x0f (if (< 0 (bitwise-and #x10 new-high)) (fx- (bitwise-and #x0f new-high) 6) new-high))) ; (if (> 0 new-high) (fx+ new-high 10) new-high)
+  (define new-accumulator (bitwise-ior (fxlshift corrected-high 4) (bitwise-and #x0f corrected-low)))
+  (define raw (fx- op-a op-b (if carry 0 1)))
+  (define zero-flag (= 0 (bitwise-and #xff raw)))
+  (define carry-flag (< 0 (bitwise-and #x100 raw)))
+  (define negative-flag (< 0 (bitwise-and #x80 raw)))
+  (define overflow-flag (and (< 0 (bitwise-and #x80 (bitwise-xor raw op-b)))
+                           (< 0 (bitwise-and #x80 (bitwise-xor op-a op-b)))))
+  (struct-copy cpu-state state
+               [accumulator new-accumulator]
+               [flags
+                (set-flags-cznv state carry-flag zero-flag negative-flag overflow-flag)]
+               [program-counter (next-program-counter state pc-inc)]))
+
+(module+ test
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x10) (lambda (s) #x01) 2))
+                #x09)
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x00) (lambda (s) #x01) 2))
+                #x99)
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x21) (lambda (s) #x10) 2))
+                #x11)
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x99) (lambda (s) #x10) 2))
+                #x89)
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x95) (lambda (s) #x26) 2))
+                #x69))
+
 (define/c (bcd-+ state peeker pc-inc)  
   (-> cpu-state? peeker/c byte? cpu-state?)
   (define carry (carry-flag? state))
@@ -2384,35 +2422,51 @@
     [(#xde) (interpret-crement-mem state fx- peek-absx poke-absx 3)]
     ;; #xdf -io DCP abx
     [(#xe0) (interpret-compare state cpu-state-x-index peek-pc+1 2)]
-    [(#xe1) (interpret-calc-op state fx- 0 peek-izx derive-carry-after-subtraction 2)]
+    [(#xe1) (if (decimal-flag? state)
+                (bcd-- state peek-izx 2)
+                (interpret-calc-op state fx- 0 peek-izx derive-carry-after-subtraction 2))]
     ;; #xe2 -io NOP imm
     ;; #xe3 -io ISC izx
     [(#xe4) (interpret-compare state cpu-state-x-index peek-zp 2)]
-    [(#xe5) (interpret-calc-op state fx- 0 peek-zp derive-carry-after-subtraction 2)]
+    [(#xe5) (if (decimal-flag? state)
+                (bcd-- state peek-zp 2)
+                (interpret-calc-op state fx- 0 peek-zp derive-carry-after-subtraction 2))]
     [(#xe6) (interpret-crement-mem state fx+ peek-zp poke-zp 2)]
     ;; #xe7 -io ISC zp
     [(#xe8) (interpret-modify-x-index state 1)]
-    [(#xe9) (interpret-calc-op state fx- 0 peek-pc+1 derive-carry-after-subtraction 2)]
+    [(#xe9) (if (decimal-flag? state)
+                (bcd-- state peek-pc+1 2)
+                (interpret-calc-op state fx- 0 peek-pc+1 derive-carry-after-subtraction 2))]
     [(#xea) (interpret-nop state)]
     ;; #xeb -io SBC imm
     [(#xec) (interpret-compare state cpu-state-x-index peek-abs 3)]
-    [(#xed) (interpret-calc-op state fx- 0 peek-abs derive-carry-after-subtraction 3)]
+    [(#xed) (if (decimal-flag? state)
+                (bcd-- state peek-abs 3)
+                (interpret-calc-op state fx- 0 peek-abs derive-carry-after-subtraction 3))]
     [(#xee) (interpret-crement-mem state fx+ peek-abs poke-abs 3)]
     ;; #xef -io ISC abs
     [(#xf0) (interpret-branch-rel state zero-flag?)]
-    [(#xf1) (interpret-calc-op state fx- 0 peek-izy derive-carry-after-subtraction 2)]
+    [(#xf1) (if (decimal-flag? state)
+                (bcd-- state peek-izy 2)
+                (interpret-calc-op state fx- 0 peek-izy derive-carry-after-subtraction 2))]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
     ;; #xf4 -io NOP zpx
-    [(#xf5) (interpret-calc-op state fx- 0 peek-zpx derive-carry-after-subtraction 2)]
+    [(#xf5) (if (decimal-flag? state)
+                (bcd-- state peek-zpx 2)
+                (interpret-calc-op state fx- 0 peek-zpx derive-carry-after-subtraction 2))]
     [(#xf6) (interpret-crement-mem state fx+ peek-zpx poke-zpx 2)]
     ;; #xf7 -io ISC zpx
     [(#xf8) (interpret-sed state)]
-    [(#xf9) (interpret-calc-op state fx- 0 peek-absy derive-carry-after-subtraction 3)]
+    [(#xf9) (if (decimal-flag? state)
+                (bcd-- state peek-absy 3)
+                (interpret-calc-op state fx- 0 peek-absy derive-carry-after-subtraction 3))]
     ;; #xfa -io NOP
     ;; #xfb -io ISC aby
     ;; #xfc -io NOP abx
-    [(#xfd) (interpret-calc-op state fx- 0 peek-absx derive-carry-after-subtraction 3)]
+    [(#xfd) (if (decimal-flag? state)
+                (bcd-- state peek-absx 3)
+                (interpret-calc-op state fx- 0 peek-absx derive-carry-after-subtraction 3))]
     [(#xfe) (interpret-crement-mem state fx+ peek-absx poke-absx 3)]
     ;; #xff -io ISC abx
     [else (error "unknown opcode")]))
@@ -2421,7 +2475,7 @@
   (define (at-2000_sbc-2000-x_with-x-3 accumulator at-2003-value)
     (~>> (initialize-cpu)
         (with-program-counter _ #x2000)              ;; *=$2000
-        (with-flags _ #xff)                          ;; carry set
+        (with-flags _ #x01)                          ;; carry set
         (with-accumulator     _ accumulator)         ;; LDA #,accumulator
         (poke _ #x2000 #xfd #x00 #x20 at-2003-value) ;; SBC $2000,X
                                                      ;; .byte ,at-2003-value
