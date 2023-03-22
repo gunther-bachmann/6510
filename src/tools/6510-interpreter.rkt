@@ -358,14 +358,31 @@
                         (if (carry-flag? state) "X" "_" )))
                ""))
 
+(define/c (state->compact-string state)
+  (-> cpu-state? string?)
+  (string-join (list
+                (format "A: $~a, " (byte->hex-string (cpu-state-accumulator state)))
+                (format "X: $~a, " (byte->hex-string (cpu-state-x-index state)))
+                (format "Y: $~a (" (byte->hex-string (cpu-state-y-index state)))
+                (format "SP: $~a, " (byte->hex-string (cpu-state-stack-pointer state)))
+                (format "N~a O~a B~a D~a I~a Z~a C~a)"
+                        (if (negative-flag? state) "X" "_" )
+                        (if (overflow-flag? state) "X" "_" )
+                        (if (break-flag? state) "X" "_" )
+                        (if (decimal-flag? state) "X" "_" )
+                        (if (interrupt-flag? state) "X" "_" )
+                        (if (zero-flag? state) "X" "_" )
+                        (if (carry-flag? state) "X" "_" )))
+               ""))
+
 (module+ test #| state->string |#
   (check-equal? (state->string (initialize-cpu))
                 "A  = $00,    X = $00, Y = $00\nPC = $0000, SP = $ff\nN=_, O=_, B=_, D=_, I=_, Z=_, C=_"))
 
 ;; print the state 
-(define/c (print-state state)
-  (-> cpu-state? cpu-state?)
-  (printf "~a\n "(state->string state))
+(define/c (print-state state (compact #f))
+  (->* (cpu-state?) (boolean?) cpu-state?)
+  (printf "~a~a" (if compact (state->compact-string state) (state->string state)) (if compact "" "\n"))
   state)
 
 (module+ test #| set-nth |#
