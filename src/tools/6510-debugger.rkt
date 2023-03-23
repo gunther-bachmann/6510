@@ -7,7 +7,6 @@
 
  |#
 
-
 (require (rename-in  racket/contract [define/contract define/c]))
 (require readline/readline)
 (require threading)
@@ -16,6 +15,7 @@
 (require (only-in "../asm/6510-parser.rkt" asm->ast))
 (require (only-in "6510-disassembler.rkt" disassemble disassemble-single))
 (require (only-in "../ast/6510-resolver.rkt" commands->bytes))
+(require (only-in racket/fixnum fx+))
 
 (provide run-debugger)
 
@@ -75,8 +75,8 @@ clear flag [cbnvzi]   clear flag (Carry,Break,Negative,Overflow,Zero,Interrupt)
 set flag [cbnvzi]     set flag (Carry,Break,Negative,Overflow,Zero,Interrupt)
 clear                 clear all breakpoints
 commit <B>?           keep only the last 10 | B (hex) states
-r                     run until a break point is hit
-c                     continue over the currently halted on breakpoint
+run                   run until a break point is hit
+inc pc                increment program counter (e.g. to step over a BRK instruction)
 q                     quit
 EOF
     )
@@ -213,6 +213,7 @@ EOF
 (define/c (dispatch-debugger-command command d-state)
   (-> string? debug-state? debug-state?)
   (define c-states (debug-state-states d-state))
+  (define c-state (car c-states))
   (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4})?$")
   (define pm-regex #px"^pm *([[:xdigit:]]{1,4})? *([[:xdigit:]]{1,2})?$")
   (define sm-regex #px"^s(et)? *m(em)? *([[:xdigit:]]{1,4}) *= *([[:xdigit:]]{1,2})$")
@@ -229,8 +230,13 @@ EOF
   (define commit-regex #px"^commit *([[:xdigit:]]{1,2})?$")
   (define flags-regex #px"^(s(et)?|c(lear)?) *f(lag)? *([cbnvzi])$")
   (define run-regex #px"^r(un)?")
+  (define incpc_regex #px"^i(nc)? *p(c)?")
   (define options-refex #px"^t(oggle)? o(ption)? (verbose-step)")
   (cond ((or (string=? command "?") (string=? command "h")) (debugger--help d-state))
+        ;; increment pc (to step over brk for example)
+        ((regexp-match? incpc_regex command)
+         (struct-copy debug-state d-state
+                      [states (cons (with-program-counter c-state (fx+ 1 (cpu-state-program-counter c-state))) c-states)]))
         ;; b - go back in history
         ((regexp-match? b-regex command)
          (match-let (((list _ _ value) (regexp-match b-regex command)))
@@ -251,7 +257,7 @@ EOF
                (debugger--pretty-print #f "1" _)
                (print-latest-cpu-state _))))
         ;; p - print processor state
-        ((string=? command "p") (displayln "") (print-state (car c-states)) d-state)
+        ((string=? command "p") (displayln "") (print-state c-state) d-state)
         ;; pp - disassemble (pretty print)
         ((regexp-match? pp-regex command)
          (match-let (((list _ len address) (regexp-match pp-regex command)))
