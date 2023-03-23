@@ -12,7 +12,7 @@ this file is an example of how the native compilation of a mil could look like
 (require "../ast/6510-relocator.rkt")
 (require "../tools/6510-prg-generator.rkt")
 
-(require "../tools/6510-interpreter.rkt")
+;; (require "../tools/6510-interpreter.rkt")
 (require "../tools/6510-debugger.rkt")
 (require "../ast/6510-constants.rkt")
 
@@ -21,8 +21,8 @@ this file is an example of how the native compilation of a mil could look like
 
 (define program
   (list
-   (byte-const STRING_ID_HELLO-WORLD  1)
-   (byte-const STRING_ID_FORMAT_ERROR 2)
+   (byte-const STRING_ID_HELLO-WORLD  0)
+   (byte-const STRING_ID_FORMAT_ERROR 1)
 
    (byte-const MILRT_STRING_TYPE 1)
    (byte-const MILRT_UINT8_TYPE 2)
@@ -32,15 +32,81 @@ this file is an example of how the native compilation of a mil could look like
    (byte-const MILRT_ZP_VAL_HEAP_PTRP1 #x81)
    (byte-const MILRT_ZP_STRING_PTR #x82)
    (byte-const MILRT_ZP_STRING_PTRP1 #x83)
+   (byte-const MILRT_ZP_STRING_PTR2 #x84)
+   (byte-const MILRT_ZP_STRING_PTR2P1 #x85)
 
-   (label MILRT_SETUP)               (LDA !<MILRT_VAL_HEAP)
+   (word-const MILRT_STRING_ID_TABLE #xc000)
+   (word-const MILRT_STRING_ID_TABLE_P2 #xc100)
+   (word-const MILRT_STRING_TABLE #xc200)
+
+   (label MILRT_SETUP)               (LDA !<STRING-TABLE)
+                                     (STA MILRT_ZP_VAL_HEAP_PTR)
+                                     (LDA !>STRING-TABLE)
+                                     (STA MILRT_ZP_VAL_HEAP_PTRP1)
+
+                                     (LDA !<MILRT_STRING_ID_TABLE)
+                                     (STA MILRT_ZP_STRING_PTR)
+                                     (LDA !>MILRT_STRING_ID_TABLE)
+                                     (STA MILRT_ZP_STRING_PTRP1)
+
+                                     (LDA !<MILRT_STRING_TABLE)
+                                     (STA MILRT_ZP_STRING_PTR2)
+                                     (LDA !>MILRT_STRING_TABLE)
+                                     (STA MILRT_ZP_STRING_PTR2P1)
+
+   (label MLRT_SETUP__COPY_STRINGS)  (LDY !0)
+                                     (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
+                                     (TAX) ;; put len into x
+                                     (BEQ MILRT_SETUP_VALUE_HEAP)
+
+                                     ;; store current ptr into MLRT_STRING_TABLE into MLRT_STRING_ID_TABLE
+                                     (LDA MILRT_ZP_STRING_PTR2)
+                                     (STA (MILRT_ZP_STRING_PTR),y)
+                                     (LDA MILRT_ZP_STRING_PTR2P1)
+                                     (INY)
+                                     (STA (MILRT_ZP_STRING_PTR),y)
+
+                                     (INX) ;; copy len = strlen + len info itself
+                                     (LDY !0)
+   (label MLRT_SETUP__COPY)          (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
+                                     (STA (MILRT_ZP_STRING_PTR2),y)
+                                     (INY)
+                                     (DEX)
+                                     (BNE MLRT_SETUP__COPY)
+
+                                     ;; increment string table ptr by Y
+                                     (TYA)
+                                     (CLC)
+                                     (ADC MILRT_ZP_STRING_PTR2)
+                                     (STA MILRT_ZP_STRING_PTR2)
+                                     (BCC MILRT_SETUP__COPY_INC_NEXT)
+                                     (INC MILRT_ZP_STRING_PTR2P1)
+
+   (label MILRT_SETUP__COPY_INC_NEXT)
+                                     ;; increment value expression ptr (src of strings)
+                                     (TYA)
+                                     (CLC)
+                                     (ADC MILRT_ZP_VAL_HEAP_PTR)
+                                     (STA MILRT_ZP_VAL_HEAP_PTR)
+                                     (BCC MILRT_SETUP__COPY_INC_NEXT3)
+                                     (INC MILRT_ZP_VAL_HEAP_PTRP1)
+
+   (label MILRT_SETUP__COPY_INC_NEXT3)
+                                     ;; increment location in string id table
+                                     (CLC)
+                                     (LDA !2)
+                                     (ADC MILRT_ZP_STRING_PTR)
+                                     (STA MILRT_ZP_STRING_PTR)
+                                     (BCC MILRT_SETUP__COPY_INC_NEXT2)
+                                     (INC MILRT_ZP_STRING_PTRP1)
+   (label MILRT_SETUP__COPY_INC_NEXT2)
+                                     (JMP MLRT_SETUP__COPY_STRINGS)
+
+                                     ;; setup up value heap ptr for application
+   (label MILRT_SETUP_VALUE_HEAP)    (LDA !<MILRT_VAL_HEAP)
                                      (STA MILRT_ZP_VAL_HEAP_PTR)
                                      (LDA !>MILRT_VAL_HEAP)
                                      (STA MILRT_ZP_VAL_HEAP_PTRP1)
-
-                                     ; copy strings
-                                     ; copy STRING-TABLE-ID2PTR -> C000..C1FF
-                                     ; copy STRING-TABLE        -> C200..CFFF
                                      (JMP MAIN)
 
                                      ;; push the STRING_ID in A onto the value stack
@@ -88,8 +154,12 @@ this file is an example of how the native compilation of a mil could look like
                                      ;; DISPLAY string with STRING_ID on the value stack
                                      ;; Y = 0, A = last char of string
    (label MILRT_DISPLAY)             (LDY !2)  ;; expecting bytes on the stack
-                                     (LDA (MILRT_ZP_VAL_HEAP_PTR),y) ;; get string id
+                                     (TYA)
+                                     (PHA)
+                                     (LDA (MILRT_ZP_VAL_HEAP_PTR),y) ;; get string id                                     
                                      (JSR MILRT_STRING_ID2PTR)
+                                     (PLA)
+                                     (TAY)
                                      (JSR MILRT_INC_VAL_HEAP_BY_Y) ;; drop string from value stack
                                      (LDA (MILRT_ZP_STRING_PTR),y) ;; y should be 0, a= strlen
                                      (TAY);;  y = strlen
@@ -149,17 +219,35 @@ this file is an example of how the native compilation of a mil could look like
    (label MILRT_DISPLAY_DIGIT)       (ADC !48) ; 0 -> 0
                                      (JMP $FFD2)  
 
-   (label MILRT_DISPLAY_NONUINT)
+   (label MILRT_DISPLAY_NONUINT)     ;; TODO: implement printing strings, cons-cells, lists and boolean
                                      (RTS)
 
                                      ;; load ptr to string with A = STRING ID
                                      ;; into zero page MILRT_ZP_STRING_PTR, MILRT_ZP_STRING_PTRP1 (low, high)
-                                     ;; A = *
-   (label MILRT_STRING_ID2PTR)       (LDA !<STRING_PTR) ;; work around
+                                     ;; A = *, Y = *
+   (label MILRT_STRING_ID2PTR)       (ASL A)
+                                     (TAY)
+                                     (BCS MILRT_STRING_ID2PTR_2)
+
+                                     (LDA MILRT_STRING_ID_TABLE,y)
                                      (STA MILRT_ZP_STRING_PTR)
-                                     (LDA !>STRING_PTR)
+                                     (INY)
+                                     (LDA MILRT_STRING_ID_TABLE,y)
                                      (STA MILRT_ZP_STRING_PTRP1)
                                      (RTS)
+                                     
+   (label MILRT_STRING_ID2PTR_2)     (LDA MILRT_STRING_ID_TABLE_P2,y)
+                                     (STA MILRT_ZP_STRING_PTR)
+                                     (INY)
+                                     (LDA MILRT_STRING_ID_TABLE_P2,y)
+                                     (STA MILRT_ZP_STRING_PTRP1)
+                                     (RTS)
+
+                                     ;; (LDA !<STRING_PTR) ;; work around
+                                     ;; (STA MILRT_ZP_STRING_PTR)
+                                     ;; (LDA !>STRING_PTR)
+                                     ;; (STA MILRT_ZP_STRING_PTRP1)
+                                     ;; (RTS)
    
                                      ;; copy bytes from [MILRT_ZP_MEMCPY_SPTR] -> [MILRT_ZP_MEMCPY_TPTR]
                                      ;; # = [MILRT_ZP_MEMCPY_LEN_LOW][MILRT_ZP_MEMCPY_LEN_HIGH+1]
@@ -174,22 +262,16 @@ this file is an example of how the native compilation of a mil could look like
                                      (JSR MILRT_PUSH_STRING)
                                      (JMP MILRT_DISPLAY)
 
-   (label STRING-TABLE-ID2PTR)
-                                     ; id -> ptr to c000..c1ff
-                                     ; copy string to c200..cfff
-                                     ; (byte >STRING_PTR)             ID = 1
-                                     ; (byte <STRING_PTR)
-                                     ; (byte >STRING_FORMAT_ERROR)    ID = 2
-                                     ; (byte <STRING_FORMAT_ERROR)
-
    (label STRING-TABLE)
    (label STRING_PTR)                (byte 15)
                                      ;; (byte $5E)
                                      (asc "!a")
                                      (byte $5E)
                                      (asc " DLROW OLLEH")
-   (label STRING_FORMAT_ERROR)       (byte 19)
-                                     (asc "rorre tamrof gnirts")
+   ;; (label STRING_FORMAT_ERROR) ; this label is not needed
+                                     (byte 19)
+                                     (asc "RORRE TAMROF GNIRTS")
+                                     (byte 0) ;; marks the end of the string table
                                      ))
 
 (define org 2064)
