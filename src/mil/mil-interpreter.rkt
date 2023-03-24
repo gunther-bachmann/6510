@@ -20,7 +20,7 @@
 
 (define atom-functions '(+ - display cdr car quote cons > < eq? not zero?))
 
-(define special-forms '(let     ;; mil-elt
+(define special-forms '(let     ;; mil-let
                         if      ;; mil-if
                         def     ;; mil-definition
                         and       ;; mil-and
@@ -99,11 +99,11 @@
 
 ;; printout some text (and variables)
 ;; the first parameter is a format string that
-;; may contain ~a and must be followed by an equal 
+;; may contain ^a and must be followed by an equal
 ;; number of atomic values to print
 (define/contract (mil-display params ctxs)
   (-> (listof mil-expression?) (listof interpreter-ctx?) mil-void?)
-  (define format (mil-string-value (car params)))
+  (define format (regexp-replace* "\\^" (mil-string-value (car params)) "~"))
   (define values (map unbox-mil-atomic-value (cdr params)))
   (apply fprintf (cons (current-output-port) (cons format values)))
   (mil-void))

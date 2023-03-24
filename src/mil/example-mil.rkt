@@ -2,6 +2,10 @@
 
 (require "./mil-structures.rkt")
 (require "./mil-interpreter.rkt")
+(require "./mil-compiler.rkt")
+(require "./mil-compile-structures.rkt")
+
+
 
 (define mil-definition-funx80 
   (mil-definition 
@@ -35,24 +39,25 @@
 
 (module+ main
   (interpret (mil-l (mil-symbol 'display)
-                    (mil-string "some ~a\n")
-                    (mil-uint8 #x80))
+                    (mil-string "HELLO WORLD ~a!") ;; in mil its printed in hex
+                    (mil-uint8 #xa3))
                (list))
 
-  (interpret
-   (mil-l (mil-symbol '+)
-          (mil-uint8 2)
-          (mil-l (mil-symbol 'funx80)))
-   (list (module-ctx mil-module-a)))
+  ;; (interpret
+  ;;  (mil-l (mil-symbol '+)
+  ;;         (mil-uint8 2)
+  ;;         (mil-l (mil-symbol 'funx80)))
+  ;;  (list (module-ctx mil-module-a)))
 
-  (interpret
-   (mil-l (mil-symbol 'times2) (mil-uint8 #x10))
-   (list (module-ctx mil-module-a)))
+  ;; (interpret
+  ;;  (mil-l (mil-symbol 'times2) (mil-uint8 #x10))
+  ;;  (list (module-ctx mil-module-a)))
 
-  (interpret
-   (mil-l (mil-symbol 'age-comment) (mil-uint8 #x10))
-   (list (module-ctx mil-module-a)))
+  ;; (interpret
+  ;;  (mil-l (mil-symbol 'age-comment) (mil-uint8 #x10))
+  ;;  (list (module-ctx mil-module-a)))
 
-  (interpret
-   (mil-l (mil-symbol 'age-comment) (mil-uint8 #x20))
-   (list (module-ctx mil-module-a))))
+  ;; (interpret
+  ;;  (mil-l (mil-symbol 'age-comment) (mil-uint8 #x20))
+  ;;  (list (module-ctx mil-module-a)))
+  )
