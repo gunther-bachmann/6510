@@ -2423,11 +2423,11 @@
     [(#xce) (interpret-crement-mem state fx- peek-abs poke-abs 3)]
     ;; #xcf -io DCP abs
     [(#xd0) (interpret-branch-rel state not-zero-flag?)]
-    [(#xd1) (interpret-compare state cpu-state-accumulator peek-izy 3)]
+    [(#xd1) (interpret-compare state cpu-state-accumulator peek-izy 2)]
     ;; #xd2 -io KIL
     ;; #xd3 -io DCP izy
     ;; #xd4 -io NOP zpx
-    [(#xd5) (interpret-compare state cpu-state-accumulator peek-zpx 3)]
+    [(#xd5) (interpret-compare state cpu-state-accumulator peek-zpx 2)]
     [(#xd6) (interpret-crement-mem state fx- peek-zpx poke-zpx 2)]
     ;; #xd7 -io DCP zpx
     [(#xd8) (interpret-cld state)]

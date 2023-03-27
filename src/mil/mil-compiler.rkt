@@ -53,8 +53,9 @@
 
 (define/contract (gen-string-table ctx)
   (-> compile-ctx? (listof ast-command?))
-  (flatten (list (label STRING-TABLE)
-                 (map encode-string (compile-ctx-strings ctx)))))
+  (append (flatten (list (label STRING-TABLE)
+                         (map encode-string (compile-ctx-strings ctx))))
+          (list (ast-bytes-cmd (list 0)))))
 
 (module+ test #| gen-string-table |#
   (check-equal? (gen-string-table (compile-ctx (list "SOME" "OTHER")))
@@ -272,7 +273,12 @@
                                        (LDA !>MILRT_STRING_TABLE)
                                        (STA MILRT_ZP_STRING_PTR2P1)
 
-     (label MLRT_SETUP__COPY_STRINGS)  (LDY !0)
+     (label MLRT_SETUP__COPY_STRINGS)
+
+                                       (LDA-immediate (char->integer #\.))
+                                       (JSR $FFD2)
+
+                                       (LDY !0)
                                        (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
                                        (TAX) ;; put len into x
                                        (BEQ MILRT_SETUP_VALUE_HEAP)
@@ -321,7 +327,12 @@
                                        (JMP MLRT_SETUP__COPY_STRINGS)
 
                                        ;; setup up value heap ptr for application
-     (label MILRT_SETUP_VALUE_HEAP)    (LDA !<MILRT_VAL_HEAP)
+     (label MILRT_SETUP_VALUE_HEAP)
+
+                                       (LDA !13)
+                                       (JSR $FFD2)
+
+                                       (LDA !<MILRT_VAL_HEAP)
                                        (STA MILRT_ZP_VAL_HEAP_PTR)
                                        (LDA !>MILRT_VAL_HEAP)
                                        (STA MILRT_ZP_VAL_HEAP_PTRP1)
@@ -506,7 +517,11 @@
      (label MILRT_MEM_COPY_IN_LOOP)
                                        (RTS)
 
-     (label MAIN)))
+     (label MAIN)
+                                       ;; (LDA-immediate (char->integer #\Z))
+                                       ;; (JMP $FFD2)
+
+                                       ))
   (let-values (((opcodes ctx) (compile-expression expr (compile-ctx (list "STRING FORMAT ERROR")))))
     (define program (append milrt opcodes (list (RTS)) (gen-string-table ctx)))
     
