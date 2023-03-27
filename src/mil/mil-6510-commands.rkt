@@ -4,6 +4,7 @@
 
 (provide label-def
          BNE-relative
+         CMP-immediate
          JMP-absolute
          JSR-absolute
          LDA-immediate)
@@ -34,6 +35,14 @@
 (module+ test #| BNE-relative |#
   (check-equal? (BNE-relative 'some)
                 (BNE some)))
+
+(define/contract (CMP-immediate expr)
+  (-> exact-nonnegative-integer? ast-opcode-cmd?)
+  (-pass-expression 'CMP (string-append "!" (number->string expr))))
+
+(module+ test #| CMP-immediate |#
+  (check-equal? (CMP-immediate (+ 1 2))
+                (CMP !3)))
 
 (define/contract (JMP-absolute target)
   (-> symbol? ast-command?)

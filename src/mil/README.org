@@ -13,6 +13,7 @@
   - https://www.codebase64.org/doku.php?id=base:6502_6510_maths
   - http://www.6502.org/tutorials/decimal_mode.html
   - http://www.6502.org/tutorials/decimal_mode.html#A
+  - http://www.6502.org/tutorials/compare_beyond.html#2.1
 * minimal lisp with (reduced) racket
 this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
 lisp itself

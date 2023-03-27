@@ -8,6 +8,7 @@
 (require "../ast/6510-constants.rkt")
 (require "../tools/6510-prg-generator.rkt")
 (require "./mil-6510-commands.rkt")
+(require "./mil-runtime.rkt")
 
 (provide compile-expression)
 
@@ -18,14 +19,14 @@
 
 (define/contract (translate-function-symbol sym)
   (-> symbol? symbol?)
-  (cond ((eq? sym '+)       'MILRT_PLUS)
-        ((eq? sym '-)       'MILRT_MINUS)
-        ((eq? sym 'display) 'MILRT_DISPLAY)
+  (cond ((eq? sym '+)       'MILRT_PLUS)    ;; ok
+        ((eq? sym '-)       'MILRT_MINUS)   ;; ok
+        ((eq? sym 'display) 'MILRT_DISPLAY) ;; ok
         ((eq? sym 'cdr)     'MILRT_CDR)
         ((eq? sym 'car)     'MILRT_CAR)
         ((eq? sym 'cons)    'MILRT_CONS)
-        ((eq? sym '>)       'MILRT_GREATER)
-        ((eq? sym '<)       'MILRT_SMALLER)
+        ((eq? sym '>)       'MILRT_GREATER) ;; ok
+        ((eq? sym '<)       'MILRT_SMALLER) ;; ok
         ((eq? sym 'eq?)     'MILRT_EQUAL)
         ((eq? sym 'not)       'MILRT_NOT)
         ((eq? sym 'zero?)   'MILRT_ZERO)
@@ -61,7 +62,8 @@
   (check-equal? (gen-string-table (compile-ctx (list "SOME" "OTHER")))
                 (list (label STRING-TABLE)
                       (byte 4) (asc "EMOS")
-                      (byte 5) (asc "REHTO"))))
+                      (byte 5) (asc "REHTO")
+                      (byte 0))))
 
 (define/contract (compile-bool expr ctx)
   (-> mil-bool? compile-ctx? (values (listof ast-command?) compile-ctx?))
@@ -168,7 +170,8 @@
                 (list
                  (label STRING-TABLE)
                  (byte 5) (asc "REHTO")
-                 (byte 4) (asc "EMOS"))))
+                 (byte 4) (asc "EMOS")
+                 (byte 0))))
 
 ;; compile a list of mil-expressions (interspersed with list of opcodes), passing ctx to each next compile
 (define/contract (compile--elements elements ctx (opcodes (list)))
@@ -227,6 +230,53 @@
                  (JSR MILRT_PUSH_STRING)
                  (label if_end))))
 
+;; compile a list of mil-expressions (interspersed with list of opcodes), passing ctx to each next compile
+(define/contract (quote--elements elements ctx (opcodes (list)))
+  (->* ((listof (or/c mil-expression? (listof ast-command?))) compile-ctx?) ((listof ast-command?)) (values (listof ast-command?) compile-ctx?))
+  (if (empty? elements)
+      (values opcodes ctx)
+      (let ((element (car elements)))
+        (if (mil-expression? element)
+            (let-values (((compiled-opcodes compiled-ctx) (quote-expression element ctx)))
+              (quote--elements (cdr elements) compiled-ctx (append opcodes compiled-opcodes)))
+            (quote--elements (cdr elements) ctx (append opcodes element))))))
+
+(define/contract (quote-expression quoted ctx)
+  (-> mil-expression? compile-ctx? (values (listof ast-command?) compile-ctx?))  
+  (cond ((mil-atomic-value? quoted) (compile-expression quoted ctx))
+        ((mil-list? quoted) (quote--elements
+                             (append (list (list (JSR MILRT_PUSH_LIST_END_MARKER)))
+                                     (reverse (mil-list-elements quoted))
+                                     (list (list (JSR MILRT_PUSH_LIST_START_MARKER)))) 
+                             ctx))
+        ((mil-cell? quoted) (quote--elements
+                             (list (mil-cell-tail quoted)
+                                   (mil-cell-head quoted)
+                                   (JSR MILRT_PUSH_CONS_CELLT))
+                             ctx))
+        (#t (raise-user-error "unknown expression type ~a" quoted))))
+
+(define/contract (compile-quote expr ctx)
+  (-> mil-quote? compile-ctx? (values (listof ast-command?) compile-ctx?))  
+  (define quoted (mil-quote-quoted expr))
+  (quote-expression quoted ctx))
+
+(module+ test #| compile-quote |#
+  (check-equal? (let-values (((opcodes ctx) (compile-quote (mil-quote (mil-l)) (compile-ctx (list)) )))
+                  opcodes)
+                (list
+                 (JSR MILRT_PUSH_LIST_END_MARKER)
+                 (JSR MILRT_PUSH_LIST_START_MARKER)))
+  (check-equal? (let-values (((opcodes ctx) (compile-quote (mil-quote (mil-l (mil-uint8 10) (mil-uint8 20))) (compile-ctx (list))) ))
+                  opcodes)
+                (list
+                 (JSR MILRT_PUSH_LIST_END_MARKER)
+                 (LDA !20)
+                 (JSR MILRT_PUSH_UINT8)
+                 (LDA !10)
+                 (JSR MILRT_PUSH_UINT8)
+                 (JSR MILRT_PUSH_LIST_START_MARKER))))
+
 (define/contract (compile-expression expr ctx)
   (-> mil-expression? compile-ctx? (values (listof ast-command?) compile-ctx?))  
   (cond
@@ -235,325 +285,19 @@
     ((mil-list? expr)   (compile-list expr ctx))
     ((mil-bool? expr)   (compile-bool expr ctx))
     ((mil-if? expr)     (compile-if expr ctx))
+    ((mil-quote? expr)  (compile-quote expr ctx))
     (#t (raise-user-error "cannot compile expression ~a" expr))))
 
+
 (define (mil->asm expr)
-  (define milrt
-    (list
-     (byte-const STRING_ID_FORMAT_ERROR 0)
-
-     (byte-const MILRT_STRING_TYPE 1)
-     (byte-const MILRT_UINT8_TYPE 2)
-     (byte-const MILRT_BOOL_TYPE 3)
-
-     (word-const MILRT_VAL_HEAP #x9eff)
-     (byte-const MILRT_ZP_VAL_HEAP_PTR #x71)
-     (byte-const MILRT_ZP_VAL_HEAP_PTRP1 #x72)
-     (byte-const MILRT_ZP_STRING_PTR #xfb)
-     (byte-const MILRT_ZP_STRING_PTRP1 #xfc)
-     (byte-const MILRT_ZP_STRING_PTR2 #xfd)
-     (byte-const MILRT_ZP_STRING_PTR2P1 #xfe)
-
-     (word-const MILRT_STRING_ID_TABLE #xc000)
-     (word-const MILRT_STRING_ID_TABLE_P2 #xc100)
-     (word-const MILRT_STRING_TABLE #xc200)
-
-     (label MILRT_SETUP)               (LDA !<STRING-TABLE)
-                                       (STA MILRT_ZP_VAL_HEAP_PTR)
-                                       (LDA !>STRING-TABLE)
-                                       (STA MILRT_ZP_VAL_HEAP_PTRP1)
-
-                                       (LDA !<MILRT_STRING_ID_TABLE)
-                                       (STA MILRT_ZP_STRING_PTR)
-                                       (LDA !>MILRT_STRING_ID_TABLE)
-                                       (STA MILRT_ZP_STRING_PTRP1)
-
-                                       (LDA !<MILRT_STRING_TABLE)
-                                       (STA MILRT_ZP_STRING_PTR2)
-                                       (LDA !>MILRT_STRING_TABLE)
-                                       (STA MILRT_ZP_STRING_PTR2P1)
-
-     (label MLRT_SETUP__COPY_STRINGS)
-
-                                       (LDA-immediate (char->integer #\.))
-                                       (JSR $FFD2)
-
-                                       (LDY !0)
-                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (TAX) ;; put len into x
-                                       (BEQ MILRT_SETUP_VALUE_HEAP)
-
-                                       ;; store current ptr into MLRT_STRING_TABLE into MLRT_STRING_ID_TABLE
-                                       (LDA MILRT_ZP_STRING_PTR2)
-                                       (STA (MILRT_ZP_STRING_PTR),y)
-                                       (LDA MILRT_ZP_STRING_PTR2P1)
-                                       (INY)
-                                       (STA (MILRT_ZP_STRING_PTR),y)
-
-                                       (INX) ;; copy len = strlen + len info itself
-                                       (LDY !0)
-     (label MLRT_SETUP__COPY)          (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (STA (MILRT_ZP_STRING_PTR2),y)
-                                       (INY)
-                                       (DEX)
-                                       (BNE MLRT_SETUP__COPY)
-
-                                       ;; increment string table ptr by Y
-                                       (TYA)
-                                       (CLC)
-                                       (ADC MILRT_ZP_STRING_PTR2)
-                                       (STA MILRT_ZP_STRING_PTR2)
-                                       (BCC MILRT_SETUP__COPY_INC_NEXT)
-                                       (INC MILRT_ZP_STRING_PTR2P1)
-
-     (label MILRT_SETUP__COPY_INC_NEXT)
-                                       ;; increment value expression ptr (src of strings)
-                                       (TYA)
-                                       (CLC)
-                                       (ADC MILRT_ZP_VAL_HEAP_PTR)
-                                       (STA MILRT_ZP_VAL_HEAP_PTR)
-                                       (BCC MILRT_SETUP__COPY_INC_NEXT3)
-                                       (INC MILRT_ZP_VAL_HEAP_PTRP1)
-
-     (label MILRT_SETUP__COPY_INC_NEXT3)
-                                       ;; increment location in string id table
-                                       (CLC)
-                                       (LDA !2)
-                                       (ADC MILRT_ZP_STRING_PTR)
-                                       (STA MILRT_ZP_STRING_PTR)
-                                       (BCC MILRT_SETUP__COPY_INC_NEXT2)
-                                       (INC MILRT_ZP_STRING_PTRP1)
-     (label MILRT_SETUP__COPY_INC_NEXT2)
-                                       (JMP MLRT_SETUP__COPY_STRINGS)
-
-                                       ;; setup up value heap ptr for application
-     (label MILRT_SETUP_VALUE_HEAP)
-
-                                       (LDA !13)
-                                       (JSR $FFD2)
-
-                                       (LDA !<MILRT_VAL_HEAP)
-                                       (STA MILRT_ZP_VAL_HEAP_PTR)
-                                       (LDA !>MILRT_VAL_HEAP)
-                                       (STA MILRT_ZP_VAL_HEAP_PTRP1)
-                                       (JMP MAIN)
-
-                                       ;; push the STRING_ID in A onto the value stack
-                                       ;; A = MILRT_STRING_TYPE, Y = 0
-     (label MILRT_PUSH_STRING)         (LDY !2)
-                                       (JSR MILRT_DEC_VAL_HEAP_BY_Y)
-                                       (LDY !2)
-                                       (STA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (DEY)
-                                       (LDA !MILRT_STRING_TYPE)
-                                       (STA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (DEY) ;; return w/ Y=0
-                                       (RTS)
-
-                                       ;; push the UINT8 in A onto the value stack
-                                       ;; A = MILRT_UINT8_TYPE, Y = 0
-     (label MILRT_PUSH_UINT8)          (LDY !2)
-                                       (JSR MILRT_DEC_VAL_HEAP_BY_Y)
-                                       (LDY !2)
-                                       (STA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (DEY)
-                                       (LDA !MILRT_UINT8_TYPE)
-                                       (STA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (DEY) ;; return w/ Y=0
-                                       (RTS)
-
-                                       ;; push the UINT8 in A onto the value stack
-                                       ;; A = MILRT_BOOL_TYPE, Y = 0
-     (label MILRT_PUSH_BOOL)           (LDY !2)
-                                       (JSR MILRT_DEC_VAL_HEAP_BY_Y)
-     (label MILRT_SETTOS_BOOL)
-                                       (LDY !2)
-                                       (STA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (DEY)
-                                       (LDA !MILRT_BOOL_TYPE)
-                                       (STA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (DEY) ;; return w/ Y=0
-                                       (RTS)
-
-     (label MILRT_POP_BOOL)            (LDY !1)
-                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (CMP !MILRT_BOOL_TYPE)
-                                       (BNE MILRT_TYPE_ERROR)
-                                       (INY)
-                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (JSR MILRT_INC_VAL_HEAP_BY_Y)
-                                       (CMP !0)
-                                       (RTS)
-
-     (label MILRT_POP_UINT8)           (LDY !1)
-                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (CMP !MILRT_UINT8_TYPE)
-                                       (BNE MILRT_TYPE_ERROR)
-                                       (INY)
-                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (JSR MILRT_INC_VAL_HEAP_BY_Y)
-                                       (RTS)
-
-     (label MILRT_GREATER)
-                                       (JSR MILRT_POP_UINT8)
-                                       (PHA)
-                                       (LDY !1)
-                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (CMP !MILRT_UINT8_TYPE)
-                                       (BEQ MILRT_GREATER_CONT)
-                                       (PLA) ;; drop pushed a from stack
-                                       (JMP MILRT_TYPE_ERROR)
-     (label MILRT_GREATER_CONT)
-                                       (PLA)
-                                       (INY)
-                                       (CMP (MILRT_ZP_VAL_HEAP_PTR),y)
-                                       (BEQ MILRT_GREATER_FALSE)
-                                       (BCC MILRT_GREATER_FALSE)
-                                       (LDA !$FF) ;; true
-                                       (JMP MILRT_SETTOS_BOOL)
-     (label MILRT_GREATER_FALSE)
-                                       (LDA !0)
-                                       (JMP MILRT_SETTOS_BOOL)
-
-     (label MILRT_TYPE_ERROR)
-                                       (LDA-immediate (char->integer #\X))
-                                       (JMP $FFD2)
-                                       ;; (BRK)
-
-                                        ;; decrement ptr to free tos of value stack (push) by Y
-                                        ;; Y = 0
-     (label MILRT_DEC_VAL_HEAP_BY_Y)   (DEC MILRT_ZP_VAL_HEAP_PTR)
-                                       (BNE MILRT_DVHBY_DONE)
-                                       (DEC MILRT_ZP_VAL_HEAP_PTRP1)
-     (label MILRT_DVHBY_DONE)          (DEY)
-                                       (BNE MILRT_DEC_VAL_HEAP_BY_Y)
-                                       (RTS)
-
-                                       ;; increment ptr to free tos of value stack (pop) by Y
-                                       ;; Y = 0
-     (label MILRT_INC_VAL_HEAP_BY_Y)   (INC MILRT_ZP_VAL_HEAP_PTR)
-                                       (BNE MILRT_IVHBY_DONE)
-                                       (INC MILRT_ZP_VAL_HEAP_PTRP1)
-     (label MILRT_IVHBY_DONE)          (DEY)
-                                       (BNE MILRT_INC_VAL_HEAP_BY_Y)
-                                       (RTS)
-
-                                       ;; DISPLAY string with STRING_ID on the value stack
-                                       ;; Y = 0, A = last char of string
-     (label MILRT_DISPLAY)             (LDY !2)  ;; expecting bytes on the stack
-                                       (TYA)
-                                       (PHA)
-                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y) ;; get string id
-                                       (JSR MILRT_STRING_ID2PTR)
-                                       (PLA)
-                                       (TAY)
-                                       (JSR MILRT_INC_VAL_HEAP_BY_Y) ;; drop string from value stack
-                                       (LDA (MILRT_ZP_STRING_PTR),y) ;; y should be 0, a= strlen
-                                       (TAY);;  y = strlen
-     (label MILRT_DISPLAY_NEXT)        (LDA (MILRT_ZP_STRING_PTR),y)
-                                       ;; if A = #\^, then special (up arrow)
-                                       (CMP !$5E)
-                                       (BNE MILRT_DISPLAY_REGULAR)
-                                       (DEY)
-                                       (LDA (MILRT_ZP_STRING_PTR),y)
-                                       (CMP !$5E)
-                                       (BNE MILRT_DISPLAY_OTHER)
-     (label MILRT_DISPLAY_REGULAR)     (JSR $FFD2)
-     (label MILRT_DISPLAY_REGULAR_C)   (DEY)
-                                       (BNE MILRT_DISPLAY_NEXT)
-                                       (RTS)
-                                     
-     (label MILRT_DISPLAY_OTHER)       (CMP !97) ;; 'a'
-                                       (BNE STR_FORMAT_ERROR)
-                                       ;; keep y
-                                       (TYA)
-                                       (PHA)
-                                       (JSR MILRT_DISPLAY_OBJECT)
-                                       (PLA)
-                                       (TAY)
-                                       (JMP MILRT_DISPLAY_REGULAR_C) ;; continue with rest of string
-     (label STR_FORMAT_ERROR)
-                                       (LDA !STRING_ID_FORMAT_ERROR)
-                                       (JSR MILRT_PUSH_STRING)
-                                       (JMP MILRT_DISPLAY)
-                                       ;; (BRK) ; stop
-
-                                       ;; print object tos as string and pop
-                                       ;; uint8 => 0..255, string => string, char => char, bool => true/false
-                                       ;; cons-cell => (a . b), list => (a b ... )
-                                       ;; Y = *, A = *
-     (label MILRT_DISPLAY_OBJECT)
-                                       (LDY !1)  ;;
-                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y) ;; get type descriptor
-                                       (CMP !MILRT_UINT8_TYPE)
-                                       (BNE MILRT_DISPLAY_NONUINT)
-     (label MILRT_DISPLAY_UINT)
-                                       (INY)
-                                       (LDA !36) ;; prefix with '$'
-                                       (JSR $FFD2)
-
-                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y) ;; get uint value
-                                       (JSR MILRT_INC_VAL_HEAP_BY_Y) ;; pop uint incl. type descriptor from stack
-
-                                       ;; basic routine to write byte !
-
-                                       ;; print byte in A as Hex
-                                       ;; A = last Digit, need 1 stack slot
-     (label MILRT_DISPLAY_UINT8)
-                                       (PHA)                            ; Save A
-                                       (LSR) (LSR) (LSR) (LSR)          ; Move top nybble to bottom nybble
-                                       (JSR MILRT_DISPLAY_NIBBLE)     ; Print this nybble
-                                       (PLA)                            ; Get A back and print bottom nybble
-
-     (label MILRT_DISPLAY_NIBBLE)
-                                       (AND !15)                        ; Keep bottom four bits
-                                       (CMP !10)
-                                       (BCC MILRT_DISPLAY_DIGIT)      ; If 0-9, jump to print
-                                       (ADC !6)                         ; Convert ':' to 'A'
-     (label MILRT_DISPLAY_DIGIT)       (ADC !48) ; 0 -> 0
-                                       (JMP $FFD2)
-
-     (label MILRT_DISPLAY_NONUINT)     ;; TODO: implement printing strings, cons-cells, lists and boolean
-                                       (LDA-immediate (char->integer #\Y))
-                                       (JSR $FFD2)
-                                       (RTS)
-
-                                       ;; load ptr to string with A = STRING ID
-                                       ;; into zero page MILRT_ZP_STRING_PTR, MILRT_ZP_STRING_PTRP1 (low, high)
-                                       ;; A = *, Y = *
-     (label MILRT_STRING_ID2PTR)       (ASL A)
-                                       (TAY)
-                                       (BCS MILRT_STRING_ID2PTR_2)
-
-                                       (LDA MILRT_STRING_ID_TABLE,y)
-                                       (STA MILRT_ZP_STRING_PTR)
-                                       (INY)
-                                       (LDA MILRT_STRING_ID_TABLE,y)
-                                       (STA MILRT_ZP_STRING_PTRP1)
-                                       (RTS)
-
-     (label MILRT_STRING_ID2PTR_2)     (LDA MILRT_STRING_ID_TABLE_P2,y)
-                                       (STA MILRT_ZP_STRING_PTR)
-                                       (INY)
-                                       (LDA MILRT_STRING_ID_TABLE_P2,y)
-                                       (STA MILRT_ZP_STRING_PTRP1)
-                                       (RTS)
-
-     (label MILRT_MEM_COPY)
-     (label MILRT_MEM_COPY_IN_LOOP)
-                                       (RTS)
-
-     (label MAIN)
-                                       ;; (LDA-immediate (char->integer #\Z))
-                                       ;; (JMP $FFD2)
-
-                                       ))
+  
   (let-values (((opcodes ctx) (compile-expression expr (compile-ctx (list "STRING FORMAT ERROR")))))
-    (define program (append milrt opcodes (list (RTS)) (gen-string-table ctx)))
+    (define program (append mil-runtime (list) opcodes (list (RTS)) (gen-string-table ctx)))
     
 
     (define program-p1 (->resolved-decisions (label-instructions program) program))
-    (define program-p2 (->resolve-labels org (label-string-offsets org program-p1) program-p1 '()))
+    (define lsoffsets (label-string-offsets org program-p1))
+    (define program-p2 (->resolve-labels org lsoffsets program-p1 '()))
     (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
     (define raw-bytes (resolved-program->bytes program-p3))
 
@@ -574,6 +318,15 @@
     ;;        (mil-string "HELLO WORLD ^a!") ;; in mil its printed in hex
     ;;        (mil-uint8 #xa3)
     ;;        )
+    ;; (mil-l (mil-symbol '-)
+    ;;               (mil-uint8 10)
+    ;;               (mil-uint8 100))
+    ;; (mil-l (mil-symbol 'display)
+    ;;        (mil-string "HELLO WORLD ^a!") ;; in mil its printed in hex
+    ;;        (mil-l (mil-symbol '+)
+    ;;               (mil-uint8 #x80)
+    ;;               (mil-uint8 #x10))
+    ;;        )
     ;; (mil-if (mil-bool #f)
     ;;         (mil-l (mil-symbol 'display)
     ;;                (mil-string "HELLO WORLD ^a!") ;; in mil its printed in hex
@@ -581,16 +334,17 @@
     ;;         (mil-l (mil-symbol 'display)
     ;;                (mil-string "OH")))
     ;; (mil-uint8 #x10)
-    ;; (mil-l (mil-symbol '>)
-    ;;                (mil-uint8 #x10)
+    ;; (mil-if (mil-l (mil-symbol '>)
+    ;;                (mil-l (mil-symbol '+) (mil-uint8 #x10) (mil-uint8 #x03))
     ;;                (mil-uint8 #x12))
-    (mil-if (mil-l (mil-symbol '>)
-                   (mil-uint8 #x13)
-                   (mil-uint8 #x12))
-            (mil-l (mil-symbol 'display)
-                   (mil-string "HELLO WORLD ^a!") ;; in mil its printed in hex
-                   (mil-uint8 #xa3))
-            (mil-l (mil-symbol 'display)
-                   (mil-string "OH")))
+    ;;         (mil-l (mil-symbol 'display)
+    ;;                (mil-string "HELLO WORLD ^a!") ;; in mil its printed in hex
+    ;;                (mil-uint8 #xa3))
+    ;;         (mil-l (mil-symbol 'display)
+    ;;                (mil-string "OH")))
+
+    (mil-l (mil-symbol 'display)
+           (mil-string "LIST: ^a")
+           (mil-quote (mil-l (mil-uint8 10) (mil-l (mil-uint8 20) (mil-string "O")) (mil-l) (mil-string "HEL\"LO"))))
     )))
 
