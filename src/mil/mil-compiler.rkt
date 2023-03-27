@@ -366,6 +366,7 @@
                                        ;; A = MILRT_BOOL_TYPE, Y = 0
      (label MILRT_PUSH_BOOL)           (LDY !2)
                                        (JSR MILRT_DEC_VAL_HEAP_BY_Y)
+     (label MILRT_SETTOS_BOOL)
                                        (LDY !2)
                                        (STA (MILRT_ZP_VAL_HEAP_PTR),y)
                                        (DEY)
@@ -384,7 +385,40 @@
                                        (CMP !0)
                                        (RTS)
 
-     (label MILRT_TYPE_ERROR)          (BRK)
+     (label MILRT_POP_UINT8)           (LDY !1)
+                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
+                                       (CMP !MILRT_UINT8_TYPE)
+                                       (BNE MILRT_TYPE_ERROR)
+                                       (INY)
+                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
+                                       (JSR MILRT_INC_VAL_HEAP_BY_Y)
+                                       (RTS)
+
+     (label MILRT_GREATER)
+                                       (JSR MILRT_POP_UINT8)
+                                       (PHA)
+                                       (LDY !1)
+                                       (LDA (MILRT_ZP_VAL_HEAP_PTR),y)
+                                       (CMP !MILRT_UINT8_TYPE)
+                                       (BEQ MILRT_GREATER_CONT)
+                                       (PLA) ;; drop pushed a from stack
+                                       (JMP MILRT_TYPE_ERROR)
+     (label MILRT_GREATER_CONT)
+                                       (PLA)
+                                       (INY)
+                                       (CMP (MILRT_ZP_VAL_HEAP_PTR),y)
+                                       (BEQ MILRT_GREATER_FALSE)
+                                       (BCC MILRT_GREATER_FALSE)
+                                       (LDA !$FF) ;; true
+                                       (JMP MILRT_SETTOS_BOOL)
+     (label MILRT_GREATER_FALSE)
+                                       (LDA !0)
+                                       (JMP MILRT_SETTOS_BOOL)
+
+     (label MILRT_TYPE_ERROR)
+                                       (LDA-immediate (char->integer #\X))
+                                       (JMP $FFD2)
+                                       ;; (BRK)
 
                                         ;; decrement ptr to free tos of value stack (push) by Y
                                         ;; Y = 0
@@ -505,14 +539,6 @@
                                        (STA MILRT_ZP_STRING_PTRP1)
                                        (RTS)
 
-                                       ;; (LDA !<STRING_PTR) ;; work around
-                                       ;; (STA MILRT_ZP_STRING_PTR)
-                                       ;; (LDA !>STRING_PTR)
-                                       ;; (STA MILRT_ZP_STRING_PTRP1)
-                                       ;; (RTS)
-
-                                       ;; copy bytes from [MILRT_ZP_MEMCPY_SPTR] -> [MILRT_ZP_MEMCPY_TPTR]
-                                       ;; # = [MILRT_ZP_MEMCPY_LEN_LOW][MILRT_ZP_MEMCPY_LEN_HIGH+1]
      (label MILRT_MEM_COPY)
      (label MILRT_MEM_COPY_IN_LOOP)
                                        (RTS)
@@ -548,7 +574,19 @@
     ;;        (mil-string "HELLO WORLD ^a!") ;; in mil its printed in hex
     ;;        (mil-uint8 #xa3)
     ;;        )
-    (mil-if (mil-bool #f)
+    ;; (mil-if (mil-bool #f)
+    ;;         (mil-l (mil-symbol 'display)
+    ;;                (mil-string "HELLO WORLD ^a!") ;; in mil its printed in hex
+    ;;                (mil-uint8 #xa3))
+    ;;         (mil-l (mil-symbol 'display)
+    ;;                (mil-string "OH")))
+    ;; (mil-uint8 #x10)
+    ;; (mil-l (mil-symbol '>)
+    ;;                (mil-uint8 #x10)
+    ;;                (mil-uint8 #x12))
+    (mil-if (mil-l (mil-symbol '>)
+                   (mil-uint8 #x13)
+                   (mil-uint8 #x12))
             (mil-l (mil-symbol 'display)
                    (mil-string "HELLO WORLD ^a!") ;; in mil its printed in hex
                    (mil-uint8 #xa3))
