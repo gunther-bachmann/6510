@@ -13,7 +13,7 @@
   - https://www.codebase64.org/doku.php?id=base:6502_6510_maths
   - http://www.6502.org/tutorials/decimal_mode.html
   - http://www.6502.org/tutorials/decimal_mode.html#A
-  - http://www.6502.org/tutorials/compare_beyond.html#2.1
+  - http://www.6502.org/tutorials/compare_beyond.html#2.1\
 * minimal lisp with (reduced) racket
 this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
 lisp itself
@@ -162,10 +162,9 @@ only tailcall recursion allowed (no check, yet)
     table of strings (ptr - >str)
     table of symbols (ptr/id -> symbol string)
     function table (ptr/id -> function code)
-
 - [ ] define parser for actual syntax
 - [ ] define translation: parsed -> mil ast
-** mil-ast -> c64
+** (old) mil-ast -> c64
 *** simple function
 #+begin_src racket
   (mil-definition
@@ -217,10 +216,10 @@ stack of pointers (e.g. just 256 bytes = 128 values)
 
 heap of values pointed to by value stack (pointers)
 | ptr        | *value stack heap* | size                    | layout                                                              |
-|------------+------------------+-------------------------+---------------------------------------------------------------------|
-| ptr->tos   | (list a b c)     | 4 +len(a)+len(b)+len(c) | [type-cons-cell[a][type-cons-cell[b][type cons-cell[c][nil-cell]]]] |
-| ptr->tos-1 | byte #$42        | 2                       | [type-byte-const][$42]                                              |
-| ...        |                  |                         |                                                                     |
+|------------+--------------------+-------------------------+---------------------------------------------------------------------|
+| ptr->tos   | (list a b c)       | 4 +len(a)+len(b)+len(c) | [type-cons-cell[a][type-cons-cell[b][type cons-cell[c][nil-cell]]]] |
+| ptr->tos-1 | byte #$42          | 2                       | [type-byte-const][$42]                                              |
+| ...        |                    |                         |                                                                     |
 
 - pop on the stack means:
   - cell-n is dropped,
@@ -271,6 +270,150 @@ should compile to
 #+end_src
 String table should hold one entry: "Hello World!" with ID 1 (STRING-ID_HELLO_WORLD
 Symbol Table is not necessary yet (maybe if 'eval' is implemented)
+
+** memory layout
+- 0000-00ff ZP
+  - PTR for strings/symbols
+  - PTR to TOS of Expression Stack
+  - PTR to next free cons-cell
+  - HIGH-BYTE of to last free cons-cell (reaching this means, the heap needs to allocate new cons cells), done in 256 byte steps
+- 0100-01ff 6510-STACK
+- <used>
+- 0800...    PROGRAM
+- ...        EXPRESSION STACK (growing up) [atomic-values, or ptr to cons-cell]
+-            FREE
+- ...        EXPRESSION-HEAP (growing down, with free cons-cells list)
+- A000-BFFF
+- C000... Strings/Symbols (growing up)
+- .. CFFF MAP: String/Symbol-ID -> PTR (growing down)
+
+*** expression stack
+- 2 bytes
+- either low-high of pointer (lowest two bits are 00), if completely 0 then = nil
+- or atomic value (lowest two bits are set)
+  - 01 atomic value (string(id), uint8, char, bool, symbol(id)) <- in second byte,
+    - C-- 000 01 uint 8 (carry from last operation on that value)
+    - --- 001 01 char
+    - --- 010 01 bool
+    - hhh 011 01 string-id (hhh are the high 3 bits, if # is getting too large)
+    - hhh 100 01 symbol-id (hhh are the high 3 bits, if # is getting too large)
+    - --- 101 01
+    - --- 110 01
+    - --- 111 01
+  - 10
+  - 11
+
+*** expression heap is made of cons-cells (all of equal size, later on maybe use pages of cons-cells of different size).
+- IDEA: 256 byte = 51 cons cells, 51 byte = reference counters + 1 byte pages status
+  [xxxxxx00][high-byte]
+  00110011
+- each cons cell [4 bytes][+1 byte for reference count] <- where this byte is located needs to be decided on!!
+  - [aaaaaaTT][aaaaaaaa][bbbbbbSS][bbbbbbbb]
+  - TT = 00 => a = ptr to next cons cell
+  - SS = 00 => b = ptr to next cons cell
+  - TT/SS = 01 => is atomic value, same encoding as expression stack!
+  - if a and TT is = 0 => nil, this cons cell is = nil
+  - if b and SS is = 0 => this is the last element of a list
+- a cons cell of the free list has only /a/ set, /b/ = nil. a points to the next free cons cell.
+- if a is 0 this is the last free cons-cell. the last free cons-cell has in b pointer to the next block to allocate
+- cells are located at
+  - (+ (* 4 (* 3 17)) 51), 51 cells used
+  - [00000] status byte
+
+  - [0000 01]00 ... 0000 0111 -> 0000 0001
+  - [0000 10]00 ... 0000 1011 -> 0000 0010
+  - [0000 11]00 ... 0000 1111 -> 0000 0011
+
+  - [0100 00]00 ... 0100 0011 -> 0001 0000
+  - [0100 01]00 ... 0100 0111 -> 0001 0001
+  - ...
+  - [1000 00]00 ... 1000 0011 -> 0010 0000
+  - [1100 00]00 ... 1100 0011 -> 0011 0000
+  - [1111 11]00 ... 1111 1111 -> 0011 1111
+  #+begin_src scheme
+
+                        ;; init page at high-byte
+                        ;; use zero page LOW_PTR, HIGH_PTR = LOW_PTR+1
+
+                        ;; fill page with zeros!
+                        (LDA !high-byte)
+                        (STA HIGH_PTR
+                        (LDA !$0)
+                        (STA LOW_PTR)
+                        (LDX !FF)
+                        (LDA !0)
+    (label _FILL0)
+                        (STA (LOW_PTR),x)
+                        (DEX)
+                        (BNE _FILL0)
+
+                        ;; set page status on first byte of the page
+                        (LDA !page-status)
+                        (STA (LOW_PTR),x)
+
+                        ;; fill first 3 cells (special)
+
+                        ;; now 0000 0100, 0000 0101 <- 0000 1000, high-byte
+                        (LDX !$04)
+                        (LDA !$08) ;; point to next cell at 0000 1000
+                        (STA (LOW_PTR),x)
+                        (INX)
+                        (LDA !high-byte)
+                        (STA (LOW_PTR),x)
+                        ;; next 0000 1000, 0000 1001 <- 0000 1100, high-byte
+                        (LDX !$08)
+                        (LDA !$0a) ;; point to next cell at 0000 1100
+                        (STA (LOW_PTR),x)
+                        (INX)
+                        (LDA !high-byte)
+                        (STA (LOW_PTR),x)
+                        ;; next 0000 1100, 0000 1101 <- 0100 000, high byte
+                        (LDX !$0a)
+                        (LDA !$40) ;; point to next cell at 0100 0000
+                        (STA (LOW_PTR),x)
+                        (TAY)
+                        (INX)
+                        (LDA !high-byte)
+                        (STA (LOW_PTR),x)
+                        ;; next 0100 0000, 0100 0001 <- 0100 0100, high byte
+
+                        ;; fill the 48 other cells starting at 0100 0000
+    (label _loop_init_cons)
+                        (TYA)
+                        (TAX)
+                        (CLC)
+                        (ADC !$04) ;; next cell at this+4
+                        (STA (LOW_PTR),x) ;; point to next cell
+                        (TAY) ;; keep ptr to next cell in Y
+                        (INX)
+                        (LDA !high-byte)
+                        (STA (LOW_PTR),x) ;; point to next cell high byte
+                        (CPX !$F9) ;; was last cell to point to next
+                        (BNE _loop_init_cons
+
+                        ;; last cell marked with two zeros
+                        (RTS)
+
+                        ;; next 0100 0100, 0100 0001 <- 0100 1000, high byte
+                        ;; next 0100 1000, 0100 1001 <- 0100 1100, high byte
+                        ;; next 0100 1100, 0100 1101 <- 0101 0000, high byte
+                        ;; next 1100 0000, 1100 0001 <- 1100 0100, high byte
+                        ;; next 1111 1000, 1111 1001 <- 1111 1100, high byte
+                        ;; next 1111 1100, 1111 1101 <- 0, 0
+
+  #+end_src
+** runtime functions
+- copy strings/symbols to string/symbol table
+- initialize expression heap of cons cells
+  - create free list
+  - allocate cons-cell
+  - grow heap for free list
+  - collect cells for free-list (collection should be inplace, without additional space-usage)
+- initialize expression stack
+  - push atomic values
+  - pop atomic values
+  - push lists / cons-cells
+- display (atomic values, cons-cells (lists))
 
 * additional routines
 ** times 10 (decimal)
