@@ -51,6 +51,8 @@
 ;; (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
 (require (only-in threading ~>>))
 (require "../6510-utils.rkt")
+(require "../ast/6510-command.rkt")
+(require "../ast/6510-assembler.rkt")
 (require scribble/srcdoc)
 (require (for-doc scribble/base scribble/manual))
 (require data/pvector)
@@ -65,6 +67,7 @@
          execute-cpu-step
          initialize-cpu
          memory->string
+         memory-list
          peek
          peek-pc
          peek-pc+1
@@ -278,6 +281,12 @@
   (cond
     ((char-graphic? dump-char) (string dump-char))
     (else ".")))
+
+(define/c (memory-list state from to)
+  (-> cpu-state? word/c word/c (listof byte/c))
+  (stream->list
+   (map (lambda (idx) (peek state idx))
+        (range from (fx+ 1 to)))))
 
 ;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
 (define/c (indexed-memory-list state from to)
@@ -2540,14 +2549,18 @@
     (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")))
 
 ;; put the raw bytes into memory (at org) and start running at org
-(define/c (run-interpreter org raw-bytes)
-  (-> word/c (listof byte/c) any/c)  
-  (displayln (format "loading program into interpreter at ~a" org))
-  (displayln "program execution starting:")
+(define/c (run-interpreter org program (verbose #t))
+  (->* (word/c (listof (or/c byte/c ast-command?))) (boolean?) cpu-state?)
+  (when verbose (displayln (format "loading program into interpreter at ~a" org)))
+  (when verbose (displayln "program execution starting:"))
+  (define raw-bytes (if (ast-command? (car program))
+                        (assemble org program)
+                        program))
   ;; (collect-garbage)
   ;; (displayln (format "memory: ~a" (current-memory-use)))
   (define state (6510-load (initialize-cpu) org raw-bytes))
-  (run (with-program-counter state org))
-  ;; (collect-garbage)
-  ;; (displayln (format "\nmemory: ~a" (current-memory-use)))
-  (displayln "program execution done."))
+  (begin0
+      (run (with-program-counter state org))
+    ;; (collect-garbage)
+    ;; (displayln (format "\nmemory: ~a" (current-memory-use)))
+    (when verbose (displayln "program execution done."))))

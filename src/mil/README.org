@@ -13,7 +13,9 @@
   - https://www.codebase64.org/doku.php?id=base:6502_6510_maths
   - http://www.6502.org/tutorials/decimal_mode.html
   - http://www.6502.org/tutorials/decimal_mode.html#A
-  - http://www.6502.org/tutorials/compare_beyond.html#2.1\
+  - http://www.6502.org/tutorials/compare_beyond.html#2.1
+  - https://www.pagetable.com/c64ref/6502/?tab=0
+  - https://celso.io/retrocomputing/2019/12/23/c64-assembly
 * minimal lisp with (reduced) racket
 this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
 lisp itself
@@ -273,15 +275,24 @@ Symbol Table is not necessary yet (maybe if 'eval' is implemented)
 
 ** memory layout
 - 0000-00ff ZP
-  - PTR for strings/symbols
-  - PTR to TOS of Expression Stack
-  - PTR to next free cons-cell
-  - HIGH-BYTE of to last free cons-cell (reaching this means, the heap needs to allocate new cons cells), done in 256 byte steps
+  - free for use by mil (since only used by basic)
+    07, 08 : used for searching with basic
+    0c : basic dim array check
+    0d : basic string / number indicator
+    0e : basic integer / float indicator
+    3b, 3c, 3d, 3e, 3f, 40, 41, 42: basic line number stuff, basic data command stuff
+    fb, fc, fd, fe : unused
+  - ~07..08~ : PTR for strings/symbols (during string/symbol processing and initialisation)
+  - ~0d..0e~ : PTR to TOS of Expression Stack
+  - ~3b..3c~ : PTR to next free cons-cell
+  - ~3d..3e~ : PTR to free-cons-cells for pass2 of freeing
+  - ~3f~     : HIGH-BYTE of to last free cons-cell (reaching this means, the heap needs to allocate new cons cells), done in 256 byte steps
+  - ~40..41~ : PTR to cons cell (register 1)
 - 0100-01ff 6510-STACK
 - <used>
 - 0800...    PROGRAM
 - ...        EXPRESSION STACK (growing up) [atomic-values, or ptr to cons-cell]
--            FREE
+- FREE
 - ...        EXPRESSION-HEAP (growing down, with free cons-cells list)
 - A000-BFFF
 - C000... Strings/Symbols (growing up)
@@ -403,12 +414,70 @@ Symbol Table is not necessary yet (maybe if 'eval' is implemented)
 
   #+end_src
 ** runtime functions
-- copy strings/symbols to string/symbol table
+- free-cons-cell-ptr :: points to the first free cons cell
+- CR1..n :: cons register
+- next-heap-page :: holds the high byte of the next free heap page 
+- init RT
+  - copy strings/symbols to string/symbol table
 - initialize expression heap of cons cells
   - create free list
   - allocate cons-cell
+    - when (lowbyte of) car of free-cons-cell-ptr is zero (no more free cons cells), grow heap and initialize new freelist
+    - copy ~free-cons-cell-ptr~ into cons register
+    - copy car of cons cell into ~free-cons-cell-ptr~
+    - inc reference count (cons register lowbyte shift right 2 times)
+  - add cons-cell (in cons register) to free-list
+    - copy ~free-cons-cell-ptr~ into car of cons register, clear cdr of cons register (clear reference count, should be zero anyhow)
+    - copy cons register into ~free-cons-cell-ptr~
+  - free cons-cell (CR)
+    - shift low byte right two times (now high low should point to reference count)
+    - dec reference count
+    - when zero, add cons cell to free-list
+    - free car of cons-cell (if ptr), free cdr of cons-cell (if ptr) [no recursion: do this as a loop] 
+    - example implementation
+      - loop (1)
+        - keep if car of cons cell (if it is a ptr)
+        - if cdr holds ptr, add this to free-pass2-cons-cell list, car -> free-pass2-cons-cell list, free-pass-cons-cell list := CR
+        - if cdr holds no ptr, free cons cell itself
+        - loop to free car (if it is a ptr)
+      - loop (2)
+        - pop top of free-pass2-cons-cell list, call free on cdr of that cell (jump into loop 1) and thus add this cons cell to the free list
+        - loop until free-pass2-cons-cell list is empty
   - grow heap for free list
+    - check that next-heap-page does not collide with expression-stack (high byte) => out of memory error, gc?
+    - initialize new page, mark last cell as such, set car of last cell to 0 (set $FC = 0) <- is set to 0 by init
   - collect cells for free-list (collection should be inplace, without additional space-usage)
+- gc (e.g. mark and sweep) <- necessary? how would could a reference ring come into being? not for lists alone, what about structures
+  #+begin_src scheme
+    (struct A (a b val)) ;; a b can be cons cells
+
+    (define A2 (A nil nil  2)) ;; A2 ref count 1
+    (define A1 (A nil A2 15)) ;; A1 ref count 1, A2 ref count 2
+    (define newA2 (struct-copy A A2 [a A1])) ;; newA2 ref count1, A1 refcount 2, A2 refcount 3
+
+    newA2 -> A1 ->
+          -> A2
+
+
+    (discard A2) ;; A2 refcount 2 
+    (discard A1) ;; A1 refcount 1
+
+    (discard newA2) ;; newA2 refcount = 0
+    (discard (A-a newA2)) ;; A1 refcount = 0
+    (discard (A-b (A-a newA2))) ;; A2 refount = 1
+    (discard (A-b newA2)) ;; A2 refcount = 0
+
+    ;; given the fact that no modificaton is allowed, circular references cannot occur
+    ;; => cannot implement double linked list
+  #+end_src
+  - gc only necessary, when starting to allow assignments (without copying)
+    #+begin_src scheme
+      (struct A (prev next val))
+      (define A1 (A nil nil 5))
+      (define A2 (A nil nil 6))
+      (A-next-set! A1 A2) ;; set does mark as gc collectible? or simply offers no memory deallocation?
+      (A-prev-set! A2 A1)
+    #+end_src
 - initialize expression stack
   - push atomic values
   - pop atomic values
