@@ -1,14 +1,13 @@
 #lang racket
 
 (require "../../6510.rkt")
-(require "../mil-6510-commands.rkt")
 
-(provide MILRT_INIT_CONS_CELL_PAGE)
+(provide MILRT_INIT_CONS_CELL_PAGE MILRT_INIT_CONS_CELL_PAGE_C)
 
 (module+ test
   (require "../../6510-test-utils.rkt"))
 
-(define MILRT_ZP_CONSTANTS
+(define MILRT_INIT_CONS_CELL_PAGE_C
   (list
    (byte-const page-status     #x01) ;; 0-byte on page (to identify page)
    (byte-const temp-ptr-1      #x07)
@@ -37,6 +36,7 @@
 ;; Y *
 (define MILRT_INIT_CONS_CELL_PAGE
   (list
+   (label MILRT_INIT_CONS_CELL_PAGE)
                         (STA temp-ptr-1-high)
                         (LDA !$0)
                         (STA temp-ptr-1)
@@ -97,9 +97,10 @@
 
 (module+ test
   (require (only-in "../../tools/6510-interpreter.rkt" memory-list run-interpreter))
+  (require "../../ast/6510-assembler.rkt")
 
   (define org 2064)
-  (define program (append (list (LDA !$c0)) MILRT_ZP_CONSTANTS MILRT_INIT_CONS_CELL_PAGE))
+  (define program (append (list (LDA !$c0)) MILRT_INIT_CONS_CELL_PAGE_C MILRT_INIT_CONS_CELL_PAGE))
 
   ;; ensure that all cons-cells LSR two times point to the ref count cell
   (check-equal? (arithmetic-shift #x04 -2) #x01)

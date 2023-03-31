@@ -16,6 +16,8 @@
 (require (only-in "6510-disassembler.rkt" disassemble disassemble-single))
 (require (only-in "../ast/6510-resolver.rkt" commands->bytes))
 (require (only-in racket/fixnum fx+))
+(require (only-in "../ast/6510-command.rkt" ast-command?))
+(require (only-in "../ast/6510-assembler.rkt" assemble))
 
 (provide run-debugger)
 
@@ -339,10 +341,14 @@ EOF
                    d-state))))
 
 ;; run an read eval print loop debugger on the passed program
-(define/c (run-debugger org raw-bytes)
-  (-> word/c (listof byte/c) any/c)
-  (displayln (format "loading program into debugger at ~a" org))
-  (displayln "enter '?' to get help, enter 'q' to quit")
+(define/c (run-debugger org program (verbose #t))
+  (->* (word/c (listof (or/c byte/c ast-command?))) (boolean?) any/c)
+  (define raw-bytes (if (ast-command? (car program))
+                        (assemble org program)
+                        program))
+  (when verbose
+    (displayln (format "loading program into debugger at ~a" org))
+    (displayln "enter '?' to get help, enter 'q' to quit"))
   (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '()))
   (for ([_ (in-naturals)])
     (displayln "")

@@ -325,13 +325,22 @@
   (if (empty? program)
       resolved
       (let* ((instruction (car program))
-             (bytes       (cond [(ast-opcode-cmd? instruction)
-                                 (ast-opcode-cmd-bytes instruction)]
-                                [(ast-rel-opcode-cmd? instruction)
-                                 (ast-rel-opcode-cmd-bytes instruction)]
-                                [(ast-bytes-cmd? instruction)
-                                 (ast-bytes-cmd-bytes instruction)]
-                                [#t '()])))
+             (bytes       (cond
+                            [(ast-unresolved-command? instruction)
+                             (raise-user-error "cannot resolve unresolved command to bytes ~a" instruction)]
+                            [(ast-decide-cmd? instruction)
+                             (raise-user-error "cannot resolve undecided command to bytes ~a" instruction)]
+                            [(ast-opcode-cmd? instruction)
+                             (ast-opcode-cmd-bytes instruction)]
+                            [(ast-rel-opcode-cmd? instruction)
+                             (ast-rel-opcode-cmd-bytes instruction)]
+                            [(ast-bytes-cmd? instruction)
+                             (ast-bytes-cmd-bytes instruction)]
+                            [(ast-const? instruction) '()]
+                            [(ast-require? instruction) '()]
+                            [(ast-provide? instruction) '()]
+                            [(ast-label-def-cmd? instruction) '()]
+                            [#t (raise-user-error "cannot resolve instruction to bytes ~a" instruction)])))
         (-resolved-program->bytes (cdr program) (append resolved bytes)))))
 
 ;; transform a resolved PROGRAM into a list of bytes

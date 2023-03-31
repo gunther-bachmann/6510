@@ -1,7 +1,7 @@
 #lang racket
 
 (require "../6510.rkt")
-(require "./mil-6510-commands.rkt")
+(require "../ast/6510-calc-opcode-facades.rkt")
 
 (provide mil-runtime)
 

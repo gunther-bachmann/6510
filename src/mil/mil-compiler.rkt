@@ -3,12 +3,10 @@
 (require "./mil-structures.rkt")
 (require "./mil-compile-structures.rkt")
 (require "../6510.rkt")
-(require "../ast/6510-resolver.rkt")
-(require "../ast/6510-relocator.rkt")
-(require "../ast/6510-constants.rkt")
 (require "../tools/6510-prg-generator.rkt")
-(require "./mil-6510-commands.rkt")
+(require "../ast/6510-calc-opcode-facades.rkt")
 (require "./mil-runtime.rkt")
+(require "../ast/6510-assembler.rkt")
 
 (provide compile-expression)
 
@@ -293,13 +291,7 @@
   
   (let-values (((opcodes ctx) (compile-expression expr (compile-ctx (list "STRING FORMAT ERROR")))))
     (define program (append mil-runtime (list) opcodes (list (RTS)) (gen-string-table ctx)))
-    
-
-    (define program-p1 (->resolved-decisions (label-instructions program) program))
-    (define lsoffsets (label-string-offsets org program-p1))
-    (define program-p2 (->resolve-labels org lsoffsets program-p1 '()))
-    (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
-    (define raw-bytes (resolved-program->bytes program-p3))
+    (define raw-bytes (assemble org program))
 
     (create-prg raw-bytes org "compiled.prg")
     ;; (create-image-with-program raw-bytes org "compiled.prg" "compiled.d64" ".")
@@ -345,6 +337,7 @@
 
     (mil-l (mil-symbol 'display)
            (mil-string "LIST: ^a")
-           (mil-quote (mil-l (mil-uint8 10) (mil-l (mil-uint8 20) (mil-string "O")) (mil-l) (mil-string "HEL\"LO"))))
-    )))
+           (mil-quote (mil-l (mil-uint8 10) (mil-l (mil-uint8 20) (mil-string "O")) (mil-l) (mil-string "HEL\"LO")))
+           )))
 
+  )
