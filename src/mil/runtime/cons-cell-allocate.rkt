@@ -74,16 +74,56 @@
                             (JMP $FFD2)))
 
 (module+ test
-  (require (only-in "../../tools/6510-interpreter.rkt" memory-list run-interpreter))
+  (require (only-in "../../tools/6510-interpreter.rkt" memory-list run-interpreter cpu-state-accumulator))
   (require "./cons-cell-page-init.rkt")
 
   (define org 2064)
   (define init-page-allocate-first
     (append MILRT_ALLOCATE_CONS_CELL_C
-            (list (LDA !$c0) ;; create page at c0
+            (list (LDA !$c1) ;; create page at c0
                   (JSR MILRT_INIT_CONS_CELL_PAGE)
                   (STA free-cons-cell-ptr-high)
                   (LDA !4) ;; first free cell is located at byte 4
+                  (STA free-cons-cell-ptr)
+                  (JMP MILRT_ALLOCATE_CONS_CELL))
+            MILRT_INIT_CONS_CELL_PAGE_C
+            MILRT_INIT_CONS_CELL_PAGE
+            MILRT_ALLOCATE_CONS_CELL))
+
+  (define init-page-allocate-3rd
+    (append MILRT_ALLOCATE_CONS_CELL_C
+            (list (LDA !$c1) ;; create page at c0
+                  (JSR MILRT_INIT_CONS_CELL_PAGE)
+                  (STA free-cons-cell-ptr-high)
+                  (LDA !$0c) ;; third free cell is located at byte 0c
+                  (STA free-cons-cell-ptr)
+                  (JMP MILRT_ALLOCATE_CONS_CELL))
+            MILRT_INIT_CONS_CELL_PAGE_C
+            MILRT_INIT_CONS_CELL_PAGE
+            MILRT_ALLOCATE_CONS_CELL))
+
+  (define init-page-allocate-last
+    (append MILRT_ALLOCATE_CONS_CELL_C
+            (list (LDA !$c1) ;; create page at c0
+                  (STA high-byte-next-free-cons-page)
+                  (JSR MILRT_INIT_CONS_CELL_PAGE)
+                  (STA free-cons-cell-ptr-high)
+                  (LDA !$fc) ;; last free cell is located at fc
+                  (STA free-cons-cell-ptr)
+                  (JMP MILRT_ALLOCATE_CONS_CELL))
+            MILRT_INIT_CONS_CELL_PAGE_C
+            MILRT_INIT_CONS_CELL_PAGE
+            MILRT_ALLOCATE_CONS_CELL))
+
+  (define init-page-allocate-last-failing
+    (append MILRT_ALLOCATE_CONS_CELL_C
+            (list (LDA !$c1) ;; create page at c0
+                  (STA high-byte-next-free-cons-page)
+                  (STA high-byte-expression-stack)
+                  (DEC high-byte-expression-stack)
+                  (JSR MILRT_INIT_CONS_CELL_PAGE)
+                  (STA free-cons-cell-ptr-high)
+                  (LDA !$fc) ;; last free cell is located at fc
                   (STA free-cons-cell-ptr)
                   (JMP MILRT_ALLOCATE_CONS_CELL))
             MILRT_INIT_CONS_CELL_PAGE_C
@@ -95,14 +135,24 @@
   
   (check-equal? (memory-list (run-interpreter org init-page-allocate-first #f)
                              #x0040 #x0041)
-                (list #x04 #xc0)
+                (list #x04 #xc1)
                 "cons-cell register holds pointer to first free cons cell allocated")
   (check-equal? (memory-list (run-interpreter org init-page-allocate-first #f)
                              #x003b #x003c)
-                (list #x08 #xc0)
-                "after allocation, next free cons cell is referenced by free list") 
-  (skip "check that allocation after three will use 'higher' cons cells" #f)
-  (skip "check that allocation of last cell will init new page" #f)
-  (skip "check that after alloc last and init new page, out of memory is written, if expression stack is on that page" #f)
-  ) 
-
+                (list #x08 #xc1)
+                "after allocation, next free cons cell is referenced by free list")
+  (check-equal? (memory-list (run-interpreter org init-page-allocate-3rd #f)
+                             #x003b #x003c)
+                (list #x40 #xc1)
+                "check that allocation after three will use 'higher' cons cells")
+  (check-equal? (memory-list (run-interpreter org init-page-allocate-last #f)
+                             #x003b #x003c)
+                (list #x04 #xc0)
+                "check that allocation of last cell will init new page")
+  (check-equal? (memory-list (run-interpreter org init-page-allocate-last #f)
+                             #x003f #x003f)
+                (list #xc0)
+                "check that allocation of last cell will init new page")
+  (check-equal? (cpu-state-accumulator (run-interpreter org init-page-allocate-last-failing #f))
+                (char->integer #\O)
+                "check that after alloc last and init new page, out of memory is written, if expression stack is on that page"))
