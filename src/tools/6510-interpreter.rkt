@@ -436,12 +436,12 @@
   (peek state (word (fx+ 2 (cpu-state-program-counter state)))))
 
 ;; execute if pc does not point at a 0 byte (brk)
-(define/c (run state)
-  (-> cpu-state? cpu-state?)
+(define/c (run state (verbose #t))
+  (->* (cpu-state?) (boolean?) cpu-state?)
   (if  (zero? (peek-pc state))
        state
-       (let ((next-state (execute-cpu-step state)))
-         (run next-state))))
+       (let ((next-state (execute-cpu-step state verbose)))
+         (run next-state verbose))))
 
 ;; interpret the RTS (return from subroutine) command
 ;; pop low-byte, then high-byte form stack, inc by one and write this into the pc
@@ -455,14 +455,14 @@
                  [stack-pointer   (byte (fx+ sp 2))])))
 
 ;; https://www.c64-wiki.com/wiki/control_character
-(define/c (display-c64charcode byte state)
-  (-> byte/c cpu-state? cpu-state?)
+(define/c (display-c64charcode byte state (verbose #t))
+  (->* (byte/c cpu-state?) (boolean?) cpu-state?)
   (case byte
-    [(#x0d) (displayln "") state] ;; linefeed
-    [(#x0e) (display "") (poke state 53272 23)] ;; switch to lower letter mode    
-    [(#x12) (display "") (poke state 199 #x12)] ;; reverse on
-    [(#x92) (display "") (poke state 199 #x00)] ;; reverse off
-    [else (display (integer->char (c64-byte->unicode byte state)))
+    [(#x0d) (when verbose (displayln "")) state] ;; linefeed
+    [(#x0e) (when verbose (display "")) (poke state 53272 23)] ;; switch to lower letter mode
+    [(#x12) (when verbose (display "")) (poke state 199 #x12)] ;; reverse on
+    [(#x92) (when verbose (display "")) (poke state 199 #x00)] ;; reverse off
+    [else (when verbose (display (integer->char (c64-byte->unicode byte state))))
           state]))
 
 ;; unmodified mapping
@@ -964,20 +964,20 @@
   (-> byte? byte? boolean?)
   (= (absolute high low) #xFFD2))
 
-(define/c (interpret-c64-rom-routine high low state)
-  (-> byte? byte? cpu-state? cpu-state?)
+(define/c (interpret-c64-rom-routine high low state (verbose #t))
+  (->* (byte? byte? cpu-state?) (boolean?) cpu-state?)
   (case (absolute high low)
     [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
      (~>> (cpu-state-accumulator state)
-         (display-c64charcode _ state)
+         (display-c64charcode _ state verbose)
          )]))
 
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
-(define/c (interpret-jsr-abs high low state)
-  (-> byte/c byte/c cpu-state? cpu-state?)
+(define/c (interpret-jsr-abs high low state (verbose #t))
+  (->* (byte/c byte/c cpu-state?) (boolean?) cpu-state?)
   (if (c64-rom-routine? high low)
-      (let ((after-rom-state (interpret-c64-rom-routine high low state)))
+      (let ((after-rom-state (interpret-c64-rom-routine high low state verbose)))
         (struct-copy cpu-state after-rom-state [program-counter (next-program-counter after-rom-state 3)]))
       (let* ([new-program-counter (absolute high low)]
                  [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
@@ -1039,10 +1039,10 @@
       (-clear-negative-flag flags)))
 
 ;; interpret JMP absolute (jump)
-(define/c (interpret-jmp-abs high low state)
-  (-> byte/c byte/c cpu-state? cpu-state?)
+(define/c (interpret-jmp-abs high low state (verbose #t))
+  (->* (byte/c byte/c cpu-state?) (boolean?) cpu-state?)
   (if (c64-rom-routine? high low)
-      (interpret-rts (interpret-c64-rom-routine high low state))      
+      (interpret-rts (interpret-c64-rom-routine high low state verbose))
       (struct-copy cpu-state state
                    [program-counter (word (absolute high low))])))
 
@@ -2065,13 +2065,13 @@
                cpu-state-y-index))
              11))
 
-(define/c (interpret-jmp-ind state)
-  (-> cpu-state? cpu-state?)
+(define/c (interpret-jmp-ind state (verbose #t))
+  (->* (cpu-state?) (boolean?) cpu-state?)
   (let* ((new-abs-address (peek-word-at-address state (peek-word-at-pc+1 state)))
          (hi              (high-byte new-abs-address))
          (lo              (low-byte new-abs-address)))
     (if (c64-rom-routine? hi lo)
-        (interpret-rts (interpret-c64-rom-routine hi lo state))
+        (interpret-rts (interpret-c64-rom-routine hi lo state verbose))
         (struct-copy cpu-state state
                      [program-counter new-abs-address]))))
 
@@ -2204,8 +2204,8 @@
 ;; ind = ($0000)
 ;; rel = $00 (PC-relative)
 ;; io = illegal opcode
-(define/c (execute-cpu-step state)
-  (-> cpu-state? cpu-state?)
+(define/c (execute-cpu-step state (verbose #t))
+  (->* (cpu-state?) (boolean?) cpu-state?)
   (case (peek-pc state)
     [(#x00) (interpret-brk state)]
     [(#x01) (interpret-logic-op-mem state bitwise-ior peek-izx 2)]
@@ -2239,7 +2239,7 @@
     [(#x1d) (interpret-logic-op-mem state bitwise-ior peek-absx 3)]
     [(#x1e) (interpret-asl-mem state peek-absx poke-absx 3)]
     ;; #x1f -io SLO abx
-    [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state verbose)]
     [(#x21) (interpret-logic-op-mem state bitwise-and peek-izx 2)]
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
@@ -2283,7 +2283,7 @@
     [(#x49) (interpret-logic-op-mem state bitwise-xor peek-pc+1 2)]
     [(#x4a) (interpret-lsr state cpu-state-accumulator)] ; peek-zp
     ;; #x4b -io ALR imm
-    [(#x4c) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state)]
+    [(#x4c) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state verbose)]
     [(#x4d) (interpret-logic-op-mem state bitwise-xor peek-abs 3)]
     [(#x4e) (interpret-lsr-mem state peek-abs poke-abs 3)]
     ;; #x4f -io SRE abs
@@ -2321,7 +2321,7 @@
                 (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2))]
     [(#x6a) (interpret-ror state)]
     ;; #x6b -io ARR imm
-    [(#x6c) (interpret-jmp-ind state)]
+    [(#x6c) (interpret-jmp-ind state verbose)]
     [(#x6d) (if (decimal-flag? state)
                 (bcd-+ state peek-abs 3)
                 (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3))]
@@ -2560,7 +2560,7 @@
   ;; (displayln (format "memory: ~a" (current-memory-use)))
   (define state (6510-load (initialize-cpu) org raw-bytes))
   (begin0
-      (run (with-program-counter state org))
+      (run (with-program-counter state org) verbose)
     ;; (collect-garbage)
     ;; (displayln (format "\nmemory: ~a" (current-memory-use)))
     (when verbose (displayln "program execution done."))))
