@@ -3,19 +3,25 @@
 
 - references
   - http://6502.org/source/
-  - https://github.com/davidgiven/cpm65
-  - https://beebwiki.mdfs.net/Number_output_in_6502_machine_code#Print_8-bit_decimal
-  - https://www.pagetable.com/?p=793
+  - http://codebase64.org/doku.php?id=start
   - http://sta.c64.org/cbm64krnfunc.html
-  - https://sta.c64.org/cbm64mem.html
-  - http://www.ffd2.com/fridge/docs/c64-diss.html
-  - https://www.c64-wiki.com/wiki/BASIC-ROM
-  - https://www.codebase64.org/doku.php?id=base:6502_6510_maths
+  - http://wilsonminesco.com/6502interrupts/
+  - http://www.6502.org/tutorials/compare_beyond.html#2.1
   - http://www.6502.org/tutorials/decimal_mode.html
   - http://www.6502.org/tutorials/decimal_mode.html#A
-  - http://www.6502.org/tutorials/compare_beyond.html#2.1
-  - https://www.pagetable.com/c64ref/6502/?tab=0
+  - http://www.ffd2.com/fridge/docs/c64-diss.html
+  - http://www.lunix.c64.org/
+  - https://archive.org/details/commodore_c64_books
+  - https://atariwiki.org/wiki/Wiki.jsp?page=Lisp
+  - https://beebwiki.mdfs.net/Number_output_in_6502_machine_code#Print_8-bit_decimal
   - https://celso.io/retrocomputing/2019/12/23/c64-assembly
+  - https://github.com/davidgiven/cpm65
+  - https://sta.c64.org/cbm64mem.html
+  - https://www.c64-wiki.com/wiki/BASIC-ROM
+  - https://www.codebase64.org/doku.php?id=base:6502_6510_maths
+  - https://www.pagetable.com/?p=793
+  - https://www.pagetable.com/c64ref/6502/?tab=0
+  - https://www.c64-wiki.com/wiki/Floating_point_arithmetic
 * minimal lisp with (reduced) racket
 this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
 lisp itself
@@ -293,11 +299,10 @@ Symbol Table is not necessary yet (maybe if 'eval' is implemented)
 - 0800...    PROGRAM
 - ...        EXPRESSION STACK (growing up) [atomic-values, or ptr to cons-cell]
 - FREE
-- ...        EXPRESSION-HEAP (growing down, with free cons-cells list)
+- ...        PAGE-HEAP (growing down, with pages of free cons-cells list, arrays ...)
 - A000-BFFF
 - C000... Strings/Symbols (growing up)
 - .. CFFF MAP: String/Symbol-ID -> PTR (growing down)
-
 *** expression stack
 - 2 bytes
 - either low-high of pointer (lowest two bits are 00), if completely 0 then = nil
@@ -314,7 +319,7 @@ Symbol Table is not necessary yet (maybe if 'eval' is implemented)
   - 10
   - 11
 
-*** expression heap is made of cons-cells (all of equal size, later on maybe use pages of cons-cells of different size).
+*** page heap is made of page of e.g. cons-cells (all of equal size, later on maybe use pages of cons-cells of different size).
 - IDEA: 256 byte = 51 cons cells, 51 byte = reference counters + 1 byte pages status
   [xxxxxx00][high-byte]
   00110011
@@ -411,8 +416,223 @@ Symbol Table is not necessary yet (maybe if 'eval' is implemented)
                         ;; next 1100 0000, 1100 0001 <- 1100 0100, high byte
                         ;; next 1111 1000, 1111 1001 <- 1111 1100, high byte
                         ;; next 1111 1100, 1111 1101 <- 0, 0
-
   #+end_src
+*** sparse hash page on the heap (binary tree?)
+- how about implementing it with cons-cells?
+  hash-cell:
+    car cell = hash
+    cdr cell = l/r cons cell | value cell
+  l/r cons cell:
+    car cell = left-hash-cell
+    cdr cell = right-hash-cell
+- load balancing the tree is then done by a separate mechanism
+*** byte-array/string/symbol page on the heap arrays may be of max 255 size
+=> index points directly to byte/char
+each array starts with the number of elements (like a string, too, which then is an array of chars)
+=> an array page can allocated in a similar way as a cons-cell page
+each page holds a list of of free arrays to allow reallocation
+- how about string / symbol double indirection ? id -> ptr -> value => relocation would be possible
+   (page compaction)
+*** generic array (array of cells)
+=> index * 2 = pointer to cell (128 cells reachable) [not cons cell, just cell]
+
+*** id page = id -> ptr = ptr array = generic array, cell = ptr to string (free <= cell = 0)
+*** page for structures (#cells in structure + ref count + cells)
+*** cell format (revisited)
+ptr -> cons-cell (cell pair)
+ptr -> cell
+ptr -> byte-array (string, symbol)
+ptr -> generic-array (id: ptr -> ? map)
+atom -> char/byte/array-index/extended atom
+
+native-string = cons-cell with car = ptr-> byte array, cdr = atom -> byte (index), actual string is the located by the ptr in the pointed to array at index position
+string = list of char
+symbol = cons-cell with car = ptr-> byte array, cdr = atom -> byte (index)
+list = cons-cell with car = any, cdr = any
+pair = list
+integer (2byte) = cons-cell first = car = extended atom, cdr = value
+large array (array may only have 0..127 as indices) = hash-map to arrays
+
+cell [l-byte][h-byte]
+[1st-byte] = 0 p p p p p p 0 : ptr, location w/i page (lsl to get actual) | [......] 0 0 : ptr, location w/i page
+             0 0 0 0 0 0 0 1 : atom byte (if interpreted as extended byte atom, make sure high bits are all zero)
+             0 - - - 0 1 0 1 : atom char
+             0 - - - 1 0 0 1 : atom bool
+             0 p p p 1 1 0 1 : atom float (p p p = index to float page, lowest bit of 2nd byte could be used additionally for the page) 
+             0 h h h h h 1 1 : extended byte atom, ..... = high bits (5 bits)  (encode such that adc/sbc/*/div work without too much hassle)
+             1 i i i i i i i : index page (high byte, need to shift left)
+[2nd-byte] = ptr: page
+             atom: byte/char/bool value
+             extended atom: low byte
+             float: ptr within float page to actual float, (lowest bit = used for float page index)
+             index page: index within the page
+
+
+atoms only exist on the expression stack => pop = in case of floats, if they are removed from the stack, the respective float entry on the
+page is set to empty!
+necessary: dynamic typing => type information can be derived during runtime
+           what types are present
+           - byte, integer, index?, native-string, hash-map<?>, native-array<byte>, native-array<cell>, list, pair, char,
+             generic/large-array<cell>
+
+putting the two descriptor bits at position 7/6 has the benefit of being able to is ~bit~ to direcly check those bits.
+putting the two bits at position 0/1 has the benefit of directly using this byte to point into a page
+putting the two bits at position 7/0 allows for a single ROL/ROR to get one bit into the carry
+=> define access strategies to decide on that
+*** byte
+range: 0..255, atom, one byte
+use case: + - * / *​2 /2, bitwise and/or/xor
+- ~(n+ a b)~ /; native plus/
+  naive implementation of add (using zp-a register)
+  12 byte
+  #+begin_src asm
+    jsr pop_byte_into_zp_acc
+    jsr pop_byte_from_expression_stack ; puts it into A
+    clc ;; may not be necessary, if ensured by previous code
+    adc zp_acc
+    ;; optional check overflow (in carry)
+    jmp push_byte_onto_expression_stack
+  #+end_src
+- ~(n+ a b)~ /; native plus (unsafe)/
+  implementation making use of (zp-tos-ptr, pointing to the top of expression stack low-byte)
+  no check whether the second operand really is a byte
+  11 byte (less jumps)
+  #+begin_src asm
+    jsr pop_byte_into_a ; a = byte from stack
+    ldy #1
+    clc ;; may not be necessary, if ensured by previous code
+    adc (zp_tos),y
+    sta (zp_tos),y
+    ;; optional check overflow (in carry)
+    rts
+  #+end_src
+*** char
+range: 0..255, atom, one byte
+*** bool
+range: true/false
+use-case: and, or, xor, not
+*** index (for native-array) =  byte?
+range 0..254, atom, one byte
+*** integer
+extended atom
+range 0.. (at least 320 for graphic coordinates)
+use case: + - * / *​2 /2, bitwise and/or/xor, graphic coordinate operations
+- ~(e+ a b)~ /; native plus on number up to 8192/
+  #+begin_src asm
+    jsr pop_extendedbyte_into_a+ ; extended accu (a = lowbyte, zp_x = high byte/bits)
+    ldy #1
+    clc ;; may not be necessary, if ensured by previous code
+    adc (zp_tos),y
+    sta (zp_tos),y
+    php ;; keep carry flag
+    dey
+    lda (zp_tos),y ;; get high bits of extended atom
+    lsr ;; bring those bits in right algned position
+    lsr
+    plp
+    adc zp_x ;; add with carry!
+    asl
+    asl ;; bring resulting bits into right position
+    ora #$03 ;; set low bits to identify this data as extended
+    ;; optional: check highest bit for overflow!
+    and #$7f ;; clear highest bit
+    sta (zp_tos),y ;; 
+    rts
+  #+end_src
+*** native-string/symbol
+ptr -> string-page=native-array<cell> + index (0..127), cell = ptr -> native-array<byte> + index to first byte (len-byte) of string
+use case: compare, print, allocate (list of char <-> native string), delete
+*** float
+there are only 16 float pages possible => table with 16 byte with page high bytes point to the respective float page (map float page index
+-> page with floats),
+use case: push, pop, *, /, +, -, sin, cos, ....
+5 bytes necessary (6 used) put into separate float pages (256 byte)
+byte 0 = index of first free float (0 = page is completely empty, $FF, page is full)
+float entry = $FF, + 5 bytes float
+free float entry: index to free float entry on this page, + 5 bytes unused
+00000000 (first float)   $00 0
+00000110                 $06 6
+00001100                 $0c 12
+00010010                 $12 18
+00011000                 $18 24
+00011110                 $1E 30
+- ~(f+ a b)~ /; native (basic) float +/
+  #+begin_src asm
+    jsr pop_float_into_fac1 ; does free on float in float page!
+    jsr tos_float_into_fac2 ; just copy from stack (without popping it)
+    jsr basic_float_plus ; calls basic float function of c64
+    jmp tos_float_from_fac ; replace tos with result
+  #+end_src
+*** hash-map<?>
+implemented by list
+[atom byte hash + info whether leaf/node][value-cell / ptr to l/r cell]
+value cell can be: byte/char/bool/integer/native-string/ptr to a list
+l/r cell: is a ptr to a cons cell w/ car cell = ptr to left, cdr cell = ptr to right
+use case: quickly find atoms
+*** native-array<byte>
+use case: allocate (up to 255 enties), indexed access, free
+array block = <len byte> <len times bytes>
+page first byte = len of (first) array
+  if $FF then page is full (since that array takes all the space)
+  if less, = index of first free array block (0= no free blocks), first array block follows this byte
+free array block = <len free><index next free>
+- ~(n-at array index)~  /; tos = byte atom, tos-1 = array/
+   #+begin_src asm
+     ldy #0
+     lda (zp_tos),y 
+     asl ;; get actual page ptr
+     sta zp_x+1
+     iny
+     lda (zp_tos),y
+     sta zp_x
+     dey
+     lda (zp_x),y
+     iny
+     ;; pop+return or store as byte into tos
+     sta (zp_tos),y
+     dey
+     lda #$01
+     sta (zp_tos),y
+     rts
+   #+end_src
+*** native-array<cell>
+use case: allocate (up to 127), indexed access, free
+array block = <len in words, 1 byte> <len * 2 times bytes>
+page first byte = len of (first) array
+  if $7f then the page is full (since that array takes all the space)
+  if less, = index of first free array block (0= no free blocks), first array block follows this byte
+free array block = <len in words, 1 byte> <index next free>
+*** list
+cell pair
+use case: cons, car, cdr, allocate, discard
+free cell pair ptr is held in zero page, pointing to some page of cons cells (cell pairs)
+(how about keeping this free list per page, trying to reuse pages with expected similar lifetime?/fill oldes pages first to deplete youngest
+pages?)
+*** pair - same as list
+*** native-page
+32 bytes (max) to hold info about free pages (in 64k), 8 bit each, 0 indicating free page, 1 indicating used page
+the number of actually available pages 
+- get first free page (either from top, from bottom)
+- allocate page
+- free page
+*** extended-page/block
+4k block that can be visible at special address (e.g. swap ram <-> block)
+use case:
+- make block with pages visible (and accessible)
+- swap up to 15 pages into 4k block, write additional information for retrieval into block, keep minimal information in 64k
+- restore up to 15 pages from 4k block
+** ideas
+- (poke mem val)
+- (peek mem val)
+- (native-asm {
+    LDA !$20
+  })
+- let mil compile to intermediary language (ie mil-1..n)
+  - allow optimization in all steps
+  - mil-x = stack machine?
+- allow interpretation of byte code?
+  - mil-x = byte code = stack machine?
+- mil = language able to write this compiler? => need assembler implemented in mil
 ** runtime functions
 - free-cons-cell-ptr :: points to the first free cons cell
 - CR1..n :: cons register
