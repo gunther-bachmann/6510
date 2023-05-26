@@ -1,0 +1,204 @@
+#+title: Interpreter
+* basic operations
+- resolve a symbol to a value (in the environment)
+- add a symbol + value to the environment
+- a value may be a
+  - function
+  - list of values
+  - atomic value
+    - string
+    - symbol
+    - int
+    - byte
+    - float
+- a symbol is a string/id
+- apply a function to a list of values
+- functions are either
+  - build in functions
+    - car, cdr, cons
+    - +, -, *, /, ^, sqrt
+  - user defined functions
+* examples
+fun reverse list-a  -> list-b
+    create environment
+      [ list-a <- tos ] ;; tos is unchanged!
+      [ list-b <- nil ] ;; result list is a new list
+:l0 if list-a = nil return and replace tos with list-b
+    push list-a     ;; list-b = (cons list-b (car list-a))
+    apply car
+    push list-b
+    apply cons
+    ;; tail call allows replacing parameters with the next calls values (each written value must not be accessed before the goto, else it
+    ;; would not be tail callable
+    pop into list-b ;; list-b is not accessed before goto (tail call)
+    push list-a     ;; list-a = (cdr list-a)
+    apply cdr
+    pop into list-a ;; list-a is not accessed before goto (tail call)
+    goto :l0
+- using indices for environmental variables => no extra resolution, indexed access!
+  list-a = index 0
+  list-b = index 1
+- normal definition
+  (defun (reverse a-list)
+    (-reverse a-list nil))
+  (defun (-revers a-list b-list)
+    (if (nil? a-list)
+        b-list
+        (-reverse (cdr a-list) (cons b-list (car a-list))))) ;; tail call recursion
+- example usage of user defined reverse function
+  push list-x
+  apply reverse
+
+* environment
+is an array of values?
+nested
+- each nesting = namespace
+- nesting is dynamic
+- index in one level is static
+lexical scoping?
+- example
+  (defun (some a b c)   ;; env [ [ a b c ] ]
+    (fn1 a)             ;; reference to a is (1,1), 1 = this scope, 2 = first => a
+    (let ((c (fn2 b))   ;; reference to b is (1,2), 1 = this scope, 2 = second => b
+          d
+          e)            ;; env [ [ c d e ] [ a b c ] ]
+      (fn3 c)           ;; reference to c is (1,1), 1 = this scope, 1 = first => c
+      (fn4 b d)         ;; reference to b is (2,2), 2 = second scope, 2 = second => b
+      ))                ;; reference to d is (1,2), 1 = this scope, 2 = second => d
+- flattened example
+  (defun (some a b c)   ;; env [ a b c ]
+    (fn1 a)             ;; reference to a is 1
+    (let ((c (fn2 b))   ;; reference to b is 2
+          d
+          e)            ;; env [ c d e  a b c ]
+      (fn3 c)           ;; reference to c is 1  => c (of inner scope)
+      (fn4 b d)         ;; reference to b is 5
+      ))                ;; reference to d is 2
+- importing names into the scope
+  (require /module-name/) ;; env [ some fn1 fn2 const-x ... ] ;; <- all top level forms required and defined in this module
+  (fn1 5)               ;; reference to fn1 is 1
+  (defun (some a b c)   ;; env [ a b c some fn1 fn2 const-x ... ]
+    (fn1 a))            ;; reference to fn1 is 5, it a is 1
+  (some 8 9 10)         ;; reference to some is 1
+- loading a module = linking = create root env = env with map: index->value, value may of course be a function
+- calling a function of another module: use root env of other module
+- passing a function as parameter: function will use the env of its definition location:
+  e.g: (fn a (lambda (q s) ...)) ;; call site = module A, fn = function of other module B
+  - a is dereferenced in module A and passed to fn
+  - the anonymous lambda has access to the root env (enclosing env of call site) of module A and its parameters q and s
+  - fn itself has access to its root env (module B), parameter-1 = a and parameter 2 = anonymous function
+- IDEA: indices seem to be static, can be defined during compile time/linking time =>
+  reference to the root env, resolved on loading the module: direct address
+  each module gets additional env stack allocated during execution: indexed access
+- WARNING: index can only be flattened for root env access.
+  indices on dynamic env stack need to be separate, indexed and can itself be flattened
+  => two flattened index access, root=absolute/dynamic=relative (from top of env stack) [or absolute for self modifying code]
+  
+* elements of implementation
+** environment
+*** static root (per module) => can be resolved during compile/load/linking time
+*** dynamic (global)
+- growing by each nested namespace dynamically
+- access = indexed via two coordinates: nesting level, index w/i single nesting
+  => deref nesting => to array : growing with nesting = dynamic array? = limits call/recursion depth
+  => deref index in array => to actual location : fixed size = struct?
+** evaluation stack (global cell stack = list?)
+- dynamically growing/shrinking during evaluation of primitives
+** call stack (global address stack = list?)
+- keep primitives (byte code) location when calling functions
+** evaluation primitives
+- repw {value, value-ref} :: replace tos with
+- push {value, value-ref} :: push
+- pop {value-ref} :: pop (into)
+- apply :: apply tos function ref on remaining stack
+- dup :: duplicate tos
+- tos {value-ref} :: write tos into
+- swap :: swap tos with second on stack
+- add, sub, mul, div, pow, sqrt, sin, cos, tan, log, 10^, e^, ... :: arithmetic
+- and, or, not :: logical
+- band, bor, bnot, bxor :: binary
+- sel :: select (before: 3 vals on stack, tos=boolean, after: 1 val on stack)
+- >, <, >=, <=, !=, == :: compare ordered value
+- nil? :: empty list
+- 0? :: zero?
+- symbol<->string :: ? optional ?
+- {char,byte,int,float,string}->{char,byte,int,float,string} ::
+- cons, cdr, car :: list manipulation
+- string<->list :: to/from list of character
+- strlen :: string length
+- match :: regexp
+- nop ::
+- throw ::
+** runtime functions
+- all that are not primitives?
+** runtime constants
+- floats: pi, e, 10, 1, 2 ...
+** data
+- value
+  - byte/char
+  - integer/unicodechar
+  - float (ref)
+  - string
+  - symbol
+  - cell
+  - cons-cell (pair)
+  - array
+- value-ref (into environment)
+  - target type
+    - function-ref
+    - data-ref
+  - reference type
+    - a ref can be absolute (module level static ref)
+    - a ref can be relative (dynamic nesting ... ref)
+* grouping implementation
+** os page management
+*** allocate page
+*** free page
+** data management
+*** ideas
+**** byte/int array
+***** allocate array
+***** indexed access
+***** grow/shrink array
+***** free array
+**** cell array
+***** allocate array
+***** indexed access
+***** grow/shrink array
+***** free array
+*** environment
+**** array to map index->byte code
+one array growing / shrinking whenever new env frame is added/removed
+int->int => (#symbols in one (root) env can be > 256)
+***** allocate / free
+***** grow = allocate page
+***** shrink = free page
+***** indexed access = find page, find intra page location
+**** array to map index->array
+one array growing / shrinking by one entry with every new frame added/removed
+int->array => (#level of nested environment can be > 256)
+*** list (cons-cell)
+**** allocate
+**** free
+**** nil
+**** cons
+**** car
+**** cdr
+*** value stack = list
+*** call stack
+* implementation steps
+- implement interpreter in racket
+  - use basic features (corresponding mil)
+  - no macros
+- transfer into machine language runtime
+- collect ideas on how to use mil language features to implement the interpreter thus that it can be
+  compiled into the machine language runtime
+* -
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; eval: (jinx-mode 0)            ;; no spell check errors
+  ;; eval: (org-overview)           ;; show org overview (just headlines)
+  ;; eval: (valign-mode 1)          ;; switch pretty table mode on
+  ;; fill-column: 100
+  ;; End:
+  #+end_src

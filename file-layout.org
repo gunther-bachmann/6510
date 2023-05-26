@@ -41,3 +41,13 @@ tbd
     base64 vlq https://www.lucidchart.com/techblog/2019/08/22/decode-encoding-base64-vlqs-source-maps/
     source map explained https://www.bugsnag.com/blog/source-maps
     source map specs https://github.com/source-map/source-map-spec
+* -
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; eval: (jinx-mode 0) ;; no spell check errors
+  ;; eval: (org-overview)
+  ;; eval: (valign-mode 1)
+  ;; eval: (gb/align-all-tables)
+  ;; fill-column: 100
+  ;; End:
+  #+end_src

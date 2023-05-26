@@ -1,0 +1,3 @@
+#! /usr/bin/env -S bash -e
+# get info of all defined aliases
+{ if [ "$1" == "--help" ]; then echo "get info of all defined aliases"; else for al in $(ls -1 ${DIRENV_DIR:1}/.direnv/aliases); do echo -n $al; echo -ne "\t"; $al --help; done; $@; fi }

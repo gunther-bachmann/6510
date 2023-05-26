@@ -2,6 +2,9 @@
 /ideas and plans on how and what to implement as minimal lisp/
 
 - references
+  - 6502 lisp compile :: https://github.com/jaoswald/cl-comfy-6502/tree/master
+  - language implemented on the 6502 :: https://dwheeler.com/6502/
+  - SICL, a new CL implementation :: https://github.com/robert-strandh/SICL
   - http://6502.org/source/
   - http://codebase64.org/doku.php?id=start
   - http://sta.c64.org/cbm64krnfunc.html
@@ -20,8 +23,13 @@
   - https://www.c64-wiki.com/wiki/BASIC-ROM
   - https://www.codebase64.org/doku.php?id=base:6502_6510_maths
   - https://www.pagetable.com/?p=793
-  - https://www.pagetable.com/c64ref/6502/?tab=0
-  - https://www.c64-wiki.com/wiki/Floating_point_arithmetic
+  - Description of Opcodes, Memory, ROM https://www.pagetable.com/c64ref/6502/?tab=0
+  - Floats for c64 https://www.c64-wiki.com/wiki/Floating_point_arithmetic
+  - Minimal scheme implementation with VM https://github.com/udem-dlteam/ribbit
+  - ulisp (lisp running on micro controllers) http://www.ulisp.com/
+  - lelisp (z80 lisp) https://www.softwarepreservation.org/projects/LISP/le_lisp/source/lelisp12
+  - move memory http://www.6502.org/source/general/memory_move.html
+  - graphics registers https://cbm8bit.blogspot.com/2018/07/vic-ii-on-c64.html
 * minimal lisp with (reduced) racket
 this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
 lisp itself
@@ -99,6 +107,7 @@ only tailcall recursion allowed (no check, yet)
       (fnA)
       (fnB))
 #+end_src
+***
 *** mutable value (ideas)
 #+begin_src lisp
   (mutable-byte #x00 byteId)
@@ -319,7 +328,7 @@ Symbol Table is not necessary yet (maybe if 'eval' is implemented)
   - 10
   - 11
 
-*** page heap is made of page of e.g. cons-cells (all of equal size, later on maybe use pages of cons-cells of different size).
+*** cons-cells page (all of equal size, later on maybe use pages of cons-cells of different size).
 - IDEA: 256 byte = 51 cons cells, 51 byte = reference counters + 1 byte pages status
   [xxxxxx00][high-byte]
   00110011
@@ -621,6 +630,33 @@ use case:
 - make block with pages visible (and accessible)
 - swap up to 15 pages into 4k block, write additional information for retrieval into block, keep minimal information in 64k
 - restore up to 15 pages from 4k block
+*** struct page
+structures are flat memory fields, structured by their definition
+byte 0 = index to next free cell
+byte 1..n first structure
+- byte (8bit), int (16bit), char (8bit), bool (8bit), list (16bit)=ptr to cons-cell, string (16bit)=id/array-page+index, n-array ...
+structure block (3 + n byte): refcount, ptr to structure definition, flat bytes encoding each type
+free block (2 byte): byte index to next free, # bytes of continuous free
+*** page meta data
+32 byte bitmap to have 1 bit to indicate free space in pages?
+**** page types (descr 4 bits) -> type defines structure of page (for introspection)
+- [0000] cons-cells (4 byte aligned) = list = pairs
+- [0001] cells (2 byte aligned) = atoms, ptr->(list,pair,array-entry,float,struct)
+- [0010] native-array<byte> = strings = symbols (1 byte aligned) = array<byte,bool,char>
+- [0011] native-array<cell> (2 byte aligned) = array<string|floag|array|atoms>
+- [0100] floats (6 byte aligned)
+- [0101] structs (4 byte aligned)
+- [0110] page with meta data (e.g. structure type definitions, data about pages, data about extended pages?)
+- [0111] byte code page
+- [1000] native code page
+- [1001] rom page (e.g. kernel, basic, char-rom etc.)
+- [1010] system page (e.g. i/o, zp, vic, sid etc.)
+**** page -> type function 
+**** page of type x -> (first?) page with free space
+**** put page of type x into partial free list
+**** remove page of type x from partial frrfree list
+**** allocate new page of type x 
+**** free page of type x 
 ** ideas
 - (poke mem val)
 - (peek mem val)
@@ -633,6 +669,36 @@ use case:
 - allow interpretation of byte code?
   - mil-x = byte code = stack machine?
 - mil = language able to write this compiler? => need assembler implemented in mil
+- mil = language able to write the runtime of mil? => write rt-functions + translate them back to mil (ensure language concepts are available)
+  - e.g. passing byte as parameter in accumulator, x- or y-register => platform hints
+    #+begin_src scheme
+      (def (allocate-page page-type)
+           "allocate a memory page (256 byte) of the given PAGE-TYPE"
+           (platform-hints
+            'c64 '(pass-by-register a page-type))
+            ; ...
+           )
+    #+end_src
+  - give hint about native runtime function
+    #+begin_src scheme
+      (platform-hints
+       'c64
+       '(natively-implemented-at #xffd2))
+    #+end_src
+- memory mapped structure (instantiation)
+  e.g. define a structure, then map it to a certain memory location
+  #+begin_src racket
+    (struct name (field-a field-b)) ;; define a structure
+    (name init-a init-b #:mapping ((field-a 'byte #xf2) (field-b 'word #xf3))) ;; place them on the zero page
+  #+end_src
+- mapping bit-fields (define bit index range)
+  #+begin_src racket
+    (name init-a init-b #:mapping ((field-a (bits 4 5) #xf3) (field-b (bits 0 3) #xf3))) ;; in f3 in different bit locations
+  #+end_src
+- placing a structure at a certain memory location (e.g. previously allocated)
+  #+begin_src racket
+    (name init-a init-b #:memory-location #x9EF0) ;; place the given structure instance at 9ef0
+  #+end_src
 ** runtime functions
 - free-cons-cell-ptr :: points to the first free cons cell
 - CR1..n :: cons register
@@ -642,10 +708,10 @@ use case:
 - initialize expression heap of cons cells
   - create free list
   - allocate cons-cell
-    - when (lowbyte of) car of free-cons-cell-ptr is zero (no more free cons cells), grow heap and initialize new freelist
+    - when (low byte of) car of free-cons-cell-ptr is zero (no more free cons cells), grow heap and initialize new freelist
     - copy ~free-cons-cell-ptr~ into cons register
     - copy car of cons cell into ~free-cons-cell-ptr~
-    - inc reference count (cons register lowbyte shift right 2 times)
+    - inc reference count (cons register low byte shift right 2 times)
   - add cons-cell (in cons register) to free-list
     - copy ~free-cons-cell-ptr~ into car of cons register, clear cdr of cons register (clear reference count, should be zero anyhow)
     - copy cons register into ~free-cons-cell-ptr~
@@ -666,8 +732,8 @@ use case:
   - grow heap for free list
     - check that next-heap-page does not collide with expression-stack (high byte) => out of memory error, gc?
     - initialize new page, mark last cell as such, set car of last cell to 0 (set $FC = 0) <- is set to 0 by init
-  - collect cells for free-list (collection should be inplace, without additional space-usage)
-- gc (e.g. mark and sweep) <- necessary? how would could a reference ring come into being? not for lists alone, what about structures
+  - collect cells for free-list (collection should be in place, without additional space-usage)
+- GC (e.g. mark and sweep) <- necessary? how would could a reference ring come into being? not for lists alone, what about structures
   #+begin_src scheme
     (struct A (a b val)) ;; a b can be cons cells
 
@@ -703,8 +769,136 @@ use case:
   - pop atomic values
   - push lists / cons-cells
 - display (atomic values, cons-cells (lists))
+*** page data structures
+zp variable points ot the first free page (one byte)
+native byte array page (<=255 entries), mapping page id (index) -> page type and page status
+native byte array (max 16 entries) mapping page type (index) -> first partially free page
+**** free page
+at $00 -> page id of next free page (or 0 in case this is the last one)
+**** cons-cells page
+page type: 0000
+***** partially free page
+first cons cell points to the next free cons cell w/i the page => needs only one byte | or nil if the first cons cell is the last free one,
+2nd byte is the next partially free page of this type (cons-cells)
+***** full page
+all cons cells are used
+**** cells page
+page type: 0001
+***** partially free page
+first cell = ptr to next free cell w/i the page => need just one byte | 0 if the last free cell, 2nd byte is the next partially free page of
+this type (cells)
+***** full page
+no more free cells
+*** pagefunctions
+(pages grow in two directions <- not really, since all pages are fetched from the heap, no [stack-like] growth is expected)
+- module/program + static symbols + strings, from bottom to top
+- heap grows top down
+**** page -> type function
+- implementation ideas
+  - use a native byte page to map high byte (the page id) to a byte: size could be reduced to only relevant pages, or a full native array w/
+    page id 0..254
+  - this byte describes the page (type, free-status)
+    e.g. lower 4 bits = type
+    page usage status
+    00 = completely free
+    01 = partially free
+    11 = full
+**** page of type x -> (first?) page with free space
+- implementation ideas
+  - type = index into native byte array, with the byte being the high byte of the page that is (partially) free
+    - array size <= 16 bytes
+**** put page of type x into partial free list
+**** remove page of type x from partial free list
+**** allocate new page of type x
+**** free page of type x
+*** page specific functions
+**** cell page (just cells, allocated on heap)
+**** cons-cell page
+*** mil interface to page functions
+**** allocate page of type x
+**** free page
+**** mark page (full, partially free, free)
+**** get type of page
+**** get partially free page of type x
+*** memory layout
+https://www.c64-wiki.com/wiki/Memory_Map
+- 0000-00FF zero page
+- 0100-01FF stack
+- 0200-03FF os and basic area
+- 0400-07FF char screen memory
+- 0800-XXXX MIL Core Runtime
+- XXXX-9FFF free page area
+- A000-BFFF Basic
+- C000-CFFF free (for what so ever)
+- D000-DFFF mem mapped i/o
+- E000-FFFF Kernal
+**** allocate pages and implement all other concepts on allocated page
+- expression-stack
+- heap
+  - cons-cells
+  - cells
+  - native byte arrays
+  - native cell arrays
+  - strings, symbols
+  - floats
+* example program execution
+- program is loaded to 0800..XXXX (regular basic program load "*",8) and run (executes sys 2064)
+- initialize runtime
+  - (allocate page for strings/symbols, copy string and symbols int that page)
+  - initialize expression stack (native array of cells), and stack pointer to tos
+  - initialize heap (free lists etc.)
+- initialize interpreter
+  - vm-pc (ptr to current byte-code instruction)
+  - allocate page for vm-callstack
+  - execute vm instruction
+* working draft
+** memory management
+*** pages
+**** general layout
+pages are 256 byte chunks, addressed through the page-id which is the high-byte of the absolute ptr.
+pages allocated have the guarantee to not being moved => page-id will always be the high byte
+* MMU idea
+6510 Ax = address line of processor (0..15)
+MR1Ax = address line of page mapping ram 1 (256 byte addressable) (0..7)
+MR2Ax = address line of page mapping ram 2 (256 byte addressable) (0..7)
+MMAx = address line of (complete) main memory (16MB addressable) (0..23)
 
-* additional routines
+mapped mode
+6510           MR1/2          MM         6510
+A8-15 -> MR1A0-7: D0-7 -> MMA16-23:
+      -> MR2A0-7: D0-7 -> MMA8-15 :  <-> D0-7
+A0-7                   -> MMA0-7  :
+
+MR1-mode (set/read page configuration of register 1)
+6510              MR1        6510
+A8-15 = CR1
+A0-7          -> MR1A0-7:  <-> D0-7
+
+CR1 = bit pattern of where MR1 ram (256 byte) should be mapped into real memory
+
+MR2-mode (set/read page configuration of register 1)
+6510              MR2        6510
+A8-15 = CR2
+A0-7          -> MR2A0-7:  <-> D0-7
+
+CR2 = bit pattern of where MR2 ram (256 byte) should be mapped into real memory
+
+Dxxx = CR1
+Dxxy = CR2
+Dxxz = 0000 00LP = L=1 meaning MR1 mode, P=1 meaning MR2 mode (0 meaning it is not mapped)
+
+
+- map main page 0010 1101 1001 0110 [0000 0000] -> into 6510 address 0100 1000 [0000 0000] means
+    MR1[0100 1000] = 0010 1101
+    MR2[0100 1000] = 1001 0110
+- changing that mapping (e.g) 0010 1101 1000 0000 [0000 0000] -> 0100 1000 [0000 0000] means
+    MR2[0100 1000] = 1000 0000
+
+mapping this also means that references need to be taken care of (references [from other places in memory] into that page will suddenly
+point to other physical memory and thus data). the program/os needs to be aware of that and make sure that no references to the old page
+(data) are not used until the old/right page is restored to that native position.
+
+* misc additional routines
 ** times 10 (decimal)
 #+begin_src asm
   mul10:  PHA; save an in the stack
@@ -718,3 +912,57 @@ use case:
           ADC temp; add an*8 to a*2 to get a*10
           RTS ; return
 #+end_src
+* virtual (stack) machine
+** interpreter loop
+- each instruction is 1 byte, except pushes, which push a cell (e.g. 1xxx xxxx = push, with x being the first byte of the cell, 0yyy yyyy
+  regular byte instruction like call, pop, branch etc.)
+- there is a jump table (vm-instruction -> jump location = 1/2 page, depending on how many different instructions are necessary)
+- decode instruction, increment vm-pc -
+  - decode = lsl, read address from jump location, jsr to instruction interpretation
+** operations
+- see [[https://en.wikipedia.org/wiki/SECD_machine][SECD machine]], [[https://rachel.cafe/2021/12/10/secd.html][descibed with haskell]], [[https://github.com/zachallaun/secd][implemented in clojure]], or [[https://pqnelson.github.io/org-notes/comp-sci/abstract-machines/secd.html#h-d00204c5-0ff0-4e26-9ba0-5881aeb4e634][here]]
+- writing an interpreter of the cesk machine https://matt.might.net/articles/cesk-machines/, https://matt.might.net/articles/oo-cesk/, https://matt.might.net/articles/cesk-machines/
+- 
+*** push cell (float, string, char, boolean, byte, int, symbol)
+*** push n-array, struct, cons-cell (list)
+*** plus, minus (byte/integer/float)
+pop tos into A
+replace tos with A +/- tos
+*** shift left/right (byte/integer)
+*** times, divide (int, too?), power, sqrt, log (float)
+tos = cell, ptr to float
+=> pop tos, transfer pointed to float into FAC (decrement ref count)
+=> repl tos with result of, tranferd pointed to float to FAC2 (decrement ref count), execute * / ^ sqrt log, write result into FLOAT HEAP
+(increment ref count)
+*** peek, poke
+- peek
+  pop cell (byte) into zp-reg
+  pop cell (byte) into zp-reg+1
+  load (zp-reg),0
+  push cell (byte)
+- poke
+  pop cell (byte) into zp-reg
+  pop cell (byte) into zp-reg+1
+  pop cell (byte) into A
+  store (zp-reg),0
+*** pop, duplicate, swap
+*** branch-if, jump, call, return
+*** cons, car, cdr
+*** empty?, list?, atom?
+*** not, and, or, xor
+*** b-not, b-and, b-or, b-xor
+*** get-field, set-field, copy (struct)
+** examples
+- adding to integers
+  push int-a
+  push int-b
+  plus
+- adding an integer to a list
+  push list-a
+  push an-int
+  cons
+- implementation of reverse (incomplete). is a list always a pair (cons-cell) or is nil a single cell?
+  pair (or cons-cell) = [[cell][cell]​]
+  list (or cons-cell) = [[nil][x]​]
+                        [[value-cell][ptr->cons-cell|nil]​]
+                        

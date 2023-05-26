@@ -76,7 +76,7 @@
   (do [digits <- (many+/p hex-digit/p)]
       (pure (list->string digits))))
 
-;; considered whitespace (space, newline, tab, all chars behind ';')
+;; considered white space (space, newline, tab, all chars behind ';')
 (define/c ml-whitespace/p
   (-> parser?)
   (many/p (or/p (char/p #\newline)
@@ -374,7 +374,7 @@
       (string-cia/p ",y")
     (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',y))))
 
-(module+ test #| immedapte/p,  zero-page-or-relative/p,  indirect/p,  indirect-x/p,  indirect-y/p,  absolute/p |#
+(module+ test #| immediate/p,  zero-page-or-relative/p,  indirect/p,  indirect-x/p,  indirect-y/p,  absolute/p |#
   (check-match (parsed-string-result immediate/p "#$10")
                '("!16"))
   (check-match (parsed-string-result zero-page-or-relative/p "<some")
