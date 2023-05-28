@@ -32,6 +32,26 @@
 
 ;; reference to a value
 (struct value-reference value
+  ()
+  #:transparent)
+
+(struct value-nil-reference value-reference
+  ()
+  #:transparent)
+
+(define nil-reference (value-nil-reference))
+
+(define/contract (nil-ref? a-val-ref)
+  (-> value-reference? boolean?)
+  (eq? a-val-ref nil-reference))
+
+(module+ test #| nil |#
+  (check-true (nil-ref? nil-reference)
+              "only the defined nil-reference is nil")
+  (check-false (nil-ref? (value-nil-reference))
+               "another instance of value-nil-reference is not nil!"))
+
+(struct value-bound-reference value-reference
   (page-no index)
   #:guard (struct-guard/c nonnegative-integer? byte?))
 
@@ -117,13 +137,13 @@
 
 ;; write A-VALUE into A-VALUE-REF using/within A-memory
 (define/contract (write-into-value-ref a-memory a-value-ref a-value)
-  (-> memory? value-reference? value? memory?)
+  (-> memory? value-bound-reference? value? memory?)
   (define vpage
-    (get-memory-page a-memory (value-reference-page-no a-value-ref)))
+    (get-memory-page a-memory (value-bound-reference-page-no a-value-ref)))
   (cond ((and (byte-value? a-value) (byte-page? vpage))
          (memory (set-nth (memory-pages a-memory)
-                          (value-reference-page-no a-value-ref)
-                          (write-byte vpage (value-reference-index a-value-ref) (byte-value-byte a-value)))
+                          (value-bound-reference-page-no a-value-ref)
+                          (write-byte vpage (value-bound-reference-index a-value-ref) (byte-value-byte a-value)))
                  (memory-count a-memory)))
         (#t (raise-user-error "memory page not matching value or unknown implementation"))))
 
@@ -134,7 +154,7 @@
 
 ;; write the top of A-VALUE-STACK into A-VALUE-REF using/within A-memory
 (define/contract (tos-value-into a-memory a-value-stack a-value-ref)
-  (-> memory? value-stack? value-reference? memory?)
+  (-> memory? value-stack? value-bound-reference? memory?)
   (write-into-value-ref a-memory a-value-ref (car (value-stack-values a-value-stack))))
 
 ;; pop the top from A-VALUE-STACK
@@ -166,7 +186,7 @@
   (check-equal? (read-byte
                  (get-memory-page
                   (write-into-value-ref (alloc-memory-page (make-memory 2) 1 (make-byte-page))
-                                        (value-reference 1 100)
+                                        (value-bound-reference 1 100)
                                         (byte-value #x37))
                   1)
                  100)
@@ -176,19 +196,19 @@
 
 ;; dereference A-VALUE-REFERENCE
 (define (dereference-value a-memory a-value-reference)
-  (-> memory? value-reference? value?)
-  (define page (get-memory-page a-memory (value-reference-page-no a-value-reference)))
+  (-> memory? value-bound-reference? value?)
+  (define page (get-memory-page a-memory (value-bound-reference-page-no a-value-reference)))
   (cond ((byte-page? page)
-         (read-byte-value page (value-reference-index a-value-reference)))
+         (read-byte-value page (value-bound-reference-index a-value-reference)))
         (#t (raise-user-error "unknown memory page type"))))
 
 (module+ test #| dereference-value |#
   (check-equal? (byte-value-byte
                  (dereference-value
                   (write-into-value-ref (alloc-memory-page (make-memory 2) 1 (make-byte-page))
-                                        (value-reference 1 100)
+                                        (value-bound-reference 1 100)
                                         (byte-value #x37))
-                  (value-reference 1 100)))                 
+                  (value-bound-reference 1 100)))
                 #x37))
 
 (struct code-reference
@@ -197,16 +217,8 @@
   #:transparent
   #:guard (struct-guard/c nonnegative-integer? byte?))
 
-(struct call-stack
-  (code-references)
-  #:guard (struct-guard/c (listof code-reference?)))
-
-(struct env
-  (map-stack)
-  #:guard (struct-guard/c (listof hash?)))
-
-(define/contract (inc-pc a-pc delta)
-  (-> code-reference? integer? code-reference?)
+(define/contract (inc-pc a-pc (delta 1))
+  (->* (code-reference?) (integer?) code-reference?)
   (define new-index-unmodified (+ (code-reference-index a-pc) delta))
   (define new-page
     (cond ((< new-index-unmodified 0)
@@ -264,6 +276,69 @@
                   -1)
                  #x21))
 
+(struct env
+  (map-stack)
+  #:guard (struct-guard/c (listof hash?)))
+
+(define/contract (env-push-frame an-env a-map)
+  (-> env? hash? env?)
+  (env (cons a-map (env-map-stack an-env))))
+
+(define/contract (env-pop-frame an-env)
+  (-> env? env?)
+  (env (cdr (env-map-stack an-env))))
+
+(define/contract (env-resolve an-env key)
+  (-> env? any/c value?)
+  (if (empty? (env-map-stack an-env))
+      nil-reference
+      (let ((top-frame (car (env-map-stack an-env))))
+        (cond ((hash-has-key? top-frame key)
+               (hash-ref top-frame key))
+              (#t (env-resolve (env (cdr (env-map-stack an-env))) key))))))
+
+(module+ test #| env |#
+  (check-eq?  (env-resolve (env '()) 'unknown-key)
+              nil-reference)
+  (check-true  (nil-ref? (env-resolve (env '()) 'unknown-key)))
+  (check-equal?
+   (byte-value-byte (env-resolve (env-push-frame (env '()) (hash 'some-key (byte-value #x3e)))
+                                 'some-key))
+   #x3e)
+  (check-equal?
+   (byte-value-byte (env-resolve
+                     (env-push-frame
+                      (env-push-frame (env '()) (hash 'some-key (byte-value #x73)))
+                      (hash 'some-key (byte-value #x3e)))
+                     'some-key))
+   #x3e
+   "second frame shadows key with its value")
+  (check-equal?
+   (byte-value-byte (env-resolve
+                     (env-pop-frame
+                      (env-push-frame
+                       (env-push-frame (env '()) (hash 'some-key (byte-value #x73)))
+                       (hash 'some-key (byte-value #x3e))))
+                     'some-key))
+   #x73
+   "some key is no longer shadowed by second frame (since it is popped)"))
+
+(struct call-stack
+  (code-references)
+  #:guard (struct-guard/c (listof code-reference?)))
+
+(define/contract (call-stack-push-pc a-call-stack a-pc)
+  (-> call-stack? code-reference? call-stack?)
+  (call-stack (cons a-pc (call-stack-code-references a-call-stack))))
+
+(define/contract (call-stack-pop a-call-stack a-pc)
+  (-> call-stack? code-reference? call-stack?)
+  (call-stack (cdr (call-stack-code-references a-call-stack))))
+
+(define/contract (call-stack-get-return a-call-stack)
+  (-> call-stack? code-reference?)
+  (car (call-stack-code-references a-call-stack)))
+
 (struct vm-state
   (value-stack ;; values
    call-stack  ;; stack with return addresses
@@ -272,3 +347,72 @@
    pc)         ;; current program counter (index into memory)
   #:guard (struct-guard/c value-stack? call-stack? memory? env? code-reference?))
 
+(define vm-op-codes
+  (hash #x00 'break   ;; no operand
+        #x01 'push_b  ;; byte value
+        #x02 'pop     ;;
+        #x03 'add))   ;; pop 2 values, add them, then push
+
+(define/contract (vm-interpret-push_b a-vm)
+  (-> vm-state? vm-state?)
+  (struct-copy vm-state a-vm
+               [value-stack (push-value (vm-state-value-stack a-vm) (byte-value (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm) 1)))]
+               [pc (inc-pc (vm-state-pc a-vm) 2)]))
+
+(define/contract (vm-interpret-pop a-vm)
+  (-> vm-state? vm-state?)
+  (struct-copy vm-state a-vm
+               [value-stack (pop-value (vm-state-value-stack a-vm))]
+               [pc (inc-pc (vm-state-pc a-vm))]))
+
+(define/contract (vm-interpret-add a-vm)
+  (-> vm-state? vm-state?)
+  (define val-a (top-of-stack-value (vm-state-value-stack a-vm)))
+  (define stack1 (pop-value (vm-state-value-stack a-vm)))
+  (define val-b (top-of-stack-value stack1))
+  (define stack2 (pop-value stack1))
+  (define result (bitwise-and #xff (+ (byte-value-byte val-a) (byte-value-byte val-b))))
+  (struct-copy vm-state a-vm
+               [value-stack (push-value stack2 (byte-value result))]
+               [pc (inc-pc (vm-state-pc a-vm))]))
+
+(define/contract (make-vm)
+  (-> vm-state?)
+  (vm-state
+   (value-stack '())
+   (call-stack '())
+   (alloc-memory-page (make-memory #xff) 0 (make-byte-page))
+   (env '())
+   (code-reference 0 0)))
+
+(define/contract (load-initial-code a-vm bytes)
+  (-> vm-state? (listof byte?) vm-state?)
+  (struct-copy vm-state a-vm
+               [memory
+                (memory
+                 (set-nth (memory-pages (vm-state-memory a-vm))
+                          0 ;; page no
+                          (write-bytes (get-memory-page (vm-state-memory a-vm) 0) 0 bytes))
+                 (memory-count (vm-state-memory a-vm)))]))
+
+(define/contract (run-vm a-vm)
+  (-> vm-state? vm-state?)
+  (define instruction (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm)))
+  (define instruction-symbol (hash-ref vm-op-codes instruction))
+  (cond ((eq? 'break instruction-symbol)
+         a-vm)
+        ((eq? 'push_b instruction-symbol)
+         (run-vm (vm-interpret-push_b a-vm)))
+        ((eq? 'pop instruction-symbol)
+         (run-vm (vm-interpret-pop a-vm)))
+        ((eq? 'add instruction-symbol)
+         (run-vm (vm-interpret-add a-vm)))))
+
+(module+ test #| vm |#
+  (check-equal? 
+   (byte-value-byte
+    (top-of-stack-value
+     (vm-state-value-stack
+      (run-vm
+       (load-initial-code (make-vm) '(#x01 #x10 #x01 #x12 #x03 #x00))))))
+   #x22))
