@@ -353,6 +353,9 @@
         #x02 'pop     ;;
         #x03 'add))   ;; pop 2 values, add them, then push
 
+(define vm-code-ops
+  (apply hash (flatten (map (lambda (pair) (list (cdr pair) (car pair))) (hash->list vm-op-codes)))))
+
 (define/contract (vm-interpret-push_b a-vm)
   (-> vm-state? vm-state?)
   (struct-copy vm-state a-vm
@@ -386,13 +389,18 @@
    (code-reference 0 0)))
 
 (define/contract (load-initial-code a-vm bytes)
-  (-> vm-state? (listof byte?) vm-state?)
+  (-> vm-state? (listof (or/c symbol? byte?)) vm-state?)
+  (define real-bytes (map (lambda (b-or-s)
+                            (cond ((symbol? b-or-s)
+                                   (hash-ref vm-code-ops b-or-s))
+                                  (#t b-or-s)))
+                          bytes))
   (struct-copy vm-state a-vm
                [memory
                 (memory
                  (set-nth (memory-pages (vm-state-memory a-vm))
                           0 ;; page no
-                          (write-bytes (get-memory-page (vm-state-memory a-vm) 0) 0 bytes))
+                          (write-bytes (get-memory-page (vm-state-memory a-vm) 0) 0 real-bytes))
                  (memory-count (vm-state-memory a-vm)))]))
 
 (define/contract (run-vm a-vm)
@@ -414,5 +422,9 @@
     (top-of-stack-value
      (vm-state-value-stack
       (run-vm
-       (load-initial-code (make-vm) '(#x01 #x10 #x01 #x12 #x03 #x00))))))
+       (load-initial-code (make-vm)
+                          '(push_b #x10
+                            push_b #x12
+                            add
+                            break))))))
    #x22))
