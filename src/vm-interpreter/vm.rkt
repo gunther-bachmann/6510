@@ -66,41 +66,123 @@
   (values)
   #:guard (struct-guard/c list?))
 
+;; reference into memory
+(struct byte-mem-reference
+  (page-no
+   index)
+  #:transparent
+  #:guard (struct-guard/c nonnegative-integer? byte?))
+
+(define/contract (inc-byte-mem-ref a-byte-mem-ref (delta 1))
+  (->* (byte-mem-reference?) (integer?) byte-mem-reference?)
+  (define new-index-unmodified (+ (byte-mem-reference-index a-byte-mem-ref) delta))
+  (define new-page
+    (cond ((< new-index-unmodified 0)
+           (sub1 (byte-mem-reference-page-no a-byte-mem-ref)))
+          ((> new-index-unmodified #xff)
+           (add1 (byte-mem-reference-page-no a-byte-mem-ref)))
+          (#t (byte-mem-reference-page-no a-byte-mem-ref))))
+  (byte-mem-reference new-page (bitwise-and #xff new-index-unmodified)))
+
+(module+ test #| inc-pc |#
+  (check-equal? (byte-mem-reference-page-no (inc-byte-mem-ref (byte-mem-reference 5 255) 1))
+                6)
+  (check-equal? (byte-mem-reference-index (inc-byte-mem-ref (byte-mem-reference 5 255) 1))
+                0)
+  (check-equal? (byte-mem-reference-page-no (inc-byte-mem-ref (byte-mem-reference 5 255) 2))
+                6)
+  (check-equal? (byte-mem-reference-index (inc-byte-mem-ref (byte-mem-reference 5 255) 2))
+                1)
+  (check-equal? (byte-mem-reference-page-no (inc-byte-mem-ref (byte-mem-reference 5 254) 1))
+                5)
+  (check-equal? (byte-mem-reference-index (inc-byte-mem-ref (byte-mem-reference 5 254) 1))
+                255)
+  (check-equal? (byte-mem-reference-page-no (inc-byte-mem-ref (byte-mem-reference 5 0) -1))
+                4)
+  (check-equal? (byte-mem-reference-index (inc-byte-mem-ref (byte-mem-reference 5 0) -1))
+                255)
+  (check-equal? (byte-mem-reference-page-no (inc-byte-mem-ref (byte-mem-reference 5 0) -2))
+                4)
+  (check-equal? (byte-mem-reference-index (inc-byte-mem-ref (byte-mem-reference 5 0) -2))
+                254)
+  (check-equal? (byte-mem-reference-page-no (inc-byte-mem-ref (byte-mem-reference 5 1) -1))
+                5)
+  (check-equal? (byte-mem-reference-index (inc-byte-mem-ref (byte-mem-reference 5 1) -1))
+                0))
+
 ;; c-tor
 (define (make-byte-page)
   (byte-page (make-pvector 256 0)))
 
 ;; write BYTE into A-BYTE-PAGE at INDEX
-(define/contract (write-byte a-byte-page index byte)
+(define/contract (write-byte-into-page a-byte-page index byte)
   (-> byte-page? byte? byte? byte-page?)
   (byte-page (set-nth (byte-page-data a-byte-page) index byte)))
 
-(define/contract (write-bytes a-byte-page index bytes)
+(define/contract (write-bytes-into-page a-byte-page index bytes)
   (-> byte-page? byte? (listof byte?) byte-page?)
   (if (empty? bytes)
       a-byte-page
-      (write-bytes
-       (write-byte a-byte-page index (car bytes))
+      (write-bytes-into-page
+       (write-byte-into-page a-byte-page index (car bytes))
        (add1 index)
        (cdr bytes))))
 
+(define/contract (memory-set-page mem page-no a-page)
+  (-> memory? nonnegative-integer? page? memory?)
+  (memory (set-nth (memory-pages mem)
+                   page-no
+                   a-page)
+          (memory-count mem)))
+
+;; write bytes (even over page borders)
+(define/contract (write-bytes-into-memory mem mem-ref bytes)
+  (-> memory? byte-mem-reference? (listof byte?) memory?)
+  (if (empty? bytes)
+      mem
+      (write-bytes-into-memory
+       (memory-set-page mem
+                        (byte-mem-reference-page-no mem-ref)
+                        (write-byte-into-page (get-memory-page mem (byte-mem-reference-page-no mem-ref))
+                                              (byte-mem-reference-index mem-ref)
+                                              (car bytes)))
+       (inc-byte-mem-ref mem-ref)
+       (cdr bytes))))
+
+(module+ test #| write-bytes-into-memory |#
+  (define mem-written-over-two-pages
+    (write-bytes-into-memory 
+                 (alloc-memory-page
+                  (alloc-memory-page (make-memory 3) 0 (make-byte-page))
+                  1 (make-byte-page))
+                 (byte-mem-reference 0 254)
+                 '(1 2 3 4)))
+  (check-equal? (read-byte-from-page (get-memory-page mem-written-over-two-pages 0) 254)
+                1)
+  (check-equal? (read-byte-from-page (get-memory-page mem-written-over-two-pages 0) 255)
+                2)
+  (check-equal? (read-byte-from-page (get-memory-page mem-written-over-two-pages 1) 0)
+                3)
+  (check-equal? (read-byte-from-page (get-memory-page mem-written-over-two-pages 1) 1)
+                4))
+
 ;; read byte from A-BYTE-PAGE at INDEX
-(define/contract (read-byte a-byte-page index)
+(define/contract (read-byte-from-page a-byte-page index)
   (-> byte-page? byte? byte?)
   (nth (byte-page-data a-byte-page) index))
 
 ;; write BYTE into A-BYTE-PAGE at INDEX
-(define/contract (write-byte-value a-byte-page index a-byte-value)
+(define/contract (write-byte-value-into-page a-byte-page index a-byte-value)
   (-> byte-page? byte? byte-value? byte-page?)
-  (write-byte a-byte-page index (byte-value-byte a-byte-value)))
+  (write-byte-into-page a-byte-page index (byte-value-byte a-byte-value)))
 
 ;; read byte from A-BYTE-PAGE at INDEX
-(define/contract (read-byte-value a-byte-page index)
+(define/contract (read-byte-value-from-page a-byte-page index)
   (-> byte-page? byte? byte-value?)
-  (byte-value (read-byte a-byte-page index)))
+  (byte-value (read-byte-from-page a-byte-page index)))
 
 (module+ test #| write-byte, read-byte |#
-  (check-equal? (read-byte (write-byte (make-byte-page) 5 #x20)
+  (check-equal? (read-byte-from-page (write-byte-into-page (make-byte-page) 5 #x20)
                            5)
                 #x20
                 "written byte can be read from byte-page"))
@@ -118,14 +200,14 @@
 ;; free the page at NO of the memory
 (define (free-memory-page a-memory no)
   (-> memory? nonnegative-integer? memory?)
-  (memory (set-nth (memory-pages a-memory) no nil-page) (memory-count a-memory)))
+  (memory-set-page a-memory no nil-page))
 
 ;; allocate this PAGE at NO on the memory
 (define (alloc-memory-page a-memory no page)
-  (-> memory? nonnegative-integer? memory?)
-  (unless (eq? (nth (memory-pages a-memory) no) nil-page)
+  (-> memory? nonnegative-integer? page? memory?)
+  (unless (eq? (get-memory-page a-memory no) nil-page)
     (raise-user-error "cannot (re)allocate, page already allocated"))
-  (memory (set-nth (memory-pages a-memory) no page) (memory-count a-memory)))
+  (memory-set-page a-memory no page))
 
 (module+ test #| allocate, get, free-memory-page |#
   (check-true (byte-page? (get-memory-page (alloc-memory-page (make-memory 256) #xC0 (make-byte-page)) #xC0))
@@ -141,10 +223,9 @@
   (define vpage
     (get-memory-page a-memory (value-bound-reference-page-no a-value-ref)))
   (cond ((and (byte-value? a-value) (byte-page? vpage))
-         (memory (set-nth (memory-pages a-memory)
+         (memory-set-page a-memory
                           (value-bound-reference-page-no a-value-ref)
-                          (write-byte vpage (value-bound-reference-index a-value-ref) (byte-value-byte a-value)))
-                 (memory-count a-memory)))
+                          (write-byte-into-page vpage (value-bound-reference-index a-value-ref) (byte-value-byte a-value))))
         (#t (raise-user-error "memory page not matching value or unknown implementation"))))
 
 ;; push A-VALUE onto A-VALUE-STACK
@@ -183,7 +264,7 @@
 
 
 (module+ test #| write-into-value-ref |#
-  (check-equal? (read-byte
+  (check-equal? (read-byte-from-page
                  (get-memory-page
                   (write-into-value-ref (alloc-memory-page (make-memory 2) 1 (make-byte-page))
                                         (value-bound-reference 1 100)
@@ -199,7 +280,7 @@
   (-> memory? value-bound-reference? value?)
   (define page (get-memory-page a-memory (value-bound-reference-page-no a-value-reference)))
   (cond ((byte-page? page)
-         (read-byte-value page (value-bound-reference-index a-value-reference)))
+         (read-byte-value-from-page page (value-bound-reference-index a-value-reference)))
         (#t (raise-user-error "unknown memory page type"))))
 
 (module+ test #| dereference-value |#
@@ -211,68 +292,25 @@
                   (value-bound-reference 1 100)))
                 #x37))
 
-(struct code-reference
-  (page-no
-   index)
-  #:transparent
-  #:guard (struct-guard/c nonnegative-integer? byte?))
-
-(define/contract (inc-pc a-pc (delta 1))
-  (->* (code-reference?) (integer?) code-reference?)
-  (define new-index-unmodified (+ (code-reference-index a-pc) delta))
-  (define new-page
-    (cond ((< new-index-unmodified 0)
-           (sub1 (code-reference-page-no a-pc)))
-          ((> new-index-unmodified #xff)
-           (add1 (code-reference-page-no a-pc)))
-          (#t (code-reference-page-no a-pc))))
-  (code-reference new-page (bitwise-and #xff new-index-unmodified)))
-
-(module+ test #| inc-pc |#
-  (check-equal? (code-reference-page-no (inc-pc (code-reference 5 255) 1))
-                6)
-  (check-equal? (code-reference-index (inc-pc (code-reference 5 255) 1))
-                0)
-  (check-equal? (code-reference-page-no (inc-pc (code-reference 5 255) 2))
-                6)
-  (check-equal? (code-reference-index (inc-pc (code-reference 5 255) 2))
-                1)
-  (check-equal? (code-reference-page-no (inc-pc (code-reference 5 254) 1))
-                5)
-  (check-equal? (code-reference-index (inc-pc (code-reference 5 254) 1))
-                255)
-  (check-equal? (code-reference-page-no (inc-pc (code-reference 5 0) -1))
-                4)
-  (check-equal? (code-reference-index (inc-pc (code-reference 5 0) -1))
-                255)
-  (check-equal? (code-reference-page-no (inc-pc (code-reference 5 0) -2))
-                4)
-  (check-equal? (code-reference-index (inc-pc (code-reference 5 0) -2))
-                254)
-  (check-equal? (code-reference-page-no (inc-pc (code-reference 5 1) -1))
-                5)
-  (check-equal? (code-reference-index (inc-pc (code-reference 5 1) -1))
-                0))
-
 (define/contract (deref-pc a-mem a-pc (rel 0))
-  (->* (memory? code-reference?) (integer?) byte?)
-  (define real-pc (inc-pc a-pc rel))
-  (define page (get-memory-page a-mem (code-reference-page-no real-pc)))
-  (nth (byte-page-data page) (code-reference-index real-pc)))
+  (->* (memory? byte-mem-reference?) (integer?) byte?)
+  (define real-pc (inc-byte-mem-ref a-pc rel))
+  (define page (get-memory-page a-mem (byte-mem-reference-page-no real-pc)))
+  (nth (byte-page-data page) (byte-mem-reference-index real-pc)))
 
 (module+ test #| deref-pc |#
   (check-equal?  (deref-pc
-                  (alloc-memory-page (make-memory 10) 5 (write-bytes (make-byte-page) 2 '(#x21 #x4e #xc3)))
-                  (code-reference 5 3))
+                  (alloc-memory-page (make-memory 10) 5 (write-bytes-into-page (make-byte-page) 2 '(#x21 #x4e #xc3)))
+                  (byte-mem-reference 5 3))
                  #x4e)
   (check-equal?  (deref-pc
-                  (alloc-memory-page (make-memory 10) 5 (write-bytes (make-byte-page) 2 '(#x21 #x4e #xc3)))
-                  (code-reference 5 3)
+                  (alloc-memory-page (make-memory 10) 5 (write-bytes-into-page (make-byte-page) 2 '(#x21 #x4e #xc3)))
+                  (byte-mem-reference 5 3)
                   1)
                  #xc3)
   (check-equal?  (deref-pc
-                  (alloc-memory-page (make-memory 10) 5 (write-bytes (make-byte-page) 2 '(#x21 #x4e #xc3)))
-                  (code-reference 5 3)
+                  (alloc-memory-page (make-memory 10) 5 (write-bytes-into-page (make-byte-page) 2 '(#x21 #x4e #xc3)))
+                  (byte-mem-reference 5 3)
                   -1)
                  #x21))
 
@@ -325,18 +363,18 @@
 
 (struct call-stack
   (code-references)
-  #:guard (struct-guard/c (listof code-reference?)))
+  #:guard (struct-guard/c (listof byte-mem-reference?)))
 
 (define/contract (call-stack-push-pc a-call-stack a-pc)
-  (-> call-stack? code-reference? call-stack?)
+  (-> call-stack? byte-mem-reference? call-stack?)
   (call-stack (cons a-pc (call-stack-code-references a-call-stack))))
 
 (define/contract (call-stack-pop a-call-stack a-pc)
-  (-> call-stack? code-reference? call-stack?)
+  (-> call-stack? byte-mem-reference? call-stack?)
   (call-stack (cdr (call-stack-code-references a-call-stack))))
 
 (define/contract (call-stack-get-return a-call-stack)
-  (-> call-stack? code-reference?)
+  (-> call-stack? byte-mem-reference?)
   (car (call-stack-code-references a-call-stack)))
 
 (struct vm-state
@@ -345,7 +383,7 @@
    memory      ;; pages
    env         ;; nested environments of int->value references
    pc)         ;; current program counter (index into memory)
-  #:guard (struct-guard/c value-stack? call-stack? memory? env? code-reference?))
+  #:guard (struct-guard/c value-stack? call-stack? memory? env? byte-mem-reference?))
 
 (define vm-op-codes
   (hash #x00 'break   ;; no operand
@@ -360,13 +398,13 @@
   (-> vm-state? vm-state?)
   (struct-copy vm-state a-vm
                [value-stack (push-value (vm-state-value-stack a-vm) (byte-value (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm) 1)))]
-               [pc (inc-pc (vm-state-pc a-vm) 2)]))
+               [pc (inc-byte-mem-ref (vm-state-pc a-vm) 2)]))
 
 (define/contract (vm-interpret-pop a-vm)
   (-> vm-state? vm-state?)
   (struct-copy vm-state a-vm
                [value-stack (pop-value (vm-state-value-stack a-vm))]
-               [pc (inc-pc (vm-state-pc a-vm))]))
+               [pc (inc-byte-mem-ref (vm-state-pc a-vm))]))
 
 (define/contract (vm-interpret-add a-vm)
   (-> vm-state? vm-state?)
@@ -377,8 +415,9 @@
   (define result (bitwise-and #xff (+ (byte-value-byte val-a) (byte-value-byte val-b))))
   (struct-copy vm-state a-vm
                [value-stack (push-value stack2 (byte-value result))]
-               [pc (inc-pc (vm-state-pc a-vm))]))
+               [pc (inc-byte-mem-ref (vm-state-pc a-vm))]))
 
+;; create a virtual machine with just page 0 being allocated as byte page
 (define/contract (make-vm)
   (-> vm-state?)
   (vm-state
@@ -386,10 +425,11 @@
    (call-stack '())
    (alloc-memory-page (make-memory #xff) 0 (make-byte-page))
    (env '())
-   (code-reference 0 0)))
+   (byte-mem-reference 0 0)))
 
-(define/contract (load-initial-code a-vm bytes)
-  (-> vm-state? (listof (or/c symbol? byte?)) vm-state?)
+;; load the given code into the vm 
+(define/contract (load-initial-code a-vm bytes (mem-ref (byte-mem-reference 0 0)))
+  (->* (vm-state? (listof (or/c symbol? byte?))) (byte-mem-reference?) vm-state?)
   (define real-bytes (map (lambda (b-or-s)
                             (cond ((symbol? b-or-s)
                                    (hash-ref vm-code-ops b-or-s))
@@ -397,12 +437,10 @@
                           bytes))
   (struct-copy vm-state a-vm
                [memory
-                (memory
-                 (set-nth (memory-pages (vm-state-memory a-vm))
-                          0 ;; page no
-                          (write-bytes (get-memory-page (vm-state-memory a-vm) 0) 0 real-bytes))
-                 (memory-count (vm-state-memory a-vm)))]))
+                (write-bytes-into-memory (vm-state-memory a-vm) mem-ref real-bytes)]
+               [pc mem-ref]))
 
+;; run the current vm until a break instruction is encountered
 (define/contract (run-vm a-vm)
   (-> vm-state? vm-state?)
   (define instruction (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm)))
@@ -414,7 +452,8 @@
         ((eq? 'pop instruction-symbol)
          (run-vm (vm-interpret-pop a-vm)))
         ((eq? 'add instruction-symbol)
-         (run-vm (vm-interpret-add a-vm)))))
+         (run-vm (vm-interpret-add a-vm)))
+        (#t (raise-user-error "unknown opcode ~a" instruction-symbol))))
 
 (module+ test #| vm |#
   (check-equal? 
@@ -426,5 +465,6 @@
                           '(push_b #x10
                             push_b #x12
                             add
-                            break))))))
+                            break)
+                          (byte-mem-reference 0 2))))))
    #x22))
