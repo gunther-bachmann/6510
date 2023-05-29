@@ -110,7 +110,9 @@ lexical scoping?
 - repw {value, value-ref} :: replace tos with
 - push {value, value-ref} :: push
 - pop {value-ref} :: pop (into)
+- discard-tos :: pop, discarding
 - apply :: apply tos function ref on remaining stack
+- eval :: execute tos list expression (s-expression) = (list symbol <- function-reference param-1 ... param-n)
 - dup :: duplicate tos
 - tos {value-ref} :: write tos into
 - swap :: swap tos with second on stack
@@ -129,8 +131,40 @@ lexical scoping?
 - match :: regexp
 - nop ::
 - throw ::
+- break :: into the monitor/os
 ** runtime functions
 - all that are not primitives?
+- allocate/free os/page
+  heed metadata (e.g. for relocation)
+  - data
+  - code
+- allocate/free mil objects
+  - small arrays (one page)
+    - byte array / char / boolean (native array)
+    - integer array (native array)
+    - array of cells (byte, integer, reference->[float, string, symbol, byte, integer, reference, boolean char,
+      array ...], boolean, char)
+    - array of cons-cells (pair of cells)
+    - array of floats
+    - array of structures
+    - array of strings/symbols (interned)
+    - bit array (bitmaps)
+  - large arrays (multiple pages)
+  - single data
+    - ? byte/char/boolean
+    - ? integer
+    - cell (byte, integer, boolean, char, reference-> [...])
+    - cons-cell (pair of cells)
+- i/o
+  - screen output
+    - write char (at)
+  - keyboard input
+    - read key
+  - disk i/o
+    - read/write blob
+    - read/write file
+  - tape i/o
+    - read/write file
 ** runtime constants
 - floats: pi, e, 10, 1, 2 ...
 ** data
