@@ -1,7 +1,6 @@
 #lang racket
 
 (require data/pvector)
-(require racket/generic)
 (require (only-in data/collection
                   set-nth
                   nth))
@@ -26,48 +25,63 @@
   (data)
   #:guard (struct-guard/c pvector?))
 
-;; generic value type
-(struct value
-  (ref-count)
+;; generic cell type
+(struct cell
+  (ref-count) ;; ref-count is only kept on cells in the heap, cells on the stack do not have ref-counts!
   #:transparent
   #:guard (struct-guard/c byte?))
 
-;; reference to a value
-(struct value-reference value
+;; when putting a cell-ref on the stack, the heap-cell ref-count is incremented,
+;; when popping a cell-ref from the stack, the heap-cell ref-count is decremented,
+;; when putting a cell-value on the stack no ref-count needs adjustments
+
+;; reference to a cell 
+(struct cell-reference cell
   ()
   #:transparent)
 
-(struct value-nil-reference value-reference
+(struct cell-nil-reference cell-reference
   ()
   #:transparent
   #:guard (struct-guard/c byte?))
 
-(define nil-reference (value-nil-reference 0))
+;; single instance 
+(define nil-reference (cell-nil-reference 0))
 
 (define/contract (nil-ref? a-val-ref)
-  (-> value-reference? boolean?)
+  (-> cell-reference? boolean?)
   (eq? a-val-ref nil-reference))
 
 (module+ test #| nil |#
   (check-true (nil-ref? nil-reference)
               "only the defined nil-reference is nil")
-  (check-false (nil-ref? (value-nil-reference 0))
-               "another instance of value-nil-reference is not nil!"))
+  (check-false (nil-ref? (cell-nil-reference 0))
+               "another instance of cell-nil-reference is not nil!"))
 
-(struct value-bound-reference value-reference
+;; reference to an allocated cell on the heap
+(struct cell-bound-reference cell-reference
   (page-no index)
   #:guard (struct-guard/c byte? nonnegative-integer? byte?))
 
-;; byte value
-(struct byte-value value
+;; byte cell
+(struct byte-cell cell
   (byte)
   #:transparent
   #:guard (struct-guard/c byte? byte?))
 
-;; stack of values to be operated on
-(struct value-stack
-  (values)
-  #:guard (struct-guard/c (listof value?)))
+;; int-cell (can store values > 256 but definitely < 65535 to allow for type tag bits in the 16 bit)
+;; char-cell = special byte cell? 
+;; boolean-cell = special byte cell?
+;; native-array-ref-cell is special cell-reference (type-info anywhere?)
+;; string-cell = special native-array-ref-cell?
+;; symbol-cell = special native-array-ref-cell?
+;; function/code-ref cell is special cell-reference (type-info anywhere?)
+;; float-cell = special cell-reference (type-info anywhere)
+
+;; stack of cells to be operated on
+(struct eval-stack
+  (cells)
+  #:guard (struct-guard/c (listof cell?)))
 
 ;; reference into memory
 (struct byte-mem-reference
@@ -176,14 +190,14 @@
   (nth (byte-page-data a-byte-page) index))
 
 ;; write BYTE into A-BYTE-PAGE at INDEX
-(define/contract (write-byte-value-into-page a-byte-page index a-byte-value)
-  (-> byte-page? byte? byte-value? byte-page?)
-  (write-byte-into-page a-byte-page index (byte-value-byte a-byte-value)))
+(define/contract (write-byte-cell-into-page a-byte-page index a-byte-cell)
+  (-> byte-page? byte? byte-cell? byte-page?)
+  (write-byte-into-page a-byte-page index (byte-cell-byte a-byte-cell)))
 
 ;; read byte from A-BYTE-PAGE at INDEX
-(define/contract (read-byte-value-from-page a-byte-page index)
-  (-> byte-page? byte? byte-value?)
-  (byte-value 0 (read-byte-from-page a-byte-page index)))
+(define/contract (read-byte-cell-from-page a-byte-page index)
+  (-> byte-page? byte? byte-cell?)
+  (byte-cell 0 (read-byte-from-page a-byte-page index)))
 
 (module+ test #| write-byte, read-byte |#
   (check-equal? (read-byte-from-page (write-byte-into-page (make-byte-page) 5 #x20)
@@ -221,79 +235,79 @@
   (check-eq? (get-memory-page (free-memory-page (alloc-memory-page (make-memory 256) #xC0 (make-byte-page)) #xC0) #xC0) nil-page
              "allocated, then freed pages eq nil-page (again)"))
 
-;; write A-VALUE into A-VALUE-REF using/within A-memory
-(define/contract (write-into-value-ref a-memory a-value-ref a-value)
-  (-> memory? value-bound-reference? value? memory?)
+;; write A-cell into A-cell-REF using/within A-memory
+(define/contract (write-into-cell-ref a-memory a-cell-ref a-cell)
+  (-> memory? cell-bound-reference? cell? memory?)
   (define vpage
-    (get-memory-page a-memory (value-bound-reference-page-no a-value-ref)))
-  (cond ((and (byte-value? a-value) (byte-page? vpage))
+    (get-memory-page a-memory (cell-bound-reference-page-no a-cell-ref)))
+  (cond ((and (byte-cell? a-cell) (byte-page? vpage))
          (memory-set-page a-memory
-                          (value-bound-reference-page-no a-value-ref)
-                          (write-byte-into-page vpage (value-bound-reference-index a-value-ref) (byte-value-byte a-value))))
-        (#t (raise-user-error "memory page not matching value or unknown implementation"))))
+                          (cell-bound-reference-page-no a-cell-ref)
+                          (write-byte-into-page vpage (cell-bound-reference-index a-cell-ref) (byte-cell-byte a-cell))))
+        (#t (raise-user-error "memory page not matching cell or unknown implementation"))))
 
-;; push A-VALUE onto A-VALUE-STACK
-(define/contract (push-value a-value-stack a-value)
-  (-> value-stack? value? value-stack?)
-  (value-stack (cons a-value (value-stack-values a-value-stack))))
+;; push A-cell onto A-eval-stack
+(define/contract (push-cell a-eval-stack a-cell)
+  (-> eval-stack? cell? eval-stack?)
+  (eval-stack (cons a-cell (eval-stack-cells a-eval-stack))))
 
-;; write the top of A-VALUE-STACK into A-VALUE-REF using/within A-memory
-(define/contract (tos-value-into a-memory a-value-stack a-value-ref)
-  (-> memory? value-stack? value-bound-reference? memory?)
-  (write-into-value-ref a-memory a-value-ref (car (value-stack-values a-value-stack))))
+;; write the top of A-eval-stack into A-cell-REF using/within A-memory
+(define/contract (tos-cell-into a-memory a-eval-stack a-cell-ref)
+  (-> memory? eval-stack? cell-bound-reference? memory?)
+  (write-into-cell-ref a-memory a-cell-ref (car (eval-stack-cells a-eval-stack))))
 
-;; pop the top from A-VALUE-STACK
-(define/contract (pop-value a-value-stack)
-  (-> value-stack? value-stack?)
-  (value-stack (cdr (value-stack-values a-value-stack))))
+;; pop the top from A-eval-stack
+(define/contract (pop-cell a-eval-stack)
+  (-> eval-stack? eval-stack?)
+  (eval-stack (cdr (eval-stack-cells a-eval-stack))))
 
-;; get the value of the top of A-VALUE-STACK
-(define/contract (top-of-stack-value a-value-stack)
-  (-> value-stack? value?)
-  (car (value-stack-values a-value-stack)))
+;; get the cell of the top of A-eval-stack
+(define/contract (top-of-stack-cell a-eval-stack)
+  (-> eval-stack? cell?)
+  (car (eval-stack-cells a-eval-stack)))
 
-(module+ test #| push-value, pop-value, top-of-stack-value, pop-value-into |#
-  (check-equal? (byte-value-byte
-                 (top-of-stack-value
-                  (push-value (value-stack '()) (byte-value 0 #xCD))))
+(module+ test #| push-cell, pop-cell, top-of-stack-cell, pop-cell-into |#
+  (check-equal? (byte-cell-byte
+                 (top-of-stack-cell
+                  (push-cell (eval-stack '()) (byte-cell 0 #xCD))))
                 #xCD)
-  (check-equal? (byte-value-byte
-                 (top-of-stack-value
-                  (push-value (push-value (value-stack '()) (byte-value 0 #xCD)) (byte-value 0 #x23))))
+  (check-equal? (byte-cell-byte
+                 (top-of-stack-cell
+                  (push-cell (push-cell (eval-stack '()) (byte-cell 0 #xCD)) (byte-cell 0 #x23))))
                 #x23)
-  (check-equal? (byte-value-byte
-                 (top-of-stack-value
-                  (pop-value (push-value (push-value (value-stack '()) (byte-value 0 #xCD)) (byte-value 0 #x23)))))
+  (check-equal? (byte-cell-byte
+                 (top-of-stack-cell
+                  (pop-cell (push-cell (push-cell (eval-stack '()) (byte-cell 0 #xCD)) (byte-cell 0 #x23)))))
                 #xCD))
 
 
-(module+ test #| write-into-value-ref |#
+(module+ test #| write-into-cell-ref |#
   (check-equal? (read-byte-from-page
                  (get-memory-page
-                  (write-into-value-ref (alloc-memory-page (make-memory 2) 1 (make-byte-page))
-                                        (value-bound-reference 0 1 100)
-                                        (byte-value 0 #x37))
+                  (write-into-cell-ref (alloc-memory-page (make-memory 2) 1 (make-byte-page))
+                                        (cell-bound-reference 0 1 100)
+                                        (byte-cell 0 #x37))
                   1)
                  100)
                 #x37))
 
 ;; skeleton definitions (without implementation
 
-;; dereference A-VALUE-REFERENCE
-(define (dereference-value a-memory a-value-reference)
-  (-> memory? value-bound-reference? value?)
-  (define page (get-memory-page a-memory (value-bound-reference-page-no a-value-reference)))
+;; dereference A-cell-REFERENCE
+(define (dereference-cell a-memory a-cell-reference)
+  (-> memory? cell-bound-reference? cell?)
+  (define page (get-memory-page a-memory (cell-bound-reference-page-no a-cell-reference)))
   (cond ((byte-page? page)
-         (read-byte-value-from-page page (value-bound-reference-index a-value-reference)))
+         (read-byte-cell-from-page page (cell-bound-reference-index a-cell-reference)))
         (#t (raise-user-error "unknown memory page type"))))
 
-(module+ test #| dereference-value |#
-  (check-equal? (byte-value-byte
-                 (dereference-value
-                  (write-into-value-ref (alloc-memory-page (make-memory 2) 1 (make-byte-page))
-                                        (value-bound-reference 0 1 100)
-                                        (byte-value 0 #x37))
-                  (value-bound-reference 0 1 100)))
+(module+ test #| dereference-cell |#
+  (check-equal? (byte-cell-byte
+                 (dereference-cell
+                  (write-into-cell-ref (alloc-memory-page (make-memory 2) 1 (make-byte-page))
+                                        (cell-bound-reference 0 1 100)
+                                        (byte-cell 0 #x37))
+                  (cell-bound-reference 0 1 100)))
                 #x37))
 
 (define/contract (deref-pc a-mem a-pc (rel 0))
@@ -331,7 +345,7 @@
   (env (cdr (env-map-stack an-env))))
 
 (define/contract (env-resolve an-env key)
-  (-> env? any/c value?)
+  (-> env? any/c cell?)
   (if (empty? (env-map-stack an-env))
       nil-reference
       (let ((top-frame (car (env-map-stack an-env))))
@@ -344,23 +358,23 @@
               nil-reference)
   (check-true  (nil-ref? (env-resolve (env '()) 'unknown-key)))
   (check-equal?
-   (byte-value-byte (env-resolve (env-push-frame (env '()) (hash 'some-key (byte-value 0 #x3e)))
+   (byte-cell-byte (env-resolve (env-push-frame (env '()) (hash 'some-key (byte-cell 0 #x3e)))
                                  'some-key))
    #x3e)
   (check-equal?
-   (byte-value-byte (env-resolve
+   (byte-cell-byte (env-resolve
                      (env-push-frame
-                      (env-push-frame (env '()) (hash 'some-key (byte-value 0 #x73)))
-                      (hash 'some-key (byte-value 0 #x3e)))
+                      (env-push-frame (env '()) (hash 'some-key (byte-cell 0 #x73)))
+                      (hash 'some-key (byte-cell 0 #x3e)))
                      'some-key))
    #x3e
-   "second frame shadows key with its value")
+   "second frame shadows key with its cell")
   (check-equal?
-   (byte-value-byte (env-resolve
+   (byte-cell-byte (env-resolve
                      (env-pop-frame
                       (env-push-frame
-                       (env-push-frame (env '()) (hash 'some-key (byte-value 0 #x73)))
-                       (hash 'some-key (byte-value 0 #x3e))))
+                       (env-push-frame (env '()) (hash 'some-key (byte-cell 0 #x73)))
+                       (hash 'some-key (byte-cell 0 #x3e))))
                      'some-key))
    #x73
    "some key is no longer shadowed by second frame (since it is popped)"))
@@ -382,18 +396,18 @@
   (car (call-stack-code-references a-call-stack)))
 
 (struct vm-state
-  (value-stack ;; values
+  (eval-stack ;; cell stack
    call-stack  ;; stack with return addresses
    memory      ;; pages
-   env         ;; nested environments of int->value references
+   env         ;; nested environments of int|key->cell (references)
    pc)         ;; current program counter (index into memory)
-  #:guard (struct-guard/c value-stack? call-stack? memory? env? byte-mem-reference?))
+  #:guard (struct-guard/c eval-stack? call-stack? memory? env? byte-mem-reference?))
 
 (define vm-op-codes
   (hash #x00 'break   ;; no operand
-        #x01 'push_b  ;; byte value
+        #x01 'push_b  ;; byte cell
         #x02 'pop     ;;
-        #x03 'add))   ;; pop 2 values, add them, then push
+        #x03 'add))   ;; pop 2 cells, add them, then push
 
 (define vm-code-ops
   (apply hash (flatten (map (lambda (pair) (list (cdr pair) (car pair))) (hash->list vm-op-codes)))))
@@ -401,31 +415,31 @@
 (define/contract (vm-interpret-push_b a-vm)
   (-> vm-state? vm-state?)
   (struct-copy vm-state a-vm
-               [value-stack (push-value (vm-state-value-stack a-vm) (byte-value 0 (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm) 1)))]
+               [eval-stack (push-cell (vm-state-eval-stack a-vm) (byte-cell 0 (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm) 1)))]
                [pc (inc-byte-mem-ref (vm-state-pc a-vm) 2)]))
 
 (define/contract (vm-interpret-pop a-vm)
   (-> vm-state? vm-state?)
   (struct-copy vm-state a-vm
-               [value-stack (pop-value (vm-state-value-stack a-vm))]
+               [eval-stack (pop-cell (vm-state-eval-stack a-vm))]
                [pc (inc-byte-mem-ref (vm-state-pc a-vm))]))
 
 (define/contract (vm-interpret-add a-vm)
   (-> vm-state? vm-state?)
-  (define val-a (top-of-stack-value (vm-state-value-stack a-vm)))
-  (define stack1 (pop-value (vm-state-value-stack a-vm)))
-  (define val-b (top-of-stack-value stack1))
-  (define stack2 (pop-value stack1))
-  (define result (bitwise-and #xff (+ (byte-value-byte val-a) (byte-value-byte val-b))))
+  (define val-a (top-of-stack-cell (vm-state-eval-stack a-vm)))
+  (define stack1 (pop-cell (vm-state-eval-stack a-vm)))
+  (define val-b (top-of-stack-cell stack1))
+  (define stack2 (pop-cell stack1))
+  (define result (bitwise-and #xff (+ (byte-cell-byte val-a) (byte-cell-byte val-b))))
   (struct-copy vm-state a-vm
-               [value-stack (push-value stack2 (byte-value 0 result))]
+               [eval-stack (push-cell stack2 (byte-cell 0 result))]
                [pc (inc-byte-mem-ref (vm-state-pc a-vm))]))
 
 ;; create a virtual machine with just page 0 being allocated as byte page
 (define/contract (make-vm)
   (-> vm-state?)
   (vm-state
-   (value-stack '())
+   (eval-stack '())
    (call-stack '())
    (alloc-memory-page (make-memory #xff) 0 (make-byte-page))
    (env '())
@@ -461,9 +475,9 @@
 
 (module+ test #| vm |#
   (check-equal? 
-   (byte-value-byte
-    (top-of-stack-value
-     (vm-state-value-stack
+   (byte-cell-byte
+    (top-of-stack-cell
+     (vm-state-eval-stack
       (run-vm
        (load-initial-code (make-vm)
                           '(push_b #x10
