@@ -139,7 +139,7 @@ lexical scoping?
   - data
   - code
 - allocate/free mil objects
-  - small arrays (one page)
+  - (native) small arrays (one page)
     - byte array / char / boolean (native array)
     - integer array (native array)
     - array of cells (byte, integer, reference->[float, string, symbol, byte, integer, reference, boolean char,
@@ -150,11 +150,50 @@ lexical scoping?
     - array of strings/symbols (interned)
     - bit array (bitmaps)
   - large arrays (multiple pages)
-  - single data
-    - ? byte/char/boolean
-    - ? integer
+  - single data (references)
+    - byte/char/boolean
+    - integer
     - cell (byte, integer, boolean, char, reference-> [...])
     - cons-cell (pair of cells)
+    - array/string/symbol
+    - structure
+- data operations
+  - byte
+  - char
+  - boolean
+  - integer
+  - references
+    - string (native byte array?)
+      - compare
+      - len
+      - string->list
+      - string->symbol
+    - symbol (native byte array?)
+      - compare
+      - synmbol->string
+    - cell (holds simple data, reference, integer)
+      - byte/char/boolean-cell
+      - reference-cell (to string, symbol, cell, cons-cell, native array, large array)
+      - integer-cell
+    - cons-cell (two consquetive cells on the stack, stack cell = cdr-part, top stack cell = car-part)
+      - cons (create cons cell with this cell as first and second cell a reference to the original cons-cell (head)
+        - push cdr of original list
+        - push car of original list
+        - push cell to prepend (value-cell, value-ref-cell <- inc reference count)
+        - cons ;; will leave resulting cons-cell (two cells) (cdr of new list) (car of new list), car being the original value pushed last
+        these two cells can then be popped into a free heap cons-cell/environmental variable etc.
+      - car (first cell)
+        - discard cdr (which should be right below tos) = swap then pop = squash
+      - cdr (second cell)
+        - descard car (which should be tos) = pop
+    - native-array
+      - get-at
+      - put-at
+      - copy-from-to
+    - (implement with other basic data structure) large array
+      - get-at
+      - put-at
+      - copy-from-to
 - i/o
   - screen output
     - write char (at)
@@ -169,14 +208,14 @@ lexical scoping?
 - floats: pi, e, 10, 1, 2 ...
 ** data
 - value
-  - byte/char
-  - integer/unicodechar
+  - byte/char/boolean
+  - integer (unicodechar???)
   - float (ref)
-  - string
-  - symbol
+  - string (ref)
+  - symbol (ref)
   - cell
-  - cons-cell (pair)
-  - array
+  - cons-cell (pair) <- idea: just two cells (on the stack)
+  - array (ref)
 - value-ref (into environment)
   - target type
     - function-ref
