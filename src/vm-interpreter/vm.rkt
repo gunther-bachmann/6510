@@ -28,7 +28,9 @@
 
 ;; generic value type
 (struct value
-  ())
+  (ref-count)
+  #:transparent
+  #:guard (struct-guard/c byte?))
 
 ;; reference to a value
 (struct value-reference value
@@ -37,9 +39,10 @@
 
 (struct value-nil-reference value-reference
   ()
-  #:transparent)
+  #:transparent
+  #:guard (struct-guard/c byte?))
 
-(define nil-reference (value-nil-reference))
+(define nil-reference (value-nil-reference 0))
 
 (define/contract (nil-ref? a-val-ref)
   (-> value-reference? boolean?)
@@ -48,23 +51,23 @@
 (module+ test #| nil |#
   (check-true (nil-ref? nil-reference)
               "only the defined nil-reference is nil")
-  (check-false (nil-ref? (value-nil-reference))
+  (check-false (nil-ref? (value-nil-reference 0))
                "another instance of value-nil-reference is not nil!"))
 
 (struct value-bound-reference value-reference
   (page-no index)
-  #:guard (struct-guard/c nonnegative-integer? byte?))
+  #:guard (struct-guard/c byte? nonnegative-integer? byte?))
 
 ;; byte value
 (struct byte-value value
   (byte)
   #:transparent
-  #:guard (struct-guard/c byte?))
+  #:guard (struct-guard/c byte? byte?))
 
 ;; stack of values to be operated on
 (struct value-stack
   (values)
-  #:guard (struct-guard/c list?))
+  #:guard (struct-guard/c (listof value?)))
 
 ;; reference into memory
 (struct byte-mem-reference
@@ -75,14 +78,15 @@
 
 (define/contract (inc-byte-mem-ref a-byte-mem-ref (delta 1))
   (->* (byte-mem-reference?) (integer?) byte-mem-reference?)
+  (define page-no (byte-mem-reference-page-no a-byte-mem-ref))
   (define new-index-unmodified (+ (byte-mem-reference-index a-byte-mem-ref) delta))
-  (define new-page
+  (define new-page-no
     (cond ((< new-index-unmodified 0)
-           (sub1 (byte-mem-reference-page-no a-byte-mem-ref)))
+           (sub1 page-no))
           ((> new-index-unmodified #xff)
-           (add1 (byte-mem-reference-page-no a-byte-mem-ref)))
-          (#t (byte-mem-reference-page-no a-byte-mem-ref))))
-  (byte-mem-reference new-page (bitwise-and #xff new-index-unmodified)))
+           (add1 page-no))
+          (#t page-no)))
+  (byte-mem-reference new-page-no (bitwise-and #xff new-index-unmodified)))
 
 (module+ test #| inc-pc |#
   (check-equal? (byte-mem-reference-page-no (inc-byte-mem-ref (byte-mem-reference 5 255) 1))
@@ -179,7 +183,7 @@
 ;; read byte from A-BYTE-PAGE at INDEX
 (define/contract (read-byte-value-from-page a-byte-page index)
   (-> byte-page? byte? byte-value?)
-  (byte-value (read-byte-from-page a-byte-page index)))
+  (byte-value 0 (read-byte-from-page a-byte-page index)))
 
 (module+ test #| write-byte, read-byte |#
   (check-equal? (read-byte-from-page (write-byte-into-page (make-byte-page) 5 #x20)
@@ -251,15 +255,15 @@
 (module+ test #| push-value, pop-value, top-of-stack-value, pop-value-into |#
   (check-equal? (byte-value-byte
                  (top-of-stack-value
-                  (push-value (value-stack '()) (byte-value #xCD))))
+                  (push-value (value-stack '()) (byte-value 0 #xCD))))
                 #xCD)
   (check-equal? (byte-value-byte
                  (top-of-stack-value
-                  (push-value (push-value (value-stack '()) (byte-value #xCD)) (byte-value #x23))))
+                  (push-value (push-value (value-stack '()) (byte-value 0 #xCD)) (byte-value 0 #x23))))
                 #x23)
   (check-equal? (byte-value-byte
                  (top-of-stack-value
-                  (pop-value (push-value (push-value (value-stack '()) (byte-value #xCD)) (byte-value #x23)))))
+                  (pop-value (push-value (push-value (value-stack '()) (byte-value 0 #xCD)) (byte-value 0 #x23)))))
                 #xCD))
 
 
@@ -267,8 +271,8 @@
   (check-equal? (read-byte-from-page
                  (get-memory-page
                   (write-into-value-ref (alloc-memory-page (make-memory 2) 1 (make-byte-page))
-                                        (value-bound-reference 1 100)
-                                        (byte-value #x37))
+                                        (value-bound-reference 0 1 100)
+                                        (byte-value 0 #x37))
                   1)
                  100)
                 #x37))
@@ -287,9 +291,9 @@
   (check-equal? (byte-value-byte
                  (dereference-value
                   (write-into-value-ref (alloc-memory-page (make-memory 2) 1 (make-byte-page))
-                                        (value-bound-reference 1 100)
-                                        (byte-value #x37))
-                  (value-bound-reference 1 100)))
+                                        (value-bound-reference 0 1 100)
+                                        (byte-value 0 #x37))
+                  (value-bound-reference 0 1 100)))
                 #x37))
 
 (define/contract (deref-pc a-mem a-pc (rel 0))
@@ -340,14 +344,14 @@
               nil-reference)
   (check-true  (nil-ref? (env-resolve (env '()) 'unknown-key)))
   (check-equal?
-   (byte-value-byte (env-resolve (env-push-frame (env '()) (hash 'some-key (byte-value #x3e)))
+   (byte-value-byte (env-resolve (env-push-frame (env '()) (hash 'some-key (byte-value 0 #x3e)))
                                  'some-key))
    #x3e)
   (check-equal?
    (byte-value-byte (env-resolve
                      (env-push-frame
-                      (env-push-frame (env '()) (hash 'some-key (byte-value #x73)))
-                      (hash 'some-key (byte-value #x3e)))
+                      (env-push-frame (env '()) (hash 'some-key (byte-value 0 #x73)))
+                      (hash 'some-key (byte-value 0 #x3e)))
                      'some-key))
    #x3e
    "second frame shadows key with its value")
@@ -355,8 +359,8 @@
    (byte-value-byte (env-resolve
                      (env-pop-frame
                       (env-push-frame
-                       (env-push-frame (env '()) (hash 'some-key (byte-value #x73)))
-                       (hash 'some-key (byte-value #x3e))))
+                       (env-push-frame (env '()) (hash 'some-key (byte-value 0 #x73)))
+                       (hash 'some-key (byte-value 0 #x3e))))
                      'some-key))
    #x73
    "some key is no longer shadowed by second frame (since it is popped)"))
@@ -397,7 +401,7 @@
 (define/contract (vm-interpret-push_b a-vm)
   (-> vm-state? vm-state?)
   (struct-copy vm-state a-vm
-               [value-stack (push-value (vm-state-value-stack a-vm) (byte-value (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm) 1)))]
+               [value-stack (push-value (vm-state-value-stack a-vm) (byte-value 0 (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm) 1)))]
                [pc (inc-byte-mem-ref (vm-state-pc a-vm) 2)]))
 
 (define/contract (vm-interpret-pop a-vm)
@@ -414,7 +418,7 @@
   (define stack2 (pop-value stack1))
   (define result (bitwise-and #xff (+ (byte-value-byte val-a) (byte-value-byte val-b))))
   (struct-copy vm-state a-vm
-               [value-stack (push-value stack2 (byte-value result))]
+               [value-stack (push-value stack2 (byte-value 0 result))]
                [pc (inc-byte-mem-ref (vm-state-pc a-vm))]))
 
 ;; create a virtual machine with just page 0 being allocated as byte page
