@@ -55,6 +55,7 @@
   (define (parsed-string-result syntax string)
     (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
 
+;; space or tab
 (define/c space-or-tab/p
   (-> parser?)
   (or/p (char/p #\space) (char/p #\tab)))
@@ -84,6 +85,7 @@
                 (do (char/p #\;)
                     (many/p (char-not/p #\newline))))))
 
+;; '$' hex-digit+
 (define/c hex-integer/p
   (-> parser?)
   (do (char/p #\$)
@@ -96,15 +98,18 @@
   (or (eq? char #\0)
      (eq? char #\1)))
 
+;; 0 | 1
 (define/c bin-digit/p
   (-> parser?)
   (label/p "bin-number" (satisfy/p char-bin?)))
 
+;; string of binary digits (0 | 1)
 (define/c bin-string/p
   (-> parser?)
   (do [digits <- (many+/p bin-digit/p)]
       (pure (list->string digits))))
 
+;; '%' (0 | 1)+
 (define/c bin-integer/p
   (-> parser?)
   (do (char/p #\%)
@@ -120,6 +125,7 @@
   (check-match (parsed-string-result bin-integer/p "%10")
                2))
 
+;; any integer (dec, hex, binary)
 (define/c 6510-integer/p
   (-> parser?)
   (or/p integer/p hex-integer/p bin-integer/p))
@@ -146,6 +152,7 @@
   (check-exn exn:fail?
              (lambda () (parsed-string-result 6510-integer/p "_17"))))
 
+;; end of line
 (define/c 6510-eol/p
   (-> parser?)
   (do (many/p space-or-tab/p)
@@ -155,6 +162,7 @@
     (or/p (char/p #\newline)
           eof/p)))
 
+;; allowed label characters
 (define/c 6510-label-letter/p
   (-> parser?)
   (satisfy/p (lambda (c) (or (and (char>=? c #\A)
@@ -163,10 +171,12 @@
                           (char<=? c #\z))
                        (char=? c #\_)))))
 
+;; label byte indicator
 (define/c 6510-label-byte-ind/p
   (-> parser?)
   (or/p (char/p #\>) (char/p #\<)))
 
+;; label parser (without > or <, but including -)
 (define/c 6510-label/p
   (-> parser?)
   (do      
@@ -178,6 +188,7 @@
                                              (list->string (syntax->datum new-label))))))))
 
 
+;; label '=' word
 (define/c 6510-constant-def/p
   (-> parser?)
     (do
@@ -199,6 +210,7 @@
     (check-match (parsed-string-result 6510-constant-def/p "x-abc = $100")
                '(word-const "x-abc" "256")))
 
+;; label ':'
 (define/c 6510-label-def/p
   (-> parser?)
   (do
@@ -210,6 +222,7 @@
   (check-match (parsed-string-result 6510-label-def/p "abc-x:")
                '(label "abc-x")))
 
+;; ( '>' | '<' ) label
 (define/c 6510-label-byte/p
   (-> parser?)
   (do
@@ -222,7 +235,7 @@
                                              (string (syntax->datum first-letter))
                                              (list->string (syntax->datum new-label))
                                              ))))))
-
+;; ( '>' | '<' )? label
 (define/c 6510-any-label/p
   (-> parser?)
   (do
@@ -264,11 +277,13 @@
   (check-exn exn:fail?
              (lambda () (parsed-string-result 6510-label/p "!bc"))))
 
+;; parse integer in word range
 (define/c word/p
   (-> parser?)
   (guard/p 6510-integer/p (λ (x) (and (>= x 0) (<= x 65535)))
            "integer in range [$0000,$FFFF]"))
 
+;; parse integer in byte range
 (define/c byte/p
   (-> parser?)
   (guard/p 6510-integer/p (λ (x) (and (>= x 0) (<= x 255)))
@@ -302,26 +317,31 @@
   (-> string? parser?)
   (chars-ci/p string))
 
+;; 'A'
 (define/c accumulator/p
   (-> parser?)
   (do (char-ci/p #\A) (pure '(A))))
 
+;; '#' (byte-label | byte)
 (define/c immediate/p
   (-> parser?)
   (do (char/p #\#)
       [x <- (or/p 6510-any-label/p byte/p)]
     (pure (list (string-append "!" (if (number? x) (number->string x) (->string (last (syntax->datum x)))))))))
 
+;; (label | byte)
 (define/c zero-page-or-relative/p
   (-> parser?)
   (do [b <- (or/p byte/p 6510-any-label/p)]
       (pure (list (if (number? b) (number->string b) (last (syntax->datum b)))))))
 
+;; (label | word)
 (define/c absolute/p
   (-> parser?)
   (do [mem <- (or/p 6510-any-label/p word/p)]
       (pure (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))))))
 
+;; '(' label | byte ',x)'
 (define/c indirect-x/p
   (-> parser?)
   (do (char/p #\()
@@ -334,6 +354,7 @@
     (check-match (parsed-string-result indirect-x/p "($11,x)")
                  '(("17",x))))
 
+;; '(' label | byte '),y'
 (define/c indirect-y/p
   (-> parser?)
   (do 
@@ -343,6 +364,7 @@
     (string-cia/p ",y")
     (pure (list (list (if (number? mem) (number->string mem) (last (syntax->datum mem)))) ',y))))
 
+;; '(' label | word ')'
 (define/c indirect/p
   (-> parser?)
   (do (char/p #\()
@@ -350,24 +372,28 @@
     (char/p #\))
     (pure `(( ,(if (number? mem) (number->string mem) (last (syntax->datum mem))) )))))
 
+;; ( label | word ) ',x'
 (define/c absolute-x/p
   (-> parser?)
   (do [x <- (or/p word/p 6510-any-label/p)]
       (string-cia/p ",x")
     (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',x))))
 
+;; (label | word) ',y'
 (define/c absolute-y/p
   (-> parser?)
   (do [x <- (or/p word/p 6510-any-label/p)]
       (string-cia/p ",y")
     (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',y))))
 
+;; (label | byte) ',x'
 (define/c zero-page-x/p
   (-> parser?)
   (do [x <- (or/p byte/p 6510-any-label/p)]
       (string-cia/p ",x")
     (pure (list (if (number? x) (number->string x) (last (syntax->datum x))) ',x))))
 
+;; (label | byte) ',y'
 (define/c zero-page-y/p
   (-> parser?)
   (do [x <- (or/p byte/p 6510-any-label/p)]
