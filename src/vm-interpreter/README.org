@@ -1,3 +1,7 @@
 #+title: README
 Implementation of the mil byte code virtual machine
 Interpreter, data structures etc.
+* TODO take some inspiration from https://github.com/dschmenk/PLASMA#implementation
+* TODO look at https://ryansuchocki.github.io/microscheme/documentation
+* TODO http://community.schemewiki.org/?scheme-faq-standards
+* TODO https://groups.scheme.org/prescheme/1.3/ (see https://www.s48.org/)
