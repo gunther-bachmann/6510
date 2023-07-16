@@ -5,3 +5,187 @@ Interpreter, data structures etc.
 * TODO look at https://ryansuchocki.github.io/microscheme/documentation
 * TODO http://community.schemewiki.org/?scheme-faq-standards
 * TODO https://groups.scheme.org/prescheme/1.3/ (see https://www.s48.org/)
+* TODO look at 
+* garbage collection (ideas)
+** reference counting
+- lazy deallocation : advantage: deallocating large number of cells will be spread to allocation of new cells
+  when reference drops to 0, free once cell and put that cell on a freed cell stack/list
+  when this (free) cell is reused, process other cell, referenced by this cell (if so), dec ref count ...
+- refcount coalescing : make sure that (predictable) repeated local changes to refcounts will be done once at the end
+- don't do refcounting on fresh allocated objects, that will probably live only shortly, do refcounting only if they survive long enough
+* interpreter-cells
+** general cell structure
+#+begin_src dot :file interpreter-cells.png
+  digraph {
+      bgcolor="#202020"
+      node[shape="record",color="gray",fontcolor="gray"]
+      edge[color="darkgoldenrod"]
+
+      atomic_cell[label="atomic value cell"]
+      symbol_cell[label="atomic symbol index\n idx=0..8191"]
+      boolean_cell[label="boolean cell\natomic boolean\n#t, #f"]
+      byte_cell[label="byte cell\natomic byte\n0..255"]
+      char_cell[label="char cell\natomic char"]
+      int_cell[label="int cell\natomic int\n-8191...8192"]
+      lref[label="ref\npoints to a another location"]
+      nil_ref[label="nil ref\nlist ref @0"]
+      cell_ref[label="cell ref\npoints to single cell"]
+      list_ref[label="list ref\npoints to cons-cell"]
+      float_ref[label="float ref\npoints to float value"]
+      narray_ref[label="narray ref\npoints to native array of values"]
+
+      cell1[label="cell"]
+
+      cons_cell[shape="record",label="{cons-cells |{<c0> car-cell|<c1> cdr-cell}}"]
+      cons_cell:c0 -> cell[color="gray"]
+      cons_cell:c1 -> cell1[color="gray"]
+
+      cell -> lref
+      cell -> atomic_cell
+      atomic_cell -> boolean_cell
+      atomic_cell -> byte_cell
+      atomic_cell -> int_cell
+      atomic_cell -> char_cell
+      atomic_cell -> symbol_cell
+
+      list_ref -> nil_ref
+      lref -> narray_ref
+      lref -> list_ref
+      lref -> float_ref
+      lref -> cell_ref
+  }
+#+end_src
+
+#+RESULTS:
+[[file:interpreter-cells.png]]
+the type of a reference is defined by a page->type function. each page is populated with one type of elements (either single cells,
+cons-cells, floats, or a native array). if there is need to find out the type of a reference, use its upper byte to lookup the type in a
+page->type table.
+** cell examples
+- int cell #x1ff (prefix '01')
+  #+begin_src dot :file cell-example.int-cell-1ff.png
+    digraph {
+      bgcolor="#202020"
+      node[shape="record",color="gray",fontcolor="gray"]
+      edge[color="gray"]
+
+              val_cons_cell1[label="0|1|...|1|1|1|1|1|1|1|1|1"]
+    }
+  #+end_src
+
+  #+RESULTS:
+  [[file:cell-example.int-cell-1ff.png]]
+
+- symbol cell (indexing symbol #x3C2) (prefix '001')
+  #+begin_src dot :file cell-example.symbol-cell-c2.png
+    digraph {
+      bgcolor="#202020"
+      node[shape="record",color="gray",fontcolor="gray"]
+      edge[color="gray"]
+
+              val_cons_cell1[label="0|0|1|0|0|0|1|1|1|1|0|0|0|0|1|0"]
+    }
+  #+end_src
+
+  #+RESULTS:
+  [[file:cell-example.symbol-cell-c2.png]]
+
+- boolean cell ~#t~ (prefix '00000000')
+  #+begin_src dot :file cell-example.boolean-cell.png
+    digraph {
+      bgcolor="#202020"
+      node[shape="record",color="gray",fontcolor="gray"]
+      edge[color="gray"]
+
+              boolean_cell[label="0|0|0|0|0|0|0|0|1|1|1|1|1|1|1|1"]
+    }
+
+  #+end_src
+  
+  #+RESULTS:
+  [[file:cell-example.boolean-cell.png]]
+
+- boolean cell ~#f~ (prefix '00000000')
+  #+begin_src dot :file cell-example.boolean-cell.false.png
+    digraph {
+      bgcolor="#202020"
+      node[shape="record",color="gray",fontcolor="gray"]
+      edge[color="gray"]
+
+              boolean_cell[label="0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0"]
+    }
+
+  #+end_src
+
+  #+RESULTS:
+  [[file:cell-example.boolean-cell.false.png]]
+
+- char cell 'A' #x41 65 (prefix '00000001')
+  #+begin_src dot :file cell-example.char-cell-A.png
+    digraph {
+      bgcolor="#202020"
+      node[shape="record",color="gray",fontcolor="gray"]
+      edge[color="gray"]
+
+      v1[label="0|0|0|0|0|0|0|1|0|1|0|0|0|0|0|1"]
+    }
+  #+end_src
+
+  #+RESULTS:
+  [[file:cell-example.char-cell-A.png]]
+
+** pair examples
+- pair of values ~(4 . 2)~
+  #+begin_src dot :file pair-excamples.of-values.png
+    digraph {
+      bgcolor="#202020"
+      node[shape="record",color="gray",fontcolor="gray"]
+      edge[color="gray"]
+
+              val_cons_cell[label="<c0> atomic value '4'|<c1> atomic value '2'"]
+        }
+  #+end_src
+
+  #+RESULTS:
+  [[file:pair-excamples.of-values.png]]
+
+** list examples (cons-cells)
+- list of values ~(4 2)~
+  #+begin_src dot :file cons-cells.list-of-values.png
+    digraph {
+      bgcolor="#202020"
+      node[shape="record",color="gray",fontcolor="gray"]
+      edge[color="gray"]
+
+              val_cons_cell1[label="<c0> atomic value '4'|<c1> list_ref to next cons-cell"]
+              val_cons_cell2[label="<c0> atomic value '2'|<c1> nil"]
+              val_cons_cell1:c1 -> val_cons_cell2:c0
+    }
+  #+end_src
+
+  #+RESULTS:
+  [[file:cons-cells.list-of-values.png]]
+
+- list of characters ~('h' 'e' 'l' 'l' 'o') \equiv string "hello"~
+  #+begin_src dot :file cons-cells.list-of-characters.png
+    digraph {
+      bgcolor="#202020"
+      node[shape="record",color="gray",fontcolor="gray"]
+      edge[color="gray"]
+              val_cons_cell1[shape="record",label="<c0> atomic value 'h'|<c1> list_ref to next cons-cell"]
+              val_cons_cell2[shape="record",label="<c0> atomic value 'e'|<c1> list_ref to next cons-cell"]
+              val_cons_cell3[shape="record",label="<c0> atomic value 'l'|<c1> list_ref to next cons-cell"]
+              val_cons_cell4[shape="record",label="<c0> atomic value 'l'|<c1> list_ref to next cons-cell"]
+              val_cons_cell5[shape="record",label="<c0> atomic value 'o'|<c1> nil"]
+
+              val_cons_cell1:c1 -> val_cons_cell2:c0
+              val_cons_cell2:c1 -> val_cons_cell3:c0
+              val_cons_cell3:c1 -> val_cons_cell4:c0
+              val_cons_cell4:c1 -> val_cons_cell5:c0
+
+    }
+  #+end_src
+
+  #+RESULTS:
+  [[file:cons-cells.list-of-characters.png]]
+

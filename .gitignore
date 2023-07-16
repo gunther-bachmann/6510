@@ -8,3 +8,5 @@ doc/
 /.direnv/
 /coverage/
 /git-stats.html
+/src/vm-interpreter/*.png
+/**/ltximg/*.png
