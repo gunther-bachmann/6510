@@ -1,0 +1,826 @@
+#+title: MIL with scheme (racket)
+/language definition to transform mil -> scheme/
+
+this will allow further implementation to be coded in mil, making mil the
+implementation language for all following language tools
+
+* idea
+- code in mil
+- run in racket
+- implement mil -> ast with mil
+- implement ast -> ast' with mil (optimizer)
+- implement ast -> c64 asm with mil
+- use c64 asm -> byte code (with existing assembler)
+- implement mil runtime with mil => need language construct to be able to
+  generate code that resembles handwritten assembly code as close as possible
+* minimal lisp with (reduced) racket
+this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
+lisp itself
+** core features of mil
+*** constants
+** driving samples
+*** constant definitions, atoms
+#+begin_src lisp
+  (def letterA #\A)
+  (def stringABC "ABC")
+  (def eightBitNumber #x20)
+  (def sexteenBitNumber #xFFD2)
+  (def floatNumber 1.23e5)
+  (def symbol 'aSymbol)
+  (def emptyList '())
+  (def true #t)
+  (def false #f)
+#+end_src
+*** quote, quasiquote, list
+- '() is shorthand for (list)
+- 'some is shorthand for (quote some)
+- `(,some) is shorthand for (quasiquote (list (unquote some)))
+#+begin_src lisp
+  (list) => '()
+  (list some) => '(some)
+  (quote some) => 'some
+  (quote (list)) => '(list)
+  (quote ()) => '()
+  (quasiquote (list (unqote other))) => `(,other)
+#+end_src
+*** splice operator
+#+begin_src lisp
+  (def aList (list a b c))
+  (def bList (@aList d e f)) => (a b c d e f)
+
+  (def aMap (map a va b vb c vc))
+  (def bMap (map @aMap c oc d vd e ve)) => (map a va b vb c oc d vd e ve)
+
+  (def aArray (array a b c))
+  (def bArray (array @aArray d e f)) => (array a b c d e f)
+
+  (def aStruct (struct idA #:fieldA valueFieldA #:fieldB valueFieldB))
+  (def bStruct (struct idB @aStruct #:fieldC valueFieldC #:fieldD valueFieldD))
+#+end_src
+*** orthogonal concepts
+all defaults to immutable data
+list, map, array and struct can be converted into another.
+list: variable length o(1) to prepend a value (mutable)
+map: variable length o(1) to read by key
+struct: fixed length o(1) to read by key and write by key (mutable)
+array: fixed length o(1) to read by index and write by index (mutable)
+- a struct is a map of fields -> values
+- a struct is a list of fieldId value ...
+- an array is a list (of fixed len)
+- a map is a list of key value ...
+*** function definition
+only tailcall recursion allowed (no check, yet)
+#+begin_src lisp
+  (def fn (lambda ([param1 typeA] [param2 typeB]) (fn param1 param2)))
+#+end_src
+*** let, let*
+#+begin_src lisp
+  (let ((nameA valueA)
+        (nameB valueB))
+    (useNameA nameA nameB))
+#+end_src
+#+begin_src lisp
+  (let* ((nameA valueA)
+         (nameB (fn valueA)))
+    (fn nameA nameB))
+#+end_src
+*** if [when, unless]
+#+begin_src lisp
+  (if booleanExpr
+      (fnA)
+      (fnB))
+#+end_src
+***
+*** mutable value (ideas)
+#+begin_src lisp
+  (mutable-byte #x00 byteId)
+  (mutate:= byteId #x20)
+  (mitable-word #xc000 wordId)
+  (mutate:= wordId #xFFD2)
+#+end_src
+*** types
+#+begin_src lisp
+  (deftype id (sumtype a b c)) ;; a x b x c
+  (deftype id (uniontype a b c)) ;; a | b | c
+  void ;;
+  any  ;; is subtype of all types
+  none ;; is supertype of all types
+#+end_src
+*** structures
+#+begin_src lisp
+  (defstruct id
+    field1
+    field2)
+#+end_src
+*** lists, arrays, maps
+#+begin_src lisp
+  (def aList (a b c))
+  (def aHash {a: valueA b: valueB c: valueC})
+  (def anArray [a b c d])
+#+end_src
+** plan
+- [-] define scheme-syntax for mil (concepts), e.g. use ~mil-~​prefix ast
+  - overview
+    #+begin_src racket
+      (mil-module
+       modname
+       (mil-import ...)
+       (mil-export ...)
+
+       (mil-definition
+        'age-comment (list (mil-parameter 'age))
+        "return a comment about your age"
+        (mil-if (mil-l (mil-symbol '>) (mil-symbol 'age) (mil-uint8 17))
+                (mil-string "erwachsen")
+                (mil-string "kind"))))
+    #+end_src
+  - byte arithmetic
+    #+begin_src lisp
+      ;; integer arithmetic
+      (mil-+ op1 op2 ... op-m)
+
+      ;; mil--
+    #+end_src
+  - logical operators
+    #+begin_src lisp
+      ;; mil-or
+      ;; mil-and
+      ;; not
+    #+end_src
+  - binary bit operators
+    #+begin_src lisp
+    #+end_src
+- [X] define interpreter for mil scheme-syntax ast (see [[file:~/repo/+1/6510/src/mil/mil-interpreter.rkt][mil-interpreter.rkt]])
+- [ ] define compiler mil scheme ast -> c64 assembler
+  - expression stack?
+  - implement most simple function
+    function no parameter returning atomic value
+  - function call = expression reduction
+  - variable / function - lookup / environment
+  - memory layout for normal forms (list, cons + atomic values),
+    special forms are translated into code
+    table of strings (ptr - >str)
+    table of symbols (ptr/id -> symbol string)
+    function table (ptr/id -> function code)
+- [ ] define parser for actual syntax
+- [ ] define translation: parsed -> mil ast
+** (old) mil-ast -> c64
+*** simple function
+#+begin_src racket
+  (mil-definition
+   'const-a
+   '()
+   "constant a = 42"
+   (mil-uint8 42))
+
+  (mil-l (mil-symbol 'display) (mil-symbol 'const-a)) ;; print const-a
+#+end_src
+#+begin_src asm
+                  ; put uint8 42 on expression stack, register A destroyed, probably some flags, too
+  const-a:        lda #42
+                  jmp PUT_MIL_CONST_ON_EXPR_STACK
+
+  main:           jsr const-a ; eager eval of parameters
+                  jsr DISPLAY ; runtime library to display last object(s) on the expression stack
+#+end_src
+*** value (expression) stack
+- tos = ptr to top element of the stack
+- tos = atomic value or string
+- data representation [not optimized, simple]
+  - e.g.
+    - bool/char/byte value: [type-byte][value] (in sum 16 bits)
+    - string value: [type-string][string-id] (in sum 16 bits), id into string table
+    - cons-cell(list): [type-cons-cell][a][b]  (in sum 8 bit + len(a) + len(b))
+      - a, b can be a bool/char/byte/string value or a cell-ptr
+      - cell-ptr: [type-cell-pointer][low][high] (in sum 24 bits, with 16 bit ptr to next cell)
+      - nil-cell-ptr: [type-nil-cell-pointer] (in sum 8 bit)
+- value list construction (e.g. '(a b c)):
+  - push nil-cell-ptr  on the expression stack [expression stack: [nil-cell-ptr]]
+  - push value c on expression stack [expression stack: [c][nil-cell-ptr]]
+  - call cons (replacing tos and tos-1 with cell-ptr to cons-cell [c][nil-cell-ptr])
+  - push value b on expression stack
+  - call cons (replacing tos and tos-1 with cell-ptr to cons-cell [b][cell-ptr, pointing to [c][nil-cell-ptr]] )
+  - push value a on expression stack
+  - call cons  (replacing tos and tos-1 with cell-ptr to cons-cell [a][cell-ptr, pointing to [b][cell-ptr, pointing to [c][nil-cell-ptr]]])
+*** runtime methods for value stack
+- push atomic value on the stack
+- push nil-cell-ptr
+- cons tos with tos-1
+- (store tos-loc (for cleanup after function-call))?
+
+*** memory layout for value stack
+stack of pointers (e.g. just 256 bytes = 128 values)
+| cell0     | cell1     | ... | cell n-1   | cell n   |
+|-----------+-----------+-----+------------+----------|
+| ptr->tos0 | ptr->tos1 | ... | ptr->tos-1 | ptr->tos |
+
+heap of values pointed to by value stack (pointers)
+| ptr        | *value stack heap* | size                    | layout                                                              |
+|------------+--------------------+-------------------------+---------------------------------------------------------------------|
+| ptr->tos   | (list a b c)       | 4 +len(a)+len(b)+len(c) | [type-cons-cell[a][type-cons-cell[b][type cons-cell[c][nil-cell]]]] |
+| ptr->tos-1 | byte #$42          | 2                       | [type-byte-const][$42]                                              |
+| ...        |                    |                         |                                                                     |
+
+- pop on the stack means:
+  - cell-n is dropped,
+  - data ptr->tos points to is free again
+  - new value stack allocation starts at ptr->tos
+  => for allocation, the next free value stack heap location needs to be kept somewhere (or can be calculated)
+*** c64 program layout
+| address    | function                                  |
+|------------+-------------------------------------------|
+| E000..FFFF | Kernal                                    |
+| D000..DFFF | unused, char rom, etc.                    |
+| C200..CFFF | Strings (currently not garbage collected) |
+| C000..C1FF | String ID -> ptr to Strings               |
+| A000..BFFF | Basic                                     |
+| 9F00..9FFF | value stack (growing down)                |
+| 9EFF       | value heap (growing down)                 |
+| 3000       | mil program start                         |
+| 2000..2FFF | mil runtime (size not known yet)          |
+| 0200..1FFF | basic area (not used)                     |
+| 0100..01FF | 6510 call stack                           |
+| 0000..00FF | zero page                                 |
+
+*** hello world
+#+begin_src racket
+  (module
+      'some
+      ;; no provide no require
+      (mil-definition 'hello-world
+                      '()
+                      "print hello world"
+                      (mil-l (mil-symbol 'display) (mil-string "Hello World!")))
+    (mil-l (mil-symbol 'hello-world)))
+
+  ;; which corresponds to
+
+  (define (hello-world)
+    (display "Hello World!"))
+
+  (hello-world)
+#+end_src
+should compile to
+#+begin_src asm
+                  jmp HELLO_WORLD
+
+  HELLO_WORLD:    lda #STRING-ID_HELLO_WORLD
+                  jsr MILRT_push_string
+                  jmp MILRT_display
+#+end_src
+String table should hold one entry: "Hello World!" with ID 1 (STRING-ID_HELLO_WORLD
+Symbol Table is not necessary yet (maybe if 'eval' is implemented)
+
+** memory layout
+- 0000-00ff ZP
+  - free for use by mil (since only used by basic)
+    07, 08 : used for searching with basic
+    0c : basic dim array check
+    0d : basic string / number indicator
+    0e : basic integer / float indicator
+    3b, 3c, 3d, 3e, 3f, 40, 41, 42: basic line number stuff, basic data command stuff
+    fb, fc, fd, fe : unused
+  - ~07..08~ : PTR for strings/symbols (during string/symbol processing and initialisation)
+  - ~0d..0e~ : PTR to TOS of Expression Stack
+  - ~3b..3c~ : PTR to next free cons-cell
+  - ~3d..3e~ : PTR to free-cons-cells for pass2 of freeing
+  - ~3f~     : HIGH-BYTE of to last free cons-cell (reaching this means, the heap needs to allocate new cons cells), done in 256 byte steps
+  - ~40..41~ : PTR to cons cell (register 1)
+- 0100-01ff 6510-STACK
+- <used>
+- 0800...    PROGRAM
+- ...        EXPRESSION STACK (growing up) [atomic-values, or ptr to cons-cell]
+- FREE
+- ...        PAGE-HEAP (growing down, with pages of free cons-cells list, arrays ...)
+- A000-BFFF
+- C000... Strings/Symbols (growing up)
+- .. CFFF MAP: String/Symbol-ID -> PTR (growing down)
+*** expression stack
+- 2 bytes
+- either low-high of pointer (lowest two bits are 00), if completely 0 then = nil
+- or atomic value (lowest two bits are set)
+  - 01 atomic value (string(id), uint8, char, bool, symbol(id)) <- in second byte,
+    - C-- 000 01 uint 8 (carry from last operation on that value)
+    - --- 001 01 char
+    - --- 010 01 bool
+    - hhh 011 01 string-id (hhh are the high 3 bits, if # is getting too large)
+    - hhh 100 01 symbol-id (hhh are the high 3 bits, if # is getting too large)
+    - --- 101 01
+    - --- 110 01
+    - --- 111 01
+  - 10
+  - 11
+
+*** cons-cells page (all of equal size, later on maybe use pages of cons-cells of different size).
+- IDEA: 256 byte = 51 cons cells, 51 byte = reference counters + 1 byte pages status
+  [xxxxxx00][high-byte]
+  00110011
+- each cons cell [4 bytes][+1 byte for reference count] <- where this byte is located needs to be decided on!!
+  - [aaaaaaTT][aaaaaaaa][bbbbbbSS][bbbbbbbb]
+  - TT = 00 => a = ptr to next cons cell
+  - SS = 00 => b = ptr to next cons cell
+  - TT/SS = 01 => is atomic value, same encoding as expression stack!
+  - if a and TT is = 0 => nil, this cons cell is = nil
+  - if b and SS is = 0 => this is the last element of a list
+- a cons cell of the free list has only /a/ set, /b/ = nil. a points to the next free cons cell.
+- if a is 0 this is the last free cons-cell. the last free cons-cell has in b pointer to the next block to allocate
+- cells are located at
+  - (+ (* 4 (* 3 17)) 51), 51 cells used
+  - [00000] status byte
+
+  - [0000 01]00 ... 0000 0111 -> 0000 0001
+  - [0000 10]00 ... 0000 1011 -> 0000 0010
+  - [0000 11]00 ... 0000 1111 -> 0000 0011
+
+  - [0100 00]00 ... 0100 0011 -> 0001 0000
+  - [0100 01]00 ... 0100 0111 -> 0001 0001
+  - ...
+  - [1000 00]00 ... 1000 0011 -> 0010 0000
+  - [1100 00]00 ... 1100 0011 -> 0011 0000
+  - [1111 11]00 ... 1111 1111 -> 0011 1111
+  #+begin_src scheme
+
+                        ;; init page at high-byte
+                        ;; use zero page LOW_PTR, HIGH_PTR = LOW_PTR+1
+
+                        ;; fill page with zeros!
+                        (LDA !high-byte)
+                        (STA HIGH_PTR
+                        (LDA !$0)
+                        (STA LOW_PTR)
+                        (LDX !FF)
+                        (LDA !0)
+    (label _FILL0)
+                        (STA (LOW_PTR),x)
+                        (DEX)
+                        (BNE _FILL0)
+
+                        ;; set page status on first byte of the page
+                        (LDA !page-status)
+                        (STA (LOW_PTR),x)
+
+                        ;; fill first 3 cells (special)
+
+                        ;; now 0000 0100, 0000 0101 <- 0000 1000, high-byte
+                        (LDX !$04)
+                        (LDA !$08) ;; point to next cell at 0000 1000
+                        (STA (LOW_PTR),x)
+                        (INX)
+                        (LDA !high-byte)
+                        (STA (LOW_PTR),x)
+                        ;; next 0000 1000, 0000 1001 <- 0000 1100, high-byte
+                        (LDX !$08)
+                        (LDA !$0a) ;; point to next cell at 0000 1100
+                        (STA (LOW_PTR),x)
+                        (INX)
+                        (LDA !high-byte)
+                        (STA (LOW_PTR),x)
+                        ;; next 0000 1100, 0000 1101 <- 0100 000, high byte
+                        (LDX !$0a)
+                        (LDA !$40) ;; point to next cell at 0100 0000
+                        (STA (LOW_PTR),x)
+                        (TAY)
+                        (INX)
+                        (LDA !high-byte)
+                        (STA (LOW_PTR),x)
+                        ;; next 0100 0000, 0100 0001 <- 0100 0100, high byte
+
+                        ;; fill the 48 other cells starting at 0100 0000
+    (label _loop_init_cons)
+                        (TYA)
+                        (TAX)
+                        (CLC)
+                        (ADC !$04) ;; next cell at this+4
+                        (STA (LOW_PTR),x) ;; point to next cell
+                        (TAY) ;; keep ptr to next cell in Y
+                        (INX)
+                        (LDA !high-byte)
+                        (STA (LOW_PTR),x) ;; point to next cell high byte
+                        (CPX !$F9) ;; was last cell to point to next
+                        (BNE _loop_init_cons
+
+                        ;; last cell marked with two zeros
+                        (RTS)
+
+                        ;; next 0100 0100, 0100 0001 <- 0100 1000, high byte
+                        ;; next 0100 1000, 0100 1001 <- 0100 1100, high byte
+                        ;; next 0100 1100, 0100 1101 <- 0101 0000, high byte
+                        ;; next 1100 0000, 1100 0001 <- 1100 0100, high byte
+                        ;; next 1111 1000, 1111 1001 <- 1111 1100, high byte
+                        ;; next 1111 1100, 1111 1101 <- 0, 0
+  #+end_src
+*** sparse hash page on the heap (binary tree?)
+- how about implementing it with cons-cells?
+  hash-cell:
+    car cell = hash
+    cdr cell = l/r cons cell | value cell
+  l/r cons cell:
+    car cell = left-hash-cell
+    cdr cell = right-hash-cell
+- load balancing the tree is then done by a separate mechanism
+*** byte-array/string/symbol page on the heap arrays may be of max 255 size
+=> index points directly to byte/char
+each array starts with the number of elements (like a string, too, which then is an array of chars)
+=> an array page can allocated in a similar way as a cons-cell page
+each page holds a list of of free arrays to allow reallocation
+- how about string / symbol double indirection ? id -> ptr -> value => relocation would be possible
+   (page compaction)
+*** generic array (array of cells)
+=> index * 2 = pointer to cell (128 cells reachable) [not cons cell, just cell]
+
+*** id page = id -> ptr = ptr array = generic array, cell = ptr to string (free <= cell = 0)
+*** page for structures (#cells in structure + ref count + cells)
+*** cell format (revisited)
+ptr -> cons-cell (cell pair)
+ptr -> cell
+ptr -> byte-array (string, symbol)
+ptr -> generic-array (id: ptr -> ? map)
+atom -> char/byte/array-index/extended atom
+
+native-string = cons-cell with car = ptr-> byte array, cdr = atom -> byte (index), actual string is the located by the ptr in the pointed to array at index position
+string = list of char
+symbol = cons-cell with car = ptr-> byte array, cdr = atom -> byte (index)
+list = cons-cell with car = any, cdr = any
+pair = list
+integer (2byte) = cons-cell first = car = extended atom, cdr = value
+large array (array may only have 0..127 as indices) = hash-map to arrays
+
+cell [l-byte][h-byte]
+[1st-byte] = 0 p p p p p p 0 : ptr, location w/i page (lsl to get actual) | [......] 0 0 : ptr, location w/i page
+             0 0 0 0 0 0 0 1 : atom byte (if interpreted as extended byte atom, make sure high bits are all zero)
+             0 - - - 0 1 0 1 : atom char
+             0 - - - 1 0 0 1 : atom bool
+             0 p p p 1 1 0 1 : atom float (p p p = index to float page, lowest bit of 2nd byte could be used additionally for the page)
+             0 h h h h h 1 1 : extended byte atom, ..... = high bits (5 bits)  (encode such that adc/sbc/*/div work without too much hassle)
+             1 i i i i i i i : index page (high byte, need to shift left)
+[2nd-byte] = ptr: page
+             atom: byte/char/bool value
+             extended atom: low byte
+             float: ptr within float page to actual float, (lowest bit = used for float page index)
+             index page: index within the page
+
+
+atoms only exist on the expression stack => pop = in case of floats, if they are removed from the stack, the respective float entry on the
+page is set to empty!
+necessary: dynamic typing => type information can be derived during runtime
+           what types are present
+           - byte, integer, index?, native-string, hash-map<?>, native-array<byte>, native-array<cell>, list, pair, char,
+             generic/large-array<cell>
+
+putting the two descriptor bits at position 7/6 has the benefit of being able to is ~bit~ to direcly check those bits.
+putting the two bits at position 0/1 has the benefit of directly using this byte to point into a page
+putting the two bits at position 7/0 allows for a single ROL/ROR to get one bit into the carry
+=> define access strategies to decide on that
+*** byte
+range: 0..255, atom, one byte
+use case: + - * / *​2 /2, bitwise and/or/xor
+- ~(n+ a b)~ /; native plus/
+  naive implementation of add (using zp-a register)
+  12 byte
+  #+begin_src asm
+    jsr pop_byte_into_zp_acc
+    jsr pop_byte_from_expression_stack ; puts it into A
+    clc ;; may not be necessary, if ensured by previous code
+    adc zp_acc
+    ;; optional check overflow (in carry)
+    jmp push_byte_onto_expression_stack
+  #+end_src
+- ~(n+ a b)~ /; native plus (unsafe)/
+  implementation making use of (zp-tos-ptr, pointing to the top of expression stack low-byte)
+  no check whether the second operand really is a byte
+  11 byte (less jumps)
+  #+begin_src asm
+    jsr pop_byte_into_a ; a = byte from stack
+    ldy #1
+    clc ;; may not be necessary, if ensured by previous code
+    adc (zp_tos),y
+    sta (zp_tos),y
+    ;; optional check overflow (in carry)
+    rts
+  #+end_src
+*** char
+range: 0..255, atom, one byte
+*** bool
+range: true/false
+use-case: and, or, xor, not
+*** index (for native-array) =  byte?
+range 0..254, atom, one byte
+*** integer
+extended atom
+range 0.. (at least 320 for graphic coordinates)
+use case: + - * / *​2 /2, bitwise and/or/xor, graphic coordinate operations
+- ~(e+ a b)~ /; native plus on number up to 8192/
+  #+begin_src asm
+    jsr pop_extendedbyte_into_a+ ; extended accu (a = lowbyte, zp_x = high byte/bits)
+    ldy #1
+    clc ;; may not be necessary, if ensured by previous code
+    adc (zp_tos),y
+    sta (zp_tos),y
+    php ;; keep carry flag
+    dey
+    lda (zp_tos),y ;; get high bits of extended atom
+    lsr ;; bring those bits in right algned position
+    lsr
+    plp
+    adc zp_x ;; add with carry!
+    asl
+    asl ;; bring resulting bits into right position
+    ora #$03 ;; set low bits to identify this data as extended
+    ;; optional: check highest bit for overflow!
+    and #$7f ;; clear highest bit
+    sta (zp_tos),y ;;
+    rts
+  #+end_src
+*** native-string/symbol
+ptr -> string-page=native-array<cell> + index (0..127), cell = ptr -> native-array<byte> + index to first byte (len-byte) of string
+use case: compare, print, allocate (list of char <-> native string), delete
+*** float
+there are only 16 float pages possible => table with 16 byte with page high bytes point to the respective float page (map float page index
+-> page with floats),
+use case: push, pop, *, /, +, -, sin, cos, ....
+5 bytes necessary (6 used) put into separate float pages (256 byte)
+byte 0 = index of first free float (0 = page is completely empty, $FF, page is full)
+float entry = $FF, + 5 bytes float
+free float entry: index to free float entry on this page, + 5 bytes unused
+00000000 (first float)   $00 0
+00000110                 $06 6
+00001100                 $0c 12
+00010010                 $12 18
+00011000                 $18 24
+00011110                 $1E 30
+- ~(f+ a b)~ /; native (basic) float +/
+  #+begin_src asm
+    jsr pop_float_into_fac1 ; does free on float in float page!
+    jsr tos_float_into_fac2 ; just copy from stack (without popping it)
+    jsr basic_float_plus ; calls basic float function of c64
+    jmp tos_float_from_fac ; replace tos with result
+  #+end_src
+*** hash-map<?>
+implemented by list
+[atom byte hash + info whether leaf/node][value-cell / ptr to l/r cell]
+value cell can be: byte/char/bool/integer/native-string/ptr to a list
+l/r cell: is a ptr to a cons cell w/ car cell = ptr to left, cdr cell = ptr to right
+use case: quickly find atoms
+*** native-array<byte>
+use case: allocate (up to 255 enties), indexed access, free
+array block = <len byte> <len times bytes>
+page first byte = len of (first) array
+  if $FF then page is full (since that array takes all the space)
+  if less, = index of first free array block (0= no free blocks), first array block follows this byte
+free array block = <len free><index next free>
+- ~(n-at array index)~  /; tos = byte atom, tos-1 = array/
+   #+begin_src asm
+     ldy #0
+     lda (zp_tos),y
+     asl ;; get actual page ptr
+     sta zp_x+1
+     iny
+     lda (zp_tos),y
+     sta zp_x
+     dey
+     lda (zp_x),y
+     iny
+     ;; pop+return or store as byte into tos
+     sta (zp_tos),y
+     dey
+     lda #$01
+     sta (zp_tos),y
+     rts
+   #+end_src
+*** native-array<cell>
+use case: allocate (up to 127), indexed access, free
+array block = <len in words, 1 byte> <len * 2 times bytes>
+page first byte = len of (first) array
+  if $7f then the page is full (since that array takes all the space)
+  if less, = index of first free array block (0= no free blocks), first array block follows this byte
+free array block = <len in words, 1 byte> <index next free>
+*** list
+cell pair
+use case: cons, car, cdr, allocate, discard
+free cell pair ptr is held in zero page, pointing to some page of cons cells (cell pairs)
+(how about keeping this free list per page, trying to reuse pages with expected similar lifetime?/fill oldes pages first to deplete youngest
+pages?)
+*** pair - same as list
+*** native-page
+32 bytes (max) to hold info about free pages (in 64k), 8 bit each, 0 indicating free page, 1 indicating used page
+the number of actually available pages
+- get first free page (either from top, from bottom)
+- allocate page
+- free page
+*** extended-page/block
+4k block that can be visible at special address (e.g. swap ram <-> block)
+use case:
+- make block with pages visible (and accessible)
+- swap up to 15 pages into 4k block, write additional information for retrieval into block, keep minimal information in 64k
+- restore up to 15 pages from 4k block
+*** struct page
+structures are flat memory fields, structured by their definition
+byte 0 = index to next free cell
+byte 1..n first structure
+- byte (8bit), int (16bit), char (8bit), bool (8bit), list (16bit)=ptr to cons-cell, string (16bit)=id/array-page+index, n-array ...
+structure block (3 + n byte): refcount, ptr to structure definition, flat bytes encoding each type
+free block (2 byte): byte index to next free, # bytes of continuous free
+*** page meta data
+32 byte bitmap to have 1 bit to indicate free space in pages?
+**** page types (descr 4 bits) -> type defines structure of page (for introspection)
+- [0000] cons-cells (4 byte aligned) = list = pairs
+- [0001] cells (2 byte aligned) = atoms, ptr->(list,pair,array-entry,float,struct)
+- [0010] native-array<byte> = strings = symbols (1 byte aligned) = array<byte,bool,char>
+- [0011] native-array<cell> (2 byte aligned) = array<string|floag|array|atoms>
+- [0100] floats (6 byte aligned)
+- [0101] structs (4 byte aligned)
+- [0110] page with meta data (e.g. structure type definitions, data about pages, data about extended pages?)
+- [0111] byte code page
+- [1000] native code page
+- [1001] rom page (e.g. kernel, basic, char-rom etc.)
+- [1010] system page (e.g. i/o, zp, vic, sid etc.)
+**** page -> type function
+**** page of type x -> (first?) page with free space
+**** put page of type x into partial free list
+**** remove page of type x from partial frrfree list
+**** allocate new page of type x
+**** free page of type x
+** ideas
+- (poke mem val)
+- (peek mem val)
+- (native-asm {
+    LDA !$20
+  })
+- let mil compile to intermediary language (ie mil-1..n)
+  - allow optimization in all steps
+  - mil-x = stack machine?
+- allow interpretation of byte code?
+  - mil-x = byte code = stack machine?
+- mil = language able to write this compiler? => need assembler implemented in mil
+- mil = language able to write the runtime of mil? => write rt-functions + translate them back to mil (ensure language concepts are available)
+  - e.g. passing byte as parameter in accumulator, x- or y-register => platform hints
+    #+begin_src scheme
+      (def (allocate-page page-type)
+           "allocate a memory page (256 byte) of the given PAGE-TYPE"
+           (platform-hints
+            'c64 '(pass-by-register a page-type))
+            ; ...
+           )
+    #+end_src
+  - give hint about native runtime function
+    #+begin_src scheme
+      (platform-hints
+       'c64
+       '(natively-implemented-at #xffd2))
+    #+end_src
+- memory mapped structure (instantiation)
+  e.g. define a structure, then map it to a certain memory location
+  #+begin_src racket
+    (struct name (field-a field-b)) ;; define a structure
+    (name init-a init-b #:mapping ((field-a 'byte #xf2) (field-b 'word #xf3))) ;; place them on the zero page
+  #+end_src
+- mapping bit-fields (define bit index range)
+  #+begin_src racket
+    (name init-a init-b #:mapping ((field-a (bits 4 5) #xf3) (field-b (bits 0 3) #xf3))) ;; in f3 in different bit locations
+  #+end_src
+- placing a structure at a certain memory location (e.g. previously allocated)
+  #+begin_src racket
+    (name init-a init-b #:memory-location #x9EF0) ;; place the given structure instance at 9ef0
+  #+end_src
+** runtime functions
+- free-cons-cell-ptr :: points to the first free cons cell
+- CR1..n :: cons register
+- next-heap-page :: holds the high byte of the next free heap page
+- init RT
+  - copy strings/symbols to string/symbol table
+- initialize expression heap of cons cells
+  - create free list
+  - allocate cons-cell
+    - when (low byte of) car of free-cons-cell-ptr is zero (no more free cons cells), grow heap and initialize new freelist
+    - copy ~free-cons-cell-ptr~ into cons register
+    - copy car of cons cell into ~free-cons-cell-ptr~
+    - inc reference count (cons register low byte shift right 2 times)
+  - add cons-cell (in cons register) to free-list
+    - copy ~free-cons-cell-ptr~ into car of cons register, clear cdr of cons register (clear reference count, should be zero anyhow)
+    - copy cons register into ~free-cons-cell-ptr~
+  - free cons-cell (CR)
+    - shift low byte right two times (now high low should point to reference count)
+    - dec reference count
+    - when zero, add cons cell to free-list
+    - free car of cons-cell (if ptr), free cdr of cons-cell (if ptr) [no recursion: do this as a loop]
+    - example implementation
+      - loop (1)
+        - keep if car of cons cell (if it is a ptr)
+        - if cdr holds ptr, add this to free-pass2-cons-cell list, car -> free-pass2-cons-cell list, free-pass-cons-cell list := CR
+        - if cdr holds no ptr, free cons cell itself
+        - loop to free car (if it is a ptr)
+      - loop (2)
+        - pop top of free-pass2-cons-cell list, call free on cdr of that cell (jump into loop 1) and thus add this cons cell to the free list
+        - loop until free-pass2-cons-cell list is empty
+  - grow heap for free list
+    - check that next-heap-page does not collide with expression-stack (high byte) => out of memory error, gc?
+    - initialize new page, mark last cell as such, set car of last cell to 0 (set $FC = 0) <- is set to 0 by init
+  - collect cells for free-list (collection should be in place, without additional space-usage)
+- GC (e.g. mark and sweep) <- necessary? how would could a reference ring come into being? not for lists alone, what about structures
+  #+begin_src scheme
+    (struct A (a b val)) ;; a b can be cons cells
+
+    (define A2 (A nil nil  2)) ;; A2 ref count 1
+    (define A1 (A nil A2 15)) ;; A1 ref count 1, A2 ref count 2
+    (define newA2 (struct-copy A A2 [a A1])) ;; newA2 ref count1, A1 refcount 2, A2 refcount 3
+
+    newA2 -> A1 ->
+          -> A2
+
+
+    (discard A2) ;; A2 refcount 2
+    (discard A1) ;; A1 refcount 1
+
+    (discard newA2) ;; newA2 refcount = 0
+    (discard (A-a newA2)) ;; A1 refcount = 0
+    (discard (A-b (A-a newA2))) ;; A2 refount = 1
+    (discard (A-b newA2)) ;; A2 refcount = 0
+
+    ;; given the fact that no modificaton is allowed, circular references cannot occur
+    ;; => cannot implement double linked list
+  #+end_src
+  - gc only necessary, when starting to allow assignments (without copying)
+    #+begin_src scheme
+      (struct A (prev next val))
+      (define A1 (A nil nil 5))
+      (define A2 (A nil nil 6))
+      (A-next-set! A1 A2) ;; set does mark as gc collectible? or simply offers no memory deallocation?
+      (A-prev-set! A2 A1)
+    #+end_src
+- initialize expression stack
+  - push atomic values
+  - pop atomic values
+  - push lists / cons-cells
+- display (atomic values, cons-cells (lists))
+*** page data structures
+zp variable points ot the first free page (one byte)
+native byte array page (<=255 entries), mapping page id (index) -> page type and page status
+native byte array (max 16 entries) mapping page type (index) -> first partially free page
+**** free page
+at $00 -> page id of next free page (or 0 in case this is the last one)
+**** cons-cells page
+page type: 0000
+***** partially free page
+first cons cell points to the next free cons cell w/i the page => needs only one byte | or nil if the first cons cell is the last free one,
+2nd byte is the next partially free page of this type (cons-cells)
+***** full page
+all cons cells are used
+**** cells page
+page type: 0001
+***** partially free page
+first cell = ptr to next free cell w/i the page => need just one byte | 0 if the last free cell, 2nd byte is the next partially free page of
+this type (cells)
+***** full page
+no more free cells
+*** pagefunctions
+(pages grow in two directions <- not really, since all pages are fetched from the heap, no [stack-like] growth is expected)
+- module/program + static symbols + strings, from bottom to top
+- heap grows top down
+**** page -> type function
+- implementation ideas
+  - use a native byte page to map high byte (the page id) to a byte: size could be reduced to only relevant pages, or a full native array w/
+    page id 0..254
+  - this byte describes the page (type, free-status)
+    e.g. lower 4 bits = type
+    page usage status
+    00 = completely free
+    01 = partially free
+    11 = full
+**** page of type x -> (first?) page with free space
+- implementation ideas
+  - type = index into native byte array, with the byte being the high byte of the page that is (partially) free
+    - array size <= 16 bytes
+**** put page of type x into partial free list
+**** remove page of type x from partial free list
+**** allocate new page of type x
+**** free page of type x
+*** page specific functions
+**** cell page (just cells, allocated on heap)
+**** cons-cell page
+*** mil interface to page functions
+**** allocate page of type x
+**** free page
+**** mark page (full, partially free, free)
+**** get type of page
+**** get partially free page of type x
+*** memory layout
+https://www.c64-wiki.com/wiki/Memory_Map
+- 0000-00FF zero page
+- 0100-01FF stack
+- 0200-03FF os and basic area
+- 0400-07FF char screen memory
+- 0800-XXXX MIL Core Runtime
+- XXXX-9FFF free page area
+- A000-BFFF Basic
+- C000-CFFF free (for what so ever)
+- D000-DFFF mem mapped i/o
+- E000-FFFF Kernal
+**** allocate pages and implement all other concepts on allocated page
+- expression-stack
+- heap
+  - cons-cells
+  - cells
+  - native byte arrays
+  - native cell arrays
+  - strings, symbols
+  - floats

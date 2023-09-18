@@ -586,9 +586,8 @@
                                         (LSR) (LSR) (LSR) (LSR)          ; Move top nybble to bottom nybble
                                         (JSR MILRT_DISPLAY_NIBBLE)     ; Print this nybble
                                         (PLA)                            ; Get A back and print bottom nybble
-
-      (label MILRT_DISPLAY_NIBBLE)
                                         (AND !15)                        ; Keep bottom four bits
+      (label MILRT_DISPLAY_NIBBLE)
                                         (CMP !10)
                                         (BCC MILRT_DISPLAY_DIGIT)      ; If 0-9, jump to print
                                         (ADC !6)                         ; Convert ':' to 'A'
