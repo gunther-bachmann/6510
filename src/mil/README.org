@@ -5,7 +5,6 @@
   - 6502 lisp compile :: https://github.com/jaoswald/cl-comfy-6502/tree/master
   - language implemented on the 6502 :: https://dwheeler.com/6502/
   - SICL, a new CL implementation :: https://github.com/robert-strandh/SICL
-  - http://6502.org/source/
   - http://codebase64.org/doku.php?id=start
   - http://sta.c64.org/cbm64krnfunc.html
   - http://wilsonminesco.com/6502interrupts/
@@ -29,7 +28,14 @@
   - ulisp (lisp running on micro controllers) http://www.ulisp.com/
   - lelisp (z80 lisp) https://www.softwarepreservation.org/projects/LISP/le_lisp/source/lelisp12
   - move memory http://www.6502.org/source/general/memory_move.html
+  - general routines :: http://www.6502.org/source/
   - graphics registers https://cbm8bit.blogspot.com/2018/07/vic-ii-on-c64.html
+  - compile lisp to x86 :: https://bernsteinbear.com/blog/compiling-a-lisp-0/
+  - doc collection :: https://bernsteinbear.com/pl-resources/
+  - racket macros :: https://www-old.cs.utah.edu/plt/scope-sets/
+  - scheme bibliography :: https://github.com/schemedoc/bibliography/blob/master/page3.md
+  - racket features :: https://nikhilism.com/post/2023/racket-beyond-languages/
+  - c64 assembler :: https://www.pagetable.com/?p=1542
 * example program execution
 - program is loaded to 0800..XXXX (regular basic program load "*",8) and run (executes sys 2064)
 - initialize runtime

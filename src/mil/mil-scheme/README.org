@@ -13,6 +13,14 @@ implementation language for all following language tools
 - use c64 asm -> byte code (with existing assembler)
 - implement mil runtime with mil => need language construct to be able to
   generate code that resembles handwritten assembly code as close as possible
+** todos
+- decide on ast vs. racket source code : ast functions vs. macros working on source code
+  - pro ast: may use typed racketed to work on ast
+  - pro macro: may directly execute (with racket runtime)
+  - con ast: needs interpreter to execute or another translation step ast -> whatever is executable
+  - con macro: naming transformed ast structures might become difficult? in nano-passes? e.g. defun', defun'', defun''' for defun in
+    different ast transformation stages
+-
 * minimal lisp with (reduced) racket
 this is a minimal lisp implementation that makes use of a reduced set of racket features in order to be somewhat portable to the minimal
 lisp itself
@@ -90,7 +98,6 @@ only tailcall recursion allowed (no check, yet)
       (fnA)
       (fnB))
 #+end_src
-***
 *** mutable value (ideas)
 #+begin_src lisp
   (mutable-byte #x00 byteId)

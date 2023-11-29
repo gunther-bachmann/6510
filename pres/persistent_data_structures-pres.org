@@ -21,10 +21,10 @@
     - overhead in memory consumption
   - indications when to use
     - code complexity reduction 
-    - memory overhead ok (no tiny devices, hard memory restrictions)
+    - memory overhead ok (tiny devices, hard memory restrictions)
     - access time ok
     - thread safety is important w/o blocking mutexes
-    - undo / redo (keep multiple versions)
+    - undo / redo (keep multiple versions) <- example = anywhere undo/redo is wanted, e.g. debugger?
   - indications when not to use
     - single threaded (thread safety is no restriction)
     - efficiency (very) important
