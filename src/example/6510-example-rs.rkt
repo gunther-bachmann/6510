@@ -11,7 +11,6 @@
 (require "../ast/6510-relocator.rkt")
 
 (require "../tools/6510-interpreter.rkt")
-(require "../tools/6510-debugger.rkt")
 (require "../ast/6510-constants.rkt")
 
 

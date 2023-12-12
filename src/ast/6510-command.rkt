@@ -41,11 +41,11 @@
      (ast-unresolved-opcode-cmd? command)))
 
 (define (ast-unresolved-command-resolve-sub-command command)
-  (cond ([ast-unresolved-opcode-cmd? command]
-         (ast-unresolved-opcode-cmd-resolve-sub-command command))
-        ([ast-unresolved-rel-opcode-cmd? command]
-         (ast-unresolved-rel-opcode-cmd-resolve-sub-command command))
-        [#t (raise-user-error "unknown unresolved ast command")]))
+  (cond [[ast-unresolved-opcode-cmd? command]
+         (ast-unresolved-opcode-cmd-resolve-sub-command command)]
+        [[ast-unresolved-rel-opcode-cmd? command]
+         (ast-unresolved-rel-opcode-cmd-resolve-sub-command command)]
+        [else (raise-user-error "unknown unresolved ast command")]))
 
 ;; generic root of all ast commands
 (struct ast-command
@@ -82,7 +82,7 @@
 
 (define (label->byte-resolve-mode label)
   (cond [(string-prefix? label ">") 'high-byte]
-        [#t 'low-byte]))
+        [else 'low-byte]))
 
 ;; resolving to a byte
 (struct ast-resolve-byte-scmd ast-resolve-sub-cmd
@@ -188,18 +188,22 @@
   (check-true (cond [(ast-opcode-cmd? opcode-example)
                      #t]
                     [(ast-decide-cmd? opcode-example)
-                     #f]))
+                     #f]
+                    [else #f]))
   (check-true (cond [(ast-opcode-cmd? opcode-resolved)
                      #t]
                     [(ast-decide-cmd? opcode-resolved)
-                     #f]))
+                     #f]
+                    [else #f]))
   (check-true (cond [(ast-unresolved-opcode-cmd? opcode-example)
                      #t]
                     [(ast-unresolved-opcode-cmd? opcode-resolved)
-                     #f]))
+                     #f]
+                    [else #f]))
   (check-true (cond [(ast-opcode-cmd? decide-example)
                      #f]
                     [(ast-decide-cmd? decide-example)
-                     #t]))
+                     #t]
+                    [else #f]))
   (check-equal? (ast-decide-cmd-options decide-example)
                 (list opcode-example)))
