@@ -465,6 +465,14 @@
     [else (when verbose (display (integer->char (c64-byte->unicode byte state))))
           state]))
 
+(define/c (display-c64zerotermstring word state (verbose #t))
+  (->* (word/c cpu-state?) (boolean?) cpu-state?)
+  (let ([cbyte (peek state word)])
+    (unless (eq? 0 cbyte)
+      (display-c64charcode cbyte state verbose)
+      (display-c64zerotermstring (fx+ 1 word) state verbose)))
+  state)
+
 ;; unmodified mapping
 (define unicode->c64-high-map
   (hash
@@ -962,15 +970,21 @@
 
 (define/c (c64-rom-routine? high low)
   (-> byte? byte? boolean?)
-  (= (absolute high low) #xFFD2))
+  (or (= (absolute high low) #xFFD2)
+     (= (absolute high low) #xAB1E)))
 
 (define/c (interpret-c64-rom-routine high low state (verbose #t))
   (->* (byte? byte? cpu-state?) (boolean?) cpu-state?)
   (case (absolute high low)
     [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
      (~>> (cpu-state-accumulator state)
-         (display-c64charcode _ state verbose)
-         )]))
+         (display-c64charcode _ state verbose))]
+    [(#xAB1E)
+     (display-c64zerotermstring
+      (absolute (cpu-state-y-index state)
+                (cpu-state-accumulator state))
+      state
+      verbose)]))
 
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
