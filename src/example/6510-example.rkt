@@ -9,16 +9,19 @@
         ; currently require/provide cannot be parsed or resolved here
 
 ROM-COUT  = $ffd2
-REPEAT    = 5
+REPEAT    = 3
 LINE-FEED = %00001101 ; $0d
 
+
+        ;; print hello word (reverse encoded)
         ldx hello
 sout:   lda hello,x
         jsr ROM-COUT
         dex
         bne sout
 
-        clc
+
+        ;; some other print out function (pring REPEAT times ABC)
         ldx #REPEAT    ; repeat .. times
 some:
         lda #$41       ; load character A (dec 65)
@@ -31,13 +34,30 @@ some:
         jsr cout
 end:    dex
         bne some
-        rts            ; end of execution
+
+        ;; hello world non reverse encoded (taking 1 byte more in printing method)
+
+        ldx #00
+rep:    lda hellon,x
+        beq done
+        jsr ROM-COUT
+        inx             ; max 255 chars
+        bne rep
+
+done:
+
+        ;; using string out of the c64 rom
+        lda #<hellon
+        ldy #>hellon
+        jsr $ab1e
+        rts             ; end of execution
 
 cout:   jmp (table)
 
 table:  .data $d2, $ff
 
-hello:  .data 22  ; number of bytes to print (string length)
+hello:  .data 23  ; number of bytes to print (string length)
+        .data $92 ; inverse off
         .data $0d ; line feed
         .data $a7 ; right one eigth
         .data $12 ; reverse
@@ -46,6 +66,10 @@ hello:  .data 22  ; number of bytes to print (string length)
         .data $0d
         .asc "DLROw WEN OLLEh"
         .data $0e ; switch to lower letter mode
+
+hellon: .asc "hELLO wORLD"
+        .data $0d
+        .data $00
 
 
 
