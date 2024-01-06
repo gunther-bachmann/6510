@@ -11,7 +11,7 @@
 (require (only-in "../6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of))
 (require (only-in "6510-relocator.rkt" command-len label-string-offsets))
 
-(module+ test
+(module+ test #| require |#
   (require "../6510-test-utils.rkt"))
 
 (provide ->resolved-decisions label-instructions ->resolve-labels resolved-program->bytes commands->bytes)
@@ -47,7 +47,7 @@
                     (ast-const-word-cmd-label instruction)]
                    [(ast-label-def-cmd? instruction)
                     (ast-label-def-cmd-label instruction)]
-                   [#t '()]))
+                   [else '()]))
            (equal? label instruction-word-label))
          program))
 
@@ -81,7 +81,8 @@
                      [(ast-require-word-cmd? instruction)
                       (ast-require-word-cmd-label instruction)]
                      [(ast-require-byte-cmd? instruction)
-                      (ast-require-byte-cmd-label instruction)]))
+                      (ast-require-byte-cmd-label instruction)]
+                     [else '()]))
            (equal? label label-str))
          program))
 
@@ -123,7 +124,7 @@
                       (byte-label-cmd? label-entry)]
                      [(ast-resolve-word-scmd? resolve-scmd)
                       (word-label-cmd? label-entry)]
-                     [#t #f])
+                     [else #f])
                #f))
          decide-options))
 
@@ -167,7 +168,7 @@
                  (if moption
                      (cons moption (->resolved-decisions labels (cdr program)))
                      (default-result-f)))]
-              [#t
+              [else
                (default-result-f)]))))
 
 (module+ test #| ->resolved-decisions |#
@@ -257,7 +258,8 @@
                (encode-label-hbyte-value instruction value)]
               [(and (ast-resolve-byte-scmd? subcmd)
                   (eq? 'low-byte (ast-resolve-byte-scmd-mode subcmd)))
-               (encode-label-lbyte-value instruction value)])
+               (encode-label-lbyte-value instruction value)]
+              [else (raise-user-error "unknown subcommand ~a" subcmd) ])
         instruction)))
 
 ;; resolve this relative opcode command (if applicable) using the given current offset of the code
@@ -266,10 +268,10 @@
   (let* ((subcmd (ast-unresolved-rel-opcode-cmd-resolve-sub-command instruction))
          (label  (ast-resolve-sub-cmd-label subcmd))
          (value  (hash-ref labels label #f)))
-    (if value
-        (let ((rel-value (two-complement-of (- value (+ offset 2)))))
-          (encode-label-rel-value instruction rel-value))
-        instruction)))
+    (cond [value
+           (let ([rel-value (two-complement-of (- value (+ offset 2)))])
+             (encode-label-rel-value instruction rel-value))]
+          [else instruction])))
 
 ;; resolve labels to bytes in the given program, using offset as absolute program start
 (define/c (->resolve-labels offset labels program resolved-program)
@@ -282,7 +284,7 @@
                                   (resolve-opcode-cmd instruction labels)]
                                  [(ast-unresolved-rel-opcode-cmd? instruction)
                                   (resolve-rel-opcode-cmd instruction offset labels)]
-                                 [#t instruction]))
+                                 [else instruction]))
              (new-res-prg  (append resolved-program (list resolved-cmd))))        
         (->resolve-labels next-offset labels (cdr program) new-res-prg))))
 
@@ -340,7 +342,7 @@
                             [(ast-require? instruction) '()]
                             [(ast-provide? instruction) '()]
                             [(ast-label-def-cmd? instruction) '()]
-                            [#t (raise-user-error "cannot resolve instruction to bytes ~a" instruction)])))
+                            [else (raise-user-error "cannot resolve instruction to bytes ~a" instruction)])))
         (-resolved-program->bytes (cdr program) (append resolved bytes)))))
 
 ;; transform a resolved PROGRAM into a list of bytes
