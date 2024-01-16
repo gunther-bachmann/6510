@@ -49,8 +49,9 @@
 
 ;; generic root of all ast commands
 (struct ast-command
-  ()
-  #:transparent)
+  (meta-information) ;; keyword value? list (optional value depending on keyword)
+  #:transparent
+  #:guard (struct-guard/c list?))
 
 ;; a complete program (module) of 6510 assembler code
 (struct ast-program
@@ -62,7 +63,7 @@
 (struct ast-decide-cmd ast-command
   (options)
   #:transparent
-  #:guard (struct-guard/c (listof ast-unresolved-command?)))
+  #:guard (struct-guard/c list? (listof ast-unresolved-command?)))
 
 ;; a resolve sub command, referencing this label (use word/byte sub structure)
 (struct ast-resolve-sub-cmd
@@ -95,12 +96,14 @@
   (bytes)
   #:transparent
   #:guard (struct-guard/c
+           list?
            (listof byte?)))
 
 (struct ast-rel-opcode-cmd ast-command
   (bytes)
   #:transparent
   #:guard (struct-guard/c
+           list?
            (listof byte?)))
 
 ;; bytes (usually data)
@@ -108,6 +111,7 @@
   (bytes)
   #:transparent
   #:guard (struct-guard/c
+           list?
            (listof byte?)))
 
 ;; opcode including unresolved resolve subcommand
@@ -115,6 +119,7 @@
   (resolve-sub-command)
   #:transparent
   #:guard (struct-guard/c
+           list?
            (listof byte?)
            ast-resolve-sub-cmd?))
 
@@ -123,6 +128,7 @@
   (resolve-sub-command)
   #:transparent
   #:guard (struct-guard/c
+           list?
            (listof byte?)
            ast-resolve-byte-scmd?))
 
@@ -130,60 +136,65 @@
 (struct ast-label-def-cmd ast-command
   (label)
   #:transparent
-  #:guard (struct-guard/c string?))
+  #:guard (struct-guard/c list? string?))
 
 (struct ast-require ast-command
   ()
-  #:transparent)
+  #:transparent
+  #:guard (struct-guard/c list?))
 
 ;; import word definition
 (struct ast-require-word-cmd ast-require
   (label)
   #:transparent
-  #:guard (struct-guard/c string?))
+  #:guard (struct-guard/c list? string?))
 
 ;; import byte definition
 (struct ast-require-byte-cmd ast-require
   (label)
   #:transparent
-  #:guard (struct-guard/c string?))
+  #:guard (struct-guard/c list? string?))
 
 (struct ast-provide ast-command
   ()
-  #:transparent)
+  #:transparent
+  #:guard (struct-guard/c list?))
 
 ;; export word definition
 (struct ast-provide-word-cmd ast-provide
   (label)
   #:transparent
-  #:guard (struct-guard/c string?))
+  #:guard (struct-guard/c list? string?))
 
 ;; export byte definition
 (struct ast-provide-byte-cmd ast-provide
   (label)
   #:transparent
-  #:guard (struct-guard/c string?))
+  #:guard (struct-guard/c list? string?))
 
 (struct ast-const ast-command
   ()
-  #:transparent)
+  #:transparent
+  #:guard (struct-guard/c list?))
 
 ;; constant byte definition
 (struct ast-const-byte-cmd ast-const
   (label byte)
   #:transparent
-  #:guard (struct-guard/c string? byte?))
+  #:guard (struct-guard/c list? string? byte?))
 
 ;; constant word definition
 (struct ast-const-word-cmd ast-const
   (label word)
   #:transparent
-  #:guard (struct-guard/c string? word/c))
+  #:guard (struct-guard/c list? string? word/c))
 
 (module+ test #| struct type |#
-  (define opcode-example (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label")))
-  (define decide-example (ast-decide-cmd (list opcode-example)))
-  (define opcode-resolved (ast-opcode-cmd '(#x20 #xd2 #xff)))
+  (define opcode-example (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "label")))
+  (define decide-example (ast-decide-cmd '() (list opcode-example)))
+  (define opcode-resolved (ast-opcode-cmd '() '(#x20 #xd2 #xff)))
+
+  ;; (define const-word (ast-const-word-cmd '(#:line 17 #:cmd) "some" #x2000))
 
   (check-true (cond [(ast-opcode-cmd? opcode-example)
                      #t]
