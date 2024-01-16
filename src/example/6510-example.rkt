@@ -14,6 +14,9 @@ LINE-FEED = %00001101 ; $0d
 
 
         ;; print hello word (reverse encoded)
+        ;; hello: #of bytes to print
+        ;; hello+1: last byte to print
+        ; ... hello+n: first byte to print
         ldx hello
 sout:   lda hello,x
         jsr ROM-COUT
@@ -36,7 +39,7 @@ end:    dex
         bne some
 
         ;; hello world non reverse encoded (taking 1 byte more in printing method)
-
+        ;; hellon: zero terminated string
         ldx #00
 rep:    lda hellon,x
         beq done
@@ -47,6 +50,7 @@ rep:    lda hellon,x
 done:
 
         ;; using string out of the c64 rom
+        ;; hellon: zero terminated string
         lda #<hellon
         ldy #>hellon
         jsr $ab1e

@@ -1,7 +1,7 @@
 #+title: README
 /tooling to work with 6510 / c64 assembler code/
 
-including a debugger, an interpreter and functions to write vice compatible executables
+including a debugger, an interpreter and functions to write vice compatible executable
 
 * ideas
 ** c64 lisp editor
@@ -30,3 +30,27 @@ including a debugger, an interpreter and functions to write vice compatible exec
 - allow for quick buffer switches
 - keep buffers in memory pages (extension)
 - each displayed line holds a pointer to the actual textline hold in memory
+** debugger commands
+*** like dbx
+(dbx) help
+run                    - begin execution of the program
+print <exp>            - print the value of the expression
+where                  - print currently active procedures
+stop at <line>         - suspend execution at the line
+stop in <proc>         - suspend execution when <proc> is called
+cont                   - continue execution
+step                   - single step one line
+next                   - step to next line (skip over calls)
+trace <line#>          - trace execution of the line
+trace <proc>           - trace calls to the procedure
+trace <var>            - trace changes to the variable
+trace <exp> at <line#> - print <exp> when <line> is reached
+status                 - print trace/stop's in effect
+delete <number>        - remove trace or stop of given number
+screen                 - switch dbx to another virtual terminal
+call <proc>            - call a procedure in program
+whatis <name>          - print the declaration of the name
+list <line>, <line>    - list source lines
+registers              - display register set
+quit                   - exit dbx
+(dbx)

@@ -99,7 +99,7 @@
    (cond
      [(implicit-addressing? addressings-defs)         
       `(no-operand-opcode 'implicit ',addressings-defs)]
-     [#t (raise-addressing-error stx addressings-defs 0)])))
+     [else (raise-addressing-error stx addressings-defs 0)])))
 
 (module+ test #| no-op |#
   (begin-for-syntax

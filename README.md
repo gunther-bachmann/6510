@@ -11,6 +11,7 @@ rackets' capabilities to define (and interpret) languages, in this case: 6510 as
 * pvector (`raco pkg install pvector`)
 * cover (`raco pkg install cover`)
 * ansi-color (`raco pkg install ansi-color`)
+* review (`raco pkg install review`)
 
 ## usage
 

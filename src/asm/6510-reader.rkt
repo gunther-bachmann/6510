@@ -105,7 +105,7 @@
            (create-image-with-program raw-bytes org prg-name d64-name (path->string (path-replace-extension f-name "")))
 
            ;; run when called from racket (C-c C-c)
-           (when (not (getenv "INSIDE_EMACS"))
+           (unless (getenv "INSIDE_EMACS")
              (displayln "(have a look at raw-program, program, program-p1, program-p2, program-p3 or raw-bytes)")
              (displayln (format "execute the program in vice via (run-emulator \"~a\")" d64-name))
              (displayln (format "execute interpreter via (run-interpreter ~a raw-bytes)" org))

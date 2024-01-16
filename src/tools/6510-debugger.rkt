@@ -38,19 +38,19 @@
 ;; set or clear flags
 (define/c (modify-flag set flag c-state)
   (-> boolean? string? cpu-state? cpu-state?)
-  (cond ((string=? flag "c")
-         (if set (set-carry-flag c-state) (clear-carry-flag c-state)))
-        ((string=? flag "n")
-         (if set (set-negative-flag c-state) (clear-negative-flag c-state)))
-        ((string=? flag "i")
-         (if set (set-interrupt-flag c-state) (clear-interrupt-flag c-state)))
-        ((string=? flag "b")
-         (if set (set-brk-flag c-state) (clear-brk-flag c-state)))
-        ((string=? flag "v")
-         (if set (set-overflow-flag c-state) (clear-overflow-flag c-state)))
-        ((string=? flag "z")
-         (if set (set-zero-flag c-state) (clear-zero-flag c-state)))
-        (#t c-state)))
+  (cond [(string=? flag "c")
+         (if set (set-carry-flag c-state) (clear-carry-flag c-state))]
+        [(string=? flag "n")
+         (if set (set-negative-flag c-state) (clear-negative-flag c-state))]
+        [(string=? flag "i")
+         (if set (set-interrupt-flag c-state) (clear-interrupt-flag c-state))]
+        [(string=? flag "b")
+         (if set (set-brk-flag c-state) (clear-brk-flag c-state))]
+        [(string=? flag "v")
+         (if set (set-overflow-flag c-state) (clear-overflow-flag c-state))]
+        [(string=? flag "z")
+         (if set (set-zero-flag c-state) (clear-zero-flag c-state))]
+        [else c-state]))
 
 (struct breakpoint (description fn)
   #:transparent
