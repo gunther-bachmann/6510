@@ -56,8 +56,13 @@
   #:transparent
   #:guard (struct-guard/c string? any/c))
 
-(struct debug-state (states breakpoints)
-  #:guard ((listof cpu-state?) (listof breakpoint?)))
+(struct pc-source-map-entry (line source-code file)
+  #:guard (struct-guard/c nonnegative-integer? string? string?))
+
+(struct debug-state (states breakpoints pc-source-map)
+  #:guard (struct-guard/c (listof cpu-state?)
+                          (listof breakpoint?)
+                          (hash/c nonnegative-integer? pc-source-map-entry?)))
 
 (define/c (debugger--help d-state)
   (-> debug-state? debug-state?)
@@ -91,6 +96,13 @@ EOF
   (display (disassemble c-state
                         (if address (string->number address 16)  (cpu-state-program-counter c-state))
                         (if len (string->number len 16) 1)))
+  (define s-entry (hash-ref (debug-state-pc-source-map d-state)
+                            (cpu-state-program-counter c-state)
+                            #f))
+  (when s-entry
+    (display (format " (@~a:~a)"
+                     (pc-source-map-entry-file s-entry)
+                     (pc-source-map-entry-line s-entry))))
   d-state)
 
 (define/c (debugger--print-memory address len d-state)
@@ -349,7 +361,7 @@ EOF
   (when verbose
     (displayln (format "loading program into debugger at ~a" org))
     (displayln "enter '?' to get help, enter 'q' to quit"))
-  (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '()))
+  (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '() (hash)))
   (for ([_ (in-naturals)])
     (displayln "")
     (display (format "Step-Debugger[~x] > " (length (debug-state-states d-state))))

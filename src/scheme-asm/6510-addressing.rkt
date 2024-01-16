@@ -107,6 +107,20 @@
      (syntax->datum (no-op #f #'((implicit . #x10))))
      '(no-operand-opcode 'implicit '((implicit . #x10))))))
 
+(define-for-syntax (no-op-w-meta stx addressings-defs meta)
+  (datum->syntax
+   stx
+   (cond
+     [(implicit-addressing? addressings-defs)
+      `(no-operand-opcode 'implicit ',addressings-defs ',meta)]
+     [else (raise-addressing-error stx addressings-defs 0)])))
+
+(module+ test #| no-op-w-meta |#
+  (begin-for-syntax
+    (check-equal?
+     (syntax->datum (no-op-w-meta #f #'((implicit . #x10)) #'(#:line 17 #:org-cmd)))
+     '(no-operand-opcode 'implicit '((implicit . #x10)) '(#:line 17 #:org-cmd)))))
+
 ;; transform the given (having one operand) to a valid operand command given the possible addressing-modes
 (define-for-syntax (one-op stx addressings-defs op)
   (define possible-ambiguous-addressing '(zero-page  absolute))

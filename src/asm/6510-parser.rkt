@@ -693,6 +693,8 @@
 (define/c (parse-program str)
   (-> string? (listof ast-command?))
   (define parsed (syntax->datum (parse-result! (parse-string (syntax/p 6510-program/p) str))))
+  ;; TODO: get metadata for each command (line and original string)
+  ;;       in a second step generate program-counter -> source line map into a file
   (define stripped-src-location-data (map (lambda (command) (filter-meta-data command)) (cadr parsed)))
   (scheme-asm->ast stripped-src-location-data))
 
