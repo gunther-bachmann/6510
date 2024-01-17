@@ -85,7 +85,7 @@
   (check-equal? (XYZ ($10,x))
                 (ast-opcode-cmd '()  '(#xfd #x10)))
   (check-equal? (XYZ (#:line 17 #:org-cmd) ($10,x))
-                (ast-opcode-cmd '()  '(#xfd #x10)))
+                (ast-opcode-cmd '(#:line 17 #:org-cmd) '(#xfd #x10)))
   (check-equal? (XYZ  ($10),y)
                 (ast-opcode-cmd '()  '(#xfc #x10)))
   (check-equal? (XYZ (#:line 17 #:org-cmd) ($10),y)
@@ -166,7 +166,7 @@
      [(indirect-x-addressing? addressings-defs op)
       `(indirect-x-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(indirect-addressing? addressings-defs op)
-      `(indirect-opcode ',addressings-defs ',op)]
+      `(indirect-opcode-w-meta ',addressings-defs ',op ',meta)]
      [else (raise-addressing-error stx addressings-defs 1)])))
 
 (module+ test #|one-op|#

@@ -26,6 +26,7 @@
          immediate-opcode
          immediate-opcode-w-meta
          indirect-opcode
+         indirect-opcode-w-meta
          indirect-x-opcode
          indirect-x-opcode-w-meta
          indirect-y-opcode
@@ -591,6 +592,19 @@
                (low-byte word)
                (high-byte word)))
         (ast-unresolved-opcode-cmd '() (list (cdr (find-addressing-mode 'indirect addressing-modes)))
+                                   word))))
+
+(define/c (indirect-opcode-w-meta addressing-modes op meta)
+  (-> (listof addressing-mode?) any/c list? (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
+  (let ([word (word-operand (car op) #t)])
+    absolute-opcode-w-meta
+    (if (number? word)
+        (ast-opcode-cmd
+         meta
+         (list (cdr (find-addressing-mode 'indirect addressing-modes))
+               (low-byte word)
+               (high-byte word)))
+        (ast-unresolved-opcode-cmd meta (list (cdr (find-addressing-mode 'indirect addressing-modes)))
                                    word))))
 
 (module+ test #| indirect-opcode |#
