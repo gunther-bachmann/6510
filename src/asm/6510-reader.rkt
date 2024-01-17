@@ -101,8 +101,8 @@
            (define program-p2 (->resolve-labels org (label-string-offsets org program-p1) program-p1 '()))
            (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
            (define raw-bytes (resolved-program->bytes program-p3))
-           (create-prg raw-bytes org prg-name)
-           (create-image-with-program raw-bytes org prg-name d64-name (path->string (path-replace-extension f-name "")))
+           ;; (create-prg raw-bytes org prg-name)
+           ;; (create-image-with-program raw-bytes org prg-name d64-name (path->string (path-replace-extension f-name "")))
 
            ;; run when called from racket (C-c C-c)
            (unless (getenv "INSIDE_EMACS")

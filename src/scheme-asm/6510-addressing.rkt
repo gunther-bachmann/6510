@@ -33,13 +33,20 @@
 
 (define-for-syntax (meta-info? stx) 
   (let ([datum (syntax->datum stx)])
-    (and (list? datum)
-       (equal? (car datum)
-               '#:line))))
+    (or
+     (and (list? datum)
+        (equal? (car datum)
+                '#:line))
+     (and (list? datum)
+        (equal? (car datum)
+                'quote)
+        (equal? (caadr datum)
+                '#:line)))))
 
 (module+ test #| meta-info? |#
   (begin-for-syntax
-    (check-true (meta-info? #'(#:line 1 #:org-cmd "some")))))
+    (check-true (meta-info? #'(#:line 1 #:org-cmd "some")))
+    (check-true (meta-info? #'(quote (#:line 1 #:org-cmd "some"))))))
 
 ;; define an opcode with a list of addressing modes and their respecitve byte encoding
 (define-syntax (define-opcode stx)
@@ -74,7 +81,7 @@
 
   (check-equal? (XYZ)
                 (ast-opcode-cmd '()  '(#xff)))
-  (check-equal? (XYZ (#:line 17 #:org-cmd "xyz"))
+  (check-equal? (XYZ '(#:line 17 #:org-cmd "xyz"))
                 (ast-opcode-cmd '(#:line 17 #:org-cmd "xyz") '(#xff)))
   (check-exn exn:fail? (λ () (expand #'(XYZ $))))
   (check-equal? (XYZ $10)
@@ -118,8 +125,8 @@
 (module+ test #| no-op-w-meta |#
   (begin-for-syntax
     (check-equal?
-     (syntax->datum (no-op-w-meta #f #'((implicit . #x10)) #'(#:line 17 #:org-cmd)))
-     '(no-operand-opcode-w-meta 'implicit '((implicit . #x10)) '(#:line 17 #:org-cmd)))))
+     (syntax->datum (no-op-w-meta #f #'((implicit . #x10)) #'(quote (#:line 17 #:org-cmd))))
+     '(no-operand-opcode-w-meta 'implicit '((implicit . #x10)) ''(#:line 17 #:org-cmd)))))
 
 ;; transform the given (having one operand) to a valid operand command given the possible addressing-modes
 (define-for-syntax (one-op stx addressings-defs op)
@@ -159,7 +166,7 @@
      [(relative-addressing? addressings-defs op)
       `(relative-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(word-addressing? 'absolute addressings-defs op)
-      `(absolute-opcode-w-meta ',addressings-defs ',op)]
+      `(absolute-opcode-w-meta ',addressings-defs ',op ,meta)]
      [(immediate-addressing? addressings-defs op)
       `(immediate-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(indirect-x-addressing? addressings-defs op)

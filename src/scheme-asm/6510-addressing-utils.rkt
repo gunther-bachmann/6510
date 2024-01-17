@@ -447,7 +447,7 @@
 
 (define/c (no-operand-opcode-w-meta addressing addressing-modes meta)
   (-> symbol? (listof addressing-mode?) list? ast-opcode-cmd?)
-  (ast-opcode-cmd meta (list (cdr (find-addressing-mode addressing addressing-modes)))))
+  (ast-opcode-cmd (cadr meta) (list (cdr (find-addressing-mode addressing addressing-modes)))))
 
 (module+ test #| opcode-without-operand |#
   (check-equal? (no-operand-opcode 'implicit '((accumulator . #x20) (implicit . #x10)))

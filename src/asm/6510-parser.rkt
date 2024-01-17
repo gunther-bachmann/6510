@@ -453,7 +453,7 @@
   (->* (syntax?) (syntax?) syntax?)
   (datum->syntax actual-opcode-stx
                 (append (opcode->list4pure (syntax->datum actual-opcode-stx))
-                        (list (construct-ref-meta-info actual-opcode-stx operands-stx))
+                        (list (list 'quote (construct-ref-meta-info actual-opcode-stx operands-stx)))
                         (if (void? (syntax->datum operands-stx)) (list) (syntax->datum operands-stx)))
                 actual-opcode-stx))
 
