@@ -207,7 +207,7 @@
      [(abs-or-zero-page-indexed-addressing? possible-ambiguous-indexed-addressing addressings-defs op1 op2)
       `(abs-or-zero-page-indexed-opcode-w-meta ',possible-ambiguous-indexed-addressing ',addressings-defs ',op1 ',op2 ',meta)]
      [(zero-page-indexed-addressing? 'zero-page-x ',x addressings-defs op1 op2)
-      `(zero-page-indexed-opcode 'zero-page-x ',addressings-defs ',op1)]
+      `(zero-page-indexed-opcode-w-meta 'zero-page-x ',addressings-defs ',op1 ',meta)]
      [(zero-page-indexed-addressing? 'zero-page-y ',y addressings-defs op1 op2)
       `(zero-page-indexed-opcode 'zero-page-y ',addressings-defs ',op1)]
      [(absolute-indexed-addressing? 'absolute-x ',x addressings-defs op1 op2)
