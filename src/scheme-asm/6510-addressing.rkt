@@ -211,7 +211,7 @@
      [(zero-page-indexed-addressing? 'zero-page-y ',y addressings-defs op1 op2)
       `(zero-page-indexed-opcode 'zero-page-y ',addressings-defs ',op1)]
      [(absolute-indexed-addressing? 'absolute-x ',x addressings-defs op1 op2)
-      `(absolute-indexed-opcode 'absolute-x ',addressings-defs ',op1)]
+      `(absolute-indexed-opcode-w-meta 'absolute-x ',addressings-defs ',op1)]
      [(absolute-indexed-addressing? 'absolute-y ',y addressings-defs op1 op2)
       `(absolute-indexed-opcode 'absolute-y ',addressings-defs ',op1)]
      [(indirect-y-addressing? addressings-defs op1 op2)

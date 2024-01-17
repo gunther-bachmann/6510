@@ -23,6 +23,7 @@
          absolute-opcode
          absolute-opcode-w-meta
          absolute-indexed-opcode
+         absolute-indexed-opcode-w-meta
          immediate-opcode
          immediate-opcode-w-meta
          indirect-opcode
@@ -625,6 +626,12 @@
 (define/c (absolute-indexed-opcode sym addressing-modes op)
   (-> any/c (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (ast-opcode-cmd '() (list (cdr (find-addressing-mode sym addressing-modes))
+                        (low-byte (word-operand op))
+                        (high-byte (word-operand op)))))
+
+(define/c (absolute-indexed-opcode-w-meta sym addressing-modes op meta)
+  (-> any/c (listof addressing-mode?) any/c list? (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
+  (ast-opcode-cmd meta (list (cdr (find-addressing-mode sym addressing-modes))
                         (low-byte (word-operand op))
                         (high-byte (word-operand op)))))
 
