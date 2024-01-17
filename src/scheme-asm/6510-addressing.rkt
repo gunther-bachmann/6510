@@ -53,7 +53,7 @@
                                      (no-op-w-meta nstx #'addressing-modes #'op)
                                      (one-op nstx #'addressing-modes #'op)))
                ([_ op1 op2]      (if (meta-info? #'op1)
-                                     (one-op nstx #'addressing-modes #'op2)
+                                     (one-op-w-meta nstx #'addressing-modes #'op2 #'op1)
                                      (two-op nstx #'addressing-modes #'op1 #'op2)))
                ([_ meta op1 op2] (if (meta-info? #'meta)
                                      (two-op nstx #'addressing-modes #'op1 #'op2)
@@ -80,7 +80,7 @@
   (check-equal? (XYZ $10)
                 (ast-opcode-cmd '()  '(#xfe #x10)))
   (check-equal? (XYZ (#:line 17 #:org-cmd) $10)
-                (ast-opcode-cmd '()  '(#xfe #x10)))
+                (ast-opcode-cmd '(#:line 17 #:org-cmd) '(#xfe #x10)))
   (check-exn exn:fail? (λ () (expand #'(XYZ no no))))
   (check-equal? (XYZ ($10,x))
                 (ast-opcode-cmd '()  '(#xfd #x10)))
@@ -145,11 +145,38 @@
       `(indirect-opcode ',addressings-defs ',op)]
      [#t (raise-addressing-error stx addressings-defs 1)])))
 
+(define-for-syntax (one-op-w-meta stx addressings-defs op meta)
+  (define possible-ambiguous-addressing '(zero-page  absolute))
+  (datum->syntax
+   stx
+   (cond
+     ;; TODO: fix the other adressing modes, too (zero-page and accumulator already done)
+     [(abs-or-zero-page-addressing? possible-ambiguous-addressing addressings-defs op)
+      `(abs-or-zero-page-opcode ',possible-ambiguous-addressing ',addressings-defs ',op)]
+     [(accumulator-addressing? addressings-defs op)
+      `(no-operand-opcode-w-meta 'accumulator ',addressings-defs ',meta)]
+     [(byte-addressing? 'zero-page addressings-defs op)
+      `(zero-page-opcode-w-meta ',addressings-defs ',op ',meta)]
+     [(relative-addressing? addressings-defs op)
+      `(relative-opcode ',addressings-defs ',op)]
+     [(word-addressing? 'absolute addressings-defs op)
+      `(absolute-opcode ',addressings-defs ',op)]
+     [(immediate-addressing? addressings-defs op)
+      `(immediate-opcode ',addressings-defs ',op)]
+     [(indirect-x-addressing? addressings-defs op)
+      `(indirect-x-opcode ',addressings-defs ',op)]
+     [(indirect-addressing? addressings-defs op)
+      `(indirect-opcode ',addressings-defs ',op)]
+     [else (raise-addressing-error stx addressings-defs 1)])))
+
 (module+ test #|one-op|#
   (begin-for-syntax
     (check-equal?
      (syntax->datum (one-op #f #'((accumulator . #x10)) #'A))
-     (quote (no-operand-opcode 'accumulator '((accumulator . #x10)))))))
+     (quote (no-operand-opcode 'accumulator '((accumulator . #x10)))))
+    (check-equal?
+     (syntax->datum (one-op-w-meta #f #'((accumulator . #x10)) #'A '(#:line 17 #:cmd "add a")))
+     (quote (no-operand-opcode-w-meta 'accumulator '((accumulator . #x10)) '(#:line 17 #:cmd "add a"))))))
 
 ;; transform the given (having two operands) to a vliad operand command given the possible addressing-modes 
 (define-for-syntax (two-op stx addressings-defs op1 op2)
@@ -170,4 +197,4 @@
       `(absolute-indexed-opcode 'absolute-y ',addressings-defs ',op1)]
      [(indirect-y-addressing? addressings-defs op1 op2)      
       `(indirect-y-opcode ',addressings-defs ',op1)]
-     [#t (raise-addressing-error stx addressings-defs 2)])))
+     [else (raise-addressing-error stx addressings-defs 2)])))

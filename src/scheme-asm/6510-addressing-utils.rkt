@@ -28,6 +28,7 @@
          indirect-y-opcode
          relative-opcode
          zero-page-opcode
+         zero-page-opcode-w-meta
          zero-page-indexed-opcode
          no-operand-opcode
          no-operand-opcode-w-meta
@@ -453,6 +454,15 @@
       (ast-opcode-cmd '() (list (cdr (find-addressing-mode 'zero-page addressing-modes))
                             operand))
       (ast-unresolved-opcode-cmd '() (list (cdr (find-addressing-mode 'zero-page addressing-modes)))
+                                 operand)))
+
+(define/c (zero-page-opcode-w-meta addressing-modes op meta)
+  (-> (listof addressing-mode?) any/c list? (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
+  (define operand (byte-operand op))
+  (if (number? operand)
+      (ast-opcode-cmd meta (list (cdr (find-addressing-mode 'zero-page addressing-modes))
+                            operand))
+      (ast-unresolved-opcode-cmd meta (list (cdr (find-addressing-mode 'zero-page addressing-modes)))
                                  operand)))
 
 (define/c (zero-page-indexed-opcode sym addressing-modes op)
