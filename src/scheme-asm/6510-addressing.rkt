@@ -158,7 +158,7 @@
      [(byte-addressing? 'zero-page addressings-defs op)
       `(zero-page-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(relative-addressing? addressings-defs op)
-      `(relative-opcode ',addressings-defs ',op)]
+      `(relative-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(word-addressing? 'absolute addressings-defs op)
       `(absolute-opcode ',addressings-defs ',op)]
      [(immediate-addressing? addressings-defs op)

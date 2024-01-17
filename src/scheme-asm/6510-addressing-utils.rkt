@@ -27,6 +27,7 @@
          indirect-x-opcode
          indirect-y-opcode
          relative-opcode
+         relative-opcode-w-meta
          zero-page-opcode
          zero-page-opcode-w-meta
          zero-page-indexed-opcode
@@ -509,6 +510,17 @@
         (ast-rel-opcode-cmd '() (list opcode operand))
         (ast-unresolved-rel-opcode-cmd
          '()
+         (list opcode)
+         (ast-resolve-byte-scmd (ast-resolve-sub-cmd-label operand) 'relative)))))
+
+(define/c (relative-opcode-w-meta addressing-modes op meta)
+  (-> (listof addressing-mode?) any/c list? (or/c ast-rel-opcode-cmd? ast-unresolved-rel-opcode-cmd?))
+  (let ([operand (byte-operand op #t #t)]
+        [opcode  (cdr (find-addressing-mode 'relative addressing-modes))])
+    (if (number? operand)
+        (ast-rel-opcode-cmd meta (list opcode operand))
+        (ast-unresolved-rel-opcode-cmd
+         meta
          (list opcode)
          (ast-resolve-byte-scmd (ast-resolve-sub-cmd-label operand) 'relative)))))
 
