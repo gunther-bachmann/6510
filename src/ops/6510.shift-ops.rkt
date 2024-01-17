@@ -41,7 +41,7 @@
   (check-equal? (ASL $1000,x)
                 (ast-opcode-cmd '() '(#x1e #x00 #x10)))
   (check-equal? (ASL (#:line 17 #:org-cmd "asl $1000,x") $1000,x)
-                (ast-opcode-cmd '() '(#x1e #x00 #x10))))
+                (ast-opcode-cmd '(#:line 17 #:org-cmd "asl $1000,x") '(#x1e #x00 #x10))))
 
 (define-opcode LSR
   ((zero-page   . #x46)

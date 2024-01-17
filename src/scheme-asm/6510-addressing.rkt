@@ -89,7 +89,7 @@
   (check-equal? (XYZ  ($10),y)
                 (ast-opcode-cmd '()  '(#xfc #x10)))
   (check-equal? (XYZ (#:line 17 #:org-cmd) ($10),y)
-                (ast-opcode-cmd '()  '(#xfc #x10)))
+                (ast-opcode-cmd '(#:line 17 #:org-cmd) '(#xfc #x10)))
   (check-exn exn:fail? (λ () (expand #'(XYZ no ($10),y)))))
 
 ;; transform the given to a no-operand (implicit) command
@@ -209,11 +209,11 @@
      [(zero-page-indexed-addressing? 'zero-page-x ',x addressings-defs op1 op2)
       `(zero-page-indexed-opcode-w-meta 'zero-page-x ',addressings-defs ',op1 ',meta)]
      [(zero-page-indexed-addressing? 'zero-page-y ',y addressings-defs op1 op2)
-      `(zero-page-indexed-opcode 'zero-page-y ',addressings-defs ',op1)]
+      `(zero-page-indexed-opcode-w-meta 'zero-page-y ',addressings-defs ',op1 ',meta)]
      [(absolute-indexed-addressing? 'absolute-x ',x addressings-defs op1 op2)
-      `(absolute-indexed-opcode-w-meta 'absolute-x ',addressings-defs ',op1)]
+      `(absolute-indexed-opcode-w-meta 'absolute-x ',addressings-defs ',op1 ',meta)]
      [(absolute-indexed-addressing? 'absolute-y ',y addressings-defs op1 op2)
-      `(absolute-indexed-opcode 'absolute-y ',addressings-defs ',op1)]
+      `(absolute-indexed-opcode-w-meta 'absolute-y ',addressings-defs ',op1 ',meta)]
      [(indirect-y-addressing? addressings-defs op1 op2)
-      `(indirect-y-opcode ',addressings-defs ',op1)]
+      `(indirect-y-opcode-w-meta ',addressings-defs ',op1 ',meta)]
      [else (raise-addressing-error stx addressings-defs 2)])))
