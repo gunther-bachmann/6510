@@ -27,6 +27,7 @@
          immediate-opcode-w-meta
          indirect-opcode
          indirect-x-opcode
+         indirect-x-opcode-w-meta
          indirect-y-opcode
          relative-opcode
          relative-opcode-w-meta
@@ -511,6 +512,15 @@
       (ast-opcode-cmd '() (list (cdr (find-addressing-mode 'indirect-x addressing-modes))
                             operand))
       (ast-unresolved-opcode-cmd '() (list (cdr (find-addressing-mode 'indirect-x addressing-modes)))
+                                 operand)))
+
+(define/c (indirect-x-opcode-w-meta addressing-modes op meta)
+  (-> (listof addressing-mode?) any/c list? (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
+  (define operand (byte-operand (car op) #t))
+  (if (number? operand)
+      (ast-opcode-cmd meta (list (cdr (find-addressing-mode 'indirect-x addressing-modes))
+                            operand))
+      (ast-unresolved-opcode-cmd meta (list (cdr (find-addressing-mode 'indirect-x addressing-modes)))
                                  operand)))
 
 (define/c (relative-opcode addressing-modes op)

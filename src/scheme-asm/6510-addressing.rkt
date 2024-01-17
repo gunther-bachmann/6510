@@ -164,7 +164,7 @@
      [(immediate-addressing? addressings-defs op)
       `(immediate-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(indirect-x-addressing? addressings-defs op)
-      `(indirect-x-opcode ',addressings-defs ',op)]
+      `(indirect-x-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(indirect-addressing? addressings-defs op)
       `(indirect-opcode ',addressings-defs ',op)]
      [else (raise-addressing-error stx addressings-defs 1)])))
