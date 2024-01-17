@@ -29,10 +29,10 @@
 (define/c (constant->command command res-byte-list)
   (-> ast-command? (listof byte/c) ast-command?)
   (cond [(ast-unresolved-opcode-cmd? command)
-         (ast-opcode-cmd (append (ast-opcode-cmd-bytes command) res-byte-list))]
+         (ast-opcode-cmd '() (append (ast-opcode-cmd-bytes command) res-byte-list))]
         [(ast-unresolved-rel-opcode-cmd? command)
-         (ast-rel-opcode-cmd (append (ast-rel-opcode-cmd-bytes command) res-byte-list))]
-        [#t (raise-user-error "unknown unresolved command")]))
+         (ast-rel-opcode-cmd '()  (append (ast-rel-opcode-cmd-bytes command) res-byte-list))]
+        [else (raise-user-error "unknown unresolved command")]))
 
 ;; append the low and highbyte of value to the command opcode
 (define/c (word-constant->command command value)
@@ -65,7 +65,7 @@
            (hibyte-constant->command command value)]
           [value
            (lobyte-constant->command command value)]
-          [#t command])))
+          [else command])))
 
 ;; get all constant defining commands from the list
 (define/c (constant-definition-commands commands)
@@ -85,16 +85,17 @@
                             (ast-const-word-cmd-word command))]
                    [(ast-const-byte-cmd? command)
                     (values (ast-const-byte-cmd-label command)
-                            (ast-const-byte-cmd-byte command))]))
+                            (ast-const-byte-cmd-byte command))]
+                   [else (raise-user-error "unknown ast const command")]))
            (hash-set hash label value))
          (hash)
          (constant-definition-commands commands)))
 
 (module+ test #| constant-definitions |#
-  (check-equal? (constant-definitions-hash (list (ast-const-byte-cmd "some" #x30)))
+  (check-equal? (constant-definitions-hash (list (ast-const-byte-cmd '() "some" #x30)))
                 '#hash(("some" . #x30)))
-  (check-equal? (constant-definitions-hash (list (ast-const-byte-cmd "some" #x30)
-                                                 (ast-const-word-cmd "other" #x3020)))
+  (check-equal? (constant-definitions-hash (list (ast-const-byte-cmd '() "some" #x30)
+                                                 (ast-const-word-cmd '() "other" #x3020)))
                 '#hash(("some" . #x30)
                        ("other" . #x3020))))
 
@@ -125,7 +126,7 @@
                       (ast-resolve-byte-scmd-mode res)
                       constants
                       command)]
-                    [#t command])))
+                    [else command])))
         (-resolve-constants (append result (list next-result)) constants (cdr commands)))))
 
 ;; resolve all constants in commands using the constants hash
@@ -136,26 +137,31 @@
 (module+ test #| resolve-constants |#
   (check-equal? (resolve-constants '#hash(("some" . #x30))
                                    (list (ast-unresolved-opcode-cmd
+                                          '()
                                           '(#x20)
                                           (ast-resolve-byte-scmd "some" 'low-byte))))
-                (list (ast-opcode-cmd '(#x20 #x30))))
+                (list (ast-opcode-cmd '() '(#x20 #x30))))
   (check-equal? (resolve-constants '#hash(("some" . #x3010))
                                    (list (ast-unresolved-opcode-cmd
+                                          '()
                                           '(#x20)
                                           (ast-resolve-byte-scmd "some" 'high-byte))))
-                (list (ast-opcode-cmd '(#x20 #x30))))
+                (list (ast-opcode-cmd '() '(#x20 #x30))))
   (check-equal? (resolve-constants '#hash(("some" . #x3010))
                                    (list (ast-unresolved-opcode-cmd
+                                          '()
                                           '(#x20)
                                           (ast-resolve-byte-scmd "some" 'low-byte))))
-                (list (ast-opcode-cmd '(#x20 #x10))))
+                (list (ast-opcode-cmd '() '(#x20 #x10))))
   (check-equal? (resolve-constants '#hash(("some" . #x3010))
                                    (list (ast-unresolved-opcode-cmd
+                                          '()
                                           '(#x20)
                                           (ast-resolve-word-scmd "some"))))
-                (list (ast-opcode-cmd '(#x20 #x10 #x30))))
+                (list (ast-opcode-cmd '() '(#x20 #x10 #x30))))
   (check-equal? (resolve-constants '#hash(("other" . #x3010))
                                    (list (ast-unresolved-opcode-cmd
+                                          '()
                                           '(#x20)
                                           (ast-resolve-word-scmd "some"))))
-                (list (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "some")))))
+                (list (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "some")))))

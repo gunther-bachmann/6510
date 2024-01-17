@@ -431,54 +431,63 @@
 
 (define/c (no-operand-opcode addressing addressing-modes)
   (-> symbol? (listof addressing-mode?) ast-opcode-cmd?)
-  (ast-opcode-cmd (list (cdr (find-addressing-mode addressing addressing-modes)))))
+  (ast-opcode-cmd '() (list (cdr (find-addressing-mode addressing addressing-modes)))))
+
 
 (module+ test #| opcode-without-operand |#
   (check-equal? (no-operand-opcode 'implicit '((accumulator . #x20) (implicit . #x10)))
-                (ast-opcode-cmd '(#x10))))
+                (ast-opcode-cmd '() '(#x10))))
+
+(define/c (no-operand-opcode-w-meta addressing addressing-modes meta-info)
+  (-> symbol? (listof addressing-mode?) list? ast-opcode-cmd?)
+  (ast-opcode-cmd meta-info (list (cdr (find-addressing-mode addressing addressing-modes)))))
+
+(module+ test #| no-operand-opcode-w-meta |#
+  (check-equal? (no-operand-opcode-w-meta 'implicit '((accumulator . #x20) (implicit . #x10)) '(#:line 17 #:some))
+                (ast-opcode-cmd '(#:line 17 #:some) '(#x10))))
 
 (define/c (zero-page-opcode addressing-modes op)
   (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (byte-operand op))
   (if (number? operand)
-      (ast-opcode-cmd (list (cdr (find-addressing-mode 'zero-page addressing-modes))
+      (ast-opcode-cmd '() (list (cdr (find-addressing-mode 'zero-page addressing-modes))
                             operand))
-      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'zero-page addressing-modes)))
+      (ast-unresolved-opcode-cmd '() (list (cdr (find-addressing-mode 'zero-page addressing-modes)))
                                  operand)))
 
 (define/c (zero-page-indexed-opcode sym addressing-modes op)
   (-> any/c (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (byte-operand op))
   (if (number? operand)
-      (ast-opcode-cmd (list (cdr (find-addressing-mode sym addressing-modes))
+      (ast-opcode-cmd '() (list (cdr (find-addressing-mode sym addressing-modes))
                             operand))
-      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode sym addressing-modes)))
+      (ast-unresolved-opcode-cmd '() (list (cdr (find-addressing-mode sym addressing-modes)))
                                  operand)))
 
 (define/c (immediate-opcode addressing-modes op)
   (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (immediate-byte-operand op))
   (if (number? operand)
-      (ast-opcode-cmd (list (cdr (find-addressing-mode 'immediate addressing-modes))
+      (ast-opcode-cmd '() (list (cdr (find-addressing-mode 'immediate addressing-modes))
                             operand))
-      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'immediate addressing-modes)))
+      (ast-unresolved-opcode-cmd '() (list (cdr (find-addressing-mode 'immediate addressing-modes)))
                                  operand)))
 
 (module+ test #| immediate opcode |#
   (check-equal? (immediate-opcode '((immediate . #x33)) "!$20")
-                (ast-opcode-cmd '(#x33 #x20)))
+                (ast-opcode-cmd '() '(#x33 #x20)))
   (check-equal? (immediate-opcode '((immediate . #x33)) "!<some")
-                (ast-unresolved-opcode-cmd '(#x33) (ast-resolve-byte-scmd "some" 'low-byte)))
+                (ast-unresolved-opcode-cmd '() '(#x33) (ast-resolve-byte-scmd "some" 'low-byte)))
   (check-equal? (immediate-opcode '((immediate . #x33)) "!>some")
-                (ast-unresolved-opcode-cmd '(#x33) (ast-resolve-byte-scmd "some" 'high-byte))))
+                (ast-unresolved-opcode-cmd '() '(#x33) (ast-resolve-byte-scmd "some" 'high-byte))))
 
 (define/c (indirect-x-opcode addressing-modes op)
   (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (byte-operand (car op) #t))
   (if (number? operand)
-      (ast-opcode-cmd (list (cdr (find-addressing-mode 'indirect-x addressing-modes))
+      (ast-opcode-cmd '() (list (cdr (find-addressing-mode 'indirect-x addressing-modes))
                             operand))
-      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'indirect-x addressing-modes)))
+      (ast-unresolved-opcode-cmd '() (list (cdr (find-addressing-mode 'indirect-x addressing-modes)))
                                  operand)))
 
 (define/c (relative-opcode addressing-modes op)
@@ -486,64 +495,66 @@
   (let ((operand (byte-operand op #t #t))
         (opcode  (cdr (find-addressing-mode 'relative addressing-modes))))
     (if (number? operand)
-        (ast-rel-opcode-cmd (list opcode operand))
+        (ast-rel-opcode-cmd '() (list opcode operand))
         (ast-unresolved-rel-opcode-cmd
+         '()
          (list opcode)
          (ast-resolve-byte-scmd (ast-resolve-sub-cmd-label operand) 'relative)))))
 
 (module+ test #| relative-opcode |#
   (check-equal? (relative-opcode '((relative . #x20)) '$10)
-                (ast-rel-opcode-cmd '(#x20 #x10)))
+                (ast-rel-opcode-cmd '() '(#x20 #x10)))
   (check-equal? (relative-opcode '((relative . #x20)) 'some)
-                (ast-unresolved-rel-opcode-cmd '(#x20) (ast-resolve-byte-scmd "some" 'relative))))
+                (ast-unresolved-rel-opcode-cmd '() '(#x20) (ast-resolve-byte-scmd "some" 'relative))))
 
 (define/c (absolute-opcode addressing-modes op)
   (-> (listof addressing-mode?) any/c ast-opcode-cmd?)
-  (ast-opcode-cmd (list (cdr (find-addressing-mode 'absolute addressing-modes))
+  (ast-opcode-cmd '() (list (cdr (find-addressing-mode 'absolute addressing-modes))
                         (low-byte (word-operand  op))
                         (high-byte (word-operand  op)))))
 
 (module+ test #| absolute-opcode |#
   (check-equal? (absolute-opcode '((absolute . #x20)) '$1000)
-                (ast-opcode-cmd '(#x20 #x00 #x10))))
+                (ast-opcode-cmd '() '(#x20 #x00 #x10))))
 
 (define/c (indirect-y-opcode addressing-modes op)
   (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (define operand (byte-operand (car op) #t))
   (if (number? operand)
-      (ast-opcode-cmd (list (cdr (find-addressing-mode 'indirect-y  addressing-modes))
+      (ast-opcode-cmd '() (list (cdr (find-addressing-mode 'indirect-y  addressing-modes))
                             operand))
-      (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'indirect-y  addressing-modes)))
+      (ast-unresolved-opcode-cmd '() (list (cdr (find-addressing-mode 'indirect-y  addressing-modes)))
                                  operand)))
 
 (module+ test #| indirect-y-opcode |#
   (check-equal? (indirect-y-opcode '((indirect-y . #x20)) '($10))
-                (ast-opcode-cmd '(#x20 #x10))))
+                (ast-opcode-cmd '() '(#x20 #x10))))
 
 (define/c (indirect-opcode addressing-modes op)
   (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (let ((word (word-operand (car op) #t)))
     (if (number? word)
         (ast-opcode-cmd
+         '()
          (list (cdr (find-addressing-mode 'indirect addressing-modes))
                (low-byte word)
                (high-byte word)))
-        (ast-unresolved-opcode-cmd (list (cdr (find-addressing-mode 'indirect addressing-modes)))
+        (ast-unresolved-opcode-cmd '() (list (cdr (find-addressing-mode 'indirect addressing-modes)))
                                    word))))
 
 (module+ test #| indirect-opcode |#
   (check-equal? (indirect-opcode '((indirect . #x20)) '($1000))
-                (ast-opcode-cmd '(#x20 #x00 #x10))))
+                (ast-opcode-cmd '() '(#x20 #x00 #x10))))
 
 (define/c (absolute-indexed-opcode sym addressing-modes op)
   (-> any/c (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
-  (ast-opcode-cmd (list (cdr (find-addressing-mode sym addressing-modes))
+  (ast-opcode-cmd '() (list (cdr (find-addressing-mode sym addressing-modes))
                         (low-byte (word-operand op))
                         (high-byte (word-operand op)))))
 
 (module+ test #| absolute-indexed-opcode |#
   (check-equal? (absolute-indexed-opcode 'absolute-x '((absolute-x . #x20)) '$1000)
-                (ast-opcode-cmd '(#x20 0 16))))
+                (ast-opcode-cmd '() '(#x20 0 16))))
 
 (define (possible-addressings addressing-sym-list addressing-modes op1 op2)
   (-> (listof (cons/c symbol? any/c))
@@ -591,14 +602,15 @@
          (raise-syntax-error 'ambiguous-addressing "no possible addressing mode found")]
         [(= 1 (length possible-addressing-modes))
          (let ((res (hash-ref address-mode-to-resolve-map (caar possible-addressing-modes))))
-           (ast-unresolved-opcode-cmd (list (cdar possible-addressing-modes))
+           (ast-unresolved-opcode-cmd '()
+                                      (list (cdar possible-addressing-modes))
                                       (if (eq? res 'resolve-word)
                                           (ast-resolve-word-scmd (->string op))
                                           (ast-resolve-byte-scmd (->string op) 'low-byte))))]
         [(< 1 (length possible-addressing-modes))
-         (ast-decide-cmd (map (lambda (addressing-mode)
+         (ast-decide-cmd '() (map (lambda (addressing-mode)
                                 (let ((resolve-strategy (hash-ref address-mode-to-resolve-map (car addressing-mode))))
-                                  (ast-unresolved-opcode-cmd
+                                  (ast-unresolved-opcode-cmd '()
                                    (list (cdr addressing-mode))
                                    (cond [(eq? resolve-strategy 'resolve-word)
                                           (ast-resolve-word-scmd (->string op))]
@@ -625,7 +637,7 @@
                    (absolute-y . #x30))
                  'some
                  ',x)
-                (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "some")))
+                (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "some")))
   (check-equal? (abs-or-zero-page-indexed-opcode
                  '((zero-page-x . ,x)
                    (absolute-x . ,x))
@@ -634,9 +646,10 @@
                  'some
                  ',x)
                 (ast-decide-cmd
+                 '()
                  (list
-                  (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "some"))
-                  (ast-unresolved-opcode-cmd '(#x30) (ast-resolve-byte-scmd "some" 'low-byte))))))
+                  (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "some"))
+                  (ast-unresolved-opcode-cmd '()'(#x30) (ast-resolve-byte-scmd "some" 'low-byte))))))
 
 (define/c (abs-or-zero-page-opcode addressing-list addressing-modes op)
   (-> (listof symbol?) (listof addressing-mode?) any/c (or/c ast-unresolved-opcode-cmd? ast-decide-cmd?))

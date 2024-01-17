@@ -41,20 +41,20 @@
 
 (define/contract (encode-string str)
   (-> string? (listof ast-command?))
-  (list (ast-bytes-cmd (list (string-length str)))
-        (ast-bytes-cmd (map char->integer (reverse (string->list str))))))
+  (list (ast-bytes-cmd '()  (list (string-length str)))
+        (ast-bytes-cmd '() (map char->integer (reverse (string->list str))))))
 
 (module+ test #| encode-string |#
   (check-equal? (encode-string "ABC")
                 (list
-                 (ast-bytes-cmd (list 3))
-                 (ast-bytes-cmd (list 67 66 65)))))
+                 (ast-bytes-cmd '() (list 3))
+                 (ast-bytes-cmd '() (list 67 66 65)))))
 
 (define/contract (gen-string-table ctx)
   (-> compile-ctx? (listof ast-command?))
   (append (flatten (list (label STRING-TABLE)
                          (map encode-string (compile-ctx-strings ctx))))
-          (list (ast-bytes-cmd (list 0)))))
+          (list (ast-bytes-cmd '() (list 0)))))
 
 (module+ test #| gen-string-table |#
   (check-equal? (gen-string-table (compile-ctx (list "SOME" "OTHER")))

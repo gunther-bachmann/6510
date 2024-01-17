@@ -79,4 +79,4 @@
 (module+ test #| LDA-immediate |#
   (define locally-defined 2)
   (check-equal? (LDA-immediate (+ 1 locally-defined))
-                (ast-opcode-cmd (list 169 3))))
+                (ast-opcode-cmd '() (list 169 3))))

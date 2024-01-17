@@ -26,7 +26,7 @@
 
 (module+ test #| DEX |#
   (check-equal? (DEX)
-                (ast-opcode-cmd '(#xca))))
+                (ast-opcode-cmd '() '(#xca))))
 
 (define-opcode DEY ((implicit . #x88)))
 
@@ -35,16 +35,16 @@
 
 (module+ test
   (check-match (INC "$10")
-               (ast-opcode-cmd '(#xE6 #x10)))
+               (ast-opcode-cmd '() '(#xE6 #x10)))
 
   (check-match (INC "$10",x)
-               (ast-opcode-cmd '(#xF6 #x10)))
+               (ast-opcode-cmd '() '(#xF6 #x10)))
 
   (check-match (INC "$1000")
-               (ast-opcode-cmd '(#xEE #x00 #x10)))
+               (ast-opcode-cmd '() '(#xEE #x00 #x10)))
 
   (check-match (INC "$1000",x)
-               (ast-opcode-cmd '(#xFE #x00 #x10))))
+               (ast-opcode-cmd '() '(#xFE #x00 #x10))))
 
 (define-opcode INX ((implicit . #xe8)))
 

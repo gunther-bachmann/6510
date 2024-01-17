@@ -165,9 +165,9 @@
         (ast-provide-byte-cmd-label command))))
 
 (module+ test #| ast-provide-cmd-label |#
-  (check-equal? (ast-provide-cmd-label (ast-provide-byte-cmd "some-byte"))
+  (check-equal? (ast-provide-cmd-label (ast-provide-byte-cmd '() "some-byte"))
                 "some-byte")
-  (check-equal? (ast-provide-cmd-label (ast-provide-word-cmd "some-word"))
+  (check-equal? (ast-provide-cmd-label (ast-provide-word-cmd '() "some-word"))
                 "some-word"))
 
 ;; encode one entry of the export table for the provide-command
@@ -184,18 +184,18 @@
            (encode-byte-const const-value label)]
           [(and rel-label (ast-provide-word-cmd? provide-command))
            (encode-word-relative rel-label label)]
-          [#t (raise-user-error "cannot be converted")])))
+          [else (raise-user-error "cannot be converted")])))
 
 (module+ test #| provide-entry |#
-  (check-equal? (provide-entry (ast-provide-word-cmd "some")
+  (check-equal? (provide-entry (ast-provide-word-cmd '() "some")
                                (hash)
                                '#hash(("some" . #xFFD2)))
                  '(2 0 #xD2 #xFF 4 115 111 109 101))
-  (check-equal? (provide-entry (ast-provide-byte-cmd "some")
+  (check-equal? (provide-entry (ast-provide-byte-cmd '() "some")
                                (hash)
                                '#hash(("some" . #xD2)))
                  '(1 #xD2 4 115 111 109 101))
-  (check-equal? (provide-entry (ast-provide-word-cmd "some")
+  (check-equal? (provide-entry (ast-provide-word-cmd '() "some")
                                '#hash(("some" . #x01D2))
                                (hash))
                 '(2 1 #xD2 #x01 4 115 111 109 101)))
@@ -211,11 +211,11 @@
         [(encoded-word-relative? bytes)
          (let-values (((rel label) (decode-word-const bytes)))
            (values (+ 5 (string-length label)) (hash-set labels label rel) constants))]
-        [#t (raise-user-error "cannot be converted")]))
+        [else (raise-user-error "cannot be converted")]))
 
 (module+ test #| provide-entry retrieve-entry |#
   (let-values (((len labels constants)
-                (retrieve-entry (provide-entry (ast-provide-word-cmd "some")
+                (retrieve-entry (provide-entry (ast-provide-word-cmd '() "some")
                                                (hash)
                                                '#hash(("some" . #xFFD2)))
                                 #hash() #hash())))
@@ -223,7 +223,7 @@
     (check-equal? (hash-ref constants "some")
                   #xffd2))
   (let-values (((len labels constants)
-                (retrieve-entry (provide-entry (ast-provide-byte-cmd "some")
+                (retrieve-entry (provide-entry (ast-provide-byte-cmd '() "some")
                                                (hash)
                                                '#hash(("some" . #xD2)))
                                 #hash() #hash())))
@@ -231,7 +231,7 @@
     (check-equal? (hash-ref constants "some")
                   #xd2))
   (let-values (((len labels constants)
-                (retrieve-entry (provide-entry (ast-provide-word-cmd "some")
+                (retrieve-entry (provide-entry (ast-provide-word-cmd '() "some")
                                                '#hash(("some" . #x01D2))
                                                (hash))
                                 #hash() #hash())))
@@ -281,9 +281,9 @@
                  '#hash(("none" . #x01E0))
                  '#hash(("some" . #xFFD2)
                         ("other" . #xC0))
-                 (list (ast-provide-word-cmd "some")
-                       (ast-provide-word-cmd "none")
-                       (ast-provide-byte-cmd "other")))
+                 (list (ast-provide-word-cmd '()  "some")
+                       (ast-provide-word-cmd '()  "none")
+                       (ast-provide-byte-cmd '()  "other")))
                  '(2 0 #xD2 #xFF 4 115 111 109 101
                    2 1 #xE0 #x01 4 110 111 110 101
                    1 #xC0 5 111 116 104 101 114)))
@@ -370,10 +370,10 @@
 
 (module+ test #| import-table-bytes |#
   (check-equal? (import-table-bytes #xfe '() '#hash(("some" . word) ("other" . byte))
-                                    (list(ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "some"))
-                                         (ast-unresolved-opcode-cmd '(#xea) (ast-resolve-byte-scmd "other" 'low-byte))
-                                         (ast-unresolved-opcode-cmd '(#xea) (ast-resolve-byte-scmd "some" 'low-byte))
-                                         (ast-unresolved-opcode-cmd '(#xea) (ast-resolve-byte-scmd "some" 'high-byte))))
+                                    (list(ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "some"))
+                                         (ast-unresolved-opcode-cmd '() '(#xea) (ast-resolve-byte-scmd "other" 'low-byte))
+                                         (ast-unresolved-opcode-cmd '() '(#xea) (ast-resolve-byte-scmd "some" 'low-byte))
+                                         (ast-unresolved-opcode-cmd '() '(#xea) (ast-resolve-byte-scmd "some" 'high-byte))))
                 '(#xff #x00 2 4 115 111 109 101
                   #x02 #x01 1 0 5 111 116 104 101 114
                   #x04 #x01 1 0 4 115 111 109 101
@@ -393,17 +393,17 @@
                [#t collected])))))
 
 (module+ test #| collect-import-hash |#
-  (check-equal? (collect-import-hash (list (ast-require-byte-cmd "some")) #hash())
+  (check-equal? (collect-import-hash (list (ast-require-byte-cmd '() "some")) #hash())
                 #hash(("some" . byte)))
   (check-equal? (collect-import-hash (list) #hash())
                 #hash())
-  (check-equal? (collect-import-hash (list (ast-require-word-cmd "some")) #hash())
+  (check-equal? (collect-import-hash (list (ast-require-word-cmd '() "some")) #hash())
                 #hash(("some" . word)))
   (check-equal? (collect-import-hash
-                 (list (ast-require-byte-cmd "some")
-                       (ast-opcode-cmd '(0 1 2))
-                       (ast-require-word-cmd "other")
-                       (ast-label-def-cmd "label"))
+                 (list (ast-require-byte-cmd '() "some")
+                       (ast-opcode-cmd '() '(0 1 2))
+                       (ast-require-word-cmd '() "other")
+                       (ast-label-def-cmd '() "label"))
                  #hash())
                 #hash(("some" . byte)
                       ("other" . word))))
@@ -481,9 +481,9 @@
   (foldl require-hash (hash) commands))
 
 (module+ test #| require-hashes |#
-  (check-equal? (require-hashes (list (ast-require-word-cmd "some")
-                                      (ast-require-byte-cmd "other")
-                                      (ast-opcode-cmd '(#x20))))
+  (check-equal? (require-hashes (list (ast-require-word-cmd '()  "some")
+                                      (ast-require-byte-cmd '() "other")
+                                      (ast-opcode-cmd '() '(#x20))))
                 '#hash(("some" . word)
                        ("other" . byte))))
 
@@ -498,13 +498,14 @@
       #t))
 
 (module+ test #| -resolvable-cmd |#
-  (check-true (-resolvable-cmd? #hash() '() #hash() (ast-label-def-cmd "sout")))
-  (check-true (-resolvable-cmd? #hash() '() #hash() (ast-opcode-cmd '(#x20 #x10 #x00))))
-  (check-false (-resolvable-cmd? #hash() '() #hash() (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label"))))
-  (check-true (-resolvable-cmd? #hash(("label" . 'byte)) '() #hash() (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label"))))
-  (check-true (-resolvable-cmd? #hash() '() #hash(("label" . 'byte)) (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label"))))
-  (check-true (-resolvable-cmd? #hash() '("label") #hash() (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label"))))
-  (check-true (-resolvable-cmd? #hash() (list (symbol->string 'label)) #hash() (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label")))))
+  (check-true (-resolvable-cmd? #hash() '() #hash() (ast-label-def-cmd '() "sout")))
+  (check-true (-resolvable-cmd? #hash() '() #hash() (ast-opcode-cmd '() '(#x20 #x10 #x00))))
+  (check-false (-resolvable-cmd? #hash() '() #hash() (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "label"))))
+  (check-true (-resolvable-cmd? #hash(("label" . 'byte)) '() #hash() (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "label"))))
+  (check-true (-resolvable-cmd? #hash() '() #hash(("label" . 'byte)) (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "label"))))
+  (check-true (-resolvable-cmd? #hash() '("label") #hash() (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "label")
+                                                            )))
+  (check-true (-resolvable-cmd? #hash() (list (symbol->string 'label)) #hash() (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "label")))))
 
 ;; are the ast-commands resolvable using the given imports, labels and constants
 (define/c (-resolvable? imports-hash labels constants-hash ast-commands)
@@ -537,7 +538,7 @@
 (define/c (unresolved-commands ast-commands)
   (-> (listof ast-command?) (listof ast-command?))
   (-unresolved-commands (collect-import-hash ast-commands #hash())
-                (map (lambda (label-cmd) (ast-label-def-cmd-label label-cmd))
+                        (map (lambda (label-cmd) (ast-label-def-cmd-label label-cmd))
                      (filter ast-label-def-cmd? ast-commands))
                 (constant-definitions-hash ast-commands)
                 ast-commands
@@ -550,46 +551,46 @@
 
 (module+ test #| resolvable? |#
   (check-true (resolvable? (list)))
-  (check-false (resolvable? (list (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-word-scmd "label")))))
-  (check-false (resolvable? (list (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "sout" 'relative)))))
+  (check-false (resolvable? (list (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "label")))))
+  (check-false (resolvable? (list (ast-unresolved-rel-opcode-cmd '() '(#xA9) (ast-resolve-byte-scmd "sout" 'relative)))))
   (check-true (resolvable?
-               (list (ast-label-def-cmd "sout")
-                     (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "sout" 'relative)))))
+               (list (ast-label-def-cmd '() "sout")
+                     (ast-unresolved-rel-opcode-cmd '() '(#xA9) (ast-resolve-byte-scmd "sout" 'relative)))))
   (check-true (resolvable?
-               (list (ast-label-def-cmd "sout")
-                     (ast-const-byte-cmd "my-byte" 65)
-                     (ast-const-word-cmd "my-word" #xffd2)
+               (list (ast-label-def-cmd '() "sout")
+                     (ast-const-byte-cmd '() "my-byte" 65)
+                     (ast-const-word-cmd '() "my-word" #xffd2)
                      (require-word "req-word")
                      (require-byte "req-byte")
-                     (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "sout" 'relative))
-                     (ast-unresolved-opcode-cmd '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte))
-                     (ast-unresolved-opcode-cmd '(#xa5) (ast-resolve-word-scmd "my-word"))
-                     (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-sub-cmd "req-word"))
-                     (ast-unresolved-opcode-cmd '(#xa1) (ast-resolve-byte-scmd "req-byte" 'low-byte)))))
+                     (ast-unresolved-rel-opcode-cmd '() '(#xA9) (ast-resolve-byte-scmd "sout" 'relative))
+                     (ast-unresolved-opcode-cmd '() '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte))
+                     (ast-unresolved-opcode-cmd '() '(#xa5) (ast-resolve-word-scmd "my-word"))
+                     (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-sub-cmd "req-word"))
+                     (ast-unresolved-opcode-cmd '() '(#xa1) (ast-resolve-byte-scmd "req-byte" 'low-byte)))))
   (check-equal? (unresolved-commands
-                 (list (ast-label-def-cmd "repeat")
-                       (ast-const-byte-cmd "my-byte" 65)
-                       (ast-const-word-cmd "my-word" #xffd2)
+                 (list (ast-label-def-cmd '(0) "repeat")
+                       (ast-const-byte-cmd '() "my-byte" 65)
+                       (ast-const-word-cmd '() "my-word" #xffd2)
                        (require-word req-word)
                        (require-byte "req-byte")
-                       (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "repeat" 'relative))
-                       (ast-unresolved-opcode-cmd '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte))
-                       (ast-unresolved-opcode-cmd '(#xa5) (ast-resolve-word-scmd "my-word"))
-                       (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-sub-cmd "req-word"))
-                       (ast-unresolved-opcode-cmd '(#xa1) (ast-resolve-byte-scmd "req-byte" 'low-byte))))
+                       (ast-unresolved-rel-opcode-cmd '() '(#xA9) (ast-resolve-byte-scmd "repeat" 'relative))
+                       (ast-unresolved-opcode-cmd '() '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte))
+                       (ast-unresolved-opcode-cmd '() '(#xa5) (ast-resolve-word-scmd "my-word"))
+                       (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-sub-cmd "req-word"))
+                       (ast-unresolved-opcode-cmd '() '(#xa1) (ast-resolve-byte-scmd "req-byte" 'low-byte))))
                 (list))
   (check-equal? (unresolved-commands
-                 (list (ast-label-def-cmd "sout")
-                       (ast-const-word-cmd "my-word" #xffd2)
+                 (list (ast-label-def-cmd '() "sout")
+                       (ast-const-word-cmd '() "my-word" #xffd2)
                        (require-word "req-word")
                        (require-byte "req-byte")
-                       (ast-unresolved-rel-opcode-cmd '(#xA9) (ast-resolve-byte-scmd "sout" 'relative))
-                       (ast-unresolved-opcode-cmd '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte))
-                       (ast-unresolved-opcode-cmd '(#xa5) (ast-resolve-word-scmd "my-word"))
-                       (ast-unresolved-opcode-cmd '(#x20) (ast-resolve-sub-cmd "req-word"))
-                       (ast-unresolved-opcode-cmd '(#xa1) (ast-resolve-byte-scmd "req-byte" 'low-byte))))
+                       (ast-unresolved-rel-opcode-cmd '() '(#xA9) (ast-resolve-byte-scmd "sout" 'relative))
+                       (ast-unresolved-opcode-cmd '() '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte))
+                       (ast-unresolved-opcode-cmd '() '(#xa5) (ast-resolve-word-scmd "my-word"))
+                       (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-sub-cmd "req-word"))
+                       (ast-unresolved-opcode-cmd '() '(#xa1) (ast-resolve-byte-scmd "req-byte" 'low-byte))))
                 (list
-                 (ast-unresolved-opcode-cmd '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte)))))
+                 (ast-unresolved-opcode-cmd '() '(#xa9) (ast-resolve-byte-scmd "my-byte" 'low-byte)))))
 
 (module+ test #| linking two programs together|#
 

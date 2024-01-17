@@ -27,9 +27,9 @@
 
 (module+ test #| BEQ |#
   (check-equal? (BEQ $10)
-                (ast-rel-opcode-cmd '(#xf0 #x10)))
+                (ast-rel-opcode-cmd '() '(#xf0 #x10)))
   (check-equal? (BEQ some)
-                (ast-unresolved-rel-opcode-cmd '(#xf0) (ast-resolve-byte-scmd "some" 'relative))))
+                (ast-unresolved-rel-opcode-cmd '() '(#xf0) (ast-resolve-byte-scmd "some" 'relative))))
 
 (define-opcode BMI ((relative . #x30)))
 
