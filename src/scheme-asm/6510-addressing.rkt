@@ -160,7 +160,7 @@
      [(relative-addressing? addressings-defs op)
       `(relative-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(word-addressing? 'absolute addressings-defs op)
-      `(absolute-opcode ',addressings-defs ',op)]
+      `(absolute-opcode-w-meta ',addressings-defs ',op)]
      [(immediate-addressing? addressings-defs op)
       `(immediate-opcode ',addressings-defs ',op)]
      [(indirect-x-addressing? addressings-defs op)

@@ -21,6 +21,7 @@
 
          ;; opcode transformers 
          absolute-opcode
+         absolute-opcode-w-meta
          absolute-indexed-opcode
          immediate-opcode
          indirect-opcode
@@ -536,6 +537,12 @@
                         (low-byte (word-operand  op))
                         (high-byte (word-operand  op)))))
 
+(define/c (absolute-opcode-w-meta addressing-modes op meta)
+  (-> (listof addressing-mode?) any/c list? ast-opcode-cmd?)
+  (ast-opcode-cmd meta (list (cdr (find-addressing-mode 'absolute addressing-modes))
+                        (low-byte (word-operand  op))
+                        (high-byte (word-operand  op)))))
+
 (module+ test #| absolute-opcode |#
   (check-equal? (absolute-opcode '((absolute . #x20)) '$1000)
                 (ast-opcode-cmd '() '(#x20 #x00 #x10))))
@@ -556,6 +563,7 @@
 (define/c (indirect-opcode addressing-modes op)
   (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
   (let ((word (word-operand (car op) #t)))
+    absolute-opcode-w-meta
     (if (number? word)
         (ast-opcode-cmd
          '()
