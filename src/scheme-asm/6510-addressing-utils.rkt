@@ -38,6 +38,7 @@
          no-operand-opcode
          no-operand-opcode-w-meta
          abs-or-zero-page-indexed-opcode
+         abs-or-zero-page-indexed-opcode-w-meta
          abs-or-zero-page-opcode
          abs-or-zero-page-opcode-w-meta
          
@@ -714,6 +715,15 @@
               (member (car addressing-mode) pos-addressings))
             addressing-modes))
   (ambiguous-addressing-opcode possible-addressing-modes op1))
+
+(define/c (abs-or-zero-page-indexed-opcode-w-meta addressing-sym-list addressing-modes op1 op2 meta)
+  (-> (listof (cons/c symbol? any/c)) (listof addressing-mode?) any/c any/c list? (or/c ast-unresolved-opcode-cmd? ast-decide-cmd?))
+  (define pos-addressings (possible-addressings addressing-sym-list addressing-modes op1 op2))
+  (define possible-addressing-modes
+    (filter (λ (addressing-mode)
+              (member (car addressing-mode) pos-addressings))
+            addressing-modes))
+  (ambiguous-addressing-opcode-w-meta possible-addressing-modes op1 meta))
 
 (module+ test #| abs-or-zero-page-indexed-opcode |#
   (check-equal? (abs-or-zero-page-indexed-opcode

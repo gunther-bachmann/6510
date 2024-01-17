@@ -56,7 +56,7 @@
                                      (one-op-w-meta nstx #'addressing-modes #'op2 #'op1)
                                      (two-op nstx #'addressing-modes #'op1 #'op2)))
                ([_ meta op1 op2] (if (meta-info? #'meta)
-                                     (two-op nstx #'addressing-modes #'op1 #'op2)
+                                     (two-op-w-meta nstx #'addressing-modes #'op1 #'op2 #'meta)
                                      (raise-addressing-error nstx #'addressings-modes 2)))))))))
 
 (module+ test #| define-opcode |#
@@ -150,7 +150,6 @@
   (datum->syntax
    stx
    (cond
-     ;; TODO: fix the other adressing modes, too (zero-page and accumulator already done)
      [(abs-or-zero-page-addressing? possible-ambiguous-addressing addressings-defs op)
       `(abs-or-zero-page-opcode-w-meta ',possible-ambiguous-addressing ',addressings-defs ',op ',meta)]
      [(accumulator-addressing? addressings-defs op)
@@ -196,5 +195,25 @@
      [(absolute-indexed-addressing? 'absolute-y ',y addressings-defs op1 op2)             
       `(absolute-indexed-opcode 'absolute-y ',addressings-defs ',op1)]
      [(indirect-y-addressing? addressings-defs op1 op2)      
+      `(indirect-y-opcode ',addressings-defs ',op1)]
+     [else (raise-addressing-error stx addressings-defs 2)])))
+
+(define-for-syntax (two-op-w-meta stx addressings-defs op1 op2 meta)
+  (define possible-ambiguous-indexed-addressing
+    '((zero-page-x . ,x) (zero-page-y . ,y) (absolute-x . ,x) (absolute-y . ,y)))
+  (datum->syntax
+   stx
+   (cond
+     [(abs-or-zero-page-indexed-addressing? possible-ambiguous-indexed-addressing addressings-defs op1 op2)
+      `(abs-or-zero-page-indexed-opcode-w-meta ',possible-ambiguous-indexed-addressing ',addressings-defs ',op1 ',op2 ',meta)]
+     [(zero-page-indexed-addressing? 'zero-page-x ',x addressings-defs op1 op2)
+      `(zero-page-indexed-opcode 'zero-page-x ',addressings-defs ',op1)]
+     [(zero-page-indexed-addressing? 'zero-page-y ',y addressings-defs op1 op2)
+      `(zero-page-indexed-opcode 'zero-page-y ',addressings-defs ',op1)]
+     [(absolute-indexed-addressing? 'absolute-x ',x addressings-defs op1 op2)
+      `(absolute-indexed-opcode 'absolute-x ',addressings-defs ',op1)]
+     [(absolute-indexed-addressing? 'absolute-y ',y addressings-defs op1 op2)
+      `(absolute-indexed-opcode 'absolute-y ',addressings-defs ',op1)]
+     [(indirect-y-addressing? addressings-defs op1 op2)
       `(indirect-y-opcode ',addressings-defs ',op1)]
      [else (raise-addressing-error stx addressings-defs 2)])))
