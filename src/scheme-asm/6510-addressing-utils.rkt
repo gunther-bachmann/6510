@@ -34,6 +34,7 @@
          no-operand-opcode-w-meta
          abs-or-zero-page-indexed-opcode
          abs-or-zero-page-opcode
+         abs-or-zero-page-opcode-w-meta
          
          raise-addressing-error)
 
@@ -628,6 +629,29 @@
                               possible-addressing-modes) )]
         [#t (raise-syntax-error 'ambiguous-addressing "no option found for ambiguous address resolution")]))
 
+(define/c (ambiguous-addressing-opcode-w-meta possible-addressing-modes op meta)
+  (-> (listof (cons/c symbol? any/c)) any/c list? (or/c ast-unresolved-opcode-cmd? ast-decide-cmd?))
+  (cond [(empty? possible-addressing-modes)
+         (raise-syntax-error 'ambiguous-addressing "no possible addressing mode found")]
+        [(= 1 (length possible-addressing-modes))
+         (let ([res (hash-ref address-mode-to-resolve-map (caar possible-addressing-modes))])
+           (ast-unresolved-opcode-cmd meta
+                                      (list (cdar possible-addressing-modes))
+                                      (if (eq? res 'resolve-word)
+                                          (ast-resolve-word-scmd (->string op))
+                                          (ast-resolve-byte-scmd (->string op) 'low-byte))))]
+        [(< 1 (length possible-addressing-modes))
+         (ast-decide-cmd meta (map (lambda (addressing-mode)
+                                (let ([resolve-strategy (hash-ref address-mode-to-resolve-map (car addressing-mode))])
+                                  (ast-unresolved-opcode-cmd
+                                   meta
+                                   (list (cdr addressing-mode))
+                                   (cond [(eq? resolve-strategy 'resolve-word)
+                                          (ast-resolve-word-scmd (->string op))]
+                                         [else (ast-resolve-byte-scmd (->string op) 'low-byte)]))))
+                              possible-addressing-modes) )]
+        [else (raise-syntax-error 'ambiguous-addressing "no option found for ambiguous address resolution")]))
+
 (define/c (abs-or-zero-page-indexed-opcode addressing-sym-list addressing-modes op1 op2)
   (-> (listof (cons/c symbol? any/c)) (listof addressing-mode?) any/c any/c (or/c ast-unresolved-opcode-cmd? ast-decide-cmd?))
   (define pos-addressings (possible-addressings addressing-sym-list addressing-modes op1 op2))
@@ -672,6 +696,18 @@
               (member (car addressing-mode) pos-addressings))
             addressing-modes))
   (ambiguous-addressing-opcode possible-addressing-modes op))
+
+(define/c (abs-or-zero-page-opcode-w-meta addressing-list addressing-modes op meta)
+  (-> (listof symbol?) (listof addressing-mode?) any/c list? (or/c ast-unresolved-opcode-cmd? ast-decide-cmd?))
+  (define pos-addressings
+    (filter (lambda (addressing)
+              (has-addressing-mode? addressing addressing-modes))
+            addressing-list))
+  (define possible-addressing-modes
+    (filter (λ (addressing-mode)
+              (member (car addressing-mode) pos-addressings))
+            addressing-modes))
+  (ambiguous-addressing-opcode-w-meta possible-addressing-modes op meta))
 
 (define/c (raise-addressing-error stx addressing-modes-stx num)
   (-> syntax? syntax? exact-integer? syntax?)

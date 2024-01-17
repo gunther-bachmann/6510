@@ -72,9 +72,9 @@
                        (ast-unresolved-opcode-cmd '() '(#xae) (ast-resolve-word-scmd "hello")))))
   (check-equal? (LDX (#:line 17 :#org-cmd "ldx hello") hello)
                 (ast-decide-cmd
-                 '()
-                 (list (ast-unresolved-opcode-cmd '() '(#xa6) (ast-resolve-byte-scmd "hello" 'low-byte))
-                       (ast-unresolved-opcode-cmd '() '(#xae) (ast-resolve-word-scmd "hello"))))))
+                 '(#:line 17 :#org-cmd "ldx hello")
+                 (list (ast-unresolved-opcode-cmd '(#:line 17 :#org-cmd "ldx hello") '(#xa6) (ast-resolve-byte-scmd "hello" 'low-byte))
+                       (ast-unresolved-opcode-cmd '(#:line 17 :#org-cmd "ldx hello") '(#xae) (ast-resolve-word-scmd "hello"))))))
 
 (define-opcode LDY
   ((immediate   . #xA0)

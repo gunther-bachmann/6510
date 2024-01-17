@@ -152,7 +152,7 @@
    (cond
      ;; TODO: fix the other adressing modes, too (zero-page and accumulator already done)
      [(abs-or-zero-page-addressing? possible-ambiguous-addressing addressings-defs op)
-      `(abs-or-zero-page-opcode ',possible-ambiguous-addressing ',addressings-defs ',op)]
+      `(abs-or-zero-page-opcode-w-meta ',possible-ambiguous-addressing ',addressings-defs ',op ',meta)]
      [(accumulator-addressing? addressings-defs op)
       `(no-operand-opcode-w-meta 'accumulator ',addressings-defs ',meta)]
      [(byte-addressing? 'zero-page addressings-defs op)
