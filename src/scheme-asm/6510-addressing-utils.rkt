@@ -30,6 +30,7 @@
          zero-page-opcode
          zero-page-indexed-opcode
          no-operand-opcode
+         no-operand-opcode-w-meta
          abs-or-zero-page-indexed-opcode
          abs-or-zero-page-opcode
          
@@ -433,14 +434,13 @@
   (-> symbol? (listof addressing-mode?) ast-opcode-cmd?)
   (ast-opcode-cmd '() (list (cdr (find-addressing-mode addressing addressing-modes)))))
 
+(define/c (no-operand-opcode-w-meta addressing addressing-modes meta)
+  (-> symbol? (listof addressing-mode?) list? ast-opcode-cmd?)
+  (ast-opcode-cmd meta (list (cdr (find-addressing-mode addressing addressing-modes)))))
 
 (module+ test #| opcode-without-operand |#
   (check-equal? (no-operand-opcode 'implicit '((accumulator . #x20) (implicit . #x10)))
                 (ast-opcode-cmd '() '(#x10))))
-
-(define/c (no-operand-opcode-w-meta addressing addressing-modes meta-info)
-  (-> symbol? (listof addressing-mode?) list? ast-opcode-cmd?)
-  (ast-opcode-cmd meta-info (list (cdr (find-addressing-mode addressing addressing-modes)))))
 
 (module+ test #| no-operand-opcode-w-meta |#
   (check-equal? (no-operand-opcode-w-meta 'implicit '((accumulator . #x20) (implicit . #x10)) '(#:line 17 #:some))

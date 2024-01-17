@@ -190,7 +190,7 @@
   #:guard (struct-guard/c list? string? word/c))
 
 (module+ test #| struct type |#
-  (define opcode-example (ast-unresolved-opcode-cmd '() '(#x20) (ast-resolve-word-scmd "label")))
+  (define opcode-example (ast-unresolved-opcode-cmd '(#:line 15 #:cmd "hello") '(#x20) (ast-resolve-word-scmd "label")))
   (define decide-example (ast-decide-cmd '() (list opcode-example)))
   (define opcode-resolved (ast-opcode-cmd '() '(#x20 #xd2 #xff)))
 

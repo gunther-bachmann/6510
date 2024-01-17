@@ -32,7 +32,7 @@
     (require rackunit)))
 
 (define-for-syntax (meta-info? stx) 
-  (let ((datum (syntax->datum stx)))
+  (let ([datum (syntax->datum stx)])
     (and (list? datum)
        (equal? (car datum)
                '#:line))))
@@ -50,7 +50,7 @@
              (syntax-case nstx ()
                ([_]              (no-op nstx #'addressing-modes))
                ([_ op]           (if (meta-info? #'op)
-                                     (no-op  nstx #'addressing-modes)
+                                     (no-op-w-meta nstx #'addressing-modes #'op)
                                      (one-op nstx #'addressing-modes #'op)))
                ([_ op1 op2]      (if (meta-info? #'op1)
                                      (one-op nstx #'addressing-modes #'op2)
@@ -75,7 +75,7 @@
   (check-equal? (XYZ)
                 (ast-opcode-cmd '()  '(#xff)))
   (check-equal? (XYZ (#:line 17 #:org-cmd "xyz"))
-                (ast-opcode-cmd '()  '(#xff)))
+                (ast-opcode-cmd '(#:line 17 #:org-cmd "xyz") '(#xff)))
   (check-exn exn:fail? (λ () (expand #'(XYZ $))))
   (check-equal? (XYZ $10)
                 (ast-opcode-cmd '()  '(#xfe #x10)))
@@ -112,14 +112,14 @@
    stx
    (cond
      [(implicit-addressing? addressings-defs)
-      `(no-operand-opcode 'implicit ',addressings-defs ',meta)]
+      `(no-operand-opcode-w-meta 'implicit ',addressings-defs ',meta)]
      [else (raise-addressing-error stx addressings-defs 0)])))
 
 (module+ test #| no-op-w-meta |#
   (begin-for-syntax
     (check-equal?
      (syntax->datum (no-op-w-meta #f #'((implicit . #x10)) #'(#:line 17 #:org-cmd)))
-     '(no-operand-opcode 'implicit '((implicit . #x10)) '(#:line 17 #:org-cmd)))))
+     '(no-operand-opcode-w-meta 'implicit '((implicit . #x10)) '(#:line 17 #:org-cmd)))))
 
 ;; transform the given (having one operand) to a valid operand command given the possible addressing-modes
 (define-for-syntax (one-op stx addressings-defs op)
