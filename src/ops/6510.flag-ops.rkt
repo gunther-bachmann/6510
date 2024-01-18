@@ -22,7 +22,7 @@
 (define-opcode CLC ((implicit . #x18)))
 
 (module+ test
-  (check-equal? (CLC (#:line 10 #:org-cmd "clc"))
+  (check-equal? (CLC '(#:line 10 #:org-cmd "clc"))
                 (ast-opcode-cmd '(#:line 10 #:org-cmd "clc") '(#x18))))
 
 (define-opcode CLD ((implicit . #xd8)))

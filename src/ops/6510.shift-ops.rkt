@@ -28,11 +28,11 @@
 (module+ test #| ASL |#
   (check-equal? (ASL A)
                 (ast-opcode-cmd '() '(#x0a)))
-  (check-equal? (ASL (#:line 17 #:org-cmd "asl a") A)
+  (check-equal? (ASL '(#:line 17 #:org-cmd "asl a") A)
                 (ast-opcode-cmd '(#:line 17 #:org-cmd "asl a") '(#x0a)))
   (check-equal? (ASL $10)
                 (ast-opcode-cmd '() '(#x06 #x10)))
-  (check-equal? (ASL (#:line 17 #:org-cmd "asl $10") $10)
+  (check-equal? (ASL '(#:line 17 #:org-cmd "asl $10") $10)
                 (ast-opcode-cmd '(#:line 17 #:org-cmd "asl $10") '(#x06 #x10)))
   (check-equal? (ASL $10,x)
                 (ast-opcode-cmd '() '(#x16 #x10)))
@@ -40,7 +40,7 @@
                 (ast-opcode-cmd '() '(#x0e #x00 #x10)))
   (check-equal? (ASL $1000,x)
                 (ast-opcode-cmd '() '(#x1e #x00 #x10)))
-  (check-equal? (ASL (#:line 17 #:org-cmd "asl $1000,x") $1000,x)
+  (check-equal? (ASL '(#:line 17 #:org-cmd "asl $1000,x") $1000,x)
                 (ast-opcode-cmd '(#:line 17 #:org-cmd "asl $1000,x") '(#x1e #x00 #x10))))
 
 (define-opcode LSR

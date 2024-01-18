@@ -86,16 +86,16 @@
   (check-exn exn:fail? (λ () (expand #'(XYZ $))))
   (check-equal? (XYZ $10)
                 (ast-opcode-cmd '()  '(#xfe #x10)))
-  (check-equal? (XYZ (#:line 17 #:org-cmd) $10)
+  (check-equal? (XYZ '(#:line 17 #:org-cmd) $10)
                 (ast-opcode-cmd '(#:line 17 #:org-cmd) '(#xfe #x10)))
   (check-exn exn:fail? (λ () (expand #'(XYZ no no))))
   (check-equal? (XYZ ($10,x))
                 (ast-opcode-cmd '()  '(#xfd #x10)))
-  (check-equal? (XYZ (#:line 17 #:org-cmd) ($10,x))
+  (check-equal? (XYZ '(#:line 17 #:org-cmd) ($10,x))
                 (ast-opcode-cmd '(#:line 17 #:org-cmd) '(#xfd #x10)))
   (check-equal? (XYZ  ($10),y)
                 (ast-opcode-cmd '()  '(#xfc #x10)))
-  (check-equal? (XYZ (#:line 17 #:org-cmd) ($10),y)
+  (check-equal? (XYZ '(#:line 17 #:org-cmd) ($10),y)
                 (ast-opcode-cmd '(#:line 17 #:org-cmd) '(#xfc #x10)))
   (check-exn exn:fail? (λ () (expand #'(XYZ no ($10),y)))))
 
@@ -150,7 +150,7 @@
       `(indirect-x-opcode ',addressings-defs ',op)]
      [(indirect-addressing? addressings-defs op)
       `(indirect-opcode ',addressings-defs ',op)]
-     [#t (raise-addressing-error stx addressings-defs 1)])))
+     [else (raise-addressing-error stx addressings-defs 1)])))
 
 (define-for-syntax (one-op-w-meta stx addressings-defs op meta)
   (define possible-ambiguous-addressing '(zero-page  absolute))
@@ -166,7 +166,7 @@
      [(relative-addressing? addressings-defs op)
       `(relative-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(word-addressing? 'absolute addressings-defs op)
-      `(absolute-opcode-w-meta ',addressings-defs ',op ,meta)]
+      `(absolute-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(immediate-addressing? addressings-defs op)
       `(immediate-opcode-w-meta ',addressings-defs ',op ',meta)]
      [(indirect-x-addressing? addressings-defs op)

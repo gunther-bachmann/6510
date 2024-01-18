@@ -70,7 +70,7 @@
                  '()
                  (list (ast-unresolved-opcode-cmd '() '(#xa6) (ast-resolve-byte-scmd "hello" 'low-byte))
                        (ast-unresolved-opcode-cmd '() '(#xae) (ast-resolve-word-scmd "hello")))))
-  (check-equal? (LDX (#:line 17 :#org-cmd "ldx hello") hello)
+  (check-equal? (LDX '(#:line 17 :#org-cmd "ldx hello") hello)
                 (ast-decide-cmd
                  '(#:line 17 :#org-cmd "ldx hello")
                  (list (ast-unresolved-opcode-cmd '(#:line 17 :#org-cmd "ldx hello") '(#xa6) (ast-resolve-byte-scmd "hello" 'low-byte))
