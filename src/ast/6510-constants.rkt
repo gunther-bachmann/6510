@@ -29,9 +29,9 @@
 (define/c (constant->command command res-byte-list)
   (-> ast-command? (listof byte/c) ast-command?)
   (cond [(ast-unresolved-opcode-cmd? command)
-         (ast-opcode-cmd '() (append (ast-opcode-cmd-bytes command) res-byte-list))]
+         (ast-opcode-cmd (ast-command-meta-information command) (append (ast-opcode-cmd-bytes command) res-byte-list))]
         [(ast-unresolved-rel-opcode-cmd? command)
-         (ast-rel-opcode-cmd '()  (append (ast-rel-opcode-cmd-bytes command) res-byte-list))]
+         (ast-rel-opcode-cmd (ast-command-meta-information command) (append (ast-rel-opcode-cmd-bytes command) res-byte-list))]
         [else (raise-user-error "unknown unresolved command")]))
 
 ;; append the low and highbyte of value to the command opcode
