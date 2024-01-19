@@ -14,7 +14,12 @@
 (module+ test #| require |#
   (require "../6510-test-utils.rkt"))
 
-(provide ->resolved-decisions label-instructions ->resolve-labels resolved-program->bytes commands->bytes)
+(provide resolved-instruction->bytes
+         ->resolved-decisions
+         label-instructions
+         ->resolve-labels
+         resolved-program->bytes
+         commands->bytes)
 
 ;; is this instruction introducing a label referencing a byte value (e.g. constant def)?
 (define/c (byte-label-cmd? instruction)
@@ -329,27 +334,32 @@
          (ast-opcode-cmd '(#:test) '(202))
          (ast-rel-opcode-cmd '(#:test) '(208 247)))))
 
+
+(define/c (resolved-instruction->bytes instruction)
+  (-> ast-command? (listof byte/c))
+  (cond
+    [(ast-unresolved-command? instruction)
+     (raise-user-error "cannot resolve unresolved command to bytes ~a" instruction)]
+    [(ast-decide-cmd? instruction)
+     (raise-user-error "cannot resolve undecided command to bytes ~a" instruction)]
+    [(ast-opcode-cmd? instruction)
+     (ast-opcode-cmd-bytes instruction)]
+    [(ast-rel-opcode-cmd? instruction)
+     (ast-rel-opcode-cmd-bytes instruction)]
+    [(ast-bytes-cmd? instruction)
+     (ast-bytes-cmd-bytes instruction)]
+    [(ast-const? instruction) '()]
+    [(ast-require? instruction) '()]
+    [(ast-provide? instruction) '()]
+    [(ast-label-def-cmd? instruction) '()]
+    [else (raise-user-error "cannot resolve instruction to bytes ~a" instruction)]))
+
 (define/c (-resolved-program->bytes program resolved)
   (-> (listof ast-command?) (listof byte/c) (listof byte/c))
   (if (empty? program)
       resolved
       (let* ((instruction (car program))
-             (bytes       (cond
-                            [(ast-unresolved-command? instruction)
-                             (raise-user-error "cannot resolve unresolved command to bytes ~a" instruction)]
-                            [(ast-decide-cmd? instruction)
-                             (raise-user-error "cannot resolve undecided command to bytes ~a" instruction)]
-                            [(ast-opcode-cmd? instruction)
-                             (ast-opcode-cmd-bytes instruction)]
-                            [(ast-rel-opcode-cmd? instruction)
-                             (ast-rel-opcode-cmd-bytes instruction)]
-                            [(ast-bytes-cmd? instruction)
-                             (ast-bytes-cmd-bytes instruction)]
-                            [(ast-const? instruction) '()]
-                            [(ast-require? instruction) '()]
-                            [(ast-provide? instruction) '()]
-                            [(ast-label-def-cmd? instruction) '()]
-                            [else (raise-user-error "cannot resolve instruction to bytes ~a" instruction)])))
+             (bytes       (resolved-instruction->bytes instruction)))
         (-resolved-program->bytes (cdr program) (append resolved bytes)))))
 
 ;; transform a resolved PROGRAM into a list of bytes

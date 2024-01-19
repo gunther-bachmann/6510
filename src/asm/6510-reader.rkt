@@ -63,7 +63,8 @@
                 [(6510-interpreter-folder) (string-append folder-prefix "/src/tools/6510-interpreter.rkt")]
                 [(6510-prg-generator-folder) (string-append folder-prefix "/src/tools/6510-prg-generator.rkt")]
                 [(6510-debugger-folder) (string-append folder-prefix "/src/tools/6510-debugger.rkt")]
-                [(6510-constants-folder) (string-append folder-prefix "/src/ast/6510-constants.rkt")])
+                [(6510-constants-folder) (string-append folder-prefix "/src/ast/6510-constants.rkt")]
+                [(6510-source-map-folder) (string-append folder-prefix "/src/tools/6510-source-map.rkt")])
     (with-syntax ([(str ...) parsed-opcodes]
                   [(sy-str ...) unenc-prg]
                   [org origin]
@@ -76,7 +77,8 @@
                   [6510-interpreter-folder 6510-interpreter-folder]
                   [6510-prg-generator-folder 6510-prg-generator-folder]
                   [6510-debugger-folder 6510-debugger-folder]
-                  [6510-constants-folder 6510-constants-folder])
+                  [6510-constants-folder 6510-constants-folder]
+                  [6510-source-map-folder 6510-source-map-folder])
       (strip-context
        #`(module compiled6510 racket
            (require 6510-folder)
@@ -86,6 +88,7 @@
            (require 6510-prg-generator-folder)
            (require 6510-debugger-folder)
            (require 6510-constants-folder)
+           (require 6510-source-map-folder)
            (provide program
                     program-p1
                     program-p2
@@ -100,8 +103,8 @@
            (define program-p1 (->resolved-decisions (label-instructions program) program))
            (define program-p2 (->resolve-labels org (label-string-offsets org program-p1) program-p1 '()))
            (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
-           ;; TODO extract debugging info from program-p3 and use it for the debugger
            (define raw-bytes (resolved-program->bytes program-p3))
+           (create-source-map raw-bytes org (path->string f-name) program-p3 )
            (create-prg raw-bytes org prg-name)
            (create-image-with-program raw-bytes org prg-name d64-name (path->string (path-replace-extension f-name "")))
 
