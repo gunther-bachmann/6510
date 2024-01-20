@@ -15,6 +15,7 @@ this file is an example of how the native compilation of a mil could look like
 ;; (require "../tools/6510-interpreter.rkt")
 (require "../tools/6510-debugger.rkt")
 (require "../ast/6510-constants.rkt")
+(require (only-in "../tools/6510-source-map.rkt" create-source-map))
 
 (module+ test
   (require rackunit))
@@ -285,7 +286,8 @@ this file is an example of how the native compilation of a mil could look like
 ;; (define executable-program (with-program-counter data org))
 
 (module+ main
+  (create-source-map raw-bytes org "example-mil-asm.rkt" program-p3 )
   (create-prg raw-bytes org "example-mil-asm.prg")
   (create-image-with-program raw-bytes org "example-mil-asm.prg" "example-mil-asm.d64" ".")
 
-  (run-debugger org raw-bytes))
+  (run-debugger org raw-bytes "example-mil-asm.rkt"))

@@ -113,7 +113,7 @@
              (displayln "(have a look at raw-program, program, program-p1, program-p2, program-p3 or raw-bytes)")
              (displayln (format "execute the program in vice via (run-emulator \"~a\")" d64-name))
              (displayln (format "execute interpreter via (run-interpreter ~a raw-bytes)" org))
-             (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes)" org)))
+             (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes \"~a\")" org (path->string f-name))))
 
            ;; run when called from cli
            (module+ main
