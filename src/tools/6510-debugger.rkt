@@ -19,6 +19,8 @@
 (require (only-in "../ast/6510-command.rkt" ast-command?))
 (require (only-in "../ast/6510-assembler.rkt" assemble))
 (require (only-in "./6510-debugger-sync-source.rkt" remove-overlay-source load-source-map overlay-source pc-source-map-entry? pc-source-map-entry-file pc-source-map-entry-line))
+(require (only-in "./6510-processor-display.rkt" 6510-proc-buffer-display 6510-proc-buffer-kill))
+(require "6510-debugger-shared.rkt")
 
 (provide run-debugger)
 
@@ -52,15 +54,6 @@
         [(string=? flag "z")
          (if set (set-zero-flag c-state) (clear-zero-flag c-state))]
         [else c-state]))
-
-(struct breakpoint (description fn)
-  #:transparent
-  #:guard (struct-guard/c string? any/c))
-
-(struct debug-state (states breakpoints pc-source-map)
-  #:guard (struct-guard/c (listof cpu-state?)
-                          (listof breakpoint?)
-                          (hash/c nonnegative-integer? pc-source-map-entry?)))
 
 (define/c (debugger--help d-state)
   (-> debug-state? debug-state?)
@@ -361,12 +354,15 @@ EOF
                               #f))
     (when s-entry
       (overlay-source (pc-source-map-entry-file s-entry) (pc-source-map-entry-line s-entry)))
+    (6510-proc-buffer-display d-state)
     (display (format "Step-Debugger[~x] > " (length (debug-state-states d-state))))
     (flush-output)
     (define input (begin (readline "")))
+    (when s-entry (remove-overlay-source (pc-source-map-entry-file s-entry)))
     #:break (string=? input "q")
     (set! d-state
-          (dispatch-debugger-command input d-state))))
+          (dispatch-debugger-command input d-state)))
+  (6510-proc-buffer-kill))
 
 ;; (run-debugger #xc000 (list #xa9 #x41 #x48 #x20 #xd2 #xff #x00))
 

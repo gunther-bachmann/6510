@@ -75,6 +75,7 @@
          -pokem
          poke
          print-state
+         state->string
          reset-cpu
          run
          run-interpreter

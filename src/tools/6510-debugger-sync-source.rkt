@@ -46,8 +46,10 @@
 ;; display an overlay on the given source file at position of the program counter
 (define/c (overlay-source file-name line)
   (-> string? nonnegative-integer? any/c)
-  (process (format "emacsclient -e \"(6510-debugger--overlay-source \\\"~a\\\" ~a)\"" file-name (add1 line))))
+  (parameterize ([current-output-port (open-output-nowhere)])
+    (system* (find-executable-path "emacsclient") "-e" (format "(6510-debugger--overlay-source \"~a\" ~a)" file-name (add1 line)))))
 
 (define/c (remove-overlay-source file-name)
   (-> string? any/c)
-  (process (format "emacsclient -e \"(6510-debugger--remove-overlay-source \\\"~a\\\")\"" file-name)))
+  (parameterize ([current-output-port (open-output-nowhere)])
+    (system* (find-executable-path "emacsclient") "-e" (format "(6510-debugger--remove-overlay-source \"~a\")" file-name))))
