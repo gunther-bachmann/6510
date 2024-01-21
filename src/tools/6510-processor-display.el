@@ -1,12 +1,12 @@
 ;; emacs code to display processor status
 
 ;; window configuration
-;; (setopt
-;;  display-buffer-alist
-;;  '(("^\\* 6510 processor \\*$"
-;;     (display-buffer-below-selected display-buffer-at-bottom)
-;;     (inhibit-same-window . t)
-;;     (window-height . 4))))
+(setopt
+ display-buffer-alist
+ '(("^\\* 6510 processor \\*$"
+    (display-buffer-below-selected display-buffer-at-bottom)
+    (inhibit-same-window . t)
+    (window-height . 6))))
 
 (defconst 6510-proc-buffer-name "* 6510 processor *")
 

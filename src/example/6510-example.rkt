@@ -18,7 +18,7 @@ LINE-FEED = %00001101 ; $0d
         ;; hello+1: last byte to print
         ; ... hello+n: first byte to print
         ldx hello
-sout:   lda hello,x
+sout:   lda hello,x ;; a long comment that might be overridden by the disassembled code and the bytes encoding
         jsr ROM-COUT
         dex
         bne sout

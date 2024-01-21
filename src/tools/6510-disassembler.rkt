@@ -20,7 +20,7 @@
                   peek-pc+1
                   peek-word-at-pc+1))
 
-(provide disassemble disassemble-single)
+(provide disassemble disassemble-single code-bytes)
 
 (module+ test #| rackunit |#
   (require (only-in "6510-interpreter.rkt" poke with-flags initialize-cpu))

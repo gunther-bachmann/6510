@@ -13,12 +13,20 @@
 (require "../6510-utils.rkt")
 (require "6510-interpreter.rkt")
 (require (only-in "../asm/6510-parser.rkt" asm->ast))
-(require (only-in "6510-disassembler.rkt" disassemble disassemble-single))
+(require (only-in "6510-disassembler.rkt" disassemble disassemble-single code-bytes))
 (require (only-in "../ast/6510-resolver.rkt" commands->bytes))
 (require (only-in racket/fixnum fx+))
 (require (only-in "../ast/6510-command.rkt" ast-command?))
 (require (only-in "../ast/6510-assembler.rkt" assemble))
-(require (only-in "./6510-debugger-sync-source.rkt" remove-overlay-source load-source-map overlay-source pc-source-map-entry? pc-source-map-entry-file pc-source-map-entry-line))
+(require (only-in "./6510-debugger-sync-source.rkt"
+                  remove-source-addresses
+                  instrument-source-with-address
+                  remove-overlay-source
+                  load-source-map
+                  overlay-source
+                  pc-source-map-entry?
+                  pc-source-map-entry-file
+                  pc-source-map-entry-line))
 (require (only-in "./6510-processor-display.rkt" 6510-proc-buffer-display 6510-proc-buffer-kill))
 (require "6510-debugger-shared.rkt")
 
@@ -337,6 +345,13 @@ EOF
                      (displayln "(unknown command, enter '?' to get help)") )
                    d-state)]))
 
+(define/c (create-debug-overlay c-state)
+  (-> cpu-state? string?)
+  (define address (cpu-state-program-counter c-state))
+  (let-values (((str len) (disassemble-single c-state address)))
+    (define code-byte-str (code-bytes c-state address len))
+    (format "~a (~a)" str code-byte-str)))
+
 ;; run an read eval print loop debugger on the passed program
 (define/c (run-debugger org program file-name (verbose #t))
   (->* (word/c (listof (or/c byte/c ast-command?)) string?) (boolean?) any/c)
@@ -347,13 +362,17 @@ EOF
     (displayln (format "loading program into debugger at ~a" org))
     (displayln "enter '?' to get help, enter 'q' to quit"))
   (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '() (load-source-map file-name)))
+  (instrument-source-with-address file-name (debug-state-pc-source-map d-state))
   (for ([_ (in-naturals)])
+    (define c-state (car (debug-state-states d-state)))
     (displayln "")
     (define s-entry (hash-ref (debug-state-pc-source-map d-state)
-                              (cpu-state-program-counter (car (debug-state-states d-state)))
+                              (cpu-state-program-counter c-state)
                               #f))
     (when s-entry
-      (overlay-source (pc-source-map-entry-file s-entry) (pc-source-map-entry-line s-entry)))
+      (overlay-source (pc-source-map-entry-file s-entry)
+                      (pc-source-map-entry-line s-entry)
+                      (create-debug-overlay c-state)))
     (6510-proc-buffer-display d-state)
     (display (format "Step-Debugger[~x] > " (length (debug-state-states d-state))))
     (flush-output)
@@ -362,7 +381,8 @@ EOF
     #:break (string=? input "q")
     (set! d-state
           (dispatch-debugger-command input d-state)))
-  (6510-proc-buffer-kill))
+  (6510-proc-buffer-kill)
+  (remove-source-addresses file-name))
 
 ;; (run-debugger #xc000 (list #xa9 #x41 #x48 #x20 #xd2 #xff #x00))
 
