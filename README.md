@@ -133,7 +133,6 @@ To generate coverage for all racket files, run `raco cover src/*.rkt` and open `
 
 ### Next
 
-- FEATURE: mark changes in proc window with red color
 - FEATURE: combine elisp functions in package, add to emacs init (to autoload integration)
 - FEATURE: make emacs integration optional (opt out)
 - FEATURE: don't output status information during debugging, when proc status and source is visible

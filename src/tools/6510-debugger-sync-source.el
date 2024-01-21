@@ -7,7 +7,7 @@
       (unless hl-line-mode (hl-line-mode 1))
       (goto-line line)
       (let ((ov (make-overlay (line-beginning-position) (line-end-position))))
-        (ov-set ov 'before-string (propertize pc-str 'face 'font-lock-doc-face))))))
+        (ov-set ov 'before-string (propertize pc-str 'font-lock-face 'font-lock-doc-face))))))
 
 (defun 6510-debugger--remove-overlay-source-lines (file-name)
   (when-let ((buffer (find-buffer-visiting (format "./%s" file-name))))
@@ -36,7 +36,7 @@
                            (min (line-end-position)
                                 (+ (line-beginning-position) column)))))
     (ov-set ov 'after-string (propertize (format "%s%s" prefix str)
-                                         'face 'font-lock-doc-face))
+                                         'font-lock-face 'font-lock-doc-face))
     (ov-set ov 'disassembly t)))
 
 (defun 6510-debugger--overlay-source (file-name line disassembled-str)
