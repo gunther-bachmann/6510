@@ -84,6 +84,7 @@ commit <B>?           keep only the last 10 | B (hex) states
 run                   run until a break point is hit
 inc pc                increment program counter (e.g. to step over a BRK instruction)
 q                     quit
+.                     repeat last command (multiple dots repeat multiple times)
 EOF
     )
   (displayln help)
@@ -253,9 +254,7 @@ EOF
         [(regexp-match? s-regex command)
          (match-let (((list _ _ len) (regexp-match s-regex command)))
            (~>> d-state
-               (debugger--run-steps _ (if len (string->number len 16) 1))             
-               (debugger--pretty-print #f "1" _)
-               (print-latest-cpu-state _)))]
+               (debugger--run-steps _ (if len (string->number len 16) 1))))]
         ;; so - step over
         [(regexp-match? so-regex command)
          (match-let (((list _ _ _ len) (regexp-match so-regex command)))
@@ -363,6 +362,7 @@ EOF
     (displayln "enter '?' to get help, enter 'q' to quit"))
   (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '() (load-source-map file-name)))
   (instrument-source-with-address file-name (debug-state-pc-source-map d-state))
+  (define old-input '())
   (for ([_ (in-naturals)])
     (define c-state (car (debug-state-states d-state)))
     (displayln "")
@@ -379,8 +379,15 @@ EOF
     (define input (begin (readline "")))
     (when s-entry (remove-overlay-source (pc-source-map-entry-file s-entry)))
     #:break (string=? input "q")
-    (set! d-state
-          (dispatch-debugger-command input d-state)))
+    (if (and old-input
+           (regexp-match #rx"^\\.+$" input))
+        (for ([_ (in-range (string-length input))])
+          (set! d-state
+                (dispatch-debugger-command old-input d-state)))
+        (begin
+          (set! old-input input)
+          (set! d-state
+                (dispatch-debugger-command input d-state)))))
   (6510-proc-buffer-kill)
   (remove-source-addresses file-name))
 
