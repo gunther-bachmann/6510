@@ -133,10 +133,6 @@ To generate coverage for all racket files, run `raco cover src/*.rkt` and open `
 
 ### Next
 
-- FEATURE: combine elisp functions in package, add to emacs init (to autoload integration)
-- FEATURE: make emacs integration optional (opt out)
-- FEATURE: don't output status information during debugging, when proc status and source is visible
-
 - translate one module (list of commands) to a linkable binary format (lbf)
  
 - write a linker that links (statically) multiple modules to one executable prg, resolving all symbols etc.

@@ -39,10 +39,11 @@
         [(symbol? el) (symbol->string el)]
         [(number? el) (number->string el)]
         [(syntax? el) (->string (syntax->datum el))]
+        [(keyword? el) (keyword->string el)]
         [(list? el)
          (cond [(equal? (car el) 'unquote)
                 (format ",~a" (cadr el))]
-               [#t (format "(~a)" (string-join (map (λ (iel) (->string iel)) el) ""))])]
+               [else (format "(~a)" (string-join (map (λ (iel) (->string iel)) el) ""))])]
         [#t (raise-argument-error '->string (format "cannot convert ~a to string" el))]))
 
 (module+ test #| ->string |#

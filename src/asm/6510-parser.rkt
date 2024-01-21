@@ -523,16 +523,16 @@
 (define/c data-bytes/p
   (-> parser?)
   (do
-      (try/p (string-cia/p ".data"))
+      [data-cmd <- (syntax/p (try/p (string-cia/p ".data")))]
       (many/p space-or-tab/p)
     [result <- (many/p byte/p #:sep (do (char/p #\,) ml-whitespace/p))]
-    (pure (append (list 'byte) result))))
+    (pure (append (list 'byte) (list (list 'quote (list '#:line (syntax-line data-cmd)))) result))))
 
 (module+ test #| data-bytes/p |#
   (check-match (parsed-string-result data-bytes/p ".data    2,3,4")
-               '(byte 2 3 4))
+               '(byte '(#:line 1) 2 3 4))
   (check-match (parsed-string-result data-bytes/p ".data $20,	%10,  4")
-               '(byte 32 2 4)))
+               '(byte '(#:line 1) 32 2 4)))
 
 (module+ test #| adr-modes-opcode/p |#
   (check-match (parsed-string-result (adr-modes-opcode/p "php" '(implicit)) "php")
@@ -668,6 +668,7 @@
 
 (module+ test #| asm->scheme-asm |#
   (check-equal? (asm->scheme-asm "LDA #$20") '((LDA '(#:line 1 #:org-cmd "lda !32") "!32")))
+  (check-equal? (asm->scheme-asm ".data $20") '((byte '(#:line 1) 32)))
   (check-equal? (asm->scheme-asm "LDA #$20\nJSR $FFD2")
                 '((LDA '(#:line 1 #:org-cmd "lda !32") "!32")
                   (JSR '(#:line 2 #:org-cmd "jsr 65490") "65490"))))
@@ -679,8 +680,10 @@
   (map (lambda (command) (eval command eval-ns)) scheme-asm-command-list))
 
 (module+ test #| scheme-asm->ast |#
-  (check-equal? (scheme-asm->ast '((LDA "!32")))
-                (list (ast-opcode-cmd '() '(169 32))))
+  (check-equal? (scheme-asm->ast '((LDA '(#:line 1) "!32")))
+                (list (ast-opcode-cmd '(#:line 1) '(169 32))))
+  (check-equal? (scheme-asm->ast '((byte '(#:line 1) 32)))
+                (list (ast-bytes-cmd '(#:line 1) '(32))))
   (check-equal? (scheme-asm->ast '((LDA "!32")(JSR "65490")))
                 (list (ast-opcode-cmd '() '(169 32))
                       (ast-opcode-cmd '() '(32 210 255)))))
@@ -706,7 +709,7 @@
   (check-equal? (asm->ast "JSR $FFD2")
                 (list (ast-opcode-cmd '(#:line 1 #:org-cmd "jsr 65490") '(32 210 255))))
   (check-equal? (asm->ast ".data $FF, $10")
-                (list (ast-bytes-cmd '() '(255 16))))
+                (list (ast-bytes-cmd '(#:line 1) '(255 16))))
   (check-equal? (asm->ast "LDX $ff00\nsome: JSR some")
                 (list (ast-opcode-cmd '(#:line 1 #:org-cmd "ldx 65280") '(174 0 255))
                       (ast-label-def-cmd '() "some")
@@ -781,10 +784,10 @@ EOF
    (ast-opcode-cmd '(#:line 27 #:org-cmd "jsr 65490") '(32 210 255))
    (ast-opcode-cmd '(#:line 28 #:org-cmd "rts") '(96))
    (ast-label-def-cmd '() "hello")
-   (ast-bytes-cmd '() '(18))
-   (ast-bytes-cmd '() '(13))
+   (ast-bytes-cmd '(#:line 30) '(18))
+   (ast-bytes-cmd '(#:line 31) '(13))
    (ast-bytes-cmd '() '(33 68 76 82 79 119 32 87 69 78 32 79 76 76 69 104))
-   (ast-bytes-cmd '() '(14))
+   (ast-bytes-cmd '(#:line 33) '(14))
    (ast-unresolved-opcode-cmd '(#:line 35 #:org-cmd "adc (<end),y") '(113) (ast-resolve-byte-scmd "end" 'low-byte))))
 
   (check-equal? (parse-program #<<EOF

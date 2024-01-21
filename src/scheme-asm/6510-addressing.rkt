@@ -18,6 +18,7 @@
 
 (require (for-syntax "6510-addressing-utils.rkt"))
 (require (for-syntax "6510-syntax-utils.rkt"))
+(require (for-syntax "../scheme-asm/6510-syntax-utils.rkt"))
 
 (require "6510-addressing-utils.rkt")
 (provide (all-from-out "6510-addressing-utils.rkt"))
@@ -31,22 +32,6 @@
   (begin-for-syntax
     (require rackunit)))
 
-(define-for-syntax (meta-info? stx) 
-  (let ([datum (syntax->datum stx)])
-    (or
-     (and (list? datum)
-        (equal? (car datum)
-                '#:line))
-     (and (list? datum)
-        (equal? (car datum)
-                'quote)
-        (equal? (caadr datum)
-                '#:line)))))
-
-(module+ test #| meta-info? |#
-  (begin-for-syntax
-    (check-true (meta-info? #'(#:line 1 #:org-cmd "some")))
-    (check-true (meta-info? #'(quote (#:line 1 #:org-cmd "some"))))))
 
 ;; define an opcode with a list of addressing modes and their respecitve byte encoding
 (define-syntax (define-opcode stx)

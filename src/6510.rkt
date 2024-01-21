@@ -22,6 +22,8 @@
 (require "ops/6510.compare-ops.rkt")
 (require "ops/6510.subroutine-ops.rkt")
 (require "ops/6510.stack-ops.rkt")
+(require (for-syntax "scheme-asm/6510-syntax-utils.rkt"))
+
 
 (provide (all-from-out "ast/6510-command.rkt"))
 
@@ -109,23 +111,41 @@
    (ast-const-word-cmd '() "some" #x2000))
   (check-exn exn:fail:syntax? (λ () (expand #'(word-const some $10000)))))
 
+(define-for-syntax (byte-number-check val)
+  (let ((str-val (->string val)))
+    (and (6510-number-string? str-val)
+       (in-byte-range? (parse-number-string str-val)))))
+
 (define-syntax (byte stx)
   (syntax-case stx ()
-    ([_ byte ...]
-     (with-syntax (((is-byte-number ...)
-                    (map (λ (val)
-                           (let ((str-val (->string val)))
-                             (and (6510-number-string? str-val)
-                                (in-byte-range? (parse-number-string str-val)))))
-                         (syntax->list #'(byte ...)))))
-       (all #'(is-byte-number ...)))
-     #'(ast-bytes-cmd '() (list (parse-number-string (->string #'byte)) ...)))))
+    ([_ meta-info byte ...]
+     (cond [(and (meta-info? #'meta-info)
+               (with-syntax (((is-byte-number ...)
+                              (map byte-number-check (syntax->list #'(byte ...)))))
+                 (all #'(is-byte-number ...))))
+            #'(ast-bytes-cmd meta-info (list (parse-number-string (->string #'byte)) ...))]
+           [(and (6510-number-string? (->string #'meta-info))
+               (in-byte-range? (parse-number-string (->string #'meta-info)))
+               (with-syntax (((is-byte-number ...)
+                              (map byte-number-check (syntax->list #'(byte ...)))))
+                 (all #'(is-byte-number ...))))
+            #'(ast-bytes-cmd '() (list (parse-number-string (->string #'meta-info)) (parse-number-string (->string #'byte)) ...))]
+           [else (raise-syntax-error 'byte-constant "byte cannot be parsed")]))))
 
 (module+ test #| byte |#
-  (check-equal? (byte $10 $FF $D2 %10010000 %11111111)
+  (check-equal? (byte '(#:line 17) $10 $FF $D2 %10010000 %11111111)
+                (ast-bytes-cmd '(#:line 17) '(#x10 #xFF #xD2 #b10010000 #b11111111)))
+  (check-equal? (byte "$10" "$FF" "$D2" "%10010000" "%11111111")
                 (ast-bytes-cmd '() '(#x10 #xFF #xD2 #b10010000 #b11111111)))
   (check-equal? (byte "$10" "$FF" "$D2" "%10010000" "%11111111")
                 (ast-bytes-cmd '() '(#x10 #xFF #xD2 #b10010000 #b11111111)))
+  (check-equal? (byte "$10")
+                (ast-bytes-cmd '() '(#x10)))
+  (check-equal? (byte '(#:line 23) "$10")
+                (ast-bytes-cmd '(#:line 23) '(#x10)))
+  (check-exn exn:fail:syntax? (λ () (expand #'(byte $100))))
+  (check-exn exn:fail:syntax? (λ () (expand #'(byte '(#:line 17) $100))))
+  (check-exn exn:fail:syntax? (λ () (expand #'(byte '(#:line 17) $10 $100))))
   (check-exn exn:fail:syntax? (λ () (expand #'(byte $10 $100)))))
 
 (define-syntax (provide-word stx)

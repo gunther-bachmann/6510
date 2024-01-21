@@ -8,7 +8,7 @@
 (module+ test
   (require rackunit))
 
-(provide symbol-append discard-void-syntax-object make-id)
+(provide symbol-append discard-void-syntax-object make-id meta-info?)
 
 (define (make-id stx id-template . ids)
   (let ([str (apply format id-template (map syntax->datum ids))])
@@ -40,3 +40,20 @@
 
   (check-match (syntax->datum (with-syntax ([void-syn (void)]) (discard-void-syntax-object #'some #'void-syn)))
                'some))
+
+(define (meta-info? stx)
+  (let ([datum (syntax->datum stx)])
+    (or
+     (and (list? datum)
+        (equal? (car datum)
+                '#:line))
+     (and (list? datum)
+        (equal? (car datum)
+                'quote)
+        (equal? (caadr datum)
+                '#:line)))))
+
+
+(module+ test #| meta-info? |#
+  (check-true (meta-info? #'(#:line 1 #:org-cmd "some")))
+  (check-true (meta-info? #'(quote (#:line 1 #:org-cmd "some")))))
