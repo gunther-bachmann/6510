@@ -11,11 +11,11 @@
 
 (provide
  load-source-map
- overlay-source
- remove-overlay-source
- -instrument-source-with-address ;; TODO remove
- instrument-source-with-address
- remove-source-addresses
+ 6510-debugger--remove-all-addresses-on-source
+ 6510-debugger--show-disassembly-on-source-lines
+ 6510-debugger--show-address-on-source-lines
+ 6510-debugger--remove-disassembly-on-source-lines
+
  (struct-out pc-source-map-entry))
 
 (struct pc-source-map-entry (line source-code file)
@@ -24,9 +24,15 @@
 (module+ test
   (require rackunit))
 
+(define elisp-function-remove-disassembly-on-source-lines "6510-debugger--remove-disassembly-on-source-lines")
+(define elisp-function-show-disassembly-on-source-line "6510-debugger--show-disassembly-on-source-lines")
+(define elisp-function-remove-all-addresses-on-source "6510-debugger--remove-all-overlay")
+(define elisp-function-show-address-on-source-line "6510-debugger--show-address-on-source-line")
+;; (define elisp-function-remove-highlighted-execution-line "6510-debugger--remove-highlighted-execution-line")
+
+;; load a source map for the given file, returning a hashmap mapping addresses to map entries
 (define/c (load-source-map file-name)
   (-> string? (hash/c nonnegative-integer? pc-source-map-entry?))
-  ;; TODO: read map file from .rkt.map, use something like: (read (open-input-string "(+ (- 5 2))"))
   (with-input-from-file (format "./~a.map" file-name)
     (thunk
      (let ([result (make-hash)])
@@ -44,31 +50,34 @@
                             (if org-cmd-mark (cadr org-cmd-mark) "")
                             file-name)))))))
        result))))
-    ;; (hash 2067 (pc-source-map-entry 20 "sout:   lda hello,x" file-name))
 
-(define/c (-instrument-source-with-address file-name pc line)
+;; instrument a single source line with a prefix of the address
+(define/c (-show-address-on-source-line file-name pc line)
   (-> string? word/c nonnegative-integer? any/c)
   (define pc-str (format "~a " (word->hex-string pc)))
   (parameterize ([current-output-port (open-output-nowhere)])
-    (system* (find-executable-path "emacsclient") "-e" (format "(6510-debugger--overlay-source-line \"~a\" ~a \"~a\")" file-name (add1 line) pc-str))))
+    (system* (find-executable-path "emacsclient") "-e" (format "(~a \"~a\" ~a \"~a\")" elisp-function-show-address-on-source-line file-name (add1 line) pc-str))))
 
-(define/c (remove-source-addresses file-name)
+;; remove all address overlays from the source file
+(define/c (6510-debugger--remove-disassembly-on-source-lines file-name)
   (-> string? any/c)
   (parameterize ([current-output-port (open-output-nowhere)])
-    (system* (find-executable-path "emacsclient") "-e" (format "(6510-debugger--remove-overlay-source-lines \"~a\")" file-name))))
+    (system* (find-executable-path "emacsclient") "-e" (format "(~a \"~a\")" elisp-function-remove-disassembly-on-source-lines file-name))))
 
-(define/c (instrument-source-with-address file-name source-map)
+;; instrument all source lines with a prefix of the corresponding address
+(define/c (6510-debugger--show-address-on-source-lines file-name source-map)
   (-> string? (hash/c nonnegative-integer? pc-source-map-entry?) any/c)
   (for ([(pc entry) source-map])
-    (-instrument-source-with-address file-name pc (pc-source-map-entry-line entry))))
+    (-show-address-on-source-line file-name pc (pc-source-map-entry-line entry))))
 
 ;; display an overlay on the given source file at position of the program counter
-(define/c (overlay-source file-name line disassembled)
+(define/c (6510-debugger--show-disassembly-on-source-lines file-name line disassembled)
   (-> string? nonnegative-integer? string? any/c)
   (parameterize ([current-output-port (open-output-nowhere)])
-    (system* (find-executable-path "emacsclient") "-e" (format "(6510-debugger--overlay-source \"~a\" ~a \"~a\")" file-name (add1 line) disassembled))))
+    (system* (find-executable-path "emacsclient") "-e" (format "(~a \"~a\" ~a \"~a\")" elisp-function-show-disassembly-on-source-line file-name (add1 line) disassembled))))
 
-(define/c (remove-overlay-source file-name)
+;; remove all source overlays (disassemblies)
+(define/c (6510-debugger--remove-all-addresses-on-source file-name)
   (-> string? any/c)
   (parameterize ([current-output-port (open-output-nowhere)])
-    (system* (find-executable-path "emacsclient") "-e" (format "(6510-debugger--remove-overlay-source \"~a\")" file-name))))
+    (system* (find-executable-path "emacsclient") "-e" (format "(~a \"~a\")" elisp-function-remove-all-addresses-on-source file-name))))

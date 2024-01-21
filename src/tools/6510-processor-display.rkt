@@ -11,15 +11,18 @@
 (require (only-in "6510-interpreter.rkt" state->string))
 
 (provide
- 6510-proc-buffer-display
- 6510-proc-buffer-kill)
+ 6510-debugger--proc-buffer-display
+ 6510-debugger--proc-buffer-kill)
 
-(define/c (6510-proc-buffer-display d-state)
+(define elisp-function-kill-proc-buffer "6510-debugger--proc-buffer-kill")
+(define elisp-function-open-n-display-proc-buffer "6510-debugger--proc-buffer-display")
+
+(define/c (6510-debugger--proc-buffer-display d-state)
   (-> debug-state? any/c)
   (define proc-status-string (state->string (car (debug-state-states d-state))))
   (parameterize ([current-output-port (open-output-nowhere)])
-    (system* (find-executable-path "emacsclient") "-e" (format "(6510-proc-buffer-display \"~a\")" proc-status-string))))
+    (system* (find-executable-path "emacsclient") "-e" (format "(~a \"~a\")" elisp-function-open-n-display-proc-buffer proc-status-string))))
 
-(define/c (6510-proc-buffer-kill)
+(define/c (6510-debugger--proc-buffer-kill)
   (-> any/c)
-  (system* (find-executable-path "emacsclient") "-e" "(6510-proc-buffer-kill)"))
+  (system* (find-executable-path "emacsclient") "-e" (format "(~a)" elisp-function-kill-proc-buffer)))

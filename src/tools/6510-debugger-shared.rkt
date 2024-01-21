@@ -1,12 +1,12 @@
 #lang racket
 #|
 
+ common structures shared by some debugger tool files
 
  |#
 
-(require "../6510-utils.rkt")
-(require "6510-interpreter.rkt")
-(require (only-in "./6510-debugger-sync-source.rkt" remove-overlay-source load-source-map overlay-source pc-source-map-entry? pc-source-map-entry-file pc-source-map-entry-line))
+(require (only-in "./6510-interpreter.rkt" cpu-state?))
+(require (only-in "./6510-debugger-sync-source.rkt" pc-source-map-entry?))
 
 (provide (struct-out breakpoint)
          (struct-out debug-state))

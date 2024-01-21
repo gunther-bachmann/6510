@@ -19,15 +19,20 @@
 (require (only-in "../ast/6510-command.rkt" ast-command?))
 (require (only-in "../ast/6510-assembler.rkt" assemble))
 (require (only-in "./6510-debugger-sync-source.rkt"
-                  remove-source-addresses
-                  instrument-source-with-address
-                  remove-overlay-source
                   load-source-map
-                  overlay-source
+                  6510-debugger--remove-all-addresses-on-source
+                  6510-debugger--show-disassembly-on-source-lines
+                  6510-debugger--show-address-on-source-lines
+                  6510-debugger--remove-disassembly-on-source-lines
                   pc-source-map-entry?
                   pc-source-map-entry-file
                   pc-source-map-entry-line))
-(require (only-in "./6510-processor-display.rkt" 6510-proc-buffer-display 6510-proc-buffer-kill))
+(require (only-in "./6510-processor-display.rkt"
+                  6510-debugger--proc-buffer-display
+                  6510-debugger--proc-buffer-kill))
+(require (only-in "./6510-emacs-integration.rkt"
+                  6510-debugger--has-single-step-cap
+                  6510-debugger--has-proc-display-cap))
 (require "6510-debugger-shared.rkt")
 
 (provide run-debugger)
@@ -263,11 +268,13 @@ EOF
                (debugger--pretty-print #f "1" _)
                (print-latest-cpu-state _)))]
         ;; p - print processor state
-        [(string=? command "p") (displayln "") (print-state c-state) d-state]
+        [(string=? command "p") (print-state c-state) d-state]
         ;; pp - disassemble (pretty print)
         [(regexp-match? pp-regex command)
          (match-let (((list _ len address) (regexp-match pp-regex command)))
-           (debugger--pretty-print address len d-state))]
+           (begin0
+               (debugger--pretty-print address len d-state)
+             (displayln "")))]
         ;; pm - print memory
         [(regexp-match? pm-regex command)
          (match-let (((list _ address len) (regexp-match pm-regex command)))
@@ -344,12 +351,23 @@ EOF
                      (displayln "(unknown command, enter '?' to get help)") )
                    d-state)]))
 
-(define/c (create-debug-overlay c-state)
+(define/c (create-disassemble-annotation-string c-state)
   (-> cpu-state? string?)
   (define address (cpu-state-program-counter c-state))
   (let-values (((str len) (disassemble-single c-state address)))
     (define code-byte-str (code-bytes c-state address len))
-    (format "~a (~a)" str code-byte-str)))
+    (format "~a: ~a" (~a code-byte-str #:width 8 #:right-pad-string " ") str)))
+
+(struct emacs-capabilities
+  (print-proc-status
+   sync-step-with-source)
+  #:transparent)
+
+(define/c (collect-emacs-capabilities)
+  (-> emacs-capabilities?)
+  (emacs-capabilities
+   (6510-debugger--has-proc-display-cap)
+   (6510-debugger--has-single-step-cap)))
 
 ;; run an read eval print loop debugger on the passed program
 (define/c (run-debugger org program file-name (verbose #t))
@@ -357,27 +375,33 @@ EOF
   (define raw-bytes (if (ast-command? (car program))
                         (assemble org program)
                         program))
+  (define capabilities (collect-emacs-capabilities))
+  (displayln (format "emacs integration caps: ~a" capabilities))
   (when verbose
     (displayln (format "loading program into debugger at ~a" org))
     (displayln "enter '?' to get help, enter 'q' to quit"))
   (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '() (load-source-map file-name)))
-  (instrument-source-with-address file-name (debug-state-pc-source-map d-state))
+  (when (emacs-capabilities-sync-step-with-source capabilities)
+    (6510-debugger--show-address-on-source-lines file-name (debug-state-pc-source-map d-state)))
   (define old-input '())
   (for ([_ (in-naturals)])
     (define c-state (car (debug-state-states d-state)))
-    (displayln "")
+    ;; (displayln "")
     (define s-entry (hash-ref (debug-state-pc-source-map d-state)
                               (cpu-state-program-counter c-state)
                               #f))
-    (when s-entry
-      (overlay-source (pc-source-map-entry-file s-entry)
-                      (pc-source-map-entry-line s-entry)
-                      (create-debug-overlay c-state)))
-    (6510-proc-buffer-display d-state)
+    (when (emacs-capabilities-sync-step-with-source capabilities)
+      (when s-entry
+        (6510-debugger--show-disassembly-on-source-lines (pc-source-map-entry-file s-entry)
+                        (pc-source-map-entry-line s-entry)
+                        (create-disassemble-annotation-string c-state))))
+    (when (emacs-capabilities-print-proc-status capabilities)
+      (6510-debugger--proc-buffer-display d-state))
     (display (format "Step-Debugger[~x] > " (length (debug-state-states d-state))))
     (flush-output)
     (define input (begin (readline "")))
-    (when s-entry (remove-overlay-source (pc-source-map-entry-file s-entry)))
+    (when (emacs-capabilities-sync-step-with-source capabilities)
+      (when s-entry (6510-debugger--remove-disassembly-on-source-lines (pc-source-map-entry-file s-entry))))
     #:break (string=? input "q")
     (if (and old-input
            (regexp-match #rx"^\\.+$" input))
@@ -388,8 +412,10 @@ EOF
           (set! old-input input)
           (set! d-state
                 (dispatch-debugger-command input d-state)))))
-  (6510-proc-buffer-kill)
-  (remove-source-addresses file-name))
+  (when (emacs-capabilities-print-proc-status capabilities)
+    (6510-debugger--proc-buffer-kill))
+  (when (emacs-capabilities-sync-step-with-source capabilities)
+    (6510-debugger--remove-all-addresses-on-source file-name)))
 
 ;; (run-debugger #xc000 (list #xa9 #x41 #x48 #x20 #xd2 #xff #x00))
 

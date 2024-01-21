@@ -1,12 +1,7 @@
 ;; emacs code to display processor status
 
 ;; window configuration
-(setopt
- display-buffer-alist
- '(("^\\* 6510 processor \\*$"
-    (display-buffer-below-selected display-buffer-at-bottom)
-    (inhibit-same-window . t)
-    (window-height . 6))))
+
 
 (defconst 6510-proc-buffer-name "* 6510 processor *")
 
@@ -25,7 +20,7 @@
               (progn
                 (setq new-str
                       (string-join (list new-str
-                                         (propertize (substring str red-start-index it-index) 'font-lock-face 'diff-error))))
+                                         (propertize (substring str red-start-index it-index) 'font-lock-face '(:foreground "orange")))))
                 (setq red-start-index -1)
                 (setq str-index it-index)))
           (when (and (< red-start-index 0)
@@ -37,10 +32,11 @@
           (setq new-str (string-join (list new-str (substring str str-index))))
         (setq new-str
               (string-join (list new-str
-                                 (propertize (substring str red-start-index) 'font-lock-face 'diff-error)))))
+                                 (propertize (substring str red-start-index) 'font-lock-face '(:foreground "orange"))))))
       new-str)))
 
-(defun 6510-proc-buffer-display (str)
+;;;###autoload
+(defun 6510-debugger--proc-buffer-display (str)
   (save-current-buffer
     (let* ((proc-buff (get-buffer-create 6510-proc-buffer-name))
            (proc-win  (get-buffer-window proc-buff)))
@@ -60,6 +56,9 @@
           (set-buffer-modified-p nil)
           (read-only-mode 1))))))
 
-(defun 6510-proc-buffer-kill ()
+;;;###autoload
+(defun 6510-debugger--proc-buffer-kill ()
   (ignore-errors
     (kill-buffer 6510-proc-buffer-name)))
+
+(provide '6510-processor-display)
