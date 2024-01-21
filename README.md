@@ -5,13 +5,19 @@ rackets' capabilities to define (and interpret) languages, in this case: 6510 as
 
 ## prerequisites
 
-* racket 7.3+ (`nix-env -i racket`)
+* racket 11.1+ (`guix package -i racket`), see https://racket-lang.org/
 * megaparsack (`raco pkg install megaparsack-lib`) 
 * threading library (`raco pkg install threading`) 
 * pvector (`raco pkg install pvector`)
 * cover (`raco pkg install cover`)
 * ansi-color (`raco pkg install ansi-color`)
 * review (`raco pkg install review`)
+
+* guix (see https://guix.gnu.org/ )
+* direnv (see https://direnv.net/ )
+* just (see https://github.com/casey/just )
+* git (see https://git-scm.com/ )
+* emacs (see https://www.gnu.org/software/emacs/ )
 
 ## usage
 
@@ -23,7 +29,7 @@ You may execute the example program directly:
 ```
 This will
 1. translate the given assembler program into the 6510 codes
-2. run a debugger on that code (executing `r` will print some to the console)
+2. run an interpreter on that code 
 3. and write a `6510-example.d64` disk image and a `6510-example.prg`, usable by vice (c64 emulator)
 (take a look at the commands actually executed by `src/asm/6510-reader.rkt`)
 
@@ -113,19 +119,25 @@ Operations
 
 ## Status
 
-If using direnv and guix, aliases are automatically installed. Execute `a` to print help.
+The `justfile` defines all available build commands.
 
 To run tests of a single file, run `raco test -y --drdr 6510-parser.rkt` for example. 
 
-To run all tests, run `raco test -y -t -x -j 8  .` If direnv is installed, you can use `t` to run all tests.
+To run all tests, run `raco test -y -t -x -j 8  .` or `just test` on the command line.
 
-To build run `raco make -v -j 8 src/*.rkt src/ops/*.rkt src/example/*.rkt` (direnv: `m`)
+To build run `raco make -v -j 8 src/*.rkt src/ops/*.rkt src/example/*.rkt`
 
 To generate coverage for all racket files, run `raco cover src/*.rkt` and open `coverage/index.html`
 
 ## Todos
 
 ### Next
+
+- FEATURE: enter in debugger = repeat last command
+- FEATURE: mark changes in proc window with red color
+- FEATURE: combine elisp functions in package, add to emacs init (to autoload integration)
+- FEATURE: make emacs integration optional (opt out)
+- FEATURE: don't output status information during debugging, when proc status and source is visible
 
 - translate one module (list of commands) to a linkable binary format (lbf)
  
