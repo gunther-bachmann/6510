@@ -6,6 +6,9 @@
 ;;;###autoload
 (defun 6510-debugger--has-proc-display-cap () t)
 ;;;###autoload
-(defun 6510-debugger--has-single-step-cap () t)
+(defun 6510-debugger--has-single-step-cap (file-name)
+  (if (find-buffer-visiting file-name)
+      t
+    nil))
 
 (provide '6510-emacs-integration)

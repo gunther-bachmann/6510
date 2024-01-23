@@ -20,7 +20,7 @@ LINE-FEED = %00001101 ; $0d
         ldx hello
 sout:   lda hello,x ;; a long comment that might be overridden by the disassembled code and the bytes encoding
         jsr ROM-COUT
-dex
+        dex
         bne sout
 
 

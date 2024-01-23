@@ -329,7 +329,7 @@ EOF
         ;; list stop
         [(regexp-match? list-bp-regex command)
          (begin
-           (for ((description (map breakpoint-description (debug-state-breakpoints d-state))))
+           (for ([description (map breakpoint-description (debug-state-breakpoints d-state))])
              (display description))
            d-state)]
         ;; stop cf = 0 - stop when carry is cleared
@@ -363,59 +363,88 @@ EOF
    sync-step-with-source)
   #:transparent)
 
-(define/c (collect-emacs-capabilities)
-  (-> emacs-capabilities?)
+(define/c (collect-emacs-capabilities file-name)
+  (-> string? emacs-capabilities?)
   (emacs-capabilities
    (6510-debugger--has-proc-display-cap)
-   (6510-debugger--has-single-step-cap)))
+   (6510-debugger--has-single-step-cap file-name)))
 
-;; run an read eval print loop debugger on the passed program
-(define/c (run-debugger org program file-name (verbose #t))
-  (->* (word/c (listof (or/c byte/c ast-command?)) string?) (boolean?) any/c)
-  (define raw-bytes (if (ast-command? (car program))
-                        (assemble org program)
-                        program))
-  (define capabilities (collect-emacs-capabilities))
-  (displayln (format "emacs integration caps: ~a" capabilities))
-  (when verbose
-    (displayln (format "loading program into debugger at ~a" org))
-    (displayln "enter '?' to get help, enter 'q' to quit"))
-  (define d-state (debug-state (list (6510-load (initialize-cpu) org raw-bytes)) '() (load-source-map file-name)))
+(define/c (run-debugger--prepare-emacs-integration capabilities file-name d-state)
+  (-> emacs-capabilities? string? debug-state? any/c)
   (when (emacs-capabilities-sync-step-with-source capabilities)
-    (6510-debugger--show-address-on-source-lines file-name (debug-state-pc-source-map d-state)))
-  (define old-input '())
-  (for ([_ (in-naturals)])
-    (define c-state (car (debug-state-states d-state)))
-    ;; (displayln "")
-    (define s-entry (hash-ref (debug-state-pc-source-map d-state)
-                              (cpu-state-program-counter c-state)
-                              #f))
-    (when (emacs-capabilities-sync-step-with-source capabilities)
-      (when s-entry
-        (6510-debugger--show-disassembly-on-source-lines (pc-source-map-entry-file s-entry)
-                        (pc-source-map-entry-line s-entry)
-                        (create-disassemble-annotation-string c-state))))
-    (when (emacs-capabilities-print-proc-status capabilities)
-      (6510-debugger--proc-buffer-display d-state))
-    (display (format "Step-Debugger[~x] > " (length (debug-state-states d-state))))
-    (flush-output)
-    (define input (begin (readline "")))
-    (when (emacs-capabilities-sync-step-with-source capabilities)
-      (when s-entry (6510-debugger--remove-disassembly-on-source-lines (pc-source-map-entry-file s-entry))))
-    #:break (string=? input "q")
-    (if (and old-input
-           (regexp-match #rx"^\\.+$" input))
-        (for ([_ (in-range (string-length input))])
-          (set! d-state
-                (dispatch-debugger-command old-input d-state)))
-        (begin
-          (set! old-input input)
-          (set! d-state
-                (dispatch-debugger-command input d-state)))))
+    (6510-debugger--remove-all-addresses-on-source file-name)
+    (6510-debugger--show-address-on-source-lines file-name (debug-state-pc-source-map d-state))))
+
+(define/c (run-debugger--step-update-emacs-integration capabilities s-entry d-state)
+  (-> emacs-capabilities? pc-source-map-entry? debug-state? any/c)
+  (if (emacs-capabilities-sync-step-with-source capabilities)
+    (when s-entry
+      (6510-debugger--show-disassembly-on-source-lines (pc-source-map-entry-file s-entry)
+                                                       (pc-source-map-entry-line s-entry)
+                                                       (create-disassemble-annotation-string (car (debug-state-states d-state)))))
+    (begin (debugger--pretty-print #f #f d-state)
+           (displayln "")))
+  (when (emacs-capabilities-print-proc-status capabilities)
+    (6510-debugger--proc-buffer-display d-state)))
+
+(define/c (run-debugger--step-cleanup-emacs-integration capabilities s-entry)
+  (-> emacs-capabilities? pc-source-map-entry? any/c)
+  (when (emacs-capabilities-sync-step-with-source capabilities)
+    (when s-entry (6510-debugger--remove-disassembly-on-source-lines (pc-source-map-entry-file s-entry)))))
+
+(define/c (run-debugger--cleanup-emacs-integration capabilities file-name)
+  (-> emacs-capabilities? string?  any/c)
   (when (emacs-capabilities-print-proc-status capabilities)
     (6510-debugger--proc-buffer-kill))
   (when (emacs-capabilities-sync-step-with-source capabilities)
     (6510-debugger--remove-all-addresses-on-source file-name)))
+
+;; run an read eval print loop debugger on the passed program
+(define/c (run-debugger org program (file-name "") (verbose #t))
+  (->* (word/c (listof (or/c byte/c ast-command?)) string?) (boolean?) any/c)
+  (define raw-bytes (if (ast-command? (car program))
+                        (assemble org program)
+                        program))
+  (define capabilities (collect-emacs-capabilities file-name))
+  (when verbose
+    (displayln (format "loading program into debugger at ~a" org))
+    (displayln "enter '?' to get help, enter 'q' to quit"))
+  (define d-state
+    (debug-state (list (6510-load (initialize-cpu) org raw-bytes))
+                 '()
+                 (load-source-map file-name)))
+
+  (run-debugger--prepare-emacs-integration capabilities file-name d-state)
+  (run-debugger--repl d-state capabilities)
+  (run-debugger--cleanup-emacs-integration capabilities file-name))
+
+;; execute the debugger repl
+(define/c (run-debugger--repl initial-d-state capabilities)
+  (-> debug-state? emacs-capabilities? any/c)
+  (define d-state (struct-copy debug-state initial-d-state))
+  (define previous-input '())
+  (for ([_ (in-naturals)])
+    (define s-entry (hash-ref (debug-state-pc-source-map d-state)
+                              (cpu-state-program-counter (car (debug-state-states d-state)))
+                              #f))
+    (run-debugger--step-update-emacs-integration capabilities s-entry d-state)
+    (display (format "Step-Debugger[~x] > " (length (debug-state-states d-state))))
+    (define input (begin (readline "")))
+    (run-debugger--step-cleanup-emacs-integration capabilities s-entry)
+    #:break (string=? input "q")
+    (if (and previous-input (regexp-match #rx"^\\.+$" input))
+        (set! d-state (run-debugger--dispatch-debugger-command-n-times previous-input d-state (string-length input)))
+        (begin
+          (set! previous-input input)
+          (set! d-state (dispatch-debugger-command input d-state))))))
+
+;; dispatch the given debugger command n-times starting with the current debug-state
+(define/c (run-debugger--dispatch-debugger-command-n-times command d-state (n 1))
+  (->* (string? debug-state?) (nonnegative-integer?) debug-state?)
+  (let ([local-d-state (struct-copy debug-state d-state)])
+    (for ([_ (in-range n)])
+      (set! local-d-state (dispatch-debugger-command command local-d-state)))
+    local-d-state))
 
 ;; (run-debugger #xc000 (list #xa9 #x41 #x48 #x20 #xd2 #xff #x00))
 
