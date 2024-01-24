@@ -1,0 +1,63 @@
+#+title: TODO
+list of todo items, prioritized and elaborated
+goal: have precise stories to work on and complete
+* Descriptions
+** MIL Runtime
+create a set of functions (6510 code) that will allow a MIL Interpreter (or compiled MIL code) to execute this includes
+implement minimal set first
+*** Memory Managment
+- garbage collection/or explicit allocation/deallocation
+- memory layout
+- allocation/deallocation/collection of basic data structures
+*** basic data structures + operations
+- *byte*
+- int
+- *char* (is a byte?)
+- *string* (is an array of char?)
+- float
+- *cells* (cons-cells)
+- *lists*
+- arrays
+- maps
+*** input/output
+- write data (basic data structures) to *screen*, tape, disc, printer ??
+- read data (basic data structure ) from *keyboard*, tape, disc ??
+** Virtual Machine
+implement a stack machine with byte code to execute basic MIL functions
+First implementation will be a simple interpreter loop [fetchen, decode, execute]
+*** instructions
+e.g.
+- push basic data
+- call runtime function (MIL Runtime is in place)
+- call user function
+*** calling conventions (call frames)
+*** resolving names
+- user names
+- runtime names
+- scoping
+* Research
+** movable memory (=> additional indirection on access)
+using a memory extension that can page in a memory page at some address (in some range) could be used without code adjustments, if the
+access to memory would be redirected from virtual page -> actual address.  this indirect access could be utilized for certain accesses.  it
+would be nice if this access still allows for quick access if the access is repeatedly done (e.g. jit to replace indirect access w/ direct
+access, while undoing this, once the page is swapped out again).  this indirect access is optional and does not incur runtime penalties for
+direct access!
+** requirements of continuation on call-frame, resolving names, garbage collection, memory ownership
+* Epic
+** allocate/deallocate page (type)
+- allocate a page of a certain type (e.g. *stack-page*, *code*, *byte/char-array*, *cell-pair/list-page*, *cell page*, float page, int page)
+- keep a free-list / used-list (per type)
+- free a page
+- allow introspection of pages
+- define layout and access to page types
+** output a string
+e.g. ~(displayln "hello world")~
+*** stories
+**** memory manage strings
+- bootstrap code (program startup)
+- constant strings / array of char => byte/char-array-page
+**** code as list of vm-instructions
+- give translation of (display "some string") in vm instructions
+**** runtime method to write string to the screen
+**** fetch, decode, execute
+- for all vm instructions necessary to do hello word

@@ -123,7 +123,7 @@ The `justfile` defines all available build commands.
 
 To run tests of a single file, run `raco test -y --drdr 6510-parser.rkt` for example. 
 
-To run all tests, run `raco test -y -t -x -j 8  .` or `just test` on the command line.
+To run all tests, run `raco test -y -t -x -j 8  .` or `just test` on the command line or `C-c C-x C-j` in emacs to select just profile to run .
 
 To build run `raco make -v -j 8 src/*.rkt src/ops/*.rkt src/example/*.rkt`
 
