@@ -52,7 +52,7 @@
   (-> cell-reference? boolean?)
   (eq? a-val-ref nil-reference))
 
-(module+ test #| nil |#
+(module+ test #| nil-ref? nil-reference |#
   (check-true (nil-ref? nil-reference)
               "only the defined nil-reference is nil")
   (check-false (nil-ref? (cell-nil-reference 0))
@@ -95,11 +95,11 @@
   (define page-no (byte-mem-reference-page-no a-byte-mem-ref))
   (define new-index-unmodified (+ (byte-mem-reference-index a-byte-mem-ref) delta))
   (define new-page-no
-    (cond ((< new-index-unmodified 0)
-           (sub1 page-no))
-          ((> new-index-unmodified #xff)
-           (add1 page-no))
-          (#t page-no)))
+    (cond [(< new-index-unmodified 0)
+           (sub1 page-no)]
+          [(> new-index-unmodified #xff)
+           (add1 page-no)]
+          [else page-no]))
   (byte-mem-reference new-page-no (bitwise-and #xff new-index-unmodified)))
 
 (module+ test #| inc-pc |#
@@ -332,6 +332,13 @@
                   -1)
                  #x21))
 
+#|
+
+ env is a stack (push/pop) of hash maps (resolve key -> cell)
+ if the key cannot be resolved nil-reference is returned
+
+ |#
+
 (struct env
   (map-stack)
   #:guard (struct-guard/c (listof hash?)))
@@ -348,10 +355,9 @@
   (-> env? any/c cell?)
   (if (empty? (env-map-stack an-env))
       nil-reference
-      (let ((top-frame (car (env-map-stack an-env))))
-        (cond ((hash-has-key? top-frame key)
-               (hash-ref top-frame key))
-              (#t (env-resolve (env (cdr (env-map-stack an-env))) key))))))
+      (hash-ref (car (env-map-stack an-env))
+                key
+                (env-resolve (env (cdr (env-map-stack an-env))) key))))
 
 (module+ test #| env |#
   (check-eq?  (env-resolve (env '()) 'unknown-key)
@@ -379,8 +385,9 @@
    #x73
    "some key is no longer shadowed by second frame (since it is popped)"))
 
+;; keep the reference to a byte code location in a stack (usually the program counter pc)
 (struct call-stack
-  (code-references)
+  (code-references) ;; stack of byte-mem-references
   #:guard (struct-guard/c (listof byte-mem-reference?)))
 
 (define/contract (call-stack-push-pc a-call-stack a-pc)
@@ -395,8 +402,9 @@
   (-> call-stack? byte-mem-reference?)
   (car (call-stack-code-references a-call-stack)))
 
+;; keep the current virtual machine execution state
 (struct vm-state
-  (eval-stack ;; cell stack
+  (eval-stack  ;; cell stack (all evaluations run on the cells on this stack)
    call-stack  ;; stack with return addresses
    memory      ;; pages
    env         ;; nested environments of int|key->cell (references)
@@ -446,13 +454,13 @@
    (byte-mem-reference 0 0)))
 
 ;; load the given code into the vm 
-(define/contract (load-initial-code a-vm bytes (mem-ref (byte-mem-reference 0 0)))
+(define/contract (load-initial-code a-vm vm-instructions (mem-ref (byte-mem-reference 0 0)))
   (->* (vm-state? (listof (or/c symbol? byte?))) (byte-mem-reference?) vm-state?)
   (define real-bytes (map (lambda (b-or-s)
-                            (cond ((symbol? b-or-s)
-                                   (hash-ref vm-code-ops b-or-s))
-                                  (#t b-or-s)))
-                          bytes))
+                            (cond [(symbol? b-or-s)
+                                   (hash-ref vm-code-ops b-or-s)]
+                                  [else b-or-s]))
+                          vm-instructions))
   (struct-copy vm-state a-vm
                [memory
                 (write-bytes-into-memory (vm-state-memory a-vm) mem-ref real-bytes)]
@@ -463,15 +471,15 @@
   (-> vm-state? vm-state?)
   (define instruction (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm)))
   (define instruction-symbol (hash-ref vm-op-codes instruction))
-  (cond ((eq? 'break instruction-symbol)
-         a-vm)
-        ((eq? 'push_b instruction-symbol)
-         (run-vm (vm-interpret-push_b a-vm)))
-        ((eq? 'pop instruction-symbol)
-         (run-vm (vm-interpret-pop a-vm)))
-        ((eq? 'add instruction-symbol)
-         (run-vm (vm-interpret-add a-vm)))
-        (#t (raise-user-error "unknown opcode ~a" instruction-symbol))))
+  (cond [(eq? 'break instruction-symbol)
+         a-vm]
+        [(eq? 'push_b instruction-symbol)
+         (run-vm (vm-interpret-push_b a-vm))]
+        [(eq? 'pop instruction-symbol)
+         (run-vm (vm-interpret-pop a-vm))]
+        [(eq? 'add instruction-symbol)
+         (run-vm (vm-interpret-add a-vm))]
+        [else (raise-user-error "unknown opcode ~a" instruction-symbol)]))
 
 (module+ test #| vm |#
   (check-equal? 
@@ -485,4 +493,5 @@
                             add
                             break)
                           (byte-mem-reference 0 2))))))
-   #x22))
+   #x22
+   "adding two pushed byte cells (x10, x12) leaves the sum on tos"))

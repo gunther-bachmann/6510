@@ -44,7 +44,8 @@ access, while undoing this, once the page is swapped out again).  this indirect 
 direct access!
 ** requirements of continuation on call-frame, resolving names, garbage collection, memory ownership
 * Epic
-** allocate/deallocate page (type)
+** OBSOLETE allocate/deallocate page (type)
+(obsolete since this will be implemented with the mil vm interpreter)
 - allocate a page of a certain type (e.g. *stack-page*, *code*, *byte/char-array*, *cell-pair/list-page*, *cell page*, float page, int page)
 - keep a free-list / used-list (per type)
 - free a page
@@ -53,11 +54,12 @@ direct access!
 ** output a string
 e.g. ~(displayln "hello world")~
 *** stories
-**** memory manage strings
+**** vm-interpreter
+***** memory manage strings
 - bootstrap code (program startup)
 - constant strings / array of char => byte/char-array-page
-**** code as list of vm-instructions
+***** code as list of vm-instructions
 - give translation of (display "some string") in vm instructions
-**** runtime method to write string to the screen
-**** fetch, decode, execute
+***** runtime method to write string to the screen
+***** fetch, decode, execute
 - for all vm instructions necessary to do hello word

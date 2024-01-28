@@ -1,398 +1,398 @@
 #+title: MIL Requirements
 * brainstorming
-  - OPTION write minimal lisp compiler in 6502 assembler
-  - OPTION write minimal lisp compiler in c
-  - write minimal lisp compiler in minimal racket that compiles to 6502 assembler
-  - then port this compiler to that the minimal lisp (self hosting)
-  - extend this lisp step by step to fit minimalism while keeping usability
-  - design runtime environment for lisp (reuse as much c64 stuff as possible, putting that behind abstractions?)
+- OPTION write minimal lisp compiler in 6502 assembler
+- OPTION write minimal lisp compiler in c
+- write minimal lisp compiler in minimal racket that compiles to 6502 assembler
+- then port this compiler to that the minimal lisp (self hosting)
+- extend this lisp step by step to fit minimalism while keeping usability
+- design runtime environment for lisp (reuse as much c64 stuff as possible, putting that behind abstractions?)
 * preparations
-  - read about other implementations
-  - find minimal set of features
-  - use different kind of brackets for semantics
-  - pair, list (immutable=array), map, tree
+- read about other implementations
+- find minimal set of features
+- use different kind of brackets for semantics
+- pair, list (immutable=array), map, tree
 * goals
-  - write lisp on c64
-    - editor
-    - compiler
-    - interpreter?
-  - compile lisp down to (efficient) 6510 assembler
-    - tail call recursion
-    - work around stack limitation of 6510
-    - find efficient data structures for memory restrictions
-    - immutability as default
-    - typing
-  - design a lisp that grows to
-    - macros
-    - syntax rules (as in racket)
-    - run on larger machines
+- write lisp on c64
+  - editor
+  - compiler
+  - interpreter?
+- compile lisp down to (efficient) 6510 assembler
+  - tail call recursion
+  - work around stack limitation of 6510
+  - find efficient data structures for memory restrictions
+  - immutability as default
+  - typing
+- design a lisp that grows to
+  - macros
+  - syntax rules (as in racket)
+  - run on larger machines
 * optimize on byte code size
 * optimize on speed
 * design decisions
-  - just tail call recursion (no other type of recursion)
-    -> looping instead of recursion
-    -> no uncontrolled stack growth
-  - parameters are NOT passed through the stack (except perhaps for single parameters)
-    -> small stack footprint for calls
-    -> need parameters frames on the heap
-  - use native 6510 data types where possible
-    -> execution speed
-  - use call stack of 6510
-    -> execution speed
-    -> restricted call depth [256 bytes / (2 return address + 1-2? parameter frame/actual parameter) == 64 max call depth!]
-       maybe this is not strictly necessary
-    -> swap out/in calling stack when reaching the limit (detection?)
-  - use c64 basic rom / kernal rom to implement runtime (e.g. floating point arithmetic, string output etc.)
-  - use persistent data structures as default <- can this be implemented on top?
+- just tail call recursion (no other type of recursion)
+  -> looping instead of recursion
+  -> no uncontrolled stack growth
+- parameters are NOT passed through the stack (except perhaps for single parameters)
+  -> small stack footprint for calls
+  -> need parameters frames on the heap
+- use native 6510 data types where possible
+  -> execution speed
+- use call stack of 6510
+  -> execution speed
+  -> restricted call depth [256 bytes / (2 return address + 1-2? parameter frame/actual parameter) == 64 max call depth!]
+     maybe this is not strictly necessary
+  -> swap out/in calling stack when reaching the limit (detection?)
+- use c64 basic rom / kernal rom to implement runtime (e.g. floating point arithmetic, string output etc.)
+- use persistent data structures as default <- can this be implemented on top?
 * minimal language constructs / concepts
-  - namespacing / modules
-    (module name "documentation"? imports? exports? definitions)
-    (module+ test ...)
-  - special modules (e.g. test)
-  - constants
-    - 'nil, 't, 'f
-  - values/reader
-    - "string" -> native strings
-    - 123      -> integer (incl sign), binary and hex allowed (postfix b h)
-    - 1.2      -> floating point
-    - \#a      -> character
-    - a-b?     -> identifier, anything without space except " \ ( ) { } [ ] ; and space
-    - ;        -> comment until end of line
-  - special ids
-    - nil (identical nil nil) -> f
-    - t
-    - f
-  - symbol definition
-    #+begin_src elisp
-      (def symbol type? "documentation"? value) ;; ? indicating optional parameters
-      (def untyped-symbol "documentation" value)
-      (def symbol value)
-    #+end_src
-  - anonymous function
-    #+begin_src elisp
-      (lambda (param1 param2)(body ...))
-    #+end_src
-  - function definition (could be derived)
-    #+begin_src elisp      
-      (def (func-name param1 param2 untyped-param3)
-           (type-param1 type-param2 type-param3 type-return)? ;; optional
-           "documentation"?
-           (body))
-
-      (def func-name (func/t type-param1 type-param2 type-param3 type-return) "documentation" (lambda (param1 param2 param3) (body)))
-    #+end_src
-  - special forms
-    #+begin_src elisp
-      (if bool-exp then-form else-form)
-      (if-not bool-exp then-form else-form) ;; derived
-      (when bool-exp when-forms) ;; derived (if bool-exp (begin when-forms) nil)
-      (unless bool-exp unless-forms) ;; derived
-      (cond (conda a)(condb b)...(t always)) ;; derive if from this
-
-      (begin ...) ;; form grouping
-      (identical? a b ...) ;; pointing to the same memory location
-      (equal? a b  ...) ;; value equal (deep by default)
-      (shallow-equal? ...) ;; ...
-    #+end_src
-    
-  - function application
-    #+begin_src elisp
-      (apply #'func-name param1 param2 param3)
-    #+end_src
-  - function call (could be derived)
-    #+begin_src elisp
-      (func-name param1 param2 param3)
-    #+end_src
-  - native data types
-    - 'byte8, 'byte16,
-    - 'char, 'string     
-  - data types
-    - 'bool
-  - optional typing ('any)
-  - type definition
-    #+begin_src elisp
-      (func/t bool byte8) ;; function type with one parameter of type bool returning byte8
-      (or/t bool nil) ;; type that can be boolean or nil
-      (and/t ...) ;; must be of all of these types
-      (guard/t (lambda (value) 't)) ;; runtime guard type on this
-      (struct/t ...) ;; maybe use only one of them (map/struct), since r/o by default -> optimization posssible?
-      (map/t ...)
-    #+end_src
-  - structure definition (could be derived as special list)
-    #+begin_src elips
-      (def-struct (struct-name "documentation"? (symbol1 type "doc"?)(symbol2 type "doc"?) ...))
-    #+end_src
-  - structure construction (could be derived as list)
-    #+begin_src elisp
-      (struct-name value1 value2 ...)
-    #+end_src
-  - structure access (could be derived by automatic access functions on a list, but natively the cpu is able to access at any point, maybe
-    array is more accurate to use here)
-    #+begin_src elisp
-      (struct-name-symbol1 structure)
-      (with struct-name (symbol1 structure)) ;; ??
-    #+end_src
-  - cell construction
-    #+begin_src elisp
-      (cons 'car 'cdr)
-    #+end_src
-  - cell access
-    #+begin_src elisp
-      (car (cons 'car 'cdr))
-      (cdr (cons 'car 'cdr))
-    #+end_src
-  - list construction
-    #+begin_src elisp
-      (list 'a 'b 'c 'd) ;; (cons 'a (cons 'b (cons 'c (cons 'd nil))))
-    #+end_src
-  - list access
-    #+begin_src elisp
-      (car (list 'a 'b 'c 'd))
-      (cdr (list 'a 'b 'c 'd))
-    #+end_src
-  - map (is a (dynamic) structure)
-    #+begin_src elisp
-      (def my-map (map/t value-type1 value-type2)  "some" { (key value) (key value) })
-      (zip2map keys-list values-list) ;; returns a map
-      (my-map-get map key) ;; return value
-      (my-map-has? map key) ;; returns boolean
-      (my-map-keys map) ;; list of keys
-      (my-map-values map) ;; list of values
-    #+end_src
-  - set (is a list)
-    - contains, union, intersection
-  - tree (is a list of lists)
-  - queue (is a (inversed?) list)
-  - stack (is a list)
-  - array (is a (static) list)
-* execution considerations (1st step only interpretation = execute what the reader returns)
-  - compile time considerations
-    - definition
-      - symbol in global symbol table and reference by its id/pointer
-      - make sure guards are executed upon call/return
-    - evaluation
-      - type checking
-  - evaluation
-    - create initial environment (globals, namespaced etc.) (like module environment, but root, importing basic runtime)
-    - get first symbol of the list
-    - special symbol?
-      - let
-        - extend environment with symbol and its value
-        - cleanup environment after leaving this let
-      - cond
-        - eval boolean cond expression and if true eval and return the respective expression
-        - else goto next expression
-      - if (derived)
-        - eval boolean expression
-        - eval depending on previous result
-      - apply
-        - get next symbol (resolve it to a function implementation or lambda expression)
-        - create subframe / call environment with parameter symbols pointing to the expressions passed
-        - execute guard type checks with parameters are resolved
-      - def
-        - put value into the current environment (value is then a lambda expression)
-      - module
-        - create module environment 
-      - lambda
-      - begin      
-    - regular symbol (resolve to value/implementation)
-      - car, cdr, cons, ...
-  - utility function to put source code into memory (for mil interpreter to work)
-  - when and how to go gc?
-  - how to allocate data?
-  - how about reference counting w/o cyclic structures => what about compacting gc? what about partitioning the memory for several use
-    cases? growing memory
-* the reader
-  - cells should be made of token + ptr to next cell (or 0)
-    or (to open a new list-level) ptr to next level cell + ptr to next cell (or 0)
-  - idea: fixed sized cells (efficiency consideration):
-    - examples (min size) looks like 6: 1 refcount + 1/2 type + 2 word/abs ptr/str ptr + 1/2 type + 2 word/abs ptr/str ptr
-      [refcount] + [t] + word + [t] + word
-      [refcount] + [t] + abs ptr + [t] + abs ptr
-      [refcount] + [t] + str ptr + [t] + str ptr
-  - a cell is made of refcount x this x next
-    if refcount drops to 0 all referenced cells are reduced by 1 and this cell is discarded
-  - to have a very compact representation of for cells, references and values, it might be beneficial to have cells only 4-byte addressable
-    => cells are of 2^i (i>0) size
-  - cell functions (cell = ptr to cell)
-    - internal api
-      - unlink-cell c :: (reduce reference count, when 0 unlink all referenced cells and garbage collect the memory of this cell)
-      - link-cell c :: increase reference count to cell
-      - ptr? c.{left|right} :: is ca/dr c a pointer to another cell
-      - nil? c.{left|right} :: is ca/dr c a nil pointer?
-      - deref c.{left|right} :: dereference ca/dr c (e.g. make sure absolute and relative links are properly resolved)
-      - allocate value/ptr/nil value/ptr/nil :: allocate new cell and use the right pointer / value type, try to make compact choice (if
-        allocated cell is close to the one referenced, short relative pointers might be usable)
-    - external api (a,b: value | cell | nil, c: cell)
-      - cons a b :: create a cell with ptr/values a and b, set reference count to (0/1), increase reference count of all pointed to cells (if any)
-      - car c :: get first element of cell (value or cell or nil)
-      - cdr c :: get second element of cell (value or cell or nil)
-      - nil? a :: is cell reference nil?
-      - pair? a :: is a a reference to a cell (neither value nor nil)
-      - value? a :: is a a value (no reference to a cell nor nil)
-      - byte? a :: is a a byte value
-      - word? a :: is a a word value
-      - string? a :: is a a string value
-      - symbol? a :: is a a symbol value
-      - eq? a b :: is a equal to b (t: only if value = value or, if ptr, recurse into ptr until values can be compared, else f)
-      - identical? a b :: is a identical to b (t: only if value = value or, if ptr = ptr)
-  - compact cell representation
-    - cell sizes:
-      3 = 1 refcount + 1 relative ptr + 1 relative ptr
-      4 = 1 refcount + 1 byte type + 1 byte value + 1 relative ptr
-      4+= 1 refcount + 1 string type + 1 string len + 0..255 characters + 1 relative ptr
-      5 = 1 refcount + 1 byte type + 1 byte value + 2 abs ptr
-      5 = 1 refcount + 1 word type + 2 word value + 1 relative ptr
-      5 = 1 refcount + 2 abs ptr + 2 abs ptr
-      6 = 1 refcount + 1 word type + 2 word value + 2 abs ptr
-      7 = 1 refcount + 1 word type + 2 word value + 1 word type + 2 word value
-    - pointers
-      - [1xxx xxxx][xxxx xxxx] = 15 bit abs ptr (shift left?)
-      - [00xx xxxx] = 6 bit relative ptr (+/-63)
-      - nil = 0000 0000 = 6 bit relative ptr 0
-    - values
-      - [01xx xttt] + (8 types possible)
-        - byte8
-        - word16
-        - string
-        - symbol (user-defined symbol, static symbols)
-  - transforms characters into tokens
-    - a token (1st step) is a two+ byte value
-      ptr             e.g. bbbb bbbb bbbb bbb0
-      symbol          e.g. <special-symbol-id> 001 |
-                           <symbol-id> 011 <extended-symbol-id>
-
-                           0000 1101 def ...
-      byte8           e.g. 0000 0111 byte
-      byte16          e.g. 0000 1111 low-byte high-byte
-      string-constant e.g. 0000 1011 <str-len> <actual string bytes>/ptr to string
-
-    - string -> symbol-id (pointing into a symbol table, a table of string)
-    - transforms original file into token stream (replacing the original file in memory)
-    - token-cons-pair: [2 byte ptr to next cell][byte reference count][token]
-    - token-list: ptr to first token-cons-pair
-  - examples
-    - single value:
-      #x20   -4-> [2 byte 0][0000 0010][#x20]
-      #xFFFE -5-> [2 byte 0][0000 0011][#xFE][#xFF]
-      'cdr   -3-> [2 byte 0][1000 0000]
-      'apply -3-> [2 byte 0][1000 0010]
-      "some" -10-> [2 byte 0][0000 0001] [#x04][#x00] [s][o][m][e]
-    - list of values:
-      '(#x20 #x22) -8-> [2 byte to next][0000 0010][#x20] [2 byte 0][0000 0010][#x22]
-* memory considerations / layout / module / execution / bytecode
-  - symbol table: [2 byte len][2 byte ptr to string of first symbol] ... [2 byte ptr to string of last symbol]
-    size: 2*<number of symbols> + 2
-    access: base-address + 2 + symbol-id << 1
-    functions: get-string-for-symbol <symbol-id>, add-symbol <string>
-  - environment: [2 byte len][2 byte ref to parent env][id of this function (2byte)][ [2 byte ptr to string of symbol][2 byte ptr to value of symbol] ] ...
-    size: 4*<number of symbols> + 4
-    functions: get-value-for-symbol <symbol-id>, create-child-env <parent-env>, add-symbol <string> <value>
-  - current-expression (value/nil/ptr to cell): nibble(type) (max)2 byte [total 3 bytes]
-  - current-env: ptr to current child env
-  - memory (growing/shrinking cell heap) : no solution for strings yet
-    | start | end | description                       |
-    |-------+-----+-----------------------------------|
-    |       |     | symbols (fixed after tokenizer)   |
-    |       |     | environment-stack (growing up)    |
-    |       |     | cell space (heap)  (growing down) |
-    |       |     | program (tokenized)               |
-    |       |     | mil runtime                       |
-    where to put the needed strings? having a pure cell heap has advantages for the gc, it can directly address memory known what is at the
-    given location.
-    making the cell space grow and shrink will make a compacting gc necessary.
-    compacting gc makes cell relocation necessary.
-    cell relocation includes reference updates. cell relocation will have the need to walk the heap.
-  - memory (fixed) -> fixed amount of cells => no growing => string + call frames have fixed memory available
-    | start | end | description                     |
-    |-------+-----+---------------------------------|
-    |       |     | symbols (fixed)                 |
-    |       |     | environment-stack (growing up)  |
-    |       |     | strings (growing down)          |
-    |       |     | cells fixed (keeping free list) |
-    |       |     | program (tokenized)             |
-    |       |     | mil runtime                     |
-  - cell pages e.g. 1024 byte (per type => e.g. byte,ptr cell, word,ptr cell, ptr,ptr cell, string,ptr cell, float,ptr cell)
-    each page has some more information about the cells therein
-    - if the type is fixed, there are fixed locations to look for ptrs => if pretty full, it might be efficient to go through those
-      this would make it necessary to put 0s into ptr in the free list
-    - free list vs. bitmap
-      bitmap allows for easy scanning of (active) pointers in the page
-      free list allows for easy allocation/deallocation in a page
-    - relocating/compaction
-      keep length of free list => how sparse is the page used => relocation attractive (into other page)
-      1. collect inner page references (no scanning other pages)
-      2. collect references from other pages (starting w/ ones having the same type, ...)
-      3. stop as soon as refcount locations were found (keep locations to adjust due to relocation)
-    maybe even short pointers possible
-    relocation may be easier
-    swapping pages into other memory?
-    example memory layout of a cell page 1024 of type byte, ptr pair
-     [1: page type]
-     [1: no of free cells]
-     [2: ptr to first free cell]
-     [31: bitmap (free/occupied cells)]
-     [1: unused]
-     [4: cell0 (8 ref count + 8 byte value + 16 ptr)]
-     ...
-     [4: cell247] 
-    example memory layout of a cell page 1024 of type word, ptr pair
-     [1: page type]
-     [1: no of free cells]
-     [2: ptr to first free cell] 
-     [25: bitmap (free/occupied cells)]
-     [5: cell0 (8 ref count + 16 byte value + 16 ptr)]
-     ...
-     [5: cell199]
-   depending on the gc algorithm / relocating algorithm there might be the need for spare cells at the end of the page
-   page types: unused (not allocated), [byte,ptr], [word,ptr], [ptr,ptr], [string,ptr], [float,ptr]
-   when using no reference counting is used (but mark and sweep), reference count bytes can be removed,
-   => e.g. a page of byte,ptr pairs will contain up to 326 cells (even more if bitmap is not needed)
-* gc
-  - whenever leaving an namespace (env child frame)
-    - loop over all symbols, decrement reference count of values, when 0 remove and try to collect cell pointed to (reduce reference count ...)
-    - resulting expression/value is kept, until it is clear that the caller discards the value returned (e.g. current-expression is overwritten)
-* loops / tail calls
-  - 1st: execute all recursive calls as tail calls (check that this can be done safely?)
-  - example
-    - w/ tail call
-      #+begin_src elisp
-        (defun tail-callable (num-list sum)
-          (cond ((empty? num-list)
-                 sum)
-                t (tail-callable (cdr num-list) (+ (car num-list) sum))))
-        ;; last expression is recursive call
-        ;; all parameter values can be computed w/o actually executing the recursive call
-      #+end_src
-      - the execution of the tail call will modify the current environment of the call itself (replacing num-list with (cdr num-list), and
-        sum with (+ (car num-list) sum) and goto/jump to the beginning of the function
-    - w/o tail call
-      #+begin_src elisp
-        (defun rec-sum (num-list)
-          (cond ((empty? num-list) 0)
-                (t (+ (car num-list) (rec-sum (cdr num-list))))))
-        ;; last expression to return is '+ and the recursive call is executed before actually returning from this function
-        ;; -> no tail call recursion: runtime error!
-      #+end_src
-      - recursion detection: e.g. recursively scan environment for calls to this function
-* example step through
+- namespacing / modules
+  (module name "documentation"? imports? exports? definitions)
+  (module+ test ...)
+- special modules (e.g. test)
+- constants
+  - 'nil, 't, 'f
+- values/reader
+  - "string" -> native strings
+  - 123      -> integer (incl sign), binary and hex allowed (postfix b h)
+  - 1.2      -> floating point
+  - \#a      -> character
+  - a-b?     -> identifier, anything without space except " \ ( ) { } [ ] ; and space
+  - ;        -> comment until end of line
+- special ids
+  - nil (identical nil nil) -> f
+  - t
+  - f
+- symbol definition
   #+begin_src elisp
-    (def (add n1 n2)
-         (+ n1 n2))
-
-    (add 10 12)
+    (def symbol type? "documentation"? value) ;; ? indicating optional parameters
+    (def untyped-symbol "documentation" value)
+    (def symbol value)
   #+end_src
-  - tokenizer result
-    - notation
-      [01: ->(02)] id of the cell is 01, containing a 2 byte reference to cell with id 02 (references are always 2 byte)
-    - id0: (def id1 id2)
-    - id1: (add n1 n2)
-    - id2: (+ n1 n2)
-    - id3: (add 10 12)
+- anonymous function
+  #+begin_src elisp
+    (lambda (param1 param2)(body ...))
+  #+end_src
+- function definition (could be derived)
+  #+begin_src elisp
+    (def (func-name param1 param2 untyped-param3)
+         (type-param1 type-param2 type-param3 type-return)? ;; optional
+         "documentation"?
+         (body))
 
-    - [:
+    (def func-name (func/t type-param1 type-param2 type-param3 type-return) "documentation" (lambda (param1 param2 param3) (body)))
+  #+end_src
+- special forms
+  #+begin_src elisp
+    (if bool-exp then-form else-form)
+    (if-not bool-exp then-form else-form) ;; derived
+    (when bool-exp when-forms) ;; derived (if bool-exp (begin when-forms) nil)
+    (unless bool-exp unless-forms) ;; derived
+    (cond (conda a)(condb b)...(t always)) ;; derive if from this
 
-    - [id0-0: ->(id0-1)] [1000 0001] [id0-1: ->(id1-0) ] [: ->(id2-0)]
+    (begin ...) ;; form grouping
+    (identical? a b ...) ;; pointing to the same memory location
+    (equal? a b  ...) ;; value equal (deep by default)
+    (shallow-equal? ...) ;; ...
+  #+end_src
+    
+- function application
+  #+begin_src elisp
+    (apply #'func-name param1 param2 param3)
+  #+end_src
+- function call (could be derived)
+  #+begin_src elisp
+    (func-name param1 param2 param3)
+  #+end_src
+- native data types
+  - 'byte8, 'byte16,
+  - 'char, 'string
+- data types
+  - 'bool
+- optional typing ('any)
+- type definition
+  #+begin_src elisp
+    (func/t bool byte8) ;; function type with one parameter of type bool returning byte8
+    (or/t bool nil) ;; type that can be boolean or nil
+    (and/t ...) ;; must be of all of these types
+    (guard/t (lambda (value) 't)) ;; runtime guard type on this
+    (struct/t ...) ;; maybe use only one of them (map/struct), since r/o by default -> optimization posssible?
+    (map/t ...)
+  #+end_src
+- structure definition (could be derived as special list)
+  #+begin_src elips
+    (def-struct (struct-name "documentation"? (symbol1 type "doc"?)(symbol2 type "doc"?) ...))
+  #+end_src
+- structure construction (could be derived as list)
+  #+begin_src elisp
+    (struct-name value1 value2 ...)
+  #+end_src
+- structure access (could be derived by automatic access functions on a list, but natively the cpu is able to access at any point, maybe
+  array is more accurate to use here)
+  #+begin_src elisp
+    (struct-name-symbol1 structure)
+    (with struct-name (symbol1 structure)) ;; ??
+  #+end_src
+- cell construction
+  #+begin_src elisp
+    (cons 'car 'cdr)
+  #+end_src
+- cell access
+  #+begin_src elisp
+    (car (cons 'car 'cdr))
+    (cdr (cons 'car 'cdr))
+  #+end_src
+- list construction
+  #+begin_src elisp
+    (list 'a 'b 'c 'd) ;; (cons 'a (cons 'b (cons 'c (cons 'd nil))))
+  #+end_src
+- list access
+  #+begin_src elisp
+    (car (list 'a 'b 'c 'd))
+    (cdr (list 'a 'b 'c 'd))
+  #+end_src
+- map (is a (dynamic) structure)
+  #+begin_src elisp
+    (def my-map (map/t value-type1 value-type2)  "some" { (key value) (key value) })
+    (zip2map keys-list values-list) ;; returns a map
+    (my-map-get map key) ;; return value
+    (my-map-has? map key) ;; returns boolean
+    (my-map-keys map) ;; list of keys
+    (my-map-values map) ;; list of values
+  #+end_src
+- set (is a list)
+  - contains, union, intersection
+- tree (is a list of lists)
+- queue (is a (inversed?) list)
+- stack (is a list)
+- array (is a (static) list)
+* execution considerations (1st step only interpretation = execute what the reader returns)
+- compile time considerations
+  - definition
+    - symbol in global symbol table and reference by its id/pointer
+    - make sure guards are executed upon call/return
+  - evaluation
+    - type checking
+- evaluation
+  - create initial environment (globals, namespaced etc.) (like module environment, but root, importing basic runtime)
+  - get first symbol of the list
+  - special symbol?
+    - let
+      - extend environment with symbol and its value
+      - cleanup environment after leaving this let
+    - cond
+      - eval boolean cond expression and if true eval and return the respective expression
+      - else goto next expression
+    - if (derived)
+      - eval boolean expression
+      - eval depending on previous result
+    - apply
+      - get next symbol (resolve it to a function implementation or lambda expression)
+      - create subframe / call environment with parameter symbols pointing to the expressions passed
+      - execute guard type checks with parameters are resolved
+    - def
+      - put value into the current environment (value is then a lambda expression)
+    - module
+      - create module environment
+    - lambda
+    - begin
+  - regular symbol (resolve to value/implementation)
+    - car, cdr, cons, ...
+- utility function to put source code into memory (for mil interpreter to work)
+- when and how to go gc?
+- how to allocate data?
+- how about reference counting w/o cyclic structures => what about compacting gc? what about partitioning the memory for several use
+  cases? growing memory
+* the reader
+- cells should be made of token + ptr to next cell (or 0)
+  or (to open a new list-level) ptr to next level cell + ptr to next cell (or 0)
+- idea: fixed sized cells (efficiency consideration):
+  - examples (min size) looks like 6: 1 refcount + 1/2 type + 2 word/abs ptr/str ptr + 1/2 type + 2 word/abs ptr/str ptr
+    [refcount] + [t] + word + [t] + word
+    [refcount] + [t] + abs ptr + [t] + abs ptr
+    [refcount] + [t] + str ptr + [t] + str ptr
+- a cell is made of refcount x this x next
+  if refcount drops to 0 all referenced cells are reduced by 1 and this cell is discarded
+- to have a very compact representation of for cells, references and values, it might be beneficial to have cells only 4-byte addressable
+  => cells are of 2^i (i>0) size
+- cell functions (cell = ptr to cell)
+  - internal api
+    - unlink-cell c :: (reduce reference count, when 0 unlink all referenced cells and garbage collect the memory of this cell)
+    - link-cell c :: increase reference count to cell
+    - ptr? c.{left|right} :: is ca/dr c a pointer to another cell
+    - nil? c.{left|right} :: is ca/dr c a nil pointer?
+    - deref c.{left|right} :: dereference ca/dr c (e.g. make sure absolute and relative links are properly resolved)
+    - allocate value/ptr/nil value/ptr/nil :: allocate new cell and use the right pointer / value type, try to make compact choice (if
+      allocated cell is close to the one referenced, short relative pointers might be usable)
+  - external api (a,b: value | cell | nil, c: cell)
+    - cons a b :: create a cell with ptr/values a and b, set reference count to (0/1), increase reference count of all pointed to cells (if any)
+    - car c :: get first element of cell (value or cell or nil)
+    - cdr c :: get second element of cell (value or cell or nil)
+    - nil? a :: is cell reference nil?
+    - pair? a :: is a a reference to a cell (neither value nor nil)
+    - value? a :: is a a value (no reference to a cell nor nil)
+    - byte? a :: is a a byte value
+    - word? a :: is a a word value
+    - string? a :: is a a string value
+    - symbol? a :: is a a symbol value
+    - eq? a b :: is a equal to b (t: only if value = value or, if ptr, recurse into ptr until values can be compared, else f)
+    - identical? a b :: is a identical to b (t: only if value = value or, if ptr = ptr)
+- compact cell representation
+  - cell sizes:
+    3 = 1 refcount + 1 relative ptr + 1 relative ptr
+    4 = 1 refcount + 1 byte type + 1 byte value + 1 relative ptr
+    4+= 1 refcount + 1 string type + 1 string len + 0..255 characters + 1 relative ptr
+    5 = 1 refcount + 1 byte type + 1 byte value + 2 abs ptr
+    5 = 1 refcount + 1 word type + 2 word value + 1 relative ptr
+    5 = 1 refcount + 2 abs ptr + 2 abs ptr
+    6 = 1 refcount + 1 word type + 2 word value + 2 abs ptr
+    7 = 1 refcount + 1 word type + 2 word value + 1 word type + 2 word value
+  - pointers
+    - [1xxx xxxx][xxxx xxxx] = 15 bit abs ptr (shift left?)
+    - [00xx xxxx] = 6 bit relative ptr (+/-63)
+    - nil = 0000 0000 = 6 bit relative ptr 0
+  - values
+    - [01xx xttt] + (8 types possible)
+      - byte8
+      - word16
+      - string
+      - symbol (user-defined symbol, static symbols)
+- transforms characters into tokens
+  - a token (1st step) is a two+ byte value
+    ptr             e.g. bbbb bbbb bbbb bbb0
+    symbol          e.g. <special-symbol-id> 001 |
+                         <symbol-id> 011 <extended-symbol-id>
+
+                         0000 1101 def ...
+    byte8           e.g. 0000 0111 byte
+    byte16          e.g. 0000 1111 low-byte high-byte
+    string-constant e.g. 0000 1011 <str-len> <actual string bytes>/ptr to string
+
+  - string -> symbol-id (pointing into a symbol table, a table of string)
+  - transforms original file into token stream (replacing the original file in memory)
+  - token-cons-pair: [2 byte ptr to next cell][byte reference count][token]
+  - token-list: ptr to first token-cons-pair
+- examples
+  - single value:
+    #x20   -4-> [2 byte 0][0000 0010][#x20]
+    #xFFFE -5-> [2 byte 0][0000 0011][#xFE][#xFF]
+    'cdr   -3-> [2 byte 0][1000 0000]
+    'apply -3-> [2 byte 0][1000 0010]
+    "some" -10-> [2 byte 0][0000 0001] [#x04][#x00] [s][o][m][e]
+  - list of values:
+    '(#x20 #x22) -8-> [2 byte to next][0000 0010][#x20] [2 byte 0][0000 0010][#x22]
+* memory considerations / layout / module / execution / bytecode
+- symbol table: [2 byte len][2 byte ptr to string of first symbol] ... [2 byte ptr to string of last symbol]
+  size: 2*<number of symbols> + 2
+  access: base-address + 2 + symbol-id << 1
+  functions: get-string-for-symbol <symbol-id>, add-symbol <string>
+- environment: [2 byte len][2 byte ref to parent env][id of this function (2byte)][ [2 byte ptr to string of symbol][2 byte ptr to value of symbol] ] ...
+  size: 4*<number of symbols> + 4
+  functions: get-value-for-symbol <symbol-id>, create-child-env <parent-env>, add-symbol <string> <value>
+- current-expression (value/nil/ptr to cell): nibble(type) (max)2 byte [total 3 bytes]
+- current-env: ptr to current child env
+- memory (growing/shrinking cell heap) : no solution for strings yet
+  | start | end | description                       |
+  |-------+-----+-----------------------------------|
+  |       |     | symbols (fixed after tokenizer)   |
+  |       |     | environment-stack (growing up)    |
+  |       |     | cell space (heap)  (growing down) |
+  |       |     | program (tokenized)               |
+  |       |     | mil runtime                       |
+  where to put the needed strings? having a pure cell heap has advantages for the gc, it can directly address memory known what is at the
+  given location.
+  making the cell space grow and shrink will make a compacting gc necessary.
+  compacting gc makes cell relocation necessary.
+  cell relocation includes reference updates. cell relocation will have the need to walk the heap.
+- memory (fixed) -> fixed amount of cells => no growing => string + call frames have fixed memory available
+  | start | end | description                     |
+  |-------+-----+---------------------------------|
+  |       |     | symbols (fixed)                 |
+  |       |     | environment-stack (growing up)  |
+  |       |     | strings (growing down)          |
+  |       |     | cells fixed (keeping free list) |
+  |       |     | program (tokenized)             |
+  |       |     | mil runtime                     |
+- cell pages e.g. 1024 byte (per type => e.g. byte,ptr cell, word,ptr cell, ptr,ptr cell, string,ptr cell, float,ptr cell)
+  each page has some more information about the cells therein
+  - if the type is fixed, there are fixed locations to look for ptrs => if pretty full, it might be efficient to go through those
+    this would make it necessary to put 0s into ptr in the free list
+  - free list vs. bitmap
+    bitmap allows for easy scanning of (active) pointers in the page
+    free list allows for easy allocation/deallocation in a page
+  - relocating/compaction
+    keep length of free list => how sparse is the page used => relocation attractive (into other page)
+    1. collect inner page references (no scanning other pages)
+    2. collect references from other pages (starting w/ ones having the same type, ...)
+    3. stop as soon as refcount locations were found (keep locations to adjust due to relocation)
+  maybe even short pointers possible
+  relocation may be easier
+  swapping pages into other memory?
+  example memory layout of a cell page 1024 of type byte, ptr pair
+   [1: page type]
+   [1: no of free cells]
+   [2: ptr to first free cell]
+   [31: bitmap (free/occupied cells)]
+   [1: unused]
+   [4: cell0 (8 ref count + 8 byte value + 16 ptr)]
+   ...
+   [4: cell247]
+  example memory layout of a cell page 1024 of type word, ptr pair
+   [1: page type]
+   [1: no of free cells]
+   [2: ptr to first free cell]
+   [25: bitmap (free/occupied cells)]
+   [5: cell0 (8 ref count + 16 byte value + 16 ptr)]
+   ...
+   [5: cell199]
+ depending on the gc algorithm / relocating algorithm there might be the need for spare cells at the end of the page
+ page types: unused (not allocated), [byte,ptr], [word,ptr], [ptr,ptr], [string,ptr], [float,ptr]
+ when using no reference counting is used (but mark and sweep), reference count bytes can be removed,
+ => e.g. a page of byte,ptr pairs will contain up to 326 cells (even more if bitmap is not needed)
+* gc
+- whenever leaving an namespace (env child frame)
+  - loop over all symbols, decrement reference count of values, when 0 remove and try to collect cell pointed to (reduce reference count ...)
+  - resulting expression/value is kept, until it is clear that the caller discards the value returned (e.g. current-expression is overwritten)
+* loops / tail calls
+- 1st: execute all recursive calls as tail calls (check that this can be done safely?)
+- example
+  - w/ tail call
+    #+begin_src elisp
+      (defun tail-callable (num-list sum)
+        (cond ((empty? num-list)
+               sum)
+              t (tail-callable (cdr num-list) (+ (car num-list) sum))))
+      ;; last expression is recursive call
+      ;; all parameter values can be computed w/o actually executing the recursive call
+    #+end_src
+    - the execution of the tail call will modify the current environment of the call itself (replacing num-list with (cdr num-list), and
+      sum with (+ (car num-list) sum) and goto/jump to the beginning of the function
+  - w/o tail call
+    #+begin_src elisp
+      (defun rec-sum (num-list)
+        (cond ((empty? num-list) 0)
+              (t (+ (car num-list) (rec-sum (cdr num-list))))))
+      ;; last expression to return is '+ and the recursive call is executed before actually returning from this function
+      ;; -> no tail call recursion: runtime error!
+    #+end_src
+    - recursion detection: e.g. recursively scan environment for calls to this function
+* example step through
+#+begin_src elisp
+  (def (add n1 n2)
+       (+ n1 n2))
+
+  (add 10 12)
+#+end_src
+- tokenizer result
+  - notation
+    [01: ->(02)] id of the cell is 01, containing a 2 byte reference to cell with id 02 (references are always 2 byte)
+  - id0: (def id1 id2)
+  - id1: (add n1 n2)
+  - id2: (+ n1 n2)
+  - id3: (add 10 12)
+
+  - [:
+
+  - [id0-0: ->(id0-1)] [1000 0001] [id0-1: ->(id1-0) ] [: ->(id2-0)]
 * references
 ** [[https://bernsteinbear.com/blog/compiling-a-lisp-1/][compiling a lisp]]
 ** [[https://github.com/oskarth/sai][minimal lisp immplemented in racket]] (see repo [[file:repo/+1/sai/][here]])
@@ -401,9 +401,9 @@
 ** sector lisp https://justine.lol/sectorlisp2/
 ** make your own lisp, original c/perl implementation https://github.com/leonita79/mal-leonita79/tree/master/impls/c
 ** honeylisp (apple2 live coding env)
-   - https://bitbucket.org/SpindleyQ/honeylisp/src/main/
-   - https://spindleyq.itch.io/8-bitsy
-   - https://dwheeler.com/6502/
+- https://bitbucket.org/SpindleyQ/honeylisp/src/main/
+- https://spindleyq.itch.io/8-bitsy
+- https://dwheeler.com/6502/
 *** honeylisp https://www.youtube.com/watch?v=Q9TG1G0l3xY&list=PLPWFbl2QwQaZM5DxmIDNCrN3CuTiSTg8q&index=1
 ** apple2 -> lisp machine https://blog.nullspace.io/apple-2-lisp-part-1.html
 ** minimal lisp impl https://github.com/kanaka/mal/tree/master/impls/rust
@@ -417,7 +417,7 @@
 ** https://github.com/kanaka/miniMAL
 ** https://carld.github.io/2017/06/20/lisp-in-less-than-200-lines-of-c.html
 ** video: byrd on the most beautiful program ever written (maxwell equations of software)
-   - https://www.youtube.com/watch?v=OyfBQmvr2Hc
+- https://www.youtube.com/watch?v=OyfBQmvr2Hc
 ** c64 disk copiers https://commodore.software/downloads/category/24-disk-copiers
 ** c64 text games with cc65 https://retrogamecoders.com/retro-c-code-text-games/
 ** blog about hw close scheme - https://dustycloud.org/blog/guile-steel-smelting-pot/
