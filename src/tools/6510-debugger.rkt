@@ -376,20 +376,21 @@ EOF
     (6510-debugger--show-address-on-source-lines file-name (debug-state-pc-source-map d-state))))
 
 (define/c (run-debugger--step-update-emacs-integration capabilities s-entry d-state)
-  (-> emacs-capabilities? pc-source-map-entry? debug-state? any/c)
-  (if (emacs-capabilities-sync-step-with-source capabilities)
-    (when s-entry
-      (6510-debugger--show-disassembly-on-source-lines (pc-source-map-entry-file s-entry)
-                                                       (pc-source-map-entry-line s-entry)
-                                                       (create-disassemble-annotation-string (car (debug-state-states d-state)))))
-    (begin (debugger--pretty-print #f #f d-state)
-           (displayln "")))
+  (-> emacs-capabilities? (or/c pc-source-map-entry? #f) debug-state? any/c)
+  (cond [(and (emacs-capabilities-sync-step-with-source capabilities)
+            s-entry)
+         (6510-debugger--show-disassembly-on-source-lines (pc-source-map-entry-file s-entry)
+                                                          (pc-source-map-entry-line s-entry)
+                                                          (create-disassemble-annotation-string (car (debug-state-states d-state))))]
+        [else
+         (debugger--pretty-print #f #f d-state)
+         (displayln "")])
   (when (emacs-capabilities-print-proc-status capabilities)
     (6510-debugger--proc-buffer-display d-state)))
 
 (define/c (run-debugger--step-cleanup-emacs-integration capabilities s-entry)
-  (-> emacs-capabilities? pc-source-map-entry? any/c)
-  (when (emacs-capabilities-sync-step-with-source capabilities)
+  (-> emacs-capabilities? (or/c pc-source-map-entry? #f) any/c)
+  (when (and s-entry (emacs-capabilities-sync-step-with-source capabilities))
     (when s-entry (6510-debugger--remove-disassembly-on-source-lines (pc-source-map-entry-file s-entry)))))
 
 (define/c (run-debugger--cleanup-emacs-integration capabilities file-name)
