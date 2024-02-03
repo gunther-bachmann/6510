@@ -2,6 +2,7 @@
 
 (require '6510-debugger-sync-source)
 (require '6510-processor-display)
+(require '6510-debugger)
 
 ;;;###autoload
 (defun 6510-debugger--has-proc-display-cap () t)
@@ -10,5 +11,7 @@
   (if (find-buffer-visiting file-name)
       t
     nil))
+
+
 
 (provide '6510-emacs-integration)
