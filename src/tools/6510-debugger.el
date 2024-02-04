@@ -65,8 +65,13 @@
                (hex-location (overlay-get hex-num-ov 'before-string))
                (hex-str (string-trim (substring-no-properties hex-location))))
       (message "hexlocation %s" hex-location)
-      (6510-debugger--visualize-break-point)
-      (6510-debugger--execute-command-in-repl (format "stop pc = %s" hex-str)))))
+      (if (6510-debugger--visualized-break-point-p)
+          (progn
+           (6510-debugger--remove-visualized-break-point)
+           (6510-debugger--execute-command-in-repl (format "clear stop pc = %s" hex-str)))
+        (progn
+         (6510-debugger--visualize-break-point)
+         (6510-debugger--execute-command-in-repl (format "stop pc = %s" hex-str)))))))
 
 (defun 6510-debugger--visualize-break-point ()
   (let ((before-string (propertize " " 'display '(left-fringe large-circle)))
