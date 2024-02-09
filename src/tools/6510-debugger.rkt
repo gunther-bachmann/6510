@@ -47,10 +47,7 @@
 ;; (namespace-variable-value 25)
 ;; (eval '(+ some 5)) ;; => 30
 
-;; enable/disable breakpoints
-;; give breakpoints names
-;; list breakpoints
-;; delete single breakpoints (by name)
+(define debugger-max-uninterrupted-steps 4096)
 
 ;; set or clear flags
 (define/c (modify-flag set flag c-state)
@@ -69,15 +66,12 @@
          (if set (set-zero-flag c-state) (clear-zero-flag c-state))]
         [else c-state]))
 
-
-
 (define/c (debugger--pretty-print address len d-state)
   (-> (or/c string? false?) (or/c string? false?) debug-state? debug-state?)
   (define c-state (car (debug-state-states d-state)))
   (display (disassemble c-state
                         (if address (string->number address 16)  (cpu-state-program-counter c-state))
                         (if len (string->number len 16) 1)))
-
   d-state)
 
 (define/c (debugger--print-memory address len d-state)
@@ -154,13 +148,6 @@
 (define/c (debugger--pop-breakpoint d-state)
   (-> debug-state? debug-state?)
   (struct-copy debug-state d-state [breakpoints (cdr (debug-state-breakpoints d-state))]))
-
-;; (define/c (debugger--run d-state [display #t])
-;;   (->* (debug-state?) (boolean?) debug-state?)
-;;   (let-values (((breakpoint new-states) (run-until-breakpoint (debug-state-states d-state) (debug-state-breakpoints d-state))))
-;;     (when (and breakpoint display)
-;;       (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))
-;;     (struct-copy debug-state d-state [states new-states])))
 
 (define/c (debugger--run d-state (display #t))
   (->* (debug-state?) (boolean?) debug-state?)
@@ -505,17 +492,20 @@ EOF
   (zero? (peek-pc c-state)))
 
 ;; run until a break point hits or the cpu is on a BRK statement
-(define/c (run-until-breakpoint states breakpoints)
-  (-> (listof cpu-state?) list? (values (or/c boolean? breakpoint?) (listof cpu-state?)))
+(define/c (run-until-breakpoint states breakpoints (steps 0))
+  (->* ((listof cpu-state?) list?)  (nonnegative-integer?) (values (or/c boolean? breakpoint?) (listof cpu-state?)))
   (let ([breakpoint (breakpoint-hits (car states) breakpoints)])
-    (if (or breakpoint
+    (cond [(or breakpoint
            (-debugger-at-brk (car states))
            (-debugger-at-root-rts (car states)))
-        (begin
-          (values breakpoint states))
-        (begin
-          (let ([next-states (cons (execute-cpu-step (car states)) states)])
-            (run-until-breakpoint next-states breakpoints))))))
+           (values breakpoint states)]
+          [(> steps debugger-max-uninterrupted-steps)
+           (values breakpoint states)]
+          [else
+           (run-until-breakpoint
+            (cons (execute-cpu-step (car states)) states)
+            breakpoints
+            (fx+ 1 steps))])))
 
 (define/c (compile-opcodes str)
   (-> string? (listof byte/c))
