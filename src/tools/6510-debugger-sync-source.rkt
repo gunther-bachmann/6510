@@ -15,6 +15,7 @@
  6510-debugger--remove-all-addresses-on-source
  6510-debugger--show-disassembly-on-source-lines
  6510-debugger--show-address-on-source-lines
+ 6510-debugger--move-cursor-to-source-line
  6510-debugger--remove-disassembly-on-source-lines
 
  (struct-out pc-source-map-entry))
@@ -27,6 +28,7 @@
 
 (define elisp-function-remove-disassembly-on-source-lines "6510-debugger--remove-disassembly-on-source-lines")
 (define elisp-function-show-disassembly-on-source-line "6510-debugger--show-disassembly-on-source-lines")
+(define elisp-function-move-cursor-to-source-line "6510-debugger--move-cursor-to-source-line")
 (define elisp-function-remove-all-addresses-on-source "6510-debugger--remove-all-overlay")
 (define elisp-function-show-address-on-source-line "6510-debugger--show-address-on-source-line")
 ;; (define elisp-function-remove-highlighted-execution-line "6510-debugger--remove-highlighted-execution-line")
@@ -76,6 +78,14 @@
   (-> string? (hash/c nonnegative-integer? pc-source-map-entry?) any/c)
   (for ([(pc entry) source-map])
     (-show-address-on-source-line file-name pc (pc-source-map-entry-line entry))))
+
+(define/c (6510-debugger--move-cursor-to-source-line file-name line)
+  (-> string? nonnegative-integer? any/c)
+  (6510-debugger--execute-elisp-expression
+   (format "(~a \"~a\" ~a)"
+           elisp-function-move-cursor-to-source-line
+           file-name
+           (add1 line))))
 
 ;; display an overlay on the given source file at position of the program counter
 (define/c (6510-debugger--show-disassembly-on-source-lines file-name line disassembled)

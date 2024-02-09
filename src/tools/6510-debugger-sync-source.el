@@ -5,10 +5,11 @@
   "add overlay of pc to line of file"
   (when-let ((buffer (find-buffer-visiting (format "./%s" file-name))))
     (with-current-buffer buffer
-      (unless hl-line-mode (hl-line-mode 1))
-      (goto-line line)
-      (let ((ov (make-overlay (line-beginning-position) (1+ (line-beginning-position)))))
-        (ov-set ov 'before-string (propertize pc-str 'font-lock-face '(:foreground "orange4" :slant normal)))))))
+      (save-excursion
+        (goto-char (point-min))
+        (forward-line (1- line))
+        (let ((ov (make-overlay (line-beginning-position) (1+ (line-beginning-position)))))
+          (ov-set ov 'before-string (propertize pc-str 'font-lock-face '(:foreground "orange4" :slant normal))))))))
 
 ;;;###autoload
 (defun 6510-debugger--remove-all-overlay (file-name)
@@ -57,23 +58,27 @@
   "highlight line in the buffer visiting the given file"
   (when-let ((buffer (find-buffer-visiting (format "./%s" file-name))))
     (with-current-buffer buffer
-      (6510-debugger--remove-disassembly-on-source-lines file-name)
-      (unless hl-line-mode (hl-line-mode 1))
-      (goto-line line)
-      (hl-line-unhighlight)
-      (hl-line-highlight)
-      (let ((line-len (- (line-end-position) (line-beginning-position))))
-        ;; (when (> line-len 6510-debugger--command-overlay-column)
-        ;;   (6510-debugger--hide-tail-of-long-line
-        ;;    6510-debugger--command-overlay-column))
+      (let ((orig-point (point)))
+        (goto-char (point-min))
+        (forward-line (1- line))
+        (unless (ov-in 'disassembly t (line-beginning-position) (line-end-position))
+          (setq orig-point nil))
+        (6510-debugger--remove-disassembly-on-source-lines file-name)
         (6510-debugger--show-tail-string-overlay
          6510-debugger--command-overlay-column
-         disassembled-str))
-      (when-let ((sel-win (get-buffer-window buffer)))
-        (with-selected-window sel-win
-          (goto-char (point-min))
-          (forward-line (1- line))
-          (recenter nil t))))))
+         disassembled-str)
+        (if orig-point
+            (goto-char orig-point)
+          (run-hooks 'post-command-hook))))))
+
+;;;###autoload
+(defun 6510-debugger--move-cursor-to-source-line (file-name line)
+  (when-let ((buffer (find-buffer-visiting (format "./%s" file-name))))
+    (when-let ((sel-win (get-buffer-window buffer)))
+      (with-selected-window sel-win
+        (goto-char (point-min))
+        (forward-line (1- line))
+        (recenter nil t)))))
 
 ;; (defun 6510-debugger--remove-highlighted-execution-line (file-name)
 ;;   "highlight line in the buffer visiting the given file"

@@ -23,6 +23,7 @@
                   6510-debugger--remove-all-addresses-on-source
                   6510-debugger--show-disassembly-on-source-lines
                   6510-debugger--show-address-on-source-lines
+                  6510-debugger--move-cursor-to-source-line
                   6510-debugger--remove-disassembly-on-source-lines
                   pc-source-map-entry?
                   pc-source-map-entry-file
@@ -419,8 +420,10 @@ EOF
 
 (define/c (run-debugger--step-cleanup-emacs-integration capabilities s-entry)
   (-> emacs-capabilities? (or/c pc-source-map-entry? #f) any/c)
-  (when (and s-entry (emacs-capabilities-sync-step-with-source capabilities))
-    (when s-entry (6510-debugger--remove-disassembly-on-source-lines (pc-source-map-entry-file s-entry)))))
+  '()
+  ;; (when (and s-entry (emacs-capabilities-sync-step-with-source capabilities))
+  ;;   (when s-entry (6510-debugger--remove-disassembly-on-source-lines (pc-source-map-entry-file s-entry))))
+  )
 
 (define/c (run-debugger--cleanup-emacs-integration capabilities file-name)
   (-> emacs-capabilities? string?  any/c)
