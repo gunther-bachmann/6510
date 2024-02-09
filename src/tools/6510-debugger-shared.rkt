@@ -15,7 +15,8 @@
   #:transparent
   #:guard (struct-guard/c string? any/c))
 
-(struct debug-state (states breakpoints pc-source-map)
+(struct debug-state (states breakpoints pc-source-map output-function)
   #:guard (struct-guard/c (listof cpu-state?)
                           (listof breakpoint?)
-                          (hash/c nonnegative-integer? pc-source-map-entry?)))
+                          (hash/c nonnegative-integer? pc-source-map-entry?)
+                          (-> string? any/c)))

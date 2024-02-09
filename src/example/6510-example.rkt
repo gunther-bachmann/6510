@@ -9,7 +9,7 @@
 ; currently require/provide cannot be parsed or resolved here
 
 ROM-COUT  = $ffd2
-REPEAT    = 3
+REPEAT    = 2
 LINE-FEED = %00001101 ; $0d
 
 
@@ -50,9 +50,9 @@ rep:    lda hellon,x
 done:
 
         ;; using string out of the c64 rom
-        ;; hellon: zero terminated string
-        lda #<hellon
-        ldy #>hellon
+        ;; hellon2: zero terminated string
+        lda #<hellon2
+        ldy #>hellon2
         jsr $ab1e
         rts             ; end of execution
 
@@ -74,3 +74,7 @@ hello:  .data 23  ; number of bytes to print (string length)
 hellon: .asc "hELLO wORLD"
         .data $0d
         .data $00
+
+hellon2: .asc "hELLO wORLD FROM AB1E"
+         .data $0d
+         .data $00

@@ -18,6 +18,7 @@
 (require (only-in racket/fixnum fx+))
 (require (only-in "../ast/6510-command.rkt" ast-command?))
 (require (only-in "../ast/6510-assembler.rkt" assemble))
+(require (only-in "./6510-screen-display.rkt" 6510-debugger--print-string))
 (require (only-in "./6510-debugger-sync-source.rkt"
                   load-source-map
                   6510-debugger--remove-all-addresses-on-source
@@ -33,6 +34,7 @@
                   6510-debugger--proc-buffer-kill))
 (require (only-in "./6510-emacs-integration.rkt"
                   6510-debugger--has-single-step-cap
+                  6510-debugger--has-output-cap
                   6510-debugger--has-proc-display-cap))
 (require "6510-debugger-shared.rkt")
 
@@ -152,8 +154,8 @@
 (define/c (debugger--run d-state (display #t))
   (->* (debug-state?) (boolean?) debug-state?)
   (define c-states (debug-state-states d-state))
-  (define next-states (cons (execute-cpu-step (car c-states)) c-states))
-  (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state))))
+  (define next-states (cons (execute-cpu-step (car c-states) #t (debug-state-output-function d-state)) c-states))
+  (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state) 0 (debug-state-output-function d-state))))
     (when (and breakpoint display)
       (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))
     (struct-copy debug-state d-state [states new-states])))
@@ -180,7 +182,7 @@
       (let ((next-step-jsr (next-cpu-step? #x20 (car c-states)))
             (next-step-rts (next-cpu-step? #x60 (car c-states)))
             (sp            (cpu-state-stack-pointer (car c-states)))
-            (new-states    (cons (execute-cpu-step (car c-states)) c-states)))
+            (new-states    (cons (execute-cpu-step (car c-states) #t (debug-state-output-function d-state)) c-states)))
         (debugger--run-steps
          (struct-copy debug-state d-state
                       [states new-states])
@@ -377,14 +379,16 @@ EOF
 
 (struct emacs-capabilities
   (print-proc-status
-   sync-step-with-source)
+   sync-step-with-source
+   output)
   #:transparent)
 
 (define/c (collect-emacs-capabilities file-name)
   (-> string? emacs-capabilities?)
   (emacs-capabilities
    (6510-debugger--has-proc-display-cap)
-   (6510-debugger--has-single-step-cap file-name)))
+   (6510-debugger--has-single-step-cap file-name)
+   (6510-debugger--has-output-cap)))
 
 (define/c (run-debugger--prepare-emacs-integration capabilities file-name d-state)
   (-> emacs-capabilities? string? debug-state? any/c)
@@ -421,7 +425,7 @@ EOF
 
 ;; run an read eval print loop debugger on the passed program
 (define/c (run-debugger org program (file-name "") (verbose #t))
-  (->* (word/c (listof (or/c byte/c ast-command?)) string?) (boolean?) any/c)
+  (->* (word/c (listof (or/c byte/c ast-command?))) (string? boolean?) any/c)
   (define raw-bytes (if (ast-command? (car program))
                         (assemble org program)
                         program))
@@ -432,7 +436,10 @@ EOF
   (define d-state
     (debug-state (list (6510-load (initialize-cpu) org raw-bytes))
                  '()
-                 (load-source-map file-name)))
+                 (load-source-map file-name)
+                 (if (emacs-capabilities-output capabilities)
+                     6510-debugger--print-string
+                     debugger-output-function)))
 
   (run-debugger--prepare-emacs-integration capabilities file-name d-state)
   (run-debugger--repl d-state capabilities)
@@ -491,9 +498,12 @@ EOF
   (-> cpu-state? boolean?)
   (zero? (peek-pc c-state)))
 
+(define (debugger-output-function str)
+  (display str))
+
 ;; run until a break point hits or the cpu is on a BRK statement
-(define/c (run-until-breakpoint states breakpoints (steps 0))
-  (->* ((listof cpu-state?) list?)  (nonnegative-integer?) (values (or/c boolean? breakpoint?) (listof cpu-state?)))
+(define/c (run-until-breakpoint states breakpoints (steps 0) (string-output-function debugger-output-function))
+  (->* ((listof cpu-state?) list?)  (nonnegative-integer? (-> string? any/c)) (values (or/c boolean? breakpoint?) (listof cpu-state?)))
   (let ([breakpoint (breakpoint-hits (car states) breakpoints)])
     (cond [(or breakpoint
            (-debugger-at-brk (car states))
@@ -503,9 +513,10 @@ EOF
            (values breakpoint states)]
           [else
            (run-until-breakpoint
-            (cons (execute-cpu-step (car states)) states)
+            (cons (execute-cpu-step (car states) #t string-output-function) states)
             breakpoints
-            (fx+ 1 steps))])))
+            (fx+ 1 steps)
+            string-output-function)])))
 
 (define/c (compile-opcodes str)
   (-> string? (listof byte/c))
