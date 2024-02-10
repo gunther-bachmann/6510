@@ -16,7 +16,9 @@
 
 (define/c (6510-debugger--print-string str)
   (-> string? any/c)
+  (define ops (open-output-string))
+  (write str ops)
   (6510-debugger--execute-elisp-expression
-   (format "(~a \"~a\")"
+   (format "(~a ~a)"
            elisp-function-print-string
-           str)))
+           (get-output-string ops))))
