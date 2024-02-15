@@ -15,10 +15,11 @@
   (setq output-running nil))
 
 (defun 6510-debugger--ensure-output-window ()
-  (unless (get-buffer-window 6510-debugger-output-buffer)
+  (unless (and (get-buffer-window 6510-debugger-output-buffer)
+             (memq (get-buffer-window 6510-debugger-output-buffer) (window-list)))
     (split-window-below -20)
     (other-window 1)
-    (let ((buffer (generate-new-buffer 6510-debugger-output-buffer)))
+    (let ((buffer (or (get-buffer 6510-debugger-output-buffer) (generate-new-buffer 6510-debugger-output-buffer))))
       (set-window-buffer (selected-window) buffer)
       (set-buffer-major-mode buffer))
     (other-window -1)))
