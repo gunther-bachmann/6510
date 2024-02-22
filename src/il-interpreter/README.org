@@ -1,0 +1,262 @@
+#+title: IL-interpreter
+is an interpreter for the intermediate language that should be used on the 6510
+it needs to address the following issues
+- memory contraint
+  => very compact byte code (rather cisc than risc)
+- speed constraint
+  => fast decode, execution optimized making use of
+  - native stack (limited)
+  - zero page
+  - registers a, x, y
+* basic design
+** expression / evaluation stack
+values organized as stack that are part of evaluation
+** call frames / stack
+keep track of executions
+** environments
+are used to resolve symbols
+** bytecode
+very compact bytecode, common x quick operations = short, uncommon x long operations = long
+** atoms, cells, pairs, lists, arrays, (hash)maps, long lists, long arrays
+datatypes, representations
+** heap
+dynamic allocation of data, call frames, environments,
+* test programs for the compiler
+** hello world (complete)
+- define a module
+- require symbol from other module (io)
+- define function main (no parameters), documentation, body
+- execute function call with string parameter
+#+begin_src scheme
+  (module one)
+  (require io hello-world)
+
+  (def (main)
+       "prints hello world"
+       (write "hello-world\n"))
+#+end_src
+** TODO fragments
+RECONSIDER THE VERY FINE GRANULAR COMMAND SET TO BE MORE CISC
+*** constant byte
+#+begin_src scheme
+  17
+#+end_src
+- put constant byte on the stack ~(push-immediate-byte 17)~
+*** constant boolean
+#+begin_src scheme
+  #t
+#+end_src
+- put constant byte on the stack ~(push-immediate-byte $FF)~
+*** sum constant
+- put two constants into eval position (stack, register)
+- execute atomic function (byte+)
+#+begin_src scheme
+  (byte+ 17 4)
+#+end_src
+- ~((builtin-cmd byte+) (native-byte 17) (native-byte 4))~
+
+or (naive using 3x4 = 12 bytes)
+- [(cell-builtin-cmd byte+) . ->]
+- [(cell-native-byte 17) . ->]
+- [(cell-native-byte 4) . nil]
+wanted (minimal) 3 bytes
+- (built-in byte+) <- knows there are only two bytes following / other commands have variable parameter (e.g. number is coded)
+- (native-byte 17) || code reference || var reference
+- (native-byte 4)
+*** cond
+#+begin_src scheme
+  (cond (#f (byte+ 1 2))
+        (#t (byte+ 2 3)))
+#+end_src
+- ~(push-immediate-byte $00)~
+- ~(jump-if-true byte-code-location-1)~
+- ~(push-immediate-byte $ff)~
+- ~(jump-if-true byte-code-location-2)~
+byte code location following is raising a fall through exception
+
+or
+- (built-in cond)
+- number of cases 2-6 (encoded -2) into 00, bit mask indicating which option is just a value 000000
+- (ref to code for predicate)
+- (ref to code for first option) || value
+- (ref to code for second predicate)
+- (ref to code for second option) || value
+- ...
+- (ref to code for last option)  || value <- does not have a predicate, must be true!
+- next command
+*** derived unless/when
+- when = (cond (bool value) (t nil))
+- unless = (cond ((not(bool)) value) (t nil))
+*** comparison
+#+begin_src scheme
+  (=? 1 2)
+  (!=? 1 2)
+  (>? 1 2)
+#+end_src
+- ~(push-immediate-byte 1)~
+- ~(push-immediate-byte 2)~
+- ~(equals-byte-p)~
+
+or
+- (built-in equal)
+- number of args // always 2?
+- (ref-to-code for arg 1) || native value
+- (ref-to-code for arg 2) || native value
+- ....
+*** conditional if with subexpression
+#+begin_src scheme
+  (if #t (byte+ 1 2) (byte+ 2 3))
+#+end_src
+- see previous descr.
+*** constant list
+#+begin_src scheme
+  '(1 2)
+  (list 1 2)
+  nil
+  '(nil . nil)     ;; '()
+  '(1 . nil)       ;; '(1)
+  '(1 . (2 . nil)) ;; '(1 2)
+#+end_src
+code layout
+- (built-in list)
+- #of cells
+- (cell 1)   ;; car
+- (cell 2)   ;; cadr
+memory layout
+- (cell-pair (cell 1) (ref to (cell-pair (cell 2) nil-cell)))
+
+possible code layout (compact)
+- (cell pair)
+- (cell 1)          ;; car
+- (cell pair)       ;; cdr
+- (cell 2)          ;; cadr
+- (nil-cell)        ;; cddr
+
+other possible memory layout (regular)
+- (cell pair)
+- (cell 1)          ;; car
+- (ptr-to cdr cellpair)
+
+cdr cellpair
+- (cell pair)       ;; cdr
+- (cell 2)          ;; cadr
+- (nil-cell)        ;; cddr
+*** basic list functions
+#+begin_src scheme
+  (car '(1 2))     ;; 1
+  (cdr '(1 2))     ;; '(2)
+  (cons 1 '(2))    ;; '(1 2)
+  (nil? '())       ;; #f
+  (nil? nil)       ;; #t
+  (empty? '())     ;; #t
+  (empty? nil)     ;; runtime error (list expected)
+#+end_src
+*** define variable
+#+begin_src scheme
+  (def var 17)
+#+end_src
+- (define-top-level-symbol var)
+- (push-immediate-byte 17)
+- (assign-to var)
+*** return two added numbers
+- function definition (with intrinsic types)
+- execute atomic function
+- return result
+#+begin_src scheme
+  (def (adder (a byte) (b byte))
+       "return the sum"
+       (byte+ a b))
+#+end_src
+- ~(define-top-level-symbol adder)~
+- ~(push-byte-code-address byte-code-location)~
+- ~(assign-to var)~
+
+- byte-code-location:
+- ~(assert-locals-n 2)~
+- ~(push-local 0)~ ;; a
+- ~(push-local 1)~ ;; b
+- ~(byte+)~
+*** basic list functions
+**** IGNORE append (non tail call version)
+#+begin_src scheme
+  (def (append (a list) (b list))
+       "append two lists"
+       (if (nil? (car a))
+           b
+           (cons (car a)
+                 (append (cdr a) b))))
+#+end_src
+**** append (tail call version) if reverse is not implemented using append!!
+#+begin_src scheme
+  (def (-append (ar list) (b list))
+       (if (nil? (car ar))
+           b
+           (-append (cdr ar)
+                    (cons (car ar) b))))
+
+  (def (append (a list) (b list))
+       (-append (reverse a) b))
+#+end_src
+- ~(assert-locals-n 2)~
+- byte-code-location-append
+- ~(push-local 0)~
+- ~(car)~
+- ~(nil?)~
+- ~(jump-if-false byte-code-location-1)~
+- byte-code-location-0
+- ~(push-local 1)~
+- ~(return)~
+- byte-code-location-1
+- ~(push-local 0)~
+- ~(cdr)~
+- ~(push-local 1)~
+- ~(push-local 0)~
+- ~(car)~
+- ~(cons)~
+- ~(pop-to-local 0)~
+- ~(pop-to-local 1)~
+- ~(jump byte-code-location-append)~
+
+- ~(assert-locals-n 2)~
+- ~(push-local 1)~
+- ~(push-local 0)~
+- ~(call reverse)~
+- ~(call -append)~
+**** IGNORE reverse
+#+begin_src scheme
+  (def (reverse (a list))
+       (if (nil? a)
+           a
+           (append (reverse (cdr a)) ((car a) . nil ))))
+#+end_src
+**** reverse (tail call version)
+#+begin_src scheme
+  (def (-reverse (a list) (acc list))
+       (if (nil? (car a))
+           acc
+           (-reverse (cdr a) (cons (car a) acc))))
+
+  (def (reverse (a list))
+       (-reverse a '()))
+#+end_src
+*** function application
+#+begin_src scheme
+  (def fn #'byte+)
+  (apply fn 1 2)
+#+end_src
+*** higher order functions
+#+begin_src scheme
+  (def (map (fn fun) (a list))
+       "apply function to each element of the list returning a new list of the results"
+       (if (nil? (car a))
+           a
+           (cons (apply fn (car a)) (map fn (cdr a)))))
+#+end_src
+*** local variable (through let)
+#+begin_src scheme
+  (def (some-fun (a list))
+       (let (((b list) (list 1 2 3)))
+         (if (nil? (car a))
+             b
+             a)))
+#+end_src

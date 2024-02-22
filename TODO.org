@@ -36,6 +36,7 @@ e.g.
 - runtime names
 - scoping
 * Research
+see [[file:~/mil.readlist.org::*literature][literature]]
 ** movable memory (=> additional indirection on access)
 using a memory extension that can page in a memory page at some address (in some range) could be used without code adjustments, if the
 access to memory would be redirected from virtual page -> actual address.  this indirect access could be utilized for certain accesses.  it
@@ -43,6 +44,14 @@ would be nice if this access still allows for quick access if the access is repe
 access, while undoing this, once the page is swapped out again).  this indirect access is optional and does not incur runtime penalties for
 direct access!
 ** requirements of continuation on call-frame, resolving names, garbage collection, memory ownership
+** look at other intermediate compiler languages of functional languages
+- e.g. guile scheme (https://www.gnu.org/software/guile/manual/html_node/Guile-Implementation.html)
+- macscheme https://web.archive.org/web/20101210181945/http://larceny.ccs.neu.edu/doc/larceny-notes.html
+* References
+** debugging
+- debugging standard :: https://dwarfstd.org/
+** scheme doc
+https://github.com/schemedoc/bibliography/blob/master/page8.md
 * Epic
 ** OBSOLETE allocate/deallocate page (type)
 (obsolete since this will be implemented with the mil vm interpreter)

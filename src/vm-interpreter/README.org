@@ -193,3 +193,297 @@ page->type table.
   #+RESULTS:
   [[file:cons-cells.list-of-characters.png]]
 
+* intermediate language(s)
+** ideas
+- there may be several levels of intermediate languages
+  (e.g. mil -> il0 -> il1 -> ... -> byte-code -> ... -> iln-1 -> iln -> assembly)
+- byte code should be very compact
+  because of memory restrictions, the program size is very important
+** byte code is just one il
+- qualities
+  - compact
+    =>
+    - common opcodes 1 byte
+    - opcodes may trade off complexity (risc) for size (cisc)
+  - fast to execute
+    =>
+    - static resolutions have taken place
+    - optimizations have taken place
+    - fast decode of common opcodes
+    - fast decode of common var-access (e.g. 4 local vars = fast, others slower)
+** examples
+*** native operation (add, sub)
+*** execution of primitive (e.g. car cdr)
+*** call runtime
+*** call user function
+* 6510 considerations
+** small memory => compact opcodes
+** fast zero page access => equivalent to registers in zp
+** small native stack => heap allocated stack frames, native stack used for ?
+** fast decode with native 6510 instructions
+- useful assembly properties
+  - flags
+    | flag           | short | bit | description                                                               |
+    |----------------+-------+-----+---------------------------------------------------------------------------|
+    | Negative       | N     | b7  | Set when an operation results in a negative number                        |
+    | Overflow       | V     | b6  | Set when a signed addition or subtraction results in an overflow          |
+    | Unused         | —     | b5  | This bit of the processor status register is not used                     |
+    | Break          | B     | b4  | Set when a BRK instruction is executed                                    |
+    | Decimal Mode   | D     | b3  | When set, certain instructions operate in decimal rather than binary mode |
+    | Interrupt Mask | I     | b2  | When set, interrupt requests are ignored                                  |
+    | Zero           | Z     | b1  | Set when an operation results in a zero                                   |
+    | Carry          | C     | b0  | Set when an unsigned addition or subtraction results in an overflow       |
+  - flags after loading (e.g. the byte code) (LDA, LDX, LDY)
+    N = bit7 of loaded value
+    Z = loaded is zero
+  - flags after shifting rotating
+    - asl
+      bit0 = 0
+      N = old bit6, new bit7
+      Z = zero now?
+      C = old bit7
+    - lsr
+      bit7 = 0
+      N = 0
+      Z = zero now?
+      C = old bit0
+    - ror
+      bit7 = old C
+      N = new bit7 = old C
+      Z = zero now?
+      C = old bit0
+    - rol
+      bit0 = old C
+      N = old bit6 = new bit7
+      Z = zero now?
+      C = old bit7
+  - flags after and, ora, eor
+    just regular N and Z flag
+  - flags after bit
+    N = bit7
+    V = bit6
+    Z = mem AND accumulator = zero?
+  - flags after compare (cmp, cpx, cpy)
+    N = accumulator < operand
+    Z = accumulator = operand
+    C = accumulator >= operand
+  - flags after adc, sbc
+    N
+    V
+    Z
+    C
+* test programs for the compiler
+** hello world (complete)
+- define a module
+- require symbol from other module (io)
+- define function main (no parameters), documentation, body
+- execute function call with string parameter
+#+begin_src scheme
+  (module one)
+  (require io hello-world)
+
+  (def (main)
+       "prints hello world"
+       (write "hello-world\n"))
+#+end_src
+** fragments
+*** constant byte
+#+begin_src scheme
+  17
+#+end_src
+- put constant byte on the stack ~(push-immediate-byte 17)~
+*** constant boolean
+#+begin_src scheme
+  #t
+#+end_src
+- put constant byte on the stack ~(push-immediate-byte $FF)~
+*** sum constant
+- put two constants into eval position (stack, register)
+- execute atomic function (byte+)
+#+begin_src scheme
+  (byte+ 17 4)
+#+end_src
+- ~(push-immediate-byte 17)~
+- ~(push-immediate-byte 4)~
+- ~(byte+)~
+*** IGNORE conditional if (can be implemented through cand)
+- boolean condition must be evaluated
+- only the respective branch is then evaluated
+#+begin_src scheme
+  (if #t 17 4)
+#+end_src
+- ~(push-immediate-byte $ff)~
+- ~(jump-if-false byte-code-location-false-case)~
+  or
+  ~(jump-if-true byte-code-location-true-case)~
+*** cond
+#+begin_src scheme
+  (cond (#f (byte+ 1 2))
+        (#t (byte+ 2 3)))
+#+end_src
+- ~(push-immediate-byte $00)~
+- ~(jump-if-true byte-code-location-1)~
+- ~(push-immediate-byte $ff)~
+- ~(jump-if-true byte-code-location-2)~
+byte code location following is raising a fall through exception
+*** comparison
+#+begin_src scheme
+  (=? 1 2)
+  (!=? 1 2)
+  (>? 1 2)
+#+end_src
+- ~(push-immediate-byte 1)~
+- ~(push-immediate-byte 2)~
+- ~(equals-byte-p)~
+*** conditional if with subexpression
+#+begin_src scheme
+  (if #t (byte+ 1 2) (byte+ 2 3))
+#+end_src
+- ~(push-immediate-byte $ff)~
+- ~(jump-if-false byte-code-location-false)~
+- ~(push-immediate-byte 1)~
+- ~(push-immediate-byte 2)~
+- ~(byte+)~
+- ~(jump byte-code-location-next)~
+- byte-code-location-false:
+- ~(push-immediate-byte 2)~
+- ~(push-immediate-byte 3)~
+- ~(byte+)~
+- byte-code-location-true:
+*** constant list
+#+begin_src scheme
+  '(1 2)
+  (list 1 2)
+  nil
+  '(nil . nil)     ;; '()
+  '(1 . nil)       ;; '(1)
+  '(1 . (2 . nil)) ;; '(1 2)
+#+end_src
+- ~(push-nil-cell)~
+- ~(push-byte-cell 2)~
+- ~(cons)~
+- ~(push-byte-cell 1)~
+- ~(cons)~
+- optimized to
+- ~(push-immediate-byte 2)~
+- ~(push-immediate-byte 1)~
+- ~(list)~
+*** basic list functions
+#+begin_src scheme
+  (car '(1 2))     ;; 1
+  (cdr '(1 2))     ;; '(2)
+  (cons 1 '(2))    ;; '(1 2)
+  (nil? '())       ;; #f
+  (nil? nil)       ;; #t
+  (empty? '())     ;; #t
+  (empty? nil)     ;; runtime error (list expected)
+#+end_src
+*** define variable
+#+begin_src scheme
+  (def var 17)
+#+end_src
+- (define-top-level-symbol var)
+- (push-immediate-byte 17)
+- (assign-to var)
+*** return two added numbers
+- function definition (with intrinsic types)
+- execute atomic function
+- return result
+#+begin_src scheme
+  (def (adder (a byte) (b byte))
+       "return the sum"
+       (byte+ a b))
+#+end_src
+- ~(define-top-level-symbol adder)~
+- ~(push-byte-code-address byte-code-location)~
+- ~(assign-to var)~
+
+- byte-code-location:
+- ~(assert-locals-n 2)~
+- ~(push-local 0)~ ;; a
+- ~(push-local 1)~ ;; b
+- ~(byte+)~
+*** basic list functions
+**** IGNORE append (non tail call version)
+#+begin_src scheme
+  (def (append (a list) (b list))
+       "append two lists"
+       (if (nil? (car a))
+           b
+           (cons (car a)
+                 (append (cdr a) b))))
+#+end_src
+**** append (tail call version) if reverse is not implemented using append!!
+#+begin_src scheme
+  (def (-append (ar list) (b list))
+       (if (nil? (car ar))
+           b
+           (-append (cdr ar)
+                    (cons (car ar) b))))
+
+  (def (append (a list) (b list))
+       (-append (reverse a) b))
+#+end_src
+- ~(assert-locals-n 2)~
+- byte-code-location-append
+- ~(push-local 0)~
+- ~(car)~
+- ~(nil?)~
+- ~(jump-if-false byte-code-location-1)~
+- byte-code-location-0
+- ~(push-local 1)~
+- ~(return)~
+- byte-code-location-1
+- ~(push-local 0)~
+- ~(cdr)~
+- ~(push-local 1)~
+- ~(push-local 0)~
+- ~(car)~
+- ~(cons)~
+- ~(pop-to-local 0)~
+- ~(pop-to-local 1)~
+- ~(jump byte-code-location-append)~
+
+- ~(assert-locals-n 2)~
+- ~(push-local 1)~
+- ~(push-local 0)~
+- ~(call reverse)~
+- ~(call -append)~
+**** IGNORE reverse
+#+begin_src scheme
+  (def (reverse (a list))
+       (if (nil? a)
+           a
+           (append (reverse (cdr a)) ((car a) . nil ))))
+#+end_src
+**** reverse (tail call version)
+#+begin_src scheme
+  (def (-reverse (a list) (acc list))
+       (if (nil? (car a))
+           acc
+           (-reverse (cdr a) (cons (car a) acc))))
+
+  (def (reverse (a list))
+       (-reverse a '()))
+#+end_src
+*** function application
+#+begin_src scheme
+  (def fn #'byte+)
+  (apply fn 1 2)
+#+end_src
+*** higher order functions
+#+begin_src scheme
+  (def (map (fn fun) (a list))
+       "apply function to each element of the list returning a new list of the results"
+       (if (nil? (car a))
+           a
+           (cons (apply fn (car a)) (map fn (cdr a)))))
+#+end_src
+*** local variable (through let)
+#+begin_src scheme
+  (def (some-fun (a list))
+       (let (((b list) (list 1 2 3)))
+         (if (nil? (car a))
+             b
+             a)))
+#+end_src

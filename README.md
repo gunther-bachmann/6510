@@ -280,3 +280,9 @@ idea: use same commands as vice monitor (see https://vice-emu.sourceforge.io/vic
 ### Maybe
 * Extend interpreter to allow for c64-like output functions when calling rom addresses
 * [-] Emulate text mode (fixed charset) of c64
+
+
+### releated projects
+
+  mos :: https://github.com/datatrash/mos
+  
