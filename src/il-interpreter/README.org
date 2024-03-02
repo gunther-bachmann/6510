@@ -28,12 +28,17 @@ dynamic allocation of data, call frames, environments,
 - define function main (no parameters), documentation, body
 - execute function call with string parameter
 #+begin_src scheme
-  (module one)
-  (require io hello-world)
+  (module
+   one
+   "description of this module")
+
+  (require io write)
 
   (def (main)
        "prints hello world"
        (write "hello-world\n"))
+
+  (main)
 #+end_src
 ** TODO fragments
 RECONSIDER THE VERY FINE GRANULAR COMMAND SET TO BE MORE CISC
@@ -260,3 +265,67 @@ cdr cellpair
              b
              a)))
 #+end_src
+* general ideas
+** data is organized in native elements, boxed in cells, paried in cell-pairs
+- native element 8bit
+  - byte
+- cell 16bit
+  - byte cell = char cell = boolean cell
+  - reference-cell (pointing to other cell in heap) [bit7 is 1] => BMI/BPL for pointer
+  - nil-cell [one complete byte is 0 ?] => BEQ/BNZ for nil-cell
+  - symbol-cell => lookup
+- pair of cells 32bit
+  - car cell + cdr cell
+** sp organisation (call stack)
+return address put here by 'call
+[ bytecode ptr to caller ]
+** fp organisation (call frame)
+setup by 'create-call-frame
+[ local 0 - cell ]
+[ local 1 - cell ]
+** eval stack, atomic functions work on this stack
+values are pushed on the stack by
+'load-local
+'load-const (cell)
+** program byte code = list encoding using cell pairs
+this does not seem the right decision
+=> byte code is an array of bytes
+   data is organized in native data, cells, or cell pairs
+   what about data = code? maybe via transformation
+#+begin_src scheme
+  (defun (a-func p-1 p-2)
+    "description"
+    (byte+ p-1 p-2))
+#+end_src
+- naive
+  - outer: cell-pair: ptr->inner, nil-cell
+  - inner: cell-pair: symbol-cell('defun), ptr->header
+  - header: cell-pair: ptr->inhead, ptr->desc
+  - desc: cell-pair: ptr->desc-string, ptr->body
+  - desc-string: cell-pair: "d", ptr->after-d
+  - after-d: cell-pair: "e", ....
+  - ...: cell-pair: "n", nil-cell
+  - inhead: cell-pair: symbol-cell('a-func), ptr->param1
+  - param1: cell-pair: symbol-cell('p-1), ptr->param2
+  - param2: cell-pair: symbol-cell('p-2), nil-cell
+  - body: cell-pair: ptr->inbody, nil-cell
+  - inbody: cell-pair: symbol-cell('byte+), ptr->cp1
+  - cp1: cell-pair: symbol-cell('p-1), ptr->cp2
+  - cp2: cell-pair: symbol-cell('p-2), nil-cell
+
+- program eval translation
+  - a-func:
+  - ;; (assert-params-2) ;; ensure two parameters are used in call
+  - (local-load 0)    ;; load param-1
+  - (local-load 1)    ;; load param-2
+  - (binary+)         ;; atomic function binary+ on two parameters
+
+- calling a function like that:
+  #+begin_src scheme
+    (a-func 17 5)
+  #+end_src
+  - (create-call-frame 2) ;; create a call frame for 2 parameter
+  - (put-byte-to-local 17 0)
+  - (put-byte-to-local 5 1)
+  - (call a-func)
+  - (put-result to ...)
