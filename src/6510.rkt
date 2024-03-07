@@ -112,7 +112,7 @@
   (check-exn exn:fail:syntax? (λ () (expand #'(word-const some $10000)))))
 
 (define-for-syntax (byte-number-check val)
-  (let ((str-val (->string val)))
+  (let ([str-val (->string val)])
     (and (6510-number-string? str-val)
        (in-byte-range? (parse-number-string str-val)))))
 

@@ -106,7 +106,7 @@
          (ast-unresolved-opcode-cmd-resolve-sub-command command)]
         [(ast-unresolved-rel-opcode-cmd? command)
          (ast-unresolved-rel-opcode-cmd-resolve-sub-command command)]
-        [#t (raise-user-error "unknown unresolved command")]))
+        [else (raise-user-error "unknown unresolved command")]))
 
 ;; resolve all constants in commands into result using the constants hash
 (define/c (-resolve-constants result constants commands)

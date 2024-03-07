@@ -240,11 +240,11 @@
   (-> memory? cell-bound-reference? cell? memory?)
   (define vpage
     (get-memory-page a-memory (cell-bound-reference-page-no a-cell-ref)))
-  (cond ((and (byte-cell? a-cell) (byte-page? vpage))
+  (cond [(and (byte-cell? a-cell) (byte-page? vpage))
          (memory-set-page a-memory
                           (cell-bound-reference-page-no a-cell-ref)
-                          (write-byte-into-page vpage (cell-bound-reference-index a-cell-ref) (byte-cell-byte a-cell))))
-        (#t (raise-user-error "memory page not matching cell or unknown implementation"))))
+                          (write-byte-into-page vpage (cell-bound-reference-index a-cell-ref) (byte-cell-byte a-cell)))]
+        [else (raise-user-error "memory page not matching cell or unknown implementation")]))
 
 ;; push A-cell onto A-eval-stack
 (define/contract (push-cell a-eval-stack a-cell)
@@ -297,9 +297,9 @@
 (define (dereference-cell a-memory a-cell-reference)
   (-> memory? cell-bound-reference? cell?)
   (define page (get-memory-page a-memory (cell-bound-reference-page-no a-cell-reference)))
-  (cond ((byte-page? page)
-         (read-byte-cell-from-page page (cell-bound-reference-index a-cell-reference)))
-        (#t (raise-user-error "unknown memory page type"))))
+  (cond [(byte-page? page)
+         (read-byte-cell-from-page page (cell-bound-reference-index a-cell-reference))]
+        [else (raise-user-error "unknown memory page type")]))
 
 (module+ test #| dereference-cell |#
   (check-equal? (byte-cell-byte

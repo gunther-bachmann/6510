@@ -17,21 +17,21 @@
 
 (define/contract (translate-function-symbol sym)
   (-> symbol? symbol?)
-  (cond ((eq? sym '+)       'MILRT_PLUS)    ;; ok
-        ((eq? sym '-)       'MILRT_MINUS)   ;; ok
-        ((eq? sym 'display) 'MILRT_DISPLAY) ;; ok
-        ((eq? sym 'cdr)     'MILRT_CDR)
-        ((eq? sym 'car)     'MILRT_CAR)
-        ((eq? sym 'cons)    'MILRT_CONS)
-        ((eq? sym '>)       'MILRT_GREATER) ;; ok
-        ((eq? sym '<)       'MILRT_SMALLER) ;; ok
-        ((eq? sym 'eq?)     'MILRT_EQUAL)
-        ((eq? sym 'not)       'MILRT_NOT)
-        ((eq? sym 'zero?)   'MILRT_ZERO)
-        (#t                 (string->symbol
+  (cond [(eq? sym '+)       'MILRT_PLUS]    ;; ok
+        [(eq? sym '-)       'MILRT_MINUS]   ;; ok
+        [(eq? sym 'display) 'MILRT_DISPLAY] ;; ok
+        [(eq? sym 'cdr)     'MILRT_CDR]
+        [(eq? sym 'car)     'MILRT_CAR]
+        [(eq? sym 'cons)    'MILRT_CONS]
+        [(eq? sym '>)       'MILRT_GREATER] ;; ok
+        [(eq? sym '<)       'MILRT_SMALLER] ;; ok
+        [(eq? sym 'eq?)     'MILRT_EQUAL]
+        [(eq? sym 'not)       'MILRT_NOT]
+        [(eq? sym 'zero?)   'MILRT_ZERO]
+        [else                (string->symbol
                              (regexp-replace* #rx"[^a-zA-Z_0-9-]"
                                               (string-append user-function-prefix
-                                                             (symbol->string sym)) "_")))))
+                                                             (symbol->string sym)) "_"))]))
 
 (module+ test #| translate-function-symbol |#
   (check-equal? (translate-function-symbol '+)
@@ -174,13 +174,14 @@
 ;; compile a list of mil-expressions (interspersed with list of opcodes), passing ctx to each next compile
 (define/contract (compile--elements elements ctx (opcodes (list)))
   (->* ((listof (or/c mil-expression? (listof ast-command?))) compile-ctx?) ((listof ast-command?)) (values (listof ast-command?) compile-ctx?))
-  (if (empty? elements)
-      (values opcodes ctx)
-      (let ((element (car elements)))
-        (if (mil-expression? element)
-            (let-values (((compiled-opcodes compiled-ctx) (compile-expression element ctx)))
-              (compile--elements (cdr elements) compiled-ctx (append opcodes compiled-opcodes)))
-            (compile--elements (cdr elements) ctx (append opcodes element))))))
+  (cond [(empty? elements)
+         (values opcodes ctx)]
+        [else
+         (let ([element (car elements)])
+           (if (mil-expression? element)
+               (let-values (((compiled-opcodes compiled-ctx) (compile-expression element ctx)))
+                 (compile--elements (cdr elements) compiled-ctx (append opcodes compiled-opcodes)))
+               (compile--elements (cdr elements) ctx (append opcodes element))))]))
 
 (module+ test #| compile--elements |#
   (check-equal? (let-values (((opcodes ctx) (compile--elements (list (mil-uint8 15)
@@ -231,28 +232,29 @@
 ;; compile a list of mil-expressions (interspersed with list of opcodes), passing ctx to each next compile
 (define/contract (quote--elements elements ctx (opcodes (list)))
   (->* ((listof (or/c mil-expression? (listof ast-command?))) compile-ctx?) ((listof ast-command?)) (values (listof ast-command?) compile-ctx?))
-  (if (empty? elements)
-      (values opcodes ctx)
-      (let ((element (car elements)))
-        (if (mil-expression? element)
-            (let-values (((compiled-opcodes compiled-ctx) (quote-expression element ctx)))
-              (quote--elements (cdr elements) compiled-ctx (append opcodes compiled-opcodes)))
-            (quote--elements (cdr elements) ctx (append opcodes element))))))
+  (cond [(empty? elements)
+         (values opcodes ctx)]
+        [else
+         (let ([element (car elements)])
+           (if (mil-expression? element)
+               (let-values (((compiled-opcodes compiled-ctx) (quote-expression element ctx)))
+                 (quote--elements (cdr elements) compiled-ctx (append opcodes compiled-opcodes)))
+               (quote--elements (cdr elements) ctx (append opcodes element))))]))
 
 (define/contract (quote-expression quoted ctx)
   (-> mil-expression? compile-ctx? (values (listof ast-command?) compile-ctx?))  
-  (cond ((mil-atomic-value? quoted) (compile-expression quoted ctx))
-        ((mil-list? quoted) (quote--elements
+  (cond [(mil-atomic-value? quoted) (compile-expression quoted ctx)]
+        [(mil-list? quoted) (quote--elements
                              (append (list (list (JSR MILRT_PUSH_LIST_END_MARKER)))
                                      (reverse (mil-list-elements quoted))
                                      (list (list (JSR MILRT_PUSH_LIST_START_MARKER)))) 
-                             ctx))
-        ((mil-cell? quoted) (quote--elements
+                             ctx)]
+        [(mil-cell? quoted) (quote--elements
                              (list (mil-cell-tail quoted)
                                    (mil-cell-head quoted)
                                    (JSR MILRT_PUSH_CONS_CELLT))
-                             ctx))
-        (#t (raise-user-error "unknown expression type ~a" quoted))))
+                             ctx)]
+        [else (raise-user-error "unknown expression type ~a" quoted)]))
 
 (define/contract (compile-quote expr ctx)
   (-> mil-quote? compile-ctx? (values (listof ast-command?) compile-ctx?))  
@@ -278,13 +280,13 @@
 (define/contract (compile-expression expr ctx)
   (-> mil-expression? compile-ctx? (values (listof ast-command?) compile-ctx?))  
   (cond
-    ((mil-uint8? expr)  (compile-uint8 expr ctx))
-    ((mil-string? expr) (compile-string expr ctx))
-    ((mil-list? expr)   (compile-list expr ctx))
-    ((mil-bool? expr)   (compile-bool expr ctx))
-    ((mil-if? expr)     (compile-if expr ctx))
-    ((mil-quote? expr)  (compile-quote expr ctx))
-    (#t (raise-user-error "cannot compile expression ~a" expr))))
+    [(mil-uint8? expr)  (compile-uint8 expr ctx)]
+    [(mil-string? expr) (compile-string expr ctx)]
+    [(mil-list? expr)   (compile-list expr ctx)]
+    [(mil-bool? expr)   (compile-bool expr ctx)]
+    [(mil-if? expr)     (compile-if expr ctx)]
+    [(mil-quote? expr)  (compile-quote expr ctx)]
+    [else (raise-user-error "cannot compile expression ~a" expr)]))
 
 
 (define (mil->asm expr)

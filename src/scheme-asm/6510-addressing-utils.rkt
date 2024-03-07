@@ -80,9 +80,9 @@
            (byte-label? any-num)))))
 
 (module+ test #| byte-operand? |#
-  (for ((byte `(10 0 255 "10" "0" "255" "%101" ,(string->symbol "10") |10| |$10| |$FF| |%101| ">some" "<other")))
+  (for ([byte `(10 0 255 "10" "0" "255" "%101" ,(string->symbol "10") |10| |$10| |$FF| |%101| ">some" "<other")])
     (check-true (byte-operand? byte) (format "~a not a byte" byte)))
-  (for ((no-byte '(-1 256 "-1" "256" |-1| |$101| "some" "other")))
+  (for ([no-byte '(-1 256 "-1" "256" |-1| |$101| "some" "other")])
     (check-false (byte-operand? no-byte) (format "~a is a byte" no-byte))))
 
 ;; is the given string a byte label?
@@ -113,14 +113,14 @@
             (label? any-num)
             relative)
          (ast-resolve-byte-scmd any-num 'relative)]
-        [#t (raise-syntax-error #f (format "unknown byte operand ~a" any-num))]))
+        [else (raise-syntax-error #f (format "unknown byte operand ~a" any-num))]))
 
 (module+ test #| byte-operand |#
   (check-equal? (byte-operand "some" #t)
                 (ast-resolve-byte-scmd "some" 'low-byte))
   (check-equal? (byte-operand "some" #t #t)
                 (ast-resolve-byte-scmd "some" 'relative))
-  (for ((byte-expectation
+  (for ([byte-expectation
          `((10      . 10)
            (0       . 0)
            (255     . 255)
@@ -131,7 +131,7 @@
            (|$10|   . 16)
            (|$FF|   . 255)
            (|%101|  . 5)
-           (">some" . ,(ast-resolve-byte-scmd "some" 'high-byte)))))
+           (">some" . ,(ast-resolve-byte-scmd "some" 'high-byte)))])
     (check-equal? (byte-operand (car byte-expectation))
                   (cdr byte-expectation)
                   (format "expected: ~a == ~a"
@@ -146,12 +146,12 @@
         [(number? any-num) any-num]
         [(6510-number-string? any-num) (parse-number-string any-num)]        
         [force (ast-resolve-word-scmd any-num)]
-        [#t (raise-syntax-error 'word-operand (format "'~a' is no valid word operand" any-num))]))
+        [else (raise-syntax-error 'word-operand (format "'~a' is no valid word operand" any-num))]))
 
 (module+ test #| word-operand |#
   (check-equal? (word-operand "some" #t)
                 (ast-resolve-word-scmd "some"))
-  (for ((word-expectation
+  (for ([word-expectation
          '((10       . 10)
            (0        . 0)
            (65535    . 65535)
@@ -161,7 +161,7 @@
            (|10|     . 10)
            ($10      . 16)
            ($FFff    . 65535)
-           (%10001   . 17))))
+           (%10001   . 17))])
     (check-eq? (word-operand (car word-expectation))
                (cdr word-expectation)
                (format "expected: ~a == ~a"
@@ -199,9 +199,9 @@
         (in-word-range? (parse-number-string any-num)))))
 
 (module+ test #| word-operand? |#
-  (for ((word '(10 0 65535 "10" "0" "65535" |10| |$10| |$FFFF| |%10001|)))
+  (for ([word '(10 0 65535 "10" "0" "65535" |10| |$10| |$FFFF| |%10001|)])
     (check-true (word-operand? word) (format "~a not a word" word)))
-  (for ((word '(-1 65536 "-1" "65536" |-1| |$10001|)))
+  (for ([word '(-1 65536 "-1" "65536" |-1| |$10001|)])
     (check-false (word-operand? word) (format "~a is a word" word))))
 
 ;; is this operand an immediate byte value operand?
@@ -215,10 +215,10 @@
         (possibly-byte-operand? (substring sym 1)))))
 
 (module+ test #| immediate-byte-operand? |#
-  (for ((immediate-byte '("!10" "!0" "!255" |!10| |!$10| |!$FF| |!%101| "!<some" "!some")))
+  (for ([immediate-byte '("!10" "!0" "!255" |!10| |!$10| |!$FF| |!%101| "!<some" "!some")])
     (check-true (immediate-byte-operand? immediate-byte)
                 (format "~a not an immediate byte" immediate-byte)))
-  (for ((immediate-byte '("!-1" "!256" |!-1| |!$101|)))
+  (for ([immediate-byte '("!-1" "!256" |!-1| |!$101|)])
     (check-false (immediate-byte-operand? immediate-byte)
                  (format "~a is a byte" immediate-byte))))
 
@@ -230,7 +230,7 @@
       (byte-operand (substring sym 1) #t)))
 
 (module+ test #| immediate-byte-operand |#
-  (for ((byte-expectation
+  (for ([byte-expectation
          `(("!10"   . 10)
            ("!0"    . 0)
            ("!255"  . 255)
@@ -238,7 +238,7 @@
            (|!$10|  . 16)
            (|!$FF|  . 255)
            (|!%101| . 5)
-           ("!>some" . ,(ast-resolve-byte-scmd "some" 'high-byte)))))
+           ("!>some" . ,(ast-resolve-byte-scmd "some" 'high-byte)))])
     (check-equal? (immediate-byte-operand (car byte-expectation))
                   (cdr byte-expectation)
                   (format "expected: ~a == ~a"
@@ -539,8 +539,8 @@
 
 (define/c (relative-opcode addressing-modes op)
   (-> (listof addressing-mode?) any/c (or/c ast-rel-opcode-cmd? ast-unresolved-rel-opcode-cmd?))
-  (let ((operand (byte-operand op #t #t))
-        (opcode  (cdr (find-addressing-mode 'relative addressing-modes))))
+  (let ([operand (byte-operand op #t #t)]
+        [opcode  (cdr (find-addressing-mode 'relative addressing-modes))])
     (if (number? operand)
         (ast-rel-opcode-cmd '() (list opcode operand))
         (ast-unresolved-rel-opcode-cmd
@@ -605,7 +605,7 @@
 
 (define/c (indirect-opcode addressing-modes op)
   (-> (listof addressing-mode?) any/c (or/c ast-opcode-cmd? ast-unresolved-opcode-cmd?))
-  (let ((word (word-operand (car op) #t)))
+  (let ([word (word-operand (car op) #t)])
     ;; absolute-opcode-w-meta
     (if (number? word)
         (ast-opcode-cmd
@@ -694,7 +694,7 @@
   (cond [(empty? possible-addressing-modes)
          (raise-syntax-error 'ambiguous-addressing "no possible addressing mode found")]
         [(= 1 (length possible-addressing-modes))
-         (let ((res (hash-ref address-mode-to-resolve-map (caar possible-addressing-modes))))
+         (let ([res (hash-ref address-mode-to-resolve-map (caar possible-addressing-modes))])
            (ast-unresolved-opcode-cmd '()
                                       (list (cdar possible-addressing-modes))
                                       (if (eq? res 'resolve-word)
@@ -702,14 +702,14 @@
                                           (ast-resolve-byte-scmd (->string op) 'low-byte))))]
         [(< 1 (length possible-addressing-modes))
          (ast-decide-cmd '() (map (lambda (addressing-mode)
-                                (let ((resolve-strategy (hash-ref address-mode-to-resolve-map (car addressing-mode))))
+                                (let ([resolve-strategy (hash-ref address-mode-to-resolve-map (car addressing-mode))])
                                   (ast-unresolved-opcode-cmd '()
                                    (list (cdr addressing-mode))
                                    (cond [(eq? resolve-strategy 'resolve-word)
                                           (ast-resolve-word-scmd (->string op))]
-                                         [#t (ast-resolve-byte-scmd (->string op) 'low-byte)]))))
+                                         [else (ast-resolve-byte-scmd (->string op) 'low-byte)]))))
                               possible-addressing-modes) )]
-        [#t (raise-syntax-error 'ambiguous-addressing "no option found for ambiguous address resolution")]))
+        [else (raise-syntax-error 'ambiguous-addressing "no option found for ambiguous address resolution")]))
 
 (define/c (ambiguous-addressing-opcode-w-meta possible-addressing-modes op meta)
   (-> (listof (cons/c symbol? any/c)) any/c list? (or/c ast-unresolved-opcode-cmd? ast-decide-cmd?))

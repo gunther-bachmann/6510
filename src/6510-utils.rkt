@@ -44,7 +44,7 @@
          (cond [(equal? (car el) 'unquote)
                 (format ",~a" (cadr el))]
                [else (format "(~a)" (string-join (map (λ (iel) (->string iel)) el) ""))])]
-        [#t (raise-argument-error '->string (format "cannot convert ~a to string" el))]))
+        [else (raise-argument-error '->string (format "cannot convert ~a to string" el))]))
 
 (module+ test #| ->string |#
   (check-equal? (->string '(($1000)))
@@ -85,7 +85,7 @@
   (cond [(or (eq? #\> (string-ref full-label 0))
             (eq? #\< (string-ref full-label 0)))
          (substring full-label 1)]
-        [#t full-label]))
+        [else full-label]))
 
 (module+ test #| base-label-str |#
   (check-equal? (base-label-str "hello")
@@ -188,7 +188,7 @@
       abs-val))
 
 (module+ test #| decimal-from-two-complements |#
-  (for ((b (range -128 127)))
+  (for ([b (range -128 127)])
     (check-eq? (decimal-from-two-complement (two-complement-of b))
                b)))
 

@@ -122,15 +122,16 @@
   (with-handlers ([exn:fail? ;; catch parse error of the 6510 opcode
                    (lambda (e) (displayln e) d-state)])
     (define c-state (car (debug-state-states d-state)))
-    (let ((byteList (compile-opcodes (string-trim command))))
-      (if (or force
-             (eq? (instruction-byte-len c-state)
-                  (length byteList)))
-          (struct-copy debug-state d-state
-                       [states (cons (-pokem c-state (cpu-state-program-counter c-state) byteList)
-                                     (debug-state-states d-state))])
-          (begin (displayln "byte length differs (use xf to force)")
-                 d-state)))))
+    (let ([byteList (compile-opcodes (string-trim command))])
+      (cond [(or force
+                 (eq? (instruction-byte-len c-state)
+                      (length byteList)))
+             (struct-copy debug-state d-state
+                          [states (cons (-pokem c-state (cpu-state-program-counter c-state) byteList)
+                                        (debug-state-states d-state))])]
+            [else
+             (begin (displayln "byte length differs (use xf to force)")
+                    d-state)]))))
 
 (define/c (debugger--remove-breakpoints d-state description)
   (-> debug-state? string? debug-state?)
@@ -176,25 +177,26 @@
   (define breakpoint (if i-call  #f (breakpoint-hits (car c-states) (debug-state-breakpoints d-state))))
   (when breakpoint
     (printf "breakpoint hit: ~a\n" (breakpoint-description breakpoint)))
-  (if (or (and (<= len 0) (or (not follow-jsr) (= 0 depth)))
-         breakpoint)
-      d-state
-      (let ((next-step-jsr (next-cpu-step? #x20 (car c-states)))
-            (next-step-rts (next-cpu-step? #x60 (car c-states)))
-            (sp            (cpu-state-stack-pointer (car c-states)))
-            (new-states    (cons (execute-cpu-step (car c-states) #t (debug-state-output-function d-state)) c-states)))
-        (debugger--run-steps
-         (struct-copy debug-state d-state
-                      [states new-states])
-         (- len 1)
-         (+ depth
-            (if (and (> sp (cpu-state-stack-pointer (car new-states)))
-                   next-step-jsr)
-                1
-                0)
-            (if next-step-rts -1 0))
-         follow-jsr
-         #f))))
+  (cond [(or (and (<= len 0) (or (not follow-jsr) (= 0 depth)))
+            breakpoint)
+         d-state]
+        [else
+         (let ([next-step-jsr (next-cpu-step? #x20 (car c-states))]
+               [next-step-rts (next-cpu-step? #x60 (car c-states))]
+               [sp            (cpu-state-stack-pointer (car c-states))]
+               [new-states    (cons (execute-cpu-step (car c-states) #t (debug-state-output-function d-state)) c-states)])
+           (debugger--run-steps
+            (struct-copy debug-state d-state
+                         [states new-states])
+            (- len 1)
+            (+ depth
+               (if (and (> sp (cpu-state-stack-pointer (car new-states)))
+                      next-step-jsr)
+                   1
+                   0)
+               (if next-step-rts -1 0))
+            follow-jsr
+            #f))]))
 
 (define/c (debugger--help d-state)
   (-> debug-state? debug-state?)
@@ -306,45 +308,48 @@ EOF
         ;; stop - stop at program counter (breakpoint)
         [(regexp-match? stop-pc-regex command)
          (match-let (((list _ cl value) (regexp-match stop-pc-regex command)))
-           (if cl
-               (begin
-                 (displayln (format "clear breakpoint at pc = $~a" value))
-                 (debugger--remove-breakpoints d-state (format "stop at pc = $~a" value)))
-               (begin
-                 (displayln (format "set breakpoint at pc = $~a" value))
-                 (debugger--push-breakpoint d-state
-                                            (lambda (lc-state)
-                                              (eq? (cpu-state-program-counter lc-state)
-                                                   (string->number value 16)))
-                                            (format "stop at pc = $~a" value)))))]
+           (cond [cl
+                  (begin
+                    (displayln (format "clear breakpoint at pc = $~a" value))
+                    (debugger--remove-breakpoints d-state (format "stop at pc = $~a" value)))]
+                 [else
+                  (begin
+                    (displayln (format "set breakpoint at pc = $~a" value))
+                    (debugger--push-breakpoint d-state
+                                               (lambda (lc-state)
+                                                 (eq? (cpu-state-program-counter lc-state)
+                                                      (string->number value 16)))
+                                               (format "stop at pc = $~a" value)))]))]
         ;; stop a=ff - stop at accumulator = ff
         [(regexp-match? stop-a-regex command)
          (match-let (((list _ cl value) (regexp-match stop-a-regex command)))
-           (if cl
-               (begin
-                 (displayln (format "clear breakpoint at accumluator = $~a" value))
-                 (debugger--remove-breakpoints d-state (format "stop when register A = $~a" value)))
-               (begin
-                 (displayln (format "set breakpoint at accumluator = $~a" value))
-                 (debugger--push-breakpoint d-state
-                                            (lambda (lc-state)
-                                              (eq? (cpu-state-accumulator lc-state)
-                                                   (string->number value 16)))
-                                            (format "stop when register A = $~a" value)))))]
+           (cond [cl
+                  (begin
+                    (displayln (format "clear breakpoint at accumluator = $~a" value))
+                    (debugger--remove-breakpoints d-state (format "stop when register A = $~a" value)))]
+                 [else
+                  (begin
+                    (displayln (format "set breakpoint at accumluator = $~a" value))
+                    (debugger--push-breakpoint d-state
+                                               (lambda (lc-state)
+                                                 (eq? (cpu-state-accumulator lc-state)
+                                                      (string->number value 16)))
+                                               (format "stop when register A = $~a" value)))]))]
         ;; stop sp=ff - stop at stack pointer = fff
         [(regexp-match? stop-sp-regex command)
          (match-let (((list _ cl value) (regexp-match stop-sp-regex command)))
-           (if cl
-               (begin
-                 (displayln (format "clear breakpoint at sp = $(1)~a" value))
-                 (debugger--remove-breakpoints d-state (format "stop when sp = $~a" value)))
-               (begin
-                 (displayln (format "set breakpoint at sp = $(1)~a" value))
-                 (debugger--push-breakpoint d-state
-                                            (lambda (lc-state)
-                                              (eq? (cpu-state-stack-pointer lc-state)
-                                                   (string->number value 16)))
-                                            (format "stop when sp = $~a" value)))))]
+           (cond [cl
+                  (begin
+                    (displayln (format "clear breakpoint at sp = $(1)~a" value))
+                    (debugger--remove-breakpoints d-state (format "stop when sp = $~a" value)))]
+                 [else
+                  (begin
+                    (displayln (format "set breakpoint at sp = $(1)~a" value))
+                    (debugger--push-breakpoint d-state
+                                               (lambda (lc-state)
+                                                 (eq? (cpu-state-stack-pointer lc-state)
+                                                      (string->number value 16)))
+                                               (format "stop when sp = $~a" value)))]))]
         ;; list stop
         [(regexp-match? list-bp-regex command)
          (begin
@@ -459,11 +464,12 @@ EOF
     (define input (begin (readline "")))
     (run-debugger--step-cleanup-emacs-integration capabilities s-entry)
     #:break (string=? input "q")
-    (if (and previous-input (regexp-match #rx"^\\.+$" input))
-        (set! d-state (run-debugger--dispatch-debugger-command-n-times previous-input d-state (string-length input)))
-        (begin
-          (set! previous-input input)
-          (set! d-state (dispatch-debugger-command input d-state))))))
+    (cond [(and previous-input (regexp-match #rx"^\\.+$" input))
+           (set! d-state (run-debugger--dispatch-debugger-command-n-times previous-input d-state (string-length input)))]
+          [else
+           (begin
+             (set! previous-input input)
+             (set! d-state (dispatch-debugger-command input d-state)))])))
 
 ;; dispatch the given debugger command n-times starting with the current debug-state
 (define/c (run-debugger--dispatch-debugger-command-n-times command d-state (n 1))
@@ -479,14 +485,15 @@ EOF
 ;; breakpoint is a function that takes a single argument the state
 (define/c (breakpoint-hits c-state breakpoints)
   (-> cpu-state? list? (or/c boolean? breakpoint?))
-  (if (empty? breakpoints)
-      #f
-      (begin
-        (if (apply
-             (breakpoint-fn (car breakpoints))
-             (list c-state))
-            (car breakpoints)
-            (breakpoint-hits c-state (cdr breakpoints))))))
+  (cond [(empty? breakpoints)
+         #f]
+        [else
+         (begin
+           (if (apply
+                (breakpoint-fn (car breakpoints))
+                (list c-state))
+               (car breakpoints)
+               (breakpoint-hits c-state (cdr breakpoints))))]))
 
 ;; is the debugger at a rts command and the stack is at the bottom (#xff)?
 (define/c (-debugger-at-root-rts c-state)

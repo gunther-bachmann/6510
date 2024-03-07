@@ -280,8 +280,8 @@
   (-> byte/c string?)
   (define dump-char (integer->char dump-byte))
   (cond
-    ((char-graphic? dump-char) (string dump-char))
-    (else ".")))
+    [(char-graphic? dump-char) (string dump-char)]
+    [else "."]))
 
 (define/c (memory-list state from to)
   (-> cpu-state? word/c word/c (listof byte/c))
@@ -408,8 +408,8 @@
 (define/c (6510-load state memory-address program)
   (-> cpu-state? word/c (listof byte/c) cpu-state?)
   (with-program-counter  
-    (foldl (lambda (state pair) 
-             (poke state (first pair) (last pair)))
+    (foldl (lambda (lstate pair)
+             (poke lstate (first pair) (last pair)))
            state 
            (map list
                 (sequence->list (in-range memory-address (fx+ memory-address (length program))))
@@ -439,10 +439,11 @@
 ;; execute if pc does not point at a 0 byte (brk)
 (define/c (run state (verbose #t) (string-output-function interpreter-output-function))
   (->* (cpu-state?) (boolean? (-> string? any/c)) cpu-state?)
-  (if  (zero? (peek-pc state))
-       state
-       (let ((next-state (execute-cpu-step state verbose string-output-function)))
-         (run next-state verbose string-output-function))))
+  (cond [(zero? (peek-pc state))
+         state]
+        [else
+         (let ([next-state (execute-cpu-step state verbose string-output-function)])
+           (run next-state verbose string-output-function))]))
 
 ;; interpret the RTS (return from subroutine) command
 ;; pop low-byte, then high-byte form stack, inc by one and write this into the pc
@@ -954,8 +955,8 @@
    ))
 
 (define (c64-byte->unicode byte state)
-  (let ((low-high-charset (peek state 53272))
-        (reverse (peek state 199)))
+  (let ([low-high-charset (peek state 53272)]
+        [reverse (peek state 199)])
     (cond
       [(and (eq? low-high-charset 23)
           (eq? reverse 0)
@@ -992,17 +993,18 @@
 ;; mock kernel function FFD2 to print a string
 (define/c (interpret-jsr-abs high low state (verbose #t) (string-output-function interpreter-output-function))
   (->* (byte/c byte/c cpu-state?) (boolean? (-> string? any/c)) cpu-state?)
-  (if (c64-rom-routine? high low)
-      (let ((after-rom-state (interpret-c64-rom-routine high low state verbose string-output-function)))
-        (struct-copy cpu-state after-rom-state [program-counter (next-program-counter after-rom-state 3)]))
-      (let* ([new-program-counter (absolute high low)]
-                 [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
-                 [sp (cpu-state-stack-pointer state)])
-            (struct-copy cpu-state (~>> state
-                                       (poke-stack _ (high-byte return-address))
-                                       (poke-stack-1 _ (low-byte return-address)))
-                         [program-counter (word new-program-counter)]
-                         [stack-pointer   (byte (fx- sp 2))]))))
+  (cond [(c64-rom-routine? high low)
+         (let ([after-rom-state (interpret-c64-rom-routine high low state verbose string-output-function)])
+           (struct-copy cpu-state after-rom-state [program-counter (next-program-counter after-rom-state 3)]))]
+        [else
+         (let* ([new-program-counter (absolute high low)]
+                [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
+                [sp (cpu-state-stack-pointer state)])
+           (struct-copy cpu-state (~>> state
+                                      (poke-stack _ (high-byte return-address))
+                                      (poke-stack-1 _ (low-byte return-address)))
+                        [program-counter (word new-program-counter)]
+                        [stack-pointer   (byte (fx- sp 2))]))]))
 
 (module+ test #| jsr (jump to sub routine) |#
   (check-equal? (cpu-state-program-counter
@@ -1781,7 +1783,7 @@
 ;; setting zero, negative flag (ZN)
 (define/c (interpret-lda-mem state peeker pc-inc)
   (-> cpu-state? peeker/c exact-nonnegative-integer? cpu-state?)
-  (let ((value (peeker state)))
+  (let ([value (peeker state)])
     (struct-copy cpu-state state
                  [accumulator     value]
                  [flags           (set-flags-zn state (zero? value) (bit7? value))]
@@ -1791,7 +1793,7 @@
 ;; setting zero, negative flag (ZN)
 (define/c (interpret-ldx-mem state peeker pc-inc)
   (-> cpu-state? peeker/c exact-nonnegative-integer? cpu-state?)
-  (let ((value (peeker state)))
+  (let ([value (peeker state)])
     (struct-copy cpu-state state
                  [x-index         value]
                  [flags           (set-flags-zn state (zero? value) (bit7? value))]
@@ -1801,7 +1803,7 @@
 ;; setting zero, negative flag (ZN)
 (define/c (interpret-ldy-mem state peeker pc-inc)
   (-> cpu-state? peeker/c exact-nonnegative-integer? cpu-state?)
-  (let ((value (peeker state)))
+  (let ([value (peeker state)])
     (struct-copy cpu-state state
                  [y-index         value]
                  [flags           (set-flags-zn state (zero? value) (bit7? value))]
@@ -2048,7 +2050,7 @@
 
 (define/c (interpret-t_a state source)
   (-> cpu-state? (-> cpu-state? byte/c) cpu-state?)
-  (let ((value (source state)))
+  (let ([value (source state)])
     (struct-copy cpu-state state
                  [accumulator     value]
                  [flags           (set-flags-zn state (zero? value) (< 127 value))]
@@ -2056,14 +2058,14 @@
 
 (define/c (interpret-t_s state source)
   (-> cpu-state? (-> cpu-state? byte/c) cpu-state?)
-  (let ((value (source state)))
+  (let ([value (source state)])
     (struct-copy cpu-state state
                  [stack-pointer   value]
                  [program-counter (next-program-counter state 1)])))
 
 (define/c (interpret-t_x state source)
   (-> cpu-state? (-> cpu-state? byte/c) cpu-state?)
-  (let ((value (source state)))
+  (let ([value (source state)])
     (struct-copy cpu-state state
                  [x-index         value]
                  [flags           (set-flags-zn state (zero? value) (bit7? value))]
@@ -2071,7 +2073,7 @@
 
 (define/c (interpret-t_y state source)
   (-> cpu-state? (-> cpu-state? byte/c) cpu-state?)
-  (let ((value (source state)))
+  (let ([value (source state)])
     (struct-copy cpu-state state
                  [y-index         value]
                  [flags           (set-flags-zn state (zero? value) (bit7? value))]
@@ -2079,7 +2081,7 @@
 
 (define/c (interpret-modify-x-index state delta)
   (-> cpu-state? exact-integer? cpu-state?)
-  (let ((value (byte (fx+ delta (cpu-state-x-index state)))))
+  (let ([value (byte (fx+ delta (cpu-state-x-index state)))])
     (struct-copy cpu-state state
                  [x-index         value]
                  [flags           (set-flags-zn state (zero? value) (bit7? value))]
@@ -2087,7 +2089,7 @@
 
 (define/c (interpret-modify-y-index state delta)
   (-> cpu-state? exact-integer? cpu-state?)
-  (let ((value (byte (fx+ delta (cpu-state-y-index state)))))
+  (let ([value (byte (fx+ delta (cpu-state-y-index state)))])
     (struct-copy cpu-state state
                  [y-index         value]
                  [flags           (set-flags-zn state (zero? value) (bit7? value))]
@@ -2135,7 +2137,7 @@
 (module+ test #| crement-mem |#
   (check-eq? (peek (interpret-crement-mem (initialize-cpu)
                                            fx+
-                                           (lambda (s) 10)
+                                           (lambda (_s) 10)
                                            (lambda (s v) (poke s #x2000 v))
                                            2)
                    #x2000)
@@ -2175,15 +2177,15 @@
                [program-counter (next-program-counter state pc-inc)]))
 
 (module+ test
-  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x10) (lambda (s) #x01) 2))
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x10) (lambda (_s) #x01) 2))
                 #x09)
-  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x00) (lambda (s) #x01) 2))
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x00) (lambda (_s) #x01) 2))
                 #x99)
-  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x21) (lambda (s) #x10) 2))
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x21) (lambda (_s) #x10) 2))
                 #x11)
-  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x99) (lambda (s) #x10) 2))
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x99) (lambda (_s) #x10) 2))
                 #x89)
-  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x95) (lambda (s) #x26) 2))
+  (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x95) (lambda (_s) #x26) 2))
                 #x69))
 
 (define/c (bcd-+ state peeker pc-inc)  
@@ -2212,24 +2214,24 @@
                [program-counter (next-program-counter state pc-inc)]))
 
 (module+ test
-  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x10) (lambda (s) #x01) 2))
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x10) (lambda (_s) #x01) 2))
                 #x11)
-  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x19) (lambda (s) #x01) 2))
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x19) (lambda (_s) #x01) 2))
                 #x20)
-  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x60) (lambda (s) #x0a) 2))
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x60) (lambda (_s) #x0a) 2))
                 #x70)
-  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x60) (lambda (s) #x0f) 2))
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x60) (lambda (_s) #x0f) 2))
                 #x75)
-  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x5a) (lambda (s) #x01) 2))
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x5a) (lambda (_s) #x01) 2))
                 #x61)
-  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x5f) (lambda (s) #x01) 2))
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x5f) (lambda (_s) #x01) 2))
                 #x66)
-  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2))
+  (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (_s) #x01) 2))
                 #x00)
-  (check-false (zero-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2)))
-  (check-true (overflow-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2)))
-  (check-true (carry-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2)))
-  (check-true (negative-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (s) #x01) 2))))
+  (check-false (zero-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (_s) #x01) 2)))
+  (check-true (overflow-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (_s) #x01) 2)))
+  (check-true (carry-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (_s) #x01) 2)))
+  (check-true (negative-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (_s) #x01) 2))))
 
 
 (define (interpreter-output-function str)
@@ -2551,16 +2553,16 @@
                                                      ;; .byte ,at-2003-value
         (with-x-index _ #x03)))
 
-  (let ((result (~>> (at-2000_sbc-2000-x_with-x-3 #x21 #x10)
-                    (execute-cpu-step _))))
+  (let ([result (~>> (at-2000_sbc-2000-x_with-x-3 #x21 #x10)
+                    (execute-cpu-step _))])
     (check-eq? (cpu-state-accumulator result) #x11 "#x21 - #x10 = #x11")
     (check-eq? (cpu-state-program-counter result) #x2003 "this was a 3 byte command")
     (check-true (carry-flag? result) "carry flag is still set, no borrow took place")
     (check-false (zero-flag? result) "zero flag is false since != $00")
     (check-false (negative-flag? result) "negative flag false, bit7, sign flag not set"))
 
-  (let ((result (~>> (at-2000_sbc-2000-x_with-x-3 #x10 #x21)
-                    (execute-cpu-step _))))
+  (let ([result (~>> (at-2000_sbc-2000-x_with-x-3 #x10 #x21)
+                    (execute-cpu-step _))])
     (check-eq? (cpu-state-accumulator result) #xef "#x10 - #x21 = #xef")
     (check-false (carry-flag? result) "carry flag is false, borrow took place!")
     (check-false (zero-flag? result) "zero flag is false since != $00")
@@ -2575,20 +2577,20 @@
                                                      ;; .byte ,at-2003-value
         (with-x-index _ #x03)))                      ;; LDX #x03
   
-  (let ((result (~>> (at-2000_inc-2000-x_with-x-3 #x10)
-                    (execute-cpu-step _))))
+  (let ([result (~>> (at-2000_inc-2000-x_with-x-3 #x10)
+                    (execute-cpu-step _))])
     (check-eq? (peek-word-at-address result #x2003) #x11 "incremented byte at location $2000+x")
     (check-eq? (cpu-state-program-counter result) #x2003 "this was a 3 byte command")
     (check-false (zero-flag? result) "zero flag is false since ($10 + 1) != $00")
     (check-false (negative-flag? result) "negative flag false, bit7, sign flag not set"))
 
-    (let ((result (~>> (at-2000_inc-2000-x_with-x-3 #xff)
-                    (execute-cpu-step _))))
+    (let ([result (~>> (at-2000_inc-2000-x_with-x-3 #xff)
+                    (execute-cpu-step _))])
     (check-true (zero-flag? result) "zero flag is true since ($FF + 1) == $00")
     (check-false (negative-flag? result) "negative flag false, bit7, sign flag not set"))
 
-    (let ((result (~>> (at-2000_inc-2000-x_with-x-3 #x7f)
-                    (execute-cpu-step _))))
+    (let ([result (~>> (at-2000_inc-2000-x_with-x-3 #x7f)
+                    (execute-cpu-step _))])
     (check-false (zero-flag? result) "zero flag is false since ($7f + 1) != $00")
     (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")))
 

@@ -362,7 +362,7 @@
                     [(ast-resolve-byte-scmd? res)
                      (import-byte-entry-bytes (ast-resolve-sub-cmd-label res) req-hashes offset+1
                                               (ast-resolve-byte-scmd-mode res))]
-                    [#t '()])))
+                    [else '()])))
         (import-table-bytes (+ offset (command-len command))
                             (append collected-entries new-entry)
                             req-hashes
@@ -381,16 +381,16 @@
 
 (define/c (collect-import-hash commands collected)
   (-> (listof ast-command?) hash? hash?)
-  (if (empty? commands)
-      collected
-      (let ((command (first commands)))
-        (collect-import-hash
-         (cdr commands)
-         (cond [(ast-require-byte-cmd? command)
-                (hash-set collected (ast-require-byte-cmd-label command) 'byte)]
-               [(ast-require-word-cmd? command)
-                (hash-set collected (ast-require-word-cmd-label command) 'word)]
-               [#t collected])))))
+  (cond [(empty? commands) collected]
+        [else
+         (let ([command (first commands)])
+           (collect-import-hash
+            (cdr commands)
+            (cond [(ast-require-byte-cmd? command)
+                   (hash-set collected (ast-require-byte-cmd-label command) 'byte)]
+                  [(ast-require-word-cmd? command)
+                   (hash-set collected (ast-require-word-cmd-label command) 'word)]
+                  [else collected])))]))
 
 (module+ test #| collect-import-hash |#
   (check-equal? (collect-import-hash (list (ast-require-byte-cmd '() "some")) #hash())
@@ -439,7 +439,7 @@
             (((entry-len label sym)
               (cond [(eq? width 2) (decode-import-table-word-entry-values bytes)]
                     [(eq? width 1) (decode-import-table-byte-entry-values bytes)]
-                    [ #t (raise-user-error "illegal width (neither 1 nor 2)")])))
+                    [else (raise-user-error "illegal width (neither 1 nor 2)")])))
           (decode-import-table-bytes
            (drop bytes entry-len)
            (cons (list label addr sym)
@@ -473,7 +473,7 @@
          (hash-set hash (ast-require-word-cmd-label command) 'word)]
         [(ast-require-byte-cmd? command)
          (hash-set hash (ast-require-byte-cmd-label command) 'byte)]
-        [#t hash]))
+        [else hash]))
 
 ;; get the complete hash of label -> 'word | 'byte that are required by the given commands
 (define/c (require-hashes commands)
@@ -490,12 +490,12 @@
 ;; is the given value resolvable given the imports, labels and constants?
 (define/c (-resolvable-cmd? imports-hash labels constants-hash command)
   (-> hash? (listof string?) hash? ast-command? boolean?)
-  (if (ast-unresolved-command? command)
-      (let ((unresolved-label (ast-resolve-sub-cmd-label (ast-unresolved-command-resolve-sub-command command))))
-        (or (and (hash-ref imports-hash unresolved-label #f) #t)
-           (and (hash-ref constants-hash unresolved-label #f) #t)
-           (and (member unresolved-label labels) #t)))
-      #t))
+  (cond [(ast-unresolved-command? command)
+         (let ([unresolved-label (ast-resolve-sub-cmd-label (ast-unresolved-command-resolve-sub-command command))])
+           (or (and (hash-ref imports-hash unresolved-label #f) #t)
+              (and (hash-ref constants-hash unresolved-label #f) #t)
+              (and (member unresolved-label labels) #t)))]
+        [else #t]))
 
 (module+ test #| -resolvable-cmd |#
   (check-true (-resolvable-cmd? #hash() '() #hash() (ast-label-def-cmd '() "sout")))

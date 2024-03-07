@@ -52,8 +52,8 @@
     (begin-for-syntax
     (require rackunit))
 
-  (define (parsed-string-result syntax string)
-    (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
+    (define (parsed-string-result syntax string)
+      (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
 
 ;; space or tab
 (define/c space-or-tab/p
@@ -199,7 +199,7 @@
       [value <- (syntax/p word/p)]
       6510-eol/p
       (pure (datum->syntax label
-                          (let ((num (syntax->datum value)))
+                          (let ([num (syntax->datum value)])
                             (list (string->symbol (if (byte? num) "byte-const" "word-const"))
                                   (cadr (syntax->datum label))
                                   (number->string num)))))))
@@ -431,10 +431,10 @@
 
 (define/c (args->string opcode-args-stx)
   (-> syntax? string?)
-  (let ((args (syntax->datum opcode-args-stx)))
+  (let ([args (syntax->datum opcode-args-stx)])
     (cond [(list? args)
            (string-join (map ->string args) "")]
-          [#t (->string args)])))
+          [else (->string args)])))
 
 (module+ test #| args->string |#
   (check-equal? (args->string #'( ("16"),y))
@@ -474,7 +474,7 @@
 
 (define/c (opcode-addressing/p actual-opcode addressing adr-mode-list rule/p)
   (-> syntax? (or/c addressing-symbol? (listof addressing-symbol?)) (listof addressing-symbol?) parser? parser?)
-  (let ((addressings (flatten (list addressing))))
+  (let ([addressings (flatten (list addressing))])
     (try/p (guard/p (do (many/p space-or-tab/p) [a-res <- (syntax/p rule/p)]
                       (pure (result->syntax actual-opcode a-res)))
                     (lambda (_) (ormap (λ (addr) (member addr adr-mode-list)) addressings))

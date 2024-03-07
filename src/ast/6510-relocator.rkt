@@ -97,7 +97,7 @@
   (-> string? byte/c)
   (cond [(string-prefix? full-label ">") 1]
         [(string-prefix? full-label "<") 0]
-        [#t (raise-user-error (format "full-label ~a has no hi/low prefix" full-label))]))
+        [else (raise-user-error (format "full-label ~a has no hi/low prefix" full-label))]))
 
 ;; relocation table format
 ;; offset       data
@@ -114,7 +114,7 @@
 
 (define/c (resolve-word->reloc-bytes resolve label-offsets offset)
   (-> ast-resolve-sub-cmd? hash? word/c (listof byte/c))
-  (let ((rel-offset (hash-ref label-offsets (ast-resolve-sub-cmd-label resolve))))                 
+  (let ([rel-offset (hash-ref label-offsets (ast-resolve-sub-cmd-label resolve))])
     (reloc-entry-bytes offset rel-offset 2)))
 
 (module+ test #| resolve-word->reloc-bytes |#
@@ -151,7 +151,7 @@
                                   (resolve-word->reloc-bytes res label-offsets offset)]
                                  [(ast-resolve-byte-scmd? res)
                                   (resolve-byte->reloc-bytes res label-offsets offset)]
-                                 [#t '()]))
+                                 [else '()]))
              (next-entries (append collected-entries entry)))
         (reloc-table-bytes next-offset next-entries label-offsets (cdr commands)))))
 
@@ -167,7 +167,7 @@
 (define/c (value-by-hilo-ind hilo-ind value)
   (-> byte/c word/c byte/c)
   (cond [(= 1 hilo-ind) (high-byte value)]
-        [#t (low-byte value)]))
+        [else (low-byte value)]))
 
 (module+ test #| value-by-hilo-ind |#
   (check-eq? (value-by-hilo-ind 0 #xffd2)
@@ -185,7 +185,7 @@
          (match-let* (((list _ _ _ low high) (take reloc-table 5))
                       (value (word (fx+ delta (absolute high low)))))
            (list (low-byte value) (high-byte value)))]
-        [#t (raise-user-error (format "relocated-bytes width ~a is unknown" width))]))
+        [else (raise-user-error (format "relocated-bytes width ~a is unknown" width))]))
 
 (define/c (relocate-program delta reloc-table bytes)
   (-> word/c  (listof byte/c) (listof byte/c) (listof byte/c))
@@ -196,7 +196,7 @@
   (cond
     [(empty? bytes)       result]
     [(empty? reloc-table) (append result bytes)]
-    [#t
+    [else
      (match-let*
          (((list offset-low offset-high width) (take reloc-table 3))
           (reloc-applies (eq? offset (absolute offset-high offset-low)))

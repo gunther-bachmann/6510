@@ -58,11 +58,11 @@
 
 (define/contract (unbox-mil-atomic-value value)
   (-> mil-atomic-value? (or/c string? byte? char? boolean?))
-  (cond ((mil-string? value) (mil-string-value value))
-        ((mil-uint8? value) (mil-uint8-value value))
-        ((mil-char? value) (mil-char-value value))
-        ((mil-bool? value) (mil-bool-value value))
-        (#t (raise-user-error "unknown atomic value ~a" value))))
+  (cond [(mil-string? value) (mil-string-value value)]
+        [(mil-uint8? value) (mil-uint8-value value)]
+        [(mil-char? value) (mil-char-value value)]
+        [(mil-bool? value) (mil-bool-value value)]
+        [else (raise-user-error "unknown atomic value ~a" value)]))
 
 ;; sum up all uint params
 (define/contract (mil-+ params ctxs)
@@ -80,10 +80,10 @@
   (define p1 (car params))
   (define rest (cdr params))
   (define result
-    (cond ((empty? rest)
-           (- 0 (mil-uint8-value p1)))
-          (#t
-           (foldr (lambda (val acc) (- acc (mil-uint8-value val))) (mil-uint8-value p1) rest))))
+    (cond [(empty? rest)
+           (- 0 (mil-uint8-value p1))]
+          [else
+           (foldr (lambda (val acc) (- acc (mil-uint8-value val))) (mil-uint8-value p1) rest)]))
   (mil-uint8
    (if (< result 0)
        (two-complement-of result)
@@ -114,11 +114,11 @@
   (-> (list/c (or/c mil-list? mil-cell?)) (listof interpreter-ctx?) mil-expression?)
   (if (empty? params)
       (raise-user-error "cdr w/o parameter")
-      (cond ((mil-list? (car params))
-             (mil-list (cdr (mil-list-elements (car params)))))
-            ((mil-cell? (car params))
-             (mil-cell-tail (car params)))
-            (#t (raise-user-error "cdr works on list only ~a" params)))))
+      (cond [(mil-list? (car params))
+             (mil-list (cdr (mil-list-elements (car params))))]
+            [(mil-cell? (car params))
+             (mil-cell-tail (car params))]
+            [else (raise-user-error "cdr works on list only ~a" params)])))
 
 (module+ test #| mil-cdr |#
   (check-equal? (mil-cdr (list (mil-l (mil-uint8 2) (mil-uint8 3))) (list))
@@ -132,11 +132,11 @@
   (-> (list/c (or/c mil-list? mil-cell?)) (listof interpreter-ctx?) mil-expression?)
   (if (empty? params)
       (raise-user-error "car w/o parameter")
-      (cond ((mil-list? (car params))
-             (car (mil-list-elements (car params))))
-            ((mil-cell? (car params))
-             (mil-cell-head (car params)))
-            (#t (raise-user-error "car works on list only ~a" params)))))
+      (cond [(mil-list? (car params))
+             (car (mil-list-elements (car params)))]
+            [(mil-cell? (car params))
+             (mil-cell-head (car params))]
+            [else (raise-user-error "car works on list only ~a" params)])))
 
 (module+ test #| mil-car |#
   (check-equal? (mil-car (list (mil-l (mil-uint8 2) (mil-uint8 3))) (list))
@@ -149,11 +149,11 @@
   (-> (list/c mil-expression? mil-expression?) (listof interpreter-ctx?) (or/c mil-cell? mil-list?))
   (define p1 (car params))
   (define p2 (cadr params))
-  (cond ((mil-list? p2)
-         (mil-list (cons p1 (mil-list-elements p2))))
-        ((mil-cell? p2)
-         (mil-list (list p1 p2)))
-        (#t (mil-cell p1 p2))))
+  (cond [(mil-list? p2)
+         (mil-list (cons p1 (mil-list-elements p2)))]
+        [(mil-cell? p2)
+         (mil-list (list p1 p2))]
+        [else (mil-cell p1 p2)]))
 
 (module+ test #| mil-cons |#
   (check-equal? (mil-cons (list (mil-uint8 1) (mil-l (mil-uint8 2) (mil-uint8 3))) (list))
@@ -194,15 +194,15 @@
   (-> (list/c mil-expression? mil-expression?) (listof interpreter-ctx?) mil-bool?)  
   (define p1 (car params))
   (define p2 (cadr params))
-  (mil-bool (cond ((mil-uint8? p1)
-                   (eq? (mil-uint8-value p1) (mil-uint8-value p2)))
-                  ((mil-string? p1)
-                   (equal? (mil-string-value p1) (mil-string-value p2)))
-                  ((mil-char? p1)
-                   (eq? (mil-char-value p1) (mil-char-value p2)))
-                  ((mil-bool? p1)
-                   (eq? (mil-bool-value p1) (mil-bool-value p2)))
-                  (#t (raise-user-error "cannot compare non atomic values ~a ~a" p1 p2)))))
+  (mil-bool (cond [(mil-uint8? p1)
+                   (eq? (mil-uint8-value p1) (mil-uint8-value p2))]
+                  [(mil-string? p1)
+                   (equal? (mil-string-value p1) (mil-string-value p2))]
+                  [(mil-char? p1)
+                   (eq? (mil-char-value p1) (mil-char-value p2))]
+                  [(mil-bool? p1)
+                   (eq? (mil-bool-value p1) (mil-bool-value p2))]
+                  [else (raise-user-error "cannot compare non atomic values ~a ~a" p1 p2)])))
 
 (module+ test #| mil-eq? |#
   (check-equal? (mil-eq? (list (mil-uint8 1) (mil-uint8 2)) (list))
@@ -233,18 +233,18 @@
   (-> mil-symbol? (listof mil-expression?) (listof interpreter-ctx?) mil-expression?)
   ;; eager eval of parameter
   (define reduced-params (map (lambda (param) (interpret param ctxs)) params))
-  (cond ((eq? '+ (mil-symbol-value sym))       (mil-+ reduced-params ctxs))
-        ((eq? '- (mil-symbol-value sym))       (mil-- reduced-params ctxs))
-        ((eq? 'display (mil-symbol-value sym)) (mil-display reduced-params ctxs))
-        ((eq? 'cdr (mil-symbol-value sym))     (mil-cdr reduced-params ctxs))
-        ((eq? 'car (mil-symbol-value sym))     (mil-car reduced-params ctxs))
-        ((eq? 'cons (mil-symbol-value sym))    (mil-cons reduced-params ctxs))
-        ((eq? '> (mil-symbol-value sym))       (mil-> reduced-params ctxs))
-        ((eq? '< (mil-symbol-value sym))       (mil-< reduced-params ctxs))
-        ((eq? 'eq? (mil-symbol-value sym))     (mil-eq? reduced-params ctxs))
-        ((eq? 'not (mil-symbol-value sym))       (mil-bool (not (mil-bool-value (car reduced-params)))))
-        ((eq? 'zero? (mil-symbol-value sym))   (mil-bool (zero? (mil-uint8-value (car reduced-params)))))
-        (#t (apply-mil-user-function sym reduced-params ctxs))))
+  (cond [(eq? '+ (mil-symbol-value sym))       (mil-+ reduced-params ctxs)]
+        [(eq? '- (mil-symbol-value sym))       (mil-- reduced-params ctxs)]
+        [(eq? 'display (mil-symbol-value sym)) (mil-display reduced-params ctxs)]
+        [(eq? 'cdr (mil-symbol-value sym))     (mil-cdr reduced-params ctxs)]
+        [(eq? 'car (mil-symbol-value sym))     (mil-car reduced-params ctxs)]
+        [(eq? 'cons (mil-symbol-value sym))    (mil-cons reduced-params ctxs)]
+        [(eq? '> (mil-symbol-value sym))       (mil-> reduced-params ctxs)]
+        [(eq? '< (mil-symbol-value sym))       (mil-< reduced-params ctxs)]
+        [(eq? 'eq? (mil-symbol-value sym))     (mil-eq? reduced-params ctxs)]
+        [(eq? 'not (mil-symbol-value sym))       (mil-bool (not (mil-bool-value (car reduced-params))))]
+        [(eq? 'zero? (mil-symbol-value sym))   (mil-bool (zero? (mil-uint8-value (car reduced-params))))]
+        [else (apply-mil-user-function sym reduced-params ctxs)]))
 
 (module+ test #| apply-mil-function |#
   (check-equal? (apply-mil-function (mil-symbol 'zero?) (list (mil-uint8 0)) (list))
@@ -289,16 +289,16 @@
 ;; interpret/reduce the given EXPR in this CTXS
 (define/contract (interpret expr ctxs)
   (-> mil-expression? (listof interpreter-ctx?) mil-expression?)
-  (cond ((mil-atomic-value? expr) expr)
-        ((mil-quote? expr)        (mil-quote-quoted expr))
-        ((mil-symbol? expr)       (resolve expr ctxs))
-        ((mil-progn? expr)        (last (map (lambda (val) (interpret val ctxs)) (mil-list-elements expr))))
-        ((mil-and? expr)          (mil-sf-and expr ctxs))
-        ((mil-or? expr)           (mil-sf-or expr ctxs))
-        ((mil-let? expr)          (interpret (mil-let-body (cons (let-ctx (mil-let-bindings expr) ctxs) ctxs))))
-        ((mil-if? expr)           (mil-sf-if expr ctxs))
-        ((mil-list? expr)         (mil-sf-list expr ctxs))
-        (#t (raise-user-error "cannot interpret expr ~a" expr))))
+  (cond [(mil-atomic-value? expr) expr]
+        [(mil-quote? expr)        (mil-quote-quoted expr)]
+        [(mil-symbol? expr)       (resolve expr ctxs)]
+        [(mil-progn? expr)        (last (map (lambda (val) (interpret val ctxs)) (mil-list-elements expr)))]
+        [(mil-and? expr)          (mil-sf-and expr ctxs)]
+        [(mil-or? expr)           (mil-sf-or expr ctxs)]
+        [(mil-let? expr)          (interpret (mil-let-body (cons (let-ctx (mil-let-bindings expr) ctxs) ctxs)))]
+        [(mil-if? expr)           (mil-sf-if expr ctxs)]
+        [(mil-list? expr)         (mil-sf-list expr ctxs)]
+        [else (raise-user-error "cannot interpret expr ~a" expr)]))
 
 (module+ test #| interpret |#
   (check-exn exn:fail? (lambda () (interpret (mil-list (list 'abc)) (list (interpreter-ctx (hash))))))
