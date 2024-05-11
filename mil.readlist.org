@@ -1,0 +1,1896 @@
+#+title: Mini Lisp Read List
+* literature
+tags
+- VM :: virtual machine
+- SC :: small computer
+- MEM :: memory management
+- T :: theoretical, concepts
+- SYS :: complete lisp system
+** DONE Ribbit: A Small Scheme VM, Compiler, and REPL in 4K :VM:SC:
+[[file:Downloads/c64_classics/minilisp/00_small_scheme_compiler.pdf][paper]] 11p, 2021, [[https://github.com/udem-dlteam/ribbit/tree/main][repository]]
+- includes REPL (Picobit does not)
+- byte code 
+- small virtual machine RVM (Ribbit VM, e.g. [[https://github.com/udem-dlteam/ribbit/blob/main/src/host/c/rvm.c][c-implementation]] with 793 lines, [[https://github.com/udem-dlteam/ribbit/blob/main/src/host/scm/rvm.scm][scheme implementation]] with 439 lines)
+- closures, tail calls, first-class continuations, automatic memory management
+- no support for variadic parameters
+- closures /not safe for space/
+*** notes
+**** memory
+- four itemis are stored in heap memory
+  - scheme objects
+  - scheme global variables
+  - the RVM stack (pointed to tos by stack register)
+  - instruction stream executed by RVM (pointed to current instruction rib by pc register)
+=> stack depth, code len etc. essentially limited only by heap space
+=> unused code can be reclaimed !
+- all memory items allocated are of fixed size records called /ribs/
+- rib contains three object references
+- stack-rib and instruction-rib use first field to chain ribs together
+- gc roots of RVM are the two registers: stack and pc (+ #t #f)
+=> any object not reachable from stack nor (following) instruction stream can be reclaimed
+=> machine word lowest bit = 0: rib-ptr, 1: integer-value
+- gc: stop and copy cheney style gc is used
+**** scheme object representation
+with a rib, consisting of three fields
+- pair :: -> [car][cdr][0]
+- procedure :: -> [code][env][1]
+- symbol/global var :: -> [value][name][2]
+  there is no extra symbol table (just the runtime library has a symbol table)
+  RVM byte code directly references (global) symbols
+- string :: ->[chars][len][3]
+- vector :: ->[elems][len][4]
+- special values (#t, #f, ()) :: [.][.][5]
+**** RVM (footprint 2.6-5.5kB, depending on optimization level)
+- uses 2 registers
+  - stack (TOS pointer)
+  - program counter (instruction pointer)
+- instructions
+  - tail call slot/global :: ->[0][slot/global][0]
+  - non-tail call slot/global :: ->[0][slot/global][->next]
+  - set slot/global<-pop() :: -> [1][slot/global][->next]
+  - get push(slot/global) :: -> [2][slot/global][->next]
+  - const push(object) :: -> [3][slot/global][->next]
+  - if pop() != #f goto then :: [4][->then][->next]
+- primitive procedures, 19 in total
+  each primitive procedure is represented through one rib that is executed through a call to that rib
+  a jump to a primitive is equivalent to a tail call continuation
+  - rib :: create a rib from values off the stack :: [0][-][1]
+  - id :: return tos (pushed again on the stack) :: [1][-][1]
+  - arg1 :: pop 2, return second popped :: [2][-][1]
+  - arg2 :: pop 2, return first pooped: [3][-][1]
+  - close :: return a new rib(field0, stack, 1)
+  - rib? :: pop returning true if popped is a rib
+  ... (field0, field1, field2, field0-set!, field1-set!, field2-set!, eqv?, <, +, -, *​, quotient, getchar, puthar
+- closure
+  is a primitive procedure with the code field pointing to a special rib for the form: [#args][-][->code]
+  the env field allows access to free variables (not globals, which are directly referenced through symbols)
+- call protocol (to non primitive)
+  - construct a list with
+    - tail = continuation rib = [stack(after popping args)][->procedure][->next(call)]
+    - reverse order of popped stack arguments to the procedure
+  - stack -> this list
+  - pc = -> procedure  
+**** runtime library
+- ~string->symbol~ function to get a symbol from the global RT symbols
+- min runtime library includes:
+  *, +, -, <, =, cadddr, caddr, cadr, call/cc, car, cddr, cdr, cons,
+  define, display, eof-object?, equal?, eqv?, eval, if, lambda,
+  length, list->string, list->vector, list-ref, make-string,
+  make-vector, newline, not, null?, pair?, peek-char, procedure?,
+  quote, quotient, read, read-char, repl, set!, set-car!, set-cdr!,
+  string->list, string->symbol, string-length, string-ref,
+  string-set!, string?, symbol->string, symbol?, vector->list,
+- max runtime library addes the following:
+  <=, >, >=, abs, and, append, assoc, assq, assv, begin, boolean?,
+  ca...r, cd...r, ceiling, cond, denominator, eq?, even?, expt, floor,
+  for-each, gcd, integer?, lcm, let, map, max, member, memq, memv, min,
+  modulo, negative?, number->string, numerator, odd?, or, positive?,
+  remainder, reverse, round, string->number, string-append,
+  string-copy, string-fill!, string<=?, string<?, string=?,
+  string>=?, string>?, substring, truncate, vector-fill!, zero?
+**** AOT Compiler
+compiles program to string encoded byte code
+encoded byte code is the decoded into ribs upon start of the program
+AOT create encoded 2068 bytes for min, 4241 for max RT lib (≈ 2kB, 4kB)
+** DONE Picobit: A Compact Scheme System for Microcontrollers :VM:SC:
+[[file:Downloads/c64_classics/minilisp/00_picobit.pdf][paper]] 18p, >2009, [[file:Downloads/c64_classics/minilisp/00_picolisp_simplemachines.pdf][paper]] 5p, 2015
+- compact byte code
+- small virtual machine
+- works with <7kB memory
+- implemented in c
+- support for
+  - macros
+  - automatic memory management
+  - lists
+  - closures and higher-order procedures
+  - first class continuations
+  - unbounded precision integers
+  - byte vectors
+  - lightweight threads
+- no support for
+  - floating point numbers
+  - rational numbers
+  - complex numbers
+  - string <-> symbol conversion
+  - S-expression input
+  - file I/O
+  - eval
+*** notes
+- picobit VM = c-code translated to native microcontroller code
+- picobit scheme compiler = scheme translated to bytecode for picobit VM
+**** optimizations
+all done on a global (not module) level (whole program optimization)
+- mutability analysis to minimize allocations
+- branch tensioning (combine multiple branching jumps)
+- treeshaker (remove any dead code)
+**** instruction set
+| 000xxxxx                   | Push constant x                               |
+| 001xxxxx                   | Push stack element #x                         |
+| 0100xxxx                   | Push global #x                                |
+| 0101xxxx                   | Set global #x to TOS                          |
+| 0110xxxx                   | Call closure at TOS with x arguments          |
+| 0111xxxx                   | Jump to closure at TOS with x arguments       |
+| 1000xxxx                   | Jump to entry point at address pc + x         |
+| 1001xxxx                   | Go to address pc + x if TOS is false          |
+| 1010xxxx xxxxxxxx          | Push constant x                               |
+| 10110000 xxxxxxxx xxxxxxxx | Call procedure at address x                   |
+| 10110001 xxxxxxxx xxxxxxxx | Jump to entry point at address x              |
+| 10110010 xxxxxxxx xxxxxxxx | Go to address x                               |
+| 10110011 xxxxxxxx xxxxxxxx | Go to address x if TOS is false               |
+| 10110100 xxxxxxxx xxxxxxxx | Build a closure with entry point x            |
+| 10110101 xxxxxxxx          | Call procedure at address pc + x − 128        |
+| 10110110 xxxxxxxx          | Jump to entry point at address pc + x − 128   |
+| 10110111 xxxxxxxx          | Go to address pc + x − 128                    |
+| 10111000 xxxxxxxx          | Go to address pc + x − 128 if TOS is false    |
+| 10111001 xxxxxxxx          | Build a closure with entry point pc + x − 128 |
+| 10111110 xxxxxxxx          | Push global #x                                |
+| 10111111 xxxxxxxx          | Set global #x to TOS                          |
+| 11xxxxxx                   | Primitives (+, return, get-cont, ...)         |
+**** picobit VM
+stack based virtual machine
+- includes gc, data structures and unbound precision integers
+***** environment
+- environments = stacks = lists = heap allocated cons-cells
+- var lookup needs to know depth in stack (statically determined)
+***** gc
+- mark and sweep gc
+- Deutsche-Schorr-Waite for marking (no additional memory needed for marking)
+***** address space layout
+design decision: usually more ROM than RAM (in microcontroller)
+=> move to ROM as much as you can
+memory is partitioned, pointers are encoded and point either to
+- ROM values (constants)
+- Heap values
+- Byte vectors
+****** object encoding
+all objects are 32 bit wide (either in ROM or RAM)
+(short) indices always point to objects
+******* regular
+integers implemented as list (little endian) allowing for unbound integers
+continuations directly allocated on heap, no call stack copying, implemented as chain to parent
+byte vectors are allocated in designated space, meta info is stored in regular heap
+- integer ::      00 G next-cell (13b)    integer (16b)
+- closure ::      01 G entry-point (16b)       ptr to environment (13b)
+- pair ::         1 GC car (13b)          000  cdr (13b)
+- symbol ::       10 G 0 0000 0000 0000   001  0 0000 0000 0000
+- string ::       10 G to char list (13b) 010  0 0000 0000 0000
+- u8vector ::     10 G length (13b)       011  to contents (13b)
+- continuation :: 1 GC to parent (13b)    100 to closure (13b)
+******* light
+no unbound integers available (just 24bit)
+- integer ::       G 000 0000        value (24)
+- closure ::       G 01 entry hi (5) to environment (8) 0000 0000     entry low (8)
+- pair ::          GC 00 0010        car (8)            cdr (8)       0000 0000
+- symbol ::        G 000 0011        0000 0000          0000 0000     0000 0000
+- string ::        G 000 0101        to char list (8)   0000 0000     0000 0000
+- continuations :: GC 1 entry-hi (5) to environment (8) to parent (b) entry lo (8)
+***** c-compiler and calling convention
+optimization: no recursion allowed
+=> allocate all variables in global registers (memory locations) without overlap (global analysis)
+=> no allocation on the call stack necessary! params can be passed through registers
+specialized switch-case implementation (generating very compact code)
+** DONE Automatic Memory Management in newLISP :MEM:
+[[file:Downloads/c64_classics/minilisp/01_Automatic Memory Management in newLISP.pdf][paper]], 7p, 2013
+- one reference only memory management (no gc)
+- idea: copy lisp cells + managing free lists is cheap
+  => evaluation does copying/freeing a lot
+  => no explicit gc necessary
+- lists, arrays, strings (lob) need to be passed by reference
+  => newlisp uses host memory manager to handle those
+  => they are passed by reference for all builtin functions
+  => they are managed through name space ids (probably coupling them to a namespace lifetime)
+- seems to contradict persistent data structures
+*** notes
+**** copy all cells (with values) when entering evaluation level
+**** free all cells (with vlaues) when leaving evaluation level
+**** list, arrays and strings are passed by reference
+using default functor namespace ids
+**** optimization
+- built in functions work directly on the reference returned object
+  => only parameters passed into and return from user defined functions need to be managed
+- checking the result stack reduced the actually copied objects by 83%
+**** memory and data types
+- optimized for cell memory allocation / free (using lists => pointer adjustments)
+- every object is kept in a cell
+***** instructions
+- pushResultStack(reference to cell)
+- popResultStack : implies deleting the cell (and all the cell references)
+***** datastructure
+- resultStack[]
+- resultStackIndex
+***** pseudo code
+#+begin_src c
+  function evaluateExpression(expr)
+  {
+      resultStackIndexSave = resultStackIndex
+      if typeOf(expr) is BOOLEAN or NUMBER or STRING
+          return(expr)
+
+      if typeOf(expr) is SYMBOL
+          return(symbolContents(expr))
+                     
+      if typeOf(expr) is QUOTE
+          return(quoteContents(expr))
+                     
+      if typeOf(expr) is LIST
+          {
+              func = evaluateExpression(firstOf(expr))
+              args = rest(expr)
+              if typeOf(func) is BUILTIN_FUNCTION
+                  result = evaluateFunc(func, args)
+              else if typeOf(func) = LAMBDA_FUNCTION
+                  result = evaluateLambda(func, args)
+          }
+
+      while (resultStackIndex > resultStackIndexSave)
+          deleteList(popResultStack())
+
+      pushResultStack(result)
+      return(result)
+  }
+#+end_src
+****** evaluateFunc
+applies a built in function (optimizing passing list, arrays and string as references)
+****** evaluateLambda
+applies a user defined function 
+** DONE Memory Ownership in Carp :MEM:
+[[https://github.com/carp-lang/Carp/blob/master/docs/Memory.md][www]], [[file:Downloads/c64_classics/minilisp/rust-memory.pdf][pages]], 15p, 2022
+- linear types = types + lifetime
+  allows tracking memory location with value association
+- linear value can be used once in a single lexical scope
+- binding (ownership) can be transferred (used) only once
+- gc is called when a value is no longer used in the lexical scope
+- moving :: ownership is transfered, may only be done once in any given lexical scope
+  - binding (e.g. in a let)
+  - passing to function call
+  - returning something from a function call
+- borrowing :: get reference to value without transferring ownership (through *&* or *ref*)
+  - example (function call reverse would normally have transferred ownership=>concatenate could not use it anymore)
+    #+begin_src lisp
+      (let [a-string @"hello, linear world!"
+            reversed (reverse &a-string)] ;; reference to string
+        (concatenate a-string reversed)) ;; ok; first move of string
+    #+end_src
+- copying :: copy value behind reference  (through *@*)
+** DONE Memory management in Bones :MEM:
+[[https://github.com/wolfgangj/bone-lisp/][www]], lisp with regions, persistent data
+- expression ~(in-expr expr1 expr2 ... exrpn)~ evaluates in a region, deleting everything except the result (which is copied into the parent
+  region)
+- fast allocate within region
+- fast deallocation of whole region
+- fast copy of result between regions
+  => allocation/deallocation per lexical scope / function
+** DONE A Tractable Scheme Implementation: Scheme 48 :SYS:
+[[file:Downloads/c64_classics/minilisp/01_A tractable Scheme implementation.pdf][paper]], 21p, 1994
+- Pre-Scheme used for virtual machine implementation
+  - compile time typing
+  - no automatic memory management
+  - tail calls explicit only
+- Byte code compiler compiles primitive scheme for VM
+- Primitive Scheme is the minimal scheme implementation
+  (is used to implement a full scheme, including compiler, linker etc)
+- VM stack based
+*** virtual machine
+**** architecture
+Data structures
+	memory :: Pointers and pointer arithmetic
+	descriptors :: Typed descriptors for Scheme objects
+	fixnum-arithmetic :: Small integer arithmetic with overflow checks
+	stored-objects :: Manipulating heap objects
+	data-types :: Particular stored object types
+	ports :: Scheme I/0 ports
+Storage management
+	heap :: Heap (including garbage collector)
+	environments :: Lexical environments
+	stacks :: Operand stack and continuations
+Byte-code interpreter
+	interpreter :: Instruction dispatch; error detection
+	resume :: Initialize, read a heap image, and start interpreting
+**** data representation
+- scheme objects = descriptor holding pointer plus tag bits (lower 2 bits)
+- tag
+  - fixnum :: rest of the descriptor = small integer
+  - immediate :: #f #t  (type is stored in additional 6 bits)
+  - stored object :: pointer to first non header descriptor, before that is a header describing the object, stored objects are usually
+    objects such as strings, pairs, vectors ...
+  - header :: description of stored objects including type, size and immutability flag
+- aggregate data structures
+  all stored objects
+  - templates :: each stores a vector of instructions and a vector of values (including constants, locations and other templates)
+  - closures :: contains a template and an environment
+  - continuations :: contains operand stack and some machine registers
+  - locations :: contains value of top-level variable
+  - run-time environments :: contains values of lexically bound variables, implemented as vectors, [0] = parent lexical env, lexical
+    variable identified by two indices, first = depth, second = index
+**** storage management
+allow for allocation/reclamation of stored objects
+gc is running a two-space copying garbage collector
+heap image can be written/read from files
+- continuations
+  four basic functions
+  - create continuations (copy argument stack and some internal machine state)
+  - call continuation (restore arg stack and machine state)
+  - preserve continuation
+  - make preserved continuation active
+  used for non-tail-recursive calls, proc returns, call-with-current-continuation, apply result of call-with-current-continuation
+  simplest implementation: create all on the heap
+  complex implementation: keep on stack => no need to copy the arg-stack
+- environments
+  make vector (chaining with parent env)
+  can be allocated on stack or heap
+- stack
+  invoking continuations frees stack space allocated since contintuations creation
+  overflowing stack can be copied into heap
+  allows for recursion deeper than the stack
+  (see Chris Hanson. Efficient stack allocation for tail recursive languages. In Proc. 1990 ACM Symposium on Lisp and Functional
+  Programming, 1990.)
+  (see Richard Kelsey. Tail-recursive stack disciplines for an interpreter. Technical Report NU-CCS-93-03, Northeastern University College
+  of Computer Science, Boston, MA, 1992.) 
+**** [[pdfview:~/Downloads/c64_classics/minilisp/01_A tractable Scheme implementation.pdf::8++0.00][interpreter]]
+***** example
+#+begin_src lisp
+  (lambda (x) (+ 10 x))
+#+end_src
+#+begin_src lisp
+  (check-nargs= 1)
+  (make-env 1)
+  (literal '10)
+  (push)
+  (local 0 1)
+  (+)
+  (return)
+#+end_src
+***** example commands
+there are several additional commands dealing with numeric ops, allocation, accessing and modifying storage, varios i/o ops etc.
+a set of generic instructions exist for stored objects like pairs, symbols, vectors and strings
+- + :: polymorphic addition
+- call :: call tos symbol with n arguments
+- check-nargs= :: check the given # of args
+- check-nargs>= :: check for minimum # of args
+- global :: deref global 
+- jump :: jump to label (only forward jumps are allowed)
+- jump-if-false :: jump to label of tos is false (only forward jumps are allowed)
+- literal :: load literal into value-register
+- local :: deref local (depth + index)
+- make-cont :: create a continuation
+- make-env :: create n new variables in this lexical scope
+- make-rest-list :: create a list of variadic parameters after n non optional parameters
+- push :: push value-register
+- return :: restores operand stack, sets PC, Template, Env and Cont registers
+- get-<REG> :: get register into Value register
+- set-<REG>! :: set register with value from Value register
+**** registers
+- Value :: the most recent instruction result                 
+- PC :: byte-code program counter                          
+- Template :: instruction vector and a vector of literal values  
+- Cont :: continuation                                       
+- Env :: environment                                        
+- Nargs :: number of arguments                                
+- Dynamic :: dynamic state                                      
+- Enabled-Interrupts :: which interrupts are currently enabled             
+- Interrupt-Handlers :: vector of procedures for processing interrupts     
+- Exception-Handler :: procedure for processing exceptions                
+** DONE A virtual machine for Guile :VM:
+[[https://www.gnu.org/software/guile/manual/html_node/A-Virtual-Machine-for-Guile.html][guile vm]]
+*** vm concepts
+- each thread has own instatiation of vm
+- instruction = op, source operand(s), target operand(s)
+- procedure = local var(s), argument(s) <- accessed by index
+  - local vars are stored on stack, discarded when returning
+- vm = stack x ip x sp x fp x shared global memory x registers
+  - ip :: instruction pointer
+  - sp :: stack pointer
+  - fp :: frame pointer
+  - global memory :: modules, global bindings etc.
+**** stack
+- stack is composed of frames
+- each frame = application of one proc (except for tail calls, of course)
+- stack grows downwards (in this drawing), always 64bit wide
+#+begin_src text
+     | ...previous frame locals...  |
+     +==============================+ <- fp + 3
+     | Dynamic link                 |
+     +------------------------------+
+     | Virtual return address (vRA) |
+     +------------------------------+
+     | Machine return address (mRA) |
+     +==============================+ <- fp
+     | Local 0                      |
+     +------------------------------+
+     | Local 1                      |
+     +------------------------------+
+     | ...                          |
+     +------------------------------+
+     | Local N-1                    |
+     \------------------------------/ <- sp
+#+end_src
+1. check parameters to be compatible
+2. allocate additional locals for the function
+- once a local is no longer used, the slot may be reused
+- dynamic link :: old fp before this activation (links activation frames) <- relative addressing
+- virtual return address :: old ip before activation (byte code)
+- machine return address :: old native machine code ip before activation (only in case of jit)
+**** variables
+***** top level variable
+- each module has a obarray of name -> variable
+- created through ~(define name value)~
+- dynamically created bye ~make-undefined-variable~ or ~make-variable init~
+***** free variable vector
+***** local variables
+**** object file format (using ELF)
+**** vm instruction (see https://www.gnu.org/software/guile/manual/html_node/Instruction-Set.html)
+- s​/n/ :: sp relative index to local var
+- f​/n/ :: fp relative index to local var
+- c​/n/ :: constant unsigned n-bit integer
+- l24 :: offset to ip in 32bits units, as a signed 24-bit val (relative jumps)
+- zi16, i16, i32 :: immediate scheme value
+- a32, b32 :: immediate scheme value pair of 32 bit words (to encode 64 bit values)
+- n32 :: statically allocated non immediate x = ip + offset
+- r32 :: indirected scheme value (like n32, just indirected, ***​x = ip + offset)
+- l32, lo32 :: ip relative address
+- v32:x80-l24 :: additional words in special instructions
+- b1 :: boolean 1=true, 0=false
+- x​/n/ :: ignored sequence of n-bits
+***** call return instructions
+****** *call* f24:proc x8:_ c24:nlocals
+****** *call-label* f24:proc x8:_ c24:nlocals l32:label
+****** *tail-call* x24:_
+****** *tail-call-label* x24:_ l32:label
+****** *return-values* x24:_
+****** *receive* f12:dst f12:proc x8:_ c24:nlocals
+****** *receive-values* f24:proc b1:allow-extra? x7:_ c24:nvalues
+***** function prologue instructions
+****** *assert-nargs-ee* c24:expected
+****** *assert-nargs-ge* c24:expected
+****** *assert-nargs-le* c24:expected
+****** *arguments<=?* c24:expected
+****** *positional-arguments<=?* c24:nreq x8:_ c24:expected
+****** *bind-kwargs* c24:nreq c8:flags c24:nreq-and-opt x8:_ c24:ntotal n32:kw-offset
+****** *bind-optionals* f24:nlocals
+****** *bind-rest* f24:dst
+****** *alloc-frame* c24:nlocals
+****** *reset-frame* c24:nlocals
+****** *assert-nargs-ee/locals* c12:expected c12:nlocals
+***** shuffling instructions
+****** *mov* s12:dst s12:src
+****** *long-mov* s24:dst x8:_ s24:src
+****** *long-fmov* f24:dst x8:_ f24:src
+****** *push* s24:src
+****** *pop* s24:src
+****** *drop* s24:src
+****** *shuffle-down* f12:from f12:to
+****** *expand-apply-argument* x24:_
+***** trampoline instructions
+****** *subr-call* c24:idx
+****** *foreign-call* c12:cif-idx c12:ptr-idx
+****** *builtin-ref* s12:dst c12:idx
+***** non-local control flow instructions
+****** *capture-continuation* s24:dst
+****** *continuation-call* c24:contregs
+****** *abort* x24:_
+****** *compose-continuation* c24:cont
+****** *prompt* s24:tag b1:escape-only? x7:_ f24:proc-slot x8:_ l24:handler-offset
+****** *throw* s12:key s12:args
+****** *throw/value* s24:value n32:key-subr-and-message
+****** *throw/value+data* s24:value n32:key-subr-and-message
+***** instrumentation instructions
+****** *instrument-entry* x24__ n32:data
+****** *instrument-loop* x24__ n32:data
+****** *handle-interrupts* x24:_
+****** *return-from-interrupt* x24:_
+***** intrinsic call instructions
+****** *call-thread* x24:_ c32:idx
+****** *call-thread-scm* s24:a c32:idx
+****** *call-thread-scm-scm* s12:a s12:b c32:idx
+****** *call-scm-sz-u32* s12:a s12:b c32:idx
+****** call-scm<-thread s24:dst c32:idx
+****** call-scm<-u64 s12:dst s12:a c32:idx
+****** call-scm<-s64 s12:dst s12:a c32:idx
+****** call-scm<-scm s12:dst s12:a c32:idx
+****** call-u64<-scm s12:dst s12:a c32:idx
+****** call-s64<-scm s12:dst s12:a c32:idx
+****** call-f64<-scm s12:dst s12:a c32:idx
+****** call-scm<-scm-scm s8:dst s8:a s8:b c32:idx
+****** call-scm<-scm-uimm s8:dst s8:a c8:b c32:idx
+****** call-scm<-thread-scm s12:dst s12:a c32:idx
+****** call-scm<-scm-u64 s8:dst s8:a s8:b c32:idx
+****** call-scm-scm s12:a s12:b c32:idx
+****** call-scm-scm-scm s8:a s8:b s8:c c32:idx
+****** call-scm-uimm-scm s8:a c8:b s8:c c32:idx
+****** add dst a b
+****** add/immediate dst a b/imm
+****** sub dst a b
+****** sub/immediate dst a b/imm
+****** mul dst a b
+****** div dst a b
+****** quo dst a b
+****** rem dst a b
+****** mod dst a b
+****** logand dst a b
+****** logior dst a b
+****** logxor dst a b
+****** logsub dst a b
+****** lsh dst a b
+****** lsh/immediate a b/imm
+****** rsh dst a b
+****** rsh/immediate dst a b/imm
+****** scm->f64 dst src
+****** scm->u64 dst src
+****** scm->u64/truncate dst src
+****** scm->s64 dst src
+****** u64->scm dst src
+****** s64->scm scm<-s64
+****** string-set! str idx ch
+****** string->number dst src
+****** string->symbol dst src
+****** symbol->keyword dst src
+****** class-of dst src
+****** wind winder unwinder
+****** unwind
+****** push-fluid fluid value
+****** pop-fluid
+****** fluid-ref dst fluid
+****** fluid-set! fluid value
+****** push-dynamic-state state
+****** pop-dynamic-state
+****** resolve-module dst name public?
+****** lookup dst mod sym
+****** define! dst mod sym
+****** current-module dst
+****** $car dst src
+****** $cdr dst src
+****** $set-car! x val
+****** $set-cdr! x val
+****** $variable-ref dst src
+****** $variable-set! x val
+****** $vector-length dst x
+****** $vector-ref dst x idx
+****** $vector-ref/immediate dst x idx/imm
+****** $vector-set! x idx v
+****** $vector-set!/immediate x idx/imm v
+****** $allocate-struct dst vtable nwords
+****** $struct-vtable dst src
+****** $struct-ref dst src idx
+****** $struct-ref/immediate dst src idx/imm
+****** $struct-set! x idx v
+****** $struct-set!/immediate x idx/imm v
+***** constant instructions
+****** *make-immediate* s8:dst zi16:low-bits
+****** *make-short-immediate* s8:dst i16:low-bits
+****** *make-long-immediate* s24:dst i32:low-bits
+****** *make-long-long-immediate* s24:dst a32:high-bits b32:low-bits
+****** *make-non-immediate* s24:dst n32:offset
+****** *load-label* s24:dst l32:offset
+****** *load-f64* s24:dst au32:high-bits au32:low-bits
+****** *load-u64* s24:dst au32:high-bits au32:low-bits
+****** *load-s64* s24:dst au32:high-bits au32:low-bits
+****** *static-ref* s24:dst r32:offset
+****** *static-set*! s24:src lo32:offset
+****** *static-patch*! x24:_ lo32:dst-offset l32:src-offset
+***** memory access instructions
+****** allocate-words s12:dst s12:count
+****** allocate-words/immediate s12:dst c12:count
+****** scm-ref s8:dst s8:obj s8:idx
+****** scm-ref/immediate s8:dst s8:obj c8:idx
+****** scm-set! s8:dst s8:idx s8:obj
+****** scm-set!/immediate s8:dst c8:idx s8:obj
+****** scm-ref/tag s8:dst s8:obj c8:tag
+****** scm-set!/tag s8:obj c8:tag s8:val
+****** word-ref s8:dst s8:obj s8:idx
+****** word-ref/immediate s8:dst s8:obj c8:idx
+****** word-set! s8:dst s8:idx s8:obj
+****** word-set!/immediate s8:dst c8:idx s8:obj
+****** pointer-ref/immediate s8:dst s8:obj c8:idx
+****** pointer-set!/immediate s8:dst c8:idx s8:obj
+****** tail-pointer-ref/immediate s8:dst s8:obj c8:idx
+***** atomic memory access instructions
+****** current-thread s24:dst
+****** atomic-scm-ref/immediate s8:dst s8:obj c8:idx
+****** atomic-scm-set!/immediate s8:obj c8:idx s8:val
+****** atomic-scm-swap!/immediate s24:dst x8:_ s24:obj c8:idx s24:val
+****** atomic-scm-compare-and-swap!/immediate s24:dst x8:_ s24:obj c8:idx s24:expected x8:_ s24:desired
+***** tagging and untagging instructions
+****** tag-char s12:dst s12:src
+****** untag-char s12:dst s12:src
+****** tag-fixnum s12:dst s12:src
+****** untag-fixnum s12:dst s12:src
+***** integer arithmetic instructions
+****** uadd s8:dst s8:a s8:b
+****** uadd/immediate s8:dst s8:a c8:b
+****** usub s8:dst s8:a s8:b
+****** usub/immediate s8:dst s8:a c8:b
+****** umul s8:dst s8:a s8:b
+****** umul/immediate s8:dst s8:a c8:b
+****** ulogand s8:dst s8:a s8:b
+****** ulogior s8:dst s8:a s8:b
+****** ulogxor s8:dst s8:a s8:b
+****** ulogsub s8:dst s8:a s8:b
+****** ulsh s8:dst s8:a s8:b
+****** ulsh/immediate s8:dst s8:a c8:b
+****** ursh s8:dst s8:a s8:b
+****** ursh/immediate s8:dst s8:a c8:b
+****** srsh s8:dst s8:a s8:b
+****** srsh/immediate s8:dst s8:a c8:b
+***** floating point arithmetic instructions
+****** fadd s8:dst s8:a s8:b
+****** fsub s8:dst s8:a s8:b
+****** fmul s8:dst s8:a s8:b
+****** fdiv s8:dst s8:a s8:b
+***** comparison instructions
+****** u64=? s12:a s12:b
+****** u64<? s12:a s12:b
+****** s64<? s12:a s12:b
+****** s64-imm=? s12:a z12:b
+****** u64-imm<? s12:a c12:b
+****** imm-u64<? s12:a s12:b
+****** s64-imm<? s12:a z12:b
+****** imm-s64<? s12:a z12:b
+****** f64=? s12:a s12:b
+****** f64<? s12:a s12:b
+****** =? s12:a s12:b
+****** heap-numbers-equal? s12:a s12:b
+****** <? s12:a s12:b
+****** immediate-tag=? s24:obj c16:mask c16:tag
+****** heap-tag=? s24:obj c16:mask c16:tag
+****** eq? s12:a s12:b
+****** eq-immediate? s8:a zi16:b
+****** fixnum? x
+****** heap-object? x
+****** char? x
+****** eq-false? x
+****** eq-nil? x
+****** eq-null? x
+****** eq-true? x
+****** unspecified? x
+****** undefined? x
+****** eof-object? x
+****** null? x
+****** false? x
+****** nil? x
+****** pair? x
+****** struct? x
+****** symbol? x
+****** variable? x
+****** vector? x
+****** immutable-vector? x
+****** mutable-vector? x
+****** weak-vector? x
+****** string? x
+****** heap-number? x
+****** hash-table? x
+****** pointer? x
+****** fluid? x
+****** stringbuf? x
+****** dynamic-state? x
+****** frame? x
+****** keyword? x
+****** atomic-box? x
+****** syntax? x
+****** program? x
+****** vm-continuation? x
+****** bytevector? x
+****** weak-set? x
+****** weak-table? x
+****** array? x
+****** bitvector? x
+****** smob? x
+****** port? x
+****** bignum? x
+****** flonum? x
+****** compnum? x
+****** fracnum? x
+***** branch instructions
+****** j l24:offset
+****** jl l24:offset
+****** je l24:offset
+****** jnl l24:offset
+****** jne l24:offset
+****** jge l24:offset
+****** jnge l24:offset
+****** jtable s24:idx v32:length [x8:_ l24:offset]...
+***** raw memory access instructions
+****** u8-ref s8:dst s8:ptr s8:idx
+****** s8-ref s8:dst s8:ptr s8:idx
+****** u16-ref s8:dst s8:ptr s8:idx
+****** s16-ref s8:dst s8:ptr s8:idx
+****** u32-ref s8:dst s8:ptr s8:idx
+****** s32-ref s8:dst s8:ptr s8:idx
+****** u64-ref s8:dst s8:ptr s8:idx
+****** s64-ref s8:dst s8:ptr s8:idx
+****** f32-ref s8:dst s8:ptr s8:idx
+****** f64-ref s8:dst s8:ptr s8:idx
+****** u8-set! s8:ptr s8:idx s8:val
+****** s8-set! s8:ptr s8:idx s8:val
+****** u16-set! s8:ptr s8:idx s8:val
+****** s16-set! s8:ptr s8:idx s8:val
+****** u32-set! s8:ptr s8:idx s8:val
+****** s32-set! s8:ptr s8:idx s8:val
+****** u64-set! s8:ptr s8:idx s8:val
+****** s64-set! s8:ptr s8:idx s8:val
+****** f32-set! s8:ptr s8:idx s8:val
+****** f64-set! s8:ptr s8:idx s8:val
+***** variables
+****** make-variable init -> var
+****** make-undefined-variable -> var
+****** variable-bound? var -> boolean
+****** variable-ref var -> value
+****** variable-set! var val -> void
+****** variable-unset! var -> void
+****** variable? obj -> boolean
+**** jit
+- increment function usage counter, threshold->native compile
+- template jit = bytecode -> series of native instructions (no time consuming analysis)
+** DONE compiling to the virtual machine (guile) :VM:
+(see https://www.gnu.org/software/guile/manual/html_node/Compiling-to-the-Virtual-Machine.html)
+*** Compiler Tower
+- scheme -> macro expansion -> tree-il -> cps -> vm byte code
+- this list can be extended by own languages
+- each translation step is defined with scheme
+  #+begin_src scheme
+    (define-language scheme
+      #:title	"Scheme"
+      #:reader      (lambda (port env) ...)
+      #:compilers   `((tree-il . ,compile-tree-il))
+      #:decompilers `((tree-il . ,decompile-tree-il))
+      #:evaluator	(lambda (x module) (primitive-eval x))
+      #:printer	write
+      #:make-default-environment (lambda () ...))
+  #+end_src
+*** The Scheme Compiler
+- expand all macros
+- expand all scheme expressions to their most primitive expressions
+- a most primitive expression is a Tree-IL expressions (and cannot be further reduced)
+- this expansion is completely implemented as macro expansion
+  #+begin_src scheme
+    (compile '(+ 1 2) #:from 'scheme #:to 'tree-il)
+    ⇒
+    #<tree-il (call (toplevel +) (const 1) (const 2))>
+  #+end_src
+*** Tree-IL
+- all is represented as structures (there is a structure notation)
+- each element has a reference to the source code it is associated with (not shown in scheme notation)
+- there is a notation that is more scheme-like
+**** commands (scheme notation)
+***** ~(void)~
+***** ~(const exp)~
+- definition of a constant
+***** ~(primitive name)~
+- reference to a primitive (e.g. car)
+***** ~(lexical name gensym)~
+- reference to lexically bound variable
+***** ~(set! (lexical name gensym) exp)~
+***** ~(@ mod name)~
+***** ~(@@ mod name)~
+- reference to a name in a module
+***** ~(set! (@ mod name) exp)~
+***** ~(set! (@@ mod name) exp)~
+***** ~(toplevel name)~
+- reference var in current module
+***** ~(set! (toplevel name) exp)~
+***** ~(define name exp)~
+- define top level var in current module
+***** ~(if test then else)~
+- 'else' is not optional
+***** ~(call proc . args)~
+- regular procedure call
+***** ~(primcall name . args)~
+- equivalent to ~(call (primitive name) . args)~
+***** ~(seq head tail)~
+- sequence, head is evaluated, ignoring results, then tail is evaluated, in tail position
+***** ~(lambda meta body)~
+- a clojure with meta - assoc list, body = single Tree-IL expression of type ~lambda-case~
+***** ~(lambda-case ((req opt rest kw inits gensyms) body) [alternate])~
+- ~req~ is a list of required arguments, ~opt~ of optional, and ~rest~ of restarguments
+- ~kw~ is a list of keyword value pairs
+- ~inits~ are Tree-IL expressions corresponding to all ~opt~ and ~kw~
+- ~gensyms~ lists all gensyms of ~req~, ~opt~, ~rest~ and ~kw~
+- ~body~ and ~alternative~:
+  if all params are given, execute body in tail pos
+  elif alternative, it should be a lambda case = next clause to try
+  else error (wrong # of args) is raised
+***** ~(let names gensyms vals exp)~
+- lexical name binding
+***** ~(letrec names gensyms vals exp)~
+***** ~(letrec* names gensyms vals exp)~
+- version of let allowing recursive binding
+***** ~(prompt escape-only? tag body handler)~
+***** ~(abort tag args tail)~
+- abort to nearest prompt
+***** ~(let-values names gensyms exp body)~
+***** ~(fix names gensyms vals body)~
+*** Continuation Passing Style
+gives a name to every control point and every intermediate value
+program is a soup of continuations, a map from label to continuation
+special continuations: function entry, tail position
+term continuation: term evaluations to 0..n values, recording continuation to which these values are passed
+conditional branches e.g. pass/continue to one of a number of continuations
+**** guile continuations (building blocks)
+are labeled with small integers
+- $kargs names vars term :: bind vars w/ org names and eval term
+- $continue k src exp :: eval exp, pass values to continuation k (source code found in src)
+- $promcall name param args :: call primitive operation name, passing args, pass result to continuation (param holds additional info)
+- $const val :: continue with constant value val
+- $prim name :: continue with proc, implementing primitive operation named name
+- $call proc args :: call proc with args and pass values to cotninuation
+- $values args :: pass values args (list) to continuation
+- $prompt escape? tag handler ::
+- $fun body ::
+- $rec names vars funs :: continue with mutual recursive function
+- $const-fun label ::
+- $code label :: continue with value of label
+- $callk label proc args :: like call (but in same compilation unit)
+- $branch kf kt src op param args :: primcall op with args and const param continue to kt with zero values (true), else kt
+- $switch kf kt* src arg :: continue to label in the list k* depending on index arg
+- $throw ::
+- $prompt k kh src scape? tag :: push prompt on stack
+- $kreceive arity k :: receive values on the stack
+- $arity req opt rest kw allow-other-keys? ::  list of req(uired), opt(ional) and rest args
+- $kfun src meta self tail clause :: declare function entry
+- $ktail :: tail continuation
+- $kclause :: arity cont alternate
+*** continuations are build using macros in guile
+*** bytecode
+- see virtual machine vm instruction set ([[*vm instruction (see https://www.gnu.org/software/guile/manual/html_node/Instruction-Set.html)][vm instructions]])
+- the assembler, loader and linker have a imperative interface
+- the byte code is generated by emit instructions
+** DONE LIL: A LISP Implementation Language :VM:
+[[pdfview:~/Downloads/c64_classics/minilisp/03_lil.a_lisp_implementation_language.1988.pdf::2++0.00][thesis]], 177p, 1988
+- describes a virtual machine in detail
+*** virtual machine
+general idea: code = instructions implementable by macro assembler
+**** JPDL (jump push down list)
+keeps track of function invocation (call stack)
+**** APDL (argument push down list)
+pass arguments from one function to another (value stack)
+modules (subroutines) do not have (explicit) parameters, all is passed through the value stack
+**** statements
+***** expressions
+evaluate to single value
+***** instructions
+execute and contain expression, constants, variables etc.
+***** declaration statements
+- comment declaration :: define comments
+- constant declaration :: define constant value (no id)
+  integer, real, octal, hex, char, string
+- variable declaration :: declare id as value holder
+  allocated to hold largest data type (since decl. is typeless)
+- space/array declaration :: one dimensional, continuous space declaration
+  id x size x (word|byte),
+- structure template declaration :: field layout definition
+  (id x count x (bit|byte|word))*
+***** definition statements
+- const definition :: associate id with constant value
+- tag definition :: define label (or tag) as jump target
+- module definition :: module initialization code
+  can be either threaded module (scheduled to be called) or subroutine (immediately called)
+***** conditional statements
+- compare statement :: compare two statements and return boolean
+  eq, ne, le, lt, ge, gt
+***** control statements
+- codebegin :: transfer control to this function
+- codeend :: marks end of code of a function
+- loop :: mark beginning of infinite loop
+- loopend :: end of inifite loop
+- srjump :: jump to subroutine
+- ret :: return from subroutine
+- call :: call os routine with parameters
+***** stack manipulation instructions
+- push :: push onto certain space the result of an expression
+- bpush :: push a statement to the bottom of th stack
+- pop :: pop tos and return value
+- jpush :: push function onto JPDL
+- jpop :: pop from JPDL without transfer of control
+- apush :: pushes result of an expresion to the APDL
+- apop :: pop a value from APDL returning its value
+- popj :: pop next function from JPDL and jump to it
+***** arithmetic instructions
+- set :: an identified variable to the result of an expression
+- add :: two expressions
+- inc :: increment a variable
+- sub :: subtract two expressions
+- dec :: decrement a variable
+- mul :: multiply two expressions
+- div :: integer divide two expressions
+- mod :: integer remainder of two expressions
+***** storage management instructions
+- mkstr :: allocate in given space mem to hold the given structure
+- checkspace :: check for space for structure in given space
+- initspace :: initialize the given space
+- vinit :: intern variable and set to nil
+***** data manipulation instructions
+- get :: get field from structure
+- put :: put result of expression into structure
+- aget :: get from array
+- aput :: put result of expression into array
+***** flow instructions
+- jump :: jump to label (tag)
+- jumpif :: jump to label if given condition is true
+- jumpnif :: negated jumpif
+- jumpz :: jump if result is zero
+- jumpnz :: jump if result is not zero
+***** miscellaneous instructions
+- vset :: assign result to vcell of a given atom
+- vget :: get vcell of atom
+- scopy :: string copy
+- scomp :: string compare
+- scat :: string concatenation
+***** operating system interfaces
+- fopen :: file open
+- fclose :: file close
+- fread :: read number of characters from connection
+- fwrite :: write number of characters to connection
+**** space + space-registers (heap)
+used to implement arrays, free space allocation, stacks, queues etc.
+**** eval
+is divided into three distinct segments
+(allows for changing handlers for certain evals, e.g. debugging eval)
+***** argument handler
+will decide what to do with arguments (eval etc.)
+***** body handler
+bind variables, executing function
+***** result handler
+cleanup stack and restore environment
+**** spaces
+gc (mark sweep) only in cons-cell space
+***** cons-cell space
+used for paired cells
+***** atom-header space
+simple heap
+***** string space
+**** values
+***** atom
+any non-list object, identified by atom-header
+atom-header = type x gc tag x value x plist x pname
+with plist = pointer to previous atom, pname = printable name of this value
+***** cons
+each cons cell as 4 fields
+cons cell = type x gc tag x car x cdr
+***** snums
+small numbers (no print name, use atom header)
+***** subr
+compiled function evaluation their arguments (eager)
+***** fsubr
+compiled function not evaluating their arguments
+***** lambda
+lisp function which evaluates their arguments (eager)
+***** flambda
+lisp function not evaluating their arguments (lazy)
+**** functions
+***** quote (quote)
+***** set (set)
+***** setq (set quoted)
+***** gc (garbage collect)
+***** room (num of cells available)
+***** oblist (print all atoms in the oblist)
+***** putp (put into property list)
+***** getp (get from property list)
+***** return  (return from break level with some value)
+***** reset (reset break level to 0)
+***** eval
+***** progn (eval and return last expression result)
+***** evlis (eval each expression and produce a list of results)
+***** list (create list of expressions)
+***** append (append two or more lists)
+***** car
+***** cdr
+***** cons
+***** null (t if expression is non-nil)
+***** +
+***** -
+***** *
+***** /
+***** %
+***** =
+***** >
+***** <
+***** >=
+***** <=
+***** atom
+***** eq (point to the same objects)
+***** or
+***** and
+***** cond (multi condition)
+***** replcd (replace cdr of list with other list)
+***** replca (replace car with result of expression)
+***** nonc (append, modifying the first list)
+***** de (define lambda)
+***** df (define flambda)
+***** read (from terminal)
+***** print (to terminal)
+***** exit (terminate)
+** DONE CMUCL - CMU Common Lisp implementation (w/ compact bytecode) :VM:
+[[https://cmucl.org/docs/internals/design.html][design]] (e.g. object [[https://cmucl.org/docs/internals/design.html#Tagging][tagging]])
+[[file:fp4/Docs/CMUCL-design.pdf][book]], 122p, 2003
+*** registers
+**** before call
+- LEXENV :: lexical environment
+- CNAME :: symbol for named call
+- OCFP :: frame pointer restored upon return
+- A0..An :: hold the first n+1 arguments
+- NARGS :: holds the number of arguments
+- LRA :: lisp return adress (where to return to)
+- CODE :: function object actually called
+- CSP :: calle sets it if necessary based on CFP
+- CFP :: holds callee frame pointer
+- NSP :: indicates need to allocate/deallocate before returning or tail calling
+**** after call
+- A0 :: holds the value
+- CODE :: holds LRA to execute now
+- CSP :: holds CFP
+- CFP :: holds OCFP
+**** for multiple return values
+- NARGS :: number of values returned
+- A0..An :: hold n+1 values
+- CSP :: returner stores CFP + NARGS * <address units per word>
+- OCFP :: returner stores CFP
+*** tagging (lowest 3bit)
+- 000 :: even fixnum
+- 001 :: function pointer
+- 010 :: even other immediate (header-words, characters, symbol-value, trap-value ...)
+- 011 :: list pointer
+- 100 :: odd fixnum
+- 101 :: structure pointer
+- 110 :: odd other immediate
+- 111 :: other pointer to data-bblocks (other than conses, structures and functions)
+- ratios and complex are no primary values => have a header-word
+- bignums have a header word
+- single and double floats
+- symbols have a pad slot
+*** structures
+len (24 bit), structure-header (8-bit)
+structure type name / symbol (32bit)
+structure slot 0 (32bit)
+       :
+structure slot lenght -2 (32bit)
+*** fixnums (effectively 2 tag bits)
+30 bit 2's complement event integer 000
+  or
+30 bit 2's complement odd integer 100
+- number can be used for offsets in 32 bit words without shifting!
+- no masking for subtraction or addition
+- division + multiplication requres special shifting
+*** other immediates
+data (24bits), type (8 bit with low tag) 10
+*** data blocks and header-word format
+dual word address of data block (29bits) 111
+*** types
+- number
+  - bignum
+    - ratio
+    - single float
+    - double float
+    - double-double float
+    - complex
+    - complex single float
+    - complex double float
+    - complex double double float
+- array
+  - simple array
+  - vector
+    - simple string
+    - simple bit vector
+    - simple vevtor
+    - simple array unsigned 2 bytes
+    - simple array 4 bytes
+    - simple array 8 bytes
+    - simple array 16 bytes
+    - simple array 32 bytes
+    - simple array signed 2 bytes
+    - simple array 4 bytes
+    - simple array 8 bytes
+    - simple array 16 bytes
+    - simple array 32 bytes
+    - simple array single float
+    - simple array double float
+    - simple array double-double float
+    - simple array complex single float
+    - simple array complex double float
+    - simple array complex double double float
+  - complex string
+  - complex bit vector
+  - complex array
+- code-header-type
+- function-header type
+- closure header type
+- funcallable instance header type
+- .....
+*** strings are c null terminated
+*** symbols and nil
+5 (24 bits) symbol type (8bits)
+value descriptor (32 bits)
+hashvalue (32bits)
+property list (32bits)
+print name (32bits)
+package (32bits)
+- nil is a symbol with a fixed address (first in global space)
+*** bytecode
+- 00 :: NOP (allows allignment)
+- 01 :: pop => table :: pop from stack and add to table
+- 02 :: push index(4) => stack :: put table item at index on stack
+- 03 :: byte-push index(1) => stack :: put table item on stack
+- 04 :: empty-list => stack :: empty list is pushed on the stack
+- 05 :: truth => stack :: push truth on stack
+- 06 :: symbol-save n(4) name(n) => stack & table :: n(4) = length of print name, name follows one char per byte, result (symbol) is pushed
+  on stack and added to the table
+- 07 :: small-symbol-save n(1) name(n) => stack & table :: same as symbol-save, for one byte length
+- 08 :: symbol-in-package-save index(4) n(4) name(n) => stack & table
+- 09 :: small-symbol-in-package-save index(4) n(1) name(n) => stack & table-  ::
+- 0A :: ...
+- 0E :: package => table :: item is popped from stack, must be a symbol. package is pushed on the table
+- 0F :: list len(1) => stack :: make top len elements of the stack a list and push that list on the stack
+- 10 :: list* len(1) => stack :: make except tos len elements of the stack a list, terminated by old tos and push it
+- 11-18 :: list-1 ... list-8 :: shorthand for list len(1)= 1..8, making short list more compact
+- 19..20 :: list*-1 ... list*-8
+- 21 :: integer n(4) value(n) => stack :: put long integer on stack
+- 22 :: small-integer n(1) value(n) => stack :: put integer on stack
+- 23 :: word-integer value(4) => stack
+- 24 :: byte-integer value(1) => stack
+- 25 :: string n(4) name(n) => stack
+- 26 :: small-string n(1) name(n) => stack
+- 27 :: vector n(4) => stack
+- 28 :: small-vector n(1) => stack
+- 2D :: layout :: pop layout object from stack (4 32bit words)
+- 2E :: single-float data(4) ::
+- 2F :: double-float data(8)
+- 30 :: struct n(4) :: n = len of structure to construct
+- 31 :: small-struct n(1)
+- 35 :: eval :: pop item and evaluate, push result on stack
+- 36 :: eval-for-effect :: pop item evaluate and ignore result
+- 37 :: funcall nargs(1) => stack :: pop nargs+1 and apply last one popped as function to the args, push result
+- 38 :: funcall-for-effect nargs(1)
+- 39 :: code-format implementation(1) version(1) :: define code format for following code object
+- 3A :: code nitems(4) size(4) :: push compiled function on the stack
+- 3B :: small-code nitems(1) size(2)
+- 3C :: fdefinition :: pop fdefinition from stack
+- 3D :: sanctify-for-execution ::
+- 3E :: verify-table-size size(4)
+- 3F :: verify-empty-stack :: check that stack is empty
+- 40 :: end-group :: last op of a group
+- 41 :: pop-for-effect
+- 42 :: misc-trap :: push trap object
+- 43 :: double-double-float value(8)
+- 44 :: character character(3)
+- 45 :: small-character char(1)
+- 46 :: ratio :: creates ration from two tos ints
+- 47 :: complex ::
+- 51 :: normal-load
+- 52 :: maybe-cold-load
+- 53 :: array rank(4)
+-  :: alter-code :: modify constant part of code object
+  ....
+** DONE Design of an Efficient Bytecode Machine and Compiler :VM:
+[[file:Downloads/design_of_an_efficient_lisp_bytecode_compiler_and_interpreter.2023.pdf][paper]], 8p, 2023
+*** bytecode
+- vector of octets of pure byte code commands
+  + vector of literals referenced through ~CONSTANT~ instruction
+- each instruction has 0+ operands depending on the instruction
+- there is a long prefix byte (instruction) allowing for instructions encoding > 8 bit
+- goal: small set of orthogonal set of instructions
+**** examples
+- bind-required-args
+- call
+- call
+- cell-ref
+- check-arg-count
+- check-arg-count-LE
+- closure
+- const
+- exit
+- fdefinition
+- make-cell
+- make-closure
+- pop
+- ref
+- restore-sp
+- return
+- save-sp
+- set
+- special-bind
+- unbind
+*** vm
+- stack machine
+- call frame reserves fixed number of values on the stack
+- these stack slots can be referenced throug ~REF~ instruction
+- program counter
+- values vector
+- flat closures (no linked environments)
+  - benefits: O(1) access time, only data accessible is kept alive, bytecode is simpler
+  - drawbacks: mutation is difficult to support
+- interoperability with native code and byte code
+** DONE A Lisp with very compact bytecode :VM:
+[[file:Downloads/lisp_with_compact_bytecode.pdf][paper]], 7p, 1973+
+- all values are referenced with pointers
+- to prevent too much allocation for integers,
+  the most common ones are simple preallocated at fixed addresses
+- commands are encoded and executed either in load or store mode
+- use short encoding for low number of references (in functions etc.)
+*** bytecode
+**** control
+- JUMP n :: always jump n bytes
+- TJUMP n :: jump if tos = true
+- FJUMP n :: jump of tos = false
+- NTJUMP n :: jump if tos = true, else pop
+- TYPEJUMP t d :: jump if tos = type (t) = d = true/false and pop
+- GOTOSELF ::  tailcall
+- RETURN :: return tos
+**** data movement
+- store v :: store tos into v
+  - IVAR, GVAR, FVAR :: store into binding
+  - CONST :: error
+  - FN0..FN6 :: function is called in store context
+  - FN* :: function with args is called in store context
+- dstore v :: same as store + pop
+- addrx :: increase range of addresses
+- pop :: pop
+- copy :: pushes tos (dup)
+- ARG :: replace tos=N with Nth argument to function
+- SETARG :: write tos to tos-1'th argument of the function
+** clisp bytecode specification :VM:
+[[https://www.gnu.org/software/clisp/impnotes/bytecode.html][reference]]
+*** instructions
+**** constants
+| mnemonic     | description                                     | semantics                                       |
+|--------------+-------------------------------------------------+-------------------------------------------------|
+| (NIL)        | Load [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]] into [[file:vm.html][values]].                           | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]], [[file:vm.html][mv_count]] : 1                      |
+| (PUSH-NIL n) | Push /n/ [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]]s into the [[file:vm.html][STACK]].                     | /n/ times do: *-- [[file:vm.html][STACK]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]], Invalidate [[file:vm.html][values]]. |
+| (T)          | Load [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_t.html][T]] into [[file:vm.html][values]].                             | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_t.html][T]], [[file:vm.html][mv_count]] : 1                        |
+| (CONST n)    | Load the function's /n/th constant into [[file:vm.html][values]]. | [[file:vm.html][value1]] : [[file:comp-fun.html][consts]][ /n/], [[file:vm.html][mv_count]] : 1             |
+
+**** lexical variables
+| mnemonic            | description                                                                                     | semantics                                                                            |
+|---------------------+-------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------|
+| (LOAD n)            | Load a directly accessible local variable into [[file:vm.html][values]].                                          | [[file:vm.html][value1]] : *( [[file:vm.html][STACK]]+ /n/), [[file:vm.html][mv_count]] : 1                                                  |
+| (LOADI k_1 k_2 n)     | Load an indirectly accessible local variable into [[file:vm.html][values]].                                       | /k/ : /k =_{1 + [[file:vm.html][jmpbufsize]] * /k =_{2, [[file:vm.html][value1]] : *(*( [[file:vm.html][SP]]+ /k/)+ /n/), [[file:vm.html][mv_count]] : 1             |
+| (LOADC n m)         | Load a closed-up variable, defined in the same function and directly accessible, into [[file:vm.html][values]].   | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]](*( [[file:vm.html][STACK]]+ /n/),1+ /m/), [[file:vm.html][mv_count]] : 1                                      |
+| (LOADV k m)         | Load a closed-up variable, defined in an outer function, into [[file:vm.html][values]].                           | /v/ : [[file:comp-fun.html][venv-const]], /m/ times do: /v/ : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]]( /v/,0), [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]]( /v/, /m/), [[file:vm.html][mv_count]] : 1     |
+| (LOADIC k_1 k_2 n m)  | Load a closed-up variable, defined in the same function and indirectly accessible, into [[file:vm.html][values]]. | /k/ : /k =_{1 + [[file:vm.html][jmpbufsize]] * /k =_{2, [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]](*(*( [[file:vm.html][SP]]+ /k/)+ /n/),1+ /m/), [[file:vm.html][mv_count]] : 1 |
+| (STORE n)           | Store values into a directly accessible local variable.                                         | *( [[file:vm.html][STACK]]+ /n/) : [[file:vm.html][value1]], [[file:vm.html][mv_count]] : 1                                                  |
+| (STOREI k_1 k_2 n)    | Store values into an indirectly accessible local variable.                                      | /k/ : /k =_{1 + [[file:vm.html][jmpbufsize]] * /k =_{2, *(*( [[file:vm.html][SP]]+ /k/)+ /n/) : [[file:vm.html][value1]], [[file:vm.html][mv_count]] : 1             |
+| (STOREC n m)        | Store values into a closed-up variable, defined in the same function and directly accessible.   | [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]](*( [[file:vm.html][STACK]]+ /n/),1+m) : [[file:vm.html][value1]], [[file:vm.html][mv_count]] : 1                                       |
+| (STOREV k m)        | Store values into a closed-up variable, defined in an outer function.                           | /v/ : [[file:comp-fun.html][venv-const]], /m/ times do: /v/ : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]]( /v/,0), [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]]( /v/, /m/) : [[file:vm.html][value1]], [[file:vm.html][mv_count]] : 1     |
+| (STOREIC k_1 k_2 n m) | Store values into a closed-up variable, defined in the same function and indirectly accessible. | /k/ : /k =_{1 + [[file:vm.html][jmpbufsize]] * /k =_{2, [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]](*(*( [[file:vm.html][SP]]+ /k/)+ /n/),1+ /m/) : [[file:vm.html][value1]], [[file:vm.html][mv_count]] : 1 |
+
+**** dynamic variables
+| mnemonic     | description                                           | semantics                                                                                                                                    |
+|--------------+-------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------|
+| (GETVALUE n) | Load a symbol's value into [[file:vm.html][values]].                    | [[file:vm.html][value1]] : symbol-value( [[file:comp-fun.html][consts]][ /n/]), [[file:vm.html][mv_count]] : 1                                                                                           |
+| (SETVALUE n) | Store values into a symbol's value.                   | symbol-value( [[file:comp-fun.html][consts]][ /n/]) : [[file:vm.html][value1]], [[file:vm.html][mv_count]] : 1                                                                                           |
+| (BIND n)     | Bind a symbol dynamically.                            | Bind the value of the symbol [[file:comp-fun.html][consts]][ /n/] to [[file:vm.html][value1]], implicitly [[file:vm.html][STACK]] - 3, Invalidate [[file:vm.html][values]].                                                |
+| (UNBIND1)    | Dissolve one binding frame.                           | Unbind the binding frame [[file:vm.html][STACK]] is pointing to, implicitly [[file:vm.html][STACK]] + 3                                                                          |
+| (UNBIND n)   | Dissolve /n/ binding frames.                            | /n/ times do: Unbind the binding frame [[file:vm.html][STACK]] is pointing to, thereby incrementing [[file:vm.html][STACK]] Thus, [[file:vm.html][STACK]] + 1+2* /n/                                   |
+| (PROGV)      | Bind a set of symbols dynamically to a set of values. | /symbols/ : * [[file:vm.html][STACK]]++, *-- [[file:vm.html][SP]] : [[file:vm.html][STACK]], build a single binding frame binding the symbols in /symbols/ to the values in [[file:vm.html][value1]], Invalidate [[file:vm.html][values]]. |
+
+**** stack operations
+| mnemonic        | description                                                                           | semantics                                                                       |
+|-----------------+---------------------------------------------------------------------------------------+---------------------------------------------------------------------------------|
+| (PUSH)          | Push one object onto the [[file:vm.html][STACK]].                                                       | *-- [[file:vm.html][STACK]] : [[file:vm.html][value1]], Invalidate [[file:vm.html][values]].                                          |
+| (POP)           | Pop one object from the [[file:vm.html][STACK]], into [[file:vm.html][values]].                                           | [[file:vm.html][value1]] : * [[file:vm.html][STACK]]++, [[file:vm.html][mv_count]] : 1                                                |
+| (SKIP n)        | Restore a previous [[file:vm.html][STACK]] pointer. Remove /n/ objects from the [[file:vm.html][STACK]].                    | [[file:vm.html][STACK]] : [[file:vm.html][STACK]] + /n/                                                               |
+| (SKIPI k_1 k_2 n) | Restore a previous [[file:vm.html][STACK]] pointer. Remove an unknown number of objects from the [[file:vm.html][STACK]]. | /k/ : /k_1 + [[file:vm.html][jmpbufsize]] * /k_2, [[file:vm.html][STACK]] : *( [[file:vm.html][SP]]+ /k/), [[file:vm.html][SP]] : [[file:vm.html][SP]]+ /k/+1, [[file:vm.html][STACK]] : [[file:vm.html][STACK]] + /n/ |
+| (SKIPSP k_1 k_2)  | Restore a previous [[file:vm.html][SP]] pointer.                                                        | /k/ : /k_1 + [[file:vm.html][jmpbufsize]] * /k_2, [[file:vm.html][SP]] : [[file:vm.html][SP]]+ /k/                                          |
+
+**** control flow, jumps
+| mnemonic               | description                                                        | semantics                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+|------------------------+--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| (SKIP&RET n)           | Clean up the [[file:vm.html][STACK]], and return from the function.                  | [[file:vm.html][STACK]] : [[file:vm.html][STACK]]+ /n/, return from the function, returning values.                                                                                                                                                                                                                                                                                                                                                                                   |
+| (SKIP&RETGF n)         | Clean up the [[file:vm.html][STACK]], and return from the generic function.          | If bit 3 is set in the function's [[file:comp-fun.html][flags]], then [[file:vm.html][STACK]] : [[file:vm.html][STACK]]+ /n/, [[file:vm.html][mv_count]] : 1, and return from the function. Otherwise: if the current function has no [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&REST]] argument, then [[file:vm.html][STACK]] : [[file:vm.html][STACK]]+ /n/- [[file:comp-fun.html][numreq]], apply [[file:vm.html][value1]] to the [[file:comp-fun.html][numreq]] arguments still on the [[file:vm.html][STACK]], and return from the function. Else [[file:vm.html][STACK]] : [[file:vm.html][STACK]]+ /n/- [[file:comp-fun.html][numreq]]-1, apply [[file:vm.html][value1]] to the [[file:comp-fun.html][numreq]] arguments and the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&REST]] argument, all still on the [[file:vm.html][STACK]], and return from the function. |
+| (JMP label)            | Jump to /label/.                                                     | PC : /label/.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| (JMPIF label)          | Jump to /label/, if [[file:vm.html][value1]] is true.                                  | If [[file:vm.html][value1]] is not [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]], PC : /label/.                                                                                                                                                                                                                                                                                                                                                                                                               |
+| (JMPIFNOT label)       | Jump to /label/, if [[file:vm.html][value1]] is false.                                 | If [[file:vm.html][value1]] is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]], PC : /label/.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| (JMPIF1 label)         | Jump to /label/ and forget secondary values, if [[file:vm.html][value1]] is true.      | If [[file:vm.html][value1]] is not [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]], [[file:vm.html][mv_count]] : 1, PC : /label/.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| (JMPIFNOT1 label)      | Jump to /label/ and forget secondary values, if [[file:vm.html][value1]] is false.     | If [[file:vm.html][value1]] is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]], [[file:vm.html][mv_count]] : 1, PC : /label/.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| (JMPIFATOM label)      | Jump to /label/, if [[file:vm.html][value1]] is not a cons.                            | If [[file:vm.html][value1]] is not a cons, PC : /label/. Invalidate [[file:vm.html][values]].                                                                                                                                                                                                                                                                                                                                                                                         |
+| (JMPIFCONSP label)     | Jump to /label/, if [[file:vm.html][value1]] is a cons.                                | If [[file:vm.html][value1]] is a cons, PC : /label/. Invalidate [[file:vm.html][values]].                                                                                                                                                                                                                                                                                                                                                                                             |
+| (JMPIFEQ label)        | Jump to /label/, if [[file:vm.html][value1]] is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eq.html][EQ]] to the top-of-stack.                | If eq( [[file:vm.html][value1]],* [[file:vm.html][STACK]]++), PC : /label/. Invalidate [[file:vm.html][values]].                                                                                                                                                                                                                                                                                                                                                                                        |
+| (JMPIFNOTEQ label)     | Jump to /label/, if [[file:vm.html][value1]] is not [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eq.html][EQ]] to the top-of-stack.            | If not eq( [[file:vm.html][value1]],* [[file:vm.html][STACK]]++), PC : /label/. Invalidate [[file:vm.html][values]].                                                                                                                                                                                                                                                                                                                                                                                    |
+| (JMPIFEQTO n label)    | Jump to /label/, if the top-of-stack is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eq.html][EQ]] to a constant.            | If eq(* [[file:vm.html][STACK]]++, [[file:comp-fun.html][consts]][ /n/]), PC : /label/. Invalidate [[file:vm.html][values]].                                                                                                                                                                                                                                                                                                                                                                                   |
+| (JMPIFNOTEQTO n label) | Jump to /label/, if the top-of-stack is not [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eq.html][EQ]] to a constant.        | If not eq(* [[file:vm.html][STACK]]++, [[file:comp-fun.html][consts]][ /n/]), PC : /label/. Invalidate [[file:vm.html][values]].                                                                                                                                                                                                                                                                                                                                                                               |
+| (JMPHASH n label)      | Table-driven jump, depending on [[file:vm.html][value1]].                            | Lookup [[file:vm.html][value1]] in the hash table [[file:comp-fun.html][consts]][ /n/]. (The hash table's test is either [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eq.html][EQ]] or [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eql.html][EQL]].) If found, the hash table value is a signed [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/typ_fixnum.html][FIXNUM]], jump to it: PC : PC + value. Else jump to /label/. Invalidate [[file:vm.html][values]].                                                                                                                                                                                                                                |
+| (JMPHASHV n label)     | Table-driven jump, depending on [[file:vm.html][value1]], inside a generic function. | Lookup [[file:vm.html][value1]] in the hash table [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]]( [[file:comp-fun.html][consts]][0], /n/). (The hash table's test is either [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eq.html][EQ]] or [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eql.html][EQL]].) If found, the hash table value is a signed [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/typ_fixnum.html][FIXNUM]], jump to it: PC : PC + value. Else jump to /label/. Invalidate [[file:vm.html][values]].                                                                                                                                                                                                                       |
+| (JSR label)            | Subroutine call.                                                   | *-- [[file:vm.html][STACK]] : function. Then start interpreting the bytecode at /label/, with [[file:vm.html][values]] undefined. When a (RET) is encountered, program execution is resumed at the instruction after (JSR label).                                                                                                                                                                                                                                                     |
+| (JMPTAIL m n label)    | Tail subroutine call.                                              | /n/ [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eqcm_sleq__lteqcm_gteq.html][>]] /m/. The [[file:vm.html][STACK]] frame of size /n/ is reduced to size /m/: {*( [[file:vm.html][STACK]]+ /n/- /m/), ..., *( [[file:vm.html][STACK]]+ /n/-1)} : {* [[file:vm.html][STACK]], ..., *( [[file:vm.html][STACK]]+ /m/-1)}. [[file:vm.html][STACK]] + n-m. *-- [[file:vm.html][STACK]] : function. Then jump to /label/, with [[file:vm.html][values]] undefined.                                                                                                                                                                                                                                      |
+
+**** [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-1-1-3.html][lexical environment]], creation of closures
+| mnemonic              | description                                                                       | semantics                                                                                                                |
+|-----------------------+-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------|
+| (VENV)                | Load the [[file:comp-fun.html][venv-const]] into [[file:vm.html][values]].                                                  | [[file:vm.html][value1]] : [[file:comp-fun.html][consts]][0], [[file:vm.html][mv_count]] : 1.                                                                                        |
+| (MAKE-VECTOR1&PUSH n) | Create a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/typ_simple-vector.html][SIMPLE-VECTOR]] used for closed-up variables.                              | /v/ : new [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/typ_simple-vector.html][SIMPLE-VECTOR]] of size /n/+1. [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]]( /v/,0) : [[file:vm.html][value1]]. *-- [[file:vm.html][STACK]] : /v/. Invalidate [[file:vm.html][values]].                              |
+| (COPY-CLOSURE m n)    | Create a closure by copying the prototype and filling in the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-1-1-3.html][lexical environment]]. | /f/ : copy-function( [[file:comp-fun.html][consts]][ /m/]). For /i/0,.., /n/-1: /f/_ [[file:comp-fun.html][consts]][i] : *( [[file:vm.html][STACK]]+ /n/-1- /i/). [[file:vm.html][STACK]] + /n/. [[file:vm.html][value1]] : /f/, [[file:vm.html][mv_count]] : 1 |
+
+**** function calls
+| mnemonic     | description                                                    | semantics                                                                                                                                                                                                                                       |
+|--------------+----------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| (CALL k n)   | Calls a constant function with /k/ arguments.                    | The function [[file:comp-fun.html][consts]][ /n/] is called with the arguments *( [[file:vm.html][STACK]]+ /k/-1), ..., *( [[file:vm.html][STACK]]+0). [[file:vm.html][STACK]] + /k/. The returned values go into [[file:vm.html][values]].                                                                                                          |
+| (CALL0 n)    | Calls a constant function with 0 arguments.                    | The function [[file:comp-fun.html][consts]][ /n/] is called with 0 arguments. The returned values go into [[file:vm.html][values]].                                                                                                                                                       |
+| (CALL1 n)    | Calls a constant function with 1 argument.                     | The function [[file:comp-fun.html][consts]][ /n/] is called with one argument * [[file:vm.html][STACK]]. [[file:vm.html][STACK]] + 1. The returned values go into [[file:vm.html][values]].                                                                                                                                   |
+| (CALL2 n)    | Calls a constant function with 2 arguments.                    | The function [[file:comp-fun.html][consts]][ /n/] is called with two arguments *( [[file:vm.html][STACK]]+1) and *( [[file:vm.html][STACK]]+0). [[file:vm.html][STACK]] + 2. The returned values go into [[file:vm.html][values]].                                                                                                              |
+| (CALLS1 b)   | Calls a system function with no [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&REST]].                         | Calls the system function [[file:recompile.html#byte-version][FUNTAB]][ /b/]. The right number of arguments is already on the [[file:vm.html][STACK]] (including #s in place of absent [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&OPTIONAL]] or [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&KEY]] parameters). The arguments are removed from the [[file:vm.html][STACK]]. The returned values go into [[file:vm.html][values]].     |
+| (CALLS2 b)   | Calls a system function with no [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&REST]].                         | Calls the system function [[file:recompile.html#byte-version][FUNTAB]][256+ /b/]. The right number of arguments is already on the [[file:vm.html][STACK]] (including #s in place of absent [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&OPTIONAL]] or [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&KEY]] parameters). The arguments are removed from the [[file:vm.html][STACK]]. The returned values go into [[file:vm.html][values]]. |
+| (CALLSR m b) | Calls a system function with [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&REST]].                            | Calls the system function [[file:recompile.html#byte-version][FUNTAB]]R[ /b/]. The minimum number of arguments is already on the [[file:vm.html][STACK]], and /m/ additional arguments as well. The arguments are removed from the [[file:vm.html][STACK]]. The returned values go into [[file:vm.html][values]].                              |
+| (CALLC)      | Calls a computed compiled function with no [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&KEY]]s.              | Calls the compiled function [[file:vm.html][value1]]. The right number of arguments is already on the [[file:vm.html][STACK]] (including #s in place of absent [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&OPTIONAL]] parameters). The arguments are removed from the [[file:vm.html][STACK]]. The returned values go into [[file:vm.html][values]].                 |
+| (CALLCKEY)   | Calls a computed compiled function with [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&KEY]]s.                 | Calls the compiled function [[file:vm.html][value1]]. The right number of arguments is already on the [[file:vm.html][STACK]] (including #s in place of absent [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&OPTIONAL]] or [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/sec_3-4-1.html][&KEY]] parameters). The arguments are removed from the [[file:vm.html][STACK]]. The returned values go into [[file:vm.html][values]].         |
+| (FUNCALL n)  | Calls a computed function.                                     | Calls the function *( [[file:vm.html][STACK]]+ /n/) with the arguments *( [[file:vm.html][STACK]]+ /n/-1), ..., *( [[file:vm.html][STACK]]+0). [[file:vm.html][STACK]] + /n/+1. The returned values go into [[file:vm.html][values]].                                                                                                         |
+| (APPLY n)    | Calls a computed function with an unknown number of arguments. | Calls the function *( [[file:vm.html][STACK]]+ /n/) with the arguments *( [[file:vm.html][STACK]]+ /n/-1), ..., *( [[file:vm.html][STACK]]+0) and a list of additional arguments [[file:vm.html][value1]]. [[file:vm.html][STACK]] + /n/+1. The returned values go into [[file:vm.html][values]].                                                               |
+
+**** optional and keyword parameters
+| mnemonic              | description                                                                | semantics                                                                                                                                                                                                                                                    |
+|-----------------------+----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| (PUSH-UNBOUND n)      | Push /n/ #s into the [[file:vm.html][STACK]].                                                  | /n/ times do: *-- [[file:vm.html][STACK]] : =#=. Invalidate [[file:vm.html][values]].                                                                                                                                                                                                                |
+| (UNLIST n m)          | Destructure a proper [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/syscla_list.html][LIST]].                                                 | 0 ≤ /m/ ≤ /n/. /n/ times do: *-- [[file:vm.html][STACK]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CAR]]( [[file:vm.html][value1]]), [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( [[file:vm.html][value1]]). During the last /m/ iterations, the list [[file:vm.html][value1]] may already have reached its end; in this case, *-- [[file:vm.html][STACK]] : =#=. At the end, [[file:vm.html][value1]] must be [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]]. Invalidate [[file:vm.html][values]].                      |
+| (UNLIST* n m)         | Destructure a proper or dotted [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/syscla_list.html][LIST]].                                       | 0 ≤ /m/ ≤ /n/, /n/ > 0. /n/ times do: *-- [[file:vm.html][STACK]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CAR]]( [[file:vm.html][value1]]), [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( [[file:vm.html][value1]]). During the last /m/ iterations, the list [[file:vm.html][value1]] may already have reached its end; in this case, *-- [[file:vm.html][STACK]] : =#=. At the end, after /n/ [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]s, *-- [[file:vm.html][STACK]] : [[file:vm.html][value1]]. Invalidate [[file:vm.html][values]]. |
+| (JMPIFBOUNDP n label) | Jump to /label/, if a local variable is not unbound.                         | If *( [[file:vm.html][STACK]]+ /n/) is not =#=, [[file:vm.html][value1]] : *( [[file:vm.html][STACK]]+ /n/), [[file:vm.html][mv_count]] : 1, PC : /label/. Else: Invalidate [[file:vm.html][values]]..                                                                                                                                                         |
+| (BOUNDP n)            | Load [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_t.html][T]] or [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]] into [[file:vm.html][values]], depending on whether a local variable is bound. | If *( [[file:vm.html][STACK]]+ /n/) is not =#=, [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_t.html][T]], [[file:vm.html][mv_count]] : 1. Else: [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]], [[file:vm.html][mv_count]] : 1.                                                                                                                                                                        |
+| (UNBOUND->NIL n)      | If a local variable is unbound, assign a default value [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]] to it.          | If *( [[file:vm.html][STACK]]+ /n/) is =#=, *( [[file:vm.html][STACK]]+ /n/) : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]].                                                                                                                                                                                                                    |
+
+**** [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/glo_m.html#multiple_values][multiple values]]
+| mnemonic         | description                                     | semantics                                                                                                                                                          |
+|------------------+-------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| (VALUES0)        | Load no values into [[file:vm.html][values]].                     | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]], [[file:vm.html][mv_count]] : 0                                                                                                                                         |
+| (VALUES1)        | Forget secondary values.                        | [[file:vm.html][mv_count]] : 1                                                                                                                                                       |
+| (STACK=-TO-MV n) | Pop the first /n/ objects from [[file:vm.html][STACK]] into [[file:vm.html][values]]. | Load values(*( [[file:vm.html][STACK]]+ /n/-1),...,*( [[file:vm.html][STACK]]+0)) into values. [[file:vm.html][STACK]] + /n/.                                                                                                |
+| (MV-TO-STACK)    | Save values on [[file:vm.html][STACK]].                           | Push the [[file:vm.html][mv_count]] values onto the [[file:vm.html][STACK]] (in order: [[file:vm.html][value1]] comes first). [[file:vm.html][STACK]] - [[file:vm.html][mv_count]]. Invalidate [[file:vm.html][values]].                                                       |
+| (NV-TO-STACK n)  | Save /n/ values on [[file:vm.html][STACK]].                         | Push the first /n/ values onto the [[file:vm.html][STACK]] (in order: [[file:vm.html][value1]] comes first). [[file:vm.html][STACK]] - /n/. Invalidate [[file:vm.html][values]].                                                               |
+| (MV-TO-LIST)     | Convert [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/glo_m.html#multiple_values][multiple values]] into a list.            | [[file:vm.html][value1]] : list of values, [[file:vm.html][mv_count]] : 1                                                                                                                              |
+| (LIST-TO-MV)     | Convert a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/syscla_list.html][LIST]] into [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/glo_m.html#multiple_values][multiple values]].            | Call the function [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_values-list.html][VALUES-LIST]] with [[file:vm.html][value1]] as argument. The returned values go into [[file:vm.html][values]].                                                                         |
+| (MVCALLP)        | Start a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_multiple-value-call.html][MULTIPLE-VALUE-CALL]] invocation.         | *-- [[file:vm.html][SP]] : [[file:vm.html][STACK]]. *-- [[file:vm.html][STACK]] : [[file:vm.html][value1]].                                                                                                                                |
+| (MVCALL)         | Finish a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_multiple-value-call.html][MULTIPLE-VALUE-CALL]] invocation.        | newSTACK : * [[file:vm.html][SP]]++. Call the function *(newSTACK-1), passing it *(newSTACK-2), ..., *( [[file:vm.html][STACK]]+0) as arguments. [[file:vm.html][STACK]] : newSTACK. The returned values go into [[file:vm.html][values]]. |
+
+**** [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_block.html][BLOCK]] and [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_return-from.html][RETURN-FROM]]
+| mnemonic                | description                                              | semantics                                                                                                                                                                                                                                        |
+|-------------------------+----------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| (BLOCK-OPEN n label)    | Create a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_block.html][BLOCK]] frame.                                    | Create a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_block.html][BLOCK]] frame, [[file:vm.html][STACK]] - 3, [[file:vm.html][SP]] - 2+ [[file:vm.html][jmpbufsize]]. The topmost (third) object in the block frame is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_cons.html][CONS]]( [[file:comp-fun.html][consts]][ /n/],frame-pointer) (its /block-cons/). Upon a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_return-from.html][RETURN-FROM]] to this frame, execution will continue at /label/. Invalidate [[file:vm.html][values]].. |
+| (BLOCK-CLOSE)           | Dissolve a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_block.html][BLOCK]] frame.                                  | Dissolve the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_block.html][BLOCK]] frame at [[file:vm.html][STACK]], [[file:vm.html][STACK]] + 3, [[file:vm.html][SP]] + 2+ [[file:vm.html][jmpbufsize]]. Mark the /block-cons/ as invalid.                                                                                                                                                |
+| (RETURN-FROM n)         | Leave a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_block.html][BLOCK]] whose /block-cons/ is given.                 | /block-cons/ : [[file:comp-fun.html][consts]][ /n/]. If [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( /block-cons/)  =#=, an [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/contyp_error.html][ERROR]] is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_signal.html][SIGNAL]]ed. Else [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( /block-cons/) is a frame-pointer. Unwind the stack up to this frame, pass it values.                                                                             |
+| (RETURN-FROM-I k_1 k_2 n) | Leave a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_block.html][BLOCK]] whose /block-cons/ is indirectly accessible. | /k/ : /k_1 + [[file:vm.html][jmpbufsize]] * /k_2, /block-cons/ : *(*( [[file:vm.html][SP]]+ /k/)+ /n/). If [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( /block-cons/)  =#=, an [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/contyp_error.html][ERROR]] is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_signal.html][SIGNAL]]ed. Else [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( /block-cons/) is a frame-pointer. Unwind the stack up to this frame, pass it values.                                             |
+
+**** [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] and [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_go.html][GO]]
+| mnemonic                            | description                                                      | semantics                                                                                                                                                                                                                                                                                                                                     |
+|-------------------------------------+------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| (TAGBODY-OPEN m label_1 ... label_n)  | Create a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] frame.                                          | Fetch [[file:comp-fun.html][consts]][ /m/], this is a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/typ_simple-vector.html][SIMPLE-VECTOR]] with /n/ elements, then decode /n/ label operands. Create a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] frame, [[file:vm.html][STACK]] - 3+ /n/, [[file:vm.html][SP]] - 1+ [[file:vm.html][jmpbufsize]]. The third object in the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] frame is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_cons.html][CONS]]( [[file:comp-fun.html][consts]][ /m/],frame-pointer) (the /tagbody-cons/) Upon a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_go.html][GO]] to tag /label/ of this frame, execution will continue at /label_l/. Invalidate [[file:vm.html][values]]. |
+| (TAGBODY-CLOSE-NIL)                 | Dissolve a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] frame, and load [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]] into [[file:vm.html][values]].              | Dissolve the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] frame at [[file:vm.html][STACK]], [[file:vm.html][STACK]] + 3+ /m/, [[file:vm.html][SP]] + 1+ [[file:vm.html][jmpbufsize]]. Mark the /tagbody-cons/ as invalid. [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/convar_nil.html][NIL]], [[file:vm.html][mv_count]] : 1.                                                                                                                                                                                                          |
+| (TAGBODY-CLOSE)                     | Dissolve a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] frame.                                        | Dissolve the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] frame at [[file:vm.html][STACK]], [[file:vm.html][STACK]] + 3+ /m/, [[file:vm.html][SP]] + 1+ [[file:vm.html][jmpbufsize]]. Mark the /tagbody-cons/ as invalid.                                                                                                                                                                                                                                      |
+| (GO n label)                        | Jump into a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] whose /tagbody-cons/ is given.                 | /tagbody-cons/ : [[file:comp-fun.html][consts]][ /n/]. If [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( /tagbody-cons/)  =#=, an [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/contyp_error.html][ERROR]] is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_signal.html][SIGNAL]]ed. Else [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( /tagbody-cons/) is a frame-pointer. Unwind the stack up to this frame, pass it the number /label/.                                                                                                                                                          |
+| (GO-I k_1 k_2 n label)                | Jump into a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_tagbody.html][TAGBODY]] whose /tagbody-cons/ is indirectly accessible. | /k/ : /k_1 + [[file:vm.html][jmpbufsize]] * /k_2, /tagbody-cons/ : *(*( [[file:vm.html][SP]]+ /k/)+ /n/). If [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( /tagbody-cons/)  =#=, an [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/contyp_error.html][ERROR]] is [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_signal.html][SIGNAL]]ed. Else [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( /tagbody-cons/) is a frame-pointer. Unwind the stack up to this frame, pass it the number /label/.                                                                                                                          |
+
+**** [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_catch.html][CATCH]] and [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_throw.html][THROW]]
+| mnemonic           | description                      | semantics                                                                                                                       |
+|--------------------+----------------------------------+---------------------------------------------------------------------------------------------------------------------------------|
+| (CATCH-OPEN label) | Create a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_catch.html][CATCH]] frame.            | Create a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_catch.html][CATCH]] frame, with [[file:vm.html][value1]] as tag. [[file:vm.html][STACK]] - 3, [[file:vm.html][SP]] - 2+ [[file:vm.html][jmpbufsize]]. Upon a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_throw.html][THROW]] to this tag execution continues at /label/. |
+| (CATCH-CLOSE)      | Dissolve a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_catch.html][CATCH]] frame.          | Dissolve the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_catch.html][CATCH]] frame at [[file:vm.html][STACK]]. [[file:vm.html][STACK]] + 3, [[file:vm.html][SP]] + 2+ [[file:vm.html][jmpbufsize]].                                                               |
+| (THROW)            | Non-local exit to a [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_catch.html][CATCH]] frame. | /tag/ : * [[file:vm.html][STACK]]++. Search the innermost [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_catch.html][CATCH]] frame with tag /tag/ on the [[file:vm.html][STACK]], unwind the stack up to it, pass it values.         |
+
+**** [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_unwind-protect.html][UNWIND-PROTECT]]
+| mnemonic                     | description                                                                            | semantics                                                                                                                                                                                                                                                                                               |
+|------------------------------+----------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| (UNWIND-PROTECT-OPEN label)  | Create an [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_unwind-protect.html][UNWIND-PROTECT]] frame.                                                        | Create an [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_unwind-protect.html][UNWIND-PROTECT]] frame. [[file:vm.html][STACK]] - 2, [[file:vm.html][SP]] - 2+ [[file:vm.html][jmpbufsize]]. When the stack will be unwound by a non-local exit, values will be saved on [[file:vm.html][STACK]], and execution will be transferred to /label/.                                                                                                           |
+| (UNWIND-PROTECT-NORMAL-EXIT) | Dissolve an [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_unwind-protect.html][UNWIND-PROTECT]] frame, and start the cleanup code.                          | Dissolve the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_unwind-protect.html][UNWIND-PROTECT]] frame at [[file:vm.html][STACK]]. [[file:vm.html][STACK]] + 2, [[file:vm.html][SP]] + 2+ [[file:vm.html][jmpbufsize]]. *-- [[file:vm.html][SP]] : 0, *-- [[file:vm.html][SP]] : 0, *-- [[file:vm.html][SP]] : [[file:vm.html][STACK]]. Save the values on the [[file:vm.html][STACK]], [[file:vm.html][STACK]] - [[file:vm.html][mv_count]].                                                                                                                                      |
+| (UNWIND-PROTECT-CLOSE)       | Terminate the cleanup code.                                                            | newSTACK : * [[file:vm.html][SP]]++. Load values(*(newSTACK-1), ..., *( [[file:vm.html][STACK]]+0)) into [[file:vm.html][values]]. [[file:vm.html][STACK]] : newSTACK. SPword1 : * [[file:vm.html][SP]]++, SPword2 : * [[file:vm.html][SP]]++. Continue depending on SPword1 and SPword2. If both are 0, simply continue execution. If SPword2 is 0 but SPword1 is nonzero, interpret it as a label and jump to it. |
+| (UNWIND-PROTECT-CLEANUP)     | Dissolve an [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_unwind-protect.html][UNWIND-PROTECT]] frame, and execute the cleanup code like a subroutine call. | Dissolve the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/speope_unwind-protect.html][UNWIND-PROTECT]] frame at [[file:vm.html][STACK]], get /label/ out of the frame. [[file:vm.html][STACK]] + 2, [[file:vm.html][SP]] + 2+ [[file:vm.html][jmpbufsize]]. *-- [[file:vm.html][SP]] : 0, *-- [[file:vm.html][SP]] : PC, *-- [[file:vm.html][SP]] : [[file:vm.html][STACK]]. Save the values on the [[file:vm.html][STACK]], [[file:vm.html][STACK]] - [[file:vm.html][mv_count]]. PC : /label/.                                                                                             |
+
+**** [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/mac_handler-bind.html][HANDLER-BIND]]
+| mnemonic             | description             | semantics                                                                                                                                                           |
+|----------------------+-------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| (HANDLER-OPEN n)     | Create a handler frame. | Create a handler frame, using [[file:comp-fun.html][consts]][ /n/] which contains the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/contyp_condition.html][CONDITION]] types, the corresponding labels and the current [[file:vm.html][SP]] depth ( function entry [[file:vm.html][SP]] - current [[file:vm.html][SP]]). |
+| (HANDLER-BEGIN&PUSH) | Start a handler.        | Restore the same [[file:vm.html][SP]] state as after the HANDLER-OPEN. [[file:vm.html][value1]] : the [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/contyp_condition.html][CONDITION]] that was passed to the handler, [[file:vm.html][mv_count]] : 1. *-- [[file:vm.html][STACK]] : [[file:vm.html][value1]].                       |
+
+**** some inlined functions
+| mnemonic          | description                      | semantics                                                                                                         |
+|-------------------+----------------------------------+-------------------------------------------------------------------------------------------------------------------|
+| (NOT)             | Inlined call to [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_not.html][NOT]].             | [[file:vm.html][value1]] : not( [[file:vm.html][value1]]), [[file:vm.html][mv_count]] : 1.                                                                              |
+| (EQ)              | Inlined call to [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_eq.html][EQ]].              | [[file:vm.html][value1]] : eq(* [[file:vm.html][STACK]]++, [[file:vm.html][value1]]), [[file:vm.html][mv_count]] : 1.                                                                     |
+| (CAR)             | Inlined call to [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CAR]].             | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CAR]]( [[file:vm.html][value1]]), [[file:vm.html][mv_count]] : 1.                                                                              |
+| (CDR)             | Inlined call to [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]].             | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_carcm_cdr_darcm_cddddr.html][CDR]]( [[file:vm.html][value1]]), [[file:vm.html][mv_count]] : 1.                                                                              |
+| (CONS)            | Inlined call to [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_cons.html][CONS]].            | [[file:vm.html][value1]] : cons(* [[file:vm.html][STACK]]++, [[file:vm.html][value1]]), [[file:vm.html][mv_count]] : 1.                                                                   |
+| (SYMBOL-FUNCTION) | Inlined call to [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_symbol-function.html][SYMBOL-FUNCTION]]. | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_symbol-function.html][SYMBOL-FUNCTION]]( [[file:vm.html][value1]]), [[file:vm.html][mv_count]] : 1.                                                                  |
+| (SVREF)           | Inlined call to [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]].           | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]](* [[file:vm.html][STACK]]++, [[file:vm.html][value1]]), [[file:vm.html][mv_count]] : 1.                                                                  |
+| (SVSET)           | Inlined call to SETF [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]].      | /arg1 : *( [[file:vm.html][STACK]]+1), /arg2 : *( [[file:vm.html][STACK]]+0), [[file:vm.html][STACK]] + 2. [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/acc_svref.html][SVREF]]( /arg2, [[file:vm.html][value1]]) : /arg1. [[file:vm.html][value1]] : /arg1, [[file:vm.html][mv_count]] : 1. |
+| (LIST n)          | Inlined call to [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_listcm_listst.html][LIST]].            | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_listcm_listst.html][LIST]](*( [[file:vm.html][STACK]]+ /n/-1),...,*( [[file:vm.html][STACK]]+0)), [[file:vm.html][mv_count]] : 1, [[file:vm.html][STACK]] + /n/.                                           |
+| (LIST* n)         | Inlined call to [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_listcm_listst.html][LIST*]].           | [[file:vm.html][value1]] : [[http://www.ai.mit.edu/projects/iiip/doc/CommonLISP/HyperSpec/Body/fun_listcm_listst.html][LIST*]](*( [[file:vm.html][STACK]]+ /n/-1),..., *( [[file:vm.html][STACK]]+0), [[file:vm.html][value1]]), [[file:vm.html][mv_count]] : 1, [[file:vm.html][STACK]] + /n/.                                 |
+
+**** Combined instructions
+The most frequent short sequences of instructions have an equivalent combined instruction. They are only present for space and speed
+optimization. The only exception is =FUNCALL&SKIP&RETGF=, which is needed for generic functions.
+| mnemonic                          | equivalent                            |
+|-----------------------------------+---------------------------------------|
+| (NIL&PUSH)                        | (NIL) (PUSH)                          |
+| (T&PUSH)                          | (T) (PUSH)                            |
+| (CONST&PUSH n)                    | (CONST n) (PUSH)                      |
+| (LOAD&PUSH n)                     | (LOAD n) (PUSH)                       |
+| (LOADI&PUSH k_1 k_2 n)              | (LOADI k_1 k_2 n) (PUSH)                |
+| (LOADC&PUSH n m)                  | (LOADC n m) (PUSH)                    |
+| (LOADV&PUSH k m)                  | (LOADV k m) (PUSH)                    |
+| (POP&STORE n)                     | (POP) (STORE n)                       |
+| (GETVALUE&PUSH n)                 | (GETVALUE n) (PUSH)                   |
+| (JSR&PUSH label)                  | (JSR label) (PUSH)                    |
+| (COPY-CLOSURE&PUSH m n)           | (COPY-CLOSURE m n) (PUSH)             |
+| (CALL&PUSH k n)                   | (CALL k n) (PUSH)                     |
+| (CALL1&PUSH n)                    | (CALL1 n) (PUSH)                      |
+| (CALL2&PUSH n)                    | (CALL2 n) (PUSH)                      |
+| (CALLS1&PUSH b)                   | (CALLS1 b) (PUSH)                     |
+| (CALLS2&PUSH b)                   | (CALLS2 b) (PUSH)                     |
+| (CALLSR&PUSH m n)                 | (CALLSR m n) (PUSH)                   |
+| (CALLC&PUSH)                      | (CALLC) (PUSH)                        |
+| (CALLCKEY&PUSH)                   | (CALLCKEY) (PUSH)                     |
+| (FUNCALL&PUSH n)                  | (FUNCALL n) (PUSH)                    |
+| (APPLY&PUSH n)                    | (APPLY n) (PUSH)                      |
+| (CAR&PUSH)                        | (CAR) (PUSH)                          |
+| (CDR&PUSH)                        | (CDR) (PUSH)                          |
+| (CONS&PUSH)                       | (CONS) (PUSH)                         |
+| (LIST&PUSH n)                     | (LIST n) (PUSH)                       |
+| (LIST*&PUSH n)                    | (LIST* n) (PUSH)                      |
+| (NIL&STORE n)                     | (NIL) (STORE n)                       |
+| (T&STORE n)                       | (T) (STORE n)                         |
+| (LOAD&STOREC k n m)               | (LOAD k) (STOREC n m)                 |
+| (CALLS1&STORE b k)                | (CALLS1 b) (STORE k)                  |
+| (CALLS2&STORE b k)                | (CALLS2 b) (STORE k)                  |
+| (CALLSR&STORE m n k)              | (CALLSR m n) (STORE k)                |
+| (LOAD&CDR&STORE n)                | (LOAD n) (CDR) (STORE n)              |
+| (LOAD&CONS&STORE n)               | (LOAD n/+1) (CONS) (STORE n)          |
+| (LOAD&INC&STORE n)                | (LOAD n) (CALL1 #'1+) (STORE n)       |
+| (LOAD&DEC&STORE n)                | (LOAD n) (CALL1 #'1-) (STORE n)       |
+| (LOAD&CAR&STORE m n)              | (LOAD m) (CAR) (STORE n)              |
+| (CALL1&JMPIF n label)             | (CALL1 n) (JMPIF label)               |
+| (CALL1&JMPIFNOT n label)          | (CALL1 n) (JMPIFNOT label)            |
+| (CALL2&JMPIF n label)             | (CALL2 n) (JMPIF label)               |
+| (CALL2&JMPIFNOT n label)          | (CALL2 n) (JMPIFNOT label)            |
+| (CALLS1&JMPIF b label)            | (CALLS1 b) (JMPIF label)              |
+| (CALLS1&JMPIFNOT b label)         | (CALLS1 b) (JMPIFNOT label)           |
+| (CALLS2&JMPIF b label)            | (CALLS2 b) (JMPIF label)              |
+| (CALLS2&JMPIFNOT b label)         | (CALLS2 b) (JMPIFNOT label)           |
+| (CALLSR&JMPIF m n label)          | (CALLSR m n) (JMPIF label)            |
+| (CALLSR&JMPIFNOT m n label)       | (CALLSR m n) (JMPIFNOT label)         |
+| (LOAD&JMPIF n label)              | (LOAD n) (JMPIF label)                |
+| (LOAD&JMPIFNOT n label)           | (LOAD n) (JMPIFNOT label)             |
+| (LOAD&CAR&PUSH n)                 | (LOAD n) (CAR) (PUSH)                 |
+| (LOAD&CDR&PUSH n)                 | (LOAD n) (CDR) (PUSH)                 |
+| (LOAD&INC&PUSH n)                 | (LOAD n) (CALL1 #'1+) (PUSH)          |
+| (LOAD&DEC&PUSH n)                 | (LOAD n) (CALL1 #'1-) (PUSH)          |
+| (CONST&SYMBOL-FUNCTION n)         | (CONST n) (SYMBOL-FUNCTION)           |
+| (CONST&SYMBOL-FUNCTION&PUSH n)    | (CONST n) (SYMBOL-FUNCTION) (PUSH)    |
+| (CONST&SYMBOL-FUNCTION&STORE n k) | (CONST n) (SYMBOL-FUNCTION) (STORE k) |
+| (APPLY&SKIP&RET n k)              | (APPLY n) (SKIP&RET k)                |
+| (FUNCALL&SKIP&RETGF n k)          | (FUNCALL n) (SKIP&RETGF k)            |
+
+**** Shortcut instructions
+There are special one-byte instructions (without explicit operands) for the following frequent instructions:
+
+| mnemonic       | operand range |
+|----------------+---------------|
+| (LOAD n)       | 0 ≤ /n/ < 15    |
+| (LOAD&PUSH n)  | 0 ≤ /n/ < 25    |
+| (CONST n)      | 0 ≤ /n/ < 21    |
+| (CONST&PUSH n) | 0 ≤ /n/ < 30    |
+| (STORE n)      | 0 ≤ /n/ < 8     |
+
+** LeLisp: A complete LISP System :SYS:VM:
+[[pdfview:~/Downloads/c64_classics/minilisp/03_lelisp.pdf][book]], 709p, 1993
+- includes chapter about [[pdfview:~/Downloads/c64_classics/minilisp/03_lelisp.pdf::498++0.00][LLM3]], a VM for LeLisp
+** The Design of an Instruction Set for Common Lisp :VM:
+[[file:Downloads/The Design of an Instruction Set for Common Lisp.pdf][paper]], 9p, 1984
+** Performance and Evaluation of Lisp Systems :SYS:VM:
+describes some lisp implementations (with some techn. detail) and does perforamce measures
+[[file:fp4/Docs/Timrep.pdf][book]], 294p, 1985
+** assemblers and loaders
+[[file:fp4/Docs/asl.pdf][book]], 299p, 1982
+** anatomy of lisp
+[[file:fp4/Docs/document.pdf][book]], 470p, 1978
+** Paradigms of Artificial Intelligence Programming Case Studies in Common Lisp
+[[file:fp4/Docs/Peter Norvig - Paradigms of Artificial Intelligence Programming Case Studies in Common Lisp, 6th ed..pdf][book]], 948p, 1992
+** An architecture for efficient Lisp list access :VM:
+[[file:Downloads/An_architecture_for_efficient_Lisp_list_access.pdf][paper]], 9p, 1986
+** compiler design: virtual machines :T:VM:MEM:
+[[file:Downloads/c64_classics/minilisp/02_Compiler_Design_Virtual_Machines_-_Wilhelm_Reinhard.pdf][book]], 193p, 2010
+- *no* cookbook!
+- concepts of compiler design
+- targets virtual machines
+- virtual machines discussed in detail
+- discusses translation of [[pdfview:~/Downloads/c64_classics/minilisp/02_Compiler_Design_Virtual_Machines_-_Wilhelm_Reinhard.pdf::66++0.00][function programming languages]] in detail
+- defines a vm for function languages
+** A Tractable Native-Code Scheme System :VM:
+[[https://www.deinprogramm.de/sperber/papers/tractable-native-code-scheme-system.pdf][www]], [[file:Downloads/c64_classics/minilisp/tractable-native-code-scheme-system.pdf][paper]], 11p, 2007
+- byte code compiler, optimizer and native compiler for pre-scheme
+- add this to the existing tractable implemenation of scheme 48
+** Lisp64: A Lisp implementation on the C64 :SC:SYS:
+[[file:Downloads/c64_classics/minilisp/01_Lisp64.pdf][manual]], 120p, 1986
+** a survey of memory management techniques for lisp on small machines :MEM:
+[[file:Downloads/c64_classics/minilisp/01_lisp.memory-management.small-machine.pdf][paper]], 78p, 1989
+- find best memory management for small machines
+** Lisp in Small Pieces :T:
+[[pdfview:~/Downloads/c64_classics/minilisp/03_lisp-in-small-pieces_compress.pdf::7++0.00][book]], 536p, 2003
+- theoretical book about lisp
+- evaluation of lisp
+- continuations
+- assignments and side effects
+- denotational semantics
+- compilation
+  - macros
+** Three Implementation Models for Scheme :T:
+[[pdfview:~/Downloads/c64_classics/minilisp/09_implementation models for scheme.pdf::7++0.00][thesis]], 190p, 1987
+- [[pdfview:~/Downloads/c64_classics/minilisp/09_implementation models for scheme.pdf::53++0.00][heap based model]]
+- [[pdfview:~/Downloads/c64_classics/minilisp/09_implementation models for scheme.pdf::79++0.00][stack based model]]
+- [[pdfview:~/Downloads/c64_classics/minilisp/09_implementation models for scheme.pdf::127++0.00][string based model]]
+** essentials of compilation :VM:T:
+[[file:Downloads/essentials_of_compilation.2021.pdf][book]], 257p, 2021
+** the optimal implementation of functional programming languages :T:
+[[file:Downloads/The Optimal Implementation of Functional Programming Languages.1998.pdf][book]], 403p, 1998
+** the design of intermediate languages for optimizing :VM:T:
+[[file:Downloads/the design of intermediate languages in optimizing.phd.2018.pdf][thesis]], 194p, 2018
+** Advanced Design and Implementation of Virtual Machines :T:VM:MEM:
+[[file:Downloads/c64_classics/minilisp/02_advanced_design_and_implementation_of_virtual_machines.2017.book.pdf][book]], 465p, 2017
+- discusses existing VMs
+- JIT
+- memory management and GC in VMs
+- native interfaces
+- exceptions
+** LOOP: A Lisp Oriented Architecture :T:VM:
+[[file:Downloads/c64_classics/minilisp/09_implementation models for scheme.pdf][thesis]], 67p, 1994
+- [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::15++0.00][architecture]] for efficient execution
+- hardware support
+- (vm) [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::21++0.00][instructions]], [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::33++0.00][instruction format]] 
+* collected notes and considerations
+** general ideas
+- implement byte code interpreter in racket
+- implement interpreter in byte code itself
+- iterate
+- optimize byte code (size/decoding speed)
+- implement interpreter in 6510 assembly
+- optimize (size/decoding speed)
+- iterate
+*** first iteration
+- simple function to do byte plus two parameter
+  #+begin_src scheme
+    (def (f (a : byte) (b : byte)) : byte
+         "add a and b by using vm-instruction byte add"
+         (b+ a b))
+
+    (f 10 11)
+  #+end_src
+- define byte code
+  #+begin_src scheme
+    (byte-cell 10 l0) ;; create new byte cell with constant 10 into local cells at index 0
+    (byte-cell 11 l1)
+    (call 'f 3 l0 l1 l2 -0-) ;; call f with 3 params l0, l1, l2<-result and 0 additional space allocated for locals of the called function
+
+    (function f)
+    ;; (ensure-args 3)
+    ;; (ensure-byte-arg 0)
+    ;; (ensure-byte-arg 1)
+    ;; (ensure-byte-arg 2)
+    (byte+ p0 p1 p2)
+    (return)
+  #+end_src
+- tail recursive function using lists
+  #+begin_src scheme
+    (def (sum (bl : (list byte)) (acc : byte = 0)) : byte
+         "tail recursive function with accumulator"
+         (if (empty? list)
+             acc
+             (sum (cdr bl) (b+ acc (car bl)))))
+
+    (sum (list 10 20))
+  #+end_src
+- byte code (no gc necessary)
+  5 locals are used for this instatiation (2 for list creation, 2 for the actual list, and one for the result/accumulator)
+  #+begin_src scheme
+    (byte-cell 10 l0) ;; create a byte cell with value 10 at local 0
+    (byte-cell 20 l1)
+    (make-list 2 l0 l1 l2) ;; make  a list of l0 and l1 into l2/l3 [optimization, could reuse l0 and l1 for list]
+    (byte-cell 0 l4) ;; make default argument explicitly at caller site
+    (call 'sum 3 l2 l3 l4 -0-) ;; call sum with two input arguments, l2, l3, storing result in l4 (=> 3 parameters), allocating additional 0 locals
+
+    (function sum)
+    ; (ensure-args 3) ;; 1 byte + car/cons cells 2 = 3
+    ; (ensure-list-arg 0)
+    ; (ensure-byte-arg 2)
+    (label -sum-recur)
+    (bra-empty-list? a0 -sum2) ;; check car of list = 0 which means it is an empty list, could also be (bra-zero-cell 0) check arg 0 to be an empty cell = empty list
+    (byte+ a2 a0 a2)
+    (resolve-ptr-arg-into-arg a1 2 a0) ;; resolve ptr in cdr cell (arg 1), 2 consequtive cells (another list, that is car and cdr-cell) into arg 0 (and 1)
+    (goto -sum-recur) ;; tailcall
+    (label -sum2)
+    (return) ;; a2 (last parameter) is automatically the return value
+  #+end_src
+- access defined structure
+  #+begin_src scheme
+    (def-struct point
+      (x : byte)
+      (y : byte))
+
+    (point 1 2) ;; c-tor
+  #+end_src
+- data layout
+  byte offset
+  0 [data-header-cell = struct header] => some bytes are following
+  2 [struct-meta-data (id)]
+  4 [struct-data-bytes]
+- bytecode
+  #+begin_src scheme
+    (struct-create l0 'point 1 2) ;; l0 = pointer to structure, structure is explicitly allocated (gc undefined yet)
+
+    (byte-cell l1 1)
+    (struct-set l0 0 l1) ;; set 0 offset field (which is x) in structure point (in l0) to value of l1 (a bytecell with value 1)
+  #+end_src
+- define interpreter (poc)
+  - data layout
+    - eval-stack = stack of cells
+    - cell 16bit = byte/char 8bit | int xbit | pointer to cell 15bit | data-header (following cell holds value of given type) ybit
+    - data-header-cell = struct | float | array | list ... cannot be car nor cdr cell but must be pointed at!
+    - data-cell (following data-header) 16bit = ptr to
+    - list = car-cell, cdr-cell (these cells cannot be data-header-cells)
+  #+begin_src scheme
+    (def-enum cell-type
+      (pointer
+       byte
+       int
+       header))
+
+    (def-struct cell
+      (tag : cell-type)
+      (or (cell-ptr    : bytes2)
+          (cell-byte   : bytes2)
+          (cell-header : bytes2)
+          (cell-int    : bytes2)))
+
+    (def-struct function
+      (byte-code    : (array byte)) "vm instructions as array"
+      (locals-count : byte)         "number of locals in this function"
+      (name         : string)       "symbol name of function")
+
+    (def-struct continuation
+      (byte-index     : int) "location in byte-code of function"
+      (function-index : int) "function id")
+
+    (def-struct call-frame
+      (cont         : continuation)  "return"
+      (param-count  : byte)          "actually passed parameters = len of parameters array"
+      (locals-count : byte)          "number of locals to reserve"
+      (lnps         : (array cell))  "locals and parameters array (len defined by function) + actually passed parameter")
+
+    (def-struct vm
+      "state of the virtual machine"
+      (call-stack : (list call-frame))
+      (functions  : (array function))
+      (frame      : call-frame)
+      (globals    : (array cell)))
+
+    ;; def-struct create the following accessors
+    ; (structname-fieldname a-struct)                ;; to read, returning the value of the field
+    ;  (structname-fieldname! a-struct a-field-value) ;; to write (returning the struct itself
+
+
+    (def (vm-new) : vm
+         "create an initialized vm"
+         (vm l() [(function [0] "just-break" 0)] (call-frame (continuation 0 0) 0 0 [] [])))
+
+    (def (vm-next-inst-byte! (avm : vm)) : vm
+         "return vm pointing to next instruction byte (no bounds check)"
+         (def-local cont (call-frame-cont (vm-frame avm)))
+         (continuation-byte-index!
+          cont
+          (int-inc (continuation-byte-index cont))))
+
+    (def (vm-peek-inst-byte (avm : vm) (off : byte = 0)) : byte
+         "return the byte currently pointed to by frame"
+         (def-local cont (call-frame-cont (vm-frame avm)))
+         (def-local functions (vm-functions vm))
+         (def-local func (array-at functions (continuation-function-index cont)))
+         (array-at (function-byte-code func) (+ off (continuation-byte-index cont))))
+
+    (def (bytes->int (low : byte) (high: byte)): int
+         (def-local int-cell (make-int-cell))
+         (int-cell-low-set! int-cell low)
+         (int-cell-high-set! int-cell high)
+         int-cell)
+
+    (def (vm-peek-inst-int (avm : vm) (off : byte = 0) : int
+         "return the int currently pointed to by the frame"
+         (def-local cont (call-frame-cont (vm-frame avm)))
+         (def-local functions (vm-functions vm))
+         (def-local func (array-at functions (continuation-function-index cont)))
+         (def-local index (+ off (continuation-byte-index cont)))
+         (bytes->int
+          low= (array-at (function-byte-code func) index)
+          high= (array-at (function-byte-code func) (1+ index))))
+
+    (def (vm-interpret-instruction (avm : vm)) : vm
+         "execute the current instruction of the vm"
+         (def-local byte-code (vm-peek-inst-byte avm))
+         (case byte-code
+           [00 (break)]
+           [01 (vm-interpret-byte+ avm)]
+           [else (throw-usr-exception "unknown opcode ~a" bc)]))
+
+    (def (vm-decode-operand-ptr-high (op-code : byte) (avm : vm)) : cell
+         "return cell referenced by encoded (in the high 4 bits) of op-code"
+         (vm-decode-operand-ptr (shift-right 4 op-code) avm))
+
+    (def (vm-decode-operand-ptr-low (op-code : byte) (avm : vm)) : cell
+         "return cell referenced by encoded (in the high 4 bits) of op-code"
+         (vm-decode-operand-ptr (bitwise-and op-code 0x00001111) avm))
+
+    (def (vm-decode-operand-ptr (op-code : byte) (avm : vm)) : cell
+         "return cell referenced by encoded in op-code"
+         (if (bitwise-and op-code 0x00001000) ;; is access to local | arg, else access to global
+             (nth (call-frame-lnps (vm-call-frame avm)) (bitwise-and op-code 0x00000111))
+           (nth (vm-globals avm) (bitwise-and op-code 0x00000111))))
+
+    (def (vm-interpret-byte+ (avm : vm)) : vm
+         "interpret byte+ instruction"
+         (def-local src-ops (vm-peek-inst-byte avm 0))
+         (def-local target (vm-peek-inst-byte avm 1))
+         (byte-cell! (native+ (cell-byte (vm-decode-operand-ptr-high src-ops avm))
+                              (cell-byte (vm-decode-operand-ptr-low src-ops avm)))
+                     (vm-decode-operand-ptr-low target avm))
+         (vm-next-inst-byte! avm 3))
+
+    (def (copy-parameter (avm : vm)
+                         (parameter-number : byte) "number of parameters"
+                         (parameters : cell-array) "array of locals+parameters"
+                         (start-idx : byte)        "current index into the parameters array"
+                         ) : void
+         "copy parameter-number many parameters, encoded in the following instruction bytes
+          of avm into the parameters array, starting at start-idx"
+         (when (> parameter-number 0)
+           (def-local encoded-param (vm-peek-inst-byte avm))
+           ;; for single byte encoded parameter, if encoded in high/lowbyte, this is more complex
+           (vm-next-inst-byte! avm)
+           (nth-set! parameters start-idx (vm-decode-operand-ptr encoded-param avm))
+           (copy-parameter avm (1- parameter-number) parameters (1+ start-idx)) ;; tailcall!
+           )
+
+    (def (vm-interpret-call (avm : vm)) : vm
+         "interpret a call to a function"
+         (vm-next-inst-byte! avm) ;; point to next byte
+         (vm-call-stack! avm (cons (vm-frame avm) (vm-call-stack avm))) ;; push current call onto callstack
+         (def-local function-index (vm-peek-inst-int avm))
+         (vm-next-inst-byte! avm 2) ;; point to #of params
+         (def-local parameter-number (vm-peek-inst-byte avm))
+         (vm-next-inst-byte! avm) ;; point to first param (or next instruction)
+         (def-local function (nth (vm-functions avm) function-indx))
+         (def-local local-number (function-locals-count function))
+         (def-local value-array (cell-array (+ local-number parameter-number)))
+         (copy-parameters avm parameter-number values-array local-number)
+         (vm-frame! avm
+                    (call-frame
+                     (continuation 0 function-index))
+                    local-number
+                    parameter-number
+                    value-array)
+         avm)
+
+    (def (vm-interpret-return (avm : vm)) : vm
+         "interpret the return of a called function"
+         ;; implementation incomplete
+         )
+  #+end_src
+- define byte code for interpreter
+  - idea: there is only one vm => can be statically assigned to a memory region (for snapshot, this vm can be copied into a separately allocated region if needed)
+  - idea: for tight loops/tail calls, some locals could be held on zero page (register is probably not available)
+- collected-commands
+  - bra-empty-list? <reg> <label> :: jump to label if reg(tos) is an empty list (e.g. car = 0000 0000 0000 0001)
+  - byte+ :: add top 2 byte cells, leaving one sum byte cell an the eval stack
+  - call <fun> <#params> <p0> ... <pN> :: call a specific function (by ptr/int-id) + parameter (#locals is got from the function list/array)
+  - ensure-args <num> :: make sure num arguments are on the eval stack for this function
+  - ensure-byte-arg <idx> :: make sure that parameter at idx has type byte
+  - goto <label> :: simply jump
+  - make-list <num> :: create a list of the <num> topmost cells on the stack, putting car and cdr on the stack
+  - pop :: discard tos
+  - pop-into-arg <reg> :: pop tos into the given arg
+  - push-byte <val> :: push a byte value into a cell on the eval stack
+  - return :: simple return
+  - struct-create <label> :: allocate structure bytes, set cell-header, metadata and data, put ptr to struct onto stack?
+  - struct-get <data-off> :: get cell at data-off to tos (struct ptr in tos-2)
+  - struct-set <data-off> :: set cell at data-off to tos (struct ptr in tos-2)
+** memory management
+*** layout
+**** operations
+  - pass parameter to function
+    - access with static offset
+    - decide whether to allow overwrite (shared memory)
+  - allocate local slots <- access with static offset
+  - return into slot (via static offset)
+**** call-frame : continuous memory allocating cells for parameters and locals
+return address
+no of parameter (byte)          # could be variable
+parameter - cells (copied)      # is known by caller (access fast)
+locals - cells (uninitialized)  # is known by callee (and known by caller if it is a static call)
+=> call-frame <alloc-num> <local-num> <- only available if the function is statically known!
+   copy loc/arg -> arg
+   call function
+   cisc code: *call functionid, #args, l/a#->a# ..., (#locals)*, (bytecode for call0 and call1 and call2 with short copy encoding) function is 16bit id / jump address
+   dynamic call (getting the functionid from as symbol form a cell): *calld #args, l/a#->a# ..., func-id-l/a/g#*
+- (is part of call frame) local-frame (access fastest) <- must be put onto the call frame to allow multiple instantiations of the same call
+  locals - cells (uninitialized)  number is known by called function +[accessible right before bytecode] => local0 is @ function - 2+
+The call frames are organized in a stack. Accessing a parameter will
+c64 implementation detail:
+    first parameter cell = lda (parameter),x=0 .. lda (parameter),x=1
+    first local cell = lda (locals),x=0 .. lda (locals),x=1
+    /parameter/ is a zero page address that is set for each activation frame
+    same for /locals/
+    idea: since locals should be a fixed number, they could come first such that the accessing index (x) is fixed for locals and params, even though params may vary (variadic) allowing for only on zero page "register"/pointer
+**** global-frame [fixed number during program run?]
+  global - cells  (access not so fast)
+
+**** collected code
+- cisc-code for builtin functions (not runtime) => no eval stack, all is directly referencing args, locals or globals
+  - byte/int+/- a/l/g# a/l/g# -> a/l/g#
+  - byte/int-inc/dec
+  - byte/int*//
+  - zerob?
+  - zeroi?
+  - bra-zerob/i?
+  - bra-greaterb/i?
+  - bra-equalb/i?
+  - bra-greater-or-equalb/i?
+  - goto/jump
+  - bra-nil?
+  - land/or/not
+  - cons a/l/g# a/l/g# -> a/l/g#
+  - car/cons = index0 index1 of list double cell
+  - struct-set a/l/g# a/l/g# a/l/g# :: set structure arg0, field# in arg1, to value arg2
+  - struct-get a/l/g# a/l/g# a/l/g# :: get structure arg0, field# in arg1 into arg2
+*** data types
+(nil pointer should be easy to spot!, e.g. zero page has no cells => first byte 0 = nil ptr)
+- cell
+  - pointer to cell (need 15 bits)
+    layout: [ptr (15bits)] 1
+  - header (need max bits, describing the type of the header + as much information as possible)
+    headers are usually followed by the bytes specific for this type
+    layout: [type ()] .....010
+  - int (need max bits, low bits should all be zero to allow adding/substraction without shifting)
+    layout: [value (x bits)] ......00
+    range: 0..16383, -8192..8191
+  - byte/char (need 8 bits, one full byte should be used unmodified)
+    layout: [value (8 bits)] .....110
+  - specialty idea: bcd encoded digits (3) for exact number maybe?
+- float, exact, array/string, (hash)-map
+*** allocation
+*** deallocation
+** continuations
+** vm registers and runtime behaviour
+call, tail-call, variable resolution, continuations, closures, macros?
+- (later) use cpu registers for parameters (quickest)
+- (later) use zero page for parameters (quick)
+- use stack for parameters (slow)
+- tail call should be as simple as test + branch instruction
+- macros should already be resolved (no vm instructions for that, for now)
+- use flattened closures to allow O(1) access to live locals and globals
+** vm instructions
+- use single byte for vm instruction
+- use minimal length for common (short) instructions (e.g. lists with 0-3 elements)
+- allow larger lengths for uncommon (long) instructions (e.g. lists with 1000 elements)
+- idea
+  - define vm instructions
+  - optimize for size and speed of decoding later
+  - keep optimizing strategies in mind
+    - encode (small) values into opcode
+    - use prefix byte for long commands (long running and seldom used)
+    - how can table jumps be used
+    - how can bits in the opcode be used for common actions (bit = micro op)
+** loading/linking
+** repl
+* links
+[[https://e-booksdirectory.com/listing.php?category=399][books about scheme]]
+* additional material
+** language & low level programming course
+- https://web.cecs.pdx.edu/~mpj/llp/

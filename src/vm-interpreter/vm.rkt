@@ -420,6 +420,7 @@
 (define vm-code-ops
   (apply hash (flatten (map (lambda (pair) (list (cdr pair) (car pair))) (hash->list vm-op-codes)))))
 
+;; push next value after currrent pc as byte cell onto the value stack
 (define/contract (vm-interpret-push_b a-vm)
   (-> vm-state? vm-state?)
   (struct-copy vm-state a-vm
@@ -471,15 +472,12 @@
   (-> vm-state? vm-state?)
   (define instruction (deref-pc (vm-state-memory a-vm) (vm-state-pc a-vm)))
   (define instruction-symbol (hash-ref vm-op-codes instruction))
-  (cond [(eq? 'break instruction-symbol)
-         a-vm]
-        [(eq? 'push_b instruction-symbol)
-         (run-vm (vm-interpret-push_b a-vm))]
-        [(eq? 'pop instruction-symbol)
-         (run-vm (vm-interpret-pop a-vm))]
-        [(eq? 'add instruction-symbol)
-         (run-vm (vm-interpret-add a-vm))]
-        [else (raise-user-error "unknown opcode ~a" instruction-symbol)]))
+  (case instruction-symbol
+    [(break)  a-vm]
+    [(push_b) (run-vm (vm-interpret-push_b a-vm))]
+    [(pop)    (run-vm (vm-interpret-pop a-vm))]
+    [(add)    (run-vm (vm-interpret-add a-vm))]
+    [else     (raise-user-error "unknown opcode" instruction-symbol)]))
 
 (module+ test #| vm |#
   (check-equal? 

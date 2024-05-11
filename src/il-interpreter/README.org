@@ -1,7 +1,7 @@
 #+title: IL-interpreter
 is an interpreter for the intermediate language that should be used on the 6510
 it needs to address the following issues
-- memory contraint
+- memory constraint
   => very compact byte code (rather cisc than risc)
 - speed constraint
   => fast decode, execution optimized making use of
@@ -12,9 +12,19 @@ it needs to address the following issues
 ** expression / evaluation stack
 values organized as stack that are part of evaluation
 ** call frames / stack
-keep track of executions
+keep track of executions and locals/parameters
+fp -> [return address]
+      [local 0 = param 0]
+      [local n = param n] (var args?)
+lp -> [local n+1 = local var 0]
+      [local n+m+1 = local var m]
+sp ->
+fp = current activation frame pointer
+lp = pointer to first local var
+sp = tos of frame stack
 ** environments
-are used to resolve symbols
+global = module level (all required ...)
+w/i module it should be compiled
 ** bytecode
 very compact bytecode, common x quick operations = short, uncommon x long operations = long
 ** atoms, cells, pairs, lists, arrays, (hash)maps, long lists, long arrays
@@ -202,23 +212,25 @@ cdr cellpair
   (def (append (a list) (b list))
        (-append (reverse a) b))
 #+end_src
+ar = local 0
+b  = local 1
 - ~(assert-locals-n 2)~
-- byte-code-location-append
-- ~(push-local 0)~
+- byte-code-location-append-tail-call-entry
+- ~(push-local 0)~ ; ar
 - ~(car)~
 - ~(nil?)~
 - ~(jump-if-false byte-code-location-1)~
 - byte-code-location-0
-- ~(push-local 1)~
+- ~(push-local 1)~ ; b
 - ~(return)~
 - byte-code-location-1
-- ~(push-local 0)~
+- ~(push-local 0)~ ; ar
 - ~(cdr)~
-- ~(push-local 1)~
-- ~(push-local 0)~
+- ~(push-local 1)~ ; b
+- ~(push-local 0)~ ; ar
 - ~(car)~
 - ~(cons)~
-- ~(pop-to-local 0)~
+- ~(pop-to-local 0)~ ;; prepare for tail call
 - ~(pop-to-local 1)~
 - ~(jump byte-code-location-append)~
 
@@ -249,7 +261,7 @@ cdr cellpair
   (def fn #'byte+)
   (apply fn 1 2)
 #+end_src
-*** higher order functions
+*** higher order functions (map)
 #+begin_src scheme
   (def (map (fn fun) (a list))
        "apply function to each element of the list returning a new list of the results"
@@ -257,25 +269,100 @@ cdr cellpair
            a
            (cons (apply fn (car a)) (map fn (cdr a)))))
 #+end_src
+*** higher order function (map), tail recursive version
+#+begin_src scheme
+  (def (-map (fn fun) (a list) (acc list))
+       (if (nil? (car a))
+           acc
+           (-map fn (cdr a) (cons (apply fn (car a)) acc))))
+
+  (def (map (fn fun) (a list))
+       "apply function to each element of the list returning a new list of the results"
+       (-map fn (reverse a) '()))
+#+end_src
 *** local variable (through let)
 #+begin_src scheme
-  (def (some-fun (a list))
-       (let (((b list) (list 1 2 3)))
+  (def (some-fun (a (listof int)) -> (or (listof int) int)
+       (let (((b (listof int)) (list 1 2 3)))
          (if (nil? (car a))
              b
              a)))
 #+end_src
+*** structures
+**** definition
+#+begin_src scheme
+  (def-rec id super-id ;; <- splices in the parent structure
+          ((list: el0 "description")
+           (byte: el1)
+           (int: el2)))
+#+end_src
+**** access
+#+begin_src scheme
+  (rec-id-el0 struct-ref) ;; evaluates to a list stored in the structure referenced by struct-ref
+  (rec-id-el0! struct-ref '(some list)) ;; writes/updates a structure element
+  (rec-get-id struct-ref 'el0)
+  (rec-set-id! struct-ref 'el0 '(some list))
+  (rec-make-id (el0 '(some list))
+               (el1 42)
+               (el2 8000))
+#+end_src
+**** copy with update
+#+begin_src scheme
+  (rec​-cp-id struct-ref (el0 '(some list))
+                        (el1 42)) ;; creates new structure (copy) with fields el0 and el1 updated
+#+end_src
+*** arrays
+**** definition
+#+begin_src scheme
+  (arr-make id byte: dimension)
+#+end_src
+**** access
+#+begin_src scheme
+  (arr-get array-ref index)
+  (arr-put! array-ref index value)
+  (arr-cp array-ref index0 index1 array-ref2)
+  (arr-cp-full array-ref)
+#+end_src
+*** (hash)maps
+**** access (any idea whether to make access more clojure like?)
+#+begin_src scheme
+  (map-get map-ref key) -> string (type of value)
+  (map-put! map-ref key value) -> string: (type of value)
+  (map-put map-ref key value) -> new map reference
+  (map-drop map-ref key) -> new map reference
+  (map-has? map-ref key) -> bool:
+  (map-make (key value) (key value) ...) -> new map reference
+#+end_src
+- map-get
+  (push-local-0) ;; local 0 = map ref
+  (push-constant-byte 42) ;; key
+  (map-get) ;; tos = result of get (could be nil)
+- map-make
+  (push valuen)
+  (push keyn)
+  ...
+  (push value0)
+  (push key0)
+  (push-constant-byte n) ;; number of key value pairs
+  (map-make) ;; tos = reference to created map
 * general ideas
-** data is organized in native elements, boxed in cells, paried in cell-pairs
+** data is organized in native elements, boxed in cells, paired in cell-pairs
+(which element is used, is defined by the command used, there is no runtimecheck to validate the right element type is present)
 - native element 8bit
   - byte
 - cell 16bit
-  - byte cell = char cell = boolean cell
-  - reference-cell (pointing to other cell in heap) [bit7 is 1] => BMI/BPL for pointer
-  - nil-cell [one complete byte is 0 ?] => BEQ/BNZ for nil-cell
-  - symbol-cell => lookup
+  - 1lll llll hhhh hhhh  - reference-cell (pointing to other cell in heap) [bit7 is 1] => BMI/BPL for pointer
+  - 01ii iiii iiii iiii integer cell -8192 .. 8191
+  - 001i iiii iiii iiii symbol-cell => lookup (8192 symbols)
+  - 0001 xxxx bbbb bbbb byte cell = char cell = boolean cell
+  - 0000 0000 xxxx xxxx nil-cell [one complete byte is 0 ?] => BEQ/BNZ for nil-cell
 - pair of cells 32bit
   - car cell + cdr cell
+- structure (flat) (idea: keep structure meta information)
+  - continuous memory (byte index access)
+  - structures have a  static memory layout (fixed size) and may contain any combination of native elements, cells, and/or pairs
+  - structures may not contain more then <256 elements
+
 ** sp organisation (call stack)
 return address put here by 'call
 [ bytecode ptr to caller ]
@@ -283,12 +370,21 @@ return address put here by 'call
 setup by 'create-call-frame
 [ local 0 - cell ]
 [ local 1 - cell ]
+** vm state (zp = zero page allocated, heap = heap allocated)
+value stack pointer [zp]
+frame stack pointer [zp]
+local0-register .. local2-register (n-registers used for referencing (closure?) locals, [zp]
+instruction pointer [zp]
+value stack [heap]
+frame stack [heap]
+instructions [heap]
+static values (strings, bytes, arrays, maps, structures) [heap]
 ** eval stack, atomic functions work on this stack
 values are pushed on the stack by
 'load-local
 'load-const (cell)
-** program byte code = list encoding using cell pairs
-this does not seem the right decision
+** program byte code != list encoding using cell pairs
+making them equal does not seem the right decision
 => byte code is an array of bytes
    data is organized in native data, cells, or cell pairs
    what about data = code? maybe via transformation
@@ -329,3 +425,288 @@ this does not seem the right decision
   - (put-byte-to-local 5 1)
   - (call a-func)
   - (put-result to ...)
+** implement a basic screen editor
+*** features
+**** compact source code storage
+**** scroll up/down
+**** wrap (truncate lines -> scroll left/right)
+**** navigation
+**** save/load from disk
+**** undo / redo (limited by memory only)
+**** goto line/col
+**** folding
+**** search (simple regex)
+*** data model
+**** cursor position
+**** insert/overwrite mode
+**** screen-line -> source code
+**** screen-line -> wrapped
+**** source-code = string-ropes? (see [[https://en.wikipedia.org/wiki/Rope_(data_structure)][ropes]] and [[https://github.com/Ramarren/ropes/blob/master/rope.lisp][lisp impl]])
+***** ropes implementation (eval size of code, is it worth it?)
+(can easily made a persistent datastructure, allowing for undo)
+leaf = string + len
+non-leaf = total len of the left children, childreferences to left and right
+any inode may have no right subtree
+****** structure
+#+begin_src scheme
+  (def-struct rope-node
+    (exact-num: len)) ;; c64 idea: implement exact numbers as an array of bcd numbers!
+
+  (def-struct rope-inode rope-node
+    (rope-node: left)
+    (rope-node: right))
+
+  (def-struct rope-leaf rope-node
+    (string: str))
+#+end_src
+****** collect-leaves (strings)
+#+begin_src scheme
+  (def (-col-left-nodes (rope-node: root) ((list: rope-inode:) left-list) -> (list: rope-inode:))
+       "collect all left inodes (not leaves) starting at root"
+       (cond ((rope-leaf? root)
+              left-list)
+             ((rope-inode? (rope-inode-left root))
+              (-col-left-nodes (rope-inode-left root) (cons root left-list)))
+             (else left-list)))
+
+  (def (-collect-leaves--proc-stack ((list: rope-inode:) left-stack)
+                                    ((list: rope-leaf:) leaf-list)
+                                    -> (list: rope-leaf:))
+       "collect all the rope leaves working on the given stack"
+       (let ((tos (car left-stack))) ;; rope-inode: tos
+         (cond ((nil? tos) leaf-list)
+               ((rope-leaf? (rope-inode-right tos))
+                (-collect-leaves--proc-stack
+                 (cdr left-stack)
+                 (cons (rope-inode-left tos) (cons (rope-inode-right tos) leaf-list))))
+               (else ;; rope-inode: (rope-inode-right tos)
+                (-collect-leaves--proc-stack
+                 (append (-col-left-nodes (rope-inode-right tos) '()) (cdr left-stack))
+                 (cons (rope-inode-left tos) leaf-list))))))
+
+  (def (collect-leaves (rope-node: root) -> (list: rope-leaf:))
+       "get an ordered list of rope leaves with the strings that will make up the total string of the tree"
+       (let ((left-stack (-col-left-nodes root '()))
+             (leaf-list  (cond ((rope-leaf? root) '(root)) (else '())))
+         (-collect-leaves--proc-stack left-stack leaf-list)))
+
+  (def (collect-strings (rope-node: root) -> (list: string:))
+       "collect the string elements of this rope"
+       (map (lambda (leaf) (rope-leaf-str leaf)) (collect-leaves root)))
+#+end_src
+****** rebalance (Collect the set of leaves L and rebuild the tree from the bottom-up.)
+#+begin_src c++
+  // weight = total length
+  static boolean isBalanced(RopeLike r) {
+      val depth = r.depth();
+      if (depth >= FIBONACCI_SEQUENCE.length - 2) {
+          return false;
+      }
+      return FIBONACCI_SEQUENCE[depth + 2] <= r.weight();
+  }
+
+  static RopeLike rebalance(RopeLike r) {
+      if (!isBalanced(r)) {
+          val leaves = Ropes.collectleaves(r);
+          return merge(leaves, 0, leaves.size());
+      }
+      return r;
+  }
+
+  static RopeLike merge(List<RopeLike> leaves) {
+      return merge(leaves, 0, leaves.size());
+  }
+
+  static RopeLike merge(List<RopeLike> leaves, int start, int end) {
+      int range = end - start;
+      if (range == 1) {
+          return leaves.get(start);
+      }
+      if (range == 2) {
+          return new RopeLikeTree(leaves.get(start), leaves.get(start + 1));
+      }
+      int mid = start + (range / 2);
+      return new RopeLikeTree(merge(leaves, start, mid), merge(leaves, mid, end));
+  }
+#+end_src
+#+begin_src scheme
+#+end_src
+****** insert (a char sequence at the given index)
+#+begin_src c++
+  public Rope insert(int idx, CharSequence sequence) {
+      if (idx == 0) {
+          return prepend(sequence);
+      }
+      if (idx == length()) {
+          return append(sequence);
+      }
+      val lhs = base.split(idx);
+      return new Rope(Ropes.concat(lhs.fst.append(sequence), lhs.snd));
+  }
+#+end_src
+#+begin_src scheme
+#+end_src
+****** index (return char at index)
+#+begin_src scheme
+  (def (-rope-char-at--node (rope-node: el) (exact-num: idx) -> (char:))
+       (cond ((rope-leaf? el)
+              (string-at (rope-leaf-str el) idx)) ;; algorithm ensures that idx <= len
+             ((exact-num< idx (rope-node-len root))
+              (-rope-char-at--node (rope-inode-left root) idx))
+             (else
+              (-rope-char-at--node (rope-inode-right root) (exact-num- idx (rope-node-len root))))))
+
+  (def (rope-char-at (rope-inode: root) (exact-num: idx) -> (char:))
+       (-rope-char-at--node root idx))
+#+end_src
+****** merge (two ropes)
+create new root, add left to left, right to right and create another root setting left
+#+begin_src scheme
+  (def (-string-len (rope-node: a) (exact-num: acc-len) -> (exact-num:))
+       (let ((sum (exact-num+ acc-len (rope-node-len a))))
+         (cond ((rope-leaf?) sum)
+               (else (-string-len (rope-inode-right a) sum)))))
+
+  (def (string-len (rope-node: a) -> (exact-num:))
+       (-string-len a 0))
+
+  (def (-full-node (rope-node: a) -> (rope-node:))
+       (cond ((and (rope-inode? a)
+                   (nil? (rope-inode-right a)))
+              (rope-inode-left a))
+             (else a)))
+
+  (def (rope-merge (rope-node: a) (rope-node: b) -> (rope-inode:))
+       "merge to rope nodes"
+       (rope-inode (rope-node-len a) (-full-node a) (-full-node b)))
+
+  (def (can-be-root-node? (rope-inode: node) -> (bool:))
+       (nil? (rope-inode-right node)))
+
+  (def (prepend-root-node (rope-inode: node) -> (rope-inode:))
+       (rope-inode (string-len a) a '()))
+#+end_src
+****** split (a rope at the given index)
+#+begin_src c++
+  public Pair<RopeLike, RopeLike> split(int index) {
+      if (index < weight) {
+          val split = left.split(index);
+          return Pair.of(rebalance(split.fst), rebalance(new RopeLikeTree(split.snd, right)));
+      } else if (index > weight) {
+          val split = right.split(index - weight);
+          return Pair.of(rebalance(new RopeLikeTree(left, split.fst)), rebalance(split.snd));
+      } else {
+          return Pair.of(left, right);
+      }
+  }
+#+end_src
+****** delete (a substring from idx1 to idx2 in the rope)
+#+begin_src c++
+  @Override
+  public RopeLike delete(int start, int length) {
+      val lhs = split(start);
+      val rhs = split(start + length);
+      return rebalance(new RopeLikeTree(lhs.fst, rhs.snd));
+  }
+#+end_src
+**** NO array of line# to string (inserting lines/killing lines is expensive)
+how about a trie using relative numbers to get to the next node, leafs being source lines, summing weights = the line#
+(e.g. a source code having the lines 'a', 'b', 'c' would then be  a tree ((+1(+0a)(+1b))(+3c)), adding/removing lines would (locally) reconstruct the tree)
+optimization: for small files (< 256 lines): have to pages (lowbyte)(highbyte) for string (rope) references => deleting/adding lines = mem copy two pages (partially)
+**** maybe a list of source lines is a valid data model, too?
+since they are not double linked, this probably doesn't help!
+*** optimization-ideas
+- use screen memory as workarea, write screen-line -> source-code when leaving (and updates were done)
+  this will restrict stepwise undo/redo
+- work fast on 1:1 correspondence of screen-line : source-line
+- optimize for parenthesis (e.g. have special glyph for two opening/two closing parens)
+- limit wrapped lines to e.g. 2 lines max (=80z)
+- allow swapping source code to disk / lazy load from disk to allow editing of large files that would not easily fit into memory
+*** operations
+**** render screen-line source-code
+**** render screen-line source-code +wrapped-index
+**** scroll up/down
+**** render screen-line0 screen-line-end source-code
+**** delete character screen-line screen-col (cursor)
+**** save source-code file-name
+***** open file (for writing)
+***** convert internal editable data structure to string that can be written (in blocks)
+***** write blocks
+***** close file
+**** load file-name
+***** read from file
+***** optionally restore old editing position
+***** transform into editable data structure (lazy?)
+***** render the screen
+** BRAIN types are regular functions? that construct types
+- an 16-bit integer is ~int~, a string is ~str,~ a char is ~char~, a boolean is ~bool~, a byte is ~byte~
+- e.g. a list of integers is ~(listof int)~ or even ~(list int)~, a list can describe its elements and order more precisely
+  ~(list type-a type-b)~ defines a list of two elements, of ~type-a~ and of ~type-b~, it can be interpreted as /matching/ expression e.g. ~(list type-a type-b ... last-element-type)~
+- a structure is either the structure definition id or an adhoc structure type ~(struct id (field-a type-a "documentation") (field-b type-b))~
+- an array is ~(arrayof int)~ or ~(array int)~, array values can be of any type, array indices must be ~int~ or ~byte~
+- (hash)map ~(mapof int string)~ or ~(map int string)~, key must be either ~int~ or ~byte~, value can be any type
+- (complex) types can be named and thus referenced in type position
+- type checking is a step run during analysis of the program
+** BRAIN ideas
+*** compact byte code for common instructions
+- push-local onto the stack / pop stack into local?
+  how about making car cons work directly on locals (first couple of locals e.g. 0..3)
+  => *car* byte code uses the last 2 bits to select either stack or local 0..2, result is put onto stack or local 0..2 (again 2 bits)
+  [<car-opcode-4-bit> <source-stack-or-local-2-bits> <target-stack-or-local-2-bits>]
+  => *cdr* byte code uses the last 2 bits to select either stack or local 0..2, result is put onto stack or local 0..2 (again 2 bits)
+  [<cdr-opcode-4-bit> <source-stack-or-local-2-bits> <target-stack-or-local-2-bits>]
+  => *cons* byte code uses last
+  [<cons-opcode-2-bit> <source-stack-or-local-2-bits> <source-stack-or-local-2-bits> <target-stack-or-local-2-bits>]
+- (2) byte code calls to runtime functions
+  => call (e.g. 2 bits) rt-function-index (6 bits), param0 param1 param2 param3 (each two bits)
+- (2) byte code execution of vm implemented functions (e.g.t byte+, byte-, int+, int-, byte++, byte--, int++, int--, char=, char>, char<, byte>, byte<, byte=)
+- call runtime/vm-implemented function separation is not fixed (e.g. could change during implementation of the vm = optimization rt->vm-impl)
+- encoding <- dynamically done => define method of encoding based on statistics of programs?
+  - 00 iiiiii p0 p1 p2 p3             (call rt)
+  - 01 iiiiii p0 p1 p2 p3             (call vm impl)
+  - 10 p0 p1 p2                       (cons)
+  - 11 00 p0 p1                       (car)
+  - 11 01 p0 p1                       (cdr)
+  - 11 10 0c cc                       (push byte constant 0-7)
+  - 11 10 10 ii                       (push-local)
+  - 11 10 11 ii                       (pop-into-local)
+  - 11 11 00 00 mmmm mmmm             (jump-rel [to intra-module-label])
+  - 11 11 01 p0 mmmm mmmm             (jump-if-true-rel [to intra-module-label])
+  - 11 11 10 p0 mmmm mmmm             (jump-if-false-rel [to intra-module-label])
+  - 11 11 11 xx                       (unused)
+  - ? mmmm mmmm eeee eeee   (jump-abs to intra-module-label) <- less frequent need not be that compact?
+  - ? p0 mmmm mmmm eeee eeee   (jump-if-true-abs to intra-module-label)
+  - ? p0 mmmm mmmm eeee eeee   (jump-if-false-abs to intra-module-label)
+*** the loader resolves lables -> relative/absolute references
+*** start with pure stack value operation, then optimize to local register usage, compacting code
+** instructionset
+- car
+- cdr
+- cons
+- exec {rt-func, vm-func}
+- jump-[if-{true,false}]-rel
+- jump-[if-{true,false}]-abs
+- push-const-{byte,string,nil,bool,int}
+- push-struct-element
+- push-local
+- pop-into-local
+- pop-into-struct-element
+- copy-struct-element-into-local
+- copy-local-to-struct-element
+- copy-struct
+- ensure-n-params?
+** rt-func / vm-funcs
+- byte{+, -, +​+, --, <, >, <=, >=, ==, !​=}
+- int{+, -, +​+, --, <, >, <=, >=, ==, !​=}
+- bool{not, and, or}
+- string{<, >, <=, >=, ==, !​=, concatenate, match, starts-with, ends-with, index-of, sub-string ...}
+- rec-{id}-{el}{!}, rec-{get, set}-{id}{!}, rec-{cp, make}-{id}
+- arr-{get, put!, make, cp, cp-full}
+- map-{get, put, put!, drop, has?, make, cp, cp-full}
+- file-{open, read, write, close, flush}
+- screen-{write, read}
+- key-{waiting?, read}
+** (abstract) access to native resources of the c64 == basic runtime functions (could be cp/m oriented)
+*** i/o (file)
+*** screen access
+*** keyboard access

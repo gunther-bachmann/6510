@@ -175,18 +175,6 @@
   (struct-copy cpu-state state
                [program-counter (peek-word-at-address state #xFFFC)]))
 
-;; documentation test with testfun
-(define (testfun a)
-  a)
-
-(provide
- (proc-doc/names
-  testfun
-  (-> number? any/c)
-  (a)
-  @{Doc test}
-  ))
-
 ;; is bit7 set in value?
 (define/c (bit7? value)
   (-> exact-nonnegative-integer? boolean?)
@@ -235,7 +223,7 @@
 
 ;; poke values starting at address into memory
 (define/c (poke state address . values)
-  (->* (cpu-state? word/c) () #:rest (listof byte/c) cpu-state?)
+  (->* [cpu-state? word/c] [] #:rest (listof byte/c) cpu-state?)
   (-pokem state address values))
 
 ;; peek byte at current stack pointer
@@ -391,7 +379,7 @@
 
 ;; print the state 
 (define/c (print-state state (compact #f))
-  (->* (cpu-state?) (boolean?) cpu-state?)
+  (->* [cpu-state?] [boolean?] cpu-state?)
   (printf "~a~a" (if compact (state->compact-string state) (state->string state)) (if compact "" "\n"))
   state)
 
@@ -438,7 +426,7 @@
 
 ;; execute if pc does not point at a 0 byte (brk)
 (define/c (run state (verbose #t) (string-output-function interpreter-output-function))
-  (->* (cpu-state?) (boolean? (-> string? any/c)) cpu-state?)
+  (->* [cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (cond [(zero? (peek-pc state))
          state]
         [else
@@ -458,7 +446,7 @@
 
 ;; https://www.c64-wiki.com/wiki/control_character
 (define/c (display-c64charcode byte state (verbose #t) (string-output-function interpreter-output-function))
-  (->* (byte/c cpu-state?) (boolean? (-> string? any/c)) cpu-state?)
+  (->* [byte/c cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (case byte
     [(#x0d) (when verbose (string-output-function "\n")) state] ;; linefeed
     [(#x0e) (when verbose (string-output-function "")) (poke state 53272 23)] ;; switch to lower letter mode
@@ -468,7 +456,7 @@
           state]))
 
 (define/c (display-c64zerotermstring word state (verbose #t) (string-output-function interpreter-output-function))
-  (->* (word/c cpu-state?) (boolean? (-> string? any/c)) cpu-state?)
+  (->* [word/c cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (let ([cbyte (peek state word)])
     (unless (eq? 0 cbyte)
       (display-c64charcode cbyte state verbose string-output-function)
@@ -976,7 +964,7 @@
      (= (absolute high low) #xAB1E)))
 
 (define/c (interpret-c64-rom-routine high low state (verbose #t) (string-output-function interpreter-output-function))
-  (->* (byte? byte? cpu-state?) (boolean? (-> string? any/c)) cpu-state?)
+  (->* [byte? byte? cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (case (absolute high low)
     [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
      (~>> (cpu-state-accumulator state)
@@ -992,7 +980,7 @@
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
 (define/c (interpret-jsr-abs high low state (verbose #t) (string-output-function interpreter-output-function))
-  (->* (byte/c byte/c cpu-state?) (boolean? (-> string? any/c)) cpu-state?)
+  (->* [byte/c byte/c cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (cond [(c64-rom-routine? high low)
          (let ([after-rom-state (interpret-c64-rom-routine high low state verbose string-output-function)])
            (struct-copy cpu-state after-rom-state [program-counter (next-program-counter after-rom-state 3)]))]
@@ -2108,7 +2096,7 @@
              11))
 
 (define/c (interpret-jmp-ind state (verbose #t) (string-output-function interpreter-output-function))
-  (->* (cpu-state?) (boolean? (-> string? any/c)) cpu-state?)
+  (->* [cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (let* ((new-abs-address (peek-word-at-address state (peek-word-at-pc+1 state)))
          (hi              (high-byte new-abs-address))
          (lo              (low-byte new-abs-address)))
@@ -2251,7 +2239,7 @@
 ;; rel = $00 (PC-relative)
 ;; io = illegal opcode
 (define/c (execute-cpu-step state (verbose #t) (string-output-function interpreter-output-function))
-  (->* (cpu-state?) (boolean? (-> string? any/c)) cpu-state?)
+  (->* [cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (case (peek-pc state)
     [(#x00) (interpret-brk state)]
     [(#x01) (interpret-logic-op-mem state bitwise-ior peek-izx 2)]
@@ -2596,7 +2584,7 @@
 
 ;; put the raw bytes into memory (at org) and start running at org
 (define/c (run-interpreter org program (verbose #t) (string-output-function interpreter-output-function))
-  (->* (word/c (listof (or/c byte/c ast-command?))) (boolean? (-> string? any/c)) cpu-state?)
+  (->* [word/c (listof (or/c byte/c ast-command?))] [boolean? (-> string? any/c)] cpu-state?)
   (when verbose (displayln (format "loading program into interpreter at ~a" org)))
   (when verbose (displayln "program execution starting:"))
   (define raw-bytes (if (ast-command? (car program))

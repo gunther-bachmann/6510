@@ -153,7 +153,7 @@
   (struct-copy debug-state d-state [breakpoints (cdr (debug-state-breakpoints d-state))]))
 
 (define/c (debugger--run d-state (display #t))
-  (->* (debug-state?) (boolean?) debug-state?)
+  (->* [debug-state?] [boolean?] debug-state?)
   (define c-states (debug-state-states d-state))
   (define next-states (cons (execute-cpu-step (car c-states) #t (debug-state-output-function d-state)) c-states))
   (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state) 0 (debug-state-output-function d-state))))
@@ -172,7 +172,7 @@
 
 ;; run len steps (1 if len is false)
 (define/c (debugger--run-steps d-state len (depth 0) (follow-jsr #f) (i-call #t))
-  (->* (debug-state? exact-nonnegative-integer?) (exact-nonnegative-integer? boolean? boolean?) debug-state?)
+  (->* [debug-state? exact-nonnegative-integer?] [exact-nonnegative-integer? boolean? boolean?] debug-state?)
   (define c-states (debug-state-states d-state))
   (define breakpoint (if i-call  #f (breakpoint-hits (car c-states) (debug-state-breakpoints d-state))))
   (when breakpoint
@@ -430,7 +430,7 @@ EOF
 
 ;; run an read eval print loop debugger on the passed program
 (define/c (run-debugger org program (file-name "") (verbose #t))
-  (->* (word/c (listof (or/c byte/c ast-command?))) (string? boolean?) any/c)
+  (->* [word/c (listof (or/c byte/c ast-command?))] [string? boolean?] any/c)
   (define raw-bytes (if (ast-command? (car program))
                         (assemble org program)
                         program))
@@ -473,7 +473,7 @@ EOF
 
 ;; dispatch the given debugger command n-times starting with the current debug-state
 (define/c (run-debugger--dispatch-debugger-command-n-times command d-state (n 1))
-  (->* (string? debug-state?) (nonnegative-integer?) debug-state?)
+  [->* [string? debug-state?] [nonnegative-integer?] debug-state?]
   (let ([local-d-state (struct-copy debug-state d-state)])
     (for ([_ (in-range n)])
       (set! local-d-state (dispatch-debugger-command command local-d-state)))
@@ -510,7 +510,7 @@ EOF
 
 ;; run until a break point hits or the cpu is on a BRK statement
 (define/c (run-until-breakpoint states breakpoints (steps 0) (string-output-function debugger-output-function))
-  (->* ((listof cpu-state?) list?)  (nonnegative-integer? (-> string? any/c)) (values (or/c boolean? breakpoint?) (listof cpu-state?)))
+  (->* [(listof cpu-state?) list?] [nonnegative-integer? (-> string? any/c)] [values (or/c boolean? breakpoint?) (listof cpu-state?)])
   (let ([breakpoint (breakpoint-hits (car states) breakpoints)])
     (cond [(or breakpoint
            (-debugger-at-brk (car states))

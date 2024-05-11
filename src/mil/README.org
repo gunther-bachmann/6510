@@ -36,6 +36,7 @@
   - scheme bibliography :: https://github.com/schemedoc/bibliography/blob/master/page3.md
   - racket features :: https://nikhilism.com/post/2023/racket-beyond-languages/
   - c64 assembler :: https://www.pagetable.com/?p=1542
+  - c64 6502 optimizations :: https://dwheeler.com/6502/a-lang.txt
 * example program execution
 - program is loaded to 0800..XXXX (regular basic program load "*",8) and run (executes sys 2064)
 - initialize runtime
