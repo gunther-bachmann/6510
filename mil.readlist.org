@@ -1581,7 +1581,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   #+end_src
 - tail recursive function using lists
   #+begin_src scheme
-    (def (sum (bl : (list byte)) (acc : byte = 0)) : byte
+    (def (sum (bl (list byte)) (acc byte 0)) -> byte
          "tail recursive function with accumulator"
          (if (empty? list)
              acc
@@ -1592,11 +1592,11 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - byte code (no gc necessary)
   5 locals are used for this instatiation (2 for list creation, 2 for the actual list, and one for the result/accumulator)
   #+begin_src scheme
-    (byte-cell 10 l0) ;; create a byte cell with value 10 at local 0
-    (byte-cell 20 l1)
-    (make-list 2 l0 l1 l2) ;; make  a list of l0 and l1 into l2/l3 [optimization, could reuse l0 and l1 for list]
-    (byte-cell 0 l4) ;; make default argument explicitly at caller site
-    (call 'sum 3 l2 l3 l4 -0-) ;; call sum with two input arguments, l2, l3, storing result in l4 (=> 3 parameters), allocating additional 0 locals
+    (byte-cell l0 10) ;; create a byte cell with value 10 at local 0
+    (byte-cell l1 20)
+    (make-list l2 2 l0 l1) ;; make  a list of l0 and l1 into l2/l3 [optimization, could reuse l0 and l1 for list]
+    (zero-byte-cell l4) ;; make default argument explicitly at caller site
+    (call l4 'sum 2 l2 l4 0) ;; call sum with two input arguments, l2, l3, storing result in l4 (=> 2 parameters), allocating additional 0 locals
 
     (function sum)
     ; (ensure-args 3) ;; 1 byte + car/cons cells 2 = 3
@@ -1605,10 +1605,10 @@ describes some lisp implementations (with some techn. detail) and does perforamc
     (label -sum-recur)
     (bra-empty-list? a0 -sum2) ;; check car of list = 0 which means it is an empty list, could also be (bra-zero-cell 0) check arg 0 to be an empty cell = empty list
     (byte+ a2 a0 a2)
-    (resolve-ptr-arg-into-arg a1 2 a0) ;; resolve ptr in cdr cell (arg 1), 2 consequtive cells (another list, that is car and cdr-cell) into arg 0 (and 1)
+    (resolve-cdr a1 2 a0) ;; resolve ptr in cdr cell (arg 1), 2 consequtive cells (another list, that is car and cdr-cell) into arg 0 (and 1)
     (goto -sum-recur) ;; tailcall
     (label -sum2)
-    (return) ;; a2 (last parameter) is automatically the return value
+    (return a2) ;; a2 (last parameter) is automatically the return value
   #+end_src
 - access defined structure
   #+begin_src scheme
@@ -1643,76 +1643,82 @@ describes some lisp implementations (with some techn. detail) and does perforamc
        byte
        int
        header))
+    ;; alternatively
+    (def-type cell-type (or 'pointer 'byte 'int 'header)) ;; or for symbols
 
     (def-struct cell
-      (tag : cell-type)
-      (or (cell-ptr    : bytes2)
-          (cell-byte   : bytes2)
-          (cell-header : bytes2)
-          (cell-int    : bytes2)))
+      (tag cell-type)
+      (or (cell-ptr    bytes2)  ;; or for fields
+          (cell-byte   bytes2)
+          (cell-header bytes2)
+          (cell-int    bytes2)))
 
     (def-struct function
-      (byte-code    : (array byte)) "vm instructions as array"
-      (locals-count : byte)         "number of locals in this function"
-      (name         : string)       "symbol name of function")
+      (byte-code    (array byte) "vm instructions as array")
+      (locals-count byte         "number of locals in this function")
+      (name         string       "symbol name of function"))
 
     (def-struct continuation
-      (byte-index     : int) "location in byte-code of function"
-      (function-index : int) "function id")
+      (byte-index     int "location in byte-code of function")
+      (function-index int "function id"))
 
     (def-struct call-frame
-      (cont         : continuation)  "return"
-      (param-count  : byte)          "actually passed parameters = len of parameters array"
-      (locals-count : byte)          "number of locals to reserve"
-      (lnps         : (array cell))  "locals and parameters array (len defined by function) + actually passed parameter")
+      "data needed to store arguments and locals of a function and the continuation to return to"
+      (cont         continuation "return")
+      (param-count  byte         "actually passed parameters = len of parameters array")
+      (locals-count byte         "number of locals to reserve")
+      (locals       (array cell) "fixed number of cells used as locals"
+      (params       (array cell) "parameters array (len defined by function) + actually passed parameter"))
 
     (def-struct vm
       "state of the virtual machine"
-      (call-stack : (list call-frame))
-      (functions  : (array function))
-      (frame      : call-frame)
-      (globals    : (array cell)))
+      (call-stack (list call-frame))
+      (functions  (array function))
+      (frame      call-frame)
+      (globals    (array cell)))
 
     ;; def-struct create the following accessors
     ; (structname-fieldname a-struct)                ;; to read, returning the value of the field
     ;  (structname-fieldname! a-struct a-field-value) ;; to write (returning the struct itself
 
-
-    (def (vm-new) : vm
+    (def (vm-new) -> vm
          "create an initialized vm"
-         (vm l() [(function [0] "just-break" 0)] (call-frame (continuation 0 0) 0 0 [] [])))
+         (vm :call-stack '()
+             :functions  [(function :byte-code    [0]
+                                    :locals-count 0
+                                    :name         "just-break")]
+             :frame      (call-frame :cont         (continuation 0 0)
+                                     :param-count  0
+                                     :locals-count 0
+                                     :locals       []
+                                     :parameters   [])
+             :globals    []))
 
-    (def (vm-next-inst-byte! (avm : vm)) : vm
+    (def (vm-next-inst-byte! (avm vm)) -> vm
          "return vm pointing to next instruction byte (no bounds check)"
          (def-local cont (call-frame-cont (vm-frame avm)))
          (continuation-byte-index!
           cont
           (int-inc (continuation-byte-index cont))))
 
-    (def (vm-peek-inst-byte (avm : vm) (off : byte = 0)) : byte
+    (def (vm-peek-inst-byte (avm vm) (off byte 0)) -> byte
          "return the byte currently pointed to by frame"
          (def-local cont (call-frame-cont (vm-frame avm)))
          (def-local functions (vm-functions vm))
          (def-local func (array-at functions (continuation-function-index cont)))
          (array-at (function-byte-code func) (+ off (continuation-byte-index cont))))
 
-    (def (bytes->int (low : byte) (high: byte)): int
-         (def-local int-cell (make-int-cell))
-         (int-cell-low-set! int-cell low)
-         (int-cell-high-set! int-cell high)
-         int-cell)
-
-    (def (vm-peek-inst-int (avm : vm) (off : byte = 0) : int
+    (def (vm-peek-inst-int (avm vm) (off byte 0) -> int
          "return the int currently pointed to by the frame"
          (def-local cont (call-frame-cont (vm-frame avm)))
          (def-local functions (vm-functions vm))
          (def-local func (array-at functions (continuation-function-index cont)))
          (def-local index (+ off (continuation-byte-index cont)))
          (bytes->int
-          low= (array-at (function-byte-code func) index)
-          high= (array-at (function-byte-code func) (1+ index))))
+          :low (array-at (function-byte-code func) index)
+          :high (array-at (function-byte-code func) (1+ index))))
 
-    (def (vm-interpret-instruction (avm : vm)) : vm
+    (def (vm-interpret-instruction (avm vm)) -> vm
          "execute the current instruction of the vm"
          (def-local byte-code (vm-peek-inst-byte avm))
          (case byte-code
@@ -1720,21 +1726,23 @@ describes some lisp implementations (with some techn. detail) and does perforamc
            [01 (vm-interpret-byte+ avm)]
            [else (throw-usr-exception "unknown opcode ~a" bc)]))
 
-    (def (vm-decode-operand-ptr-high (op-code : byte) (avm : vm)) : cell
+    (def (vm-decode-operand-ptr-high (op-code byte) (avm vm)) -> cell
          "return cell referenced by encoded (in the high 4 bits) of op-code"
          (vm-decode-operand-ptr (shift-right 4 op-code) avm))
 
-    (def (vm-decode-operand-ptr-low (op-code : byte) (avm : vm)) : cell
+    (def (vm-decode-operand-ptr-low (op-code byte) (avm vm)) -> cell
          "return cell referenced by encoded (in the high 4 bits) of op-code"
          (vm-decode-operand-ptr (bitwise-and op-code 0x00001111) avm))
 
-    (def (vm-decode-operand-ptr (op-code : byte) (avm : vm)) : cell
+    (def (vm-decode-operand-ptr (op-code byte) (avm vm)) -> cell
          "return cell referenced by encoded in op-code"
-         (if (bitwise-and op-code 0x00001000) ;; is access to local | arg, else access to global
-             (nth (call-frame-lnps (vm-call-frame avm)) (bitwise-and op-code 0x00000111))
+         (if (bitwise-and op-code 0x00001000) ;; is access to (parameter or local)  | arg, else access to global
+             (if (bitwise-and op-code 0x00000100)
+                 (nth (call-frame-params (vm-call-frame avm)) (bitwise-and op-code 0x00000011))
+               (nth (call-frame-locals (vm-call-frame avm)) (bitwise-and op-code 0x00000011)))
            (nth (vm-globals avm) (bitwise-and op-code 0x00000111))))
 
-    (def (vm-interpret-byte+ (avm : vm)) : vm
+    (def (vm-interpret-byte+ (avm vm)) -> vm
          "interpret byte+ instruction"
          (def-local src-ops (vm-peek-inst-byte avm 0))
          (def-local target (vm-peek-inst-byte avm 1))
@@ -1743,11 +1751,12 @@ describes some lisp implementations (with some techn. detail) and does perforamc
                      (vm-decode-operand-ptr-low target avm))
          (vm-next-inst-byte! avm 3))
 
-    (def (copy-parameter (avm : vm)
-                         (parameter-number : byte) "number of parameters"
-                         (parameters : cell-array) "array of locals+parameters"
-                         (start-idx : byte)        "current index into the parameters array"
-                         ) : void
+    (def (copy-parameter
+          (avm vm)
+          (parameter-number byte "number of parameters")
+          (parameters cell-array "array of locals+parameters")
+          (start-idx byte        "current index into the parameters array"))
+         -> void
          "copy parameter-number many parameters, encoded in the following instruction bytes
           of avm into the parameters array, starting at start-idx"
          (when (> parameter-number 0)
@@ -1758,7 +1767,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
            (copy-parameter avm (1- parameter-number) parameters (1+ start-idx)) ;; tailcall!
            )
 
-    (def (vm-interpret-call (avm : vm)) : vm
+    (def (vm-interpret-call (avm vm)) -> vm
          "interpret a call to a function"
          (vm-next-inst-byte! avm) ;; point to next byte
          (vm-call-stack! avm (cons (vm-frame avm) (vm-call-stack avm))) ;; push current call onto callstack
@@ -1778,29 +1787,282 @@ describes some lisp implementations (with some techn. detail) and does perforamc
                     value-array)
          avm)
 
-    (def (vm-interpret-return (avm : vm)) : vm
+    (def (vm-interpret-return (avm vm)) -> vm
          "interpret the return of a called function"
          ;; implementation incomplete
          )
   #+end_src
+- decomposed functions
+  - complex structure creation
+    #+begin_src scheme
+      (def (vm-new) -> vm
+           "create an initialized vm"
+           (vm :call-stack '()
+               :functions  [(function :byte-code    [0]
+                                      :locals-count 0
+                                      :name         "just-break")]
+               :frame      (call-frame :cont         (continuation 0 0)
+                                       :param-count  0
+                                       :locals-count 0
+                                       :locals       []
+                                       :parameters   [])
+               :globals    []))
+    #+end_src
+    #+begin_src scheme
+      (empty-list l1)                           ;; '()
+
+      (zero-byte l14)                           ;; l14 = 0
+      (make-array l11 1 l14)                    ;; l11 = [0]
+      (zero-byte l12)                           ;; l12 = 0
+      (string l13 "just-break")                 ;; l13 = "just-break"
+      (struct-create l5 'function l11 l12 l13)  ;; l5 = (function [0] 0 "just-break")
+      (make-array l2 1 l5)                      ;; l2 = [(function [0] 0 "just-break")]
+
+      (zero-int l10)                            ;; l10 = 0 (int)
+      (zero-int l15)                            ;; l15 = 0 (int)
+      (struct-create l9 'continuation l10 l15)  ;; l9 = (continuation 0 0)
+      (zero-byte l16)                           ;; l16 = 0
+      (zero-byte l17)                           ;; l17 = 0
+      (empty-array l18)                         ;; l18 = []
+      (empty-array l19)                         ;; l19 = []
+      (struct-create l3 'call-frame l9 l16 l17 l18 l19) ;; l3 = (call-frame (continuation 0 0) 0 0 [] [])
+
+      (empty-array l4)                          ;; l4 = []
+      (struct-create l0 'vm l1 l2 l3 l4)        ;; (vm '() [(function [0] 0 "just-break")] (call-frame (continuation 0 0) 0 0 [] []) [])
+    #+end_src
+  - function with access to complex structure
+    #+begin_src scheme
+      (def (vm-next-inst-byte! (avm vm)) -> vm
+           "return vm pointing to next instruction byte (no bounds check)"
+           (def-local cont (call-frame-cont (vm-frame avm)))
+           (continuation-byte-index!
+            cont
+            (int-inc (continuation-byte-index cont))))
+    #+end_src
+    the following byte code can optimize the locals usage by reusing registers that are no longer used
+    #+begin_src scheme
+      (function vm-next-inst-byte!)
+
+      ;; (ensure-args 1) ;; structure ref cell
+      ;; (ensure-struct 'vm 0) ;; arg0 = structure of type vm
+      ;; (ensure-locals 3) ;;
+
+      (struct-get l0 'frame p0)      ;; l0 - call-frame  (frame of avm)
+      (struct-get l1 'cont l0)       ;; l1 - cont        (continuation of call-frame)
+      (struct-get l2 'byte-index l1) ;; byte index
+      (int++ l2)
+      (struct-set 'byte-index l1 l2)
+      (return arg0)
+    #+end_src
+  - function with struct access and array access
+    #+begin_src scheme
+      (def (vm-peek-inst-byte (avm vm) (off byte 0)) -> byte
+           "return the byte currently pointed to by frame"
+           (def-local cont (call-frame-cont (vm-frame avm)))
+           (def-local functions (vm-functions vm))
+           (def-local func (array-at functions (continuation-function-index cont)))
+           (array-at (function-byte-code func) (+ off (continuation-byte-index cont))))
+    #+end_src
+    #+begin_src scheme
+      (function vm-peek-inst-byte)
+
+      ;; (ensure-args 2)
+      ;; (ensure-struct 'vm 0)
+      ;; (ensure-byte 1)
+      ;; (ensure-locals 8)
+
+      (struct-get l0 'frame p0)          ;; l0 = (vm-frame avm)
+      (struct-get l1 'cont l0)           ;; l1 = (call-frame-cont (vm-frame avm))
+      (struct-get l2 'functions p0)      ;; l2 = (vm-functions avm)
+      (struct-get l3 'function-index l2) ;; l3 = (continuation-function-index l1)
+      (array-at l4 l2 l3)                  ;; l4 = array (l2) at index (l3)
+      (struct-get l5 'byte-code l4)      ;; l5 = (function-byte-code l4)
+      (struct-get l6 'byte-index l1)     ;; l6 = (continuation-byte-index l1)
+      (int+ l7 p1 l6)                      ;; l7 = (+ off l6)
+      (array-at l8 l5 l7)                  ;; l8 - array (l5) at (l7)
+      (return l8)
+    #+end_src
+  - function with byte->int conversion
+    #+begin_src scheme
+      (def (vm-peek-inst-int (avm vm) (off byte 0) -> int
+           "return the int currently pointed to by the frame"
+           (def-local cont (call-frame-cont (vm-frame avm)))
+           (def-local functions (vm-functions vm))
+           (def-local func (array-at functions (continuation-function-index cont)))
+           (def-local index (+ off (continuation-byte-index cont)))
+           (bytes->int
+            :low (array-at (function-byte-code func) index)
+            :high (array-at (function-byte-code func) (1+ index)))
+    #+end_src
+    #+begin_src scheme
+      (function vm-peek-inst-int)
+
+      ;; (ensure-args 2)
+      ;; (ensure-struct-arg 'vm 0)
+      ;; (ensure-byte-arg 1)
+      ;; (ensure-locals 11)
+
+      (struct-get l0 'frame p0)
+      (struct-get l1 'cont l0)
+      (struct-get l2 'functions p0)
+      (struct-get l3 'function-index l1)
+      (array-at l4 l2 l3)
+      (struct-get l5 'byte-index l1)
+      (int+ l6 p1 l5)
+      (struct-get l7 'byte-code l6)
+      (array-at l8 l7 l6)
+      (int++ l6)
+      (array-at l9 l7 l6)
+      (make-int l10 p8 p9)
+      (return l10)
+    #+end_src
+  - function with case
+    #+begin_src scheme
+      (def (vm-interpret-instruction (avm vm)) -> vm
+           "execute the current instruction of the vm"
+           (def-local byte-code (vm-peek-inst-byte avm))
+           (case byte-code
+             [00 (break)]
+             [01 (vm-interpret-byte+ avm)]
+             [else (throw-usr-exception "unknown opcode ~a" byte-code)]))
+    #+end_src
+    #+begin_src scheme
+      (function vm-interpret-instruction)
+
+      ;; (ensure-args 1)
+      ;; (ensure-struct 'vm 0)
+      ;; (ensure-locals 2)
+
+      (call l0 'vm-eek-inst-byte 1 p0)
+      (case l0 2
+        0 'break-label
+        1 'byte+-label)
+      (throw-exception 1 "unknown-opcode ~a" l0)
+      (label 'break-label)
+      (break)
+      (label 'byte+-label)
+      (call l1 'vm-interpret-byte+ 1 p0)
+      (return l1)
+
+    #+end_src
 - define byte code for interpreter
   - idea: there is only one vm => can be statically assigned to a memory region (for snapshot, this vm can be copied into a separately allocated region if needed)
+  - idea: statically created structures could be encoded into the actual values => need for data layout?
   - idea: for tight loops/tail calls, some locals could be held on zero page (register is probably not available)
+  - idea: it seems like the copying of locals and parameters is a bit too much for just a function call. this should be more lightweight!!
+          maybe keep a separate memory location where the currently passed parameters are?
+          do a indirect copy, by copying only references?
+          keep another offset that should be added to all local parameter access offsets? ldat (zp-current-args),x <- offset that is adjusted accordingly
+
+          no shared args
+          [call0-arg0-cell]      <- zp-current-args (during call 0)
+          [call0-arg1-cell]
+          ...
+          [call1-arg0-cell]      <- zp-current-args (during call 1)
+          [call1-arg1-cell]
+          ...
+
+          sharing arg1 (or start sharing here)
+          [call0-arg0-cell]      <- zp-current-args (during call 0)
+          [call0-arg1-cell]      <- zp-current-args (during call 1)   :  lda (..),x such that x = 0 for shared arg1, x = .. for call1-arg0 ... => x is set dynamically?
+          ...                                                            indices are stored in separate memory: ldx $zp-arg0-idx, then lda (zp-current-args),x (for first 8 bits)
+          [call1-arg0-cell]
+          [call1-arg1-cell]
+          ...
 - collected-commands
-  - bra-empty-list? <reg> <label> :: jump to label if reg(tos) is an empty list (e.g. car = 0000 0000 0000 0001)
-  - byte+ :: add top 2 byte cells, leaving one sum byte cell an the eval stack
-  - call <fun> <#params> <p0> ... <pN> :: call a specific function (by ptr/int-id) + parameter (#locals is got from the function list/array)
-  - ensure-args <num> :: make sure num arguments are on the eval stack for this function
-  - ensure-byte-arg <idx> :: make sure that parameter at idx has type byte
+  commands in braces are extended/optional commands
+  commands tagged (!) do have allocation / deallocation requirements
+  registers are always statically allocated locations for each function call (locals) or globally allocated (globals)
+  a register is always a cell, a list-register is basically using two slots
+  - array-at <into-reg> <array-reg> <index-reg> ::
+  - array-cpy <into-reg> <array-reg> <reg-start> <reg-end> ::
+  - array-len <into-reg> <array-reg> ::
+  - bra-empty-list <reg> <label> :: jump to label if reg(tos) is an empty list (e.g. car = 0000 0000 0000 0001)
+  - bra <boolean-reg> <label> ::
+  - bra-b/i-(n)-less <reg-a> <reg-b> <label> ::
+  - bra-b/i-(n)-greater <reg-a> <reg-b> <label> ::
+  - bra-b/i-(n)-equal <reg-a> <reg-b> <label> ::
+  - bra-b/i-(n)zero <reg> <label> :: branch on byte/integer (not) zero
+  - break :: stop execution
+  - byte+-*/ <into-reg> <reg-1> <reg-2> :: add two registers into-reg
+  - byte-and/or/xor <into-reg> <reg-mask> <reg-value> ::
+  - byte++-- :: increment/decrement byte register
+  - byte-less/greater/equal? <into-reg> <reg-a> <reg-b> ::
+  - byte-zero? <into-reg> <reg> ::
+  - (!) call <into-reg> <fun> <#params> <p0> ... <pN> :: call a specific function (by ptr/int-id) + parameter (#locals is got from the function list/array)
+  - car :: is accessing the first cell of a list (car/cdr cell)
+  - cdr-resolve <into-reg> <list-reg> :: is resolving the second cell of a list (cdr cell), pointing to another cell-pair of (car/cdr) into-reg (and the next register) if <cell-num> = 2
+  - cons <into-reg> <value-reg> <list-reg> :: <list-reg> must be a pointer to a list, it cannot be the car/cdr pair, a new car/cdr pair needs to be allocated and the car/cdr cell pairs ref-count of the original list must be increment???!!!
+  - case <val-reg> <num> <const-0> <label-0> ... <const-n> <label-n>  ::
+  - compare <into-reg> <reg-a> <reg-b> :: compare to values (char, byte, int, string? ...)
+  (- empty-array <reg> :: set reg to an empty array)
+  - empty-list? <into-reg> <reg> :: set boolean if list is empty
+  (- ensure-args <num> :: make sure num arguments are on the eval stack for this function)
+  (- ensure-locals <num> :: ensure enough locals are allocated for this function)
+  (- ensure-struct <struct-label> <num> :: ensure arg-num is of type struct-label)
+  (- ensure-byte-arg <idx> :: make sure that parameter at idx has type byte)
+  (- ensure-int-arg <idx> :: make sure that parameter at idx has type int)
+  (- ensure-string-arg <idx> :: make sure that parameter at idx has type string)
+  (- ensure-float-arg <idx> :: make sure that parameter at idx has type float)
+  (- ensure-array-arg <idx> :: make sure that parameter at idx has type array)
+  (- ensure-list-arg <idx> :: make sure that parameter at idx has type list)
+  (- ensure-map-arg <idx> :: make sure that parameter at idx has type map)
+  - (!) free-list <reg>
+  - (!) free-array <reg>
+  - (!) free-float <reg>
+  - (!) free-map <reg>
+  - (!) free-struct <reg>
   - goto <label> :: simply jump
-  - make-list <num> :: create a list of the <num> topmost cells on the stack, putting car and cdr on the stack
-  - pop :: discard tos
-  - pop-into-arg <reg> :: pop tos into the given arg
-  - push-byte <val> :: push a byte value into a cell on the eval stack
-  - return :: simple return
-  - struct-create <label> :: allocate structure bytes, set cell-header, metadata and data, put ptr to struct onto stack?
-  - struct-get <data-off> :: get cell at data-off to tos (struct ptr in tos-2)
-  - struct-set <data-off> :: set cell at data-off to tos (struct ptr in tos-2)
+  - int+-*/ <into-reg> <reg-1> <reg-2> ::
+  - int-and/or/xor <into-reg> <reg-mask> <reg-value> ::
+  - int++-- <reg> :: increment/decrement int register
+  - int-(n)less/greater/equal <into-reg> <reg-a> <reg-b> :: integer (not) less/greater/equal the other
+  - int-zero <into-reg> <reg> ::
+  - label <symbol> :: jump-target (has no bytecode!)
+  - logical-and/or <into-reg> <reg-a> <reg-b> :: could be encoded using byte=0 for false, and byte=1 for true
+  - logical-not <into-reg> <reg> ::
+  - (!) make-array <into-reg> <num> <reg-1> ... <reg-n> :: create an array into-reg of num elements
+  - (!) make-empty-list <reg> :: set reg to an empty list
+  - make-int <into-reg> <low-reg> <high-reg> ::
+  - (!) make-list <into-reg> <num> <reg-1> ... <reg-n> :: create a list of the <num> topmost cells on the stack, putting car and cdr on the stack
+  - (!) make-string <into-reg> <string> :: create string into-reg
+  - make-zero-(byte/int) <reg> :: make a zero byte/int cell in reg
+  - make-byte-immediate <into-reg> byte-constant ::
+  - make-int-immediate <into-reg> int-constant ::
+  - (!) string->list <into-reg> <string-reg> :: make a list of chars from a string
+  - (!) list->string <into-reg> <list-reg> :: make a string from a list of chars
+  - (!) array->list <into-reg> <array-reg> ::
+  - (!) list->array <into-reg> <list-reg> ::
+  - (!) map->list <into-reg> <list-reg> :: list of key-value pairs
+  - (!) list->map <into-reg> <list-reg> :: make a map from a list of key-value pairs
+  - (!) return <reg> :: simple return
+  - (!) return-list <reg> :: return list (reg and next reg)
+  - (!) struct-create <into-reg> <label> <reg-1> ... <reg-n> :: create structure label into-reg setting its fields to <reg-1>..<reg-n>
+  - struct-get <into-reg> <data-off> <struct-reg> :: get cell at data-off to structure in reg into-reg
+  - struct-set <data-off> <struct-reg> <value-reg> :: set cell at data-off in structure reg to value in second reg
+  - throw-exception <num> <string> <reg-0> ... <reg-n> :: throw an exception with num context vars and a string message
+*** next iteration
+- memory management
+  - basic idea: don't do ref counting within a function
+    - do reference counting only upon returning form a function
+    - try to allocate/discard locally
+  - idea: memory pages
+    each page is used to allocate a certain type
+    - list page (car/cdr cell-pairs)
+    - array<> page (uniform type arrays)
+    - structure page (page storing structures)
+    - dynamicArray<> page (arrays of polymorphic types)
+    - hashmap page (table for hashmaps)
+    - float page (page for float numbers)
+    - byte-code page
+    - native-code page
+  - sketch a memory usage upon function enter / leave (and during execution) to find a way to achieve this goal
+  - atomic values (char, byte, int) are copied (to-from locals) without reference counting, except when used to create a list?
+  - lists and arrays/strings are allocated on the heap and need to ref-count the cells
+  - describe each instruction more closely to check how we can avoid reference counting
+  - maybe start with explicit memory management (alloc, free)
+- cisc commands
+  - use basic encoding (each reg = 1 byte), keep in mind to provide compact bytecodes for first 15 regs etc.
 ** memory management
 *** layout
 **** operations
@@ -1830,40 +2092,32 @@ c64 implementation detail:
     idea: since locals should be a fixed number, they could come first such that the accessing index (x) is fixed for locals and params, even though params may vary (variadic) allowing for only on zero page "register"/pointer
 **** global-frame [fixed number during program run?]
   global - cells  (access not so fast)
-
-**** collected code
-- cisc-code for builtin functions (not runtime) => no eval stack, all is directly referencing args, locals or globals
-  - byte/int+/- a/l/g# a/l/g# -> a/l/g#
-  - byte/int-inc/dec
-  - byte/int*//
-  - zerob?
-  - zeroi?
-  - bra-zerob/i?
-  - bra-greaterb/i?
-  - bra-equalb/i?
-  - bra-greater-or-equalb/i?
-  - goto/jump
-  - bra-nil?
-  - land/or/not
-  - cons a/l/g# a/l/g# -> a/l/g#
-  - car/cons = index0 index1 of list double cell
-  - struct-set a/l/g# a/l/g# a/l/g# :: set structure arg0, field# in arg1, to value arg2
-  - struct-get a/l/g# a/l/g# a/l/g# :: get structure arg0, field# in arg1 into arg2
 *** data types
 (nil pointer should be easy to spot!, e.g. zero page has no cells => first byte 0 = nil ptr)
 - cell
   - pointer to cell (need 15 bits)
-    layout: [ptr (15bits)] 1
+    layout: [ptr (15bits)] 1 (uneven pointers?, page warp?)
+  - pointer to cell-pair (list) (needs 14 bits)
+    layout: [ptr (14bits)] 10
   - header (need max bits, describing the type of the header + as much information as possible)
     headers are usually followed by the bytes specific for this type
-    layout: [type ()] .....010
-  - int (need max bits, low bits should all be zero to allow adding/substraction without shifting)
-    layout: [value (x bits)] ......00
-    range: 0..16383, -8192..8191
+    layout: [type ()] .....0100
+  - int (need max bits, low bits should all be zero to allow adding/subtraction without shifting)
+    layout: [value (x bits)] ......000
+    range: 0..8191, -4096..4095
   - byte/char (need 8 bits, one full byte should be used unmodified)
-    layout: [value (8 bits)] .....110
+    layout: [value (8 bits)] .....1100
   - specialty idea: bcd encoded digits (3) for exact number maybe?
 - float, exact, array/string, (hash)-map
+- list = pair of cells (car + cdr=ptr to next cell-pair), car=0 => empty-list or nil
+  e.g. list of bytes =
+  (1 . o)->(2 . o)->(ptr0 . x)  ;; o)-> = cdr pointer, ptr0 = a pointer to cell 0 which is encoded into hex 0001
+- list of pairs = (car=ptr to cell-pair of which car=key, cdr=value, + cdr=ptr to next pair)
+- e.g. list of pairs, byte->string
+  (o . o)->(o . o)->(ptr0 . x)
+   |        |
+   |        +->(5 . o)-> {header: string, length: 7, values: "at five"}
+   +-->(2 . o)-> {header: string, length: 6, values: "at two" }
 *** allocation
 *** deallocation
 ** continuations
