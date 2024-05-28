@@ -850,7 +850,7 @@
   (-> vm? vm?)
   (define target-reg (decode-cell-idx (get-current-byte-code a-vm 1)))
   (define array-cell-idx (decode-cell-idx (get-current-byte-code a-vm 2)))
-  (define idx (cell-byte-value (get-cell a-vm (decode-cell-idx (get-current-byte-code 3)))))
+  (define idx (cell-byte-value (get-cell a-vm (decode-cell-idx (get-current-byte-code a-vm 3)))))
   (increment-program-counter
    (set-cell a-vm target-reg (array-get a-vm array-cell-idx idx))
    4))
@@ -991,52 +991,59 @@
                                                     CISC_VM_RET VM_L2)
                                          "get-local"))
 
-  (define r_function-test-get-local (function 0 (pvector CISC_VM_CALL VM_L0 1 0 1 VM_L3 ;; vm is local@3
+  (define r_function-test-get-local (function 1 (pvector CISC_VM_CALL VM_L0 1 0 2 VM_L3 VM_L4 ;; vm is local@3
                                                          CISC_VM_BRK)
                                               "test-get-local"))
 
-  (define test-vm (make-vm #:structs (pvector r_struct-vm
-                                              r_struct-frame
-                                              r_struct-continuation
-                                              r_struct-function)
-                           #:locals (pvector
-                                     (cell) ;; result of test function (local @0)
-                                     (cell-byte (encode-idx 2 l-local)) ;; encoded ref to local 2 in the virtual machine
-                                     (cell-byte 47) ;; local @2 (should NOT be fetched!)
-                                     ;; struct of running vm
-                                     (cell-ptr
-                                      (cell-array
-                                       6
-                                       (pvector (cell) ;; frame-stack  - list of frames
-                                                (cell) ;; functions    - vector of functions
-                                                (cell-ptr  ;; frame        - frame
-                                                 (cell-array
-                                                  6
-                                                  (pvector (cell-ptr
-                                                            (cell-array ;; continuation
-                                                             2
-                                                             (pvector
-                                                              (cell-byte 0) ;; byte-code-idx
-                                                              (cell-byte 0) ;; function-idx
-                                                              )))
-                                                           (cell-byte 0) ;; param-count
-                                                           (cell-byte 3) ;; locals-count
-                                                           (cell-ptr      ;; locals - vector of cells
-                                                            (cell-array
-                                                             3
-                                                             (pvector
-                                                              (cell-byte 1)
-                                                              (cell-byte 2)
-                                                              (cell-byte 3))))
-                                                           (cell-ptr (cell-array 0 (pvector))) ;; params
-                                                           (cell) ;; return cell
-                                                           )))
-                                                (cell) ;; globals      - vector of cells
-                                                (cell) ;; structs      - vector of struct-definitions
-                                                (cell) ;; options      - vector of cells (options)
-                                                ))))
-                           #:functions (pvector r_function-test-get-local
-                                                r_function-get-local))))
+  (define test-get-local-vm
+    (make-vm #:structs (pvector r_struct-vm
+                                r_struct-frame
+                                r_struct-continuation
+                                r_struct-function)
+             #:locals (pvector
+                       (cell) ;; result of test function (local @0)
+                       (cell-byte (encode-idx 2 l-local)) ;; encoded ref to local 2 in the virtual machine
+                       (cell-byte 47) ;; local @2 (should NOT be fetched!)
+                       ;; struct of running vm
+                       (cell-ptr
+                        (cell-array
+                         6
+                         (pvector (cell) ;; frame-stack  - list of frames
+                                  (cell) ;; functions    - vector of functions
+                                  (cell-ptr  ;; frame        - frame
+                                   (cell-array
+                                    6
+                                    (pvector (cell-ptr
+                                              (cell-array ;; continuation
+                                               2
+                                               (pvector
+                                                (cell-byte 0) ;; byte-code-idx
+                                                (cell-byte 0) ;; function-idx
+                                                )))
+                                             (cell-byte 0) ;; param-count
+                                             (cell-byte 3) ;; locals-count
+                                             (cell-ptr      ;; locals - vector of cells
+                                              (cell-array
+                                               3
+                                               (pvector
+                                                (cell-byte 11)
+                                                (cell-byte 21) ;; <-- value got
+                                                (cell-byte 31))))
+                                             (cell-ptr (cell-array 0 (pvector))) ;; params
+                                             (cell) ;; return cell
+                                             )))
+                                  (cell) ;; globals      - vector of cells
+                                  (cell) ;; structs      - vector of struct-definitions
+                                  (cell) ;; options      - vector of cells (options)
+                                  )))
+                       (cell-byte 1)) ;; index into cell array
+             #:options (list ) ;; 'trace
+             #:functions (pvector r_function-test-get-local
+                                  r_function-get-local)))
+
+  (define test-get-local-vm-run (run-until-break test-get-local-vm))
+  (check-equal? (get-local test-get-local-vm-run 0)
+                (cell-byte 21)))
 
 ;; allocate memory for a structure and write reference into local cell
 ;; (define (allocate-struct-into))
