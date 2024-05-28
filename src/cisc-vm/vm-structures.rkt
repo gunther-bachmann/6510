@@ -9,42 +9,85 @@
 (module+ test #| require test utils |#
   (require "../6510-test-utils.rkt"))
 
+
+;; [xxxx xxxx xxxx xxxx] : cell
+
+;; [xxxx xxxx xxxx xxx1] : cell-ptr        points to any cell
+;; [xxxx xxxx xxxx xx10] : cell-list-ptr   points to a pair of cells (car, cdr)
+;; [xxxx xxxx xxxx x000] : cell-int        direct value (13 bit payload) (high 8, low 5)
+
+;; complex cells
+;; [xxxx xxxx xxx0 0100] : cell-map        meta-cell, cells following form the map
+;; [xxxx xxxx xxx0 1100] : cell-array      meta-cell, cells following form the array [ cannot be part of a list ]
+;; [xxxx xxxx xxx1 0100] : cell-struct     meta-cell, cells following form the structure
+;; [            01 1100]
+;; [           011 1100]
+;; [          0111 1100]
+
+;; [xxxx xxxx 1111 1100] : cell-byte       direct value (8 bit payload)
+
+;; if an array is to be put into a list or another complex cell (e.g. map, array, struct), it is wrapped in a cell-ptr!
+;; complex cells (e.g. list, array, map, struct) may contain (directly) only either cell-ptr, cell-list-ptr, cell-int or cell-byte
+
 ;; 16 bit element
 (struct cell ()
   #:transparent)
 
-;; pointer to a cell
-(struct cell-ptr cell (ref)
+;; arbitrary number of cells
+(struct celln cell ()
+  #:transparent)
+
+(struct atomic-cell cell ()
+  #:transparent)
+
+;; pointer to a cell (
+(struct cell-ptr atomic-cell (ref)
   #:transparent
   #:guard
   (struct-guard/c cell?))
 
-;; pointer to a list, which is 2 cells memory adjacent, car (any cell) and cdr cell (usually a cell-list-ptr)
-(struct cell-list-ptr cell (car cdr)
+;; pointer to a pair, which is 2 cells memory adjacent, car (any cell) and cdr cell (usually a cell-list-ptr)
+(struct cell-list-ptr atomic-cell (car cdr)
   #:transparent
   #:guard
-  (struct-guard/c cell? cell?))
+  (struct-guard/c atomic-cell? atomic-cell?))
 
 (struct cell-nil cell-list-ptr ()
   #:transparent
   #:guard
-  (struct-guard/c cell? cell?))
+  (struct-guard/c atomic-cell? atomic-cell?))
+
+(define VM_NIL_CELL (cell-nil (atomic-cell) (atomic-cell)))
 
 ;; flat value 0..255 or -128..127 (used for byte, char and boolean)
-(struct cell-byte cell (value)
+(struct cell-byte atomic-cell (value)
   #:transparent
   #:guard
   (struct-guard/c byte?))
 
 ;; flat value 0..8191 or -4096...4095
-(struct cell-int cell (value)
+(struct cell-int atomic-cell (value)
   #:transparent
   #:guard
   (struct-guard/c integer?))
 
-;; meta data for arrays, structures, maps, always memory adjacent with its data (struct-data, array-data, map-data, float)
-(struct cell-header cell ()
-  #:transparent)
+(struct cell-array celln
+  (size
+   array)
+  #:transparent
+  #:guard
+  (struct-guard/c
+   byte?
+   pvector?)) ;; vector of atomic cells!
+
+;; current implementation is an array
+;; (struct cell-struct cell-array
+;;   ()
+;;   #:transparent
+;;   #:guard
+;;   (struct-guard/c
+;;    byte?
+;;    pvector?))
 
 ;; keep in mind that strings are just byte arrays
 
@@ -94,6 +137,7 @@
    functions
    frame
    globals
+   structs
    options)
   #:transparent
   #:guard
@@ -102,7 +146,13 @@
    pvector?
    frame?
    pvector?
+   pvector?
    (listof symbol?)))
+
+;; type ids
+(define CISC_VM_TYPE_BYTE      1)
+(define CISC_VM_TYPE_INT       2)
+(define CISC_VM_TYPE_STRUCT    3)
 
 ;; byte code
 (define CISC_VM_BRK            0)
@@ -115,6 +165,10 @@
 (define CISC_VM_CAR            7)
 (define CISC_VM_CDR            8)
 (define CISC_VM_GOTO           9)
+(define CISC_VM_STRUCT_CREATE 10)
+(define CISC_VM_ARRAY_CREATE  11)
+(define CISC_VM_ARRAY_GET     12)
+(define CISC_VM_ARRAY_SET     13)
 
 ;; reference to locals
 (define VM_L0 0)
@@ -143,15 +197,22 @@
 (define VM_G5 133)
 (define VM_G6 134)
 
+;; encoded byte constants
+(define VM_I0 #b11000000)
+(define VM_I1 #b11000001)
+(define VM_I2 #b11000010)
+(define VM_I3 #b11000011)
+
 ;; create a vm with the given locals (in the current execution context) and the given functions
 ;; it is set to execute the first function at byte-code-index 0
 (define/contract (make-vm #:locals [locals (make-pvector 0 (cell))]
                           #:params [params (make-pvector 0 (cell))]
                           #:globals [globals (make-pvector 0 (cell))]
                           #:functions [functions (make-pvector 1 (function 0 (make-pvector 1 CISC_VM_BRK) "just-brk (0)"))]
+                          #:structs [structs (make-pvector 0 (cell))]
                           #:options [options (list)])
-  (->* [] [#:locals pvector? #:params pvector? #:globals pvector?  #:functions pvector? #:options (listof symbol?)] vm?)
-  (vm '() functions (frame (continuation 0 0) 0 0 locals params 0) globals options))
+  (->* [] [#:locals pvector? #:params pvector? #:globals pvector?  #:functions pvector? #:structs pvector? #:options (listof symbol?)] vm?)
+  (vm '() functions (frame (continuation 0 0) 0 0 locals params 0) globals structs options))
 
 (define/contract (set-locals-array a-vm new-locals)
   (-> vm? pvector? vm?)
@@ -364,9 +425,20 @@
   #:guard
   (struct-guard/c
    exact-nonnegative-integer? ;; 0..63
-   exact-nonnegative-integer? ;; 0..3, 0 = local, 1 = parameter, 2 = global
-   ;; (or/c 'local 'global 'parameter)
+   exact-nonnegative-integer? ;; 0..3, 0 = local, 1 = parameter, 2 = global, (idea: 3 = immediate byte value => index is an immediate constant (no reg use))
+   ;; (or/c 'local 'global 'parameter 'immediate)
    ))
+
+(define l-local 0)
+(define l-param 1)
+(define l-global 2)
+(define l-imm 3)
+
+(define/contract (encode-idx idx location)
+  (-> byte? byte? byte?)
+  (bitwise-ior
+   (arithmetic-shift (bitwise-and location #b11)  6)
+   (bitwise-and idx #b00111111)))
 
 (define/contract (decode-cell-idx encoded-idx)
   (-> byte? cell-idx?)
@@ -376,16 +448,24 @@
 
 (module+ test #| decode-cell-idx |#
   (check-equal? (decode-cell-idx #b01000010)
-                (cell-idx 2 1)))
+                (cell-idx 2 1))
+  (check-equal? (encode-idx (cell-idx-index (decode-cell-idx #b01000010))
+                            (cell-idx-location (decode-cell-idx #b01000010)))
+                #b01000010))
 
 (define/contract (get-cell a-vm a-cell-idx)
   (-> vm? cell-idx? cell?)
   (define idx (cell-idx-index a-cell-idx))
-  (case (cell-idx-location a-cell-idx)
-    ((0) (nth (frame-locals (vm-frame a-vm)) idx))
-    ((1) (nth (frame-params (vm-frame a-vm)) idx))
-    ((2) (nth (vm-globals a-vm) idx))
-    (else (raise-user-error "unknown cell-index"))))
+  (define i-cell
+    (case (cell-idx-location a-cell-idx)
+      ((0) (nth (frame-locals (vm-frame a-vm)) idx))
+      ((1) (nth (frame-params (vm-frame a-vm)) idx))
+      ((2) (nth (vm-globals a-vm) idx))
+      ((3) (cell-byte idx)) ;; create dummy cell to carry 0..63 as byte value
+      (else (raise-user-error "unknown cell-index"))))
+  (if (cell-ptr? i-cell)
+      (cell-ptr-ref i-cell)
+      i-cell))
 
 (module+ test #| get-cell |#
   (define local1params1globals2
@@ -457,9 +537,11 @@
      (make-vm #:functions
               (pvector (function 3 (pvector CISC_VM_IMMB VM_L0 1
                                             CISC_VM_IMMB VM_L1 2
-                                            CISC_VM_CALL VM_L2 1 0 2 VM_L0 VM_L1) "f0: call f1")
+                                            CISC_VM_CALL VM_L2 1 0 2 VM_L0 VM_L1)
+                                 "f0: call f1")
                        (function 1 (pvector CISC_VM_BYTE_ADD VM_L0 VM_P0 VM_P1
-                                            CISC_VM_RET VM_L0) "just add"))
+                                            CISC_VM_RET VM_L0)
+                                 "just add"))
               #:locals (pvector (cell-byte 1) (cell-byte 2) (cell)))
      6))
 
@@ -510,8 +592,8 @@
     1)
    (list (cell-byte 1) (cell-byte 2))))
 
-(define (construct-rev-cell-list elements (cur-head (cell-nil (cell) (cell))))
-  (->* [(listof cell?)] [cell-list-ptr?] cell-list-ptr?)
+(define (construct-rev-cell-list elements (cur-head VM_NIL_CELL))
+  (->* [(listof atomic-cell?)] [cell-list-ptr?] cell-list-ptr?)
   (if (empty? elements)
       cur-head
       (construct-rev-cell-list (cdr elements)
@@ -522,7 +604,7 @@
                 (cell-list-ptr (cell-byte 3)
                                (cell-list-ptr (cell-byte 2)
                                               (cell-list-ptr (cell-byte 1)
-                                                             (cell-nil (cell) (cell)))))))
+                                                             VM_NIL_CELL)))))
 
 (define (interpret-make-list a-vm)
   (-> vm? vm?)
@@ -542,7 +624,7 @@
     2)
    (cell-list-ptr (cell-byte 1)
                   (cell-list-ptr (cell-byte 2)
-                                 (cell-nil (cell) (cell))))))
+                                 VM_NIL_CELL))))
 
 (define (interpret-bra-emtpy-list a-vm)
   (-> vm? vm?)
@@ -557,14 +639,14 @@
    (frame-continuation
     (vm-frame
      (interpret-bra-emtpy-list
-      (make-vm #:locals (pvector (cell-nil (cell) (cell)))
+      (make-vm #:locals (pvector VM_NIL_CELL)
                #:functions (pvector (function 1 (pvector CISC_VM_BRA_EMPTY_LIST VM_L0 (two-complement-of -2)) "some"))))))
    (continuation 0 0))
   (check-equal?
    (frame-continuation
     (vm-frame
      (interpret-bra-emtpy-list
-      (make-vm #:locals (pvector (cell-nil (cell) (cell)))
+      (make-vm #:locals (pvector VM_NIL_CELL)
                #:functions (pvector (function 1 (pvector CISC_VM_BRA_EMPTY_LIST VM_L0 (two-complement-of 1)) "some"))))))
    (continuation 3 0)))
 
@@ -579,7 +661,7 @@
   (check-equal?
    (get-local
     (interpret-car
-     (make-vm #:locals (pvector (cell-list-ptr (cell-byte 1) (cell-list-ptr (cell-byte 2) (cell-nil (cell) (cell))))
+     (make-vm #:locals (pvector (cell-list-ptr (cell-byte 1) (cell-list-ptr (cell-byte 2) VM_NIL_CELL))
                                 (cell))
               #:functions (pvector (function 1 (pvector CISC_VM_CAR VM_L1 VM_L0) "car"))))
     1)
@@ -596,11 +678,11 @@
   (check-equal?
    (get-local
     (interpret-cdr
-     (make-vm #:locals (pvector (cell-list-ptr (cell-byte 1) (cell-list-ptr (cell-byte 2) (cell-nil (cell) (cell))))
+     (make-vm #:locals (pvector (cell-list-ptr (cell-byte 1) (cell-list-ptr (cell-byte 2) VM_NIL_CELL))
                                 (cell))
               #:functions (pvector (function 1 (pvector CISC_VM_CDR VM_L1 VM_L0) "car"))))
     1)
-   (cell-list-ptr (cell-byte 2) (cell-nil (cell) (cell)))))
+   (cell-list-ptr (cell-byte 2) VM_NIL_CELL)))
 
 (define (interpret-goto a-vm)
   (-> vm? vm?)
@@ -642,6 +724,10 @@
     [(= bc CISC_VM_CAR)             (interpret-car a-vm)]
     [(= bc CISC_VM_CDR)             (interpret-cdr a-vm)]
     [(= bc CISC_VM_GOTO)            (interpret-goto a-vm)]
+    [(= bc CISC_VM_ARRAY_CREATE)    (interpret-array-create a-vm)]
+    [(= bc CISC_VM_ARRAY_GET)       (interpret-array-get a-vm)]
+    [(= bc CISC_VM_ARRAY_SET)       (interpret-array-set a-vm)]
+    [(= bc CISC_VM_STRUCT_CREATE)   (interpret-struct-create a-vm)]
     [else (raise-user-error (format "unknown byte command ~a" (get-current-byte-code a-vm)))]))
 
 (module+ test #| interpret command |#
@@ -695,9 +781,9 @@
 (module+ test #| write-data |#
   (check-equal? (string-join (write-data (cell-byte 20)) "")
                 "byte: 20")
-  (check-equal? (string-join (write-data (cell-list-ptr (cell-byte 20) (cell-list-ptr (cell-byte 30) (cell-nil (cell) (cell))))) "")
+  (check-equal? (string-join (write-data (cell-list-ptr (cell-byte 20) (cell-list-ptr (cell-byte 30) VM_NIL_CELL))) "")
                 "(byte: 20 . (byte: 30 . nil))")
-  (check-equal? (string-join (write-data (cell-nil (cell) (cell))) "")
+  (check-equal? (string-join (write-data VM_NIL_CELL) "")
               "nil")
   (check-equal? (string-join (write-data (cell-ptr (cell-byte 10))) "")
               "->byte: 10"))
@@ -722,6 +808,235 @@
 
   (check-equal? (get-local vmRecFAfterRun 4)
                 (cell-byte 30)))
+
+(define/contract (array-create a-vm target-reg len default-value)
+  (-> vm? cell-idx? exact-nonnegative-integer? cell? vm?)
+  (set-cell a-vm target-reg
+            (cell-array len (make-pvector len default-value ))))
+
+(module+ test #| array-create |#
+  (check-equal?
+   (get-cell
+    (array-create
+     (make-vm #:locals (pvector 2 (cell)))
+     (cell-idx 0 0)
+     2
+     (cell-byte 42))
+    (cell-idx 0 0))
+   (cell-array 2 (pvector (cell-byte 42) (cell-byte 42)))))
+
+(define/contract (interpret-array-create a-vm)
+  (-> vm? vm?)
+  (define target-reg (decode-cell-idx (get-current-byte-code a-vm 1)))
+  (define len (cell-byte-value (get-cell a-vm (decode-cell-idx (get-current-byte-code a-vm 2)))))
+  (define default-value (get-cell a-vm (decode-cell-idx (get-current-byte-code a-vm 3))))
+  (increment-program-counter
+   (array-create a-vm target-reg len default-value) 4))
+
+(module+ test #| interpret-array-create |#
+  (check-equal?
+   (get-cell
+    (interpret-array-create
+     (make-vm #:locals (pvector (cell) (cell-byte 2) (cell-byte 10))
+              #:functions (pvector (function 0 (pvector CISC_VM_ARRAY_CREATE VM_L0 VM_L1 VM_L2) "fun"))))
+    (decode-cell-idx VM_L0))
+   (cell-array 2 (pvector (cell-byte 10) (cell-byte 10)))))
+
+(define/contract (array-get a-vm array-cell-idx idx)
+  (-> vm? cell-idx? exact-nonnegative-integer? cell?)
+  (nth (cell-array-array (get-cell a-vm array-cell-idx)) idx))
+
+(define/contract (interpret-array-get a-vm)
+  (-> vm? vm?)
+  (define target-reg (decode-cell-idx (get-current-byte-code a-vm 1)))
+  (define array-cell-idx (decode-cell-idx (get-current-byte-code a-vm 2)))
+  (define idx (cell-byte-value (get-cell a-vm (decode-cell-idx (get-current-byte-code 3)))))
+  (increment-program-counter
+   (set-cell a-vm target-reg (array-get a-vm array-cell-idx idx))
+   4))
+
+(define/contract (array-set a-vm target-idx array-cell-idx array-idx value)
+  (-> vm? cell-idx? cell-idx? byte? cell? vm?)
+  (define array-cell (get-cell a-vm array-cell-idx))
+  (set-cell a-vm target-idx
+            (cell-array (cell-array-size array-cell)
+                        (set-nth (cell-array-array array-cell) array-idx value))))
+
+(define/contract (interpret-array-set a-vm)
+  (-> vm? vm?)
+  (define array-cell-idx (decode-cell-idx (get-current-byte-code a-vm 2)))
+  (define idx (cell-byte-value (get-cell a-vm (decode-cell-idx (get-current-byte-code 3)))))
+  (define value (array-get a-vm array-cell-idx idx))
+  (increment-program-counter
+   (array-set a-vm array-cell-idx array-cell-idx idx value)
+   4))
+
+(module+ test #| array get and set |#
+  (check-equal?
+   (array-get
+    (array-create (make-vm #:locals (pvector (cell) (cell-byte 5))) (cell-idx 0 0) 10 (cell-byte 0))
+    (cell-idx 0 0)
+    5)
+   (cell-byte 0))
+
+  (check-equal?
+   (array-get
+    (array-set
+     (array-create (make-vm #:locals (pvector (cell) (cell-byte 5))) (cell-idx 0 0) 10 (cell-byte 0))
+     (cell-idx 0 0) ;; target reg
+     (cell-idx 0 0) ;; array reg
+     5              ;; index
+     (cell-byte 7)) ;; value
+    (cell-idx 0 0)
+    5)
+   (cell-byte 7))
+
+  (check-equal?
+   (array-get
+    (array-set
+     (array-create (make-vm #:locals (pvector (cell) (cell-byte 5))) (cell-idx 0 0) 10 (cell-byte 0))
+     (cell-idx 0 0) ;; target reg
+     (cell-idx 0 0) ;; array reg
+     5              ;; index
+     (cell-byte 7)) ;; value
+    (cell-idx 0 0)
+    6)
+   (cell-byte 0)))
+
+(define/contract (struct-create a-vm struct-def target-reg init-cells)
+  (-> vm? cell-array? cell-idx? (listof cell?) vm?)
+  (define field-num (cell-byte-value (nth (cell-array-array struct-def) 0)))
+  (define vm-w-alloc-struct (array-create a-vm target-reg field-num (cell)))
+  (foldl (lambda (idxd-cell-pair n-vm)
+           (array-set n-vm target-reg target-reg (car idxd-cell-pair) (cdr idxd-cell-pair)))
+         vm-w-alloc-struct
+        (map cons (range field-num) init-cells)))
+
+(define/contract (interpret-struct-create a-vm)
+  (-> vm? vm?)
+  (define target-reg (decode-cell-idx (get-current-byte-code a-vm 1)))
+  (define struct-def (cell-ptr-ref (nth (vm-structs a-vm) (get-current-byte-code a-vm 2))))
+  (define struct-size (cell-byte-value (nth (cell-array-array struct-def) 0)))
+  (define init-cells (get-next-decoded-cells a-vm struct-size 3))
+  (struct-create a-vm struct-def target-reg init-cells))
+
+(module+ test #| structure create, access = array get |#
+  (define vmStructPointDefinition
+    (cell-ptr (cell-array 4 (pvector (cell-byte 2) ;; two fields
+                                     (cell-ptr (cell-array 5 (pvector #\p #\o #\i #\n #\t))) ;; structure name
+                                     (cell-ptr (cell-array 1 (pvector #\x)))     ;; field 0 name
+                                     (cell-ptr (cell-array 1 (pvector #\y))))))) ;; field 1 name
+
+  (define vmStructCreate
+    (make-vm #:locals (pvector (cell) (cell-byte 10) (cell-byte 20))
+             #:functions (pvector (function 1 (pvector CISC_VM_STRUCT_CREATE VM_L0 0 #| index to structure definition |# VM_L1 VM_L2) "some"))
+             #:structs (pvector vmStructPointDefinition)))
+
+  (define vmStructCreateAfterRun
+    (interpret-struct-create vmStructCreate))
+
+  (check-equal? (get-local vmStructCreateAfterRun 0)
+                (cell-array 2 (pvector (cell-byte 10) (cell-byte 20)))))
+
+
+(define/contract (string->pvector a-str)
+  (-> string? pvector?)
+  (apply pvector (string->list a-str)))
+
+
+(define/contract (string->cell-array a-str)
+  (-> string? cell-array?)
+  (cell-array (string-length a-str) (string->pvector a-str)))
+
+(define/contract (make-structure name fields)
+  (-> string? (listof string?) cell-ptr?)
+  (cell-ptr
+   (cell-array
+    (+ 2 (length fields))
+    (apply pvector
+           (cons (cell-byte (length fields))
+                 (cons (cell-ptr (string->cell-array name))
+                       (map (lambda (field) (cell-ptr (string->cell-array field))) fields)))))))
+
+(module+ test #| write part of the interpreter within itself |#
+  (define r-struct-vm-frame 2)
+  (define r_struct-vm (make-structure "vm"
+                                      (list "frame-stack"
+                                            "functions"
+                                            "frame"
+                                            "globals"
+                                            "structs"
+                                            "options")))
+
+  (define r-struct-frame-locals 3)
+  (define r_struct-frame (make-structure "frame"
+                                         (list "continuation"
+                                               "param-count"
+                                               "locals-count"
+                                               "locals"
+                                               "params"
+                                               "return-cell")))
+  (define r_struct-continuation (make-structure "continuation"
+                                                (list "byte-code-idx"
+                                                      "func-idx")))
+  (define r_struct-function (make-structure "function"
+                                            (list "locals-count"
+                                                  "byte-code"
+                                                  "name")))
+
+
+  (define r_function-get-local (function 3 (pvector CISC_VM_ARRAY_GET VM_L0 VM_P0 (encode-idx r-struct-vm-frame l-imm )
+                                                    CISC_VM_ARRAY_GET VM_L1 VM_L0 (encode-idx r-struct-frame-locals l-imm)
+                                                    CISC_VM_ARRAY_GET VM_L2 VM_L1 VM_P1
+                                                    CISC_VM_RET VM_L2)
+                                         "get-local"))
+
+  (define r_function-test-get-local (function 0 (pvector CISC_VM_CALL VM_L0 1 0 1 VM_L3 ;; vm is local@3
+                                                         CISC_VM_BRK)
+                                              "test-get-local"))
+
+  (define test-vm (make-vm #:structs (pvector r_struct-vm
+                                              r_struct-frame
+                                              r_struct-continuation
+                                              r_struct-function)
+                           #:locals (pvector
+                                     (cell) ;; result of test function (local @0)
+                                     (cell-byte (encode-idx 2 l-local)) ;; encoded ref to local 2 in the virtual machine
+                                     (cell-byte 47) ;; local @2 (should NOT be fetched!)
+                                     ;; struct of running vm
+                                     (cell-ptr
+                                      (cell-array
+                                       6
+                                       (pvector (cell) ;; frame-stack  - list of frames
+                                                (cell) ;; functions    - vector of functions
+                                                (cell-ptr  ;; frame        - frame
+                                                 (cell-array
+                                                  6
+                                                  (pvector (cell-ptr
+                                                            (cell-array ;; continuation
+                                                             2
+                                                             (pvector
+                                                              (cell-byte 0) ;; byte-code-idx
+                                                              (cell-byte 0) ;; function-idx
+                                                              )))
+                                                           (cell-byte 0) ;; param-count
+                                                           (cell-byte 3) ;; locals-count
+                                                           (cell-ptr      ;; locals - vector of cells
+                                                            (cell-array
+                                                             3
+                                                             (pvector
+                                                              (cell-byte 1)
+                                                              (cell-byte 2)
+                                                              (cell-byte 3))))
+                                                           (cell-ptr (cell-array 0 (pvector))) ;; params
+                                                           (cell) ;; return cell
+                                                           )))
+                                                (cell) ;; globals      - vector of cells
+                                                (cell) ;; structs      - vector of struct-definitions
+                                                (cell) ;; options      - vector of cells (options)
+                                                ))))
+                           #:functions (pvector r_function-test-get-local
+                                                r_function-get-local))))
 
 ;; allocate memory for a structure and write reference into local cell
 ;; (define (allocate-struct-into))

@@ -1618,11 +1618,19 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 
     (point 1 2) ;; c-tor
   #+end_src
-- data layout
+- data layout of a structure definition is an array of cells
+  -> [
+     byte: number of field
+     string : name of struct
+     string : field name 0
+     ...
+     string : field name n
+     ]
+- data layout of an instantiated structure
   byte offset
-  0 [data-header-cell = struct header] => some bytes are following
-  2 [struct-meta-data (id)]
-  4 [struct-data-bytes]
+  2 [struct cell 0]
+  4 [struct cell 1]
+  ...
 - bytecode
   #+begin_src scheme
     (struct-create l0 'point 1 2) ;; l0 = pointer to structure, structure is explicitly allocated (gc undefined yet)
@@ -1974,9 +1982,11 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   commands tagged (!) do have allocation / deallocation requirements
   registers are always statically allocated locations for each function call (locals) or globally allocated (globals)
   a register is always a cell, a list-register is basically using two slots
-  - array-at <into-reg> <array-reg> <index-reg> ::
+  - array-get <into-reg> <array-reg> <index-reg> ::
+  - array-set <array-reg> <index-reg> <value-reg> ::
   - array-cpy <into-reg> <array-reg> <reg-start> <reg-end> ::
   - array-len <into-reg> <array-reg> ::
+  - array-create <into-reg> <array-len> <default-val> ::
   - bra-empty-list <reg> <label> :: jump to label if reg(tos) is an empty list (e.g. car = 0000 0000 0000 0001)
   - bra <boolean-reg> <label> ::
   - bra-b/i-(n)-less <reg-a> <reg-b> <label> ::
