@@ -1917,12 +1917,30 @@ describes some lisp implementations (with some techn. detail) and does perforamc
       (array-at l4 l2 l3)
       (struct-get l5 'byte-index l1)
       (int+ l6 p1 l5)
-      (struct-get l7 'byte-code l6)
+      (struct-get l7 'byte-code l2)
       (array-at l8 l7 l6)
       (int++ l6)
       (array-at l9 l7 l6)
-      (make-int l10 p8 p9)
+      (make-int l10 l8 l9)
       (return l10)
+    #+end_src
+  - function reverse with list building and tail call recursion
+    #+begin_src scheme
+      (defun (revers (a-list (listof cell)) (b-list (list cell) '())) -> (list cell)
+        "reverse a-list, consing it into b-list"
+          (if (nil? a-list)
+              b-list
+              (reverse (cdr a-list) (cons (car a-list) b-list))))
+    #+end_src
+    #+begin_src scheme
+      (label :tail-call)
+      (bra-empty-list P0 :return)
+      (car L0 P0)
+      (cons P1 L0 P1)
+      (cdr P0 P0)
+      (goto :tail-call)
+      (label :return)
+      (return P1)
     #+end_src
   - function with case
     #+begin_src scheme
