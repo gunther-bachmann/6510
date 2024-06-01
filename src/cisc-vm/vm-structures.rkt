@@ -185,6 +185,8 @@
 (define CISC_VM_IMMI          20) ;; 3          <byte-code> <target-reg> low-value high-value
 (define CISC_VM_INT_ADD       21) ;; 4          <byte-code> <target-reg> <int-a-reg> <int-b-reg>
 (define CISC_VM_INT_INC       22) ;; 2          <byte-code> <target-reg>
+(define CISC_VM_CASE          23) ;; 3+casen*3  <byte-code> <target-reg> <case-src-reg> case-no case-byte-value-0 <new-byte-idx> case-byte-value-1 <new-byte-idx> ... case-byte-value-n <new-byte-idx>
+(define CISC_VM_THROW         24) ;; 3+paramn   <byte-code> <exception-str> <param-no> <param-1> <param-2> ... <param-n>
 
 ;; BYTE_SUB
 ;; INT_SUB
@@ -416,6 +418,18 @@
            [continuation (struct-copy
                           continuation the-cont
                           [byte-code-idx (fx+ (continuation-byte-code-idx the-cont) delta)])])]))
+
+(define/contract (set-byte-code-idx a-vm new-byte-code-idx)
+  (-> vm? exact-nonnegative-integer? vm?)
+  (define the-frame (vm-frame a-vm))
+  (define the-cont (frame-continuation the-frame))
+  (struct-copy
+   vm a-vm
+   [frame (struct-copy
+           frame the-frame
+           [continuation (struct-copy
+                          continuation the-cont
+                          [byte-code-idx new-byte-code-idx])])]))
 
 (module+ test #| increment-program-counter |#
   (check-equal? (frame-continuation (vm-frame (increment-program-counter (make-vm))))
@@ -750,92 +764,6 @@
       (make-vm #:functions (pvector (function 0 (pvector CISC_VM_GOTO (two-complement-of 1)) "goto"))))))
    (continuation 2 0)))
 
-(define/contract (interpret-command a-vm)
-  (-> vm? vm?)
-  (define bc (get-current-byte-code a-vm))
-  (when (member 'trace (vm-options a-vm))
-    (define cur-frame (frame-continuation (vm-frame a-vm)))
-    (displayln (format "exec: bc: ~a  @function: ~a, byte-offset: ~a" bc
-                       (continuation-func-idx cur-frame)
-                       (continuation-byte-code-idx cur-frame))))
-  (cond
-    [(= bc CISC_VM_BRK)             (raise-user-error "brk command encountered")]
-    [(= bc CISC_VM_BYTE_ADD)        (interpret-byte+ a-vm)]
-    [(= bc CISC_VM_CALL)            (interpret-call a-vm)]
-    [(= bc CISC_VM_RET)             (interpret-return a-vm)]
-    [(= bc CISC_VM_IMMB)            (interpret-load-immediate-byte a-vm)]
-    [(= bc CISC_VM_MAKE_LIST)       (interpret-make-list a-vm)]
-    [(= bc CISC_VM_BRA_EMPTY_LIST)  (interpret-bra-emtpy-list a-vm)]
-    [(= bc CISC_VM_CAR)             (interpret-car a-vm)]
-    [(= bc CISC_VM_CDR)             (interpret-cdr a-vm)]
-    [(= bc CISC_VM_GOTO)            (interpret-goto a-vm)]
-    [(= bc CISC_VM_ARRAY_CREATE)    (interpret-array-create a-vm)]
-    [(= bc CISC_VM_ARRAY_GET)       (interpret-array-get a-vm)]
-    [(= bc CISC_VM_ARRAY_SET)       (interpret-array-set a-vm)]
-    [(= bc CISC_VM_STRUCT_CREATE)   (interpret-struct-create a-vm)] ;; creates an array of predefined "structure"
-    [(= bc CISC_VM_CONS)            (interpret-cons a-vm)]
-    [(= bc CISC_VM_INT_ADD)         (interpret-int-add a-vm)]
-    [(= bc CISC_VM_INT_INC)         (interpret-int-inc a-vm)]
-    [(= bc CISC_VM_MAKE_INT)        (interpret-make-int a-vm)]
-    [else (raise-user-error (format "unknown byte command ~a" (get-current-byte-code a-vm)))]))
-
-(module+ test #| interpret command |#
-  (define vm-before-interpretation (set-function local1params1globals2 0 add-function))
-  (define vm-after-interpretation (interpret-command vm-before-interpretation))
-
-  (check-equal? (frame-continuation (vm-frame vm-after-interpretation))
-                (continuation 4 0)
-                "program counter is increased by 4")
-  (check-equal? (get-local vm-after-interpretation 0)
-                (cell-byte 7)))
-
-(define/contract (run-until-break a-vm)
-  (-> vm? vm?)
-  (cond [(fx= 0 (get-current-byte-code a-vm)) a-vm]
-        [else
-         (define next-vm (interpret-command a-vm))
-         (run-until-break next-vm)]))
-
-(module+ test #| run-until-break |#
-  (define vmBeforeRun
-    (make-vm #:functions
-              (pvector (function 3 (pvector CISC_VM_IMMB VM_L0 1
-                                            CISC_VM_IMMB VM_L1 2
-                                            CISC_VM_CALL VM_L2 1 0 2 VM_L0 VM_L1
-                                            CISC_VM_BRK) "f0: call add, brk")
-                       (function 1 (pvector CISC_VM_BYTE_ADD VM_L0 VM_P0 VM_P1
-                                            CISC_VM_RET   VM_L0) "just add and return"))
-              #:locals (pvector (cell-byte 1) (cell-byte 2) (cell))))
-  (define vmAfterRun (run-until-break vmBeforeRun))
-
-  (check-equal? (get-local vmAfterRun 2)
-                (cell-byte 3))
-
-  (check-equal? (frame-continuation (vm-frame vmAfterRun))
-                (continuation 13 0)))
-
-(define/contract (write-data a-cell (strings '()))
-  (->* [cell?] [(listof string?)] (listof string?))
-  (cond
-    [(cell-byte? a-cell) (cons (format "byte: ~a" (cell-byte-value a-cell)) strings)]
-    [(cell-ptr? a-cell)  (cons "->" (write-data (cell-ptr-ref a-cell) strings))]
-    [(cell-nil? a-cell) (cons "nil" strings)]
-    [(cell-list-ptr? a-cell) (cons "("
-                                   (write-data (cell-list-ptr-car a-cell)
-                                               (cons " . "
-                                                     (write-data (cell-list-ptr-cdr a-cell)
-                                                                 (cons ")" strings)))))]
-    [else (raise-user-error (format "unknown cell type ~a" a-cell))]))
-
-(module+ test #| write-data |#
-  (check-equal? (string-join (write-data (cell-byte 20)) "")
-                "byte: 20")
-  (check-equal? (string-join (write-data (cell-list-ptr (cell-byte 20) (cell-list-ptr (cell-byte 30) VM_NIL_CELL))) "")
-                "(byte: 20 . (byte: 30 . nil))")
-  (check-equal? (string-join (write-data VM_NIL_CELL) "")
-              "nil")
-  (check-equal? (string-join (write-data (cell-ptr (cell-byte 10))) "")
-              "->byte: 10"))
 
 (module+ test #| recursive list generating function |#
   (define vmRecF
@@ -959,7 +887,7 @@
   (foldl (lambda (idxd-cell-pair n-vm)
            (array-set n-vm target-reg target-reg (car idxd-cell-pair) (cdr idxd-cell-pair)))
          vm-w-alloc-struct
-        (map cons (range field-num) init-cells)))
+         (map cons (range field-num) init-cells)))
 
 (define/contract (interpret-struct-create a-vm)
   (-> vm? vm?)
@@ -1276,17 +1204,19 @@
                                          CISC_VM_CDR            VM_P0 VM_P0
                                          CISC_VM_GOTO           (two-complement-of -14)
                                          CISC_VM_RET            VM_P1)
-                                    "reverse"))
+                              "reverse"))
+
+  (define/contract (r_make-list cells (i-result VM_NIL_CELL))
+    (-> (listof cell?) cell-list-ptr?)
+    (define (r_make-list-rev r-cells result)
+      (if (empty? r-cells)
+          result
+          (r_make-list-rev (cdr r-cells) (cell-list-ptr (car r-cells) result))))
+    (r_make-list-rev (reverse cells) i-result))
 
   (define r_reverse-test-vm
     (make-vm #:locals (pvector (cell)
-                               (cell-list-ptr
-                                (cell-byte 1)
-                                (cell-list-ptr
-                                 (cell-int 400)
-                                 (cell-list-ptr
-                                  (cell-byte 3)
-                                  VM_NIL_CELL)))
+                               (r_make-list (list (cell-byte 1) (cell-int 400) (cell-byte 3)))
                                VM_NIL_CELL)
              #:functions (pvector (function 0 (pvector CISC_VM_CALL VM_L0 1 0 2 VM_L1 VM_L2
                                                        CISC_VM_BRK)
@@ -1297,13 +1227,80 @@
   (define r_reverse-test-vm-run (run-until-break r_reverse-test-vm))
 
   (check-equal? (get-local r_reverse-test-vm-run 0)
-                (cell-list-ptr
-                 (cell-byte 3)
-                 (cell-list-ptr
-                  (cell-int 400)
-                  (cell-list-ptr
-                   (cell-byte 1)
-                   VM_NIL_CELL)))))
+                (r_make-list (list (cell-byte 3) (cell-int 400) (cell-byte 1)))))
+
+;; <byte-code> <case-src-reg> case-no case-value-0 <case-ptr> <case-value-1> <case-ptr> ... <case-value-n> <case-ptr>
+(define/contract (interpret-case a-vm)
+  (-> vm? vm?)
+  (define source-cell-val (cell-value (get-cell a-vm (decode-cell-idx (get-current-byte-code a-vm 1)))))
+  (define case-no (get-current-byte-code a-vm 2))
+  (define case-found
+    (findf (lambda (pair) (eq? (car pair) source-cell-val))
+           (map (lambda (idx) (cons (get-current-byte-code a-vm (fx+ 3 (* 3 idx)))
+                               (fx+  (get-current-byte-code a-vm (fx+ 4 (* 3 idx)) )
+                                     (arithmetic-shift (get-current-byte-code a-vm (fx+ 5 (* 3 idx))) 8))))
+                (range case-no))))
+  (if case-found
+      (set-byte-code-idx a-vm (cdr case-found))
+      (increment-program-counter a-vm (fx+ 3 (* 3 case-no)))))
+
+(module+ test #| interpret-case |#
+  (define (case-test-vm check-val)
+    (make-vm
+     #:locals (pvector (cell-byte check-val))
+     #:functions
+     (pvector
+      (function 1 (pvector CISC_VM_CASE VM_L0 3
+                           1  #x01 #x01
+                           15 #x20 #x01
+                           20 #x00 #xff)
+                "case-fun"))))
+
+  (check-equal? (continuation-byte-code-idx
+                 (frame-continuation
+                  (vm-frame
+                   (interpret-case (case-test-vm 15)))))
+                #x0120)
+
+  (check-equal? (continuation-byte-code-idx
+                 (frame-continuation
+                  (vm-frame
+                   (interpret-case (case-test-vm 1)))))
+                #x0101)
+
+  (check-equal? (continuation-byte-code-idx
+                 (frame-continuation
+                  (vm-frame
+                   (interpret-case (case-test-vm 20)))))
+                #xFF00)
+
+  (check-equal? (continuation-byte-code-idx
+                 (frame-continuation
+                  (vm-frame
+                   (interpret-case (case-test-vm 30)))))
+                12))
+
+;; no idea how to handle this yet (e.g. register function to be called, have exception-handle-frames and unwind up to them)
+(define/contract (interpret-throw-exception a-vm)
+  (-> vm? vm?)
+  (define error-string (get-cell a-vm (decode-cell-idx (get-current-byte-code a-vm 1))))
+  (define param-no (get-current-byte-code a-vm 2))
+  (define param-cells (get-next-decoded-cells a-vm param-no 3))
+  (writeln (format "EXCEPTION with error: ~a params: ~a" error-string (string-join (flatten (map write-data param-cells)))))
+  (increment-program-counter
+   a-vm
+   (fx+ 3 param-no)))
+
+(module+ test #| throw exceptin |#
+  (skip "throw exception does just some output currently (implementation incomplete)"
+        (interpret-throw-exception
+         (make-vm
+          #:locals (pvector (cell-ptr (cell-array 5 (string->pvector "error")))
+                            (cell-byte 1)
+                            (cell-byte 10))
+          #:functions (pvector (function 0 (pvector CISC_VM_THROW VM_L0 2 VM_L1 VM_L2)
+                                         "fun"))))))
+
 
 ;; MEMORY TRACKING ---
 
@@ -1328,3 +1325,93 @@
 ;; free allocated memory pointed to by ref (could be a cell, a struct, ...)
 ;; first iteration (gc + reference counting is be part of another iteration)
 ;; (define (free-ref))
+
+
+(define/contract (interpret-command a-vm)
+  (-> vm? vm?)
+  (define bc (get-current-byte-code a-vm))
+  (when (member 'trace (vm-options a-vm))
+    (define cur-frame (frame-continuation (vm-frame a-vm)))
+    (displayln (format "exec: bc: ~a  @function: ~a, byte-offset: ~a" bc
+                       (continuation-func-idx cur-frame)
+                       (continuation-byte-code-idx cur-frame))))
+  (cond
+    [(= bc CISC_VM_BRK)             (raise-user-error "brk command encountered")]
+    [(= bc CISC_VM_BYTE_ADD)        (interpret-byte+ a-vm)]
+    [(= bc CISC_VM_CALL)            (interpret-call a-vm)]
+    [(= bc CISC_VM_RET)             (interpret-return a-vm)]
+    [(= bc CISC_VM_IMMB)            (interpret-load-immediate-byte a-vm)]
+    [(= bc CISC_VM_MAKE_LIST)       (interpret-make-list a-vm)]
+    [(= bc CISC_VM_BRA_EMPTY_LIST)  (interpret-bra-emtpy-list a-vm)]
+    [(= bc CISC_VM_CAR)             (interpret-car a-vm)]
+    [(= bc CISC_VM_CDR)             (interpret-cdr a-vm)]
+    [(= bc CISC_VM_GOTO)            (interpret-goto a-vm)]
+    [(= bc CISC_VM_ARRAY_CREATE)    (interpret-array-create a-vm)]
+    [(= bc CISC_VM_ARRAY_GET)       (interpret-array-get a-vm)]
+    [(= bc CISC_VM_ARRAY_SET)       (interpret-array-set a-vm)]
+    [(= bc CISC_VM_STRUCT_CREATE)   (interpret-struct-create a-vm)] ;; creates an array of predefined "structure"
+    [(= bc CISC_VM_CONS)            (interpret-cons a-vm)]
+    [(= bc CISC_VM_INT_ADD)         (interpret-int-add a-vm)]
+    [(= bc CISC_VM_INT_INC)         (interpret-int-inc a-vm)]
+    [(= bc CISC_VM_MAKE_INT)        (interpret-make-int a-vm)]
+    [(= bc CISC_VM_CASE)            (interpret-case a-vm)]
+    [(= bc CISC_VM_THROW)           (interpret-throw-exception a-vm)]
+    [else (raise-user-error (format "unknown byte command ~a" (get-current-byte-code a-vm)))]))
+
+(module+ test #| interpret command |#
+  (define vm-before-interpretation (set-function local1params1globals2 0 add-function))
+  (define vm-after-interpretation (interpret-command vm-before-interpretation))
+
+  (check-equal? (frame-continuation (vm-frame vm-after-interpretation))
+                (continuation 4 0)
+                "program counter is increased by 4")
+  (check-equal? (get-local vm-after-interpretation 0)
+                (cell-byte 7)))
+
+(define/contract (run-until-break a-vm)
+  (-> vm? vm?)
+  (cond [(fx= 0 (get-current-byte-code a-vm)) a-vm]
+        [else
+         (define next-vm (interpret-command a-vm))
+         (run-until-break next-vm)]))
+
+(module+ test #| run-until-break |#
+  (define vmBeforeRun
+    (make-vm #:functions
+             (pvector (function 3 (pvector CISC_VM_IMMB VM_L0 1
+                                           CISC_VM_IMMB VM_L1 2
+                                           CISC_VM_CALL VM_L2 1 0 2 VM_L0 VM_L1
+                                           CISC_VM_BRK) "f0: call add, brk")
+                      (function 1 (pvector CISC_VM_BYTE_ADD VM_L0 VM_P0 VM_P1
+                                           CISC_VM_RET   VM_L0) "just add and return"))
+             #:locals (pvector (cell-byte 1) (cell-byte 2) (cell))))
+  (define vmAfterRun (run-until-break vmBeforeRun))
+
+  (check-equal? (get-local vmAfterRun 2)
+                (cell-byte 3))
+
+  (check-equal? (frame-continuation (vm-frame vmAfterRun))
+                (continuation 13 0)))
+
+(define/contract (write-data a-cell (strings '()))
+  (->* [cell?] [(listof string?)] (listof string?))
+  (cond
+    [(cell-byte? a-cell) (cons (format "byte: ~a" (cell-byte-value a-cell)) strings)]
+    [(cell-ptr? a-cell)  (cons "->" (write-data (cell-ptr-ref a-cell) strings))]
+    [(cell-nil? a-cell) (cons "nil" strings)]
+    [(cell-list-ptr? a-cell) (cons "("
+                                   (write-data (cell-list-ptr-car a-cell)
+                                               (cons " . "
+                                                     (write-data (cell-list-ptr-cdr a-cell)
+                                                                 (cons ")" strings)))))]
+    [else (raise-user-error (format "unknown cell type ~a" a-cell))]))
+
+(module+ test #| write-data |#
+  (check-equal? (string-join (write-data (cell-byte 20)) "")
+                "byte: 20")
+  (check-equal? (string-join (write-data (cell-list-ptr (cell-byte 20) (cell-list-ptr (cell-byte 30) VM_NIL_CELL))) "")
+                "(byte: 20 . (byte: 30 . nil))")
+  (check-equal? (string-join (write-data VM_NIL_CELL) "")
+                "nil")
+  (check-equal? (string-join (write-data (cell-ptr (cell-byte 10))) "")
+                "->byte: 10"))
