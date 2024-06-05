@@ -1245,7 +1245,7 @@ package (32bits)
 - copy :: pushes tos (dup)
 - ARG :: replace tos=N with Nth argument to function
 - SETARG :: write tos to tos-1'th argument of the function
-** clisp bytecode specification :VM:
+** DONE clisp bytecode specification :VM:
 [[https://www.gnu.org/software/clisp/impnotes/bytecode.html][reference]]
 *** instructions
 **** constants
@@ -1482,6 +1482,28 @@ There are special one-byte instructions (without explicit operands) for the foll
 | (CONST&PUSH n) | 0 ≤ /n/ < 30    |
 | (STORE n)      | 0 ≤ /n/ < 8     |
 
+** DONE pico lisp :VM:SYS:
+[[https://software-lab.de/doc/ref.html#cell][pico lisp reference]]
+*** concepts
+- all values are stored in a cell, which is made of a 2x64 bit value
+- cells a pointed to by pointers tagged with the type  (using 2 bits)
+- garbage collector uses one bit [w/i the pointer]
+- type can be
+  - pair     (... 000[0])
+  - number    (...S01[0])
+  - bignumber (...S10[0])
+  - symbol    (...100[0])
+    - NIL
+    - external
+    - internal
+    - transient
+  - big numbers are held on the heap (as list of digits) and pointed to
+- grabage collection makes use of a simple mark and sweep
+  no compaction necessary, since there is no defragmentation (only cells on the heap).
+- more complex types are made of lists, having the benefit of very simple memory and type system
+  hash map = list of key value pairs
+  array = list
+- simplicity gives way to simple/fast algorithms
 ** LeLisp: A complete LISP System :SYS:VM:
 [[pdfview:~/Downloads/c64_classics/minilisp/03_lelisp.pdf][book]], 709p, 1993
 - includes chapter about [[pdfview:~/Downloads/c64_classics/minilisp/03_lelisp.pdf::498++0.00][LLM3]], a VM for LeLisp
@@ -1995,31 +2017,31 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   commands tagged (!) do have allocation / deallocation requirements
   registers are always statically allocated locations for each function call (locals) or globally allocated (globals)
   a register is always a cell, a list-register is basically using two slots
-  - array-get <into-reg> <array-reg> <index-reg> ::
-  - array-set <array-reg> <index-reg> <value-reg> ::
-  - array-cpy <into-reg> <array-reg> <reg-start> <reg-end> ::
-  - array-len <into-reg> <array-reg> ::
-  - array-create <into-reg> <array-len> <default-val> ::
-  - bra-empty-list <reg> <label> :: jump to label if reg(tos) is an empty list (e.g. car = 0000 0000 0000 0001)
-  - bra <boolean-reg> <label> ::
-  - bra-b/i-(n)-less <reg-a> <reg-b> <label> ::
-  - bra-b/i-(n)-greater <reg-a> <reg-b> <label> ::
-  - bra-b/i-(n)-equal <reg-a> <reg-b> <label> ::
-  - bra-b/i-(n)zero <reg> <label> :: branch on byte/integer (not) zero
-  - break :: stop execution
-  - byte+-*/ <into-reg> <reg-1> <reg-2> :: add two registers into-reg
-  - byte-and/or/xor <into-reg> <reg-mask> <reg-value> ::
-  - byte++-- :: increment/decrement byte register
-  - byte-less/greater/equal? <into-reg> <reg-a> <reg-b> ::
-  - byte-zero? <into-reg> <reg> ::
-  - (!) call <into-reg> <fun> <#params> <p0> ... <pN> :: call a specific function (by ptr/int-id) + parameter (#locals is got from the function list/array)
-  - car :: is accessing the first cell of a list (car/cdr cell)
-  - cdr-resolve <into-reg> <list-reg> :: is resolving the second cell of a list (cdr cell), pointing to another cell-pair of (car/cdr) into-reg (and the next register) if <cell-num> = 2
-  - cons <into-reg> <value-reg> <list-reg> :: <list-reg> must be a pointer to a list, it cannot be the car/cdr pair, a new car/cdr pair needs to be allocated and the car/cdr cell pairs ref-count of the original list must be increment???!!!
-  - case <val-reg> <num> <const-0> <label-0> ... <const-n> <label-n>  ::
-  - compare <into-reg> <reg-a> <reg-b> :: compare to values (char, byte, int, string? ...)
+  - [X] array-get <into-reg> <array-reg> <index-reg> ::
+  - [X] array-set <array-reg> <index-reg> <value-reg> ::
+  - [ ] array-cpy <into-reg> <array-reg> <reg-start> <reg-end> ::
+  - [ ] array-len <into-reg> <array-reg> ::
+  - [X] array-create <into-reg> <array-len> <default-val> ::
+  - [X] bra-empty-list <reg> <label> :: jump to label if reg(tos) is an empty list (e.g. car = 0000 0000 0000 0001)
+  - [ ] bra <boolean-reg> <label> ::
+  - [ ] bra-b/i-(n)-less <reg-a> <reg-b> <label> ::
+  - [ ] bra-b/i-(n)-greater <reg-a> <reg-b> <label> ::
+  - [ ] bra-b/i-(n)-equal <reg-a> <reg-b> <label> ::
+  - [ ] bra-b/i-(n)zero <reg> <label> :: branch on byte/integer (not) zero
+  - [ ] break :: stop execution
+  - [-] byte+-*/ <into-reg> <reg-1> <reg-2> :: add two registers into-reg
+  - [-] byte-and/or/xor <into-reg> <reg-mask> <reg-value> ::
+  - [ ] byte++-- :: increment/decrement byte register
+  - [ ] byte-less/greater/equal? <into-reg> <reg-a> <reg-b> ::
+  - [ ] byte-zero? <into-reg> <reg> ::
+  - [X] call <into-reg> <fun> <#params> <p0> ... <pN> :: call a specific function (by ptr/int-id) + parameter (#locals is got from the function list/array)
+  - [X] car <into-reg> <list-reg> :: is accessing the first cell of a list (car/cdr cell)
+  - [X] cdr <into-reg> <list-reg> :: is resolving the second cell of a list (cdr cell), pointing to another cell-pair of (car/cdr) into-reg (and the next register) if <cell-num> = 2
+  - [X] cons <into-reg> <value-reg> <list-reg> :: <list-reg> must be a pointer to a list, it cannot be the car/cdr pair, a new car/cdr pair needs to be allocated and the car/cdr cell pairs ref-count of the original list must be increment???!!!
+  - [X] case <val-reg> <num> <const-0> <label-0> ... <const-n> <label-n>  ::
+  - [ ] compare <into-reg> <reg-a> <reg-b> :: compare to values (char, byte, int, string? ...)
   (- empty-array <reg> :: set reg to an empty array)
-  - empty-list? <into-reg> <reg> :: set boolean if list is empty
+  - [ ] empty-list? <into-reg> <reg> :: set boolean if list is empty
   (- ensure-args <num> :: make sure num arguments are on the eval stack for this function)
   (- ensure-locals <num> :: ensure enough locals are allocated for this function)
   (- ensure-struct <struct-label> <num> :: ensure arg-num is of type struct-label)
@@ -2035,36 +2057,52 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   - (!) free-float <reg>
   - (!) free-map <reg>
   - (!) free-struct <reg>
-  - goto <label> :: simply jump
-  - int+-*/ <into-reg> <reg-1> <reg-2> ::
-  - int-and/or/xor <into-reg> <reg-mask> <reg-value> ::
-  - int++-- <reg> :: increment/decrement int register
-  - int-(n)less/greater/equal <into-reg> <reg-a> <reg-b> :: integer (not) less/greater/equal the other
-  - int-zero <into-reg> <reg> ::
-  - label <symbol> :: jump-target (has no bytecode!)
-  - logical-and/or <into-reg> <reg-a> <reg-b> :: could be encoded using byte=0 for false, and byte=1 for true
-  - logical-not <into-reg> <reg> ::
-  - (!) make-array <into-reg> <num> <reg-1> ... <reg-n> :: create an array into-reg of num elements
-  - (!) make-empty-list <reg> :: set reg to an empty list
-  - make-int <into-reg> <low-reg> <high-reg> ::
-  - (!) make-list <into-reg> <num> <reg-1> ... <reg-n> :: create a list of the <num> topmost cells on the stack, putting car and cdr on the stack
-  - (!) make-string <into-reg> <string> :: create string into-reg
-  - make-zero-(byte/int) <reg> :: make a zero byte/int cell in reg
-  - make-byte-immediate <into-reg> byte-constant ::
-  - make-int-immediate <into-reg> int-constant ::
-  - (!) string->list <into-reg> <string-reg> :: make a list of chars from a string
-  - (!) list->string <into-reg> <list-reg> :: make a string from a list of chars
-  - (!) array->list <into-reg> <array-reg> ::
-  - (!) list->array <into-reg> <list-reg> ::
-  - (!) map->list <into-reg> <list-reg> :: list of key-value pairs
-  - (!) list->map <into-reg> <list-reg> :: make a map from a list of key-value pairs
-  - (!) return <reg> :: simple return
-  - (!) return-list <reg> :: return list (reg and next reg)
-  - (!) struct-create <into-reg> <label> <reg-1> ... <reg-n> :: create structure label into-reg setting its fields to <reg-1>..<reg-n>
-  - struct-get <into-reg> <data-off> <struct-reg> :: get cell at data-off to structure in reg into-reg
-  - struct-set <data-off> <struct-reg> <value-reg> :: set cell at data-off in structure reg to value in second reg
-  - throw-exception <num> <string> <reg-0> ... <reg-n> :: throw an exception with num context vars and a string message
-*** next iteration
+  - [X] goto <label> :: simply jump
+  - [-] int+-*/ <into-reg> <reg-1> <reg-2> ::
+  - [ ] int-and/or/xor <into-reg> <reg-mask> <reg-value> ::
+  - [-] int++-- <reg> :: increment/decrement int register
+  - [ ] int-(n)less/greater/equal <into-reg> <reg-a> <reg-b> :: integer (not) less/greater/equal the other
+  - [ ] int-zero <into-reg> <reg> ::
+  - [X] label <symbol> :: jump-target (has no bytecode!)
+  - [ ] logical-and/or <into-reg> <reg-a> <reg-b> :: could be encoded using byte=0 for false, and byte=1 for true
+  - [ ] logical-not <into-reg> <reg> ::
+  - [X] make-array <into-reg> <num> <reg-1> ... <reg-n> :: create an array into-reg of num elements
+  - [ ] (!) make-empty-list <reg> :: set reg to an empty list
+  - [X] make-int <into-reg> <low-reg> <high-reg> ::
+  - [ ] (!) make-list <into-reg> <num> <reg-1> ... <reg-n> :: create a list of the <num> topmost cells on the stack, putting car and cdr on the stack
+  - [ ] (!) make-string <into-reg> <string> :: create string into-reg
+  - [ ] make-zero-(byte/int) <reg> :: make a zero byte/int cell in reg
+  - [X] make-byte-immediate <into-reg> byte-constant ::
+  - [X] make-int-immediate <into-reg> int-constant ::
+  - [ ] (!) string->list <into-reg> <string-reg> :: make a list of chars from a string
+  - [ ] (!) list->string <into-reg> <list-reg> :: make a string from a list of chars
+  - [ ] (!) array->list <into-reg> <array-reg> ::
+  - [ ] (!) list->array <into-reg> <list-reg> ::
+  - [ ] (!) map->list <into-reg> <list-reg> :: list of key-value pairs
+  - [ ] (!) list->map <into-reg> <list-reg> :: make a map from a list of key-value pairs
+  - [X] (!) return <reg> :: simple return
+  - [ ] (!) return-list <reg> :: return list (reg and next reg)
+  - [X] (!) struct-create <into-reg> <label> <reg-1> ... <reg-n> :: create structure label into-reg setting its fields to <reg-1>..<reg-n>
+  - [-] struct-get <into-reg> <data-off> <struct-reg> :: get cell at data-off to structure in reg into-reg
+  - [-] struct-set <data-off> <struct-reg> <value-reg> :: set cell at data-off in structure reg to value in second reg
+  - [-] throw-exception <num> <string> <reg-0> ... <reg-n> :: throw an exception with num context vars and a string message
+*** next
+- simple translator scheme->byte-code
+- (m-def (<name> (<arg> <type> <default) ..) -> <type>
+   ...)
+  gets translated to a funcion definition that can be added to the virtual machine
+- keep meta information
+  - source code location
+  - default values
+  - types
+  - name -> index
+- (<name> <arg> ...)
+  gets translated to (resolving name to function-index)
+  (call <target-reg> function-index <param-no> ...)
+- there needs to be done some register allocation (VM_​Lx)
+  each (sub) expression is assigned to a local register
+  a register that is not used later in the program can be reused (optimization => later)
+*** next
 - memory management
   - basic idea: don't do ref counting within a function
     - do reference counting only upon returning form a function
