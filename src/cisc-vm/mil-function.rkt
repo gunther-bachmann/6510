@@ -44,16 +44,16 @@
   ()
   #:transparent)
 
-(struct ed-if-usage expression-def
-  ;; special because parameters of if underly a sepcial execution order (no strict eval)
-  (bool-expr true-expr false-exprs)
-  #:transparent
-  #:guard
-  (struct-guard/c expression-def? expression-def? (listof expression-def?)))
-
 (struct ed-function-call expression-def
   ;; strict eval parameter evaluation
   (fun params)
+  #:transparent
+  #:guard
+  (struct-guard/c symbol? (listof expression-def?)))
+
+(struct ed-if-call ed-function-call
+  ;; special because parameters of if underly a sepcial execution order (no strict eval)
+  ()
   #:transparent
   #:guard
   (struct-guard/c symbol? (listof expression-def?)))
@@ -188,9 +188,10 @@
   [(_ '())
    #'(ed-nil)]
   [(_ ((~literal if) bool-param true-param false-param ...))
-   #'(ed-if-usage (m-expression-def bool-param)
-                                      (m-expression-def true-param)
-                                      (list (m-expression-def false-param) ...))]
+   #'(ed-if-call 'if (cons (m-expression-def bool-param)
+                       (cons
+                        (m-expression-def true-param)
+                        (list (m-expression-def false-param) ...))))]
   [(_ (id param ...))
    #'(ed-function-call 'id (list (m-expression-def param) ...))]
   [(_ value)
@@ -223,7 +224,7 @@
 
   (check-equal?
    (m-expression-def (if #t "A" "B"))
-   (ed-if-usage (edv-boolean #t) (edv-string "A") (list (edv-string "B"))))
+   (ed-if-call 'if (list (edv-boolean #t) (edv-string "A") (edv-string "B"))))
 
   (check-equal?
    (m-expression-def (fn2))
@@ -257,10 +258,11 @@
     '("reverse a-list, consing it into b-list")
     ;; body
     (list
-     (ed-if-usage
-      (ed-function-call 'nil? (list (edv-id 'a-list)))
-      (edv-id 'b-list)
+     (ed-if-call
+      'if
       (list
+       (ed-function-call 'nil? (list (edv-id 'a-list)))
+       (edv-id 'b-list)
        (ed-function-call
         'reverse
         (list
@@ -281,10 +283,11 @@
   #:transparent)
 
 (define step0 (list
-               (ed-if-usage
-                (ed-function-call 'nil? (list (edv-id 'a-list)))
-                (edv-id 'b-list)
+               (ed-if-call
+                'if
                 (list
+                 (ed-function-call 'nil? (list (edv-id 'a-list)))
+                 (edv-id 'b-list)
                  (ed-function-call
                   'reverse
                   (list
@@ -296,10 +299,11 @@
                      (edv-id 'b-list)))))))))
 
 (define step1 (list
-     (ed-if-usage
-      (ed-function-call 'nil? (list (edv-id 'a-list)))
-      (edv-id 'b-list)
+     (ed-if-call
+      'if
       (list
+       (ed-function-call 'nil? (list (edv-id 'a-list)))
+       (edv-id 'b-list)
        (ed-function-call
         'reverse
         (list
@@ -308,10 +312,11 @@
          (ed-function-call 'cons (list (loc-ref 'a) (edv-id 'b-list))))))))) ;; now this call has only refs to ids (done), extract call itself to id b'
 
 (define step2 (list
-     (ed-if-usage
-      (ed-function-call 'nil? (list (edv-id 'a-list)))
-      (edv-id 'b-list)
+     (ed-if-call
+      'if
       (list
+       (ed-function-call 'nil? (list (edv-id 'a-list)))
+       (edv-id 'b-list)
        (ed-function-call
         'reverse
         (list
@@ -321,10 +326,11 @@
          (loc-ref 'b)))))))
 
 (define step3 (list
-     (ed-if-usage
-      (ed-function-call 'nil? (list (edv-id 'a-list)))
-      (edv-id 'b-list)
+     (ed-if-call
+      'if
       (list
+       (ed-function-call 'nil? (list (edv-id 'a-list)))
+       (edv-id 'b-list)
        (-loc-set 'a (ed-function-call 'car (list (edv-id 'a-list))))
        (-loc-set 'b (ed-function-call 'cons (list (loc-ref 'a) (edv-id 'b-list)))) ;; p1 can be reused here
        (-loc-set 'c (ed-function-call 'cdr (list (edv-id 'a-list)))) ;; p0 can be reused here
@@ -362,7 +368,6 @@
       (listof (list/c (or/c loc-ref? edv-id?) (listof -loc-set?) (listof loc-ref?))))
   (map (lambda (param)
          (cond [(ed-function-call? param)
-                ;; incomplete! (recursion into call params mapper does not keep prepends nor locrefs!
                 (define sym (symbol-generator))
                 (match-define (list new-func new-ref-list prepends)
                   (ed-function-call--extract-refs param '() '() symbol-generator))
@@ -377,6 +382,17 @@
        params))
 
 (module+ test
+  (check-match (ed-function-call-params--mapper (list (ed-if-call 'if (list (edv-boolean #t) (edv-string "true-val") (edv-string "false-val")))))
+               (list (list
+                      (loc-ref a-sym)
+                      (list
+                       (-loc-set a-sym (ed-function-call 'if (list (loc-ref b-sym) (loc-ref c-sym) (loc-ref d-sym))))
+                       (-loc-set b-sym (edv-boolean #t))
+                       (-loc-set c-sym (edv-string "true-val"))
+                       (-loc-set d-sym (edv-string "false-val")))
+                      '()))
+               (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym) (symbol? d-sym)))
+
   (check-equal? (ed-function-call-params--mapper (list (ed-nil) (edv-number 47) (edv-string "x") (edv-boolean #t)) (lambda () 'a))
                 (list (list (loc-ref 'a) (list (-loc-set 'a (ed-nil))) '())
                       (list (loc-ref 'a) (list (-loc-set 'a (edv-number 47))) '())
@@ -432,14 +448,36 @@
       (list/c ed-function-call? (listof loc-ref?) (listof -loc-set?)))
   (cond [(ed-function-call--has-only-refs? fun-call) (list fun-call ref-list prepends)]
         [else
-         (define transformed-params
-           (ed-function-call-params--mapper (ed-function-call-params fun-call) symbol-generator))
+         (define transformed-params (ed-function-call-params--mapper (ed-function-call-params fun-call) symbol-generator))
          (list
           (ed-function-call
            (ed-function-call-fun fun-call)
            (map (lambda (param) (car param)) transformed-params))
           (append ref-list (flatten (map (lambda (param) (cddr param)) transformed-params)))
           (append prepends (flatten (map (lambda (param) (cadr param)) transformed-params))))]))
+
+
+(module+ test
+  (check-match (ed-function-call--extract-refs (ed-function-call 'fn1 (list (edv-boolean #t) (ed-function-call 'inner (list (edv-string "a-string"))))))
+                (list
+                 (ed-function-call 'fn1 (list (loc-ref a-sym) (loc-ref b-sym)))
+                 '()
+                 (list
+                  (-loc-set a-sym (edv-boolean #t))
+                  (-loc-set b-sym (ed-function-call 'inner (list (loc-ref c-sym))))
+                  (-loc-set c-sym (edv-string "a-string")))))
+
+  (check-match (ed-function-call--extract-refs (ed-function-call 'fn1 (list (ed-if-call 'if (list (edv-boolean #t) (edv-number 10) (edv-number 20))) (ed-function-call 'inner (list (edv-string "a-string"))))))
+               (list
+                (ed-function-call 'fn1 (list (loc-ref 'g308083) (loc-ref 'g308087)))
+                '()
+                (list
+                 (-loc-set 'g308083 (ed-function-call 'if (list (loc-ref 'g308084) (loc-ref 'g308085) (loc-ref 'g308086))))
+                 (-loc-set 'g308084 (edv-boolean #t))
+                 (-loc-set 'g308085 (edv-number 10))
+                 (-loc-set 'g308086 (edv-number 20))
+                 (-loc-set 'g308087 (ed-function-call 'inner (list (loc-ref 'g308088))))
+                 (-loc-set 'g308088 (edv-string "a-string"))))))
 
 (define/contract (cisc-vm-transform fun)
   (->* [function-def?] [] (listof byte?))
