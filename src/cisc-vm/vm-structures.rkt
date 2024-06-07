@@ -6,6 +6,17 @@
 (require (only-in threading ~>>))
 (require (only-in "../6510-utils.rkt" two-complement-of decimal-from-two-complement))
 
+(provide CISC_VM_CONS
+         CISC_VM_CAR
+         CISC_VM_BRA_EMPTY_LIST
+         CISC_VM_CDR
+         CISC_VM_GOTO
+         CISC_VM_RET
+
+         VM_L0
+         VM_P0
+         VM_P1)
+
 (module+ test #| require test utils |#
   (require "../6510-test-utils.rkt"))
 
