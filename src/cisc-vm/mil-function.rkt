@@ -17,111 +17,111 @@
   ()
   #:transparent)
 
-(struct type-def ast-node
+(struct ast-type-def ast-node
   ()
   #:transparent)
 
-(struct td-simple type-def
+(struct ast-td-simple ast-type-def
   (id)
   #:transparent
   #:guard
   (struct-guard/c symbol?))
 
-(struct td-complex type-def
+(struct ast-ts-complex ast-type-def
   (id params)
   #:transparent
   #:guard
-  (struct-guard/c symbol? (listof type-def?)))
+  (struct-guard/c symbol? (listof ast-type-def?)))
 
-(struct parameter-def ast-node
+(struct ast-param-def ast-node
   (id type)
   #:transparent
   #:guard
-  (struct-guard/c symbol? type-def?))
+  (struct-guard/c symbol? ast-type-def?))
 
-(struct expression-def ast-node
+(struct ast-expression ast-node
   ()
   #:transparent)
 
-(struct ed-nil expression-def
+(struct ast-e-nil ast-expression
   ;; the nil symbol/list
   ()
   #:transparent)
 
-(struct ed-function-call expression-def
+(struct ast-e-fun-call ast-expression
   ;; strict eval parameter evaluation
   (fun params)
   #:transparent
   #:guard
-  (struct-guard/c symbol? (listof expression-def?)))
+  (struct-guard/c symbol? (listof ast-expression?)))
 
-(struct ed-if-call ed-function-call
+(struct ast-e-if ast-e-fun-call
   ;; special because parameters of if underly a sepcial execution order (no strict eval)
   ()
   #:transparent
   #:guard
-  (struct-guard/c symbol? (listof expression-def?)))
+  (struct-guard/c symbol? (listof ast-expression?)))
 
-(struct ed-value expression-def
+(struct ast-e-value ast-expression
   ;; atomic values not containing others
   ()
   #:transparent)
 
-(struct edv-string ed-value
+(struct ast-ev-string ast-e-value
   (str)
   #:transparent
   #:guard
   (struct-guard/c string?))
 
-(struct edv-boolean ed-value
+(struct ast-ev-bool ast-e-value
   (bool)
   #:transparent
   #:guard
   (struct-guard/c boolean?))
 
-(struct edv-id ed-value
+(struct ast-ev-id ast-e-value
   (id)
   #:transparent
   #:guard
   (struct-guard/c symbol?))
 
-(struct edv-number ed-value
+(struct ast-ev-number ast-e-value
   (number)
   #:transparent
   #:guard
   (struct-guard/c exact-integer?))
 
-(struct default-parameter-def parameter-def
+(struct ast-pd-default-param ast-param-def
   (value)
   #:transparent
   #:guard
-  (struct-guard/c symbol? type-def? expression-def?))
+  (struct-guard/c symbol? ast-type-def? ast-expression?))
 
-(struct function-def ast-node
+(struct ast-function-def ast-node
   (id parameter default-parameter return-type description body)
   #:transparent
   #:guard
   (struct-guard/c symbol?
-                  (listof parameter-def?)
-                  (listof default-parameter-def?)
-                  type-def?
+                  (listof ast-param-def?)
+                  (listof ast-pd-default-param?)
+                  ast-type-def?
                   (listof string?)
-                  (listof expression-def?)))
+                  (listof ast-expression?)))
 
 ;; type definition parser
 (define-syntax-parser m-type-def
   [(_ (cpx-type inner-type ...))
-   #'(td-complex 'cpx-type (list (m-type-def inner-type) ...))]
+   #'(ast-ts-complex 'cpx-type (list (m-type-def inner-type) ...))]
   [(_ basic-type)
-   #'(td-simple 'basic-type)])
+   #'(ast-td-simple 'basic-type)])
 
 ;; (function) definition parser
 (define-syntax-parser m-def
   #:literals [->]
   [(_ (id (p-id p-typ) ... (o-id o-typ o-val) ... -> r-typ desc ...) expr ...)
-   #'(function-def 'id
-                   (list (parameter-def 'p-id (m-type-def p-typ)) ...)
-                   (list (default-parameter-def 'o-id (m-type-def o-typ) (m-expression-def o-val)
+   #'(ast-function-def 'id
+                   (list (ast-param-def 'p-id (m-type-def p-typ)) ...)
+                   (list (ast-pd-default-param 'o-id (m-type-def o-typ) (m-expression-def o-val)
                            ) ...)
                    (m-type-def r-typ)
                    (list 'desc ...)
@@ -130,114 +130,116 @@
 (module+ test #| m-def |#
   (define mf0 (m-def (f0 -> string "description1" "description2") "value-hello"))
 
-  (check-equal? (function-def-id mf0)
+  (check-equal? (ast-function-def-id mf0)
                 'f0)
-  (check-equal? (function-def-parameter mf0)
+  (check-equal? (ast-function-def-parameter mf0)
                 '())
-  (check-equal? (function-def-default-parameter mf0)
+  (check-equal? (ast-function-def-default-parameter mf0)
                 '())
-  (check-equal? (function-def-return-type mf0)
-                (td-simple 'string))
-  (check-equal? (function-def-description mf0)
+  (check-equal? (ast-function-def-return-type mf0)
+                (ast-td-simple 'string))
+  (check-equal? (ast-function-def-description mf0)
                 (list "description1" "description2"))
 
   (define mf1 (m-def (f1 (a string) (b bool) (q string "h") -> string)
                      (hello)
                      (hello2)))
 
-  (check-equal? (function-def-id mf1)
+  (check-equal? (ast-function-def-id mf1)
                 'f1)
-  (check-equal? (function-def-parameter mf1)
-                (list (parameter-def 'a (td-simple 'string))
-                      (parameter-def 'b (td-simple 'bool))))
-  (check-equal? (function-def-default-parameter mf1)
-                (list (default-parameter-def 'q (td-simple 'string) (edv-string "h"))))
-  (check-equal? (function-def-return-type mf1)
-               (td-simple 'string))
-  (check-equal? (function-def-description mf1)
+  (check-equal? (ast-function-def-parameter mf1)
+                (list (ast-param-def 'a (ast-td-simple 'string))
+                      (ast-param-def 'b (ast-td-simple 'bool))))
+  (check-equal? (ast-function-def-default-parameter mf1)
+                (list (ast-pd-default-param 'q (ast-td-simple 'string) (ast-ev-string "h"))))
+  (check-equal? (ast-function-def-return-type mf1)
+               (ast-td-simple 'string))
+  (check-equal? (ast-function-def-description mf1)
                 '())
-  (check-equal? (function-def-body mf1)
-                (list (ed-function-call 'hello (list))
-                      (ed-function-call 'hello2 (list))))
+  (check-equal? (ast-function-def-body mf1)
+                (list (ast-e-fun-call 'hello (list))
+                      (ast-e-fun-call 'hello2 (list))))
 
   (define mf2 (m-def (f2 (a string) -> bool)))
 
-  (check-equal? (function-def-id mf2)
+  (check-equal? (ast-function-def-id mf2)
                 'f2)
-  (check-equal? (function-def-parameter mf2)
-                (list (parameter-def 'a (td-simple 'string))))
-  (check-equal? (function-def-default-parameter mf2)
+  (check-equal? (ast-function-def-parameter mf2)
+                (list (ast-param-def 'a (ast-td-simple 'string))))
+  (check-equal? (ast-function-def-default-parameter mf2)
                 '())
-  (check-equal? (function-def-return-type mf2)
-                (td-simple 'bool))
-  (check-equal? (function-def-description mf2)
+  (check-equal? (ast-function-def-return-type mf2)
+                (ast-td-simple 'bool))
+  (check-equal? (ast-function-def-description mf2)
                 '())
 
   (define mf3 (m-def (f3 (a string "init") -> (list int))))
 
-  (check-equal? (function-def-id mf3)
+  (check-equal? (ast-function-def-id mf3)
                 'f3)
-  (check-equal? (function-def-parameter mf3)
+  (check-equal? (ast-function-def-parameter mf3)
                 '()
                 )
-  (check-equal? (function-def-default-parameter mf3)
-                (list (default-parameter-def 'a (td-simple 'string) (edv-string "init"))))
-  (check-equal? (function-def-return-type mf3)
-                (td-complex 'list (list (td-simple 'int))))
-  (check-equal? (function-def-description mf3)
+  (check-equal? (ast-function-def-default-parameter mf3)
+                (list (ast-pd-default-param 'a (ast-td-simple 'string) (ast-ev-string "init"))))
+  (check-equal? (ast-function-def-return-type mf3)
+                (ast-ts-complex 'list (list (ast-td-simple 'int))))
+  (check-equal? (ast-function-def-description mf3)
                 '()))
 
 ;; expression parser
 (define-syntax-parser m-expression-def
   [(_ '())
-   #'(ed-nil)]
+   #'(ast-e-nil)]
   [(_ ((~literal if) bool-param true-param false-param ...))
-   #'(ed-if-call 'if (cons (m-expression-def bool-param)
+   #'(ast-e-if 'if (cons (m-expression-def bool-param)
                        (cons
                         (m-expression-def true-param)
                         (list (m-expression-def false-param) ...))))]
+  [(_ ((~literal cond) ((case-cond) (case-expression) ...) ...))
+   #'()]
   [(_ (id param ...))
-   #'(ed-function-call 'id (list (m-expression-def param) ...))]
+   #'(ast-e-fun-call 'id (list (m-expression-def param) ...))]
   [(_ value)
-   #'(cond ((string? 'value) (edv-string 'value))
-           ((boolean? 'value) (edv-boolean 'value))
-           ((exact-integer? 'value) (edv-number 'value))
-           ((symbol? 'value) (edv-id 'value))
+   #'(cond ((string? 'value) (ast-ev-string 'value))
+           ((boolean? 'value) (ast-ev-bool 'value))
+           ((exact-integer? 'value) (ast-ev-number 'value))
+           ((symbol? 'value) (ast-ev-id 'value))
            (else (raise-user-error (format "unknown expression value type ~a" 'value))))])
 
 (module+ test #| m-expression-def |#
   (check-equal?
    (m-expression-def '())
-   (ed-nil))
+   (ast-e-nil))
 
   (check-equal?
    (m-expression-def "hello")
-   (edv-string "hello"))
+   (ast-ev-string "hello"))
 
   (check-equal?
    (m-expression-def 123)
-   (edv-number 123))
+   (ast-ev-number 123))
 
   (check-equal?
    (m-expression-def #t)
-   (edv-boolean #t))
+   (ast-ev-bool #t))
 
   (check-equal?
    (m-expression-def (fn1 "A" #t))
-   (ed-function-call 'fn1 (list (edv-string "A") (edv-boolean #t))))
+   (ast-e-fun-call 'fn1 (list (ast-ev-string "A") (ast-ev-bool #t))))
 
   (check-equal?
    (m-expression-def (if #t "A" "B"))
-   (ed-if-call 'if (list (edv-boolean #t) (edv-string "A") (edv-string "B"))))
+   (ast-e-if 'if (list (ast-ev-bool #t) (ast-ev-string "A") (ast-ev-string "B"))))
 
   (check-equal?
    (m-expression-def (fn2))
-   (ed-function-call 'fn2 (list)))
+   (ast-e-fun-call 'fn2 (list)))
 
   (check-equal?
    (m-expression-def (fn3 (fn5 "A") (- 1 2)))
-   (ed-function-call 'fn3 (list (ed-function-call 'fn5 (list (edv-string "A")))
-                                (ed-function-call '- (list (edv-number 1) (edv-number 2)))))))
+   (ast-e-fun-call 'fn3 (list (ast-e-fun-call 'fn5 (list (ast-ev-string "A")))
+                                (ast-e-fun-call '- (list (ast-ev-number 1) (ast-ev-number 2)))))))
 
 (module+ test #| simple reverse function |#
   (check-equal?
@@ -246,99 +248,99 @@
           (if (nil? a-list)
               b-list
               (reverse (cdr a-list) (cons (car a-list) b-list))))
-   (function-def
+   (ast-function-def
     'reverse
     ;; parameter
-    (list (parameter-def 'a-list (td-complex 'list (list (td-simple 'cell)))))
+    (list (ast-param-def 'a-list (ast-ts-complex 'list (list (ast-td-simple 'cell)))))
     ;; parameter with defaults
     (list
-     (default-parameter-def
+     (ast-pd-default-param
        'b-list
-       (td-complex 'list (list (td-simple 'cell)))
-       (ed-nil)))
+       (ast-ts-complex 'list (list (ast-td-simple 'cell)))
+       (ast-e-nil)))
     ;; return type
-    (td-complex 'list (list (td-simple 'cell)))
+    (ast-ts-complex 'list (list (ast-td-simple 'cell)))
     ;; doc
     '("reverse a-list, consing it into b-list")
     ;; body
     (list
-     (ed-if-call
+     (ast-e-if
       'if
       (list
-       (ed-function-call 'nil? (list (edv-id 'a-list)))
-       (edv-id 'b-list)
-       (ed-function-call
+       (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)))
+       (ast-ev-id 'b-list)
+       (ast-e-fun-call
         'reverse
         (list
-         (ed-function-call 'cdr (list (edv-id 'a-list)))
-         (ed-function-call
+         (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)))
+         (ast-e-fun-call
           'cons
           (list
-           (ed-function-call 'car (list (edv-id 'a-list)))
-           (edv-id 'b-list)))))))))))
+           (ast-e-fun-call 'car (list (ast-ev-id 'a-list)))
+           (ast-ev-id 'b-list)))))))))))
 
 ;; intermediate ast nodes (used during transformation)
-(struct -loc-set expression-def
+(struct -loc-set ast-expression
   (id expr)
   #:transparent)
 
-(struct loc-ref expression-def
+(struct loc-ref ast-expression
   (id)
   #:transparent)
 
 (define step0 (list
-               (ed-if-call
+               (ast-e-if
                 'if
                 (list
-                 (ed-function-call 'nil? (list (edv-id 'a-list)))
-                 (edv-id 'b-list)
-                 (ed-function-call
+                 (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)))
+                 (ast-ev-id 'b-list)
+                 (ast-e-fun-call
                   'reverse
                   (list
-                   (ed-function-call 'cdr (list (edv-id 'a-list)))
-                   (ed-function-call
+                   (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)))
+                   (ast-e-fun-call
                     'cons
                     (list
-                     (ed-function-call 'car (list (edv-id 'a-list))) ;; extract this inner call to some variable 'a
-                     (edv-id 'b-list)))))))))
+                     (ast-e-fun-call 'car (list (ast-ev-id 'a-list))) ;; extract this inner call to some variable 'a
+                     (ast-ev-id 'b-list)))))))))
 
 (define step1 (list
-     (ed-if-call
+     (ast-e-if
       'if
       (list
-       (ed-function-call 'nil? (list (edv-id 'a-list)))
-       (edv-id 'b-list)
-       (ed-function-call
+       (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)))
+       (ast-ev-id 'b-list)
+       (ast-e-fun-call
         'reverse
         (list
-         (ed-function-call 'cdr (list (edv-id 'a-list))) ;; call has only refs to ids (done)
-         (-loc-set 'a (ed-function-call 'car (list (edv-id 'a-list))))
-         (ed-function-call 'cons (list (loc-ref 'a) (edv-id 'b-list))))))))) ;; now this call has only refs to ids (done), extract call itself to id b'
+         (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list))) ;; call has only refs to ids (done)
+         (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list))))
+         (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list))))))))) ;; now this call has only refs to ids (done), extract call itself to id b'
 
 (define step2 (list
-     (ed-if-call
+     (ast-e-if
       'if
       (list
-       (ed-function-call 'nil? (list (edv-id 'a-list)))
-       (edv-id 'b-list)
-       (ed-function-call
+       (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)))
+       (ast-ev-id 'b-list)
+       (ast-e-fun-call
         'reverse
         (list
-         (ed-function-call 'cdr (list (edv-id 'a-list))) ;; extract call itself to id 'c
-         (-loc-set 'a (ed-function-call 'car (list (edv-id 'a-list))))
-         (-loc-set 'b (ed-function-call 'cons (list (loc-ref 'a) (edv-id 'b-list))))
+         (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list))) ;; extract call itself to id 'c
+         (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list))))
+         (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list))))
          (loc-ref 'b)))))))
 
 (define step3 (list
-     (ed-if-call
+     (ast-e-if
       'if
       (list
-       (ed-function-call 'nil? (list (edv-id 'a-list)))
-       (edv-id 'b-list)
-       (-loc-set 'a (ed-function-call 'car (list (edv-id 'a-list))))
-       (-loc-set 'b (ed-function-call 'cons (list (loc-ref 'a) (edv-id 'b-list)))) ;; p1 can be reused here
-       (-loc-set 'c (ed-function-call 'cdr (list (edv-id 'a-list)))) ;; p0 can be reused here
-       (ed-function-call 'reverse (list (loc-ref 'c) (loc-ref 'b))))))) ;; now reverse has only ref parameters (done)
+       (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)))
+       (ast-ev-id 'b-list)
+       (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list))))
+       (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)))) ;; p1 can be reused here
+       (-loc-set 'c (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)))) ;; p0 can be reused here
+       (ast-e-fun-call 'reverse (list (loc-ref 'c) (loc-ref 'b))))))) ;; now reverse has only ref parameters (done)
 
 ;; - function calls with only ids or local-refs are not compacted any further
 ;; - if function is special
@@ -352,15 +354,15 @@
 ;;   recursive call must be transformed into a goto! <- define fail condition  (if it cannot be done readily)
 
 (define/contract (ed-function-call--has-only-refs? fun-call)
-  (->* [ed-function-call?] [] boolean?)
-  (foldl (lambda (l r) (and (or (loc-ref? l) (edv-id? l)) r)) true (ed-function-call-params fun-call)))
+  (->* [ast-e-fun-call?] [] boolean?)
+  (foldl (lambda (l r) (and (or (loc-ref? l) (ast-ev-id? l)) r)) true (ast-e-fun-call-params fun-call)))
 
 (module+ test
-  (check-true (ed-function-call--has-only-refs? (ed-function-call 'fn1 (list))))
+  (check-true (ed-function-call--has-only-refs? (ast-e-fun-call 'fn1 (list))))
 
-  (check-true (ed-function-call--has-only-refs? (ed-function-call 'fn1 (list (loc-ref 'a) (edv-id 'b)))))
+  (check-true (ed-function-call--has-only-refs? (ast-e-fun-call 'fn1 (list (loc-ref 'a) (ast-ev-id 'b)))))
 
-  (check-false (ed-function-call--has-only-refs? (ed-function-call 'fn1 (list (loc-ref 'a) (edv-string "10"))))))
+  (check-false (ed-function-call--has-only-refs? (ast-e-fun-call 'fn1 (list (loc-ref 'a) (ast-ev-string "10"))))))
 
 ;; recursively extract all non refs from the given parameters (of a function all)
 ;; return the
@@ -368,125 +370,125 @@
 ;; - setters that need to be prepended to the call
 ;; - list of newly introduced references
 (define/contract (ed-function-call-params--mapper params (symbol-generator gensym))
-  (->* [(listof expression-def?)] [any/c]
-      (listof (list/c (or/c loc-ref? edv-id?) (listof -loc-set?) (listof loc-ref?))))
+  (->* [(listof ast-expression?)] [any/c]
+      (listof (list/c (or/c loc-ref? ast-ev-id?) (listof -loc-set?) (listof loc-ref?))))
   (map (lambda (param)
-         (cond [(ed-function-call? param)
+         (cond [(ast-e-fun-call? param)
                 (define sym (symbol-generator))
                 (match-define (list new-func new-ref-list prepends)
                   (ed-function-call--extract-refs param '() '() symbol-generator))
                 (list (loc-ref sym) (cons (-loc-set sym new-func) prepends) new-ref-list)]
-               [(ed-nil? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
-               [(edv-number? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
-               [(edv-string? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
-               [(edv-boolean? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
-               [(edv-id? param) (list param '() '())]
+               [(ast-e-nil? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
+               [(ast-ev-number? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
+               [(ast-ev-string? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
+               [(ast-ev-bool? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
+               [(ast-ev-id? param) (list param '() '())]
                [(loc-ref? param) (list param '() '())]
                [else (raise-user-error (format "unknown param type ~a" param))]))
        params))
 
 (module+ test
-  (check-match (ed-function-call-params--mapper (list (ed-if-call 'if (list (edv-boolean #t) (edv-string "true-val") (edv-string "false-val")))))
+  (check-match (ed-function-call-params--mapper (list (ast-e-if 'if (list (ast-ev-bool #t) (ast-ev-string "true-val") (ast-ev-string "false-val")))))
                (list (list
                       (loc-ref a-sym)
                       (list
-                       (-loc-set a-sym (ed-function-call 'if (list (loc-ref b-sym) (loc-ref c-sym) (loc-ref d-sym))))
-                       (-loc-set b-sym (edv-boolean #t))
-                       (-loc-set c-sym (edv-string "true-val"))
-                       (-loc-set d-sym (edv-string "false-val")))
+                       (-loc-set a-sym (ast-e-fun-call 'if (list (loc-ref b-sym) (loc-ref c-sym) (loc-ref d-sym))))
+                       (-loc-set b-sym (ast-ev-bool #t))
+                       (-loc-set c-sym (ast-ev-string "true-val"))
+                       (-loc-set d-sym (ast-ev-string "false-val")))
                       '()))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym) (symbol? d-sym)))
 
-  (check-equal? (ed-function-call-params--mapper (list (ed-nil) (edv-number 47) (edv-string "x") (edv-boolean #t)) (lambda () 'a))
-                (list (list (loc-ref 'a) (list (-loc-set 'a (ed-nil))) '())
-                      (list (loc-ref 'a) (list (-loc-set 'a (edv-number 47))) '())
-                      (list (loc-ref 'a) (list (-loc-set 'a (edv-string "x"))) '())
-                      (list (loc-ref 'a) (list (-loc-set 'a (edv-boolean #t))) '()))
+  (check-equal? (ed-function-call-params--mapper (list (ast-e-nil) (ast-ev-number 47) (ast-ev-string "x") (ast-ev-bool #t)) (lambda () 'a))
+                (list (list (loc-ref 'a) (list (-loc-set 'a (ast-e-nil))) '())
+                      (list (loc-ref 'a) (list (-loc-set 'a (ast-ev-number 47))) '())
+                      (list (loc-ref 'a) (list (-loc-set 'a (ast-ev-string "x"))) '())
+                      (list (loc-ref 'a) (list (-loc-set 'a (ast-ev-bool #t))) '()))
                 "values are extracted into a set to a ref and the ref")
 
-  (check-equal? (ed-function-call-params--mapper (list (loc-ref 'a) (edv-id 'b)))
+  (check-equal? (ed-function-call-params--mapper (list (loc-ref 'a) (ast-ev-id 'b)))
                 (list (list (loc-ref 'a) '() '())
-                      (list (edv-id 'b) '() '()))
+                      (list (ast-ev-id 'b) '() '()))
                 "a reference is not transformed => no new refs etc")
 
-  (check-equal? (ed-function-call-params--mapper (list (loc-ref 'q) (edv-number 17)) (lambda () 'l1))
+  (check-equal? (ed-function-call-params--mapper (list (loc-ref 'q) (ast-ev-number 17)) (lambda () 'l1))
                 (list (list (loc-ref 'q) '() '())
-                      (list (loc-ref 'l1) (list (-loc-set 'l1 (edv-number 17))) '())))
+                      (list (loc-ref 'l1) (list (-loc-set 'l1 (ast-ev-number 17))) '())))
 
-  (check-match (ed-function-call-params--mapper (list (loc-ref 'q) (ed-function-call 'fn1 (list (edv-number 1)))))
+  (check-match (ed-function-call-params--mapper (list (loc-ref 'q) (ast-e-fun-call 'fn1 (list (ast-ev-number 1)))))
                (list (list (loc-ref 'q) '() '())
                      (list (loc-ref a-sym)
-                           (list (-loc-set a-sym (ed-function-call 'fn1 (list (loc-ref b-sym))))
-                                 (-loc-set b-sym (edv-number 1))) '()))
+                           (list (-loc-set a-sym (ast-e-fun-call 'fn1 (list (loc-ref b-sym))))
+                                 (-loc-set b-sym (ast-ev-number 1))) '()))
                (and (symbol? a-sym) (symbol? b-sym)))
 
   (check-match (ed-function-call-params--mapper
-                (list (loc-ref 'q) (ed-function-call 'fn1 (list (edv-id 'l) (ed-function-call 'r2 (list (edv-number 1)))))))
+                (list (loc-ref 'q) (ast-e-fun-call 'fn1 (list (ast-ev-id 'l) (ast-e-fun-call 'r2 (list (ast-ev-number 1)))))))
                (list (list (loc-ref 'q) '() '())
                      (list (loc-ref a-sym)
-                           (list (-loc-set a-sym (ed-function-call 'fn1 (list (edv-id 'l) (loc-ref b-sym))))
-                                 (-loc-set b-sym (ed-function-call 'r2 (list (loc-ref c-sym))))
-                                 (-loc-set c-sym (edv-number 1))) '()))
+                           (list (-loc-set a-sym (ast-e-fun-call 'fn1 (list (ast-ev-id 'l) (loc-ref b-sym))))
+                                 (-loc-set b-sym (ast-e-fun-call 'r2 (list (loc-ref c-sym))))
+                                 (-loc-set c-sym (ast-ev-number 1))) '()))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym)))
 
   (check-match (ed-function-call-params--mapper
                 (list
-                 (ed-function-call 'cdr (list (edv-id 'a-list)))
-                 (ed-function-call
+                 (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)))
+                 (ast-e-fun-call
                   'cons
                   (list
-                   (ed-function-call 'car (list (edv-id 'a-list)))
-                   (edv-id 'b-list)))))
+                   (ast-e-fun-call 'car (list (ast-ev-id 'a-list)))
+                   (ast-ev-id 'b-list)))))
                (list (list (loc-ref c-sym)
-                           (list (-loc-set c-sym (ed-function-call 'cdr (list (edv-id 'a-list)))))
+                           (list (-loc-set c-sym (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)))))
                            '())
                      (list (loc-ref b-sym)
-                           (list (-loc-set b-sym (ed-function-call 'cons (list (loc-ref a-sym) (edv-id 'b-list))))
-                                 (-loc-set a-sym (ed-function-call 'car (list (edv-id 'a-list)))))
+                           (list (-loc-set b-sym (ast-e-fun-call 'cons (list (loc-ref a-sym) (ast-ev-id 'b-list))))
+                                 (-loc-set a-sym (ast-e-fun-call 'car (list (ast-ev-id 'a-list)))))
                            '()))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym))))
 
 (define/contract (ed-function-call--extract-refs fun-call (ref-list '()) (prepends '()) (symbol-generator gensym))
-  (->* [ed-function-call?]
+  (->* [ast-e-fun-call?]
       [(listof loc-ref?) (listof -loc-set?) any/c]
-      (list/c ed-function-call? (listof loc-ref?) (listof -loc-set?)))
+      (list/c ast-e-fun-call? (listof loc-ref?) (listof -loc-set?)))
   (cond [(ed-function-call--has-only-refs? fun-call) (list fun-call ref-list prepends)]
         [else
-         (define transformed-params (ed-function-call-params--mapper (ed-function-call-params fun-call) symbol-generator))
+         (define transformed-params (ed-function-call-params--mapper (ast-e-fun-call-params fun-call) symbol-generator))
          (list
-          (ed-function-call
-           (ed-function-call-fun fun-call)
+          (ast-e-fun-call
+           (ast-e-fun-call-fun fun-call)
            (map (lambda (param) (car param)) transformed-params))
           (append ref-list (flatten (map (lambda (param) (cddr param)) transformed-params)))
           (append prepends (flatten (map (lambda (param) (cadr param)) transformed-params))))]))
 
 
 (module+ test
-  (check-match (ed-function-call--extract-refs (ed-function-call 'fn1 (list (edv-boolean #t) (ed-function-call 'inner (list (edv-string "a-string"))))))
+  (check-match (ed-function-call--extract-refs (ast-e-fun-call 'fn1 (list (ast-ev-bool #t) (ast-e-fun-call 'inner (list (ast-ev-string "a-string"))))))
                 (list
-                 (ed-function-call 'fn1 (list (loc-ref a-sym) (loc-ref b-sym)))
+                 (ast-e-fun-call 'fn1 (list (loc-ref a-sym) (loc-ref b-sym)))
                  '()
                  (list
-                  (-loc-set a-sym (edv-boolean #t))
-                  (-loc-set b-sym (ed-function-call 'inner (list (loc-ref c-sym))))
-                  (-loc-set c-sym (edv-string "a-string")))))
+                  (-loc-set a-sym (ast-ev-bool #t))
+                  (-loc-set b-sym (ast-e-fun-call 'inner (list (loc-ref c-sym))))
+                  (-loc-set c-sym (ast-ev-string "a-string")))))
 
   (check-match (ed-function-call--extract-refs
-                (ed-function-call 'fn1 (list (ed-if-call 'if (list (edv-boolean #t) (edv-number 10) (edv-number 20)))
-                                             (ed-function-call 'inner (list (edv-string "a-string"))))))
+                (ast-e-fun-call 'fn1 (list (ast-e-if 'if (list (ast-ev-bool #t) (ast-ev-number 10) (ast-ev-number 20)))
+                                             (ast-e-fun-call 'inner (list (ast-ev-string "a-string"))))))
                (list
-                (ed-function-call 'fn1 (list (loc-ref b-sym) (loc-ref a-sym)))
+                (ast-e-fun-call 'fn1 (list (loc-ref b-sym) (loc-ref a-sym)))
                 '()
                 (list
-                 (-loc-set b-sym (ed-function-call 'if (list (loc-ref c-sym) (loc-ref d-sym) (loc-ref e-sym))))
-                 (-loc-set c-sym (edv-boolean #t))
-                 (-loc-set d-sym (edv-number 10))
-                 (-loc-set e-sym (edv-number 20))
-                 (-loc-set a-sym (ed-function-call 'inner (list (loc-ref f-sym))))
-                 (-loc-set f-sym (edv-string "a-string"))))))
+                 (-loc-set b-sym (ast-e-fun-call 'if (list (loc-ref c-sym) (loc-ref d-sym) (loc-ref e-sym))))
+                 (-loc-set c-sym (ast-ev-bool #t))
+                 (-loc-set d-sym (ast-ev-number 10))
+                 (-loc-set e-sym (ast-ev-number 20))
+                 (-loc-set a-sym (ast-e-fun-call 'inner (list (loc-ref f-sym))))
+                 (-loc-set f-sym (ast-ev-string "a-string"))))))
 
 (define/contract (cisc-vm-transform fun)
-  (->* [function-def?] [] (listof byte?))
+  (->* [ast-function-def?] [] (listof byte?))
   (list 0))
 
 (module+ test #| compile |#
