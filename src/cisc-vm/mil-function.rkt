@@ -376,9 +376,9 @@
   (map (lambda (param)
          (cond [(ast-e-fun-call? param)
                 (define sym (symbol-generator))
-                (match-define (list new-func new-ref-list prepends)
-                  (ed-function-call--extract-refs param '() '() symbol-generator))
-                (list (loc-ref sym) (cons (-loc-set sym new-func) prepends) new-ref-list)]
+                ;; (match-define (list new-func new-ref-list prepends)
+                ;;   (ed-function-call--extract-refs param '() '() symbol-generator))
+                (list (loc-ref sym) (list (-loc-set sym (transform-function-call param))) '())]
                [(ast-e-nil? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
                [(ast-ev-number? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
                [(ast-ev-string? param) (define sym (symbol-generator)) (list (loc-ref sym) (list (-loc-set sym param)) '())]
@@ -393,10 +393,10 @@
                (list (list
                       (loc-ref a-sym)
                       (list
-                       (-loc-set a-sym (ast-e-fun-call 'if (list (loc-ref b-sym) (loc-ref c-sym) (loc-ref d-sym)) '() '()))
-                       (-loc-set b-sym (ast-ev-bool #t))
-                       (-loc-set c-sym (ast-ev-string "true-val"))
-                       (-loc-set d-sym (ast-ev-string "false-val")))
+                       (-loc-set a-sym (ast-e-fun-call 'if (list (loc-ref b-sym) (loc-ref c-sym) (loc-ref d-sym))
+                                                       (list (-loc-set d-sym (ast-ev-string "false-val"))
+                                                             (-loc-set c-sym (ast-ev-string "true-val"))
+                                                             (-loc-set b-sym (ast-ev-bool #t))) '())))
                       '()))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym) (symbol? d-sym)))
 
@@ -419,17 +419,25 @@
   (check-match (ed-function-call-params--mapper (list (loc-ref 'q) (ast-e-fun-call 'fn1 (list (ast-ev-number 1)) '() '())))
                (list (list (loc-ref 'q) '() '())
                      (list (loc-ref a-sym)
-                           (list (-loc-set a-sym (ast-e-fun-call 'fn1 (list (loc-ref b-sym)) '() '()))
-                                 (-loc-set b-sym (ast-ev-number 1))) '()))
+                           (list (-loc-set a-sym (ast-e-fun-call 'fn1 (list (loc-ref b-sym))
+                                                                 (list (-loc-set b-sym (ast-ev-number 1))) '()))) '()))
                (and (symbol? a-sym) (symbol? b-sym)))
 
   (check-match (ed-function-call-params--mapper
                 (list (loc-ref 'q) (ast-e-fun-call 'fn1 (list (ast-ev-id 'l) (ast-e-fun-call 'r2 (list (ast-ev-number 1)) '() '())) '() '())))
                (list (list (loc-ref 'q) '() '())
                      (list (loc-ref a-sym)
-                           (list (-loc-set a-sym (ast-e-fun-call 'fn1 (list (ast-ev-id 'l) (loc-ref b-sym)) '() '()))
-                                 (-loc-set b-sym (ast-e-fun-call 'r2 (list (loc-ref c-sym)) '() '()))
-                                 (-loc-set c-sym (ast-ev-number 1))) '()))
+                           (list (-loc-set a-sym
+                                           (ast-e-fun-call
+                                            'fn1 (list (ast-ev-id 'l) (loc-ref b-sym))
+                                            (list (-loc-set b-sym
+                                                            (ast-e-fun-call
+                                                             'r2
+                                                             (list (loc-ref c-sym))
+                                                             (list (-loc-set c-sym (ast-ev-number 1)))
+                                                             '())))
+                                            '())))
+                           '()))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym)))
 
   (check-match (ed-function-call-params--mapper
@@ -444,8 +452,11 @@
                            (list (-loc-set c-sym (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '())))
                            '())
                      (list (loc-ref b-sym)
-                           (list (-loc-set b-sym (ast-e-fun-call 'cons (list (loc-ref a-sym) (ast-ev-id 'b-list)) '() '()))
-                                 (-loc-set a-sym (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '())))
+                           (list (-loc-set b-sym (ast-e-fun-call
+                                                  'cons
+                                                  (list (loc-ref a-sym) (ast-ev-id 'b-list))
+                                                  (list (-loc-set a-sym (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '())))
+                                                  '())))
                            '()))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym))))
 
@@ -467,27 +478,62 @@
 
 (module+ test
   (check-match (ed-function-call--extract-refs (ast-e-fun-call 'fn1 (list (ast-ev-bool #t) (ast-e-fun-call 'inner (list (ast-ev-string "a-string")) '() '())) '() '()))
+               (list
+                (ast-e-fun-call 'fn1 (list (loc-ref a-sym) (loc-ref b-sym)) '() '())
+                '()
                 (list
-                 (ast-e-fun-call 'fn1 (list (loc-ref a-sym) (loc-ref b-sym)) '() '())
-                 '()
-                 (list
-                  (-loc-set a-sym (ast-ev-bool #t))
-                  (-loc-set b-sym (ast-e-fun-call 'inner (list (loc-ref c-sym)) '() '()))
-                  (-loc-set c-sym (ast-ev-string "a-string")))))
+                 (-loc-set a-sym (ast-ev-bool #t))
+                 (-loc-set b-sym (ast-e-fun-call
+                                  'inner
+                                  (list (loc-ref c-sym ))
+                                  (list (-loc-set c-sym  (ast-ev-string "a-string")))
+                                  '())))))
 
   (check-match (ed-function-call--extract-refs
                 (ast-e-fun-call 'fn1 (list (ast-e-if 'if (list (ast-ev-bool #t) (ast-ev-number 10) (ast-ev-number 20)) '() '())
                                              (ast-e-fun-call 'inner (list (ast-ev-string "a-string")) '() '())) '() '()))
+
                (list
-                (ast-e-fun-call 'fn1 (list (loc-ref b-sym) (loc-ref a-sym)) '() '())
+                (ast-e-fun-call 'fn1 (list (loc-ref a-sym) (loc-ref b-sym)) '() '())
                 '()
                 (list
-                 (-loc-set b-sym (ast-e-fun-call 'if (list (loc-ref c-sym) (loc-ref d-sym) (loc-ref e-sym)) '() '()))
-                 (-loc-set c-sym (ast-ev-bool #t))
-                 (-loc-set d-sym (ast-ev-number 10))
-                 (-loc-set e-sym (ast-ev-number 20))
-                 (-loc-set a-sym (ast-e-fun-call 'inner (list (loc-ref f-sym)) '() '()))
-                 (-loc-set f-sym (ast-ev-string "a-string"))))))
+                 (-loc-set a-sym (ast-e-fun-call
+                                     'if
+                                     (list (loc-ref c-sym) (loc-ref d-sym) (loc-ref e-sym))
+                                     (list
+                                      (-loc-set e-sym (ast-ev-number 20))
+                                      (-loc-set d-sym (ast-ev-number 10))
+                                      (-loc-set c-sym (ast-ev-bool #t)))
+                                     '()))
+                 (-loc-set b-sym (ast-e-fun-call
+                                     'inner
+                                     (list (loc-ref f-sym))
+                                     (list (-loc-set f-sym (ast-ev-string "a-string")))
+                                     '()))))))
+
+(define/contract (transform-function-call fun-call)
+  (->* [ast-e-fun-call?] [] ast-e-fun-call?)
+  (match-define (list new-call loc-refs loc-sets)
+    (ed-function-call--extract-refs fun-call))
+  (struct-copy ast-e-fun-call new-call
+               [pre-code (append (ast-e-fun-call-pre-code fun-call) (reverse loc-sets))]))
+
+(module+ test #| transform function call |#
+  (check-match (transform-function-call (ast-e-fun-call 'fn1 (list (ast-ev-bool #t)) '() '()))
+               (ast-e-fun-call 'fn1
+                               (list (loc-ref a-sym))
+                               (list (-loc-set a-sym (ast-ev-bool #t)))
+                               '())
+               (symbol? a-sym))
+
+  (check-match (transform-function-call (ast-e-fun-call 'fn1 (list (ast-ev-bool #t) (ast-e-fun-call 'fn2 (list (ast-ev-string "z")) '() '())) '() '()))
+               (ast-e-fun-call 'fn1
+                               (list (loc-ref a-sym) (loc-ref b-sym))
+                               (list
+                                (-loc-set b-sym (ast-e-fun-call 'fn2 (list (loc-ref c-sym)) (list (-loc-set c-sym (ast-ev-string "z"))) '()))
+                                (-loc-set a-sym (ast-ev-bool #t)))
+                               '())
+               (symbol? a-sym)))
 
 (define/contract (cisc-vm-transform fun)
   (->* [ast-function-def?] [] (listof byte?))
