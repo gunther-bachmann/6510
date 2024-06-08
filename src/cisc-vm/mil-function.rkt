@@ -393,12 +393,10 @@
                (list (list
                       (loc-ref a-sym)
                       (list
-                       (-loc-set a-sym (ast-e-fun-call 'if (list (loc-ref b-sym) (loc-ref c-sym) (loc-ref d-sym))
-                                                       (list (-loc-set d-sym (ast-ev-string "false-val"))
-                                                             (-loc-set c-sym (ast-ev-string "true-val"))
-                                                             (-loc-set b-sym (ast-ev-bool #t))) '())))
+                       (-loc-set a-sym (ast-e-fun-call 'if (list (loc-ref b-sym) (ast-ev-string "true-val") (ast-ev-string "false-val"))
+                                                       (list (-loc-set b-sym (ast-ev-bool #t))) '())))
                       '()))
-               (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym) (symbol? d-sym)))
+               (and (symbol? a-sym) (symbol? b-sym)))
 
   (check-equal? (ed-function-call-params--mapper (list (ast-e-nil) (ast-ev-number 47) (ast-ev-string "x") (ast-ev-bool #t)) (lambda () 'a))
                 (list (list (loc-ref 'a) (list (-loc-set 'a (ast-e-nil))) '())
@@ -465,6 +463,14 @@
       [(listof loc-ref?) (listof -loc-set?) any/c]
       (list/c ast-e-fun-call? (listof loc-ref?) (listof -loc-set?)))
   (cond [(ed-function-call--has-only-refs? fun-call) (list fun-call ref-list prepends)]
+        [(eq? 'if (ast-e-fun-call-fun fun-call))
+         (define transformed-bool-param (ed-function-call-params--mapper (list (car (ast-e-fun-call-params fun-call))) symbol-generator))
+         (list (ast-e-fun-call
+                'if
+                (cons (caar transformed-bool-param) (cdr (ast-e-fun-call-params fun-call)))
+                '() '())
+               (append ref-list (flatten (map (lambda (param) (cddr param)) transformed-bool-param)))
+               (append prepends (flatten (map (lambda (param) (cadr param)) transformed-bool-param))))]
         [else
          (define transformed-params (ed-function-call-params--mapper (ast-e-fun-call-params fun-call) symbol-generator))
          (list
@@ -499,11 +505,8 @@
                 (list
                  (-loc-set a-sym (ast-e-fun-call
                                      'if
-                                     (list (loc-ref c-sym) (loc-ref d-sym) (loc-ref e-sym))
-                                     (list
-                                      (-loc-set e-sym (ast-ev-number 20))
-                                      (-loc-set d-sym (ast-ev-number 10))
-                                      (-loc-set c-sym (ast-ev-bool #t)))
+                                     (list (loc-ref c-sym) (ast-ev-number 10) (ast-ev-number 20))
+                                     (list (-loc-set c-sym (ast-ev-bool #t)))
                                      '()))
                  (-loc-set b-sym (ast-e-fun-call
                                      'inner
