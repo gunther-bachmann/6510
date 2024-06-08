@@ -13,7 +13,11 @@
 (define-syntax (-> stx)
   (raise-syntax-error #f "cannot be used as an expression" stx))
 
-(struct type-def
+(struct ast-node
+  ()
+  #:transparent)
+
+(struct type-def ast-node
   ()
   #:transparent)
 
@@ -29,13 +33,13 @@
   #:guard
   (struct-guard/c symbol? (listof type-def?)))
 
-(struct parameter-def
+(struct parameter-def ast-node
   (id type)
   #:transparent
   #:guard
   (struct-guard/c symbol? type-def?))
 
-(struct expression-def
+(struct expression-def ast-node
   ()
   #:transparent)
 
@@ -93,7 +97,7 @@
   #:guard
   (struct-guard/c symbol? type-def? expression-def?))
 
-(struct function-def
+(struct function-def ast-node
   (id parameter default-parameter return-type description body)
   #:transparent
   #:guard
@@ -467,17 +471,19 @@
                   (-loc-set b-sym (ed-function-call 'inner (list (loc-ref c-sym))))
                   (-loc-set c-sym (edv-string "a-string")))))
 
-  (check-match (ed-function-call--extract-refs (ed-function-call 'fn1 (list (ed-if-call 'if (list (edv-boolean #t) (edv-number 10) (edv-number 20))) (ed-function-call 'inner (list (edv-string "a-string"))))))
+  (check-match (ed-function-call--extract-refs
+                (ed-function-call 'fn1 (list (ed-if-call 'if (list (edv-boolean #t) (edv-number 10) (edv-number 20)))
+                                             (ed-function-call 'inner (list (edv-string "a-string"))))))
                (list
-                (ed-function-call 'fn1 (list (loc-ref 'g308083) (loc-ref 'g308087)))
+                (ed-function-call 'fn1 (list (loc-ref b-sym) (loc-ref a-sym)))
                 '()
                 (list
-                 (-loc-set 'g308083 (ed-function-call 'if (list (loc-ref 'g308084) (loc-ref 'g308085) (loc-ref 'g308086))))
-                 (-loc-set 'g308084 (edv-boolean #t))
-                 (-loc-set 'g308085 (edv-number 10))
-                 (-loc-set 'g308086 (edv-number 20))
-                 (-loc-set 'g308087 (ed-function-call 'inner (list (loc-ref 'g308088))))
-                 (-loc-set 'g308088 (edv-string "a-string"))))))
+                 (-loc-set b-sym (ed-function-call 'if (list (loc-ref c-sym) (loc-ref d-sym) (loc-ref e-sym))))
+                 (-loc-set c-sym (edv-boolean #t))
+                 (-loc-set d-sym (edv-number 10))
+                 (-loc-set e-sym (edv-number 20))
+                 (-loc-set a-sym (ed-function-call 'inner (list (loc-ref f-sym))))
+                 (-loc-set f-sym (edv-string "a-string"))))))
 
 (define/contract (cisc-vm-transform fun)
   (->* [function-def?] [] (listof byte?))
