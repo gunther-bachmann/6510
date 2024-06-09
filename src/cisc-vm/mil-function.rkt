@@ -7,8 +7,31 @@
 
 (require syntax/parse/define)
 
+(require (only-in "./vm-structures.rkt"
+                  CISC_VM_CONS
+                  CISC_VM_CAR
+                  CISC_VM_BRA_EMPTY_LIST
+                  CISC_VM_CDR
+                  CISC_VM_GOTO
+                  CISC_VM_RET
+                  CISC_VM_IMMB
+                  CISC_VM_BYTE_ADD
+
+                  VM_L0
+                  VM_L1
+                  VM_P0
+                  VM_P1
+
+                  encode-idx
+                  l-local
+                  l-param
+                  l-global
+                  l-imm))
+
 (module+ test #| require test utils |#
-  (require "../6510-test-utils.rkt"))
+  (require "../6510-test-utils.rkt")
+
+  )
 
 (define-syntax (-> stx)
   (raise-syntax-error #f "cannot be used as an expression" stx))
@@ -120,12 +143,12 @@
   #:literals [->]
   [(_ (id (p-id p-typ) ... (o-id o-typ o-val) ... -> r-typ desc ...) expr ...)
    #'(ast-function-def 'id
-                   (list (ast-param-def 'p-id (m-type-def p-typ)) ...)
-                   (list (ast-pd-default-param 'o-id (m-type-def o-typ) (m-expression-def o-val)
-                           ) ...)
-                   (m-type-def r-typ)
-                   (list 'desc ...)
-                   (list (m-expression-def expr) ...))])
+                       (list (ast-param-def 'p-id (m-type-def p-typ)) ...)
+                       (list (ast-pd-default-param 'o-id (m-type-def o-typ) (m-expression-def o-val)
+                                                   ) ...)
+                       (m-type-def r-typ)
+                       (list 'desc ...)
+                       (list (m-expression-def expr) ...))])
 
 (module+ test #| m-def |#
   (define mf0 (m-def (f0 -> string "description1" "description2") "value-hello"))
@@ -153,7 +176,7 @@
   (check-equal? (ast-function-def-default-parameter mf1)
                 (list (ast-pd-default-param 'q (ast-td-simple 'string) (ast-ev-string "h"))))
   (check-equal? (ast-function-def-return-type mf1)
-               (ast-td-simple 'string))
+                (ast-td-simple 'string))
   (check-equal? (ast-function-def-description mf1)
                 '())
   (check-equal? (ast-function-def-body mf1)
@@ -193,9 +216,9 @@
    #'(ast-e-nil)]
   [(_ ((~literal if) bool-param true-param false-param ...))
    #'(ast-e-if 'if (cons (m-expression-def bool-param)
-                       (cons
-                        (m-expression-def true-param)
-                        (list (m-expression-def false-param) ...))) '() '())]
+                         (cons
+                          (m-expression-def true-param)
+                          (list (m-expression-def false-param) ...))) '() '())]
   [(_ ((~literal cond) ((case-cond) (case-expression) ...) ...))
    #'()]
   [(_ (id param ...))
@@ -239,7 +262,7 @@
   (check-equal?
    (m-expression-def (fn3 (fn5 "A") (- 1 2)))
    (ast-e-fun-call 'fn3 (list (ast-e-fun-call 'fn5 (list (ast-ev-string "A")) '() '())
-                                (ast-e-fun-call '- (list (ast-ev-number 1) (ast-ev-number 2)) '() '()))
+                              (ast-e-fun-call '- (list (ast-ev-number 1) (ast-ev-number 2)) '() '()))
                    '() '())))
 
 (module+ test #| simple reverse function |#
@@ -256,9 +279,9 @@
     ;; parameter with defaults
     (list
      (ast-pd-default-param
-       'b-list
-       (ast-ts-complex 'list (list (ast-td-simple 'cell)))
-       (ast-e-nil)))
+      'b-list
+      (ast-ts-complex 'list (list (ast-td-simple 'cell)))
+      (ast-e-nil)))
     ;; return type
     (ast-ts-complex 'list (list (ast-td-simple 'cell)))
     ;; doc
@@ -306,42 +329,42 @@
                      (ast-ev-id 'b-list)) '() '())) '() '())) '() '())))
 
 (define step1 (list
-     (ast-e-if
-      'if
-      (list
-       (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
-       (ast-ev-id 'b-list)
-       (ast-e-fun-call
-        'reverse
-        (list
-         (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '()) ;; call has only refs to ids (done)
-         (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
-         (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '())) '() '())) '() '()))) ;; now this call has only refs to ids (done), extract call itself to id b'
+               (ast-e-if
+                'if
+                (list
+                 (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
+                 (ast-ev-id 'b-list)
+                 (ast-e-fun-call
+                  'reverse
+                  (list
+                   (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '()) ;; call has only refs to ids (done)
+                   (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
+                   (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '())) '() '())) '() '()))) ;; now this call has only refs to ids (done), extract call itself to id b'
 
 (define step2 (list
-     (ast-e-if
-      'if
-      (list
-       (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
-       (ast-ev-id 'b-list)
-       (ast-e-fun-call
-        'reverse
-        (list
-         (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '()) ;; extract call itself to id 'c
-         (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
-         (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '()))
-         (loc-ref 'b)) '() '())) '() '())))
+               (ast-e-if
+                'if
+                (list
+                 (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
+                 (ast-ev-id 'b-list)
+                 (ast-e-fun-call
+                  'reverse
+                  (list
+                   (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '()) ;; extract call itself to id 'c
+                   (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
+                   (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '()))
+                   (loc-ref 'b)) '() '())) '() '())))
 
 (define step3 (list
-     (ast-e-if
-      'if
-      (list
-       (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
-       (ast-ev-id 'b-list)
-       (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
-       (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '())) ;; p1 can be reused here
-       (-loc-set 'c (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '())) ;; p0 can be reused here
-       (ast-e-fun-call 'reverse (list (loc-ref 'c) (loc-ref 'b)) '() '())) '() '()))) ;; now reverse has only ref parameters (done)
+               (ast-e-if
+                'if
+                (list
+                 (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
+                 (ast-ev-id 'b-list)
+                 (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
+                 (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '())) ;; p1 can be reused here
+                 (-loc-set 'c (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '())) ;; p0 can be reused here
+                 (ast-e-fun-call 'reverse (list (loc-ref 'c) (loc-ref 'b)) '() '())) '() '()))) ;; now reverse has only ref parameters (done)
 
 ;; - function calls with only ids or local-refs are not compacted any further
 ;; - if function is special
@@ -497,22 +520,22 @@
 
   (check-match (ed-function-call--extract-refs
                 (ast-e-fun-call 'fn1 (list (ast-e-if 'if (list (ast-ev-bool #t) (ast-ev-number 10) (ast-ev-number 20)) '() '())
-                                             (ast-e-fun-call 'inner (list (ast-ev-string "a-string")) '() '())) '() '()))
+                                           (ast-e-fun-call 'inner (list (ast-ev-string "a-string")) '() '())) '() '()))
 
                (list
                 (ast-e-fun-call 'fn1 (list (loc-ref a-sym) (loc-ref b-sym)) '() '())
                 '()
                 (list
                  (-loc-set a-sym (ast-e-fun-call
-                                     'if
-                                     (list (loc-ref c-sym) (ast-ev-number 10) (ast-ev-number 20))
-                                     (list (-loc-set c-sym (ast-ev-bool #t)))
-                                     '()))
+                                  'if
+                                  (list (loc-ref c-sym) (ast-ev-number 10) (ast-ev-number 20))
+                                  (list (-loc-set c-sym (ast-ev-bool #t)))
+                                  '()))
                  (-loc-set b-sym (ast-e-fun-call
-                                     'inner
-                                     (list (loc-ref f-sym))
-                                     (list (-loc-set f-sym (ast-ev-string "a-string")))
-                                     '()))))))
+                                  'inner
+                                  (list (loc-ref f-sym))
+                                  (list (-loc-set f-sym (ast-ev-string "a-string")))
+                                  '()))))))
 
 (define/contract (transform-function-call fun-call)
   (->* [ast-e-fun-call?] [] ast-e-fun-call?)
@@ -538,24 +561,103 @@
                                '())
                (symbol? a-sym)))
 
+(define/contract (transform an-expression)
+  (->* [ast-expression?] [] ast-expression?)
+  (cond
+    [(ast-e-if? an-expression) (raise-user-error "not implemented yet")]
+    [(ast-e-fun-call? an-expression) (transform-function-call an-expression)]
+    [else an-expression]))
+
+(module+ test #| transform |#
+  (check-match (transform (ast-e-fun-call '+ (list (ast-ev-number 1) (ast-ev-id 'a-byte)) '() '()))
+               (ast-e-fun-call '+ (list (loc-ref a-sym) (ast-ev-id 'a-byte)) (list (-loc-set a-sym (ast-ev-number 1))) '())
+               (symbol? a-sym)))
+
+(struct gen-context
+  (next-local local-id-map parameter-id-map gen-bytes)
+  #:transparent
+  #:guard
+  (struct-guard/c byte? (hash/c symbol? byte?) (hash/c symbol? byte?) (listof byte?)))
+
+;; generate references to parameters and encode them into one byte (VM_L0 ... VM_Lx, VM_P0 ... etc.)
+(define/contract (generate-parameter parameter a-gen-context)
+  (->* [ast-node? gen-context?] [] byte?)
+  (cond
+    [(ast-ev-id? parameter)
+     (encode-idx (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id parameter))
+                 l-param)]
+    [(loc-ref? parameter)
+     (encode-idx (hash-ref (gen-context-local-id-map a-gen-context) (loc-ref-id parameter))
+                 l-local)]
+    [else (raise-user-error (format "unknown parameter ~a" parameter))]))
+
+;; generate code for an-expression, assigning result into target-reg within the given gen-context
+(define/contract (generate target-reg an-expression a-gen-context)
+  (->* [byte? ast-expression? gen-context?] [] gen-context?)
+  (cond
+    [(-loc-set? an-expression) ;; makes no use of target-reg
+     (define expr (-loc-set-expr an-expression))
+     (define local (gen-context-next-local a-gen-context))
+     (struct-copy gen-context a-gen-context
+                  [next-local (+ 1 local)]
+                  [local-id-map (hash-set (gen-context-local-id-map a-gen-context) (-loc-set-id an-expression) local)]
+                  [gen-bytes (append (gen-context-gen-bytes a-gen-context)
+                                     (cond
+                                       [(ast-ev-number? expr) (list CISC_VM_IMMB local (ast-ev-number-number expr))]
+                                       [else (raise-user-error (format "unknown expression to set ~a" expr))]))])]
+    [(ast-e-fun-call? an-expression)
+     (define fun-id (ast-e-fun-call-fun an-expression))
+     (define fun-params (ast-e-fun-call-params an-expression))
+     (define pre-code (ast-e-fun-call-pre-code an-expression))
+     (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate 0 pre-expression inner-gen-context)) a-gen-context pre-code))
+     (cond
+       [(eq? fun-id '+)
+        (struct-copy gen-context next-gen-context
+                     [gen-bytes (append (gen-context-gen-bytes next-gen-context)
+                                        (list CISC_VM_BYTE_ADD target-reg (generate-parameter (first fun-params) next-gen-context)
+                                              (generate-parameter (second fun-params) next-gen-context)))])]
+       [else (raise-user-error (format "unknown function id ~a" fun-id))])]
+    [else (raise-user-error (format "unknown expression to generate ~a" an-expression))]))
+
+(module+ test #| gen-context |#
+  (check-equal? (gen-context-gen-bytes (generate 0 (-loc-set 'sym (ast-ev-number 10)) (gen-context 0 (hash) (hash) '())))
+                (list CISC_VM_IMMB VM_L0 10))
+
+  (check-equal? (gen-context-gen-bytes
+                 (generate VM_L1
+                           (ast-e-fun-call '+
+                                           (list (loc-ref 'byte-10) (ast-ev-id 'a-byte))
+                                           (list (-loc-set 'byte-10 (ast-ev-number 10)))
+                                           '())
+                           (gen-context 0 (hash) (hash 'a-byte 0) '())))
+                (list
+                 CISC_VM_IMMB VM_L0 10
+                 CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P0)))
+
 (define/contract (cisc-vm-transform fun)
   (->* [ast-function-def?] [] (listof byte?))
-  (list 0))
+  (define transformed-expressions (map transform (ast-function-def-body fun)))
+  ;; register all parameter-id s into the generation context
+  ;; generate (into target local slot 0) expression(s)
+  ;; count the needed local slots (for later function registration)
+  ;; generate return local slot 0
+  (list))
 
 (module+ test #| compile |#
-  (require (only-in "./vm-structures.rkt"
-                    CISC_VM_CONS
-                    CISC_VM_CAR
-                    CISC_VM_BRA_EMPTY_LIST
-                    CISC_VM_CDR
-                    CISC_VM_GOTO
-                    CISC_VM_RET
 
-                    VM_L0
-                    VM_P0
-                    VM_P1))
 
   (require (only-in "../6510-utils.rkt" two-complement-of))
+
+
+  (skip "simple add not implemented yet"
+        (check-equal?
+         (cisc-vm-transform
+          (m-def (add1 (a-byte byte) -> byte
+                       "add one to the given")
+                 (+ 1 a-byte)))
+         (list CISC_VM_IMMB VM_L0 1
+               CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P0
+               CISC_VM_RET VM_L1)))
 
 
   (skip "transformation is not implemented yet"

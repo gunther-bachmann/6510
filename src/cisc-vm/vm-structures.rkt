@@ -12,10 +12,19 @@
          CISC_VM_CDR
          CISC_VM_GOTO
          CISC_VM_RET
+         CISC_VM_IMMB
+         CISC_VM_BYTE_ADD
 
          VM_L0
+         VM_L1
          VM_P0
-         VM_P1)
+         VM_P1
+
+         encode-idx
+         l-local
+         l-param
+         l-global
+         l-imm)
 
 (module+ test #| require test utils |#
   (require "../6510-test-utils.rkt"))
