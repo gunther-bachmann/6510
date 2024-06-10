@@ -569,8 +569,8 @@
     [else an-expression]))
 
 (module+ test #| transform |#
-  (check-match (transform (ast-e-fun-call '+ (list (ast-ev-number 1) (ast-ev-id 'a-byte)) '() '()))
-               (ast-e-fun-call '+ (list (loc-ref a-sym) (ast-ev-id 'a-byte)) (list (-loc-set a-sym (ast-ev-number 1))) '())
+  (check-match (transform (ast-e-fun-call 'byte+ (list (ast-ev-number 1) (ast-ev-id 'a-byte)) '() '()))
+               (ast-e-fun-call 'byte+ (list (loc-ref a-sym) (ast-ev-id 'a-byte)) (list (-loc-set a-sym (ast-ev-number 1))) '())
                (symbol? a-sym)))
 
 (struct gen-context
@@ -591,32 +591,53 @@
                  l-local)]
     [else (raise-user-error (format "unknown parameter ~a" parameter))]))
 
+(define/contract (generate-loc-set a-loc-set a-gen-context)
+  (->* [-loc-set? gen-context?] [] gen-context?)
+  (define expr (-loc-set-expr a-loc-set))
+  (define local (gen-context-next-local a-gen-context))
+  (struct-copy gen-context a-gen-context
+               [next-local (+ 1 local)]
+               [local-id-map (hash-set (gen-context-local-id-map a-gen-context) (-loc-set-id a-loc-set) local)]
+               [gen-bytes (append (gen-context-gen-bytes a-gen-context)
+                                  (cond
+                                    [(ast-ev-number? expr) (list CISC_VM_IMMB local (ast-ev-number-number expr))]
+                                    [else (raise-user-error (format "unknown expression to set ~a" expr))]))]))
+
+(module+ test #| generate-loc-set |#
+  (check-equal? (generate-loc-set (-loc-set 'sym (ast-ev-number 15)) (gen-context 5 (hash) (hash) '()))
+                (gen-context 6 '#hash((sym . 5)) '#hash() (list CISC_VM_IMMB 5 15))))
+
+(define/contract (generate-fun-call target-reg a-fun-call a-gen-context)
+  (->* [byte? ast-e-fun-call? gen-context?] [] gen-context?)
+  (define fun-id (ast-e-fun-call-fun a-fun-call))
+     (define fun-params (ast-e-fun-call-params a-fun-call))
+     (define pre-code (ast-e-fun-call-pre-code a-fun-call))
+     (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate 0 pre-expression inner-gen-context)) a-gen-context pre-code))
+     (cond
+       [(eq? fun-id 'byte+)
+        (struct-copy gen-context next-gen-context
+                     [gen-bytes (append (gen-context-gen-bytes next-gen-context)
+                                        (list CISC_VM_BYTE_ADD target-reg (generate-parameter (first fun-params) next-gen-context)
+                                              (generate-parameter (second fun-params) next-gen-context)))])]
+       [else (raise-user-error (format "unknown function id ~a" fun-id))]))
+
+(module+ test #| generate-fun-call |#
+  (check-equal? (generate-fun-call VM_L1 (ast-e-fun-call 'byte+ (list (loc-ref 'sym) (ast-ev-id 'param))
+                                                         (list (-loc-set 'sym (ast-ev-number 11)))
+                                                         '())
+                                   (gen-context 0 (hash) (hash 'param 1) '()))
+                (gen-context 1 '#hash((sym . 0)) '#hash((param . 1))
+                             (list CISC_VM_IMMB     VM_L0 11
+                                   CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P1))))
+
 ;; generate code for an-expression, assigning result into target-reg within the given gen-context
 (define/contract (generate target-reg an-expression a-gen-context)
   (->* [byte? ast-expression? gen-context?] [] gen-context?)
   (cond
     [(-loc-set? an-expression) ;; makes no use of target-reg
-     (define expr (-loc-set-expr an-expression))
-     (define local (gen-context-next-local a-gen-context))
-     (struct-copy gen-context a-gen-context
-                  [next-local (+ 1 local)]
-                  [local-id-map (hash-set (gen-context-local-id-map a-gen-context) (-loc-set-id an-expression) local)]
-                  [gen-bytes (append (gen-context-gen-bytes a-gen-context)
-                                     (cond
-                                       [(ast-ev-number? expr) (list CISC_VM_IMMB local (ast-ev-number-number expr))]
-                                       [else (raise-user-error (format "unknown expression to set ~a" expr))]))])]
+     (generate-loc-set an-expression a-gen-context)]
     [(ast-e-fun-call? an-expression)
-     (define fun-id (ast-e-fun-call-fun an-expression))
-     (define fun-params (ast-e-fun-call-params an-expression))
-     (define pre-code (ast-e-fun-call-pre-code an-expression))
-     (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate 0 pre-expression inner-gen-context)) a-gen-context pre-code))
-     (cond
-       [(eq? fun-id '+)
-        (struct-copy gen-context next-gen-context
-                     [gen-bytes (append (gen-context-gen-bytes next-gen-context)
-                                        (list CISC_VM_BYTE_ADD target-reg (generate-parameter (first fun-params) next-gen-context)
-                                              (generate-parameter (second fun-params) next-gen-context)))])]
-       [else (raise-user-error (format "unknown function id ~a" fun-id))])]
+     (generate-fun-call target-reg an-expression a-gen-context)]
     [else (raise-user-error (format "unknown expression to generate ~a" an-expression))]))
 
 (module+ test #| gen-context |#
@@ -625,7 +646,7 @@
 
   (check-equal? (gen-context-gen-bytes
                  (generate VM_L1
-                           (ast-e-fun-call '+
+                           (ast-e-fun-call 'byte+
                                            (list (loc-ref 'byte-10) (ast-ev-id 'a-byte))
                                            (list (-loc-set 'byte-10 (ast-ev-number 10)))
                                            '())
@@ -634,33 +655,50 @@
                  CISC_VM_IMMB VM_L0 10
                  CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P0)))
 
+(define/contract (--prep-param-hashmap params)
+  (->* [(listof ast-param-def?)] [] hash?)
+  (define param-ids (map ast-param-def-id params))
+  (foldl (lambda (param hash-map) (hash-set hash-map param (hash-count hash-map))) (hash) param-ids))
+
+(module+ test #| --prep-param-hashmap |#
+  (check-equal? (--prep-param-hashmap (list (ast-param-def 'p0 (ast-td-simple 'string))
+                                            (ast-param-def 'other (ast-td-simple 'number))))
+                (hash 'p0 0 'other 1)))
+
 (define/contract (cisc-vm-transform fun)
-  (->* [ast-function-def?] [] (listof byte?))
+  (->* [ast-function-def?] [] gen-context?)
   (define transformed-expressions (map transform (ast-function-def-body fun)))
   ;; register all parameter-id s into the generation context
+  (define param-map (--prep-param-hashmap (ast-function-def-parameter fun)))
   ;; generate (into target local slot 0) expression(s)
+  (define new-gen-context (foldl (lambda (body-expr a-gen-ctx) (generate VM_L0 body-expr a-gen-ctx)) (gen-context 0 (hash) param-map '()) transformed-expressions))
   ;; count the needed local slots (for later function registration)
   ;; generate return local slot 0
-  (list))
+  (define locals-needed (gen-context-next-local new-gen-context))
+  (struct-copy gen-context new-gen-context
+               [gen-bytes (append (gen-context-gen-bytes new-gen-context)
+                                  (list CISC_VM_RET (- locals-needed 1)))]))
 
 (module+ test #| compile |#
 
-
   (require (only-in "../6510-utils.rkt" two-complement-of))
 
+  (check-match
+   (cisc-vm-transform
+    (m-def (add1 (a-byte byte) -> byte
+                 "add one to the given")
+           (byte+ 1 a-byte)))
+   (gen-context 1 a-hash (hash 'a-byte 0)
+                (list CISC_VM_IMMB VM_L0 1
+                      CISC_VM_BYTE_ADD VM_L0 VM_L0 VM_P0 ;; optimization: byte could be directly encoded into parameter (encode-idx 1 l-imm)
+                      CISC_VM_RET VM_L0))
+   (hash? a-hash))
 
-  (skip "simple add not implemented yet"
-        (check-equal?
-         (cisc-vm-transform
-          (m-def (add1 (a-byte byte) -> byte
-                       "add one to the given")
-                 (+ 1 a-byte)))
-         (list CISC_VM_IMMB VM_L0 1
-               CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P0
-               CISC_VM_RET VM_L1)))
 
+  ;; next test: tail call recursion
+  ;; next test: if/cond
 
-  (skip "transformation is not implemented yet"
+  (skip "transformation (if, tail-recursion) not implemented yet"
         (check-equal?
          (cisc-vm-transform
           (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
