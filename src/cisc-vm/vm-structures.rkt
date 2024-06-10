@@ -14,9 +14,11 @@
          CISC_VM_RET
          CISC_VM_IMMB
          CISC_VM_BYTE_ADD
+         CISC_VM_BRA
 
          VM_L0
          VM_L1
+         VM_L2
          VM_P0
          VM_P1
 
@@ -188,7 +190,7 @@
 (define CISC_VM_RET            3) ;; 2          <byte-code> <result-reg>
 (define CISC_VM_IMMB           4) ;; 3          <byte-code> <target-reg> value
 (define CISC_VM_MAKE_LIST      5) ;; 3+elemc    <byte-code> <target-reg> element-count <elem1-reg> <elem2-reg> ... <elemn-reg>
-(define CISC_VM_BRA_EMPTY_LIST 6) ;; 3          <byte-code> <tested-reg> offset
+(define CISC_VM_BRA_EMPTY_LIST 6) ;; 3          <byte-code> <list-tested-reg> offset
 (define CISC_VM_CAR            7) ;; 3          <byte-code> <target-reg> <src-list-reg>
 (define CISC_VM_CDR            8) ;; 3          <byte-code> <target-reg> <src-list-reg>
 (define CISC_VM_GOTO           9) ;; 2          <byte-code> offset
@@ -207,6 +209,7 @@
 (define CISC_VM_INT_INC       22) ;; 2          <byte-code> <target-reg>
 (define CISC_VM_CASE          23) ;; 3+casen*3  <byte-code> <target-reg> <case-src-reg> case-no case-byte-value-0 <new-byte-idx> case-byte-value-1 <new-byte-idx> ... case-byte-value-n <new-byte-idx>
 (define CISC_VM_THROW         24) ;; 3+paramn   <byte-code> <exception-str> <param-no> <param-1> <param-2> ... <param-n>
+(define CISC_VM_BRA           25) ;; 3          <byte-code> <bool-tested-reg> offset
 
 ;; BYTE_SUB
 ;; INT_SUB

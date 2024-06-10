@@ -16,9 +16,11 @@
                   CISC_VM_RET
                   CISC_VM_IMMB
                   CISC_VM_BYTE_ADD
+                  CISC_VM_BRA
 
                   VM_L0
                   VM_L1
+                  VM_L2
                   VM_P0
                   VM_P1
 
@@ -561,10 +563,14 @@
                                '())
                (symbol? a-sym)))
 
+(define/contract (transform-if if-expression)
+  (->* [ast-e-if?] [] ast-e-if?)
+  if-expression)
+
 (define/contract (transform an-expression)
   (->* [ast-expression?] [] ast-expression?)
   (cond
-    [(ast-e-if? an-expression) (raise-user-error "not implemented yet")]
+    [(ast-e-if? an-expression) (transform-if an-expression)]
     [(ast-e-fun-call? an-expression) (transform-function-call an-expression)]
     [else an-expression]))
 
@@ -578,6 +584,11 @@
   #:transparent
   #:guard
   (struct-guard/c byte? (hash/c symbol? byte?) (hash/c symbol? byte?) (listof byte?)))
+
+
+(define/contract (make-gen-context)
+  (->* [] [] gen-context?)
+  (gen-context 0 (hash) (hash) (list)))
 
 ;; generate references to parameters and encode them into one byte (VM_L0 ... VM_Lx, VM_P0 ... etc.)
 (define/contract (generate-parameter parameter a-gen-context)
@@ -601,6 +612,7 @@
                [gen-bytes (append (gen-context-gen-bytes a-gen-context)
                                   (cond
                                     [(ast-ev-number? expr) (list CISC_VM_IMMB local (ast-ev-number-number expr))]
+                                    [(ast-ev-bool? expr)   (list CISC_VM_IMMB local (if (ast-ev-bool-bool expr) #xff #x00))]
                                     [else (raise-user-error (format "unknown expression to set ~a" expr))]))]))
 
 (module+ test #| generate-loc-set |#
@@ -630,18 +642,109 @@
                              (list CISC_VM_IMMB     VM_L0 11
                                    CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P1))))
 
+(define/contract (generate-if target-reg if-expr a-gen-context)
+  (->* [byte? ast-e-if? gen-context?] [] gen-context?)
+  (define pre-code (ast-e-fun-call-pre-code if-expr))
+  (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate 0 pre-expression inner-gen-context)) a-gen-context pre-code))
+  (define else-block-gen-context (struct-copy gen-context next-gen-context [gen-bytes (list)]))
+  (define else-block-expressions (map transform (cddr (ast-e-fun-call-params if-expr))))
+  (define final-else-block-gen-context (foldl (lambda (pre-expression inner-gen-context)
+                                                (generate target-reg pre-expression inner-gen-context))
+                                              else-block-gen-context else-block-expressions))
+  (define then-block-gen-context (struct-copy gen-context final-else-block-gen-context [gen-bytes (list)]))
+  (define then-block-expression (transform (cadr (ast-e-fun-call-params if-expr))))
+  (define final-then-block-gen-context (generate target-reg then-block-expression then-block-gen-context))
+  (define then-block-len (length (gen-context-gen-bytes final-then-block-gen-context)))
+  (define else-block-len (length (gen-context-gen-bytes final-else-block-gen-context)))
+
+  ;; possible workaround: make longjumps possible
+  (when (> then-block-len 126)
+    (raise-user-error "generated then block > 126 bytes, branch cannot be generated"))
+  (when (> else-block-len 126)
+    (raise-user-error "generated else block > 126 bytes, branch cannot be generated"))
+
+  (struct-copy gen-context final-then-block-gen-context
+               [gen-bytes (append (gen-context-gen-bytes next-gen-context)
+                                  (list CISC_VM_BRA 0 (+ 3 then-block-len)) ;; TODO: register for branch must be generated (not always 0!)
+                                  (gen-context-gen-bytes final-then-block-gen-context)
+                                  (list CISC_VM_GOTO (+ 1 else-block-len))
+                                  (gen-context-gen-bytes final-else-block-gen-context))]))
+
+(module+ test #| generate-if |#
+  (check-equal? (generate-if VM_L0 (ast-e-if 'if
+                                             (list (loc-ref 'sym) (ast-ev-number 1) (ast-ev-number 2))
+                                             (list (-loc-set 'sym (ast-ev-bool #t)))
+                                             '())
+                             (make-gen-context))
+                (gen-context 1 (hash 'sym 0) (hash)
+                             (list CISC_VM_IMMB VM_L0 #xff
+                                   CISC_VM_BRA VM_L0 6
+                                   CISC_VM_IMMB VM_L0 1
+                                   CISC_VM_GOTO 4
+                                   CISC_VM_IMMB VM_L0 2)))
+
+  (skip "TODO: register for branch must be generated"
+        (check-equal? (generate-if VM_L0 (ast-e-if 'if
+                                                   (list (ast-ev-id 'param) (ast-ev-number 1) (ast-ev-number 2))
+                                                   '() '())
+                                   (gen-context 0 (hash) (hash 'param 1) (list)))
+                      (gen-context 1 (hash) (hash 'param 1)
+                                   (list CISC_VM_BRA VM_P1 6
+                                         CISC_VM_IMMB VM_L0 1
+                                         CISC_VM_GOTO 4
+                                         CISC_VM_IMMB VM_L0 2))))
+
+    (check-match (generate-if VM_L0 (ast-e-if 'if
+                                               (list (loc-ref 'sym)
+                                                     (ast-ev-number 1)
+                                                     (ast-e-fun-call 'byte+ (list (ast-ev-number 2)
+                                                                                  (ast-ev-number 3))
+                                                                     (list) (list)))
+                                             (list (-loc-set 'sym (ast-ev-bool #t)))
+                                             '())
+                             (make-gen-context))
+                (gen-context 3 gen-hash (hash)
+                             (list CISC_VM_IMMB VM_L0 #xff
+                                   CISC_VM_BRA VM_L0 6
+                                   CISC_VM_IMMB VM_L0 1
+                                   CISC_VM_GOTO 11
+                                   CISC_VM_IMMB VM_L1 3
+                                   CISC_VM_IMMB VM_L2 2
+                                   CISC_VM_BYTE_ADD VM_L0 VM_L2 VM_L1))
+                (hash? gen-hash)))
+
+(define/contract (generate-value-set target-reg an-expression a-gen-context)
+  (->* [byte? ast-e-value? gen-context?] [] gen-context?)
+  (cond
+    [(ast-ev-number? an-expression)
+     (struct-copy gen-context a-gen-context
+                  [gen-bytes (append (gen-context-gen-bytes a-gen-context)
+                                     (list CISC_VM_IMMB target-reg (ast-ev-number-number an-expression)))])]
+    [(ast-ev-bool an-expression)
+     (struct-copy gen-context a-gen-context
+                  [gen-bytes (append (gen-context-gen-bytes a-gen-context)
+                                     (list CISC_VM_IMMB target-reg (if (ast-ev-bool-bool an-expression) #xff #x00)))])]
+    ;; [(ast-ev-string an-expression)]
+    ;; [(ast-ev-id an-expression)]
+    [else (raise-user-error (format "unknown value ~a" an-expression))]
+    ))
+
 ;; generate code for an-expression, assigning result into target-reg within the given gen-context
 (define/contract (generate target-reg an-expression a-gen-context)
   (->* [byte? ast-expression? gen-context?] [] gen-context?)
   (cond
+    [(ast-e-value? an-expression)
+     (generate-value-set target-reg an-expression a-gen-context)]
     [(-loc-set? an-expression) ;; makes no use of target-reg
      (generate-loc-set an-expression a-gen-context)]
+    [(ast-e-if? an-expression)
+     (generate-if target-reg an-expression a-gen-context)]
     [(ast-e-fun-call? an-expression)
      (generate-fun-call target-reg an-expression a-gen-context)]
     [else (raise-user-error (format "unknown expression to generate ~a" an-expression))]))
 
 (module+ test #| gen-context |#
-  (check-equal? (gen-context-gen-bytes (generate 0 (-loc-set 'sym (ast-ev-number 10)) (gen-context 0 (hash) (hash) '())))
+  (check-equal? (gen-context-gen-bytes (generate 0 (-loc-set 'sym (ast-ev-number 10)) (make-gen-context)))
                 (list CISC_VM_IMMB VM_L0 10))
 
   (check-equal? (gen-context-gen-bytes
@@ -677,26 +780,40 @@
   (define locals-needed (gen-context-next-local new-gen-context))
   (struct-copy gen-context new-gen-context
                [gen-bytes (append (gen-context-gen-bytes new-gen-context)
-                                  (list CISC_VM_RET (- locals-needed 1)))]))
+                                  (list CISC_VM_RET VM_L0))]))
 
 (module+ test #| compile |#
 
   (require (only-in "../6510-utils.rkt" two-complement-of))
 
-  (check-match
-   (cisc-vm-transform
-    (m-def (add1 (a-byte byte) -> byte
-                 "add one to the given")
-           (byte+ 1 a-byte)))
-   (gen-context 1 a-hash (hash 'a-byte 0)
-                (list CISC_VM_IMMB VM_L0 1
-                      CISC_VM_BYTE_ADD VM_L0 VM_L0 VM_P0 ;; optimization: byte could be directly encoded into parameter (encode-idx 1 l-imm)
-                      CISC_VM_RET VM_L0))
-   (hash? a-hash))
+  (check-equal?
+   (gen-context-gen-bytes
+    (cisc-vm-transform
+     (m-def (add1 (a-byte byte) -> byte
+                  "add one to the given")
+            (byte+ 1 a-byte))))
+   (list CISC_VM_IMMB VM_L0 1
+         CISC_VM_BYTE_ADD VM_L0 VM_L0 VM_P0 ;; optimization: byte could be directly encoded into parameter (encode-idx 1 l-imm)
+         CISC_VM_RET VM_L0)))
 
+(module+ test #| if/cond |#
 
-  ;; next test: tail call recursion
-  ;; next test: if/cond
+  (skip "TODO: register for branch must be generated"
+        (check-equal?
+         (cisc-vm-transform
+          (m-def (a-or-b (param bool) -> byte
+                         "return first or second")
+                 (if param 1 2)))
+         (gen-context 0 (hash) (hash 'param 0)
+                      (list CISC_VM_BRA  VM_P0 6
+                            CISC_VM_IMMB VM_L0 1
+                            CISC_VM_GOTO 4
+                            CISC_VM_IMMB VM_L0 2
+                            CISC_VM_RET  VM_L0)))))
+
+;; next test: tail call recursion
+
+(module+ test #| compile |#
 
   (skip "transformation (if, tail-recursion) not implemented yet"
         (check-equal?
