@@ -21,6 +21,7 @@
                   CISC_VM_BRA
                   CISC_VM_MOVE
                   CISC_VM_CALL
+                  CISC_VM_NIL_P
 
                   VM_L0
                   VM_L1
@@ -152,8 +153,7 @@
   [(_ (id (p-id p-typ) ... (o-id o-typ o-val) ... -> r-typ desc ...) expr ...)
    #'(ast-function-def 'id
                        (list (ast-param-def 'p-id (m-type-def p-typ)) ...)
-                       (list (ast-pd-default-param 'o-id (m-type-def o-typ) (m-expression-def o-val)
-                                                   ) ...)
+                       (list (ast-pd-default-param 'o-id (m-type-def o-typ) (m-expression-def o-val)) ...)
                        (m-type-def r-typ)
                        (list 'desc ...)
                        (list (m-expression-def expr) ...))])
@@ -571,7 +571,16 @@
 
 (define/contract (transform-if if-expression)
   (->* [ast-e-if?] [] ast-e-if?)
-  if-expression)
+  (define boolean-expr (car (ast-e-fun-call-params if-expression)))
+  (cond
+    [(ast-ev-bool? boolean-expr) if-expression]
+    [(ast-ev-id? boolean-expr) if-expression]
+    [else
+     (define sym (gensym))
+     (ast-e-if 'if (cons (loc-ref sym)
+                         (cdr (ast-e-fun-call-params if-expression)))
+               (list (-loc-set sym (transform boolean-expr)))
+               (list))]))
 
 (define/contract (transform an-expression)
   (->* [ast-expression?] [] ast-expression?)
@@ -631,6 +640,7 @@
                                     [(ast-ev-bool? expr)   (list CISC_VM_IMMB local (if (ast-ev-bool-bool expr) #xff #x00))]
                                     [(ast-e-if? expr)      (raise-user-error (format "if not allowed in -loc-set position (yet) ~a" expr))]
                                     [(ast-e-fun-call? expr) (gen-context-gen-bytes (generate-fun-call local expr (struct-copy gen-context a-gen-context [gen-bytes (list)])))]
+                                    [(ast-ev-id? expr)      (list CISC_VM_MOVE local (encode-idx (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id expr)) l-param))]
                                     [else (raise-user-error (format "unknown expression to set ~a" expr))]))]))
 
 (module+ test #| generate-loc-set |#
@@ -654,36 +664,40 @@
 (define/contract (generate-fun-call target-reg a-fun-call a-gen-context)
   (->* [byte? ast-e-fun-call? gen-context?] [] gen-context?)
   (define fun-id (ast-e-fun-call-fun a-fun-call))
-     (define fun-params (ast-e-fun-call-params a-fun-call))
-     (define fun-params-len (length fun-params))
-     (define pre-code (ast-e-fun-call-pre-code a-fun-call))
-     (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate 0 pre-expression inner-gen-context)) a-gen-context pre-code))
-     (cond
-       [(eq? fun-id 'byte+)
-        (struct-copy gen-context next-gen-context
-                     [gen-bytes (append (gen-context-gen-bytes next-gen-context)
-                                        (list CISC_VM_BYTE_ADD target-reg (generate-parameter (first fun-params) next-gen-context)
-                                              (generate-parameter (second fun-params) next-gen-context)))])]
-       [(eq? fun-id (gen-context-current-function a-gen-context))
-        (define function-len (+ (length (gen-context-gen-bytes next-gen-context)) ;; generated up to here
-                                (* 3 fun-params-len) ;; moves for params
-                                1)) ;; goto itself
-        (struct-copy gen-context next-gen-context
-                     [gen-bytes (append (gen-context-gen-bytes next-gen-context)
-                                        (flatten
-                                         (map (lambda  (idx-param) (list CISC_VM_MOVE (encode-idx (car idx-param) l-param) (cdr idx-param)))
-                                              (map cons (range (length fun-params))
-                                                   (map (lambda (param) (generate-parameter param next-gen-context)) fun-params))))
-                                        (list CISC_VM_GOTO (two-complement-of (- 0 function-len)))
-                                        )])]
-       [else
-        (define func-idx (hash-ref (gen-context-function-id-map a-gen-context) fun-id))
-        (define func-idx-low (bitwise-and func-idx #xff))
-        (define func-idx-high (arithmetic-shift func-idx -8))
-        (struct-copy gen-context next-gen-context
-                     [gen-bytes (append (gen-context-gen-bytes next-gen-context)
-                                        (list CISC_VM_CALL target-reg func-idx-low func-idx-high fun-params-len)
-                                        (map (lambda (param) (generate-parameter param next-gen-context)) fun-params))])]))
+  (define fun-params (ast-e-fun-call-params a-fun-call))
+  (define fun-params-len (length fun-params))
+  (define pre-code (ast-e-fun-call-pre-code a-fun-call))
+  (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate 0 pre-expression inner-gen-context)) a-gen-context pre-code))
+  (cond
+    [(eq? fun-id 'cons) next-gen-context]
+    [(eq? fun-id 'cdr) next-gen-context]
+    [(eq? fun-id 'car) next-gen-context]
+    [(eq? fun-id 'nil?) next-gen-context]
+    [(eq? fun-id 'byte+)
+     (struct-copy gen-context next-gen-context
+                  [gen-bytes (append (gen-context-gen-bytes next-gen-context)
+                                     (list CISC_VM_BYTE_ADD target-reg (generate-parameter (first fun-params) next-gen-context)
+                                           (generate-parameter (second fun-params) next-gen-context)))])]
+    [(eq? fun-id (gen-context-current-function a-gen-context))
+     (define function-len (+ (length (gen-context-gen-bytes next-gen-context)) ;; generated up to here
+                             (* 3 fun-params-len) ;; moves for params
+                             1)) ;; goto itself
+     (struct-copy gen-context next-gen-context
+                  [gen-bytes (append (gen-context-gen-bytes next-gen-context)
+                                     (flatten
+                                      (map (lambda  (idx-param) (list CISC_VM_MOVE (encode-idx (car idx-param) l-param) (cdr idx-param)))
+                                           (map cons (range (length fun-params))
+                                                (map (lambda (param) (generate-parameter param next-gen-context)) fun-params))))
+                                     (list CISC_VM_GOTO (two-complement-of (- 0 function-len)))
+                                     )])]
+    [else
+     (define func-idx (hash-ref (gen-context-function-id-map a-gen-context) fun-id))
+     (define func-idx-low (bitwise-and func-idx #xff))
+     (define func-idx-high (arithmetic-shift func-idx -8))
+     (struct-copy gen-context next-gen-context
+                  [gen-bytes (append (gen-context-gen-bytes next-gen-context)
+                                     (list CISC_VM_CALL target-reg func-idx-low func-idx-high fun-params-len)
+                                     (map (lambda (param) (generate-parameter param next-gen-context)) fun-params))])]))
 
 (module+ test #| generate-fun-call |#
   (check-equal? (generate-fun-call VM_L1 (ast-e-fun-call 'byte+ (list (loc-ref 'sym) (ast-ev-id 'param))
@@ -788,12 +802,17 @@
      (struct-copy gen-context a-gen-context
                   [gen-bytes (append (gen-context-gen-bytes a-gen-context)
                                      (list CISC_VM_IMMB target-reg (ast-ev-number-number an-expression)))])]
-    [(ast-ev-bool an-expression)
+    [(ast-ev-bool? an-expression)
      (struct-copy gen-context a-gen-context
                   [gen-bytes (append (gen-context-gen-bytes a-gen-context)
                                      (list CISC_VM_IMMB target-reg (if (ast-ev-bool-bool an-expression) #xff #x00)))])]
+    [(ast-ev-id? an-expression)
+     (unless (hash-has-key? (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id an-expression))
+       (raise-user-error (format "Key ~a not found in ~a" (ast-ev-id-id an-expression) (gen-context-parameter-id-map a-gen-context))))
+     (struct-copy gen-context a-gen-context
+                  [gen-bytes (append (gen-context-gen-bytes a-gen-context)
+                                     (list CISC_VM_MOVE target-reg (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id an-expression))))])]
     ;; [(ast-ev-string an-expression)]
-    ;; [(ast-ev-id an-expression)]
     [else (raise-user-error (format "unknown value ~a" an-expression))]
     ))
 
@@ -828,8 +847,7 @@
 
 (define/contract (--prep-param-hashmap params)
   (->* [(listof ast-param-def?)] [] hash?)
-  (define param-ids (map ast-param-def-id params))
-  (foldl (lambda (param hash-map) (hash-set hash-map param (hash-count hash-map))) (hash) param-ids))
+  (apply hash (flatten (map list (map ast-param-def-id params) (range (length params))))))
 
 (module+ test #| --prep-param-hashmap |#
   (check-equal? (--prep-param-hashmap (list (ast-param-def 'p0 (ast-td-simple 'string))
@@ -840,7 +858,7 @@
   (->* [ast-function-def?] [] gen-context?)
   (define transformed-expressions (map transform (ast-function-def-body fun)))
   ;; register all parameter-id s into the generation context
-  (define param-map (--prep-param-hashmap (ast-function-def-parameter fun)))
+  (define param-map (--prep-param-hashmap (append (ast-function-def-parameter fun) (ast-function-def-default-parameter fun))))
   ;; generate (into target local slot 0) expression(s)
   (define new-gen-context (foldl (lambda (body-expr a-gen-ctx) (generate VM_L0 body-expr a-gen-ctx))
                                  (gen-context 0 (hash) param-map '() (hash) (ast-function-def-id fun))
@@ -900,20 +918,23 @@
 
 (module+ test #| compile |#
 
-  (skip "transformation (if, tail-recursion) not implemented yet"
+  (skip "not completely done yet"
         (check-equal?
-         (cisc-vm-transform
-          (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
-                          "reverse a-list, consing it into b-list")
-                 (if (nil? a-list)
-                     b-list
-                     (reverse (cdr a-list) (cons (car a-list) b-list)))))
-         (list CISC_VM_BRA_EMPTY_LIST VM_P0 13
-               CISC_VM_CAR            VM_L0 VM_P0
-               CISC_VM_CONS           VM_P1 VM_L0 VM_P1
-               CISC_VM_CDR            VM_P0 VM_P0
-               CISC_VM_GOTO           (two-complement-of -14)
-               CISC_VM_RET            VM_P1))))
+         (gen-context-gen-bytes
+          (cisc-vm-transform
+           (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
+                           "reverse a-list, consing it into b-list")
+                  (if (nil? a-list)
+                      b-list
+                      (reverse (cdr a-list) (cons (car a-list) b-list))))))
+         (list CISC_VM_MOVE       VM_L0 VM_P0
+               CISC_VM_NIL_P      VM_L0 VM_P0
+               CISC_VM_BRA        VM_L0 13
+               CISC_VM_CAR        VM_L0 VM_P0
+               CISC_VM_CONS       VM_P1 VM_L0 VM_P1
+               CISC_VM_CDR        VM_P0 VM_P0
+               CISC_VM_GOTO       (two-complement-of -14)
+               CISC_VM_RET        VM_P1))))
 
 
 ;; TODO: now transform this tree into a flat list of cisc vm commands

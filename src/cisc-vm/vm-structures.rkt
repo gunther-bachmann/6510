@@ -17,6 +17,7 @@
          CISC_VM_BRA
          CISC_VM_MOVE
          CISC_VM_CALL
+         CISC_VM_NIL_P
 
          VM_L0
          VM_L1
@@ -214,6 +215,7 @@
 (define CISC_VM_THROW         24) ;; 3+paramn   <byte-code> <exception-str> <param-no> <param-1> <param-2> ... <param-n>
 (define CISC_VM_BRA           25) ;; 3          <byte-code> <bool-tested-reg> offset
 (define CISC_VM_MOVE          26) ;; 3          <byte-code> <target-reg> <source-reg>
+(define CISC_VM_NIL_P         27) ;; 3          <byte-code> <target-reg> <list-reg>
 
 ;; BYTE_SUB
 ;; INT_SUB
