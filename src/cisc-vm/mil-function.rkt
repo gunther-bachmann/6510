@@ -642,9 +642,17 @@
                              (list CISC_VM_IMMB     VM_L0 11
                                    CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P1))))
 
+(define/contract (generate-register-ref expr a-gen-context)
+  (->* [ast-expression? gen-context?] [] byte?)
+  (cond
+    [(loc-ref? expr) (encode-idx (hash-ref (gen-context-local-id-map a-gen-context) (loc-ref-id expr)) l-local)]
+    [(ast-ev-id? expr) (encode-idx (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id expr)) l-param)]
+    [else (raise-user-error (format "cannot resolve reference ~a" expr))]))
+
 (define/contract (generate-if target-reg if-expr a-gen-context)
   (->* [byte? ast-e-if? gen-context?] [] gen-context?)
   (define pre-code (ast-e-fun-call-pre-code if-expr))
+  (define bool-ref-expression (car (ast-e-fun-call-params if-expr)))
   (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate 0 pre-expression inner-gen-context)) a-gen-context pre-code))
   (define else-block-gen-context (struct-copy gen-context next-gen-context [gen-bytes (list)]))
   (define else-block-expressions (map transform (cddr (ast-e-fun-call-params if-expr))))
@@ -656,6 +664,7 @@
   (define final-then-block-gen-context (generate target-reg then-block-expression then-block-gen-context))
   (define then-block-len (length (gen-context-gen-bytes final-then-block-gen-context)))
   (define else-block-len (length (gen-context-gen-bytes final-else-block-gen-context)))
+  (define branch-decision-register (generate-register-ref bool-ref-expression next-gen-context))
 
   ;; possible workaround: make longjumps possible
   (when (> then-block-len 126)
@@ -665,7 +674,7 @@
 
   (struct-copy gen-context final-then-block-gen-context
                [gen-bytes (append (gen-context-gen-bytes next-gen-context)
-                                  (list CISC_VM_BRA 0 (+ 3 then-block-len)) ;; TODO: register for branch must be generated (not always 0!)
+                                  (list CISC_VM_BRA branch-decision-register (+ 3 then-block-len))
                                   (gen-context-gen-bytes final-then-block-gen-context)
                                   (list CISC_VM_GOTO (+ 1 else-block-len))
                                   (gen-context-gen-bytes final-else-block-gen-context))]))
@@ -683,16 +692,15 @@
                                    CISC_VM_GOTO 4
                                    CISC_VM_IMMB VM_L0 2)))
 
-  (skip "TODO: register for branch must be generated"
-        (check-equal? (generate-if VM_L0 (ast-e-if 'if
-                                                   (list (ast-ev-id 'param) (ast-ev-number 1) (ast-ev-number 2))
-                                                   '() '())
-                                   (gen-context 0 (hash) (hash 'param 1) (list)))
-                      (gen-context 1 (hash) (hash 'param 1)
-                                   (list CISC_VM_BRA VM_P1 6
-                                         CISC_VM_IMMB VM_L0 1
-                                         CISC_VM_GOTO 4
-                                         CISC_VM_IMMB VM_L0 2))))
+  (check-equal? (generate-if VM_L0 (ast-e-if 'if
+                                             (list (ast-ev-id 'param) (ast-ev-number 1) (ast-ev-number 2))
+                                             '() '())
+                             (gen-context 0 (hash) (hash 'param 1) (list)))
+                (gen-context 0 (hash) (hash 'param 1)
+                             (list CISC_VM_BRA VM_P1 6
+                                   CISC_VM_IMMB VM_L0 1
+                                   CISC_VM_GOTO 4
+                                   CISC_VM_IMMB VM_L0 2)))
 
     (check-match (generate-if VM_L0 (ast-e-if 'if
                                                (list (loc-ref 'sym)
@@ -798,18 +806,17 @@
 
 (module+ test #| if/cond |#
 
-  (skip "TODO: register for branch must be generated"
-        (check-equal?
-         (cisc-vm-transform
-          (m-def (a-or-b (param bool) -> byte
-                         "return first or second")
-                 (if param 1 2)))
-         (gen-context 0 (hash) (hash 'param 0)
-                      (list CISC_VM_BRA  VM_P0 6
-                            CISC_VM_IMMB VM_L0 1
-                            CISC_VM_GOTO 4
-                            CISC_VM_IMMB VM_L0 2
-                            CISC_VM_RET  VM_L0)))))
+  (check-equal?
+   (cisc-vm-transform
+    (m-def (a-or-b (param bool) -> byte
+                   "return first or second")
+           (if param 1 2)))
+   (gen-context 0 (hash) (hash 'param 0)
+                (list CISC_VM_BRA  VM_P0 6
+                      CISC_VM_IMMB VM_L0 1
+                      CISC_VM_GOTO 4
+                      CISC_VM_IMMB VM_L0 2
+                      CISC_VM_RET  VM_L0))))
 
 ;; next test: tail call recursion
 
