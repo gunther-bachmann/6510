@@ -7,6 +7,8 @@
 
 (require syntax/parse/define)
 
+(require (only-in "../6510-utils.rkt" two-complement-of))
+
 (require (only-in "./vm-structures.rkt"
                   CISC_VM_CONS
                   CISC_VM_CAR
@@ -17,10 +19,14 @@
                   CISC_VM_IMMB
                   CISC_VM_BYTE_ADD
                   CISC_VM_BRA
+                  CISC_VM_MOVE
+                  CISC_VM_CALL
 
                   VM_L0
                   VM_L1
                   VM_L2
+                  VM_L3
+
                   VM_P0
                   VM_P1
 
@@ -580,15 +586,25 @@
                (symbol? a-sym)))
 
 (struct gen-context
-  (next-local local-id-map parameter-id-map gen-bytes)
+  (next-local local-id-map parameter-id-map gen-bytes function-id-map current-function)
   #:transparent
   #:guard
-  (struct-guard/c byte? (hash/c symbol? byte?) (hash/c symbol? byte?) (listof byte?)))
+  (struct-guard/c byte? (hash/c symbol? byte?) (hash/c symbol? byte?) (listof byte?) (hash/c symbol? integer?) symbol?))
 
-
-(define/contract (make-gen-context)
-  (->* [] [] gen-context?)
-  (gen-context 0 (hash) (hash) (list)))
+(define/contract (make-gen-context #:next-local (a-next-local 0)
+                                   #:local-id-map (a-local-id-map (hash))
+                                   #:parameter-id-map (a-parameter-id-map (hash))
+                                   #:gen-bytes (a-gen-bytes (list))
+                                   #:function-id-map (a-function-id-map (hash))
+                                   #:current-function (a-current-function 'nil))
+  (->* [] [#:next-local byte?
+          #:local-id-map hash?
+          #:parameter-id-map hash?
+          #:gen-bytes (listof byte?)
+          #:function-id-map hash?
+          #:current-function symbol?]
+  gen-context?)
+  (gen-context a-next-local a-local-id-map a-parameter-id-map a-gen-bytes a-function-id-map a-current-function))
 
 ;; generate references to parameters and encode them into one byte (VM_L0 ... VM_Lx, VM_P0 ... etc.)
 (define/contract (generate-parameter parameter a-gen-context)
@@ -613,16 +629,33 @@
                                   (cond
                                     [(ast-ev-number? expr) (list CISC_VM_IMMB local (ast-ev-number-number expr))]
                                     [(ast-ev-bool? expr)   (list CISC_VM_IMMB local (if (ast-ev-bool-bool expr) #xff #x00))]
+                                    [(ast-e-if? expr)      (raise-user-error (format "if not allowed in -loc-set position (yet) ~a" expr))]
+                                    [(ast-e-fun-call? expr) (gen-context-gen-bytes (generate-fun-call local expr (struct-copy gen-context a-gen-context [gen-bytes (list)])))]
                                     [else (raise-user-error (format "unknown expression to set ~a" expr))]))]))
 
 (module+ test #| generate-loc-set |#
-  (check-equal? (generate-loc-set (-loc-set 'sym (ast-ev-number 15)) (gen-context 5 (hash) (hash) '()))
-                (gen-context 6 '#hash((sym . 5)) '#hash() (list CISC_VM_IMMB 5 15))))
+  (check-equal? (generate-loc-set (-loc-set 'sym (ast-ev-number 15)) (make-gen-context #:next-local 5))
+                (make-gen-context #:next-local 6 #:local-id-map '#hash((sym . 5)) #:gen-bytes (list CISC_VM_IMMB 5 15)))
+
+  (check-equal?
+   (generate-loc-set
+    (-loc-set 'sym (ast-e-fun-call 'byte+ (list (loc-ref 'a) (loc-ref 'b))
+                                   (list (-loc-set 'a (ast-ev-number 1))
+                                         (-loc-set 'b (ast-ev-number 2)))
+                                   (list)))
+    (make-gen-context #:function-id-map (hash 'byte+ 0)))
+   (gen-context 1 (hash 'sym 0) (hash)
+                (list CISC_VM_IMMB VM_L0 1
+                      CISC_VM_IMMB VM_L1 2
+                      CISC_VM_BYTE_ADD VM_L0 VM_L0 VM_L1)
+                (hash 'byte+ 0)
+                'nil)))
 
 (define/contract (generate-fun-call target-reg a-fun-call a-gen-context)
   (->* [byte? ast-e-fun-call? gen-context?] [] gen-context?)
   (define fun-id (ast-e-fun-call-fun a-fun-call))
      (define fun-params (ast-e-fun-call-params a-fun-call))
+     (define fun-params-len (length fun-params))
      (define pre-code (ast-e-fun-call-pre-code a-fun-call))
      (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate 0 pre-expression inner-gen-context)) a-gen-context pre-code))
      (cond
@@ -631,16 +664,37 @@
                      [gen-bytes (append (gen-context-gen-bytes next-gen-context)
                                         (list CISC_VM_BYTE_ADD target-reg (generate-parameter (first fun-params) next-gen-context)
                                               (generate-parameter (second fun-params) next-gen-context)))])]
-       [else (raise-user-error (format "unknown function id ~a" fun-id))]))
+       [(eq? fun-id (gen-context-current-function a-gen-context))
+        (define function-len (+ (length (gen-context-gen-bytes next-gen-context)) ;; generated up to here
+                                (* 3 fun-params-len) ;; moves for params
+                                1)) ;; goto itself
+        (struct-copy gen-context next-gen-context
+                     [gen-bytes (append (gen-context-gen-bytes next-gen-context)
+                                        (flatten
+                                         (map (lambda  (idx-param) (list CISC_VM_MOVE (encode-idx (car idx-param) l-param) (cdr idx-param)))
+                                              (map cons (range (length fun-params))
+                                                   (map (lambda (param) (generate-parameter param next-gen-context)) fun-params))))
+                                        (list CISC_VM_GOTO (two-complement-of (- 0 function-len)))
+                                        )])]
+       [else
+        (define func-idx (hash-ref (gen-context-function-id-map a-gen-context) fun-id))
+        (define func-idx-low (bitwise-and func-idx #xff))
+        (define func-idx-high (arithmetic-shift func-idx -8))
+        (struct-copy gen-context next-gen-context
+                     [gen-bytes (append (gen-context-gen-bytes next-gen-context)
+                                        (list CISC_VM_CALL target-reg func-idx-low func-idx-high fun-params-len)
+                                        (map (lambda (param) (generate-parameter param next-gen-context)) fun-params))])]))
 
 (module+ test #| generate-fun-call |#
   (check-equal? (generate-fun-call VM_L1 (ast-e-fun-call 'byte+ (list (loc-ref 'sym) (ast-ev-id 'param))
                                                          (list (-loc-set 'sym (ast-ev-number 11)))
                                                          '())
-                                   (gen-context 0 (hash) (hash 'param 1) '()))
+                                   (make-gen-context #:parameter-id-map (hash 'param 1)))
                 (gen-context 1 '#hash((sym . 0)) '#hash((param . 1))
                              (list CISC_VM_IMMB     VM_L0 11
-                                   CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P1))))
+                                   CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P1)
+                             (hash)
+                             'nil)))
 
 (define/contract (generate-register-ref expr a-gen-context)
   (->* [ast-expression? gen-context?] [] byte?)
@@ -690,36 +744,42 @@
                                    CISC_VM_BRA VM_L0 6
                                    CISC_VM_IMMB VM_L0 1
                                    CISC_VM_GOTO 4
-                                   CISC_VM_IMMB VM_L0 2)))
+                                   CISC_VM_IMMB VM_L0 2)
+                             (hash)
+                             'nil))
 
   (check-equal? (generate-if VM_L0 (ast-e-if 'if
                                              (list (ast-ev-id 'param) (ast-ev-number 1) (ast-ev-number 2))
                                              '() '())
-                             (gen-context 0 (hash) (hash 'param 1) (list)))
+                             (make-gen-context #:parameter-id-map (hash 'param 1)))
                 (gen-context 0 (hash) (hash 'param 1)
                              (list CISC_VM_BRA VM_P1 6
                                    CISC_VM_IMMB VM_L0 1
                                    CISC_VM_GOTO 4
-                                   CISC_VM_IMMB VM_L0 2)))
+                                   CISC_VM_IMMB VM_L0 2)
+                             (hash)
+                             'nil))
 
-    (check-match (generate-if VM_L0 (ast-e-if 'if
-                                               (list (loc-ref 'sym)
-                                                     (ast-ev-number 1)
-                                                     (ast-e-fun-call 'byte+ (list (ast-ev-number 2)
-                                                                                  (ast-ev-number 3))
-                                                                     (list) (list)))
-                                             (list (-loc-set 'sym (ast-ev-bool #t)))
-                                             '())
-                             (make-gen-context))
-                (gen-context 3 gen-hash (hash)
-                             (list CISC_VM_IMMB VM_L0 #xff
-                                   CISC_VM_BRA VM_L0 6
-                                   CISC_VM_IMMB VM_L0 1
-                                   CISC_VM_GOTO 11
-                                   CISC_VM_IMMB VM_L1 3
-                                   CISC_VM_IMMB VM_L2 2
-                                   CISC_VM_BYTE_ADD VM_L0 VM_L2 VM_L1))
-                (hash? gen-hash)))
+  (check-match (generate-if VM_L0 (ast-e-if 'if
+                                            (list (loc-ref 'sym)
+                                                  (ast-ev-number 1)
+                                                  (ast-e-fun-call 'byte+ (list (ast-ev-number 2)
+                                                                               (ast-ev-number 3))
+                                                                  (list) (list)))
+                                            (list (-loc-set 'sym (ast-ev-bool #t)))
+                                            '())
+                            (make-gen-context))
+               (gen-context 3 gen-hash (hash)
+                            (list CISC_VM_IMMB VM_L0 #xff
+                                  CISC_VM_BRA VM_L0 6
+                                  CISC_VM_IMMB VM_L0 1
+                                  CISC_VM_GOTO 11
+                                  CISC_VM_IMMB VM_L1 3
+                                  CISC_VM_IMMB VM_L2 2
+                                  CISC_VM_BYTE_ADD VM_L0 VM_L2 VM_L1)
+                            (hash)
+                            'nil)
+               (hash? gen-hash)))
 
 (define/contract (generate-value-set target-reg an-expression a-gen-context)
   (->* [byte? ast-e-value? gen-context?] [] gen-context?)
@@ -761,7 +821,7 @@
                                            (list (loc-ref 'byte-10) (ast-ev-id 'a-byte))
                                            (list (-loc-set 'byte-10 (ast-ev-number 10)))
                                            '())
-                           (gen-context 0 (hash) (hash 'a-byte 0) '())))
+                           (make-gen-context #:parameter-id-map (hash 'a-byte 0))))
                 (list
                  CISC_VM_IMMB VM_L0 10
                  CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P0)))
@@ -782,7 +842,9 @@
   ;; register all parameter-id s into the generation context
   (define param-map (--prep-param-hashmap (ast-function-def-parameter fun)))
   ;; generate (into target local slot 0) expression(s)
-  (define new-gen-context (foldl (lambda (body-expr a-gen-ctx) (generate VM_L0 body-expr a-gen-ctx)) (gen-context 0 (hash) param-map '()) transformed-expressions))
+  (define new-gen-context (foldl (lambda (body-expr a-gen-ctx) (generate VM_L0 body-expr a-gen-ctx))
+                                 (gen-context 0 (hash) param-map '() (hash) (ast-function-def-id fun))
+                                 transformed-expressions))
   ;; count the needed local slots (for later function registration)
   ;; generate return local slot 0
   (define locals-needed (gen-context-next-local new-gen-context))
@@ -792,7 +854,6 @@
 
 (module+ test #| compile |#
 
-  (require (only-in "../6510-utils.rkt" two-complement-of))
 
   (check-equal?
    (gen-context-gen-bytes
@@ -816,9 +877,26 @@
                       CISC_VM_IMMB VM_L0 1
                       CISC_VM_GOTO 4
                       CISC_VM_IMMB VM_L0 2
-                      CISC_VM_RET  VM_L0))))
+                      CISC_VM_RET  VM_L0)
+                (hash)
+                'a-or-b)))
 
-;; next test: tail call recursion
+(module+ test #| tail call recursion (w/ infinite loop => without if) |#
+
+  (check-equal?
+   (gen-context-gen-bytes
+    (cisc-vm-transform
+     (m-def (called-rec (a byte) (b byte) -> byte
+                        "make infinite loop adding one to each parameter")
+            (called-rec (byte+ a 1) (byte+ b 1)))))
+   (list CISC_VM_IMMB     VM_L0 1              ;; 3
+         CISC_VM_BYTE_ADD VM_L0 VM_P1 VM_L0    ;; 4
+         CISC_VM_IMMB     VM_L1 1              ;; 3
+         CISC_VM_BYTE_ADD VM_L1 VM_P0 VM_L1    ;; 4
+         CISC_VM_MOVE     VM_P0 VM_L1          ;; 3
+         CISC_VM_MOVE     VM_P1 VM_L0          ;; 3
+         CISC_VM_GOTO     (two-complement-of -21)
+         CISC_VM_RET      VM_L0)))
 
 (module+ test #| compile |#
 

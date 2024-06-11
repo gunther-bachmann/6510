@@ -15,10 +15,13 @@
          CISC_VM_IMMB
          CISC_VM_BYTE_ADD
          CISC_VM_BRA
+         CISC_VM_MOVE
+         CISC_VM_CALL
 
          VM_L0
          VM_L1
          VM_L2
+         VM_L3
          VM_P0
          VM_P1
 
@@ -210,6 +213,7 @@
 (define CISC_VM_CASE          23) ;; 3+casen*3  <byte-code> <target-reg> <case-src-reg> case-no case-byte-value-0 <new-byte-idx> case-byte-value-1 <new-byte-idx> ... case-byte-value-n <new-byte-idx>
 (define CISC_VM_THROW         24) ;; 3+paramn   <byte-code> <exception-str> <param-no> <param-1> <param-2> ... <param-n>
 (define CISC_VM_BRA           25) ;; 3          <byte-code> <bool-tested-reg> offset
+(define CISC_VM_MOVE          26) ;; 3          <byte-code> <target-reg> <source-reg>
 
 ;; BYTE_SUB
 ;; INT_SUB
