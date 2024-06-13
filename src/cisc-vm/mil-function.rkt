@@ -10,6 +10,8 @@
 (require (only-in "../6510-utils.rkt" two-complement-of))
 
 (require (only-in "./vm-structures.rkt"
+                  disassemble
+                  make-vm
                   CISC_VM_CONS
                   CISC_VM_CAR
                   CISC_VM_BRA_EMPTY_LIST
@@ -872,7 +874,6 @@
 
 (module+ test #| compile |#
 
-
   (check-equal?
    (gen-context-gen-bytes
     (cisc-vm-transform
@@ -902,39 +903,43 @@
 (module+ test #| tail call recursion (w/ infinite loop => without if) |#
 
   (check-equal?
-   (gen-context-gen-bytes
-    (cisc-vm-transform
-     (m-def (called-rec (a byte) (b byte) -> byte
-                        "make infinite loop adding one to each parameter")
-            (called-rec (byte+ a 1) (byte+ b 1)))))
-   (list CISC_VM_IMMB     VM_L0 1              ;; 3
-         CISC_VM_BYTE_ADD VM_L0 VM_P1 VM_L0    ;; 4
-         CISC_VM_IMMB     VM_L1 1              ;; 3
-         CISC_VM_BYTE_ADD VM_L1 VM_P0 VM_L1    ;; 4
-         CISC_VM_MOVE     VM_P0 VM_L1          ;; 3
-         CISC_VM_MOVE     VM_P1 VM_L0          ;; 3
-         CISC_VM_GOTO     (two-complement-of -21)
-         CISC_VM_RET      VM_L0)))
+   (disassemble
+    (gen-context-gen-bytes
+     (cisc-vm-transform
+      (m-def (called-rec (a byte) (b byte) -> byte
+                         "make infinite loop adding one to each parameter")
+             (called-rec (byte+ a 1) (byte+ b 1)))))
+    (make-vm))
+   (list "immb 1 -> l0"
+         "byte+ p1 + l0 -> l0"
+         "immb 1 -> l1"
+         "byte+ p0 + l1 -> l1"
+         "move l1 -> p0"
+         "move l0 -> p1"
+         "goto -> -21"
+         "ret l0")))
+
 
 (module+ test #| compile |#
 
   (skip "not completely done yet"
         (check-equal?
-         (gen-context-gen-bytes
-          (cisc-vm-transform
-           (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
-                           "reverse a-list, consing it into b-list")
-                  (if (nil? a-list)
-                      b-list
-                      (reverse (cdr a-list) (cons (car a-list) b-list))))))
-         (list CISC_VM_MOVE       VM_L0 VM_P0
-               CISC_VM_NIL_P      VM_L0 VM_P0
-               CISC_VM_BRA        VM_L0 13
-               CISC_VM_CAR        VM_L0 VM_P0
-               CISC_VM_CONS       VM_P1 VM_L0 VM_P1
-               CISC_VM_CDR        VM_P0 VM_P0
-               CISC_VM_GOTO       (two-complement-of -14)
-               CISC_VM_RET        VM_P1))))
+         (disassemble
+          (gen-context-gen-bytes
+           (cisc-vm-transform
+            (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
+                            "reverse a-list, consing it into b-list")
+                   (if (nil? a-list)
+                       b-list
+                       (reverse (cdr a-list) (cons (car a-list) b-list))))))
+          (make-vm))
+         (list "nil? p0 -> l0"
+               "bra l0 -> 13"
+               "car p0 -> l0"
+               "cons l0 p1 -> p1"
+               "cdr p0 -> p0"
+               "goto -> -14"
+               "ret p1"))))
 
 
 ;; TODO: now transform this tree into a flat list of cisc vm commands

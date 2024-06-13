@@ -6,7 +6,9 @@
 (require (only-in threading ~>>))
 (require (only-in "../6510-utils.rkt" two-complement-of decimal-from-two-complement))
 
-(provide CISC_VM_CONS
+(provide disassemble
+         make-vm
+         CISC_VM_CONS
          CISC_VM_CAR
          CISC_VM_BRA_EMPTY_LIST
          CISC_VM_CDR
@@ -206,7 +208,7 @@
 (define CISC_VM_PEEK_HBYTE    15) ;; 3          <byte-code> <target-reg> <cell-ptr-reg
 (define CISC_VM_POKE_LBYTE    16) ;; 3          <byte-code> <cell-ptr-reg> <value-reg>
 (define CISC_VM_POKE_HBYTE    17) ;; 3          <byte-code> <cell-ptr-reg> <value-reg>
-(define CISC_VM_CONS          18) ;; 3          <byte-code> <target-reg> <value-reg> <list-ptr/val-reg>
+(define CISC_VM_CONS          18) ;; 4          <byte-code> <target-reg> <value-reg> <list-ptr/val-reg>
 (define CISC_VM_MAKE_INT      19) ;; 4          <byte-code> <target-reg> <low-byte-reg> <high-byte-reg>
 (define CISC_VM_IMMI          20) ;; 3          <byte-code> <target-reg> low-value high-value
 (define CISC_VM_INT_ADD       21) ;; 4          <byte-code> <target-reg> <int-a-reg> <int-b-reg>
@@ -217,9 +219,6 @@
 (define CISC_VM_MOVE          26) ;; 3          <byte-code> <target-reg> <source-reg>
 (define CISC_VM_NIL_P         27) ;; 3          <byte-code> <target-reg> <list-reg>
 
-;; BYTE_SUB
-;; INT_SUB
-;; BYTE_TIMES
 ;; INT_TIMES
 ;; INT->BYTE
 ;; BYTE->INT
@@ -1132,6 +1131,10 @@
   (-> cell-byte? cell-byte? cell-int?)
   (cell-int (fx+ (arithmetic-shift (bitwise-and (cell-byte-value b-cell) #b00111111) 8) (cell-byte-value a-cell))))
 
+(define/contract (2-bytes->int a-byte b-byte)
+  (-> byte? byte? integer?)
+  (fx+ (arithmetic-shift (bitwise-and b-byte #b00111111) 8) a-byte))
+
 (define/contract (interpret-make-int a-vm)
   (-> vm? vm?)
   (define target-reg (decode-cell-idx (get-current-byte-code a-vm 1)))
@@ -1444,3 +1447,105 @@
                 "nil")
   (check-equal? (string-join (write-data (cell-ptr (cell-byte 10))) "")
                 "->byte: 10"))
+
+(define/contract (cell-idx->string a-cell-idx)
+  (-> cell-idx? string?)
+  (define loc (cell-idx-location a-cell-idx))
+  (format "~a~a"
+          (cond [(eq? loc l-local) "l"]
+                [(eq? loc l-param) "p"]
+                [(eq? loc l-global) "g"]
+                [(eq? loc l-imm) " "]
+                [else (raise-user-error (format "unknown cell-idx location ~a") loc)])
+          (cell-idx-index a-cell-idx)))
+
+(define/contract (reg-idx->str encoded-reg)
+  (-> byte? string?)
+  (define decoded-reg (decode-cell-idx encoded-reg))
+  (cell-idx->string decoded-reg))
+
+(define/contract (reg->str@ bytes idx)
+  (-> (listof byte?) exact-nonnegative-integer? string?)
+  (define reg (nth bytes idx))
+  (reg-idx->str reg))
+
+(define/contract (disassemble byte-codes a-vm (strings (list)))
+  (->* [(listof byte?) vm?] [(listof string?)] (listof string?))
+  (cond [(empty? byte-codes) strings]
+        [else
+         (define opcode (car byte-codes))
+         (define-values (add-strings bytes-consumed)
+           (cond
+             [(eq? opcode CISC_VM_BRK)            (values (list "brk") 1)]
+             [(eq? opcode CISC_VM_BYTE_ADD)       (values (list (format "byte+ ~a + ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 3)(reg->str@ byte-codes 1))) 4)] ;; 4          <byte-code> <target-reg> <src-a-reg> <src-b-reg>
+             [(eq? opcode CISC_VM_CALL)
+              (define param-count (nth byte-codes 4))
+              (values (list (format "call ~a (~a) -> ~a"
+                                    (2-bytes->int (nth byte-codes 2) (nth byte-codes 3))
+                                    (string-join (map (lambda (idx) (reg->str@ byte-codes (+ idx 5))) (range param-count)) " ")
+                                    (reg->str@ byte-codes 1))) (+ 5 param-count))] ;; 5+paramc   <byte-code> <target-reg> <func-idx-low> <func-idx-high> param-count <param1-reg> <param2-reg> ... <paramn-reg>
+             [(eq? opcode CISC_VM_RET)            (values (list (format "ret ~a" (reg->str@ byte-codes 1))) 2)] ;; 2          <byte-code> <result-reg>
+             [(eq? opcode CISC_VM_IMMB)           (values (list (format "immb ~a -> ~a" (nth byte-codes 2) (reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> value
+             [(eq? opcode CISC_VM_MAKE_LIST)
+              (define list-count (nth byte-codes 2))
+              (values (list (format "make_list (~a) -> ~a"
+                                    (string-join (map (lambda (idx) (reg->str@ byte-codes (+ idx 3))) (range list-count)) " ")
+                                    (reg->str@ byte-codes 1))) (+ 3 list-count))] ;; 3+elemc    <byte-code> <target-reg> element-count <elem1-reg> <elem2-reg> ... <elemn-reg>
+             [(eq? opcode CISC_VM_BRA_EMPTY_LIST) (values (list (format "bra_empty_list ~a? -> ~a" (reg->str@ byte-codes 1) (decimal-from-two-complement (nth byte-codes 2)))) 3)] ;; 3          <byte-code> <list-tested-reg> offset
+             [(eq? opcode CISC_VM_CAR)            (values (list (format "car ~a -> ~a" (reg->str@ byte-codes 2) (reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <src-list-reg>
+             [(eq? opcode CISC_VM_CDR)            (values (list (format "cdr ~a -> ~a" (reg->str@ byte-codes 2) (reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <src-list-reg>
+             [(eq? opcode CISC_VM_GOTO)           (values (list (format "goto -> ~a" (decimal-from-two-complement (nth byte-codes 1)))) 2)] ;; 2          <byte-code> offset
+             [(eq? opcode CISC_VM_STRUCT_CREATE)
+              (define field-count 1) ;; TODO: find out how many fields the given structure has (using a-vm)
+              (values '("struct_create") (+ 3 field-count))] ;; 3+fieldc   <byte-code> <target-reg> <struct-def-idx> <field-1-reg> <field-2-reg> ... <field-n-reg>
+             [(eq? opcode CISC_VM_ARRAY_CREATE)   (values '("(i) array_create") 4)] ;; 4          <byte-code> <target-reg> <length-reg> <default-val-reg>
+             [(eq? opcode CISC_VM_ARRAY_GET)      (values '("(i) array_get") 4)] ;; 4          <byte-code> <target-reg> <array-reg> <idx-reg>
+             [(eq? opcode CISC_VM_ARRAY_SET)      (values '("(i) array_set") 4)] ;; 4          <byte-code> <array-reg> <idx-reg> <value-reg>
+             [(eq? opcode CISC_VM_PEEK_LBYTE)     (values '("(i) peek_lbyte") 3)] ;; 3          <byte-code> <target-reg> <cell-ptr-reg>
+             [(eq? opcode CISC_VM_PEEK_HBYTE)     (values '("(i) peek_hbyte") 3)] ;; 3          <byte-code> <target-reg> <cell-ptr-reg
+             [(eq? opcode CISC_VM_POKE_LBYTE)     (values '("(i) poke_lbyte") 3)] ;; 3          <byte-code> <cell-ptr-reg> <value-reg>
+             [(eq? opcode CISC_VM_POKE_HBYTE)     (values '("(i) poke_hbyte") 3)] ;; 3          <byte-code> <cell-ptr-reg> <value-reg>
+             [(eq? opcode CISC_VM_CONS)           (values (list (format "cons ~a ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 3)(reg->str@ byte-codes 1))) 4)] ;; 4          <byte-code> <target-reg> <value-reg> <list-ptr/val-reg>
+             [(eq? opcode CISC_VM_MAKE_INT)       (values (list (format "make_int ~a + ~a<<8 -> ~a" (reg->str@ byte-codes 2) (reg->str@ byte-codes 3) (reg->str@ byte-codes 1))) 4)] ;; 4          <byte-code> <target-reg> <low-byte-reg> <high-byte-reg>
+             [(eq? opcode CISC_VM_IMMI)           (values (list (format "immi ~a -> ~a" (2-bytes->int (nth byte-codes 2) (nth byte-codes 3)) (reg->str@ byte-codes 1))) 4)] ;; 4          <byte-code> <target-reg> low-value high-value
+             [(eq? opcode CISC_VM_INT_ADD)        (values '("(i) int_add") 4)] ;; 4          <byte-code> <target-reg> <int-a-reg> <int-b-reg>
+             [(eq? opcode CISC_VM_INT_INC)        (values '("(i) int_inc") 2)] ;; 2          <byte-code> <target-reg>
+             [(eq? opcode CISC_VM_CASE)           (values '("(i) case") (+ 3 (* 2 (nth byte-codes 3))))] ;; 3+casen*3  <byte-code> <target-reg> <case-src-reg> case-no case-byte-value-0 <new-byte-idx> case-byte-value-1 <new-byte-idx> ... case-byte-value-n <new-byte-idx>
+             [(eq? opcode CISC_VM_THROW)          (values '("(i) throw") (+ 3 (nth byte-codes 2)))] ;; 3+paramn   <byte-code> <exception-str> <param-no> <param-1> <param-2> ... <param-n>
+             [(eq? opcode CISC_VM_BRA)            (values '("(i) bra") 3)] ;; 3          <byte-code> <bool-tested-reg> offset
+             [(eq? opcode CISC_VM_MOVE)           (values (list (format "move ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <source-reg>
+             [(eq? opcode CISC_VM_NIL_P)          (values '("(i) nil_p") 3)] ;; 3          <byte-code> <target-reg> <list-reg>
+             [else (raise-user-error (format "unknown opcode ~a" opcode))]))
+         (disassemble (drop byte-codes bytes-consumed) a-vm (append strings add-strings))]))
+
+(module+ test
+  (check-equal? (disassemble (list CISC_VM_BRK
+                                   CISC_VM_BYTE_ADD VM_L0 VM_P1 VM_G1
+                                   CISC_VM_CALL VM_L0 2 1 2 VM_L1 VM_P1
+                                   CISC_VM_IMMB VM_L0 212
+                                   CISC_VM_MAKE_LIST VM_L1 2 VM_P1 VM_P2
+                                   CISC_VM_RET VM_L0
+                                   CISC_VM_BRA_EMPTY_LIST VM_L0 (two-complement-of -12)
+                                   CISC_VM_CAR VM_L0 VM_P1
+                                   CISC_VM_CDR VM_L0 VM_P1
+                                   CISC_VM_GOTO (two-complement-of 5)
+                                   CISC_VM_CONS VM_L0 VM_P1 VM_L1
+                                   CISC_VM_MAKE_INT VM_L0 VM_P0 VM_P1
+                                   CISC_VM_IMMI VM_L0 1 2
+                                   CISC_VM_MOVE VM_L0 VM_L1
+                                   ) (make-vm))
+                (list "brk"
+                      "byte+ p1 + g1 -> l0"
+                      "call 258 (l1 p1) -> l0"
+                      "immb 212 -> l0"
+                      "make_list (p1 p2) -> l1"
+                      "ret l0"
+                      "bra_empty_list l0? -> -12"
+                      "car p1 -> l0"
+                      "cdr p1 -> l0"
+                      "goto -> 5"
+                      "cons p1 l1 -> l0"
+                      "make_int p0 + p1<<8 -> l0"
+                      "immi 513 -> l0"
+                      "move l1 -> l0"
+                      )))
