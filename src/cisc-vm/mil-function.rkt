@@ -21,6 +21,7 @@
                   CISC_VM_IMMB
                   CISC_VM_BYTE_ADD
                   CISC_VM_BRA
+                  CISC_VM_BRA_NOT
                   CISC_VM_MOVE
                   CISC_VM_CALL
                   CISC_VM_NIL_P
@@ -47,92 +48,118 @@
 (define-syntax (-> stx)
   (raise-syntax-error #f "cannot be used as an expression" stx))
 
+;; generic root node for all ast nodes
 (struct ast-node
   ()
   #:transparent)
 
+;; type definition
 (struct ast-type-def ast-node
   ()
   #:transparent)
 
+;; simple atomic type definition (like bool, string, int, byte, symbol)
 (struct ast-td-simple ast-type-def
-  (id)
+  (id) ;; type name/symbol
   #:transparent
   #:guard
   (struct-guard/c symbol?))
 
+;; complex type definition with parameters (like (array byte), or (map string string))
 (struct ast-ts-complex ast-type-def
-  (id params)
+  (id       ;; type name/symbol
+   params)  ;; type parameters itself type definitions
   #:transparent
   #:guard
   (struct-guard/c symbol? (listof ast-type-def?)))
 
+;; parameter definition as used by function definitions
 (struct ast-param-def ast-node
-  (id type)
+  (id     ;; parameter name/symbol
+   type)  ;; type of the parameter
   #:transparent
   #:guard
   (struct-guard/c symbol? ast-type-def?))
 
+;; root of all expression ast nodes
 (struct ast-expression ast-node
   ()
   #:transparent)
 
+;; expression nil
 (struct ast-e-nil ast-expression
   ;; the nil symbol/list
   ()
   #:transparent)
 
+;; function call
 (struct ast-e-fun-call ast-expression
   ;; strict eval parameter evaluation
-  (fun params pre-code post-code)
+  (fun         ;; function name/id
+   params      ;; parameters passed to the function
+   pre-code    ;; pre-code inserted before actual call (e.g. pre-eval of complex parameter expressions into local variables)
+   post-code)  ;; post-code inserted after actual call
   #:transparent
   #:guard
   (struct-guard/c symbol? (listof ast-expression?) (listof ast-expression?) (listof ast-expression?)))
 
+;; special form if (looking like a function call)
 (struct ast-e-if ast-e-fun-call
-  ;; special because parameters of if underly a sepcial execution order (no strict eval)
+  ;; special because parameters of 'if' have special execution order (no strict eval)
   ()
   #:transparent
   #:guard
   (struct-guard/c symbol? (listof ast-expression?) (listof ast-expression?) (listof ast-expression?)))
 
+;; value expression, representation an atomic value
 (struct ast-e-value ast-expression
   ;; atomic values not containing others
   ()
   #:transparent)
 
+;; value expression string
 (struct ast-ev-string ast-e-value
-  (str)
+  (str) ;; actual string
   #:transparent
   #:guard
   (struct-guard/c string?))
 
+;; value expression boolean (either true or false)
 (struct ast-ev-bool ast-e-value
   (bool)
   #:transparent
   #:guard
   (struct-guard/c boolean?))
 
+;; value expression id (referencing a value in scope)
 (struct ast-ev-id ast-e-value
-  (id)
+  (id) ;; symbol/name of value referenced
   #:transparent
   #:guard
   (struct-guard/c symbol?))
 
+;; number value expression
 (struct ast-ev-number ast-e-value
-  (number)
+  (number) ;; TODO: split this up into small-byte (fitting into 4 bit), byte and int
   #:transparent
   #:guard
   (struct-guard/c exact-integer?))
 
+;; parameter definition of a parameter with default value (expression)
 (struct ast-pd-default-param ast-param-def
   (value)
   #:transparent
   #:guard
   (struct-guard/c symbol? ast-type-def? ast-expression?))
 
+;; function definition
 (struct ast-function-def ast-node
-  (id parameter default-parameter return-type description body)
+  (id                 ;; name/symbol of the function
+   parameter          ;; list of typed parameters without default initializer
+   default-parameter  ;; list of typed parameters with default initializers
+   return-type        ;; type definition of the return value
+   description        ;; list of strings describing this function
+   body)              ;; list of expressions making up the body of the function
   #:transparent
   #:guard
   (struct-guard/c symbol?
@@ -313,68 +340,74 @@
            (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '())
            (ast-ev-id 'b-list)) '() '())) '() '())) '() '())))))
 
-;; intermediate ast nodes (used during transformation)
+;; --- intermediate ast nodes (used during transformation) e.g. in pre-code
+
+;; set a variable in scope to an expression result
 (struct -loc-set ast-expression
-  (id expr)
+  (id     ;; variable to set
+   expr)  ;; expression to eval
   #:transparent)
 
+;; reference a variable in scope (duplicate of ast-ev-id?)
 (struct loc-ref ast-expression
   (id)
   #:transparent)
 
-(define step0 (list
-               (ast-e-if
-                'if
-                (list
-                 (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
-                 (ast-ev-id 'b-list)
-                 (ast-e-fun-call
-                  'reverse
+(module+ test #| documenting steps during code generation |#
+
+  (define step0 (list
+                 (ast-e-if
+                  'if
                   (list
-                   (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '())
+                   (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
+                   (ast-ev-id 'b-list)
                    (ast-e-fun-call
-                    'cons
+                    'reverse
                     (list
-                     (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()) ;; extract this inner call to some variable 'a
-                     (ast-ev-id 'b-list)) '() '())) '() '())) '() '())))
+                     (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '())
+                     (ast-e-fun-call
+                      'cons
+                      (list
+                       (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()) ;; extract this inner call to some variable 'a
+                       (ast-ev-id 'b-list)) '() '())) '() '())) '() '())))
 
-(define step1 (list
-               (ast-e-if
-                'if
-                (list
-                 (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
-                 (ast-ev-id 'b-list)
-                 (ast-e-fun-call
-                  'reverse
+  (define step1 (list
+                 (ast-e-if
+                  'if
                   (list
-                   (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '()) ;; call has only refs to ids (done)
-                   (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
-                   (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '())) '() '())) '() '()))) ;; now this call has only refs to ids (done), extract call itself to id b'
+                   (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
+                   (ast-ev-id 'b-list)
+                   (ast-e-fun-call
+                    'reverse
+                    (list
+                     (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '()) ;; call has only refs to ids (done)
+                     (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
+                     (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '())) '() '())) '() '()))) ;; now this call has only refs to ids (done), extract call itself to id b'
 
-(define step2 (list
-               (ast-e-if
-                'if
-                (list
-                 (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
-                 (ast-ev-id 'b-list)
-                 (ast-e-fun-call
-                  'reverse
+  (define step2 (list
+                 (ast-e-if
+                  'if
                   (list
-                   (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '()) ;; extract call itself to id 'c
-                   (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
-                   (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '()))
-                   (loc-ref 'b)) '() '())) '() '())))
+                   (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
+                   (ast-ev-id 'b-list)
+                   (ast-e-fun-call
+                    'reverse
+                    (list
+                     (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '()) ;; extract call itself to id 'c
+                     (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
+                     (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '()))
+                     (loc-ref 'b)) '() '())) '() '())))
 
-(define step3 (list
-               (ast-e-if
-                'if
-                (list
-                 (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
-                 (ast-ev-id 'b-list)
-                 (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
-                 (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '())) ;; p1 can be reused here
-                 (-loc-set 'c (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '())) ;; p0 can be reused here
-                 (ast-e-fun-call 'reverse (list (loc-ref 'c) (loc-ref 'b)) '() '())) '() '()))) ;; now reverse has only ref parameters (done)
+  (define step3 (list
+                 (ast-e-if
+                  'if
+                  (list
+                   (ast-e-fun-call 'nil? (list (ast-ev-id 'a-list)) '() '())
+                   (ast-ev-id 'b-list)
+                   (-loc-set 'a (ast-e-fun-call 'car (list (ast-ev-id 'a-list)) '() '()))
+                   (-loc-set 'b (ast-e-fun-call 'cons (list (loc-ref 'a) (ast-ev-id 'b-list)) '() '())) ;; p1 can be reused here
+                   (-loc-set 'c (ast-e-fun-call 'cdr (list (ast-ev-id 'a-list)) '() '())) ;; p0 can be reused here
+                   (ast-e-fun-call 'reverse (list (loc-ref 'c) (loc-ref 'b)) '() '())) '() '())))) ;; now reverse has only ref parameters (done)
 
 ;; - function calls with only ids or local-refs are not compacted any further
 ;; - if function is special
@@ -387,11 +420,12 @@
 ;;   last expression is returned (via RET register)
 ;;   recursive call must be transformed into a goto! <- define fail condition  (if it cannot be done readily)
 
+;; parameters of this function call have only loc-ref or ast-ev-id ast nodes => no more extraction of precode before actual call
 (define/contract (ed-function-call--has-only-refs? fun-call)
   (->* [ast-e-fun-call?] [] boolean?)
   (foldl (lambda (l r) (and (or (loc-ref? l) (ast-ev-id? l)) r)) true (ast-e-fun-call-params fun-call)))
 
-(module+ test
+(module+ test #| ed-function-call--has-only-refs? |#
   (check-true (ed-function-call--has-only-refs? (ast-e-fun-call 'fn1 (list) '() '())))
 
   (check-true (ed-function-call--has-only-refs? (ast-e-fun-call 'fn1 (list (loc-ref 'a) (ast-ev-id 'b)) '() '())))
@@ -596,8 +630,14 @@
                (ast-e-fun-call 'byte+ (list (loc-ref a-sym) (ast-ev-id 'a-byte)) (list (-loc-set a-sym (ast-ev-number 1))) '())
                (symbol? a-sym)))
 
+;; generation context keeping track of useful information during code generation
 (struct gen-context
-  (next-local local-id-map parameter-id-map gen-bytes function-id-map current-function)
+  (next-local         ;; byte marking the next free local register/variable
+   local-id-map       ;; map of symbol->local index (register/variable)
+   parameter-id-map   ;; map of symbol->parameter index (register/variable)
+   gen-bytes          ;; list of already generated bytes
+   function-id-map    ;; map of function symbols->function index
+   current-function)  ;; symbol of the current function w/i which this generation takes place (useful for tail-call detection)
   #:transparent
   #:guard
   (struct-guard/c byte? (hash/c symbol? byte?) (hash/c symbol? byte?) (listof byte?) (hash/c symbol? integer?) symbol?))
@@ -656,19 +696,22 @@
                                          (-loc-set 'b (ast-ev-number 2)))
                                    (list)))
     (make-gen-context #:function-id-map (hash 'byte+ 0)))
-   (gen-context 1 (hash 'sym 0) (hash)
-                (list CISC_VM_IMMB VM_L0 1
-                      CISC_VM_IMMB VM_L1 2
-                      CISC_VM_BYTE_ADD VM_L0 VM_L0 VM_L1)
-                (hash 'byte+ 0)
-                'nil)))
+   (make-gen-context #:next-local 1
+                     #:local-id-map (hash 'sym 0)
+                     #:gen-bytes
+                     (list CISC_VM_IMMB VM_L0 1
+                           CISC_VM_IMMB VM_L1 2
+                           CISC_VM_BYTE_ADD VM_L0 VM_L0 VM_L1)
+                     #:function-id-map (hash 'byte+ 0))))
 
+;; generate code for operation with one operand (and target-reg of course)
 (define/contract (generate-one-op opcode target-reg param a-gen-context)
   (->* [byte? byte? ast-expression? gen-context?] [] gen-context?)
   (struct-copy gen-context a-gen-context
                [gen-bytes (append (gen-context-gen-bytes a-gen-context)
                                   (list opcode target-reg (generate-parameter param a-gen-context)))]))
 
+;; generate code for operation with two operands (and target-reg of course)
 (define/contract (generate-two-op opcode target-reg param1 param2 a-gen-context)
   (->* [byte? byte? ast-expression? ast-expression? gen-context?] [] gen-context?)
   (struct-copy gen-context a-gen-context
@@ -689,7 +732,7 @@
     [(eq? fun-id 'car) (generate-one-op CISC_VM_CAR target-reg (first fun-params) next-gen-context)]
     [(eq? fun-id 'nil?) (generate-one-op CISC_VM_NIL_P target-reg (first fun-params) next-gen-context)]
     [(eq? fun-id 'byte+) (generate-two-op CISC_VM_BYTE_ADD target-reg (first fun-params) (second fun-params) next-gen-context)]
-    [(eq? fun-id (gen-context-current-function a-gen-context))
+    [(eq? fun-id (gen-context-current-function a-gen-context)) ;; this is a tail call
      (define function-len (+ (length (gen-context-gen-bytes next-gen-context)) ;; generated up to here
                              (* 3 fun-params-len) ;; moves for params
                              1)) ;; goto itself
@@ -701,7 +744,7 @@
                                                 (map (lambda (param) (generate-parameter param next-gen-context)) fun-params))))
                                      (list CISC_VM_GOTO (two-complement-of (- 0 function-len)))
                                      )])]
-    [else
+    [else ;; this is a regular function call
      (define func-idx (hash-ref (gen-context-function-id-map a-gen-context) fun-id))
      (define func-idx-low (bitwise-and func-idx #xff))
      (define func-idx-high (arithmetic-shift func-idx -8))
@@ -715,18 +758,18 @@
                                                          (list (-loc-set 'sym (ast-ev-number 11)))
                                                          '())
                                    (make-gen-context #:parameter-id-map (hash 'param 1)))
-                (gen-context 1 '#hash((sym . 0)) '#hash((param . 1))
-                             (list CISC_VM_IMMB     VM_L0 11
-                                   CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P1)
-                             (hash)
-                             'nil)))
+                (make-gen-context #:next-local 1
+                                  #:local-id-map '#hash((sym . 0))
+                                  #:parameter-id-map '#hash((param . 1))
+                                  #:gen-bytes (list CISC_VM_IMMB     VM_L0 11
+                                                    CISC_VM_BYTE_ADD VM_L1 VM_L0 VM_P1))))
 
 (define/contract (generate-register-ref expr a-gen-context)
   (->* [ast-expression? gen-context?] [] byte?)
   (cond
     [(loc-ref? expr) (encode-idx (hash-ref (gen-context-local-id-map a-gen-context) (loc-ref-id expr)) l-local)]
     [(ast-ev-id? expr) (encode-idx (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id expr)) l-param)]
-    [else (raise-user-error (format "cannot resolve reference ~a" expr))]))
+    [else (raise-user-error (format "cannot resolve reference to register ~a" expr))]))
 
 (define/contract (generate-if target-reg if-expr a-gen-context)
   (->* [byte? ast-e-if? gen-context?] [] gen-context?)
@@ -753,7 +796,7 @@
 
   (struct-copy gen-context final-then-block-gen-context
                [gen-bytes (append (gen-context-gen-bytes next-gen-context)
-                                  (list CISC_VM_BRA branch-decision-register (+ 3 then-block-len))
+                                  (list CISC_VM_BRA_NOT branch-decision-register (+ 3 then-block-len))
                                   (gen-context-gen-bytes final-then-block-gen-context)
                                   (list CISC_VM_GOTO (+ 1 else-block-len))
                                   (gen-context-gen-bytes final-else-block-gen-context))]))
@@ -764,26 +807,23 @@
                                              (list (-loc-set 'sym (ast-ev-bool #t)))
                                              '())
                              (make-gen-context))
-                (gen-context 1 (hash 'sym 0) (hash)
-                             (list CISC_VM_IMMB VM_L0 #xff
-                                   CISC_VM_BRA VM_L0 6
-                                   CISC_VM_IMMB VM_L0 1
-                                   CISC_VM_GOTO 4
-                                   CISC_VM_IMMB VM_L0 2)
-                             (hash)
-                             'nil))
+                (make-gen-context #:next-local 1
+                                  #:local-id-map (hash 'sym 0)
+                                  #:gen-bytes (list CISC_VM_IMMB VM_L0 #xff
+                                                    CISC_VM_BRA_NOT VM_L0 6
+                                                    CISC_VM_IMMB VM_L0 1
+                                                    CISC_VM_GOTO 4
+                                                    CISC_VM_IMMB VM_L0 2)))
 
   (check-equal? (generate-if VM_L0 (ast-e-if 'if
                                              (list (ast-ev-id 'param) (ast-ev-number 1) (ast-ev-number 2))
                                              '() '())
                              (make-gen-context #:parameter-id-map (hash 'param 1)))
-                (gen-context 0 (hash) (hash 'param 1)
-                             (list CISC_VM_BRA VM_P1 6
-                                   CISC_VM_IMMB VM_L0 1
-                                   CISC_VM_GOTO 4
-                                   CISC_VM_IMMB VM_L0 2)
-                             (hash)
-                             'nil))
+                (make-gen-context #:parameter-id-map (hash 'param 1)
+                                  #:gen-bytes (list CISC_VM_BRA_NOT VM_P1 6
+                                                    CISC_VM_IMMB VM_L0 1
+                                                    CISC_VM_GOTO 4
+                                                    CISC_VM_IMMB VM_L0 2)))
 
   (check-match (generate-if VM_L0 (ast-e-if 'if
                                             (list (loc-ref 'sym)
@@ -796,7 +836,7 @@
                             (make-gen-context))
                (gen-context 3 gen-hash (hash)
                             (list CISC_VM_IMMB VM_L0 #xff
-                                  CISC_VM_BRA VM_L0 6
+                                  CISC_VM_BRA_NOT VM_L0 6
                                   CISC_VM_IMMB VM_L0 1
                                   CISC_VM_GOTO 11
                                   CISC_VM_IMMB VM_L1 3
@@ -819,7 +859,7 @@
                                      (list CISC_VM_IMMB target-reg (if (ast-ev-bool-bool an-expression) #xff #x00)))])]
     [(ast-ev-id? an-expression)
      (unless (hash-has-key? (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id an-expression))
-       (raise-user-error (format "Key ~a not found in ~a" (ast-ev-id-id an-expression) (gen-context-parameter-id-map a-gen-context))))
+       (raise-user-error (format "Key id ~a not found in parameter list ~a" (ast-ev-id-id an-expression) (gen-context-parameter-id-map a-gen-context))))
      (struct-copy gen-context a-gen-context
                   [gen-bytes (append (gen-context-gen-bytes a-gen-context)
                                      (list CISC_VM_MOVE target-reg (encode-idx (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id an-expression)) l-param)))])]
@@ -872,7 +912,7 @@
   (define param-map (--prep-param-hashmap (append (ast-function-def-parameter fun) (ast-function-def-default-parameter fun))))
   ;; generate (into target local slot 0) expression(s)
   (define new-gen-context (foldl (lambda (body-expr a-gen-ctx) (generate VM_L0 body-expr a-gen-ctx))
-                                 (gen-context 0 (hash) param-map '() (hash) (ast-function-def-id fun))
+                                 (make-gen-context #:parameter-id-map param-map #:current-function (ast-function-def-id fun))
                                  transformed-expressions))
   ;; count the needed local slots (for later function registration)
   ;; generate return local slot 0
@@ -900,14 +940,13 @@
     (m-def (a-or-b (param bool) -> byte
                    "return first or second")
            (if param 1 2)))
-   (gen-context 0 (hash) (hash 'param 0)
-                (list CISC_VM_BRA  VM_P0 6
-                      CISC_VM_IMMB VM_L0 1
-                      CISC_VM_GOTO 4
-                      CISC_VM_IMMB VM_L0 2
-                      CISC_VM_RET  VM_L0)
-                (hash)
-                'a-or-b)))
+   (make-gen-context #:parameter-id-map (hash 'param 0)
+                     #:gen-bytes (list CISC_VM_BRA_NOT VM_P0 6
+                                       CISC_VM_IMMB VM_L0 1
+                                       CISC_VM_GOTO 4
+                                       CISC_VM_IMMB VM_L0 2
+                                       CISC_VM_RET  VM_L0)
+                     #:current-function 'a-or-b)))
 
 (module+ test #| tail call recursion (w/ infinite loop => without if) |#
 
@@ -928,7 +967,6 @@
          "goto -> -21"
          "ret l0")))
 
-
 (module+ test #| compile |#
 
   (check-equal?
@@ -942,10 +980,10 @@
                  (reverse (cdr a-list) (cons (car a-list) b-list))))))
     (make-vm))
    (list "nil? p0 -> l0"
-         "bra l0? -> 6"
-         "move p1 -> l0"
+         "bra not l0? -> 6"
+         "move p1 -> l0" ;; branch (then) contains only move and goto
          "goto -> 19"
-         "car p0 -> l1"
+         "car p0 -> l1"  ;; branch (else) contains recursive call => does not exit
          "cons l1 p1 -> l1"
          "cdr p0 -> l2"
          "move l2 -> p0"
@@ -965,16 +1003,12 @@
                        (reverse (cdr a-list) (cons (car a-list) b-list))))))
           (make-vm))
          (list "nil? p0 -> l0"
-               "bra l0 -> 13"
+               "bra l0? -> 13"
                "car p0 -> l0"
                "cons l0 p1 -> p1"
                "cdr p0 -> p0"
                "goto -> -14"
                "ret p1"))))
 
-
-;; TODO: now transform this tree into a flat list of cisc vm commands
-;; idea: recursively transform innermost nodes into cisc commands,
-;; allocating locals,
 ;; (tracking liveliness,) <- optimize later on that
 ;; replacing tree nodes with cisc

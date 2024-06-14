@@ -17,6 +17,7 @@
          CISC_VM_IMMB
          CISC_VM_BYTE_ADD
          CISC_VM_BRA
+         CISC_VM_BRA_NOT
          CISC_VM_MOVE
          CISC_VM_CALL
          CISC_VM_NIL_P
@@ -218,6 +219,7 @@
 (define CISC_VM_BRA           25) ;; 3          <byte-code> <bool-tested-reg> offset
 (define CISC_VM_MOVE          26) ;; 3          <byte-code> <target-reg> <source-reg>
 (define CISC_VM_NIL_P         27) ;; 3          <byte-code> <target-reg> <list-reg>
+(define CISC_VM_BRA_NOT       28) ;; 3          <byte-code> <bool-tested-reg> offset
 
 ;; INT_TIMES
 ;; INT->BYTE
@@ -1537,6 +1539,7 @@
              [(eq? opcode CISC_VM_CASE)           (values '("(i) case") (+ 3 (* 2 (nth byte-codes 3))))] ;; 3+casen*3  <byte-code> <target-reg> <case-src-reg> case-no case-byte-value-0 <new-byte-idx> case-byte-value-1 <new-byte-idx> ... case-byte-value-n <new-byte-idx>
              [(eq? opcode CISC_VM_THROW)          (values '("(i) throw") (+ 3 (nth byte-codes 2)))] ;; 3+paramn   <byte-code> <exception-str> <param-no> <param-1> <param-2> ... <param-n>
              [(eq? opcode CISC_VM_BRA)            (values (list (format "bra ~a? -> ~a" (reg->str@ byte-codes 1) (decimal-from-two-complement (nth byte-codes 2)))) 3)] ;; 3          <byte-code> <bool-tested-reg> offset
+             [(eq? opcode CISC_VM_BRA_NOT)        (values (list (format "bra not ~a? -> ~a" (reg->str@ byte-codes 1) (decimal-from-two-complement (nth byte-codes 2)))) 3)] ;; 3          <byte-code> <bool-tested-reg> offset
              [(eq? opcode CISC_VM_MOVE)           (values (list (format "move ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <source-reg>
              [(eq? opcode CISC_VM_NIL_P)          (values (list (format "nil? ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <list-reg>
              [else (raise-user-error (format "unknown opcode ~a" opcode))]))
@@ -1560,6 +1563,7 @@
                                    CISC_VM_STRUCT_CREATE VM_L0 0 VM_L1 VM_P1 VM_P0
                                    CISC_VM_NIL_P VM_L0 VM_L1
                                    CISC_VM_BRA VM_L0 (two-complement-of -4)
+                                   CISC_VM_BRA_NOT VM_L0 (two-complement-of -4)
                                    )
                              (make-vm #:structs (pvector (make-structure "point" (list "x" "y" "z")))))
                 (list "brk"
@@ -1579,4 +1583,5 @@
                       "struct-create point { x: l1, y: p1, z: p0 } -> l0"
                       "nil? l1 -> l0"
                       "bra l0? -> -4"
+                      "bra not l0? -> -4"
                       )))
