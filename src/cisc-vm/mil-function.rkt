@@ -663,6 +663,19 @@
                 (hash 'byte+ 0)
                 'nil)))
 
+(define/contract (generate-one-op opcode target-reg param a-gen-context)
+  (->* [byte? byte? ast-expression? gen-context?] [] gen-context?)
+  (struct-copy gen-context a-gen-context
+               [gen-bytes (append (gen-context-gen-bytes a-gen-context)
+                                  (list opcode target-reg (generate-parameter param a-gen-context)))]))
+
+(define/contract (generate-two-op opcode target-reg param1 param2 a-gen-context)
+  (->* [byte? byte? ast-expression? ast-expression? gen-context?] [] gen-context?)
+  (struct-copy gen-context a-gen-context
+               [gen-bytes (append (gen-context-gen-bytes a-gen-context)
+                                  (list opcode target-reg (generate-parameter param1 a-gen-context)
+                                        (generate-parameter param2 a-gen-context)))]))
+
 (define/contract (generate-fun-call target-reg a-fun-call a-gen-context)
   (->* [byte? ast-e-fun-call? gen-context?] [] gen-context?)
   (define fun-id (ast-e-fun-call-fun a-fun-call))
@@ -671,15 +684,11 @@
   (define pre-code (ast-e-fun-call-pre-code a-fun-call))
   (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate 0 pre-expression inner-gen-context)) a-gen-context pre-code))
   (cond
-    [(eq? fun-id 'cons) next-gen-context]
-    [(eq? fun-id 'cdr) next-gen-context]
-    [(eq? fun-id 'car) next-gen-context]
-    [(eq? fun-id 'nil?) next-gen-context]
-    [(eq? fun-id 'byte+)
-     (struct-copy gen-context next-gen-context
-                  [gen-bytes (append (gen-context-gen-bytes next-gen-context)
-                                     (list CISC_VM_BYTE_ADD target-reg (generate-parameter (first fun-params) next-gen-context)
-                                           (generate-parameter (second fun-params) next-gen-context)))])]
+    [(eq? fun-id 'cons) (generate-two-op CISC_VM_CONS target-reg (first fun-params) (second fun-params) next-gen-context)]
+    [(eq? fun-id 'cdr) (generate-one-op CISC_VM_CDR target-reg (first fun-params) next-gen-context)]
+    [(eq? fun-id 'car) (generate-one-op CISC_VM_CAR target-reg (first fun-params) next-gen-context)]
+    [(eq? fun-id 'nil?) (generate-one-op CISC_VM_NIL_P target-reg (first fun-params) next-gen-context)]
+    [(eq? fun-id 'byte+) (generate-two-op CISC_VM_BYTE_ADD target-reg (first fun-params) (second fun-params) next-gen-context)]
     [(eq? fun-id (gen-context-current-function a-gen-context))
      (define function-len (+ (length (gen-context-gen-bytes next-gen-context)) ;; generated up to here
                              (* 3 fun-params-len) ;; moves for params
@@ -813,7 +822,7 @@
        (raise-user-error (format "Key ~a not found in ~a" (ast-ev-id-id an-expression) (gen-context-parameter-id-map a-gen-context))))
      (struct-copy gen-context a-gen-context
                   [gen-bytes (append (gen-context-gen-bytes a-gen-context)
-                                     (list CISC_VM_MOVE target-reg (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id an-expression))))])]
+                                     (list CISC_VM_MOVE target-reg (encode-idx (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id an-expression)) l-param)))])]
     ;; [(ast-ev-string an-expression)]
     [else (raise-user-error (format "unknown value ~a" an-expression))]
     ))
@@ -922,7 +931,29 @@
 
 (module+ test #| compile |#
 
-  (skip "not completely done yet"
+  (check-equal?
+   (disassemble
+    (gen-context-gen-bytes
+     (cisc-vm-transform
+      (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
+                      "reverse a-list, consing it into b-list")
+             (if (nil? a-list)
+                 b-list
+                 (reverse (cdr a-list) (cons (car a-list) b-list))))))
+    (make-vm))
+   (list "nil? p0 -> l0"
+         "bra l0? -> 6"
+         "move p1 -> l0"
+         "goto -> 19"
+         "car p0 -> l1"
+         "cons l1 p1 -> l1"
+         "cdr p0 -> l2"
+         "move l2 -> p0"
+         "move l1 -> p1"
+         "goto -> -17"
+         "ret l0"))
+
+  (skip ": optimization should yield this (someday)"
         (check-equal?
          (disassemble
           (gen-context-gen-bytes

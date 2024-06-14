@@ -948,11 +948,19 @@
   (-> string? pvector?)
   (apply pvector (string->list a-str)))
 
+(define/contract (pvector->string a-vec)
+  (-> pvector? string?)
+  (apply string (sequence->list a-vec)))
+
+(module+ test
+  (check-equal? (pvector->string (string->pvector "hello"))
+                "hello"))
 
 (define/contract (string->cell-array a-str)
   (-> string? cell-array?)
   (cell-array (string-length a-str) (string->pvector a-str)))
 
+;; creates a structure with vm data such that vm commands can introspect on this data
 (define/contract (make-structure name fields)
   (-> string? (listof string?) cell-ptr?)
   (cell-ptr
@@ -962,6 +970,19 @@
            (cons (cell-byte (length fields))
                  (cons (cell-ptr (string->cell-array name))
                        (map (lambda (field) (cell-ptr (string->cell-array field))) fields)))))))
+
+(define/contract (structure-field-num a-struc-def)
+  (-> cell-ptr? byte?)
+  (cell-byte-value (nth (cell-array-array (cell-ptr-ref a-struc-def)) 0)))
+
+(define/contract (structure-name a-struc-def)
+  (-> cell-ptr? string?)
+  (pvector->string (cell-array-array (cell-ptr-ref (nth (cell-array-array (cell-ptr-ref a-struc-def)) 1)))))
+
+(define/contract (structure-field a-struc-def idx)
+  (-> cell-ptr? byte? string?)
+  (pvector->string (cell-array-array (cell-ptr-ref (nth (cell-array-array (cell-ptr-ref a-struc-def)) (+ 2 idx))))))
+
 
 (module+ test #| write part of the interpreter within itself, poc |#
   (define r-struct-vm-functions 1)
@@ -1496,8 +1517,11 @@
              [(eq? opcode CISC_VM_CDR)            (values (list (format "cdr ~a -> ~a" (reg->str@ byte-codes 2) (reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <src-list-reg>
              [(eq? opcode CISC_VM_GOTO)           (values (list (format "goto -> ~a" (decimal-from-two-complement (nth byte-codes 1)))) 2)] ;; 2          <byte-code> offset
              [(eq? opcode CISC_VM_STRUCT_CREATE)
-              (define field-count 1) ;; TODO: find out how many fields the given structure has (using a-vm)
-              (values '("struct_create") (+ 3 field-count))] ;; 3+fieldc   <byte-code> <target-reg> <struct-def-idx> <field-1-reg> <field-2-reg> ... <field-n-reg>
+              (define struct-idx (nth byte-codes 2))
+              (define struct-def  (nth (vm-structs a-vm) struct-idx))
+              (define field-num (structure-field-num struct-def))
+              (define struct-name (structure-name struct-def))
+              (values (list (format "struct-create ~a { ~a } -> ~a" struct-name (string-join (map (lambda (idx) (format "~a: ~a" (structure-field struct-def idx) (reg->str@ byte-codes (+ idx 3)))) (range  field-num) ) ", ") (reg->str@ byte-codes 1))) (+ 3 field-num))] ;; 3+fieldc   <byte-code> <target-reg> <struct-def-idx> <field-1-reg> <field-2-reg> ... <field-n-reg>
              [(eq? opcode CISC_VM_ARRAY_CREATE)   (values '("(i) array_create") 4)] ;; 4          <byte-code> <target-reg> <length-reg> <default-val-reg>
              [(eq? opcode CISC_VM_ARRAY_GET)      (values '("(i) array_get") 4)] ;; 4          <byte-code> <target-reg> <array-reg> <idx-reg>
              [(eq? opcode CISC_VM_ARRAY_SET)      (values '("(i) array_set") 4)] ;; 4          <byte-code> <array-reg> <idx-reg> <value-reg>
@@ -1512,9 +1536,9 @@
              [(eq? opcode CISC_VM_INT_INC)        (values '("(i) int_inc") 2)] ;; 2          <byte-code> <target-reg>
              [(eq? opcode CISC_VM_CASE)           (values '("(i) case") (+ 3 (* 2 (nth byte-codes 3))))] ;; 3+casen*3  <byte-code> <target-reg> <case-src-reg> case-no case-byte-value-0 <new-byte-idx> case-byte-value-1 <new-byte-idx> ... case-byte-value-n <new-byte-idx>
              [(eq? opcode CISC_VM_THROW)          (values '("(i) throw") (+ 3 (nth byte-codes 2)))] ;; 3+paramn   <byte-code> <exception-str> <param-no> <param-1> <param-2> ... <param-n>
-             [(eq? opcode CISC_VM_BRA)            (values '("(i) bra") 3)] ;; 3          <byte-code> <bool-tested-reg> offset
+             [(eq? opcode CISC_VM_BRA)            (values (list (format "bra ~a? -> ~a" (reg->str@ byte-codes 1) (decimal-from-two-complement (nth byte-codes 2)))) 3)] ;; 3          <byte-code> <bool-tested-reg> offset
              [(eq? opcode CISC_VM_MOVE)           (values (list (format "move ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <source-reg>
-             [(eq? opcode CISC_VM_NIL_P)          (values '("(i) nil_p") 3)] ;; 3          <byte-code> <target-reg> <list-reg>
+             [(eq? opcode CISC_VM_NIL_P)          (values (list (format "nil? ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <list-reg>
              [else (raise-user-error (format "unknown opcode ~a" opcode))]))
          (disassemble (drop byte-codes bytes-consumed) a-vm (append strings add-strings))]))
 
@@ -1533,7 +1557,11 @@
                                    CISC_VM_MAKE_INT VM_L0 VM_P0 VM_P1
                                    CISC_VM_IMMI VM_L0 1 2
                                    CISC_VM_MOVE VM_L0 VM_L1
-                                   ) (make-vm))
+                                   CISC_VM_STRUCT_CREATE VM_L0 0 VM_L1 VM_P1 VM_P0
+                                   CISC_VM_NIL_P VM_L0 VM_L1
+                                   CISC_VM_BRA VM_L0 (two-complement-of -4)
+                                   )
+                             (make-vm #:structs (pvector (make-structure "point" (list "x" "y" "z")))))
                 (list "brk"
                       "byte+ p1 + g1 -> l0"
                       "call 258 (l1 p1) -> l0"
@@ -1548,4 +1576,7 @@
                       "make_int p0 + p1<<8 -> l0"
                       "immi 513 -> l0"
                       "move l1 -> l0"
+                      "struct-create point { x: l1, y: p1, z: p0 } -> l0"
+                      "nil? l1 -> l0"
+                      "bra l0? -> -4"
                       )))
