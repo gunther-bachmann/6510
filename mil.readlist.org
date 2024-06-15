@@ -2087,6 +2087,14 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   - [-] struct-set <data-off> <struct-reg> <value-reg> :: set cell at data-off in structure reg to value in second reg
   - [-] throw-exception <num> <string> <reg-0> ... <reg-n> :: throw an exception with num context vars and a string message
 *** next
+- IDEA: make syntax for list-types more compact
+  e.g postix * to indicate a list of a certain type, [] to indicate array
+  #+begin_src scheme
+    (m-def (my-fun (a-list byte*) (b-list byte*) -> byte*
+                   "add")
+           (;; body ...
+            ))
+  #+end_src
 - simple translator scheme->byte-code
 - (m-def (<name> (<arg> <type> <default) ..) -> <type>
    ...)
