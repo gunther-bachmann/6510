@@ -466,63 +466,77 @@
 ;; - list of newly introduced references
 (define/contract (ed-function-call-params--mapper params (symbol-generator gensym))
   (->* [(listof ast-expression?)] [any/c]
-      (listof (list/c (or/c loc-ref? ast-ev-id?) (listof -loc-set?) (listof loc-ref?))))
+      (listof (list/c (or/c loc-ref? ast-ev-id?) (listof -loc-set?))))
   (map (lambda (param)
          (cond [(ast-e-fun-call? param)
                 (define sym (symbol-generator))
                 ;; (match-define (list new-func new-ref-list prepends)
                 ;;   (ed-function-call--extract-refs param '() '() symbol-generator))
-                (list (loc-ref agsi sym) (list (-loc-set agsi sym (transform-function-call param))) '())]
-               [(ast-e-nil? param) (define sym (symbol-generator)) (list (loc-ref agsi sym) (list (-loc-set agsi sym param)) '())]
-               [(ast-ev-number? param) (define sym (symbol-generator)) (list (loc-ref agsi sym) (list (-loc-set agsi sym param)) '())]
-               [(ast-ev-string? param) (define sym (symbol-generator)) (list (loc-ref agsi sym) (list (-loc-set agsi sym param)) '())]
-               [(ast-ev-bool? param) (define sym (symbol-generator)) (list (loc-ref agsi sym) (list (-loc-set agsi sym param)) '())]
-               [(ast-ev-id? param) (list param '() '())]
-               [(loc-ref? param) (list param '() '())]
+                (list (loc-ref agsi sym) (list (-loc-set agsi sym (transform-function-call param))))]
+               [(ast-e-nil? param) (define sym (symbol-generator)) (list (loc-ref agsi sym) (list (-loc-set agsi sym param)))]
+               [(ast-ev-number? param) (define sym (symbol-generator)) (list (loc-ref agsi sym) (list (-loc-set agsi sym param)))]
+               [(ast-ev-string? param) (define sym (symbol-generator)) (list (loc-ref agsi sym) (list (-loc-set agsi sym param)))]
+               [(ast-ev-bool? param) (define sym (symbol-generator)) (list (loc-ref agsi sym) (list (-loc-set agsi sym param)))]
+               [(ast-ev-id? param) (list param '())]
+               [(loc-ref? param) (list param '())]
                [else (raise-user-error (format "unknown param type ~a" param))]))
        params))
 
 (module+ test
-  (check-match (ed-function-call-params--mapper (list (ast-e-if agsi 'if (list (ast-ev-bool agsi #t) (ast-ev-string agsi "true-val") (ast-ev-string agsi "false-val")) )))
+  ;; make sure that the resulting parameter is just a reference
+  ;; make sure that nested if function then and else body are not transformed (because of late execution)
+  ;; make sure that the boolean condition of the if function is transformed (pre-code on the if-command)
+  (check-match (ed-function-call-params--mapper
+                (list (ast-e-if agsi 'if (list (ast-ev-bool agsi #t)
+                                               (ast-ev-string agsi "true-val")
+                                               (ast-ev-string agsi "false-val")))))
                (list (list
-                      (loc-ref _ a-sym)
-                      (list
-                       (-loc-set _ a-sym (ast-e-fun-call (ast-gen-info (list (-loc-set _ b-sym (ast-ev-bool _ #t))) _ _ _ ) 'if (list (loc-ref _ b-sym) (ast-ev-string _ "true-val") (ast-ev-string _ "false-val")))))
-                      '()))
-               (and (symbol? a-sym) (symbol? b-sym)))
+                      (loc-ref _ a-sym) ;; resulting parameter
+                      (list             ;; of setters to be executed before
+                       (-loc-set _ a-sym (ast-e-fun-call gen 'if (list (loc-ref _ b-sym)
+                                                                       (ast-ev-string _ "true-val")
+                                                                       (ast-ev-string _ "false-val")))))))
+               (and (symbol? a-sym) (symbol? b-sym)
+                  (match (ast-gen-info-pre-code gen)
+                    [(list (-loc-set _ b-sym (ast-ev-bool _ #t))) #t] ;; precode associated with the if-command
+                    [_ #f])))
 
-  (check-equal? (ed-function-call-params--mapper (list (ast-e-nil agsi) (ast-ev-number agsi 47) (ast-ev-string agsi "x") (ast-ev-bool agsi #t)) (lambda () 'a))
-                (list (list (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-e-nil agsi))) '())
-                      (list (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-ev-number agsi 47))) '())
-                      (list (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-ev-string agsi "x"))) '())
-                      (list (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-ev-bool agsi #t))) '()))
+  (check-equal? (ed-function-call-params--mapper
+                 (list (ast-e-nil agsi)
+                       (ast-ev-number agsi 47)
+                       (ast-ev-string agsi "x")
+                       (ast-ev-bool agsi #t))
+                 (lambda () 'a))
+                (list (list (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-e-nil agsi))))
+                      (list (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-ev-number agsi 47))))
+                      (list (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-ev-string agsi "x"))))
+                      (list (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-ev-bool agsi #t)))))
                 "values are extracted into a set to a ref and the ref")
 
   (check-equal? (ed-function-call-params--mapper (list (loc-ref agsi 'a) (ast-ev-id agsi 'b)))
-                (list (list (loc-ref agsi 'a) '() '())
-                      (list (ast-ev-id agsi 'b) '() '()))
+                (list (list (loc-ref agsi 'a) '())
+                      (list (ast-ev-id agsi 'b) '()))
                 "a reference is not transformed => no new refs etc")
 
   (check-equal? (ed-function-call-params--mapper (list (loc-ref agsi 'q) (ast-ev-number agsi 17)) (lambda () 'l1))
-                (list (list (loc-ref agsi 'q) '() '())
-                      (list (loc-ref agsi 'l1) (list (-loc-set agsi 'l1 (ast-ev-number agsi 17))) '())))
+                (list (list (loc-ref agsi 'q) '())
+                      (list (loc-ref agsi 'l1) (list (-loc-set agsi 'l1 (ast-ev-number agsi 17))))))
 
   (check-match (ed-function-call-params--mapper (list (loc-ref agsi 'q) (ast-e-fun-call agsi 'fn1 (list (ast-ev-number agsi 1)) )))
-               (list (list (loc-ref _ 'q) '() '())
+               (list (list (loc-ref _ 'q) '())
                      (list (loc-ref _ a-sym)
                            (list (-loc-set _ a-sym
                                            (ast-e-fun-call
                                             (ast-gen-info (list (-loc-set _ b-sym (ast-ev-number _ 1))) _ _ _)
                                             'fn1
-                                            (list (loc-ref _ b-sym)))))
-                           '()))
+                                            (list (loc-ref _ b-sym)))))))
                (and (symbol? a-sym) (symbol? b-sym)))
 
   (check-match (ed-function-call-params--mapper
                 (list (loc-ref agsi 'q)
                       (ast-e-fun-call agsi 'fn1 (list (ast-ev-id agsi 'l)
                                                       (ast-e-fun-call agsi 'r2 (list (ast-ev-number agsi 1)))))))
-               (list (list (loc-ref _ 'q) '() '())
+               (list (list (loc-ref _ 'q) '())
                      (list (loc-ref _ a-sym)
                            (list (-loc-set _ a-sym
                                            (ast-e-fun-call
@@ -532,8 +546,7 @@
                                                               (ast-gen-info (list (-loc-set _ c-sym (ast-ev-number _ 1))) _ _ _)
                                                               'r2
                                                               (list (loc-ref _ c-sym))))) _ _ _)
-                                            'fn1 (list (ast-ev-id _ 'l) (loc-ref _ b-sym)))))
-                           '()))
+                                            'fn1 (list (ast-ev-id _ 'l) (loc-ref _ b-sym)))))))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym)))
 
   (check-match (ed-function-call-params--mapper
@@ -545,14 +558,12 @@
                                   (ast-e-fun-call agsi 'car (list (ast-ev-id agsi 'a-list)))
                                   (ast-ev-id agsi 'b-list)) )))
                (list (list (loc-ref _ c-sym)
-                           (list (-loc-set _ c-sym (ast-e-fun-call _ 'cdr (list (ast-ev-id _ 'a-list)))))
-                           '())
+                           (list (-loc-set _ c-sym (ast-e-fun-call _ 'cdr (list (ast-ev-id _ 'a-list))))))
                      (list (loc-ref _ b-sym)
                            (list (-loc-set _ b-sym
                                            (ast-e-fun-call (ast-gen-info (list (-loc-set _ a-sym (ast-e-fun-call _ 'car (list (ast-ev-id _ 'a-list)) ))) _ _ _)
                                                            'cons
-                                                           (list (loc-ref _ a-sym) (ast-ev-id _ 'b-list)))))
-                           '()))
+                                                           (list (loc-ref _ a-sym) (ast-ev-id _ 'b-list)))))))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym))))
 
 (define/contract (ed-function-call--extract-refs fun-call (ref-list '()) (prepends '()) (symbol-generator gensym))
