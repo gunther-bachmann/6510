@@ -26,6 +26,9 @@
          VM_L1
          VM_L2
          VM_L3
+         VM_L4
+         VM_L5
+
          VM_P0
          VM_P1
 
