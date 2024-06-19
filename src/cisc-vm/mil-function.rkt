@@ -1205,7 +1205,6 @@
 
 (module+ test #| compile |#
 
-  ;; (skip "validate")
   (check-match (allocate-registers (transform (car (ast-function-def-body
                                                     (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
                                                                     "reverse a-list, consing it into b-list")
@@ -1237,7 +1236,6 @@
                    (loc-ref (ast-gen-info '() '() 0 'default 0) sym-2)
                    (loc-ref (ast-gen-info '() '() 1 'default 0) sym-3))))))
 
-  ;; (skip "register allocation currently broken")
   (check-equal?
    (disassemble
     (gen-context-gen-bytes
@@ -1250,15 +1248,15 @@
     (make-vm))
    (list "nil? p0 -> l0"
          "bra not l0? -> 6"
-         "move p1 -> l0" ;; branch (then) contains only move and goto
-         "goto -> 19"
-         "cdr p0 -> l0"
-         "car p0 -> l1"  ;; branch (else) contains recursive call => does not exit
-         "cons l1 p1 -> l1"
-         "move l0 -> p0"
-         "move l1 -> p1"
-         "goto -> -17"
-         "ret l0"))
+         "move p1 -> l0"    ;; branch (then) contains only move and goto => ret p1 would eliminate this move
+         "goto -> 19"       ;; branch not-cmd, with immediate goto = branch-cmd to end (eliminate old then branch)
+         "cdr p0 -> l0"     ;; branch (else) contains recursive call => does not exit => doesn't care about the actual ret register
+         "car p0 -> l1"     ;; data flow (eliminate move by replacing last assignment with move target, reorder to allow)
+         "cons l1 p1 -> l1" ;; (a1) cdr p0 -> l0    before (a2)      (b1) car p0 -> l1         before (b2)
+         "move l0 -> p0"    ;;                                       (b2) cons l1 p1 -> l1     after (b1) before (b3)
+         "move l1 -> p1"    ;; (a2) move l0 -> p0   after  (a1,b1)   (b3) move l1 -> p1        after (b2)
+         "goto -> -17"      ;;
+         "ret l0"))         ;; ret l0 is replaced with ret p1 (see then branch)
 
   (skip ": optimization should yield this (someday)"
         (check-equal?
@@ -1266,7 +1264,7 @@
           (gen-context-gen-bytes
            (cisc-vm-transform
             (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
-                            "reverse a-list, consing it into b-list")
+                            "reverse a-list into b-list (through cons ing)")
                    (if (nil? a-list)
                        b-list
                        (reverse (cdr a-list) (cons (car a-list) b-list))))))
@@ -1275,14 +1273,11 @@
                "bra l0? -> 13"
                "car p0 -> l0"
                "cons l0 p1 -> p1"
-               "cdr p0 -> p0"
+               "cdr p0 -> p0" ;; reordering this expression to the end allows for reuse of p0
                "goto -> -14"
                "ret p1"))))
 
 (module+ test #| optimization ideas |#
-
-  ;; idea each ast node has a generation description node as a side car,
-  ;; that can hold e.g. pre-/post-code, target-reg preference etc.
 
   (define example-ast
     (ast-function-def
