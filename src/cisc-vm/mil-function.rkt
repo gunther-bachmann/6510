@@ -481,13 +481,11 @@
       ;; (listof (list/c (or/c loc-ref? ast-ev-id?)) (listof -loc-set?) byte?)
       transformed-parameter?
       )
-  (define new-gen-info (struct-copy ast-gen-info (ast-node-gen-info param)
-                                    [target-reg (encode-idx idx l-local)]))
+  (define new-gen-info (ast-node-gen-info param))
   (cond [(ast-e-fun-call? param)
-         ;; (match-define (list new-func new-ref-list prepends)
-         ;;   (ed-function-call--extract-refs param '() '() symbol-generator))
-         (define transformed-inner-fn-call (transform-function-call (struct-copy ast-e-fun-call param
-                                                                                 [gen-info #:parent ast-node new-gen-info])))
+         (define transformed-inner-fn-call
+           (transform-function-call (struct-copy ast-e-fun-call param
+                                                 [gen-info #:parent ast-node new-gen-info])))
          (define used-up-locals (ast-gen-info-locals-used (ast-node-gen-info transformed-inner-fn-call)))
          (transformed-parameter
           (loc-ref new-gen-info sym)
@@ -544,10 +542,10 @@
                        (ast-ev-string agsi "x")
                        (ast-ev-bool agsi #t))
                  (lambda () 'a))
-                (list (transformed-parameter (loc-ref (make-ast-gen-info #:target-reg 0) 'a) (list (-loc-set (make-ast-gen-info #:target-reg 0) 'a (ast-e-nil agsi))) 1)
-                      (transformed-parameter (loc-ref (make-ast-gen-info #:target-reg 1) 'a) (list (-loc-set (make-ast-gen-info #:target-reg 1) 'a (ast-ev-number agsi 47))) 1)
-                      (transformed-parameter (loc-ref (make-ast-gen-info #:target-reg 2) 'a) (list (-loc-set (make-ast-gen-info #:target-reg 2) 'a (ast-ev-string agsi "x"))) 1)
-                      (transformed-parameter (loc-ref (make-ast-gen-info #:target-reg 3) 'a) (list (-loc-set (make-ast-gen-info #:target-reg 3) 'a (ast-ev-bool agsi #t))) 1))
+                (list (transformed-parameter (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-e-nil agsi))) 1)
+                      (transformed-parameter (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-ev-number agsi 47))) 1)
+                      (transformed-parameter (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-ev-string agsi "x"))) 1)
+                      (transformed-parameter (loc-ref agsi 'a) (list (-loc-set agsi 'a (ast-ev-bool agsi #t))) 1))
                 "values are extracted into a set to a ref and the ref")
 
   (check-equal? (ed-function-call-params--mapper (list (loc-ref agsi 'a) (ast-ev-id agsi 'b)))
@@ -562,7 +560,7 @@
   (check-match (ed-function-call-params--mapper (list (loc-ref agsi 'q) (ast-e-fun-call agsi 'fn1 (list (ast-ev-number agsi 1)) )))
                (list (transformed-parameter (loc-ref _ 'q) '() 0)
                      (transformed-parameter (loc-ref _ a-sym)
-                           (list (-loc-set _ a-sym (ast-e-fun-call gen 'fn1 (list (loc-ref _ b-sym))))) 0))
+                           (list (-loc-set _ a-sym (ast-e-fun-call gen 'fn1 (list (loc-ref _ b-sym))))) 1))
                (and (symbol? a-sym) (symbol? b-sym)
                   (match (ast-gen-info-pre-code gen)
                     [(list (-loc-set _ b-sym (ast-ev-number _ 1))) #t]
@@ -578,7 +576,7 @@
                                            (ast-e-fun-call
                                             f1-gen
                                             'fn1 (list (ast-ev-id _ 'l) (loc-ref _ b-sym)))))
-                           0))
+                           1))
                (and (symbol? a-sym) (symbol? b-sym)
                   (match (ast-gen-info-pre-code f1-gen)
                     [(list (-loc-set _ b-sym
@@ -607,7 +605,7 @@
                                            (ast-e-fun-call gen
                                                            'cons
                                                            (list (loc-ref _ a-sym) (ast-ev-id _ 'b-list)))))
-                           0))
+                           1))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym)
                   (match (ast-gen-info-pre-code gen)
                     [(list (-loc-set _ a-sym (ast-e-fun-call _ 'car (list (ast-ev-id _ 'a-list))))) #t]
@@ -620,7 +618,7 @@
   (cond [(ed-function-call--has-only-refs? fun-call) (list fun-call ref-list prepends)]
         [(eq? 'if (ast-e-fun-call-fun fun-call))
          (define transformed-bool-param (ed-function-call-params--mapper (list (car (ast-e-fun-call-params fun-call))) symbol-generator))
-         (list (ast-e-fun-call agsi
+         (list (ast-e-fun-call (ast-node-gen-info fun-call)
                                'if
                                (cons (transformed-parameter-reference (car transformed-bool-param)) (cdr (ast-e-fun-call-params fun-call)))
                                )
@@ -628,14 +626,16 @@
                (append prepends (flatten (map (lambda (param) (transformed-parameter-loc-set param)) transformed-bool-param))))]
         [else
          (define transformed-params (ed-function-call-params--mapper (ast-e-fun-call-params fun-call) symbol-generator))
+         (define new-refs (map (lambda (param) (transformed-parameter-reference param)) transformed-params))
+         (define transformed-refs (append new-refs  ref-list))
+         (define additional-locals (foldl (lambda (ref acc) (+ acc (if (loc-ref? ref) 1 0))) 0  new-refs))
          (list
-          (ast-e-fun-call agsi
+          (ast-e-fun-call (struct-copy ast-gen-info (ast-node-gen-info fun-call)
+                                       [locals-used  additional-locals])
                           (ast-e-fun-call-fun fun-call)
-                          (map (lambda (param) (transformed-parameter-reference param)) transformed-params)
-                          )
-          (append (map (lambda (param) (transformed-parameter-reference param)) transformed-params) ref-list)
+                          (map (lambda (param) (transformed-parameter-reference param)) transformed-params))
+          transformed-refs
           (append prepends (flatten (map (lambda (param) (transformed-parameter-loc-set param)) transformed-params))))]))
-
 
 (module+ test
   (check-match (ed-function-call--extract-refs
@@ -674,8 +674,8 @@
   (->* [ast-e-fun-call?] [] ast-e-fun-call?)
   (match-define (list new-call loc-refs loc-sets)
     (ed-function-call--extract-refs fun-call))
-  (define new-gen-info (struct-copy ast-gen-info (ast-node-gen-info fun-call)
-                                    [pre-code (append (ast-gen-info-pre-code (ast-node-gen-info fun-call)) (reverse loc-sets))]))
+  (define new-gen-info (struct-copy ast-gen-info (ast-node-gen-info new-call)
+                                    [pre-code (append (ast-gen-info-pre-code (ast-node-gen-info fun-call)) loc-sets)]))
   (struct-copy ast-e-fun-call new-call
                [gen-info #:parent ast-node new-gen-info]))
 
@@ -694,8 +694,8 @@
                (and (symbol? a-sym)
                   (match (ast-gen-info-pre-code fn1-gen)
                     [(list
-                       (-loc-set _ b-sym (ast-e-fun-call fn2-gen 'fn2 (list (loc-ref _ c-sym))))
-                       (-loc-set _ a-sym (ast-ev-bool _ #t)))
+                       (-loc-set _ a-sym (ast-ev-bool _ #t))
+                       (-loc-set _ b-sym (ast-e-fun-call fn2-gen 'fn2 (list (loc-ref _ c-sym)))))
                      (match (ast-gen-info-pre-code fn2-gen)
                        [(list (-loc-set _ c-sym (ast-ev-string _ "z"))) #t]
                        [_ #f]) #t]
@@ -711,17 +711,27 @@
     [else
      (define sym (gensym))
      ;; target reg can be used for boolean expression, since it will eventually be overwritten exactly after the condition was evaluated and used (the last time)
+     ;; TODO used transformed instead of regular
      (ast-e-if (struct-copy ast-gen-info (ast-node-gen-info if-expression)
                             [pre-code (append (ast-gen-info-pre-code (ast-node-gen-info if-expression))
                                               (list (-loc-set agsi sym (transform boolean-expr))))])
                'if (cons (loc-ref agsi sym)
-                         (cdr (ast-e-fun-call-params if-expression))))]))
+                         (map transform (cdr (ast-e-fun-call-params if-expression)))))]))
 
 (define/contract (transform an-expression)
   (->* [ast-expression?] [] ast-expression?)
   (cond
     [(ast-e-if? an-expression) (transform-if an-expression)]
     [(ast-e-fun-call? an-expression) (transform-function-call an-expression)]
+    [(ast-ev-number? an-expression) (struct-copy ast-ev-number an-expression
+                                                 [gen-info #:parent ast-node (struct-copy ast-gen-info (ast-node-gen-info an-expression)
+                                                                                          [locals-used (+ 1 (ast-gen-info-locals-used (ast-node-gen-info an-expression)))])])]
+    [(ast-ev-bool? an-expression) (struct-copy ast-ev-bool an-expression
+                                                 [gen-info #:parent ast-node (struct-copy ast-gen-info (ast-node-gen-info an-expression)
+                                                                                          [locals-used (+ 1 (ast-gen-info-locals-used (ast-node-gen-info an-expression)))])])]
+    [(ast-ev-string? an-expression) (struct-copy ast-ev-string an-expression
+                                                 [gen-info #:parent ast-node (struct-copy ast-gen-info (ast-node-gen-info an-expression)
+                                                                                          [locals-used (+ 1 (ast-gen-info-locals-used (ast-node-gen-info an-expression)))])])]
     [else an-expression]))
 
 (module+ test #| transform |#
@@ -774,7 +784,6 @@
 (define/contract (generate-loc-set a-loc-set a-gen-context)
   (->* [-loc-set? gen-context?] [] gen-context?)
   (define expr (-loc-set-expr a-loc-set))
-  ;; (define local (gen-context-next-local a-gen-context))
   (define local (ast-gen-info-target-reg (ast-node-gen-info expr)))
   (struct-copy gen-context a-gen-context
                [next-local (+ 1 local)]
@@ -828,7 +837,9 @@
   (define fun-params (ast-e-fun-call-params a-fun-call))
   (define fun-params-len (length fun-params))
   (define pre-code (ast-gen-info-pre-code (ast-node-gen-info a-fun-call)))
-  (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate pre-expression inner-gen-context)) a-gen-context pre-code))
+  (define next-gen-context (foldl (lambda (pre-expression inner-gen-context)
+                                    (generate pre-expression inner-gen-context))
+                                  a-gen-context pre-code))
   (cond
     ;; built in (intrinsic) commands
     [(eq? fun-id 'cons) (generate-two-op CISC_VM_CONS target-reg (first fun-params) (second fun-params) next-gen-context)]
@@ -936,13 +947,13 @@
                                             (ast-e-fun-call agsi 'byte+ (list (ast-ev-number (make-ast-gen-info #:target-reg VM_L2) 2)
                                                                               (ast-ev-number (make-ast-gen-info #:target-reg VM_L1) 3)))))
                             (make-gen-context))
-               (gen-context 3 gen-hash (hash)
+               (gen-context 2 gen-hash (hash)
                             (list CISC_VM_IMMB VM_L0 #xff
                                   CISC_VM_BRA_NOT VM_L0 6
                                   CISC_VM_IMMB VM_L0 1
                                   CISC_VM_GOTO 11
-                                  CISC_VM_IMMB VM_L1 3
                                   CISC_VM_IMMB VM_L2 2
+                                  CISC_VM_IMMB VM_L1 3
                                   CISC_VM_BYTE_ADD VM_L0 VM_L2 VM_L1)
                             (hash)
                             'nil)
@@ -1009,7 +1020,8 @@
 
 (define/contract (cisc-vm-transform fun)
   (->* [ast-function-def?] [] gen-context?)
-  (define transformed-expressions (map transform (ast-function-def-body fun)))
+  (define allocated-expressions (map (lambda (expr) (allocate-registers expr)) (ast-function-def-body fun)))
+  (define transformed-expressions (map transform allocated-expressions))
   ;; register all parameter-id s into the generation context
   (define param-map (--prep-param-hashmap (append (ast-function-def-parameter fun) (ast-function-def-default-parameter fun))))
   ;; generate (into target local slot 0) expression(s)
@@ -1052,25 +1064,180 @@
 
 (module+ test #| tail call recursion (w/ infinite loop => without if) |#
 
+
+  ;;(skip "register allocation currently broken")
   (check-equal?
    (disassemble
     (gen-context-gen-bytes
      (cisc-vm-transform
       (m-def (called-rec (a byte) (b byte) -> byte
                          "make infinite loop adding one to each parameter")
-             (called-rec (byte+ a 1) (byte+ b 1)))))
+             (called-rec (byte+ a 2) (byte+ b 1)))))
     (make-vm))
-   (list "immb 1 -> l0"
-         "byte+ p1 + l0 -> l0"
-         "immb 1 -> l1"
-         "byte+ p0 + l1 -> l1"
-         "move l1 -> p0"
-         "move l0 -> p1"
+   (list "immb 2 -> l1"
+         "byte+ p0 + l1 -> l0"
+         "immb 1 -> l2"
+         "byte+ p1 + l2 -> l1"
+         "move l0 -> p0"
+         "move l1 -> p1"
          "goto -> -21"
          "ret l0")))
 
+(define (update-gen-info an-ast-node new-gen-info)
+  (cond
+    [(ast-e-fun-call? an-ast-node) (struct-copy ast-e-fun-call an-ast-node
+                                                [gen-info #:parent ast-node new-gen-info])]
+    [(ast-ev-bool? an-ast-node) (struct-copy ast-ev-bool an-ast-node
+                                             [gen-info #:parent ast-node new-gen-info])]
+    [(ast-ev-number? an-ast-node) (struct-copy ast-ev-number an-ast-node
+                                               [gen-info #:parent ast-node new-gen-info])]
+    [(ast-ev-string? an-ast-node) (struct-copy ast-ev-string an-ast-node
+                                               [gen-info #:parent ast-node new-gen-info])]
+    [(ast-ev-id? an-ast-node) (struct-copy ast-ev-id an-ast-node
+                                           [gen-info #:parent ast-node new-gen-info])]
+    [(ast-e-if? an-ast-node) (struct-copy ast-e-if an-ast-node
+                                          [gen-info #:parent ast-node new-gen-info])]
+    [(loc-ref? an-ast-node) (struct-copy loc-ref an-ast-node
+                                         [gen-info #:parent ast-node new-gen-info])]
+    [else (raise-user-error (format "structure info ~a cannot update gen-info (yet)" an-ast-node))]))
+
+(define (update-gen-info-pre-code an-ast-node value)
+  (update-gen-info an-ast-node
+                   (struct-copy ast-gen-info (ast-node-gen-info an-ast-node)
+                                [pre-code value])))
+
+(define (update-gen-info-post-code an-ast-node value)
+  (update-gen-info an-ast-node
+                   (struct-copy ast-gen-info (ast-node-gen-info an-ast-node)
+                                [post-code value])))
+
+(define (update-gen-info-target-reg an-ast-node value)
+  (update-gen-info an-ast-node
+                   (struct-copy ast-gen-info (ast-node-gen-info an-ast-node)
+                                [target-reg value])))
+
+(define (update-gen-info-target-reg-pref an-ast-node value)
+  (update-gen-info an-ast-node
+                   (struct-copy ast-gen-info (ast-node-gen-info an-ast-node)
+                                [target-reg-pref value])))
+
+(define (update-gen-info-locals-used an-ast-node value)
+  (update-gen-info an-ast-node
+                   (struct-copy ast-gen-info (ast-node-gen-info an-ast-node)
+                                [locals-used value])))
+
+(define/contract (allocate-regs-fun-call a-fun-call allocate-at)
+  (->* [ast-e-fun-call? byte?] [] ast-e-fun-call?)
+  ;; each parameter gets new allocate-at
+  (define new-params  (reverse (cdr
+                                (foldl (lambda (param allocate-at-param-list)
+                                         (define updated-param (update-gen-info-target-reg (allocate-registers param (car allocate-at-param-list)) (car allocate-at-param-list)))
+                                         (cons (+ 1 (ast-gen-info-target-reg (ast-node-gen-info updated-param)))
+                                               (cons updated-param (cdr allocate-at-param-list))))
+                                       (cons allocate-at (list))
+                                       (ast-e-fun-call-params a-fun-call)))))
+  (ast-e-fun-call (ast-node-gen-info a-fun-call)
+                  (ast-e-fun-call-fun a-fun-call)
+                  new-params))
+
+(module+ test #| allocate-regs-fun-call |#
+
+  (check-equal? (allocate-regs-fun-call
+                 (ast-e-fun-call (make-ast-gen-info)
+                           'fun
+                           '())
+                 0)
+                (ast-e-fun-call (make-ast-gen-info)
+                          'fun
+                          '()))
+  (check-equal? (allocate-regs-fun-call
+                 (ast-e-fun-call (make-ast-gen-info)
+                           'fun
+                           (list (ast-ev-bool (make-ast-gen-info) #t)
+                                 (ast-ev-number (make-ast-gen-info) 15)))
+                 0)
+                (ast-e-fun-call (make-ast-gen-info)
+                          'fun
+                          (list (ast-ev-bool (make-ast-gen-info) #t)
+                                (ast-ev-number (make-ast-gen-info #:target-reg 1) 15))))
+
+    (check-equal? (allocate-regs-fun-call
+                 (ast-e-fun-call (make-ast-gen-info)
+                           'fun
+                           (list (ast-ev-bool (make-ast-gen-info) #t)
+                                 (ast-ev-number (make-ast-gen-info) 15)))
+                 5)
+                (ast-e-fun-call (make-ast-gen-info)
+                          'fun
+                          (list (ast-ev-bool (make-ast-gen-info #:target-reg 5) #t)
+                                (ast-ev-number (make-ast-gen-info #:target-reg 6) 15))))
+    (check-equal? (allocate-regs-fun-call
+                   (ast-e-fun-call (make-ast-gen-info)
+                                   'fun
+                                   (list (ast-ev-bool (make-ast-gen-info) #t)
+                                         (ast-e-fun-call (make-ast-gen-info) 'inner
+                                                         (list (ast-ev-string (make-ast-gen-info) "hello")
+                                                               (ast-ev-string (make-ast-gen-info) "there")))
+                                         (ast-ev-number (make-ast-gen-info) 15)))
+                   5)
+                  (ast-e-fun-call (make-ast-gen-info)
+                                  'fun
+                                  (list (ast-ev-bool (make-ast-gen-info #:target-reg 5) #t)
+                                        (ast-e-fun-call (make-ast-gen-info #:target-reg 6) 'inner
+                                                        (list (ast-ev-string (make-ast-gen-info #:target-reg 6) "hello")
+                                                              (ast-ev-string (make-ast-gen-info #:target-reg 7) "there")))
+                                        (ast-ev-number (make-ast-gen-info #:target-reg 7) 15)))))
+
+
+(define (allocate-regs-if-expr  an-if-expr allocate-at)
+  (ast-e-if (ast-node-gen-info an-if-expr)
+            'if
+            (map (lambda (param) (allocate-registers param allocate-at)) (ast-e-fun-call-params an-if-expr))))
+
+(define/contract (allocate-registers an-ast-expression (allocate-at 0))
+  (->* [ast-expression?] [byte?] ast-expression?)
+  (cond
+    [(ast-e-if? an-ast-expression) (allocate-regs-if-expr an-ast-expression allocate-at)]
+    [(ast-e-fun-call? an-ast-expression) (allocate-regs-fun-call an-ast-expression allocate-at)]
+    [else an-ast-expression]))
+
+(module+ test #| allocate registers |# )
+
 (module+ test #| compile |#
 
+  ;; (skip "validate")
+  (check-match (allocate-registers (transform (car (ast-function-def-body
+                                                    (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
+                                                                    "reverse a-list, consing it into b-list")
+                                                           (if (nil? a-list)
+                                                               b-list
+                                                               (reverse (cdr a-list) (cons (car a-list) b-list))))))))
+               (ast-e-if
+                (ast-gen-info
+                 (list (-loc-set _ sym-1 (ast-e-fun-call _ 'nil? (list (ast-ev-id _ 'a-list))))) '() 0 'default 0)
+                'if
+                (list
+                 (loc-ref _ sym-1)
+                 (ast-ev-id _ 'b-list)
+                 (ast-e-fun-call
+                  (ast-gen-info
+                   (list
+                    (-loc-set _ sym-2 (ast-e-fun-call _ 'cdr (list (ast-ev-id _ 'a-list))))
+                    (-loc-set _ sym-3
+                              (ast-e-fun-call
+                               (ast-gen-info (list (-loc-set _ sym-4 (ast-e-fun-call _ 'car (list (ast-ev-id _ 'a-list)))))
+                                             '() 0 'default 1)
+                               'cons
+                               (list
+                                (loc-ref _ sym-4)
+                                (ast-ev-id _ 'b-list)))))
+                   '() 0 'default 2)
+                  'reverse
+                  (list
+                   (loc-ref (ast-gen-info '() '() 0 'default 0) sym-2)
+                   (loc-ref (ast-gen-info '() '() 1 'default 0) sym-3))))))
+
+  ;; (skip "register allocation currently broken")
   (check-equal?
    (disassemble
     (gen-context-gen-bytes
@@ -1085,10 +1252,10 @@
          "bra not l0? -> 6"
          "move p1 -> l0" ;; branch (then) contains only move and goto
          "goto -> 19"
+         "cdr p0 -> l0"
          "car p0 -> l1"  ;; branch (else) contains recursive call => does not exit
          "cons l1 p1 -> l1"
-         "cdr p0 -> l2"
-         "move l2 -> p0"
+         "move l0 -> p0"
          "move l1 -> p1"
          "goto -> -17"
          "ret l0"))
@@ -1138,35 +1305,25 @@
          (list (ast-e-fun-call agsi 'cdr (list (ast-ev-id agsi 'a-list)) )
                (ast-e-fun-call agsi 'cons (list (ast-e-fun-call agsi 'car (list (ast-ev-id agsi 'a-list)) ) (ast-ev-id agsi 'b-list)) ))))))))
 
-#|
+  #|
   pattern for optimization
   ast-function-def
-    gen info (target reg VM_L0 = default)
-    body list
-      ...
-      <any depth?>
+  gen info (target reg VM_L0 = default)
+  body list
+  ...
+  <any depth?>
 
-      last-expression
-        gen-info (target reg VM_L0 = default)
-        ;; cases: id-ref => push new target reg up
-                  any value (bool, int, string ...) => use target reg (no push up)
-                  call (regular) => use target reg (no push up)
-                  call (recursive) => use target reg (no push up)
-                  if bool then-branch else-branch :: if both branches want to push, choose one, if one branch wants to push, do so, if none want to push, inore
-                  cond bool branch ... else branch :: if all branches want to push, choose one, if one branch wants to push, do so, if none want to push, ignore
+  last-expression
+  gen-info (target reg VM_L0 = default)
+  ;; cases: id-ref => push new target reg up
+  any value (bool, int, string ...) => use target reg (no push up)
+  call (regular) => use target reg (no push up)
+  call (recursive) => use target reg (no push up)
+  if bool then-branch else-branch :: if both branches want to push, choose one, if one branch wants to push, do so, if none want to push, inore
+  cond bool branch ... else branch :: if all branches want to push, choose one, if one branch wants to push, do so, if none want to push, ignore
 
   |#
   )
-
-(define/contract (wanted-target-reg an-ast-expression)
-  (->* [ast-expression?] [] byte?)
-  (ast-gen-info-target-reg (ast-node-gen-info an-ast-expression)))
-
-(module+ test #| wanted-target-reg |#
-  (skip "refactor of target reg necessary"
-        (check-equal? (wanted-target-reg (ast-ev-id (make-ast-gen-info #:target-reg VM_P1) 'some))
-                      VM_P1
-                      "referencing an id propagates the target reg of the expression")))
 
 ;; (tracking liveliness,) <- optimize later on that
 ;; replacing tree nodes with cisc
