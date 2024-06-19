@@ -21,6 +21,20 @@ rackets' capabilities to define (and interpret) languages, in this case: 6510 as
 
 ## usage
 
+### debugging (in emacs)
+
+- open 6510-example.rkt
+- `C-c C-c` to open repl for this file (`M-x racket-run-module-at-point`)
+- `M-x 6510-connected-debugger-mode` to enable debugger mode
+- `x` to execute debugger startup and goto first line of code (`M-x 6510-debugger-execute-startup`)
+- now hit `?` to mode specific commands listed (of the minor mode 6510-connected-debugger
+  - `b` for toggle of breakpoints
+  - `n` for next (single step)
+  - `p` for previous (single step back in time)
+  - `r` run to next breakpoint or brk
+  - `c` move cursor to instruction to be executed next
+  - `q` to quit debugging session
+
 ### running
 
 You may execute the example program directly:
