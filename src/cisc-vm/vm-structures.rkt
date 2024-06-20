@@ -21,6 +21,7 @@
          CISC_VM_MOVE
          CISC_VM_CALL
          CISC_VM_NIL_P
+         CISC_VM_NOT
 
          VM_L0
          VM_L1
@@ -223,6 +224,7 @@
 (define CISC_VM_MOVE          26) ;; 3          <byte-code> <target-reg> <source-reg>
 (define CISC_VM_NIL_P         27) ;; 3          <byte-code> <target-reg> <list-reg>
 (define CISC_VM_BRA_NOT       28) ;; 3          <byte-code> <bool-tested-reg> offset
+(define CISC_VM_NOT           29) ;; 3          <byte-code> <bool-target-reg> <bool-source-reg>
 
 ;; INT_TIMES
 ;; INT->BYTE
@@ -1545,6 +1547,7 @@
              [(eq? opcode CISC_VM_BRA_NOT)        (values (list (format "bra not ~a? -> ~a" (reg->str@ byte-codes 1) (decimal-from-two-complement (nth byte-codes 2)))) 3)] ;; 3          <byte-code> <bool-tested-reg> offset
              [(eq? opcode CISC_VM_MOVE)           (values (list (format "move ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <source-reg>
              [(eq? opcode CISC_VM_NIL_P)          (values (list (format "nil? ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <list-reg>
+             [(eq? opcode CISC_VM_NOT)            (values (list (format "not! ~a -> ~a" (reg->str@ byte-codes 2)(reg->str@ byte-codes 1))) 3)] ;; 3          <byte-code> <target-reg> <bool-reg>
              [else (raise-user-error (format "unknown opcode ~a" opcode))]))
          (disassemble (drop byte-codes bytes-consumed) a-vm (append strings add-strings))]))
 
@@ -1565,6 +1568,7 @@
                                    CISC_VM_MOVE VM_L0 VM_L1
                                    CISC_VM_STRUCT_CREATE VM_L0 0 VM_L1 VM_P1 VM_P0
                                    CISC_VM_NIL_P VM_L0 VM_L1
+                                   CISC_VM_NOT VM_L0 VM_L1
                                    CISC_VM_BRA VM_L0 (two-complement-of -4)
                                    CISC_VM_BRA_NOT VM_L0 (two-complement-of -4)
                                    )
@@ -1585,6 +1589,7 @@
                       "move l1 -> l0"
                       "struct-create point { x: l1, y: p1, z: p0 } -> l0"
                       "nil? l1 -> l0"
+                      "not! l1 -> l0"
                       "bra l0? -> -4"
                       "bra not l0? -> -4"
                       )))
