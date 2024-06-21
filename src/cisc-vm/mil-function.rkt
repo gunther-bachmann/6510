@@ -405,7 +405,7 @@
   #:transparent)
 
 ;; reference a variable in scope (duplicate of ast-ev-id?)
-(struct loc-ref ast-expression
+(struct ast-e-loc-ref ast-expression
   (id)
   #:transparent)
 
@@ -444,7 +444,7 @@
                     (list
                      (ast-e-fun-call agsi 'cdr (list (ast-ev-id agsi 'a-list))) ;; call has only refs to ids (done)
                      (ast-e-loc-set agsi 'a (ast-e-fun-call agsi 'car (list (ast-ev-id agsi 'a-list))))
-                     (ast-e-fun-call agsi 'cons (list (loc-ref agsi 'a) (ast-ev-id agsi 'b-list)) ))))
+                     (ast-e-fun-call agsi 'cons (list (ast-e-loc-ref agsi 'a) (ast-ev-id agsi 'b-list)) ))))
                   #f))) ;; now this call has only refs to ids (done), extract call itself to id b'
 
   (define step2 (list
@@ -460,8 +460,8 @@
                     (list
                      (ast-e-fun-call agsi 'cdr (list (ast-ev-id agsi 'a-list))) ;; extract call itself to id 'c
                      (ast-e-loc-set agsi 'a (ast-e-fun-call agsi 'car (list (ast-ev-id agsi 'a-list))))
-                     (ast-e-loc-set agsi 'b (ast-e-fun-call agsi 'cons (list (loc-ref agsi 'a) (ast-ev-id agsi 'b-list))))
-                     (loc-ref agsi 'b))))
+                     (ast-e-loc-set agsi 'b (ast-e-fun-call agsi 'cons (list (ast-e-loc-ref agsi 'a) (ast-ev-id agsi 'b-list))))
+                     (ast-e-loc-ref agsi 'b))))
                   #f)))
 
   (define step3 (list
@@ -472,9 +472,9 @@
                    (ast-e-fun-call agsi 'nil? (list (ast-ev-id agsi 'a-list)) )
                    (ast-ev-id agsi 'b-list)
                    (ast-e-loc-set agsi 'a (ast-e-fun-call agsi 'car (list (ast-ev-id agsi 'a-list))))
-                   (ast-e-loc-set agsi 'b (ast-e-fun-call agsi 'cons (list (loc-ref agsi 'a) (ast-ev-id agsi 'b-list)))) ;; p1 can be reused here
+                   (ast-e-loc-set agsi 'b (ast-e-fun-call agsi 'cons (list (ast-e-loc-ref agsi 'a) (ast-ev-id agsi 'b-list)))) ;; p1 can be reused here
                    (ast-e-loc-set agsi 'c (ast-e-fun-call agsi 'cdr (list (ast-ev-id agsi 'a-list)))) ;; p0 can be reused here
-                   (ast-e-fun-call agsi 'reverse (list (loc-ref agsi 'c) (loc-ref agsi 'b))))
+                   (ast-e-fun-call agsi 'reverse (list (ast-e-loc-ref agsi 'c) (ast-e-loc-ref agsi 'b))))
                   #f)))) ;; now reverse has only ref parameters (done)
 
 ;; - function calls with only ids or local-refs are not compacted any further
@@ -491,14 +491,14 @@
 ;; parameters of this function call have only loc-ref or ast-ev-id ast nodes => no more extraction of precode before actual call
 (define/contract (ed-function-call--has-only-refs? fun-call)
   (->* [ast-e-fun-call?] [] boolean?)
-  (foldl (lambda (l r) (and (or (loc-ref? l) (ast-ev-id? l)) r)) true (ast-e-fun-call-params fun-call)))
+  (foldl (lambda (l r) (and (or (ast-e-loc-ref? l) (ast-ev-id? l)) r)) true (ast-e-fun-call-params fun-call)))
 
 (module+ test #| ed-function-call--has-only-refs? |#
   (check-true (ed-function-call--has-only-refs? (ast-e-fun-call agsi 'fn1 (list) )))
 
-  (check-true (ed-function-call--has-only-refs? (ast-e-fun-call agsi 'fn1 (list (loc-ref agsi 'a) (ast-ev-id agsi 'b)) )))
+  (check-true (ed-function-call--has-only-refs? (ast-e-fun-call agsi 'fn1 (list (ast-e-loc-ref agsi 'a) (ast-ev-id agsi 'b)) )))
 
-  (check-false (ed-function-call--has-only-refs? (ast-e-fun-call agsi 'fn1 (list (loc-ref agsi 'a) (ast-ev-string agsi "10")) ))))
+  (check-false (ed-function-call--has-only-refs? (ast-e-fun-call agsi 'fn1 (list (ast-e-loc-ref agsi 'a) (ast-ev-string agsi "10")) ))))
 
 
 (struct transformed-parameter
@@ -506,7 +506,7 @@
    loc-set
    locals-used)
   #:transparent
-  #:guard (struct-guard/c (or/c loc-ref? ast-ev-id?)
+  #:guard (struct-guard/c (or/c ast-e-loc-ref? ast-ev-id?)
                           (listof ast-e-loc-set?)
                           byte?))
 
@@ -522,15 +522,15 @@
                                                  [gen-info #:parent ast-node new-gen-info])))
          (define used-up-locals (ast-gen-info-locals-used (ast-node-gen-info transformed-inner-fn-call)))
          (transformed-parameter
-          (loc-ref new-gen-info sym)
+          (ast-e-loc-ref new-gen-info sym)
           (list (ast-e-loc-set new-gen-info sym transformed-inner-fn-call))
           used-up-locals)]
-        [(ast-e-nil? param)  (transformed-parameter (loc-ref new-gen-info sym) (list (ast-e-loc-set new-gen-info sym param)) 1)]
-        [(ast-ev-number? param)  (transformed-parameter (loc-ref new-gen-info sym) (list (ast-e-loc-set new-gen-info sym param)) 1)]
-        [(ast-ev-string? param)  (transformed-parameter (loc-ref new-gen-info sym) (list (ast-e-loc-set new-gen-info sym param)) 1)]
-        [(ast-ev-bool? param)  (transformed-parameter (loc-ref new-gen-info sym) (list (ast-e-loc-set new-gen-info sym param)) 1)]
+        [(ast-e-nil? param)  (transformed-parameter (ast-e-loc-ref new-gen-info sym) (list (ast-e-loc-set new-gen-info sym param)) 1)]
+        [(ast-ev-number? param)  (transformed-parameter (ast-e-loc-ref new-gen-info sym) (list (ast-e-loc-set new-gen-info sym param)) 1)]
+        [(ast-ev-string? param)  (transformed-parameter (ast-e-loc-ref new-gen-info sym) (list (ast-e-loc-set new-gen-info sym param)) 1)]
+        [(ast-ev-bool? param)  (transformed-parameter (ast-e-loc-ref new-gen-info sym) (list (ast-e-loc-set new-gen-info sym param)) 1)]
         [(ast-ev-id? param) (transformed-parameter param '() 0)]
-        [(loc-ref? param) (transformed-parameter param '() 0)]
+        [(ast-e-loc-ref? param) (transformed-parameter param '() 0)]
         [else (raise-user-error (format "unknown param type ~a" param))]))
 
 ;; recursively extract all non refs from the given parameters (of a function all)
@@ -560,9 +560,9 @@
                                                (ast-ev-string agsi "false-val"))
                                 #f)))
                (list (transformed-parameter
-                      (loc-ref _ a-sym) ;; resulting parameter
+                      (ast-e-loc-ref _ a-sym) ;; resulting parameter
                       (list             ;; of setters to be executed before
-                       (ast-e-loc-set _ a-sym (ast-e-fun-call gen 'if (list (loc-ref _ b-sym)
+                       (ast-e-loc-set _ a-sym (ast-e-fun-call gen 'if (list (ast-e-loc-ref _ b-sym)
                                                                        (ast-ev-string _ "true-val")
                                                                        (ast-ev-string _ "false-val")))))
                       0))
@@ -577,40 +577,40 @@
                        (ast-ev-string agsi "x")
                        (ast-ev-bool agsi #t))
                  (lambda () 'a))
-                (list (transformed-parameter (loc-ref agsi 'a) (list (ast-e-loc-set agsi 'a (ast-e-nil agsi))) 1)
-                      (transformed-parameter (loc-ref agsi 'a) (list (ast-e-loc-set agsi 'a (ast-ev-number agsi 47))) 1)
-                      (transformed-parameter (loc-ref agsi 'a) (list (ast-e-loc-set agsi 'a (ast-ev-string agsi "x"))) 1)
-                      (transformed-parameter (loc-ref agsi 'a) (list (ast-e-loc-set agsi 'a (ast-ev-bool agsi #t))) 1))
+                (list (transformed-parameter (ast-e-loc-ref agsi 'a) (list (ast-e-loc-set agsi 'a (ast-e-nil agsi))) 1)
+                      (transformed-parameter (ast-e-loc-ref agsi 'a) (list (ast-e-loc-set agsi 'a (ast-ev-number agsi 47))) 1)
+                      (transformed-parameter (ast-e-loc-ref agsi 'a) (list (ast-e-loc-set agsi 'a (ast-ev-string agsi "x"))) 1)
+                      (transformed-parameter (ast-e-loc-ref agsi 'a) (list (ast-e-loc-set agsi 'a (ast-ev-bool agsi #t))) 1))
                 "values are extracted into a set to a ref and the ref")
 
-  (check-equal? (ed-function-call-params--mapper (list (loc-ref agsi 'a) (ast-ev-id agsi 'b)))
-                (list (transformed-parameter (loc-ref agsi 'a) '() 0)
+  (check-equal? (ed-function-call-params--mapper (list (ast-e-loc-ref agsi 'a) (ast-ev-id agsi 'b)))
+                (list (transformed-parameter (ast-e-loc-ref agsi 'a) '() 0)
                       (transformed-parameter (ast-ev-id agsi 'b) '() 0))
                 "a reference is not transformed => no new refs etc")
 
-  (check-equal? (ed-function-call-params--mapper (list (loc-ref agsi 'q) (ast-ev-number agsi 17)) (lambda () 'l1))
-                (list (transformed-parameter (loc-ref agsi 'q) '() 0)
-                      (transformed-parameter (loc-ref agsi 'l1) (list (ast-e-loc-set agsi 'l1 (ast-ev-number agsi 17))) 1)))
+  (check-equal? (ed-function-call-params--mapper (list (ast-e-loc-ref agsi 'q) (ast-ev-number agsi 17)) (lambda () 'l1))
+                (list (transformed-parameter (ast-e-loc-ref agsi 'q) '() 0)
+                      (transformed-parameter (ast-e-loc-ref agsi 'l1) (list (ast-e-loc-set agsi 'l1 (ast-ev-number agsi 17))) 1)))
 
-  (check-match (ed-function-call-params--mapper (list (loc-ref agsi 'q) (ast-e-fun-call agsi 'fn1 (list (ast-ev-number agsi 1)) )))
-               (list (transformed-parameter (loc-ref _ 'q) '() 0)
-                     (transformed-parameter (loc-ref _ a-sym)
-                           (list (ast-e-loc-set _ a-sym (ast-e-fun-call gen 'fn1 (list (loc-ref _ b-sym))))) 1))
+  (check-match (ed-function-call-params--mapper (list (ast-e-loc-ref agsi 'q) (ast-e-fun-call agsi 'fn1 (list (ast-ev-number agsi 1)) )))
+               (list (transformed-parameter (ast-e-loc-ref _ 'q) '() 0)
+                     (transformed-parameter (ast-e-loc-ref _ a-sym)
+                           (list (ast-e-loc-set _ a-sym (ast-e-fun-call gen 'fn1 (list (ast-e-loc-ref _ b-sym))))) 1))
                (and (symbol? a-sym) (symbol? b-sym)
                   (match (ast-gen-info-pre-code gen)
                     [(list (ast-e-loc-set _ b-sym (ast-ev-number _ 1))) #t]
                     [_ #f])))
 
   (check-match (ed-function-call-params--mapper
-                (list (loc-ref agsi 'q)
+                (list (ast-e-loc-ref agsi 'q)
                       (ast-e-fun-call agsi 'fn1 (list (ast-ev-id agsi 'l)
                                                       (ast-e-fun-call agsi 'r2 (list (ast-ev-number agsi 1)))))))
-               (list (transformed-parameter (loc-ref _ 'q) '() 0)
-                     (transformed-parameter (loc-ref _ a-sym)
+               (list (transformed-parameter (ast-e-loc-ref _ 'q) '() 0)
+                     (transformed-parameter (ast-e-loc-ref _ a-sym)
                            (list (ast-e-loc-set _ a-sym
                                            (ast-e-fun-call
                                             f1-gen
-                                            'fn1 (list (ast-ev-id _ 'l) (loc-ref _ b-sym)))))
+                                            'fn1 (list (ast-ev-id _ 'l) (ast-e-loc-ref _ b-sym)))))
                            1))
                (and (symbol? a-sym) (symbol? b-sym)
                   (match (ast-gen-info-pre-code f1-gen)
@@ -618,7 +618,7 @@
                                        (ast-e-fun-call
                                         r2-gen
                                         'r2
-                                        (list (loc-ref _ c-sym)))))
+                                        (list (ast-e-loc-ref _ c-sym)))))
                      (match (ast-gen-info-pre-code r2-gen)
                        [(list (ast-e-loc-set _ c-sym (ast-ev-number _ 1))) #t]
                        [_ #f])]
@@ -632,14 +632,14 @@
                                  (list
                                   (ast-e-fun-call agsi 'car (list (ast-ev-id agsi 'a-list)))
                                   (ast-ev-id agsi 'b-list)))))
-               (list (transformed-parameter (loc-ref _ c-sym)
+               (list (transformed-parameter (ast-e-loc-ref _ c-sym)
                            (list (ast-e-loc-set _ c-sym (ast-e-fun-call _ 'cdr (list (ast-ev-id _ 'a-list)))))
                            0)
-                     (transformed-parameter (loc-ref _ b-sym)
+                     (transformed-parameter (ast-e-loc-ref _ b-sym)
                            (list (ast-e-loc-set _ b-sym
                                            (ast-e-fun-call gen
                                                            'cons
-                                                           (list (loc-ref _ a-sym) (ast-ev-id _ 'b-list)))))
+                                                           (list (ast-e-loc-ref _ a-sym) (ast-ev-id _ 'b-list)))))
                            1))
                (and (symbol? a-sym) (symbol? b-sym) (symbol? c-sym)
                   (match (ast-gen-info-pre-code gen)
@@ -648,8 +648,8 @@
 
 (define/contract (ed-function-call--extract-refs fun-call (ref-list '()) (prepends '()) (symbol-generator gensym))
   (->* [ast-e-fun-call?]
-      [(listof loc-ref?) (listof ast-e-loc-set?) any/c]
-      (list/c ast-e-fun-call? (listof (or/c loc-ref? ast-ev-id?)) (listof ast-e-loc-set?)))
+      [(listof ast-e-loc-ref?) (listof ast-e-loc-set?) any/c]
+      (list/c ast-e-fun-call? (listof (or/c ast-e-loc-ref? ast-ev-id?)) (listof ast-e-loc-set?)))
   (cond [(ed-function-call--has-only-refs? fun-call) (list fun-call ref-list prepends)]
         [(eq? 'if (ast-e-fun-call-fun fun-call))
          (define transformed-bool-param (ed-function-call-params--mapper (list (car (ast-e-fun-call-params fun-call))) symbol-generator))
@@ -663,7 +663,7 @@
          (define transformed-params (ed-function-call-params--mapper (ast-e-fun-call-params fun-call) symbol-generator))
          (define new-refs (map (lambda (param) (transformed-parameter-reference param)) transformed-params))
          (define transformed-refs (append new-refs  ref-list))
-         (define additional-locals (foldl (lambda (ref acc) (+ acc (if (loc-ref? ref) 1 0))) 0  new-refs))
+         (define additional-locals (foldl (lambda (ref acc) (+ acc (if (ast-e-loc-ref? ref) 1 0))) 0  new-refs))
          (list
           (ast-e-fun-call (struct-copy ast-gen-info (ast-node-gen-info fun-call)
                                        [locals-used  additional-locals])
@@ -679,11 +679,11 @@
                                 (list (ast-ev-bool agsi #t)
                                       (ast-e-fun-call agsi 'inner (list (ast-ev-string agsi "a-string"))))))
                (list
-                (ast-e-fun-call _ 'fn1 (list (loc-ref _ a-sym) (loc-ref _ b-sym)))
-                (list (loc-ref _ a-sym) (loc-ref _ b-sym))
+                (ast-e-fun-call _ 'fn1 (list (ast-e-loc-ref _ a-sym) (ast-e-loc-ref _ b-sym)))
+                (list (ast-e-loc-ref _ a-sym) (ast-e-loc-ref _ b-sym))
                 (list
                  (ast-e-loc-set _ a-sym (ast-ev-bool _ #t))
-                 (ast-e-loc-set _ b-sym (ast-e-fun-call gen 'inner (list (loc-ref _ c-sym ))))))
+                 (ast-e-loc-set _ b-sym (ast-e-fun-call gen 'inner (list (ast-e-loc-ref _ c-sym ))))))
                (match (ast-gen-info-pre-code gen)
                  [(list (ast-e-loc-set _ c-sym  (ast-ev-string _ "a-string"))) #t]
                  [_ #f]))
@@ -693,11 +693,11 @@
                                                  (ast-e-fun-call agsi 'inner (list (ast-ev-string agsi "a-string"))))))
 
                (list
-                (ast-e-fun-call _ 'fn1 (list (loc-ref _ a-sym) (loc-ref _ b-sym)))
-                (list (loc-ref _ a-sym) (loc-ref _ b-sym))
+                (ast-e-fun-call _ 'fn1 (list (ast-e-loc-ref _ a-sym) (ast-e-loc-ref _ b-sym)))
+                (list (ast-e-loc-ref _ a-sym) (ast-e-loc-ref _ b-sym))
                 (list
-                 (ast-e-loc-set _ a-sym (ast-e-fun-call if-gen 'if (list (loc-ref _ c-sym) (ast-ev-number _ 10) (ast-ev-number _ 20))))
-                 (ast-e-loc-set _ b-sym (ast-e-fun-call inner-gen 'inner (list (loc-ref _ f-sym))))))
+                 (ast-e-loc-set _ a-sym (ast-e-fun-call if-gen 'if (list (ast-e-loc-ref _ c-sym) (ast-ev-number _ 10) (ast-ev-number _ 20))))
+                 (ast-e-loc-set _ b-sym (ast-e-fun-call inner-gen 'inner (list (ast-e-loc-ref _ f-sym))))))
                (and (match (ast-gen-info-pre-code if-gen)
                     [(list (ast-e-loc-set _ c-sym (ast-ev-bool _ #t))) #t]
                     [_ #f])
@@ -717,7 +717,7 @@
 (module+ test #| transform function call |#
   (check-match (transform-function-call (ast-e-fun-call agsi 'fn1 (list (ast-ev-bool agsi #t))))
                (ast-e-fun-call gen 'fn1
-                               (list (loc-ref _ a-sym)))
+                               (list (ast-e-loc-ref _ a-sym)))
                (and (symbol? a-sym)
                   (match (ast-gen-info-pre-code gen)
                     [(list (ast-e-loc-set _ a-sym (ast-ev-bool _ #t))) #t]
@@ -725,12 +725,12 @@
 
   (check-match (transform-function-call (ast-e-fun-call agsi 'fn1 (list (ast-ev-bool agsi #t) (ast-e-fun-call agsi 'fn2 (list (ast-ev-string agsi "z"))))))
                (ast-e-fun-call fn1-gen 'fn1
-                               (list (loc-ref _ a-sym) (loc-ref _ b-sym)))
+                               (list (ast-e-loc-ref _ a-sym) (ast-e-loc-ref _ b-sym)))
                (and (symbol? a-sym)
                   (match (ast-gen-info-pre-code fn1-gen)
                     [(list
                        (ast-e-loc-set _ a-sym (ast-ev-bool _ #t))
-                       (ast-e-loc-set _ b-sym (ast-e-fun-call fn2-gen 'fn2 (list (loc-ref _ c-sym)))))
+                       (ast-e-loc-set _ b-sym (ast-e-fun-call fn2-gen 'fn2 (list (ast-e-loc-ref _ c-sym)))))
                      (match (ast-gen-info-pre-code fn2-gen)
                        [(list (ast-e-loc-set _ c-sym (ast-ev-string _ "z"))) #t]
                        [_ #f]) #t]
@@ -750,7 +750,7 @@
      (ast-e-if (struct-copy ast-gen-info (ast-node-gen-info if-expression)
                             [pre-code (append (ast-gen-info-pre-code (ast-node-gen-info if-expression))
                                               (list (ast-e-loc-set agsi sym (transform boolean-expr))))])
-               'if (cons (loc-ref agsi sym)
+               'if (cons (ast-e-loc-ref agsi sym)
                          (map transform (cdr (ast-e-fun-call-params if-expression))))
                (ast-e-if-negated if-expression))]))
 
@@ -777,7 +777,7 @@
                                            (list (list'ast-e-loc-set _ a-sym (list 'ast-ev-number _ 1))) ;; precode
                                            _ ...) ;; this allows for ast-gen-info to change without this test to be adjusted
                      'byte+
-                     (list (list 'loc-ref _ a-sym)
+                     (list (list 'ast-e-loc-ref _ a-sym)
                            (list 'ast-ev-id _ 'a-byte)))))
 
 ;; generation context keeping track of useful information during code generation
@@ -814,8 +814,8 @@
     [(ast-ev-id? parameter)
      (encode-idx (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id parameter))
                  l-param)]
-    [(loc-ref? parameter)
-     (encode-idx (hash-ref (gen-context-local-id-map a-gen-context) (loc-ref-id parameter))
+    [(ast-e-loc-ref? parameter)
+     (encode-idx (hash-ref (gen-context-local-id-map a-gen-context) (ast-e-loc-ref-id parameter))
                  l-local)]
     [else (raise-user-error (format "unknown parameter ~a" parameter))]))
 
@@ -845,7 +845,7 @@
    (generate-loc-set
     (ast-e-loc-set agsi 'sym (ast-e-fun-call (make-ast-gen-info #:pre-code (list (ast-e-loc-set (make-ast-gen-info #:target-reg VM_L0) 'a (ast-ev-number (make-ast-gen-info #:target-reg VM_L0) 1))
                                                             (ast-e-loc-set (make-ast-gen-info #:target-reg VM_L1) 'b (ast-ev-number (make-ast-gen-info #:target-reg VM_L1) 2))))
-                                        'byte+ (list (loc-ref agsi 'a) (loc-ref agsi 'b))))
+                                        'byte+ (list (ast-e-loc-ref agsi 'a) (ast-e-loc-ref agsi 'b))))
     (make-gen-context #:function-id-map (hash 'byte+ 0)))
    (make-gen-context #:next-local 1
                      #:local-id-map (hash 'sym 0)
@@ -916,7 +916,7 @@
   (check-equal? (generate-fun-call (ast-e-fun-call (make-ast-gen-info #:pre-code (list (ast-e-loc-set agsi 'sym (ast-ev-number agsi 11)))
                                                                       #:target-reg VM_L1)
                                                    'byte+
-                                                   (list (loc-ref agsi 'sym) (ast-ev-id agsi 'param)))
+                                                   (list (ast-e-loc-ref agsi 'sym) (ast-ev-id agsi 'param)))
                                    (make-gen-context  #:parameter-id-map (hash 'param 1)))
                 (make-gen-context #:next-local 1
                                   #:local-id-map '#hash((sym . 0))
@@ -927,7 +927,7 @@
 (define/contract (generate-register-ref expr a-gen-context)
   (->* [ast-expression? gen-context?] [] byte?)
   (cond
-    [(loc-ref? expr) (encode-idx (hash-ref (gen-context-local-id-map a-gen-context) (loc-ref-id expr)) l-local)]
+    [(ast-e-loc-ref? expr) (encode-idx (hash-ref (gen-context-local-id-map a-gen-context) (ast-e-loc-ref-id expr)) l-local)]
     [(ast-ev-id? expr) (encode-idx (hash-ref (gen-context-parameter-id-map a-gen-context) (ast-ev-id-id expr)) l-param)]
     [else (raise-user-error (format "cannot resolve reference to register ~a" expr))]))
 
@@ -967,7 +967,7 @@
 (module+ test #| generate-if |#
   (check-equal? (generate-if (ast-e-if (make-ast-gen-info #:pre-code (list (ast-e-loc-set agsi 'sym (ast-ev-bool agsi #t))))
                                        'if
-                                       (list (loc-ref agsi 'sym) (ast-ev-number agsi 1) (ast-ev-number agsi 2))
+                                       (list (ast-e-loc-ref agsi 'sym) (ast-ev-number agsi 1) (ast-ev-number agsi 2))
                                        #f)
                              (make-gen-context))
                 (make-gen-context #:next-local 1
@@ -990,7 +990,7 @@
 
   (check-match (generate-if (ast-e-if (make-ast-gen-info #:pre-code (list (ast-e-loc-set agsi 'sym (ast-ev-bool agsi #t))))
                                       'if
-                                      (list (loc-ref agsi 'sym)
+                                      (list (ast-e-loc-ref agsi 'sym)
                                             (ast-ev-number agsi 1)
                                             (ast-e-fun-call agsi 'byte+ (list (ast-ev-number (make-ast-gen-info #:target-reg VM_L2) 2)
                                                                               (ast-ev-number (make-ast-gen-info #:target-reg VM_L1) 3))))
@@ -1054,7 +1054,7 @@
 
   (check-equal? (gen-context-gen-bytes
                  (generate (ast-e-fun-call (make-ast-gen-info #:pre-code (list (ast-e-loc-set agsi 'byte-10 (ast-ev-number agsi 10))) #:target-reg VM_L1) 'byte+
-                                           (list (loc-ref agsi 'byte-10) (ast-ev-id agsi 'a-byte)))
+                                           (list (ast-e-loc-ref agsi 'byte-10) (ast-ev-id agsi 'a-byte)))
                            (make-gen-context #:parameter-id-map (hash 'a-byte 0))))
                 (list
                  CISC_VM_IMMB VM_L0 10
@@ -1150,7 +1150,7 @@
                                            [gen-info #:parent ast-node new-gen-info])]
     [(ast-e-if? an-ast-node) (struct-copy ast-e-if an-ast-node
                                           [gen-info #:parent ast-node new-gen-info])]
-    [(loc-ref? an-ast-node) (struct-copy loc-ref an-ast-node
+    [(ast-e-loc-ref? an-ast-node) (struct-copy ast-e-loc-ref an-ast-node
                                          [gen-info #:parent ast-node new-gen-info])]
     [else (raise-user-error (format "structure info ~a cannot update gen-info (yet)" an-ast-node))]))
 
@@ -1253,7 +1253,7 @@
   (->* [ast-expression? hash?] [] byte?)
   (cond
     [(ast-ev-id? an-ast-expression) (encode-idx  (hash-ref param-map (ast-ev-id-id an-ast-expression)) l-param)]
-    [(loc-ref? an-ast-expression) (ast-gen-info-target-reg (ast-node-gen-info an-ast-expression))]
+    [(ast-e-loc-ref? an-ast-expression) (ast-gen-info-target-reg (ast-node-gen-info an-ast-expression))]
     [(ast-e-value? an-ast-expression) (ast-gen-info-target-reg (ast-node-gen-info an-ast-expression))]
     [else (raise-user-error (format "expression has no wanted target register ~a" an-ast-expression))]))
 
@@ -1316,7 +1316,7 @@
 (define/contract (retargetable-atomic-expression ast-expr)
   (->* [ast-expression?] [] boolean?)
   (or (ast-e-value? ast-expr)
-         (loc-ref? ast-expr)))
+         (ast-e-loc-ref? ast-expr)))
 
 (define/contract (normalize-ast-e-if an-if-expression)
   (->* [ast-e-if?] [] ast-e-if?)
@@ -1405,7 +1405,7 @@
      (list (ast-e-loc-set _ sym-1 (ast-e-fun-call _ 'nil? (list (ast-ev-id _ 'a-list))))) '() 0 'default 0)
     'if
     (list
-     (loc-ref _ sym-1)
+     (ast-e-loc-ref _ sym-1)
      (ast-ev-id _ 'b-list) ;; then branch = just reference (no expression, no value etc)  => eligable for other target reg
      (ast-e-fun-call       ;; else branch = recursive call => no other target reg necessary
       (ast-gen-info
@@ -1417,13 +1417,13 @@
                                  '() 1 'default 1)
                    'cons
                    (list
-                    (loc-ref _ sym-4)
+                    (ast-e-loc-ref _ sym-4)
                     (ast-ev-id _ 'b-list)))))
        '() 0 'default 2)
       'reverse
       (list
-       (loc-ref (ast-gen-info '() '() 0 'default 0) sym-2)
-       (loc-ref (ast-gen-info '() '() 1 'default 0) sym-3))))
+       (ast-e-loc-ref (ast-gen-info '() '() 0 'default 0) sym-2)
+       (ast-e-loc-ref (ast-gen-info '() '() 1 'default 0) sym-3))))
     #f))
 
   (define t-opt-ret-fun (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
