@@ -1578,7 +1578,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - implement interpreter in 6510 assembly
 - optimize (size/decoding speed)
 - iterate
-*** first iteration
+*** DONE (mostly) first iteration
 - simple function to do byte plus two parameter
   #+begin_src scheme
     (def (f (a : byte) (b : byte)) : byte
@@ -2086,7 +2086,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   - [-] struct-get <into-reg> <data-off> <struct-reg> :: get cell at data-off to structure in reg into-reg
   - [-] struct-set <data-off> <struct-reg> <value-reg> :: set cell at data-off in structure reg to value in second reg
   - [-] throw-exception <num> <string> <reg-0> ... <reg-n> :: throw an exception with num context vars and a string message
-*** next
+*** DONE next
 - IDEA: make syntax for list-types more compact
   e.g postix * to indicate a list of a certain type, [] to indicate array
   #+begin_src scheme
@@ -2099,11 +2099,6 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - (m-def (<name> (<arg> <type> <default) ..) -> <type>
    ...)
   gets translated to a funcion definition that can be added to the virtual machine
-- keep meta information
-  - source code location
-  - default values
-  - types
-  - name -> index
 - (<name> <arg> ...)
   gets translated to (resolving name to function-index)
   (call <target-reg> function-index <param-no> ...)
@@ -2111,6 +2106,34 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   each (sub) expression is assigned to a local register
   a register that is not used later in the program can be reused (optimization => later)
 *** next
+**** tidy up code base
+- find naming conventions for the different phases
+  - ast- :: nodes in the ast
+  - m- :: parsers for mil
+- make elements of the ast more explicit to be relevant for a certain phase
+- get an overview of what information is necessary for the different phases
+- decide on where in the ast to keep this information
+- find a way to make additions to racket structures less invasive and prone to include massive code changes (use typed attribute lists?)
+**** make compilation phases more explicit
+- macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
+- transformation from ast/stack orientation -> register oriented atomic commands
+- vm-register allocation + reordering sub expressions (optimization)
+  - function parameters can be evaluated in any order (strict eval scheme)
+- optional: others like constant folding
+**** glue together mil + vm
+- (m-def ...) -> vm, execute, debug?
+**** keep meta information (related to debugging)
+- source code location
+- default values
+- types
+- name -> index
+**** debugging
+- level 0: debug vm code (byte code), trace, inspect, step-debugger, memory inspector
+- level 1: debug mil, function/expression entry, inspect parameters, locals, etc, call stack, memory inspector
+**** implement vm in mil
+- precondition: all language features are implemented, debugging should be possible
+- information gained: optimize execution speed + bytecode size + heap usage + c64 implementability
+*** some iteration
 - memory management
   - basic idea: don't do ref counting within a function
     - do reference counting only upon returning form a function

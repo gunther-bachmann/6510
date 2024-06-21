@@ -44,9 +44,8 @@
                   l-imm))
 
 (module+ test #| require test utils |#
-  (require "../6510-test-utils.rkt")
+  (require "../6510-test-utils.rkt"))
 
-  )
 
 (define-syntax (-> stx)
   (raise-syntax-error #f "cannot be used as an expression" stx))
@@ -194,6 +193,35 @@
                   ast-type-def?
                   (listof string?)
                   (listof ast-expression?)))
+
+(module+ test #| deep-struct->list |#
+  (require racket/struct)
+
+  ;; function to make a nested structure into a nested list, making it easier for check-match to only specify the actual values wanted to check
+  (define (nested->list deeply-nested)
+    (cond
+      [(struct? deeply-nested)
+       (define-values (info _a) (struct-info deeply-nested))
+       (define-values (name _b _c _d _e _f _g _h) (struct-type-info info))
+       (cons name (nested->list (struct->list deeply-nested)))]
+
+      [(list? deeply-nested)
+       (map nested->list deeply-nested)]
+
+      [(hash? deeply-nested)
+       (map (lambda (cons-cell) (cons (nested->list (car cons-cell)) (nested->list (cdr cons-cell))))
+            (hash->list deeply-nested))]
+
+      [else deeply-nested]))
+
+  ;; make sure last element in ast-ev-boo; structure is true, ignoring the rest
+  (check-match (nested->list (ast-ev-bool (make-ast-gen-info) #t))
+               (list 'ast-ev-bool _ ... #t))
+
+  ;; check that target register is 0 in the gen info nested in ast-ev-bool
+  ;; this is particularly useful since the number of elements in ast-gen-info may change (at tail)
+  (check-match (nested->list (ast-ev-bool (make-ast-gen-info) #t))
+               (list 'ast-ev-bool (list 'ast-gen-info _ _ 0 _ ... ) _ ...)))
 
 ;; type definition parser
 (define-syntax-parser m-type-def
@@ -743,12 +771,14 @@
     [else an-expression]))
 
 (module+ test #| transform |#
-  (check-match (transform (ast-e-fun-call agsi 'byte+ (list (ast-ev-number agsi 1) (ast-ev-id agsi 'a-byte))))
-               (ast-e-fun-call gen 'byte+ (list (loc-ref _ a-sym) (ast-ev-id _ 'a-byte)))
-               (and (symbol? a-sym)
-                  (match (ast-gen-info-pre-code gen)
-                    [(list (-loc-set _ a-sym (ast-ev-number _ 1))) #t]
-                    [_ #f]))))
+
+  (check-match (nested->list (transform (ast-e-fun-call agsi 'byte+ (list (ast-ev-number agsi 1) (ast-ev-id agsi 'a-byte)))))
+               (list 'ast-e-fun-call (list 'ast-gen-info
+                                           (list (list'-loc-set _ a-sym (list 'ast-ev-number _ 1))) ;; precode
+                                           _ ...) ;; this allows for ast-gen-info to change without this test to be adjusted
+                     'byte+
+                     (list (list 'loc-ref _ a-sym)
+                           (list 'ast-ev-id _ 'a-byte)))))
 
 ;; generation context keeping track of useful information during code generation
 (struct gen-context
@@ -1159,8 +1189,12 @@
                                                (cons updated-param (cdr allocate-at-param-list))))
                                        (cons allocate-at (list))
                                        (ast-e-fun-call-params a-fun-call)))))
+  ;; TODO determine target registers for tail call optimization!
+  ;; in case of a recursive call, the parameters may have target registers corresponding to the actual parameters
+  ;; careful though, a parameter may be used in some parameter (pre) code => order precode to not clash (if possible)
+  (define fun-id (ast-e-fun-call-fun a-fun-call))
   (ast-e-fun-call (ast-node-gen-info a-fun-call)
-                  (ast-e-fun-call-fun a-fun-call)
+                  fun-id
                   new-params))
 
 (module+ test #| allocate-regs-fun-call |#
@@ -1423,7 +1457,7 @@
          "move l0 -> p0"    ;;                                       (b2) cons l1 p1 -> l1     after (b1) before (b3)
          "move l1 -> p1"    ;; (a2) move l0 -> p0   after  (a1,b1)   (b3) move l1 -> p1        after (b2)
          "goto -> -17"      ;;
-         "ret p1"))         ;; ret l0 is replaced with ret p1 (see then branch)
+         "ret p1"))
 
   (skip ": optimization should yield this (someday)"
         (check-equal?
@@ -1488,6 +1522,10 @@
 
   |#
   )
+
+
+
+
 
 ;; (tracking liveliness,) <- optimize later on that
 ;; replacing tree nodes with cisc
