@@ -2114,6 +2114,22 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - get an overview of what information is necessary for the different phases
 - decide on where in the ast to keep this information
 - find a way to make additions to racket structures less invasive and prone to include massive code changes (use typed attribute lists?)
+**** information collected/used during compilation phases
+Maybe add this information as a hashmap, allowing for arbitrary information to be added any time
+What information is needed for the different phases? => check the different optimization problems, collect necessary information
+- precode :: used to store atomic expressions that need to run before the code for the current node can be executed
+  e.g. ~(byte+ a 1)~ needs a precode instruction to load the constant 1 into a local reg such that the byte+ instruction has only references left, that can be passed to the call
+- is-recursive-call :: is the given node a recursive call? (must be a ast-e-fun-call)
+- parameter-id-map :: parameter id to parameter register map (to resolve parameter references), does not change w/i function
+- locals-id-map :: mapping locally introduced ids to local registers, does change, whenever a new local is introduced
+- globals-id-map :: mapping global ids to global registers, is setup once
+- registers-usage :: description of the register use (e.g. vm_​l0 r/w, vm_​p1 r)
+  this information (of the dataflow) is used for instruction reordering
+  it can be used to find out which register are free for allocation for other instructions
+- negated :: (on if nodes), is the given nodes' bool expression negated? => code generation needs to take this into account, may happen if else/then branches are swapped
+- source code location :: location of the original source
+- previous node :: reference to node before change (to track changes through compilation)
+- previous note :: note that describes the transformation done from previous node to current node
 **** make compilation phases more explicit
 - macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
 - transformation from ast/stack orientation -> register oriented atomic commands

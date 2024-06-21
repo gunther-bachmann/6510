@@ -202,21 +202,25 @@
     (cond
       [(struct? deeply-nested)
        (define-values (info _a) (struct-info deeply-nested))
-       (define-values (name _b _c _d _e _f _g _h) (struct-type-info info))
-       (cons name (nested->list (struct->list deeply-nested)))]
+       (define-values (struct-name _b _c _d _e _f _g _h) (struct-type-info info))
+       (cons struct-name (nested->list (struct->list deeply-nested)))]
 
       [(list? deeply-nested)
        (map nested->list deeply-nested)]
 
       [(hash? deeply-nested)
-       (map (lambda (cons-cell) (cons (nested->list (car cons-cell)) (nested->list (cdr cons-cell))))
-            (hash->list deeply-nested))]
+       (foldl (lambda (key acc-hash) (hash-set acc-hash key (nested->list (hash-ref deeply-nested key))))
+            (hash) (hash-keys deeply-nested))]
 
       [else deeply-nested]))
 
-  ;; make sure last element in ast-ev-boo; structure is true, ignoring the rest
+  ;; make sure last element in ast-ev-bool structure is true, ignoring the rest
   (check-match (nested->list (ast-ev-bool (make-ast-gen-info) #t))
                (list 'ast-ev-bool _ ... #t))
+
+  ;; allow for match partial hashes! and convert structures in hashes to lists
+  (check-match (nested->list (hash 'b "some" 'a (ast-ev-bool (make-ast-gen-info) #t)))
+               (hash 'a (list 'ast-ev-bool (list 'ast-gen-info _ ...) #t) #:open))
 
   ;; check that target register is 0 in the gen info nested in ast-ev-bool
   ;; this is particularly useful since the number of elements in ast-gen-info may change (at tail)
