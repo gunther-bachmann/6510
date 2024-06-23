@@ -894,17 +894,21 @@
     [(eq? fun-id 'byte+) (generate-two-op CISC_VM_BYTE_ADD target-reg (first fun-params) (second fun-params) next-gen-context)]
     ;; tail call
     [(eq? fun-id (gen-context-current-function a-gen-context))
-     (define function-len (+ (length (gen-context-gen-bytes next-gen-context)) ;; generated up to here
-                             (* 3 fun-params-len) ;; moves for params
+
+     (define gen-bytes-up-to-goto
+       (append
+        (gen-context-gen-bytes next-gen-context)
+        (flatten
+         (map (lambda  (idx-param) (if (= (encode-idx (car idx-param) l-param) (cdr idx-param))
+                                  (list)
+                                  (list CISC_VM_MOVE (encode-idx (car idx-param) l-param) (cdr idx-param))))
+              (map cons (range (length fun-params))
+                   (map (lambda (param) (generate-parameter param next-gen-context)) fun-params))))))
+     (define function-len (+ (length gen-bytes-up-to-goto) ;; generated up to here
                              1)) ;; goto itself
+     ;; (println (format "function len ~a, gen bytes up to goto ~a" function-len gen-bytes-up-to-goto))
      (struct-copy gen-context next-gen-context
-                  [gen-bytes (append (gen-context-gen-bytes next-gen-context)
-                                     (flatten
-                                      (map (lambda  (idx-param) (if (= (encode-idx (car idx-param) l-param) (cdr idx-param))
-                                                               (list)
-                                                               (list CISC_VM_MOVE (encode-idx (car idx-param) l-param) (cdr idx-param))))
-                                           (map cons (range (length fun-params))
-                                                (map (lambda (param) (generate-parameter param next-gen-context)) fun-params))))
+                  [gen-bytes (append gen-bytes-up-to-goto
                                      (list CISC_VM_GOTO (two-complement-of (- 0 function-len))))])]
     ;; regular function call
     [else
@@ -937,14 +941,14 @@
 
 (define/contract (generate-if if-expr a-gen-context)
   (->* [ast-e-if? gen-context?] [] gen-context?)
+  ;; TODO: if a block (else or then) contains a recursive call, the the goto needs to know all generated code =>
+  ;; generating a block that may contain a goto must be done with a context that holds all bytes generated so far!
   (define pre-code (ast-gen-info-pre-code (ast-node-gen-info if-expr)))
   (define bool-ref-expression (car (ast-e-fun-call-params if-expr)))
   (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate pre-expression inner-gen-context)) a-gen-context pre-code))
   (define else-block-gen-context (struct-copy gen-context next-gen-context [gen-bytes (list)]))
-  (define else-block-expressions (map transform (cddr (ast-e-fun-call-params if-expr))))
-  (define final-else-block-gen-context (foldl (lambda (pre-expression inner-gen-context)
-                                                (generate pre-expression inner-gen-context))
-                                              else-block-gen-context else-block-expressions))
+  (define else-block-expression (transform (third (ast-e-fun-call-params if-expr))))
+  (define final-else-block-gen-context (generate else-block-expression else-block-gen-context))
   (define then-block-gen-context (struct-copy gen-context final-else-block-gen-context [gen-bytes (list)]))
   (define then-block-expression (transform (cadr (ast-e-fun-call-params if-expr))))
   (define then-block-is-recursive-call (and (ast-e-fun-call? then-block-expression)
@@ -961,12 +965,16 @@
   (when (> else-block-len 126)
     (raise-user-error "generated else block > 126 bytes, branch cannot be generated"))
 
-  (struct-copy gen-context final-then-block-gen-context
-               [gen-bytes (append (gen-context-gen-bytes next-gen-context)
-                                  (list (if (ast-e-if-negated if-expr) CISC_VM_BRA CISC_VM_BRA_NOT) branch-decision-register (+ 3 then-block-len))
-                                  (gen-context-gen-bytes final-then-block-gen-context)
-                                  (if then-block-is-recursive-call '() (list CISC_VM_GOTO (+ 1 else-block-len))) ;; only if else-block is no recursive call
-                                  (gen-context-gen-bytes final-else-block-gen-context))]))
+  (foldl (lambda (byte-list-fun context) (apply byte-list-fun (list context)))
+         next-gen-context
+         (list (lambda (ctx) (struct-copy gen-context ctx
+                                     [gen-bytes (append (gen-context-gen-bytes ctx)
+                                                        (list (if (ast-e-if-negated if-expr) CISC_VM_BRA CISC_VM_BRA_NOT) branch-decision-register (+ 3 then-block-len)))]))
+               (lambda (ctx) (generate then-block-expression ctx))
+               (lambda (ctx) (struct-copy gen-context ctx
+                                     [gen-bytes (append (gen-context-gen-bytes ctx)
+                                                        (if then-block-is-recursive-call '() (list CISC_VM_GOTO (+ 1 else-block-len))))]))
+               (lambda (ctx) (generate else-block-expression ctx)))))
 
 (module+ test #| generate-if |#
   (check-equal? (generate-if (ast-e-if (make-ast-gen-info #:pre-code (list (ast-e-loc-set agsi 'sym (ast-ev-bool agsi #t))))
@@ -1460,7 +1468,7 @@
          "cons l1 p1 -> l1" ;; (a1) cdr p0 -> l0    before (a2)      (b1) car p0 -> l1         before (b2)
          "move l0 -> p0"    ;;                                       (b2) cons l1 p1 -> l1     after (b1) before (b3)
          "move l1 -> p1"    ;; (a2) move l0 -> p0   after  (a1,b1)   (b3) move l1 -> p1        after (b2)
-         "goto -> -17"      ;;
+         "goto -> -23"      ;;
          "ret p1"))
 
   (skip ": optimization should yield this (someday)"
@@ -1479,7 +1487,7 @@
                "car p0 -> l0"
                "cons l0 p1 -> p1"
                "cdr p0 -> p0" ;; reordering this expression to the end allows for reuse of p0
-               "goto -> -14"
+               "goto -> -17"
                "ret p1"))))
 
 (module+ test #| optimization ideas |#
