@@ -2106,6 +2106,31 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   each (sub) expression is assigned to a local register
   a register that is not used later in the program can be reused (optimization => later)
 *** next
+**** excursion - code size (byte code) using a stack machine instead of register machine
+#+begin_src scheme
+  (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
+                  "reverse a-list, consing it into b-list")
+         (if (nil? a-list)
+             b-list
+             (reverse (cdr a-list) (cons (car a-list) b-list))))
+#+end_src
+- transformed into stack machine code
+  ;; the two parameter are on the stack
+  ;; 0 nil? stack-1 (a-list) -> stack
+  ;; 1 bra + ..
+  ;; 3 cdr stack-1 (a-list) -> stack
+  ;; 4 car stack-2 (a-list) -> stack
+  ;; 5 cons tos (car a-list) stack-2 (b-list)  -> stack
+  ;; 6 drop stack-3 .. stack-2 ;; tail call opt (drop original parameters, using tos and tos-1
+  ;; 8 goto (nil?)
+  ;; 10 drop stack-1 ;; just keeping b-list
+  ;; 11 return
+- total size 11..13 bytes (optimized)
+  => potentially byte code more compact
+  interpretation might be more costly (since no zero page optimization/register optimization) is done beforehand
+  current idea: copy parameter/refs to zero page and operate with constant offsets there
+  could be more costly because of copy from to zero page
+  how about stack machine + copy relevant part of the stack into zero page to have indexed access (called method holds info of stack range used)
 **** tidy up code base
 - find naming conventions for the different phases
   - ast- :: nodes in the ast
@@ -2123,9 +2148,9 @@ What information is needed for the different phases? => check the different opti
 - parameter-id-map :: parameter id to parameter register map (to resolve parameter references), does not change w/i function
 - locals-id-map :: mapping locally introduced ids to local registers, does change, whenever a new local is introduced
 - globals-id-map :: mapping global ids to global registers, is setup once
-- registers-usage :: description of the register use (e.g. vm_​l0 r/w, vm_​p1 r)
+- registers-usage :: description of the register use and liveliness (e.g. vm_​l0 r/w, vm_​p1 r)
   this information (of the dataflow) is used for instruction reordering
-  it can be used to find out which register are free for allocation for other instructions
+  it can be used to find out which register are free (not live anymore) for allocation for other instructions
 - negated :: (on if nodes), is the given nodes' bool expression negated? => code generation needs to take this into account, may happen if else/then branches are swapped
 - source code location :: location of the original source
 - previous node :: reference to node before change (to track changes through compilation)

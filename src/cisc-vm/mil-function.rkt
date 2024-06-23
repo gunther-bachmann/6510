@@ -1499,7 +1499,7 @@
                "cons l0 p1 -> p1"
                "cdr p0 -> p0" ;; reordering this expression to the end allows for reuse of p0
                "goto -> -17"
-               "ret p1"))))
+               "ret p1")))) ;; outlook: currently 20 bytes, w/ register/opcode optimization: 13..15 bytes
 
 (module+ test #| optimization ideas |#
 
