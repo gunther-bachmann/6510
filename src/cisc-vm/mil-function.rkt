@@ -967,13 +967,21 @@
 
   (foldl (lambda (byte-list-fun context) (apply byte-list-fun (list context)))
          next-gen-context
-         (list (lambda (ctx) (struct-copy gen-context ctx
-                                     [gen-bytes (append (gen-context-gen-bytes ctx)
-                                                        (list (if (ast-e-if-negated if-expr) CISC_VM_BRA CISC_VM_BRA_NOT) branch-decision-register (+ 3 then-block-len)))]))
+         (list (lambda (ctx) (struct-copy
+                         gen-context ctx
+                         [gen-bytes
+                          (append (gen-context-gen-bytes ctx)
+                                  (list (if (ast-e-if-negated if-expr) CISC_VM_BRA CISC_VM_BRA_NOT)
+                                        branch-decision-register
+                                        (+ 1 then-block-len (if then-block-is-recursive-call 0 2))))]))
                (lambda (ctx) (generate then-block-expression ctx))
-               (lambda (ctx) (struct-copy gen-context ctx
-                                     [gen-bytes (append (gen-context-gen-bytes ctx)
-                                                        (if then-block-is-recursive-call '() (list CISC_VM_GOTO (+ 1 else-block-len))))]))
+               (lambda (ctx) (struct-copy
+                         gen-context ctx
+                         [gen-bytes
+                          (append (gen-context-gen-bytes ctx)
+                                  (if then-block-is-recursive-call
+                                      '()
+                                      (list CISC_VM_GOTO (+ 1 else-block-len))))]))
                (lambda (ctx) (generate else-block-expression ctx)))))
 
 (module+ test #| generate-if |#
@@ -1462,7 +1470,7 @@
                  (reverse (cdr a-list) (cons (car a-list) b-list))))))
     (make-vm))
    (list "nil? p0 -> l0"
-         "bra l0? -> 21"
+         "bra l0? -> 19"
          "cdr p0 -> l0"
          "car p0 -> l1"     ;; data flow (eliminate move by replacing last assignment with move target, reorder to allow)
          "cons l1 p1 -> l1" ;; (a1) cdr p0 -> l0    before (a2)      (b1) car p0 -> l1         before (b2)
