@@ -2131,6 +2131,126 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   current idea: copy parameter/refs to zero page and operate with constant offsets there
   could be more costly because of copy from to zero page
   how about stack machine + copy relevant part of the stack into zero page to have indexed access (called method holds info of stack range used)
+**** implement a stack vm (redo some of first iteration)
+- byte code stays basically the same, except that operands are on the stack!
+- the virtual machine has to redone to allow that
+***** simple function
+- simple function to do byte plus two parameter
+  #+begin_src scheme
+    (def (f (a : byte) (b : byte)) : byte
+         "add a and b by using vm-instruction byte add"
+         (b+ a b))
+
+    (f 10 11)
+  #+end_src
+- define byte code
+  #+begin_src scheme
+    ;; function expecting 2 parameters on the stack (each stack element is one cell, => a list = two elements on the stack, car-cell, cdr-cell
+    (call-byte+) ;;  replace tos with (+ tos tos-1)
+    (ret)
+  #+end_src
+***** tail call function
+- tail recursive function using lists
+  #+begin_src scheme
+    (def (sum (bl (list byte)) (acc byte 0)) -> byte
+         "tail recursive function with accumulator"
+         (if (nil? bl)
+             acc
+             (sum (cdr bl) (byte+ acc (car bl)))))
+
+    (sum (list 10 20))
+  #+end_src
+- define byte code 1  <-- preferred solution
+  explicit push of parameters on the value stack
+  same smallest byte code size of program (17 bytes)
+  makes copy of parameter explicit
+  all functions use the (value) stack as parameters
+  the params and locals can be held on freely accessible value stack
+  these can be copied into the zero page for faster access (e.g. r/w access 2+ or something) and/or tailcalls
+  #+begin_src scheme
+    (push param0)               ;; 1..2             p0->p1->p0
+    (nil? [tos -> tos ])        ;; 1                p0->p1->NIL? p0
+    (bra [tos] -> +11)           ;; 2 removes tos    p0->p1
+    (push param0)               ;; 1..2             p0->p1->p0
+    (cdr [tos -> tos]           ;; 1                p0->p1->(cdr p0)
+    (push param1)               ;; 1..2             p0->p1->(cdr p0)->p1
+    (push param0)               ;; 1..2             p0->p1->(cdr p0)->p1->p0
+    (car [tos -> tos]           ;; 1                p0->p1->(cdr p0)->p1->(car p0)
+    (call-byte+)                ;; 1 tos = car bl, tos-2 acc, replace top 2 stack elements with 1 result   p0->p1->(cdr p0)->(+ p1 (car p0))
+    (pop ->param1)              ;; 1..2             p1=(+ p1 (car p0))   p0->p1->(cdr p0)
+    (pop ->param0)              ;; 1..2             p0=(cdr p0)          p0->p1
+    (goto -13)                  ;; 2 recursive call
+    (drop tos-1 .. tos-1)        ;; 2               p1
+    (ret)                       ;; 1
+  #+end_src
+- define byte code 2
+  relative to tos
+  negative: params have changing offsets (depending on the current size of the stack)
+  negative: encoding is more complext
+  positive: less stacky, easier to read
+  same smallest byte code size of program
+  #+begin_src scheme
+    (nil? tos-1 [ -> tos ])      ;; 2 increases stack
+    (bra [tos] -> +x)            ;; 2 removes tos
+    (cdr tos-1) -> tos           ;; 2 increases stack
+    (car tos-2) -> tos           ;; 2 increases stack
+    (call-byte+ [2] tos tos-2)   ;; 2 tos = car bl, tos-2 acc, replace top 2 stack elements with 1 result
+    (drop tos-3 .. tis-2)        ;; 2
+    (goto -x)                    ;; 2 recursive call
+    (drop tos-1 .. tos-1)        ;; 2
+    (ret)                        ;; 1
+  #+end_src
+- define byte code 3
+  relative to base of stack (when entered function)
+  sb+0 = param 0, sb + 1 = param 1
+  positive: same values are accessed with same index (e.g. param-0 always with sb+0)
+  negative: more complex command encoding
+  same smallest byte code size of program
+  #+begin_src scheme
+    (nil? sb+0 [ -> tos ])      ;; 2 increases stack (sb+2)
+    (bra [tos = sb+2] -> +x)    ;; 2..3 removes tos
+    (cdr sb+1) -> tos           ;; 2 increases stack (sb+2)
+    (car sb+0) -> tos           ;; 2 increases stack (sb+3)
+    (call-byte+ [2] sb+3 sb+1)  ;; 2..3 sb+3 = car bl, sb+1 acc, replace top 2 stack elements with 1 result (sb+3)
+    (drop sb+0 .. sb+1)          ;; 2 sb+0 .. sb+1
+    (goto -x)                   ;; 2 recursive call
+    (drop sb+0 .. sb+0)          ;; 2
+    (ret)                       ;; 1
+  #+end_src
+- example call encoded
+  #+begin_src scheme
+    (push-byte 10) ;; 2
+    (push-byte 20) ;; 2
+    (push-byte 2)  ;; 1  two elements to make a list from
+    (make-list)    ;; 1
+    (push-byte 0)  ;; 2  default parameter (accumulator) initialized with 0
+    (push-id 'sum) ;; 3  push the function id on the stack
+    (call)         ;; 1  execute call on the following stack  p0->p1->low(function)->high(function)
+  #+end_src
+***** structures
+****** create (programmatically)
+#+begin_src scheme
+  (push-byte 1)    ;; 2
+  (push-byte 2)    ;; 2
+  (push-id 'point) ;; 3
+  (create-struct)  ;; 1   tos = structure reference
+#+end_src
+****** access
+******* read
+#+begin_src scheme
+  ;; tos = structure reference
+  (push-byte 2)    ;; field index
+  (field-read)     ;; replace structure ref and field index with value read
+#+end_src
+******* write
+#+begin_src scheme
+  ;; tos = structure reference
+  (push-byte 2)    ;; 2 field index
+  (push-int 17)    ;; 3 value
+  (field-write)    ;; replace structure ref, field index with value set ?
+#+end_src
+***** define interpreter
+*** some iteration
 **** tidy up code base
 - find naming conventions for the different phases
   - ast- :: nodes in the ast
@@ -2174,8 +2294,7 @@ What information is needed for the different phases? => check the different opti
 **** implement vm in mil
 - precondition: all language features are implemented, debugging should be possible
 - information gained: optimize execution speed + bytecode size + heap usage + c64 implementability
-*** some iteration
-- memory management
+**** memory management
   - basic idea: don't do ref counting within a function
     - do reference counting only upon returning form a function
     - try to allocate/discard locally
@@ -2194,7 +2313,7 @@ What information is needed for the different phases? => check the different opti
   - lists and arrays/strings are allocated on the heap and need to ref-count the cells
   - describe each instruction more closely to check how we can avoid reference counting
   - maybe start with explicit memory management (alloc, free)
-- cisc commands
+**** cisc commands
   - use basic encoding (each reg = 1 byte), keep in mind to provide compact bytecodes for first 15 regs etc.
 ** memory management
 *** layout

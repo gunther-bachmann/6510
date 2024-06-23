@@ -9,7 +9,7 @@
 
 (require (only-in "../6510-utils.rkt" two-complement-of))
 
-(require (only-in "./vm-structures.rkt"
+(require (only-in "./rvm-structures.rkt"
                   disassemble
                   make-vm
                   CISC_VM_CONS
