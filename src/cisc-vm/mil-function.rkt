@@ -941,23 +941,21 @@
 
 (define/contract (generate-if if-expr a-gen-context)
   (->* [ast-e-if? gen-context?] [] gen-context?)
-  ;; TODO: if a block (else or then) contains a recursive call, the the goto needs to know all generated code =>
-  ;; generating a block that may contain a goto must be done with a context that holds all bytes generated so far!
   (define pre-code (ast-gen-info-pre-code (ast-node-gen-info if-expr)))
-  (define bool-ref-expression (car (ast-e-fun-call-params if-expr)))
-  (define next-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate pre-expression inner-gen-context)) a-gen-context pre-code))
-  (define else-block-gen-context (struct-copy gen-context next-gen-context [gen-bytes (list)]))
-  (define else-block-expression (transform (third (ast-e-fun-call-params if-expr))))
+  (define bool-ref-expression (first (ast-e-fun-call-params if-expr)))
+  (define final-bool-expr-gen-context (foldl (lambda (pre-expression inner-gen-context) (generate pre-expression inner-gen-context)) a-gen-context pre-code))
+  (define else-block-gen-context (struct-copy gen-context final-bool-expr-gen-context [gen-bytes (list)]))
+  (define else-block-expression  (third (ast-e-fun-call-params if-expr)))
   (define final-else-block-gen-context (generate else-block-expression else-block-gen-context))
   (define then-block-gen-context (struct-copy gen-context final-else-block-gen-context [gen-bytes (list)]))
-  (define then-block-expression (transform (cadr (ast-e-fun-call-params if-expr))))
+  (define then-block-expression  (second (ast-e-fun-call-params if-expr)))
   (define then-block-is-recursive-call (and (ast-e-fun-call? then-block-expression)
                                           (eq? (ast-e-fun-call-fun then-block-expression)
                                                (gen-context-current-function then-block-gen-context))))
   (define final-then-block-gen-context (generate then-block-expression then-block-gen-context))
   (define then-block-len (length (gen-context-gen-bytes final-then-block-gen-context)))
   (define else-block-len (length (gen-context-gen-bytes final-else-block-gen-context)))
-  (define branch-decision-register (generate-register-ref bool-ref-expression next-gen-context))
+  (define branch-decision-register (generate-register-ref bool-ref-expression final-bool-expr-gen-context))
 
   ;; possible workaround: make longjumps possible
   (when (> then-block-len 126)
@@ -966,7 +964,7 @@
     (raise-user-error "generated else block > 126 bytes, branch cannot be generated"))
 
   (foldl (lambda (byte-list-fun context) (apply byte-list-fun (list context)))
-         next-gen-context
+         final-bool-expr-gen-context
          (list (lambda (ctx) (struct-copy
                          gen-context ctx
                          [gen-bytes
@@ -1012,8 +1010,13 @@
                                       'if
                                       (list (ast-e-loc-ref agsi 'sym)
                                             (ast-ev-number agsi 1)
-                                            (ast-e-fun-call agsi 'byte+ (list (ast-ev-number (make-ast-gen-info #:target-reg VM_L2) 2)
-                                                                              (ast-ev-number (make-ast-gen-info #:target-reg VM_L1) 3))))
+                                            (ast-e-fun-call
+                                             (make-ast-gen-info
+                                              #:pre-code (list (ast-e-loc-set agsi 'two (ast-ev-number (make-ast-gen-info #:target-reg VM_L2) 2))
+                                                               (ast-e-loc-set agsi 'three (ast-ev-number (make-ast-gen-info #:target-reg VM_L1) 3))))
+                                             'byte+
+                                             (list (ast-e-loc-ref agsi 'two)
+                                                   (ast-e-loc-ref agsi 'three))))
                                       #f)
                             (make-gen-context))
                (gen-context 3 gen-hash (hash)
