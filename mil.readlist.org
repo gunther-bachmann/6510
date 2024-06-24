@@ -2227,6 +2227,47 @@ describes some lisp implementations (with some techn. detail) and does perforamc
     (push-id 'sum) ;; 3  push the function id on the stack
     (call)         ;; 1  execute call on the following stack  p0->p1->low(function)->high(function)
   #+end_src
+***** second tail recursive function
+- original
+  #+begin_src scheme
+    (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
+                    "reverse a-list, consing it into b-list")
+           (if (nil? a-list)
+               b-list
+               (reverse (cdr a-list) (cons (car a-list) b-list))))
+  #+end_src
+- byte code (optimized 1) ca. 14 bytes
+  #+begin_src scheme
+    (push param0)  ;; 1
+    (nil?)         ;; 1
+    (bra +9)      ;; 2
+    (push param0)  ;; 1
+    (car)          ;; 1
+    (cons)         ;; 1 (reuse b-list, being second parameter and on the stack)
+    (push param0)  ;; 1
+    (cdr)          ;; 1
+    (pop param0)   ;; 1
+    (goto -11)     ;; 2
+    (drop param0)  ;; 1
+    (ret)          ;; 1
+  #+end_src
+- byte code (naiive) ca. 16 bytes
+  #+begin_src scheme
+    (push param0) ;; 1
+    (nil?)        ;; 1
+    (bra +11)     ;; 2
+    (push param1) ;; 1
+    (push param0) ;; 1
+    (car)         ;; 1
+    (cons)        ;; 1
+    (push param0) ;; 1
+    (cdr)         ;; 1
+    (pop param0)  ;; 1
+    (pop param1)  ;; 1
+    (goto -13)    ;; 2
+    (drop param0) ;; 1
+    (ret)         ;; 1
+  #+end_src
 ***** structures
 ****** create (programmatically)
 #+begin_src scheme
@@ -2250,6 +2291,25 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   (field-write)    ;; replace structure ref, field index with value set ?
 #+end_src
 ***** define interpreter
+****** state
+- vm-frame :: execution frame
+  fun-idx (int)
+  byte-code-idx (int)
+  [local-stack (arrayof cell), first n are the parameters passed]
+  [tos-idx (byte), index into local-stack]
+- vm-function-def :: a function definition
+  total-stack-size-used (byte)
+  name (string)
+  byte-code (arrayof byte)
+- vm :: the complete state of the virtual stack oriented machine
+  frame-stack (listof vm-frame)
+  value-stack (listof cell)
+  functions (arrayof vm-function-def)
+  active-frame (vm-frame)
+  globals (arrayof cell)
+  structs (arrayof vm-struct-def)
+  options (listof symbol)
+
 *** some iteration
 **** tidy up code base
 - find naming conventions for the different phases
