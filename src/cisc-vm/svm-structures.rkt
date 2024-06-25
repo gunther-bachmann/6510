@@ -105,8 +105,9 @@
         : vm-
   (vm- frames values functions globals structs options))
 
-(define SVMC_PUSH_PARAM           1) ;; op= param-idx from tail, stack [] -> [cell-]
-(define SVMC_PUSH_BYTE            2) ;; op= byte value, stack [] -> [cell-byte]
+(define SVMC_BRK                  0) ;;
+(define SVMC_PUSH_PARAM           1) ;; op = param-idx from tail, stack [] -> [cell-]
+(define SVMC_PUSH_BYTE            2) ;; op = byte value, stack [] -> [cell-byte]
 (define SVMC_PUSH_INT             3) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
                                      ;; also used for struct-index or function-index
 (define SVMC_PUSH_GLOBAL          4) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
@@ -421,23 +422,67 @@
   (increment-pc (pop-value vm) delta))
 
 ;; bytecode: op two-complement-offset, len: 2b
-;; stack: [ .... ]  -> [ ... ], growth: 0c
+;; stack: [ ... ]  -> [ ... ], growth: 0c
 (define (interpret-goto [vm : vm-]) : vm-
   (define delta (+ 1 (two-complement->signed-byte (peek-pc-byte vm 1))))
   (increment-pc vm delta))
 
+;; bytecode: op, len: 1b
+;; stack: [ cell-list-ptr ... ] -> [ car-of-list ... ], growth: 0c
 (define (interpret-car [vm : vm-]) : vm-
-  (raise-user-error "not implemented yet"))
+  (define tos (peek-value vm))
+  (define car-cell (if (cell-list-ptr-? tos)
+                       (cell-list-ptr--car tos)
+                       (raise-user-error "expected cell-list-ptr, got ~a" tos)))
+  (increment-pc (push-value (pop-value vm) car-cell)))
 
+;; bytecode: op, len: 1b
+;; stack: [ cell-list-ptr ... ] -> [ cdr-of-list ... ], growth: 0c
 (define (interpret-cdr [vm : vm-]) : vm-
-  (raise-user-error "not implemented yet"))
+  (define tos (peek-value vm))
+  (define cdr-cell (if (cell-list-ptr-? tos)
+                       (cell-list-ptr--cdr tos)
+                       (raise-user-error "expected cell-list-ptr, got ~a" tos)))
+  (increment-pc (push-value (pop-value vm) cdr-cell)))
 
+;; bytecode: op, len: 1b
+;; stack: [ cdr-cell car-cell ... ] -> [ cell-list-ptr ... ], growth: -1c
 (define (interpret-cons [vm : vm-]) : vm-
-  (raise-user-error "not implemented yet"))
+  (match-define (list (list cdr-cell car-cell) next-vm) (pop-values vm 2))
+  (increment-pc (push-value next-vm (cell-list-ptr- car-cell cdr-cell))))
 
-(define (interpret-byte-code [vm : vm-] : vm-)
+(define (dissassemble-byte-code (vm : vm-)) : String
   (define byte-code (peek-pc-byte vm))
+    (cond
+    [(= byte-code SVMC_BRK) "brk"]
+    [(= byte-code SVMC_BYTE+) "byte+"]
+    [(= byte-code SVMC_RET) "ret"]
+    [(= byte-code SVMC_CALL) "call"]
+    [(= byte-code SVMC_PUSH_PARAM) (format "pushp p-~a" (peek-pc-byte vm 1))]
+    [(= byte-code SVMC_PUSH_BYTE) (format "pushb #~a" (peek-pc-byte vm 1))]
+    [(= byte-code SVMC_PUSH_INT) (format "pushi #~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code SVMC_PUSH_GLOBAL) (format "pushg g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code SVMC_POP_TO_PARAM) (format "popp p-~a" (peek-pc-byte vm 1))]
+    [(= byte-code SVMC_POP_TO_GLOBAL) (format "popp g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code SVMC_NIL?) "nil?"]
+    [(= byte-code SVMC_BRA) (format "bra ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
+    [(= byte-code SVMC_CAR) "car"]
+    [(= byte-code SVMC_CDR) "cdr"]
+    [(= byte-code SVMC_CONS) "cons"]
+    [(= byte-code SVMC_GOTO) (format "goto ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
+
+    [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
+
+(define (interpret-byte-code [vm : vm-]) : vm-
+  (define byte-code (peek-pc-byte vm))
+  (when (member 'trace (vm--options vm))
+    (define cur-frame (car (vm--frame-stack vm)))
+    (displayln (format "exec: (~a)\t ~a  \t@function: ~a, byte-offset: ~a" byte-code
+                       (dissassemble-byte-code vm)
+                       (vm-frame--fun-idx cur-frame)
+                       (vm-frame--bc-idx cur-frame))))
   (cond
+    [(= byte-code SVMC_BRK) (raise-user-error "encountered BRK")]
     [(= byte-code SVMC_BYTE+) (interpret-byte+ vm)]
     [(= byte-code SVMC_RET) (interpret-ret vm)]
     [(= byte-code SVMC_CALL) (interpret-call vm)]
@@ -455,3 +500,27 @@
     [(= byte-code SVMC_GOTO) (interpret-goto vm)]
 
     [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
+
+(define (run-until-break (vm : vm-)) : vm-
+  (cond [(fx= SVMC_BRK (peek-pc-byte vm)) vm]
+        [else
+         (define next-vm (interpret-byte-code vm))
+         (run-until-break next-vm)]))
+
+(module+ test #| run-until-break |#
+  (define test-byte+--run-until-break
+    (run-until-break
+     (make-vm
+      #:options (list 'trace)
+      #:functions
+      (vector-immutable
+       (make-function-def
+        #:byte-code (vector-immutable SVMC_PUSH_BYTE 10
+                                      SVMC_PUSH_BYTE 20
+                                      SVMC_BYTE+
+                                      SVMC_BRK))))))
+
+  (check-equal? (vm--value-stack test-byte+--run-until-break)
+                (list (cell-byte- 30)))
+  (check-equal? (car (vm--frame-stack test-byte+--run-until-break))
+                (make-frame #:bc-idx 5)))
