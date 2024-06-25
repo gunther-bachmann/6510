@@ -1,7 +1,7 @@
 #lang typed/racket
 
-(require (only-in racket/fixnum fx+ fx= fx<))
-(require/typed racket/kernel [vector-set/copy (All (a) (-> (Immutable-Vectorof a) Byte a (Vectorof a)))])
+(require (only-in racket/fixnum fx+ fx= fx< fx-))
+(require/typed racket/kernel [vector-set/copy (All (a) (-> (Immutable-Vectorof a) Nonnegative-Integer a (Vectorof a)))])
 
 (module+ test #| require test utils |#
   (require typed/rackunit))
@@ -146,13 +146,20 @@
   (check-exn exn:fail? (lambda () (integer->two-complement -32769)))
   (check-exn exn:fail? (lambda () (integer->two-complement 32768))))
 
-(define (interpret-call [vm : vm-]) : vm-
-  (define new-frame (make-frame #:fun-idx (integer->two-complement (cell--value (car (vm--value-stack vm))))
-                                #:bc-idx  0
-                                #:parameter-tail (vm--value-stack vm)))
-  (struct-copy vm- vm
-               [frame-stack (cons new-frame (vm--frame-stack (increment-pc vm)))]
-               [value-stack (cdr (vm--value-stack vm))]))
+(define (two-complement->signed-byte (a : Byte)) : Integer
+  (cond
+    [(< a #x80) a]
+    [else (fx- a #x100)]))
+
+(module+ test #| two-complement->signed-byte |#
+  (check-equal? (two-complement->signed-byte #x7f)
+                127)
+  (check-equal? (two-complement->signed-byte 0)
+                0)
+  (check-equal? (two-complement->signed-byte #x80)
+                -128)
+  (check-equal? (two-complement->signed-byte #xff)
+                -1))
 
 (define (peek-pc-byte [vm : vm-] [ delta : Nonnegative-Integer 0]) : Byte
   (define active-frame (car (vm--frame-stack vm)))
@@ -173,10 +180,13 @@
                  1)
                 10))
 
-(define (increment-pc [vm : vm-] [delta : Nonnegative-Integer 1]) : vm-
+(define (increment-pc [vm : vm-] [delta : Integer 1]) : vm-
   (define active-frame (car (vm--frame-stack vm)))
+  (define new-bc-idx (fx+ delta (vm-frame--bc-idx active-frame)))
   (define new-frame (struct-copy vm-frame- active-frame
-                                 [bc-idx (fx+ delta (vm-frame--bc-idx active-frame))]))
+                                 [bc-idx (if (fx< new-bc-idx 0)
+                                             (raise-user-error (format "pc reduced to negative offset ~a" new-bc-idx))
+                                             new-bc-idx)]))
   (struct-copy vm- vm
                [frame-stack (cons new-frame (cdr (vm--frame-stack vm)))]))
 
@@ -188,14 +198,11 @@
                                         (make-function-def #:byte-code (vector-immutable 7 8 9 10 11))))))
                 10))
 
-(define (interpret-ret [vm : vm-]) : vm-
-  (struct-copy vm- vm [frame-stack (cdr (vm--frame-stack vm))]))
+(define (peek-value [vm : vm-] [offset : Byte 0]) : cell-
+  (car (drop (vm--value-stack vm) offset)))
 
-(define (peek-value [vm : vm-]) : cell-
-  (car (vm--value-stack vm)))
-
-(define (pop-value [vm : vm-]) : vm-
-  (struct-copy vm- vm [value-stack (cdr (vm--value-stack vm))]))
+(define (pop-value [vm : vm-] [count : Byte 1]) : vm-
+  (struct-copy vm- vm [value-stack (drop (vm--value-stack vm) count)]))
 
 ;; inner function for tail call recursion required, because recursive typed call w/ optional field does not typecheck
 (define (pop-values [vm : vm-] [count : Nonnegative-Integer]) : (List (Listof cell-) vm-)
@@ -207,6 +214,9 @@
   (pop-values- vm count '()))
 
 (define (push-value [vm : vm-] [value : cell-]) : vm-
+  (struct-copy vm- vm [value-stack (cons value (vm--value-stack vm))]))
+
+(define (push-on-value-stack (vm : vm-) (value : cell-)) : vm-
   (struct-copy vm- vm [value-stack (cons value (vm--value-stack vm))]))
 
 ;; ensure overflow is caught to enable type checking result to be Byte
@@ -226,6 +236,23 @@
   (check-exn exn:fail? (lambda () (byte+ 128 128)))
   (check-exn exn:fail? (lambda () (byte+ 255 1))))
 
+;; bytecode: op, len: 1b
+;; stack: [ func-idx:cell-int- pN ... p1 p0 ] -> [ pN ... p1 p0 ], growth: -1c
+(define (interpret-call [vm : vm-]) : vm-
+  (define new-frame (make-frame #:fun-idx (integer->two-complement (cell--value (car (vm--value-stack vm))))
+                                #:bc-idx  0
+                                #:parameter-tail (vm--value-stack vm)))
+  (struct-copy vm- vm
+               [frame-stack (cons new-frame (vm--frame-stack (increment-pc vm)))]
+               [value-stack (cdr (vm--value-stack vm))]))
+
+;; bytecode: op, len: 1b
+;; stack: [ res pN .. p1 p0 ...] -> [ res ... ], growth: -N-1 (for n+1 parameter)
+(define (interpret-ret [vm : vm-]) : vm-
+  (struct-copy vm- vm [frame-stack (cdr (vm--frame-stack vm))]))
+
+;; bytecode: op, len: 1b
+;; stack: [ a:cell-byte b:cell-byte ... ] -> [ a+b:cell-byte- ... ], growth: -1c
 (define (interpret-byte+ [vm : vm-]) : vm-
   ;; replace tos and tos-1 with sum (of the two bytes)
   (match-define (list (list a b) new-vm) (pop-values vm 2))
@@ -241,9 +268,8 @@
                                                            #:frames (list (make-frame)))))
                 (list (cell-byte- 3))))
 
-(define (push-on-value-stack (vm : vm-) (value : cell-)) : vm-
-  (struct-copy vm- vm [value-stack (cons value (vm--value-stack vm))]))
-
+;; bytecode: op idx:byte, len: 2b
+;; stack: [ ... pN .. p1 p0] -> [ pIDX ... pN .. p1 p0], growth: 1c
 (define (interpret-push-param [vm : vm-]) : vm-
   (define param-idx (peek-pc-byte vm 1))
   (define param-value (car (drop (vm-frame--parameter-tail (car (vm--frame-stack vm))) param-idx)))
@@ -263,21 +289,31 @@
                 2
                 "the program counter got incremented by 2 (push + operand)"))
 
+;; bytecode: op val:byte, len: 2b
+;; stack: [ ... pN .. p1 p0] -> [ val:cell-byte- ... pN .. p1 p0], growth: 1c
 (define (interpret-push-byte [vm : vm-]) : vm-
   (define byte-value (peek-pc-byte vm 1))
   (increment-pc (push-on-value-stack vm (cell-byte- byte-value)) 2))
 
+;; bytecode: op val-low:byte val-high:byte, len: 3b
+;; stack: [ ... ] -> [ val:cell-int- ... ], growth: 1c
 (define (interpret-push-int [vm : vm-]) : vm-
   (define low-byte (peek-pc-byte vm 1))
   (define high-byte (peek-pc-byte vm 1))
   (define int-value (cell-int- (fx+ (arithmetic-shift high-byte 8) low-byte)))
   (increment-pc (push-on-value-stack vm int-value) 3))
 
+;; bytecode: op idx-low:byte idx-high:byte, len: 3b
+;; stack: [ ... ] -> [ global@IDX:cell- ... ], growth: 1c
 (define (interpret-push-global [vm : vm-]) : vm-
-  (define global-idx (peek-pc-byte vm 1))
+  (define global-idx-low (peek-pc-byte vm 1))
+  (define global-idx-high (peek-pc-byte vm 2))
+  (define global-idx (fx+ (arithmetic-shift global-idx-high 8) global-idx-low))
   (define global-value (vector-ref (vm--globals vm) global-idx))
-  (increment-pc (push-on-value-stack vm global-value) 2))
+  (increment-pc (push-on-value-stack vm global-value) 3))
 
+;; bytecode: op idx:byte, len: 2b
+;; stack: [ val ... pN .. p1 p0] -> [ ... pN .. pIDX=val .. p1 p0], growth: -1c
 (define (interpret-pop-to-param [vm : vm-]) : vm-
   (define parameter-offset-from-tail (peek-pc-byte vm 1))
   (define value-stack (vm--value-stack vm))
@@ -344,13 +380,18 @@
                 (list (cell-) #| params tail is here |# (cell-) (cell-) (cell-) (cell-) (cell-byte- 10))
                 "replace last parameter keeping rest of value stack"))
 
+;; bytecode: op idx-low:byte idx-high:byte, len: 3b
+;; stack: [ val ... ] -> [ ...], growth: -1c
+;; global@IDX = val
 (define (interpret-pop-to-global [vm : vm-]) : vm-
-  (define global-idx (peek-pc-byte vm 1))
+  (define global-idx-low (peek-pc-byte vm 1))
+  (define global-idx-high (peek-pc-byte vm 2))
+  (define global-idx (fx+ (arithmetic-shift global-idx-high 8) global-idx-low))
   (increment-pc
    (struct-copy vm- vm
                 [value-stack (cdr (vm--value-stack vm))]
                 [globals (vector->immutable-vector (vector-set/copy (vm--globals vm) global-idx (car (vm--value-stack vm))))])
-   2))
+   3))
 
 (module+ test #| interpret pop to global |#
   (define test-interpret-pop-to-global
@@ -361,11 +402,29 @@
   (check-equal? (vm--globals test-interpret-pop-to-global)
                 (vector-immutable (cell-)(cell-)(cell-byte- 10)(cell-))))
 
+;; bytecode: op
+;; stack: [ cell-list-ptr ...] -> [ cell-bool ... ], growth: 0
 (define (interpret-nil? [vm : vm-]) : vm-
-  (raise-user-error "not implemented yet"))
+  (define list-ptr (peek-value vm))
+  (increment-pc
+   (push-value (pop-value vm) (cell-byte- (if (eq? list-ptr VM_NIL_CELL) #xff #x00)))))
 
+;; bytecode: op two-complement-offset, len: 2b
+;; stack: [ val:cell-byte ... ]  -> [ ... ], growth: -1c
 (define (interpret-bra [vm : vm-]) : vm-
-  (raise-user-error "not implemented yet"))
+  (define tos (peek-value vm))
+  (define delta (if (= 0 (if (cell-byte-? tos)
+                         (cell-byte--value tos)
+                         (raise-user-error (format "expected byte as tos, got ~a" tos)) ))
+                2
+                (+ 1 (two-complement->signed-byte (peek-pc-byte vm 1)))))
+  (increment-pc (pop-value vm) delta))
+
+;; bytecode: op two-complement-offset, len: 2b
+;; stack: [ .... ]  -> [ ... ], growth: 0c
+(define (interpret-goto [vm : vm-]) : vm-
+  (define delta (+ 1 (two-complement->signed-byte (peek-pc-byte vm 1))))
+  (increment-pc vm delta))
 
 (define (interpret-car [vm : vm-]) : vm-
   (raise-user-error "not implemented yet"))
@@ -374,9 +433,6 @@
   (raise-user-error "not implemented yet"))
 
 (define (interpret-cons [vm : vm-]) : vm-
-  (raise-user-error "not implemented yet"))
-
-(define (interpret-goto [vm : vm-]) : vm-
   (raise-user-error "not implemented yet"))
 
 (define (interpret-byte-code [vm : vm-] : vm-)

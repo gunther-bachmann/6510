@@ -2290,7 +2290,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   (push-int 17)    ;; 3 value
   (field-write)    ;; replace structure ref, field index with value set ?
 #+end_src
-***** define interpreter
+***** define interpreter (in racket)
 ****** state
 - vm-frame :: execution frame
   fun-idx (int)
@@ -2309,7 +2309,13 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   globals (arrayof cell)
   structs (arrayof vm-struct-def)
   options (listof symbol)
-
+***** IDEA: speedup pop to param
+- drawback: unified view of stack is lost
+- params could be held in an array (number is known)
+- local stack could be an array (number is limited)
+  => push-local = store x idx++
+  => push-for-call = store into array of called function?
+  => result of function is either pushed to local or pushed to next call
 *** some iteration
 **** tidy up code base
 - find naming conventions for the different phases
