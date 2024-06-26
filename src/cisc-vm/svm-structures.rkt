@@ -242,7 +242,7 @@
 (define (interpret-call [vm : vm-]) : vm-
   (define new-frame (make-frame #:fun-idx (integer->two-complement (cell--value (car (vm--value-stack vm))))
                                 #:bc-idx  0
-                                #:parameter-tail (vm--value-stack vm)))
+                                #:parameter-tail (cdr (vm--value-stack vm))))
   (struct-copy vm- vm
                [frame-stack (cons new-frame (vm--frame-stack (increment-pc vm)))]
                [value-stack (cdr (vm--value-stack vm))]))
@@ -250,7 +250,13 @@
 ;; bytecode: op, len: 1b
 ;; stack: [ res pN .. p1 p0 ...] -> [ res ... ], growth: -N-1 (for n+1 parameter)
 (define (interpret-ret [vm : vm-]) : vm-
-  (struct-copy vm- vm [frame-stack (cdr (vm--frame-stack vm))]))
+  ;; drop the parameters
+  (define value-stack (vm--value-stack vm))
+  (define active-frame (car (vm--frame-stack vm)))
+  (define new-value-stack (append (list (car value-stack))
+                                  (drop value-stack (fx+ 1 (vm-function-def--parameter-count (vector-ref (vm--functions vm) (vm-frame--fun-idx active-frame)))))))
+  (struct-copy vm- vm [frame-stack (cdr (vm--frame-stack vm))]
+                      [value-stack new-value-stack]))
 
 ;; bytecode: op, len: 1b
 ;; stack: [ a:cell-byte b:cell-byte ... ] -> [ a+b:cell-byte- ... ], growth: -1c
@@ -300,7 +306,7 @@
 ;; stack: [ ... ] -> [ val:cell-int- ... ], growth: 1c
 (define (interpret-push-int [vm : vm-]) : vm-
   (define low-byte (peek-pc-byte vm 1))
-  (define high-byte (peek-pc-byte vm 1))
+  (define high-byte (peek-pc-byte vm 2))
   (define int-value (cell-int- (fx+ (arithmetic-shift high-byte 8) low-byte)))
   (increment-pc (push-on-value-stack vm int-value) 3))
 
@@ -407,6 +413,8 @@
 ;; stack: [ cell-list-ptr ...] -> [ cell-bool ... ], growth: 0
 (define (interpret-nil? [vm : vm-]) : vm-
   (define list-ptr (peek-value vm))
+  (unless (cell-list-ptr-? list-ptr)
+    (raise-user-error (format "operand for nil? is not a list but ~a" list-ptr)))
   (increment-pc
    (push-value (pop-value vm) (cell-byte- (if (eq? list-ptr VM_NIL_CELL) #xff #x00)))))
 
@@ -477,10 +485,14 @@
   (define byte-code (peek-pc-byte vm))
   (when (member 'trace (vm--options vm))
     (define cur-frame (car (vm--frame-stack vm)))
-    (displayln (format "exec: (~a)\t ~a  \t@function: ~a, byte-offset: ~a" byte-code
+    (displayln (format "exec: (~a)\t ~a  \t@function: ~a, byte-offset: ~a, value-stack-size: ~a, tos: ~a" byte-code
                        (dissassemble-byte-code vm)
                        (vm-frame--fun-idx cur-frame)
-                       (vm-frame--bc-idx cur-frame))))
+                       (vm-frame--bc-idx cur-frame)
+                       (length (vm--value-stack vm))
+                       (if (empty? (vm--value-stack vm))
+                           "nil"
+                           (car (vm--value-stack vm))))))
   (cond
     [(= byte-code SVMC_BRK) (raise-user-error "encountered BRK")]
     [(= byte-code SVMC_BYTE+) (interpret-byte+ vm)]
@@ -511,7 +523,7 @@
   (define test-byte+--run-until-break
     (run-until-break
      (make-vm
-      #:options (list 'trace)
+      #:options (list ) ;; 'trace
       #:functions
       (vector-immutable
        (make-function-def
@@ -521,6 +533,78 @@
                                       SVMC_BRK))))))
 
   (check-equal? (vm--value-stack test-byte+--run-until-break)
-                (list (cell-byte- 30)))
+                (list (cell-byte- 30))
+                "the execution result on the value stack should be 30")
   (check-equal? (car (vm--frame-stack test-byte+--run-until-break))
-                (make-frame #:bc-idx 5)))
+                (make-frame #:bc-idx 5)
+                "the program counter should point to the break instruction")
+
+  (define test-call-return--run-until-break
+    (run-until-break
+     (make-vm
+      #:options (list) ;;  'trace
+      #:functions
+      (vector-immutable
+       (make-function-def
+        #:byte-code (vector-immutable SVMC_PUSH_BYTE 10
+                                      SVMC_PUSH_BYTE 20
+                                      SVMC_PUSH_INT   1 0 ;; function index 1
+                                      SVMC_CALL
+                                      SVMC_BRK))
+       (make-function-def
+        #:parameter-count 2
+        #:byte-code (vector-immutable SVMC_PUSH_PARAM 1
+                                      SVMC_PUSH_PARAM 0
+                                      SVMC_BYTE+
+                                      SVMC_RET))))))
+
+  (check-equal? (vm--value-stack test-call-return--run-until-break)
+                (list (cell-byte- 30))
+                "the execution result on the value stack should be 30")
+  (check-equal? (car (vm--frame-stack test-call-return--run-until-break))
+                (make-frame #:bc-idx 8)
+                "the program counter should point to the break instruction")
+
+  (define test-tail-recursio--value-stack
+    (list (cell-byte- 0)
+          (cell-list-ptr- (cell-byte- 10) (cell-list-ptr- (cell-byte- 20) VM_NIL_CELL))))
+
+  (define (byte->two-complement (value : Fixnum)) : Byte
+    (define pre-result
+      (cond
+        [(fx< value 0) (fx+ 256 value)]
+        [else value]))
+    (if (byte? pre-result)
+        pre-result
+       (raise-user-error (format "signed byte out of range ~a" value))))
+
+  (define test-tail-recursion--run-until-break
+    (run-until-break
+     (make-vm
+      #:options (list) ;;  'trace
+      #:values  test-tail-recursio--value-stack
+      #:functions
+      (vector-immutable
+       (make-function-def
+        #:byte-code (vector-immutable SVMC_PUSH_INT   1 0 ;; function index 1
+                                      SVMC_CALL
+                                      SVMC_BRK))
+       (make-function-def
+        #:parameter-count 2
+        #:byte-code (vector-immutable SVMC_PUSH_PARAM 1 ;; the list        stack [list]
+                                      SVMC_NIL?         ;;                 stack [nil?]
+                                      SVMC_BRA 16       ;;                 stack []
+                                      SVMC_PUSH_PARAM 1 ;; the list        stack [list]
+                                      SVMC_CAR          ;; first value     stack [car]
+                                      SVMC_PUSH_PARAM 0 ;; the accumulator stack [acc car]
+                                      SVMC_BYTE+        ;;                 stack [new-acc]
+                                      SVMC_PUSH_PARAM 1 ;; the list        stack [list new-acc]
+                                      SVMC_CDR          ;;                 stack [cdr new-acc]
+                                      SVMC_POP_TO_PARAM 1 ;;               stack [new-acc]
+                                      SVMC_POP_TO_PARAM 0 ;;               stack []
+                                      SVMC_GOTO (byte->two-complement -19)
+                                      SVMC_PUSH_PARAM 0 ;; acc             stack [acc]
+                                      SVMC_RET))))))
+
+  (check-equal? (vm--value-stack test-tail-recursion--run-until-break)
+                (list (cell-byte- 30))))
