@@ -2439,7 +2439,7 @@ c64 implementation detail:
 *** allocation
 *** deallocation
 ** continuations
-** vm registers and runtime behaviour
+** vm registers and runtime behavior
 call, tail-call, variable resolution, continuations, closures, macros?
 - (later) use cpu registers for parameters (quickest)
 - (later) use zero page for parameters (quick)

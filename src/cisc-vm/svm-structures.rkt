@@ -58,14 +58,16 @@
   ([fun-idx : Nonnegative-Integer]
    [bc-idx  : Nonnegative-Integer]
    [parameter-tail : (Listof cell-)]  ;; is a pointer to the last parameter on the value stack, at the beginning of a call this is identical to value-stack!
+   [locals : (Immutable-Vectorof cell-)]        ;; a list of locals identified by index
    )
   #:transparent)
 
-(define (make-frame #:fun-idx (fun-idx : Nonnegative-Integer 0)
-                    #:bc-idx (bc-idx : Nonnegative-Integer 0)
-                    #:parameter-tail (parameter-tail : (Listof cell-) '()))
-  : vm-frame-
-  (vm-frame- fun-idx bc-idx parameter-tail))
+(define (make-frame #:fun-idx        (fun-idx : Nonnegative-Integer 0)
+                    #:bc-idx         (bc-idx : Nonnegative-Integer 0)
+                    #:parameter-tail (parameter-tail : (Listof cell-) '())
+                    #:locals         (locals : (Immutable-Vectorof cell-) (vector-immutable)))
+        : vm-frame-
+  (vm-frame- fun-idx bc-idx parameter-tail locals))
 
 (struct vm-struct-def-
   ([name : String]
@@ -75,16 +77,18 @@
 (struct vm-function-def-
   ([stack-size-used : Byte] ;; how much (in addition to the parameters) is the stack used (max)
    [parameter-count : Byte] ;; how many parameters are expected (fix)
-   [name : String]
-   [byte-code : (Immutable-Vectorof Byte)])
+   (locals-count    : Byte) ;; how many locals are used in this function
+   [name            : String]
+   [byte-code       : (Immutable-Vectorof Byte)])
   #:transparent)
 
 (define (make-function-def #:stack-size-used (stack-size-used : Byte 0)
                            #:parameter-count (parameter-count : Byte 0)
+                           #:locals-count (locals-count : Byte 0)
                            #:name (name : String "some-func")
                            #:byte-code (byte-code : (Immutable-Vectorof Byte) (vector-immutable 0 1 2 3 4)))
   : vm-function-def-
-  (vm-function-def- stack-size-used parameter-count name byte-code))
+  (vm-function-def- stack-size-used parameter-count locals-count name byte-code))
 
 (struct vm-
   ([frame-stack : (Listof vm-frame-)]
@@ -106,22 +110,30 @@
   (vm- frames values functions globals structs options))
 
 (define SVMC_BRK                  0) ;;
-(define SVMC_PUSH_PARAM           1) ;; op = param-idx from tail, stack [] -> [cell-]
-(define SVMC_PUSH_BYTE            2) ;; op = byte value, stack [] -> [cell-byte]
-(define SVMC_PUSH_INT             3) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
+
+(define SVMC_PUSH_BYTE            5) ;; op = byte value, stack [] -> [cell-byte]
+(define SVMC_PUSH_INT             6) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
                                      ;; also used for struct-index or function-index
-(define SVMC_PUSH_GLOBAL          4) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
-(define SVMC_POP_TO_PARAM         5) ;; op= param-idx from tail, stack [cell-] -> []
-(define SVMC_POP_TO_GLOBAL        6) ;; op1=low byte index op2=high byte index, stack [cell-] -> []
-(define SVMC_NIL?                 7) ;; stack [cell-list-ptr] -> [cell-boolean]
-(define SVMC_BRA                  8) ;; op = relative offset
-(define SVMC_CAR                  9) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
-(define SVMC_CDR                 10) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
-(define SVMC_CONS                11) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
-(define SVMC_GOTO                12) ;; op = relative offset
-(define SVMC_BYTE+               13) ;; stack [cell-byte a, cell-byte b] -> [sum]
-(define SVMC_RET                 14) ;; stack [cell paramN, ... cell param1, cell param0] -> []
-(define SVMC_CALL                15) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+(define SVMC_PUSH_PARAM          10) ;; op = param-idx from tail, stack [] -> [cell-]
+(define SVMC_PUSH_GLOBAL         11) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
+(define SVMC_PUSH_LOCAL          12) ;; op = local-idx, stacl [] -> [cell-]
+
+(define SVMC_POP_TO_PARAM        15) ;; op= param-idx from tail, stack [cell-] -> []
+(define SVMC_POP_TO_GLOBAL       16) ;; op1=low byte index op2=high byte index, stack [cell-] -> []
+(define SVMC_POP_TO_LOCAL        17) ;; op = local-idx, stacl [cell-] -> []
+
+(define SVMC_NIL?                20) ;; stack [cell-list-ptr] -> [cell-boolean]
+
+(define SVMC_BRA                 31) ;; op = relative offset
+(define SVMC_GOTO                32) ;; op = relative offset
+(define SVMC_RET                 33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
+(define SVMC_CALL                34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+
+(define SVMC_CAR                 40) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
+(define SVMC_CDR                 41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
+(define SVMC_CONS                42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+
+(define SVMC_BYTE+               60) ;; stack [cell-byte a, cell-byte b] -> [sum]
 
 (define (integer->two-complement [value : Integer]) : Nonnegative-Integer
   (cond
@@ -240,9 +252,12 @@
 ;; bytecode: op, len: 1b
 ;; stack: [ func-idx:cell-int- pN ... p1 p0 ] -> [ pN ... p1 p0 ], growth: -1c
 (define (interpret-call [vm : vm-]) : vm-
-  (define new-frame (make-frame #:fun-idx (integer->two-complement (cell--value (car (vm--value-stack vm))))
+  (define fun-idx (integer->two-complement (cell--value (car (vm--value-stack vm)))))
+  (define locals-count (vm-function-def--locals-count (vector-ref (vm--functions vm) fun-idx)))
+  (define new-frame (make-frame #:fun-idx fun-idx
                                 #:bc-idx  0
-                                #:parameter-tail (cdr (vm--value-stack vm))))
+                                #:parameter-tail (cdr (vm--value-stack vm))
+                                #:locals (vector->immutable-vector (make-vector locals-count (cell-)))))
   (struct-copy vm- vm
                [frame-stack (cons new-frame (vm--frame-stack (increment-pc vm)))]
                [value-stack (cdr (vm--value-stack vm))]))
@@ -462,22 +477,22 @@
 (define (dissassemble-byte-code (vm : vm-)) : String
   (define byte-code (peek-pc-byte vm))
     (cond
+    [(= byte-code SVMC_BRA) (format "bra ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
     [(= byte-code SVMC_BRK) "brk"]
     [(= byte-code SVMC_BYTE+) "byte+"]
-    [(= byte-code SVMC_RET) "ret"]
     [(= byte-code SVMC_CALL) "call"]
-    [(= byte-code SVMC_PUSH_PARAM) (format "pushp p-~a" (peek-pc-byte vm 1))]
-    [(= byte-code SVMC_PUSH_BYTE) (format "pushb #~a" (peek-pc-byte vm 1))]
-    [(= byte-code SVMC_PUSH_INT) (format "pushi #~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
-    [(= byte-code SVMC_PUSH_GLOBAL) (format "pushg g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
-    [(= byte-code SVMC_POP_TO_PARAM) (format "popp p-~a" (peek-pc-byte vm 1))]
-    [(= byte-code SVMC_POP_TO_GLOBAL) (format "popp g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
-    [(= byte-code SVMC_NIL?) "nil?"]
-    [(= byte-code SVMC_BRA) (format "bra ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
     [(= byte-code SVMC_CAR) "car"]
     [(= byte-code SVMC_CDR) "cdr"]
     [(= byte-code SVMC_CONS) "cons"]
     [(= byte-code SVMC_GOTO) (format "goto ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
+    [(= byte-code SVMC_NIL?) "nil?"]
+    [(= byte-code SVMC_POP_TO_GLOBAL) (format "popp g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code SVMC_POP_TO_PARAM) (format "popp p-~a" (peek-pc-byte vm 1))]
+    [(= byte-code SVMC_PUSH_BYTE) (format "pushb #~a" (peek-pc-byte vm 1))]
+    [(= byte-code SVMC_PUSH_GLOBAL) (format "pushg g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code SVMC_PUSH_INT) (format "pushi #~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code SVMC_PUSH_PARAM) (format "pushp p-~a" (peek-pc-byte vm 1))]
+    [(= byte-code SVMC_RET) "ret"]
 
     [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
 
@@ -494,22 +509,22 @@
                            "nil"
                            (car (vm--value-stack vm))))))
   (cond
+    [(= byte-code SVMC_BRA) (interpret-bra vm)]
     [(= byte-code SVMC_BRK) (raise-user-error "encountered BRK")]
     [(= byte-code SVMC_BYTE+) (interpret-byte+ vm)]
-    [(= byte-code SVMC_RET) (interpret-ret vm)]
     [(= byte-code SVMC_CALL) (interpret-call vm)]
-    [(= byte-code SVMC_PUSH_PARAM) (interpret-push-param vm)]
-    [(= byte-code SVMC_PUSH_BYTE) (interpret-push-byte vm)]
-    [(= byte-code SVMC_PUSH_INT) (interpret-push-int vm)]
-    [(= byte-code SVMC_PUSH_GLOBAL) (interpret-push-global vm)]
-    [(= byte-code SVMC_POP_TO_PARAM) (interpret-pop-to-param vm)]
-    [(= byte-code SVMC_POP_TO_GLOBAL) (interpret-pop-to-global vm)]
-    [(= byte-code SVMC_NIL?) (interpret-nil? vm)]
-    [(= byte-code SVMC_BRA) (interpret-bra vm)]
     [(= byte-code SVMC_CAR) (interpret-car vm)]
     [(= byte-code SVMC_CDR) (interpret-cdr vm)]
     [(= byte-code SVMC_CONS) (interpret-cons vm)]
     [(= byte-code SVMC_GOTO) (interpret-goto vm)]
+    [(= byte-code SVMC_NIL?) (interpret-nil? vm)]
+    [(= byte-code SVMC_POP_TO_GLOBAL) (interpret-pop-to-global vm)]
+    [(= byte-code SVMC_POP_TO_PARAM) (interpret-pop-to-param vm)]
+    [(= byte-code SVMC_PUSH_BYTE) (interpret-push-byte vm)]
+    [(= byte-code SVMC_PUSH_GLOBAL) (interpret-push-global vm)]
+    [(= byte-code SVMC_PUSH_INT) (interpret-push-int vm)]
+    [(= byte-code SVMC_PUSH_PARAM) (interpret-push-param vm)]
+    [(= byte-code SVMC_RET) (interpret-ret vm)]
 
     [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
 
