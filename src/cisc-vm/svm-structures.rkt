@@ -52,8 +52,9 @@
     [else (raise-user-error (format "not a value cell ~a" a-cell))]))
 
 (struct cell-array- celln-
-  ([size : Integer]
-   [array : (Vectorof cell-)])
+  ([size : Nonnegative-Integer]
+   ;; [array : (Immutable-Vectorof cell-)]
+   [id : Nonnegative-Integer]) ;; index into global array of arrays <- special for this vm, won't be implemented on c64
   #:transparent) ;; vector of atomic cells!
 
 (struct vm-frame-
@@ -98,7 +99,8 @@
    [functions : (Immutable-Vectorof vm-function-def-)]
    [globals : (Immutable-Vectorof cell-)]
    [structs : (Immutable-Vectorof vm-struct-def-)]
-   [options : (Listof Symbol)])
+   [options : (Listof Symbol)]
+   [arrays : (Immutable-Vectorof (Vectorof cell-))])
   #:transparent)
 
 (define (make-vm
@@ -107,9 +109,39 @@
          #:functions (functions : (Immutable-Vectorof vm-function-def-) (vector-immutable))
          #:globals (globals : (Immutable-Vectorof cell-) (vector-immutable))
          #:structs (structs : (Immutable-Vectorof vm-struct-def-) (vector-immutable))
-         #:options (options : (Listof Symbol) '()))
+         #:options (options : (Listof Symbol) '())
+         #:arrays (arrays : (Immutable-Vectorof (Vectorof cell-)) (vector-immutable))) ;; kept to allow modifications (not part of c64 implementation)
         : vm-
-  (vm- frame-stack value-stack functions globals structs options))
+  (vm- frame-stack value-stack functions globals structs options arrays))
+
+;; utility functions for arrays/structures
+(define (set-array-value [vm : vm-] [array : cell-array-] [idx : Nonnegative-Integer] [value : cell-]) : vm-
+  (define value-array (vector-ref (vm--arrays vm) (cell-array--id array)))
+  (define new-value-array (vector-set/copy (vector->immutable-vector value-array) idx value))
+  (define new-arrays (vector->immutable-vector (vector-set/copy (vm--arrays vm) (cell-array--id array) new-value-array)))
+  (struct-copy vm- vm
+               [arrays new-arrays]))
+
+(define (get-array-value [vm : vm-] [array : cell-array-] [idx : Integer]) : cell-
+  (define value-array (vector-ref (vm--arrays vm) (cell-array--id array)))
+  (vector-ref value-array idx))
+
+(module+ test #| set-array-value |#
+  (check-equal? (get-array-value
+                 (make-vm #:arrays (vector->immutable-vector (vector (vector (ann (cell-byte- 0) cell-)
+                                                                            (ann (cell-byte- 1) cell-)))))
+                 (cell-array- 2 0)
+                 1)
+                (cell-byte- 1))
+  (check-equal? (get-array-value
+                 (set-array-value (make-vm #:arrays (vector->immutable-vector (vector (vector (ann (cell-byte- 0) cell-)
+                                                                                             (ann (cell-byte- 1) cell-)))))
+                                  (cell-array- 2 0)
+                                  1
+                                  (cell-int- 10))
+                 (cell-array- 2 0)
+                 1)
+                (cell-int- 10)))
 
 ;; naming convention
 ;; {(s)hort | (p)refix} COMMAND {(m)ask | (n)umber-mask | (m)ost(s)ignificant(b)it position}
@@ -132,7 +164,8 @@
 (define PUSH_PARAM          10) ;; op = param-idx from tail, stack [] -> [cell-]
 (define PUSH_GLOBAL         11) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
 (define PUSH_LOCAL          12) ;; op = local-idx, stacl [] -> [cell-]
-(define PUSH_FIELD          13) ;; op = field-idx, stack [struct-ref] -> [cell-]
+(define PUSH_STRUCT_FIELD   13) ;; op = field-idx, stack [struct-ref] -> [cell-]
+(define PUSH_ARRAY_FIELD    14) ;; op = field-idx, stack [array-ref] -> [cell-]
 
 ;; example of short (one byte instruction) for push
 ;; using 128..131
@@ -154,7 +187,9 @@
 
 (define POP_TO_PARAM        15) ;; op= param-idx from tail, stack [cell-] -> []
 (define POP_TO_GLOBAL       16) ;; op1=low byte index op2=high byte index, stack [cell-] -> []
-(define POP_TO_LOCAL        17) ;; op = local-idx, stacl [cell-] -> []
+(define POP_TO_LOCAL        17) ;; op = local-idx, stack [cell-] -> []
+(define POP_TO_STRUCT_FIELD 18) ;; op = field-idx, stack [cell- struct-ptr-] -> []
+(define POP_TO_ARRAY_FIELD  19) ;; op = array-idx, stack [cell- array-ptr-] -> []
 
 ;; using 144..147
 (define sPOP_TO_PARAM         #b10010000) ;; short pop to param, lower 2 bits
@@ -204,6 +239,12 @@
 (define CONS                42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
 
 (define BYTE+               60) ;; stack [cell-byte a, cell-byte b] -> [sum]
+
+(define ALLOCATE_STRUCT     70) ;; op = struct-def-idx,  stack [] -> [struct-ref-]
+(define FREE_STRUCT         71) ;; stack [struct-ref-] -> []
+
+(define ALLOCATE_ARRAY      72) ;; op = array len, stack [] -> [array-ref-]
+(define FREE_ARRAY          73) ;; stack [array-ref-] -> []
 
 (define (integer->two-complement [value : Integer]) : Nonnegative-Integer
   (cond
@@ -691,9 +732,89 @@
     (raise-user-error "index out of bounds for short command nil?-ret-param (~a)" idx))
   (bitwise-xor sNIL?-RET-PARAM idx))
 
+
+;; op: byte field-idx, stack: [ struct-ref- cell-] -> []
+(define (interpret-pop-to-array-field [vm : vm-]) : vm-
+  (define array (tos-value vm))
+  (define next-vm (pop-value vm))
+  (define value (tos-value next-vm))
+  (define field-idx (peek-pc-byte next-vm 1))
+  (unless (cell-array-? array)
+    (raise-user-error (format "expected cell-array- to access field ~a" field-idx)))
+  (unless (fx< field-idx (cell-array--size array))
+    (raise-user-error (format "cell-array- too small (~a) to access field ~a" (cell-array--size array) field-idx)))
+  (increment-pc (set-array-value (pop-value next-vm) array field-idx value) 2))
+
+;; op: byte field-idx, stack: [ struct-ref- ] -> [cell-]
+(define (interpret-push-array-field [vm : vm-]) : vm-
+  (define array (car (vm--value-stack vm)))
+  (define field-idx (peek-pc-byte vm 1))
+  (unless (cell-array-? array)
+    (raise-user-error (format "expected cell-array- to access field ~a" field-idx)))
+  (unless (fx< field-idx (cell-array--size array))
+    (raise-user-error (format "cell-array- too small (~a) to access field ~a" (cell-array--size array) field-idx)))
+  (define value (get-array-value vm array field-idx))
+  (increment-pc (push-value (pop-value vm) value) 2))
+
+(module+ test #| interpret-...-field |#
+  (define interpret-field-test--vm
+    (make-vm
+     #:value-stack (list (cell-array- 2 0) (cell-int- 30))
+     #:functions (vector-immutable (make-function-def #:byte-code (vector-immutable #x00 1)))
+     #:arrays (vector-immutable (vector (ann (cell-byte- 10) cell-) (ann (cell-byte- 20) cell-)))))
+
+  (check-equal? (tos-value (interpret-push-array-field interpret-field-test--vm))
+                (cell-byte- 20))
+
+  (check-equal? (vm--arrays (interpret-pop-to-array-field interpret-field-test--vm))
+                (vector-immutable (vector (ann (cell-byte- 10) cell-) (ann (cell-int- 30) cell-)))))
+
+;; op: byte array len, stack [] -> [ array-cell- ]
+(define (interpret-allocate-array [vm : vm-]) : vm-
+  (define len (peek-pc-byte vm 1))
+  (define actual-vector (make-vector len (cell-)))
+  (define new-arrays (vector-append (vm--arrays vm) (vector actual-vector)))
+  (define id (sub1 (vector-length new-arrays)))
+  (when(fx< id 0)
+    (raise-user-error (format "array id ~a must be >= 0" id)))
+  (increment-pc
+   (push-value
+    (struct-copy vm- vm
+                 [arrays (vector->immutable-vector new-arrays)])
+    (cell-array- len id))
+   2))
+
+(module+ test #| interpret-allocate-array |#
+  (define interpret-allocate-array-test--vm
+    (make-vm #:functions (vector-immutable (make-function-def #:byte-code (vector-immutable 0 10)))))
+
+  (check-equal? (tos-value (interpret-allocate-array interpret-allocate-array-test--vm))
+                (cell-array- 10 0)))
+
+(define (interpret-pop-to-local [vm : vm-]) : vm-
+  (define active-frame (car (vm--frame-stack vm)))
+  (define tos (tos-value vm))
+  (define idx (peek-pc-byte vm 1))
+  (define new-frame (struct-copy vm-frame- active-frame
+                                 [locals (vector->immutable-vector (vector-set/copy (vm-frame--locals active-frame) idx tos))]))
+  (increment-pc
+   (pop-value
+    (struct-copy vm- vm
+                 [frame-stack (cons new-frame (cdr (vm--frame-stack vm)))]))
+   2))
+
+(define (interpret-push-local [vm : vm-]) : vm-
+  (define active-frame (car (vm--frame-stack vm)))
+  (define idx (peek-pc-byte vm 1))
+  (define value (vector-ref (vm-frame--locals active-frame) idx))
+  (increment-pc
+   (push-value vm value)
+   2))
+
 (define (dissassemble-byte-code (vm : vm-)) : String
   (define byte-code (peek-pc-byte vm))
   (cond
+    [(= byte-code ALLOCATE_ARRAY) (format "alloc-array size ~a" (peek-pc-byte vm 1))]
     [(= byte-code BRA) (format "bra ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
     [(= byte-code BRK) "brk"]
     [(= byte-code BYTE+) "byte+"]
@@ -704,12 +825,16 @@
     [(= byte-code GOTO) (format "goto ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
     [(= byte-code NIL?) "nil?"]
     [(= byte-code NIL?-RET-PARAM) (format "nil? -> return p~a" (peek-pc-byte vm 1))]
-    [(= byte-code POP_TO_GLOBAL) (format "popp g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
-    [(= byte-code POP_TO_PARAM) (format "popp p-~a" (peek-pc-byte vm 1))]
+    [(= byte-code POP_TO_ARRAY_FIELD) (format "pop to array[~a]" (peek-pc-byte vm 1))]
+    [(= byte-code POP_TO_GLOBAL) (format "pop g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code POP_TO_LOCAL) (format "pop l-~a" (peek-pc-byte vm 1))]
+    [(= byte-code POP_TO_PARAM) (format "pop p-~a" (peek-pc-byte vm 1))]
+    [(= byte-code PUSH_ARRAY_FIELD) (format "push array[~a]" (peek-pc-byte vm 1))]
     [(= byte-code PUSH_BYTE) (format "pushb #~a" (peek-pc-byte vm 1))]
-    [(= byte-code PUSH_GLOBAL) (format "pushg g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
-    [(= byte-code PUSH_INT) (format "pushi #~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
-    [(= byte-code PUSH_PARAM) (format "pushp p-~a" (peek-pc-byte vm 1))]
+    [(= byte-code PUSH_GLOBAL) (format "push g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code PUSH_INT) (format "push #~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code PUSH_LOCAL) (format "push l-~a" (peek-pc-byte vm 1))]
+    [(= byte-code PUSH_PARAM) (format "push p-~a" (peek-pc-byte vm 1))]
     [(= byte-code RET) "ret"]
     [(= byte-code TAIL_CALL) "tail-call"]
 
@@ -721,19 +846,22 @@
 
     [else (raise-user-error (format "unknown byte code command during disassembly ~a" byte-code))]))
 
+(define (display-vm [vm : vm-]) : Any
+  (define cur-frame (car (vm--frame-stack vm)))
+  (displayln (format "exec: (~a)\t ~a  \t@function: ~a, byte-offset: ~a, value-stack-size: ~a, tos: ~a" (peek-pc-byte vm)
+                     (dissassemble-byte-code vm)
+                     (vm-frame--fun-idx cur-frame)
+                     (vm-frame--bc-idx cur-frame)
+                     (length (vm--value-stack vm))
+                     (if (empty? (vm--value-stack vm))
+                         "nil"
+                         (tos-value vm)))))
+
 (define (interpret-byte-code [vm : vm-]) : vm-
   (define byte-code (peek-pc-byte vm))
-  (when (member 'trace (vm--options vm))
-    (define cur-frame (car (vm--frame-stack vm)))
-    (displayln (format "exec: (~a)\t ~a  \t@function: ~a, byte-offset: ~a, value-stack-size: ~a, tos: ~a" byte-code
-                       (dissassemble-byte-code vm)
-                       (vm-frame--fun-idx cur-frame)
-                       (vm-frame--bc-idx cur-frame)
-                       (length (vm--value-stack vm))
-                       (if (empty? (vm--value-stack vm))
-                           "nil"
-                           (tos-value vm)))))
+  (when (member 'trace (vm--options vm)) (display-vm vm))
   (cond
+    [(= byte-code ALLOCATE_ARRAY) (interpret-allocate-array vm)]
     [(= byte-code BRA) (interpret-bra vm)]
     [(= byte-code BRK) (raise-user-error "encountered BRK")]
     [(= byte-code BYTE+) (interpret-byte+ vm)]
@@ -744,11 +872,17 @@
     [(= byte-code GOTO) (interpret-goto vm)]
     [(= byte-code NIL?) (interpret-nil? vm)]
     [(= byte-code NIL?-RET-PARAM) (interpret-nil?-ret-param vm)]
+    [(= byte-code POP_TO_ARRAY_FIELD) (interpret-pop-to-array-field vm)]
+    [(= byte-code POP_TO_STRUCT_FIELD) (interpret-pop-to-array-field vm)]
     [(= byte-code POP_TO_GLOBAL) (interpret-pop-to-global vm)]
+    [(= byte-code POP_TO_LOCAL) (interpret-pop-to-local vm)]
     [(= byte-code POP_TO_PARAM) (interpret-pop-to-param vm)]
     [(= byte-code PUSH_BYTE) (interpret-push-byte vm)]
+    [(= byte-code PUSH_STRUCT_FIELD) (interpret-push-array-field vm)]
+    [(= byte-code PUSH_ARRAY_FIELD) (interpret-push-array-field vm)]
     [(= byte-code PUSH_GLOBAL) (interpret-push-global vm)]
     [(= byte-code PUSH_INT) (interpret-push-int vm)]
+    [(= byte-code PUSH_LOCAL) (interpret-push-local vm)]
     [(= byte-code PUSH_PARAM) (interpret-push-param vm)]
     [(= byte-code RET) (interpret-ret vm)]
     [(= byte-code TAIL_CALL) (interpret-tail-call vm)]
@@ -809,7 +943,9 @@
                 1))
 
 (define (run-until-break (vm : vm-)) : vm-
-  (cond [(fx= BRK (peek-pc-byte vm)) vm]
+  (cond [(fx= BRK (peek-pc-byte vm))
+         (when (member 'trace (vm--options vm)) (display-vm vm))
+         vm]
         [else
          (define next-vm (interpret-byte-code vm))
          (run-until-break next-vm)]))
@@ -858,7 +994,9 @@
                 "the execution result on the value stack should be 30")
   (check-equal? (car (vm--frame-stack test-call-return--run-until-break))
                 (make-frame #:bc-idx 8)
-                "the program counter should point to the break instruction")
+                "the program counter should point to the break instruction"))
+
+(module+ test #| test tail recursion |#
 
   (define test-tail-recursion--value-stack
     (list (cell-byte- 0)
@@ -872,6 +1010,7 @@
   ;;   (if (nil? bl)
   ;;       acc
   ;;     (sum (cdr bl) (byte+ acc (car bl)))))
+
 
   (define test-tail-recursion--run-until-break
     (run-until-break
@@ -906,6 +1045,7 @@
   ;;   (if (nil? a-list)
   ;;       b-list
   ;;     (reverse (cdr a-list) (cons (car a-list) b-list))))
+
 
   (define test-tail-recursion--value-stack2
     (list NIL_CELL
@@ -943,3 +1083,27 @@
                                                       (cell-list-ptr- (cell-byte- 5)
                                                                       NIL_CELL))))
                 "tos is reversed list"))
+
+(module+ test #| structure usage |#
+
+  (define structure-usage-test--vm
+    (make-vm
+     #:options (list) ;; 'trace
+     #:frame-stack (list (make-frame #:locals (vector-immutable (cell-))))
+     #:functions
+     (vector-immutable
+      (make-function-def
+       #:byte-code (vector-immutable ALLOCATE_ARRAY 10
+                                     POP_TO_LOCAL 0
+                                     PUSH_BYTE 1
+                                     PUSH_LOCAL 0
+                                     POP_TO_ARRAY_FIELD 5
+                                     PUSH_BYTE 7
+                                     PUSH_LOCAL 0
+                                     POP_TO_ARRAY_FIELD 4
+                                     PUSH_LOCAL 0
+                                     PUSH_ARRAY_FIELD 5
+                                     BRK)))))
+
+  (check-equal? (tos-value (run-until-break structure-usage-test--vm))
+                (cell-byte- 1)))
