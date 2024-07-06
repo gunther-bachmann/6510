@@ -111,7 +111,20 @@
         : vm-
   (vm- frame-stack value-stack functions globals structs options))
 
-(define BRK                  0) ;;
+;; naming convention
+;; {(s)hort | (p)refix} COMMAND {(m)ask | (n)umber-mask | (m)ost(s)ignificant(b)it position}
+;; (s) short commands reduce the number of bytes by reducing the domain of the operands
+;; (m) mask bytes are used to mask the relevant bits for the command to be selected
+;; (n) number mask bytes are uesd to mask the relevant bits for the the operand
+;; (msb) describe the first relevant bit position for the operand
+
+;; basic concept: 1 byte = command, following are operands (usually 1 byte each)
+;; commands operate mostly on tos
+;; (p) prefix commands: modify the behaviour of the following command or change the operand sizes for the command operands
+
+(define BRK                  0) ;; stop
+(define pLONG                1) ;; double operand size
+(define NOP                  2) ;; just increase pc (no operation)
 
 (define PUSH_BYTE            5) ;; op = byte value, stack [] -> [cell-byte]
 (define PUSH_INT             6) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
@@ -119,31 +132,42 @@
 (define PUSH_PARAM          10) ;; op = param-idx from tail, stack [] -> [cell-]
 (define PUSH_GLOBAL         11) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
 (define PUSH_LOCAL          12) ;; op = local-idx, stacl [] -> [cell-]
+(define PUSH_FIELD          13) ;; op = field-idx, stack [struct-ref] -> [cell-]
 
 ;; example of short (one byte instruction) for push
+;; using 128..131
 (define sPUSH_PARAM         #b10000000) ;; short push param, lower 2 bits
 (define sPUSH_PARAMm        #b11111100)
-(define sPUSH_PARAMn        #b00000011)
+(define sPUSH_PARAMn        (bitwise-xor #xff sPUSH_PARAMm))
+;; using 132..135
 (define sPUSH_GLOBAL        #b10000100) ;; short push global, lower 2 bits + next byte
 (define sPUSH_GLOBALm       #b11111100)
-(define sPUSH_GLOBALn       #b00000011)
+(define sPUSH_GLOBALn       (bitwise-xor #xff sPUSH_GLOBALm))
+;; using 136..139
 (define sPUSH_LOCAL         #b10001000) ;; short push local, lower 2 bits
 (define sPUSH_LOCALm        #b11111100)
+(define sPUSH_LOCALn        (bitwise-xor #xff sPUSH_LOCALm))
+;; using 140..143
 (define sPUSH_BYTE          #b10001100) ;; short push byte, lower 2 bits  #b00 = #x00, #b01 = #x01, #b10 = #x02, #b11 = #xff
 (define sPUSH_BYTEm         #b11111100)
+(define sPUSH_BYTEn         (bitwise-xor #xff sPUSH_BYTEm))
 
 (define POP_TO_PARAM        15) ;; op= param-idx from tail, stack [cell-] -> []
 (define POP_TO_GLOBAL       16) ;; op1=low byte index op2=high byte index, stack [cell-] -> []
 (define POP_TO_LOCAL        17) ;; op = local-idx, stacl [cell-] -> []
 
+;; using 144..147
 (define sPOP_TO_PARAM         #b10010000) ;; short pop to param, lower 2 bits
 (define sPOP_TO_PARAMm        #b11111100)
-(define sPOP_TO_PARAMn        #b00000011)
+(define sPOP_TO_PARAMn        (bitwise-xor #xff sPOP_TO_PARAMm))
+;; using 148..151
 (define sPOP_TO_GLOBAL        #b10010100) ;; short pop to global, lower 2 bits + next byte
 (define sPOP_TO_GLOBALm       #b11111100)
-(define sPOP_TO_GLOBALn       #b00000011)
+(define sPOP_TO_GLOBALn       (bitwise-xor #xff sPOP_TO_GLOBALm))
+;; using 152..155
 (define sPOP_TO_LOCAL         #b10011000) ;; short pop to local, lower 2 bits
 (define sPOP_TO_LOCALm        #b11111100)
+(define sPOP_TO_LOCALn        (bitwise-xor #xff sPOP_TO_LOCALm))
 
 (define NIL?                20) ;; stack [cell-list-ptr] -> [cell-boolean]
 
@@ -152,11 +176,24 @@
 (define RET                 33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
 (define CALL                34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
 (define TAIL_CALL           35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
+(define NIL?-RET-PARAM      36) ;; op = param, stack [ ... paramN .. param0 ] -> [ paramOP ] if tos is nil, else no change!
+(define NIL?-RET-LOCAL      37) ;; op = param, stack [ ... paramN .. param0 ] -> [ localOP ] if tos is nil, else no change!
 
+;; using 156..159
+(define sNIL?-RET-PARAM     #b10011100)
+(define sNIL?-RET-PARAMm    #b11111100)
+(define sNIL?-RET-PARAMn    (bitwise-xor #xff sNIL?-RET-PARAMm))
+;; using 160..163
+(define sNIL?-RET-LOCAL     #b10100000)
+(define sNIL?-RET-LOCALm    #b11111100)
+(define sNIL?-RET-LOCALn    (bitwise-xor #xff sNIL?-RET-LOCALm))
+
+;; using 192..223
 (define sBRA                #b11000000)
 (define sBRAm               #b11100000)
 (define sBRAn               #b00011111)
 (define sBRAmsb             5)
+;; using 224..255
 (define sGOTO               #b11100000)
 (define sGOTOm              #b11100000)
 (define sGOTOn              #b00011111)
@@ -544,6 +581,17 @@
   (increment-pc
    (push-value (pop-value vm) (if (eq? list-ptr NIL_CELL) TRUE FALSE))))
 
+(define (interpret-nil?-ret-param [vm : vm-]) : vm-
+  (interpret-nil?-ret-param- vm (peek-pc-byte vm 1) 2))
+
+(define (interpret-nil?-ret-param- [vm : vm-] [param-idx : Byte] [pc-inc : Byte]) : vm-
+  (define list-ptr (tos-value vm))
+  (unless (cell-list-ptr-? list-ptr)
+    (raise-user-error (format "operand for nil? is not a list but ~a" list-ptr)))
+  (if (eq? list-ptr NIL_CELL)
+      (interpret-ret (push-value (pop-value vm) (car (drop (vm-frame--parameter-tail (car (vm--frame-stack vm))) param-idx))))
+      (increment-pc vm pc-inc)))
+
 (define (tos-eq-byte? (vm : vm-) (value : Byte)) : Boolean
   (define tos (tos-value vm))
   (= value
@@ -638,6 +686,11 @@
     (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
   (bitwise-xor sGOTO to-))
 
+(define (sNIL?-RET-PARAMc [idx : Byte]) : Byte
+  (when (fx> idx sNIL?-RET-PARAMn)
+    (raise-user-error "index out of bounds for short command nil?-ret-param (~a)" idx))
+  (bitwise-xor sNIL?-RET-PARAM idx))
+
 (define (dissassemble-byte-code (vm : vm-)) : String
   (define byte-code (peek-pc-byte vm))
   (cond
@@ -650,6 +703,7 @@
     [(= byte-code CONS) "cons"]
     [(= byte-code GOTO) (format "goto ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
     [(= byte-code NIL?) "nil?"]
+    [(= byte-code NIL?-RET-PARAM) (format "nil? -> return p~a" (peek-pc-byte vm 1))]
     [(= byte-code POP_TO_GLOBAL) (format "popp g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
     [(= byte-code POP_TO_PARAM) (format "popp p-~a" (peek-pc-byte vm 1))]
     [(= byte-code PUSH_BYTE) (format "pushb #~a" (peek-pc-byte vm 1))]
@@ -663,6 +717,7 @@
     [(= (bitwise-and byte-code sPOP_TO_PARAMm) sPOP_TO_PARAM) (format "pop p-~a  ;; short version" (bitwise-and sPOP_TO_PARAMn byte-code))]
     [(= (bitwise-and byte-code sBRAm) sBRA) (format "bra ~a  ;; short version" (two-complement->signed-byte (bitwise-and sBRAn byte-code) sBRAmsb))]
     [(= (bitwise-and byte-code sGOTOm) sGOTO) (format "goto ~a  ;; short version" (two-complement->signed-byte (bitwise-and sGOTOn byte-code) sGOTOmsb))]
+    [(= (bitwise-and byte-code sNIL?-RET-PARAMm) sNIL?-RET-PARAM) (format "nil? -> return p~a  ;; short version" (bitwise-and sNIL?-RET-PARAMn byte-code))]
 
     [else (raise-user-error (format "unknown byte code command during disassembly ~a" byte-code))]))
 
@@ -688,6 +743,7 @@
     [(= byte-code CONS) (interpret-cons vm)]
     [(= byte-code GOTO) (interpret-goto vm)]
     [(= byte-code NIL?) (interpret-nil? vm)]
+    [(= byte-code NIL?-RET-PARAM) (interpret-nil?-ret-param vm)]
     [(= byte-code POP_TO_GLOBAL) (interpret-pop-to-global vm)]
     [(= byte-code POP_TO_PARAM) (interpret-pop-to-param vm)]
     [(= byte-code PUSH_BYTE) (interpret-push-byte vm)]
@@ -712,6 +768,9 @@
 
     [(= (bitwise-and byte-code sGOTOm) sGOTO)
      (interpret-goto- vm (two-complement->signed-byte (bitwise-and sBRAn byte-code) sGOTOmsb))]
+
+    [(= (bitwise-and byte-code sNIL?-RET-PARAMm) sNIL?-RET-PARAM)
+     (interpret-nil?-ret-param- vm (bitwise-and sNIL?-RET-PARAMn byte-code) 1)]
 
     [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
 
@@ -828,17 +887,14 @@
        (make-function-def
         #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
         #:byte-code (vector-immutable (sPUSH_PARAMc 1)
-                                      NIL?         ;;                 stack [nil?]
-                                      (sBRAc 7)    ;; idea: combine nil check and branch command into one, how about nil?-ret combination <-
+                                      (sNIL?-RET-PARAMc 0)
                                       (sPUSH_PARAMc 1)
-                                      CDR          ;;                 stack [cdr new-acc]
+                                      CDR
                                       (sPUSH_PARAMc 1)
-                                      CAR          ;; first value     stack [car]
+                                      CAR
                                       (sPUSH_PARAMc 0)
-                                      BYTE+        ;;                 stack [new-acc]
-                                      TAIL_CALL
-                                      (sPUSH_PARAMc 0) ;; idea have a short return function, specifying what should be returned
-                                      RET))))))
+                                      BYTE+
+                                      TAIL_CALL))))))
 
   (check-equal? (vm--value-stack test-tail-recursion--run-until-break)
                 (list (cell-byte- 35))
@@ -861,7 +917,7 @@
   (define test-tail-recursion--run-until-break2
     (run-until-break
      (make-vm
-      #:options (list ) ;;  'trace
+      #:options (list) ;;  'trace
       #:value-stack  test-tail-recursion--value-stack2
       #:functions
       (vector-immutable
@@ -872,17 +928,14 @@
        (make-function-def
         #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
         #:byte-code (vector-immutable (sPUSH_PARAMc 1)
-                                      NIL?         ;;
-                                      (sBRAc 7)    ;;
+                                      (sNIL?-RET-PARAMc 0)
                                       (sPUSH_PARAMc 1)
                                       CDR
                                       (sPUSH_PARAMc 0)
                                       (sPUSH_PARAMc 1)
-                                      CAR          ;;
-                                      CONS          ;;
-                                      TAIL_CALL
-                                      (sPUSH_PARAMc 0)
-                                      RET))))))
+                                      CAR
+                                      CONS
+                                      TAIL_CALL))))))
 
   (check-equal? (vm--value-stack test-tail-recursion--run-until-break2)
                 (list (cell-list-ptr- (cell-byte- 20)

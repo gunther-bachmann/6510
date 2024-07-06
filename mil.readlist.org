@@ -2134,7 +2134,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 **** implement a stack vm (redo some of first iteration)
 - byte code stays basically the same, except that operands are on the stack!
 - the virtual machine has to redone to allow that
-***** DONE simple function
+***** simple function
 - simple function to do byte plus two parameter
   #+begin_src scheme
     (def (f (a : byte) (b : byte)) : byte
@@ -2149,7 +2149,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
     (call-byte+) ;;  replace tos with (+ tos tos-1)
     (ret)
   #+end_src
-***** DONE tail call function
+***** tail call function
 - tail recursive function using lists
   #+begin_src scheme
     (def (sum (bl (list byte)) (acc byte 0)) -> byte
@@ -2227,7 +2227,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
     (push-id 'sum) ;; 3  push the function id on the stack
     (call)         ;; 1  execute call on the following stack  p0->p1->low(function)->high(function)
   #+end_src
-***** DONE second tail recursive function
+***** second tail recursive function
 - original
   #+begin_src scheme
     (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
@@ -2290,7 +2290,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   (push-int 17)    ;; 3 value
   (field-write)    ;; replace structure ref, field index with value set ?
 #+end_src
-***** DONE define interpreter (in racket)
+***** define interpreter (in racket)
 ****** state
 - vm-frame :: execution frame
   fun-idx (int)
