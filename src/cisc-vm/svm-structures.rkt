@@ -596,7 +596,7 @@
   (increment-pc (push-value (pop-value vm) cdr-cell)))
 
 ;; bytecode: op, len: 1b
-;; stack: [ cdr-cell car-cell ... ] -> [ cell-list-ptr ... ], growth: -1c
+;; stack: [ car-cell cdr-cell ... ] -> [ cell-list-ptr ... ], growth: -1c
 (define (interpret-cons [vm : vm-]) : vm-
   (match-define (list (list cdr-cell car-cell) next-vm) (pop-and-get-values vm 2))
   (increment-pc (push-value next-vm (cell-list-ptr- car-cell cdr-cell))))
@@ -615,6 +615,28 @@
   (struct-copy vm- vm
                [value-stack new-value-stack]
                [frame-stack (cons new-frame (cdr (vm--frame-stack vm)))]))
+
+(define (sPUSH_PARAMc [idx : Byte]) : Byte
+  (when (fx> idx sPUSH_PARAMn)
+    (raise-user-error "index out of bounds for short command (~a)" idx))
+  (bitwise-xor sPUSH_PARAM idx))
+
+(define (sPOP_TO_PARAMc [idx : Byte]) : Byte
+  (when (fx> idx sPOP_TO_PARAMn)
+    (raise-user-error "index out of bounds for short command (~a)" idx))
+  (bitwise-xor sPOP_TO_PARAM idx))
+
+(define (sBRAc [to : Fixnum]) : Byte
+  (define to- (byte->two-complement to sBRAmsb))
+  (when (fx> to- sBRAn)
+    (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
+  (bitwise-xor sBRA to-))
+
+(define (sGOTOc [to : Fixnum]) : Byte
+  (define to- (byte->two-complement to sGOTOmsb))
+  (when (fx> to- sGOTOn)
+    (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
+  (bitwise-xor sGOTO to-))
 
 (define (dissassemble-byte-code (vm : vm-)) : String
   (define byte-code (peek-pc-byte vm))
@@ -642,8 +664,7 @@
     [(= (bitwise-and byte-code sBRAm) sBRA) (format "bra ~a  ;; short version" (two-complement->signed-byte (bitwise-and sBRAn byte-code) sBRAmsb))]
     [(= (bitwise-and byte-code sGOTOm) sGOTO) (format "goto ~a  ;; short version" (two-complement->signed-byte (bitwise-and sGOTOn byte-code) sGOTOmsb))]
 
-
-    [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
+    [else (raise-user-error (format "unknown byte code command during disassembly ~a" byte-code))]))
 
 (define (interpret-byte-code [vm : vm-]) : vm-
   (define byte-code (peek-pc-byte vm))
@@ -693,6 +714,40 @@
      (interpret-goto- vm (two-complement->signed-byte (bitwise-and sBRAn byte-code) sGOTOmsb))]
 
     [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
+
+(define (byte->two-complement [value : Fixnum] [start-bit : Byte 8]) : Byte
+  (define max-p1 (arithmetic-shift #x100 (fx- start-bit 8)))
+  (define mask (arithmetic-shift #xff (fx- start-bit 8)))
+  (define pre-result
+    (cond
+      [(fx< value 0) (bitwise-and (fx+ max-p1 value) mask)]
+      [else (bitwise-and value mask)]))
+  (if (byte? pre-result)
+      pre-result
+      (raise-user-error (format "signed byte out of range ~a" value))))
+
+(module+ test #| vbyte->two-complement |#
+  (check-equal? (two-complement->signed-byte (byte->two-complement -1 8) 8)
+                -1)
+  (check-equal? (two-complement->signed-byte (byte->two-complement -128 8) 8)
+                -128)
+  (check-equal? (two-complement->signed-byte (byte->two-complement 127 8) 8)
+                127)
+  (check-equal? (two-complement->signed-byte (byte->two-complement 0 8) 8)
+                0)
+  (check-equal? (two-complement->signed-byte (byte->two-complement 1 8) 8)
+                1)
+
+  (check-equal? (two-complement->signed-byte (byte->two-complement -1 6) 6)
+                -1)
+  (check-equal? (two-complement->signed-byte (byte->two-complement -32 6) 6)
+                -32)
+  (check-equal? (two-complement->signed-byte (byte->two-complement 31 6) 6)
+                31)
+  (check-equal? (two-complement->signed-byte (byte->two-complement 0 6) 6)
+                0)
+  (check-equal? (two-complement->signed-byte (byte->two-complement 1 6) 6)
+                1))
 
 (define (run-until-break (vm : vm-)) : vm-
   (cond [(fx= BRK (peek-pc-byte vm)) vm]
@@ -746,75 +801,24 @@
                 (make-frame #:bc-idx 8)
                 "the program counter should point to the break instruction")
 
-  (define test-tail-recursio--value-stack
+  (define test-tail-recursion--value-stack
     (list (cell-byte- 0)
           (cell-list-ptr- (cell-byte- 5)
                           (cell-list-ptr- (cell-byte- 10)
                                           (cell-list-ptr- (cell-byte- 20)
                                                           NIL_CELL)))))
 
-  (define (byte->two-complement [value : Fixnum] [start-bit : Byte 8]) : Byte
-    (define max-p1 (arithmetic-shift #x100 (fx- start-bit 8)))
-    (define mask (arithmetic-shift #xff (fx- start-bit 8)))
-    (define pre-result
-      (cond
-        [(fx< value 0) (bitwise-and (fx+ max-p1 value) mask)]
-        [else (bitwise-and value mask)]))
-    (if (byte? pre-result)
-        pre-result
-        (raise-user-error (format "signed byte out of range ~a" value))))
-
-  (module+ test #| vbyte->two-complement |#
-    (check-equal? (two-complement->signed-byte (byte->two-complement -1 8) 8)
-                  -1)
-    (check-equal? (two-complement->signed-byte (byte->two-complement -128 8) 8)
-                  -128)
-    (check-equal? (two-complement->signed-byte (byte->two-complement 127 8) 8)
-                  127)
-    (check-equal? (two-complement->signed-byte (byte->two-complement 0 8) 8)
-                  0)
-    (check-equal? (two-complement->signed-byte (byte->two-complement 1 8) 8)
-                  1)
-
-    (check-equal? (two-complement->signed-byte (byte->two-complement -1 6) 6)
-                  -1)
-    (check-equal? (two-complement->signed-byte (byte->two-complement -32 6) 6)
-                  -32)
-    (check-equal? (two-complement->signed-byte (byte->two-complement 31 6) 6)
-                  31)
-    (check-equal? (two-complement->signed-byte (byte->two-complement 0 6) 6)
-                  0)
-    (check-equal? (two-complement->signed-byte (byte->two-complement 1 6) 6)
-                  1)
-    )
-
-  (define (sPUSH_PARAMc [idx : Byte]) : Byte
-    (when (fx> idx sPUSH_PARAMn)
-      (raise-user-error "index out of bounds for short command (~a)" idx))
-    (bitwise-xor sPUSH_PARAM idx))
-
-  (define (sPOP_TO_PARAMc [idx : Byte]) : Byte
-    (when (fx> idx sPOP_TO_PARAMn)
-      (raise-user-error "index out of bounds for short command (~a)" idx))
-    (bitwise-xor sPOP_TO_PARAM idx))
-
-  (define (sBRAc [to : Fixnum]) : Byte
-    (define to- (byte->two-complement to sBRAmsb))
-    (when (fx> to- sBRAn)
-      (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
-    (bitwise-xor sBRA to-))
-
-  (define (sGOTOc [to : Fixnum]) : Byte
-    (define to- (byte->two-complement to sGOTOmsb))
-    (when (fx> to- sGOTOn)
-      (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
-    (bitwise-xor sGOTO to-))
+  ;; (m-def (sum (bl (list byte)) (acc byte 0) -> byte
+  ;;        "tail recursive function with accumulator")
+  ;;   (if (nil? bl)
+  ;;       acc
+  ;;     (sum (cdr bl) (byte+ acc (car bl)))))
 
   (define test-tail-recursion--run-until-break
     (run-until-break
      (make-vm
-      #:options (list 'trace) ;;  'trace
-      #:value-stack  test-tail-recursio--value-stack
+      #:options (list) ;;  'trace
+      #:value-stack  test-tail-recursion--value-stack
       #:functions
       (vector-immutable
        (make-function-def
@@ -825,7 +829,7 @@
         #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
         #:byte-code (vector-immutable (sPUSH_PARAMc 1)
                                       NIL?         ;;                 stack [nil?]
-                                      (sBRAc 7)    ;; idea: combine nil check and branch command into one
+                                      (sBRAc 7)    ;; idea: combine nil check and branch command into one, how about nil?-ret combination <-
                                       (sPUSH_PARAMc 1)
                                       CDR          ;;                 stack [cdr new-acc]
                                       (sPUSH_PARAMc 1)
@@ -838,4 +842,51 @@
 
   (check-equal? (vm--value-stack test-tail-recursion--run-until-break)
                 (list (cell-byte- 35))
-                "tos of the value stack is the sum of all bytes in the list in 'test-tail-recursive--value-stack'"))
+                "tos of the value stack is the sum of all bytes in the list in 'test-tail-recursive--value-stack'")
+
+
+  ;; (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
+  ;;                  "reverse a-list, consing it into b-list")
+  ;;   (if (nil? a-list)
+  ;;       b-list
+  ;;     (reverse (cdr a-list) (cons (car a-list) b-list))))
+
+  (define test-tail-recursion--value-stack2
+    (list NIL_CELL
+          (cell-list-ptr- (cell-byte- 5)
+                          (cell-list-ptr- (cell-byte- 10)
+                                          (cell-list-ptr- (cell-byte- 20)
+                                                          NIL_CELL)))))
+
+  (define test-tail-recursion--run-until-break2
+    (run-until-break
+     (make-vm
+      #:options (list ) ;;  'trace
+      #:value-stack  test-tail-recursion--value-stack2
+      #:functions
+      (vector-immutable
+       (make-function-def
+        #:byte-code (vector-immutable PUSH_INT   1 0 ;; function index 1
+                                      CALL
+                                      BRK))
+       (make-function-def
+        #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
+        #:byte-code (vector-immutable (sPUSH_PARAMc 1)
+                                      NIL?         ;;
+                                      (sBRAc 7)    ;;
+                                      (sPUSH_PARAMc 1)
+                                      CDR
+                                      (sPUSH_PARAMc 0)
+                                      (sPUSH_PARAMc 1)
+                                      CAR          ;;
+                                      CONS          ;;
+                                      TAIL_CALL
+                                      (sPUSH_PARAMc 0)
+                                      RET))))))
+
+  (check-equal? (vm--value-stack test-tail-recursion--run-until-break2)
+                (list (cell-list-ptr- (cell-byte- 20)
+                                      (cell-list-ptr- (cell-byte- 10)
+                                                      (cell-list-ptr- (cell-byte- 5)
+                                                                      NIL_CELL))))
+                "tos is reversed list"))
