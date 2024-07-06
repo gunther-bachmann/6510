@@ -89,7 +89,7 @@
                            #:locals-count (locals-count : Byte 0)
                            #:name (name : String "some-func")
                            #:byte-code (byte-code : (Immutable-Vectorof Byte) (vector-immutable 0 1 2 3 4)))
-  : vm-function-def-
+        : vm-function-def-
   (vm-function-def- stack-size-used parameter-count locals-count name byte-code))
 
 (struct vm-
@@ -115,7 +115,7 @@
 
 (define PUSH_BYTE            5) ;; op = byte value, stack [] -> [cell-byte]
 (define PUSH_INT             6) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
-                                ;; also used for struct-index or function-index
+;; also used for struct-index or function-index
 (define PUSH_PARAM          10) ;; op = param-idx from tail, stack [] -> [cell-]
 (define PUSH_GLOBAL         11) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
 (define PUSH_LOCAL          12) ;; op = local-idx, stacl [] -> [cell-]
@@ -151,6 +151,7 @@
 (define GOTO                32) ;; op = relative offset
 (define RET                 33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
 (define CALL                34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+(define TAIL_CALL           35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
 
 (define sBRA                #b11000000)
 (define sBRAm               #b11100000)
@@ -340,19 +341,20 @@
                (vm-frame--fun-idx (car (vm--frame-stack vm))))))
 
 ;; bytecode: op, len: 1b
-;; stack: [ res pN .. p1 p0 ...] -> [ res ... ], growth: -N-1 (for n+1 parameter)
+;; stack: [ res ... pN .. p1 p0 ...] -> [ res ... ], growth: -N-1 - any other stuff on the stack (for n+1 parameter + any other stuff)
 (define (interpret-ret [vm : vm-]) : vm-
   ;; drop the parameters
   (define value-stack (vm--value-stack vm))
+  (define param-tail (vm-frame--parameter-tail (car (vm--frame-stack vm))))
   (define new-value-stack (cons (car value-stack)
-                                (drop value-stack (fx+ 1 (active-function-param-no vm)))))
+                                (drop param-tail (active-function-param-no vm))))
   (struct-copy vm- vm [frame-stack (cdr (vm--frame-stack vm))]
-                      [value-stack new-value-stack]))
+               [value-stack new-value-stack]))
 
 (module+ test
   (define interpret-ret--vm
     (interpret-ret (make-vm #:value-stack (list (cell-byte- 10) (cell-) (cell-))
-                            #:frame-stack (list (make-frame #:fun-idx 0 #:bc-idx 0))
+                            #:frame-stack (list (make-frame #:fun-idx 0 #:bc-idx 0 #:parameter-tail (list (cell-) (cell-))))
                             #:functions (vector-immutable (make-function-def #:parameter-count 2)))))
 
   (check-equal? (vm--value-stack interpret-ret--vm)
@@ -364,8 +366,8 @@
 
   (define interpret-ret--vm2
     (interpret-ret (make-vm #:value-stack (list (cell-byte- 10) (cell-) (cell-) (cell-byte- 20))
-                            #:frame-stack (list (make-frame #:fun-idx 0 #:bc-idx 0)
-                                           (make-frame #:fun-idx 1 #:bc-idx 10))
+                            #:frame-stack (list (make-frame #:fun-idx 0 #:bc-idx 0 #:parameter-tail (list (cell-) (cell-) (cell-byte- 20)))
+                                                (make-frame #:fun-idx 1 #:bc-idx 10))
                             #:functions (vector-immutable (make-function-def #:parameter-count 2)))))
 
   (check-equal? (vm--value-stack interpret-ret--vm2)
@@ -524,9 +526,9 @@
 (module+ test #| interpret pop to global |#
   (define test-interpret-pop-to-global
     (interpret-pop-to-global
-    (make-vm #:functions (vector-immutable (make-function-def #:byte-code (vector-immutable 0 2 0 0)))
-             #:globals (vector-immutable (cell-)(cell-)(cell-byte- 9)(cell-))
-             #:value-stack (list (cell-byte- 10) (cell-)))))
+     (make-vm #:functions (vector-immutable (make-function-def #:byte-code (vector-immutable 0 2 0 0)))
+              #:globals (vector-immutable (cell-)(cell-)(cell-byte- 9)(cell-))
+              #:value-stack (list (cell-byte- 10) (cell-)))))
   (check-equal? (vm--globals test-interpret-pop-to-global)
                 (vector-immutable (cell-)(cell-)(cell-byte- 10)(cell-))))
 
@@ -562,8 +564,8 @@
 
 (define (interpret-bra- [vm : vm-] [signed-byte : Integer] [pc-inc : Byte]) : vm-
   (define delta (if (tos-value-false? vm)
-                pc-inc
-                (+ 1 signed-byte)))
+                    pc-inc
+                    (+ 1 signed-byte)))
   (increment-pc (pop-value vm) delta))
 
 ;; bytecode: op two-complement-offset, len: 2b
@@ -599,9 +601,24 @@
   (match-define (list (list cdr-cell car-cell) next-vm) (pop-and-get-values vm 2))
   (increment-pc (push-value next-vm (cell-list-ptr- car-cell cdr-cell))))
 
+(define (interpret-tail-call [vm : vm-]) : vm-
+  (define value-stack (vm--value-stack vm))
+  (define active-frame (car (vm--frame-stack vm)))
+  (define parameter-tail (vm-frame--parameter-tail active-frame))
+  (define param-number (active-function-param-no vm))
+  (define new-params (take value-stack param-number))
+  (define new-value-stack (append new-params
+                                  (drop parameter-tail param-number)))
+  (define new-frame (struct-copy vm-frame- active-frame
+                                 [parameter-tail new-value-stack]
+                                 [bc-idx 0]))
+  (struct-copy vm- vm
+               [value-stack new-value-stack]
+               [frame-stack (cons new-frame (cdr (vm--frame-stack vm)))]))
+
 (define (dissassemble-byte-code (vm : vm-)) : String
   (define byte-code (peek-pc-byte vm))
-    (cond
+  (cond
     [(= byte-code BRA) (format "bra ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
     [(= byte-code BRK) "brk"]
     [(= byte-code BYTE+) "byte+"]
@@ -618,12 +635,12 @@
     [(= byte-code PUSH_INT) (format "pushi #~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
     [(= byte-code PUSH_PARAM) (format "pushp p-~a" (peek-pc-byte vm 1))]
     [(= byte-code RET) "ret"]
+    [(= byte-code TAIL_CALL) "tail-call"]
 
     [(= (bitwise-and byte-code sPUSH_PARAMm) sPUSH_PARAM) (format "pushp p-~a  ;; short version" (bitwise-and sPUSH_PARAMn byte-code))]
-;; (define sPUSH_PARAM         #b10000000) ;; short push param, lower 2 bits
-;; (define sPUSH_GLOBAL        #b10000100) ;; short push global, lower 2 bits
-;; (define sPUSH_LOCAL         #b10001000) ;; short push local, lower 2 bits
-;; (define sPUSH_BYTE          #b10001100) ;; short push byte, lower 2 bits  #b00 = #x00, #b01 = #x01, #b10 = #x02, #b11 = #xff
+    [(= (bitwise-and byte-code sPOP_TO_PARAMm) sPOP_TO_PARAM) (format "pop p-~a  ;; short version" (bitwise-and sPOP_TO_PARAMn byte-code))]
+    [(= (bitwise-and byte-code sBRAm) sBRA) (format "bra ~a  ;; short version" (two-complement->signed-byte (bitwise-and sBRAn byte-code) sBRAmsb))]
+    [(= (bitwise-and byte-code sGOTOm) sGOTO) (format "goto ~a  ;; short version" (two-complement->signed-byte (bitwise-and sGOTOn byte-code) sGOTOmsb))]
 
 
     [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
@@ -657,6 +674,7 @@
     [(= byte-code PUSH_INT) (interpret-push-int vm)]
     [(= byte-code PUSH_PARAM) (interpret-push-param vm)]
     [(= byte-code RET) (interpret-ret vm)]
+    [(= byte-code TAIL_CALL) (interpret-tail-call vm)]
 
     [(= (bitwise-and byte-code sPUSH_PARAMm) sPUSH_PARAM)
      (interpret-push-param- vm (bitwise-and sPUSH_PARAMn byte-code) 1)]
@@ -744,7 +762,7 @@
         [else (bitwise-and value mask)]))
     (if (byte? pre-result)
         pre-result
-       (raise-user-error (format "signed byte out of range ~a" value))))
+        (raise-user-error (format "signed byte out of range ~a" value))))
 
   (module+ test #| vbyte->two-complement |#
     (check-equal? (two-complement->signed-byte (byte->two-complement -1 8) 8)
@@ -786,7 +804,7 @@
       (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
     (bitwise-xor sBRA to-))
 
-(define (sGOTOc [to : Fixnum]) : Byte
+  (define (sGOTOc [to : Fixnum]) : Byte
     (define to- (byte->two-complement to sGOTOmsb))
     (when (fx> to- sGOTOn)
       (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
@@ -795,7 +813,7 @@
   (define test-tail-recursion--run-until-break
     (run-until-break
      (make-vm
-      #:options (list) ;;  'trace
+      #:options (list 'trace) ;;  'trace
       #:value-stack  test-tail-recursio--value-stack
       #:functions
       (vector-immutable
@@ -807,17 +825,15 @@
         #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
         #:byte-code (vector-immutable (sPUSH_PARAMc 1)
                                       NIL?         ;;                 stack [nil?]
-                                      (sBRAc 9)
+                                      (sBRAc 7)    ;; idea: combine nil check and branch command into one
+                                      (sPUSH_PARAMc 1)
+                                      CDR          ;;                 stack [cdr new-acc]
                                       (sPUSH_PARAMc 1)
                                       CAR          ;; first value     stack [car]
                                       (sPUSH_PARAMc 0)
                                       BYTE+        ;;                 stack [new-acc]
-                                      (sPUSH_PARAMc 1)
-                                      CDR          ;;                 stack [cdr new-acc]
-                                      (sPOP_TO_PARAMc 1)
-                                      (sPOP_TO_PARAMc 0)
-                                      (sGOTOc -12)
-                                      (sPUSH_PARAMc 0)
+                                      TAIL_CALL
+                                      (sPUSH_PARAMc 0) ;; idea have a short return function, specifying what should be returned
                                       RET))))))
 
   (check-equal? (vm--value-stack test-tail-recursion--run-until-break)
