@@ -1,6 +1,6 @@
 #lang typed/racket
 
-(require (only-in racket/fixnum fx+ fx= fx< fx-))
+(require (only-in racket/fixnum fx+ fx= fx< fx- fx>))
 (require/typed racket/kernel [vector-set/copy (All (a) (-> (Immutable-Vectorof a) Nonnegative-Integer a (Vectorof a)))])
 
 (module+ test #| require test utils |#
@@ -120,9 +120,30 @@
 (define PUSH_GLOBAL         11) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
 (define PUSH_LOCAL          12) ;; op = local-idx, stacl [] -> [cell-]
 
+;; example of short (one byte instruction) for push
+(define sPUSH_PARAM         #b10000000) ;; short push param, lower 2 bits
+(define sPUSH_PARAMm        #b11111100)
+(define sPUSH_PARAMn        #b00000011)
+(define sPUSH_GLOBAL        #b10000100) ;; short push global, lower 2 bits + next byte
+(define sPUSH_GLOBALm       #b11111100)
+(define sPUSH_GLOBALn       #b00000011)
+(define sPUSH_LOCAL         #b10001000) ;; short push local, lower 2 bits
+(define sPUSH_LOCALm        #b11111100)
+(define sPUSH_BYTE          #b10001100) ;; short push byte, lower 2 bits  #b00 = #x00, #b01 = #x01, #b10 = #x02, #b11 = #xff
+(define sPUSH_BYTEm         #b11111100)
+
 (define POP_TO_PARAM        15) ;; op= param-idx from tail, stack [cell-] -> []
 (define POP_TO_GLOBAL       16) ;; op1=low byte index op2=high byte index, stack [cell-] -> []
 (define POP_TO_LOCAL        17) ;; op = local-idx, stacl [cell-] -> []
+
+(define sPOP_TO_PARAM         #b10010000) ;; short pop to param, lower 2 bits
+(define sPOP_TO_PARAMm        #b11111100)
+(define sPOP_TO_PARAMn        #b00000011)
+(define sPOP_TO_GLOBAL        #b10010100) ;; short pop to global, lower 2 bits + next byte
+(define sPOP_TO_GLOBALm       #b11111100)
+(define sPOP_TO_GLOBALn       #b00000011)
+(define sPOP_TO_LOCAL         #b10011000) ;; short pop to local, lower 2 bits
+(define sPOP_TO_LOCALm        #b11111100)
 
 (define NIL?                20) ;; stack [cell-list-ptr] -> [cell-boolean]
 
@@ -130,6 +151,15 @@
 (define GOTO                32) ;; op = relative offset
 (define RET                 33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
 (define CALL                34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+
+(define sBRA                #b11000000)
+(define sBRAm               #b11100000)
+(define sBRAn               #b00011111)
+(define sBRAmsb             5)
+(define sGOTO               #b11100000)
+(define sGOTOm              #b11100000)
+(define sGOTOn              #b00011111)
+(define sGOTOmsb            5)
 
 (define CAR                 40) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
 (define CDR                 41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
@@ -161,10 +191,13 @@
   (check-exn exn:fail? (lambda () (integer->two-complement -32769)))
   (check-exn exn:fail? (lambda () (integer->two-complement 32768))))
 
-(define (two-complement->signed-byte (a : Byte)) : Integer
+(define (two-complement->signed-byte [a : Byte] [start-bit : Byte 8]) : Integer
+  (define max-positive-p1 (arithmetic-shift #x80 (fx- start-bit 8)))
+  (define mask (arithmetic-shift #xff (fx- start-bit 8)))
+  (define masked-a (bitwise-and a))
   (cond
-    [(< a #x80) a]
-    [else (fx- a #x100)]))
+    [(< masked-a max-positive-p1) masked-a]
+    [else (fx- masked-a (arithmetic-shift max-positive-p1 1))]))
 
 (module+ test #| two-complement->signed-byte |#
   (check-equal? (two-complement->signed-byte #x7f)
@@ -174,6 +207,35 @@
   (check-equal? (two-complement->signed-byte #x80)
                 -128)
   (check-equal? (two-complement->signed-byte #xff)
+                -1)
+
+  (check-equal? (two-complement->signed-byte #x7f 8)
+                127)
+  (check-equal? (two-complement->signed-byte 0 8)
+                0)
+  (check-equal? (two-complement->signed-byte #x80 8)
+                -128)
+  (check-equal? (two-complement->signed-byte #xff 8)
+                -1)
+
+  (check-equal? (two-complement->signed-byte #x07 4)
+                7)
+  (check-equal? (two-complement->signed-byte 0 4)
+                0)
+  (check-equal? (two-complement->signed-byte #x08 4)
+                -8)
+  (check-equal? (two-complement->signed-byte #x0f 4)
+                -1)
+
+  (check-equal? (two-complement->signed-byte #x1f 6)
+                31)
+  (check-equal? (two-complement->signed-byte 0 6)
+                0)
+  (check-equal? (two-complement->signed-byte #x40 6)
+                0)
+  (check-equal? (two-complement->signed-byte #x20 6)
+                -32)
+  (check-equal? (two-complement->signed-byte #x3f 6)
                 -1))
 
 (define (running-function (vm : vm-)) : vm-function-def-
@@ -334,8 +396,11 @@
 ;; stack: [ ... pN .. p1 p0] -> [ pIDX ... pN .. p1 p0], growth: 1c
 (define (interpret-push-param [vm : vm-]) : vm-
   (define param-idx (peek-pc-byte vm 1))
-  (define param-value (car (drop (vm-frame--parameter-tail (car (vm--frame-stack vm))) param-idx)))
-  (increment-pc (push-value vm param-value) 2))
+  (interpret-push-param- vm param-idx 2))
+
+(define (interpret-push-param- [vm : vm-] [idx : Nonnegative-Integer] [pc-inc : Byte]) : vm-
+  (define param-value (car (drop (vm-frame--parameter-tail (car (vm--frame-stack vm))) idx)))
+  (increment-pc (push-value vm param-value) pc-inc))
 
 (module+ test #| interpret-push-param |#
   (define test_interpret-push-param
@@ -367,27 +432,33 @@
 ;; stack: [ ... ] -> [ global@IDX:cell- ... ], growth: 1c
 (define (interpret-push-global [vm : vm-]) : vm-
   (define global-idx (peek-pc-int vm 1))
-  (define global-value (vector-ref (vm--globals vm) global-idx))
-  (increment-pc (push-value vm global-value) 3))
+  (interpret-push-global- vm global-idx 3))
+
+(define (interpret-push-global- [vm : vm-] [idx : Nonnegative-Integer] [ pc-inc : Byte]) : vm-
+  (define global-value (vector-ref (vm--globals vm) idx))
+  (increment-pc (push-value vm global-value) pc-inc))
 
 ;; bytecode: op idx:byte, len: 2b
 ;; stack: [ val ... pN .. p1 p0] -> [ ... pN .. pIDX=val .. p1 p0], growth: -1c
 (define (interpret-pop-to-param [vm : vm-]) : vm-
   (define parameter-offset-from-tail (peek-pc-byte vm 1))
+  (interpret-pop-to-param- vm parameter-offset-from-tail 2))
+
+(define (interpret-pop-to-param- [vm : vm-] [tail-offset : Byte] [pc-inc : Byte]) : vm-
   (define value-stack (vm--value-stack vm))
   (define active-frame (car (vm--frame-stack vm)))
   (define parameter-tail (vm-frame--parameter-tail active-frame))
   (define values-without-parameters (takef value-stack (lambda (elt) (not (eq? elt (car parameter-tail))))))
-  (define new-parameter-tail (append (take parameter-tail parameter-offset-from-tail)
+  (define new-parameter-tail (append (take parameter-tail tail-offset)
                                      (list (car value-stack))
-                                     (drop parameter-tail (add1 parameter-offset-from-tail))))
+                                     (drop parameter-tail (add1 tail-offset))))
   (define new-frame (struct-copy vm-frame- active-frame
                                  [parameter-tail new-parameter-tail]))
   (increment-pc
    (struct-copy vm- vm
                 [value-stack (append (cdr values-without-parameters) new-parameter-tail)]
                 [frame-stack (cons new-frame (cdr (vm--frame-stack vm)))])
-   2))
+   pc-inc))
 
 (module+ test #| interpret pop to param |#
   (define test_param_2-values-interpret-pop-to-param
@@ -487,15 +558,21 @@
 ;; bytecode: op two-complement-offset, len: 2b
 ;; stack: [ val:cell-byte ... ]  -> [ ... ], growth: -1c
 (define (interpret-bra [vm : vm-]) : vm-
+  (interpret-bra- vm (two-complement->signed-byte (peek-pc-byte vm 1)) 2))
+
+(define (interpret-bra- [vm : vm-] [signed-byte : Integer] [pc-inc : Byte]) : vm-
   (define delta (if (tos-value-false? vm)
-                2
-                (+ 1 (two-complement->signed-byte (peek-pc-byte vm 1)))))
+                pc-inc
+                (+ 1 signed-byte)))
   (increment-pc (pop-value vm) delta))
 
 ;; bytecode: op two-complement-offset, len: 2b
 ;; stack: [ ... ]  -> [ ... ], growth: 0c
 (define (interpret-goto [vm : vm-]) : vm-
-  (define delta (+ 1 (two-complement->signed-byte (peek-pc-byte vm 1))))
+  (interpret-goto- vm (two-complement->signed-byte (peek-pc-byte vm 1))))
+
+(define (interpret-goto- [vm : vm-] [signed-byte : Integer]) : vm-
+  (define delta (+ 1 signed-byte))
   (increment-pc vm delta))
 
 ;; bytecode: op, len: 1b
@@ -542,6 +619,13 @@
     [(= byte-code PUSH_PARAM) (format "pushp p-~a" (peek-pc-byte vm 1))]
     [(= byte-code RET) "ret"]
 
+    [(= (bitwise-and byte-code sPUSH_PARAMm) sPUSH_PARAM) (format "pushp p-~a  ;; short version" (bitwise-and sPUSH_PARAMn byte-code))]
+;; (define sPUSH_PARAM         #b10000000) ;; short push param, lower 2 bits
+;; (define sPUSH_GLOBAL        #b10000100) ;; short push global, lower 2 bits
+;; (define sPUSH_LOCAL         #b10001000) ;; short push local, lower 2 bits
+;; (define sPUSH_BYTE          #b10001100) ;; short push byte, lower 2 bits  #b00 = #x00, #b01 = #x01, #b10 = #x02, #b11 = #xff
+
+
     [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
 
 (define (interpret-byte-code [vm : vm-]) : vm-
@@ -573,6 +657,22 @@
     [(= byte-code PUSH_INT) (interpret-push-int vm)]
     [(= byte-code PUSH_PARAM) (interpret-push-param vm)]
     [(= byte-code RET) (interpret-ret vm)]
+
+    [(= (bitwise-and byte-code sPUSH_PARAMm) sPUSH_PARAM)
+     (interpret-push-param- vm (bitwise-and sPUSH_PARAMn byte-code) 1)]
+    [(= (bitwise-and byte-code sPUSH_GLOBALm) sPUSH_GLOBAL)
+     (interpret-push-global- vm (fx+ (arithmetic-shift (bitwise-and sPUSH_GLOBALn byte-code) 8)
+                                     (peek-pc-byte vm 1))
+                             2)]
+
+    [(= (bitwise-and byte-code sPOP_TO_PARAMm) sPOP_TO_PARAM)
+     (interpret-pop-to-param- vm (bitwise-and sPOP_TO_PARAMn byte-code) 1)]
+
+    [(= (bitwise-and byte-code sBRAm) sBRA)
+     (interpret-bra- vm (two-complement->signed-byte (bitwise-and sBRAn byte-code) sBRAmsb) 1)]
+
+    [(= (bitwise-and byte-code sGOTOm) sGOTO)
+     (interpret-goto- vm (two-complement->signed-byte (bitwise-and sBRAn byte-code) sGOTOmsb))]
 
     [else (raise-user-error (format "unknown byte code command ~a" byte-code))]))
 
@@ -635,14 +735,62 @@
                                           (cell-list-ptr- (cell-byte- 20)
                                                           NIL_CELL)))))
 
-  (define (byte->two-complement (value : Fixnum)) : Byte
+  (define (byte->two-complement [value : Fixnum] [start-bit : Byte 8]) : Byte
+    (define max-p1 (arithmetic-shift #x100 (fx- start-bit 8)))
+    (define mask (arithmetic-shift #xff (fx- start-bit 8)))
     (define pre-result
       (cond
-        [(fx< value 0) (fx+ 256 value)]
-        [else value]))
+        [(fx< value 0) (bitwise-and (fx+ max-p1 value) mask)]
+        [else (bitwise-and value mask)]))
     (if (byte? pre-result)
         pre-result
        (raise-user-error (format "signed byte out of range ~a" value))))
+
+  (module+ test #| vbyte->two-complement |#
+    (check-equal? (two-complement->signed-byte (byte->two-complement -1 8) 8)
+                  -1)
+    (check-equal? (two-complement->signed-byte (byte->two-complement -128 8) 8)
+                  -128)
+    (check-equal? (two-complement->signed-byte (byte->two-complement 127 8) 8)
+                  127)
+    (check-equal? (two-complement->signed-byte (byte->two-complement 0 8) 8)
+                  0)
+    (check-equal? (two-complement->signed-byte (byte->two-complement 1 8) 8)
+                  1)
+
+    (check-equal? (two-complement->signed-byte (byte->two-complement -1 6) 6)
+                  -1)
+    (check-equal? (two-complement->signed-byte (byte->two-complement -32 6) 6)
+                  -32)
+    (check-equal? (two-complement->signed-byte (byte->two-complement 31 6) 6)
+                  31)
+    (check-equal? (two-complement->signed-byte (byte->two-complement 0 6) 6)
+                  0)
+    (check-equal? (two-complement->signed-byte (byte->two-complement 1 6) 6)
+                  1)
+    )
+
+  (define (sPUSH_PARAMc [idx : Byte]) : Byte
+    (when (fx> idx sPUSH_PARAMn)
+      (raise-user-error "index out of bounds for short command (~a)" idx))
+    (bitwise-xor sPUSH_PARAM idx))
+
+  (define (sPOP_TO_PARAMc [idx : Byte]) : Byte
+    (when (fx> idx sPOP_TO_PARAMn)
+      (raise-user-error "index out of bounds for short command (~a)" idx))
+    (bitwise-xor sPOP_TO_PARAM idx))
+
+  (define (sBRAc [to : Fixnum]) : Byte
+    (define to- (byte->two-complement to sBRAmsb))
+    (when (fx> to- sBRAn)
+      (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
+    (bitwise-xor sBRA to-))
+
+(define (sGOTOc [to : Fixnum]) : Byte
+    (define to- (byte->two-complement to sGOTOmsb))
+    (when (fx> to- sGOTOn)
+      (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
+    (bitwise-xor sGOTO to-))
 
   (define test-tail-recursion--run-until-break
     (run-until-break
@@ -657,19 +805,19 @@
                                       BRK))
        (make-function-def
         #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
-        #:byte-code (vector-immutable PUSH_PARAM 1 ;; the list        stack [list]
+        #:byte-code (vector-immutable (sPUSH_PARAMc 1)
                                       NIL?         ;;                 stack [nil?]
-                                      BRA 16       ;;                 stack []
-                                      PUSH_PARAM 1 ;; the list        stack [list]
+                                      (sBRAc 9)
+                                      (sPUSH_PARAMc 1)
                                       CAR          ;; first value     stack [car]
-                                      PUSH_PARAM 0 ;; the accumulator stack [acc car]
+                                      (sPUSH_PARAMc 0)
                                       BYTE+        ;;                 stack [new-acc]
-                                      PUSH_PARAM 1 ;; the list        stack [list new-acc]
+                                      (sPUSH_PARAMc 1)
                                       CDR          ;;                 stack [cdr new-acc]
-                                      POP_TO_PARAM 1 ;;               stack [new-acc]
-                                      POP_TO_PARAM 0 ;;               stack []
-                                      GOTO (byte->two-complement -19)
-                                      PUSH_PARAM 0 ;; acc             stack [acc]
+                                      (sPOP_TO_PARAMc 1)
+                                      (sPOP_TO_PARAMc 0)
+                                      (sGOTOc -12)
+                                      (sPUSH_PARAMc 0)
                                       RET))))))
 
   (check-equal? (vm--value-stack test-tail-recursion--run-until-break)
