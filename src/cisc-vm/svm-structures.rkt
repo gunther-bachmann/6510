@@ -1,10 +1,17 @@
 #lang typed/racket
 
-(require (only-in racket/fixnum fx+ fx= fx< fx- fx>))
+(require (only-in racket/fixnum fx+ fx= fx< fx- fx>= fx>))
 (require/typed racket/kernel [vector-set/copy (All (a) (-> (Immutable-Vectorof a) Nonnegative-Integer a (Vectorof a)))])
 
 (module+ test #| require test utils |#
   (require typed/rackunit))
+
+;; data is organized in cells (prefixed with cell-
+;; atomic cells hold the value they represent
+;; - cell-byte-, cell-init-
+;; atomic cells point to more complex structures (which are then non atomic cells)
+;; - cell-ptr-, cell-list-ptr-,
+;; non atomic cells are arrays, cell-pairs (as used by lists)
 
 ;; 16 bit element
 (struct cell- () #:transparent)
@@ -58,10 +65,10 @@
   #:transparent) ;; vector of atomic cells!
 
 (struct vm-frame-
-  ([fun-idx : Nonnegative-Integer]
-   [bc-idx  : Nonnegative-Integer]
-   [parameter-tail : (Listof cell-)]  ;; is a pointer to the last parameter on the value stack, at the beginning of a call this is identical to value-stack!
-   [locals : (Immutable-Vectorof cell-)]        ;; a list of locals identified by index
+  ([fun-idx : Nonnegative-Integer]        ;; index into vm--functions
+   [bc-idx  : Nonnegative-Integer]        ;; index into byte array of the running function
+   [parameter-tail : (Listof cell-)]      ;; is a pointer to the last parameter on the value stack, at the beginning of a call this is identical to value-stack!
+   [locals : (Immutable-Vectorof cell-)]  ;; a list of locals identified by index
    )
   #:transparent)
 
@@ -73,7 +80,7 @@
   (vm-frame- fun-idx bc-idx parameter-tail locals))
 
 (struct vm-struct-def-
-  ([name : String]
+  ([name     : String]
    [field-no : Nonnegative-Integer])
   #:transparent)
 
@@ -96,11 +103,11 @@
 (struct vm-
   ([frame-stack : (Listof vm-frame-)]
    [value-stack : (Listof cell-)]
-   [functions : (Immutable-Vectorof vm-function-def-)]
-   [globals : (Immutable-Vectorof cell-)]
-   [structs : (Immutable-Vectorof vm-struct-def-)]
-   [options : (Listof Symbol)]
-   [arrays : (Immutable-Vectorof (Vectorof cell-))])
+   [functions   : (Immutable-Vectorof vm-function-def-)]
+   [globals     : (Immutable-Vectorof cell-)]
+   [structs     : (Immutable-Vectorof vm-struct-def-)]
+   [options     : (Listof Symbol)]
+   [arrays      : (Immutable-Vectorof (Vectorof cell-))])
   #:transparent)
 
 (define (make-vm
@@ -225,7 +232,7 @@
 (define ALLOCATE_ARRAY      75) ;; op = array len, stack [] -> [array-ref-]
 (define FREE_ARRAY          76) ;; stack [array-ref-] -> []
 
-;; example of short (one byte instruction) for push
+;; example of short (one byte instruction)
 ;; using 128..131
 (define sPUSH_PARAM         #b10000000) ;; short push param, lower 2 bits
 (define sPUSH_PARAMm        #b11111100)
@@ -284,10 +291,10 @@
     [(fx< value 0)
      (define new-val (fx+ #x10000 value))
      (if (fx< new-val #x8000)
-         (raise-user-error "integer out of range ~a" value)
+         (raise-user-error (format "integer out of range ~a" value))
          new-val)]
     [(fx< value #x8000) value]
-    [else (raise-user-error "integer out of range ~a" value)]))
+    [else (raise-user-error (format "integer out of range ~a" value))]))
 
 (module+ test #| integer->two-complement |#
   (check-equal? (integer->two-complement -1)
@@ -421,7 +428,7 @@
   (define result (fx+ a b))
   (if (byte? result)
       result
-      (raise-user-error "byte+ overflow ~a + ~a" a b)))
+      (raise-user-error (format "byte+ overflow ~a + ~a" a b))))
 
 (module+ test #| byte+ |#
   (check-equal? (byte+ 1 2)
@@ -498,7 +505,7 @@
       (increment-pc
        (push-value new-vm (cell-byte- (byte+ (cell-byte--value a)
                                              (cell-byte--value b)))))
-      (raise-user-error "byte+ encountered non byte in ~a or ~a" a b)))
+      (raise-user-error (format "byte+ encountered non byte in ~a or ~a" a b))))
 
 (module+ test #| interpret-byte+ |#
   (check-equal? (vm--value-stack (interpret-byte+ (make-vm #:value-stack (list (cell-byte- 1) (cell-byte- 2))
@@ -708,7 +715,7 @@
   (define tos (tos-value vm))
   (define car-cell (if (cell-list-ptr-? tos)
                        (cell-list-ptr--car tos)
-                       (raise-user-error "expected cell-list-ptr, got ~a" tos)))
+                       (raise-user-error (format "expected cell-list-ptr, got ~a" tos))))
   (increment-pc (push-value (pop-value vm) car-cell)))
 
 ;; bytecode: op, len: 1b
@@ -717,7 +724,7 @@
   (define tos (tos-value vm))
   (define cdr-cell (if (cell-list-ptr-? tos)
                        (cell-list-ptr--cdr tos)
-                       (raise-user-error "expected cell-list-ptr, got ~a" tos)))
+                       (raise-user-error (format "expected cell-list-ptr, got ~a" tos))))
   (increment-pc (push-value (pop-value vm) cdr-cell)))
 
 ;; bytecode: op, len: 1b
@@ -741,10 +748,11 @@
                [value-stack new-value-stack]
                [frame-stack (cons new-frame (cdr (vm--frame-stack vm)))]))
 
-(define (sPUSH_BYTEc [val : Byte]) : Byte
-  (when (fx> val sPUSH_BYTEn)
+(define (sPUSH_BYTEc [val : Integer]) : Byte
+  (when (or (fx< val -1) (fx>= val sPUSH_BYTEn))
     (raise-user-error (format "byte value out of bounds for push byte short command (~a)" val)))
-  (bitwise-xor sPUSH_BYTE val))
+  (define new-val (if (fx< val 0) sPUSH_BYTEn val))
+  (bitwise-xor sPUSH_BYTE (bitwise-and sPUSH_BYTEn new-val)))
 
 (define (sPUSH_PARAMc [idx : Byte]) : Byte
   (when (fx> idx sPUSH_PARAMn)
@@ -770,7 +778,7 @@
 
 (define (sNIL?-RET-PARAMc [idx : Byte]) : Byte
   (when (fx> idx sNIL?-RET-PARAMn)
-    (raise-user-error "index out of bounds for short command nil?-ret-param (~a)" idx))
+    (raise-user-error (format "index out of bounds for short command nil?-ret-param (~a)" idx)))
   (bitwise-xor sNIL?-RET-PARAM idx))
 
 
