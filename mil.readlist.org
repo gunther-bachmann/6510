@@ -2062,7 +2062,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   - [ ] int-and/or/xor <into-reg> <reg-mask> <reg-value> ::
   - [-] int++-- <reg> :: increment/decrement int register
   - [ ] int-(n)less/greater/equal <into-reg> <reg-a> <reg-b> :: integer (not) less/greater/equal the other
-  - [ ] int-zero <into-reg> <reg> ::
+  - [ ] int-zero <into-reg> ::
   - [X] label <symbol> :: jump-target (has no bytecode!)
   - [ ] logical-and/or <into-reg> <reg-a> <reg-b> :: could be encoded using byte=0 for false, and byte=1 for true
   - [ ] logical-not <into-reg> <reg> ::
@@ -2105,7 +2105,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - there needs to be done some register allocation (VM_​Lx)
   each (sub) expression is assigned to a local register
   a register that is not used later in the program can be reused (optimization => later)
-*** next
+*** DONE next
 **** excursion - code size (byte code) using a stack machine instead of register machine
 #+begin_src scheme
   (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
@@ -2328,8 +2328,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   => push-local = store x idx++
   => push-for-call = store into array of called function?
   => result of function is either pushed to local or pushed to next call
-*** some iteration
-**** implement (partial) vm in 6510 assembler => validation of vm implementation feasability (byte code size + interpretation speed)
+*** next
 **** tidy up code base
 - find naming conventions for the different phases
   - ast- :: nodes in the ast
@@ -2338,6 +2337,13 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - get an overview of what information is necessary for the different phases
 - decide on where in the ast to keep this information
 - find a way to make additions to racket structures less invasive and prone to include massive code changes (use typed attribute lists?)
+**** write code generator for stack machine (m-def ...)
+**** make compilation phases more explicit
+- macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
+- transformation from ast/stack orientation -> register oriented atomic commands
+- vm-register allocation + reordering sub expressions (optimization)
+  - function parameters can be evaluated in any order (strict eval scheme)
+- optional: others like constant folding
 **** information collected/used during compilation phases
 Maybe add this information as a hashmap, allowing for arbitrary information to be added any time
 What information is needed for the different phases? => check the different optimization problems, collect necessary information
@@ -2354,14 +2360,9 @@ What information is needed for the different phases? => check the different opti
 - source code location :: location of the original source
 - previous node :: reference to node before change (to track changes through compilation)
 - previous note :: note that describes the transformation done from previous node to current node
-**** make compilation phases more explicit
-- macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
-- transformation from ast/stack orientation -> register oriented atomic commands
-- vm-register allocation + reordering sub expressions (optimization)
-  - function parameters can be evaluated in any order (strict eval scheme)
-- optional: others like constant folding
 **** glue together mil + vm
 - (m-def ...) -> vm, execute, debug?
+*** some iteration
 **** keep meta information (related to debugging)
 - source code location
 - default values
@@ -2370,6 +2371,7 @@ What information is needed for the different phases? => check the different opti
 **** debugging
 - level 0: debug vm code (byte code), trace, inspect, step-debugger, memory inspector
 - level 1: debug mil, function/expression entry, inspect parameters, locals, etc, call stack, memory inspector
+**** implement (partial) vm in 6510 assembler => validation of vm implementation feasability (byte code size + interpretation speed)
 **** implement vm in mil
 - precondition: all language features are implemented, debugging should be possible
 - information gained: optimize execution speed + bytecode size + heap usage + c64 implementability

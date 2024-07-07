@@ -191,6 +191,31 @@
 
 (define BYTE+               60) ;; stack [cell-byte a, cell-byte b] -> [sum]
 
+;; BYTE-INC, BYTE-DEC, BYTE-, BYTE*, BYTE_DIV, BYTE_REM
+;; INT-INC, INT-DEC, INT+, INT-, INT*, INT_DIV, INT_REM
+;; BOOL_AND, BOOL_OR, BOOL_NOT
+;; BIT_AND, BIT_OR, BIT_NOT, BIT_XOR
+;; BIT_SHIFT_RIGHT, BIT_SHIFT_LEFT
+
+;; BYTE>, BYTE<, BYTE=, BYTE>=, BYTE<=, BYTE!=
+;; INT>, INT<, INT=, INT>=, INT<=, INT!=
+
+;; BRA_NOT
+
+;; STRUCT_LEN, ARRAY_LEN
+;; STRUCT_COPY, ARRAY_COPY
+
+;; THROW_EXCEPTION
+
+;; LIST->ARRAY ;; since string and structs are arrays, there is no need to provide others
+;; ARRAY->LIST ;;
+
+;; native functions (foreign interface)
+;; FI_POKE_BYTE, FI_PEEK_BYTE
+;; FI_CALL
+;; FI_BYTE_ARRAY- <- allocate to fixed position in memory
+;;  - read/write/copy
+
 (define ALLOCATE_STRUCT     70) ;; op = struct-def-idx (int),  stack [] -> [struct-ref-]
 (define FREE_STRUCT         71) ;; stack [struct-ref-] -> []
 (define CREATE_STRUCT       72) ;; op = struct-def-idx (int), stack [fieldN .. field0] -> [struct-ref-]
@@ -220,18 +245,18 @@
 (define sPUSH_BYTEn         (bitwise-xor #xff sPUSH_BYTEm))
 
 ;; using 144..147
-(define sPOP_TO_PARAM         #b10010000) ;; short pop to param, lower 2 bits
-(define sPOP_TO_PARAMm        #b11111100)
-(define sPOP_TO_PARAMn        (bitwise-xor #xff sPOP_TO_PARAMm))
+(define sPOP_TO_PARAM       #b10010000) ;; short pop to param, lower 2 bits
+(define sPOP_TO_PARAMm      #b11111100)
+(define sPOP_TO_PARAMn      (bitwise-xor #xff sPOP_TO_PARAMm))
 ;; using 148..151
 ;; could also be used for POP_TO_FIELD poping into array/struct fields
-(define sPOP_TO_GLOBAL        #b10010100) ;; short pop to global, lower 2 bits + next byte
-(define sPOP_TO_GLOBALm       #b11111100)
-(define sPOP_TO_GLOBALn       (bitwise-xor #xff sPOP_TO_GLOBALm))
+(define sPOP_TO_GLOBAL      #b10010100) ;; short pop to global, lower 2 bits + next byte
+(define sPOP_TO_GLOBALm     #b11111100)
+(define sPOP_TO_GLOBALn     (bitwise-xor #xff sPOP_TO_GLOBALm))
 ;; using 152..155
-(define sPOP_TO_LOCAL         #b10011000) ;; short pop to local, lower 2 bits
-(define sPOP_TO_LOCALm        #b11111100)
-(define sPOP_TO_LOCALn        (bitwise-xor #xff sPOP_TO_LOCALm))
+(define sPOP_TO_LOCAL       #b10011000) ;; short pop to local, lower 2 bits
+(define sPOP_TO_LOCALm      #b11111100)
+(define sPOP_TO_LOCALn      (bitwise-xor #xff sPOP_TO_LOCALm))
 
 ;; using 156..159
 (define sNIL?-RET-PARAM     #b10011100)
@@ -242,6 +267,7 @@
 (define sNIL?-RET-LOCALm    #b11111100)
 (define sNIL?-RET-LOCALn    (bitwise-xor #xff sNIL?-RET-LOCALm))
 
+;; this is using lots of slots, maybe goto and bra are not used often enough to allow this
 ;; using 192..223
 (define sBRA                #b11000000)
 (define sBRAm               #b11100000)
