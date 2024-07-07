@@ -161,11 +161,44 @@
 (define PUSH_BYTE            5) ;; op = byte value, stack [] -> [cell-byte]
 (define PUSH_INT             6) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
 ;; also used for struct-index or function-index
+
+(define PUSH_NIL             9) ;; stack: [] -> [NIL]
 (define PUSH_PARAM          10) ;; op = param-idx from tail, stack [] -> [cell-]
 (define PUSH_GLOBAL         11) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
 (define PUSH_LOCAL          12) ;; op = local-idx, stacl [] -> [cell-]
 (define PUSH_STRUCT_FIELD   13) ;; op = field-idx, stack [struct-ref] -> [cell-]
 (define PUSH_ARRAY_FIELD    14) ;; op = field-idx, stack [array-ref] -> [cell-]
+
+(define POP_TO_PARAM        15) ;; op= param-idx from tail, stack [cell-] -> []
+(define POP_TO_GLOBAL       16) ;; op1=low byte index op2=high byte index, stack [cell-] -> []
+(define POP_TO_LOCAL        17) ;; op = local-idx, stack [cell-] -> []
+(define POP_TO_STRUCT_FIELD 18) ;; op = field-idx, stack [cell- struct-ptr-] -> []
+(define POP_TO_ARRAY_FIELD  19) ;; op = array-idx, stack [cell- array-ptr-] -> []
+
+(define NIL?                20) ;; stack [cell-list-ptr] -> [cell-boolean]
+
+(define BRA                 31) ;; op = relative offset
+(define GOTO                32) ;; op = relative offset
+(define RET                 33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
+(define CALL                34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+(define TAIL_CALL           35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
+(define NIL?-RET-PARAM      36) ;; op = param, stack [ ... paramN .. param0 ] -> [ paramOP ] if tos is nil, else no change!
+(define NIL?-RET-LOCAL      37) ;; op = param, stack [ ... paramN .. param0 ] -> [ localOP ] if tos is nil, else no change!
+
+(define CAR                 40) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
+(define CDR                 41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
+(define CONS                42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+
+(define BYTE+               60) ;; stack [cell-byte a, cell-byte b] -> [sum]
+
+(define ALLOCATE_STRUCT     70) ;; op = struct-def-idx (int),  stack [] -> [struct-ref-]
+(define FREE_STRUCT         71) ;; stack [struct-ref-] -> []
+(define CREATE_STRUCT       72) ;; op = struct-def-idx (int), stack [fieldN .. field0] -> [struct-ref-]
+
+(define CREATE_LIST         73) ;; op = N+1 (byte), stack [elN .. el0] -> [cell-list-ptr-]
+
+(define ALLOCATE_ARRAY      75) ;; op = array len, stack [] -> [array-ref-]
+(define FREE_ARRAY          76) ;; stack [array-ref-] -> []
 
 ;; example of short (one byte instruction) for push
 ;; using 128..131
@@ -173,6 +206,7 @@
 (define sPUSH_PARAMm        #b11111100)
 (define sPUSH_PARAMn        (bitwise-xor #xff sPUSH_PARAMm))
 ;; using 132..135
+;; could also be used for sPUSH__FIELD pushing array/struct fields
 (define sPUSH_GLOBAL        #b10000100) ;; short push global, lower 2 bits + next byte
 (define sPUSH_GLOBALm       #b11111100)
 (define sPUSH_GLOBALn       (bitwise-xor #xff sPUSH_GLOBALm))
@@ -185,17 +219,12 @@
 (define sPUSH_BYTEm         #b11111100)
 (define sPUSH_BYTEn         (bitwise-xor #xff sPUSH_BYTEm))
 
-(define POP_TO_PARAM        15) ;; op= param-idx from tail, stack [cell-] -> []
-(define POP_TO_GLOBAL       16) ;; op1=low byte index op2=high byte index, stack [cell-] -> []
-(define POP_TO_LOCAL        17) ;; op = local-idx, stack [cell-] -> []
-(define POP_TO_STRUCT_FIELD 18) ;; op = field-idx, stack [cell- struct-ptr-] -> []
-(define POP_TO_ARRAY_FIELD  19) ;; op = array-idx, stack [cell- array-ptr-] -> []
-
 ;; using 144..147
 (define sPOP_TO_PARAM         #b10010000) ;; short pop to param, lower 2 bits
 (define sPOP_TO_PARAMm        #b11111100)
 (define sPOP_TO_PARAMn        (bitwise-xor #xff sPOP_TO_PARAMm))
 ;; using 148..151
+;; could also be used for POP_TO_FIELD poping into array/struct fields
 (define sPOP_TO_GLOBAL        #b10010100) ;; short pop to global, lower 2 bits + next byte
 (define sPOP_TO_GLOBALm       #b11111100)
 (define sPOP_TO_GLOBALn       (bitwise-xor #xff sPOP_TO_GLOBALm))
@@ -203,16 +232,6 @@
 (define sPOP_TO_LOCAL         #b10011000) ;; short pop to local, lower 2 bits
 (define sPOP_TO_LOCALm        #b11111100)
 (define sPOP_TO_LOCALn        (bitwise-xor #xff sPOP_TO_LOCALm))
-
-(define NIL?                20) ;; stack [cell-list-ptr] -> [cell-boolean]
-
-(define BRA                 31) ;; op = relative offset
-(define GOTO                32) ;; op = relative offset
-(define RET                 33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
-(define CALL                34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
-(define TAIL_CALL           35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
-(define NIL?-RET-PARAM      36) ;; op = param, stack [ ... paramN .. param0 ] -> [ paramOP ] if tos is nil, else no change!
-(define NIL?-RET-LOCAL      37) ;; op = param, stack [ ... paramN .. param0 ] -> [ localOP ] if tos is nil, else no change!
 
 ;; using 156..159
 (define sNIL?-RET-PARAM     #b10011100)
@@ -233,18 +252,6 @@
 (define sGOTOm              #b11100000)
 (define sGOTOn              #b00011111)
 (define sGOTOmsb            5)
-
-(define CAR                 40) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
-(define CDR                 41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
-(define CONS                42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
-
-(define BYTE+               60) ;; stack [cell-byte a, cell-byte b] -> [sum]
-
-(define ALLOCATE_STRUCT     70) ;; op = struct-def-idx,  stack [] -> [struct-ref-]
-(define FREE_STRUCT         71) ;; stack [struct-ref-] -> []
-
-(define ALLOCATE_ARRAY      72) ;; op = array len, stack [] -> [array-ref-]
-(define FREE_ARRAY          73) ;; stack [array-ref-] -> []
 
 (define (integer->two-complement [value : Integer]) : Nonnegative-Integer
   (cond
@@ -500,7 +507,10 @@
 ;; stack: [ ... pN .. p1 p0] -> [ val:cell-byte- ... pN .. p1 p0], growth: 1c
 (define (interpret-push-byte [vm : vm-]) : vm-
   (define byte-value (peek-pc-byte vm 1))
-  (increment-pc (push-value vm (cell-byte- byte-value)) 2))
+  (interpret-push-byte- vm byte-value 2))
+
+(define (interpret-push-byte- [vm : vm-] [value : Byte] [pc-inc : Byte]) : vm-
+  (increment-pc (push-value vm (cell-byte- value)) pc-inc))
 
 ;; bytecode: op val-low:byte val-high:byte, len: 3b
 ;; stack: [ ... ] -> [ val:cell-int- ... ], growth: 1c
@@ -705,26 +715,31 @@
                [value-stack new-value-stack]
                [frame-stack (cons new-frame (cdr (vm--frame-stack vm)))]))
 
+(define (sPUSH_BYTEc [val : Byte]) : Byte
+  (when (fx> val sPUSH_BYTEn)
+    (raise-user-error (format "byte value out of bounds for push byte short command (~a)" val)))
+  (bitwise-xor sPUSH_BYTE val))
+
 (define (sPUSH_PARAMc [idx : Byte]) : Byte
   (when (fx> idx sPUSH_PARAMn)
-    (raise-user-error "index out of bounds for short command (~a)" idx))
+    (raise-user-error (format "index out of bounds for push param short command (~a)" idx)))
   (bitwise-xor sPUSH_PARAM idx))
 
 (define (sPOP_TO_PARAMc [idx : Byte]) : Byte
   (when (fx> idx sPOP_TO_PARAMn)
-    (raise-user-error "index out of bounds for short command (~a)" idx))
+    (raise-user-error (format "index out of bounds for pop to param short command (~a)" idx)))
   (bitwise-xor sPOP_TO_PARAM idx))
 
 (define (sBRAc [to : Fixnum]) : Byte
   (define to- (byte->two-complement to sBRAmsb))
   (when (fx> to- sBRAn)
-    (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
+    (raise-user-error (format "jump target out of bounds for bra short command (~a ~a)" to to-)))
   (bitwise-xor sBRA to-))
 
 (define (sGOTOc [to : Fixnum]) : Byte
   (define to- (byte->two-complement to sGOTOmsb))
   (when (fx> to- sGOTOn)
-    (raise-user-error "jump target out of bounds for short command (~a ~a)" to to-))
+    (raise-user-error (format "jump target out of bounds for goto short command (~a ~a)" to to-)))
   (bitwise-xor sGOTO to-))
 
 (define (sNIL?-RET-PARAMc [idx : Byte]) : Byte
@@ -773,6 +788,9 @@
 (define (interpret-allocate-array [vm : vm-]) : vm-
   (define len (peek-pc-byte vm 1))
   (define actual-vector (make-vector len (cell-)))
+  (interpret-allocate-array- vm actual-vector 2))
+
+(define (interpret-allocate-array- [vm : vm-] [actual-vector : (Vectorof cell-)] [inc-pc : Byte]) : vm-
   (define new-arrays (vector-append (vm--arrays vm) (vector actual-vector)))
   (define id (sub1 (vector-length new-arrays)))
   (when(fx< id 0)
@@ -781,8 +799,8 @@
    (push-value
     (struct-copy vm- vm
                  [arrays (vector->immutable-vector new-arrays)])
-    (cell-array- len id))
-   2))
+    (cell-array- (vector-length actual-vector) id))
+   inc-pc))
 
 (module+ test #| interpret-allocate-array |#
   (define interpret-allocate-array-test--vm
@@ -811,6 +829,62 @@
    (push-value vm value)
    2))
 
+(define (interpret-create-struct [vm : vm-]) : vm-
+  (define struct-idx (peek-pc-int vm 1))
+  (define struct-def (vector-ref (vm--structs vm) struct-idx))
+  (match-define (list struct-fields next-vm) (pop-and-get-values vm (vm-struct-def--field-no struct-def)))
+  (interpret-allocate-array- vm (list->vector struct-fields) 3))
+
+(module+ test #|interpret-create-struct |#
+  (define interpret-create-struct-test--vm
+    (make-vm #:structs (vector-immutable (vm-struct-def- "point" 2))
+             #:value-stack (list (cell-byte- 20) (cell-byte- 10))
+             #:functions (vector-immutable (make-function-def #:byte-code (vector-immutable CREATE_STRUCT 0 0)))))
+
+  (check-equal? (vm--arrays (interpret-create-struct interpret-create-struct-test--vm))
+                (vector-immutable (vector (cell-byte- 10) (cell-byte- 20)))))
+
+(define (list->cell-list-ptr [a-list : (Listof cell-)]) : cell-list-ptr-
+  (define (list->cell-list-ptr- [a-list : (Listof cell-)] [result : cell-list-ptr-]) : cell-list-ptr-
+    (if (empty? a-list)
+        result
+        (list->cell-list-ptr- (cdr a-list) (cell-list-ptr- (car a-list) result))))
+  (list->cell-list-ptr- (reverse a-list) NIL_CELL))
+
+(define (cell-list-ptr->list [a-list : cell-]) : (Listof cell-)
+  (define (cell-list-ptr->list- [a-list : cell-] [result : (Listof cell-)]) : (Listof cell-)
+    (if (eq? NIL_CELL a-list)
+        result
+        (if (cell-list-ptr-? a-list)
+            (cell-list-ptr->list- (cell-list-ptr--cdr a-list) (cons (cell-list-ptr--car a-list) result))
+            (raise-user-error (format "expected cell-list-ptr, got ~a" a-list)))))
+  (reverse (cell-list-ptr->list- a-list '())))
+
+(module+ test #| list->cell-list-ptr |#
+  (check-equal? (list->cell-list-ptr (list (cell-byte- 1) (cell-int- 8)))
+                (cell-list-ptr- (cell-byte- 1) (cell-list-ptr- (cell-int- 8) NIL_CELL)))
+
+  (check-equal? (cell-list-ptr->list (cell-list-ptr- (cell-byte- 1) (cell-list-ptr- (cell-int- 8) NIL_CELL)))
+                (list (cell-byte- 1) (cell-int- 8))))
+
+(define (interpret-create-list [vm : vm-]) : vm-
+  (define count (peek-pc-byte vm 1))
+  (match-define (list allocated-list next-vm) (pop-and-get-values vm count))
+  (increment-pc (push-value next-vm (list->cell-list-ptr allocated-list)) 2))
+
+(module+ test #|interpret-create-list |#
+  (define interpret-create-list-test--vm
+    (make-vm
+     #:value-stack (list (cell-int- 8) (cell-byte- 1))
+     #:functions (vector-immutable (make-function-def #:byte-code (vector-immutable CREATE_LIST 2)))))
+
+  (check-equal? (tos-value (interpret-create-list interpret-create-list-test--vm))
+                (cell-list-ptr- (cell-byte- 1) (cell-list-ptr- (cell-int- 8) NIL_CELL))))
+
+(define (interpret-push-nil [vm : vm-]) : vm-
+  (increment-pc
+   (push-value vm NIL_CELL)))
+
 (define (dissassemble-byte-code (vm : vm-)) : String
   (define byte-code (peek-pc-byte vm))
   (cond
@@ -822,23 +896,27 @@
     [(= byte-code CAR) "car"]
     [(= byte-code CDR) "cdr"]
     [(= byte-code CONS) "cons"]
+    [(= byte-code CREATE_STRUCT) (format "create-struct ~a" (peek-pc-int vm 1))]
+    [(= byte-code CREATE_LIST) (format "create-list ~a" (peek-pc-byte vm 1))]
     [(= byte-code GOTO) (format "goto ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
     [(= byte-code NIL?) "nil?"]
     [(= byte-code NIL?-RET-PARAM) (format "nil? -> return p~a" (peek-pc-byte vm 1))]
     [(= byte-code POP_TO_ARRAY_FIELD) (format "pop to array[~a]" (peek-pc-byte vm 1))]
-    [(= byte-code POP_TO_GLOBAL) (format "pop g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code POP_TO_GLOBAL) (format "pop g-~a" (peek-pc-int vm 1))]
     [(= byte-code POP_TO_LOCAL) (format "pop l-~a" (peek-pc-byte vm 1))]
     [(= byte-code POP_TO_PARAM) (format "pop p-~a" (peek-pc-byte vm 1))]
     [(= byte-code PUSH_ARRAY_FIELD) (format "push array[~a]" (peek-pc-byte vm 1))]
-    [(= byte-code PUSH_BYTE) (format "pushb #~a" (peek-pc-byte vm 1))]
-    [(= byte-code PUSH_GLOBAL) (format "push g-~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
-    [(= byte-code PUSH_INT) (format "push #~a" (fx+ (peek-pc-byte vm 1) (arithmetic-shift (peek-pc-byte vm 2) 8)))]
+    [(= byte-code PUSH_BYTE) (format "push #~a" (peek-pc-byte vm 1))]
+    [(= byte-code PUSH_GLOBAL) (format "push g-~a" (peek-pc-int vm 1))]
+    [(= byte-code PUSH_INT) (format "push #~a" (peek-pc-int vm 1))]
     [(= byte-code PUSH_LOCAL) (format "push l-~a" (peek-pc-byte vm 1))]
+    [(= byte-code PUSH_NIL) (format "push nil")]
     [(= byte-code PUSH_PARAM) (format "push p-~a" (peek-pc-byte vm 1))]
     [(= byte-code RET) "ret"]
     [(= byte-code TAIL_CALL) "tail-call"]
 
-    [(= (bitwise-and byte-code sPUSH_PARAMm) sPUSH_PARAM) (format "pushp p-~a  ;; short version" (bitwise-and sPUSH_PARAMn byte-code))]
+    [(= (bitwise-and byte-code sPUSH_BYTEm) sPUSH_BYTE) (format "push #-~a  ;; short version" (bitwise-and sPUSH_BYTEn byte-code))]
+    [(= (bitwise-and byte-code sPUSH_PARAMm) sPUSH_PARAM) (format "push p-~a  ;; short version" (bitwise-and sPUSH_PARAMn byte-code))]
     [(= (bitwise-and byte-code sPOP_TO_PARAMm) sPOP_TO_PARAM) (format "pop p-~a  ;; short version" (bitwise-and sPOP_TO_PARAMn byte-code))]
     [(= (bitwise-and byte-code sBRAm) sBRA) (format "bra ~a  ;; short version" (two-complement->signed-byte (bitwise-and sBRAn byte-code) sBRAmsb))]
     [(= (bitwise-and byte-code sGOTOm) sGOTO) (format "goto ~a  ;; short version" (two-complement->signed-byte (bitwise-and sGOTOn byte-code) sGOTOmsb))]
@@ -869,6 +947,8 @@
     [(= byte-code CAR) (interpret-car vm)]
     [(= byte-code CDR) (interpret-cdr vm)]
     [(= byte-code CONS) (interpret-cons vm)]
+    [(= byte-code CREATE_STRUCT) (interpret-create-struct vm)]
+    [(= byte-code CREATE_LIST) (interpret-create-list vm)]
     [(= byte-code GOTO) (interpret-goto vm)]
     [(= byte-code NIL?) (interpret-nil? vm)]
     [(= byte-code NIL?-RET-PARAM) (interpret-nil?-ret-param vm)]
@@ -883,10 +963,15 @@
     [(= byte-code PUSH_GLOBAL) (interpret-push-global vm)]
     [(= byte-code PUSH_INT) (interpret-push-int vm)]
     [(= byte-code PUSH_LOCAL) (interpret-push-local vm)]
+    [(= byte-code PUSH_NIL) (interpret-push-nil vm)]
     [(= byte-code PUSH_PARAM) (interpret-push-param vm)]
     [(= byte-code RET) (interpret-ret vm)]
     [(= byte-code TAIL_CALL) (interpret-tail-call vm)]
 
+    [(= (bitwise-and byte-code sPUSH_BYTEm) sPUSH_BYTE)
+     (define bits (bitwise-and sPUSH_BYTEn byte-code))
+     (define value (if (= bits sPUSH_BYTEn) #xff bits))
+     (interpret-push-byte- vm value 1)]
     [(= (bitwise-and byte-code sPUSH_PARAMm) sPUSH_PARAM)
      (interpret-push-param- vm (bitwise-and sPUSH_PARAMn byte-code) 1)]
     [(= (bitwise-and byte-code sPUSH_GLOBALm) sPUSH_GLOBAL)
@@ -1107,3 +1192,55 @@
 
   (check-equal? (tos-value (run-until-break structure-usage-test--vm))
                 (cell-byte- 1)))
+
+(module+ test #| higher order function |#
+  ;; (m-def (mapr (a-fun (fun T -> S)) (a-list (listof T)) (b-list (listof S) '()) -> (listof S))
+  ;;        (if (empty? a-list)
+  ;;            b-list
+  ;;            (mapr a-fun (cdr a-list) (cons (a-fun (car a-list)) b-list))))
+
+  ;; (m-def (inc (a-byte byte) -> byte)
+  ;;        (byte+ a-byte 1))
+
+  ;; (mapr inc '(1 2)) ;; yield '(3 2), since this map version reverses the original list
+
+
+  (define higher-order-function-test--vm
+    (make-vm
+     #:options (list) ;; 'trace
+     #:functions
+             (vector-immutable
+              (make-function-def ;; (mapr inc '(1 2 3)) ;; yield '(4 3 2), since this map version reverses the original list
+               #:parameter-count 0
+               #:byte-code (vector-immutable PUSH_NIL      ;; initial result '()
+                                             PUSH_BYTE 1
+                                             PUSH_BYTE 2
+                                             PUSH_BYTE 3
+                                             CREATE_LIST 3 ;; '(1 2 3)
+                                             PUSH_INT 2 0  ;; higher function passed (inc)
+                                             PUSH_INT 1 0  ;; function to call (mapr)
+                                             CALL
+                                             BRK))
+              (make-function-def ;; mapr
+               #:parameter-count 3
+               #:byte-code (vector-immutable (sPUSH_PARAMc 1)
+                                             (sNIL?-RET-PARAMc 2)
+                                             (sPUSH_PARAMc 2)
+                                             (sPUSH_PARAMc 1)
+                                             CAR
+                                             (sPUSH_PARAMc 0)
+                                             CALL
+                                             CONS
+                                             (sPUSH_PARAMc 1)
+                                             CDR
+                                             (sPUSH_PARAMc 0)
+                                             TAIL_CALL))
+              (make-function-def ;; inc
+               #:parameter-count 1
+               #:byte-code (vector-immutable (sPUSH_BYTEc 1)
+                                             (sPUSH_PARAMc 0)
+                                             BYTE+
+                                             RET)))))
+
+  (check-equal? (cell-list-ptr->list (tos-value (run-until-break higher-order-function-test--vm)))
+                (list (cell-byte- 4) (cell-byte- 3) (cell-byte- 2))))

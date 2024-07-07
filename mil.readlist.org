@@ -2290,6 +2290,18 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   (push-int 17)    ;; 3 value
   (field-write)    ;; replace structure ref, field index with value set ?
 #+end_src
+***** higher order function passing (closure is a anonymous function, just a function in the vm)
+#+begin_src scheme
+  (m-def (mapr (a-fun (fun T -> S)) (a-list (listof T)) (b-list (listof S) '()) -> (listof S))
+         (if (empty? a-list)
+             b-list
+             (mapr a-fun (cdr a-list) (cons (a-fun (car a-list)) b-list))))
+
+  (m-def (inc (a-byte byte) -> byte)
+         (byte+ a-byte 1))
+
+  (mapr inc '(1 2)) ;; yield '(3 2), since this map version reverses the original list
+#+end_src
 ***** define interpreter (in racket)
 ****** state
 - vm-frame :: execution frame
@@ -2317,6 +2329,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   => push-for-call = store into array of called function?
   => result of function is either pushed to local or pushed to next call
 *** some iteration
+**** implement (partial) vm in 6510 assembler => validation of vm implementation feasability (byte code size + interpretation speed)
 **** tidy up code base
 - find naming conventions for the different phases
   - ast- :: nodes in the ast
