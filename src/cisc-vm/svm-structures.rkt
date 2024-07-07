@@ -528,7 +528,7 @@
      (make-vm #:functions (vector-immutable (make-function-def #:byte-code (vector-immutable 0 2 0 0)))
               #:frame-stack (list (make-frame #:parameter-tail (list (cell-) (cell-) (cell-int- 10) (cell-)))))))
 
-  (check-equal? (car (vm--value-stack test_interpret-push-param))
+  (check-equal? (tos-value test_interpret-push-param)
                 (cell-int- 10)
                 "the pushed value is ten (which was the 2nd parameter in the parameter-tail list")
 
@@ -796,7 +796,7 @@
 
 ;; op: byte field-idx, stack: [ struct-ref- ] -> [cell-]
 (define (interpret-push-array-field [vm : vm-]) : vm-
-  (define array (car (vm--value-stack vm)))
+  (define array (tos-value vm))
   (define field-idx (peek-pc-byte vm 1))
   (unless (cell-array-? array)
     (raise-user-error (format "expected cell-array- to access field ~a" field-idx)))
@@ -1168,10 +1168,7 @@
 
   (define test-tail-recursion--value-stack2
     (list NIL_CELL
-          (cell-list-ptr- (cell-byte- 5)
-                          (cell-list-ptr- (cell-byte- 10)
-                                          (cell-list-ptr- (cell-byte- 20)
-                                                          NIL_CELL)))))
+          (list->cell-list-ptr (list (cell-byte- 5) (cell-byte- 10) (cell-byte- 20)))))
 
   (define test-tail-recursion--run-until-break2
     (run-until-break
@@ -1197,10 +1194,7 @@
                                       TAIL_CALL))))))
 
   (check-equal? (vm--value-stack test-tail-recursion--run-until-break2)
-                (list (cell-list-ptr- (cell-byte- 20)
-                                      (cell-list-ptr- (cell-byte- 10)
-                                                      (cell-list-ptr- (cell-byte- 5)
-                                                                      NIL_CELL))))
+                (list (list->cell-list-ptr (list  (cell-byte- 20) (cell-byte- 10) (cell-byte- 5))))
                 "tos is reversed list"))
 
 (module+ test #| structure usage |#
