@@ -3,6 +3,19 @@
 (require (only-in racket/fixnum fx+ fx= fx< fx- fx>= fx>))
 (require/typed racket/kernel [vector-set/copy (All (a) (-> (Immutable-Vectorof a) Nonnegative-Integer a (Vectorof a)))])
 
+(provide disassemble-byte-code
+         make-vm
+         CONS
+         CAR
+         CDR
+         GOTO
+         RET
+         BYTE+
+         BRA
+         CALL
+         NIL?
+         )
+
 (module+ test #| require test utils |#
   (require typed/rackunit))
 
@@ -919,7 +932,7 @@
   (increment-pc
    (push-value vm NIL_CELL)))
 
-(define (dissassemble-byte-code (vm : vm-)) : String
+(define (disassemble-byte-code (vm : vm-)) : String
   (define byte-code (peek-pc-byte vm))
   (cond
     [(= byte-code ALLOCATE_ARRAY) (format "alloc-array size ~a" (peek-pc-byte vm 1))]
@@ -961,7 +974,7 @@
 (define (display-vm [vm : vm-]) : Any
   (define cur-frame (car (vm--frame-stack vm)))
   (displayln (format "exec: (~a)\t ~a  \t@function: ~a, byte-offset: ~a, value-stack-size: ~a, tos: ~a" (peek-pc-byte vm)
-                     (dissassemble-byte-code vm)
+                     (disassemble-byte-code vm)
                      (vm-frame--fun-idx cur-frame)
                      (vm-frame--bc-idx cur-frame)
                      (length (vm--value-stack vm))
