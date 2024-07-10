@@ -95,6 +95,11 @@
   ()
   #:transparent)
 
+;; nil '()
+(struct ast-at-nil- ast-ex-atomic-
+  ()
+  #:transparent)
+
 ;; #t #f
 (struct ast-at-bool- ast-ex-atomic-
   ((bool : Boolean))
@@ -129,14 +134,26 @@
   ((list : (Listof ast-expression-)))
   #:transparent)
 
+;; (fun ...)
+(struct ast-ex-fun-call- ast-expression-
+  ((fun        : Symbol)
+   (parameters : (Listof ast-expression-)))
+  #:transparent)
+
 ;; '(...)
 (struct ast-ex-quoted-list- ast-ex-list-
   ()
   #:transparent)
 
+(struct ast-ex-cond-clause- ast-node-
+  ((condition : ast-expression-)
+   (body      : (Listof ast-expression-)))
+  #:transparent)
+
 ;; (cond (bool ex) ...)
-(struct ast-ex-cond- ast-ex-list-
-  ()
+(struct ast-ex-cond- ast-expression-
+  ((clauses : (Listof ast-ex-cond-clause-))
+   (else    : ast-expression-))
   #:transparent)
 
 ;; (if bool then else)
@@ -186,40 +203,84 @@
 
 (define-syntax (m-expression-def stx)
   (syntax-parse stx
-    ;; [(_ '())
-    ;;  #'(ast-e-nil agsi)]
+    [(_ '())
+     #'(ast-at-nil- (make-ast-info))]
+    [(_ (~literal nil))
+     #'(ast-at-nil- (make-ast-info))]
+    [(_ #t)
+     #'(ast-at-bool- (make-ast-info) #t)]
+    [(_ #f)
+     #'(ast-at-bool- (make-ast-info) #f)]
     [(_ ((~literal if) bool-param true-param false-param))
      #'(ast-ex-if- (make-ast-info)
                    (m-expression-def bool-param)
                    (m-expression-def true-param)
                    (m-expression-def false-param)
                    #f)]
-  [(_ ((~literal cond) ((case-cond) (case-expression) ...) ...))
-   #'()]
-  ;; [(_ (id param ...))
-  ;;  #'(ast-ex-fun-call- agsi 'id (list (m-expression-def param) ...))]
-  [(_ value)
-   #'(cond ((string? 'value) (ast-at-string- (make-ast-info) 'value))
-           ((boolean? 'value) (ast-at-bool- (make-ast-info) 'value))
-           ((exact-integer? 'value) (ast-at-int- (make-ast-info) 'value))
-           ((symbol? 'value) (ast-at-id- (make-ast-info) 'value))
-           (else (raise-user-error (format "unknown expression value type ~a" 'value))))]))
+    [(_ ((~literal cond) [case-cond case-expression ...] ... [(~literal _) else-expression]))
+     #'(ast-ex-cond- (make-ast-info)
+                     (list (ast-ex-cond-clause- (make-ast-info) (m-expression-def case-cond) (list (m-expression-def case-expression) ...)) ...)
+                     (m-expression-def else-expression))]
+    [(_ (id param ...))
+     #'(ast-ex-fun-call- (make-ast-info) 'id (list (m-expression-def param) ...))]
+    [(_ value)
+     #'(cond ((string? 'value) (ast-at-string- (make-ast-info) 'value))
+             ((boolean? 'value) (ast-at-bool- (make-ast-info) 'value))
+             ((exact-integer? 'value) (ast-at-int- (make-ast-info) 'value))
+             ((symbol? 'value) (ast-at-id- (make-ast-info) 'value))
+             (else (raise-user-error (format "unknown expression value type ~a" 'value))))]))
 
 (module+ test #| m-expression-def |#
   (check-true
+   (match (nested->list (m-expression-def #t))
+     [(list 'ast-at-bool- _ #t) #t]
+     [_ #f])
+   "boolean true is properly parsed as expression")
+
+  (check-true
+   (match (nested->list (m-expression-def #f))
+     [(list 'ast-at-bool- _ #f) #t]
+     [_ #f])
+   "boolean false is properly parsed as expression")
+
+  (check-true
+   (match (nested->list (m-expression-def (cond [_ 0])))
+     [(list 'ast-ex-cond- _ (list) (list 'ast-at-int- _ 0)) #t]
+     [_ #f])
+   "empty cond expression is properly parsed as expression")
+
+  (check-true
+   (match (nested->list (m-expression-def (cond [a 1] [b 3] [_ 0])))
+     [(list 'ast-ex-cond- _
+            (list (list 'ast-ex-cond-clause- _ (list 'ast-at-id- _ 'a) (list (list 'ast-at-int- _ 1)))
+                  (list 'ast-ex-cond-clause- _ (list 'ast-at-id- _ 'b) (list (list 'ast-at-int- _ 3))))
+            (list 'ast-at-int- _ 0)) #t]
+     [_ #f])
+   "complex cond expression is properly parsed as expression")
+
+  (check-true
    (match (nested->list (m-expression-def "some"))
      [(list 'ast-at-string- _ "some") #t]
-     [_ #f]))
+     [_ #f])
+   "string constants are properly parsed as expression")
+
+  (check-true
+   (match (nested->list (m-expression-def (a-fun p1 17)))
+     [(list 'ast-ex-fun-call- _ 'a-fun (list (list 'ast-at-id- _ 'p1) (list 'ast-at-int- _ 17))) #t]
+     [_ #f])
+   "functions calls are properly parsed as expression")
 
   (check-true
    (match (nested->list (m-expression-def 180))
      [(list 'ast-at-int- _ 180) #t]
-     [_ #f]))
+     [_ #f])
+   "integer constants are properly parsed as expression")
 
   (check-true
    (match (nested->list (m-expression-def (if #t 10 20)))
      [(list 'ast-ex-if- _ (list 'ast-at-bool- _ #t) (list 'ast-at-int- _ 10) (list 'ast-at-int- _ 20) #f) #t]
-     [_ #f])))
+     [_ #f])
+   "if expressions are properly parsed as expression"))
 
 (define-syntax (m-fun-def stx)
   (syntax-parse stx
