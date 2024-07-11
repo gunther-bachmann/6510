@@ -179,6 +179,15 @@
    (body        : (Listof ast-expression-)))
   #:transparent)
 
+(struct ast-ex-with-local- ast-node-
+  ((id : Symbol)
+   (value : ast-expression-))
+  #:transparent)
+
+(struct ast-ex-with- ast-expression-
+  ((locals : (Listof ast-ex-with-local-))
+   (body   : ast-expression-))
+  #:transparent)
 
 (define-syntax (m-type-def stx)
   (syntax-parse stx
@@ -207,22 +216,32 @@
      #'(ast-at-nil- (make-ast-info))]
     [(_ (~literal nil))
      #'(ast-at-nil- (make-ast-info))]
+
     [(_ #t)
      #'(ast-at-bool- (make-ast-info) #t)]
     [(_ #f)
      #'(ast-at-bool- (make-ast-info) #f)]
+
+    [(_ ((~literal with) ((id expression) ...) body))
+     #'(ast-ex-with- (make-ast-info)
+                     (list (ast-ex-with-local- (make-ast-info) 'id (m-expression-def expression)) ...)
+                     (m-expression-def body))]
     [(_ ((~literal if) bool-param true-param false-param))
+
      #'(ast-ex-if- (make-ast-info)
                    (m-expression-def bool-param)
                    (m-expression-def true-param)
                    (m-expression-def false-param)
                    #f)]
+
     [(_ ((~literal cond) [case-cond case-expression ...] ... [(~literal _) else-expression]))
      #'(ast-ex-cond- (make-ast-info)
                      (list (ast-ex-cond-clause- (make-ast-info) (m-expression-def case-cond) (list (m-expression-def case-expression) ...)) ...)
                      (m-expression-def else-expression))]
+
     [(_ (id param ...))
      #'(ast-ex-fun-call- (make-ast-info) 'id (list (m-expression-def param) ...))]
+
     [(_ value)
      #'(cond ((string? 'value) (ast-at-string- (make-ast-info) 'value))
              ((boolean? 'value) (ast-at-bool- (make-ast-info) 'value))
@@ -231,6 +250,18 @@
              (else (raise-user-error (format "unknown expression value type ~a" 'value))))]))
 
 (module+ test #| m-expression-def |#
+  (check-true
+   (match (nested->list (m-expression-def (with () "some")))
+     [(list 'ast-ex-with- _ (list) (list 'ast-at-string- _ "some")) #t]
+     [_ #f])
+   "empty with is properly parsed as expression")
+
+  (check-true
+   (match (nested->list (m-expression-def (with ((a 42)) "some")))
+     [(list 'ast-ex-with- _ (list (list 'ast-ex-with-local- _ 'a (list 'ast-at-int- _ 42))) (list 'ast-at-string- _ "some")) #t]
+     [_ #f])
+   "with is properly parsed as expression")
+
   (check-true
    (match (nested->list (m-expression-def #t))
      [(list 'ast-at-bool- _ #t) #t]
