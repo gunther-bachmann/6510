@@ -16,6 +16,7 @@
                   NIL?))
 
 (module+ test #| require test utils |#
+  ;; (require "../6510-test-utils.rkt")
   (require typed/rackunit)
 
   (require/typed racket/struct (struct->list (Any -> (Listof Any))))
@@ -194,9 +195,16 @@
     [(_ (cpx-type inner-type ...))
      #'(ast-td-complex- (make-ast-info) 'cpx-type (list (m-type-def inner-type) ...))]
     [(_ basic-type)
-     #'(ast-td-simple- (make-ast-info) 'basic-type)]))
+     (if (string-suffix? (symbol->string (syntax->datum #'basic-type)) "*")
+         #'(ast-td-complex- (make-ast-info) 'list (list (ast-td-simple- (make-ast-info) (string->symbol (string-trim (symbol->string 'basic-type) "*" #:right? #t)))))
+         #'(ast-td-simple- (make-ast-info) 'basic-type))]))
 
 (module+ test #| m-type-def |#
+  (check-true
+     (match (nested->list (m-type-def A*))
+       [(list ast-td-complex- _ 'list (list (list 'ast-td-simple- _ 'A))) #t]
+       [_ #f]))
+
   (check-true
    (match (nested->list (m-type-def A))
      [(list 'ast-td-simple- _ 'A) #t]
@@ -338,4 +346,46 @@
             (list 'ast-td-simple- _ 'C)
             (list "some")
             (list (list 'ast-at-bool- _ #f))) #t]
+     [_ #f])))
+
+
+(module+ test #| simple reverse function |#
+  (check-true
+   (match
+       (nested->list
+        (m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*
+                            "reverse a-list, consing it into b-list")
+                   (if (nil? a-list)
+                       b-list
+                       (reverse (cdr a-list) (cons (car a-list) b-list)))))
+
+     [(list ast-ex-fun-def-
+        _
+        reverse
+        (list (list ast-param-def-
+          _
+          a-list
+          (list ast-td-complex- _ list (list (list ast-td-simple- _ cell)))))
+        (list (list ast-pa-defaulted-def-
+          _
+          b-list
+          (list ast-td-complex- _ list (list (list ast-td-simple- _ cell)))
+          (list ast-at-nil- _)))
+        (list ast-td-complex- _ list (list (list ast-td-simple- _ cell)))
+        (list "reverse a-list, consing it into b-list")
+        (list (list ast-ex-if-
+          _
+          (list ast-ex-fun-call- _ nil? (list (list ast-at-id- _ a-list)))
+          (list ast-at-id- _ b-list)
+          (list ast-ex-fun-call-
+           _
+           reverse
+           (list (list ast-ex-fun-call- _ cdr (list (list ast-at-id- _ a-list)))
+            (list ast-ex-fun-call-
+             _
+             cons
+             (list (list ast-ex-fun-call- _ car (list (list ast-at-id- _ a-list)))
+              (list ast-at-id- _ b-list)))))
+          #f))
+        ) #t]
      [_ #f])))

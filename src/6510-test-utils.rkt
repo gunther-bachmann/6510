@@ -3,7 +3,7 @@
 ;; use this instead of (require rackunit) to make use of skipping tests
 
 (require ansi-color)
-(require rackunit)
+(require rackunit) ;; TODO: remove from here to be able to use typed variant instead
 
 (provide skip)
 (provide (all-from-out rackunit))
