@@ -14,6 +14,31 @@
          BRA
          CALL
          NIL?
+         TAIL_CALL
+
+         PUSH_INT
+         PUSH_ARRAY_FIELD
+         PUSH_BYTE
+         PUSH_NIL
+         PUSH_LOCAL
+         PUSH_GLOBAL
+         PUSH_STRUCT_FIELD
+         PUSH_PARAM
+
+         POP_TO_PARAM
+         POP_TO_LOCAL
+         POP_TO_GLOBAL
+
+         TRUE
+         FALSE
+
+         sPUSH_PARAMc
+         sPUSH_PARAMn
+         sPOP_TO_PARAMc
+         sPOP_TO_PARAMn
+         sNIL?-RET-PARAMc
+
+         (struct-out cell-byte-)
          )
 
 (module+ test #| require test utils |#

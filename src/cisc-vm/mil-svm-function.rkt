@@ -1,5 +1,7 @@
 #lang typed/racket
 
+(require (only-in racket/fixnum fx+ fx= fx< fx<= fx- fx>= fx>))
+
 (require (for-syntax typed/racket syntax/parse))
 
 (require (only-in "./svm-structures.rkt"
@@ -13,7 +15,33 @@
                   BYTE+
                   BRA
                   CALL
-                  NIL?))
+                  NIL?
+                  TAIL_CALL
+
+                  PUSH_INT
+                  PUSH_ARRAY_FIELD
+                  PUSH_BYTE
+                  PUSH_NIL
+                  PUSH_LOCAL
+                  PUSH_GLOBAL
+                  PUSH_STRUCT_FIELD
+                  PUSH_PARAM
+
+                  POP_TO_PARAM
+                  POP_TO_LOCAL
+                  POP_TO_GLOBAL
+
+                  TRUE
+                  FALSE
+
+                  cell-byte--value
+
+                  sPUSH_PARAMc
+                  sPUSH_PARAMn
+                  sPOP_TO_PARAMc
+                  sPOP_TO_PARAMn
+
+                  sNIL?-RET-PARAMc))
 
 (module+ test #| require test utils |#
   ;; (require "../6510-test-utils.rkt")
@@ -21,6 +49,7 @@
 
   (require/typed racket/struct (struct->list (Any -> (Listof Any))))
 
+  ;; convert a deeply nested structure into a list that can easily be matched
   (define (nested->list (deeply-nested : Any)) : Any
     (cond
       [(struct? deeply-nested)
@@ -43,24 +72,76 @@
   ((info : ast-info-))
   #:transparent)
 
+(define-type Register (U 'Param 'Global 'Local))
+
+(struct register-ref-
+  ((register : Register)
+   (index    : Nonnegative-Integer))
+  #:transparent)
+
+(define (generate-push (reg-ref : register-ref-)) : (Immutable-Vectorof Byte)
+  (define idx (register-ref--index reg-ref))
+  (case (register-ref--register reg-ref)
+    [(Param)  (cond [(fx<= idx sPUSH_PARAMn) (vector-immutable (sPUSH_PARAMc idx))]
+                     [(byte? idx) (vector-immutable PUSH_PARAM idx)]
+                     [else (raise-user-error (format "index too large for push param ~a" idx))])]
+    [(Local)  (cond [(byte? idx) (vector-immutable PUSH_LOCAL idx)]
+                     [else (raise-user-error (format "index too large for push local ~a" idx))])]
+    [(Global) (cond [(byte? idx) (vector-immutable PUSH_GLOBAL idx)]
+                     [else (raise-user-error (format "index too large for push global ~a" idx))])]
+    [else (raise-user-error (format "unknown register ref ~a" reg-ref))]))
+
+(module+ test #| generate push |#
+  (check-equal? (generate-push (register-ref- 'Param 0))
+                (vector-immutable (sPUSH_PARAMc 0)))
+
+  (check-equal? (generate-push (register-ref- 'Param 3))
+                (vector-immutable (sPUSH_PARAMc 3)))
+
+  (check-equal? (generate-push (register-ref- 'Param 4))
+                (vector-immutable PUSH_PARAM 4)))
+
+(define (generate-pop-to (reg-ref : register-ref-)) : (Immutable-Vectorof Byte)
+  (define idx (register-ref--index reg-ref))
+  (case (register-ref--register reg-ref)
+    [(Param)  (cond [(fx<= idx sPOP_TO_PARAMn) (vector-immutable (sPOP_TO_PARAMc idx))]
+                     [(byte? idx) (vector-immutable POP_TO_PARAM idx)]
+                     [else (raise-user-error (format "index too large for pop to param ~a" idx))])]
+    [(Local)  (cond [(byte? idx) (vector-immutable POP_TO_LOCAL idx)]
+                     [else (raise-user-error (format "index too large for pop to local ~a" idx))])]
+    [(Global) (cond [(byte? idx) (vector-immutable POP_TO_GLOBAL idx)]
+                     [else (raise-user-error (format "index too large for pop to global ~a" idx))])]
+    [else (raise-user-error (format "unknown register ref ~a" reg-ref))]))
+
+(module+ test #| generate pop to |#
+  (check-equal? (generate-pop-to (register-ref- 'Param 0))
+                (vector-immutable (sPOP_TO_PARAMc 0)))
+
+  (check-equal? (generate-pop-to (register-ref- 'Param 4))
+                (vector-immutable POP_TO_PARAM 4)))
+
 (struct ast-info-
   ((pre-code     : (Listof ast-node-))        ;; code that is generated before this very node, (e.g. preparing locals to be passed as parameters to a function call)
    (post-code    : (Listof ast-node-))        ;; code that is generated after this very node
    (source-start : Nonnegative-Integer)       ;; reference to source code
    (source-end   : Nonnegative-Integer)       ;;
-   (locals-used  : Nonnegative-Integer))      ;; number of locals used up by this node (and its sub nodes)
+   (locals-used  : Nonnegative-Integer)       ;; number of locals used up by this node (and its sub nodes)
+   (id-map       : (HashTable Symbol register-ref-))
+   )
   #:transparent)
 
 (define (make-ast-info #:pre-code (a-pre-code : (Listof ast-node-) (list))
                        #:post-code (a-post-code : (Listof ast-node-) (list))
                        #:source-start (a-source-start : Nonnegative-Integer 0)
                        #:source-end (a-source-end : Nonnegative-Integer 0)
-                       #:locals-used (a-locals-used : Nonnegative-Integer 0)) : ast-info-
+                       #:locals-used (a-locals-used : Nonnegative-Integer 0)
+                       #:id-map (an-id-map : (HashTable Symbol register-ref-) (hash))) : ast-info-
   (ast-info- a-pre-code
              a-post-code
              a-source-start
              a-source-end
-             a-locals-used))
+             a-locals-used
+             an-id-map))
 
 (struct ast-type-def- ast-node-
   ()
@@ -113,12 +194,12 @@
 
 ;; "A"
 (struct ast-at-char- ast-ex-atomic-
-  ((byte : Byte))
+  ((value : Byte))
   #:transparent)
 
 ;; 4711
 (struct ast-at-int- ast-ex-atomic-
-  ((int : Integer))
+  ((value : Integer))
   #:transparent)
 
 ;; "..."
@@ -348,7 +429,6 @@
             (list (list 'ast-at-bool- _ #f))) #t]
      [_ #f])))
 
-
 (module+ test #| simple reverse function |#
   (check-true
    (match
@@ -384,8 +464,74 @@
             (list ast-ex-fun-call-
              _
              cons
-             (list (list ast-ex-fun-call- _ car (list (list ast-at-id- _ a-list)))
-              (list ast-at-id- _ b-list)))))
-          #f))
-        ) #t]
+             (list `(ast-ex-fun-call- ,_ car ,(list `(ast-at-id- ,_ a-list)))
+             `(ast-at-id- ,_ b-list)))))
+          #f)))
+      #t]
      [_ #f])))
+
+;; do generation for stack machine
+;; goal: transform the reverse function into stack machine code
+
+;; compiler passes 0 1 2 .. n
+;; n = generate all information necessary to
+;;       - execute in vm
+;;       - write into file (loadable by runtime / vm)
+;; all passes before that will (just) rewrite the ast
+
+(define (low-byte (int : Integer)) : Byte
+  (define lb (bitwise-and #xff int))
+  (if (byte? lb)
+      lb
+      (raise-user-error "low-byte error")))
+
+(define (high-byte (int : Integer)) : Byte
+  (define hb (arithmetic-shift int -8))
+  (if (byte? hb)
+      hb
+      (raise-user-error "high-byte error")))
+
+;; ids should be resolved at some pass
+;; e.g. id -> param#, id -> global#, id -> local#
+
+(define (gen-atom (atom : ast-ex-atomic-)) : (Immutable-Vectorof Byte)
+  (cond
+    [(ast-at-int-? atom)
+     (define value (ast-at-int--value atom))
+     (vector-immutable PUSH_INT (low-byte value) (high-byte value))]
+    [(ast-at-bool-? atom)
+     (vector-immutable PUSH_BYTE (if (ast-at-bool--bool atom) (cell-byte--value TRUE) (cell-byte--value FALSE)))]
+    [(ast-at-id-? atom)
+     ;; TODO push value behind id
+     (raise-user-error "id not implemented yet")]
+    [(ast-at-string-? atom)
+     (raise-user-error "string not implemented yet")]
+    [else (raise-user-error (format "unknown atomic value ~a" atom))]))
+
+(module+ test #| gen-atom |#
+  (check-equal? (gen-atom (ast-at-int- (make-ast-info) #x02fe))
+                (vector-immutable PUSH_INT #xfe #x02))
+
+  (check-equal? (gen-atom (ast-at-bool- (make-ast-info) #t))
+                (vector-immutable PUSH_BYTE (cell-byte--value TRUE))))
+
+(define (svm-generate-function (def : ast-ex-fun-def-)) : (Immutable-Vectorof Byte)
+  (vector-immutable))
+
+(module+ test #| generate code for simple reverse function |#
+  (check-equal?
+   (svm-generate-function
+    (m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*
+                        "reverse a-list, consing it into b-list")
+               (if (nil? a-list)
+                   b-list
+                   (reverse (cdr a-list) (cons (car a-list) b-list)))))
+   (vector-immutable (sPUSH_PARAMc 1)
+                     (sNIL?-RET-PARAMc 0)
+                     (sPUSH_PARAMc 1)
+                     CDR
+                     (sPUSH_PARAMc 0)
+                     (sPUSH_PARAMc 1)
+                     CAR
+                     CONS
+                     TAIL_CALL)))
