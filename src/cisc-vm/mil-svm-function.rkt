@@ -2,6 +2,8 @@
 
 (require (only-in racket/fixnum fx+ fx= fx< fx<= fx- fx>= fx>))
 
+(require (only-in racket/hash hash-union))
+
 (require (for-syntax typed/racket syntax/parse))
 
 (require (only-in "./svm-structures.rkt"
@@ -62,11 +64,14 @@
        (map nested->list deeply-nested)]
 
       [(hash? deeply-nested)
-       (foldl (lambda ((key : Any) (acc-hash : (HashTable Any Any)))
-                (hash-set acc-hash key (nested->list (hash-ref deeply-nested key))))
-            (hash) (hash-keys deeply-nested))]
+       (foldl (lambda ((key : Any) (acc-hash-list : (Listof Any)))
+                (append acc-hash-list (list key (nested->list (hash-ref deeply-nested key)))))
+            (list 'hash) (hash-keys deeply-nested))]
 
-      [else deeply-nested])))
+      [else deeply-nested]))
+
+  (check-equal? (nested->list (hash 'a 1))
+               (list 'hash 'a 1)))
 
 (struct ast-node-
   ((info : ast-info-))
@@ -258,7 +263,7 @@
    (def-params  : (Listof ast-pa-defaulted-def-))
    (return-type : ast-type-def-)
    (description : (Listof String))
-   (body        : (Listof ast-expression-)))
+   (body        : ast-expression-))
   #:transparent)
 
 (struct ast-ex-with-local- ast-node-
@@ -315,8 +320,8 @@
      #'(ast-ex-with- (make-ast-info)
                      (list (ast-ex-with-local- (make-ast-info) 'id (m-expression-def expression)) ...)
                      (m-expression-def body))]
-    [(_ ((~literal if) bool-param true-param false-param))
 
+    [(_ ((~literal if) bool-param true-param false-param))
      #'(ast-ex-if- (make-ast-info)
                    (m-expression-def bool-param)
                    (m-expression-def true-param)
@@ -404,20 +409,20 @@
 
 (define-syntax (m-fun-def stx)
   (syntax-parse stx
-      [(_ (id (p-id p-typ) ... (o-id o-typ o-val) ... -> r-typ desc ...) expr ...)
-       #'(ast-ex-fun-def- (make-ast-info)
+      [(_ (id (p-id p-typ) ... (o-id o-typ o-val) ... -> r-typ desc ...) expr)
+       #'( ast-ex-fun-def- (make-ast-info)
                        'id
                        (list (ast-param-def- (make-ast-info) 'p-id (m-type-def p-typ)) ...)
                        (list (ast-pa-defaulted-def- (make-ast-info) 'o-id (m-type-def o-typ) (m-expression-def o-val)) ...)
                        (m-type-def r-typ)
                        (list 'desc ...)
-                       (list (m-expression-def expr) ...))]))
+                       (m-expression-def expr))]))
 
 (module+ test #| m-fun-def |#
   (check-true
    (match (nested->list (m-fun-def (mf (p0 A) (p1 B) (p2 C 10) -> C "some")
                                   #f))
-     [(list 'ast-ex-fun-def-
+     [(list  ast-ex-fun-def-
             _
             'mf
             (list (list 'ast-param-def- _ 'p0 (list 'ast-td-simple- _ 'A))
@@ -426,7 +431,7 @@
                         (list 'ast-at-int- _ 10)))
             (list 'ast-td-simple- _ 'C)
             (list "some")
-            (list (list 'ast-at-bool- _ #f))) #t]
+            (list 'ast-at-bool- _ #f)) #t]
      [_ #f])))
 
 (module+ test #| simple reverse function |#
@@ -453,27 +458,27 @@
           (list ast-at-nil- _)))
         (list ast-td-complex- _ list (list (list ast-td-simple- _ cell)))
         (list "reverse a-list, consing it into b-list")
-        (list (list ast-ex-if-
-          _
-          (list ast-ex-fun-call- _ nil? (list (list ast-at-id- _ a-list)))
-          (list ast-at-id- _ b-list)
-          (list ast-ex-fun-call-
-           _
-           reverse
-           (list (list ast-ex-fun-call- _ cdr (list (list ast-at-id- _ a-list)))
-            (list ast-ex-fun-call-
-             _
-             cons
-             (list `(ast-ex-fun-call- ,_ car ,(list `(ast-at-id- ,_ a-list)))
-             `(ast-at-id- ,_ b-list)))))
-          #f)))
+        (list ast-ex-if-
+                _
+                (list ast-ex-fun-call- _ nil? (list (list ast-at-id- _ a-list)))
+                (list ast-at-id- _ b-list)
+                (list ast-ex-fun-call-
+                      _
+                      reverse
+                      (list (list ast-ex-fun-call- _ cdr (list (list ast-at-id- _ a-list)))
+                            (list ast-ex-fun-call-
+                                  _
+                                  cons
+                                  (list `(ast-ex-fun-call- ,_ car ,(list `(ast-at-id- ,_ a-list)))
+                                        `(ast-at-id- ,_ b-list)))))
+                #f))
       #t]
      [_ #f])))
 
 ;; do generation for stack machine
 ;; goal: transform the reverse function into stack machine code
 
-;; compiler passes 0 1 2 .. n
+;; compiler passes 0 1 2 .. n <- just increment and use it in the ast-node?
 ;; n = generate all information necessary to
 ;;       - execute in vm
 ;;       - write into file (loadable by runtime / vm)
@@ -490,6 +495,17 @@
   (if (byte? hb)
       hb
       (raise-user-error "high-byte error")))
+
+(define (bytes->int (low : Byte) (high : Byte)) : Integer
+  (bitwise-xor low (arithmetic-shift high 8)))
+
+(module+ test #| low-byte, high-byte, bytes->int |#
+  (check-equal? (low-byte #xA5FE)
+                #xFE)
+  (check-equal? (high-byte #xA5FE)
+                #xA5)
+  (check-equal? (bytes->int #xFE #xA5)
+                #xA5FE))
 
 ;; ids should be resolved at some pass
 ;; e.g. id -> param#, id -> global#, id -> local#
@@ -523,8 +539,64 @@
   (check-equal? (gen-atom (ast-at-bool- (make-ast-info) #t))
                 (vector-immutable PUSH_BYTE (cell-byte--value TRUE))))
 
+(define (svm-resolve-ids (node : ast-node-) (id-map : (Immutable-HashTable Symbol register-ref-))) : ast-node-
+  (cond
+    [(ast-ex-with-? node) node] ;; TODO: add new ids for locals, has expressions to resolve
+    [(ast-ex-cond-? node) node] ;; TODO: has expressions to resolve
+    [(ast-ex-if-? node) node]   ;; TODO: has expressions to resolve
+    [(ast-ex-fun-call-? node) node] ;; TODO: has expressions to resolve
+
+    [(ast-at-id-? node)
+     (struct-copy ast-at-id- node
+                  [info #:parent ast-node-
+                        (struct-copy ast-info- (ast-node--info node)
+                                     [id-map (hash (ast-at-id--id node) (hash-ref id-map (ast-at-id--id node)))])] )]
+
+    [(ast-pa-defaulted-def-? node) node] ;; has expression to resolve
+
+    [(ast-ex-fun-def-? node)
+     (define ids (append (map (lambda (param) (ast-param-def--id param)) (ast-ex-fun-def--parameter node))
+                         (map (lambda (d-param) (ast-param-def--id d-param)) (ast-ex-fun-def--def-params node))))
+     (define id-offset-pairs (map (lambda: ((a : Symbol) (b : Nonnegative-Integer))
+                                    (define idx (- (length ids) b 1))
+                                    (if (>= idx 0)
+                                        (cons a (register-ref- 'Param idx))
+                                        (raise-user-error "generating param idx hash failed")))
+                                  ids (range (length ids))))
+     (define id-reg-map (make-hash id-offset-pairs))
+     (define new-body (svm-resolve-ids (ast-ex-fun-def--body node) (hash-union id-map id-reg-map)))
+     (struct-copy ast-ex-fun-def- node
+                  [body (if (ast-expression-? new-body) new-body (raise-user-error "expected new-body to be of type ast-expression-"))])]
+    [else node]))
+
+(module+ test #| svm-resolve-ids |#
+  (check-true
+   (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
+                                                   p1) (hash)))
+     [(list _ ... (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)) #t]
+     [_ #f])
+   "p1 (second parameter) has offset 0, looking from the end of the list")
+
+  (check-true
+   (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
+                                                   p0) (hash)))
+     [(list _ ... (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0)) #t]
+     [_ #f])
+   "p0 (first parameter) has offset 1, looking from the end of the list"))
+
+;; optimization pattern:
+;;   top-level-expr: if (nil? anything) <- can be negated
+;;                      param/local <- then/else can be interchanged
+;;                      tail-call <- in TC-position
+;;   can be generated optimized with
+;;     PUSH anything
+;;     sNIL?-RET_PARAMc / sNIL?-RET-LOCALc
+;;     <else ...>
+;;     TAIL_CALL
+
 (define (svm-generate-function (def : ast-ex-fun-def-)) : (Immutable-Vectorof Byte)
-  (vector-immutable))
+  ;; TODO: currently just a dummy implementation
+  (vector-immutable 129 156 129 41 128 129 40 42 35))
 
 (module+ test #| generate code for simple reverse function |#
   (check-equal?
