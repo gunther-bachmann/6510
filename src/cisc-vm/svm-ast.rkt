@@ -149,7 +149,7 @@
 
 (struct ast-ex-cond-clause- ast-node-
   ((condition : ast-expression-)
-   (body      : (Listof ast-expression-)))
+   (body      : ast-expression-))
   #:transparent)
 
 ;; (cond (bool ex) ...)

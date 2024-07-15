@@ -65,9 +65,9 @@
                    (m-expression-def false-param)
                    #f)]
 
-    [(_ ((~literal cond) [case-cond case-expression ...] ... [(~literal _) else-expression]))
+    [(_ ((~literal cond) [case-cond case-expression] ... [(~literal _) else-expression]))
      #'(ast-ex-cond- (make-ast-info)
-                     (list (ast-ex-cond-clause- (make-ast-info) (m-expression-def case-cond) (list (m-expression-def case-expression) ...)) ...)
+                     (list (ast-ex-cond-clause- (make-ast-info) (m-expression-def case-cond) (m-expression-def case-expression)) ...)
                      (m-expression-def else-expression))]
 
     [(_ (id param ...))

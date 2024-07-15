@@ -136,12 +136,43 @@
   (check-equal? (gen-atom (ast-at-bool- (make-ast-info) #t))
                 (vector-immutable PUSH_BYTE (cell-byte--value TRUE))))
 
-(define (svm-resolve-ids (node : ast-node-) (id-map : (Immutable-HashTable Symbol register-ref-))) : ast-node-
+(: svm-resolve-ids (-> ast-node- (Immutable-HashTable Symbol register-ref-) ast-node-))
+(define (svm-resolve-ids node id-map)
   (cond
-    [(ast-ex-with-? node) node] ;; TODO: add new ids for locals, has expressions to resolve
-    [(ast-ex-cond-? node) node] ;; TODO: has expressions to resolve
-    [(ast-ex-if-? node) node]   ;; TODO: has expressions to resolve
-    [(ast-ex-fun-call-? node) node] ;; TODO: has expressions to resolve
+    [(ast-ex-with-? node)
+     (define ids (map (lambda (local) (ast-ex-with-local--id local)) (ast-ex-with--locals node)))
+     (define id-offset-pairs (map (lambda: ((a : Symbol) (idx : Nonnegative-Integer))
+                                    (cons a (register-ref- 'Local idx)) ;; TODO maybe add offset because of nested with constructs! => need to keep used local idx in parameter of this function! (or do i need this information elsewhere during generation?)
+                                    )
+                                  ids (range (length ids))))
+     (define complete-id-map (hash-union id-map (make-hash id-offset-pairs)))
+     (struct-copy ast-ex-with- node
+                  [locals (map (lambda: ((local : ast-ex-with-local-) (i : Nonnegative-Integer))
+                                 (struct-copy ast-ex-with-local- local
+                                              [value (cast (svm-resolve-ids (ast-ex-with-local--value local) (hash-union id-map (make-hash (take id-offset-pairs i)))) ast-expression-)]))
+                               (ast-ex-with--locals node) (range (length (ast-ex-with--locals node))))]
+                  [body (cast (svm-resolve-ids (ast-ex-with--body node) complete-id-map) ast-expression-)])] ;; TODO: add new ids for locals, has expressions to resolve
+
+    [(ast-ex-cond-? node)
+     (struct-copy ast-ex-cond- node
+                  [clauses (map (lambda: ((clause : ast-ex-cond-clause-))
+                                  (struct-copy ast-ex-cond-clause- clause
+                                               [condition (cast (svm-resolve-ids (ast-ex-cond-clause--condition clause) id-map) ast-expression-)]
+                                               [body (cast (svm-resolve-ids (ast-ex-cond-clause--body clause) id-map) ast-expression-)]))
+                                (ast-ex-cond--clauses node))]
+                  [else    (cast (svm-resolve-ids (ast-ex-cond--else node) id-map) ast-expression-)])]
+
+    [(ast-ex-if-? node)
+     (struct-copy ast-ex-if- node
+                  [condition (cast (svm-resolve-ids (ast-ex-if--condition node) id-map) ast-expression-)]
+                  [then      (cast (svm-resolve-ids (ast-ex-if--then node) id-map) ast-expression-)]
+                  [else      (cast (svm-resolve-ids (ast-ex-if--else node) id-map) ast-expression-)])]
+
+    [(ast-ex-fun-call-? node)
+     (struct-copy ast-ex-fun-call- node
+                  [parameters (map (lambda: ((expr : ast-expression-))
+                                     (cast (svm-resolve-ids expr id-map) ast-expression-))
+                                   (ast-ex-fun-call--parameters node))])]
 
     [(ast-at-id-? node)
      (struct-copy ast-at-id- node
@@ -160,26 +191,70 @@
                                         (cons a (register-ref- 'Param idx))
                                         (raise-user-error "generating param idx hash failed")))
                                   ids (range (length ids))))
-     (define id-reg-map (make-hash id-offset-pairs))
-     (define new-body (svm-resolve-ids (ast-ex-fun-def--body node) (hash-union id-map id-reg-map)))
+     (define add-id-map (make-hash id-offset-pairs))
+     (define new-body (svm-resolve-ids (ast-ex-fun-def--body node) (hash-union id-map add-id-map)))
      (struct-copy ast-ex-fun-def- node
-                  [body (if (ast-expression-? new-body) new-body (raise-user-error "expected new-body to be of type ast-expression-"))])]
+                  [body (cast new-body ast-expression-)])]
     [else node]))
 
 (module+ test #| svm-resolve-ids |#
+  (check-true
+   (match (nested->list (svm-resolve-ids (m-expression-def (with ((p0 1) (p1 (f p0))) p1)) (hash)))
+     [(list 'ast-ex-with- _
+              (list (list 'ast-ex-with-local- _ 'p0 _)
+                    (list 'ast-ex-with-local- _ 'p1
+                          (list 'ast-ex-fun-call-
+                                  _ 'f
+                                  (list (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Local 0))) 'p0)))))
+              (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Local 1))) 'p1)) #t]
+     [_ #f])
+   "resolved locals in with forms: p0/p1 (first/second local) has offset 0/1")
+
+  (check-true
+   (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
+                                                   (cond (p1 p0) (p0 p1) (_ p0))) (hash)))
+     [(list _ ... (list ast-ex-cond- _
+                      (list (list ast-ex-cond-clause- _
+                                  (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)
+                                  (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0))
+                            (list ast-ex-cond-clause- _
+                                  (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0)
+                                  (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)))
+                      (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0))) #t]
+     [_ #f])
+   "resolved parameter in cond forms: p1/p0 (second/first parameter) has offset 0/1, looking from the end of the list")
+
+  (check-true
+   (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
+                                                   (a p1)) (hash)))
+     [(list _ ... (list ast-ex-fun-call- _ 'a (list (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)))) #t]
+     [_ #f])
+   "resolved parameter in function calls: p1 (second parameter) has offset 0, looking from the end of the list")
+
+  (check-true
+   (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
+                                                   (if p1 p0 p1)) (hash)))
+     [(list _ ... (list ast-ex-if- _
+                      (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)
+                      (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0)
+                      (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)
+                      _)) #t]
+     [_ #f])
+   "resolved parameter in if forms: p1/0 (second/first parameter) has offset 0/1, looking from the end of the list")
+
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    p1) (hash)))
      [(list _ ... (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)) #t]
      [_ #f])
-   "p1 (second parameter) has offset 0, looking from the end of the list")
+   "resolves parameter in id usage: p1 (second parameter) has offset 0, looking from the end of the list")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    p0) (hash)))
      [(list _ ... (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0)) #t]
      [_ #f])
-   "p0 (first parameter) has offset 1, looking from the end of the list"))
+   "resolves parameter in id usage: p0 (first parameter) has offset 1, looking from the end of the list"))
 
 ;; optimization pattern:
 ;;   top-level-expr: if (nil? anything) <- can be negated
