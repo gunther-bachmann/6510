@@ -502,13 +502,21 @@
     [(ast-at-bool-? atom)
      (vector-immutable PUSH_BYTE (if (ast-at-bool--bool atom) (cell-byte--value TRUE) (cell-byte--value FALSE)))]
     [(ast-at-id-? atom)
-     ;; TODO push value behind id
-     (raise-user-error "id not implemented yet")]
+     (define reg-ref (hash-ref (ast-info--id-map (ast-node--info atom)) (ast-at-id--id atom)))
+     (generate-push reg-ref)]
     [(ast-at-string-? atom)
      (raise-user-error "string not implemented yet")]
     [else (raise-user-error (format "unknown atomic value ~a" atom))]))
 
 (module+ test #| gen-atom |#
+  (check-equal? (gen-atom (ast-at-id- (make-ast-info #:id-map (hash 'some (register-ref- 'Param 2))) 'some))
+                (vector-immutable (sPUSH_PARAMc 2)))
+
+  (check-equal? (gen-atom (ast-at-id- (make-ast-info #:id-map (hash 'some (register-ref- 'Param 10))) 'some))
+                (vector-immutable PUSH_PARAM 10))
+
+  (check-exn exn:fail? (lambda () (gen-atom (ast-at-id- (make-ast-info #:id-map (hash 'some (register-ref- 'Param 10))) 'unknown))))
+
   (check-equal? (gen-atom (ast-at-int- (make-ast-info) #x02fe))
                 (vector-immutable PUSH_INT #xfe #x02))
 
