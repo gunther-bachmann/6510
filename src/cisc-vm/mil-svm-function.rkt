@@ -91,8 +91,6 @@
   (check-equal? (generate-pop-to (register-ref- 'Param 4))
                 (vector-immutable POP_TO_PARAM 4)))
 
-
-
 ;; do generation for stack machine
 ;; goal: transform the reverse function into stack machine code
 
@@ -136,6 +134,7 @@
   (check-equal? (gen-atom (ast-at-bool- (make-ast-info) #t))
                 (vector-immutable PUSH_BYTE (cell-byte--value TRUE))))
 
+;; TODO refactor this method
 (: svm-resolve-ids (-> ast-node- (Immutable-HashTable Symbol register-ref-) ast-node-))
 (define (svm-resolve-ids node id-map)
   (cond
@@ -151,7 +150,7 @@
                                  (struct-copy ast-ex-with-local- local
                                               [value (cast (svm-resolve-ids (ast-ex-with-local--value local) (hash-union id-map (make-hash (take id-offset-pairs i)))) ast-expression-)]))
                                (ast-ex-with--locals node) (range (length (ast-ex-with--locals node))))]
-                  [body (cast (svm-resolve-ids (ast-ex-with--body node) complete-id-map) ast-expression-)])] ;; TODO: add new ids for locals, has expressions to resolve
+                  [body (cast (svm-resolve-ids (ast-ex-with--body node) complete-id-map) ast-expression-)])]
 
     [(ast-ex-cond-? node)
      (struct-copy ast-ex-cond- node
@@ -206,38 +205,38 @@
                           (list 'ast-ex-fun-call-
                                   _ 'f
                                   (list (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Local 0))) 'p0)))))
-              (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Local 1))) 'p1)) #t]
+              (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Local 1))) 'p1)) #t]
      [_ #f])
    "resolved locals in with forms: p0/p1 (first/second local) has offset 0/1")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    (cond (p1 p0) (p0 p1) (_ p0))) (hash)))
-     [(list _ ... (list ast-ex-cond- _
-                      (list (list ast-ex-cond-clause- _
-                                  (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)
-                                  (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0))
-                            (list ast-ex-cond-clause- _
-                                  (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0)
-                                  (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)))
-                      (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0))) #t]
+     [(list _ ... (list 'ast-ex-cond- _
+                      (list (list 'ast-ex-cond-clause- _
+                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)
+                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0))
+                            (list 'ast-ex-cond-clause- _
+                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0)
+                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)))
+                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0))) #t]
      [_ #f])
    "resolved parameter in cond forms: p1/p0 (second/first parameter) has offset 0/1, looking from the end of the list")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    (a p1)) (hash)))
-     [(list _ ... (list ast-ex-fun-call- _ 'a (list (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)))) #t]
+     [(list _ ... (list 'ast-ex-fun-call- _ 'a (list (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)))) #t]
      [_ #f])
    "resolved parameter in function calls: p1 (second parameter) has offset 0, looking from the end of the list")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    (if p1 p0 p1)) (hash)))
-     [(list _ ... (list ast-ex-if- _
-                      (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)
-                      (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0)
-                      (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)
+     [(list _ ... (list 'ast-ex-if- _
+                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)
+                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0)
+                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)
                       _)) #t]
      [_ #f])
    "resolved parameter in if forms: p1/0 (second/first parameter) has offset 0/1, looking from the end of the list")
@@ -245,14 +244,14 @@
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    p1) (hash)))
-     [(list _ ... (list ast-at-id- (list ast-info- _ ... (list 'hash 'p1 (list register-ref- 'Param 0))) 'p1)) #t]
+     [(list _ ... (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)) #t]
      [_ #f])
    "resolves parameter in id usage: p1 (second parameter) has offset 0, looking from the end of the list")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    p0) (hash)))
-     [(list _ ... (list ast-at-id- (list ast-info- _ ... (list 'hash 'p0 (list register-ref- 'Param 1))) 'p0)) #t]
+     [(list _ ... (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0)) #t]
      [_ #f])
    "resolves parameter in id usage: p0 (first parameter) has offset 1, looking from the end of the list"))
 

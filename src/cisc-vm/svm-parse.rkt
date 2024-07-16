@@ -70,6 +70,15 @@
                      (list (ast-ex-cond-clause- (make-ast-info) (m-expression-def case-cond) (m-expression-def case-expression)) ...)
                      (m-expression-def else-expression))]
 
+    [(_ ((~literal lambda) ((p-id p-typ) ... (o-id o-typ o-val) ... -> r-typ) expr))
+     #'( ast-ex-fun-def- (make-ast-info)
+                         'lambda
+                         (list (ast-param-def- (make-ast-info) 'p-id (m-type-def p-typ)) ...)
+                         (list (ast-pa-defaulted-def- (make-ast-info) 'o-id (m-type-def o-typ) (m-expression-def o-val)) ...)
+                         (m-type-def r-typ)
+                         (list)
+                         (m-expression-def expr))]
+
     [(_ (id param ...))
      #'(ast-ex-fun-call- (make-ast-info) 'id (list (m-expression-def param) ...))]
 
@@ -81,6 +90,11 @@
              (else (raise-user-error (format "unknown expression value type ~a" 'value))))]))
 
 (module+ test #| m-expression-def |#
+  (check-true (match (nested->list (m-expression-def (lambda ((a : list*) (b : bool) -> bool) b)))
+                [(list 'ast-ex-fun-def- _ 'lambda _ ...) #t]
+                [_ #f])
+              "parse anonymous lambda expression")
+
   (check-true
    (match (nested->list (m-expression-def (with () "some")))
      [(list 'ast-ex-with- _ (list) (list 'ast-at-string- _ "some")) #t]
@@ -114,8 +128,8 @@
   (check-true
    (match (nested->list (m-expression-def (cond [a 1] [b 3] [_ 0])))
      [(list 'ast-ex-cond- _
-            (list (list 'ast-ex-cond-clause- _ (list 'ast-at-id- _ 'a) (list (list 'ast-at-int- _ 1)))
-                  (list 'ast-ex-cond-clause- _ (list 'ast-at-id- _ 'b) (list (list 'ast-at-int- _ 3))))
+            (list (list 'ast-ex-cond-clause- _ (list 'ast-at-id- _ 'a) (list 'ast-at-int- _ 1))
+                  (list 'ast-ex-cond-clause- _ (list 'ast-at-id- _ 'b) (list 'ast-at-int- _ 3)))
             (list 'ast-at-int- _ 0)) #t]
      [_ #f])
    "complex cond expression is properly parsed as expression")
