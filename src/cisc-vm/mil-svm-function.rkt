@@ -134,67 +134,98 @@
   (check-equal? (gen-atom (ast-at-bool- (make-ast-info) #t))
                 (vector-immutable PUSH_BYTE (cell-byte--value TRUE))))
 
-;; TODO refactor this method
-(: svm-resolve-ids (-> ast-node- (Immutable-HashTable Symbol register-ref-) ast-node-))
-(define (svm-resolve-ids node id-map)
+(define-type Id-Reg-Map (Immutable-HashTable Symbol register-ref-))
+
+
+(define (svm-resolve-ids--with--map-local
+         (local : ast-ex-with-local-) (i : Nonnegative-Integer) (id-map : Id-Reg-Map)) : ast-ex-with-local-
+  (define value (ast-ex-with-local--value local))
+  (struct-copy ast-ex-with-local- local
+               [value (svm-resolve-ids->expression value id-map)]))
+
+(define (svm-resolve-ids--with (with-node : ast-ex-with-) (id-map : Id-Reg-Map)) : ast-ex-with-
+  (define locals (ast-ex-with--locals with-node))
+  (define ids (map (lambda (local) (ast-ex-with-local--id local)) locals))
+  ;; TODO maybe add offset because of nested with constructs! => need to keep used local idx in parameter of this function! (or do i need this information elsewhere during generation?)
+  (define id-reg-ref-pairs (map (lambda: ((a : Symbol) (idx : Nonnegative-Integer))
+                                 (cons a (register-ref- 'Local idx)))
+                               ids (range (length ids))))
+  (define complete-id-map (hash-union id-map (make-hash id-reg-ref-pairs)))
+  (struct-copy ast-ex-with- with-node
+               [locals (map (lambda: ((local : ast-ex-with-local-) (i : Nonnegative-Integer))
+                              (define id-map-up-to-value (hash-union id-map (make-hash (take id-reg-ref-pairs i))))
+                              (svm-resolve-ids--with--map-local local i id-map-up-to-value))
+                            locals (range (length locals)))]
+               [body (svm-resolve-ids->expression (ast-ex-with--body with-node) complete-id-map)]))
+
+(define (svm-resolve-ids--cond--clause
+         (clause : ast-ex-cond-clause-) (id-map : Id-Reg-Map)) : ast-ex-cond-clause-
+  (define condition (ast-ex-cond-clause--condition clause))
+  (define body (ast-ex-cond-clause--body clause))
+  (struct-copy ast-ex-cond-clause- clause
+               [condition (svm-resolve-ids->expression condition id-map)]
+               [body      (svm-resolve-ids->expression body id-map)]))
+
+(define (svm-resolve-ids--cond (cond-node : ast-ex-cond-) (id-map : Id-Reg-Map)) : ast-ex-cond-
+  (struct-copy ast-ex-cond- cond-node
+               [clauses (map (lambda: ((clause : ast-ex-cond-clause-))
+                               (svm-resolve-ids--cond--clause clause id-map))
+                             (ast-ex-cond--clauses cond-node))]
+               [else    (svm-resolve-ids->expression (ast-ex-cond--else cond-node) id-map)]))
+
+(define (svm-resolve-ids--if (if-node : ast-ex-if-) (id-map : Id-Reg-Map)) : ast-ex-if-
+  (struct-copy ast-ex-if- if-node
+               [condition (svm-resolve-ids->expression (ast-ex-if--condition if-node) id-map)]
+               [then      (svm-resolve-ids->expression (ast-ex-if--then if-node) id-map)]
+               [else      (svm-resolve-ids->expression (ast-ex-if--else if-node) id-map)]))
+
+(define (svm-resolve-ids--fun-call (fun-call-node : ast-ex-fun-call-) (id-map : Id-Reg-Map)) : ast-ex-fun-call-
+  (struct-copy ast-ex-fun-call- fun-call-node
+               [parameters (map (lambda: ((expr : ast-expression-))
+                                  (svm-resolve-ids->expression expr id-map))
+                                (ast-ex-fun-call--parameters fun-call-node))]))
+
+(define (svm-resolve-ids--id (id-node : ast-at-id-)  (id-map : Id-Reg-Map)) : ast-at-id-
+  (struct-copy ast-at-id- id-node
+               [info #:parent ast-node-
+                     (struct-copy ast-info- (ast-node--info id-node)
+                                  [id-map (hash (ast-at-id--id id-node)
+                                                (hash-ref id-map (ast-at-id--id id-node)))])] ))
+
+(define (svm-resolve-ids--fun-def (fun-def-node : ast-ex-fun-def-) (id-map : Id-Reg-Map)) : ast-ex-fun-def-
+  (define param-ids (map (lambda (param) (ast-param-def--id param))
+                         (append (ast-ex-fun-def--parameter fun-def-node)
+                                 (ast-ex-fun-def--def-params fun-def-node))))
+  (define param-ids-len (length param-ids))
+  (define param-id-reg-ref-pairs
+    (map (lambda: ((a : Symbol) (b : Nonnegative-Integer))
+           (define idx (- param-ids-len b 1))
+           (if (>= idx 0)
+               (cons a (register-ref- 'Param idx))
+               (raise-user-error "generating param idx hash failed")))
+         param-ids (range param-ids-len)))
+  (define new-param-id-map (hash-union id-map (make-hash param-id-reg-ref-pairs)))
+  (struct-copy ast-ex-fun-def- fun-def-node
+               [body (svm-resolve-ids->expression (ast-ex-fun-def--body fun-def-node) new-param-id-map)]))
+
+(define (svm-resolve-ids--pa-defaulted
+         (pa-def-node : ast-pa-defaulted-def-) (id-map : Id-Reg-Map)) : ast-pa-defaulted-def-
+  (struct-copy ast-pa-defaulted-def- pa-def-node
+               [default (svm-resolve-ids->expression (ast-pa-defaulted-def--default pa-def-node) id-map)]))
+
+(define (svm-resolve-ids (node : ast-node-) (id-map : Id-Reg-Map)) : ast-node-
   (cond
-    [(ast-ex-with-? node)
-     (define ids (map (lambda (local) (ast-ex-with-local--id local)) (ast-ex-with--locals node)))
-     (define id-offset-pairs (map (lambda: ((a : Symbol) (idx : Nonnegative-Integer))
-                                    (cons a (register-ref- 'Local idx)) ;; TODO maybe add offset because of nested with constructs! => need to keep used local idx in parameter of this function! (or do i need this information elsewhere during generation?)
-                                    )
-                                  ids (range (length ids))))
-     (define complete-id-map (hash-union id-map (make-hash id-offset-pairs)))
-     (struct-copy ast-ex-with- node
-                  [locals (map (lambda: ((local : ast-ex-with-local-) (i : Nonnegative-Integer))
-                                 (struct-copy ast-ex-with-local- local
-                                              [value (cast (svm-resolve-ids (ast-ex-with-local--value local) (hash-union id-map (make-hash (take id-offset-pairs i)))) ast-expression-)]))
-                               (ast-ex-with--locals node) (range (length (ast-ex-with--locals node))))]
-                  [body (cast (svm-resolve-ids (ast-ex-with--body node) complete-id-map) ast-expression-)])]
-
-    [(ast-ex-cond-? node)
-     (struct-copy ast-ex-cond- node
-                  [clauses (map (lambda: ((clause : ast-ex-cond-clause-))
-                                  (struct-copy ast-ex-cond-clause- clause
-                                               [condition (cast (svm-resolve-ids (ast-ex-cond-clause--condition clause) id-map) ast-expression-)]
-                                               [body (cast (svm-resolve-ids (ast-ex-cond-clause--body clause) id-map) ast-expression-)]))
-                                (ast-ex-cond--clauses node))]
-                  [else    (cast (svm-resolve-ids (ast-ex-cond--else node) id-map) ast-expression-)])]
-
-    [(ast-ex-if-? node)
-     (struct-copy ast-ex-if- node
-                  [condition (cast (svm-resolve-ids (ast-ex-if--condition node) id-map) ast-expression-)]
-                  [then      (cast (svm-resolve-ids (ast-ex-if--then node) id-map) ast-expression-)]
-                  [else      (cast (svm-resolve-ids (ast-ex-if--else node) id-map) ast-expression-)])]
-
-    [(ast-ex-fun-call-? node)
-     (struct-copy ast-ex-fun-call- node
-                  [parameters (map (lambda: ((expr : ast-expression-))
-                                     (cast (svm-resolve-ids expr id-map) ast-expression-))
-                                   (ast-ex-fun-call--parameters node))])]
-
-    [(ast-at-id-? node)
-     (struct-copy ast-at-id- node
-                  [info #:parent ast-node-
-                        (struct-copy ast-info- (ast-node--info node)
-                                     [id-map (hash (ast-at-id--id node) (hash-ref id-map (ast-at-id--id node)))])] )]
-
-    [(ast-pa-defaulted-def-? node) node] ;; has expression to resolve
-
-    [(ast-ex-fun-def-? node)
-     (define ids (append (map (lambda (param) (ast-param-def--id param)) (ast-ex-fun-def--parameter node))
-                         (map (lambda (d-param) (ast-param-def--id d-param)) (ast-ex-fun-def--def-params node))))
-     (define id-offset-pairs (map (lambda: ((a : Symbol) (b : Nonnegative-Integer))
-                                    (define idx (- (length ids) b 1))
-                                    (if (>= idx 0)
-                                        (cons a (register-ref- 'Param idx))
-                                        (raise-user-error "generating param idx hash failed")))
-                                  ids (range (length ids))))
-     (define add-id-map (make-hash id-offset-pairs))
-     (define new-body (svm-resolve-ids (ast-ex-fun-def--body node) (hash-union id-map add-id-map)))
-     (struct-copy ast-ex-fun-def- node
-                  [body (cast new-body ast-expression-)])]
+    [(ast-ex-with-? node)          (svm-resolve-ids--with node id-map)]
+    [(ast-ex-cond-? node)          (svm-resolve-ids--cond node id-map)]
+    [(ast-ex-if-? node)            (svm-resolve-ids--if node id-map)]
+    [(ast-ex-fun-call-? node)      (svm-resolve-ids--fun-call node id-map)]
+    [(ast-at-id-? node)            (svm-resolve-ids--id node id-map)]
+    [(ast-pa-defaulted-def-? node) (svm-resolve-ids--pa-defaulted node id-map)]
+    [(ast-ex-fun-def-? node)       (svm-resolve-ids--fun-def node id-map)]
     [else node]))
+
+(define (svm-resolve-ids->expression (node : ast-expression-) (id-map : Id-Reg-Map)) : ast-expression-
+  (cast (svm-resolve-ids node id-map) ast-expression-))
 
 (module+ test #| svm-resolve-ids |#
   (check-true
