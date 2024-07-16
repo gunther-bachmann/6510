@@ -29,6 +29,29 @@
          (struct-out ast-ex-with-)
          Register)
 
+;; ast-node-    :: ast=info-
+;;    +----- ast-type-def-
+;;    |         +----- ast-td-simple-   :: id
+;;    |         +----- ast-td-complex-  :: id x params
+;;    +----- ast-param-def    :: id x type
+;;    |         +----- ast-pa-defaulted-def-    :: default
+;;    +----- ast-expression-
+;;    |         +----- ast-ex-fun-def-   :: id x params x defaulted-params x return-type x docs x body
+;;    |         +----- ast-ex-cond-      :: cond-clauses x else
+;;    |         +----- ast-ex-if-
+;;    |         +----- ast-ex-with-      :: with-locals
+;;    |         +----- ast-ex-list- ??
+;;    |         |         +----- ast-ex-def-         :: id x value
+;;    |         |         +----- ast-ex-quoted-list- :: values
+;;    |         +----- ast-ex-fun-call-  :: id x params
+;;    |         +----- ast-ex-atomic-
+;;    |                   +----- ast-at-int-    :: int-value
+;;    |                   +----- ast-at-id-     :: id
+;;    |                   +----- ast-at-bool-   :: bool-value
+;;    |                   +----- ast-at-string- :: string-value
+;;    +----- ast-ex-cond-clause-  :: condition x body
+;;    +----- ast-ex-with-local-   :: id x value
+
 (define-type Register (U 'Param 'Global 'Local))
 
 (struct register-ref-
