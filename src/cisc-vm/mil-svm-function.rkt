@@ -136,55 +136,72 @@
 
 (define-type Id-Reg-Map (Immutable-HashTable Symbol register-ref-))
 
-
+;; resolve ids on a single local value expression in with-forms
 (define (svm-resolve-ids--with--map-local
-         (local : ast-ex-with-local-) (i : Nonnegative-Integer) (id-map : Id-Reg-Map)) : ast-ex-with-local-
+         (local : ast-ex-with-local-) (i : Nonnegative-Integer) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer)) : ast-ex-with-local-
   (define value (ast-ex-with-local--value local))
   (struct-copy ast-ex-with-local- local
-               [value (svm-resolve-ids->expression value id-map)]))
+               [value (svm-resolve-ids->expression value id-map locals-used)]))
 
-(define (svm-resolve-ids--with (with-node : ast-ex-with-) (id-map : Id-Reg-Map)) : ast-ex-with-
+;; resolve ids on with-forms, adding introduced ids to the id-map
+(define (svm-resolve-ids--with (with-node : ast-ex-with-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer)) : ast-ex-with-
   (define locals (ast-ex-with--locals with-node))
   (define ids (map (lambda (local) (ast-ex-with-local--id local)) locals))
   ;; TODO maybe add offset because of nested with constructs! => need to keep used local idx in parameter of this function! (or do i need this information elsewhere during generation?)
   (define id-reg-ref-pairs (map (lambda: ((a : Symbol) (idx : Nonnegative-Integer))
-                                 (cons a (register-ref- 'Local idx)))
+                                  (cons a (register-ref- 'Local (+ idx locals-used))))
                                ids (range (length ids))))
+  (define new-locals-used (+ locals-used (length locals)))
   (define complete-id-map (hash-union id-map (make-hash id-reg-ref-pairs)))
   (struct-copy ast-ex-with- with-node
+               [info #:parent ast-node- (struct-copy ast-info- (ast-node--info with-node)
+                                                     [locals-used new-locals-used])]
                [locals (map (lambda: ((local : ast-ex-with-local-) (i : Nonnegative-Integer))
                               (define id-map-up-to-value (hash-union id-map (make-hash (take id-reg-ref-pairs i))))
-                              (svm-resolve-ids--with--map-local local i id-map-up-to-value))
+                              (svm-resolve-ids--with--map-local local i id-map-up-to-value new-locals-used))
                             locals (range (length locals)))]
-               [body (svm-resolve-ids->expression (ast-ex-with--body with-node) complete-id-map)]))
+               [body (svm-resolve-ids->expression (ast-ex-with--body with-node) complete-id-map new-locals-used)]))
 
+;; resolve ids on a clause of a cond-form
 (define (svm-resolve-ids--cond--clause
-         (clause : ast-ex-cond-clause-) (id-map : Id-Reg-Map)) : ast-ex-cond-clause-
+         (clause : ast-ex-cond-clause-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer)) : ast-ex-cond-clause-
   (define condition (ast-ex-cond-clause--condition clause))
   (define body (ast-ex-cond-clause--body clause))
   (struct-copy ast-ex-cond-clause- clause
-               [condition (svm-resolve-ids->expression condition id-map)]
-               [body      (svm-resolve-ids->expression body id-map)]))
+               [info #:parent ast-node- (struct-copy ast-info- (ast-node--info clause)
+                                                     [locals-used locals-used])]
+               [condition (svm-resolve-ids->expression condition id-map locals-used)]
+               [body      (svm-resolve-ids->expression body id-map locals-used)]))
 
-(define (svm-resolve-ids--cond (cond-node : ast-ex-cond-) (id-map : Id-Reg-Map)) : ast-ex-cond-
+;; resolve ids on a cond-form
+(define (svm-resolve-ids--cond (cond-node : ast-ex-cond-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer)) : ast-ex-cond-
   (struct-copy ast-ex-cond- cond-node
+               [info #:parent ast-node- (struct-copy ast-info- (ast-node--info cond-node)
+                                                     [locals-used locals-used])]
                [clauses (map (lambda: ((clause : ast-ex-cond-clause-))
-                               (svm-resolve-ids--cond--clause clause id-map))
+                               (svm-resolve-ids--cond--clause clause id-map locals-used))
                              (ast-ex-cond--clauses cond-node))]
-               [else    (svm-resolve-ids->expression (ast-ex-cond--else cond-node) id-map)]))
+               [else    (svm-resolve-ids->expression (ast-ex-cond--else cond-node) id-map locals-used)]))
 
-(define (svm-resolve-ids--if (if-node : ast-ex-if-) (id-map : Id-Reg-Map)) : ast-ex-if-
+;; resolve ids on an if-form
+(define (svm-resolve-ids--if (if-node : ast-ex-if-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer)) : ast-ex-if-
   (struct-copy ast-ex-if- if-node
-               [condition (svm-resolve-ids->expression (ast-ex-if--condition if-node) id-map)]
-               [then      (svm-resolve-ids->expression (ast-ex-if--then if-node) id-map)]
-               [else      (svm-resolve-ids->expression (ast-ex-if--else if-node) id-map)]))
+               [info #:parent ast-node- (struct-copy ast-info- (ast-node--info if-node)
+                                                     [locals-used locals-used])]
+               [condition (svm-resolve-ids->expression (ast-ex-if--condition if-node) id-map locals-used)]
+               [then      (svm-resolve-ids->expression (ast-ex-if--then if-node) id-map locals-used)]
+               [else      (svm-resolve-ids->expression (ast-ex-if--else if-node) id-map locals-used)]))
 
-(define (svm-resolve-ids--fun-call (fun-call-node : ast-ex-fun-call-) (id-map : Id-Reg-Map)) : ast-ex-fun-call-
+;; resolve ids on a funcion call form
+(define (svm-resolve-ids--fun-call (fun-call-node : ast-ex-fun-call-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer)) : ast-ex-fun-call-
   (struct-copy ast-ex-fun-call- fun-call-node
+               [info #:parent ast-node- (struct-copy ast-info- (ast-node--info fun-call-node)
+                                                     [locals-used locals-used])]
                [parameters (map (lambda: ((expr : ast-expression-))
-                                  (svm-resolve-ids->expression expr id-map))
+                                  (svm-resolve-ids->expression expr id-map locals-used))
                                 (ast-ex-fun-call--parameters fun-call-node))]))
 
+;; add information in which register this id is allocated, thus allowing generation  push, pop-to commands
 (define (svm-resolve-ids--id (id-node : ast-at-id-)  (id-map : Id-Reg-Map)) : ast-at-id-
   (struct-copy ast-at-id- id-node
                [info #:parent ast-node-
@@ -192,7 +209,10 @@
                                   [id-map (hash (ast-at-id--id id-node)
                                                 (hash-ref id-map (ast-at-id--id id-node)))])] ))
 
-(define (svm-resolve-ids--fun-def (fun-def-node : ast-ex-fun-def-) (id-map : Id-Reg-Map)) : ast-ex-fun-def-
+;; resolve ids in a function definition, adding the parameters as new id-reg-maps
+(define (svm-resolve-ids--fun-def
+         (fun-def-node : ast-ex-fun-def-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer))
+        : ast-ex-fun-def-
   (define param-ids (map (lambda (param) (ast-param-def--id param))
                          (append (ast-ex-fun-def--parameter fun-def-node)
                                  (ast-ex-fun-def--def-params fun-def-node))))
@@ -206,30 +226,38 @@
          param-ids (range param-ids-len)))
   (define new-param-id-map (hash-union id-map (make-hash param-id-reg-ref-pairs)))
   (struct-copy ast-ex-fun-def- fun-def-node
-               [body (svm-resolve-ids->expression (ast-ex-fun-def--body fun-def-node) new-param-id-map)]))
+               [info #:parent ast-node- (struct-copy ast-info- (ast-node--info fun-def-node)
+                                                     [locals-used locals-used])]
+               [body (svm-resolve-ids->expression (ast-ex-fun-def--body fun-def-node) new-param-id-map locals-used)]))
 
+;; resolve ids in defaulted parameters
 (define (svm-resolve-ids--pa-defaulted
-         (pa-def-node : ast-pa-defaulted-def-) (id-map : Id-Reg-Map)) : ast-pa-defaulted-def-
+         (pa-def-node : ast-pa-defaulted-def-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer))
+        : ast-pa-defaulted-def-
   (struct-copy ast-pa-defaulted-def- pa-def-node
-               [default (svm-resolve-ids->expression (ast-pa-defaulted-def--default pa-def-node) id-map)]))
+               [info #:parent ast-node- (struct-copy ast-info- (ast-node--info pa-def-node)
+                                                     [locals-used locals-used])]
+               [default (svm-resolve-ids->expression (ast-pa-defaulted-def--default pa-def-node) id-map locals-used)]))
 
-(define (svm-resolve-ids (node : ast-node-) (id-map : Id-Reg-Map)) : ast-node-
+;; resolve ids in any form, dispatching to forms introducing new ids and ones, having expressions that might use ids
+(define (svm-resolve-ids (node : ast-node-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer)) : ast-node-
   (cond
-    [(ast-ex-with-? node)          (svm-resolve-ids--with node id-map)]
-    [(ast-ex-cond-? node)          (svm-resolve-ids--cond node id-map)]
-    [(ast-ex-if-? node)            (svm-resolve-ids--if node id-map)]
-    [(ast-ex-fun-call-? node)      (svm-resolve-ids--fun-call node id-map)]
+    [(ast-ex-with-? node)          (svm-resolve-ids--with node id-map locals-used)]
+    [(ast-ex-cond-? node)          (svm-resolve-ids--cond node id-map locals-used)]
+    [(ast-ex-if-? node)            (svm-resolve-ids--if node id-map locals-used)]
+    [(ast-ex-fun-call-? node)      (svm-resolve-ids--fun-call node id-map locals-used)]
     [(ast-at-id-? node)            (svm-resolve-ids--id node id-map)]
-    [(ast-pa-defaulted-def-? node) (svm-resolve-ids--pa-defaulted node id-map)]
-    [(ast-ex-fun-def-? node)       (svm-resolve-ids--fun-def node id-map)]
+    [(ast-pa-defaulted-def-? node) (svm-resolve-ids--pa-defaulted node id-map locals-used)]
+    [(ast-ex-fun-def-? node)       (svm-resolve-ids--fun-def node id-map locals-used)]
     [else node]))
 
-(define (svm-resolve-ids->expression (node : ast-expression-) (id-map : Id-Reg-Map)) : ast-expression-
-  (cast (svm-resolve-ids node id-map) ast-expression-))
+;; resolve ids in an expression casting to expression (syntatic sugar)
+(define (svm-resolve-ids->expression (node : ast-expression-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer)) : ast-expression-
+  (cast (svm-resolve-ids node id-map locals-used) ast-expression-))
 
 (module+ test #| svm-resolve-ids |#
   (check-true
-   (match (nested->list (svm-resolve-ids (m-expression-def (with ((p0 1) (p1 (f p0))) p1)) (hash)))
+   (match (nested->list (svm-resolve-ids (m-expression-def (with ((p0 1) (p1 (f p0))) p1)) (hash) 0))
      [(list 'ast-ex-with- _
               (list (list 'ast-ex-with-local- _ 'p0 _)
                     (list 'ast-ex-with-local- _ 'p1
@@ -242,7 +270,7 @@
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
-                                                   (cond (p1 p0) (p0 p1) (_ p0))) (hash)))
+                                                   (cond (p1 p0) (p0 p1) (_ p0))) (hash) 0))
      [(list _ ... (list 'ast-ex-cond- _
                       (list (list 'ast-ex-cond-clause- _
                                   (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)
@@ -256,14 +284,14 @@
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
-                                                   (a p1)) (hash)))
+                                                   (a p1)) (hash) 0))
      [(list _ ... (list 'ast-ex-fun-call- _ 'a (list (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)))) #t]
      [_ #f])
    "resolved parameter in function calls: p1 (second parameter) has offset 0, looking from the end of the list")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
-                                                   (if p1 p0 p1)) (hash)))
+                                                   (if p1 p0 p1)) (hash) 0))
      [(list _ ... (list 'ast-ex-if- _
                       (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)
                       (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0)
@@ -274,14 +302,14 @@
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
-                                                   p1) (hash)))
+                                                   p1) (hash) 0))
      [(list _ ... (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)) #t]
      [_ #f])
    "resolves parameter in id usage: p1 (second parameter) has offset 0, looking from the end of the list")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
-                                                   p0) (hash)))
+                                                   p0) (hash) 0))
      [(list _ ... (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0)) #t]
      [_ #f])
    "resolves parameter in id usage: p0 (first parameter) has offset 1, looking from the end of the list"))
