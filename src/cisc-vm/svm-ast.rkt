@@ -206,6 +206,7 @@
 
 (struct ast-ex-with-local- ast-node-
   ((id : Symbol)
+   (type : ast-type-def-)
    (value : ast-expression-))
   #:transparent)
 

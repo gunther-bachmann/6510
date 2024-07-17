@@ -53,9 +53,9 @@
     [(_ #f)
      #'(ast-at-bool- (make-ast-info) #f)]
 
-    [(_ ((~literal with) ((id expression) ...) body))
+    [(_ ((~literal with) ((id type expression) ...) body))
      #'(ast-ex-with- (make-ast-info)
-                     (list (ast-ex-with-local- (make-ast-info) 'id (m-expression-def expression)) ...)
+                     (list (ast-ex-with-local- (make-ast-info) 'id (m-type-def type) (m-expression-def expression)) ...)
                      (m-expression-def body))]
 
     [(_ ((~literal if) bool-param true-param false-param))
@@ -102,8 +102,8 @@
    "empty with is properly parsed as expression")
 
   (check-true
-   (match (nested->list (m-expression-def (with ((a 42)) "some")))
-     [(list 'ast-ex-with- _ (list (list 'ast-ex-with-local- _ 'a (list 'ast-at-int- _ 42))) (list 'ast-at-string- _ "some")) #t]
+   (match (nested->list (m-expression-def (with ((a byte 42)) "some")))
+     [(list 'ast-ex-with- _ (list (list 'ast-ex-with-local- _ 'a _ (list 'ast-at-int- _ 42))) (list 'ast-at-string- _ "some")) #t]
      [_ #f])
    "with is properly parsed as expression")
 
