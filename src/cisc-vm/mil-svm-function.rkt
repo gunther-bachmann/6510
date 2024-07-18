@@ -260,7 +260,29 @@
                [condition (svm-resolve-ids->expression condition id-map locals-used)]
                [body      (svm-resolve-ids->expression body id-map locals-used)]))
 
-(module+ test #| svm-resolve-ids--cond-clause |# )
+(module+ test #| svm-resolve-ids--cond-clause |#
+  (check-true (match (nested->list
+                      (svm-resolve-ids--cond--clause
+                       (ast-ex-cond-clause- (make-ast-info) (m-expression-def l0) (m-expression-def l1))
+                       (hash 'l0 (register-ref- 'Local 0) 'l1 (register-ref- 'Local 1))
+                       1))
+                [(list 'ast-ex-cond-clause- _
+                       (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'l0 (list 'register-ref- 'Local 0))) 'l0)
+                       (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'l1 (list 'register-ref- 'Local 1))) 'l1))
+                 #t]
+                [_ #f])
+              "check that all conditions and body expressions are resolved")
+
+  (check-true (match (nested->list
+                      (svm-resolve-ids--cond--clause
+                       (ast-ex-cond-clause- (make-ast-info) (m-expression-def 0) (m-expression-def 1))
+                       (hash)
+                       1))
+                [(list 'ast-ex-cond-clause-
+                       (list 'ast-info- _ _ _ _ 1 _)
+                       _ _) #t]
+                [_ #f])
+              "ensure that locals-used is passed on"))
 
 ;; resolve ids on a cond-form
 (define (svm-resolve-ids--cond
@@ -274,7 +296,29 @@
                              (ast-ex-cond--clauses cond-node))]
                [else    (svm-resolve-ids->expression (ast-ex-cond--else cond-node) id-map locals-used)]))
 
-(module+ test #| svm-resolve-ids-- |# )
+(module+ test #| svm-resolve-ids--cond |#
+
+  [check-true (match (nested->list
+                      (svm-resolve-ids--cond
+                       (cast (m-expression-def (cond (#t l0) (#f l1) (_ l2))) ast-ex-cond-)
+                       (hash 'l0 (register-ref- 'Local 0)
+                             'l1 (register-ref- 'Local 1)
+                             'l2 (register-ref- 'Local 2))
+                       1))
+                [(list 'ast-ex-cond- _
+                       (list (list 'ast-ex-cond-clause- _ _
+                                   (list 'ast-at-id- (list 'ast-info- _ ...
+                                                           (list 'hash 'l0 (list 'register-ref- 'Local 0)))
+                                         'l0))
+                             (list 'ast-ex-cond-clause- _ _
+                                   (list 'ast-at-id- (list 'ast-info- _ ...
+                                                           (list 'hash 'l1 (list 'register-ref- 'Local 1)))
+                                         'l1)))
+                       (list 'ast-at-id- (list 'ast-info- _ ...
+                                               (list 'hash 'l2 (list 'register-ref- 'Local 2)))
+                             'l2)) #t]
+                [_ #f])
+              "make sure default case and all other clauses is resolved"])
 
 ;; resolve ids on an if-form
 (define (svm-resolve-ids--if
@@ -303,10 +347,13 @@
 (module+ test #| svm-resolve-ids-- |# )
 
 ;; add information in which register this id is allocated, thus allowing generation  push, pop-to commands
-(define (svm-resolve-ids--id (id-node : ast-at-id-)  (id-map : Id-Reg-Map)) : ast-at-id-
+(define (svm-resolve-ids--id
+         (id-node : ast-at-id-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer))
+        : ast-at-id-
   (struct-copy ast-at-id- id-node
                [info #:parent ast-node-
                      (struct-copy ast-info- (ast-node--info id-node)
+                                  [locals-used locals-used]
                                   [id-map (hash (ast-at-id--id id-node)
                                                 (hash-ref id-map (ast-at-id--id id-node)))])] ))
 
@@ -361,7 +408,7 @@
     [(ast-ex-cond-? node)          (svm-resolve-ids--cond node id-map locals-used)]
     [(ast-ex-if-? node)            (svm-resolve-ids--if node id-map locals-used)]
     [(ast-ex-fun-call-? node)      (svm-resolve-ids--fun-call node id-map locals-used)]
-    [(ast-at-id-? node)            (svm-resolve-ids--id node id-map)]
+    [(ast-at-id-? node)            (svm-resolve-ids--id node id-map locals-used)]
     [(ast-pa-defaulted-def-? node) (svm-resolve-ids--pa-defaulted node id-map locals-used)]
     [(ast-ex-fun-def-? node)       (svm-resolve-ids--fun-def node id-map locals-used)]
     [else node]))
