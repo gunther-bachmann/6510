@@ -1,5 +1,11 @@
 #lang typed/racket
 
+#|
+
+  VM definition, interpreter and disassembler for the stack based virtual machine
+
+ |#
+
 (require (only-in racket/fixnum fx+ fx= fx< fx- fx>= fx>))
 (require/typed racket/kernel [vector-set/copy (All (a) (-> (Immutable-Vectorof a) Nonnegative-Integer a (Vectorof a)))])
 

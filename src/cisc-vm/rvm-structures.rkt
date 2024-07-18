@@ -1,5 +1,11 @@
 #lang racket
 
+#|
+
+  Implementation of a register based virtual machine
+
+ |#
+
 (require (only-in data/pvector pvector pvector? make-pvector build-pvector))
 (require (only-in data/collection nth set-nth length))
 (require (only-in racket/fixnum fx+ fx=))

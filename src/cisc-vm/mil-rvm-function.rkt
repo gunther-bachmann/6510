@@ -1,5 +1,12 @@
 #lang racket
 
+#|
+
+  Compiler for the register based virtual machine
+
+ |#
+
+
 ;; basic types
 ;;   bool, (char), byte, int, string
 ;; complex types

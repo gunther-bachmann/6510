@@ -1,7 +1,13 @@
 #lang typed/racket
 
+#|
+
+  Parser for minimal lisp, generating an appropriate AST
+
+ |#
+
 (require (only-in "./util.rkt" nested->list low-byte high-byte bytes->int))
-(require "./svm-ast.rkt")
+(require "./mil-ast.rkt")
 
 (require (for-syntax typed/racket syntax/parse/pre))
 

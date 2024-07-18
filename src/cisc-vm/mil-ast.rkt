@@ -1,5 +1,12 @@
 #lang typed/racket
 
+#|
+
+  AST for minimal lisp (should actually be independent of VM)
+
+ |#
+
+
 (provide (struct-out ast-node-)
          (struct-out ast-info-)
          make-ast-info

@@ -1,14 +1,22 @@
 #lang typed/racket
 
+#|
+
+  Compiler for mil to stack based virtual machine
+
+ |#
+
 (require (only-in racket/fixnum fx+ fx= fx< fx<= fx- fx>= fx>))
 
 (require (only-in racket/hash hash-union))
 
-(require (only-in "./util.rkt" nested->list low-byte high-byte bytes->int))
-(require "./svm-ast.rkt")
-(require "./svm-parse.rkt")
+(require (only-in threading ~>>))
 
-(require (only-in "./svm-structures.rkt"
+(require (only-in "./util.rkt" nested->list low-byte high-byte bytes->int))
+(require "./mil-ast.rkt")
+(require "./mil-parse.rkt")
+
+(require (only-in "./stack-virtual-machine.rkt"
                   disassemble-byte-code
                   make-vm
                   CONS
@@ -399,6 +407,7 @@
 
 (module+ test #| svm-resolve-ids-- |# )
 
+;; TODO: idea: implement svm-resolve-ids with a visitor, rewriting expressions, and a visitor, collecting declarations?
 ;; resolve ids in any form, dispatching to forms introducing new ids and ones, having expressions that might use ids
 (define (svm-resolve-ids
          (node : ast-node-) (id-map : Id-Reg-Map) (locals-used : Nonnegative-Integer))
@@ -488,18 +497,101 @@
 ;;     <else ...>
 ;;     TAIL_CALL
 
-(define (svm-generate-function (def : ast-ex-fun-def-)) : (Immutable-Vectorof Byte)
+(define (svm-generate--id (id : ast-at-id-)) : (Immutable-Vectorof Byte)
+  (define reg (hash-ref (ast-info--id-map (ast-node--info id)) (ast-at-id--id id)))
+  (generate-push reg))
+
+
+(define (optimize-tail-call-if-nil--apply (if-node : ast-ex-if-)) : ast-ex-if-
+  if-node)
+
+(define (optimize-tail-call-if-nil (v-data : visitor-data-)) : visitor-data-
+  (define node (visitor-data--node v-data))
+  (define state (cast (visitor-data--state v-data) vs-optimize-tail-call-if-nil-))
+  (define cur-fun (vs-optimize-tail-call-if-nil--current-fun state))
+  (match node
+    [(ast-ex-if- _
+                 (ast-ex-fun-call- _ nil-sym (list (ast-at-id- _ _)))
+                 (ast-ex-fun-call- _ rec-sym _)
+                 _ _)
+     (if (and (eq? 'nil? nil-sym)
+            (eq? cur-fun rec-sym))
+         (struct-copy visitor-data- v-data
+                      [node (optimize-tail-call-if-nil--apply (cast node ast-ex-if-))])
+         v-data)]
+    [(ast-ex-if- _
+                 (ast-ex-fun-call- _ rec-sym _)
+                 (ast-ex-fun-call- _ nil-sym (list (ast-at-id- _ nil-checked-sym)))
+                 _ _)
+     (define if-node (cast node ast-ex-if-))
+     (if (and (eq? 'nil? nil-sym)
+            (eq? cur-fun rec-sym))
+         (struct-copy visitor-data- v-data
+                      [node (optimize-tail-call-if-nil--apply
+                             (struct-copy ast-ex-if- if-node
+                                          [else (ast-ex-if--then if-node)]
+                                          [then (ast-ex-if--else if-node)]
+                                          [negated (not (ast-ex-if--negated if-node))]))])
+         v-data)]
+    [_ v-data]))
+
+(struct visitor-state-
+  ()
+  #:transparent)
+
+(struct visitor-data-
+  ((node : ast-node-)
+   (state : visitor-state-))
+  #:transparent)
+
+(struct vs-optimize-tail-call-if-nil- visitor-state-
+  ((current-fun : Symbol))
+  #:transparent)
+
+(define (svm-apply-expression-visitor
+         (visitor : (-> visitor-data- visitor-data-))
+         (visitor-state : visitor-state-)
+         (node : ast-node-))
+        : ast-node-
+  ;; (define new-data (visitor (visitor-data- node visitor-state)))
+  (cond
+    [(ast-ex-if-? node)
+     (struct-copy ast-ex-if- node
+                  [condition (cast (svm-apply-expression-visitor visitor visitor-state (ast-ex-if--condition node)) ast-expression-)]
+                  [then (cast (svm-apply-expression-visitor visitor visitor-state (ast-ex-if--then node)) ast-expression-)]
+                  [else (cast (svm-apply-expression-visitor visitor visitor-state (ast-ex-if--else node)) ast-expression-)])]
+    [(ast-ex-fun-def-? node) node]
+    [(ast-at-int-? node) node]
+    [else (raise-user-error (format "unknown node type ~a" node))]))
+
+(module+ test #| svm-apply-expression-visitor |#
+  ;; (svm-apply-expression-visitor optimize-tail-call-if-nil (vs-optimize-tail-call-if-nil- 'some) (ast-at-int- (make-ast-info) 5))
+  )
+
+(define (svm-generate--function (def : ast-ex-fun-def-)) : (Immutable-Vectorof Byte)
   ;; TODO: currently just a dummy implementation
   (vector-immutable 129 156 129 41 128 129 40 42 35))
 
+(define (svm-generate (node : ast-node-)) : (Immutable-Vectorof Byte)
+  (cond
+    [(ast-ex-fun-def-? node) (svm-generate--function node)]
+    [(ast-at-id-? node) (svm-generate--id node)]
+    [else (raise-user-error (format "unknown node type ~a for generate" node))]))
+
+(define (svm-compile (node : ast-node-)) : ast-node-
+  (~>>
+   node
+   (svm-resolve-ids _ (hash) 0)))
+
 (module+ test #| generate code for simple reverse function |#
   (check-equal?
-   (svm-generate-function
-    (m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*
-                        "reverse a-list, consing it into b-list")
-               (if (nil? a-list)
-                   b-list
-                   (reverse (cdr a-list) (cons (car a-list) b-list)))))
+   (svm-generate
+    (svm-compile
+     (m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*
+                         "reverse a-list, consing it into b-list")
+                (if (nil? a-list)
+                    b-list
+                    (reverse (cdr a-list) (cons (car a-list) b-list))))))
    (vector-immutable (sPUSH_PARAMc 1)
                      (sNIL?-RET-PARAMc 0)
                      (sPUSH_PARAMc 1)
