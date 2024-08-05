@@ -1,15 +1,22 @@
-#lang typed/racket
+#lang typed/racket/base
+
+#|review: ignore|#
+#|  review does show several false positives |#
 
 #|
 
   Parser for minimal lisp, generating an appropriate AST
 
  |#
+(require (only-in racket/match match))
+(require (only-in racket/string string-trim))
+
 
 (require (only-in "./util.rkt" nested->list low-byte high-byte bytes->int))
 (require "./mil-ast.rkt")
 
-(require (for-syntax typed/racket syntax/parse/pre))
+(require (for-syntax typed/racket/base syntax/parse/pre))
+(require (for-syntax (only-in racket/string string-suffix?)))
 
 (provide m-type-def
          m-expression-def

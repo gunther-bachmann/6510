@@ -1,4 +1,7 @@
-#lang typed/racket
+#lang typed/racket/base
+
+#|review: ignore|#
+#|  review does show several false positives |#
 
 #|
 
@@ -7,7 +10,10 @@
  |#
 
 (require (only-in racket/fixnum fx+ fx= fx< fx- fx>= fx>))
-(require/typed racket/kernel [vector-set/copy (All (a) (-> (Immutable-Vectorof a) Nonnegative-Integer a (Vectorof a)))])
+(require (only-in racket/list drop takef take empty?))
+(require (only-in racket/match/match match-define))
+(require (only-in racket/vector vector-append vector-set/copy))
+(require/typed racket/vector [vector-set/copy (All (a) (-> (Immutable-Vectorof a) Nonnegative-Integer a (Vectorof a)))])
 
 (provide disassemble-byte-code
          make-vm
@@ -100,7 +106,7 @@
   (cond
     [(cell-byte-? a-cell) (cell-byte--value a-cell)]
     [(cell-int-? a-cell)  (cell-int--value a-cell)]
-    [else (raise-user-error (format "not a value cell ~a" a-cell))]))
+    [else                 (raise-user-error (format "not a value cell ~a" a-cell))]))
 
 (struct cell-array- celln-
   ([size : Nonnegative-Integer]
@@ -109,10 +115,10 @@
   #:transparent) ;; vector of atomic cells!
 
 (struct vm-frame-
-  ([fun-idx : Nonnegative-Integer]        ;; index into vm--functions
-   [bc-idx  : Nonnegative-Integer]        ;; index into byte array of the running function
-   [parameter-tail : (Listof cell-)]      ;; is a pointer to the last parameter on the value stack, at the beginning of a call this is identical to value-stack!
-   [locals : (Immutable-Vectorof cell-)]  ;; a list of locals identified by index
+  ([fun-idx        : Nonnegative-Integer]        ;; index into vm--functions
+   [bc-idx         : Nonnegative-Integer]        ;; index into byte array of the running function
+   [parameter-tail : (Listof cell-)]             ;; is a pointer to the last parameter on the value stack, at the beginning of a call this is identical to value-stack!
+   [locals         : (Immutable-Vectorof cell-)] ;; a list of locals identified by index
    )
   #:transparent)
 

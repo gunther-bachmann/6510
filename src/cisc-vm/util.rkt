@@ -1,4 +1,4 @@
-#lang typed/racket
+#lang typed/racket/base
 
 (require/typed racket/struct (struct->list (Any -> (Listof Any))))
 

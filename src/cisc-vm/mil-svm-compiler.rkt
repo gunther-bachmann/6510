@@ -1,4 +1,7 @@
-#lang typed/racket
+#lang typed/racket/base
+
+#|review: ignore|#
+#|  review does show several false positives |#
 
 #|
 
@@ -7,6 +10,8 @@
  |#
 
 (require (only-in racket/fixnum fx+ fx= fx< fx<= fx- fx>= fx>))
+(require (only-in racket/list range take))
+(require (only-in racket/match match))
 
 (require (only-in racket/hash hash-union))
 
