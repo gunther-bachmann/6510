@@ -119,8 +119,8 @@
   (if 6510-connected-debugger-mode
       (progn
         (message "enable 6510 connected debugger mode")
-        (read-only-mode 1))
+        (setq buffer-read-only 1))
     (message "disable 6510 connected debugger mode")
-    (read-only-mode 0)))
+    (setq buffer-read-only nil)))
 
 (provide '6510-debugger)
