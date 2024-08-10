@@ -114,7 +114,7 @@
 
 (define-minor-mode 6510-connected-debugger-mode
   "connect the given source code with a racket debugger process and execute commands"
-  :lighter " "
+  :lighter #(" " 0 2 (face (:family "FontAwesome") font-lock-face (:family "FontAwesome"))) ;; result of (all-the-icons-faicon "bug")
   :keymap 6510-debugger-mode-map
   (if 6510-connected-debugger-mode
       (progn
