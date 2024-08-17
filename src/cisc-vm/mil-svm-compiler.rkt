@@ -12,6 +12,7 @@
 (require (only-in racket/fixnum fx+ fx= fx< fx<= fx- fx>= fx>))
 (require (only-in racket/list range take))
 (require (only-in racket/match match))
+(require (only-in racket/vector vector-append))
 
 (require (only-in racket/hash hash-union))
 
@@ -510,77 +511,168 @@
 (define (optimize-tail-call-if-nil--apply (if-node : ast-ex-if-)) : ast-ex-if-
   if-node)
 
-(define (optimize-tail-call-if-nil (v-data : visitor-data-)) : visitor-data-
-  (define node (visitor-data--node v-data))
-  (define state (cast (visitor-data--state v-data) vs-optimize-tail-call-if-nil-))
-  (define cur-fun (vs-optimize-tail-call-if-nil--current-fun state))
-  (match node
-    [(ast-ex-if- _
-                 (ast-ex-fun-call- _ nil-sym (list (ast-at-id- _ _)))
-                 (ast-ex-fun-call- _ rec-sym _)
-                 _ _)
-     (if (and (eq? 'nil? nil-sym)
-            (eq? cur-fun rec-sym))
-         (struct-copy visitor-data- v-data
-                      [node (optimize-tail-call-if-nil--apply (cast node ast-ex-if-))])
-         v-data)]
-    [(ast-ex-if- _
-                 (ast-ex-fun-call- _ rec-sym _)
-                 (ast-ex-fun-call- _ nil-sym (list (ast-at-id- _ nil-checked-sym)))
-                 _ _)
-     (define if-node (cast node ast-ex-if-))
-     (if (and (eq? 'nil? nil-sym)
-            (eq? cur-fun rec-sym))
-         (struct-copy visitor-data- v-data
-                      [node (optimize-tail-call-if-nil--apply
-                             (struct-copy ast-ex-if- if-node
-                                          [else (ast-ex-if--then if-node)]
-                                          [then (ast-ex-if--else if-node)]
-                                          [negated (not (ast-ex-if--negated if-node))]))])
-         v-data)]
-    [_ v-data]))
+;; (define (optimize-tail-call-if-nil (v-data : visitor-data-)) : visitor-data-
+;;   ;; (define node (visited-ast-node--node v-data))
+;;   ;; (define state (cast (visitor-data--state v-data) vs-optimize-tail-call-if-nil-))
+;;   ;; (define cur-fun (vs-optimize-tail-call-if-nil--current-fun state))
+;;   (match node
+;;     [(ast-ex-if- _
+;;                  (ast-ex-fun-call- _ nil-sym (list (ast-at-id- _ _)))
+;;                  (ast-ex-fun-call- _ rec-sym _)
+;;                  _ _)
+;;      (if (and (eq? 'nil? nil-sym)
+;;             (eq? cur-fun rec-sym))
+;;          (struct-copy visitor-data- v-data
+;;                       [node (optimize-tail-call-if-nil--apply (cast node ast-ex-if-))])
+;;          v-data)]
+;;     [(ast-ex-if- _
+;;                  (ast-ex-fun-call- _ rec-sym _)
+;;                  (ast-ex-fun-call- _ nil-sym (list (ast-at-id- _ nil-checked-sym)))
+;;                  _ _)
+;;      (define if-node (cast node ast-ex-if-))
+;;      (if (and (eq? 'nil? nil-sym)
+;;             (eq? cur-fun rec-sym))
+;;          (struct-copy visitor-data- v-data
+;;                       [node (optimize-tail-call-if-nil--apply
+;;                              (struct-copy ast-ex-if- if-node
+;;                                           [else (ast-ex-if--then if-node)]
+;;                                           [then (ast-ex-if--else if-node)]
+;;                                           [negated (not (ast-ex-if--negated if-node))]))])
+;;          v-data)]
+;;     [_ v-data]))
 
 (struct visitor-state-
   ()
   #:transparent)
 
-(struct visitor-data-
+(struct visited-ast-node-
   ((node : ast-node-)
    (state : visitor-state-))
   #:transparent)
 
-(struct vs-optimize-tail-call-if-nil- visitor-state-
-  ((current-fun : Symbol))
-  #:transparent)
-
 (define (svm-apply-expression-visitor
-         (visitor : (-> visitor-data- visitor-data-))
-         (visitor-state : visitor-state-)
-         (node : ast-node-))
-        : ast-node-
-  ;; (define new-data (visitor (visitor-data- node visitor-state)))
+         (visitor : (-> visited-ast-node- visited-ast-node-))
+         (visited-node : visited-ast-node-))
+        : visited-ast-node-
+  (define state (visited-ast-node--state visited-node))
+  (define node (visited-ast-node--node visited-node))
   (cond
     [(ast-ex-if-? node)
-     (struct-copy ast-ex-if- node
-                  [condition (cast (svm-apply-expression-visitor visitor visitor-state (ast-ex-if--condition node)) ast-expression-)]
-                  [then (cast (svm-apply-expression-visitor visitor visitor-state (ast-ex-if--then node)) ast-expression-)]
-                  [else (cast (svm-apply-expression-visitor visitor visitor-state (ast-ex-if--else node)) ast-expression-)])]
-    [(ast-ex-fun-def-? node) node]
-    [(ast-at-int-? node) node]
-    [else (raise-user-error (format "unknown node type ~a" node))]))
+     (define visited-cond (svm-apply-expression-visitor visitor (visited-ast-node- (ast-ex-if--condition node) (visited-ast-node--state (visitor visited-node)))))
+     (define visited-then (svm-apply-expression-visitor visitor (visited-ast-node- (ast-ex-if--then node) (visited-ast-node--state visited-cond))))
+     (define visited-else (svm-apply-expression-visitor visitor (visited-ast-node- (ast-ex-if--else node) (visited-ast-node--state visited-then))))
+     (visited-ast-node-
+      (struct-copy ast-ex-if- node
+                   [condition (cast (visited-ast-node--node visited-cond) ast-expression-)]
+                   [then (cast (visited-ast-node--node visited-then) ast-expression-)]
+                   [else (cast (visited-ast-node--node visited-else) ast-expression-)])
+      (visited-ast-node--state visited-else))]
+    [else (visitor visited-node)]))
 
 (module+ test #| svm-apply-expression-visitor |#
   ;; (svm-apply-expression-visitor optimize-tail-call-if-nil (vs-optimize-tail-call-if-nil- 'some) (ast-at-int- (make-ast-info) 5))
-  )
+  (struct svm-expr-visitor--ints-state- visitor-state-
+    ((ints : (Listof Integer)))
+    #:transparent)
+  (define (svm-expr-visitor--ints (visited-node : visited-ast-node- )) : visited-ast-node-
+    (define state (cast (visited-ast-node--state visited-node) svm-expr-visitor--ints-state-))
+    (define node (visited-ast-node--node visited-node))
+    (cond
+      [(ast-at-int-? node)
+       (visited-ast-node-
+        node
+        (svm-expr-visitor--ints-state-
+         (cons (ast-at-int--value node) (svm-expr-visitor--ints-state--ints state))))]
+      [else visited-node]))
+
+  (check-equal? (svm-expr-visitor--ints-state--ints
+                 (cast (visited-ast-node--state
+                        (svm-apply-expression-visitor
+                         svm-expr-visitor--ints
+                         (visited-ast-node- (ast-ex-if- (make-ast-info) (ast-at-int- (make-ast-info) 1)
+                                                        (ast-at-int- (make-ast-info) 2)
+                                                        (ast-at-int- (make-ast-info) 3)
+                                                        #f)
+                                            (svm-expr-visitor--ints-state- (list)))))
+                       svm-expr-visitor--ints-state-))
+                '(3 2 1)))
 
 (define (svm-generate--function (def : ast-ex-fun-def-)) : (Immutable-Vectorof Byte)
   ;; TODO: currently just a dummy implementation
-  (vector-immutable 129 156 129 41 128 129 40 42 35))
+  (cast (vector->immutable-vector (vector-append (svm-generate (ast-ex-fun-def--body def)) (vector-immutable RET))) (Immutable-Vectorof Byte))
+  ;; (vector-immutable 129 156 129 41 128 129 40 42 35)
+  )
+
+(define (svm-generate--fun-call (call : ast-ex-fun-call-)) : (Immutable-Vectorof Byte)
+  ;; open: tail call, user function call, runtime function call, complete list of vm internal function calls
+  (cast
+   (vector->immutable-vector
+    (apply vector-append
+           (append (map svm-generate (ast-ex-fun-call--parameters call))
+                   (list (case (ast-ex-fun-call--fun call)
+                           [(nil?) (vector-immutable NIL?)]
+                           [(car) (vector-immutable CAR)]
+                           [(cdr) (vector-immutable CDR)]
+                           [(cons) (vector-immutable CONS)]
+                           [(reverse) (vector-immutable TAIL_CALL)]
+                           [else (raise-user-error (format "unknown function \"~a\""  (ast-ex-fun-call--fun call)))])))))
+   (Immutable-Vectorof Byte)))
+
+(module+ test #| svm-generate--fun-call |#
+  (check-equal?
+   (svm-generate--fun-call
+    (ast-ex-fun-call- (make-ast-info) 'nil? (list (ast-at-int- (make-ast-info) 10) (ast-at-int- (make-ast-info) 20))))
+   (vector-immutable PUSH_INT (low-byte 10) (high-byte 10)
+                     PUSH_INT (low-byte 20) (high-byte 20)
+                     NIL?)))
+
+(define (svm-generate--int (a : ast-at-int-)) : (Immutable-Vectorof Byte)
+  (define val (ast-at-int--value a))
+  (vector-immutable PUSH_INT (low-byte val) (high-byte val)))
+
+(module+ test #| svm-generate--int |#
+  (check-equal? (svm-generate--int (ast-at-int- (make-ast-info) 300))
+                (vector-immutable PUSH_INT 44 1)))
+
+(define (svm-generate--if (node : ast-ex-if-)) : (Immutable-Vectorof Byte)
+  ;; open: optimize for sNIL?-RET-PARAMc
+  (define cond-code (svm-generate (ast-ex-if--condition node)))
+  (define then-code (svm-generate (ast-ex-if--then node)))
+  (define else-code (svm-generate (ast-ex-if--else node)))
+  (define first-block (if (ast-ex-if--negated node) then-code else-code))
+  (define second-block (if (ast-ex-if--negated node) else-code then-code))
+  (cast (vector->immutable-vector
+         (vector-append cond-code
+                        (vector-immutable BRA (+ 2 #|len of goto @end of first block|# (vector-length first-block)))
+                        first-block
+                        (vector-immutable GOTO (vector-length second-block))
+                        second-block))
+        (Immutable-Vectorof Byte)))
+
+(module+ test #| svm-generate--if |#
+  (check-equal?
+   (svm-generate--if
+    (ast-ex-if- (make-ast-info)
+                (ast-ex-fun-call- (make-ast-info) 'nil? (list (ast-at-int- (make-ast-info) 10) (ast-at-int- (make-ast-info) 20)))
+                (ast-at-int- (make-ast-info) 100)
+                (ast-at-int- (make-ast-info) 200)
+                #f))
+
+   (vector-immutable PUSH_INT (low-byte 10) (high-byte 10)
+                     PUSH_INT (low-byte 20) (high-byte 20)
+                     NIL?
+                     BRA 5
+                     PUSH_INT (low-byte 200) (high-byte 200)
+                     GOTO 3
+                     PUSH_INT (low-byte 100) (high-byte 100))))
 
 (define (svm-generate (node : ast-node-)) : (Immutable-Vectorof Byte)
   (cond
     [(ast-ex-fun-def-? node) (svm-generate--function node)]
     [(ast-at-id-? node) (svm-generate--id node)]
+    [(ast-ex-if-? node) (svm-generate--if node)]
+    [(ast-ex-fun-call-? node) (svm-generate--fun-call node)]
+    [(ast-at-int-? node) (svm-generate--int node)]
     [else (raise-user-error (format "unknown node type ~a for generate" node))]))
 
 (define (svm-compile (node : ast-node-)) : ast-node-
@@ -597,12 +689,38 @@
                 (if (nil? a-list)
                     b-list
                     (reverse (cdr a-list) (cons (car a-list) b-list))))))
-   (vector-immutable (sPUSH_PARAMc 1)
-                     (sNIL?-RET-PARAMc 0)
+   (vector-immutable (sPUSH_PARAMc 1)     ;; a-list
+                     NIL?
+                     BRA 9
                      (sPUSH_PARAMc 1)
                      CDR
-                     (sPUSH_PARAMc 0)
                      (sPUSH_PARAMc 1)
                      CAR
+                     (sPUSH_PARAMc 0)
                      CONS
-                     TAIL_CALL)))
+                     TAIL_CALL
+                     GOTO 1
+                     (sPUSH_PARAMc 0)
+                     RET)
+   "optimization should reduce bytecode to this")
+
+  ;; (skip "optimizing is not implemented yet"
+  ;;  (check-equal?
+  ;;   (svm-generate
+  ;;    (svm-compile
+  ;;     (m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*
+  ;;                         "reverse a-list, consing it into b-list")
+  ;;                (if (nil? a-list)
+  ;;                    b-list
+  ;;                    (reverse (cdr a-list) (cons (car a-list) b-list))))))
+  ;;   (vector-immutable (sPUSH_PARAMc 1)     ;; a-list
+  ;;                     (sNIL?-RET-PARAMc 0) ;; if a-list is nil, return b-list
+  ;;                     (sPUSH_PARAMc 1)
+  ;;                     CDR                  ;; (cdr a-list)
+  ;;                     (sPUSH_PARAMc 1)
+  ;;                     CAR
+  ;;                     (sPUSH_PARAMc 0)
+  ;;                     CONS                 ;; (cons (car a-list) b-list)
+  ;;                     TAIL_CALL)           ;; write two stack values into param0 and 1 and jump to function start
+  ;;   "optimization should reduce bytecode to this"))
+  )
