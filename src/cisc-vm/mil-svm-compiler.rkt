@@ -54,6 +54,8 @@
 
                   cell-byte--value
 
+                  is-push-param-short
+
                   sPUSH_PARAMc
                   sPUSH_PARAMn
                   sPOP_TO_PARAMc
@@ -596,7 +598,11 @@
 
 (define (svm-generate--function (def : ast-ex-fun-def-)) : (Immutable-Vectorof Byte)
   ;; TODO: currently just a dummy implementation
-  (cast (vector->immutable-vector (vector-append (svm-generate (ast-ex-fun-def--body def)) (vector-immutable RET))) (Immutable-Vectorof Byte))
+  (cast (vector->immutable-vector
+         (vector-append
+          (svm-generate (ast-ex-fun-def--body def)) ;; <- pass info that ret would follow
+          (vector-immutable RET))) ;; <- emit ret only if previous does not optimize on ret
+        (Immutable-Vectorof Byte))
   ;; (vector-immutable 129 156 129 41 128 129 40 42 35)
   )
 
@@ -638,15 +644,31 @@
   (define else-code (svm-generate (ast-ex-if--else node)))
   (define first-block (if (ast-ex-if--negated node) then-code else-code))
   (define second-block (if (ast-ex-if--negated node) else-code then-code))
+  (define first-block-ends-in-jump (memq (vector-ref first-block (sub1 (vector-length first-block))) (list TAIL_CALL GOTO)))
+  (define cond-matches-param-push-nil?
+    (and (= 2 (vector-length cond-code))
+       (is-push-param-short (vector-ref cond-code 0))
+       (= NIL? (vector-ref cond-code 1))))
+  (define second-block-matches-param-push
+    (and (= 1 (vector-length second-block))
+       (is-push-param-short (vector-ref second-block 0))))
+  (define follow-code-is-ret #t)
   (cast (vector->immutable-vector
-         (vector-append cond-code
-                        (vector-immutable BRA (+ 1 #|offset itself is one byte length|#
-                                                 2 #|len of goto @end of first block|#
-                                                 (vector-length first-block)))
-                        first-block
-                        (vector-immutable GOTO (+ 1 #|offset itself is one byte length|#
-                                                  (vector-length second-block)))
-                        second-block))
+         (if (and cond-matches-param-push-nil? second-block-matches-param-push follow-code-is-ret)
+             (vector-append (vector-immutable
+                             (vector-ref cond-code 0)
+                             (sNIL?-RET-PARAMc (bitwise-and sPUSH_PARAMn (vector-ref second-block 0))))
+                            first-block)
+             (vector-append cond-code
+                            (vector-immutable BRA (+ 1 #|offset itself is one byte length|#
+                                                     (if first-block-ends-in-jump 0 2) #|len of goto @end of first block|#
+                                                     (vector-length first-block)))
+                            first-block
+                            (if first-block-ends-in-jump
+                                (vector-immutable)
+                                (vector-immutable GOTO (+ 1 #|offset itself is one byte length|#
+                                                          (vector-length second-block))))
+                            second-block)))
         (Immutable-Vectorof Byte)))
 
 (module+ test #| svm-generate--if |#
@@ -689,38 +711,14 @@
                 (if (nil? a-list)
                     b-list
                     (reverse (cdr a-list) (cons (car a-list) b-list))))))
-   (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
-                     NIL?
-                     BRA 10
-                     (sPUSH_PARAMc 1)
-                     (sPUSH_PARAMc 0)
-                     CAR
-                     CONS
-                     (sPUSH_PARAMc 0)
-                     CDR
-                     TAIL_CALL
-                     GOTO 2
-                     (sPUSH_PARAMc 1)
-                     RET)
-   "optimization should reduce bytecode to this")
-
-  ;; (skip "optimizing is not implemented yet"
-  ;;  (check-equal?
-  ;;   (svm-generate
-  ;;    (svm-compile
-  ;;     (m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*
-  ;;                         "reverse a-list, consing it into b-list")
-  ;;                (if (nil? a-list)
-  ;;                    b-list
-  ;;                    (reverse (cdr a-list) (cons (car a-list) b-list))))))
-  ;;   (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
-  ;;                     (sNIL?-RET-PARAMc 1) ;; if a-list is nil, return b-list
-  ;;                     (sPUSH_PARAMc 0)
-  ;;                     CAR
-  ;;                     (sPUSH_PARAMc 1)
-  ;;                     CONS                 ;; (cons (car a-list) b-list)
-  ;;                     (sPUSH_PARAMc 0)
-  ;;                     CDR                  ;; (cdr a-list)
-  ;;                     TAIL_CALL)           ;; write two stack values into param0 and 1 and jump to function start
-  ;;   "optimization should reduce bytecode to this"))
-  )
+    (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
+                      (sNIL?-RET-PARAMc 1) ;; if a-list is nil, return b-list
+                      (sPUSH_PARAMc 1)
+                      (sPUSH_PARAMc 0)
+                      CAR
+                      CONS                 ;; (cons (car a-list) b-list)
+                      (sPUSH_PARAMc 0)
+                      CDR                  ;; (cdr a-list)
+                      TAIL_CALL            ;; write two stack values into param0 and 1 and jump to function start
+                      RET)                 ;; TODO: optimize away
+   "optimization should reduce bytecode further"))

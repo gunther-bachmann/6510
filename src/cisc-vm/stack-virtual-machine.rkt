@@ -44,6 +44,8 @@
          TRUE
          FALSE
 
+         is-push-param-short
+
          sPUSH_PARAMc
          sPUSH_PARAMn
          sPOP_TO_PARAMc
@@ -1019,6 +1021,9 @@
                          "nil"
                          (tos-value vm)))))
 
+(define (is-push-param-short [code : Byte]) : Boolean
+  (= (bitwise-and code sPUSH_PARAMm) sPUSH_PARAM))
+
 (define (interpret-byte-code [vm : vm-]) : vm-
   (define byte-code (peek-pc-byte vm))
   (when (member 'trace (vm--options vm)) (display-vm vm))
@@ -1056,7 +1061,7 @@
      (define bits (bitwise-and sPUSH_BYTEn byte-code))
      (define value (if (= bits sPUSH_BYTEn) #xff bits))
      (interpret-push-byte- vm value 1)]
-    [(= (bitwise-and byte-code sPUSH_PARAMm) sPUSH_PARAM)
+    [(is-push-param-short byte-code)
      (interpret-push-param- vm (bitwise-and sPUSH_PARAMn byte-code) 1)]
     [(= (bitwise-and byte-code sPUSH_GLOBALm) sPUSH_GLOBAL)
      (interpret-push-global- vm (fx+ (arithmetic-shift (bitwise-and sPUSH_GLOBALn byte-code) 8)
@@ -1262,7 +1267,7 @@
         #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
         #:byte-code (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
                       NIL?
-                      BRA 10
+                      BRA 8
                       (sPUSH_PARAMc 1)
                       (sPUSH_PARAMc 0)
                       CAR
@@ -1270,7 +1275,6 @@
                       (sPUSH_PARAMc 0)
                       CDR
                       TAIL_CALL
-                      GOTO 2
                       (sPUSH_PARAMc 1)
                       RET))))))
 
