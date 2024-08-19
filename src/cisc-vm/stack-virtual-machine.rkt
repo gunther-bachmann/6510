@@ -1217,8 +1217,8 @@
 
 
   (define test-tail-recursion--value-stack2
-    (list NIL_CELL
-          (list->cell-list-ptr (list (cell-byte- 5) (cell-byte- 10) (cell-byte- 20)))))
+    (list (list->cell-list-ptr (list (cell-byte- 5) (cell-byte- 10) (cell-byte- 20)))
+          NIL_CELL))
 
   (define test-tail-recursion--run-until-break2
     (run-until-break
@@ -1233,19 +1233,51 @@
                                       BRK))
        (make-function-def
         #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
-        #:byte-code (vector-immutable (sPUSH_PARAMc 1)
-                                      (sNIL?-RET-PARAMc 0)
+        #:byte-code (vector-immutable (sPUSH_PARAMc 0)
+                                      (sNIL?-RET-PARAMc 1)
                                       (sPUSH_PARAMc 1)
-                                      CDR
                                       (sPUSH_PARAMc 0)
-                                      (sPUSH_PARAMc 1)
                                       CAR
                                       CONS
+                                      (sPUSH_PARAMc 0)
+                                      CDR
                                       TAIL_CALL))))))
 
   (check-equal? (vm--value-stack test-tail-recursion--run-until-break2)
                 (list (list->cell-list-ptr (list  (cell-byte- 20) (cell-byte- 10) (cell-byte- 5))))
-                "tos is reversed list"))
+                "tos is reversed list")
+
+  (define test-tail-recursion--unoptimized-run-until-break
+    (run-until-break
+     (make-vm
+      #:options (list) ;;  'trace
+      #:value-stack  test-tail-recursion--value-stack2
+      #:functions
+      (vector-immutable
+       (make-function-def
+        #:byte-code (vector-immutable PUSH_INT   1 0 ;; function index 1
+                                      CALL
+                                      BRK))
+       (make-function-def
+        #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
+        #:byte-code (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
+                      NIL?
+                      BRA 10
+                      (sPUSH_PARAMc 1)
+                      (sPUSH_PARAMc 0)
+                      CAR
+                      CONS
+                      (sPUSH_PARAMc 0)
+                      CDR
+                      TAIL_CALL
+                      GOTO 1
+                      (sPUSH_PARAMc 1)
+                      RET))))))
+
+  (check-equal? (vm--value-stack test-tail-recursion--unoptimized-run-until-break)
+                (list (list->cell-list-ptr (list  (cell-byte- 20) (cell-byte- 10) (cell-byte- 5))))
+                "tos is reversed list")
+  )
 
 (module+ test #| structure usage |#
 

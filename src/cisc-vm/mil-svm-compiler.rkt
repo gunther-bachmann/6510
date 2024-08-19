@@ -382,11 +382,8 @@
                                  (ast-ex-fun-def--def-params fun-def-node))))
   (define param-ids-len (length param-ids))
   (define param-id-reg-ref-pairs
-    (map (lambda: ((a : Symbol) (b : Nonnegative-Integer))
-           (define idx (- param-ids-len b 1))
-           (if (>= idx 0)
-               (cons a (register-ref- 'Param idx))
-               (raise-user-error "generating param idx hash failed")))
+    (map (lambda: ((a : Symbol) (idx : Nonnegative-Integer))
+           (cons a (register-ref- 'Param idx)))
          param-ids (range param-ids-len)))
   (define new-param-id-map (hash-union id-map (make-hash param-id-reg-ref-pairs)))
   (struct-copy ast-ex-fun-def- fun-def-node
@@ -452,46 +449,46 @@
                                                    (cond (p1 p0) (p0 p1) (_ p0))) (hash) 0))
      [(list _ ... (list 'ast-ex-cond- _
                       (list (list 'ast-ex-cond-clause- _
-                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)
-                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0))
+                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 1))) 'p1)
+                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 0))) 'p0))
                             (list 'ast-ex-cond-clause- _
-                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0)
-                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)))
-                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0))) #t]
+                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 0))) 'p0)
+                                  (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 1))) 'p1)))
+                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 0))) 'p0))) #t]
      [_ #f])
-   "resolved parameter in cond forms: p1/p0 (second/first parameter) has offset 0/1, looking from the end of the list")
+   "resolved parameter in cond forms: p1/p0 (second/first parameter) has offset 1/0, looking from the top of parameter stack")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    (a p1)) (hash) 0))
-     [(list _ ... (list 'ast-ex-fun-call- _ 'a (list (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)))) #t]
+     [(list _ ... (list 'ast-ex-fun-call- _ 'a (list (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 1))) 'p1)))) #t]
      [_ #f])
-   "resolved parameter in function calls: p1 (second parameter) has offset 0, looking from the end of the list")
+   "resolved parameter in function calls: p1 (second parameter) has offset 1, looking from the top of parameter stack")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    (if p1 p0 p1)) (hash) 0))
      [(list _ ... (list 'ast-ex-if- _
-                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)
-                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0)
-                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)
+                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 1))) 'p1)
+                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 0))) 'p0)
+                      (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 1))) 'p1)
                       _)) #t]
      [_ #f])
-   "resolved parameter in if forms: p1/0 (second/first parameter) has offset 0/1, looking from the end of the list")
+   "resolved parameter in if forms: p1/0 (second/first parameter) has offset 1/0, looking from the top of parameter stack")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    p1) (hash) 0))
-     [(list _ ... (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 0))) 'p1)) #t]
+     [(list _ ... (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p1 (list 'register-ref- 'Param 1))) 'p1)) #t]
      [_ #f])
    "resolves parameter in id usage: p1 (second parameter) has offset 0, looking from the end of the list")
 
   (check-true
    (match (nested->list (svm-resolve-ids (m-fun-def (some (p0 int) (p1 bool #t) -> bool)
                                                    p0) (hash) 0))
-     [(list _ ... (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 1))) 'p0)) #t]
+     [(list _ ... (list 'ast-at-id- (list 'ast-info- _ ... (list 'hash 'p0 (list 'register-ref- 'Param 0))) 'p0)) #t]
      [_ #f])
-   "resolves parameter in id usage: p0 (first parameter) has offset 1, looking from the end of the list"))
+   "resolves parameter in id usage: p0 (first parameter) has offset 0, looking from the top of parameter stack"))
 
 ;; optimization pattern:
 ;;   top-level-expr: if (nil? anything) <- can be negated
@@ -608,7 +605,7 @@
   (cast
    (vector->immutable-vector
     (apply vector-append
-           (append (map svm-generate (ast-ex-fun-call--parameters call))
+           (append (map svm-generate (reverse (ast-ex-fun-call--parameters call)))
                    (list (case (ast-ex-fun-call--fun call)
                            [(nil?) (vector-immutable NIL?)]
                            [(car) (vector-immutable CAR)]
@@ -622,8 +619,8 @@
   (check-equal?
    (svm-generate--fun-call
     (ast-ex-fun-call- (make-ast-info) 'nil? (list (ast-at-int- (make-ast-info) 10) (ast-at-int- (make-ast-info) 20))))
-   (vector-immutable PUSH_INT (low-byte 10) (high-byte 10)
-                     PUSH_INT (low-byte 20) (high-byte 20)
+   (vector-immutable PUSH_INT (low-byte 20) (high-byte 20)
+                     PUSH_INT (low-byte 10) (high-byte 10)
                      NIL?)))
 
 (define (svm-generate--int (a : ast-at-int-)) : (Immutable-Vectorof Byte)
@@ -658,8 +655,8 @@
                 (ast-at-int- (make-ast-info) 200)
                 #f))
 
-   (vector-immutable PUSH_INT (low-byte 10) (high-byte 10)
-                     PUSH_INT (low-byte 20) (high-byte 20)
+   (vector-immutable PUSH_INT (low-byte 20) (high-byte 20)
+                     PUSH_INT (low-byte 10) (high-byte 10)
                      NIL?
                      BRA 5
                      PUSH_INT (low-byte 200) (high-byte 200)
@@ -689,18 +686,18 @@
                 (if (nil? a-list)
                     b-list
                     (reverse (cdr a-list) (cons (car a-list) b-list))))))
-   (vector-immutable (sPUSH_PARAMc 1)     ;; a-list
+   (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
                      NIL?
                      BRA 9
                      (sPUSH_PARAMc 1)
-                     CDR
-                     (sPUSH_PARAMc 1)
-                     CAR
                      (sPUSH_PARAMc 0)
+                     CAR
                      CONS
+                     (sPUSH_PARAMc 0)
+                     CDR
                      TAIL_CALL
                      GOTO 1
-                     (sPUSH_PARAMc 0)
+                     (sPUSH_PARAMc 1)
                      RET)
    "optimization should reduce bytecode to this")
 
@@ -713,14 +710,14 @@
   ;;                (if (nil? a-list)
   ;;                    b-list
   ;;                    (reverse (cdr a-list) (cons (car a-list) b-list))))))
-  ;;   (vector-immutable (sPUSH_PARAMc 1)     ;; a-list
-  ;;                     (sNIL?-RET-PARAMc 0) ;; if a-list is nil, return b-list
-  ;;                     (sPUSH_PARAMc 1)
-  ;;                     CDR                  ;; (cdr a-list)
-  ;;                     (sPUSH_PARAMc 1)
-  ;;                     CAR
+  ;;   (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
+  ;;                     (sNIL?-RET-PARAMc 1) ;; if a-list is nil, return b-list
   ;;                     (sPUSH_PARAMc 0)
+  ;;                     CAR
+  ;;                     (sPUSH_PARAMc 1)
   ;;                     CONS                 ;; (cons (car a-list) b-list)
+  ;;                     (sPUSH_PARAMc 0)
+  ;;                     CDR                  ;; (cdr a-list)
   ;;                     TAIL_CALL)           ;; write two stack values into param0 and 1 and jump to function start
   ;;   "optimization should reduce bytecode to this"))
   )
