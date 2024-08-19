@@ -1270,7 +1270,7 @@
                       (sPUSH_PARAMc 0)
                       CDR
                       TAIL_CALL
-                      GOTO 1
+                      GOTO 2
                       (sPUSH_PARAMc 1)
                       RET))))))
 

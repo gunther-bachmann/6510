@@ -640,9 +640,12 @@
   (define second-block (if (ast-ex-if--negated node) else-code then-code))
   (cast (vector->immutable-vector
          (vector-append cond-code
-                        (vector-immutable BRA (+ 2 #|len of goto @end of first block|# (vector-length first-block)))
+                        (vector-immutable BRA (+ 1 #|offset itself is one byte length|#
+                                                 2 #|len of goto @end of first block|#
+                                                 (vector-length first-block)))
                         first-block
-                        (vector-immutable GOTO (vector-length second-block))
+                        (vector-immutable GOTO (+ 1 #|offset itself is one byte length|#
+                                                  (vector-length second-block)))
                         second-block))
         (Immutable-Vectorof Byte)))
 
@@ -658,9 +661,9 @@
    (vector-immutable PUSH_INT (low-byte 20) (high-byte 20)
                      PUSH_INT (low-byte 10) (high-byte 10)
                      NIL?
-                     BRA 5
+                     BRA 6
                      PUSH_INT (low-byte 200) (high-byte 200)
-                     GOTO 3
+                     GOTO 4
                      PUSH_INT (low-byte 100) (high-byte 100))))
 
 (define (svm-generate (node : ast-node-)) : (Immutable-Vectorof Byte)
@@ -688,7 +691,7 @@
                     (reverse (cdr a-list) (cons (car a-list) b-list))))))
    (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
                      NIL?
-                     BRA 9
+                     BRA 10
                      (sPUSH_PARAMc 1)
                      (sPUSH_PARAMc 0)
                      CAR
@@ -696,7 +699,7 @@
                      (sPUSH_PARAMc 0)
                      CDR
                      TAIL_CALL
-                     GOTO 1
+                     GOTO 2
                      (sPUSH_PARAMc 1)
                      RET)
    "optimization should reduce bytecode to this")
