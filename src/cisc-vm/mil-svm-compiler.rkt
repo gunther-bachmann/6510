@@ -502,9 +502,24 @@
 ;;     <else ...>
 ;;     TAIL_CALL
 
-(define (svm-generate--id (id : ast-at-id-)) : (Immutable-Vectorof Byte)
+(: append-bytes-vec (-> (Immutable-Vectorof Byte) * (Immutable-Vectorof Byte)))
+(define (append-bytes-vec . bytes)
+  (cast
+   (vector->immutable-vector
+    (apply vector-append bytes))
+   (Immutable-Vectorof Byte)))
+
+(: append-bytes (-> generation-artifact- (Immutable-Vectorof Byte) * generation-artifact-))
+(define (append-bytes artifact . bytes)
+  (struct-copy generation-artifact- artifact
+               [bytes (cast (vector->immutable-vector
+                             (vector-append (generation-artifact--bytes artifact)
+                                            (apply vector-append bytes)))
+                            (Immutable-Vectorof Byte))]))
+
+(define (svm-generate--id (id : ast-at-id-) (artifact : generation-artifact-)) : generation-artifact-
   (define reg (hash-ref (ast-info--id-map (ast-node--info id)) (ast-at-id--id id)))
-  (generate-push reg))
+  (append-bytes artifact (generate-push reg)))
 
 
 (define (optimize-tail-call-if-nil--apply (if-node : ast-ex-if-)) : ast-ex-if-
@@ -596,52 +611,84 @@
                        svm-expr-visitor--ints-state-))
                 '(3 2 1)))
 
-(define (svm-generate--function (def : ast-ex-fun-def-)) : (Immutable-Vectorof Byte)
-  ;; TODO: currently just a dummy implementation
-  (cast (vector->immutable-vector
-         (vector-append
-          (svm-generate (ast-ex-fun-def--body def)) ;; <- pass info that ret would follow
-          (vector-immutable RET))) ;; <- emit ret only if previous does not optimize on ret
-        (Immutable-Vectorof Byte))
-  ;; (vector-immutable 129 156 129 41 128 129 40 42 35)
-  )
+(define (svm-generate--function (def : ast-ex-fun-def-) (artifact : generation-artifact-)) : generation-artifact-
+  (define generated-body
+    (svm-generate (ast-ex-fun-def--body def)
+                  (struct-copy generation-artifact- artifact
+                               [bytes (vector-immutable)]
+                               [function-scope (symbol->string (ast-ex-fun-def--id def))]
+                               [tail-call-position #t]
+                               [ret-follows-directly #t])))
+  (append-bytes artifact
+                (generation-artifact--bytes generated-body)
+                (if (generation-artifact--ret-can-be-removed generated-body)
+                    (vector-immutable)
+                    (vector-immutable RET))))
 
-(define (svm-generate--fun-call (call : ast-ex-fun-call-)) : (Immutable-Vectorof Byte)
+(define (svm-generate--fun-call (call : ast-ex-fun-call-) (artifact : generation-artifact-)) : generation-artifact-
   ;; open: tail call, user function call, runtime function call, complete list of vm internal function calls
-  (cast
-   (vector->immutable-vector
-    (apply vector-append
-           (append (map svm-generate (reverse (ast-ex-fun-call--parameters call)))
-                   (list (case (ast-ex-fun-call--fun call)
-                           [(nil?) (vector-immutable NIL?)]
-                           [(car) (vector-immutable CAR)]
-                           [(cdr) (vector-immutable CDR)]
-                           [(cons) (vector-immutable CONS)]
-                           [(reverse) (vector-immutable TAIL_CALL)]
-                           [else (raise-user-error (format "unknown function \"~a\""  (ast-ex-fun-call--fun call)))])))))
-   (Immutable-Vectorof Byte)))
+(define call-symbol (ast-ex-fun-call--fun call))
+  (struct-copy generation-artifact- artifact
+               [bytes
+                (cast
+                 (vector->immutable-vector
+                  (apply vector-append
+                         (append (map (lambda ((param : ast-node-))
+                                        (generation-artifact--bytes
+                                         (svm-generate param (struct-copy generation-artifact- artifact
+                                                                          [bytes (vector-immutable)]
+                                                                          [tail-call-position #f]
+                                                                          [ret-follows-directly #f]))))
+                                      (reverse (ast-ex-fun-call--parameters call)) )
+                                 (list (case call-symbol
+                                         [(nil?) (vector-immutable NIL?)]
+                                         [(car) (vector-immutable CAR)]
+                                         [(cdr) (vector-immutable CDR)]
+                                         [(cons) (vector-immutable CONS)]
+                                         [else
+                                          (if (eq? call-symbol
+                                                   (string->symbol (generation-artifact--function-scope artifact)))
+                                              (if (generation-artifact--tail-call-position artifact)
+                                                  (vector-immutable TAIL_CALL)
+                                                  (raise-user-error (format "function call to \"~a\" is not in tail call position" (ast-ex-fun-call--fun call))))
+                                              (raise-user-error (format "unknown function \"~a\""  (ast-ex-fun-call--fun call))))])))))
+                 (Immutable-Vectorof Byte))]))
+
+;; used during generation of byte-code to track information between separate generational steps
+(struct generation-artifact-
+  ((bytes : (Immutable-Vectorof Byte))    ;; generated bytes
+   (function-scope : String)              ;; current generation is in the scope of the following function
+   (module-scope : String)                ;; current generation is in the scope of the following module
+   (tail-call-position : Boolean)         ;; current expression generation is in tail-call position
+   (ret-follows-directly : Boolean)       ;; the current generated artfiact will follow a ret statement diretly
+   (ret-can-be-removed : Boolean)         ;; the directly following ret is no longer necessay and was handled in this generating step
+   )
+  #:transparent)
 
 (module+ test #| svm-generate--fun-call |#
   (check-equal?
-   (svm-generate--fun-call
-    (ast-ex-fun-call- (make-ast-info) 'nil? (list (ast-at-int- (make-ast-info) 10) (ast-at-int- (make-ast-info) 20))))
+   (generation-artifact--bytes
+    (svm-generate--fun-call
+     (ast-ex-fun-call- (make-ast-info) 'nil? (list (ast-at-int- (make-ast-info) 10) (ast-at-int- (make-ast-info) 20)))
+     (make-generation-artifact)))
    (vector-immutable PUSH_INT (low-byte 20) (high-byte 20)
                      PUSH_INT (low-byte 10) (high-byte 10)
                      NIL?)))
 
-(define (svm-generate--int (a : ast-at-int-)) : (Immutable-Vectorof Byte)
+(define (svm-generate--int (a : ast-at-int-) (artifact : generation-artifact-)) : generation-artifact-
   (define val (ast-at-int--value a))
-  (vector-immutable PUSH_INT (low-byte val) (high-byte val)))
+  (append-bytes artifact (vector-immutable PUSH_INT (low-byte val) (high-byte val))))
 
 (module+ test #| svm-generate--int |#
-  (check-equal? (svm-generate--int (ast-at-int- (make-ast-info) 300))
+  (check-equal? (generation-artifact--bytes
+                 (svm-generate--int (ast-at-int- (make-ast-info) 300) (make-generation-artifact)))
                 (vector-immutable PUSH_INT 44 1)))
 
-(define (svm-generate--if (node : ast-ex-if-)) : (Immutable-Vectorof Byte)
+(define (svm-generate--if (node : ast-ex-if-) (artifact : generation-artifact-)) : generation-artifact-
   ;; open: optimize for sNIL?-RET-PARAMc
-  (define cond-code (svm-generate (ast-ex-if--condition node)))
-  (define then-code (svm-generate (ast-ex-if--then node)))
-  (define else-code (svm-generate (ast-ex-if--else node)))
+  (define cond-code (generation-artifact--bytes (svm-generate (ast-ex-if--condition node) (struct-copy generation-artifact- artifact [bytes (vector-immutable)] [tail-call-position #f] [ret-follows-directly #f]))))
+  (define then-code (generation-artifact--bytes (svm-generate (ast-ex-if--then node) (struct-copy generation-artifact- artifact [bytes (vector-immutable)] [ret-follows-directly #f]))))
+  (define else-code (generation-artifact--bytes (svm-generate (ast-ex-if--else node) (struct-copy generation-artifact- artifact [bytes (vector-immutable)] [ret-follows-directly #f]))))
   (define first-block (if (ast-ex-if--negated node) then-code else-code))
   (define second-block (if (ast-ex-if--negated node) else-code then-code))
   (define first-block-ends-in-jump (memq (vector-ref first-block (sub1 (vector-length first-block))) (list TAIL_CALL GOTO)))
@@ -652,33 +699,51 @@
   (define second-block-matches-param-push
     (and (= 1 (vector-length second-block))
        (is-push-param-short (vector-ref second-block 0))))
-  (define follow-code-is-ret #t)
-  (cast (vector->immutable-vector
-         (if (and cond-matches-param-push-nil? second-block-matches-param-push follow-code-is-ret)
-             (vector-append (vector-immutable
-                             (vector-ref cond-code 0)
-                             (sNIL?-RET-PARAMc (bitwise-and sPUSH_PARAMn (vector-ref second-block 0))))
-                            first-block)
-             (vector-append cond-code
-                            (vector-immutable BRA (+ 1 #|offset itself is one byte length|#
-                                                     (if first-block-ends-in-jump 0 2) #|len of goto @end of first block|#
-                                                     (vector-length first-block)))
-                            first-block
-                            (if first-block-ends-in-jump
-                                (vector-immutable)
-                                (vector-immutable GOTO (+ 1 #|offset itself is one byte length|#
-                                                          (vector-length second-block))))
-                            second-block)))
-        (Immutable-Vectorof Byte)))
+  (define follow-code-is-ret (generation-artifact--ret-follows-directly artifact)) ;; this allows for sNIL?-RET-PARAMc <- the RET!, but this should only be true, if this expression is in tail call position
+  (if (and cond-matches-param-push-nil?
+         second-block-matches-param-push
+         follow-code-is-ret
+         (generation-artifact--tail-call-position artifact))
+      (struct-copy generation-artifact- artifact
+                   [bytes (append-bytes-vec
+                           (generation-artifact--bytes artifact)
+                           (vector-immutable
+                            (vector-ref cond-code 0)
+                            (sNIL?-RET-PARAMc (bitwise-and sPUSH_PARAMn (vector-ref second-block 0))))
+                           first-block)]
+                   [ret-can-be-removed #t])
+      (append-bytes artifact
+                    cond-code
+                    (vector-immutable BRA (cast (+ 1 #|offset itself is one byte length|#
+                                                   (if first-block-ends-in-jump 0 2) #|len of goto @end of first block|#
+                                                   (vector-length first-block)) Byte))
+                    first-block
+                    (if first-block-ends-in-jump
+                        (vector-immutable)
+                        (vector-immutable GOTO (cast (+ 1 #|offset itself is one byte length|#
+                                                       (vector-length second-block)) Byte)))
+                    second-block)))
+
+(define (make-generation-artifact
+         #:bytes (bytes : (Immutable-Vectorof Byte) (vector-immutable)) ;; generated bytes
+         #:function-scope (function-scope : String "")                  ;; current generation is in the scope of the following function
+         #:module-scope (module-scope : String "")                      ;; current generation is in the scope of the following module
+         #:tail-call-position (tail-call-position : Boolean #f)         ;; current expression generation is in tail-call position
+         #:ret-follows-directly (ret-follows-directly : Boolean #f)     ;; the current generated artfiact will follow a ret statement diretly
+         #:ret-can-be-removed (ret-can-be-removed : Boolean #f)         ;; the directly following ret is no longer necessay and was handled in this generating step
+         ) : generation-artifact-
+  (generation-artifact-
+   bytes function-scope module-scope tail-call-position ret-follows-directly ret-can-be-removed))
 
 (module+ test #| svm-generate--if |#
   (check-equal?
-   (svm-generate--if
-    (ast-ex-if- (make-ast-info)
-                (ast-ex-fun-call- (make-ast-info) 'nil? (list (ast-at-int- (make-ast-info) 10) (ast-at-int- (make-ast-info) 20)))
-                (ast-at-int- (make-ast-info) 100)
-                (ast-at-int- (make-ast-info) 200)
-                #f))
+   (generation-artifact--bytes
+    (svm-generate--if (ast-ex-if- (make-ast-info)
+                                  (ast-ex-fun-call- (make-ast-info) 'nil? (list (ast-at-int- (make-ast-info) 10) (ast-at-int- (make-ast-info) 20)))
+                                  (ast-at-int- (make-ast-info) 100)
+                                  (ast-at-int- (make-ast-info) 200)
+                                  #f)
+                      (make-generation-artifact)))
 
    (vector-immutable PUSH_INT (low-byte 20) (high-byte 20)
                      PUSH_INT (low-byte 10) (high-byte 10)
@@ -688,13 +753,14 @@
                      GOTO 4
                      PUSH_INT (low-byte 100) (high-byte 100))))
 
-(define (svm-generate (node : ast-node-)) : (Immutable-Vectorof Byte)
+(define (svm-generate (node : ast-node-) (artifact : generation-artifact-)) : generation-artifact-
   (cond
-    [(ast-ex-fun-def-? node) (svm-generate--function node)]
-    [(ast-at-id-? node) (svm-generate--id node)]
-    [(ast-ex-if-? node) (svm-generate--if node)]
-    [(ast-ex-fun-call-? node) (svm-generate--fun-call node)]
-    [(ast-at-int-? node) (svm-generate--int node)]
+    [(ast-ex-fun-def-? node) (svm-generate--function node artifact)]
+    [(ast-at-id-? node) (svm-generate--id node artifact)]
+    [(ast-ex-if-? node) (svm-generate--if node artifact)]
+    [(ast-ex-fun-call-? node) (svm-generate--fun-call node artifact)]
+    [(ast-at-int-? node) (svm-generate--int node artifact)]
+    ;; TODO: complete generation of other node types
     [else (raise-user-error (format "unknown node type ~a for generate" node))]))
 
 (define (svm-compile (node : ast-node-)) : ast-node-
@@ -704,13 +770,15 @@
 
 (module+ test #| generate code for simple reverse function |#
   (check-equal?
-   (svm-generate
-    (svm-compile
-     (m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*
-                         "reverse a-list, consing it into b-list")
-                (if (nil? a-list)
-                    b-list
-                    (reverse (cdr a-list) (cons (car a-list) b-list))))))
+   (generation-artifact--bytes
+    (svm-generate
+     (svm-compile
+      (m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*
+                          "reverse a-list, consing it into b-list")
+                 (if (nil? a-list)
+                     b-list
+                     (reverse (cdr a-list) (cons (car a-list) b-list)))))
+     (make-generation-artifact)))
     (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
                       (sNIL?-RET-PARAMc 1) ;; if a-list is nil, return b-list
                       (sPUSH_PARAMc 1)
@@ -720,5 +788,5 @@
                       (sPUSH_PARAMc 0)
                       CDR                  ;; (cdr a-list)
                       TAIL_CALL            ;; write two stack values into param0 and 1 and jump to function start
-                      RET)                 ;; TODO: optimize away
+                      )
    "optimization should reduce bytecode further"))
