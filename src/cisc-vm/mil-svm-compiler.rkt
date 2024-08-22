@@ -53,7 +53,6 @@
                   FALSE
 
                   cell-byte--value
-
                   is-push-param-short
 
                   sPUSH_PARAMc
@@ -61,7 +60,10 @@
                   sPOP_TO_PARAMc
                   sPOP_TO_PARAMn
 
-                  sNIL?-RET-PARAMc))
+                  sNIL?-RET-PARAMc
+                  ))
+
+(provide svm-compile svm-generate (struct-out generation-artifact-) generation-artifact--bytes make-generation-artifact)
 
 (module+ test #| require test utils |#
   (require typed/rackunit))

@@ -37,6 +37,7 @@
          (struct-out ast-ex-fun-def-)
          (struct-out ast-ex-with-local-)
          (struct-out ast-ex-with-)
+         (struct-out ast-ex-value-def-)
          Register)
 
 ;; ast-node-    :: ast=info-
@@ -47,6 +48,7 @@
 ;;    |         +----- ast-pa-defaulted-def-    :: default
 ;;    +----- ast-expression-
 ;;    |         +----- ast-ex-fun-def-   :: id x params x defaulted-params x return-type x docs x body
+;;    |         +----- ast-ex-value-def- :: id x doc x body
 ;;    |         +----- ast-ex-cond-      :: cond-clauses x else
 ;;    |         +----- ast-ex-if-
 ;;    |         +----- ast-ex-with-      :: with-locals
@@ -211,6 +213,13 @@
    (def-params  : (Listof ast-pa-defaulted-def-))
    (return-type : ast-type-def-)
    (description : (Listof String))
+   (body        : ast-expression-))
+  #:transparent)
+
+(struct ast-ex-value-def- ast-expression-
+  ((id          : Symbol)
+   (type        : ast-type-def-)
+   (description : String)
    (body        : ast-expression-))
   #:transparent)
 

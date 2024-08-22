@@ -25,6 +25,7 @@
          BYTE+
          BRA
          CALL
+         BRK
          NIL?
          TAIL_CALL
 
@@ -44,6 +45,8 @@
          TRUE
          FALSE
 
+         NIL_CELL
+
          is-push-param-short
 
          sPUSH_PARAMc
@@ -53,6 +56,14 @@
          sNIL?-RET-PARAMc
 
          (struct-out cell-byte-)
+         cell-byte-
+
+         make-function-def
+         make-vm
+         vm--value-stack
+
+         run-until-break
+         list->cell-list-ptr
          )
 
 (module+ test #| require test utils |#
@@ -151,6 +162,23 @@
                            #:byte-code (byte-code : (Immutable-Vectorof Byte) (vector-immutable 0 1 2 3 4)))
         : vm-function-def-
   (vm-function-def- stack-size-used parameter-count locals-count name byte-code))
+
+;; TODO: in order to allow constants to be generated for racket-stack-vm and c64-stack-vm,
+;;       the representation need to be byte-encoded and compact
+;;       => globals are renamed into memory, being an array of bytes. pushing constants/globals will
+;;          decode the bytes into atomic cells, since no other cells may be pushed
+;;          popping cells into globals is only valid for atomic cells?
+;;       => the heap shares its memory with globals
+;;          cell-ptr- point into the heap (globals etc. likewise)
+;;          the global idx is just a pointer (since ints are 13 bit, globals may only reside in lower memory)
+;;          globals and dynamically allocated cells may reference each other (through pointers) that all
+;;          point into the heap array of byte values
+;;          the heap need not be allocated continuously (e.g. having pages for arrays, for cell-pairs etc.)
+;; TODO: structs need to be converted to bytes and vice versa?
+;; TODO: arrays are directly stored in the heap-structure
+
+;; How about racket vm decoding data bytes -> cells at startup, from then on working with cells only?
+;; of course the byte encoding need to be interpretable for the c64
 
 (struct vm-
   ([frame-stack : (Listof vm-frame-)]
@@ -1237,7 +1265,7 @@
                                       CALL
                                       BRK))
        (make-function-def
-        #:parameter-count 2 ;; param0 = accumulator, param1 = list of bytes
+        #:parameter-count 2 ;; param0 = original list, param1 = nil (reversed list in the end)
         #:byte-code (vector-immutable (sPUSH_PARAMc 0)
                                       (sNIL?-RET-PARAMc 1)
                                       (sPUSH_PARAMc 1)
@@ -1358,3 +1386,80 @@
 
   (check-equal? (cell-list-ptr->list (tos-value (run-until-break higher-order-function-test--vm)))
                 (list (cell-byte- 4) (cell-byte- 3) (cell-byte- 2))))
+
+
+;;                                        low-byte  high byte  (low-byte is first)
+(define CELL_PTR #b00000001)           ;; xxxx xxx1 xxxx xxxx (ptr to words/cells)
+(define CELL_LIST_PTR #b00000010)      ;; xxxx xx10 xxxx xxxx (ptr to (cell-pairs, car and cdr cell)) NIL= 0000 0010 0000 0000
+(define CELL_INT #b00000000)           ;; xxxx x000 xxxx xxxx 0..8191, -4096..+4095 [advantage 13-bit adding can be done easily l+l, h+h+carry]
+(define CELL_BYTE #b00000100)          ;; 0000 0100 xxxx xxxx 0..255, -128..+127
+(define CELL_BCD  #b00001100)          ;; 0000 1100 dddd dddd 00..99 binary coded decimal
+
+;; these pointers allow for relocatable data, data may become non relocatable (mostly interesting for startup encoding/constant pool)
+(define CELL_PTR_REL #b00010100)       ;; 0001 0100 xxxx xxxx -256..+254 (relative pointer) *2
+(define CELL_LIST_PTR_REL #b00011100)  ;; 0001 1100 xxxx xxxx -512..+508 (relative pointer) *4
+
+
+;; implementation idea for vm: ptr = index into (e.g. globals, functions)
+;; pointed to cells point into an array of index-> complex-cell-
+
+;; ideas of pointed to cells (are cells) which can have bytes following (no represented in vm yet)
+;; pointed to cells can be more complex array with max 127 elements each a cell (also used for structures)
+;; all data is always allocated in words (2 bytes) steps -> cell_ptr can access any cell
+(define CELL_ARRAY #b00100100)         ;; 0010 0100 xxxx xxxx size 1..256
+                                       ;; element0: 16bit cell
+                                       ;; element1: 16bit cell
+                                       ;; ..
+                                       ;; element255: 16 bit cell
+
+(define CELL_FLOAT #b00101100)         ;; 0010 1100 xxxx xxxx ??
+                                       ;; 6 byte float data following
+(define CELL_NAT_ARRAY #b00111100)     ;; 0011 1100 xxxx xxxx size 0..255 (page boundaries may play a role), used for strings
+                                       ;; up to 256 bytes of native array following (always allocated in 2 byte steps)
+(define CELL_LARGE_ARRAY #b01000100)   ;; 0100 0100 xxxx xxxx size 1..65536
+                                       ;; xxxx xxxx xxxx xxxx (even larger)
+                                       ;; cell0, cell1 ... cell65535
+
+;; idea for
+;; hash-maps implementation could be trees constructed from lists
+;; hash-map = cell-list-ptr -> hash-map-hash-node
+;; (car hash-map-hash-node) = min hash for right, or exact hash if cdr is value (and no list ptr)
+;; (cdr hash-map-hash-node) = cell-list-ptr to a hash-map-tree-node  or cell-ptr to content, or cell-byte/int/bcd content
+;; (car hash-map-tree-node) = cell-list-ptr to left (or nil)
+;; (car hash-map-tree-node) = cell-list-ptr to right (or nil)
+
+;; (int, ->(left->(int, ...) ,right->(int, ...))
+
+;; idea: compact representation of lists possible? fast conversion <-> ?
+
+;; to convert a complete cell, one might need information of globals, complex-cell-array and their indices to correctly generated data for the vm
+;; idea: input = cell X startidx for next free heap
+;;       output = bytes X
+(define (cell->byte-code (a : cell-)): (Immutable-Vectorof Byte)
+  (cond
+    [(cell-int-? a) (vector-immutable
+                     (cast (arithmetic-shift (bitwise-and #b00011111 (cell-int--value a)) 3) Byte)
+                     (cast (arithmetic-shift (bitwise-and #b0001111111100000 (cell-int--value a)) -5) Byte))]
+    [(cell-byte-? a) (vector-immutable #b00000100 (cell-byte--value a))]
+    [else (raise-user-error (format "unknown cell type \"~a\"" a))]))
+
+(module+ test #| cell->byte-code |#
+  (check-equal? (cell->byte-code (cell-int- 1025))
+                (vector-immutable #b00001000 #b00100000)))
+
+;; since cell-ptr may be in the bytes, all bytes need be accessible (the whole memory)
+(define (byte-code->cell (bytes : (Immutable-Vectorof Byte))) : cell-
+  (define byte0 (vector-ref bytes 0))
+  (cond
+    [(= 0 (bitwise-and #b00000111 byte0))
+     (define byte1 (vector-ref bytes 1))
+     (cell-int- (fx+ (arithmetic-shift byte1 5) (arithmetic-shift byte0 -3)))]
+    [(= byte0 #b00000100) (cell-byte- (vector-ref bytes 1))]
+    [else (raise-user-error (format "unknown byte encoding for data in byte 0 \"~a\"" byte0))]))
+
+(module+ test #| byte-code->cell |#
+  (check-equal? (cell-int--value (cast (byte-code->cell (cell->byte-code (cell-int- 1025))) cell-int-))
+                1025)
+
+  (check-equal? (cell-byte--value (cast (byte-code->cell (cell->byte-code (cell-byte- 129))) cell-byte-))
+                129))

@@ -20,7 +20,8 @@
 
 (provide m-type-def
          m-expression-def
-         m-fun-def)
+         m-fun-def
+         m-val-def)
 
 (module+ test #| require test utils |#
   ;; (require "../6510-test-utils.rkt")
@@ -84,7 +85,7 @@
                      (m-expression-def else-expression))]
 
     [(_ ((~literal lambda) ((p-id p-typ) ... (o-id o-typ o-val) ... -> r-typ) expr))
-     #'( ast-ex-fun-def- (make-ast-info)
+     #'(ast-ex-fun-def- (make-ast-info)
                          'lambda
                          (list (ast-param-def- (make-ast-info) 'p-id (m-type-def p-typ)) ...)
                          (list (ast-pa-defaulted-def- (make-ast-info) 'o-id (m-type-def o-typ) (m-expression-def o-val)) ...)
@@ -177,13 +178,13 @@
 (define-syntax (m-fun-def stx)
   (syntax-parse stx
     [(_ (id (p-id p-typ) ... (o-id o-typ o-val) ... -> r-typ desc ...) expr)
-     #'( ast-ex-fun-def- (make-ast-info)
-                         'id
-                         (list (ast-param-def- (make-ast-info) 'p-id (m-type-def p-typ)) ...)
-                         (list (ast-pa-defaulted-def- (make-ast-info) 'o-id (m-type-def o-typ) (m-expression-def o-val)) ...)
-                         (m-type-def r-typ)
-                         (list 'desc ...)
-                         (m-expression-def expr))]))
+     #'(ast-ex-fun-def- (make-ast-info)
+                        'id
+                        (list (ast-param-def- (make-ast-info) 'p-id (m-type-def p-typ)) ...)
+                        (list (ast-pa-defaulted-def- (make-ast-info) 'o-id (m-type-def o-typ) (m-expression-def o-val)) ...)
+                        (m-type-def r-typ)
+                        (list 'desc ...)
+                        (m-expression-def expr))]))
 
 (module+ test #| m-fun-def |#
   (check-true
@@ -240,4 +241,40 @@
                                           `(ast-at-id- ,_ b-list)))))
                   #f))
       #t]
+     [_ #f])))
+
+(define-syntax (m-val-def stx)
+  (syntax-parse stx
+    [(_ id type expr)
+     #'(ast-ex-value-def- (make-ast-info)
+                          'id
+                          (m-type-def type)
+                          ""
+                          (m-expression-def expr))]
+    [(_ id type doc expr)
+     #'(ast-ex-value-def- (make-ast-info)
+                          'id
+                          (m-type-def type)
+                          'doc
+                          (m-expression-def expr))]))
+
+(module+ test #| m-val-def |#
+  (check-true
+   (match (nested->list (m-val-def my-val int 42))
+     [(list  ast-ex-value-def-
+             _
+             'my-val
+             (list 'ast-td-simple- _ 'int)
+             ""
+             (list 'ast-at-int- _ 42)) #t]
+     [_ #f]))
+
+  (check-true
+   (match (nested->list (m-val-def my-val int "the answer to all" 42))
+     [(list  ast-ex-value-def-
+             _
+             'my-val
+             (list 'ast-td-simple- _ 'int)
+             "the answer to all"
+             (list 'ast-at-int- _ 42)) #t]
      [_ #f])))
