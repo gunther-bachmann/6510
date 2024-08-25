@@ -405,8 +405,12 @@
 - https://spindleyq.itch.io/8-bitsy
 - https://dwheeler.com/6502/
 *** honeylisp https://www.youtube.com/watch?v=Q9TG1G0l3xY&list=PLPWFbl2QwQaZM5DxmIDNCrN3CuTiSTg8q&index=1
+** sweet16 6510 implementation of 16 bit virtual cpu (very simple)
+http://www.6502.org/source/interpreters/sweet16.htm#SWEET_16_A_Pseudo_16_Bit_Micropr
 ** apple2 -> lisp machine https://blog.nullspace.io/apple-2-lisp-part-1.html
 ** minimal lisp impl https://github.com/kanaka/mal/tree/master/impls/rust
+** plasma : using a bytecode stack vm on 6502 with lots of optimizations
+https://github.com/dschmenk/PLASMA?tab=readme-ov-file
 ** https://piumarta.com/software/lysp/
 ** https://github.com/jaoswald/cl-comfy-6502/tree/master
 ** https://github.com/hl80/mu-lisp

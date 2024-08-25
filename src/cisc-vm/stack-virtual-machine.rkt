@@ -295,6 +295,96 @@
                  1)
                 (cell-int- 10)))
 
+;; thoughts about decoding (speed) of opcodes with 6510 assembly
+;; general: table: opcode -> address of handler
+;; e.g: BRK = 0 (opcode is in X), LDA 4000,X -> PHA -> LDA 4100,X -> PHA -> RTS : len=9, cycles=20
+;; alternative: LDA 4000,X -> STA $???? -> BNE $?? <- only byte byte offset possible, target contains e.g. JMP $???? => 127 / 3 opcodes possible (42): len = 8 + 3, cycles=14
+
+;; short instructions (shifted opcode) -> address of handler
+;; AND #$11110000 (maskout opcode),
+;; x-times LSR (shift to right index position)
+;; TAX
+;; use as index for table access (or), use sparse memory (use list-car-cdr fields for freelist to fill up?)
+;; after and us directly as index into some table?
+
+
+;; decoding code (16 bytes)
+;;                ;; load new opcode into A
+;;                LDA ($PC),Y ;; y = temp delta to program counter, which is held in $PC on the zero page
+;;                BPL  OPCODE ;; if negative (highest bit set, it is a short opcode)
+;; SHORT_OPCODE:  AND #$F0    ;; mask out irrelevant bits
+;; OPCODE:        TAX         ;; opcode as index into X
+;;                LDA $4000,X ;; load high byte of handler for this command from sparse table $4000-$40FF
+;;                PHA
+;;                LDA $4100,X ;; load low byte (-1) of handler for this command from sparse table $4100-$41FF
+;;                PHA
+;;                RTS
+
+;; memory layout of code table
+;; 4000 ?? ;; high byte of handler for OPCODE 0
+;; 4100 ?? ;; low byte (-1) of handler for OPCODE 0
+
+;; 4080 ?? ;; high byte of handler for OPCODE 128 (short PUSH)
+;; 4081..408F ;; unused -> sparse (15 bytes)
+;; 4090 ?? ;; high byte of handler for OPCODE 144 (short POP)
+;; 4091..409F ;; unused -> sparse (15 bytes)
+
+;; given this coding, the upper half of the page is used sparsely (4080..40FF, and 4180..41FF), leaving (* 2 (- 128 16)) => 224 bytes free for other usage
+;; this sparse usage could be blocked if the short code would be shifted right | the short code would use the lower 4 bits (better)
+;; BMI OPCODE
+;; AND #$0F
+;;
+;; memory layout would then be
+;; 4000 ?? ;; high byte of handler for short opcode $0 (PUSH)
+;; 4001 ?? ;; high byte of handler for short opcode $1 (POP)
+;; 4010 .. 407f ;; free mem (112 bytes block free <- usable e block e.g. for (free) list-cells 28, if ref counted less of course ≅ 22)
+;; 4080 ?? ;; high byte of handler for regular opcode $80
+;; 4081 ?? ;; high byte of handler for regular opcode $81
+
+
+;; how about a way to calc handler address from bytecode itself (e.g.) some ands, shifts + offset store and jump <​= depends on size of code implementation
+;; but this is wishful thinking, probably
+;; e.g. jsr prepare operand
+;;      jsr execute command
+;;      jsr store result
+
+;; other implementation (from plasma: https://dwheeler.com/6502/PLAVM.S.txt)
+;; vm code has lower bit never set (only 128 byte codes available)
+;; PC = current program counter, PCL lowbyte of PC, PCH  is highbyte of PC
+;; OPTBL holds 2 byte handler reference, that is jumped to
+;; FETCHOP: LDY #$00
+;;          LDA (PC),Y      ;; load vm byte code (lower bit 0, no need to multiply to use as index)
+;;          STA JMPOP+1     ;; write vm byte code into low byte of jump indirect command (modify code)
+;;          JSR JMPOP       ;; jump to the jump command
+;;          INC PCL         ;; PC++
+;;          BNE FETCHOP     ;;
+;;          INC PCH         ;;
+;;          BNE FETCHOP     ;; ?? what if no branch is executed
+;; JMPOP:   JMP (OPTBL)     ;; indirect jump to handler for byte code
+
+
+;; idea: - Y has INC for PC after code was handled,
+;;       - after code was handled, JMP ADJUST-PC is executed or
+;;       - using threaded interpretation adds 8 bytes to the end of the handler (prereq: Y=0, PC is up to date or no overflow expected?), maybe just for most important commands to keep mem usage low?
+;;                       LDA (PC),Y         ;; if a function is always < 256 byte => PC needs increment executing call, since within one call, y cannot overflow!
+;;                       STA JMPOP*+1
+;;             JMPOP*    JMP (OPTBL)
+
+;; ADJUST-PC:  TYA
+;;             ADC PCL
+;;             STA PCL
+;;             BCC FETCH
+;;             INC PCH
+;; FETCH:      LDY #$00
+;;             LDA (PC),Y
+;;             STA JMPOP+1
+;; JMPOP       JMP (OPTBL)
+
+;; plasma uses a 16 element X indexed eval stack of 16-bit width located in the zero page! (https://github.com/dschmenk/PLASMA?tab=readme-ov-file#code-optimizations)
+;; all parameters and temp values her on this stack (params are copied into the frame)
+;; invocation frames are organized as stack
+;; call/return are implemented using the 6510 processor stack (for speed), limiting e.g. non-tailcalled recursion or regular call-stack to 128 calls (- offset used by interpreter/system)
+
 ;; naming convention
 ;; {(s)hort | (p)refix} COMMAND {(m)ask | (n)umber-mask | (m)ost(s)ignificant(b)it position}
 ;; (s) short commands reduce the number of bytes by reducing the domain of the operands
@@ -317,7 +407,7 @@
 (define PUSH_NIL             9) ;; stack: [] -> [NIL]
 (define PUSH_PARAM          10) ;; op = param-idx from tail, stack [] -> [cell-]
 (define PUSH_GLOBAL         11) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
-(define PUSH_LOCAL          12) ;; op = local-idx, stacl [] -> [cell-]
+(define PUSH_LOCAL          12) ;; op = local-idx, stack [] -> [cell-]
 (define PUSH_STRUCT_FIELD   13) ;; op = field-idx, stack [struct-ref] -> [cell-]
 (define PUSH_ARRAY_FIELD    14) ;; op = field-idx, stack [array-ref] -> [cell-]
 
@@ -392,7 +482,7 @@
 (define sPUSH_LOCALm        #b11111100)
 (define sPUSH_LOCALn        (bitwise-xor #xff sPUSH_LOCALm))
 ;; using 140..143
-(define sPUSH_BYTE          #b10001100) ;; short push byte, lower 2 bits  #b00 = #x00, #b01 = #x01, #b10 = #x02, #b11 = #xff
+(define sPUSH_BYTE          #b10001100) ;; short push byte, lower 2 bits  #b00 = #x00, #b01 = #x01, #b10 = #x02|#xfe (-2), #b11 = #xff (-1)
 (define sPUSH_BYTEm         #b11111100)
 (define sPUSH_BYTEn         (bitwise-xor #xff sPUSH_BYTEm))
 
@@ -420,6 +510,7 @@
 (define sNIL?-RET-LOCALn    (bitwise-xor #xff sNIL?-RET-LOCALm))
 
 ;; this is using lots of slots, maybe goto and bra are not used often enough to allow this
+;; maybe push/pop of structure fields/arrays is more valuable here
 ;; using 192..223
 (define sBRA                #b11000000)
 (define sBRAm               #b11100000)
@@ -1466,6 +1557,29 @@
 (define CELL_INT #b00000000)           ;; xxxx x000 xxxx xxxx 0..8191, -4096..+4095 [advantage 13-bit adding can be done easily l+l, h+h+carry]
 (define CELL_BYTE #b00000100)          ;; 0000 0100 xxxx xxxx 0..255, -128..+127
 (define CELL_BCD  #b00001100)          ;; 0000 1100 dddd dddd 00..99 binary coded decimal
+
+;; alternative encoding
+;; ASL|ASR          = encoding len: 1 byte, execution time: 2 cycles => is beneficial if result can be used
+;; CMP Imm          = encoding len: 2 byte, execution time: 2 cycles => is beneficial if A has no further purpose (needs no postprocessing)
+;; ORA|AND|EOR Imm  = encoding len: 2 byte, execution time: 2 cycles
+;;
+;; PTR #b10000000        ;; 1xxx xxxx xxxx xxxx   ;; LDA tagbyte, BMI -- is ptr : ASL -> low byte of ptr
+;; LIST PTR #b01000000   ;; 01xx xxxx xxxx xxxx   ;; .. ASL, BMI -- is list ptr  : 2xASL -> low byte of ptr
+;; CELL_INT #b00000000   ;; 00xx xxx0 xxxx xxxx   ;; .. LDA tagbyte, ASR, BCC -- is int
+;; CELL_TRUE             ;; 0001 1111 ---- ----   ;; CMP #$1F, BEQ --true    : knowing it is a boolean: 2xASR BCC = false/BCS = true || AND #$02, BNZ -- true | B
+;; CELL_FALSE            ;; 0000 0001 ---- ----   ;; CMP #$01, BEQ -- false
+;; CELL_BYTE             ;; 0000 0010 xxxx xxxx   ;; ..
+
+;; 6510 code to have fast decoding of these tag-fields
+;; ptr detect:
+;;   A = tag-byte (first byte)
+;;   LSR put lowest bit into carry (0 into bit 7)
+;;   BCS --is a pointer (then ASL to get low byte of ptr, and next byte to have high byte of pointer)
+
+;; list ptr detect
+;;   A = tag-byte (already shifted right)
+;;   LSR
+;;   BCS -- is a list ptr (then 2xASL to get low byte of ptr ...)
 
 ;; these pointers allow for relocatable data, data may become non relocatable (mostly interesting for startup encoding/constant pool)
 (define CELL_PTR_REL #b00010100)       ;; 0001 0100 xxxx xxxx -256..+254 (relative pointer) *2
