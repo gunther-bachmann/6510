@@ -308,6 +308,130 @@
 ;; after and us directly as index into some table?
 
 
+;; how about 16 commands in the low nibble if top bit is set
+;; and if msb is not set, use only 112 of the other 128 possibilites to code the rest
+;; then stuff them together such that 128 possibilies remain that can be mapped to 2 x 128 byte jump targets in one page!
+;; #b1rrrxxxx with xxxx = opcode selector, rrr = operand
+;; #b0tttxxxx (but only 112 used) with ttt != 000
+
+;;         LDA ($PC),Y
+;;         BPL OPCODE
+;;         AND #$0F
+;; OPCODE: ASL
+;;         STA JMPOP+1
+;; JMPOP   JMP OPTBL
+
+;; optimize to remove asl
+;; how about 16 commands in the low nibble if top bit is set
+;; and if msb is not set, use only 112 of the other 128 possibilites to code the rest
+;; then stuff them together such that 128 possibilies remain that can be mapped to 2 x 128 byte jump targets in one page!
+;; #b1rrxxxxr with xxxx = opcode selector, rrr = operand
+;; #b0xxxxxx0 (but only 112 used) with tt ...t != 00...0
+
+;;         LDA ($PC),Y
+;;         BPL OPCODE
+;;         PHA ;; keep for register decoding
+;;         AND #$1E
+;; OPCODE: STA JMPOP+1
+;; JMPOP   JMP OPTBL
+
+;; the memory layout of the handler table then is one page
+;; OPTBL+0:  low-byte  #b1rr0000r (short command PUSH)
+;; OPTBL+1:  high-byte #b1rr0000r (short command PUSH)
+;; OPTBL+2:  low-byte  #b1rr0001r (short command POP)
+;; OPTBL+3:  high-byte #b1rr0001r (short command POP)
+;;         ...
+;; OPTBL+32  low-byte of command #b00010000 normal command (e.g. NOP)
+;; OPTBL+32  high-byte of command #b00010000 normal command (e.g. NOP)
+;;         ...
+;; OPTBL+254 low byte of command #b01111110
+;; OPTBL+255 high byte of command #b01111110
+
+;; decoding rrr scattered over the byte takes too much processing => short commands may be scattered
+
+
+;; FETCH-NEXT: LDA ($PC),Y
+;;             ASL
+;;             BCC OPERAND
+;;             AND $F0           ;; mask out has to take place to make sure, other bytecodes do not collide with short ones (after removing bit 7 through asl)
+;; OPERAND:    STA JMPOP+1
+;; JUMPOP:     JMP OPTBL
+
+;; OPTBL+$00: low/high #b10000rrr  (short e.g. PUSH-LOC/PARAM)
+;; OPTBL+$02: low/high #b00000001  (normal command e.g. NOP)
+;; OPTBL+$04: low/high #b00000010  (normal command e.g. BYTE-)
+;; ...
+;; OPTBL+$10: low/high #b10001rrr  (short e.g. POP-LOC/PARAM)  0..3 (registers)
+;; OPTBL+$12: low/high #b00001001  (normal command e.g. BYTE+)
+; ...
+;; OPTBL+$40: low/high #b101xxrrr  (short e.g. GOTO) $40, $50, $60, $70 contain same jump address (GOTO)
+;; OPTBL+$50: low/high #b101xxrrr  (short e.g. GOTO)
+;; OPTBL+$60: low/high #b101xxrrr  (short e.g. GOTO)
+;; OPTBL+$70: low/high #b101xxrrr  (short e.g. GOTO)
+; ...
+;; OPTBL+$80: low/high #b110xxrrr  (short e.g. BRA) xxrrr is the offset
+;; OPTBL+$90: low/high #b110xxrrr  (short e.g. BRA)
+;; OPTBL+$A0: low/high #b110xxrrr  (short e.g. BRA)
+;; OPTBL+$B0: low/high #b110xxrrr  (short e.g. BRA)
+
+;; OPTBL+$C0: PUSH-BYTE/PUSH-INT
+;; OPTBL+$D0: PUSH-ARRAY (e.g. tos = cell-ptr- -> cell-array-, rrr = array-index) <- useful for fast struct access?
+;; OPTBL+$E0: POP-ARRAY  (e.g. tos = cell-ptr- -> cell-array-, rrr = array-index)
+;; OPTBL+$F0: NIL?-RET-PARAM/...
+
+;; in case of an array, cell-ptr- points to the first field, the array meta data is located in the bytes before field0)
+;;                  array metadata
+;; array: cell-ptr->field0
+;;                  field1
+
+;; decoding operand for PUSH LOC/PARAM
+;;             LDA ($PC),Y
+;;             INY
+;;             AND #$07
+;;             LSR
+;;             BCC PUSH-PARAM
+;; PUSH-LOCAL: ...    ;; A = index to local to push
+;;             JMP FETCH-NEXT
+;; PUSH-PARAM: ...    ;; A = index to param to push
+;;             JMP FETCH-NEXT
+
+;; decoding operand for short BRA
+;;              ;; check TOS on true first
+;; SBRA:        LDX #$00
+;;              LDA ($TOS,X)
+;;              CMP #$TRUE ;; first byte (of 16-bit cell- on tos) holds true/false bitmask
+;;              BEQ SGOTO ;; branching will behave as goto from here
+;;              INY
+;;              GOTO FETCH-NEXT
+
+;; decoding operand for short GOTO
+;; SGOTO:       LDA ($PC),Y
+;;              AND #$1F
+;;              PHA
+;;              TYA           ;; first add current Y offset into PC
+;;              CLC (TYA, PHA, AND, LDA do not affect carry => yes, clc is necessary)
+;;              ADC $PCL
+;;              BCC NO_INC
+;;              INC $PCH
+;; NO_INC:      PLA           ;; now add/sub actual goto offset into PC
+;;              CMP #$0f
+;;              CLC           ;; carry needs to be empty for both cases (has no influence on BPL)
+;;              BPL GE_0F     ;; bitmask is (1xxxx) which is interpreted as negative
+;;              ;; CLC already done
+;;              ADC $PCL
+;;              BCC NO_INC2
+;;              INC $PCH
+;; NO_INC2:     LDY #$00
+;;              JMP FETCH-NEXT
+;; GE_0F:       EOR #$E0      ;; bitmask 0001xxxx -> 1111xxxx (no influence on carry)
+;;              ;; CLC already done
+;;              ADC $PCL
+;;              BCS NO_DEC
+;;              DEC $PCH
+;; NO_DEC:      LDY #$00
+;;              JMP FETCH-NEXT
+
+
 ;; decoding code (16 bytes)
 ;;                ;; load new opcode into A
 ;;                LDA ($PC),Y ;; y = temp delta to program counter, which is held in $PC on the zero page
