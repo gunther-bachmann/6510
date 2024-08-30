@@ -2338,6 +2338,945 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - decide on where in the ast to keep this information
 - find a way to make additions to racket structures less invasive and prone to include massive code changes (use typed attribute lists?)
 **** write code generator for stack machine (m-def ...)
+**** OBSOLETE old ideas for vm interpreter
+   thoughts about decoding (speed) of opcodes with 6510 assembly
+   general: table: opcode -> address of handler
+   e.g: BRK = 0 (opcode is in X), LDA 4000,X -> PHA -> LDA 4100,X -> PHA -> RTS : len=9, cycles=20
+   alternative: LDA 4000,X -> STA $???? -> BNE $?? <- only byte byte offset possible, target contains e.g. JMP $???? => 127 / 3 opcodes possible (42): len = 8 + 3, cycles=14
+
+   short instructions (shifted opcode) -> address of handler
+   AND #$11110000 (maskout opcode),
+   x-times LSR (shift to right index position)
+   TAX
+   use as index for table access (or), use sparse memory (use list-car-cdr fields for freelist to fill up?)
+   after and us directly as index into some table?
+
+
+   how about 16 commands in the low nibble if top bit is set
+   and if msb is not set, use only 112 of the other 128 possibilites to code the rest
+   then stuff them together such that 128 possibilies remain that can be mapped to 2 x 128 byte jump targets in one page!
+   #b1rrrxxxx with xxxx = opcode selector, rrr = operand
+   #b0tttxxxx (but only 112 used) with ttt != 000
+
+           LDA ($PC),Y
+           BPL OPCODE
+           AND #$0F
+   OPCODE: ASL
+           STA JMPOP+1
+   JMPOP   JMP OPTBL
+
+   optimize to remove asl
+   how about 16 commands in the low nibble if top bit is set
+   and if msb is not set, use only 112 of the other 128 possibilites to code the rest
+   then stuff them together such that 128 possibilies remain that can be mapped to 2 x 128 byte jump targets in one page!
+   #b1rrxxxxr with xxxx = opcode selector, rrr = operand
+   #b0xxxxxx0 (but only 112 used) with tt ...t != 00...0
+
+           LDA ($PC),Y
+           BPL OPCODE
+           PHA ;; keep for register decoding
+           AND #$1E
+   OPCODE: STA JMPOP+1
+   JMPOP   JMP OPTBL
+
+   the memory layout of the handler table then is one page
+   OPTBL+0:  low-byte  #b1rr0000r (short command PUSH)
+   OPTBL+1:  high-byte #b1rr0000r (short command PUSH)
+   OPTBL+2:  low-byte  #b1rr0001r (short command POP)
+   OPTBL+3:  high-byte #b1rr0001r (short command POP)
+           ...
+   OPTBL+32  low-byte of command #b00010000 normal command (e.g. NOP)
+   OPTBL+32  high-byte of command #b00010000 normal command (e.g. NOP)
+           ...
+   OPTBL+254 low byte of command #b01111110
+   OPTBL+255 high byte of command #b01111110
+
+   decoding rrr scattered over the byte takes too much processing => short commands may be scattered
+
+
+   Current option
+   TODO: move documentation into org file
+   TODO: POC implementation for selected cases (normal opcode, short opcode, long opcode, normal operand, short operand [bra/goto, push, pop], long operand)
+
+   alternative: use 128 (non short) commands with bit0 always 0 => LDA ($PC),Y -> STA JMPOP+1 -> JMP OPTBL (8 bytes, 12-cycles)
+
+   13 bytes, (5,2,3|2+2,4,3) -cycles 17 regular|18 short
+   INC-NEXT:   INY               ;; jump target if iny needs to be exexuted before fetch
+   FETCH-NEXT: LDA ($PC),Y
+               ASL
+               BCC OPERAND
+               AND $F0           ;; mask out has to take place to make sure, other bytecodes do not collide with short ones (after removing bit 7 through asl)
+   OPERAND:    STA JMPOP+1
+   JUMPOP:     JMP OPTBL
+
+   OPTBL+$00: low/high #b10000rrr  (short e.g. PUSH-LOC/PARAM)
+   OPTBL+$02: low/high #b00000001  (normal command e.g. NOP)
+   OPTBL+$04: low/high #b00000010  (normal command e.g. BYTE-)
+   ...
+   OPTBL+$10: low/high #b10001rrr  (short e.g. POP-LOC/PARAM)  0..3 (registers)
+   OPTBL+$12: low/high #b00001001  (normal command e.g. BYTE+)
+   ...
+   OPTBL+$40: low/high #b101xxrrr  (short e.g. GOTO) $40, $50, $60, $70 contain same jump address (GOTO)
+   OPTBL+$50: low/high #b101xxrrr  (short e.g. GOTO)
+   OPTBL+$60: low/high #b101xxrrr  (short e.g. GOTO)
+   OPTBL+$70: low/high #b101xxrrr  (short e.g. GOTO)
+   ...
+   OPTBL+$80: low/high #b110xxrrr  (short e.g. BRA) xxrrr is the offset
+   OPTBL+$90: low/high #b110xxrrr  (short e.g. BRA)
+   OPTBL+$A0: low/high #b110xxrrr  (short e.g. BRA)
+   OPTBL+$B0: low/high #b110xxrrr  (short e.g. BRA)
+
+   OPTBL+$C0: PUSH-BYTE/PUSH-INT
+   OPTBL+$D0: PUSH-ARRAY (e.g. tos = cell-ptr- -> cell-array-, rrr = array-index) <- useful for fast struct access?
+   OPTBL+$E0: POP-ARRAY  (e.g. tos = cell-ptr- -> cell-array-, rrr = array-index)
+   OPTBL+$F0: NIL?-RET-PARAM/...
+
+   in case of an array, cell-ptr- points to the first field, the array meta data is located in the bytes before field0)
+                    array metadata
+   array: cell-ptr->field0
+                    field1
+
+   decoding operand for PUSH LOC/PARAM
+               LDA ($PC),Y
+               AND #$07
+               LSR
+               BCC PUSH-PARAM
+   PUSH-LOCAL: ...    ;; A = index to local to push
+               JMP FETCH-NEXT|INC-NEXT
+   PUSH-PARAM: ...    ;; A = index to param to push
+               JMP FETCH-NEXT|INC-NEXT
+
+   decoding operand for short BRA
+                ;; check TOS on true first
+   SBRA:        LDX #$00  ;; maybe x always pointer to tos, then ldx would not be necessary
+                LDA ($TOS,X)
+                CMP #$TRUE ;; first byte (of 16-bit cell- on tos) holds true/false bitmask
+                BEQ SGOTO ;; branching will behave as goto from here
+                JMP INC-NEXT ;; could be saved if bne to another jmp inc-next and then just fall through
+
+   decoding operand for short GOTO
+   SGOTO:       TYA           ;; first add current Y offset into PC
+                CLC           ;; (TYA, PHA, AND, LDA do not affect carry => yes, clc is necessary)
+                ADC $PCL
+                BCC NO_INC
+                INC $PCH
+   NO_INC:      LDY #$00      ;; now that y was added to PC, it can be set to 0
+                LDA ($PC),Y   ;; load short opcode (again)
+                AND #$1F      ;; mask out the offset part
+                CMP #$0f      ;;
+                CLC           ;; carry needs to be empty for both cases (has no influence on BPL)
+                BPL GE_0F     ;; bitmask is (1xxxx) which is interpreted as negative
+                ;; CLC already done
+                ADC $PCL
+                BCC NO_INC2
+                INC $PCH
+   NO_INC2:     JMP FETCH-NEXT
+   GE_0F:       EOR #$E0      ;; bitmask 0001xxxx -> 1111xxxx (no influence on carry)
+                ;; CLC already done
+                ADC $PCL
+                BCS NO_DEC
+                DEC $PCH
+   NO_DEC:      JMP FETCH-NEXT
+
+
+   decoding code (16 bytes)
+                  ;; load new opcode into A
+                  LDA ($PC),Y ;; y = temp delta to program counter, which is held in $PC on the zero page
+                  BPL  OPCODE ;; if negative (highest bit set, it is a short opcode)
+   SHORT_OPCODE:  AND #$F0    ;; mask out irrelevant bits
+   OPCODE:        TAX         ;; opcode as index into X
+                  LDA $4000,X ;; load high byte of handler for this command from sparse table $4000-$40FF
+                  PHA
+                  LDA $4100,X ;; load low byte (-1) of handler for this command from sparse table $4100-$41FF
+                  PHA
+                  RTS
+
+   memory layout of code table
+   4000 ?? ;; high byte of handler for OPCODE 0
+   4100 ?? ;; low byte (-1) of handler for OPCODE 0
+
+   4080 ?? ;; high byte of handler for OPCODE 128 (short PUSH)
+   4081..408F ;; unused -> sparse (15 bytes)
+   4090 ?? ;; high byte of handler for OPCODE 144 (short POP)
+   4091..409F ;; unused -> sparse (15 bytes)
+
+   given this coding, the upper half of the page is used sparsely (4080..40FF, and 4180..41FF), leaving (* 2 (- 128 16)) => 224 bytes free for other usage
+   this sparse usage could be blocked if the short code would be shifted right | the short code would use the lower 4 bits (better)
+   BMI OPCODE
+   AND #$0F
+
+   memory layout would then be
+   4000 ?? ;; high byte of handler for short opcode $0 (PUSH)
+   4001 ?? ;; high byte of handler for short opcode $1 (POP)
+   4010 .. 407f ;; free mem (112 bytes block free <- usable e block e.g. for (free) list-cells 28, if ref counted less of course ≅ 22)
+   4080 ?? ;; high byte of handler for regular opcode $80
+   4081 ?? ;; high byte of handler for regular opcode $81
+
+
+   how about a way to calc handler address from bytecode itself (e.g.) some ands, shifts + offset store and jump <​= depends on size of code implementation
+   but this is wishful thinking, probably
+   e.g. jsr prepare operand
+        jsr execute command
+        jsr store result
+
+   other implementation (from plasma: https://dwheeler.com/6502/PLAVM.S.txt)
+   vm code has lower bit never set (only 128 byte codes available)
+   PC = current program counter, PCL lowbyte of PC, PCH  is highbyte of PC
+   OPTBL holds 2 byte handler reference, that is jumped to
+   FETCHOP: LDY #$00
+            LDA (PC),Y      ;; load vm byte code (lower bit 0, no need to multiply to use as index)
+            STA JMPOP+1     ;; write vm byte code into low byte of jump indirect command (modify code)
+            JSR JMPOP       ;; jump to the jump command
+            INC PCL         ;; PC++
+            BNE FETCHOP     ;;
+            INC PCH         ;;
+            BNE FETCHOP     ;; ?? what if no branch is executed
+   JMPOP:   JMP (OPTBL)     ;; indirect jump to handler for byte code
+
+
+   idea: - Y has INC for PC after code was handled,
+         - after code was handled, JMP ADJUST-PC is executed or
+         - using threaded interpretation adds 8 bytes to the end of the handler (prereq: Y=0, PC is up to date or no overflow expected?), maybe just for most important commands to keep mem usage low?
+                         LDA (PC),Y         ;; if a function is always < 256 byte => PC needs increment executing call, since within one call, y cannot overflow!
+                         STA JMPOP*+1
+               JMPOP*    JMP (OPTBL)
+
+   ADJUST-PC:  TYA
+               ADC PCL
+               STA PCL
+               BCC FETCH
+               INC PCH
+   FETCH:      LDY #$00
+               LDA (PC),Y
+               STA JMPOP+1
+   JMPOP       JMP (OPTBL)
+
+   plasma uses a 16 element X indexed eval stack of 16-bit width located in the zero page! (https://github.com/dschmenk/PLASMA?tab=readme-ov-file#code-optimizations)
+   all parameters and temp values her on this stack (params are copied into the frame)
+   invocation frames are organized as stack
+   call/return are implemented using the 6510 processor stack (for speed), limiting e.g. non-tailcalled recursion or regular call-stack to 128 calls (- offset used by interpreter/system)
+
+**** write a 6510 vm interpreter (partially, validating some design decisions)
+- alternative: use 128 (non short) commands with bit0 always 0 => LDA ($PC),Y -> STA JMPOP+1 -> JMP OPTBL (8 bytes, 12-cycles)
+- general design of vm
+  PC = zero page 16 bit program counter, pointing to the byte code
+  VS = zero page location of the Value Stack (16-bit cells) (max n elements on VS)
+  alternative to VS on zero page: VS is a list (pointed to)
+  LS = zero page location of locals (16 bit cells) (max n elements)
+  Y index register = offset to PC (temporary)
+  X index register = offset to Value Stack
+  FR = zero page 16-bit pointer to current call frame
+  - call frame (never spread over a page=> low byte is always >= 6)
+       FA/C pointer to previous frame
+       [optional FC function id (16bit)] <- not optional, actually needed for tail call (but only then)!
+       old program-counter
+       FE #of parameters (8bit)
+       FF #size of value stack before call (including parameters)
+    -> 00 parameter0
+       02 parameter1
+       ...
+       xx saved val-stack element 0
+       xy saved val-stack element 1
+       ...
+  - function decriptor
+    number of parameters x function id x byte-code ...
+    function id = 16 bit address (or # that has to be decoded)
+      -> 00 opcode length of function (byte)
+         01 number of parameter (byte)
+         02 max delta size of eval stack
+         03 first opcode of function
+         04 2nd opcode of function
+  - structure descriptor
+    number of fields x structure id
+  - array data layout
+    in case of an array, cell-ptr- points to the first field, the array meta data is located in the bytes before field0)
+                     array metadata
+    array: cell-ptr->field0
+                     field1
+- main interpreter loop
+  #+begin_src asm
+    ;; 13 bytes, (5,2,3|2+2,4,3) -cycles 17 regular|18 short
+     INC-NEXT:   INY               ;; jump target if iny needs to be exexuted before fetch
+     FETCH-NEXT: LDA ($PC),Y
+                 ASL
+                 BCC OPERAND
+                 AND $F0           ;; mask out has to take place to make sure, other bytecodes do not collide with short ones (after removing bit 7 through asl)
+     OPERAND:    STA JMPOP+1
+     JUMPOP:     JMP OPTBL
+  #+end_src
+- layout of the opcode jump targets
+  OPTBL+$00: low/high #b10000rrr  (short e.g. PUSH-LOC/PARAM)
+  OPTBL+$02: low/high #b00000001  (normal command e.g. NOP)
+  OPTBL+$04: low/high #b00000010  (normal command e.g. BYTE-)
+  ...
+  OPTBL+$10: low/high #b10001rrr  (short e.g. POP-LOC/PARAM)  0..3 (registers)
+  OPTBL+$12: low/high #b00001001  (normal command e.g. BYTE+)
+  ...
+  OPTBL+$40: low/high #b101xxrrr  (short e.g. GOTO) $40, $50, $60, $70 contain same jump address (GOTO)
+  OPTBL+$50: low/high #b101xxrrr  (short e.g. GOTO)
+  OPTBL+$60: low/high #b101xxrrr  (short e.g. GOTO)
+  OPTBL+$70: low/high #b101xxrrr  (short e.g. GOTO)
+  ...
+  OPTBL+$80: low/high #b110xxrrr  (short e.g. BRA) xxrrr is the offset
+  OPTBL+$90: low/high #b110xxrrr  (short e.g. BRA)
+  OPTBL+$A0: low/high #b110xxrrr  (short e.g. BRA)
+  OPTBL+$B0: low/high #b110xxrrr  (short e.g. BRA)
+
+  OPTBL+$C0: PUSH-BYTE/PUSH-INT
+  OPTBL+$D0: PUSH-ARRAY (e.g. tos = cell-ptr- -> cell-array-, rrr = array-index) <- useful for fast struct access?
+  OPTBL+$E0: POP-ARRAY  (e.g. tos = cell-ptr- -> cell-array-, rrr = array-index)
+  OPTBL+$F0: NIL?-RET-PARAM/...
+- decoding operand for PUSH LOC/PARAM
+  #+begin_src asm
+                 LDA ($PC),Y
+                 AND #$07
+                 LSR
+                 BCC PUSH-PARAM
+    PUSH-LOCAL:  ...    ;; A = index to local to push
+                 JMP FETCH-NEXT|INC-NEXT
+    PUSH-PARAM:  ...    ;; A = index to param to push
+                 JMP FETCH-NEXT|INC-NEXT
+  #+end_src
+- decoding operand for short BRA
+  #+begin_src asm
+                 ;; check TOS on true first
+    SBRA:        LDX #$00  ;; maybe x always pointer to tos, then ldx would not be necessary
+                 LDA ($TOS,X)
+                 CMP #$TRUE ;; first byte (of 16-bit cell- on tos) holds true/false bitmask
+                 BEQ SGOTO ;; branching will behave as goto from here
+                 JMP INC-NEXT ;; could be saved if bne to another jmp inc-next and then just fall through
+  #+end_src
+- decoding operand for short GOTO
+  #+begin_src asm
+    SGOTO:       TYA           ;; first add current Y offset into PC
+                 CLC           ;; (TYA, PHA, AND, LDA do not affect carry => yes, clc is necessary)
+                 ADC $PCL
+                 BCC NO_INC
+                 INC $PCH
+    NO_INC:      LDY #$00      ;; now that y was added to PC, it can be set to 0
+                 LDA ($PC),Y   ;; load short opcode (again)
+                 AND #$1F      ;; mask out the offset part
+                 CMP #$0f      ;;
+                 CLC           ;; carry needs to be empty for both cases (has no influence on BPL)
+                 BPL GE_0F     ;; bitmask is (1xxxx) which is interpreted as negative
+                 ;; CLC already done
+                 ADC $PCL
+                 BCC NO_INC2
+                 INC $PCH
+    NO_INC2:     JMP FETCH-NEXT
+    GE_0F:       EOR #$E0      ;; bitmask 0001xxxx -> 1111xxxx (no influence on carry)
+                 ;; CLC already done
+                 ADC $PCL
+                 BCS NO_DEC
+                 DEC $PCH
+    NO_DEC:      JMP FETCH-NEXT
+  #+end_src
+- push parameter on the value stack
+  #+begin_src asm
+    ;; parameter # is in A destroyed, X += 2 (new TOS), Y used, restored
+            STY TEMP
+            ASL ;; times 2
+            TAY
+            INX
+            INX
+            LDA (FR),Y
+            STA VS,X
+            INY
+            LDA (FR),Y
+            STA VS+1,X
+            LDY TEMP
+  #+end_src
+- push local on the value stack
+  #+begin_src asm
+    ;; local # is in A destroyed, X += 2 (new TOS), Y used, restored
+            STY TEMP
+            ASL ;; times 2
+            TAY
+            INX
+            INX
+            LDA LS,Y ;; absolute addressing with prefix 00
+            STA VS,X
+            INY
+            LDA LS,Y ;; absolute addressing with prefix 00
+            STA VS+1,X ;;
+            LDY TEMP
+  #+end_src
+- pop from the value stack into local
+  #+begin_src asm
+    ;; local # is in A destroyed, X -= 2 (new TOS), Y used, restored
+            STY TEMP
+            ASL ;; times 2
+            TAY
+            LDA VS,X
+            STA LS,Y ;; absolute addressing with prefix 00
+            LDA VS+1,X ;;
+            STA LS+1,Y ;; absolute addressing with prefix 00
+            DEX
+            DEX  ;; pointing at low byte (tos)
+            LDY TEMP
+  #+end_src
+- call a function (stacked call <= allows for variable calls, call operation with operand <= static call)
+  - call copies parameter from value stack->call frame and copies remaining values from value stack -> call frame (to restore after call)
+    - static call (function id = 16 bit operand of call command)
+      - create new invocation frame
+        get # of parameters, params*2 + 6 = frame size to allocate
+        NF = zero page new frame (16-bit)
+        #+begin_src asm
+                    ;; --- get new function as 16 bit operand of the current opcode
+                    INY
+                    LDA (PC),Y
+                    STA NFUN
+                    INY
+                    LDA (PC),Y
+                    STA NFUN+1
+
+                    ;; --- allocate call frame
+                    ;; LDY #$01
+                    ;; LDA (NFUN),y ;; # params
+                    TXA
+                    ;; ASL ;; either keep the number of parameters doubled (number of bytes), or just use the length of the current value stack!
+                    ADC #$06
+                    JSR ALLOCATE_MEM ;; writes PTR
+
+                    ;; --- fill call frame
+                    DEY
+                    LDA FR        ;; now fill allocated call frame with data
+                    STA (PTR),Y
+                    INY
+                    LDA FR+1
+                    STA (PTR),Y   ;; ptr to previous is set
+                    INY
+
+                    ;; function id is not strictly necessary in call frame, is it?
+                    ;; LDA NFUN
+                    ;; STA (PTR),y
+                    ;; INY
+                    ;; LDA NFUN+1
+                    ;; STA (PTR),y   ;; ptr to function descriptor is set
+                    ;; INY
+
+                    ;; store old program counter
+                    LDA PC
+                    STA (PTR),y
+                    INY
+                    LDA PC+1
+                    STA (PTR),y
+                    INY
+
+                    ;; store parameter count
+                    STY TEMP
+                    LDY #$01
+                    LDA (NFUN),Y
+                    LDY TEMP
+                    STA (PTR),y  ;; # of parameters
+                    ;; STA TEMP ;; count of parameter to copy
+                    INY
+
+                    ;; store value stack size
+                    TXA
+                    STA (PTR),y ;; # of elements on the value stack (including parameters)
+                    INY
+
+                    ;; --- copy parameter (and value stack) into call frame
+                    ;;
+                    ;; now copy parameters (from value stack => parameters) and rest of value stack to call frame
+                    ;; edge case (x=0: no parameters on the value stack, and value stack is empty)
+                    TXA ;; set zero flag if X is zero!
+                    BEQ NO_COPY
+            COPY_VS2PARAMS:
+                    LDA VS,X
+                    STA (PTR),Y
+                    INY
+                    LDA VS+1,X
+                    STA (PTR),Y
+                    INY
+                    DEX
+                    DEX
+                    ;; DEC TEMP ;; use if only parameters are copied
+                    BNE COPY_VS2PARAMS
+           NO_COPY:
+
+                    ;; ------ set frame ptr to parameter 0 if this new frame
+                    LDA PTR
+                    ADC #$06  ;; point to first parameter (if any) / =4 if function id is not part of call frame
+                    STA FR
+                    LDA PTR+1
+                    BCC NO_INC
+                    INC
+           NO_INC:  STA FR+1
+
+                  ;; --- set new pc to byte code start of new function (which is new function ptr + 2)
+                   LDA NFUN
+                   ADC #$02
+                   STA PC
+                   LDA NFUN+1
+                   BCC NO_INC2
+                   INC
+          NO_INC2: STA PC+1
+                   LDY #$00 ;; no offset to PC
+                   LDX #$00 ;; value stack empty
+                   JMP FETCH-NEXT
+
+
+        #+end_src
+    - return from call (restore data from call frame)
+      remember tos (which is the result of the function)
+      restore value stack (without parameters)
+      push memorized tos
+      restore ptr to previous call frame
+      restore PC
+      #+begin_src asm
+                ;; remember tos in temp (if value is returned and caller wants it)
+                LDA VS,X
+                STA TEMP
+                LDA VS+1,X
+                STA TEMP+1
+
+                ;; restore value stack
+                LDA FR
+                STA NFR ;; keep low byte of current fr
+                DEC FR
+                LDX #$00
+                LDA (FR,X)
+                STA TEMP_VSSIZE
+                DEC FR ;; make sure lowbyte of FR is never < 2
+                LDA (FR,X)
+                ASL
+                STA TEMP_PARAM_COUNT_IN_BYTES
+                ADC #$02 ;; compensate 2xdec fr
+                ADC FR
+                STA FR ;; set FR to first value after parameters
+                LDA TEMP_VSSIZE
+                SBC TEMP_PARAM_COUNT_IN_BYTES
+                STA TEMP_VSSIZE
+                TAY
+                DEY
+                LDX #$00
+         LOOP:
+                LDA (FR),Y  ;; high byte
+                STA VS+1,X
+                DEY
+                LDA (FR),Y  ;; low byte
+                STA VS,X
+                DEY
+                INX
+                INX
+                DEC TEMP_VSSIZE
+                BNE LOOP
+
+                ;; --- put old tos on value stack (if there is one, and the caller wants it!)
+                LDA TEMP
+                STA VS,X
+                LDA TEMP+1
+                STA VS+1,X
+                INX
+                INX
+
+                ;; get old pc
+                LDA FR
+                SBC #$06 ;; FR points to old FR
+                LDY #$02
+                LDA (FR),Y
+                STA PC
+                INY
+                LDA (FR),Y
+                STA PC+1
+
+                LDA FR
+                STA PTR
+                LDA FR+1
+                STA PTR+1
+
+                ;; get old call frame pointer
+                LDY #$00
+                LDA (FR),Y
+                STA NFR
+                INY
+                LDA (FR),Y
+                STA FR+1
+                LDA NFR
+                STA FR
+                DEY ;; y = 0
+
+                ;; PTR = call frame that can be freed
+                JSR deallocate ;; should now the amount of bytes allocated, and can thus free this block
+
+                JMP NEXT-FETCH
+
+
+
+
+
+      #+end_src
+  - IDEA: think about quicker/simpler call/ret mechanisms (optimizations for common cases)
+    - reduce copying
+    - e.g. reuse value stack if possible (e.g. keep parameters on value stack, still needs copying, but accessing parameters is cheaper?)
+- tail call implementation
+  get number of parameters
+  write value stack -> parameter
+  clear value stack
+  set pc to start of function
+  replace parameters with value stack and set pc to start of function
+  #+begin_src asm
+    ;; get function pointer and set pc to start of byte code of that function (could be cached in zero page, set upon call)
+            lda fr
+            sbc #$06
+            sta fr
+            ldy #$00
+            lda (fr),y
+            sta pc
+            iny
+            lda (fr),y
+            sta pc+1
+
+    ;; get number of parameters of this function (could be cached in zero page, set upon call)
+
+            lda fr
+            adc #$04
+            sta fr ;; (fr),0 pointing to #parameters
+            dey ;; 0 again
+            lda (fr),y ;; number of parameters
+            asl ;; number of bytes used by parameters
+            inc fr ;; increment just once, such that (fr),y points to high byte of last parameter
+
+            tay
+            beq NO_COPY ;; tail call has no parameter
+
+     ;; copy values from stack to parameters
+
+     LOOP:
+            lda vs+1,x         ;; tos = last parameter of function
+            sta (fr),y
+            dey
+            lda vs,x
+            sta (fr),y
+            dex
+            dex
+            dey
+            bne LOOP
+
+     NO_COPY:
+            inc fr ;; restore fr to point to first parameter
+
+            ldx #$00
+            ;; y already is zero
+            JMP FETCH-NEXT
+  #+end_src
+- memory
+  general ideas:
+    floats, cells and list-cell-pairs are organized in free-lists
+    each allocation type uses full pages => running out of space for a certain type require allocating a new page for that type
+    structure/array need some best fit algorithm (per page)
+      e.g. pages use power of 2 sized slots to hold arrays/structures of that size (e.g. smallest slots are 8 bytes, 16 32 64 128 256) other memory sizes are not supported yet.
+      each page has a header
+        00: first slot (if free, 1 byte offset to next free slot || $FF if this is the last free slot),
+        00+slot-size: second slot ...
+      pages are organized in two lists per type, list with pages with free slots (and the offset to the first free slot on that page) and list with fully allocated pages
+      e.g. 1/2 page used for page meta data => high byte = page = index into meta data?
+
+    _Data layout_ (for fixed non struct/array)
+      ~FREEPAGE~   (byte) on zero page :: page with free slot(s) for list-pair-cell [0 = no free page available]
+      ~FREEPAGE+1~ (byte) on zero page :: page with free slot(s) for cells          [0 = no free page available]
+      ~FREEPAGE+2~ (byte) on zero page :: page with free slot(s) for floats         [0 = no free page available]
+
+      (whole page used for freeslots)
+      first two bytes can be used for meta data
+      ~FREESLOT+2~ (byte) on some regular page :: offset to first free slot on page 2  [value 255 = no more free slots]
+      ~FREESLOT+3~                             :: offset to first free slot on page 3
+      ...
+      ~FREESLOT+255~                           :: offset to first free slot on page 255
+
+      (whole page used for next page)
+      first two bytes can be used for meta data
+      ~NEXT_​FREE​_PAGE+2~ (byte) on some regular page :: page id of a page of same type (as page 2) that holds free slots [value 0 = no next page]
+      ~NEXT​_​FREE_PAGE+3~                             :: page id of a page of same type (as page 3) that holds free slots
+      ...
+      ~NEXT​_​FREE​_PAGE_+255~                          :: page id of a page of same type (as page 255) that holds free slots
+
+  - allocate (new) page for type x
+    #+begin_src asm
+      ALLOCATE_NEW_PAGE: ;; Y = page type (0 list-cell-pair ,1 cell, 2 float), return A = page idx
+              STY TEMP_TYPE
+              LDY #$1F
+      CHECK_PAGE_BITMAP:
+              LDA PAGE_USE_BITMAP,Y
+              CMP #$FF
+              BNE FP_FOUND
+              DEY
+              BPL CHECK_PAGE_BITMAP
+              JMP OUT_OF_MEMORY_ERROR ;; TODO if there are enqueued ref count decs, check those first
+
+      FP_FOUND:
+              PHA
+              TYA
+              ASL
+              ASL
+              ASL
+              ;; now a has the topmost 5 bits set
+              STA PAGE
+              ;; now get the lower three bits
+              LDX #$07
+              PLA ;; get bit map
+       SHIFT_OUT:
+              LSR
+              BCC UNSET_BIT_FOUND
+              DEX
+              BPL SHIFT_OUT
+        UNSET_BIT_FOUND:
+              TXA
+              ORA PAGE ;; combine with bits
+              STA PAGE
+
+              LDA PAGE_USE_BITMAP,Y
+              ORA BITS,X
+              ;; make sure to set the bit of allocated page in page bitmap
+              STA PAGE_USE_BITMAP,Y
+              LDA PAGE
+              RTS
+
+        BITS: 0b10000000
+              0b01000000
+              0b00100000
+              0b00010000
+              0b00001000
+              0b00000100
+              0b00000010
+              0b00000001
+
+       ALT_UNSET_BUT_FOUND: ;; 4 bytes less, mean 28 cycles more
+              TXA
+              ORA PAGE ;; combine with bits
+              STA PAGE
+
+              LDA #$01
+       SHIFT_AGAIN:
+              ASL
+              DEX
+              BPL SHIFT_AGAIN
+              ROR
+              ORA PAGE_USE_BITMAP,Y
+              STA PAGE_USE_BITMAP,Y
+              LDA PAGE
+              RTS
+    #+end_src
+  - initialize page of type x (setup free list within)
+    - initialize list-cell-pairs page (without reference counts)
+      #+begin_src asm
+        ;; each slot is 4 byte SLOTSIZE = 4
+                LDA #SLOTSIZE
+                LDY #$00
+        LOOP:
+                STA (PTR),Y
+                TAY
+                ADC #SLOTSIZE
+                BCC LOOP
+                RTS
+      #+end_src
+  - list cell pair allocation [same for all slot - types]
+    TODO: check for queued refcount decreases, execute x times until free cell is identified, if not stop that and continue with default behaviour
+    find page with free list-cell-pair (type -> first free page || no free page then allocate new page)
+    use free list-cell-pair
+    adjust meta data to new first free slot of this page
+    adjust meta data if page has no more free slots
+
+    there are some pages that are automatically *unavailable: page 0 (zero page), page 1 (cpu stack)*
+    #+begin_src asm
+            ;; TYPE if cell is in Y (00 = list-pair-cell, 01 = cell, 02 = float)
+                    STY TEMP
+                    LDA FREEPAGE,Y ;; get page id of page with free slots (in zero page)
+                    ;; now get the offset into the page of the first free slot
+              GOT_PAGE:
+                    TAY
+                    LDA FREESLOT,Y ;; get offset w/i page of the first free slot (of the page idx in y)
+                    BNE SLOT_AVAILABLE
+
+                    ;; current page has no slot available, maybe next free does
+                    LDA NEXT_FREE_PAGE,Y
+                    BNE NEXT_FREE_OK
+
+                    ;; next free is 0 => there is no page with free slots known => allocate new page of this type
+                    STY TEMP+1
+                    LDY TEMP
+                    JSR ALLOCATE_NEW_PAGE
+                    LDY TEMP+1
+                    STA NEXT_FREE_PAGE,Y
+
+                    LDY TEMP
+          NEXT_FREE_OK:
+                    STA FREEPAGE,Y
+                    JMP GOT_PAGE
+
+          SLOT_AVAILABLE:
+                    STA PTR
+                    STY PTR+1 ;; now PTR (on  zero page) points to the free slot
+
+                    LDY #$00
+                    LDA (PTR),y  ;; next free slot offset
+                    CMP #$FF
+                    BNE FREE_AVAIL_SLOT
+                    LDA #$00 ;; value to indicate, that no free slot is available
+      FREE_AVAIL_SLOT:
+                    LDY PTR+1       ;; get page idx
+                    STA FREESLOT,Y ;; store offset of (new) first free slot on page
+                    RTS ;; that was it
+    #+end_src
+
+  - list cell pair ref allocation [same for all slot - types]
+    inc reference count
+    (e.g. list cell pair 51 (max 64 without rc)
+    - memory layout (list-pair-cells-page)
+      00 : reserved
+      01 : rc for cell-pair1 $04
+      02 : rc for cell-pair2 $08
+      03 : rc for cell-pair3 $0C
+      04 : cell-pair1
+      08 : cell-pair2
+      0C : cell-pair3
+      10 : rc for cell-pair4 $40
+      11 : rc for cell-pair5 $44
+      ...
+      3F : rc for cell-pair51 $FC
+      40 : cell-pair3
+      ...
+      FC : cell-pair51
+
+      0000 0100 => 0000 0001 : $01 rc for cell $04
+      0000 1000 => 0000 0010 : $02 rc for cell $08
+      0000 1100 => 0000 0011 : $03 rc for cell $0C
+
+      0100 0000 => 0001 0000 : $10 rc for cell $40
+      1111 1100 => 0011 1111 : $3F rc for cell $FC
+
+    - memory layout (8 bytes slots) 28 (max 32 without RC)
+      00 : reserved
+      ...
+      04 : rc cell 1
+      ...
+      1F : rc cell 28
+      20 : cell 1
+      ...
+      F8 : cell 28
+
+    - memory layout (16 bytes slots) 15 (max 16 without RC)
+      00: reserved
+      01: rc cell 1
+      0F: rc cell 15
+      10: cell 1
+      ...
+      F0: cell 15
+
+    - memory layout (32 bytes slots) 7 (max 8 without RC)
+      00: reserved
+      ...
+      02: rc cell 1
+      04: rc cell 2
+      ...
+      0E: rc cell 7
+      0F..1F: reserved
+      20: cell 1
+      40: cell 2
+      ...
+      E0: cell 7
+
+    - memory layout (62 bytes slots) 4
+      00: reserved
+      01: rc cell 1
+      02: cell1
+      40: reserved
+      41: rc cell 2
+      42: cell2
+      80: reserved
+      81: rc cell 3
+      82: cell3
+
+    - memory layout (127 bytes slot) 2
+      00: slot1
+      7F: rc slot 1
+      80: slot2
+      FF: rc slot 2
+
+    - memory layout (255 bytes) 1
+      00: slot
+      FF: rc for slot
+
+    - memory layout (cells-page) 85 cells (max 128 without RC)
+      00 : reserved
+      01 : rc for cell 1
+      02 : cell1
+      04 : rc for cell 2
+      ...
+      07 : rc for cell 5
+      08 : cell 2
+      0e : cell 5
+      10 : rc for cell 6
+      ...
+      1F : rc for cell 21
+      20 : cell 6
+      ..
+      3E : cell 21
+      40 : rc for cell 22
+      ...
+      7F : rc for cell 85
+      80 : cell 22
+      ..
+      FE : cell 85
+        #+begin_src asm
+          ;; is in PTR
+                  LDA PTR ;; low byte
+                  LSR
+                  LSR
+                  STA DEC_LABEL+1
+                  LDA PTR+1
+                  STA DEC_LABEL+2 ;; copy high byte (page idx)
+                  ;; -------------------------------------
+           DEC_LABEL:
+                  DEC $0000
+
+                  ;; LDY #$00
+                  ;; LDA #$01                ;; LDA (PTR+2),y
+                  ;; SBC (PTR+2),Y           ;; DEC
+                                          ;; STA (PTR+2),y
+                  ;; -------------------------------------
+                  BNE DONE
+
+                  ;; free this cell
+                  ;; copy car and cdr to possible add them to cells to free, too
+                  LDY #$03
+           COPY_CARNCDR:
+                  LDA (PTR),Y
+                  STA CAR,Y
+                  DEY
+                  BPL COPY_CARNCDR
+
+                  LDA CAR
+                  AND #$03
+                  BEQ CAR_NO_PTR
+                  LDA CAR
+                  JSR ENLIST_FOR_FREE_IF_PTR ;; if CAR is a PTR mark for ref count decrease and potential free
+             CAR_NO_PTR:
+                  LDA CAR+2 ;; cdr
+                  AND #$03
+                  BEQ CDR_NO_PTR
+                  LDA CAR+2
+                  JSR ENLIST_FOR_FREE_IF_PTR ;; if CAR is a PTR mark for ref count decrease and potential free
+    CDR_NO_PTR:
+
+                  ;; put into the given cell the offset of the last first free cell of this page
+                  LDY DEC_LABEL+2 ;; page idx
+                  LDA FREE_SLOT,Y ;; current slot offset
+                  LDY #$00
+                  STA (PTR),Y ;; set (old) free slot offset in now freed cell!
+                  LDA PTR ;; low-byte = free new offset (of now freed cell)
+                  LDY PTR+1 ;; page idx
+                  STA FREE_SLOT,Y ;; set new free offset of this page
+          DONE:
+                  RTS
+
+        #+end_src
+  - list cell pair ref deallocation [same for all slot - types]
+    dec reference count
+    if <0 mark let old first free cell of this page point to this one
+          mark this one the first free cell in the page
 **** make compilation phases more explicit
 - macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
 - transformation from ast/stack orientation -> register oriented atomic commands
