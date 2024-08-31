@@ -1,0 +1,52 @@
+#+title: new minimal lisp for the c64
+
+This document holds information about the *minimal lisp implementation*.
+
+It is an byte code interpreting vm running on the c64.
+
+_Primary design goals_
+- very compact byte code  to allow as much code in memory as possible
+- very compact data       to allow as much data in memory as possible
+- decent execution speed
+
+Extensions
+- relocation of data / code to allow memory bank switching/extensions
+- swap in/out of code
+
+* code organisation
+- ast :: definition of the mil ast used by the compiler to generate code
+- parse :: parser (basically racket syntax macros) for minimal lisp to generate ast
+- svm-compiler :: translates the ast into vm byte code (of a stack vm)
+- svm-generator :: complete generator for byte code images that can be loaded/linked and then executed
+- rvm-function :: deprecated experiments with a register based virtual machine
+
+* ideas and next steps
+[[file:~/repo/+1/6510/mil.readlist.org::*general ideas][general ideas]] for an overall view of the implementation project
+current items to work on are found in [[file:~/repo/+1/6510/mil.readlist.org::*next][next]]
+
+* major decisions
+- stack vm :: experiments with register vm indicated potential execution speed benefits at the cost of code size. since code size is
+  critical and stack vm tend to produce more compact code stack vm is chosen
+- compact byte code :: to further reduce memory footprint of code, compact byte codes are used, combining operands and opcode in one byte
+  for the most common use cases. this decision comes at the cost of lower execution speed, since decoding becomes more complex
+- reference counting :: garbage collection is implemented using a reference counting strategy. execution of gc is interleaved with regular
+  code and does no stop the world gc. circular data structures are not supported/allowed. no additional pointer indirection is needed since
+  data is not copied but stays pinned at the same location. to reduce fragmentation, allocation buckets are used.
+- allocation buckets :: memory objects are allocated in fixed sized buckets. supported bucket sizes are 16-bit cells, 32-bit cell-pairs (for
+  lists), 6-byte float slots, array/structures/string of sizes 8, 16, (31, 63, 127) bytes. Each bucket is held in one page (256 byte)
+- basic data types :: the following basic data types exist, fitting in one cell (16-bit)
+  - byte/char/boolean
+  - int
+  - list-ptr :: special cell-ptr that identifies the targeted data as list (car-cell+cdr-cell)
+  - cell-ptr :: pointer to any complex data (first byte pointed to identifies complex structure w/ additional meta data)
+- complex data types :: do not fit in a cell and thus must be pointed to
+  - list (car-cell + cdr-cell) (4 bytes) :: list-ptr points always to these cell-pairs, this should speedup list processing
+  - float (6 bytes) :: float as implemented by the c64 basic
+  - array/structure/string (n-bytes) :: structures are arrays of fields, each a single cell, strings are arrays of char-cells (currently)
+  - native-byte-array :: used for strings and buffers etc. (extension for later)
+
+* open / debatable  decisions / questions
+- exact organization of vm implemented in 6510, especially
+  - what should reside in the zero page (value stack, locals, parameters ...)
+  - how much copying to/fro the zero page should/must take place
+  - how is memory exactly organized (free-list, allocation, deallocation, reference counting)

@@ -2328,7 +2328,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   => push-local = store x idx++
   => push-for-call = store into array of called function?
   => result of function is either pushed to local or pushed to next call
-*** next
+*** IMPLEMENT next
 **** DONE tidy up code base
 - find naming conventions for the different phases
   - ast- :: nodes in the ast
