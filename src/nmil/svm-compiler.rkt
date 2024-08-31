@@ -68,6 +68,7 @@
 (module+ test #| require test utils |#
   (require typed/rackunit))
 
+;; generate byte code for a push (of param, local or global "register")
 (define (generate-push (reg-ref : register-ref-)) : (Immutable-Vectorof Byte)
   (define idx (register-ref--index reg-ref))
   (case (register-ref--register reg-ref)
@@ -90,6 +91,7 @@
   (check-equal? (generate-push (register-ref- 'Param 4))
                 (vector-immutable PUSH_PARAM 4)))
 
+;; generate byte code for a pop into (param, local or global "register")
 (define (generate-pop-to (reg-ref : register-ref-)) : (Immutable-Vectorof Byte)
   (define idx (register-ref--index reg-ref))
   (case (register-ref--register reg-ref)
@@ -123,6 +125,7 @@
 ;; ids should be resolved at some pass
 ;; e.g. id -> param#, id -> global#, id -> local#
 
+;; generate byte code (push) for an atomic value (e.g. bool, int, ...)
 (define (gen-atom (atom : ast-ex-atomic-)) : (Immutable-Vectorof Byte)
   (cond
     [(ast-at-int-? atom)
@@ -504,6 +507,7 @@
 ;;     <else ...>
 ;;     TAIL_CALL
 
+;; util function to append immutable byte vectors
 (: append-bytes-vec (-> (Immutable-Vectorof Byte) * (Immutable-Vectorof Byte)))
 (define (append-bytes-vec . bytes)
   (cast
@@ -511,6 +515,7 @@
     (apply vector-append bytes))
    (Immutable-Vectorof Byte)))
 
+;; util function to append any number immutable byte vectors to generation artifacts
 (: append-bytes (-> generation-artifact- (Immutable-Vectorof Byte) * generation-artifact-))
 (define (append-bytes artifact . bytes)
   (struct-copy generation-artifact- artifact
@@ -519,6 +524,7 @@
                                             (apply vector-append bytes)))
                             (Immutable-Vectorof Byte))]))
 
+;; generate push for referenced id (either local, param, global ...)
 (define (svm-generate--id (id : ast-at-id-) (artifact : generation-artifact-)) : generation-artifact-
   (define reg (hash-ref (ast-info--id-map (ast-node--info id)) (ast-at-id--id id)))
   (append-bytes artifact (generate-push reg)))
@@ -627,6 +633,7 @@
                     (vector-immutable)
                     (vector-immutable RET))))
 
+;; generate for a call to a function (built in or user)
 (define (svm-generate--fun-call (call : ast-ex-fun-call-) (artifact : generation-artifact-)) : generation-artifact-
   ;; open: tail call, user function call, runtime function call, complete list of vm internal function calls
 (define call-symbol (ast-ex-fun-call--fun call))
@@ -677,6 +684,7 @@
                      PUSH_INT (low-byte 10) (high-byte 10)
                      NIL?)))
 
+;; push integer
 (define (svm-generate--int (a : ast-at-int-) (artifact : generation-artifact-)) : generation-artifact-
   (define val (ast-at-int--value a))
   (append-bytes artifact (vector-immutable PUSH_INT (low-byte val) (high-byte val))))
@@ -686,6 +694,7 @@
                  (svm-generate--int (ast-at-int- (make-ast-info) 300) (make-generation-artifact)))
                 (vector-immutable PUSH_INT 44 1)))
 
+;; generate an if expression
 (define (svm-generate--if (node : ast-ex-if-) (artifact : generation-artifact-)) : generation-artifact-
   ;; open: optimize for sNIL?-RET-PARAMc
   (define cond-code (generation-artifact--bytes (svm-generate (ast-ex-if--condition node) (struct-copy generation-artifact- artifact [bytes (vector-immutable)] [tail-call-position #f] [ret-follows-directly #f]))))
@@ -755,6 +764,7 @@
                      GOTO 4
                      PUSH_INT (low-byte 100) (high-byte 100))))
 
+;; generate a node (dispatch to specific generator)
 (define (svm-generate (node : ast-node-) (artifact : generation-artifact-)) : generation-artifact-
   (cond
     [(ast-ex-fun-def-? node) (svm-generate--function node artifact)]
@@ -765,6 +775,7 @@
     ;; TODO: complete generation of other node types
     [else (raise-user-error (format "unknown node type ~a for generate" node))]))
 
+;; current compile is just resolving ids
 (define (svm-compile (node : ast-node-)) : ast-node-
   (~>>
    node

@@ -27,6 +27,7 @@
   ;; (require "../6510-test-utils.rkt")
   (require typed/rackunit))
 
+;; parser for type definitions
 (define-syntax (m-type-def stx)
   (syntax-parse stx
     [(_ (cpx-type inner-type ...))
@@ -55,6 +56,7 @@
   (check-equal? (m-type-def (listof A))
                 (ast-td-complex- (make-ast-info) 'listof (list (ast-td-simple- (make-ast-info) 'A)))))
 
+;; parser for expressions (of any type)
 (define-syntax (m-expression-def stx)
   (syntax-parse stx
     [(_ '())
@@ -174,7 +176,7 @@
 
    "if expressions are properly parsed as expression"))
 
-
+;; parser for a function definition
 (define-syntax (m-fun-def stx)
   (syntax-parse stx
     [(_ (id (p-id p-typ) ... (o-id o-typ o-val) ... -> r-typ desc ...) expr)
@@ -243,6 +245,7 @@
       #t]
      [_ #f])))
 
+;; parser for a value definition (constant)
 (define-syntax (m-val-def stx)
   (syntax-parse stx
     [(_ id type expr)

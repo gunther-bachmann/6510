@@ -1,6 +1,7 @@
 #lang racket
 
 #|
+  OBSOLETE: discarded in favor of a stack machine
 
   Compiler for the register based virtual machine
 
