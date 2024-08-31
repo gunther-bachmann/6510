@@ -18,11 +18,11 @@
 
 (require (only-in threading ~>>))
 
-(require (only-in "./util.rkt" nested->list low-byte high-byte bytes->int))
-(require "./mil-ast.rkt")
-(require "./mil-parse.rkt")
+(require (only-in "../util.rkt" nested->list low-byte high-byte bytes->int))
+(require "./ast.rkt")
+(require "./parse.rkt")
 
-(require (only-in "./stack-virtual-machine.rkt"
+(require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                   disassemble-byte-code
                   make-vm
                   CONS
@@ -791,4 +791,4 @@
                       CDR                  ;; (cdr a-list)
                       TAIL_CALL            ;; write two stack values into param0 and 1 and jump to function start
                       )
-   "optimization should reduce bytecode further"))
+   "optimization should yields 9 bytes now (current min)"))

@@ -2329,7 +2329,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   => push-for-call = store into array of called function?
   => result of function is either pushed to local or pushed to next call
 *** next
-**** tidy up code base
+**** DONE tidy up code base
 - find naming conventions for the different phases
   - ast- :: nodes in the ast
   - m- :: parsers for mil
@@ -2337,7 +2337,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - get an overview of what information is necessary for the different phases
 - decide on where in the ast to keep this information
 - find a way to make additions to racket structures less invasive and prone to include massive code changes (use typed attribute lists?)
-**** write code generator for stack machine (m-def ...)
+**** DONE write code generator for stack machine (m-def ...)
 **** OBSOLETE old ideas for vm interpreter
    thoughts about decoding (speed) of opcodes with 6510 assembly
    general: table: opcode -> address of handler
@@ -2556,7 +2556,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
    invocation frames are organized as stack
    call/return are implemented using the 6510 processor stack (for speed), limiting e.g. non-tailcalled recursion or regular call-stack to 128 calls (- offset used by interpreter/system)
 
-**** write a 6510 vm interpreter (partially, validating some design decisions)
+**** DONE write a 6510 vm interpreter (partially, validating some design decisions)
 - alternative: use 128 (non short) commands with bit0 always 0 => LDA ($PC),Y -> STA JMPOP+1 -> JMP OPTBL (8 bytes, 12-cycles)
 - general design of vm
   PC = zero page 16 bit program counter, pointing to the byte code
@@ -3277,13 +3277,23 @@ describes some lisp implementations (with some techn. detail) and does perforamc
     dec reference count
     if <0 mark let old first free cell of this page point to this one
           mark this one the first free cell in the page
-**** make compilation phases more explicit
+**** design persisted byte code (constants, unlinked symbols, bytecode), linker/loader
+**** generate persisted byte code (single module, multi module in mind)
+**** implement loader/linker
+**** IMPLEMENT glue together mil + vm + loader and linker
+- (m-def ...) -> vm, execute, debug?
+- see [[file:src/cisc-vm/mil-svm-generator.rkt]]
+**** allow 6510 interpreter to validate designed vm assembly code
+- write assembly code, validate behavior with test code <- make this easy/feasable
+**** write executable 6510 vm for (some) commands
+**** glue together mil + 6510 vm
+**** IDEA: make compilation phases more explicit
 - macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
 - transformation from ast/stack orientation -> register oriented atomic commands
 - vm-register allocation + reordering sub expressions (optimization)
   - function parameters can be evaluated in any order (strict eval scheme)
 - optional: others like constant folding
-**** information collected/used during compilation phases
+**** IDEA: information collected/used during compilation phases
 Maybe add this information as a hashmap, allowing for arbitrary information to be added any time
 What information is needed for the different phases? => check the different optimization problems, collect necessary information
 - precode :: used to store atomic expressions that need to run before the code for the current node can be executed
@@ -3299,8 +3309,6 @@ What information is needed for the different phases? => check the different opti
 - source code location :: location of the original source
 - previous node :: reference to node before change (to track changes through compilation)
 - previous note :: note that describes the transformation done from previous node to current node
-**** glue together mil + vm
-- (m-def ...) -> vm, execute, debug?
 *** some iteration
 **** keep meta information (related to debugging)
 - source code location
