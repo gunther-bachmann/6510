@@ -16,6 +16,7 @@
          (struct-out ast-resolve-byte-scmd)
          (struct-out ast-opcode-cmd)
          (struct-out ast-rel-opcode-cmd)
+         (struct-out ast-unresolved-bytes-cmd)
          (struct-out ast-unresolved-opcode-cmd)
          (struct-out ast-unresolved-rel-opcode-cmd)
          ast-unresolved-command?
@@ -113,6 +114,14 @@
   #:guard (struct-guard/c
            list?
            (listof byte?)))
+
+(struct ast-unresolved-bytes-cmd ast-bytes-cmd
+  (resolve-sub-command)
+  #:transparent
+  #:guard (struct-guard/c
+           list?
+           (listof byte?)
+           ast-resolve-sub-cmd?))
 
 ;; opcode including unresolved resolve subcommand
 (struct ast-unresolved-opcode-cmd ast-opcode-cmd

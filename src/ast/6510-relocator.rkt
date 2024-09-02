@@ -20,6 +20,10 @@
 (define/c (command-len command)
   (-> command/c nonnegative-integer?)
   (cond
+    [(ast-unresolved-bytes-cmd? command)
+     (if (ast-resolve-word-scmd? (ast-unresolved-bytes-cmd-resolve-sub-command command))
+         2
+         1)]
     [(ast-bytes-cmd? command)
      (length (ast-bytes-cmd-bytes command))]
     [(ast-rel-opcode-cmd? command)
@@ -38,6 +42,8 @@
 (module+ test #| command-len |#
   (check-equal? (command-len (ast-opcode-cmd '() '(100)))
                 1)
+  (check-equal? (command-len (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "some")))
+                2)
   (check-equal? (command-len (ast-label-def-cmd '() "some"))
                 0)
   (check-equal? (command-len (ast-const-word-cmd '() "some" #x2000))

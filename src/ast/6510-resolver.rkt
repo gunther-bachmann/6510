@@ -299,6 +299,25 @@
               [else (raise-user-error "unknown subcommand ~a" subcmd) ])
         instruction)))
 
+(define/c (resolve-bytes-cmd instruction labels)
+  (-> ast-unresolved-bytes-cmd? hash? ast-bytes-cmd?)
+  (let* ((subcmd (ast-unresolved-bytes-cmd-resolve-sub-command instruction))
+         (label  (ast-resolve-sub-cmd-label subcmd))
+         (ex-offset (label-offset label))
+         (value  (hash-ref labels (label-label label) #f)))
+    (if value
+        (cond
+          [(ast-resolve-word-scmd? subcmd)
+           (ast-bytes-cmd '() (list (low-byte (+ ex-offset value)) (high-byte (+ ex-offset value))))]
+          [(and (ast-resolve-byte-scmd? subcmd)
+              (eq? 'high-byte (ast-resolve-byte-scmd-mode subcmd)))
+           (ast-bytes-cmd '() (list (high-byte (+ ex-offset value))))]
+          [(and (ast-resolve-byte-scmd? subcmd)
+              (eq? 'low-byte (ast-resolve-byte-scmd-mode subcmd)))
+           (ast-bytes-cmd '() (list (low-byte (+ ex-offset value))))]
+          [else (raise-user-error (format "unknown subcommand ~a" subcmd)) ])
+        instruction)))
+
 ;; resolve this relative opcode command (if applicable) using the given current offset of the code
 (define/c (resolve-rel-opcode-cmd instruction offset labels)
   (-> ast-unresolved-rel-opcode-cmd? word/c hash? ast-rel-opcode-cmd?)
@@ -322,6 +341,8 @@
                                   (resolve-opcode-cmd instruction labels)]
                                  [(ast-unresolved-rel-opcode-cmd? instruction)
                                   (resolve-rel-opcode-cmd instruction offset labels)]
+                                 [(ast-unresolved-bytes-cmd? instruction)
+                                  (resolve-bytes-cmd instruction labels)]
                                  [else instruction]))
              (new-res-prg  (append resolved-program (list resolved-cmd))))        
         (->resolve-labels next-offset labels (cdr program) new-res-prg))))
@@ -373,6 +394,8 @@
 (define/c (resolved-instruction->bytes instruction)
   (-> ast-command? (listof byte/c))
   (cond
+    [(ast-unresolved-bytes-cmd? instruction)
+     (raise-user-error (format "cannot resolve unresolved command to bytes ~a" instruction))]
     [(ast-unresolved-command? instruction)
      (raise-user-error "cannot resolve unresolved command to bytes ~a" instruction)]
     [(ast-decide-cmd? instruction)

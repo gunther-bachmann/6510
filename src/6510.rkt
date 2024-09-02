@@ -40,7 +40,7 @@
 (provide (all-from-out "ops/6510.subroutine-ops.rkt"))
 (provide (all-from-out "ops/6510.stack-ops.rkt"))
 
-(provide label word-const byte-const byte word asc provide-byte provide-word require-byte require-word) ;; meta commands
+(provide label word-ref word-const byte-const byte word asc provide-byte provide-word require-byte require-word) ;; meta commands
 
 (provide (all-from-out "scheme-asm/6510-addressing-utils.rkt"))
 
@@ -199,6 +199,18 @@
   (foldl (λ (l r) (and (syntax->datum l) r))
          #t
          (syntax->list stx-list)))
+
+(define-syntax (word-ref stx)
+  (syntax-case stx ()
+    ([_ ref ...]
+     #'(list (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd (->string #'ref))) ...))))
+
+(module+ test #| word-ref |#
+  (check-equal? (word-ref some+4)
+                (list (ast-unresolved-bytes-cmd '() '()  (ast-resolve-word-scmd "some+4"))))
+  (check-equal? (word-ref some+4 some+2)
+                (list (ast-unresolved-bytes-cmd '() '()  (ast-resolve-word-scmd "some+4"))
+                      (ast-unresolved-bytes-cmd '() '()  (ast-resolve-word-scmd "some+2")))))
 
 (define-syntax (word stx)
   (syntax-case stx ()
