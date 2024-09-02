@@ -2086,7 +2086,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   - [-] struct-get <into-reg> <data-off> <struct-reg> :: get cell at data-off to structure in reg into-reg
   - [-] struct-set <data-off> <struct-reg> <value-reg> :: set cell at data-off in structure reg to value in second reg
   - [-] throw-exception <num> <string> <reg-0> ... <reg-n> :: throw an exception with num context vars and a string message
-*** DONE next
+*** DONE syntax considerations and parser
 - IDEA: make syntax for list-types more compact
   e.g postix * to indicate a list of a certain type, [] to indicate array
   #+begin_src scheme
@@ -2105,7 +2105,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - there needs to be done some register allocation (VM_​Lx)
   each (sub) expression is assigned to a local register
   a register that is not used later in the program can be reused (optimization => later)
-*** DONE next
+*** DONE stack machine vs. register machine
 **** excursion - code size (byte code) using a stack machine instead of register machine
 #+begin_src scheme
   (m-def (reverse (a-list (list cell)) (b-list (list cell) '()) -> (list cell)
@@ -2328,7 +2328,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
   => push-local = store x idx++
   => push-for-call = store into array of called function?
   => result of function is either pushed to local or pushed to next call
-*** IMPLEMENT next
+*** DONE code generator
 **** DONE tidy up code base
 - find naming conventions for the different phases
   - ast- :: nodes in the ast
@@ -2556,7 +2556,8 @@ describes some lisp implementations (with some techn. detail) and does perforamc
    invocation frames are organized as stack
    call/return are implemented using the 6510 processor stack (for speed), limiting e.g. non-tailcalled recursion or regular call-stack to 128 calls (- offset used by interpreter/system)
 
-**** DONE write a 6510 vm interpreter (partially, validating some design decisions)
+*** IMPLEMENT next
+**** DONE write a sketch of a 6510 vm interpreter (partially, validating some design decisions)
 - alternative: use 128 (non short) commands with bit0 always 0 => LDA ($PC),Y -> STA JMPOP+1 -> JMP OPTBL (8 bytes, 12-cycles)
 - general design of vm
   PC = zero page 16 bit program counter, pointing to the byte code
@@ -3277,6 +3278,8 @@ describes some lisp implementations (with some techn. detail) and does perforamc
     dec reference count
     if <0 mark let old first free cell of this page point to this one
           mark this one the first free cell in the page
+**** what part of the 6510 vm design should be implement w/ racket to validate design?
+**** how much of the 6510 code should be actually written and tested with the interpreter (and actually used to interpret byte code)?
 **** design persisted byte code (constants, unlinked symbols, bytecode), linker/loader
 **** generate persisted byte code (single module, multi module in mind)
 **** implement loader/linker
@@ -3309,7 +3312,7 @@ What information is needed for the different phases? => check the different opti
 - source code location :: location of the original source
 - previous node :: reference to node before change (to track changes through compilation)
 - previous note :: note that describes the transformation done from previous node to current node
-*** some iteration
+*** some iteration (ideas)
 **** keep meta information (related to debugging)
 - source code location
 - default values
@@ -3318,7 +3321,6 @@ What information is needed for the different phases? => check the different opti
 **** debugging
 - level 0: debug vm code (byte code), trace, inspect, step-debugger, memory inspector
 - level 1: debug mil, function/expression entry, inspect parameters, locals, etc, call stack, memory inspector
-**** implement (partial) vm in 6510 assembler => validation of vm implementation feasability (byte code size + interpretation speed)
 **** implement vm in mil
 - precondition: all language features are implemented, debugging should be possible
 - information gained: optimize execution speed + bytecode size + heap usage + c64 implementability
@@ -3341,8 +3343,6 @@ What information is needed for the different phases? => check the different opti
   - lists and arrays/strings are allocated on the heap and need to ref-count the cells
   - describe each instruction more closely to check how we can avoid reference counting
   - maybe start with explicit memory management (alloc, free)
-**** cisc commands
-  - use basic encoding (each reg = 1 byte), keep in mind to provide compact bytecodes for first 15 regs etc.
 ** memory management
 *** layout
 **** operations
