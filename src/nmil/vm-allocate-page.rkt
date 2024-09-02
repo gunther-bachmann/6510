@@ -2,6 +2,7 @@
 
 (require "../6510.rkt")
 (require "../ast/6510-calc-opcode-facades.rkt")
+(require (only-in "../ast/6510-resolver.rkt" commands->bytes))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -36,6 +37,14 @@
    ))
 
 (module+ test #| VM_ALLOC_PAGE |#
-
-
-  )
+  (define org 2064)
+  (define program (append (list)
+                          VM_ALLOC_PAGE_JUMP_TABLE
+                          VM_ALLOC_PAGE))
+  (check-equal? (commands->bytes #x2068 program)
+                (list 0 0 0 0
+                      185 105 32
+                      141 122 32
+                      185 104 32
+                      141 121 32
+                      76 0 0)))
