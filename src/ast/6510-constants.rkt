@@ -59,7 +59,7 @@
 
 ;; resolve a single label in constants using hilo-ind in this single command
 (define/c (resolve-known-byte->command label hilo-ind constants command)
-  (-> string? (or/c 'high-byte 'low-byte) hash? ast-command? ast-command?)
+  (-> string? (or/c 'high-byte 'low-byte 'relative) hash? ast-command? ast-command?)
   (let* ((value (hash-ref constants label #f)))
     (cond [(and value (eq? hilo-ind 'high-byte))
            (hibyte-constant->command command value)]

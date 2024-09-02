@@ -22,7 +22,7 @@ this file is an example of how the native compilation of a mil could look like
 
 (define program
   (list
-   (byte-const STRING_ID_HELLO-WORLD  0)
+   (byte-const STRING_ID_HELLO_WORLD  0)
    (byte-const STRING_ID_FORMAT_ERROR 1)
 
    (byte-const MILRT_STRING_TYPE 1)
@@ -40,9 +40,9 @@ this file is an example of how the native compilation of a mil could look like
    (word-const MILRT_STRING_ID_TABLE_P2 #xc100)
    (word-const MILRT_STRING_TABLE #xc200)
 
-   (label MILRT_SETUP)               (LDA !<STRING-TABLE)
+   (label MILRT_SETUP)               (LDA !<STRING_TABLE)
                                      (STA MILRT_ZP_VAL_HEAP_PTR)
-                                     (LDA !>STRING-TABLE)
+                                     (LDA !>STRING_TABLE)
                                      (STA MILRT_ZP_VAL_HEAP_PTRP1)
 
                                      (LDA !<MILRT_STRING_ID_TABLE)
@@ -259,11 +259,11 @@ this file is an example of how the native compilation of a mil could look like
    (label MAIN)                      (JMP HELLO_WORLD)
    (label HELLO_WORLD)               (LDA !$a3)
                                      (JSR MILRT_PUSH_UINT8)
-                                     (LDA !STRING_ID_HELLO-WORLD)
+                                     (LDA !STRING_ID_HELLO_WORLD)
                                      (JSR MILRT_PUSH_STRING)
                                      (JMP MILRT_DISPLAY)
 
-   (label STRING-TABLE)
+   (label STRING_TABLE)
    (label STRING_PTR)                (byte 15)
                                      ;; (byte $5E)
                                      (asc "!a")

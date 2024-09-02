@@ -122,7 +122,7 @@
   (-> (listof label-instruction?) (listof ast-unresolved-command?) (or/c ast-unresolved-command? #f))
   (findf (λ (decide-option)
            (define resolve-scmd (ast-unresolved-opcode-cmd-resolve-sub-command decide-option))
-           (define label        (ast-resolve-sub-cmd-label resolve-scmd))
+           (define label        (label-label (ast-resolve-sub-cmd-label resolve-scmd)))
            (define label-entry  (first-label-in label labels))
            (if label-entry
                (cond [(ast-resolve-byte-scmd? resolve-scmd)
@@ -256,21 +256,46 @@
   (-> ast-unresolved-rel-opcode-cmd? byte/c ast-rel-opcode-cmd?)
   (ast-rel-opcode-cmd (ast-command-meta-information instruction) (append (ast-rel-opcode-cmd-bytes instruction) (list rel-value))))
 
+(define/c (label-offset label-expression)
+  (-> string? fixnum?)
+  (define offset (regexp-match #rx"[+-][0-9]+$" label-expression))
+  (if offset
+      (string->number (car offset))
+      0))
+
+(define/c (label-label label-expression)
+  (-> string? string?)
+  (define str (regexp-match #rx"^[a-zA-Z0-9_]+" label-expression))
+  (if str
+      (car str)
+      (raise-user-error (format "\"~a\" is not a label-expression" label-expression))))
+
+(module+ test #| label-offset |#
+  (check-equal? (label-offset "abc+4")
+                4)
+  (check-equal? (label-offset "_abc7+4")
+                4)
+  (check-equal? (label-offset "abc")
+                0)
+  (check-equal? (label-offset "abc-3")
+                -3))
+
 ;; resolve this regular opcode (if applicable) 
 (define/c (resolve-opcode-cmd instruction labels)
   (-> ast-unresolved-opcode-cmd? hash? ast-opcode-cmd?)
   (let* ((subcmd (ast-unresolved-opcode-cmd-resolve-sub-command instruction))
          (label  (ast-resolve-sub-cmd-label subcmd))
-         (value  (hash-ref labels label #f)))
+         (offset (label-offset label))
+         (value  (hash-ref labels (label-label label) #f)))
     (if value
         (cond [(ast-resolve-word-scmd? subcmd)
-               (encode-label-word-value instruction value)]
+               (encode-label-word-value instruction (+ offset value))]
               [(and (ast-resolve-byte-scmd? subcmd)
                   (eq? 'high-byte (ast-resolve-byte-scmd-mode subcmd)))
-               (encode-label-hbyte-value instruction value)]
+               (encode-label-hbyte-value instruction (+ offset value))]
               [(and (ast-resolve-byte-scmd? subcmd)
                   (eq? 'low-byte (ast-resolve-byte-scmd-mode subcmd)))
-               (encode-label-lbyte-value instruction value)]
+               (encode-label-lbyte-value instruction (+ offset value))]
               [else (raise-user-error "unknown subcommand ~a" subcmd) ])
         instruction)))
 
@@ -279,9 +304,10 @@
   (-> ast-unresolved-rel-opcode-cmd? word/c hash? ast-rel-opcode-cmd?)
   (let* ((subcmd (ast-unresolved-rel-opcode-cmd-resolve-sub-command instruction))
          (label  (ast-resolve-sub-cmd-label subcmd))
-         (value  (hash-ref labels label #f)))
+         (ex-offset (label-offset label))
+         (value  (hash-ref labels (label-label label) #f)))
     (cond [value
-           (let ([rel-value (two-complement-of (- value (+ offset 2)))])
+           (let ([rel-value (two-complement-of (+ ex-offset (- value (+ offset 2))))])
              (encode-label-rel-value instruction rel-value))]
           [else instruction])))
 
@@ -306,18 +332,27 @@
                     (list (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-word-scmd "some"))
                           (ast-unresolved-rel-opcode-cmd '(#:test) '(40) (ast-resolve-byte-scmd "some" 'low-byte))
                           (ast-unresolved-rel-opcode-cmd '(#:test) '(40) (ast-resolve-byte-scmd "other" 'low-byte))
+                          (ast-unresolved-rel-opcode-cmd '(#:test) '(40) (ast-resolve-byte-scmd "some-3" 'low-byte))
+                          (ast-unresolved-rel-opcode-cmd '(#:test) '(40) (ast-resolve-byte-scmd "other+2" 'low-byte))
                           (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-byte-scmd "sowo" 'low-byte))
                           (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-byte-scmd "sowo" 'high-byte))
                           (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-byte-scmd "unknown" 'high-byte))
-                          (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-word-scmd "unknown")))
+                          (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-word-scmd "unknown"))
+                          (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-word-scmd "some+3"))
+                          (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-word-scmd "some-1"))
+)
                     '())
    (list (ast-opcode-cmd '(#:test) '(30 #x10 #x00))
          (ast-rel-opcode-cmd '(#:test) '(40 11))
          (ast-rel-opcode-cmd '(#:test) '(40 249))
+         (ast-rel-opcode-cmd '(#:test) '(40 04))
+         (ast-rel-opcode-cmd '(#:test) '(40 247))
          (ast-opcode-cmd '(#:test) '(30 #xD2))
          (ast-opcode-cmd '(#:test) '(30 #xFF))
          (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-byte-scmd "unknown" 'high-byte))
-         (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-word-scmd "unknown"))))
+         (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-word-scmd "unknown"))
+         (ast-opcode-cmd '(#:test) '(30 #x13 #x00))
+         (ast-opcode-cmd '(#:test) '(30 #x0F #x00))))
   (check-equal?
    (->resolve-labels 0 '#hash(("sout" . 3))
                     (list (ast-unresolved-opcode-cmd '(#:test) '(174) (ast-resolve-word-scmd "sout"))

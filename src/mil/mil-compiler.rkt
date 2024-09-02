@@ -13,7 +13,7 @@
 (module+ test #| require test utils |#
   (require "../6510-test-utils.rkt"))
 
-(define user-function-prefix "FUN-")
+(define user-function-prefix "FUN_")
 
 (define/contract (translate-function-symbol sym)
   (-> symbol? symbol?)
@@ -37,7 +37,7 @@
   (check-equal? (translate-function-symbol '+)
                 'MILRT_PLUS)
   (check-equal? (translate-function-symbol 'Some?+Other?)
-                'FUN-Some__Other_))
+                'FUN_Some__Other_))
 
 (define/contract (encode-string str)
   (-> string? (listof ast-command?))
@@ -130,21 +130,21 @@
                   opcodes)
                 (list))
 
-  (check-equal? (let-values (((opcodes ctx) (compile-list (mil-l (mil-symbol 'my-func)) (compile-ctx (list)))))
+  (check-equal? (let-values (((opcodes ctx) (compile-list (mil-l (mil-symbol 'my_func)) (compile-ctx (list)))))
                   opcodes)
-                (list (JSR FUN-my-func)))
+                (list (JSR FUN_my_func)))
 
   (check-equal? (let-values (((opcodes ctx)
-                              (compile-list (mil-l (mil-symbol 'my-func) (mil-uint8 #x20))
+                              (compile-list (mil-l (mil-symbol 'my_func) (mil-uint8 #x20))
                                             (compile-ctx (list)))))
                   opcodes)
                 (list
                  (LDA !$20)
                  (JSR MILRT_PUSH_UINT8)
-                 (JSR FUN-my-func)))
+                 (JSR FUN_my_func)))
 
   (check-equal? (let-values (((opcodes ctx)
-                              (compile-list (mil-l (mil-symbol 'my-func)
+                              (compile-list (mil-l (mil-symbol 'my_func)
                                                    (mil-string "SOME")
                                                    (mil-string "OTHER")
                                                    (mil-uint8 #x20))
@@ -157,9 +157,9 @@
                  (JSR MILRT_PUSH_STRING)
                  (LDA !1)
                  (JSR MILRT_PUSH_STRING)
-                 (JSR FUN-my-func)))
+                 (JSR FUN_my_func)))
   (check-equal? (let-values (((opcodes ctx)
-                              (compile-list (mil-l (mil-symbol 'my-func)
+                              (compile-list (mil-l (mil-symbol 'my_func)
                                                    (mil-string "SOME")
                                                    (mil-string "OTHER")
                                                    (mil-uint8 #x20))

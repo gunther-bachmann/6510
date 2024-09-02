@@ -8,9 +8,9 @@
 
 ; currently require/provide cannot be parsed or resolved here
 
-ROM-COUT  = $ffd2
+ROM_COUT  = $ffd2
 REPEAT    = 2
-LINE-FEED = %00001101 ; $0d
+LINE_FEED = %00001101 ; $0d
 
 
         ;; print hello word (reverse encoded)
@@ -19,7 +19,7 @@ LINE-FEED = %00001101 ; $0d
         ; ... hello+n: first byte to print
         ldx hello
 sout:   lda hello,x ;; a long comment that might be overridden by the disassembled code and the bytes encoding
-        jsr ROM-COUT
+        jsr ROM_COUT
         dex
         bne sout
 
@@ -33,7 +33,7 @@ some:
         jsr cout       ; print this character to screen
         adc #1
         jsr cout       ; print this character to screen
-        lda #LINE-FEED
+        lda #LINE_FEED
         jsr cout
 end:    dex
         bne some
@@ -43,7 +43,7 @@ end:    dex
         ldx #00
 rep:    lda hellon,x
         beq done
-        jsr ROM-COUT
+        jsr ROM_COUT
         inx             ; max 255 chars
         bne rep
 

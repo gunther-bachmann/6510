@@ -10,13 +10,13 @@
 
 (define MILRT_ALLOCATE_CONS_CELL_C
   (list
-   (byte-const page-status                   #x01) ;; 0-byte on page (to identify page)
-   (byte-const free-cons-cell-ptr            #x3b) ;; next free cell
-   (byte-const free-cons-cell-ptr-high       #x3c)
-   (byte-const high-byte-next-free-cons-page #x3f)
-   (byte-const cons-cell-ptr                 #x40) ;; next free cell
-   (byte-const cons-cell-ptr-high            #x41)
-   (byte-const high-byte-expression-stack    #x0e)))
+   (byte-const page_status                   #x01) ;; 0-byte on page (to identify page)
+   (byte-const free_cons_cell_ptr            #x3b) ;; next free cell
+   (byte-const free_cons_cell_ptr_high       #x3c)
+   (byte-const high_byte_next_free_cons_page #x3f)
+   (byte-const cons_cell_ptr                 #x40) ;; next free cell
+   (byte-const cons_cell_ptr_high            #x41)
+   (byte-const high_byte_expression_stack    #x0e)))
 
 
 ;; initialize a page (high-byte passed in A) 
@@ -43,30 +43,30 @@
 (define MILRT_ALLOCATE_CONS_CELL
   (list
    (label MILRT_ALLOCATE_CONS_CELL)
-                           (LDA free-cons-cell-ptr)
-                           (STA cons-cell-ptr)
-                           (LDA free-cons-cell-ptr-high)
-                           (STA cons-cell-ptr-high)
+                           (LDA free_cons_cell_ptr)
+                           (STA cons_cell_ptr)
+                           (LDA free_cons_cell_ptr_high)
+                           (STA cons_cell_ptr_high)
                         
                            (LDY !0)
-                           (LDA (cons-cell-ptr),y) ;; cdr of allocated cons cell
+                           (LDA (cons_cell_ptr),y) ;; cdr of allocated cons cell
                            (BEQ MILRT_ALLOC_CONS_CELL_c1)
-                           (STA free-cons-cell-ptr)
+                           (STA free_cons_cell_ptr)
                            (INY)
-                           (LDA (cons-cell-ptr),y)
-                           (STA free-cons-cell-ptr-high)
+                           (LDA (cons_cell_ptr),y)
+                           (STA free_cons_cell_ptr_high)
                            (RTS)
 
    (label MILRT_ALLOC_CONS_CELL_c1)
-                           (DEC high-byte-next-free-cons-page) ;; grow downwards
-                           (LDA high-byte-next-free-cons-page)
-                           (CMP high-byte-expression-stack)
+                           (DEC high_byte_next_free_cons_page) ;; grow downwards
+                           (LDA high_byte_next_free_cons_page)
+                           (CMP high_byte_expression_stack)
                            (BEQ MILRT_ALLOC_CONS_CELL_OUT_OF_MEM)
 
                            (JSR MILRT_INIT_CONS_CELL_PAGE)
-                           (STA free-cons-cell-ptr-high)
+                           (STA free_cons_cell_ptr_high)
                            (LDA !4) ;; first free cell is located at byte 4
-                           (STA free-cons-cell-ptr)
+                           (STA free_cons_cell_ptr)
                            (RTS)
 
    (label MILRT_ALLOC_CONS_CELL_OUT_OF_MEM) ;;out of memory
@@ -82,9 +82,9 @@
     (append MILRT_ALLOCATE_CONS_CELL_C
             (list (LDA !$c1) ;; create page at c0
                   (JSR MILRT_INIT_CONS_CELL_PAGE)
-                  (STA free-cons-cell-ptr-high)
+                  (STA free_cons_cell_ptr_high)
                   (LDA !4) ;; first free cell is located at byte 4
-                  (STA free-cons-cell-ptr)
+                  (STA free_cons_cell_ptr)
                   (JMP MILRT_ALLOCATE_CONS_CELL))
             MILRT_INIT_CONS_CELL_PAGE_C
             MILRT_INIT_CONS_CELL_PAGE
@@ -94,9 +94,9 @@
     (append MILRT_ALLOCATE_CONS_CELL_C
             (list (LDA !$c1) ;; create page at c0
                   (JSR MILRT_INIT_CONS_CELL_PAGE)
-                  (STA free-cons-cell-ptr-high)
+                  (STA free_cons_cell_ptr_high)
                   (LDA !$0c) ;; third free cell is located at byte 0c
-                  (STA free-cons-cell-ptr)
+                  (STA free_cons_cell_ptr)
                   (JMP MILRT_ALLOCATE_CONS_CELL))
             MILRT_INIT_CONS_CELL_PAGE_C
             MILRT_INIT_CONS_CELL_PAGE
@@ -105,11 +105,11 @@
   (define init-page-allocate-last
     (append MILRT_ALLOCATE_CONS_CELL_C
             (list (LDA !$c1) ;; create page at c0
-                  (STA high-byte-next-free-cons-page)
+                  (STA high_byte_next_free_cons_page)
                   (JSR MILRT_INIT_CONS_CELL_PAGE)
-                  (STA free-cons-cell-ptr-high)
+                  (STA free_cons_cell_ptr_high)
                   (LDA !$fc) ;; last free cell is located at fc
-                  (STA free-cons-cell-ptr)
+                  (STA free_cons_cell_ptr)
                   (JMP MILRT_ALLOCATE_CONS_CELL))
             MILRT_INIT_CONS_CELL_PAGE_C
             MILRT_INIT_CONS_CELL_PAGE
@@ -118,13 +118,13 @@
   (define init-page-allocate-last-failing
     (append MILRT_ALLOCATE_CONS_CELL_C
             (list (LDA !$c1) ;; create page at c0
-                  (STA high-byte-next-free-cons-page)
-                  (STA high-byte-expression-stack)
-                  (DEC high-byte-expression-stack)
+                  (STA high_byte_next_free_cons_page)
+                  (STA high_byte_expression_stack)
+                  (DEC high_byte_expression_stack)
                   (JSR MILRT_INIT_CONS_CELL_PAGE)
-                  (STA free-cons-cell-ptr-high)
+                  (STA free_cons_cell_ptr_high)
                   (LDA !$fc) ;; last free cell is located at fc
-                  (STA free-cons-cell-ptr)
+                  (STA free_cons_cell_ptr)
                   (JMP MILRT_ALLOCATE_CONS_CELL))
             MILRT_INIT_CONS_CELL_PAGE_C
             MILRT_INIT_CONS_CELL_PAGE

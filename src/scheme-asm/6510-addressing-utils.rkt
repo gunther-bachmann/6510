@@ -88,14 +88,22 @@
 ;; is the given string a byte label?
 (define/c (byte-label? str)
   (-> string? boolean?)
-  (and (regexp-match #rx"^[><][a-zA-Z_-][a-zA-Z0-9_-]*$" str) #t))
+  (and (regexp-match #rx"^[><][a-zA-Z_][a-zA-Z0-9_]*([+-][0-9]+)?$" str) #t))
+
+(module+ test #| byte-label |#
+  (check-true (byte-label? "<abc"))
+  (check-true (byte-label? "<abc+4")))
 
 ;; is the given string a label
 (define/c (label? str)
   (-> string? boolean?)
   (and (not (equal? str "A")) ;; reserved for accumulator addressing
-     (regexp-match #rx"^[a-zA-Z_][a-zA-Z0-9_-]*$" str)
+     (regexp-match #rx"^[a-zA-Z_][a-zA-Z0-9_]*([+-][0-9]+)?$" str)
      #t))
+
+(module+ test #| byte-label |#
+  (check-true (label? "abc"))
+  (check-true (label? "abc+4")))
 
 ;; resolve the given operand to a byte or to an open to resolve-to-byte ast command
 (define/c (byte-operand any-num (force true) (relative false))

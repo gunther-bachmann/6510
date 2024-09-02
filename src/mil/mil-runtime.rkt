@@ -45,9 +45,9 @@
 
 (define MILRT_ZERO_PAGE_SETUP
   (list
-     (label MILRT_SETUP)               (LDA !<STRING-TABLE)
+     (label MILRT_SETUP)               (LDA !<STRING_TABLE)
                                        (STA MILRT_ZP_VAL_HEAP_PTR)
-                                       (LDA !>STRING-TABLE)
+                                       (LDA !>STRING_TABLE)
                                        (STA MILRT_ZP_VAL_HEAP_PTRP1)
 
                                        (LDA !<MILRT_STRING_ID_TABLE)
@@ -518,7 +518,7 @@
 
                                         (LDA (MILRT_ZP_VAL_HEAP_PTR),y) ;; get uint value
                                         (JSR MILRT_INC_VAL_HEAP_BY_Y) ;; pop uint incl. type descriptor from stack
-                                        (JMP MILRT_DISPLAY_UINT8-RAW)
+                                        (JMP MILRT_DISPLAY_UINT8_RAW)
 
       (label MILRT_DISPLAY_NONUINT)     ;; TODO: implement printing strings, cons-cells, lists and boolean
                                         (CMP !MILRT_LIST_TYPE_START)
@@ -575,7 +575,7 @@
                                         (RTS)
 ))
 
-(define MILRT_DISPLAY_UINT8-RAW
+(define MILRT_DISPLAY_UINT8_RAW
   (list
                                         ;; basic routine to write byte !
 
@@ -645,7 +645,7 @@
      MILRT_TYPE_ERROR
      MILRT_DISPLAY
      MILRT_DISPLAY_OBJECT
-     MILRT_DISPLAY_UINT8-RAW
+     MILRT_DISPLAY_UINT8_RAW
      MILRT_DISPLAY_LIST
      MILRT_STRING_ID2PTR
      MILRT_PUSH_LIST_START_MARKER

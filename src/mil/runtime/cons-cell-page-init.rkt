@@ -9,9 +9,9 @@
 
 (define MILRT_INIT_CONS_CELL_PAGE_C
   (list
-   (byte-const page-status     #x01) ;; 0-byte on page (to identify page)
-   (byte-const temp-ptr-1      #x07)
-   (byte-const temp-ptr-1-high #x08)))
+   (byte-const page_status     #x01) ;; 0-byte on page (to identify page)
+   (byte-const temp_ptr_1      #x07)
+   (byte-const temp_ptr_1_high #x08)))
 
 ;; initialize a page (high-byte passed in A) 
 ;; it is filled with the given memory layout
@@ -30,51 +30,51 @@
 ;;                 ...
 ;;                 [fc]..[ff]  : cons cell 50
 ;;
-;; * temp-ptr-1 = pointer for initializing the page
+;; * temp_ptr_1 = pointer for initializing the page
 ;; A = high byte of next cons cell page (page-high-byte)
 ;; X *
 ;; Y *
 (define MILRT_INIT_CONS_CELL_PAGE
   (list
    (label MILRT_INIT_CONS_CELL_PAGE)
-                        (STA temp-ptr-1-high)
+                        (STA temp_ptr_1_high)
                         (LDA !$0)
-                        (STA temp-ptr-1)
+                        (STA temp_ptr_1)
                         (LDY !$FF)
                         (LDA !0)
     (label _FILL0)
-                        (STA (temp-ptr-1),y)
+                        (STA (temp_ptr_1),y)
                         (DEY)
                         (BNE _FILL0)
 
                         ;; set page status on first byte of the page
-                        (LDA !page-status)
-                        (STA (temp-ptr-1),y)
+                        (LDA !page_status)
+                        (STA (temp_ptr_1),y)
 
                         ;; fill first 3 cells (special)
 
                         ;; now 0000 0100, 0000 0101 <- 0000 1000, high-byte
                         (LDY !$04)
                         (LDA !$08) ;; point to next cell at 0000 1000
-                        (STA (temp-ptr-1),y)
+                        (STA (temp_ptr_1),y)
                         (INY)
-                        (LDA temp-ptr-1-high)
-                        (STA (temp-ptr-1),y)
+                        (LDA temp_ptr_1_high)
+                        (STA (temp_ptr_1),y)
                         ;; next 0000 1000, 0000 1001 <- 0000 1100, high-byte
                         (LDY !$08)
                         (LDA !$0c) ;; point to next cell at 0000 1100
-                        (STA (temp-ptr-1),y)
+                        (STA (temp_ptr_1),y)
                         (INY)
-                        (LDA temp-ptr-1-high)
-                        (STA (temp-ptr-1),y)
+                        (LDA temp_ptr_1_high)
+                        (STA (temp_ptr_1),y)
                         ;; next 0000 1100, 0000 1101 <- 0100 000, high byte
                         (LDY !$0c)
                         (LDA !$40) ;; point to next cell at 0100 0000
-                        (STA (temp-ptr-1),y)
+                        (STA (temp_ptr_1),y)
                         (TAX)
                         (INY)
-                        (LDA temp-ptr-1-high)
-                        (STA (temp-ptr-1),y)
+                        (LDA temp_ptr_1_high)
+                        (STA (temp_ptr_1),y)
                         ;; next 0100 0000, 0100 0001 <- 0100 0100, high byte
 
                         ;; fill the 48 other cells starting at 0100 0000
@@ -83,11 +83,11 @@
                         (TAY)
                         (CLC)
                         (ADC !$04) ;; next cell at this+4
-                        (STA (temp-ptr-1),y) ;; point to next cell
+                        (STA (temp_ptr_1),y) ;; point to next cell
                         (TAX) ;; keep ptr to next cell in x
                         (INY)
-                        (LDA temp-ptr-1-high)
-                        (STA (temp-ptr-1),y) ;; point to next cell high byte
+                        (LDA temp_ptr_1_high)
+                        (STA (temp_ptr_1),y) ;; point to next cell high byte
                         (CPX !$FC) ;; was last cell to point to next
                         
                         (BNE _loop_init_cons)
@@ -100,7 +100,9 @@
   (require "../../ast/6510-assembler.rkt")
 
   (define org 2064)
-  (define program (append (list (LDA !$c0)) MILRT_INIT_CONS_CELL_PAGE_C MILRT_INIT_CONS_CELL_PAGE))
+  (define program (append (list (LDA !$c0))
+                          MILRT_INIT_CONS_CELL_PAGE_C
+                          MILRT_INIT_CONS_CELL_PAGE))
 
   ;; ensure that all cons-cells LSR two times point to the ref count cell
   (check-equal? (arithmetic-shift #x04 -2) #x01)
