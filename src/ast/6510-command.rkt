@@ -39,13 +39,16 @@
 
 (define (ast-unresolved-command? command)
   (or (ast-unresolved-rel-opcode-cmd? command)
-     (ast-unresolved-opcode-cmd? command)))
+     (ast-unresolved-opcode-cmd? command)
+     (ast-unresolved-bytes-cmd? command)))
 
 (define (ast-unresolved-command-resolve-sub-command command)
   (cond [[ast-unresolved-opcode-cmd? command]
          (ast-unresolved-opcode-cmd-resolve-sub-command command)]
         [[ast-unresolved-rel-opcode-cmd? command]
          (ast-unresolved-rel-opcode-cmd-resolve-sub-command command)]
+        [(ast-unresolved-bytes-cmd? command)
+         (ast-unresolved-bytes-cmd-resolve-sub-command command)]
         [else (raise-user-error "unknown unresolved ast command")]))
 
 ;; generic root of all ast commands

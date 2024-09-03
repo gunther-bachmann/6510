@@ -351,7 +351,7 @@
 (define/c (indirect-y-addressing? addressing-modes-stx op-stx1 op-stx2)
   (-> syntax? syntax? syntax? boolean?)
   (and (has-addressing-mode? 'indirect-y (syntax->datum addressing-modes-stx))
-     (list (syntax->datum op-stx1))
+     (list? (syntax->datum op-stx1))
      (possibly-byte-operand? (car (syntax->datum op-stx1)))
      (equal? (syntax->datum op-stx2) ',y)))
 

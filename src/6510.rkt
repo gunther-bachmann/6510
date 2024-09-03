@@ -40,7 +40,7 @@
 (provide (all-from-out "ops/6510.subroutine-ops.rkt"))
 (provide (all-from-out "ops/6510.stack-ops.rkt"))
 
-(provide label word-ref word-const byte-const byte word asc provide-byte provide-word require-byte require-word) ;; meta commands
+(provide label byte-ref word-ref word-const byte-const byte word asc provide-byte provide-word require-byte require-word) ;; meta commands
 
 (provide (all-from-out "scheme-asm/6510-addressing-utils.rkt"))
 
@@ -211,6 +211,23 @@
   (check-equal? (word-ref some+4 some+2)
                 (list (ast-unresolved-bytes-cmd '() '()  (ast-resolve-word-scmd "some+4"))
                       (ast-unresolved-bytes-cmd '() '()  (ast-resolve-word-scmd "some+2")))))
+
+(define-syntax (byte-ref stx)
+  (syntax-case stx ()
+    ([_ ref ...]
+     #'(list (ast-unresolved-bytes-cmd
+              '() '()
+              (ast-resolve-byte-scmd (string-replace (->string #'ref) #rx"^[><]" "")
+                                     (cond [(string-prefix? (->string #'ref) ">") 'high-byte]
+                                           [else 'low-byte]))) ...))))
+
+(module+ test #| byte-ref |#
+  (check-equal? (byte-ref >some)
+                (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-byte-scmd "some" 'high-byte))))
+  (check-equal? (byte-ref <some)
+                (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-byte-scmd "some" 'low-byte))))
+  (check-equal? (byte-ref some)
+                (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-byte-scmd "some" 'low-byte)))))
 
 (define-syntax (word stx)
   (syntax-case stx ()

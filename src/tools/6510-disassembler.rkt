@@ -13,17 +13,19 @@
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "../6510-utils.rkt")
 (require (only-in "6510-interpreter.rkt"
+                  6510-load
                   cpu-state?
+                  initialize-cpu
                   with-program-counter
                   cpu-state-program-counter
                   peek-pc
                   peek-pc+1
                   peek-word-at-pc+1))
 
-(provide disassemble disassemble-single code-bytes)
+(provide disassemble-bytes disassemble disassemble-single code-bytes)
 
 (module+ test #| rackunit |#
-  (require (only-in "6510-interpreter.rkt" poke with-flags initialize-cpu))
+  (require (only-in "6510-interpreter.rkt" poke with-flags initialize-cpu 6510-load))
   (require rackunit))
 
 (module+ test #| disassemble |#
@@ -42,14 +44,25 @@
       (string-join (list byte (code-bytes state (add1 address) (sub1 len))) " ")
       byte))
 
+(define/c (disassemble-bytes org bytes)
+  (-> word/c (listof byte/c) (listof string?))
+  (string-split (disassemble (6510-load (initialize-cpu) org bytes) org 1000 (sub1 (+ org (length bytes))) #t) "\n"))
+
+(module+ test #| disassemble-bytes |#
+  (check-equal? (disassemble-bytes 2048 '(169 0 168))
+                (list "LDA #$00" "TAY")))
+
 ;; disassemble lines instructions
-(define/c (disassemble state [address (cpu-state-program-counter state)] [lines 1])
-  (->* (cpu-state?) (word/c word/c) string?)
-  (let-values (((str len) (disassemble-single state address)))
+(define/c (disassemble state [address (cpu-state-program-counter state)] [lines 1] [max-address #xffff] [short #f])
+  (->* (cpu-state?) (word/c word/c word/c boolean?) string?)
+  (let-values (((str len) (disassemble-single state address short)))
     (define code-byte-str (code-bytes state address len))
-    (define formatted-str (format "~a ~a\t~a" (word->hex-string address) (~a code-byte-str #:width 8) str))
-    (if (> lines 1)
-        (string-join (list formatted-str (disassemble state (+ address len) (sub1 lines))) "\n")
+    (define formatted-str
+      (if short
+          str
+          (format "~a ~a\t~a" (word->hex-string address) (~a code-byte-str #:width 8) str)))
+    (if (and (> lines 1) (< address max-address))
+        (string-join (list formatted-str (disassemble state (+ address len) (sub1 lines) max-address short)) "\n")
         formatted-str)))
 
 ;; hex string of byte at memory address pc points to
@@ -68,17 +81,19 @@
   (word->hex-string (peek-word-at-pc+1 state)))
 
 ;; format the disassembled relative branch 
-(define/c (format-relative-branch state branch-mnemonic)
-  (-> cpu-state? string? string?)
-  (format "~a $~a (->$~a)" branch-mnemonic
-          (byte-at-pc+1 state)
-          (word->hex-string (+ 2 (cpu-state-program-counter state)
-                              (decimal-from-two-complement
-                               (peek-pc+1 state))))))
+(define/c (format-relative-branch state branch-mnemonic short)
+  (-> cpu-state? string? boolean? string?)
+  (if short
+      (format"~a $~a" branch-mnemonic (byte-at-pc+1 state))
+      (format "~a $~a (->$~a)" branch-mnemonic
+              (byte-at-pc+1 state)
+              (word->hex-string (+ 2 (cpu-state-program-counter state)
+                                  (decimal-from-two-complement
+                                   (peek-pc+1 state)))))))
 
 ;; disassemble a single instruction at pc (default), returning disassembled string and byte length of command
-(define/c (disassemble-single state [address (cpu-state-program-counter state)])
-  (->* (cpu-state?) (word/c) (values string? byte/c))
+(define/c (disassemble-single state [address (cpu-state-program-counter state)] [short #f])
+  (->* (cpu-state?) (word/c boolean?) (values string? byte/c))
   (define use-state (with-program-counter state address))
   (case (peek-pc use-state)
     [(#x00) (values "BRK" 1)]
@@ -97,7 +112,7 @@
     [(#x0d) (values (format "ORA $~a" (word-at-pc+1 use-state)) 3)]
     [(#x0e) (values (format "ASL $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x0f -io SLO abs
-    [(#x10) (values (format-relative-branch use-state "BPL") 2)]
+    [(#x10) (values (format-relative-branch use-state "BPL" short) 2)]
     [(#x11) (values (format "ORA ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x12 -io KIL
     ;; #x13 -io SLO izy
@@ -129,7 +144,7 @@
     [(#x2d) (values (format "AND $~a" (word-at-pc+1 use-state)) 3)]
     [(#x2e) (values (format "ROL $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x2f -io RIA abs
-    [(#x30) (values (format-relative-branch use-state "BMI") 2)]
+    [(#x30) (values (format-relative-branch use-state "BMI" short) 2)]
     [(#x31) (values (format "AND ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x32 -io KIL
     ;; #x33 -io RIA izy
@@ -161,7 +176,7 @@
     [(#x4d) (values (format "EOR $~a" (word-at-pc+1 use-state)) 3)]
     [(#x4e) (values (format "LSR $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x4f -io SRE abs
-    [(#x50) (values (format-relative-branch use-state "BVC") 2)]
+    [(#x50) (values (format-relative-branch use-state "BVC" short) 2)]
     [(#x51) (values (format "EOR ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x52 -io KIL
     ;; #x53 -io SRE izy
@@ -193,7 +208,7 @@
     [(#x6d) (values (format "ADC $~a" (word-at-pc+1 use-state)) 3)]
     [(#x6e) (values (format "ROR $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x6f -io RRA abs
-    [(#x70) (values (format-relative-branch use-state "BVS") 2)]
+    [(#x70) (values (format-relative-branch use-state "BVS" short) 2)]
     [(#x71) (values (format "ADC ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
@@ -225,7 +240,7 @@
     [(#x8d) (values (format "STA $~a" (word-at-pc+1 use-state)) 3)]
     [(#x8e) (values (format "STX $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x8f -io SAX abs
-    [(#x90) (values (format-relative-branch use-state "BCC") 2)]
+    [(#x90) (values (format-relative-branch use-state "BCC" short) 2)]
     [(#x91) (values (format "STA ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #x92 -io KIL
     ;; #x93 -io AHX izy
@@ -257,7 +272,7 @@
     [(#xad) (values (format "LDA $~a" (word-at-pc+1 use-state)) 3)]
     [(#xae) (values (format "LDX $~a" (word-at-pc+1 use-state)) 3)]
     ;; #xaf -io LAX abs
-    [(#xb0) (values (format-relative-branch use-state "BCS") 2)]
+    [(#xb0) (values (format-relative-branch use-state "BCS" short) 2)]
     [(#xb1) (values (format "LDA ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #xb2 -io KIL
     ;; #xb3 -io LAX izy
@@ -289,7 +304,7 @@
     [(#xcd) (values (format "CMP $~a" (word-at-pc+1 use-state)) 3)]
     [(#xce) (values (format "DEC $~a" (word-at-pc+1 use-state)) 3)]
     ;; #xcf -io DCP abs
-    [(#xd0) (values (format-relative-branch use-state "BNE") 2)]
+    [(#xd0) (values (format-relative-branch use-state "BNE" short) 2)]
     [(#xd1) (values (format "CMP ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #xd2 -io KIL
     ;; #xd3 -io DCP izy
@@ -321,7 +336,7 @@
     [(#xed) (values (format "SBC $~a" (word-at-pc+1 use-state)) 3) ]
     [(#xee) (values (format "INC $~a" (word-at-pc+1 use-state)) 3)]
     ;; #xef -io ISC abs
-    [(#xf0) (values (format-relative-branch use-state "BEQ") 2)]
+    [(#xf0) (values (format-relative-branch use-state "BEQ" short) 2)]
     [(#xf1) (values (format "SBC ($~a),y" (byte-at-pc+1 use-state)) 2)]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy

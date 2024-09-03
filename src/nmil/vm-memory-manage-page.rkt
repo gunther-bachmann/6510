@@ -5,17 +5,20 @@
 (require (only-in "../ast/6510-resolver.rkt" commands->bytes))
 (require (only-in "../ast/6510-assembler.rkt" assemble))
 (require (only-in racket/list flatten take))
+(require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
 
 (module+ test
   (require "../6510-test-utils.rkt")
   (require (only-in "../tools/6510-interpreter.rkt" memory-list run-interpreter cpu-state-accumulator)))
 
 ;; constants that are used by the assembler code
-(define VM_ALLOC_PAGE_C
+(define VM_MEMORY_MANAGEMENT_CONSTANTS
   (list
    ;; page type list-pair-cells
-   (byte-const PT_LIST_PAIR_CELLS #x00)
-   (byte-const PT_CALL_STACK      #x02)))
+   (byte-const PT_LIST_PAIR_CELLS  #x00)
+   (byte-const PT_CALL_STACK       #x01)
+   (byte-const NEXT_FREE_PAGE_PAGE #xcf) ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
+   ))
 
 ;; jump table  page-type->allocation method
 (define VM_ALLOC_PAGE_JUMP_TABLE
@@ -26,15 +29,35 @@
     (label VM_ALLOC_PAGE__CALL_STACK_JT)
            (word-ref VM_ALLOC_PAGE__CALL_STACK))))
 
+;; initialize memory management (paging)
+;; - setup 'next free page' information, basically initializing the whole page with zeros
+;;
+;; destroys: A Y
+(define VM_INITIALIZE_MM_PAGE
+  (flatten
+   (list
+    (label VM_INITIALIZE_MM_PAGE)
+           (LDA !0)
+           (TAY)
+    (label VM_INITIALIZE_MM_PAGE__LOOP)
+           ;; highbyte of this address should be using the constant NEXT_FREE_PAGE_PAGE
+           ;; (STA $cf00,y) ;; encoded directly in the next couple of bytes
+           (byte 153 0) (byte-ref NEXT_FREE_PAGE_PAGE)
+           (INY)
+           (BNE VM_INITIALIZE_MM_PAGE__LOOP)
+           (RTS))))
+
 ;; parameter:
-;;   Y = page-type to allocate (see constants)
+;;   A = page-type to allocate (see constants)
 ;;       (00 = fixed slot size list-pair-cells,
-;;        02 = variable slot size native arrays for call-stack)
+;;        01 = variable slot size native arrays for call-stack)
 ;; result:
 ;;   A = allocated page
 (define VM_ALLOC_PAGE
   (list
    (label VM_ALLOC_PAGE)
+          (ASL A)
+          (TAY)
           (LDA VM_ALLOC_PAGE__LIST_PAIR_CELLS_JT+1,y) ;; high byte from jump table
           (STA VM_ALLOC_PAGE__JT+2)                   ;; write high byte of jump target
           (LDA VM_ALLOC_PAGE__LIST_PAIR_CELLS_JT,y)   ;; low byte from jump table
@@ -132,16 +155,17 @@
 (module+ test #| VM_ALLOC_PAGE |#
   (define org #x2068)
   (define program (append (list)
-                          VM_ALLOC_PAGE_JUMP_TABLE
-                          VM_ALLOC_PAGE
-                          VM_ALLOC_PAGE__LIST_PAIR_CELLS
-                          VM_ALLOC_PAGE__CALL_STACK))
-  (check-equal? (take (assemble org program) 19)
-                (list 123 32
-                      202 32
-
-                      185 105 32
-                      141 122 32
-                      185 104 32
-                      141 121 32
-                      76 0 0)))
+                          VM_MEMORY_MANAGEMENT_CONSTANTS
+                          VM_INITIALIZE_MM_PAGE
+                          ;; VM_ALLOC_PAGE_JUMP_TABLE
+                          ;; VM_ALLOC_PAGE
+                          ;; VM_ALLOC_PAGE__LIST_PAIR_CELLS
+                          ;; VM_ALLOC_PAGE__CALL_STACK
+                          ))
+  (check-equal? (disassemble-bytes org (take (assemble org program) 10))
+                (list "LDA #$00"
+                      "TAY"
+                      "STA $cf00,y"
+                      "INY"
+                      "BNE $fa"
+                      "RTS")))

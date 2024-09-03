@@ -32,7 +32,10 @@
          (ast-opcode-cmd (ast-command-meta-information command) (append (ast-opcode-cmd-bytes command) res-byte-list))]
         [(ast-unresolved-rel-opcode-cmd? command)
          (ast-rel-opcode-cmd (ast-command-meta-information command) (append (ast-rel-opcode-cmd-bytes command) res-byte-list))]
-        [else (raise-user-error "unknown unresolved command")]))
+         ;; really?
+        [(ast-unresolved-bytes-cmd? command)
+         (ast-bytes-cmd (ast-command-meta-information command) (append (ast-bytes-cmd-bytes command) res-byte-list))]
+        [else (raise-user-error (format "unknown unresolved command ~a" command))]))
 
 ;; append the low and highbyte of value to the command opcode
 (define/c (word-constant->command command value)
@@ -99,15 +102,6 @@
                 '#hash(("some" . #x30)
                        ("other" . #x3020))))
 
-;; get the sub command from an unresolved (rel) opcode command
-(define/c (ast-unresolved-command-res command)
-  (-> ast-command? ast-resolve-sub-cmd?)
-  (cond [(ast-unresolved-opcode-cmd? command)
-         (ast-unresolved-opcode-cmd-resolve-sub-command command)]
-        [(ast-unresolved-rel-opcode-cmd? command)
-         (ast-unresolved-rel-opcode-cmd-resolve-sub-command command)]
-        [else (raise-user-error "unknown unresolved command")]))
-
 ;; resolve all constants in commands into result using the constants hash
 (define/c (-resolve-constants result constants commands)
   (-> (listof ast-command?) hash? (listof ast-command?) (listof ast-command?))
@@ -115,7 +109,7 @@
       result
       (let* ((command (car commands))
              (res     (if (ast-unresolved-command? command)
-                          (ast-unresolved-command-res command)
+                          (ast-unresolved-command-resolve-sub-command command)
                           #t))
              (next-result
               (cond [(ast-resolve-word-scmd? res)
