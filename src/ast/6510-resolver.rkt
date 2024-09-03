@@ -395,11 +395,11 @@
   (-> ast-command? (listof byte/c))
   (cond
     [(ast-unresolved-bytes-cmd? instruction)
-     (raise-user-error (format "cannot resolve unresolved command to bytes ~a" instruction))]
+     (raise-user-error (format "cannot resolve unresolved bytes command to bytes ~a" instruction))]
     [(ast-unresolved-command? instruction)
-     (raise-user-error "cannot resolve unresolved command to bytes ~a" instruction)]
+     (raise-user-error (format "cannot resolve unresolved command to bytes ~a" instruction))]
     [(ast-decide-cmd? instruction)
-     (raise-user-error "cannot resolve undecided command to bytes ~a" instruction)]
+     (raise-user-error (format "cannot resolve undecided command to bytes ~a" instruction))]
     [(ast-opcode-cmd? instruction)
      (ast-opcode-cmd-bytes instruction)]
     [(ast-rel-opcode-cmd? instruction)
@@ -410,7 +410,7 @@
     [(ast-require? instruction) '()]
     [(ast-provide? instruction) '()]
     [(ast-label-def-cmd? instruction) '()]
-    [else (raise-user-error "cannot resolve instruction to bytes ~a" instruction)]))
+    [else (raise-user-error (format "cannot resolve instruction to bytes ~a" instruction))]))
 
 (define/c (-resolved-program->bytes program resolved)
   (-> (listof ast-command?) (listof byte/c) (listof byte/c))
@@ -485,6 +485,7 @@
 
 ;; translate raw program COMMANDS with possibly undecided decisions
 ;; to resolved program bytes at MEMORY-ADDRESS
+;; this step does not resolve any constants (see assemble in 6510-assembler.rkt)
 (define/c (commands->bytes memory-address commands )
   (-> word/c (listof ast-command?) (listof byte/c))
   (define resolved-decisions (->resolved-decisions (label-instructions commands) commands))

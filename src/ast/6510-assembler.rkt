@@ -22,6 +22,7 @@
 ;; take a list of ast-command s and translate them to raw bytes
 ;; make sure that everything is resolved and decided such that
 ;; each instruction can be "assembled"
+;; this command is complete as it decides, resolves labels, resolves constants and generates bytecode
 (define/contract (assemble org program)
   (-> word/c (listof ast-command?) (listof byte/c))
   (define program-p1 (->resolved-decisions (label-instructions program) program))
