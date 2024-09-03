@@ -19,7 +19,9 @@
          label-instructions
          ->resolve-labels
          resolved-program->bytes
-         commands->bytes)
+         commands->bytes
+         label-label
+         label-offset)
 
 ;; is this instruction introducing a label referencing a byte value (e.g. constant def)?
 (define/c (byte-label-cmd? instruction)

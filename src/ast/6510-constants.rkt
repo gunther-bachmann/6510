@@ -18,6 +18,7 @@
 
 (require "6510-command.rkt")
 (require (only-in "../6510-utils.rkt" high-byte low-byte byte/c word/c))
+(require (only-in "./6510-resolver.rkt" label-label label-offset))
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (provide constant-definitions-hash resolve-constants)
@@ -55,19 +56,21 @@
 ;; resolve the label in constants appending the word value to the opcode command
 (define/c (resolve-known-word->command label constants command)
   (-> string? hash? ast-command? ast-command?)
-  (let* ((value (hash-ref constants label #f)))
+  (let* ((value (hash-ref constants (label-label label) #f))
+         (offset (label-offset label)))
     (if value
-        (word-constant->command command value)
+        (word-constant->command command (+ offset value))
         command)))
 
 ;; resolve a single label in constants using hilo-ind in this single command
 (define/c (resolve-known-byte->command label hilo-ind constants command)
   (-> string? (or/c 'high-byte 'low-byte 'relative) hash? ast-command? ast-command?)
-  (let* ((value (hash-ref constants label #f)))
+  (let* ((value (hash-ref constants (label-label label) #f))
+         (offset (label-offset label)))
     (cond [(and value (eq? hilo-ind 'high-byte))
-           (hibyte-constant->command command value)]
+           (hibyte-constant->command command (+ offset value))]
           [value
-           (lobyte-constant->command command value)]
+           (lobyte-constant->command command (+ offset value))]
           [else command])))
 
 ;; get all constant defining commands from the list
