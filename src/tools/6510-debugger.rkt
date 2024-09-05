@@ -38,7 +38,7 @@
                   6510-debugger--has-proc-display-cap))
 (require "6510-debugger-shared.rkt")
 
-(provide run-debugger)
+(provide run-debugger run-debugger-on)
 
 (module+ test
   (require threading)
@@ -429,18 +429,12 @@ EOF
     (6510-debugger--remove-all-addresses-on-source file-name)))
 
 ;; run an read eval print loop debugger on the passed program
-(define/c (run-debugger org program (file-name "") (verbose #t))
-  (->* [word/c (listof (or/c byte/c ast-command?))] [string? boolean?] any/c)
-  (define raw-bytes (if (ast-command? (car program))
-                        (assemble org program)
-                        program))
+(define/c (run-debugger-on state (file-name "") (verbose #t))
+  (->* [cpu-state?] [string? boolean?] any/c)
   (define capabilities (collect-emacs-capabilities file-name))
-  (when verbose
-    (displayln (format "loading program into debugger at ~a" org))
-    (displayln "enter '?' to get help, enter 'q' to quit"))
   (define file-does-exist (and (non-empty-string? file-name) (file-exists? file-name)))
   (define d-state
-    (debug-state (list (6510-load (initialize-cpu) org raw-bytes))
+    (debug-state (list state)
                  '()
                  (if file-does-exist
                    (load-source-map file-name)
@@ -454,6 +448,16 @@ EOF
   (run-debugger--repl d-state capabilities)
   (when file-does-exist
     (run-debugger--cleanup-emacs-integration capabilities file-name)))
+
+(define/c (run-debugger org program (file-name "") (verbose #t))
+  (->* [word/c (listof (or/c byte/c ast-command?))] [string? boolean?] any/c)
+  (define raw-bytes (if (ast-command? (car program))
+                        (assemble org program)
+                        program))
+  (when verbose
+    (displayln (format "loading program into debugger at ~a" org))
+    (displayln "enter '?' to get help, enter 'q' to quit"))
+  (run-debugger-on (6510-load (initialize-cpu) org raw-bytes) file-name verbose))
 
 ;; execute the debugger repl
 (define/c (run-debugger--repl initial-d-state capabilities)

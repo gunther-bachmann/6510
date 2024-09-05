@@ -64,6 +64,7 @@
   (require rackunit))
 
 (provide 6510-load
+         6510-load-multiple
          execute-cpu-step
          initialize-cpu
          memory->string
@@ -391,6 +392,23 @@
 (module+ test #| peek and poke |#
   (check-match (peek (poke (initialize-cpu) #xc000 17) #xc000)
                17))
+
+;; code-list is a list of pairs
+;; each pair being the memory location to write to
+;;                 and the list of raw bytes to write
+;; last pair sets the pc
+(define/c (6510-load-multiple state code-list)
+  (-> cpu-state? (listof pair?) cpu-state?)
+  (foldl (lambda (lstate code)
+           (6510-load lstate (car code) (cdr code)))
+         state
+         code-list))
+
+(module+ test #| 6510-load-multiple |#
+  (check-equal? (memory->string 10 13 (6510-load-multiple (initialize-cpu) '((10 . (#x00 #x10)) (12 . (#x41 #x11)))))
+                "000a 00 10 41 11  ..A.")
+  (check-equal? (cpu-state-program-counter (6510-load-multiple (initialize-cpu) '((10 . (#x00 #x10)) (12 . (#x41 #x11)))))
+                12))
 
 ;; load program into memory using the 6510 state
 (define/c (6510-load state memory-address program)
