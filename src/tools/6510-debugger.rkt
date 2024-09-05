@@ -392,7 +392,7 @@ EOF
   (-> string? emacs-capabilities?)
   (emacs-capabilities
    (6510-debugger--has-proc-display-cap)
-   (6510-debugger--has-single-step-cap file-name)
+   (and (non-empty-string? file-name) (file-exists? file-name) (6510-debugger--has-single-step-cap file-name))
    (6510-debugger--has-output-cap)))
 
 (define/c (run-debugger--prepare-emacs-integration capabilities file-name d-state)
@@ -438,17 +438,22 @@ EOF
   (when verbose
     (displayln (format "loading program into debugger at ~a" org))
     (displayln "enter '?' to get help, enter 'q' to quit"))
+  (define file-does-exist (and (non-empty-string? file-name) (file-exists? file-name)))
   (define d-state
     (debug-state (list (6510-load (initialize-cpu) org raw-bytes))
                  '()
-                 (load-source-map file-name)
+                 (if file-does-exist
+                   (load-source-map file-name)
+                   (hash))
                  (if (emacs-capabilities-output capabilities)
                      6510-debugger--print-string
                      debugger-output-function)))
 
-  (run-debugger--prepare-emacs-integration capabilities file-name d-state)
+  (when file-does-exist
+    (run-debugger--prepare-emacs-integration capabilities file-name d-state))
   (run-debugger--repl d-state capabilities)
-  (run-debugger--cleanup-emacs-integration capabilities file-name))
+  (when file-does-exist
+    (run-debugger--cleanup-emacs-integration capabilities file-name)))
 
 ;; execute the debugger repl
 (define/c (run-debugger--repl initial-d-state capabilities)
