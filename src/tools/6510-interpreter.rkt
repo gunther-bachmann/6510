@@ -80,6 +80,7 @@
          reset-cpu
          run
          run-interpreter
+         run-interpreter-on
          set-brk-flag clear-brk-flag
          set-carry-flag clear-carry-flag
          set-decimal-flag clear-decimal-flag
@@ -399,16 +400,18 @@
 ;; last pair sets the pc
 (define/c (6510-load-multiple state code-list)
   (-> cpu-state? (listof pair?) cpu-state?)
-  (foldl (lambda (lstate code)
-           (6510-load lstate (car code) (cdr code)))
-         state
-         code-list))
+  (with-program-counter
+    (foldl (lambda (lstate code)
+             (6510-load lstate (car code) (cdr code)))
+           state
+           code-list)
+    (caar code-list)))
 
 (module+ test #| 6510-load-multiple |#
   (check-equal? (memory->string 10 13 (6510-load-multiple (initialize-cpu) '((10 . (#x00 #x10)) (12 . (#x41 #x11)))))
                 "000a 00 10 41 11  ..A.")
   (check-equal? (cpu-state-program-counter (6510-load-multiple (initialize-cpu) '((10 . (#x00 #x10)) (12 . (#x41 #x11)))))
-                12))
+                10))
 
 ;; load program into memory using the 6510 state
 (define/c (6510-load state memory-address program)
@@ -2600,6 +2603,17 @@
     (check-false (zero-flag? result) "zero flag is false since ($7f + 1) != $00")
     (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")))
 
+;; run the interpreter on the given cpu state
+(define/c (run-interpreter-on state (verbose #t) (string-output-function interpreter-output-function))
+  (->* [cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
+  ;; (collect-garbage)
+  ;; (displayln (format "memory: ~a" (current-memory-use)))
+  (begin0
+      (run state verbose string-output-function)
+    ;; (collect-garbage)
+    ;; (displayln (format "\nmemory: ~a" (current-memory-use)))
+    (when verbose (displayln "program execution done."))))
+
 ;; put the raw bytes into memory (at org) and start running at org
 (define/c (run-interpreter org program (verbose #t) (string-output-function interpreter-output-function))
   (->* [word/c (listof (or/c byte/c ast-command?))] [boolean? (-> string? any/c)] cpu-state?)
@@ -2608,11 +2622,5 @@
   (define raw-bytes (if (ast-command? (car program))
                         (assemble org program)
                         program))
-  ;; (collect-garbage)
-  ;; (displayln (format "memory: ~a" (current-memory-use)))
   (define state (6510-load (initialize-cpu) org raw-bytes))
-  (begin0
-      (run (with-program-counter state org) verbose string-output-function)
-    ;; (collect-garbage)
-    ;; (displayln (format "\nmemory: ~a" (current-memory-use)))
-    (when verbose (displayln "program execution done."))))
+  (run-interpreter-on state verbose string-output-function))

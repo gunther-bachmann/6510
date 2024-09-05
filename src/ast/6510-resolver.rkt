@@ -338,7 +338,9 @@
   (if (empty? program)
       resolved-program
       (let* ((instruction  (car program))
-             (next-offset  (+ offset (command-len instruction)))
+             (next-offset (if (ast-org-command? instruction)
+                              (ast-org-command-org instruction)
+                              (+ offset (command-len instruction))))
              (resolved-cmd (cond [(ast-unresolved-opcode-cmd? instruction)
                                   (resolve-opcode-cmd instruction labels)]
                                  [(ast-unresolved-rel-opcode-cmd? instruction)
@@ -376,6 +378,7 @@
          (ast-unresolved-opcode-cmd '(#:test) '(30) (ast-resolve-word-scmd "unknown"))
          (ast-opcode-cmd '(#:test) '(30 #x13 #x00))
          (ast-opcode-cmd '(#:test) '(30 #x0F #x00))))
+
   (check-equal?
    (->resolve-labels 0 '#hash(("sout" . 3))
                     (list (ast-unresolved-opcode-cmd '(#:test) '(174) (ast-resolve-word-scmd "sout"))
@@ -390,7 +393,20 @@
          (ast-opcode-cmd '(#:test) '(189 3 0) )
          (ast-opcode-cmd '(#:test) '(#x20 #xd2 #xff))
          (ast-opcode-cmd '(#:test) '(202))
-         (ast-rel-opcode-cmd '(#:test) '(208 247)))))
+         (ast-rel-opcode-cmd '(#:test) '(208 247))))
+
+  (check-equal?
+   (->resolve-labels 0 '#hash(("sout" . 3)) ;; sout is at position 3
+                    (list (ast-unresolved-opcode-cmd '(#:test) '(174) (ast-resolve-word-scmd "sout"))
+                          (ast-label-def-cmd '(#:test) "sout")
+                          (ast-org-command '() 10)
+                          (ast-unresolved-rel-opcode-cmd '(#:test) '(208) (ast-resolve-byte-scmd "sout" 'low-byte)))
+                    '())
+   (list (ast-opcode-cmd '(#:test) '(174 3 0))
+         (ast-label-def-cmd '(#:test) "sout")
+         (ast-org-command '() 10)
+         (ast-rel-opcode-cmd '(#:test) '(208 247)))
+   "the last relative opcode command needs to jump over to the previous code section (org-command)"))
 
 
 (define/c (resolved-instruction->bytes instruction)

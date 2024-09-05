@@ -10,6 +10,7 @@
 
 (provide (struct-out ast-program)
          (struct-out ast-command)
+         (struct-out ast-org-command)
          (struct-out ast-decide-cmd)
          (struct-out ast-resolve-sub-cmd)
          (struct-out ast-resolve-word-scmd)
@@ -51,11 +52,18 @@
          (ast-unresolved-bytes-cmd-resolve-sub-command command)]
         [else (raise-user-error "unknown unresolved ast command")]))
 
+
 ;; generic root of all ast commands
 (struct ast-command
   (meta-information) ;; keyword value? list (optional value depending on keyword)
   #:transparent
   #:guard (struct-guard/c list?))
+
+;; command to define the location for the following code
+(struct ast-org-command ast-command
+  (org)
+  #:transparent
+  #:guard (struct-guard/c list? word/c))
 
 ;; a complete program (module) of 6510 assembler code
 (struct ast-program

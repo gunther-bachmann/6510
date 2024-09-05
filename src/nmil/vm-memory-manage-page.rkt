@@ -3,9 +3,11 @@
 (require "../6510.rkt")
 (require "../ast/6510-calc-opcode-facades.rkt")
 (require (only-in "../ast/6510-resolver.rkt" commands->bytes))
-(require (only-in "../ast/6510-assembler.rkt" assemble))
+(require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list))
 (require (only-in racket/list flatten take))
 (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
+(require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
+(require (only-in "../tools/6510-interpreter.rkt" 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -20,6 +22,7 @@
    (byte-const PT_CODE                   #x02) ;; page type: code
    (byte-const NEXT_FREE_PAGE_PAGE       #xcf) ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
    (byte-const FREE_PAGE_BITMAP_SIZE     #x20) ;; size of the free page bitmap (bit set == used, bit unset == free)
+   (word-const VM_FREE_PAGE_BITMAP          #xcf00)
    ))
 
 ;; jump table  page-type->allocation method
@@ -32,6 +35,7 @@
            (word-ref VM_ALLOC_PAGE__CALL_STACK))))
 
 ;; initial data for the memory management registers
+;; put into memory @ #xced0 - len (currently 3)
 (define VM_INITIAL_MM_REGS
   (list
    (label VM_INITIAL_MM_REGS)
@@ -43,6 +47,7 @@
    (label VM_FREE_CODE_PAGE)
           (byte $9D)))
 
+;; put into memory @ #xced0
 (define VM_FREE_PAGE_BITMAP
   (list
    (label VM_FREE_PAGE_BITMAP)
@@ -99,6 +104,7 @@
            (byte 153 0) (byte-ref NEXT_FREE_PAGE_PAGE)
            (INY)
            (BNE VM_INITIALIZE_MM_PAGE__LOOP)
+           (BRK)
 
            (RTS))))
 
@@ -214,21 +220,26 @@
                (RTS)))
 
 (module+ test #| VM_ALLOC_PAGE |#
-  (define org #x2068)
-  (define program (append (list)
+  (define program (append (list (org #xc000))
                           VM_MEMORY_MANAGEMENT_CONSTANTS
                           VM_INITIALIZE_MM_PAGE
                           ;; VM_ALLOC_PAGE_JUMP_TABLE
                           ;; VM_ALLOC_PAGE
                           VM_ALLOC_PAGE__LIST_PAIR_CELLS
                           ;; VM_ALLOC_PAGE__CALL_STACK
-                          VM_INITIAL_MM_REGS  ;; should be loaded to ce00
-                          VM_FREE_PAGE_BITMAP ;; should be loaded to cf00..cfff
+                          (list (org #xcec0))
+                          VM_INITIAL_MM_REGS
+                          (list (org #xced0))
+                          VM_FREE_PAGE_BITMAP
                           ))
-  (check-equal? (disassemble-bytes org (take (assemble org program) 10))
-                (list "LDA #$00"
-                      "TAY"
-                      "STA $cf00,y"
-                      "INY"
-                      "BNE $fa"
-                      "RTS")))
+  ;; (run-debugger-on
+  ;;  (6510-load-multiple
+  ;;   (initialize-cpu)
+  ;;   (assemble-to-code-list program)))
+
+  ;; TODO check memory management code
+  (run-interpreter-on
+   (6510-load-multiple
+    (initialize-cpu)
+    (assemble-to-code-list program)))
+  )

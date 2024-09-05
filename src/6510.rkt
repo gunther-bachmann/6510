@@ -40,7 +40,7 @@
 (provide (all-from-out "ops/6510.subroutine-ops.rkt"))
 (provide (all-from-out "ops/6510.stack-ops.rkt"))
 
-(provide label byte-ref word-ref word-const byte-const byte word asc provide-byte provide-word require-byte require-word) ;; meta commands
+(provide org label byte-ref word-ref word-const byte-const byte word asc provide-byte provide-word require-byte require-word) ;; meta commands
 
 (provide (all-from-out "scheme-asm/6510-addressing-utils.rkt"))
 
@@ -53,6 +53,11 @@
 
 ;; https://blog.racket-lang.org/2011/04/writing-syntax-case-macros.html
 ;;--------------------------------------------------------------------------------
+
+(define-syntax (org stx)
+  (syntax-case stx ()
+    ([_ str]
+     #'(ast-org-command '() (syntax->datum #'str)))))
 
 (define-syntax (label stx)
   (syntax-case stx ()
