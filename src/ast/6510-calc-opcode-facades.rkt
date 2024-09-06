@@ -7,7 +7,8 @@
          CMP-immediate
          JMP-absolute
          JSR-absolute
-         LDA-immediate)
+         LDA-immediate
+         LDX-immediate)
 
 (module+ test #| setup |#
   (require "../6510-test-utils.rkt"))
@@ -80,3 +81,7 @@
   (define locally-defined 2)
   (check-equal? (LDA-immediate (+ 1 locally-defined))
                 (ast-opcode-cmd '() (list 169 3))))
+
+(define/contract (LDX-immediate expr)
+  (-> exact-nonnegative-integer? ast-opcode-cmd?)
+  (-pass-expression 'LDX (string-append "!" (number->string expr))))

@@ -26,6 +26,7 @@
 
 (module+ test #| rackunit |#
   (require (only-in "6510-interpreter.rkt" poke with-flags initialize-cpu 6510-load))
+  (require (only-in "../ast/6510-assembler.rkt" translate-code-list-for-basic-loader))
   (require rackunit))
 
 (module+ test #| disassemble |#
@@ -353,3 +354,53 @@
     [(#xfe) (values (format "INC $~a,x" (word-at-pc+1 use-state)) 3)]
     ;; #xff -io ISC abx
     [else (values (format ".data $~a" (byte-at-pc use-state)) 1)]))
+
+(module+ test #| translate-code-list-for-basic-loader |#
+  (check-equal?
+   (disassemble-bytes 2064 (translate-code-list-for-basic-loader '((#xc000 . (#x00)) (#xc100 . (#x00)))))
+   '("JMP $0831"   ;; $0810
+     "BRK"         ;; $0813
+     "BRK"         ;; $0814
+     "STA $0813"   ;; $0815
+     "STX $0814"   ;; $0818
+     "LDY #$00"    ;; $081B
+     "LDA ($fc),y" ;; $081D
+     "STA ($fe),y" ;; $081F
+     "INY"         ;; $0821
+     "DEC $0813"   ;; $0822
+     "BNE $f6"     ;; $0825
+     "INC $ff"     ;; $0827
+     "INC $fd"     ;; $0829
+     "DEC $0814"   ;; $082B
+     "BNE $ed"     ;; $082E
+     "RTS"         ;; $0830
+     "LDA #$00"    ;; $0831
+     "STA $fe"     ;; $0833
+     "LDA #$c0"    ;; $0835
+     "STA $ff"     ;; $0837
+     "LDA #$6c"    ;; $0839
+     "STA $fc"     ;; $083B
+     "LDA #$08"    ;; $083D
+     "STA $fd"     ;; $083F
+     "LDA #$01"    ;; $0841
+     "LDX #$00"    ;; $0843
+     "JSR $0815"   ;; $0845
+     "LDA #$00"    ;; $0848
+     "STA $fe"     ;; $084A
+     "LDA #$c1"    ;; $084C
+     "STA $ff"     ;; $084E
+     "LDA #$6d"    ;; $0850
+     "STA $fc"     ;; $0852
+     "LDA #$08"    ;; $0854
+     "STA $fd"     ;; $0856
+     "LDA #$01"    ;; $0858
+     "LDX #$00"    ;; $085A
+     "JSR $0815"   ;; $085C
+     "LDA #$00"    ;; $085F
+     "STA $086a"   ;; $0861
+     "LDA #$c0"    ;; $0864
+     "STA $086b"   ;; $0866
+     "JMP $0000"   ;; $0869
+     "BRK"         ;; $086C
+     "BRK"         ;; $086D
+     )))
