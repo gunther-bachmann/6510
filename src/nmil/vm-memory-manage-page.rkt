@@ -38,12 +38,15 @@
   (list
    (label VM_INITIAL_MM_REGS)
 
-   (label VM_FREE_CELL_PAGE)
+   (label VM_FREE_CELL_PAGE) ;; cell page with free cells
           (byte $9F)
-   (label VM_FREE_CALL_STACK_PAGE)
+   (label VM_FREE_CALL_STACK_PAGE) ;; call stack page with free space
           (byte $9E)
-   (label VM_FREE_CODE_PAGE)
-          (byte $9D)))
+   (label VM_FREE_CODE_PAGE) ;; code page with free space
+          (byte $9D)
+   (label VM_HIGHES_PAGE_FOR_ALLOC_SEARCH) ;; what is the highest page to start searching for a free page
+          (byte $FF)) ;; safe to start with $FF even though $CE is faster
+  )
 
 ;; put into memory @ #xced0
 (define VM_FREE_PAGE_BITMAP
@@ -138,6 +141,12 @@
   (list
    (label VM_FREE_PAGE)
           (PHA)
+
+          (CMP VM_HIGHES_PAGE_FOR_ALLOC_SEARCH) ;; check for max of highest page #
+          (BMI VM_FREE_PAGE__CONTINUE)
+          (STA VM_HIGHES_PAGE_FOR_ALLOC_SEARCH) ;; store new max
+
+   (label VM_FREE_PAGE__CONTINUE)
           (LSR)
           (LSR)
           (LSR)
@@ -165,10 +174,18 @@
 
           ;; ALLOCATE_NEW_PAGE: ;; return A = page idx
           ;; (STY TEMP_TYPE) ;; NOT USED
-          (LDY !FREE_PAGE_BITMAP_SIZE-1) ;; TODO: instead get current highest index (may increase for pages freed)
+
+          ;; use a sensible place to start looking for free page, from top to bottom
+          (LDA VM_HIGHES_PAGE_FOR_ALLOC_SEARCH)
+          (LSR)
+          (LSR)
+          (LSR)
+          (TAY)
+
+          ;; (LDY !FREE_PAGE_BITMAP_SIZE-1) ;; TODO: instead get current highest index (may increase for pages freed)
           ;; (LDY !$00) ;; TEMP
 
-          (label  CHECK_PAGE_BITMAP)
+  (label  CHECK_PAGE_BITMAP)
           (LDA VM_FREE_PAGE_BITMAP,y)
           (CMP !$FF) ;; all pages used?
           (BNE FP_FOUND)
@@ -177,7 +194,7 @@
           (BPL CHECK_PAGE_BITMAP)
           (JMP OUT_OF_MEMORY_ERROR) ;; TODO if there are enqueued ref count decs, check those first
 
-          (label FP_FOUND)
+   (label FP_FOUND)
           (PHA)
           (TYA) ;; Y = index into bitmap -> A
           (ASL A)
@@ -189,14 +206,14 @@
           (LDX !$07)
           (PLA) ;; get bit map byte again
 
-          (label SHIFT_OUT)
+   (label SHIFT_OUT)
           (ASL A)
           (BCC UNSET_BIT_FOUND)
           (DEX)
           (BPL SHIFT_OUT)
           (BRK) ;; should never get here, there must be at least one bit not set
 
-          (label UNSET_BIT_FOUND)
+   (label UNSET_BIT_FOUND)
           (TXA)      ;; get the index of the bit into A (can be of value 0..7) => lower 3 bits
           (ORA PAGE) ;; combine with bits already found for page
           (STA PAGE) ;; store the full page idx
@@ -207,9 +224,10 @@
           ;; make sure to set the bit of allocated page in page bitmap
           (STA VM_FREE_PAGE_BITMAP,y)
           (LDA PAGE) ;; return the new page in A
+          (STA VM_HIGHES_PAGE_FOR_ALLOC_SEARCH) ;; remember last page allocated (<- since always allocating form top -> bottom) this is the new top
           (RTS)
 
-          (label BITS)
+   (label BITS)
           (byte #b00000001
                 #b00000010
                 #b00000100
@@ -219,7 +237,7 @@
                 #b01000000
                 #b10000000)
 
-          (label ALT_UNSET_BUT_FOUND) ;; 4 bytes less, mean 28 cycles more
+   (label ALT_UNSET_BIT_FOUND) ;; 4 bytes less, mean 28 cycles more (calc BITS by shifting $01 x-times
           (TXA)
           (ORA PAGE) ;; combine with bits
           (STA PAGE)
@@ -250,7 +268,27 @@
                           VM_MEMORY_MANAGEMENT_CONSTANTS
                           (list (JSR VM_INITIALIZE_MM_PAGE)
                                 (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (PHA)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (PLA)
                                 (JSR VM_FREE_PAGE)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
                                 (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
                                 (BRK))
                           VM_INITIALIZE_MM_PAGE
