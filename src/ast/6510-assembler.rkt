@@ -61,6 +61,7 @@
 
 
 ;; translate a code list to a codesequence with loader that puts each segment into the right memory location upon loading into the c64
+;; TODO: put into 6510-prg-generator
 (define/contract (translate-code-list-for-basic-loader code-list)
   (-> pair? (listof byte/c))
   (define code-list-wlen ;; (list len+offset org bytes)
@@ -72,8 +73,8 @@
     (assemble-with-info
      2064
      (list        (JMP NEXT)
-                  (byte-const CPY_TARGET $FE) ;; zero page FE FF
-                  (byte-const CPY_SOURCE $FC) ;; zero page FC FD
+                  (byte-const CPY_TARGET $FD) ;; zero page FD FE
+                  (byte-const CPY_SOURCE $FB) ;; zero page FB FC
            (label COPY_LEN)
                   (word $0000)
 
@@ -90,7 +91,7 @@
                   (INC CPY_TARGET+1)
                   (INC CPY_SOURCE+1)
                   (DEC COPY_LEN+1)
-                  (BNE INNER_LOOP)
+                  (BPL INNER_LOOP)
                   (RTS)
 
            (label NEXT))))

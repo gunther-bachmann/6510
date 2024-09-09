@@ -1,17 +1,15 @@
 #lang racket/base
 
 (require "../6510.rkt")
-(require "../ast/6510-calc-opcode-facades.rkt")
-(require (only-in "../ast/6510-resolver.rkt" commands->bytes))
-(require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list))
+(require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
-(require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
-(require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
-(require (only-in "../tools/6510-interpreter.rkt" 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on))
 
 (module+ test
   (require "../6510-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt" memory-list run-interpreter cpu-state-accumulator)))
+  (require (only-in racket/port open-output-nowhere))
+  (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
+  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on)))
+(require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator))
 
 ;; constants that are used by the assembler code
 (define VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -22,15 +20,15 @@
    (byte-const PT_CODE                   #x02) ;; page type: code
    (byte-const NEXT_FREE_PAGE_PAGE       #xcf) ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
    (byte-const FREE_PAGE_BITMAP_SIZE     #x20) ;; size of the free page bitmap (bit set == used, bit unset == free)
-   (word-const VM_FREE_PAGE_BITMAP          #xcf00)
+   (word-const VM_FREE_PAGE_BITMAP       #xcf00) ;; location of the free page bitmap
    ))
 
 ;; jump table  page-type->allocation method
 (define VM_ALLOC_PAGE_JUMP_TABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
-    (label VM_ALLOC_PAGE__LIST_PAIR_CELLS_JT)
-           (word-ref VM_ALLOC_PAGE__LIST_PAIR_CELLS)
+    (label VM_ALLOC_PAGE__LIST_CELLS_PAIRS_JT)
+           (word-ref VM_ALLOC_PAGE__LIST_CELL_PAIRS)
     (label VM_ALLOC_PAGE__CALL_STACK_JT)
            (word-ref VM_ALLOC_PAGE__CALL_STACK))))
 
@@ -104,7 +102,6 @@
            (byte 153 0) (byte-ref NEXT_FREE_PAGE_PAGE)
            (INY)
            (BNE VM_INITIALIZE_MM_PAGE__LOOP)
-           (BRK)
 
            (RTS))))
 
@@ -119,9 +116,9 @@
    (label VM_ALLOC_PAGE)
           (ASL A)
           (TAY)
-          (LDA VM_ALLOC_PAGE__LIST_PAIR_CELLS_JT+1,y) ;; high byte from jump table
+          (LDA VM_ALLOC_PAGE__LIST_CELL_PAIRS_JT+1,y) ;; high byte from jump table
           (STA VM_ALLOC_PAGE__JT+2)                   ;; write high byte of jump target
-          (LDA VM_ALLOC_PAGE__LIST_PAIR_CELLS_JT,y)   ;; low byte from jump table
+          (LDA VM_ALLOC_PAGE__LIST_CELL_PAIRS_JT,y)   ;; low byte from jump table
           (STA VM_ALLOC_PAGE__JT+1)                   ;; write low byte of jump target
    (label VM_ALLOC_PAGE__JT)
           (JMP $0000)                                 ;; jump to
@@ -130,30 +127,57 @@
 ;; (JSR VM_ALLOC_PAGE__LIST_PAIR_CELLS)      ;; direct calls (if type is statically known)
 ;; (JSR VM_ALLOC_PAGE__CALL_STACK)
 
+(define VM_ALLOC_PAGE__LIST_CELL_PAIRS
+  (list
+   (label VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+          (RTS)))
+
+;; parameter: a = page
+;; result: (none)
+(define VM_FREE_PAGE
+  (list
+   (label VM_FREE_PAGE)
+          (PHA)
+          (LSR)
+          (LSR)
+          (LSR)
+          (TAY) ;; index into bitmap
+          (PLA)
+          (AND !$07)
+          (TAX)
+          (LDA VM_FREE_PAGE_BITMAP,y)
+          (EOR BITS,x) ;; clear bit that must be set because this page was in use
+          (STA VM_FREE_PAGE_BITMAP,y) ;; TODO keep y if > last highest free bitmap
+          (RTS)))
+
+;; IDEA: keep highest free page available => no need to scan the bitmap too much!
 ;; allocate a list pair cells page (initialized with free list etc)
 ;; parameter: (none)
-;; result: A = allocated list pair cells page
-(define VM_ALLOC_PAGE__LIST_PAIR_CELLS
+;; result: A = allocated free page (uninitialized)
+;; uses: A, Y, X, one stack value
+(define VM_ALLOC_PAGE__PAGE_UNINIT
   (list
-   (label VM_ALLOC_PAGE__LIST_PAIR_CELLS)
+   (label VM_ALLOC_PAGE__PAGE_UNINIT)
           (byte-const TEMP_TYPE #xfa)
           (byte-const PAGE #xfc)
 
           (word-const OUT_OF_MEMORY_ERROR #xc100)
 
-          ;; ALLOCATE_NEW_PAGE: ;; Y = page type (0 list-cell-pair ,1 cell, 2 float), return A = page idx
-          (STY TEMP_TYPE)
-          (LDY !FREE_PAGE_BITMAP_SIZE-1)
+          ;; ALLOCATE_NEW_PAGE: ;; return A = page idx
+          ;; (STY TEMP_TYPE) ;; NOT USED
+          (LDY !FREE_PAGE_BITMAP_SIZE-1) ;; TODO: instead get current highest index (may increase for pages freed)
+          ;; (LDY !$00) ;; TEMP
 
           (label  CHECK_PAGE_BITMAP)
           (LDA VM_FREE_PAGE_BITMAP,y)
           (CMP !$FF) ;; all pages used?
           (BNE FP_FOUND)
           (DEY)
+          ;;(INY) ;; TEMP
           (BPL CHECK_PAGE_BITMAP)
           (JMP OUT_OF_MEMORY_ERROR) ;; TODO if there are enqueued ref count decs, check those first
 
-   (label FP_FOUND)
+          (label FP_FOUND)
           (PHA)
           (TYA) ;; Y = index into bitmap -> A
           (ASL A)
@@ -165,14 +189,14 @@
           (LDX !$07)
           (PLA) ;; get bit map byte again
 
-   (label SHIFT_OUT)
-          (LSR)
+          (label SHIFT_OUT)
+          (ASL A)
           (BCC UNSET_BIT_FOUND)
           (DEX)
           (BPL SHIFT_OUT)
           (BRK) ;; should never get here, there must be at least one bit not set
 
-   (label UNSET_BIT_FOUND)
+          (label UNSET_BIT_FOUND)
           (TXA)      ;; get the index of the bit into A (can be of value 0..7) => lower 3 bits
           (ORA PAGE) ;; combine with bits already found for page
           (STA PAGE) ;; store the full page idx
@@ -185,23 +209,23 @@
           (LDA PAGE) ;; return the new page in A
           (RTS)
 
-   (label BITS)
-          (byte #b10000000
-                #b01000000
-                #b00100000
-                #b00010000
-                #b00001000
-                #b00000100
+          (label BITS)
+          (byte #b00000001
                 #b00000010
-                #b00000001)
+                #b00000100
+                #b00001000
+                #b00010000
+                #b00100000
+                #b01000000
+                #b10000000)
 
-   (label ALT_UNSET_BUT_FOUND) ;; 4 bytes less, mean 28 cycles more
+          (label ALT_UNSET_BUT_FOUND) ;; 4 bytes less, mean 28 cycles more
           (TXA)
           (ORA PAGE) ;; combine with bits
           (STA PAGE)
 
           (LDA !$01)
-   (label SHIFT_AGAIN)
+          (label SHIFT_AGAIN)
           (ASL A)
           (DEX)
           (BPL SHIFT_AGAIN)
@@ -210,7 +234,9 @@
           (STA VM_FREE_PAGE_BITMAP,y)
           (LDA PAGE)
           (RTS)
-))
+          ))
+
+
 
 ;; allocate a list pair cells page (initialized with free list etc)
 ;; parameter: (none)
@@ -222,11 +248,17 @@
 (module+ test #| VM_ALLOC_PAGE |#
   (define program (append (list (org #xc000))
                           VM_MEMORY_MANAGEMENT_CONSTANTS
+                          (list (JSR VM_INITIALIZE_MM_PAGE)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_FREE_PAGE)
+                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (BRK))
                           VM_INITIALIZE_MM_PAGE
                           ;; VM_ALLOC_PAGE_JUMP_TABLE
                           ;; VM_ALLOC_PAGE
-                          VM_ALLOC_PAGE__LIST_PAIR_CELLS
-                          ;; VM_ALLOC_PAGE__CALL_STACK
+                          VM_FREE_PAGE
+                          VM_ALLOC_PAGE__PAGE_UNINIT
+                          VM_ALLOC_PAGE__LIST_CELL_PAIRS
                           (list (org #xcec0))
                           VM_INITIAL_MM_REGS
                           (list (org #xced0))
@@ -237,9 +269,42 @@
   ;;   (initialize-cpu)
   ;;   (assemble-to-code-list program)))
 
+  (define raw-bytes
+    (translate-code-list-for-basic-loader
+     (assemble-to-code-list
+      (list
+       (org #xc000)
+       (LDA !$41)
+       (JSR $FFD2)
+       (JMP NEXT)
+       (org #xc100)
+       (label NEXT)
+       (LDA !$42)
+       (JSR $FFD2)
+       (RTS)))))
+
+  (define org-pos 2064)
+  ;; (define prg-name "loader-test.prg")
+  ;; (define d64-name "loader-test.d64")
+  ;; (require "../tools/6510-prg-generator.rkt")
+  ;; (create-prg raw-bytes org-pos prg-name)
+
+  (define state-after-run
+    (parameterize ([current-output-port (open-output-nowhere)])
+      (run-interpreter org-pos raw-bytes)))
+
+  (check-equal?
+   (memory-list state-after-run
+                #xc001
+                #xc001)
+   '(#x41))
+
+  (check-equal?
+   (memory-list state-after-run
+                #xc101
+                #xc101)
+   '(#x42))
+
   ;; TODO check memory management code
-  (run-interpreter-on
-   (6510-load-multiple
-    (initialize-cpu)
-    (assemble-to-code-list program)))
+;; (run-debugger-on (6510-load-multiple (initialize-cpu) (assemble-to-code-list program)))
   )
