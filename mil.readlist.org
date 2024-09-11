@@ -3126,7 +3126,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
     inc reference count
     (e.g. list cell pair 51 (max 64 without rc)
     - memory layout (list-pair-cells-page)
-      00 : reserved
+      00 : reserved (next page with free cells)?
       01 : rc for cell-pair1 $04
       02 : rc for cell-pair2 $08
       03 : rc for cell-pair3 $0C
@@ -3137,7 +3137,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
       11 : rc for cell-pair5 $44
       ...
       3F : rc for cell-pair51 $FC
-      40 : cell-pair3
+      40 : cell-pair4
       ...
       FC : cell-pair51
 
@@ -3278,6 +3278,46 @@ describes some lisp implementations (with some techn. detail) and does perforamc
     dec reference count
     if <0 mark let old first free cell of this page point to this one
           mark this one the first free cell in the page
+***** algorithm to free list-cell-pairs using no additional memory
+- basic sketch
+  - each cell type has its own to-free structure
+    - list-cell-pair  :: tree
+    - cell-ptr        :: nothing necessary
+    - array/structure :: array
+    - float           :: nothing necessary
+- the algorithm must work without allocating new space
+  - free list-cell-pair
+    - case 1 and only: cell1 (C) is a list-cell-pair (don't care about cell2)
+      - start
+             cell-pair that dropped to zero A[C|o,B|o]
+                                                |   +-->
+                                                +---->
+             to-free-tree -> D[o,o]
+                               | |
+      - end
+             recursive tail call: free C|o
+             to-free-tree -> A[o,B|o]
+                               |   +-->
+                             D[o,o]
+                               | |
+  - free cell-ptr (no free list necessary)
+    - case 1 and only: points to anything (B)
+      - start
+              cell-ptr that dropped to zero A[o]
+                                              +--> B
+      - end
+              recursive tail call: free B
+  - free array/structure
+    - case 1 and only:
+      - start
+              array/structure that dropps to zero A[B,o,o,....]
+              to-free-array C[o,o,o,o,o,o]
+      - end
+              recursively tail call: free B (first entry)
+              to-free-array A[o,o,o, ....]
+                              |
+                              C[o,o,o,o,o,o]
+
 **** what part of the 6510 vm design should be implement w/ racket to validate design?
 **** how much of the 6510 code should be actually written and tested with the interpreter (and actually used to interpret byte code)?
 **** design persisted byte code (constants, unlinked symbols, bytecode), linker/loader
@@ -3373,6 +3413,8 @@ c64 implementation detail:
 **** global-frame [fixed number during program run?]
   global - cells  (access not so fast)
 *** data types
+see [[file:src/cisc-vm/stack-virtual-machine.rkt::define CELL_PTR #b00000001) ;; xxxx xxx1 xxxx xxxx (ptr to words/cells][cell data layout]]
+**** obsolete
 (nil pointer should be easy to spot!, e.g. zero page has no cells => first byte 0 = nil ptr)
 - cell
   - pointer to cell (need 15 bits)

@@ -20,7 +20,9 @@
    (byte-const PT_CODE                   #x02) ;; page type: code
    (byte-const NEXT_FREE_PAGE_PAGE       #xcf) ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
    (byte-const FREE_PAGE_BITMAP_SIZE     #x20) ;; size of the free page bitmap (bit set == used, bit unset == free)
-   (word-const VM_FREE_PAGE_BITMAP       #xcf00) ;; location of the free page bitmap
+   (word-const VM_FREE_PAGE_BITMAP       #xced0) ;; location: free page bitmap (ced0..ceff)
+   (word-const VM_FREE_SLOT_FOR_PAGE     #xcf00) ;; location: table of first free slot for each page
+   (byte-const ZP_PTR #xfc)
    ))
 
 ;; jump table  page-type->allocation method
@@ -44,8 +46,8 @@
           (byte $9E)
    (label VM_FREE_CODE_PAGE) ;; code page with free space
           (byte $9D)
-   (label VM_HIGHES_PAGE_FOR_ALLOC_SEARCH) ;; what is the highest page to start searching for a free page
-          (byte $FF)) ;; safe to start with $FF even though $CE is faster
+   (label VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; what is the highest page to start searching for a free page
+          (byte $1f)) ;; safe to start with $1F is index
   )
 
 ;; put into memory @ #xced0
@@ -133,6 +135,58 @@
 (define VM_ALLOC_PAGE__LIST_CELL_PAIRS
   (list
    (label VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+          (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+          ;; now initialize page in A
+
+          (STA ZP_PTR+1)
+          (TAY) ;; page used as idx
+          (LDA !$04) ;; first free slot (after initialization)
+          (STA VM_FREE_SLOT_FOR_PAGE,y)
+
+          ;; first write all reference count fields (zero)
+          (LDY !$01)
+          (STY ZP_PTR)
+          (LDY !$02)
+          (LDA !$00) ;; reference count initialized with 0
+
+   (label FIRST_RC_BLOCK__VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+          (STA (ZP_PTR),y)
+          (DEY)
+          (BPL FIRST_RC_BLOCK__VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+
+          (LDY !$10)
+          (STY ZP_PTR)
+          (LDY !$2F)
+
+   (label SECOND_RC_BLOCK__VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+          (STA (ZP_PTR),y)
+          (DEY)
+          (BPL SECOND_RC_BLOCK__VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+
+          (STA ZP_PTR) ;; clear lowbyte of ptr
+          ;; write all cell-pairs to point to next free one
+          (LDA !$04)
+   (label FIRST_CELL_PAIR_BLOCK__VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+          (TAY)
+          (CLC)
+          (ADC !$04)
+          (STA (ZP_PTR),y)
+          (CMP !$0C)
+          (BMI FIRST_CELL_PAIR_BLOCK__VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+
+          ;; write last pointer in this block to next free cell pair (in next block)
+          (TAY)
+          (LDA !$40)
+          (STA (ZP_PTR),y)
+
+   (label SECOND_CELL_PAIR_BLOCK__VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+          (TAY)
+          (CLC)
+          (ADC !$04)
+          (STA (ZP_PTR),y)
+          (CMP !$FC)
+          (BNE SECOND_CELL_PAIR_BLOCK__VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+
           (RTS)))
 
 ;; parameter: a = page
@@ -142,21 +196,21 @@
    (label VM_FREE_PAGE)
           (PHA)
 
-          (CMP VM_HIGHES_PAGE_FOR_ALLOC_SEARCH) ;; check for max of highest page #
+          (LSR)
+          (LSR)
+          (LSR)
+          (CMP VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; check for max of highest page #
           (BMI VM_FREE_PAGE__CONTINUE)
-          (STA VM_HIGHES_PAGE_FOR_ALLOC_SEARCH) ;; store new max
+          (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; store new max
 
    (label VM_FREE_PAGE__CONTINUE)
-          (LSR)
-          (LSR)
-          (LSR)
           (TAY) ;; index into bitmap
           (PLA)
           (AND !$07)
           (TAX)
           (LDA VM_FREE_PAGE_BITMAP,y)
           (EOR BITS,x) ;; clear bit that must be set because this page was in use
-          (STA VM_FREE_PAGE_BITMAP,y) ;; TODO keep y if > last highest free bitmap
+          (STA VM_FREE_PAGE_BITMAP,y)
           (RTS)))
 
 ;; IDEA: keep highest free page available => no need to scan the bitmap too much!
@@ -172,31 +226,22 @@
 
           (word-const OUT_OF_MEMORY_ERROR #xc100)
 
-          ;; ALLOCATE_NEW_PAGE: ;; return A = page idx
-          ;; (STY TEMP_TYPE) ;; NOT USED
-
           ;; use a sensible place to start looking for free page, from top to bottom
-          (LDA VM_HIGHES_PAGE_FOR_ALLOC_SEARCH)
-          (LSR)
-          (LSR)
-          (LSR)
-          (TAY)
+          (LDY VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
 
-          ;; (LDY !FREE_PAGE_BITMAP_SIZE-1) ;; TODO: instead get current highest index (may increase for pages freed)
-          ;; (LDY !$00) ;; TEMP
 
   (label  CHECK_PAGE_BITMAP)
           (LDA VM_FREE_PAGE_BITMAP,y)
           (CMP !$FF) ;; all pages used?
           (BNE FP_FOUND)
           (DEY)
-          ;;(INY) ;; TEMP
           (BPL CHECK_PAGE_BITMAP)
           (JMP OUT_OF_MEMORY_ERROR) ;; TODO if there are enqueued ref count decs, check those first
 
    (label FP_FOUND)
           (PHA)
           (TYA) ;; Y = index into bitmap -> A
+          (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; remember last page allocated (<- since always allocating form top -> bottom) this is the new top
           (ASL A)
           (ASL A)
           (ASL A)
@@ -224,7 +269,6 @@
           ;; make sure to set the bit of allocated page in page bitmap
           (STA VM_FREE_PAGE_BITMAP,y)
           (LDA PAGE) ;; return the new page in A
-          (STA VM_HIGHES_PAGE_FOR_ALLOC_SEARCH) ;; remember last page allocated (<- since always allocating form top -> bottom) this is the new top
           (RTS)
 
    (label BITS)
@@ -263,40 +307,114 @@
   (list (label VM_ALLOC_PAGE__CALL_STACK)
                (RTS)))
 
+;; TODO: reference counting?
+;; page is in a
+;; resulting ptr is in ZP_PTR
+;; first free element is adjusted
+(define VM_ALLOC_CELL_PAIR_ON_PAGE
+  (list
+   (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE)
+          (JSR VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+
+   (label VM_ALLOC_CELL_PAIR_ON_PAGE) ;; <-- real entry point of this function
+          (STA ZP_PTR+1) ;; safe as highbyte of ptr
+          (TAX)
+          (LDA VM_FREE_SLOT_FOR_PAGE,x)
+          (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE) ;; allocate new page first
+
+   (label CELL_ON_THIS_PAGE__VM_ALLOC_CELL_PAIR_ON_PAGE_)
+          (STA ZP_PTR)
+          (LDY !$00)
+          (LDA (ZP_PTR),y) ;; next free cell
+          (STA VM_FREE_SLOT_FOR_PAGE,x)
+          (RTS)))
+
+;; input: cell ptr in ZP_PTR
+;; decrement ref count, if 0 deallocate
+(define VM_REFCOUNT_DECR_CELL_PAIR
+  (list
+   (label VM_REFCOUNT_DECR_CELL_PAIR)
+          (LDA ZP_PTR+1)
+          (STA PAGE__VM_REFCOUNT_DECR_CELL_PAIR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+          (LDA ZP_PTR)
+          (LSR)
+          (LSR)
+          (TAX)
+   (label PAGE__VM_REFCOUNT_DECR_CELL_PAIR)
+          (DEC $c000,x) ;; c0 is overwritten by page (see above)
+          (BNE DONE__VM_REFCOUNT_DECR_CELL_PAIR)
+          (JMP VM_FREE_CELL_PAIR_ON_PAGE) ;; free directly or delayed
+   (label DONE__VM_REFCOUNT_DECR_CELL_PAIR)
+          (RTS)))
+
+(define VM_REFCOUNT_INCR_CELL_PAIR
+  (list
+   (label VM_REFCOUNT_INCR_CELL_PAIR)
+          (LDA ZP_PTR+1)
+          (STA PAGE__VM_REFCOUNT_INCR_CELL_PAIR+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
+          (LDA ZP_PTR)
+          (LSR)
+          (LSR)
+          (TAX)
+   (label PAGE__VM_REFCOUNT_INCR_CELL_PAIR)
+          (INC $c000,x) ;; c0 is overwritten by page (see above)
+          (RTS)))
+
+;; TODO: handle pointers in this cell-pair (if there are any)
+;; TODO: find out when to free this page again (e.g. all rcs dropped to 0, or keep a count of objects)
+;; cell ptr is in ZP_PTR
+(define VM_FREE_CELL_PAIR_ON_PAGE
+  (list
+   (label VM_FREE_CELL_PAIR_ON_PAGE)
+
+   ;;        TODO: see algorithm to free list-cell-pair (file:~/repo/+1/6510/mil.readlist.org::*algorithm to free list-cell-pairs using no additional memory)
+   ;;        ;; mark cells in cell-pair if they are pointers
+   ;;        (LDY !$01)
+   ;;        (LDA (ZP_PTR),y) ;; HIGHBYTE OF FIRST CELL
+   ;;        (AND !$03)
+   ;;        (BEQ CELL_1_NOT_RELEVANT)
+   ;;        ;;
+   ;;        (LDA (ZP_PTR),y)
+   ;;        (LSR)
+   ;;        (BCC CELL_1_IS_CELL_PAIR_PTR)
+   ;;        ;; cell is cell-ptr => pointed to is reference counted!
+   ;;        ;; TODO enqueue this ptr for freeing!
+   ;; (label CELL_1_IS_CELL_PAIR_PTR)
+   ;; (label CELL_1_NOT_RELEVANT)
+
+
+          (LDX ZP_PTR+1)
+          (LDA VM_FREE_SLOT_FOR_PAGE,x) ;; old first free on page
+          (LDY !$00)
+          (STA (ZP_PTR),y) ;; set old free to next free on this very cell
+          (LDA ZP_PTR) ;; load idx within page
+          (STA VM_FREE_SLOT_FOR_PAGE,x) ;; set this cell as new first free cell on page
+
+          ;; clear refcount, too (should have been done already)
+          (LSR)
+          (LSR)
+          (TAY);; y now pointer to refcount byte
+          (LDA !$00)
+          (STA ZP_PTR) ;; modify pointer such that zp_ptr points to beginning of page
+          (STA (ZP_PTR),y) ;; clear refcount byte, too
+          (RTS)))
+
 (module+ test #| VM_ALLOC_PAGE |#
   (define program (append (list (org #xc000))
                           VM_MEMORY_MANAGEMENT_CONSTANTS
                           (list (JSR VM_INITIALIZE_MM_PAGE)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (PHA)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (PLA)
-                                (JSR VM_FREE_PAGE)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-                                (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+                                (JSR VM_ALLOC_PAGE__LIST_CELL_PAIRS)
                                 (BRK))
                           VM_INITIALIZE_MM_PAGE
                           ;; VM_ALLOC_PAGE_JUMP_TABLE
                           ;; VM_ALLOC_PAGE
                           VM_FREE_PAGE
+                          VM_FREE_CELL_PAIR_ON_PAGE
+                          VM_REFCOUNT_DECR_CELL_PAIR
+                          VM_REFCOUNT_INCR_CELL_PAIR
                           VM_ALLOC_PAGE__PAGE_UNINIT
                           VM_ALLOC_PAGE__LIST_CELL_PAIRS
+                          VM_ALLOC_CELL_PAIR_ON_PAGE
                           (list (org #xcec0))
                           VM_INITIAL_MM_REGS
                           (list (org #xced0))
@@ -312,14 +430,14 @@
      (assemble-to-code-list
       (list
        (org #xc000)
-       (LDA !$41)
-       (JSR $FFD2)
-       (JMP NEXT)
+              (LDA !$41)
+              (JSR $FFD2)
+              (JMP NEXT)
        (org #xc100)
        (label NEXT)
-       (LDA !$42)
-       (JSR $FFD2)
-       (RTS)))))
+              (LDA !$42)
+              (JSR $FFD2)
+              (RTS)))))
 
   (define org-pos 2064)
   ;; (define prg-name "loader-test.prg")
@@ -343,6 +461,5 @@
                 #xc101)
    '(#x42))
 
-  ;; TODO check memory management code
 ;; (run-debugger-on (6510-load-multiple (initialize-cpu) (assemble-to-code-list program)))
   )
