@@ -46,9 +46,13 @@
           (byte $9E)
    (label VM_FREE_CODE_PAGE) ;; code page with free space
           (byte $9D)
+   (label VM_FREE_CELL_PAIR_PAGE) ;; cell page with free cells
+          (byte $9C)
    (label VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; what is the highest page to start searching for a free page
-          (byte $1f)) ;; safe to start with $1F is index
-  )
+          (byte $1f) ;; safe to start with $1F is index
+   (label VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (word $0000) ;; if high byte is 0, the tree is empty!
+   ))
 
 ;; put into memory @ #xced0
 (define VM_FREE_PAGE_BITMAP
@@ -132,6 +136,30 @@
 ;; (JSR VM_ALLOC_PAGE__LIST_PAIR_CELLS)      ;; direct calls (if type is statically known)
 ;; (JSR VM_ALLOC_PAGE__CALL_STACK)
 
+
+;; memory layout of a cell-pairs page
+;; offset content
+;; --------------
+;; 00     unused
+;; 01     ref-count for cell-pair at 04 (cell-pair 0)
+;; 02     ref-count for cell-pair at 08 (cell-pair 1)
+;; 03     ref-count for cell-pair at 0C (cell-pair 2)
+;; 04..07  cell-pair 0
+;; 08..0b  cell-pair 1
+;; 0c..0f  cell-pair 2
+;; 10     ref-count for cell-pair at 40 (cell-pair 3)
+;; 11     ref-count for cell-pair at 44 (cell-pair 4)
+;; ..3F   ref-count for cell-pair at fc (cell-pair 50)
+;; 40     cell-pair 3
+;; 44     cell-pair 4
+;; ..fc   cell-pair 50
+;;
+;; VM_FREE_SLOT_FOR_PAGE + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
+;; the free cell-pair holds in byte 0 of the cell-pair the offset of the next free cell-pair (0 = no other free cell-pair)
+;;
+;; allocate a complete new page and initialize it to hold reference counted cell-pairs
+;; connect all cell-pairs in a free-list
+;; also set the first free slot of this allocated page (in VM_FREE_SLOT_FOR_PAGE + pageidx)
 (define VM_ALLOC_PAGE__LIST_CELL_PAIRS
   (list
    (label VM_ALLOC_PAGE__LIST_CELL_PAIRS)
@@ -189,6 +217,10 @@
 
           (RTS)))
 
+
+;; whether a page is free or used is kept in VM_FREE_PAGE_BITMAP
+;; each bit represents one page 1 = used, 0 = free
+;; VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH keeps the max idx to start looking for a page that is free
 ;; parameter: a = page
 ;; result: (none)
 (define VM_FREE_PAGE
@@ -213,8 +245,7 @@
           (STA VM_FREE_PAGE_BITMAP,y)
           (RTS)))
 
-;; IDEA: keep highest free page available => no need to scan the bitmap too much!
-;; allocate a list pair cells page (initialized with free list etc)
+;; allocate a page (completely uninitialized), just the page, update the memory page bitmap (VM_FREE_PAGE_BITMAP)
 ;; parameter: (none)
 ;; result: A = allocated free page (uninitialized)
 ;; uses: A, Y, X, one stack value
@@ -307,16 +338,20 @@
   (list (label VM_ALLOC_PAGE__CALL_STACK)
                (RTS)))
 
-;; TODO: reference counting?
 ;; page is in a
 ;; resulting ptr is in ZP_PTR
 ;; first free element is adjusted
+;; ---
+;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
+;;
 (define VM_ALLOC_CELL_PAIR_ON_PAGE
   (list
    (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE)
           (JSR VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+          (LDA ZP_PTR+1)
+          (STA VM_FREE_CELL_PAIR_PAGE)
 
-   (label VM_ALLOC_CELL_PAIR_ON_PAGE) ;; <-- real entry point of this function
+          (label VM_ALLOC_CELL_PAIR_ON_PAGE) ;; <-- real entry point of this function
           (STA ZP_PTR+1) ;; safe as highbyte of ptr
           (TAX)
           (LDA VM_FREE_SLOT_FOR_PAGE,x)
@@ -327,6 +362,25 @@
           (LDY !$00)
           (LDA (ZP_PTR),y) ;; next free cell
           (STA VM_FREE_SLOT_FOR_PAGE,x)
+          (RTS)))
+
+;; find out what kind of cell zp_ptr points to.
+;;   in case of cell-pair,
+(define VM_REFCOUNT_DECR
+  (list
+   (label VM_REFCOUNT_DECR)
+          (LDA ZP_PTR+1)
+          (LSR)
+          (BCS DECR_CELL_PTR__VM_REFCOUNT_DECR)
+          (LSR)
+          (BCS DECR_CELL_PAIR__VM_REFCOUNT_DECR)
+          ;; check other types of cells
+          (RTS)
+
+   (label DECR_CELL_PAIR__VM_REFCOUNT_DECR)
+          (JMP VM_REFCOUNT_DECR_CELL_PAIR)
+   (label DECR_CELL_PTR__VM_REFCOUNT_DECR)
+          ;; implement VM_REFCOUNT_DECR_CELL_PTR
           (RTS)))
 
 ;; input: cell ptr in ZP_PTR
@@ -343,7 +397,7 @@
    (label PAGE__VM_REFCOUNT_DECR_CELL_PAIR)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
           (BNE DONE__VM_REFCOUNT_DECR_CELL_PAIR)
-          (JMP VM_FREE_CELL_PAIR_ON_PAGE) ;; free directly or delayed
+          (JMP VM_FREE_CELL_PAIR) ;; free delayed
    (label DONE__VM_REFCOUNT_DECR_CELL_PAIR)
           (RTS)))
 
@@ -360,29 +414,148 @@
           (INC $c000,x) ;; c0 is overwritten by page (see above)
           (RTS)))
 
-;; TODO: handle pointers in this cell-pair (if there are any)
-;; TODO: find out when to free this page again (e.g. all rcs dropped to 0, or keep a count of objects)
-;; cell ptr is in ZP_PTR
-(define VM_FREE_CELL_PAIR_ON_PAGE
+;; TODO: Free nonatomic (is cell-ptr, cell-pair)
+;; parameter: zp_ptr
+(define VM_FREE_NON_ATOMIC
   (list
-   (label VM_FREE_CELL_PAIR_ON_PAGE)
+   (label VM_FREE_NON_ATOMIC)
+          (RTS)))
 
-   ;;        TODO: see algorithm to free list-cell-pair (file:~/repo/+1/6510/mil.readlist.org::*algorithm to free list-cell-pairs using no additional memory)
-   ;;        ;; mark cells in cell-pair if they are pointers
-   ;;        (LDY !$01)
-   ;;        (LDA (ZP_PTR),y) ;; HIGHBYTE OF FIRST CELL
-   ;;        (AND !$03)
-   ;;        (BEQ CELL_1_NOT_RELEVANT)
-   ;;        ;;
-   ;;        (LDA (ZP_PTR),y)
-   ;;        (LSR)
-   ;;        (BCC CELL_1_IS_CELL_PAIR_PTR)
-   ;;        ;; cell is cell-ptr => pointed to is reference counted!
-   ;;        ;; TODO enqueue this ptr for freeing!
-   ;; (label CELL_1_IS_CELL_PAIR_PTR)
-   ;; (label CELL_1_NOT_RELEVANT)
+;; result: zp_ptr = free cell-pair
+;; try to reuse root of free tree: use root but make sure to deallocate cell2 of the root (since this might still point to some data)
+;; if no free tree available, find page with free cells (VM_FREE_CELL_PAIR_PAGE)
+;; if no free cell page is available, allocate a new page and used the first free slot there
+;; NOTE: the cell-pair is not initialized (cell1 and/or cell2 may contain old data that needs to be overwritten!)
+(define VM_ALLOC_CELL_PAIR
+  (list
+   (label VM_ALLOC_CELL_PAIR)
+          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (BNE REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR)
+          ;; no cell-pair to free available
+          ;; is there a page that has free cells?
+          (LDA VM_FREE_CELL_PAIR_PAGE)
+          (BEQ VM_ALLOC_CELL_PAIR__NO_FREE_CELL_PAGE)
 
+          ;; get a cell-pair on the given page
+          (JMP VM_ALLOC_CELL_PAIR_ON_PAGE)
 
+   (label VM_ALLOC_CELL_PAIR__NO_FREE_CELL_PAGE)
+          ;; allocate new page
+          (JSR VM_ALLOC_PAGE__LIST_CELL_PAIRS)
+          (LDA ZP_PTR+1) ;; get page into A
+          ;; allocate cell-pair on this new page
+          (JMP VM_ALLOC_CELL_PAIR_ON_PAGE)
+
+   (label REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR)
+          ;; put root of free tree into zp_ptr (and copy in TEMP_PTR of this function)
+          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (STA ZP_PTR+1)
+          (STA TEMP_PTR__VM_ALLOC_CELL_PAIR+1)
+          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (STA ZP_PTR)
+          (STA TEMP_PTR__VM_ALLOC_CELL_PAIR)
+
+          ;; set new tree root for free tree to original cell1
+          (LDY !$01)
+          (LDA (ZP_PTR),y)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (DEY)
+          (LDA (ZP_PTR),y)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+
+          ;; check whether cell2 is atomic or ptr
+          (LDY !$03)
+          (LDA (ZP_PTR),y)
+          (AND !$03)
+          (BEQ CELL2_IS_ATOMIC__VM_ALLOC_CELL_PAIR) ;; no need to do further deallocation
+
+          ;; write cell2 into zp_ptr
+          (LDA (ZP_PTR),y)
+          (PHA)
+          (DEY)
+          (LDA (ZP_PTR),y)
+          (STA ZP_PTR)
+          (PLA)
+          (STA ZP_PTR+1)
+          (JSR VM_REFCOUNT_DECR)
+
+   (label CELL2_IS_ATOMIC__VM_ALLOC_CELL_PAIR)
+          ;; restore zp_ptr to the cell-pair to be reused
+          (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR+1)
+          (STA ZP_PTR+1)
+          (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR)
+          (STA ZP_PTR)
+
+          (RTS)
+
+   (label TEMP_PTR__VM_ALLOC_CELL_PAIR)
+          (word $0000)))
+
+;; cell ptr is in ZP_PTR
+;; -----
+;; put the cell-pair itself as new root to the free-tree
+;; put the old free-tree into cell1
+;; tail call free on old cell1 in this cell-pair (if not atomic, if atomic no tail call)
+;; result: this cell-pair is the new root of the free-tree for cell-pairs with:
+;;              cell1 = old free tree root, cell2 = non-freed (yet) original cell
+(define VM_FREE_CELL_PAIR
+  (list
+   (label VM_FREE_CELL_PAIR)
+
+          ;; check cell1
+          (LDY !$01)
+          (LDA (ZP_PTR),y) ;; HIGHBYTE OF FIRST cell1
+          (AND !$03)
+          (BEQ CELL_1_ATOMIC__VM_FREE_CELL_PAIR)
+          ;; make sure to call free on cell1 (could be any type of cell)
+          ;; remember ZP_PTR
+
+          ;; store cell1 into TEMP_PTR__VM_FREE_CELL_PAIR (for later tail call of free)
+          (LDA (ZP_PTR),y)
+          (STA TEMP_PTR__VM_FREE_CELL_PAIR+1)
+          (DEY)
+          (LDA (ZP_PTR),y)
+          (STA TEMP_PTR__VM_FREE_CELL_PAIR)
+
+   (label CELL_1_ATOMIC__VM_FREE_CELL_PAIR)
+          ;; cell1 is atomic and can thus be discarded (directly)
+
+          ;; simply add this cell-pair as head to free tree
+          ;; set cell1 to point to old root
+          (LDY !$01)
+          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (STA (ZP_PTR),y)
+          (DEY)
+          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (STA (ZP_PTR),y)
+          ;; set new root to point to cell-pair
+          (LDA ZP_PTR+1)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (LDA ZP_PTR)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+
+          ;; write original cell1 -> zp_ptr
+          (LDA TEMP_PTR__VM_FREE_CELL_PAIR+1)
+          (BEQ DONE__VM_FREE_CELL_PAIR)
+          (STA ZP_PTR+1)
+          (LDA TEMP_PTR__VM_FREE_CELL_PAIR)
+          (STA ZP_PTR)
+
+          (LDA !$00)
+          (STA TEMP_PTR__VM_FREE_CELL_PAIR+1) ;; mark temp_ptr as clear
+
+          (JMP VM_FREE_NON_ATOMIC) ;; chain call
+
+   (label DONE__VM_FREE_CELL_PAIR)
+          (RTS)
+
+   (label TEMP_PTR__VM_FREE_CELL_PAIR)
+          (word $0000)))
+
+;; zp_ptr = pointer to cell-pair that is added to the free list on its page
+(define VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST
+  (list
+   (label VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST)
           (LDX ZP_PTR+1)
           (LDA VM_FREE_SLOT_FOR_PAGE,x) ;; old first free on page
           (LDY !$00)
@@ -408,13 +581,19 @@
                           VM_INITIALIZE_MM_PAGE
                           ;; VM_ALLOC_PAGE_JUMP_TABLE
                           ;; VM_ALLOC_PAGE
+
+                          VM_ALLOC_PAGE__LIST_CELL_PAIRS
                           VM_FREE_PAGE
-                          VM_FREE_CELL_PAIR_ON_PAGE
+                          VM_ALLOC_PAGE__PAGE_UNINIT
+                          VM_ALLOC_PAGE__CALL_STACK
+                          VM_ALLOC_CELL_PAIR_ON_PAGE
+                          VM_REFCOUNT_DECR
                           VM_REFCOUNT_DECR_CELL_PAIR
                           VM_REFCOUNT_INCR_CELL_PAIR
-                          VM_ALLOC_PAGE__PAGE_UNINIT
-                          VM_ALLOC_PAGE__LIST_CELL_PAIRS
-                          VM_ALLOC_CELL_PAIR_ON_PAGE
+                          VM_FREE_NON_ATOMIC
+                          VM_ALLOC_CELL_PAIR
+                          VM_FREE_CELL_PAIR
+
                           (list (org #xcec0))
                           VM_INITIAL_MM_REGS
                           (list (org #xced0))
