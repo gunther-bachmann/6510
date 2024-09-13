@@ -11,6 +11,45 @@
   (require (only-in "../tools/6510-debugger.rkt" run-debugger-on)))
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator))
 
+
+;; test one roundtrip:
+
+;; use case: allocate, free, reallocate small list of cell-pairs, keeping tail because ptr was copied (ref count incremented)
+;; - allocate cell-pair
+;; - set cell1 to an int
+;; - allocate cell-pair
+;; - set cell2 to allocated cell-pair
+;; - increment ref count of cell2 (thus it must be kept, when head is decremented)
+;; - set cell1 to an int
+;; - (set cell2 to nil) => (equivalent to '(1 2))
+;; - decrement list head (cell-pair) <- should put the head of the list on the free tree, keeping the pointer to the next cell-pair
+;; - allocate cell-pair <- should recycle the top of the free tree, decrement ref count of cell2, since ref count cell2 is not dropping to 0, top of tree is set to 0
+
+;; Method index + description
+;; DATA
+;;  VM_MEMORY_MANAGEMENT_CONSTANTS :: constants that are used by the assembler code
+;;  VM_ALLOC_PAGE_JUMP_TABLE       :: jump table  page-type->allocation method
+;;  VM_INITIAL_MM_REGS             :: (initial data for) the memory management registers
+;;  VM_FREE_PAGE_BITMAP            :: bitmap indicating free pages (0) or allocated pages (1)
+;;
+;; CODE (FULL PAGE)
+;;  VM_INITIALIZE_MM_PAGE          :: initialize memory management (paging)
+;;  VM_ALLOC_PAGE                  :: INCOMPLETE! allocate page (of any kind)
+;;  VM_ALLOC_PAGE__LIST_CELL_PAIRS :: allocate a complete new page and initialize it to hold reference counted cell-pairs
+;;  VM_FREE_PAGE                   :: free the given page (may then be allocated again via VM_ALLOC_PAGE*
+;;  VM_ALLOC_PAGE__PAGE_UNINIT     :: allocate page (without initialization for specific type)
+;;  VM_ALLOC_PAGE__CALL_STACK      :: INCOMPLETE! allocate page for call stack usage
+;;
+;; CODE
+;;  VM_ALLOC_CELL_PAIR_ON_PAGE     :: allocate a cell-pair on given page, auto allocate new page if full
+;;  VM_REFCOUNT_DECR               :: INCOMPLETE: dispatch to type specific decrement of ref count
+;;  VM_REFCOUNT_DECR_CELL_PAIR     :: decrement ref count for cell-pair, mark as free if ref count drops to 0 (calls VM_FREE_CELL_PAIR)
+;;  VM_REFCOUNT_INCR_CELL_PAIR     :: increments ref count for cell-pair
+;;  VM_FREE_NON_ATOMIC             :: INCOMPLETE: free a non atomic cell (e.g. cell-ptr, cell-pair, float, array/struct)
+;;  VM_ALLOC_CELL_PAIR             :: allocate a cell-pair (reuse marked free, allocate new if no reuse possible)
+;;  VM_FREE_CELL_PAIR              :: mark cell-pair as free, tail call free on cell1 (which is used for free tree)
+;;  VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST :: add the given cell-pair to its free list on its page (cell1 and cell2 must not point to anything), refcount is set to 0
+
 ;; constants that are used by the assembler code
 (define VM_MEMORY_MANAGEMENT_CONSTANTS
   (list
@@ -22,8 +61,34 @@
    (byte-const FREE_PAGE_BITMAP_SIZE     #x20) ;; size of the free page bitmap (bit set == used, bit unset == free)
    (word-const VM_FREE_PAGE_BITMAP       #xced0) ;; location: free page bitmap (ced0..ceff)
    (word-const VM_FREE_SLOT_FOR_PAGE     #xcf00) ;; location: table of first free slot for each page
+   (word-const TAGGED_INT_0              #x0000)
+   (word-const TAGGED_NIL                #x0200)
    (byte-const ZP_PTR #xfc)
    ))
+
+;; y =1 for cell1, = 3 for cell 2
+;; zp_ptr = cell-pair
+(define VM_CELL_PAIR_SET_INT_0
+  (list
+   (label VM_CELL_PAIR_SET_INT_0)
+          (LDA !>TAGGED_INT_0)
+          (STA (ZP_PTR),y)
+          (LDA !<TAGGED_INT_0)
+          (DEY)
+          (STA (ZP_PTR),y)
+          (RTS)))
+
+;; y =1 for cell1, = 3 for cell 2
+;; zp_ptr = cell-pair
+(define VM_CELL_PAIR_SET_NIL
+  (list
+   (label VM_CELL_PAIR_SET_NIL)
+          (LDA !>TAGGED_NIL)
+          (STA (ZP_PTR),y)
+          (LDA !<TAGGED_NIL)
+          (DEY)
+          (STA (ZP_PTR),y)
+          (RTS)))
 
 ;; jump table  page-type->allocation method
 (define VM_ALLOC_PAGE_JUMP_TABLE
@@ -41,13 +106,13 @@
    (label VM_INITIAL_MM_REGS)
 
    (label VM_FREE_CELL_PAGE) ;; cell page with free cells
-          (byte $9F)
+          (byte $00)
    (label VM_FREE_CALL_STACK_PAGE) ;; call stack page with free space
-          (byte $9E)
+          (byte $00)
    (label VM_FREE_CODE_PAGE) ;; code page with free space
-          (byte $9D)
+          (byte $00)
    (label VM_FREE_CELL_PAIR_PAGE) ;; cell page with free cells
-          (byte $9C)
+          (byte $00) ;; none
    (label VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; what is the highest page to start searching for a free page
           (byte $1f) ;; safe to start with $1F is index
    (label VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
@@ -114,6 +179,7 @@
 
            (RTS))))
 
+;; INCOMPLETE!
 ;; parameter:
 ;;   A = page-type to allocate (see constants)
 ;;       (00 = fixed slot size list-pair-cells,
@@ -351,7 +417,7 @@
           (LDA ZP_PTR+1)
           (STA VM_FREE_CELL_PAIR_PAGE)
 
-          (label VM_ALLOC_CELL_PAIR_ON_PAGE) ;; <-- real entry point of this function
+   (label VM_ALLOC_CELL_PAIR_ON_PAGE) ;; <-- real entry point of this function
           (STA ZP_PTR+1) ;; safe as highbyte of ptr
           (TAX)
           (LDA VM_FREE_SLOT_FOR_PAGE,x)
@@ -572,13 +638,9 @@
           (STA (ZP_PTR),y) ;; clear refcount byte, too
           (RTS)))
 
-(module+ test #| VM_ALLOC_PAGE |#
-  (define program (append (list (org #xc000))
-                          VM_MEMORY_MANAGEMENT_CONSTANTS
-                          (list (JSR VM_INITIALIZE_MM_PAGE)
-                                (JSR VM_ALLOC_PAGE__LIST_CELL_PAIRS)
-                                (BRK))
-                          VM_INITIALIZE_MM_PAGE
+(module+ test #| vm-program <- complete page memory management |#
+  (define vm-program (append VM_MEMORY_MANAGEMENT_CONSTANTS
+                             VM_INITIALIZE_MM_PAGE
                           ;; VM_ALLOC_PAGE_JUMP_TABLE
                           ;; VM_ALLOC_PAGE
 
@@ -593,52 +655,113 @@
                           VM_FREE_NON_ATOMIC
                           VM_ALLOC_CELL_PAIR
                           VM_FREE_CELL_PAIR
+                          VM_CELL_PAIR_SET_NIL
+                          VM_CELL_PAIR_SET_INT_0
 
                           (list (org #xcec0))
                           VM_INITIAL_MM_REGS
                           (list (org #xced0))
                           VM_FREE_PAGE_BITMAP
-                          ))
-  ;; (run-debugger-on
-  ;;  (6510-load-multiple
-  ;;   (initialize-cpu)
-  ;;   (assemble-to-code-list program)))
+                          )))
 
-  (define raw-bytes
-    (translate-code-list-for-basic-loader
-     (assemble-to-code-list
-      (list
-       (org #xc000)
-              (LDA !$41)
-              (JSR $FFD2)
-              (JMP NEXT)
-       (org #xc100)
-       (label NEXT)
-              (LDA !$42)
-              (JSR $FFD2)
-              (RTS)))))
+(module+ test #| use case 1 allocate, free, reallocate single cell-pair |#
+   ;; use case: 1 allocate, free, reallocate single cell-pair
+   ;; a- allocate cell-pair (auto increment?) [zp_ptr = (nil . nil), free-tree-top = nil, rc(zp_ptr) = 1]
+   ;; a- (increment ref count of cell-pair)   [zp_ptr = (nil . nil), free-tree-top = nil, rc(zp_ptr) = 1]
+   ;; a- set cell1 and cell2 to int cells (equivalent to '(1 . 2)) [zp_ptr = (1 . 2), free-tree-top = nil, rc(zp_ptr) = 1]
+   ;; b- decrement ref count of cell-pair <- should put the cell-pair on the free tree [zp_ptr = x, free-tree-top = (nil . 2), rc((nil . 2)) = 0]
+   ;; c- allocate cell-pair (again) <- should recycle the top of the free tree [z_ptr = (nil . nil), free-tree-top = nil, rc((nil . nil)) = 1]
 
-  (define org-pos 2064)
-  ;; (define prg-name "loader-test.prg")
-  ;; (define d64-name "loader-test.d64")
-  ;; (require "../tools/6510-prg-generator.rkt")
-  ;; (create-prg raw-bytes org-pos prg-name)
+  (define use-case-1-a-code (list (org #xc000)
+                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_ALLOC_CELL_PAIR)
+                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+                  ;; set cell2 to int 0
+                  (LDY !$03)
+                  (JSR VM_CELL_PAIR_SET_INT_0)
+                  ;; set cell1 to int 0
+                  (DEY)
+                  (JSR VM_CELL_PAIR_SET_INT_0)))
+  (define use-case-1-a
+    (append use-case-1-a-code
+            (list (BRK))
+            vm-program))
 
-  (define state-after-run
-    (parameterize ([current-output-port (open-output-nowhere)])
-      (run-interpreter org-pos raw-bytes)))
+  (define use-case-1-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-a)))
+  (define use-case-1-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-a-state-before)))
 
-  (check-equal?
-   (memory-list state-after-run
-                #xc001
-                #xc001)
-   '(#x41))
+  (check-equal? (memory-list use-case-1-a-state-after #xfc #xfd)
+                '(#x04 #xcd)
+                "zp_ptr -> $cd04 = first free cell-pair on page $cd after initialization")
+  (check-equal? (memory-list use-case-1-a-state-after #xcd01 #xcd01)
+                '(#x01)
+                "refcount for first cell-pair allocated = 1")
+  (check-equal? (memory-list use-case-1-a-state-after #xcd04 #xcd07)
+                '(#x00 #x00 #x00 #x00)
+                "cell1=int0 cell2=int0")
+  (check-equal? (memory-list use-case-1-a-state-after #xcfcd #xcfcd)
+                '(#x08)
+                "next free cell-pair on page $cd is at $08")
 
-  (check-equal?
-   (memory-list state-after-run
-                #xc101
-                #xc101)
-   '(#x42))
+  (define use-case-1-b-code
+    (append use-case-1-a-code
+            (list (JSR VM_REFCOUNT_DECR_CELL_PAIR))))
+  (define use-case-1-b
+    (append use-case-1-b-code
+            (list (BRK))
+            vm-program))
 
-;; (run-debugger-on (6510-load-multiple (initialize-cpu) (assemble-to-code-list program)))
+  (define use-case-1-b-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-b)))
+  (define use-case-1-b-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-b-state-before)))
+
+  (check-equal? (memory-list use-case-1-b-state-after #xcec5 #xcec6) ;;
+                '(#x04 #xcd )
+                "root of free tree is cell-pair at $cd04")
+  (check-equal? (memory-list use-case-1-b-state-after #xcd01 #xcd01)
+                '(#x00)
+                "refcount for cell-pair freed = 0")
+  (check-equal? (memory-list use-case-1-b-state-after #xcfcd #xcfcd)
+                '(#x08)
+                "next free cell-pair on page $cd is still $08")
+
+  (define use-case-1-c-code
+    (append use-case-1-b-code
+            (list
+             ;; clear zp_ptr just to make sure
+             (LDA !$00)
+             (STA $fc)
+             (STA $fd)
+             (JSR VM_ALLOC_CELL_PAIR))))
+  (define use-case-1-c
+    (append use-case-1-c-code
+            (list (BRK))
+            vm-program))
+
+  (define use-case-1-c-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-c)))
+  (define use-case-1-c-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-c-state-before)))
+  (check-equal? (memory-list use-case-1-c-state-after #xfc #xfd) ;;
+                '(#x04 #xcd )
+                "allocated cell-pair is reused cell-pair of free tree")
+  (check-equal? (memory-list use-case-1-c-state-after #xcec5 #xcec6) ;;
+                '(#x00 #x00 )
+                "root of free tree is initial again")
+  (check-equal? (memory-list use-case-1-c-state-after #xcd01 #xcd01)
+                '(#x00)
+                "refcount for (reused) cell-pair = 1")
+  (check-equal? (memory-list use-case-1-c-state-after #xcfcd #xcfcd)
+                '(#x08)
+                "next free cell-pair on page $cd is still $08"))
+
+(module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
+  ;; use case: allocate, free, reallocate small list of cell-pairs
+  ;; - allocate cell-pair [A(nil . nil), free-tree-top = nil, rc(A) = 1]
+  ;; - set cell1 to an int [A(1 . nil), free-tree-top = nil, rc(A) = 1]
+  ;; - allocate cell-pair [A(1 . B(nil . nil)), free-tree-top = nil, rc(A) = 1, rc(B) = 1]
+  ;; - set cell2 to allocated cell-pair
+  ;; - set cell1 to an int [A(1 . B(2 . nil)), free-tree-top = nil, rc(A) = 1, rc(B) = 1]
+  ;; - (set cell2 to nil) => (equivalent to '(1 2))
+  ;; - decrement list head (cell-pair) <- should put the head of the list on the free tree, keeping the pointer to the next cell-pair
+  ;;                                  [A(nil . B(2 . nil)), free-tree-top = A, rc(A) = 0, rc(B) = 1]
+  ;; - allocate cell-pair <- should recycle the top of the free tree, decrement ref count of cell2, top of free tree will be set to cell2 and
+  ;;                        [NA(nil . nil), free-tree-top = B, rc(A) = 1, rc(B) = 0]
   )
