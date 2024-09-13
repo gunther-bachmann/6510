@@ -63,7 +63,8 @@
    (word-const VM_FREE_SLOT_FOR_PAGE     #xcf00) ;; location: table of first free slot for each page
    (word-const TAGGED_INT_0              #x0000)
    (word-const TAGGED_NIL                #x0200)
-   (byte-const ZP_PTR #xfc)
+   (byte-const ZP_PTR #xfb)
+   (byte-const ZP_PTR2 #xfd)
    ))
 
 ;; y =1 for cell1, = 3 for cell 2
@@ -498,18 +499,9 @@
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (BNE REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR)
           ;; no cell-pair to free available
-          ;; is there a page that has free cells?
-          (LDA VM_FREE_CELL_PAIR_PAGE)
-          (BEQ VM_ALLOC_CELL_PAIR__NO_FREE_CELL_PAGE)
 
-          ;; get a cell-pair on the given page
-          (JMP VM_ALLOC_CELL_PAIR_ON_PAGE)
-
-   (label VM_ALLOC_CELL_PAIR__NO_FREE_CELL_PAGE)
-          ;; allocate new page
-          (JSR VM_ALLOC_PAGE__LIST_CELL_PAIRS)
-          (LDA ZP_PTR+1) ;; get page into A
-          ;; allocate cell-pair on this new page
+          ;; get a cell-pair on the given page (or allocate a new page)
+          (LDA VM_FREE_CELL_PAIR_PAGE) ;; TODO
           (JMP VM_ALLOC_CELL_PAIR_ON_PAGE)
 
    (label REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR)
@@ -638,6 +630,24 @@
           (STA (ZP_PTR),y) ;; clear refcount byte, too
           (RTS)))
 
+(define VM_COPY_PTR2_TO_PTR1
+  (list
+   (label VM_COPY_PTR2_TO_PTR1)
+          (LDA ZP_PTR2+1)
+          (STA ZP_PTR+1)
+          (LDA ZP_PTR2)
+          (STA ZP_PTR)
+          (RTS)))
+
+(define VM_COPY_PTR1_TO_PTR2
+  (list
+   (label VM_COPY_PTR1_TO_PTR2)
+          (LDA ZP_PTR+1)
+          (STA ZP_PTR2+1)
+          (LDA ZP_PTR)
+          (STA ZP_PTR2)
+          (RTS)))
+
 (module+ test #| vm-program <- complete page memory management |#
   (define vm-program (append VM_MEMORY_MANAGEMENT_CONSTANTS
                              VM_INITIALIZE_MM_PAGE
@@ -657,6 +667,8 @@
                           VM_FREE_CELL_PAIR
                           VM_CELL_PAIR_SET_NIL
                           VM_CELL_PAIR_SET_INT_0
+                          VM_COPY_PTR2_TO_PTR1
+                          VM_COPY_PTR1_TO_PTR2
 
                           (list (org #xcec0))
                           VM_INITIAL_MM_REGS
@@ -690,7 +702,7 @@
   (define use-case-1-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-a)))
   (define use-case-1-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-a-state-before)))
 
-  (check-equal? (memory-list use-case-1-a-state-after #xfc #xfd)
+  (check-equal? (memory-list use-case-1-a-state-after #xfb #xfc)
                 '(#x04 #xcd)
                 "zp_ptr -> $cd04 = first free cell-pair on page $cd after initialization")
   (check-equal? (memory-list use-case-1-a-state-after #xcd01 #xcd01)
@@ -729,8 +741,8 @@
             (list
              ;; clear zp_ptr just to make sure
              (LDA !$00)
+             (STA $fb)
              (STA $fc)
-             (STA $fd)
              (JSR VM_ALLOC_CELL_PAIR))))
   (define use-case-1-c
     (append use-case-1-c-code
@@ -739,7 +751,7 @@
 
   (define use-case-1-c-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-c)))
   (define use-case-1-c-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-c-state-before)))
-  (check-equal? (memory-list use-case-1-c-state-after #xfc #xfd) ;;
+  (check-equal? (memory-list use-case-1-c-state-after #xfb #xfc) ;;
                 '(#x04 #xcd )
                 "allocated cell-pair is reused cell-pair of free tree")
   (check-equal? (memory-list use-case-1-c-state-after #xcec5 #xcec6) ;;
@@ -764,4 +776,41 @@
   ;;                                  [A(nil . B(2 . nil)), free-tree-top = A, rc(A) = 0, rc(B) = 1]
   ;; - allocate cell-pair <- should recycle the top of the free tree, decrement ref count of cell2, top of free tree will be set to cell2 and
   ;;                        [NA(nil . nil), free-tree-top = B, rc(A) = 1, rc(B) = 0]
-  )
+    (define use-case-2-a-code (list (org #xc000)
+                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_ALLOC_CELL_PAIR)
+                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+                  ;; set cell2 to nil
+                  (LDY !$03)
+                  (JSR VM_CELL_PAIR_SET_NIL)
+                  ;; set cell1 to int 0
+                  (DEY)
+                  (JSR VM_CELL_PAIR_SET_INT_0)
+                  (JSR VM_COPY_PTR1_TO_PTR2)
+                  (JSR VM_ALLOC_CELL_PAIR)
+                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+                  ;; set cell2 to zp_ptr2->
+                  (LDY !$03)
+                  (LDA ZP_PTR,y) ;; load from zp_ptr2+1 ( = zp_ptr+3)
+                  (STA (ZP_PTR),y) ;; write into high byte of cell2
+                  (DEY)
+                  (LDA ZP_PTR,y) ;; load from zp_ptr2 ( = zp_ptr+2)
+                  (STA (ZP_PTR),y) ;; write into low byte of cell2
+                  (DEY)
+                  (JSR VM_CELL_PAIR_SET_INT_0) ;; set cell1 to int 0
+                  ))
+  (define use-case-2-a
+    (append use-case-2-a-code
+            (list (BRK))
+            vm-program))
+
+  (define use-case-2-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-2-a)))
+  ;; (run-debugger-on use-case-2-a-state-before)
+  (define use-case-2-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-2-a-state-before)))
+  (check-equal? (memory-list use-case-2-a-state-after #xfb #xfe)
+                '(#x08 #xcd #x04 #xcd)
+                "zp_ptr -> $cd08, zp_ptr2 -> $cd04 = first two free cell-pairs on page $cd after initialization")
+  (check-equal? (memory-list use-case-2-a-state-after #xcd04 #xcd0b)
+                '(#x00 #x00 #x00 #x02 #x00 #x00 #x04 #xcd )
+                "cell-pairs contain (int0 . -> next cell), (int 0 . nil)")
+)
