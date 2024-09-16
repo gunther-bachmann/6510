@@ -358,49 +358,48 @@
 (module+ test #| translate-code-list-for-basic-loader |#
   (check-equal?
    (disassemble-bytes 2064 (translate-code-list-for-basic-loader '((#xc000 . (#x00)) (#xc100 . (#x00)))))
-   '("JMP $0831"   ;; $0810
-     "BRK"         ;; $0813
-     "BRK"         ;; $0814
-     "STA $0813"   ;; $0815
-     "STX $0814"   ;; $0818
-     "LDY #$00"    ;; $081B
-     "LDA ($fc),y" ;; $081D
-     "STA ($fe),y" ;; $081F
-     "INY"         ;; $0821
-     "DEC $0813"   ;; $0822
-     "BNE $f6"     ;; $0825
-     "INC $ff"     ;; $0827
-     "INC $fd"     ;; $0829
-     "DEC $0814"   ;; $082B
-     "BNE $ed"     ;; $082E
-     "RTS"         ;; $0830
-     "LDA #$00"    ;; $0831
-     "STA $fe"     ;; $0833
-     "LDA #$c0"    ;; $0835
-     "STA $ff"     ;; $0837
-     "LDA #$6c"    ;; $0839
-     "STA $fc"     ;; $083B
-     "LDA #$08"    ;; $083D
-     "STA $fd"     ;; $083F
-     "LDA #$01"    ;; $0841
-     "LDX #$00"    ;; $0843
-     "JSR $0815"   ;; $0845
-     "LDA #$00"    ;; $0848
-     "STA $fe"     ;; $084A
-     "LDA #$c1"    ;; $084C
-     "STA $ff"     ;; $084E
-     "LDA #$6d"    ;; $0850
-     "STA $fc"     ;; $0852
-     "LDA #$08"    ;; $0854
-     "STA $fd"     ;; $0856
-     "LDA #$01"    ;; $0858
-     "LDX #$00"    ;; $085A
-     "JSR $0815"   ;; $085C
-     "LDA #$00"    ;; $085F
-     "STA $086a"   ;; $0861
-     "LDA #$c0"    ;; $0864
-     "STA $086b"   ;; $0866
-     "JMP $0000"   ;; $0869
-     "BRK"         ;; $086C
-     "BRK"         ;; $086D
-     )))
+   '("JMP $0831"
+     "BRK"
+     "BRK"
+     "STA $0813"
+     "STX $0814"
+     "LDY #$00"
+     "LDA ($fb),y"
+     "STA ($fd),y"
+     "INY"
+     "DEC $0813"
+     "BNE $f6"
+     "INC $fe"
+     "INC $fc"
+     "DEC $0814"
+     "BPL $ed"
+     "RTS"
+     "LDA #$00"
+     "STA $fd"
+     "LDA #$c0"
+     "STA $fe"
+     "LDA #$6c"
+     "STA $fb"
+     "LDA #$08"
+     "STA $fc"
+     "LDA #$01"
+     "LDX #$00"
+     "JSR $0815"
+     "LDA #$00"
+     "STA $fd"
+     "LDA #$c1"
+     "STA $fe"
+     "LDA #$6d"
+     "STA $fb"
+     "LDA #$08"
+     "STA $fc"
+     "LDA #$01"
+     "LDX #$00"
+     "JSR $0815"
+     "LDA #$00"
+     "STA $086a"
+     "LDA #$c0"
+     "STA $086b"
+     "JMP $0000"
+     "BRK"
+     "BRK")))
