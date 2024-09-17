@@ -64,7 +64,7 @@
    (word-const VM_FREE_SLOT_FOR_PAGE     #xcf00) ;; location: table of first free slot for each page
 
    (word-const TAGGED_INT_0              #x0000)
-   (word-const TAGGED_NIL                #x0200) ;; tag indicates cell-pair-ptr
+   (word-const TAGGED_NIL                #x0002) ;; tag indicates cell-pair-ptr
 
    ;; zp_ptr holds either a cell-ptr or a cell-pair (ptr) with out the tag bits!
    ;; these two must be adjacent (for some code to work!)
@@ -83,7 +83,7 @@
    (byte-const ZP_CELL1                  #xde)  ;; de = low byte without tag, df = high byte
    ;; ... cell2 = e0..e2, 3 = e3..e5, 4 = e6..e8, 5= e9..eb, 6 = ec..ee, 7 = ef..f1
    (byte-const ZP_CELL7_LOW_TAGGED       #xef)
-   (byte-const ZP_CELL7_LOW_TAGGED       #xf0)
+   (byte-const ZP_CELL7                  #xf0)
    ))
 
 ;; naming convention
@@ -106,6 +106,43 @@
 ;;   erasing cell-ptr from a cell decreases ref count
 
 
+(module+ test #| vm-program <- complete page memory management |#
+  (define vm-program (append VM_MEMORY_MANAGEMENT_CONSTANTS
+                             VM_INITIALIZE_MM_PAGE
+                          ;; VM_ALLOC_PAGE_JUMP_TABLE
+                          ;; VM_ALLOC_PAGE
+
+                          VM_ALLOC_PAGE__LIST_CELL_PAIRS
+                          VM_FREE_PAGE
+                          VM_ALLOC_PAGE__PAGE_UNINIT
+                          VM_ALLOC_PAGE__CALL_STACK
+                          VM_ALLOC_CELL_PAIR_ON_PAGE
+                          VM_REFCOUNT_DECR
+                          VM_REFCOUNT_DECR_CELL_PAIR
+                          VM_REFCOUNT_INCR_CELL_PAIR
+                          VM_FREE_NON_ATOMIC
+                          VM_ALLOC_CELL_PAIR
+                          VM_FREE_CELL_PAIR
+                          VM_CELL_PAIR_SET_NIL
+                          VM_CELL_PAIR_SET_INT_0
+
+                          VM_CELL_STACK_PUSH_NIL
+                          VM_CELL_STACK_PUSH_INT
+
+                          VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR
+                          VM_CELL_STACK_PUSH_ZP_PTRy
+                          VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR
+                          VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy
+                          VM_CELL_STACK_POP
+
+                          VM_COPY_PTR2_TO_PTR
+                          VM_COPY_PTR_TO_PTR2
+
+                          (list (org #xcec0))
+                          VM_INITIAL_MM_REGS
+                          (list (org #xced0))
+                          VM_FREE_PAGE_BITMAP
+                          )))
 
 ;; STACK Functions
 ;;   NIL->Stack++                VM_CELL_STACK_PUSH_NIL
@@ -130,40 +167,45 @@
 ;;         Y  unchanged if cell is no ptr
 ;;            ? if cell is a ptr
 ;;    zp_ptr  is overwritte if cell is a ptr
+;; check stack empty!
 (define VM_CELL_STACK_POP
   (list
    (label VM_CELL_STACK_POP)
           (LDX ZP_CELL_TOS)
           (BMI STACK_EMPTY_ERROR__VM_CELL_STACK_POP)
+
+          ;; now check whether deallocation needs to take place (that is the cell being popped is a ptr)
           (DEX)
           (LDA ZP_CELL0,x) ;; tagged low byte
           (AND !$03)
-          (BEQ DO_POP__VM_CELL_STACK_POP)
+          (BEQ DO_POP__VM_CELL_STACK_POP) ;; is no pointer => jump
 
-          ;; is a pointer
+          ;; is a pointer?
           (LSR)
           (BCC IS_CELL_PAIR_PTR__VM_CELL_STACK_POP)
 
           ;; is a cell-ptr
+          ;; not implemented yet: should decrement cell-ptr and check whether it can be garbage collected!
 
    (label STACK_EMPTY_ERROR__VM_CELL_STACK_POP)
           (BRK) ;; not implemented yet
 
    (label IS_CELL_PAIR_PTR__VM_CELL_STACK_POP)
-          (INX)
+          (INX)               ;; point to untagged low byte
+          ;; move cell-pair-ptr (tos) -> zp_ptr
           (LDA ZP_CELL0,x)    ;; low byte untagged
-          (STA ZP_PTR)     ;; to zp_ptr
+          (STA ZP_PTR)        ;; to zp_ptr
           (LDA ZP_CELL0+1,x)  ;; high byte
-          (STA ZP_PTR+1)   ;; to zp_ptr
-          ;; no need for tagged low byte
-          (JSR VM_REFCOUNT_DECR_CELL_PAIR)
-          (LDX ZP_CELL_TOS)
-          (DEX)
+          (STA ZP_PTR+1)      ;; to zp_ptr
+          ;; no need for copying tagged low byte, since I already know it is a cell-pair-ptr
+          (JSR VM_REFCOUNT_DECR_CELL_PAIR) ;; decrement and gc if necessary
+          (LDX ZP_CELL_TOS)   ;; restore tos
+          (DEX)               ;; dex (such that in total x-=3
 
    (label DO_POP__VM_CELL_STACK_POP)
+          (DEX) ;; x was already decremented => dec 2x
           (DEX)
-          (DEX)
-          (STX ZP_CELL_TOS)
+          (STX ZP_CELL_TOS) ;; store new tos
           (RTS)))
 
 ;; push nil onto the stack (checking for stack overflow)
@@ -172,6 +214,7 @@
 ;; registers: A  ?
 ;;            X  TOS (on untagged low byte)
 ;;            Y  unchanged
+;; check stack full!
 (define VM_CELL_STACK_PUSH_NIL
   (list
    (label VM_CELL_STACK_PUSH_NIL)
@@ -182,23 +225,72 @@
           ;; inx just two times, to point right past cell to the tagged low byte (is later ++ before saved as tos)
 
           ;; check that stack pointer does not run out of bound
-          (CPX !$EF)
-          (BMI NO_ERROR__VM_CELL_STACK_PUSH_NIL)
+          (CPX !ZP_CELL7_LOW_TAGGED) ;; stack runs from  cell0 .. cell7
+          (BCS NO_ERROR__VM_CELL_STACK_PUSH_NIL)
 
           (BRK)
 
    (label NO_ERROR__VM_CELL_STACK_PUSH_NIL)
 
           (LDA !<TAGGED_NIL)
-          (STA ZP_CELL0,x)     ;; write lowbyte
-          (AND !$fc)           ;; mask out ptr tag bits
-          (STA ZP_CELL0+1,x)   ;; write untagged lowbyte
+          (STA ZP_CELL0_LOW_TAGGED,x) ;; write lowbyte
+          (AND !$fc)                  ;; mask out ptr tag bits
+          (STA ZP_CELL0,x)            ;; write untagged lowbyte
           (LDA !>TAGGED_NIL)
-          (STA ZP_CELL0+2,x)   ;; write high byte
+          (STA ZP_CELL0+1,x)          ;; write high byte
           (INX)
-          (STX ZP_CELL_TOS)    ;; set new tos
+          (STX ZP_CELL_TOS)           ;; set new tos
           (RTS)
    ))
+
+(module+ test #| vm_cell_stack_push_nil |#
+  (define test-vm_cell_stack_push_nil-a-code (list (org #xc000)
+                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_CELL_STACK_PUSH_NIL)))
+  (define test-vm_cell_stack_push_nil-a
+    (append test-vm_cell_stack_push_nil-a-code
+            (list (BRK))
+            vm-program))
+
+  (define test-vm_cell_stack_push_nil-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_push_nil-a)))
+  (define test-vm_cell_stack_push_nil-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_push_nil-a-state-before)))
+
+  ;; (run-debugger-on test-vm_cell_stack_push_nil-a-state-before)
+
+  (check-equal? (memory-list test-vm_cell_stack_push_nil-a-state-after #xd9 #xdc)
+                '(#x01
+                  #x02 #x00 #x00)
+                "tos = 01, nil is on stack")
+
+  (define test-vm_cell_stack_push_nil-b-code (list (JSR VM_CELL_STACK_PUSH_NIL)
+                                                   (JSR VM_CELL_STACK_PUSH_NIL)
+                                                   (JSR VM_CELL_STACK_PUSH_NIL)
+                                                   (JSR VM_CELL_STACK_PUSH_NIL)
+                                                   (JSR VM_CELL_STACK_PUSH_NIL)
+                                                   (JSR VM_CELL_STACK_PUSH_NIL)
+                                                   (JSR VM_CELL_STACK_PUSH_NIL)))
+  (define test-vm_cell_stack_push_nil-b
+    (append test-vm_cell_stack_push_nil-a-code
+            test-vm_cell_stack_push_nil-b-code
+            (list (BRK))
+            vm-program))
+
+  (define test-vm_cell_stack_push_nil-b-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_push_nil-b)))
+  (define test-vm_cell_stack_push_nil-b-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_push_nil-b-state-before)))
+
+  ;; (run-debugger-on test-vm_cell_stack_push_nil-b-state-before)
+
+  (check-equal? (memory-list test-vm_cell_stack_push_nil-b-state-after #xd9 #xf1)
+                '(#x16
+                  #x02 #x00 #x00
+                  #x02 #x00 #x00
+                  #x02 #x00 #x00
+                  #x02 #x00 #x00
+                  #x02 #x00 #x00
+                  #x02 #x00 #x00
+                  #x02 #x00 #x00
+                  #x02 #x00 #x00)
+                "tos = 01, 8 x nil is on stack"))
 
 ;; ints are saved high byte first, then low byte !!!!
 ;; input:  stack
@@ -208,6 +300,7 @@
 ;;         A  = transformed / tagged low byte of int
 ;;         Y  = low byte of int
 ;;         X  = tos
+;; check stack full!
 (define VM_CELL_STACK_PUSH_INT
   (list
    (label VM_CELL_STACK_PUSH_INT)
@@ -218,7 +311,7 @@
           ;; inx just two times, to point right past cell to the tagged low byte (is later ++ before saved as tos)
 
           ;; check that stack pointer does not run out of bound
-          (CPX !$EF)
+          (CPX !ZP_CELL7_LOW_TAGGED)
           (BMI NO_ERROR__VM_CELL_STACK_PUSH_INT)
 
           (BRK)
@@ -227,9 +320,9 @@
           (ASL A)
           (ASL A)
           (AND !$7c)           ;; mask out top and two low bits!
-          (STA ZP_CELL0,x)     ;; write int high byte first
-          (STA ZP_CELL0+1,x)   ;; write untagged int high byte (the same)
-          (STY ZP_CELL0+2,x)   ;; write int low byte
+          (STA ZP_CELL0_LOW_TAGGED,x)     ;; write int high byte first
+          (STA ZP_CELL0,x)   ;; write untagged int high byte (the same)
+          (STY ZP_CELL0+1,x)   ;; write int low byte
           (INX)
           (STX ZP_CELL_TOS)    ;; set new tos
           (RTS)
@@ -245,6 +338,7 @@
 ;;         x = TOS+1
 ;;         y = y+1
 ;;         flags: result of lda high byte of celly
+;; check stack full!
 (define VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR
   (list
    (label VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
@@ -255,7 +349,7 @@
           ;; inx just two times, to point right past cell to the tagged low byte (is later ++ before saved as tos)
 
           ;; check that stack pointer does not run out of bound
-          (CPX !$EF)
+          (CPX !ZP_CELL7_LOW_TAGGED)
           (BMI NO_ERROR__VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
 
           (BRK)
@@ -290,6 +384,7 @@
 ;;         x = TOS-1 => to pop execute (DEX) (DEX) (STX ZP_CELL_TOS)
 ;;         y = y+1
 ;;         flags: result of lda high byte of tos-cell
+;; no stack empty check!
 (define VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR
   (list
    (label VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
@@ -309,17 +404,29 @@
 ;;         A  high byte of zp_ptr
 ;;         X  TOS
 ;;         Y  0|2 (orig Y * 2)
+;; check stack full!
 (define VM_CELL_STACK_PUSH_ZP_PTRy
   (list
-   (label VM_CELL_STACK_PUSH_ZP_PTR_AS_CELL_PAIR_PTR)
+   (label VM_CELL_STACK_PUSH_ZP_PTRy)
           (LDX ZP_CELL_TOS)
           (INX)
           (INX)
+
+          ;; check that stack pointer does not run out of bound
+          (CPX !ZP_CELL7_LOW_TAGGED)
+          (BMI NO_ERROR__VM_CELL_STACK_PUSH_ZP_PTRy)
+
+          (BRK)
+
+   (label NO_ERROR__VM_CELL_STACK_PUSH_ZP_PTRy)
           (LDA ZP_PTR_TAGGED,y)
           (STA ZP_CELL0,x)    ;; tagged low byte
+
+          ;; Y = Y*2
           (TYA)
           (ASL A)
           (TYA)
+
           (LDA ZP_PTR,y)
           (STA ZP_CELL0+1,x)  ;; untagged low byte
           (LDA ZP_PTR+1,y)
@@ -503,9 +610,14 @@
     (label VM_INITIALIZE_MM_PAGE__LOOP)
            ;; highbyte of this address should be using the constant NEXT_FREE_PAGE_PAGE
            ;; (STA $cf00,y) ;; encoded directly in the next couple of bytes
+           ;; (car (ast-opcode-cmd-bytes (STA $cf00,y)))
            (byte 153 0) (byte-ref NEXT_FREE_PAGE_PAGE)
            (INY)
            (BNE VM_INITIALIZE_MM_PAGE__LOOP)
+
+           ;; initialize cell stack
+           (LDX !$FE)          ;; negative and 2 x inc = cell0+x -> tagged low byte
+           (STX ZP_CELL_TOS)
 
            (RTS))))
 
@@ -961,43 +1073,6 @@
           (STA (ZP_PTR),y) ;; clear refcount byte, too
           (RTS)))
 
-(module+ test #| vm-program <- complete page memory management |#
-  (define vm-program (append VM_MEMORY_MANAGEMENT_CONSTANTS
-                             VM_INITIALIZE_MM_PAGE
-                          ;; VM_ALLOC_PAGE_JUMP_TABLE
-                          ;; VM_ALLOC_PAGE
-
-                          VM_ALLOC_PAGE__LIST_CELL_PAIRS
-                          VM_FREE_PAGE
-                          VM_ALLOC_PAGE__PAGE_UNINIT
-                          VM_ALLOC_PAGE__CALL_STACK
-                          VM_ALLOC_CELL_PAIR_ON_PAGE
-                          VM_REFCOUNT_DECR
-                          VM_REFCOUNT_DECR_CELL_PAIR
-                          VM_REFCOUNT_INCR_CELL_PAIR
-                          VM_FREE_NON_ATOMIC
-                          VM_ALLOC_CELL_PAIR
-                          VM_FREE_CELL_PAIR
-                          VM_CELL_PAIR_SET_NIL
-                          VM_CELL_PAIR_SET_INT_0
-
-                          VM_CELL_STACK_PUSH_NIL
-                          VM_CELL_STACK_PUSH_INT
-                                             
-                          VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR
-                          VM_CELL_STACK_PUSH_ZP_PTRy
-                          VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR
-                          VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy
-                          VM_CELL_STACK_POP
-
-                          VM_COPY_PTR2_TO_PTR
-                          VM_COPY_PTR_TO_PTR2
-
-                          (list (org #xcec0))
-                          VM_INITIAL_MM_REGS
-                          (list (org #xced0))
-                          VM_FREE_PAGE_BITMAP
-                          )))
 
 (module+ test #| use case 1 allocate, free, reallocate single cell-pair |#
    ;; use case: 1 allocate, free, reallocate single cell-pair
@@ -1135,7 +1210,7 @@
                 "zp_ptr -> $cd08, zp_ptr2 -> $cd04 = first two free cell-pairs on page $cd after initialization")
   (check-equal? (memory-list use-case-2-a-state-after #xcd01 #xcd0b)
                 '(#x01 #x01 #x00      ;; refcounts
-                  #x00 #x00 #x00 #x02 ;; tail cell
+                  #x00 #x00 #x02 #x00 ;; tail cell
                   #x00 #x00 #x04 #xcd ;; head cell
                   )
                 "cell-pairs contain (int0 . -> next cell), (int 0 . nil)")
@@ -1155,7 +1230,7 @@
   (define use-case-2-b-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-2-b-state-before)))
   (check-equal? (memory-list use-case-2-b-state-after #xcd01 #xcd0b)
                 '(#x01 #x00 #x00      ;; refcounts
-                  #x00 #x00 #x00 #x02 ;; tail cell
+                  #x00 #x00 #x02 #x00 ;; tail cell
                   #x00 #x00 #x04 #xcd ;; head cell
                   )
                 "refcount cd08 = 0 (head), cd04 unchanged (tail)")
