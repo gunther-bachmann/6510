@@ -27,28 +27,45 @@
 
 ;; Method index + description
 ;; DATA
-;;  VM_MEMORY_MANAGEMENT_CONSTANTS :: constants that are used by the assembler code
-;;  VM_ALLOC_PAGE_JUMP_TABLE       :: jump table  page-type->allocation method
-;;  VM_INITIAL_MM_REGS             :: (initial data for) the memory management registers
-;;  VM_FREE_PAGE_BITMAP            :: bitmap indicating free pages (0) or allocated pages (1)
+;;  VM_MEMORY_MANAGEMENT_CONSTANTS              :: constants that are used by the assembler code
+;;  VM_ALLOC_PAGE_JUMP_TABLE                    :: jump table  page-type->allocation method
+;;  VM_INITIAL_MM_REGS                          :: (initial data for) the memory management registers
+;;  VM_FREE_PAGE_BITMAP                         :: bitmap indicating free pages (0) or allocated pages (1)
 ;;
 ;; CODE (FULL PAGE)
-;;  VM_INITIALIZE_MM_PAGE          :: initialize memory management (paging)
-;;  VM_ALLOC_PAGE                  :: INCOMPLETE! allocate page (of any kind)
-;;  VM_ALLOC_PAGE__LIST_CELL_PAIRS :: allocate a complete new page and initialize it to hold reference counted cell-pairs
-;;  VM_FREE_PAGE                   :: free the given page (may then be allocated again via VM_ALLOC_PAGE*
-;;  VM_ALLOC_PAGE__PAGE_UNINIT     :: allocate page (without initialization for specific type)
-;;  VM_ALLOC_PAGE__CALL_STACK      :: INCOMPLETE! allocate page for call stack usage
+;;  VM_INITIALIZE_MM_PAGE                       :: initialize memory management (paging)
+;;  VM_ALLOC_PAGE                               :: INCOMPLETE! allocate page (of any kind)
+;;  VM_ALLOC_PAGE__LIST_CELL_PAIRS              :: allocate a complete new page and initialize it to hold reference counted cell-pairs
+;;  VM_FREE_PAGE                                :: free the given page (may then be allocated again via VM_ALLOC_PAGE*
+;;  VM_ALLOC_PAGE__PAGE_UNINIT                  :: allocate page (without initialization for specific type)
+;;  VM_ALLOC_PAGE__CALL_STACK                   :: INCOMPLETE! allocate page for call stack usage
 ;;
 ;; CODE
-;;  VM_ALLOC_CELL_PAIR_ON_PAGE     :: allocate a cell-pair on given page, auto allocate new page if full
-;;  VM_REFCOUNT_DECR               :: INCOMPLETE: dispatch to type specific decrement of ref count
-;;  VM_REFCOUNT_DECR_CELL_PAIR     :: decrement ref count for cell-pair, mark as free if ref count drops to 0 (calls VM_FREE_CELL_PAIR)
-;;  VM_REFCOUNT_INCR_CELL_PAIR     :: increments ref count for cell-pair
-;;  VM_FREE_NON_ATOMIC             :: INCOMPLETE: free a non atomic cell (e.g. cell-ptr, cell-pair, float, array/struct)
-;;  VM_ALLOC_CELL_PAIR             :: allocate a cell-pair (reuse marked free, allocate new if no reuse possible)
-;;  VM_FREE_CELL_PAIR              :: mark cell-pair as free, tail call free on cell1 (which is used for free tree)
-;;  VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST :: add the given cell-pair to its free list on its page (cell1 and cell2 must not point to anything), refcount is set to 0
+;;  VM_ALLOC_CELL_PAIR_ON_PAGE                  :: allocate a cell-pair on given page, auto allocate new page if full
+;;  VM_REFCOUNT_DECR                            :: INCOMPLETE: dispatch to type specific decrement of ref count
+;;  VM_REFCOUNT_DECR_CELL_PAIR                  :: decrement ref count for cell-pair, mark as free if ref count drops to 0 (calls VM_FREE_CELL_PAIR)
+;;  VM_REFCOUNT_INCR_CELL_PAIR                  :: increments ref count for cell-pair
+;;  VM_FREE_NON_ATOMIC                          :: INCOMPLETE: free a non atomic cell (e.g. cell-ptr, cell-pair, float, array/struct)
+;;  VM_ALLOC_CELL_PAIR                          :: allocate a cell-pair (reuse marked free, allocate new if no reuse possible)
+;;  VM_FREE_CELL_PAIR                           :: mark cell-pair as free, tail call free on cell1 (which is used for free tree)
+;;  VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST       :: add the given cell-pair to its free list on its page (cell1 and cell2 must not point to anything), refcount is set to 0
+
+;; STACK Functions
+;;   VM_CELL_STACK_PUSH_NIL                     :: NIL->Stack++
+;;   VM_CELL_STACK_PUSH_INT                     :: INT->Stack++
+;;
+;; STACK ZP_PTR Functions
+;;   VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR         :: ZP_PTR (CELLy) -> Stack++
+;;   VM_CELL_STACK_PUSH_ZP_PTRy                 :: ZP_PTRy -> Stack++
+;;   VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR :: Stack -> ZP_PTR (CELLy)
+;;   VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy         :: Stack -> ZP_PTRy
+;;   VM_CELL_STACK_POP                          :: Stack -> Stack--
+;;
+;; ZP_PTR Functions
+;;   VM_COPY_PTR2_TO_PTR                        :: ZP_PTR2->ZP_PTR
+;;   VM_COPY_PTR_TO_PTR2                        :: ZP_PTR->ZP_PTR2
+
+
 
 ;; constants that are used by the assembler code
 (define VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -143,21 +160,6 @@
                           (list (org #xced0))
                           VM_FREE_PAGE_BITMAP
                           )))
-
-;; STACK Functions
-;;   NIL->Stack++                VM_CELL_STACK_PUSH_NIL
-;;   INT->Stack++                VM_CELL_STACK_PUSH_INT
-;;
-;; STACK ZP_PTR Functions
-;;   ZP_PTR (CELLy) -> Stack++   VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR
-;;   ZP_PTRy -> Stack++          VM_CELL_STACK_PUSH_ZP_PTRy
-;;   Stack -> ZP_PTR (CELLy)     VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR
-;;   Stack -> ZP_PTRy            VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy
-;;   Stack -> Stack--            VM_CELL_STACK_POP
-;;
-;; ZP_PTR Functions
-;;   ZP_PTR2->ZP_PTR             VM_COPY_PTR2_TO_PTR
-;;   ZP_PTR->ZP_PTR2             VM_COPY_PTR_TO_PTR2
 
 ;; pop cell from stack, decrease ref count if it is a reference
 ;; input: stack
@@ -1170,13 +1172,13 @@
           (LSR)
           (BCS DECR_CELL_PAIR__VM_REFCOUNT_DECR)
           ;; check other types of cells
-          (RTS)
+          (BRK)
 
    (label DECR_CELL_PAIR__VM_REFCOUNT_DECR)
           (JMP VM_REFCOUNT_DECR_CELL_PAIR)
    (label DECR_CELL_PTR__VM_REFCOUNT_DECR)
           ;; implement VM_REFCOUNT_DECR_CELL_PTR
-          (RTS)))
+          (BRK)))
 
 ;; input: cell ptr in ZP_PTR
 ;; decrement ref count, if 0 deallocate
@@ -1214,7 +1216,7 @@
 (define VM_FREE_NON_ATOMIC
   (list
    (label VM_FREE_NON_ATOMIC)
-          (RTS)))
+          (BRK)))
 
 ;; result: zp_ptr = free cell-pair
 ;; try to reuse root of free tree: use root but make sure to deallocate cell2 of the root (since this might still point to some data)
