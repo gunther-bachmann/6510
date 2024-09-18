@@ -176,7 +176,7 @@
 
           ;; now check whether deallocation needs to take place (that is the cell being popped is a ptr)
           (DEX)
-          (LDA ZP_CELL0,x) ;; tagged low byte
+          (LDA ZP_CELL0_LOW_TAGGED,x) ;; tagged low byte
           (AND !$03)
           (BEQ DO_POP__VM_CELL_STACK_POP) ;; is no pointer => jump
 
@@ -191,22 +191,45 @@
           (BRK) ;; not implemented yet
 
    (label IS_CELL_PAIR_PTR__VM_CELL_STACK_POP)
-          (INX)               ;; point to untagged low byte
           ;; move cell-pair-ptr (tos) -> zp_ptr
+          (LDA ZP_CELL0+1,x)  ;; high byte
+          (BEQ DO_POP__VM_CELL_STACK_POP) ;; hight byte = 0 => is nil => no need to decr cell pair
+          (STA ZP_PTR+1)      ;; to zp_ptr+1
           (LDA ZP_CELL0,x)    ;; low byte untagged
           (STA ZP_PTR)        ;; to zp_ptr
-          (LDA ZP_CELL0+1,x)  ;; high byte
-          (STA ZP_PTR+1)      ;; to zp_ptr
           ;; no need for copying tagged low byte, since I already know it is a cell-pair-ptr
           (JSR VM_REFCOUNT_DECR_CELL_PAIR) ;; decrement and gc if necessary
           (LDX ZP_CELL_TOS)   ;; restore tos
-          (DEX)               ;; dex (such that in total x-=3
+          (DEX)               ;; dex (such that in total x-=3)
 
    (label DO_POP__VM_CELL_STACK_POP)
           (DEX) ;; x was already decremented => dec 2x
           (DEX)
           (STX ZP_CELL_TOS) ;; store new tos
           (RTS)))
+
+(module+ test #| vm_cell_stack_pop |#
+  (define test-vm_cell_stack_pop-a-code (list (org #xc000)
+                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_CELL_STACK_PUSH_NIL)
+                  (JSR VM_CELL_STACK_POP)
+                  (JSR VM_CELL_STACK_POP) ;; stops at brk in this routine
+                  (LDA !$00)              ;; is never run
+                  (STA ZP_CELL_TOS)))
+  (define test-vm_cell_stack_pop-a
+    (append test-vm_cell_stack_pop-a-code
+            (list (BRK))
+            vm-program))
+
+  (define test-vm_cell_stack_pop-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_pop-a)))
+  (define test-vm_cell_stack_pop-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_pop-a-state-before)))
+
+  ;; (run-debugger-on test-vm_cell_stack_pop-a-state-before)
+
+  (check-equal? (memory-list test-vm_cell_stack_pop-a-state-after #xd9 #xdc)
+                '(#xfe
+                  #x02 #x00 #x00)
+                "tos = fe (empty), nil is (still) in memory but off from stack, second pop runs into brk, no clearing of zp_cell_tos!"))
 
 ;; push nil onto the stack (checking for stack overflow)
 ;; input: stack
@@ -312,7 +335,7 @@
 
           ;; check that stack pointer does not run out of bound
           (CPX !ZP_CELL7_LOW_TAGGED)
-          (BMI NO_ERROR__VM_CELL_STACK_PUSH_INT)
+          (BCS NO_ERROR__VM_CELL_STACK_PUSH_INT)
 
           (BRK)
 
@@ -327,6 +350,43 @@
           (STX ZP_CELL_TOS)    ;; set new tos
           (RTS)
    ))
+
+(module+ test #| vm_cell_push_int |#
+    (define test-vm_cell_stack_push_int-a-code (list (org #xc000)
+                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (LDA !$1f) ;; -1
+                  (LDY !$ff)
+                  (JSR VM_CELL_STACK_PUSH_INT)
+                  (LDA !$10) ;; -4096
+                  (LDY !$00)
+                  (JSR VM_CELL_STACK_PUSH_INT)
+                  (LDA !$00) ;; 1
+                  (LDY !$01)
+                  (JSR VM_CELL_STACK_PUSH_INT)
+                  (LDA !$00) ;; 0
+                  (LDY !$00)
+                  (JSR VM_CELL_STACK_PUSH_INT)
+                  (LDA !$0f) ;; 4095
+                  (LDY !$ff)
+                  (JSR VM_CELL_STACK_PUSH_INT)))
+  (define test-vm_cell_stack_push_int-a
+    (append test-vm_cell_stack_push_int-a-code
+            (list (BRK))
+            vm-program))
+
+  (define test-vm_cell_stack_push_int-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_push_int-a)))
+  (define test-vm_cell_stack_push_int-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_push_int-a-state-before)))
+
+  ;; (run-debugger-on test-vm_cell_stack_push_int-a-state-before)
+
+  (check-equal? (memory-list test-vm_cell_stack_push_int-a-state-after #xd9 #xe8)
+                '(#x0d
+                  #x7c #x7c #xff  ;; signed int -1
+                  #x40 #x40 #x00  ;; signed int -4096
+                  #x00 #x00 #x01  ;; 1
+                  #x00 #x00 #x00  ;; 0
+                  #x3c #x3c #xff) ;; 4095
+                "tos = 13, int 8447 is on stack"))
 
 ;; push celly of cell-pair pointer to by zp_ptr (y=0 car-cell, y=2 cdr-cell) onto cell-stack
 ;; input:  cell-stack
@@ -350,7 +410,7 @@
 
           ;; check that stack pointer does not run out of bound
           (CPX !ZP_CELL7_LOW_TAGGED)
-          (BMI NO_ERROR__VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
+          (BCS NO_ERROR__VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
 
           (BRK)
 
@@ -414,7 +474,7 @@
 
           ;; check that stack pointer does not run out of bound
           (CPX !ZP_CELL7_LOW_TAGGED)
-          (BMI NO_ERROR__VM_CELL_STACK_PUSH_ZP_PTRy)
+          (BCS NO_ERROR__VM_CELL_STACK_PUSH_ZP_PTRy)
 
           (BRK)
 
