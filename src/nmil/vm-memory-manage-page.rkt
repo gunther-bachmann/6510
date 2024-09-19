@@ -33,7 +33,7 @@
 ;;  VM_FREE_PAGE_BITMAP                         :: bitmap indicating free pages (0) or allocated pages (1)
 ;;
 ;; CODE (FULL PAGE)
-;;  VM_INITIALIZE_MM_PAGE                       :: initialize memory management (paging)
+;;  VM_INITIALIZE_MEMORY_MANAGER                :: initialize memory management (paging, cell stack)
 ;;  VM_ALLOC_PAGE                               :: INCOMPLETE! allocate page (of any kind)
 ;;  VM_ALLOC_PAGE__LIST_CELL_PAIRS              :: allocate a complete new page and initialize it to hold reference counted cell-pairs
 ;;  VM_FREE_PAGE                                :: free the given page (may then be allocated again via VM_ALLOC_PAGE*
@@ -52,13 +52,30 @@
 
 ;; STACK Functions
 ;;   VM_CELL_STACK_PUSH_NIL                     :: NIL->Stack++
+;;
 ;;   VM_CELL_STACK_PUSH_INT                     :: INT->Stack++
+;;   VM_CELL_STACK_PUSH_INT_0                   :: INT->Stack++
+;;   VM_CELL_STACK_PUSH_INT_1                   :: INT->Stack++
+;;   VM_CELL_STACK_PUSH_INT_2                   :: INT->Stack++
+;;   VM_CELL_STACK_PUSH_INT_m1                  :: INT->Stack++
 ;;
 ;; STACK ZP_PTR Functions
 ;;   VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR         :: ZP_PTR (CELLy) -> Stack++
+;;   VM_CELL_STACK_PUSH_CELL0_OF_ZP_PTR         :: ZP_PTR (CELL0) -> Stack++
+;;   VM_CELL_STACK_PUSH_CELL1_OF_ZP_PTR         :: ZP_PTR (CELL1) -> Stack++
+;;
 ;;   VM_CELL_STACK_PUSH_ZP_PTRy                 :: ZP_PTRy -> Stack++
+;;   VM_CELL_STACK_PUSH_ZP_PTR                  :: ZP_PTR  -> Stack++
+;;   VM_CELL_STACK_PUSH_ZP_PTR2                 :: ZP_PTR2 -> Stack++
+
 ;;   VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR :: Stack -> ZP_PTR (CELLy)
+;;   VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR :: Stack -> ZP_PTR (CELL0)
+;;   VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR :: Stack -> ZP_PTR (CELL1)
+;;
 ;;   VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy         :: Stack -> ZP_PTRy
+;;   VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR          :: Stack -> ZP_PTR
+;;   VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR2         :: Stack -> ZP_PTR2
+;;
 ;;   VM_CELL_STACK_POP                          :: Stack -> Stack--
 ;;
 ;; ZP_PTR Functions
@@ -125,7 +142,7 @@
 
 (module+ test #| vm-program <- complete page memory management |#
   (define vm-program (append VM_MEMORY_MANAGEMENT_CONSTANTS
-                             VM_INITIALIZE_MM_PAGE
+                             VM_INITIALIZE_MEMORY_MANAGER
                           ;; VM_ALLOC_PAGE_JUMP_TABLE
                           ;; VM_ALLOC_PAGE
 
@@ -140,9 +157,6 @@
                           VM_FREE_NON_ATOMIC
                           VM_ALLOC_CELL_PAIR
                           VM_FREE_CELL_PAIR
-                          VM_CELL_PAIR_SET_NIL
-                          VM_CELL_PAIR_SET_INT_0
-
                           VM_CELL_STACK_PUSH_NIL
                           VM_CELL_STACK_PUSH_INT
 
@@ -212,7 +226,7 @@
 
 (module+ test #| vm_cell_stack_pop |#
   (define test-vm_cell_stack_pop-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_CELL_STACK_PUSH_NIL)
                   (JSR VM_CELL_STACK_POP)
                   (JSR VM_CELL_STACK_POP) ;; stops at brk in this routine
@@ -270,7 +284,7 @@
 
 (module+ test #| vm_cell_stack_push_nil |#
   (define test-vm_cell_stack_push_nil-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_CELL_STACK_PUSH_NIL)))
   (define test-vm_cell_stack_push_nil-a
     (append test-vm_cell_stack_push_nil-a-code
@@ -328,6 +342,23 @@
 ;; check stack full!
 (define VM_CELL_STACK_PUSH_INT
   (list
+   (label VM_CELL_STACK_PUSH_INT_2)
+          (LDY !$02)
+          (LDA !$00)
+          (BEQ VM_CELL_STACK_PUSH_INT)
+   (label VM_CELL_STACK_PUSH_INT_m1)
+          (LDA !$1f)
+          (LDY !$ff)
+          (BNE VM_CELL_STACK_PUSH_INT)
+   (label VM_CELL_STACK_PUSH_INT_1)
+          (LDY !$01)
+          (LDA !$00)
+          (BEQ VM_CELL_STACK_PUSH_INT)
+   (label VM_CELL_STACK_PUSH_INT_0)
+          (LDA !$00)
+          (TAY)
+
+   ;; -------------------------------------
    (label VM_CELL_STACK_PUSH_INT)
           ;; increase stack pointer
           (LDX ZP_CELL_TOS)
@@ -355,19 +386,13 @@
 
 (module+ test #| vm_cell_push_int |#
     (define test-vm_cell_stack_push_int-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
-                  (LDA !$1f) ;; -1
-                  (LDY !$ff)
-                  (JSR VM_CELL_STACK_PUSH_INT)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
+                  (JSR VM_CELL_STACK_PUSH_INT_m1)
                   (LDA !$10) ;; -4096
                   (LDY !$00)
                   (JSR VM_CELL_STACK_PUSH_INT)
-                  (LDA !$00) ;; 1
-                  (LDY !$01)
-                  (JSR VM_CELL_STACK_PUSH_INT)
-                  (LDA !$00) ;; 0
-                  (LDY !$00)
-                  (JSR VM_CELL_STACK_PUSH_INT)
+                  (JSR VM_CELL_STACK_PUSH_INT_1)
+                  (JSR VM_CELL_STACK_PUSH_INT_0)
                   (LDA !$0f) ;; 4095
                   (LDY !$ff)
                   (JSR VM_CELL_STACK_PUSH_INT)))
@@ -403,8 +428,13 @@
 ;; check stack full!
 (define VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR
   (list
+   (label VM_CELL_STACK_PUSH_CELL1_OF_ZP_PTR)
+          (LDY !$00)
+          (BNE VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
    (label VM_CELL_STACK_PUSH_CELL0_OF_ZP_PTR)
           (LDY !$00)
+
+   ;;------------------------------------------------
    (label VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
           ;; increase stack pointer
           (LDX ZP_CELL_TOS)
@@ -442,7 +472,7 @@
 
 (module+ test #| vm_cell_stack_push_celly_of_zp_ptr |#
     (define test-vm_cell_stack_push_celly_to_zp_ptr-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_ALLOC_CELL_PAIR)
                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
                   (LDA !$02)
@@ -496,8 +526,13 @@
 ;; no stack empty check!
 (define VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR
   (list
+   (label VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
+          (LDY !$02)
+          (BNE VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
    (label VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
           (LDY !$00)
+
+   ;;------------------------------------------------
    (label VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
           (LDX ZP_CELL_TOS)
           (DEX) ;; move to tagged low byte
@@ -510,7 +545,7 @@
 
 (module+ test #| vm_cell_stack_write_tos_to_celly_of_zp_ptr |#
     (define test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_ALLOC_CELL_PAIR)
                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
                   (LDA !$02)
@@ -554,8 +589,13 @@
 ;; check stack full!
 (define VM_CELL_STACK_PUSH_ZP_PTRy
   (list
+   (label VM_CELL_STACK_PUSH_ZP_PTR2)
+          (LDY !$01)
+          (BNE VM_CELL_STACK_PUSH_ZP_PTRy)
    (label VM_CELL_STACK_PUSH_ZP_PTR)
           (LDY !$00)
+
+   ;;------------------------------------------------
    (label VM_CELL_STACK_PUSH_ZP_PTRy)
           (LDX ZP_CELL_TOS)
           (INX)
@@ -586,7 +626,7 @@
 
 (module+ test #| vm_cell_stack_push_zp_ptry |#
   (define test-vm_cell_stack_push_zp_ptry-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_ALLOC_CELL_PAIR)
                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
                   (LDY !$00)
@@ -614,7 +654,7 @@
                 "tagged lowbyte is 04 | 02 = 06")
 
   (define test-vm_cell_stack_push_zp_ptry-b-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_ALLOC_CELL_PAIR)
                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
                   (JSR VM_COPY_PTR_TO_PTR2)
@@ -654,8 +694,13 @@
 ;;         Y  0|2 (orig *2)
 (define VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy
   (list
+   (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR2)
+          (LDY !$01)
+          (BNE VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy)
    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR)
           (LDY !$00)
+
+   ;;------------------------------------------------
    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy)
           (LDX ZP_CELL_TOS)
           (DEX)
@@ -672,7 +717,7 @@
 
 (module+ test #| vm_cell_stack_write_tos_to_zp_ptry |#
   (define test-vm_cell_stack_write_tos_to_zp_ptry-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_ALLOC_CELL_PAIR)
                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
                   (LDY !$00)
@@ -709,7 +754,7 @@
                 "tagged lowbyte is 04 | 02 = 06")
 
   (define test-vm_cell_stack_write_tos_to_zp_ptry-b-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_ALLOC_CELL_PAIR)
                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
                   (LDY !$00)
@@ -745,18 +790,6 @@
                 '(#x06)
                 "tagged lowbyte is 04 | 02 = 06"))
 
-  ;; y =1 for cell1, = 3 for cell 2
-  ;; zp_ptr = cell-pair
-  (define VM_CELL_PAIR_SET_INT_0
-    (list
-     (label VM_CELL_PAIR_SET_INT_0)
-            (LDA !>TAGGED_INT_0)
-            (STA (ZP_PTR),y)
-            (LDA !<TAGGED_INT_0)
-            (DEY)
-            (STA (ZP_PTR),y)
-            (RTS)))
-
 ;; copy zp_ptr2 to zp_ptr (including tag byte)
 ;; input:  ZP_PTR2
 ;; output: ZP_PTR
@@ -789,18 +822,6 @@
           (STA ZP_PTR2)
           (LDA ZP_PTR_TAGGED)   ;; tagged low byte
           (STA ZP_PTR2_TAGGED)
-          (RTS)))
-
-;; y =1 for cell1, = 3 for cell 2
-;; zp_ptr = cell-pair
-(define VM_CELL_PAIR_SET_NIL
-  (list
-   (label VM_CELL_PAIR_SET_NIL)
-          (LDA !>TAGGED_NIL)
-          (STA (ZP_PTR),y)
-          (LDA !<TAGGED_NIL)
-          (DEY)
-          (STA (ZP_PTR),y)
           (RTS)))
 
 ;; jump table  page-type->allocation method
@@ -884,23 +905,24 @@
 
 ;; initialize memory management (paging)
 ;; - setup 'next free page' information, basically initializing the whole page with zeros
+;; - setup cell stack (to empty)
 ;;
 ;; destroys: A Y
-(define VM_INITIALIZE_MM_PAGE
+(define VM_INITIALIZE_MEMORY_MANAGER
   (flatten
    (list
-    (label VM_INITIALIZE_MM_PAGE)
+    (label VM_INITIALIZE_MEMORY_MANAGER)
 
            ;; initialize NEXT_FREE_PAGE_PAGE (256 byte)
            (LDA !0)
            (TAY)
-    (label VM_INITIALIZE_MM_PAGE__LOOP)
+    (label VM_INITIALIZE_MEMORY_MANAGER__LOOP)
            ;; highbyte of this address should be using the constant NEXT_FREE_PAGE_PAGE
            ;; (STA $cf00,y) ;; encoded directly in the next couple of bytes
            ;; (car (ast-opcode-cmd-bytes (STA $cf00,y)))
            (byte 153 0) (byte-ref NEXT_FREE_PAGE_PAGE)
            (INY)
-           (BNE VM_INITIALIZE_MM_PAGE__LOOP)
+           (BNE VM_INITIALIZE_MEMORY_MANAGER__LOOP)
 
            ;; initialize cell stack
            (LDX !$FE)          ;; negative and 2 x inc = cell0+x -> tagged low byte
@@ -1372,15 +1394,15 @@
    ;; c- allocate cell-pair (again) <- should recycle the top of the free tree [z_ptr = (nil . nil), free-tree-top = nil, rc((nil . nil)) = 1]
 
   (define use-case-1-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MM_PAGE)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_ALLOC_CELL_PAIR)
                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
                   ;; set cell2 to int 0
-                  (LDY !$03)
-                  (JSR VM_CELL_PAIR_SET_INT_0)
+                  (JSR VM_CELL_STACK_PUSH_INT_0)
+                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
                   ;; set cell1 to int 0
-                  (DEY)
-                  (JSR VM_CELL_PAIR_SET_INT_0)))
+                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
+                  ))
   (define use-case-1-a
     (append use-case-1-a-code
             (list (BRK))
@@ -1464,15 +1486,18 @@
   ;; - allocate cell-pair <- should recycle the top of the free tree, decrement ref count of cell2, top of free tree will be set to cell2 and
   ;;                        [NA(nil . nil), free-tree-top = B, rc(A) = 1, rc(B) = 0]
   (define use-case-2-a (list (org #xc000)
-                                  (JSR VM_INITIALIZE_MM_PAGE)
+                                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
                                   (JSR VM_ALLOC_CELL_PAIR)
                                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
                                   ;; set cell2 to nil
-                                  (LDY !$03)
-                                  (JSR VM_CELL_PAIR_SET_NIL)
+                                  (JSR VM_CELL_STACK_PUSH_NIL)
+                                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
                                   ;; set cell1 to int 0
-                                  (DEY)
-                                  (JSR VM_CELL_PAIR_SET_INT_0)
+                                  (JSR VM_CELL_STACK_PUSH_INT_0)
+                                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
+                                  ;;(JSR VM_CELL_PAIR_SET_INT_0)
+
+
                                   (JSR VM_COPY_PTR_TO_PTR2)
                                   (JSR VM_ALLOC_CELL_PAIR)
                                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
@@ -1483,8 +1508,8 @@
                                   (DEY)
                                   (LDA ZP_PTR,y) ;; load from zp_ptr2 ( = zp_ptr+2)
                                   (STA (ZP_PTR),y) ;; write into low byte of cell2
-                                  (DEY)
-                                  (JSR VM_CELL_PAIR_SET_INT_0) ;; set cell1 to int 0
+
+                                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
                                   ))
   (define use-case-2-a-code
     (append use-case-2-a
