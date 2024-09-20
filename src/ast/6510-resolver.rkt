@@ -338,9 +338,14 @@
   (if (empty? program)
       resolved-program
       (let* ((instruction  (car program))
-             (next-offset (if (ast-org-command? instruction)
-                              (ast-org-command-org instruction)
-                              (+ offset (command-len instruction))))
+             (next-offset (cond
+                            [(ast-org-command? instruction)
+                             (ast-org-command-org instruction)]
+                            [(ast-org-align-command? instruction)
+                             (define al (ast-org-align-command-org-alignment instruction))
+                             (+ offset (- al (bitwise-and offset (sub1 al))))]
+                            [else
+                             (+ offset (command-len instruction))]))
              (resolved-cmd (cond [(ast-unresolved-opcode-cmd? instruction)
                                   (resolve-opcode-cmd instruction labels)]
                                  [(ast-unresolved-rel-opcode-cmd? instruction)
@@ -400,12 +405,16 @@
                     (list (ast-unresolved-opcode-cmd '(#:test) '(174) (ast-resolve-word-scmd "sout"))
                           (ast-label-def-cmd '(#:test) "sout")
                           (ast-org-command '() 10)
+                          (ast-unresolved-rel-opcode-cmd '(#:test) '(208) (ast-resolve-byte-scmd "sout" 'low-byte))
+                          (ast-org-align-command '() #x10)
                           (ast-unresolved-rel-opcode-cmd '(#:test) '(208) (ast-resolve-byte-scmd "sout" 'low-byte)))
                     '())
    (list (ast-opcode-cmd '(#:test) '(174 3 0))
          (ast-label-def-cmd '(#:test) "sout")
          (ast-org-command '() 10)
-         (ast-rel-opcode-cmd '(#:test) '(208 247)))
+         (ast-rel-opcode-cmd '(#:test) '(208 247))
+         (ast-org-align-command '() 16)
+         (ast-rel-opcode-cmd '(#:test) '(208 241)))
    "the last relative opcode command needs to jump over to the previous code section (org-command)"))
 
 

@@ -17,6 +17,8 @@
                   ast-command?
                   ast-org-command?
                   ast-org-command-org
+                  ast-org-align-command?
+                  ast-org-align-command-org-alignment
                   ast-label-def-cmd
                   ast-opcode-cmd))
 (require (only-in "../6510-utils.rkt" word/c byte/c low-byte high-byte))
@@ -31,7 +33,8 @@
   (->* ((listof ast-command?)) ((listof (listof ast-command?))) (listof (listof ast-command?)))
   (if (empty? code)
       (reverse code-list)
-      (if (ast-org-command? (car code))
+      (if (or (ast-org-command? (car code))
+             (ast-org-align-command? (car code)))
           (split-into-code-list (cdr code) (cons (list (car code)) code-list))
           (split-into-code-list (cdr code) (cons (append (car code-list) (list (car code))) (cdr code-list))))))
 
@@ -40,24 +43,48 @@
                                             (ast-command '())
                                             (ast-command '())
                                             (ast-org-command '() #xc008)
+                                            (ast-command '())
+                                            (ast-org-align-command '() #x10)
                                             (ast-command '())))
                 (list (list (ast-org-command '() #xc000)
                                             (ast-command '())
                                             (ast-command '()))
                       (list (ast-org-command '() #xc008)
+                                            (ast-command '()))
+                      (list (ast-org-align-command '() #x10)
                                             (ast-command '())))))
 
-(define/contract (org-for-code-seq code-seq)
-  (-> (listof ast-command?) word/c)
-  (if (ast-org-command? (car code-seq))
-      (ast-org-command-org (car code-seq))
-      (raise-user-error (format "org-command for this code sequence needs to be at the head, found ~a" (car code-seq)))))
+(define/contract (org-for-code-seq code-seq (corg #xFFFF))
+  (->* ((listof ast-command?)) (word/c) word/c)
+  (cond [(ast-org-command? (car code-seq))
+         (ast-org-command-org (car code-seq))]
+        [(ast-org-align-command? (car code-seq))
+         (define al (ast-org-align-command-org-alignment (car code-seq)))
+         (if (= corg #xffff)
+             #xFFFF
+             (+ corg (- al (bitwise-and corg (sub1 al)))))]
+        [else
+         (raise-user-error (format "org-command for this code sequence needs to be at the head, found ~a" (car code-seq)))]))
 
 (module+ test #| org-for-code-seq |#
   (check-equal? (org-for-code-seq (list (ast-org-command '() #xc000)
                                         (ast-command '())
                                         (ast-command '())))
-                #xc000))
+                #xc000)
+  (check-equal? (org-for-code-seq (list (ast-org-align-command '() #x100)
+                                        (ast-command '())
+                                        (ast-command '()))
+                                  #xffff)
+                #xffff)
+  (check-equal? (org-for-code-seq (list (ast-org-align-command '() #x100)
+                                        (ast-command '())
+                                        (ast-command '()))
+                                  #xc223)
+                #xc300)
+  (check-equal? (org-for-code-seq (list (ast-org-align-command '() #x100)
+                                        (ast-command '())
+                                        (ast-command '())))
+                #xFFFF))
 
 
 ;; translate a code list to a codesequence with loader that puts each segment into the right memory location upon loading into the c64
@@ -168,15 +195,97 @@
   (define program-p2 (->resolve-labels (org-for-code-seq program-p1) lsoffsets program-p1 '()))
   (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
   (define code-list (split-into-code-list program-p3))
-  (map (lambda (code-seq) `(,(org-for-code-seq code-seq) . ,(resolved-program->bytes (cdr code-seq)))) code-list))
+  (define result-wo-align
+    (map (lambda (code-seq) `(,(org-for-code-seq code-seq) . ,(resolved-program->bytes (cdr code-seq)))) code-list))
+  (define cdr-result-w-align
+    (assemble-to-code-list--resolve-org-aligns
+     (cdr result-wo-align)
+     (car result-wo-align)
+     (cdr code-list)
+     '()))
+  (cons (car result-wo-align) cdr-result-w-align))
+
+(define/contract (assemble-to-code-list--resolve-org-aligns result-wo-align prev-result code-list collected-result)
+  (-> list? list? list? list? list?)
+  (cond
+    [(empty? result-wo-align)
+     (reverse collected-result)]
+    [else
+     (define result-seq (car result-wo-align))
+     (define code-seq (car code-list))
+     (define result
+       (if (= #xFFFF (car result-seq))
+           `(,(org-for-code-seq
+               code-seq
+               (+ (car prev-result) (length (cdr prev-result))))
+             . ,(resolved-program->bytes (cdr code-seq)))
+           result-seq))
+     ;; tail call
+     (assemble-to-code-list--resolve-org-aligns
+      (cdr result-wo-align)
+      result
+      (cdr code-list)
+      (cons result collected-result))]))
 
 (module+ test #| assemble-to-code-list |#
   (check-equal? (assemble-to-code-list (list (ast-org-command '() #xc000)
+                                             (ast-opcode-cmd '() '(#x00 #x01))))
+                `((#xc000 . (#x00 #x01))))
+  (check-equal? (assemble-to-code-list (list (ast-org-command '() #xc000)
                                              (ast-opcode-cmd '() '(#x00 #x01))
                                              (ast-org-command '() #xc020)
-                                             (ast-opcode-cmd '() '(#x02 #x03))))
+                                             (ast-opcode-cmd '() '(#x02 #x03))
+                                             ))
                 `((#xc000 . (#x00 #x01))
-                  (#xc020 . (#x02 #x03)))))
+                  (#xc020 . (#x02 #x03))
+                  ))
+  (check-equal? (assemble-to-code-list (list (ast-org-command '() #xc000)
+                                             (ast-opcode-cmd '() '(#x00 #x01))
+                                             (ast-org-command '() #xc020)
+                                             (ast-opcode-cmd '() '(#x02 #x03))
+                                             (ast-org-align-command '() #x100)
+                                             (ast-opcode-cmd '() '(#x04 #x05))
+                                             ))
+                `((#xc000 . (#x00 #x01))
+                  (#xc020 . (#x02 #x03))
+                  (#xc100 . (#x04 #x05))
+                  ))
+  (check-equal? (assemble-to-code-list (list (ast-org-command '() #xc000)
+                                             (ast-opcode-cmd '() '(#x00 #x01))
+                                             (ast-org-command '() #xc020)
+                                             (ast-opcode-cmd '() '(#x02 #x03))
+                                             (ast-org-align-command '() #x100)
+                                             (ast-opcode-cmd '() '(#x04 #x05))
+                                             (ast-org-align-command '() #x100)
+                                             (ast-opcode-cmd '() '(#x04 #x05))
+                                             ))
+                `((#xc000 . (#x00 #x01))
+                  (#xc020 . (#x02 #x03))
+                  (#xc100 . (#x04 #x05))
+                  (#xc200 . (#x04 #x05))
+                  ))
+  (check-equal? (assemble-to-code-list (list (ast-org-command '() #xc000)
+                                             (ast-opcode-cmd '() '(#x00 #x01))
+                                             (ast-org-command '() #xc020)
+                                             (ast-opcode-cmd '() '(#x02 #x03))
+                                             (ast-org-align-command '() #x100)
+                                             (ast-opcode-cmd '() '(#x04 #x05))
+                                             (ast-org-align-command '() #x100)
+                                             (ast-opcode-cmd '() '(#x04 #x05))
+                                             (ast-org-align-command '() #x100)
+                                             (ast-opcode-cmd '() '(#x06 #x07))
+                                             (ast-org-command '() #xcf20)
+                                             (ast-opcode-cmd '() '(#x08 #x09))
+                                             (ast-org-align-command '() #x100)
+                                             (ast-opcode-cmd '() '(#x0a #x0b))
+                                             ))
+                `((#xc000 . (#x00 #x01))
+                  (#xc020 . (#x02 #x03))
+                  (#xc100 . (#x04 #x05))
+                  (#xc200 . (#x04 #x05))
+                  (#xc300 . (#x06 #x07))
+                  (#xcf20 . (#x08 #x09))
+                  (#xd000 . (#x0a #x0b)))))
 
 ;; take a list of ast-command s and translate them to raw bytes
 ;; make sure that everything is resolved and decided such that

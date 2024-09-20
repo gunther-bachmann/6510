@@ -11,6 +11,7 @@
 (provide (struct-out ast-program)
          (struct-out ast-command)
          (struct-out ast-org-command)
+         (struct-out ast-org-align-command)
          (struct-out ast-decide-cmd)
          (struct-out ast-resolve-sub-cmd)
          (struct-out ast-resolve-word-scmd)
@@ -62,6 +63,12 @@
 ;; command to define the location for the following code
 (struct ast-org-command ast-command
   (org)
+  #:transparent
+  #:guard (struct-guard/c list? word/c))
+
+;; command to define the location for the following code
+(struct ast-org-align-command ast-command
+  (org-alignment)
   #:transparent
   #:guard (struct-guard/c list? word/c))
 

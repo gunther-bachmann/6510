@@ -79,9 +79,14 @@
                 [(ast-label-def-cmd? command)
                  (hash-set collected-results (ast-label-def-cmd-label command) offset)]
                 [else collected-results])))
-        (if (ast-org-command? command)
-            (-label-string-offsets (ast-org-command-org command) next-results (cdr commands))
-            (-label-string-offsets (+ offset (command-len command)) next-results (cdr commands))))))
+        (cond
+          [(ast-org-command? command)
+           (-label-string-offsets (ast-org-command-org command) next-results (cdr commands))]
+          [(ast-org-align-command? command)
+           (define al (ast-org-align-command-org-alignment command))
+           (-label-string-offsets (+ offset (- al (bitwise-and offset (sub1 al)))) next-results (cdr commands))]
+          [else
+           (-label-string-offsets (+ offset (command-len command)) next-results (cdr commands))]))))
 
 (module+ test #| collect-label-offsets |#
   (check-equal? (label-string-offsets 10 (list (ast-label-def-cmd '() "some")))
@@ -107,11 +112,14 @@
                                                (ast-org-command '() #x40)
                                                (ast-label-def-cmd '() "other")
                                                (ast-unresolved-opcode-cmd '() '(#xA2) (ast-resolve-byte-scmd "hello" 'low-byte))
-                                               (ast-label-def-cmd '() "after-other")))
+                                               (ast-label-def-cmd '() "after-other")
+                                               (ast-org-align-command '() #x10)
+                                               (ast-label-def-cmd '() "after-align")))
                 '#hash(("some" . 13)
                        ("hello" . 10)
                        ("other" . 64)
-                       ("after-other" . 66))))
+                       ("after-other" . 66)
+                       ("after-align" . 80))))
 
 (define/c (label->hilo-indicator full-label)
   (-> string? byte/c)
