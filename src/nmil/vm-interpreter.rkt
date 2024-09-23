@@ -21,6 +21,7 @@
 
 ;; TODO: implement CALL, PUSH_LOCAL,
 ;; TODO: supporting functions like create local frame
+;; TODO: implement some functions to make status of the interpreter more accessible (e.g. print cell-stack, zp_ptrX, disassemble command, step through byte code ...)
 
 
 (define VM_INTERPRETER_VARIABLES
@@ -38,9 +39,9 @@
           (STA ZP_VM_PC+1)
           (RTS)))
 
-(define VM_BRK
+(define BC_BRK
   (list
-   (label VM_BRK)
+   (label BC_BRK)
           (BRK)))
 
 (module+ test #| vm_interpreter |#
@@ -69,10 +70,16 @@
                 (list #x02)
                 "stopped at byte code brk"))
 
-(define VM_PUSH_CONST_NUM_SHORT
+(define BC_PUSH_LOCAL_OR_BYTE_SHORT
   (flatten
    (list
-    (label VM_PUSH_CONST_NUM_SHORT)
+    (label BC_PUSH_LOCAL_OR_BYTE_SHORT)
+           (JMP VM_INTERPRETER_INC_PC))))
+
+(define BC_PUSH_CONST_NUM_SHORT
+  (flatten
+   (list
+    (label BC_PUSH_CONST_NUM_SHORT)
            (LDA (ZP_VM_PC),y)
            (AND !$07) ;; lower three bits are encoded into the short command
            (ASL A) ;; * 2
@@ -98,13 +105,16 @@
            )))
 
 (module+ test #| vm_interpreter |#
+  (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
   (define use-case-push-num-s
     (list
-     (byte #x80)     ;; byte code for PUSH_INT_0
-     (byte #x81)     ;; byte code for PUSH_INT_1
-     (byte #x82)     ;; byte code for PUSH_INT_2
-     (byte #x83)     ;; byte code for PUSH_INT_m1
-     (byte #x02)))   ;; brk
+     (byte #xb8)     ;; byte code for PUSH_INT_0
+     (byte #xb9)     ;; byte code for PUSH_INT_1
+     (byte #xba)     ;; byte code for PUSH_INT_2
+     (byte #xbb)     ;; byte code for PUSH_INT_m1
+     (ast-bytes-cmd '()  (list BRK))
+     ;; (byte #x02)
+     ))   ;; brk
 
   (define use-case-push-num-s-code
     (append (list (org #x7000)
@@ -128,9 +138,9 @@
                       #x7c #x7c #xff)
                 "4 elements on the stack of int 0, int 1, int 2, int -1"))
 
-(define VM_PUSH_CONST_INT
+(define BC_PUSH_CONST_INT
   (list
-   (label VM_PUSH_CONST_INT)
+   (label BC_PUSH_CONST_INT)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
           (TAX)
@@ -145,7 +155,7 @@
 (module+ test #| VM_PUSH_CONST_INT |#
   (define use-case-push-int
     (list
-     (byte #x0a)     ;; byte code for PUSH_INT
+     (byte #x06)     ;; byte code for PUSH_INT
      (byte #x04)     ;; highbyte int
      (byte #xf0)     ;; lowbyte int
      (byte #x02)))   ;; brk
@@ -169,9 +179,9 @@
                       #x10 #x10 #xf0)
                 "one element on the stack"))
 
-(define VM_INT_PLUS
+(define BC_INT_PLUS
   (list
-   (label VM_INT_PLUS)
+   (label BC_INT_PLUS)
           (LDX ZP_CELL_TOS)
           (LDA ZP_CELL0+1,x)
           (ADC ZP_CELL0-2,x)
@@ -198,15 +208,15 @@
 (module+ test #| vm_interpreter |#
   (define use-case-int-plus
     (list
-     (byte #x81)            ;; byte code for PUSH_INT_1
-     (byte #x82)            ;; byte code for PUSH_INT_2
-     (byte #x07)            ;; byte code for INT_PLUS = 3
-     (byte #x0a #x04 #xf0)  ;; push int #x4f0 (1264)
-     (byte #x0a #x01 #x1f)  ;; push int #x11f (287)
-     (byte #x07)     ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
-     (byte #x81)            ;; byte code for PUSH_INT_1
-     (byte #x83)            ;; byte code for PUSH_INT_m1
-     (byte #x07)            ;; byte code for INT_PLUS = 0
+     (byte #xb9)            ;; byte code for PUSH_INT_1
+     (byte #xba)            ;; byte code for PUSH_INT_2
+     (byte #x62)            ;; byte code for INT_PLUS = 3
+     (byte #x06 #x04 #xf0)  ;; push int #x4f0 (1264)
+     (byte #x06 #x01 #x1f)  ;; push int #x11f (287)
+     (byte #x62)            ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
+     (byte #xb9)            ;; byte code for PUSH_INT_1
+     (byte #xbb)            ;; byte code for PUSH_INT_m1
+     (byte #x62)            ;; byte code for INT_PLUS = 0
      (byte #x02)))   ;; brk
 
   (define use-case-int-plus-code
@@ -230,9 +240,9 @@
                       #x00 #x00 #x00)  ;; -1 + 1 = 0
                 "three elements on the stack, int 3, int 1551, int 0"))
 
-(define VM_INT_MINUS
+(define BC_INT_MINUS
   (list
-   (label VM_INT_MINUS)
+   (label BC_INT_MINUS)
           (LDX ZP_CELL_TOS)
 
           (SEC)
@@ -261,15 +271,15 @@
 (module+ test #| vm_interpreter |#
   (define use-case-int-minus
     (list
-     (byte #x81)            ;; byte code for PUSH_INT_1
-     (byte #x82)            ;; byte code for PUSH_INT_2
-     (byte #x09)            ;; byte code for INT_MINUS = 2 - 1 = 1
-     (byte #x0a #x04 #xf0)  ;; push int #x4f0 (1264)
-     (byte #x0a #x01 #x1f)  ;; push int #x11f (287)
-     (byte #x09)            ;; byte code for INT_MINUS (- #x011f #x04f0) ( -977 = #x0c2f -> encoded #x302f)
-     (byte #x81)            ;; byte code for PUSH_INT_1
-     (byte #x80)            ;; byte code for PUSH_INT_0
-     (byte #x09)            ;; byte code for INT_MINUS => -1
+     (byte #xb9)            ;; byte code for PUSH_INT_1
+     (byte #xba)            ;; byte code for PUSH_INT_2
+     (byte #x61)            ;; byte code for INT_MINUS = 2 - 1 = 1
+     (byte #x06 #x04 #xf0)  ;; push int #x4f0 (1264)
+     (byte #x06 #x01 #x1f)  ;; push int #x11f (287)
+     (byte #x61)            ;; byte code for INT_MINUS (- #x011f #x04f0) ( -977 = #x0c2f -> encoded #x302f)
+     (byte #xb9)            ;; byte code for PUSH_INT_1
+     (byte #xb8)            ;; byte code for PUSH_INT_0
+     (byte #x61)            ;; byte code for INT_MINUS => -1
      (byte #x02)))   ;; brk
 
   (define use-case-int-minus-code
@@ -293,9 +303,26 @@
                       #x7c #x7c #xff)  ;; 0 - 1 = -1
                 "three elements on the stack, int 3, int 1551, int 0"))
 
-(define VM_PUSH_PARAM_OR_LOCAL
+(define BC_PUSH_CONST_BYTE
   (list
-   (label VM_PUSH_PARAM_OR_LOCAL)
+   (label BC_PUSH_CONST_BYTE)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(define BC_NIL_P
+  (list
+   (label BC_NIL_P)
+          (JSR VM_NIL_P)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(define BC_PUSH_CONST_NIL
+  (list
+   (label BC_PUSH_CONST_NIL)
+          (JSR VM_CELL_STACK_PUSH_NIL)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(define BC_PUSH_PARAM_OR_GLOBAL
+  (list
+   (label BC_PUSH_PARAM_OR_GLOBAL)
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; must be page aligned!
@@ -303,17 +330,134 @@
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
     (label VM_INTERPRETER_OPTABLE)
-           (word-ref VM_PUSH_CONST_NUM_SHORT) ;; 80..87 -> 00 INT|BYTE
-           (word-ref VM_INTERPRETER_INC_PC)   ;; 01 effectively NOP
-           (word-ref VM_BRK)                  ;; 02 break into debugger/exit program
-           (word-ref VM_CONS)                 ;; 03
-           (word-ref VM_CAR)                  ;; 04
-           (word-ref VM_CDR)                  ;; 05
-           (word-ref VM_NIL_P)                ;; 06
-           (word-ref VM_INT_PLUS)             ;; 07
-           (word-ref VM_PUSH_PARAM_OR_LOCAL)   ;; 88..8F -> 10 LOCAL|PARAM
-           (word-ref VM_INT_MINUS)            ;; 09
-           (word-ref VM_PUSH_CONST_INT)       ;; 0a
+           (word-ref BC_PUSH_PARAM_OR_GLOBAL)     ;; 00  <-  80..87 -> 00
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 02  <-  01 effectively NOP
+           (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 06  <-  03 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 08  <-  04 reserved
+           (word-ref BC_PUSH_CONST_BYTE)          ;; 0a  <-  05 reserved
+           (word-ref BC_PUSH_CONST_INT)           ;; 0c  <-  06
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 0e  <-  07 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  08 reserved
+           (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 14  <-  0a reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 16  <-  0b reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 18  <-  0c reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 1a  <-  0d reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 1c  <-  0e reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 1e  <-  0f reserved
+           (word-ref BC_PUSH_LOCAL_OR_BYTE_SHORT) ;; 20  <-  88..8F -> 10
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 22  <-  11 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 24  <-  12 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 26  <-  13 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 28  <-  14 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 2a  <-  15 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 2c  <-  16 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 2f  <-  17 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 30  <-  18 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 36  <-  1b reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 38  <-  1c reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 3a  <-  1d reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 3c  <-  1e reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 40  <-  90..97 -> 20 reserved
+           (word-ref BC_NIL_P)                    ;; 42  <-  21
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 44  <-  22 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 48  <-  24 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 4c  <-  26 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 4e  <-  27 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 50  <-  28 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 52  <-  29 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 54  <-  2a reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 56  <-  2b reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 58  <-  2c reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 5a  <-  2d reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 5c  <-  2e reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 5e  <-  2f reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 60  <-  98..9f -> 30 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 62  <-  31 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 64  <-  32 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 66  <-  33 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 68  <-  34 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 6a  <-  35 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 6c  <-  36 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 6e  <-  37 reserved
+           (word-ref BC_PUSH_CONST_NUM_SHORT)     ;; 70  <-  b8..bf -> 70 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 72  <-  39 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 74  <-  3a reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 76  <-  3b reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 78  <-  3c reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 7a  <-  3d reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 7c  <-  3e reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 7e  <-  3f reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 80  <-  a0..a7 -> 40 reserved
+           (word-ref VM_CDR)                      ;; 82  <-  41 reserved
+           (word-ref VM_CONS)                     ;; 84  <-  42 reserved
+           (word-ref VM_CAR)                      ;; 86  <-  43 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 88  <-  44 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 8a  <-  45 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 8e  <-  47 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 90  <-  48 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 92  <-  49 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 94  <-  4a reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 96  <-  4b reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 98  <-  4c reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 9a  <-  4d reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 9c  <-  4e reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 9e  <-  4f reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; a0  <-  a8..af -> 50 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; a2  <-  51 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; a4  <-  52 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; a6  <-  53 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; a8  <-  54 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; aa  <-  55 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; ac  <-  56 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; ae  <-  57 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b0  <-  58 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b2  <-  59 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b4  <-  5a reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b6  <-  5b reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b8  <-  5c reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; ba  <-  5d reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; bc  <-  5e reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; be  <-  5f reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; c0  <-  b0..b7 -> 60 reserved
+           (word-ref BC_INT_MINUS)                ;; c2  <-  61
+           (word-ref BC_INT_PLUS)                 ;; c4  <-  62
+           (word-ref VM_INTERPRETER_INC_PC)       ;; c6  <-  63 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; c8  <-  64 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; ca  <-  65 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; cc  <-  66 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; ce  <-  67 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; d0  <-  68 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; d2  <-  69 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; d4  <-  6a reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; d6  <-  6b reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; d8  <-  6c reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; da  <-  6d reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; dc  <-  6e reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; de  <-  6f reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; e0  <-  70 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; e2  <-  71 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; e4  <-  72 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; e6  <-  73 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; e8  <-  74 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; ea  <-  75 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; ec  <-  76 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; ee  <-  77 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; f0  <-  78 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; f2  <-  79 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; f4  <-  7a reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; f6  <-  7b reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; f8  <-  7c reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; fa  <-  7d reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; fc  <-  7e reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; fe  <-  7f reserved
            ;; ...
     )))
 
@@ -349,13 +493,17 @@
 (define vm-interpreter
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT
-          VM_PUSH_CONST_NUM_SHORT
-          VM_PUSH_CONST_INT
+          BC_PUSH_LOCAL_OR_BYTE_SHORT
+          BC_PUSH_CONST_NUM_SHORT
+          BC_PUSH_CONST_INT
+          BC_PUSH_CONST_BYTE
+          BC_PUSH_CONST_NIL
+          BC_NIL_P
           VM_INTERPRETER
-          VM_BRK
-          VM_INT_PLUS
-          VM_INT_MINUS
-          VM_PUSH_PARAM_OR_LOCAL
+          BC_BRK
+          BC_INT_PLUS
+          BC_INT_MINUS
+          BC_PUSH_PARAM_OR_GLOBAL
           (list (org-align #x100)) ;; align to next page
           VM_INTERPRETER_OPTABLE
           vm-lists))

@@ -307,42 +307,42 @@
 ;; commands operate mostly on tos
 ;; (p) prefix commands: modify the behaviour of the following command or change the operand sizes for the command operands
 
-(define BRK                  0) ;; stop
-(define pLONG                1) ;; double operand size
-(define NOP                  2) ;; just increase pc (no operation)
+(define NOP                 #x01) ;; just increase pc (no operation)
+(define BRK                 #x02) ;; stop
+(define pLONG               #x03) ;; double operand size
 
-(define PUSH_BYTE            5) ;; op = byte value, stack [] -> [cell-byte]
-(define PUSH_INT             6) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
+(define PUSH_BYTE           #x05) ;; op = byte value, stack [] -> [cell-byte]
+(define PUSH_INT            #x06) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
 ;; also used for struct-index or function-index
 
-(define PUSH_NIL             9) ;; stack: [] -> [NIL]
-(define PUSH_PARAM          10) ;; op = param-idx from tail, stack [] -> [cell-]
-(define PUSH_GLOBAL         11) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
-(define PUSH_LOCAL          12) ;; op = local-idx, stack [] -> [cell-]
-(define PUSH_STRUCT_FIELD   13) ;; op = field-idx, stack [struct-ref] -> [cell-]
-(define PUSH_ARRAY_FIELD    14) ;; op = field-idx, stack [array-ref] -> [cell-]
+(define PUSH_NIL            #x09) ;; stack: [] -> [NIL]
+(define PUSH_PARAM          #x0a) ;; op = param-idx from tail, stack [] -> [cell-]
+(define PUSH_GLOBAL         #x0b) ;; op1=low byte index op2=high byte index stack [] -> [cell-]
+(define PUSH_LOCAL          #x0c) ;; op = local-idx, stack [] -> [cell-]
+(define PUSH_STRUCT_FIELD   #x0d) ;; op = field-idx, stack [struct-ref] -> [cell-]
+(define PUSH_ARRAY_FIELD    #x0e) ;; op = field-idx, stack [array-ref] -> [cell-]
 
-(define POP_TO_PARAM        15) ;; op= param-idx from tail, stack [cell-] -> []
-(define POP_TO_GLOBAL       16) ;; op1=low byte index op2=high byte index, stack [cell-] -> []
-(define POP_TO_LOCAL        17) ;; op = local-idx, stack [cell-] -> []
-(define POP_TO_STRUCT_FIELD 18) ;; op = field-idx, stack [cell- struct-ptr-] -> []
-(define POP_TO_ARRAY_FIELD  19) ;; op = array-idx, stack [cell- array-ptr-] -> []
+(define POP_TO_PARAM        #x0f) ;; op= param-idx from tail, stack [cell-] -> []
+(define POP_TO_GLOBAL       #x11) ;; op1=low byte index op2=high byte index, stack [cell-] -> []
+(define POP_TO_LOCAL        #x12) ;; op = local-idx, stack [cell-] -> []
+(define POP_TO_STRUCT_FIELD #x13) ;; op = field-idx, stack [cell- struct-ptr-] -> []
+(define POP_TO_ARRAY_FIELD  #x14) ;; op = array-idx, stack [cell- array-ptr-] -> []
 
-(define NIL?                20) ;; stack [cell-list-ptr] -> [cell-boolean]
+(define NIL?                #x21) ;; stack [cell-list-ptr] -> [cell-boolean]
 
-(define BRA                 31) ;; op = relative offset
-(define GOTO                32) ;; op = relative offset
-(define RET                 33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
-(define CALL                34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
-(define TAIL_CALL           35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
-(define NIL?-RET-PARAM      36) ;; op = param, stack [ ... paramN .. param0 ] -> [ paramOP ] if tos is nil, else no change!
-(define NIL?-RET-LOCAL      37) ;; op = param, stack [ ... paramN .. param0 ] -> [ localOP ] if tos is nil, else no change!
+(define BRA                 #x31) ;; op = relative offset
+(define GOTO                #x32) ;; op = relative offset
+(define RET                 #x33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
+(define CALL                #x34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+(define TAIL_CALL           #x35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
+(define NIL?-RET-PARAM      #x36) ;; op = param, stack [ ... paramN .. param0 ] -> [ paramOP ] if tos is nil, else no change!
+(define NIL?-RET-LOCAL      #x37) ;; op = param, stack [ ... paramN .. param0 ] -> [ localOP ] if tos is nil, else no change!
 
-(define CAR                 40) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
-(define CDR                 41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
-(define CONS                42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+(define CDR                 #x41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
+(define CONS                #x42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+(define CAR                 #x43) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
 
-(define BYTE+               60) ;; stack [cell-byte a, cell-byte b] -> [sum]
+(define BYTE+               #x61) ;; stack [cell-byte a, cell-byte b] -> [sum]
 
 ;; BYTE-INC, BYTE-DEC, BYTE-, BYTE*, BYTE_DIV, BYTE_REM
 ;; INT-INC, INT-DEC, INT+, INT-, INT*, INT_DIV, INT_REM
@@ -369,65 +369,65 @@
 ;; FI_BYTE_ARRAY- <- allocate to fixed position in memory
 ;;  - read/write/copy
 
-(define ALLOCATE_STRUCT     70) ;; op = struct-def-idx (int),  stack [] -> [struct-ref-]
-(define FREE_STRUCT         71) ;; stack [struct-ref-] -> []
-(define CREATE_STRUCT       72) ;; op = struct-def-idx (int), stack [fieldN .. field0] -> [struct-ref-]
+(define ALLOCATE_STRUCT     #x70) ;; op = struct-def-idx (int),  stack [] -> [struct-ref-]
+(define FREE_STRUCT         #x71) ;; stack [struct-ref-] -> []
+(define CREATE_STRUCT       #x72) ;; op = struct-def-idx (int), stack [fieldN .. field0] -> [struct-ref-]
 
-(define CREATE_LIST         73) ;; op = N+1 (byte), stack [elN .. el0] -> [cell-list-ptr-]
+(define CREATE_LIST         #x73) ;; op = N+1 (byte), stack [elN .. el0] -> [cell-list-ptr-]
 
-(define ALLOCATE_ARRAY      75) ;; op = array len, stack [] -> [array-ref-]
-(define FREE_ARRAY          76) ;; stack [array-ref-] -> []
+(define ALLOCATE_ARRAY      #x75) ;; op = array len, stack [] -> [array-ref-]
+(define FREE_ARRAY          #x76) ;; stack [array-ref-] -> []
 
 ;; example of short (one byte instruction)
-;; using 128..131
+;; using 128..131 $80..83
 (define sPUSH_PARAM         #b10000000) ;; short push param, lower 2 bits
 (define sPUSH_PARAMm        #b11111100)
 (define sPUSH_PARAMn        (bitwise-xor #xff sPUSH_PARAMm))
-;; using 132..135
+;; using 132..135 $84..87
 ;; could also be used for sPUSH__FIELD pushing array/struct fields
 (define sPUSH_GLOBAL        #b10000100) ;; short push global, lower 2 bits + next byte
 (define sPUSH_GLOBALm       #b11111100)
 (define sPUSH_GLOBALn       (bitwise-xor #xff sPUSH_GLOBALm))
-;; using 136..139
+;; using 136..139 $88..8b
 (define sPUSH_LOCAL         #b10001000) ;; short push local, lower 2 bits
 (define sPUSH_LOCALm        #b11111100)
 (define sPUSH_LOCALn        (bitwise-xor #xff sPUSH_LOCALm))
-;; using 140..143
+;; using 140..143 $8c..8f
 (define sPUSH_BYTE          #b10001100) ;; short push byte, lower 2 bits  #b00 = #x00, #b01 = #x01, #b10 = #x02|#xfe (-2), #b11 = #xff (-1)
 (define sPUSH_BYTEm         #b11111100)
 (define sPUSH_BYTEn         (bitwise-xor #xff sPUSH_BYTEm))
 
-;; using 144..147
+;; using 144..147 $90..93
 (define sPOP_TO_PARAM       #b10010000) ;; short pop to param, lower 2 bits
 (define sPOP_TO_PARAMm      #b11111100)
 (define sPOP_TO_PARAMn      (bitwise-xor #xff sPOP_TO_PARAMm))
-;; using 148..151
+;; using 148..151 $94..97
 ;; could also be used for POP_TO_FIELD poping into array/struct fields
 (define sPOP_TO_GLOBAL      #b10010100) ;; short pop to global, lower 2 bits + next byte
 (define sPOP_TO_GLOBALm     #b11111100)
 (define sPOP_TO_GLOBALn     (bitwise-xor #xff sPOP_TO_GLOBALm))
-;; using 152..155
+;; using 152..155 $98..9b
 (define sPOP_TO_LOCAL       #b10011000) ;; short pop to local, lower 2 bits
 (define sPOP_TO_LOCALm      #b11111100)
 (define sPOP_TO_LOCALn      (bitwise-xor #xff sPOP_TO_LOCALm))
 
-;; using 156..159
+;; using 156..159 $9c..9f
 (define sNIL?-RET-PARAM     #b10011100)
 (define sNIL?-RET-PARAMm    #b11111100)
 (define sNIL?-RET-PARAMn    (bitwise-xor #xff sNIL?-RET-PARAMm))
-;; using 160..163
+;; using 160..163 $a0..a3
 (define sNIL?-RET-LOCAL     #b10100000)
 (define sNIL?-RET-LOCALm    #b11111100)
 (define sNIL?-RET-LOCALn    (bitwise-xor #xff sNIL?-RET-LOCALm))
 
 ;; this is using lots of slots, maybe goto and bra are not used often enough to allow this
 ;; maybe push/pop of structure fields/arrays is more valuable here
-;; using 192..223
+;; using 192..223 $c0..df
 (define sBRA                #b11000000)
 (define sBRAm               #b11100000)
 (define sBRAn               #b00011111)
 (define sBRAmsb             5)
-;; using 224..255
+;; using 224..255 $e0..ff
 (define sGOTO               #b11100000)
 (define sGOTOm              #b11100000)
 (define sGOTOn              #b00011111)
