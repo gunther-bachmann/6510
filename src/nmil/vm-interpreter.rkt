@@ -12,7 +12,38 @@
   (require (only-in "../6510-utils.rkt" absolute))
   (require (only-in racket/port open-output-nowhere))
   (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
-  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on)))
+  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
+
+  (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
+                    CONS
+                    CAR
+                    CDR
+                    GOTO
+                    RET
+                    BYTE+
+                    INT+
+                    INT-
+                    BRA
+                    CALL
+                    BRK
+                    NIL?
+                    TAIL_CALL
+
+                    PUSH_INT
+                    PUSH_ARRAY_FIELD
+                    PUSH_BYTE
+                    PUSH_NIL
+                    PUSH_LOCAL
+                    PUSH_GLOBAL
+                    PUSH_STRUCT_FIELD
+                    PUSH_PARAM
+
+                    POP_TO_PARAM
+                    POP_TO_LOCAL
+                    POP_TO_GLOBAL))
+
+  (define (bc code)
+    (ast-bytes-cmd '()  (list code))))
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator cpu-state-program-counter peek))
 
@@ -47,7 +78,7 @@
 (module+ test #| vm_interpreter |#
   (define use-case-brk
     (list
-     (byte 02))) ;; byte code for VM_BRK
+     (bc BRK))) ;; byte code for VM_BRK
 
   (define use-case-brk-code
     (append (list (org #x7000)
@@ -67,9 +98,10 @@
 
   (check-equal? (memory-list use-case-brk-state-after
                              use-case-brk-current-vm-pc use-case-brk-current-vm-pc)
-                (list #x02)
+                (list BRK)
                 "stopped at byte code brk"))
 
+;; TODO: implement
 (define BC_PUSH_LOCAL_OR_BYTE_SHORT
   (flatten
    (list
@@ -105,14 +137,14 @@
            )))
 
 (module+ test #| vm_interpreter |#
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
+
   (define use-case-push-num-s
     (list
      (byte #xb8)     ;; byte code for PUSH_INT_0
      (byte #xb9)     ;; byte code for PUSH_INT_1
      (byte #xba)     ;; byte code for PUSH_INT_2
      (byte #xbb)     ;; byte code for PUSH_INT_m1
-     (ast-bytes-cmd '()  (list BRK))
+     (bc BRK)
      ;; (byte #x02)
      ))   ;; brk
 
@@ -155,10 +187,10 @@
 (module+ test #| VM_PUSH_CONST_INT |#
   (define use-case-push-int
     (list
-     (byte #x06)     ;; byte code for PUSH_INT
+     (bc PUSH_INT)
      (byte #x04)     ;; highbyte int
      (byte #xf0)     ;; lowbyte int
-     (byte #x02)))   ;; brk
+     (bc BRK)))   ;; brk
 
   (define use-case-push-int-code
     (append (list (org #x7000)
@@ -210,14 +242,14 @@
     (list
      (byte #xb9)            ;; byte code for PUSH_INT_1
      (byte #xba)            ;; byte code for PUSH_INT_2
-     (byte #x62)            ;; byte code for INT_PLUS = 3
-     (byte #x06 #x04 #xf0)  ;; push int #x4f0 (1264)
-     (byte #x06 #x01 #x1f)  ;; push int #x11f (287)
-     (byte #x62)            ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
+     (bc INT+)            ;; byte code for INT_PLUS = 3
+     (bc PUSH_INT) (byte #x04 #xf0)  ;; push int #x4f0 (1264)
+     (bc PUSH_INT) (byte #x01 #x1f)  ;; push int #x11f (287)
+     (bc INT+)            ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
      (byte #xb9)            ;; byte code for PUSH_INT_1
      (byte #xbb)            ;; byte code for PUSH_INT_m1
-     (byte #x62)            ;; byte code for INT_PLUS = 0
-     (byte #x02)))   ;; brk
+     (bc INT+)            ;; byte code for INT_PLUS = 0
+     (bc BRK)))   ;; brk
 
   (define use-case-int-plus-code
     (append (list (org #x7000)
@@ -273,14 +305,14 @@
     (list
      (byte #xb9)            ;; byte code for PUSH_INT_1
      (byte #xba)            ;; byte code for PUSH_INT_2
-     (byte #x61)            ;; byte code for INT_MINUS = 2 - 1 = 1
-     (byte #x06 #x04 #xf0)  ;; push int #x4f0 (1264)
-     (byte #x06 #x01 #x1f)  ;; push int #x11f (287)
-     (byte #x61)            ;; byte code for INT_MINUS (- #x011f #x04f0) ( -977 = #x0c2f -> encoded #x302f)
+     (bc INT-)            ;; byte code for INT_MINUS = 2 - 1 = 1
+     (bc PUSH_INT) (byte  #x04 #xf0)  ;; push int #x4f0 (1264)
+     (bc PUSH_INT) (byte #x01 #x1f)  ;; push int #x11f (287)
+     (bc INT-)            ;; byte code for INT_MINUS (- #x011f #x04f0) ( -977 = #x0c2f -> encoded #x302f)
      (byte #xb9)            ;; byte code for PUSH_INT_1
      (byte #xb8)            ;; byte code for PUSH_INT_0
-     (byte #x61)            ;; byte code for INT_MINUS => -1
-     (byte #x02)))   ;; brk
+     (bc INT-)            ;; byte code for INT_MINUS => -1
+     (bc BRK)))   ;; brk
 
   (define use-case-int-minus-code
     (append (list (org #x7000)
@@ -303,23 +335,27 @@
                       #x7c #x7c #xff)  ;; 0 - 1 = -1
                 "three elements on the stack, int 3, int 1551, int 0"))
 
+;; TODO: implement
 (define BC_PUSH_CONST_BYTE
   (list
    (label BC_PUSH_CONST_BYTE)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; TODO: test
 (define BC_NIL_P
   (list
    (label BC_NIL_P)
           (JSR VM_NIL_P)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; TODO: test
 (define BC_PUSH_CONST_NIL
   (list
    (label BC_PUSH_CONST_NIL)
           (JSR VM_CELL_STACK_PUSH_NIL)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; TODO: implment
 (define BC_PUSH_PARAM_OR_GLOBAL
   (list
    (label BC_PUSH_PARAM_OR_GLOBAL)

@@ -23,6 +23,8 @@
          GOTO
          RET
          BYTE+
+         INT+
+         INT-
          BRA
          CALL
          BRK
@@ -342,7 +344,9 @@
 (define CONS                #x42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
 (define CAR                 #x43) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
 
-(define BYTE+               #x61) ;; stack [cell-byte a, cell-byte b] -> [sum]
+(define BYTE+               #x63) ;; stack [cell-byte a, cell-byte b] -> [sum]
+(define INT+                #x62) ;; stack [cell-int a, cell-int b] -> [sum]
+(define INT-                #x61) ;; stack [cell-int a, cell-int b] -> [difference]
 
 ;; BYTE-INC, BYTE-DEC, BYTE-, BYTE*, BYTE_DIV, BYTE_REM
 ;; INT-INC, INT-DEC, INT+, INT-, INT*, INT_DIV, INT_REM
@@ -587,6 +591,18 @@
   (check-exn exn:fail? (lambda () (byte+ 128 128)))
   (check-exn exn:fail? (lambda () (byte+ 255 1))))
 
+(define (int+ (a : Integer) (b : Integer)) : Integer
+    (define result (fx+ a b))
+  (if (> result 4095)
+      result
+      (raise-user-error (format "int+ overflow ~a + ~a" a b))))
+
+(define (int- (a : Integer) (b : Integer)) : Integer
+    (define result (fx- a b))
+  (if (< result -4096)
+      result
+      (raise-user-error (format "int+ overflow ~a + ~a" a b))))
+
 ;; bytecode: op, len: 1b
 ;; stack: [ func-idx:cell-int- pN ... p1 p0 ] -> [ pN ... p1 p0 ], growth: -1c
 (define (interpret-call [vm : vm-]) : vm-
@@ -658,6 +674,30 @@
   (check-equal? (vm--value-stack (interpret-byte+ (make-vm #:value-stack (list (cell-byte- 1) (cell-byte- 2))
                                                            #:frame-stack (list (make-frame)))))
                 (list (cell-byte- 3))))
+
+;; bytecode: op, len: 1b
+;; stack: [ a:cell-int b:cell-int ... ] -> [ a+b:cell-int- ... ], growth: -1c
+(define (interpret-int+ [vm : vm-]) : vm-
+  ;; replace tos and tos-1 with sum (of the two ints)
+  (match-define (list (list a b) new-vm) (pop-and-get-values vm 2))
+  (if (and (cell-int-? a)
+         (cell-int-? b))
+      (increment-pc
+       (push-value new-vm (cell-int- (int+ (cell-int--value a)
+                                            (cell-int--value b)))))
+      (raise-user-error (format "int+ encountered non int in ~a or ~a" a b))))
+
+;; bytecode: op, len: 1b
+;; stack: [ a:cell-int b:cell-int ... ] -> [ a+b:cell-int- ... ], growth: -1c
+(define (interpret-int- [vm : vm-]) : vm-
+  ;; replace tos and tos-1 with sum (of the two ints)
+  (match-define (list (list a b) new-vm) (pop-and-get-values vm 2))
+  (if (and (cell-int-? a)
+         (cell-int-? b))
+      (increment-pc
+       (push-value new-vm (cell-int- (int- (cell-int--value a)
+                                            (cell-int--value b)))))
+      (raise-user-error (format "int- encountered non int in ~a or ~a" a b))))
 
 ;; bytecode: op idx:byte, len: 2b
 ;; stack: [ ... pN .. p1 p0] -> [ pIDX ... pN .. p1 p0], growth: 1c
@@ -1080,6 +1120,8 @@
     [(= byte-code BRA) (format "bra ~a" (two-complement->signed-byte (peek-pc-byte vm 1)))]
     [(= byte-code BRK) "brk"]
     [(= byte-code BYTE+) "byte+"]
+    [(= byte-code INT+) "int+"]
+    [(= byte-code INT-) "int-"]
     [(= byte-code CALL) "call"]
     [(= byte-code CAR) "car"]
     [(= byte-code CDR) "cdr"]
@@ -1134,6 +1176,8 @@
     [(= byte-code BRA) (interpret-bra vm)]
     [(= byte-code BRK) (raise-user-error "encountered BRK")]
     [(= byte-code BYTE+) (interpret-byte+ vm)]
+    [(= byte-code INT+) (interpret-int+ vm)]
+    [(= byte-code INT-) (interpret-int- vm)]
     [(= byte-code CALL) (interpret-call vm)]
     [(= byte-code CAR) (interpret-car vm)]
     [(= byte-code CDR) (interpret-cdr vm)]
