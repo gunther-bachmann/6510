@@ -1,17 +1,107 @@
 #lang racket/base
 
+(require (only-in racket/format ~a))
+
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
-(require (only-in racket/list flatten take))
+(require (only-in racket/list flatten take empty? drop))
 
 (module+ test
   (require "../6510-test-utils.rkt")
   (require (only-in racket/port open-output-nowhere))
   (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
   (require (only-in "../tools/6510-debugger.rkt" run-debugger-on)))
-(require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator))
+(require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
 (provide vm-memory-manager)
+
+;; delete every n-th element from the given list
+(define (ndelete lst n)
+  (let recur ([i 1]
+              [rest lst])
+    (cond [(null? rest) '()]
+          [(= i n) (recur 1 (cdr rest))]
+          [else (cons (car rest) (recur (+ i 1) (cdr rest)))])))
+
+(module+ test #| ndelete |#
+  (check-equal? (ndelete (cdr (cdr '(0 1 2
+                                       3 4 5
+                                       5 6 7)))
+                         3)
+                '(2
+                  3 5
+                  5 7)))
+
+;; produce strings describing the current cell-stack status
+(define (vm-stack->strings state)
+  (define stack-tos-idx (peek state ZP_CELL_TOS))
+  (define stack (memory-list state ZP_CELL0 (+ 1 stack-tos-idx #xda)))
+  (define stack-values (cons (car stack) (ndelete (cdr (cdr stack)) 3)))
+  (cons (format "stack holds ~a items" (/ (+ 2 stack-tos-idx) 3))
+        (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair))) (pairing stack-values)))))
+
+;; make a list of adjacent pairs
+(define (pairing list (paired-list '()))
+  (if (empty? list)
+      (reverse paired-list)
+      (pairing (drop list 2) (cons `(,(car list) . ,(cadr list)) paired-list))))
+
+(module+ test #| pairing |#
+  (check-equal? (pairing '(1 2 3 4 5 6))
+                '((1 . 2) (3 . 4) (5 . 6))))
+
+;; format a hexadecimal byte
+(define (format-hex-byte byte)
+  (~a (number->string byte 16) #:width 2 #:align 'right #:pad-string "0"))
+
+(define (vm-cell->string low high)
+  (cond
+    [(= 1 (bitwise-and #x01 low)) (format "cell-ptr $~a~a"
+                                          (format-hex-byte high)
+                                          (format-hex-byte (bitwise-and #xfe low)))]
+    [(= 2 (bitwise-and #x02 low)) (format "cell-pair-ptr $~a~a"
+                                          (format-hex-byte high)
+                                          (format-hex-byte (bitwise-and #xfc low)))]
+    [(= 0 (bitwise-and #x83 low)) (format "cell-int $~a~a"
+                                          (format-hex-byte (arithmetic-shift low -2))
+                                          (format-hex-byte high))]
+    [(= #xfc (bitwise-and #xfc low)) (format "cell-byte $~a" (format-hex-byte high))]
+    [else "?"]))
+
+(module+ test #| vm-cell->string |#
+  (check-equal? (vm-cell->string #xc5 #xc0)
+                "cell-ptr $c0c4")
+  (check-equal? (vm-cell->string #xc2 #xc0)
+                "cell-pair-ptr $c0c0")
+  (check-equal? (vm-cell->string #x78 #x15)
+                "cell-int $1e15")
+  (check-equal? (vm-cell->string #xfc #x15)
+                "cell-byte $15"))
+
+(module+ test #| vm-stack->string |#
+  (define test-vm_stack_to_string-a-code
+    (list (org #xc000)
+          (JSR VM_INITIALIZE_MEMORY_MANAGER)
+          (JSR VM_CELL_STACK_PUSH_NIL)
+          (JSR VM_CELL_STACK_PUSH_NIL)
+          (LDA !$03)
+          (LDY !$01)
+          (JSR VM_CELL_STACK_PUSH_INT)))
+  (define test-vm_stack_to_string-a
+    (append test-vm_stack_to_string-a-code
+            (list (BRK))
+            vm-memory-manager))
+
+  (define test-vm_stack_to_string-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_stack_to_string-a)))
+  (define test-vm_stack_to_string-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_stack_to_string-a-state-before)))
+
+  ;; (run-debugger-on test-vm_stack_to_string-a-state-before)
+
+  (check-equal? (vm-stack->strings test-vm_stack_to_string-a-state-after)
+                '("stack holds 3 items"
+                  "cell-int $0301"
+                  "cell-pair-ptr $0000"
+                  "cell-pair-ptr $0000")))
 
 ;; test one roundtrip:
 
@@ -91,43 +181,62 @@
 ;;   VM_COPY_PTR2_TO_PTR                        :: ZP_PTR2->ZP_PTR
 ;;   VM_COPY_PTR_TO_PTR2                        :: ZP_PTR->ZP_PTR2
 
-
-
 ;; constants that are used by the assembler code
 (define VM_MEMORY_MANAGEMENT_CONSTANTS
   (list
    ;; page type list-pair-cells
-   (byte-const PT_LIST_PAIR_CELLS        #x00)   ;; page type: list pair cells
-   (byte-const PT_CALL_STACK             #x01)   ;; page type: call stack
-   (byte-const PT_CODE                   #x02)   ;; page type: code
+   (byte-const PT_LIST_PAIR_CELLS        $00)   ;; page type: list pair cells
+   (byte-const PT_CALL_STACK             $01)   ;; page type: call stack
+   (byte-const PT_CODE                   $02)   ;; page type: code
 
-   (word-const VM_FREE_PAGE_BITMAP       #xced0) ;; location: free page bitmap (ced0..ceff)
+   (word-const VM_FREE_PAGE_BITMAP       $ced0) ;; location: free page bitmap (ced0..ceff)
 
-   (byte-const NEXT_FREE_PAGE_PAGE       #xcf)   ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
-   (word-const VM_FREE_SLOT_FOR_PAGE     #xcf00) ;; location: table of first free slot for each page
+   (byte-const NEXT_FREE_PAGE_PAGE       $cf)   ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
+   (word-const VM_FREE_SLOT_FOR_PAGE     $cf00) ;; location: table of first free slot for each page
 
-   (word-const TAGGED_INT_0              #x0000)
-   (word-const TAGGED_NIL                #x0002) ;; tag indicates cell-pair-ptr
+   (word-const TAGGED_INT_0              $0000)
+   (word-const TAGGED_BYTE0              $00fc)
+   (word-const TAGGED_NIL                $0002) ;; tag indicates cell-pair-ptr
 
    ;; zp_ptr holds either a cell-ptr or a cell-pair (ptr) with out the tag bits!
    ;; these two must be adjacent (for some code to work!)
-   (byte-const ZP_PTR                    #xfb)   ;; fb = low byte (with out tag bits), fc = high byte
-   (byte-const ZP_PTR2                   #xfd)   ;; fd = low byte (with out tag bits), fe = high byte
+   (byte-const ZP_PTR                    $fb)   ;; fb = low byte (with out tag bits), fc = high byte
+   (byte-const ZP_PTR2                   $fd)   ;; fd = low byte (with out tag bits), fe = high byte
 
    ;; these two must be adjacent (for some code to work)
-   (byte-const ZP_PTR_TAGGED             #x9e)   ;; 9e = low byte with tag bits
-   (byte-const ZP_PTR2_TAGGED            #x9f)   ;; 9f = low byte with tag bits
+   (byte-const ZP_PTR_TAGGED             $9e)   ;; 9e = low byte with tag bits
+   (byte-const ZP_PTR2_TAGGED            $9f)   ;; 9f = low byte with tag bits
 
    ;; zero page cell stack: tos always points to the untagged low byte!
-   (byte-const ZP_CELL_TOS               #xd9)  ;; current offset to tos $fe = stack empty, 1 = cell0, 4 = cell1, 7 = cell2 ...
-   (byte-const ZP_CELL0                  #xda)  ;; da = low byte with tag
-   (byte-const ZP_CELL0_LOW              #xdb)  ;; db = low byte without tag, dc = high byte
-   (byte-const ZP_CELL1                  #xdd)  ;; dd = low byte with tag
-   (byte-const ZP_CELL1_LOW              #xde)  ;; de = low byte without tag, df = high byte
+   (byte-const ZP_CELL_TOS               $d9)  ;; current offset to tos $fe = stack empty, 1 = cell0, 4 = cell1, 7 = cell2 ...
+   (byte-const ZP_CELL0                  $da)  ;; da = low byte with tag
+   (byte-const ZP_CELL0_LOW              $db)  ;; db = low byte without tag, dc = high byte
+   (byte-const ZP_CELL1                  $dd)  ;; dd = low byte with tag
+   (byte-const ZP_CELL1_LOW              $de)  ;; de = low byte without tag, df = high byte
    ;; ... cell2 = e0..e2, 3 = e3..e5, 4 = e6..e8, 5= e9..eb, 6 = ec..ee, 7 = ef..f1
-   (byte-const ZP_CELL7                  #xef)
-   (byte-const ZP_CELL7_LOW              #xf0)
-   ))
+
+   (byte-const ZP_CELL7                  $ef)
+   (byte-const ZP_CELL7_LOW              $f0)))
+
+(define (ast-const-get ast-commands key)
+  (when (empty? ast-commands)
+    (raise-user-error (format "key ~a not found in list of ast commands" key)))
+  (define ast-command (car ast-commands))
+  (cond
+    [(and (ast-const-byte-cmd? ast-command)
+        (string=? key (ast-const-byte-cmd-label ast-command)))
+     (ast-const-byte-cmd-byte ast-command)]
+    [(and (ast-const-word-cmd? ast-command)
+        (string=? key (ast-const-word-cmd-label ast-command)))
+     (ast-const-word-cmd-word ast-command)]
+    [else (ast-const-get (cdr ast-commands) key)]))
+
+(define ZP_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR"))
+(define ZP_PTR_TAGGED    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR_TAGGED"))
+(define ZP_PTR2          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2"))
+(define ZP_PTR2_TAGGED   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2_TAGGED"))
+(define ZP_CELL_TOS      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_TOS"))
+(define ZP_CELL0         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL0"))
 
 ;; naming convention
 ;; cell-stack         == stack of cells (could be any atomic or ptr cell)
@@ -217,7 +326,7 @@
 
   ;; (run-debugger-on test-vm_cell_stack_pop-a-state-before)
 
-  (check-equal? (memory-list test-vm_cell_stack_pop-a-state-after #xd9 #xdc)
+  (check-equal? (memory-list test-vm_cell_stack_pop-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
                 '(#xfe
                   #x02 #x00 #x00)
                 "tos = fe (empty), nil is (still) in memory but off from stack, second pop runs into brk, no clearing of zp_cell_tos!"))
@@ -271,7 +380,7 @@
 
   ;; (run-debugger-on test-vm_cell_stack_push_nil-a-state-before)
 
-  (check-equal? (memory-list test-vm_cell_stack_push_nil-a-state-after #xd9 #xdc)
+  (check-equal? (memory-list test-vm_cell_stack_push_nil-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
                 '(#x01
                   #x02 #x00 #x00)
                 "tos = 01, nil is on stack")
@@ -404,7 +513,7 @@
 
   ;; (run-debugger-on test-vm_cell_stack_push_int-a-state-before)
 
-  (check-equal? (memory-list test-vm_cell_stack_push_int-a-state-after #xd9 #xe8)
+  (check-equal? (memory-list test-vm_cell_stack_push_int-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 15))
                 '(#x0d
                   #x7c #x7c #xff  ;; signed int -1
                   #x40 #x40 #x00  ;; signed int -4096
@@ -499,12 +608,12 @@
 
   ;; (run-debugger-on test-vm_cell_stack_push_celly_to_zp_ptr-a-state-before)
 
-  (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after #xd9 #xdf)
+  (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 6))
                 '(#x04
                   #x08 #x08 #x12  ;; int 530
                   #x02 #x00 #x00) ;; nil
                 "tos = fe, empty that is")
-  (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after #xfb #xfc)
+  (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x04 #xcd)
                 "zp_ptr => cd04 (first free pair cell)")
   (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after #xcd04 #xcd07)
@@ -568,10 +677,10 @@
 
   ;; (run-debugger-on test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-before)
 
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after #xd9 #xd9)
+  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after ZP_CELL_TOS ZP_CELL_TOS)
                 '(#xfe)
                 "tos = fe, empty that is")
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after #xfb #xfc)
+  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x04 #xcd)
                 "zp_ptr => cd04 (first free pair cell)")
   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after #xcd04 #xcd07)
@@ -698,14 +807,14 @@
 
   ;; (run-debugger-on test-vm_cell_stack_push_zp_ptry-a-state-before)
 
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after #xd9 #xdc)
+  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
                 '(#x01
                   #x06 #x04 #xcd) ;; cd04 as cell-pair-ptr
                 "tos = 01, pushed cd04 as cell-pair-ptr")
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after #xfb #xfc)
+  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after ZP_PTR (+ ZP_PTR 1))
                 '(#x04 #xcd)
                 "zp_ptr => cd04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after #x9e #x9e)
+  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after ZP_PTR_TAGGED ZP_PTR_TAGGED)
                 '(#x06)
                 "tagged lowbyte is 04 | 02 = 06")
 
@@ -730,14 +839,14 @@
 
   ;; (run-debugger-on test-vm_cell_stack_push_zp_ptry-b-state-before)
 
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after #xd9 #xdc)
+  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
                 '(#x01
                   #x06 #x04 #xcd) ;; cd04 as cell-pair-ptr
                 "tos = 01, pushed cd04 as cell-pair-ptr")
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after #xfd #xfe)
+  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after ZP_PTR2 (+ 1 ZP_PTR2))
                 '(#x04 #xcd)
                 "zp_ptr2 => cd04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after #x9f #x9f)
+  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after ZP_PTR2_TAGGED ZP_PTR2_TAGGED)
                 '(#x06)
                 "tagged lowbyte is 04 | 02 = 06"))
 
@@ -798,14 +907,14 @@
 
   ;; (run-debugger-on test-vm_cell_stack_write_tos_to_zp_ptry-a-state-before)
 
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after #xd9 #xdc)
+  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
                 '(#x01
                   #x06 #x04 #xcd) ;; cd04 as cell-pair-ptr
                 "tos = 01, pushed cd04 as cell-pair-ptr")
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after #xfb #xfc)
+  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x04 #xcd)
                 "zp_ptr => cd04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after #x9e #x9e)
+  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after ZP_PTR_TAGGED ZP_PTR_TAGGED)
                 '(#x06)
                 "tagged lowbyte is 04 | 02 = 06")
 
@@ -835,14 +944,14 @@
 
   ;; (run-debugger-on test-vm_cell_stack_write_tos_to_zp_ptry-b-state-before)
 
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after #xd9 #xdc)
+  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
                 '(#x01
                   #x06 #x04 #xcd) ;; cd04 as cell-pair-ptr
                 "tos = 01, pushed cd04 as cell-pair-ptr")
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after #xfd #xfe)
+  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after ZP_PTR2 (+ 1 ZP_PTR2))
                 '(#x04 #xcd)
                 "zp_ptr2 => cd04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after #x9f #x9f)
+  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after ZP_PTR2_TAGGED ZP_PTR2_TAGGED)
                 '(#x06)
                 "tagged lowbyte is 04 | 02 = 06"))
 
@@ -1494,7 +1603,7 @@
   (define use-case-1-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-a)))
   (define use-case-1-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-a-state-before)))
 
-  (check-equal? (memory-list use-case-1-a-state-after #xfb #xfc)
+  (check-equal? (memory-list use-case-1-a-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x04 #xcd)
                 "zp_ptr -> $cd04 = first free cell-pair on page $cd after initialization")
   (check-equal? (memory-list use-case-1-a-state-after #xcd01 #xcd01)
@@ -1533,8 +1642,8 @@
             (list
              ;; clear zp_ptr just to make sure
              (LDA !$00)
-             (STA $fb)
-             (STA $fc)
+             (STA ZP_PTR)
+             (STA ZP_PTR+1)
              (JSR VM_ALLOC_CELL_PAIR))))
   (define use-case-1-c
     (append use-case-1-c-code
@@ -1543,7 +1652,7 @@
 
   (define use-case-1-c-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-c)))
   (define use-case-1-c-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-c-state-before)))
-  (check-equal? (memory-list use-case-1-c-state-after #xfb #xfc) ;;
+  (check-equal? (memory-list use-case-1-c-state-after ZP_PTR (+ 1 ZP_PTR)) ;;
                 '(#x04 #xcd )
                 "allocated cell-pair is reused cell-pair of free tree")
   (check-equal? (memory-list use-case-1-c-state-after #xcec5 #xcec6) ;;
@@ -1612,7 +1721,7 @@
   (define use-case-2-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-2-a-code)))
   ;; (run-debugger-on use-case-2-a-state-before)
   (define use-case-2-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-2-a-state-before)))
-  (check-equal? (memory-list use-case-2-a-state-after #xfb #xfe)
+  (check-equal? (memory-list use-case-2-a-state-after ZP_PTR (+ 3 ZP_PTR))
                 '(#x08 #xcd #x04 #xcd)
                 "case 2a: zp_ptr -> $cd08, zp_ptr2 -> $cd04 = first two free cell-pairs on page $cd after initialization")
   (check-equal? (memory-list use-case-2-a-state-after #xcd01 #xcd0b)
@@ -1666,7 +1775,7 @@
   (define use-case-2-c-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-2-c-code)))
   ;; (run-debugger-on use-case-2-c-state-before)
   (define use-case-2-c-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-2-c-state-before)))
-  (check-equal? (memory-list use-case-2-c-state-after #xfb #xfc)
+  (check-equal? (memory-list use-case-2-c-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x08 #xcd)
                 "case 2c: zp_ptr -> $cd08, reallocated")
   (check-equal? (memory-list use-case-2-c-state-after #xcd01 #xcd0b)

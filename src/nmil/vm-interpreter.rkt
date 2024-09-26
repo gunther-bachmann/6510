@@ -306,7 +306,7 @@
      (byte #xb9)            ;; byte code for PUSH_INT_1
      (byte #xba)            ;; byte code for PUSH_INT_2
      (bc INT-)            ;; byte code for INT_MINUS = 2 - 1 = 1
-     (bc PUSH_INT) (byte  #x04 #xf0)  ;; push int #x4f0 (1264)
+     (bc PUSH_INT) (byte #x04 #xf0)  ;; push int #x4f0 (1264)
      (bc PUSH_INT) (byte #x01 #x1f)  ;; push int #x11f (287)
      (bc INT-)            ;; byte code for INT_MINUS (- #x011f #x04f0) ( -977 = #x0c2f -> encoded #x302f)
      (byte #xb9)            ;; byte code for PUSH_INT_1
@@ -374,7 +374,7 @@
            (word-ref BC_PUSH_CONST_BYTE)          ;; 0a  <-  05 reserved
            (word-ref BC_PUSH_CONST_INT)           ;; 0c  <-  06
            (word-ref VM_INTERPRETER_INC_PC)       ;; 0e  <-  07 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  08 reserved
+           (word-ref BC_PUSH_LOCAL_OR_BYTE_SHORT) ;; 10  <-  88..8F
            (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 14  <-  0a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 16  <-  0b reserved
@@ -382,7 +382,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1a  <-  0d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1c  <-  0e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1e  <-  0f reserved
-           (word-ref BC_PUSH_LOCAL_OR_BYTE_SHORT) ;; 20  <-  88..8F -> 10
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 20  <-  90..97 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 22  <-  11 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 24  <-  12 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 26  <-  13 reserved
@@ -390,7 +390,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2a  <-  15 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2c  <-  16 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2f  <-  17 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 30  <-  18 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 30  <-  98..9f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 36  <-  1b reserved
@@ -398,7 +398,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3a  <-  1d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3c  <-  1e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 40  <-  90..97 -> 20 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 40  <-  a0..a7
            (word-ref BC_NIL_P)                    ;; 42  <-  21
            (word-ref VM_INTERPRETER_INC_PC)       ;; 44  <-  22 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
@@ -406,7 +406,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4c  <-  26 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4e  <-  27 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 50  <-  28 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 50  <-  a8..af reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 52  <-  29 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 54  <-  2a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 56  <-  2b reserved
@@ -414,7 +414,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 5a  <-  2d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 5c  <-  2e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 5e  <-  2f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 60  <-  98..9f -> 30 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 60  <-  b0..b7 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 62  <-  31 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 64  <-  32 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 66  <-  33 reserved
@@ -422,7 +422,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6a  <-  35 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6c  <-  36 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6e  <-  37 reserved
-           (word-ref BC_PUSH_CONST_NUM_SHORT)     ;; 70  <-  b8..bf -> 70 reserved
+           (word-ref BC_PUSH_CONST_NUM_SHORT)     ;; 70  <-  b8..bf reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 72  <-  39 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 74  <-  3a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 76  <-  3b reserved
@@ -430,7 +430,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7a  <-  3d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7c  <-  3e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7e  <-  3f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 80  <-  a0..a7 -> 40 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 80  <-  c0..a7 reserved
            (word-ref VM_CDR)                      ;; 82  <-  41 reserved
            (word-ref VM_CONS)                     ;; 84  <-  42 reserved
            (word-ref VM_CAR)                      ;; 86  <-  43 reserved
@@ -438,7 +438,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8a  <-  45 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8e  <-  47 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 90  <-  48 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 90  <-  c8..af reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 92  <-  49 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 94  <-  4a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 96  <-  4b reserved
@@ -446,7 +446,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 9a  <-  4d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 9c  <-  4e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 9e  <-  4f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; a0  <-  a8..af -> 50 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; a0  <-  d0..d7 eserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; a2  <-  51 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; a4  <-  52 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; a6  <-  53 reserved
@@ -454,7 +454,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; aa  <-  55 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ac  <-  56 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ae  <-  57 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; b0  <-  58 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b0  <-  d8..df reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; b2  <-  59 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; b4  <-  5a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; b6  <-  5b reserved
@@ -462,7 +462,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; ba  <-  5d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; bc  <-  5e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; be  <-  5f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; c0  <-  b0..b7 -> 60 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; c0  <-  e0..e7 reserved
            (word-ref BC_INT_MINUS)                ;; c2  <-  61
            (word-ref BC_INT_PLUS)                 ;; c4  <-  62
            (word-ref VM_INTERPRETER_INC_PC)       ;; c6  <-  63 reserved
@@ -470,7 +470,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; ca  <-  65 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; cc  <-  66 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ce  <-  67 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; d0  <-  68 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; d0  <-  e8..ef reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; d2  <-  69 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; d4  <-  6a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; d6  <-  6b reserved
@@ -478,7 +478,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; da  <-  6d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; dc  <-  6e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; de  <-  6f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; e0  <-  70 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; e0  <-  f0..f7 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; e2  <-  71 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; e4  <-  72 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; e6  <-  73 reserved
@@ -486,7 +486,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; ea  <-  75 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ec  <-  76 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ee  <-  77 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; f0  <-  78 reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; f0  <-  f8..ff reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; f2  <-  79 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; f4  <-  7a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; f6  <-  7b reserved
