@@ -332,17 +332,113 @@
                   #x02 #x00 #x00)
                 "tos = fe (empty), nil is (still) in memory but off from stack, second pop runs into brk, no clearing of zp_cell_tos!"))
 
-;; push nil onto the stack (checking for stack overflow)
+;; push a cell in A/Y (low/high) onto the cell-stack
 ;; input: stack
+;;        A = low, encoded cell (tagged)
+;;        Y = high, cell
 ;; output: stack++[nil]
 ;; registers: A  ?
 ;;            X  TOS (on untagged low byte)
 ;;            Y  unchanged
 ;; check stack full!
-(define VM_CELL_STACK_PUSH_NIL
+(define VM_CELL_STACK_PUSH
   (list
+   (label VM_CELL_STACK_PUSH_CELL1_OF_ZP_PTR)
+          (LDY !$02)
+          (BNE VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
+
+   (label VM_CELL_STACK_PUSH_CELL0_OF_ZP_PTR)
+          (LDY !$00)
+
+   ;; push celly of cell-pair pointer to by zp_ptr (y=0 car-cell, y=2 cdr-cell) onto cell-stack
+   ;; input:  cell-stack
+   ;;         y register (0 = car-cell, 2 = cdr-cell)
+   ;;         zp_ptr pointing to the cells to read from (psuh to cell-stack)
+   ;; output: cell-stack with celly pushed (=> ZP_CELL_TOS+=3)
+   ;;         zp_ptr and pointed to cells unchanged
+   ;;         a = hight byte of celly
+   ;;         x = TOS+1
+   ;;         y = y+1
+   ;;         flags: result of lda high byte of celly
+   ;; check stack full!
+   (label VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
+          (LDA (ZP_PTR),y)
+          (TAX)
+          (INY)
+          (LDA (ZP_PTR),y)
+          (TAY)
+          (TXA)
+          (CLC)
+          (BCC VM_CELL_STACK_PUSH)
+
+   (label VM_CELL_STACK_PUSH_ZP_PTR2)
+          (LDY !$01)
+          (BNE VM_CELL_STACK_PUSH_ZP_PTRy)
+   (label VM_CELL_STACK_PUSH_ZP_PTR)
+          (LDY !$00)
+
+   ;; push zp_ptry (y=0 zp_ptr, y=1 zp_ptr1) onto cell-stack
+   ;; input:  stack
+   ;;         zp_ptry
+   ;; output: stack++[zp_ptry] (uses zp_ptr_tagged, too)
+   ;;         A  high byte of zp_ptr
+   ;;         X  TOS
+   ;;         Y  0|2 (orig Y * 2)
+   ;; check stack full!
+   (label VM_CELL_STACK_PUSH_ZP_PTRy)
+          (LDA ZP_PTR_TAGGED,y)
+          (TAX)
+          ;; Y = Y*2
+          (TYA)
+          (ASL A)
+          (TAY)
+          (LDA ZP_PTR+1,y)
+          (TAY)
+          (TXA)
+          (CLC)
+          (BCC VM_CELL_STACK_PUSH)
+
+   ;; ints are saved high byte first, then low byte !!!!
+   ;; input:  stack
+   ;;         A = high byte of int (max 31 = $1f)
+   ;;         Y = low byte of int (0..255)
+   ;; output: stack++[INT]
+   ;;         A  = transformed / tagged low byte of int
+   ;;         Y  = low byte of int
+   ;;         X  = tos
+   ;; check stack full!
+   (label VM_CELL_STACK_PUSH_INT)
+          (ASL A)
+          (ASL A)
+          (AND !$7c)           ;; mask out top and two low bits!
+          (BPL VM_CELL_STACK_PUSH)
+
+   (label VM_CELL_STACK_PUSH_INT_m1)
+          (LDA !$7c) ;; 1f << 2
+          (LDY !$ff)
+          (BNE VM_CELL_STACK_PUSH)
+
+   (label VM_CELL_STACK_PUSH_INT_2)
+          (LDY !$02)
+          (LDA !$00)
+          (BEQ VM_CELL_STACK_PUSH)
+
+   (label VM_CELL_STACK_PUSH_INT_1)
+          (LDY !$01)
+          (LDA !$00)
+          (BEQ VM_CELL_STACK_PUSH)
+
+   (label VM_CELL_STACK_PUSH_INT_0)
+          (LDA !$00)
+          (TAY)
+          (BEQ VM_CELL_STACK_PUSH)
+
    (label VM_CELL_STACK_PUSH_NIL)
-          ;; increase stack pointer
+          (LDA !<TAGGED_NIL)
+          (LDY !>TAGGED_NIL)
+
+   ;; ----------------------------------------
+   (label VM_CELL_STACK_PUSH)
           (LDX ZP_CELL_TOS)
           (INX)
           (INX)
@@ -350,22 +446,18 @@
 
           ;; check that stack pointer does not run out of bound
           (CPX !ZP_CELL7) ;; stack runs from  cell0 .. cell7
-          (BCS NO_ERROR__VM_CELL_STACK_PUSH_NIL)
+          (BCS NO_ERROR__VM_CELL_STACK_PUSH)
 
           (BRK)
 
-   (label NO_ERROR__VM_CELL_STACK_PUSH_NIL)
-
-          (LDA !<TAGGED_NIL)
-          (STA ZP_CELL0,x) ;; write lowbyte
-          (AND !$fc)                  ;; mask out ptr tag bits
-          (STA ZP_CELL0_LOW,x)            ;; write untagged lowbyte
-          (LDA !>TAGGED_NIL)
-          (STA ZP_CELL0_LOW+1,x)          ;; write high byte
+   (label NO_ERROR__VM_CELL_STACK_PUSH)
+          (STA ZP_CELL0,x)       ;; write lowbyte
+          (AND !$fc)             ;; mask out ptr tag bits
+          (STA ZP_CELL0_LOW,x)   ;; write untagged lowbyte
+          (STY ZP_CELL0_LOW+1,x) ;; write high byte
           (INX)
-          (STX ZP_CELL_TOS)           ;; set new tos
-          (RTS)
-   ))
+          (STX ZP_CELL_TOS)      ;; set new tos
+          (RTS)))
 
 (module+ test #| vm_cell_stack_push_nil |#
   (define test-vm_cell_stack_push_nil-a-code (list (org #xc000)
@@ -439,59 +531,6 @@
           (STY ZP_CELL0_LOW,x)  ;; write int low byte
           (RTS)))
 
-;; ints are saved high byte first, then low byte !!!!
-;; input:  stack
-;;         A = high byte of int (max 63)
-;;         Y = low byte of int (0..255)
-;; output: stack++[INT]
-;;         A  = transformed / tagged low byte of int
-;;         Y  = low byte of int
-;;         X  = tos
-;; check stack full!
-(define VM_CELL_STACK_PUSH_INT
-  (list
-   (label VM_CELL_STACK_PUSH_INT_2)
-          (LDY !$02)
-          (LDA !$00)
-          (BEQ VM_CELL_STACK_PUSH_INT)
-   (label VM_CELL_STACK_PUSH_INT_m1)
-          (LDA !$1f)
-          (LDY !$ff)
-          (BNE VM_CELL_STACK_PUSH_INT)
-   (label VM_CELL_STACK_PUSH_INT_1)
-          (LDY !$01)
-          (LDA !$00)
-          (BEQ VM_CELL_STACK_PUSH_INT)
-   (label VM_CELL_STACK_PUSH_INT_0)
-          (LDA !$00)
-          (TAY)
-
-   ;; -------------------------------------
-   (label VM_CELL_STACK_PUSH_INT)
-          ;; increase stack pointer
-          (LDX ZP_CELL_TOS)
-          (INX)
-          (INX)
-          ;; inx just two times, to point right past cell to the tagged low byte (is later ++ before saved as tos)
-
-          ;; check that stack pointer does not run out of bound
-          (CPX !ZP_CELL7)
-          (BCS NO_ERROR__VM_CELL_STACK_PUSH_INT)
-
-          (BRK)
-
-   (label NO_ERROR__VM_CELL_STACK_PUSH_INT)
-          (ASL A)
-          (ASL A)
-          (AND !$7c)           ;; mask out top and two low bits!
-          (STA ZP_CELL0,x)     ;; write int high byte first
-          (STA ZP_CELL0_LOW,x)   ;; write untagged int high byte (the same)
-          (STY ZP_CELL0_LOW+1,x)   ;; write int low byte
-          (INX)
-          (STX ZP_CELL_TOS)    ;; set new tos
-          (RTS)
-   ))
-
 (module+ test #| vm_cell_push_int |#
     (define test-vm_cell_stack_push_int-a-code (list (org #xc000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER)
@@ -522,61 +561,6 @@
                   #x00 #x00 #x00  ;; 0
                   #x3c #x3c #xff) ;; 4095
                 "tos = 13, int 8447 is on stack"))
-
-;; push celly of cell-pair pointer to by zp_ptr (y=0 car-cell, y=2 cdr-cell) onto cell-stack
-;; input:  cell-stack
-;;         y register (0 = car-cell, 2 = cdr-cell)
-;;         zp_ptr pointing to the cells to read from (psuh to cell-stack)
-;; output: cell-stack with celly pushed (=> ZP_CELL_TOS+=3)
-;;         zp_ptr and pointed to cells unchanged
-;;         a = hight byte of celly
-;;         x = TOS+1
-;;         y = y+1
-;;         flags: result of lda high byte of celly
-;; check stack full!
-(define VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR
-  (list
-   (label VM_CELL_STACK_PUSH_CELL1_OF_ZP_PTR)
-          (LDY !$00)
-          (BNE VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
-   (label VM_CELL_STACK_PUSH_CELL0_OF_ZP_PTR)
-          (LDY !$00)
-
-   ;;------------------------------------------------
-   (label VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
-          ;; increase stack pointer
-          (LDX ZP_CELL_TOS)
-          (INX)
-          (INX)
-          ;; inx just two times, to point right past cell to the tagged low byte (is later ++ before saved as tos)
-
-          ;; check that stack pointer does not run out of bound
-          (CPX !ZP_CELL7)
-          (BCS NO_ERROR__VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
-
-          (BRK)
-
-   (label NO_ERROR__VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
-          ;; now store celly pointed to by zp_ptr to stack
-
-          ;; tagged low byte
-          (LDA (ZP_PTR),y)
-          (STA ZP_CELL0,x)
-
-          ;; untagged low byte
-          (AND $fc)           ;; mask out pointer taggs
-          (STA ZP_CELL0_LOW,x)  ;;
-          (INY)
-
-          ;; high byte
-          (LDA (ZP_PTR),y)
-          (STA ZP_CELL0_LOW+1,x)
-
-          ;; now point to new tos
-          (INX)
-          (STX ZP_CELL_TOS) ;; tos always points behind tagged low byte
-
-          (RTS)))
 
 (module+ test #| vm_cell_stack_push_celly_of_zp_ptr |#
     (define test-vm_cell_stack_push_celly_to_zp_ptr-a-code (list (org #xc000)
@@ -687,52 +671,6 @@
   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after #xcd04 #xcd07)
                 '(#x08 #x12 #x02 #x00)
                 "zp_ptr => (int530 . nil)"))
-
-;; push zp_ptry (y=0 zp_ptr, y=1 zp_ptr1) onto cell-stack
-;; input:  stack
-;;         zp_ptry
-;; output: stack++[zp_ptry] (uses zp_ptr_tagged, too)
-;;         A  high byte of zp_ptr
-;;         X  TOS
-;;         Y  0|2 (orig Y * 2)
-;; check stack full!
-(define VM_CELL_STACK_PUSH_ZP_PTRy
-  (list
-   (label VM_CELL_STACK_PUSH_ZP_PTR2)
-          (LDY !$01)
-          (BNE VM_CELL_STACK_PUSH_ZP_PTRy)
-   (label VM_CELL_STACK_PUSH_ZP_PTR)
-          (LDY !$00)
-
-   ;;------------------------------------------------
-   (label VM_CELL_STACK_PUSH_ZP_PTRy)
-          (LDX ZP_CELL_TOS)
-          (INX)
-          (INX)
-
-          ;; check that stack pointer does not run out of bound
-          (CPX !ZP_CELL7)
-          (BCS NO_ERROR__VM_CELL_STACK_PUSH_ZP_PTRy)
-
-          (BRK)
-
-   (label NO_ERROR__VM_CELL_STACK_PUSH_ZP_PTRy)
-          (LDA ZP_PTR_TAGGED,y)
-          (STA ZP_CELL0,x)    ;; tagged low byte
-
-          ;; Y = Y*2
-          (TYA)
-          (ASL A)
-          (TAY)
-
-          (LDA ZP_PTR,y)
-          (STA ZP_CELL0_LOW,x)  ;; untagged low byte
-          (LDA ZP_PTR+1,y)
-          (STA ZP_CELL0_LOW+1,x)  ;; high byte of ptr
-          (INX)
-          (STX ZP_CELL_TOS)
-          (RTS)))
-
 
 ;; write zp_ptry (y=0 zp_ptr, y=1 zp_ptr1) into top of cell-stack
 ;; input:  stack
@@ -1688,7 +1626,7 @@
                                   ;; set cell1 to int 0
                                   (JSR VM_CELL_STACK_PUSH_INT_0)                         ;; cell-stack <- push int0
                                   (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := int0
-                                  ;;(JSR VM_CELL_PAIR_SET_INT_0)
+                                  ;;(JSR VM_CELL_AIR_SET_INT_0)
 
 
                                   (JSR VM_COPY_PTR_TO_PTR2)                              ;; zp_ptr2 := zp_ptr
@@ -1806,17 +1744,13 @@
           VM_FREE_NON_ATOMIC
           VM_ALLOC_CELL_PAIR
           VM_FREE_CELL_PAIR
-          VM_CELL_STACK_PUSH_NIL
-          VM_CELL_STACK_PUSH_INT
           VM_CELL_STACK_WRITE_INT_TO_TOS
-
-          VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR
-          VM_CELL_STACK_PUSH_ZP_PTRy
           VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR
           VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS
           VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy
           VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS
           VM_CELL_STACK_POP
+          VM_CELL_STACK_PUSH
 
           VM_COPY_PTR2_TO_PTR
           VM_COPY_PTR_TO_PTR2
