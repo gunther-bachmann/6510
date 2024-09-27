@@ -81,17 +81,24 @@
 (provide vm-interpreter)
 
 
-;; TODO: implement CALL, PUSH_LOCAL, PUSH_PARAM_OR_GLOBAL, TAIL_CALL, CONS, CAR, CDR, NIL?-RET-PARAM
+;; TODO: implement CALL, PUSH_LOCAL, PUSH_PARAM_OR_LOCAL, TAIL_CALL, CONS, CAR, CDR, NIL?-RET-PARAM
 ;; TODO: supporting functions like create local frame
 ;; TODO: implement some functions to make status of the interpreter more accessible (e.g. print cell-stack, zp_ptrX, disassemble command, step through byte code ...)
 
 
 (define VM_INTERPRETER_VARIABLES
   (list
-   (byte-const ZP_VM_PC #x14)) ;; program counter 14..15
-  )
+   (byte-const ZP_VM_PC #x14)      ;; $14..15 program counter
+   (byte-const ZP_LOCALS_PTR #x0b) ;; $0b..0c pointer to locals (in call-frame)
+   (byte-const ZP_PARAMS_PTR #x0d) ;; $0d..0e pointer to params (in call-frame)
+   ;; avail:
+   ;; $0f..11
+   ;; $18..25
+   ))
 
 (define ZP_VM_PC (ast-const-get VM_INTERPRETER_VARIABLES "ZP_VM_PC"))
+(define ZP_LOCALS_PTR (ast-const-get VM_INTERPRETER_VARIABLES "ZP_LOCALS_PTR"))
+(define ZP_PARAMS_PTR (ast-const-get VM_INTERPRETER_VARIABLES "ZP_PARAMS_PTR"))
 
 ;; initialize PC to $8000
 (define VM_INTERPRETER_INIT
@@ -118,18 +125,53 @@
                 (list BRK)
                 "stopped at byte code brk"))
 
-;; TODO: implement
-(define BC_PUSH_LOCAL_OR_BYTE_SHORT
+(define BC_PUSH_PARAM_OR_LOCAL_SHORT
   (flatten
    (list
-    (label BC_PUSH_LOCAL_OR_BYTE_SHORT)
-           (JMP VM_INTERPRETER_INC_PC))))
+    (label BC_PUSH_PARAM_OR_LOCAL_SHORT)
+           (LDY !$00)
+           (LDA (ZP_VM_PC),y)
+           (AND !$07) ;; lower three bits are encoded into the short command
+           (LSR)
+           (BCS PUSH_PARAM__BC_PUSH_PARAM_OR_LOCAL_SHORT)
+           (ASL A) ;; * 2
+           (TAY)
+           (LDA (ZP_LOCALS_PTR),y)
+           (TAX)
+           (INY)
+           (LDA (ZP_LOCALS_PTR),y)
+           (TAY)
+           (TXA)
+           (JSR VM_CELL_STACK_PUSH)
+           (JMP VM_INTERPRETER_INC_PC)
 
-(define BC_PUSH_PARAM_OR_GLOBAL
-  (flatten
-   (list
-    (label BC_PUSH_PARAM_OR_GLOBAL)
-           (JMP VM_INTERPRETER_INC_PC))))
+   (label  PUSH_PARAM__BC_PUSH_PARAM_OR_LOCAL_SHORT) ;; not implemented yet
+           (ASL A) ;; * 2
+           (TAY)
+           (LDA (ZP_PARAMS_PTR),y)
+           (TAX)
+           (INY)
+           (LDA (ZP_PARAMS_PTR),y)
+           (TAY)
+           (TXA)
+           (JSR VM_CELL_STACK_PUSH)
+           (JMP VM_INTERPRETER_INC_PC)
+           )))
+
+(define PUSH_LOCAL_0 #x80)
+
+(module+ test #| BC_PUSH_PARAM_OR_LOCAL_SHORT |#
+  (define use-case-push-param-or-local-state-after
+    (run-bc-wrapped-in-test
+     (list
+      ;; todo: setup local0 to be a cell-int $0333
+      (bc PUSH_LOCAL_0)
+      (bc BRK))))
+
+  (skip (check-equal? (vm-stack->strings use-case-push-param-or-local-state-after)
+                      (list "stack holds 1 item"
+                            "cell-int $0333"      ;; tos = 0
+                            ))))
 
 (define PUSH_INT_0 #xb8)
 (define PUSH_INT_1 #xb9)
@@ -327,7 +369,7 @@
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
     (label VM_INTERPRETER_OPTABLE)
-           (word-ref BC_PUSH_PARAM_OR_GLOBAL)     ;; 00  <-  80..87 -> 00
+           (word-ref BC_PUSH_PARAM_OR_LOCAL_SHORT);; 00  <-  80..87 -> 00
            (word-ref VM_INTERPRETER_INC_PC)       ;; 02  <-  01 effectively NOP
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
            (word-ref VM_INTERPRETER_INC_PC)       ;; 06  <-  03 reserved
@@ -335,7 +377,7 @@
            (word-ref BC_PUSH_CONST_BYTE)          ;; 0a  <-  05 reserved
            (word-ref BC_PUSH_CONST_INT)           ;; 0c  <-  06
            (word-ref VM_INTERPRETER_INC_PC)       ;; 0e  <-  07 reserved
-           (word-ref BC_PUSH_LOCAL_OR_BYTE_SHORT) ;; 10  <-  88..8F
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  88..8F
            (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 14  <-  0a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 16  <-  0b reserved
@@ -490,8 +532,7 @@
 (define vm-interpreter
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT
-          BC_PUSH_LOCAL_OR_BYTE_SHORT
-          BC_PUSH_PARAM_OR_GLOBAL
+          BC_PUSH_PARAM_OR_LOCAL_SHORT
           BC_PUSH_CONST_NUM_SHORT
           BC_PUSH_CONST_INT
           BC_PUSH_CONST_BYTE
