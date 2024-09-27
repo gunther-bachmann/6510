@@ -13,7 +13,7 @@
   (require (only-in "../tools/6510-debugger.rkt" run-debugger-on)))
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
-(provide vm-memory-manager)
+(provide vm-memory-manager vm-stack->strings ast-const-get)
 
 ;; delete every n-th element from the given list
 (define (ndelete lst n)
@@ -37,12 +37,13 @@
   (define stack-tos-idx (peek state ZP_CELL_TOS))
   (define stack (memory-list state ZP_CELL0 (+ 1 stack-tos-idx #xda)))
   (define stack-values (cons (car stack) (ndelete (cdr (cdr stack)) 3)))
-  (cons (format "stack holds ~a items" (/ (+ 2 stack-tos-idx) 3))
+  (define stack-item-no (/ (+ 2 stack-tos-idx) 3))
+  (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
         (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair))) (pairing stack-values)))))
 
 ;; make a list of adjacent pairs
 (define (pairing list (paired-list '()))
-  (if (empty? list)
+  (if (< (length list) 2)
       (reverse paired-list)
       (pairing (drop list 2) (cons `(,(car list) . ,(cadr list)) paired-list))))
 

@@ -4,7 +4,7 @@
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
 
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager))
+(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings ast-const-get))
 (require (only-in "./vm-lists.rkt" vm-lists))
 
 (module+ test
@@ -40,17 +40,48 @@
 
                     POP_TO_PARAM
                     POP_TO_LOCAL
-                    POP_TO_GLOBAL))
+                    POP_TO_GLOBAL
+
+                    sPUSH_PARAMc
+                    sNIL?-RET-PARAMc))
 
   (define (bc code)
-    (ast-bytes-cmd '()  (list code))))
+    (ast-bytes-cmd '()  (list code)))
+
+  (define (wrap-bytecode-for-test bc)
+    (append (list (org #x7000)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
+                  (JSR VM_INTERPRETER_INIT)
+                  (JMP VM_INTERPRETER))
+            (list (org #x8000))
+            bc
+            (list (org #xc000))
+            vm-interpreter))
+
+  (define (run-bc-wrapped-in-test bc)
+    (define wrapped-code (wrap-bytecode-for-test bc))
+    (define state-before
+      (6510-load-multiple (initialize-cpu)
+                          (assemble-to-code-list wrapped-code)))
+    ;; (run-debugger-on state-before)
+    (parameterize ([current-output-port (open-output-nowhere)])
+      (run-interpreter-on state-before)))
+
+  (define (vm-pc state)
+    (absolute (peek state (add1 ZP_VM_PC))
+              (peek state ZP_VM_PC)))
+
+  (define (vm-next-instruction-bytes state (n 1))
+    (memory-list state
+                 (vm-pc state)
+                 (sub1 (+ n (vm-pc state))))))
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator cpu-state-program-counter peek))
 
 (provide vm-interpreter)
 
 
-;; TODO: implement CALL, PUSH_LOCAL,
+;; TODO: implement CALL, PUSH_LOCAL, PUSH_PARAM_OR_GLOBAL, TAIL_CALL, CONS, CAR, CDR, NIL?-RET-PARAM
 ;; TODO: supporting functions like create local frame
 ;; TODO: implement some functions to make status of the interpreter more accessible (e.g. print cell-stack, zp_ptrX, disassemble command, step through byte code ...)
 
@@ -59,6 +90,8 @@
   (list
    (byte-const ZP_VM_PC #x14)) ;; program counter 14..15
   )
+
+(define ZP_VM_PC (ast-const-get VM_INTERPRETER_VARIABLES "ZP_VM_PC"))
 
 ;; initialize PC to $8000
 (define VM_INTERPRETER_INIT
@@ -76,28 +109,12 @@
           (BRK)))
 
 (module+ test #| vm_interpreter |#
-  (define use-case-brk
-    (list
-     (bc BRK))) ;; byte code for VM_BRK
+  (define use-case-brk-state-after
+    (run-bc-wrapped-in-test
+     (list
+      (bc BRK))))
 
-  (define use-case-brk-code
-    (append (list (org #x7000)
-                  (JSR VM_INTERPRETER_INIT)
-                  (JMP VM_INTERPRETER))
-            (list (org #x8000))
-            use-case-brk
-            (list (org #xc000))
-            vm-interpreter))
-
-  (define use-case-brk-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-brk-code)))
-  ;; (run-debugger-on use-case-brk-state-before)
-  (define use-case-brk-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-brk-state-before)))
-  (define use-case-brk-current-vm-pc
-    (absolute (peek use-case-brk-state-after #x15)
-              (peek use-case-brk-state-after #x14)))
-
-  (check-equal? (memory-list use-case-brk-state-after
-                             use-case-brk-current-vm-pc use-case-brk-current-vm-pc)
+  (check-equal? (vm-next-instruction-bytes use-case-brk-state-after)
                 (list BRK)
                 "stopped at byte code brk"))
 
@@ -107,6 +124,17 @@
    (list
     (label BC_PUSH_LOCAL_OR_BYTE_SHORT)
            (JMP VM_INTERPRETER_INC_PC))))
+
+(define BC_PUSH_PARAM_OR_GLOBAL
+  (flatten
+   (list
+    (label BC_PUSH_PARAM_OR_GLOBAL)
+           (JMP VM_INTERPRETER_INC_PC))))
+
+(define PUSH_INT_0 #xb8)
+(define PUSH_INT_1 #xb9)
+(define PUSH_INT_2 #xba)
+(define PUSH_INT_m1 #xbb)
 
 (define BC_PUSH_CONST_NUM_SHORT
   (flatten
@@ -137,38 +165,21 @@
            )))
 
 (module+ test #| vm_interpreter |#
+  (define use-case-push-num-s-state-after
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_2)
+      (bc PUSH_INT_m1)
+      (bc BRK))))
 
-  (define use-case-push-num-s
-    (list
-     (byte #xb8)     ;; byte code for PUSH_INT_0
-     (byte #xb9)     ;; byte code for PUSH_INT_1
-     (byte #xba)     ;; byte code for PUSH_INT_2
-     (byte #xbb)     ;; byte code for PUSH_INT_m1
-     (bc BRK)
-     ;; (byte #x02)
-     ))   ;; brk
-
-  (define use-case-push-num-s-code
-    (append (list (org #x7000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_INTERPRETER_INIT)
-                  (JMP VM_INTERPRETER))
-            (list (org #x8000))
-            use-case-push-num-s
-            (list (org #xc000))
-            vm-interpreter))
-
-  (define use-case-push-num-s-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-push-num-s-code)))
-  ;; (run-debugger-on use-case-push-num-s-state-before)
-  (define use-case-push-num-s-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-push-num-s-state-before)))
-
-  (check-equal? (memory-list use-case-push-num-s-state-after #xd9 #xe5)
-                (list #x0a              ;; stack contains 4 elements = 4*3-2
-                      #x00 #x00 #x00
-                      #x00 #x00 #x01
-                      #x00 #x00 #x02
-                      #x7c #x7c #xff)
-                "4 elements on the stack of int 0, int 1, int 2, int -1"))
+  (check-equal? (vm-stack->strings use-case-push-num-s-state-after)
+                (list "stack holds 4 items"
+                      "cell-int $1fff"      ;; tos = -1
+                      "cell-int $0002"
+                      "cell-int $0001"
+                      "cell-int $0000")))
 
 (define BC_PUSH_CONST_INT
   (list
@@ -185,31 +196,15 @@
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
 
 (module+ test #| VM_PUSH_CONST_INT |#
-  (define use-case-push-int
-    (list
-     (bc PUSH_INT)
-     (byte #x04)     ;; highbyte int
-     (byte #xf0)     ;; lowbyte int
-     (bc BRK)))   ;; brk
+  (define use-case-push-int-state-after
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT) (byte #x04 #xf0)
+      (bc BRK))))
 
-  (define use-case-push-int-code
-    (append (list (org #x7000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_INTERPRETER_INIT)
-                  (JMP VM_INTERPRETER))
-            (list (org #x8000))
-            use-case-push-int
-            (list (org #xc000))
-            vm-interpreter))
-
-  (define use-case-push-int-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-push-int-code)))
-  ;; (run-debugger-on use-case-push-int-state-before)
-  (define use-case-push-int-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-push-int-state-before)))
-
-  (check-equal? (memory-list use-case-push-int-state-after #xd9 #xdc)
-                (list #x01              ;; stack contains 1 elements = 1*3-2
-                      #x10 #x10 #xf0)
-                "one element on the stack"))
+  (check-equal? (vm-stack->strings use-case-push-int-state-after)
+                (list "stack holds 1 item"
+                      "cell-int $04f0")))
 
 (define BC_INT_PLUS
   (list
@@ -238,39 +233,25 @@
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| vm_interpreter |#
-  (define use-case-int-plus
-    (list
-     (byte #xb9)            ;; byte code for PUSH_INT_1
-     (byte #xba)            ;; byte code for PUSH_INT_2
-     (bc INT+)            ;; byte code for INT_PLUS = 3
-     (bc PUSH_INT) (byte #x04 #xf0)  ;; push int #x4f0 (1264)
-     (bc PUSH_INT) (byte #x01 #x1f)  ;; push int #x11f (287)
-     (bc INT+)            ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
-     (byte #xb9)            ;; byte code for PUSH_INT_1
-     (byte #xbb)            ;; byte code for PUSH_INT_m1
-     (bc INT+)            ;; byte code for INT_PLUS = 0
-     (bc BRK)))   ;; brk
+  (define use-case-int-plus-state-after
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_2)
+      (bc INT+)                      ;; byte code for INT_PLUS = 3
+      (bc PUSH_INT) (byte #x04 #xf0) ;; push int #x4f0 (1264)
+      (bc PUSH_INT) (byte #x01 #x1f) ;; push int #x11f (287)
+      (bc INT+)                      ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_m1)
+      (bc INT+)                      ;; byte code for INT_PLUS = 0
+      (bc BRK))))
 
-  (define use-case-int-plus-code
-    (append (list (org #x7000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_INTERPRETER_INIT)
-                  (JMP VM_INTERPRETER))
-            (list (org #x8000))
-            use-case-int-plus
-            (list (org #xc000))
-            vm-interpreter))
-
-  (define use-case-int-plus-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-int-plus-code)))
-  ;; (run-debugger-on use-case-int-plus-state-before)
-  (define use-case-int-plus-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-int-plus-state-before)))
-
-  (check-equal? (memory-list use-case-int-plus-state-after #xd9 #xe2)
-                (list #x07              ;; stack contains 1 elements = 1*3-2
-                      #x00 #x00 #x03
-                      #x18 #x18 #x0f   ;; (1551 = #x060f) encoded #x06 << 2 = #x18, #x0f = #x0f
-                      #x00 #x00 #x00)  ;; -1 + 1 = 0
-                "three elements on the stack, int 3, int 1551, int 0"))
+  (check-equal? (vm-stack->strings use-case-int-plus-state-after)
+                (list "stack holds 3 items"
+                      "cell-int $0000"      ;; tos
+                      "cell-int $060f"
+                      "cell-int $0003")))
 
 (define BC_INT_MINUS
   (list
@@ -301,39 +282,25 @@
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| vm_interpreter |#
-  (define use-case-int-minus
-    (list
-     (byte #xb9)            ;; byte code for PUSH_INT_1
-     (byte #xba)            ;; byte code for PUSH_INT_2
-     (bc INT-)            ;; byte code for INT_MINUS = 2 - 1 = 1
-     (bc PUSH_INT) (byte #x04 #xf0)  ;; push int #x4f0 (1264)
-     (bc PUSH_INT) (byte #x01 #x1f)  ;; push int #x11f (287)
-     (bc INT-)            ;; byte code for INT_MINUS (- #x011f #x04f0) ( -977 = #x0c2f -> encoded #x302f)
-     (byte #xb9)            ;; byte code for PUSH_INT_1
-     (byte #xb8)            ;; byte code for PUSH_INT_0
-     (bc INT-)            ;; byte code for INT_MINUS => -1
-     (bc BRK)))   ;; brk
+  (define use-case-int-minus-state-after
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_2)
+      (bc INT-)                      ;; byte code for INT_MINUS = 2 - 1 = 1
+      (bc PUSH_INT) (byte #x04 #xf0) ;; push int #x4f0 (1264)
+      (bc PUSH_INT) (byte #x01 #x1f) ;; push int #x11f (287)
+      (bc INT-)                      ;; byte code for INT_MINUS (- #x011f #x04f0) ( -977 = #x1c2f -> encoded #x602f)
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_0)
+      (bc INT-)                      ;; byte code for INT_MINUS => -1
+      (bc BRK))))                    ;; brk
 
-  (define use-case-int-minus-code
-    (append (list (org #x7000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_INTERPRETER_INIT)
-                  (JMP VM_INTERPRETER))
-            (list (org #x8000))
-            use-case-int-minus
-            (list (org #xc000))
-            vm-interpreter))
-
-  (define use-case-int-minus-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-int-minus-code)))
-  ;; (run-debugger-on use-case-int-minus-state-before)
-  (define use-case-int-minus-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-int-minus-state-before)))
-
-  (check-equal? (memory-list use-case-int-minus-state-after #xd9 #xe2)
-                (list #x07              ;; stack contains 1 elements = 1*3-2
-                      #x00 #x00 #x01
-                      #x70 #x70 #x2f   ;;
-                      #x7c #x7c #xff)  ;; 0 - 1 = -1
-                "three elements on the stack, int 3, int 1551, int 0"))
+  (check-equal? (vm-stack->strings use-case-int-minus-state-after)
+                (list "stack holds 3 items"
+                      "cell-int $1fff"      ;; tos
+                      "cell-int $1c2f"
+                      "cell-int $0001")))
 
 ;; TODO: implement
 (define BC_PUSH_CONST_BYTE
@@ -353,12 +320,6 @@
   (list
    (label BC_PUSH_CONST_NIL)
           (JSR VM_CELL_STACK_PUSH_NIL)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-;; TODO: implment
-(define BC_PUSH_PARAM_OR_GLOBAL
-  (list
-   (label BC_PUSH_PARAM_OR_GLOBAL)
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; must be page aligned!
@@ -530,6 +491,7 @@
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT
           BC_PUSH_LOCAL_OR_BYTE_SHORT
+          BC_PUSH_PARAM_OR_GLOBAL
           BC_PUSH_CONST_NUM_SHORT
           BC_PUSH_CONST_INT
           BC_PUSH_CONST_BYTE
@@ -539,7 +501,6 @@
           BC_BRK
           BC_INT_PLUS
           BC_INT_MINUS
-          BC_PUSH_PARAM_OR_GLOBAL
           (list (org-align #x100)) ;; align to next page
           VM_INTERPRETER_OPTABLE
           vm-lists))
