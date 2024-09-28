@@ -35,11 +35,14 @@
 ;; produce strings describing the current cell-stack status
 (define (vm-stack->strings state)
   (define stack-tos-idx (peek state ZP_CELL_TOS))
-  (define stack (memory-list state ZP_CELL0 (+ 1 stack-tos-idx #xda)))
-  (define stack-values (cons (car stack) (ndelete (cdr (cdr stack)) 3)))
-  (define stack-item-no (/ (+ 2 stack-tos-idx) 3))
-  (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
-        (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair))) (pairing stack-values)))))
+  (cond
+    [(> stack-tos-idx #xf0) (list "stack is empty")]
+    [else
+     (define stack (memory-list state ZP_CELL0 (+ 1 stack-tos-idx #xda)))
+     (define stack-values (cons (car stack) (ndelete (cdr (cdr stack)) 3)))
+     (define stack-item-no (/ (+ 2 stack-tos-idx) 3))
+     (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
+           (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair))) (pairing stack-values))))]))
 
 ;; make a list of adjacent pairs
 (define (pairing list (paired-list '()))
@@ -310,6 +313,24 @@
           (RTS)))
 
 (module+ test #| vm_cell_stack_pop |#
+
+  (define (wrap-bytecode-for-test bc)
+    (append (list (org #xc000)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER))
+            bc
+            (list (BRK))
+            vm-memory-manager))
+
+  (define (run-code-in-test bc (debug #f))
+    (define wrapped-code (wrap-bytecode-for-test bc))
+    (define state-before
+      (6510-load-multiple (initialize-cpu)
+                          (assemble-to-code-list wrapped-code)))
+    (if debug
+        (run-debugger-on state-before)
+        (parameterize ([current-output-port (open-output-nowhere)])
+          (run-interpreter-on state-before))))
+
   (define test-vm_cell_stack_pop-a-code (list (org #xc000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_CELL_STACK_PUSH_NIL)
@@ -323,8 +344,15 @@
             vm-memory-manager))
 
   (define test-vm_cell_stack_pop-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_pop-a)))
-  (define test-vm_cell_stack_pop-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_pop-a-state-before)))
+  ;; (define test-vm_cell_stack_pop-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_pop-a-state-before)))
 
+  (define test-vm_cell_stack_pop-a-state-after
+    (run-code-in-test
+     (list (JSR VM_CELL_STACK_PUSH_NIL)
+           (JSR VM_CELL_STACK_POP)
+           (JSR VM_CELL_STACK_POP) ;; stops at brk in this routine
+           (LDA !$00)              ;; is never run
+           (STA ZP_CELL_TOS))))
   ;; (run-debugger-on test-vm_cell_stack_pop-a-state-before)
 
   (check-equal? (memory-list test-vm_cell_stack_pop-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
@@ -460,54 +488,35 @@
           (RTS)))
 
 (module+ test #| vm_cell_stack_push_nil |#
-  (define test-vm_cell_stack_push_nil-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_CELL_STACK_PUSH_NIL)))
-  (define test-vm_cell_stack_push_nil-a
-    (append test-vm_cell_stack_push_nil-a-code
-            (list (BRK))
-            vm-memory-manager))
+  (define test-vm_cell_stack_push_nil-a-state-after
+    (run-code-in-test
+     (list (JSR VM_CELL_STACK_PUSH_NIL))))
 
-  (define test-vm_cell_stack_push_nil-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_push_nil-a)))
-  (define test-vm_cell_stack_push_nil-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_push_nil-a-state-before)))
+  (check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-a-state-after)
+                '("stack holds 1 item"
+                  "cell-pair-ptr $0000"))
 
-  ;; (run-debugger-on test-vm_cell_stack_push_nil-a-state-before)
+  (define test-vm_cell_stack_push_nil-b-state-after
+    (run-code-in-test
+     (list (JSR VM_CELL_STACK_PUSH_NIL) ;; 1
+           (JSR VM_CELL_STACK_PUSH_NIL) ;;
+           (JSR VM_CELL_STACK_PUSH_NIL) ;; 3
+           (JSR VM_CELL_STACK_PUSH_NIL) ;;
+           (JSR VM_CELL_STACK_PUSH_NIL) ;; 5
+           (JSR VM_CELL_STACK_PUSH_NIL) ;;
+           (JSR VM_CELL_STACK_PUSH_NIL) ;; 7
+           (JSR VM_CELL_STACK_PUSH_NIL)))) ;; 8
 
-  (check-equal? (memory-list test-vm_cell_stack_push_nil-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
-                '(#x01
-                  #x02 #x00 #x00)
-                "tos = 01, nil is on stack")
-
-  (define test-vm_cell_stack_push_nil-b-code (list (JSR VM_CELL_STACK_PUSH_NIL)
-                                                   (JSR VM_CELL_STACK_PUSH_NIL)
-                                                   (JSR VM_CELL_STACK_PUSH_NIL)
-                                                   (JSR VM_CELL_STACK_PUSH_NIL)
-                                                   (JSR VM_CELL_STACK_PUSH_NIL)
-                                                   (JSR VM_CELL_STACK_PUSH_NIL)
-                                                   (JSR VM_CELL_STACK_PUSH_NIL)))
-  (define test-vm_cell_stack_push_nil-b
-    (append test-vm_cell_stack_push_nil-a-code
-            test-vm_cell_stack_push_nil-b-code
-            (list (BRK))
-            vm-memory-manager))
-
-  (define test-vm_cell_stack_push_nil-b-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_push_nil-b)))
-  (define test-vm_cell_stack_push_nil-b-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_push_nil-b-state-before)))
-
-  ;; (run-debugger-on test-vm_cell_stack_push_nil-b-state-before)
-
-  (check-equal? (memory-list test-vm_cell_stack_push_nil-b-state-after #xd9 #xf1)
-                '(#x16
-                  #x02 #x00 #x00
-                  #x02 #x00 #x00
-                  #x02 #x00 #x00
-                  #x02 #x00 #x00
-                  #x02 #x00 #x00
-                  #x02 #x00 #x00
-                  #x02 #x00 #x00
-                  #x02 #x00 #x00)
-                "tos = 01, 8 x nil is on stack"))
-
+(check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-b-state-after)
+                '("stack holds 8 items"
+                  "cell-pair-ptr $0000"
+                  "cell-pair-ptr $0000"
+                  "cell-pair-ptr $0000"
+                  "cell-pair-ptr $0000"
+                  "cell-pair-ptr $0000"
+                  "cell-pair-ptr $0000"
+                  "cell-pair-ptr $0000"
+                  "cell-pair-ptr $0000")))
 
 (define VM_CELL_STACK_WRITE_INT_TO_TOS
   (list
@@ -532,72 +541,56 @@
           (RTS)))
 
 (module+ test #| vm_cell_push_int |#
-    (define test-vm_cell_stack_push_int-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_CELL_STACK_PUSH_INT_m1)
-                  (LDA !$10) ;; -4096
-                  (LDY !$00)
-                  (JSR VM_CELL_STACK_PUSH_INT)
-                  (JSR VM_CELL_STACK_PUSH_INT_1)
-                  (JSR VM_CELL_STACK_PUSH_INT_0)
-                  (LDA !$0f) ;; 4095
-                  (LDY !$ff)
-                  (JSR VM_CELL_STACK_PUSH_INT)))
-  (define test-vm_cell_stack_push_int-a
-    (append test-vm_cell_stack_push_int-a-code
-            (list (BRK))
-            vm-memory-manager))
+    (define test-vm_cell_stack_push_int-a-state-after
+    (run-code-in-test
+     (list (JSR VM_CELL_STACK_PUSH_INT_m1)
+           (LDA !$10) ;; -4096
+           (LDY !$00)
+           (JSR VM_CELL_STACK_PUSH_INT)
+           (JSR VM_CELL_STACK_PUSH_INT_1)
+           (JSR VM_CELL_STACK_PUSH_INT_0)
+           (LDA !$0f) ;; 4095
+           (LDY !$ff)
+           (JSR VM_CELL_STACK_PUSH_INT))))
 
-  (define test-vm_cell_stack_push_int-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_push_int-a)))
-  (define test-vm_cell_stack_push_int-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_push_int-a-state-before)))
-
-  ;; (run-debugger-on test-vm_cell_stack_push_int-a-state-before)
-
-  (check-equal? (memory-list test-vm_cell_stack_push_int-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 15))
-                '(#x0d
-                  #x7c #x7c #xff  ;; signed int -1
-                  #x40 #x40 #x00  ;; signed int -4096
-                  #x00 #x00 #x01  ;; 1
-                  #x00 #x00 #x00  ;; 0
-                  #x3c #x3c #xff) ;; 4095
-                "tos = 13, int 8447 is on stack"))
+  (check-equal? (vm-stack->strings test-vm_cell_stack_push_int-a-state-after)
+                '("stack holds 5 items"
+                  "cell-int $0fff"
+                  "cell-int $0000"
+                  "cell-int $0001"
+                  "cell-int $1000"
+                  "cell-int $1fff")))
 
 (module+ test #| vm_cell_stack_push_celly_of_zp_ptr |#
-    (define test-vm_cell_stack_push_celly_to_zp_ptr-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_ALLOC_CELL_PAIR)
-                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
-                  (LDA !$02)
-                  (LDY !$12)
-                  (JSR VM_CELL_STACK_PUSH_INT)
-                  (LDY !$00)
-                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
-                  (JSR VM_CELL_STACK_POP)
-                  (JSR VM_CELL_STACK_PUSH_NIL)
-                  (LDY !$02)
-                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
-                  (JSR VM_CELL_STACK_POP)
+  (define test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after
+    (run-code-in-test
+     (list
+      (LDA !$02)
+      (LDY !$12)
+      (JSR VM_CELL_STACK_PUSH_INT)                      ;;  push cell-int $0212
 
-                  (LDY !$00)
-                  (JSR VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
-                  (LDY !$02)
-                  (JSR VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)))
+      (JSR VM_ALLOC_CELL_PAIR)
+      (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+      (LDY !$00)
+      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)  ;; write cell-int $0212 -> car of allocated cell-pair
 
-  (define test-vm_cell_stack_push_celly_to_zp_ptr-a
-    (append test-vm_cell_stack_push_celly_to_zp_ptr-a-code
-            (list (BRK))
-            vm-memory-manager))
+      (JSR VM_CELL_STACK_POP)
+      (JSR VM_CELL_STACK_PUSH_NIL)                      ;; push cell-pair-ptr nil
 
-  (define test-vm_cell_stack_push_celly_to_zp_ptr-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_push_celly_to_zp_ptr-a)))
-  (define test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_push_celly_to_zp_ptr-a-state-before)))
+      (LDY !$02)
+      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)  ;; write cell-pair-ptr nil -> cdr of allocated cell-pair
 
-  ;; (run-debugger-on test-vm_cell_stack_push_celly_to_zp_ptr-a-state-before)
+      (JSR VM_CELL_STACK_POP)                           ;; empty stack
 
-  (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 6))
-                '(#x04
-                  #x08 #x08 #x12  ;; int 530
-                  #x02 #x00 #x00) ;; nil
-                "tos = fe, empty that is")
+      (LDY !$00)
+      (JSR VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)          ;; push car (should be cell-int $0212)
+      (LDY !$02)
+      (JSR VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR))))       ;; push cdr (should be cell-pair-ptr nil)
+
+  (check-equal? (vm-stack->strings test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after)
+                '("stack holds 2 items"
+                  "cell-pair-ptr $0000"
+                  "cell-int $0212"))
   (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x04 #xcd)
                 "zp_ptr => cd04 (first free pair cell)")
@@ -637,34 +630,24 @@
           (RTS)))
 
 (module+ test #| vm_cell_stack_write_tos_to_celly_of_zp_ptr |#
-    (define test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_ALLOC_CELL_PAIR)
-                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
-                  (LDA !$02)
-                  (LDY !$12)
-                  (JSR VM_CELL_STACK_PUSH_INT)
-                  (LDY !$00)
-                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
-                  (JSR VM_CELL_STACK_POP)
-                  (JSR VM_CELL_STACK_PUSH_NIL)
-                  (LDY !$02)
-                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
-                  (JSR VM_CELL_STACK_POP)))
+  (define test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after
+    (run-code-in-test
+     (list
+      (JSR VM_ALLOC_CELL_PAIR)
+      (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+      (LDA !$02)
+      (LDY !$12)
+      (JSR VM_CELL_STACK_PUSH_INT)
+      (LDY !$00)
+      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
+      (JSR VM_CELL_STACK_POP)
+      (JSR VM_CELL_STACK_PUSH_NIL)
+      (LDY !$02)
+      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
+      (JSR VM_CELL_STACK_POP))))
 
-  (define test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a
-    (append test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-code
-            (list (BRK))
-            vm-memory-manager))
-
-  (define test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a)))
-  (define test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-before)))
-
-  ;; (run-debugger-on test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-before)
-
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after ZP_CELL_TOS ZP_CELL_TOS)
-                '(#xfe)
-                "tos = fe, empty that is")
+  (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after)
+                '("stack is empty"))
   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x04 #xcd)
                 "zp_ptr => cd04 (first free pair cell)")
@@ -729,27 +712,17 @@
           (RTS)))
 
 (module+ test #| vm_cell_stack_push_zp_ptry |#
-  (define test-vm_cell_stack_push_zp_ptry-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_ALLOC_CELL_PAIR)
-                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
-                  (LDY !$00)
-                  (JSR VM_CELL_STACK_PUSH_ZP_PTRy)))
+  (define test-vm_cell_stack_push_zp_ptry-a-state-after
+    (run-code-in-test
+     (list
+      (JSR VM_ALLOC_CELL_PAIR)
+      (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+      (LDY !$00)
+      (JSR VM_CELL_STACK_PUSH_ZP_PTRy))))
 
-  (define test-vm_cell_stack_push_zp_ptry-a
-    (append test-vm_cell_stack_push_zp_ptry-a-code
-            (list (BRK))
-            vm-memory-manager))
-
-  (define test-vm_cell_stack_push_zp_ptry-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_push_zp_ptry-a)))
-  (define test-vm_cell_stack_push_zp_ptry-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_push_zp_ptry-a-state-before)))
-
-  ;; (run-debugger-on test-vm_cell_stack_push_zp_ptry-a-state-before)
-
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
-                '(#x01
-                  #x06 #x04 #xcd) ;; cd04 as cell-pair-ptr
-                "tos = 01, pushed cd04 as cell-pair-ptr")
+  (check-equal? (vm-stack->strings test-vm_cell_stack_push_zp_ptry-a-state-after)
+                '("stack holds 1 item"
+                  "cell-pair-ptr $cd04"))
   (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after ZP_PTR (+ ZP_PTR 1))
                 '(#x04 #xcd)
                 "zp_ptr => cd04 (first free pair cell)")
@@ -757,31 +730,21 @@
                 '(#x06)
                 "tagged lowbyte is 04 | 02 = 06")
 
-  (define test-vm_cell_stack_push_zp_ptry-b-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_ALLOC_CELL_PAIR)
-                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
-                  (JSR VM_COPY_PTR_TO_PTR2)
-                  (LDA !$00)
-                  (STA ZP_PTR)
-                  (STA ZP_PTR+1)
-                  (LDY !$01)
-                  (JSR VM_CELL_STACK_PUSH_ZP_PTRy)))
+  (define test-vm_cell_stack_push_zp_ptry-b-state-after
+    (run-code-in-test
+     (list
+      (JSR VM_ALLOC_CELL_PAIR)
+      (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+      (JSR VM_COPY_PTR_TO_PTR2)
+      (LDA !$00)
+      (STA ZP_PTR)
+      (STA ZP_PTR+1)
+      (LDY !$01)
+      (JSR VM_CELL_STACK_PUSH_ZP_PTRy))))
 
-  (define test-vm_cell_stack_push_zp_ptry-b
-    (append test-vm_cell_stack_push_zp_ptry-b-code
-            (list (BRK))
-            vm-memory-manager))
-
-  (define test-vm_cell_stack_push_zp_ptry-b-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_push_zp_ptry-b)))
-  (define test-vm_cell_stack_push_zp_ptry-b-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_push_zp_ptry-b-state-before)))
-
-  ;; (run-debugger-on test-vm_cell_stack_push_zp_ptry-b-state-before)
-
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
-                '(#x01
-                  #x06 #x04 #xcd) ;; cd04 as cell-pair-ptr
-                "tos = 01, pushed cd04 as cell-pair-ptr")
+  (check-equal? (vm-stack->strings test-vm_cell_stack_push_zp_ptry-b-state-after)
+                '("stack holds 1 item"
+                  "cell-pair-ptr $cd04"))
   (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after ZP_PTR2 (+ 1 ZP_PTR2))
                 '(#x04 #xcd)
                 "zp_ptr2 => cd04 (first free pair cell)")
@@ -820,36 +783,26 @@
           (RTS)))
 
 (module+ test #| vm_cell_stack_write_tos_to_zp_ptry |#
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_ALLOC_CELL_PAIR)
-                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
-                  (LDY !$00)
-                  (JSR VM_CELL_STACK_PUSH_ZP_PTRy)
+  (define test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after
+    (run-code-in-test
+     (list
+      (JSR VM_ALLOC_CELL_PAIR)
+      (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+      (LDY !$00)
+      (JSR VM_CELL_STACK_PUSH_ZP_PTRy)
 
-                  (LDA !$00)
-                  (STA ZP_PTR)
-                  (STA ZP_PTR+1)
-                  (STA ZP_PTR2)
-                  (STA ZP_PTR2+1)
+      (LDA !$00)
+      (STA ZP_PTR)
+      (STA ZP_PTR+1)
+      (STA ZP_PTR2)
+      (STA ZP_PTR2+1)
 
-                  (LDY !$00)
-                  (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy)))
+      (LDY !$00)
+      (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy))))
 
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-a
-    (append test-vm_cell_stack_write_tos_to_zp_ptry-a-code
-            (list (BRK))
-            vm-memory-manager))
-
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_write_tos_to_zp_ptry-a)))
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_write_tos_to_zp_ptry-a-state-before)))
-
-  ;; (run-debugger-on test-vm_cell_stack_write_tos_to_zp_ptry-a-state-before)
-
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
-                '(#x01
-                  #x06 #x04 #xcd) ;; cd04 as cell-pair-ptr
-                "tos = 01, pushed cd04 as cell-pair-ptr")
+  (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after)
+                '("stack holds 1 item"
+                  "cell-pair-ptr $cd04"))
   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x04 #xcd)
                 "zp_ptr => cd04 (first free pair cell)")
@@ -857,36 +810,26 @@
                 '(#x06)
                 "tagged lowbyte is 04 | 02 = 06")
 
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-b-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_ALLOC_CELL_PAIR)
-                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
-                  (LDY !$00)
-                  (JSR VM_CELL_STACK_PUSH_ZP_PTRy)
+  (define test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after
+    (run-code-in-test
+     (list
+      (JSR VM_ALLOC_CELL_PAIR)
+      (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+      (LDY !$00)
+      (JSR VM_CELL_STACK_PUSH_ZP_PTRy)
 
-                  (LDA !$00)
-                  (STA ZP_PTR)
-                  (STA ZP_PTR+1)
-                  (STA ZP_PTR2)
-                  (STA ZP_PTR2+1)
+      (LDA !$00)
+      (STA ZP_PTR)
+      (STA ZP_PTR+1)
+      (STA ZP_PTR2)
+      (STA ZP_PTR2+1)
 
-                  (LDY !$01)
-                  (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy)))
+      (LDY !$01)
+      (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy))))
 
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-b
-    (append test-vm_cell_stack_write_tos_to_zp_ptry-b-code
-            (list (BRK))
-            vm-memory-manager))
-
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-b-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list test-vm_cell_stack_write_tos_to_zp_ptry-b)))
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on test-vm_cell_stack_write_tos_to_zp_ptry-b-state-before)))
-
-  ;; (run-debugger-on test-vm_cell_stack_write_tos_to_zp_ptry-b-state-before)
-
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 3))
-                '(#x01
-                  #x06 #x04 #xcd) ;; cd04 as cell-pair-ptr
-                "tos = 01, pushed cd04 as cell-pair-ptr")
+  (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after)
+                '("stack holds 1 item"
+                  "cell-pair-ptr $cd04"))
   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after ZP_PTR2 (+ 1 ZP_PTR2))
                 '(#x04 #xcd)
                 "zp_ptr2 => cd04 (first free pair cell)")
@@ -1517,30 +1460,18 @@
 
 
 (module+ test #| use case 1 allocate, free, reallocate single cell-pair |#
-   ;; use case: 1 allocate, free, reallocate single cell-pair
-   ;; a- allocate cell-pair (auto increment?) [zp_ptr = (nil . nil), free-tree-top = nil, rc(zp_ptr) = 1]
-   ;; a- (increment ref count of cell-pair)   [zp_ptr = (nil . nil), free-tree-top = nil, rc(zp_ptr) = 1]
-   ;; a- set cell1 and cell2 to int cells (equivalent to '(1 . 2)) [zp_ptr = (1 . 2), free-tree-top = nil, rc(zp_ptr) = 1]
-   ;; b- decrement ref count of cell-pair <- should put the cell-pair on the free tree [zp_ptr = x, free-tree-top = (nil . 2), rc((nil . 2)) = 0]
-   ;; c- allocate cell-pair (again) <- should recycle the top of the free tree [z_ptr = (nil . nil), free-tree-top = nil, rc((nil . nil)) = 1]
+  (define use-case-1-code
+    (list
+      (JSR VM_ALLOC_CELL_PAIR)
+      (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+      ;; set cell2 to int 0
+      (JSR VM_CELL_STACK_PUSH_INT_0)
+      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
+      ;; set cell1 to int 0
+      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)))
 
-  (define use-case-1-a-code (list (org #xc000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_ALLOC_CELL_PAIR)
-                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)
-                  ;; set cell2 to int 0
-                  (JSR VM_CELL_STACK_PUSH_INT_0)
-                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
-                  ;; set cell1 to int 0
-                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
-                  ))
-  (define use-case-1-a
-    (append use-case-1-a-code
-            (list (BRK))
-            vm-memory-manager))
-
-  (define use-case-1-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-a)))
-  (define use-case-1-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-a-state-before)))
+  (define use-case-1-a-state-after
+    (run-code-in-test use-case-1-code))
 
   (check-equal? (memory-list use-case-1-a-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x04 #xcd)
@@ -1556,15 +1487,14 @@
                 "next free cell-pair on page $cd is at $08")
 
   (define use-case-1-b-code
-    (append use-case-1-a-code
-            (list (JSR VM_REFCOUNT_DECR_CELL_PAIR))))
-  (define use-case-1-b
-    (append use-case-1-b-code
-            (list (BRK))
-            vm-memory-manager))
+    (append
+     use-case-1-code ;; cell was allocated and set to hold int 0 in car and cdr
+     (list
+      ;; refcount will drop to zero
+      (JSR VM_REFCOUNT_DECR_CELL_PAIR))))
 
-  (define use-case-1-b-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-b)))
-  (define use-case-1-b-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-b-state-before)))
+  (define use-case-1-b-state-after
+    (run-code-in-test use-case-1-b-code))
 
   (check-equal? (memory-list use-case-1-b-state-after #xcec5 #xcec6) ;;
                 '(#x04 #xcd )
@@ -1577,20 +1507,20 @@
                 "next free cell-pair on page $cd is still $08")
 
   (define use-case-1-c-code
-    (append use-case-1-b-code
-            (list
-             ;; clear zp_ptr just to make sure
-             (LDA !$00)
-             (STA ZP_PTR)
-             (STA ZP_PTR+1)
-             (JSR VM_ALLOC_CELL_PAIR))))
-  (define use-case-1-c
-    (append use-case-1-c-code
-            (list (BRK))
-            vm-memory-manager))
+    (append
+     use-case-1-b-code ;; cell was freed and in the free tree
+     (list
+      ;; clear zp_ptr just to make sure
+      (LDA !$00)
+      (STA ZP_PTR)
+      (STA ZP_PTR+1)
 
-  (define use-case-1-c-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-1-c)))
-  (define use-case-1-c-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-1-c-state-before)))
+      ;; allocate a new cell (should reuse pair in free-tree)
+      (JSR VM_ALLOC_CELL_PAIR))))
+
+  (define use-case-1-c-state-after
+    (run-code-in-test use-case-1-c-code))
+
   (check-equal? (memory-list use-case-1-c-state-after ZP_PTR (+ 1 ZP_PTR)) ;;
                 '(#x04 #xcd )
                 "allocated cell-pair is reused cell-pair of free tree")
@@ -1605,61 +1535,40 @@
                 "next free cell-pair on page $cd is still $08"))
 
 (module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
-  ;; use case: allocate, free, reallocate small list of cell-pairs
-  ;; - allocate cell-pair [A(nil . nil), free-tree-top = nil, rc(A) = 1]
-  ;; - set cell1 to an int [A(1 . nil), free-tree-top = nil, rc(A) = 1]
-  ;; - allocate cell-pair [A(1 . B(nil . nil)), free-tree-top = nil, rc(A) = 1, rc(B) = 1]
-  ;; - set cell2 to allocated cell-pair
-  ;; - set cell1 to an int [A(1 . B(2 . nil)), free-tree-top = nil, rc(A) = 1, rc(B) = 1]
-  ;; - (set cell2 to nil) => (equivalent to '(1 2))
-  ;; - decrement list head (cell-pair) <- should put the head of the list on the free tree, keeping the pointer to the next cell-pair
-  ;;                                  [A(nil . B(2 . nil)), free-tree-top = A, rc(A) = 0, rc(B) = 1]
-  ;; - allocate cell-pair <- should recycle the top of the free tree, decrement ref count of cell2, top of free tree will be set to cell2 and
-  ;;                        [NA(nil . nil), free-tree-top = B, rc(A) = 1, rc(B) = 0]
-  (define use-case-2-a (list (org #xc000)
-                                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                                  (JSR VM_ALLOC_CELL_PAIR)                               ;; zp_ptr = freshly allocated cell (cd04)
-                                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)                       ;; ref(zp_ptr) ++ (=1)
-                                  ;; set cell2 to nil
-                                  (JSR VM_CELL_STACK_PUSH_NIL)                           ;; cell-stack <- push nil
-                                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := nil
-                                  ;; set cell1 to int 0
-                                  (JSR VM_CELL_STACK_PUSH_INT_0)                         ;; cell-stack <- push int0
-                                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := int0
-                                  ;;(JSR VM_CELL_AIR_SET_INT_0)
-
-
-                                  (JSR VM_COPY_PTR_TO_PTR2)                              ;; zp_ptr2 := zp_ptr
-                                  (JSR VM_ALLOC_CELL_PAIR)                               ;; zp_ptr = freshly allocated cell (cd08)
-                                  (JSR VM_REFCOUNT_INCR_CELL_PAIR)                       ;; ref(zp_ptr) ++ (=1)
-                                  ;; set cell2 to zp_ptr2->
-                                  (JSR VM_CELL_STACK_PUSH_ZP_PTR2)                       ;; cell-stack <- push zp_ptr2
-                                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := tos (which is zp_ptr2)
-                                  ;; (LDY !$03)
-                                  ;; (LDA ZP_PTR,y) ;; load from zp_ptr2+1 ( = zp_ptr+3)
-                                  ;; (STA (ZP_PTR),y) ;; write into high byte of cell2
-                                  ;; (DEY)
-                                  ;; (LDA ZP_PTR,y) ;; load from zp_ptr2 ( = zp_ptr+2)
-                                  ;; (STA (ZP_PTR),y) ;; write into low byte of cell2
-                                  (JSR VM_CELL_STACK_POP__NO_GC)                         ;; just pop (no check, no gc)
-                                  (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := tos (which is int0 again
-
-                                  ;; now:
-                                  ;;   zp_ptr[cd08|1] (int0 . ->[cd04|1](int0 . nil))
-                                  ;; notation:
-                                  ;;   [<mem-location>|<ref-count>]
-                                  ;;   (<car-cell> . <cdr-cell>)
-                                  ;;   intX, nil :: atomic value cells
-                                  ;;   -> :: cell-ptr
-                                  ))
   (define use-case-2-a-code
-    (append use-case-2-a
-            (list (BRK))
-            vm-memory-manager))
+    (list
+     (JSR VM_ALLOC_CELL_PAIR)                               ;; zp_ptr = freshly allocated cell (cd04)
+     (JSR VM_REFCOUNT_INCR_CELL_PAIR)                       ;; ref(zp_ptr) ++ (=1)
+     ;; set cdr to nil
+     (JSR VM_CELL_STACK_PUSH_NIL)                           ;; cell-stack <- push nil
+     (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := nil
+     ;; set car to int 0
+     (JSR VM_CELL_STACK_PUSH_INT_0)                         ;; cell-stack <- push int0
+     (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := int0
 
-  (define use-case-2-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-2-a-code)))
-  ;; (run-debugger-on use-case-2-a-state-before)
-  (define use-case-2-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-2-a-state-before)))
+     (JSR VM_COPY_PTR_TO_PTR2)                              ;; zp_ptr2 := zp_ptr
+
+     (JSR VM_ALLOC_CELL_PAIR)                               ;; zp_ptr = freshly allocated cell (cd08)
+     (JSR VM_REFCOUNT_INCR_CELL_PAIR)                       ;; ref(zp_ptr) ++ (=1)
+     ;; set cdr to zp_ptr2->
+     (JSR VM_CELL_STACK_PUSH_ZP_PTR2)                       ;; cell-stack <- push zp_ptr2
+     (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := tos (which is zp_ptr2)
+     (JSR VM_CELL_STACK_POP__NO_GC)                         ;; just pop (no check, no gc)
+     ;; set car to int0
+     (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := tos (which is int0 again
+
+     ;; now:
+     ;;   zp_ptr[cd08|1] (int0 . ->[cd04|1](int0 . nil))
+     ;; notation:
+     ;;   [<mem-location>|<ref-count>]
+     ;;   (<car-cell> . <cdr-cell>)
+     ;;   intX, nil :: atomic value cells
+     ;;   -> :: cell-ptr
+     ))
+
+  (define use-case-2-a-state-after
+    (run-code-in-test use-case-2-a-code))
+
   (check-equal? (memory-list use-case-2-a-state-after ZP_PTR (+ 3 ZP_PTR))
                 '(#x08 #xcd #x04 #xcd)
                 "case 2a: zp_ptr -> $cd08, zp_ptr2 -> $cd04 = first two free cell-pairs on page $cd after initialization")
@@ -1670,22 +1579,17 @@
                   )
                 "case 2a: cell-pairs contain (int0 . -> next cell), (int 0 . nil)")
 
-  (define use-case-2-b
-    (append use-case-2-a
+  (define use-case-2-b-code
+    (append use-case-2-a-code ;; zp_ptr[cd08|1] (int0 . ->[cd04|1](int0 . nil))
             (list
              (JSR VM_REFCOUNT_DECR_CELL_PAIR)
              ;; now:
              ;;   free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
              )))
 
-  (define use-case-2-b-code
-    (append use-case-2-b
-            (list (BRK))
-            vm-memory-manager))
+  (define use-case-2-b-state-after
+    (run-code-in-test use-case-2-b-code))
 
-  (define use-case-2-b-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-2-b-code)))
-  ;; (run-debugger-on use-case-2-b-state-before)
-  (define use-case-2-b-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-2-b-state-before)))
   (check-equal? (memory-list use-case-2-b-state-after #xcd01 #xcd0b)
                 '(#x01 #x00 #x00      ;; refcounts
                   #x00 #x00 #x02 #x00 ;; cd04 (old tail of list)
@@ -1696,8 +1600,8 @@
                 '(#x08 #xcd )
                 "case 2b: root of free tree is cell-pair at $cd08")
 
-  (define use-case-2-c
-    (append use-case-2-b
+  (define use-case-2-c-code
+    (append use-case-2-b-code ;; free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
             (list (LDA !$FF) ;; marker for debug, remove when done
                   (JSR VM_ALLOC_CELL_PAIR)
                   (JSR VM_REFCOUNT_INCR_CELL_PAIR)
@@ -1706,14 +1610,9 @@
                   ;;   free_tree -> [cd04|0] (int0 . nil)
                   )))
 
-  (define use-case-2-c-code
-    (append use-case-2-c
-            (list (BRK))
-            vm-memory-manager))
+  (define use-case-2-c-state-after
+    (run-code-in-test use-case-2-c-code))
 
-  (define use-case-2-c-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-2-c-code)))
-  ;; (run-debugger-on use-case-2-c-state-before)
-  (define use-case-2-c-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-2-c-state-before)))
   (check-equal? (memory-list use-case-2-c-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x08 #xcd)
                 "case 2c: zp_ptr -> $cd08, reallocated")
