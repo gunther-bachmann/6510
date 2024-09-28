@@ -1195,13 +1195,6 @@
 
 
 
-;; allocate a list pair cells page (initialized with free list etc)
-;; parameter: (none)
-;; result: A = allocated call stack page
-(define VM_ALLOC_PAGE__CALL_STACK
-  (list (label VM_ALLOC_PAGE__CALL_STACK)
-               (RTS)))
-
 ;; next free lowbyte on this page is in A (or 0)
 ;; resulting ptr is in ZP_PTR
 ;; first free element is adjusted
@@ -1215,6 +1208,7 @@
           (LDA ZP_PTR+1)
           (STA VM_FREE_CELL_PAIR_PAGE)
 
+   ;; ----------------------------------------
    (label VM_ALLOC_CELL_PAIR_ON_PAGE) ;; <-- real entry point of this function
           (STA ZP_PTR+1) ;; safe as highbyte of ptr
           (TAX)
@@ -1626,6 +1620,38 @@
                 '(#x04 #xcd )
                 "case 2c: root of free tree is cell-pair at $cd04"))
 
+;; call frames are organized as stack
+;; => allocation/deallocation is always done on tos
+;;    no need for a free list (stack structure is coded into the stack pages)
+;;    need for max size left
+;; mem organization:
+;;  00 : free-idx (initially 02) <- points to the first free byte (-1 = size of previous
+;;  01 : previous page (just high byte), 00 for first stack page
+;;  02 : first frame payload byte 0
+;;  ... : first frame payload byte size-1
+;;  free-1 : size of (prev) frame
+;;  free :
+
+;; page type?
+;; location of the current (non full) page
+
+(define VM_ALLOC_PAGE__CALL_FRAME
+  (list
+   (label VM_ALLOC_PAGE__CALL_FRAME)
+   (RTS)))
+
+;; input: A = page, Y = size
+(define VM_ALLOC_CALL_FRAME_ON_PAGE
+  (list
+   (label VM_ALLOC_CALL_FRAME_ON_PAGE)
+          (RTS)))
+
+;; input: Y = size
+(define VM_ALLOC_CALL_FRAME
+  (list
+   (label VM_ALLOC_CALL_FRAME)
+          (RTS)))
+
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
           VM_INITIALIZE_MEMORY_MANAGER
@@ -1635,7 +1661,7 @@
           VM_ALLOC_PAGE__LIST_CELL_PAIRS
           VM_FREE_PAGE
           VM_ALLOC_PAGE__PAGE_UNINIT
-          VM_ALLOC_PAGE__CALL_STACK
+          VM_ALLOC_PAGE__CALL_FRAME
           VM_ALLOC_CELL_PAIR_ON_PAGE
           VM_REFCOUNT_DECR
           VM_REFCOUNT_DECR_CELL_PAIR
