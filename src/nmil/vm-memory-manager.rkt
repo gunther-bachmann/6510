@@ -1,5 +1,44 @@
 #lang racket/base
 
+;; ----------------------------------------
+;; page type: call-frame page
+;; => allocation/deallocation is always done on tos
+;;    no need for a free list (stack structure is coded into the stack pages)
+;;    need for max size left
+;; memory layout of call frame page (organized in stack)
+;;  00 : unused (page type)
+;;  01 : previous page (just high byte), 00 for first stack page
+;;  02 : first frame payload byte 0
+;;  ... : first frame payload byte size-1
+;;  free-1 : size of (prev) frame
+;;  free : unused
+;; ...ff : unused
+;;
+;; VM_FREE_SLOT_FOR_PAGE + pageidx: holds free-idx (initially 02) <- points to the first free byte (-1 = size of previous)
+
+;; ----------------------------------------
+;; page type: cell-pairs page
+;; memory layout of a cell-pairs page
+;; offset content
+;; 00     unused (page type)
+;; 01     ref-count for cell-pair at 04 (cell-pair 0)
+;; 02     ref-count for cell-pair at 08 (cell-pair 1)
+;; 03     ref-count for cell-pair at 0C (cell-pair 2)
+;; 04..07  cell-pair 0
+;; 08..0b  cell-pair 1
+;; 0c..0f  cell-pair 2
+;; 10     ref-count for cell-pair at 40 (cell-pair 3)
+;; 11     ref-count for cell-pair at 44 (cell-pair 4)
+;; ..3F   ref-count for cell-pair at fc (cell-pair 50)
+;; 40     cell-pair 3
+;; 44     cell-pair 4
+;; ..fc   cell-pair 50
+;;
+;; VM_FREE_SLOT_FOR_PAGE + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
+;; the free cell-pair holds in byte 0 of the cell-pair the offset of the next free cell-pair (0 = no other free cell-pair)
+;;
+
+
 (require (only-in racket/format ~a))
 
 (require "../6510.rkt")
@@ -891,7 +930,7 @@
           (byte $00)
    ;; $cdc1
    (label VM_FREE_CALL_STACK_PAGE) ;; call stack page with free space
-          (byte $00)
+          (byte $00) ;; initial -> first allocation will allocate a new page
    ;; $cdc2
    (label VM_FREE_CODE_PAGE) ;; code page with free space
           (byte $00)
@@ -1620,37 +1659,199 @@
                 '(#x04 #xcd )
                 "case 2c: root of free tree is cell-pair at $cd04"))
 
-;; call frames are organized as stack
+;; ----------------------------------------
+;; page type: call-frame page
 ;; => allocation/deallocation is always done on tos
 ;;    no need for a free list (stack structure is coded into the stack pages)
 ;;    need for max size left
-;; mem organization:
-;;  00 : free-idx (initially 02) <- points to the first free byte (-1 = size of previous
+;; memory layout of call frame page (organized in stack)
+;;  00 : unused (page type)
 ;;  01 : previous page (just high byte), 00 for first stack page
 ;;  02 : first frame payload byte 0
 ;;  ... : first frame payload byte size-1
 ;;  free-1 : size of (prev) frame
-;;  free :
+;;  free : unused
+;; ...ff : unused
+;;
+;; VM_FREE_SLOT_FOR_PAGE + pageidx: holds free-idx (initially 02) <- points to the first free byte (-1 = size of previous)
 
-;; page type?
-;; location of the current (non full) page
 
+;; input: X = previous call stack page
+;; output: X = page allocated
+;;         page bitmap is adjusted
+;;         page is initialized: previous call stack page is set
+;;         VM_FREE_SLOT_FOR_PAGE is set to 02
+;;         VM_FREE_CALL_STACK_PAGE is set to this allocated page
 (define VM_ALLOC_PAGE__CALL_FRAME
   (list
    (label VM_ALLOC_PAGE__CALL_FRAME)
-   (RTS)))
+          (TXA)
+          (PHA)
 
-;; input: A = page, Y = size
-(define VM_ALLOC_CALL_FRAME_ON_PAGE
-  (list
-   (label VM_ALLOC_CALL_FRAME_ON_PAGE)
+          (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; A = new page
+
+          ;; set this new page as the TOS for call stack allocation
+          (STA VM_FREE_CALL_STACK_PAGE)
+
+          ;; set zp_ptr to point to this page
+          (STA ZP_PTR+1)
+          (LDX !$00)
+          (STX ZP_PTR)
+          (TAX)
+
+          (LDA !$02)
+          (STA VM_FREE_SLOT_FOR_PAGE,x) ;; set first free slot to 02
+
+          ;; initialize allocated page
+          (PLA)
+          (LDY !$01)
+          (STA (ZP_PTR),y) ;; set previous page
+
           (RTS)))
 
-;; input: Y = size
+(module+ test #| VM_ALLOC_PAGE__CALL_FRAME |#
+  (define alloc-page-call-frame-code
+    (list
+     (LDX !$00) ;; previous not existent
+     (JSR VM_ALLOC_PAGE__CALL_FRAME)))
+
+  (define alloc-page-call-frame-state-after
+    (run-code-in-test alloc-page-call-frame-code))
+
+  (check-equal? (memory-list alloc-page-call-frame-state-after #xcd01 #xcd01)
+                (list #x00)
+                "point to previous call frame page is 00 (none)")
+  (check-equal? (memory-list alloc-page-call-frame-state-after #xcfcd #xcfcd)
+                (list #x02)
+                "first free slot of page cd is 02")
+  (check-equal? (memory-list alloc-page-call-frame-state-after #xcec1 #xcec1)
+                (list #xcd)
+                "tos for call frame ois page cd")
+
+  (define alloc-second-page-call-frame-code
+    (append
+     alloc-page-call-frame-code
+     (list
+      (LDX !$cd) ;; previous
+      (JSR VM_ALLOC_PAGE__CALL_FRAME))))
+
+  (define alloc-second-page-call-frame-state-after
+    (run-code-in-test alloc-second-page-call-frame-code))
+
+  (check-equal? (memory-list alloc-second-page-call-frame-state-after #xcc01 #xcc01)
+                (list #xcd)
+                "point to previous call frame page is cd")
+  (check-equal? (memory-list alloc-second-page-call-frame-state-after #xcfcc #xcfcc)
+                (list #x02)
+                "first free slot of page cc is 02")
+  (check-equal? (memory-list alloc-second-page-call-frame-state-after #xcec1 #xcec1)
+                (list #xcc)
+                "tos for call frame ois page cc"))
+
+;; input: A = size
+;; output: ZP_PTR
 (define VM_ALLOC_CALL_FRAME
   (list
+   ;; ----------------------------------------
    (label VM_ALLOC_CALL_FRAME)
+          (PHA)
+          (LDX VM_FREE_CALL_STACK_PAGE) ;; get the tos page for call stacks
+          (BEQ ALLOCATE_NEW_PAGE__VM_ALLOC_CALL_FRAME)
+
+          (SEC) ;; add one additionally for storing the size
+          (ADC VM_FREE_SLOT_FOR_PAGE,x)   ;; A = free + size + 1 == new free
+          (BCC USE_GIVEN_PAGE__VM_ALLOC_CALL_FRAME)
+
+   (label ALLOCATE_NEW_PAGE__VM_ALLOC_CALL_FRAME)
+          (JSR VM_ALLOC_PAGE__CALL_FRAME)
+          (PLA)
+          (PHA)      ;; A = size
+          (ADC !$03) ;; 03 = old-free (2) + size (A) + 1 = new free
+
+   (label USE_GIVEN_PAGE__VM_ALLOC_CALL_FRAME)
+          (LDY VM_FREE_SLOT_FOR_PAGE,x) ;; y = (old) free on page
+          (STA VM_FREE_SLOT_FOR_PAGE,x) ;; set new first free slot
+
+          (STX ZP_PTR+1) ;; x = stack page
+          (STY ZP_PTR)   ;; y = (old) free on page = first byte allocated
+          (PLA)          ;; A = size
+          (TAY)          ;; Y = size
+          (STA (ZP_PTR),y) ;; set size on last byte (for easy deallocation)
           (RTS)))
+
+(module+ test #| vm_alloc_call_frame |#
+  (define alloc-call-frame-code
+    (list
+     (LDA !$80)
+     (JSR VM_ALLOC_CALL_FRAME)))
+
+  (define alloc-call-frame-state-after
+    (run-code-in-test alloc-call-frame-code))
+
+  (check-equal? (memory-list alloc-call-frame-state-after #xcfcd #xcfcd)
+                (list #x83)
+                "first free slot of page cc is 83")
+  (check-equal? (memory-list alloc-call-frame-state-after #xcec1 #xcec1)
+                (list #xcd)
+                "tos for call frame is page cd")
+  (check-equal? (memory-list alloc-call-frame-state-after #xcd01 #xcd01)
+                (list #x00)
+                "previous stack page is 00")
+  (check-equal? (memory-list alloc-call-frame-state-after #xcd82 #xcd82)
+                (list #x80)
+                "size of entry is 80")
+  (check-equal? (memory-list alloc-call-frame-state-after ZP_PTR (add1 ZP_PTR))
+                (list #x02 #xcd)
+                "pointer to allocated frame")
+
+  (define alloc-call-frame-2times-code
+    (list
+     (LDA !$80)
+     (JSR VM_ALLOC_CALL_FRAME)
+     (LDA !$80) ;; does not fit again in this call frame
+     (JSR VM_ALLOC_CALL_FRAME)))
+
+  (define alloc-call-frame-2times-state-after
+    (run-code-in-test alloc-call-frame-2times-code))
+
+  (check-equal? (memory-list alloc-call-frame-2times-state-after #xcfcc #xcfcc)
+                (list #x83)
+                "first free slot of page cc is 83")
+  (check-equal? (memory-list alloc-call-frame-2times-state-after #xcec1 #xcec1)
+                (list #xcc)
+                "tos for call frame is page cc")
+  (check-equal? (memory-list alloc-call-frame-2times-state-after #xcc01 #xcc01)
+                (list #xcd)
+                "previous stack page is cd")
+  (check-equal? (memory-list alloc-call-frame-2times-state-after ZP_PTR (add1 ZP_PTR))
+                (list #x02 #xcc)
+                "pointer to allocated frame")
+
+  (define alloc-call-frame-2times-fitting-code
+    (list
+     (LDA !$20)
+     (JSR VM_ALLOC_CALL_FRAME)
+     (LDA !$20)
+     (JSR VM_ALLOC_CALL_FRAME)))
+
+  (define alloc-call-frame-2times-fitting-state-after
+    (run-code-in-test alloc-call-frame-2times-fitting-code))
+
+  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after #xcfcd #xcfcd)
+                (list #x44)
+                "first free slot of page cd is 44")
+  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after #xcec1 #xcec1)
+                (list #xcd)
+                "tos for call frame is page cd")
+  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after #xcd22 #xcd22)
+                (list #x20)
+                "size of first allocation is 20")
+  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after #xcd43 #xcd43)
+                (list #x20)
+                "size of second allocation is 20")
+  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after ZP_PTR (add1 ZP_PTR))
+                (list #x23 #xcd)
+                "pointer to allocated frame"))
 
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -1658,17 +1859,22 @@
           ;; VM_ALLOC_PAGE_JUMP_TABLE
           ;; VM_ALLOC_PAGE
 
-          VM_ALLOC_PAGE__LIST_CELL_PAIRS
           VM_FREE_PAGE
+          VM_ALLOC_PAGE__LIST_CELL_PAIRS
           VM_ALLOC_PAGE__PAGE_UNINIT
           VM_ALLOC_PAGE__CALL_FRAME
           VM_ALLOC_CELL_PAIR_ON_PAGE
+
           VM_REFCOUNT_DECR
           VM_REFCOUNT_DECR_CELL_PAIR
           VM_REFCOUNT_INCR_CELL_PAIR
-          VM_FREE_NON_ATOMIC
+
           VM_ALLOC_CELL_PAIR
+          VM_ALLOC_CALL_FRAME
+
+          VM_FREE_NON_ATOMIC
           VM_FREE_CELL_PAIR
+
           VM_CELL_STACK_WRITE_INT_TO_TOS
           VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR
           VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS
