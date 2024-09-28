@@ -1748,6 +1748,82 @@
                 (list #xcc)
                 "tos for call frame ois page cc"))
 
+
+;; input:  VM_FREE_CALL_STACK_PAGE
+;;         VM_FREE_SLOT_FOR_PAGE,x
+;; output: VM_FREE_CALL_STACK_PAGE
+;;         VM_FREE_SLOT_FOR_PAGE,x
+(define VM_POP_CALL_FRAME
+  (list
+   (label DEALLOCATE_PAGE__VM_POP_CALL_FRAME)
+          (LDA !$00)
+          (STA ZP_PTR)
+          (LDY !$01)
+          (LDA (ZP_PTR),y)  ;; A = previous page
+          (STA VM_FREE_CALL_STACK_PAGE)
+          (JSR VM_FREE_PAGE)
+
+   ;; ----------------------------------------
+   (label VM_POP_CALL_FRAME)
+          (LDX VM_FREE_CALL_STACK_PAGE)
+          (STX ZP_PTR+1)
+          (LDA VM_FREE_SLOT_FOR_PAGE,x)
+          (STA ZP_PTR)
+          (CMP !$02)
+          (BEQ DEALLOCATE_PAGE__VM_POP_CALL_FRAME)
+
+          (DEC ZP_PTR) ;; point to size of previous record
+          (LDY !$00)
+          (CLC)
+          (SBC (ZP_PTR),y) ;; a = size of previous
+          (SBC !$01)
+          (STA VM_FREE_SLOT_FOR_PAGE,x)
+          (RTS)))
+
+(module+ test #| vm_pop_call_frame |#
+  (define test-pop-call-frame-code
+    (list
+     (LDA !$80)
+     (JSR VM_ALLOC_CALL_FRAME)
+     (LDA !$80)  ;; doesn't fit, second page is allocated
+     (JSR VM_ALLOC_CALL_FRAME)
+     (JSR VM_POP_CALL_FRAME)))
+
+  (define test-pop-call-frame-state-after
+    (run-code-in-test test-pop-call-frame-code))
+
+  (check-equal? (memory-list test-pop-call-frame-state-after #xcfcc #xcfcc)
+                (list #x02)
+                "first free slot of page cc is (again) 02")
+  (check-equal? (memory-list test-pop-call-frame-state-after #xcec1 #xcec1)
+                (list #xcc)
+                "tos for call frame is page cc")
+  (check-equal? (memory-list test-pop-call-frame-state-after #xcc01 #xcc01)
+                (list #xcd)
+                "previous stack page is cd")
+
+  (define test-pop-call-frame-2times-code
+    (list
+     (LDA !$80)
+     (JSR VM_ALLOC_CALL_FRAME)
+     (LDA !$80) ;; doesn't fit, second page is allocated
+     (JSR VM_ALLOC_CALL_FRAME)
+     (JSR VM_POP_CALL_FRAME)
+     (JSR VM_POP_CALL_FRAME)))
+
+  (define test-pop-call-frame-2times-state-after
+    (run-code-in-test test-pop-call-frame-2times-code))
+
+  (check-equal? (memory-list test-pop-call-frame-2times-state-after #xcfcd #xcfcd)
+                (list #x02)
+                "first free slot of page cd is (again) 02")
+  (check-equal? (memory-list test-pop-call-frame-2times-state-after #xcec1 #xcec1)
+                (list #xcd)
+                "tos for call frame is page (again) cd")
+  (check-equal? (memory-list test-pop-call-frame-2times-state-after #xcd01 #xcd01)
+                (list #x00)
+                "previous stack page is 00"))
+
 ;; input: A = size
 ;; output: ZP_PTR
 (define VM_ALLOC_CALL_FRAME
@@ -1871,6 +1947,7 @@
 
           VM_ALLOC_CELL_PAIR
           VM_ALLOC_CALL_FRAME
+          VM_POP_CALL_FRAME
 
           VM_FREE_NON_ATOMIC
           VM_FREE_CELL_PAIR
