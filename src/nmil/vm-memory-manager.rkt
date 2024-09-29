@@ -38,13 +38,10 @@
 ;; the free cell-pair holds in byte 0 of the cell-pair the offset of the next free cell-pair (0 = no other free cell-pair)
 ;;
 
-
-;; TODO: use other cell-stack  layout:
-;;  currently: [tagged-low low high]0 [tagged-low low high]1 ...
-;;  future:    [low]0 [low]1 ... [tagged-low high]0 [tagged-low high]1 ...
-;;  expected advantage: copy of ptr is easier (no need to heed low, untagged bytes)
-;;  indirect access to cells (adjacent bytes mandatory) is not done on stack cells? => not necessary to keep untagged low with high together.
-
+;; IDEA: zero page cell stack may not be beneficial (can be put in regular memory)
+;;       LDA zeropage,x  consumes 4 clocks,  LDA absolute,x consumes 4 clocks too => no speed just size benefit (2 vs. 3 bytes)
+;;       LDA zeropage and LDA absolute differs in speed => storing registers not accessed through index makes sense
+;;       indirect addressing can only be done on zp => zp_ptr and zp_ptr2 make sense, too
 
 (require (only-in racket/format ~a))
 
@@ -1909,47 +1906,55 @@
 ;; output: stack-=x (x elements popped from the stack)
 ;;         zp_ptr = points past the copied to the first local of the call-frame (if any)
 ;;         zp_ptr_tagged = 0
-;; NO CHECK OF STACK SIZE
+;; NO CHECK OF STACK SIZE!
+;; stack is copied in reverse order (tos is last in list)
 (define VM_POP_N_CELLS_TO_CALL_FRAME
   (list
    (label VM_POP_N_CELLS_TO_CALL_FRAME)
-          (STA ZP_PTR_TAGGED)
-          (LDY !$00)
-          (LDX ZP_CELL_TOS)
+          (ASL A)
+          (STA TEMP__VM_POP_N_CELLS_TO_CALL_FRAME) ;;
+          (LDA ZP_CELL_TOS)                        ;
+          (TAX)
+          (INX)
+          (SEC)
+          (SBC TEMP__VM_POP_N_CELLS_TO_CALL_FRAME)
+          (STA ZP_CELL_TOS)                        ;; tos -= 6
+          (LDY TEMP__VM_POP_N_CELLS_TO_CALL_FRAME)
+          (DEY)
 
    (label LOOP__VM_POP_N_CELLS_TO_CALL_FRAME)
-          (LDA ZP_CELL0,x)
-          (STA (ZP_PTR),y) ;; cell low byte
-          (INY)
-          (LDA ZP_CELL0+1,x)
-          (STA (ZP_PTR),y) ;; cell high byte
-          (INY)
+          (LDA ZP_CELL0,x)  ;; is absolute,y since there is no zero-page,y (is not such a problem because clock cycles are same)
+          (STA (ZP_PTR),y)
           (DEX)
-          (DEX)
-          (DEC ZP_PTR_TAGGED)
-          (BNE LOOP__VM_POP_N_CELLS_TO_CALL_FRAME)
-          (STX ZP_CELL_TOS)
-          (RTS)))
+          (DEY)
+          (BPL LOOP__VM_POP_N_CELLS_TO_CALL_FRAME)
+
+          (RTS)
+
+   (label TEMP__VM_POP_N_CELLS_TO_CALL_FRAME)
+          (byte $00)))
 
 (module+ test #| vm_pop_n_cells_to_call_frame |#
   (define test-pop-n-cells-code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_0)
      (JSR VM_CELL_STACK_PUSH_INT_1)
+     (JSR VM_CELL_STACK_PUSH_INT_0)
+     (JSR VM_CELL_STACK_PUSH_INT_2)
      (JSR VM_CELL_STACK_PUSH_NIL)
      (JSR VM_ALLOC_CALL_FRAME)
-     (LDA !$3)
+     (LDA !$2)
      (JSR VM_POP_N_CELLS_TO_CALL_FRAME)))
 
   (define test-pop-n-cells-state-after
     (run-code-in-test test-pop-n-cells-code))
 
   (check-equal? (vm-stack->strings test-pop-n-cells-state-after)
-                '("stack is empty"))
-  (check-equal? (vm-cells->strings (memory-list test-pop-n-cells-state-after #xcd02 #xcd07))
-                '("cell-pair-ptr $0000"
-                  "cell-int $0001"
-                  "cell-int $0000")))
+                '("stack holds 2 items"
+                  "cell-int $0000"    ;; tos
+                  "cell-int $0001"))
+  (check-equal? (vm-cells->strings (memory-list test-pop-n-cells-state-after #xcd02 #xcd05))
+                '("cell-int $0002"             ;; copy in memory order (not stack order)
+                  "cell-pair-ptr $0000")))
 
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
