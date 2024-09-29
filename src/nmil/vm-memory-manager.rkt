@@ -39,6 +39,13 @@
 ;;
 
 
+;; TODO: use other cell-stack  layout:
+;;  currently: [tagged-low low high]0 [tagged-low low high]1 ...
+;;  future:    [low]0 [low]1 ... [tagged-low high]0 [tagged-low high]1 ...
+;;  expected advantage: copy of ptr is easier (no need to heed low, untagged bytes)
+;;  indirect access to cells (adjacent bytes mandatory) is not done on stack cells? => not necessary to keep untagged low with high together.
+
+
 (require (only-in racket/format ~a))
 
 (require "../6510.rkt")
@@ -120,6 +127,19 @@
                 "cell-int $1e15")
   (check-equal? (vm-cell->string #xfc #x15)
                 "cell-byte $15"))
+
+(define (vm-cells->strings byte-list (result (list)))
+  (if (empty? byte-list)
+      (reverse result)
+      (vm-cells->strings
+       (cddr byte-list)
+       (cons (vm-cell->string (car byte-list)
+                             (cadr byte-list))
+             result))))
+
+(module+ test #| vm-cells->strings |#
+  (check-equal? (vm-cells->strings '(#x02 #x00 #x00 #x01))
+                '("cell-pair-ptr $0000" "cell-int $0001")))
 
 (module+ test #| vm-stack->string |#
   (define test-vm_stack_to_string-a-code
@@ -660,6 +680,8 @@
    (label VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
           ;; move just tagged low byte and high byte, since CELLy has no untagged byte!!
           (LDX ZP_CELL_TOS)
+
+   (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR__XY_SET)
           (DEX) ;; move to tagged low byte
           (LDA ZP_CELL0,x)
           (STA (ZP_PTR),y) ;; cell low byte
@@ -1929,6 +1951,55 @@
                 (list #x23 #xcd)
                 "pointer to allocated frame"))
 
+;; copy n cells to the call frame allocated to zp_ptr
+;; input: A = number of cells
+;;        zp_ptr = pointer to allocated call-frame (first free byte)
+;; output: stack-=x (x elements popped from the stack)
+;;         zp_ptr = points past the copied to the first local of the call-frame (if any)
+;;         zp_ptr_tagged = 0
+;; NO CHECK OF STACK SIZE
+(define VM_POP_N_CELLS_TO_CALL_FRAME
+  (list
+   (label VM_POP_N_CELLS_TO_CALL_FRAME)
+          (STA ZP_PTR_TAGGED)
+          (LDY !$00)
+          (LDX ZP_CELL_TOS)
+
+   (label LOOP__VM_POP_N_CELLS_TO_CALL_FRAME)
+          (DEX) ;; move to tagged low byte
+          (LDA ZP_CELL0,x)
+          (STA (ZP_PTR),y) ;; cell low byte
+          (INY)
+          (LDA ZP_CELL0_LOW+1,x)
+          (STA (ZP_PTR),y) ;; cell high byte
+          (INY)
+          (DEX)
+          (DEX)
+          (DEC ZP_PTR_TAGGED)
+          (BNE LOOP__VM_POP_N_CELLS_TO_CALL_FRAME)
+          (STX ZP_CELL_TOS)
+          (RTS)))
+
+(module+ test #| vm_pop_n_cells_to_call_frame |#
+  (define test-pop-n-cells-code
+    (list
+     (JSR VM_CELL_STACK_PUSH_INT_0)
+     (JSR VM_CELL_STACK_PUSH_INT_1)
+     (JSR VM_CELL_STACK_PUSH_NIL)
+     (JSR VM_ALLOC_CALL_FRAME)
+     (LDA !$3)
+     (JSR VM_POP_N_CELLS_TO_CALL_FRAME)))
+
+  (define test-pop-n-cells-state-after
+    (run-code-in-test test-pop-n-cells-code))
+
+  (check-equal? (vm-stack->strings test-pop-n-cells-state-after)
+                '("stack is empty"))
+  (check-equal? (vm-cells->strings (memory-list test-pop-n-cells-state-after #xcd02 #xcd07))
+                '("cell-pair-ptr $0000"
+                  "cell-int $0001"
+                  "cell-int $0000")))
+
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
           VM_INITIALIZE_MEMORY_MANAGER
@@ -1959,6 +2030,8 @@
           VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS
           VM_CELL_STACK_POP
           VM_CELL_STACK_PUSH
+
+          VM_POP_N_CELLS_TO_CALL_FRAME
 
           VM_COPY_PTR2_TO_PTR
           VM_COPY_PTR_TO_PTR2
