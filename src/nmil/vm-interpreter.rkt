@@ -253,8 +253,8 @@
    (label BC_INT_PLUS)
           (LDX ZP_CELL_TOS)
           (LDA ZP_CELL0+1,x)
-          (ADC ZP_CELL0-2,x)
-          (STA ZP_CELL0-2,x) ;; low byte
+          (ADC ZP_CELL0-1,x)
+          (STA ZP_CELL0-1,x) ;; low byte
 
           (LDA ZP_CELL0,x)
           (BCC VM_INT_PLUS__NO_INC_HIGH)
@@ -262,13 +262,12 @@
           (ADC !$04)
 
    (label VM_INT_PLUS__NO_INC_HIGH)
-          (ADC ZP_CELL0-3,x)
+          (ADC ZP_CELL0-2,x)
           (AND !$7c)
-          (STA ZP_CELL0-3,x) ;; high byte
-          (STA ZP_CELL0-4,x) ;; high byte into tagged byte
+          (STA ZP_CELL0-2,x) ;; high byte
+
 
    (label VM_INT_PLUS__DONE)
-          (DEX)
           (DEX)
           (DEX)
           (STX ZP_CELL_TOS)
@@ -302,8 +301,8 @@
 
           (SEC)
           (LDA ZP_CELL0+1,x)
-          (SBC ZP_CELL0-2,x)
-          (STA ZP_CELL0-2,x) ;; low byte
+          (SBC ZP_CELL0-1,x)
+          (STA ZP_CELL0-1,x) ;; low byte
 
           (LDA ZP_CELL0,x)
           (BCS VM_INT_MINUS__NO_DEC_HIGH)
@@ -311,13 +310,11 @@
           (SBC !$04)
 
    (label VM_INT_MINUS__NO_DEC_HIGH)
-          (SBC ZP_CELL0-3,x)
+          (SBC ZP_CELL0-2,x)
           (AND !$7c)
-          (STA ZP_CELL0-3,x) ;; high byte
-          (STA ZP_CELL0-4,x) ;; high byte into tagged byte
+          (STA ZP_CELL0-2,x) ;; high byte
 
    (label VM_INT_MINUS__DONE)
-          (DEX)
           (DEX)
           (DEX)
           (STX ZP_CELL_TOS)
