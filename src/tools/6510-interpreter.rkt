@@ -73,6 +73,7 @@
          peek-pc
          peek-pc+1
          peek-word-at-pc+1
+         peek-word-at-address
          -pokem
          poke
          print-state

@@ -43,10 +43,77 @@
 ;;       LDA zeropage and LDA absolute differs in speed => storing registers not accessed through index makes sense
 ;;       indirect addressing can only be done on zp => zp_ptr and zp_ptr2 make sense, too
 
+;; IDEA: eval cell stack is held in pages growing from the bottom (to have continuous access)
+;;       tos is a ptr on the zp, pointing to the tos cell
+;;           LDY !$00
+;;           LDA (TOS),y    ;; tagged low byte of cell
+;;           INY ...
+;;       call-params os a ptr on the zp, pointing into the first parameter on the eval cell stack
+;;           LDY n * 2
+;;           LDA (call-params),y ;; get n-th parametere tagged low byte of cell
+;;       pop cell stack:
+;;           LDA TOS
+;;           BNE JUST_LOW
+;;           DEC TOS+1
+;;        JUST_LOW:
+;;           DEC TOS
+;;           DEC TOS
+;;       push cell stack:
+;;           INC TOS
+;;           INC TOS
+;;           BNE DONE
+;;           INC TOS+1
+;;        DONE:
+;;       call frame is created by call, but there is not need to copy (portions of) the eval stack
+;;       the call frame allocates space for locals and that's it (it's still a stack, so push/pop is supported)
+;;       alternative to tos: function entry tos + index
+;;         upon function entry, the fe tos is written (once) and a separate index is held in zero page
+;;         such that fe0-tos + index = actual tos => push pop work in index only (restriction value stack w/i one page to 128 cells)
+;;       alternative continuous stack space: allocate pages, but how? function call will fix the parameters => that part does not change
+;;       within one function, one page is enough, but an almost full page could be a problem:
+;;         one solution: page grows until function call, then, if page is free enough continues with the given page, if page is not enough allocated new one
+;;         minimum free space = 16 cells? = 32 byte => 256 - 32 = 224 (roughly) are available, can be used in combination with call-frame
+;;      zp_vm_params -> [params]            <- actually previous eval stack
+;;        callframe:    -----               <- new allocation starts here
+;;                      [old zp_vm_pc]      <- pointer to code to return to (zp_vm_pc)
+;;                      [old zp_vm_locals]  <- used to restore zp_vm_locals
+;;                      [old zp_vm_params]  <- used to restore zp_vm_params
+;;      zp_vm_locals -> [locals]            <- fixed number of slots kept for function execution
+;;         zp_vm_tos -> [eval-stack]        <- size must fit into page (16 cells) <- could later be derived from actual function implementation
+;;                                            (part of the eval stack is then again [params] for the next function called)
+;; call to function:
+;;      new zp_vm_params = zp_vm_tos - 2 * n-params (of the function called)
+;;      allocated call frame [call-back] = zp_vm_pc
+;;      new zp_vm_locals = allocated call frame + 6
+;;      new zp_vm_tos    = allocated call frame + 2 * (n-locals + 3)  (of the function called)
+;;      zp_vm_pc         = function called
+;;
+;; return from function:
+;;      zp_vm_params     = (new) zp_vm_locals - 2 * (n-params + 3) (of function returned to)
+;;      zp_vm_locals     = ? <- must be saved too
+;;      zp_vm_tos        = (old) zp_vm_params - 2
+;;      zp_vm_pc         = call-frame [call-back] = ((old) zp_vm_locals-6)
+;;
+;; NEW STACK STRUCTURE:
+;;      ZP_CELL_STACK_BASE_PTR -> points to the start of the stack of the current (executing) function
+;;      ZP_CELL_STACK_TOS      -> offset for ZP_CELL_STACK_BASE_PTR, pointing to the tagged (low) byte, ff = empty, 01 = 1 el on stack, 03 = 2 el on stack ...
+;;                                LDA (ZP_CELL_STACK_BASE_PTR),ZP_CELL_STACK_TOS   = tagged low byte
+;;                                LDA (ZP_CELL_STACK_BASE_PTR),ZP_CELL_STACK_TOS-1 = high byte
+;;                                => pushing is done in reverse order (push high byte first, then push tagged low byte)
+;;                             reading tos:
+;;                                LDY ZP_CELL_STACK_TOS;
+;;                                LDA (ZP_CELL_STACK_BASE_PTR),y  ;; gets tagged low byte
+;;                                DEY
+;;                                LDA (ZP_CELL_STACK_BASE_PTR),y  ;; gets untagged high byte
+;;
+;; IDEA: use larger block page allocation (e.g. not used one page but 4 pages as a block => less waste
+
 (require (only-in racket/format ~a))
 
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
+(require (only-in "../tools/6510-interpreter.rkt" peek-word-at-address))
+(require (only-in "../ast/6510-calc-opcode-facades.rkt" LDA-immediate))
 (require (only-in racket/list flatten take empty? drop))
 
 (module+ test
@@ -74,17 +141,22 @@
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
-(provide vm-memory-manager vm-stack->strings ast-const-get)
+(provide vm-memory-manager vm-stack->strings ast-const-get
+          ZP_VM_PC
+          ZP_LOCALS_PTR
+          ZP_PARAMS_PTR
+)
 
 ;; produce strings describing the current cell-stack status
 (define (vm-stack->strings state)
-  (define stack-tos-idx (peek state ZP_CELL_TOS))
+  (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
   (cond
     [(> stack-tos-idx #xf0) (list "stack is empty")]
     [else
-     (define stack (memory-list state ZP_CELL0 (+ 1 stack-tos-idx ZP_CELL0)))
+     (define stack-ptr (peek-word-at-address state ZP_CELL_STACK_BASE_PTR))
+     (define stack (memory-list state stack-ptr (+ stack-tos-idx stack-ptr)))
      (define stack-values stack)
-     (define stack-item-no (add1 (/ stack-tos-idx 2)))
+     (define stack-item-no (/ (add1 stack-tos-idx) 2))
      (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
            (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair))) (pairing stack-values))))]))
 
@@ -253,23 +325,38 @@
 
    ;; zp_ptr holds either a cell-ptr or a cell-pair (ptr) with out the tag bits!
    ;; these two must be adjacent (for some code to work!)
-   (byte-const ZP_PTR                    $fb)   ;; fb = low byte (with out tag bits), fc = high byte
-   (byte-const ZP_PTR2                   $fd)   ;; fd = low byte (with out tag bits), fe = high byte
 
    ;; these two must be adjacent (for some code to work)
-   (byte-const ZP_PTR_TAGGED             $9e)   ;; 9e = low byte with tag bits
-   (byte-const ZP_PTR2_TAGGED            $9f)   ;; 9f = low byte with tag bits
 
-   (byte-const ZP_CELL_TOS              $d9)  ;; current offset to tos $fe = stack empty, $00 = cell0, $02 = cell1, $04 = cell2 ...
+   ;; (byte-const ZP_CELL_TOS              $d9)  ;; current offset to tos $fe = stack empty, $00 = cell0, $02 = cell1, $04 = cell2 ...
 
-   (byte-const ZP_CELL0                 $da) ;; low tagged, high  (there are no untagged values on the stack)
-   (byte-const ZP_CELL1                 $dc)
-   (byte-const ZP_CELL2                 $de)
-   (byte-const ZP_CELL3                 $e0)
-   (byte-const ZP_CELL4                 $e2)
-   (byte-const ZP_CELL5                 $e4)
-   (byte-const ZP_CELL6                 $e6)
-   (byte-const ZP_CELL7                 $e8)))
+   ;; (byte-const ZP_CELL0                 $da) ;; low tagged, high  (there are no untagged values on the stack)
+   ;; (byte-const ZP_CELL1                 $dc)
+   ;; (byte-const ZP_CELL2                 $de)
+   ;; (byte-const ZP_CELL3                 $e0)
+   ;; (byte-const ZP_CELL4                 $e2)
+   ;; (byte-const ZP_CELL5                 $e4)
+   ;; (byte-const ZP_CELL6                 $e6)
+   ;; (byte-const ZP_CELL7                 $e8)
+
+   (byte-const ZP_CELL_STACK_BASE_PTR    $da) ;; da..db (pointer to the base of the stack of the currently running function
+   (byte-const ZP_CELL_STACK_TOS         $dc) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
+
+   (byte-const ZP_PTR_TAGGED             $dd) ;; dd = low byte with tag bits , tagged low bytes are 2 appart, to use same offset as ZP_PTR <-> ZP_PTR2
+   (byte-const ZP_PTR2_TAGGED            $df) ;; df = low byte with tag bits
+
+   (byte-const ZP_TEMP                   $de) ;; may not be used after sub calls (just within a routine)
+
+   ;; the following six bytes need to be continuous, since they are saved into the call frame
+   (byte-const ZP_VM_PC                  $e0)
+   (byte-const ZP_PARAMS_PTR             $e2) ;; pointer to first parameter in call-frame
+   (byte-const ZP_LOCALS_PTR             $e4) ;; pointer to first local in call-frame
+
+   (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2 <- may be not needed (zp_locals_ptr always = zp_call_frame + 6)
+
+   (byte-const ZP_PTR                    $fb)   ;; fb = low byte (with out tag bits), fc = high byte,   tagged low byte is held in ZP_PTR_TAGGED
+   (byte-const ZP_PTR2                   $fd)   ;; fd = low byte (with out tag bits), fe = high byte
+   ))
 
 (define (ast-const-get ast-commands key)
   (when (empty? ast-commands)
@@ -284,12 +371,19 @@
      (ast-const-word-cmd-word ast-command)]
     [else (ast-const-get (cdr ast-commands) key)]))
 
-(define ZP_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR"))
-(define ZP_PTR_TAGGED    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR_TAGGED"))
-(define ZP_PTR2          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2"))
-(define ZP_PTR2_TAGGED   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2_TAGGED"))
-(define ZP_CELL_TOS      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_TOS"))
-(define ZP_CELL0         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL0"))
+(define ZP_PTR                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR"))
+(define ZP_PTR_TAGGED           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR_TAGGED"))
+(define ZP_PTR2                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2"))
+(define ZP_PTR2_TAGGED          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2_TAGGED"))
+;; (define ZP_CELL_TOS             (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_TOS"))
+;; (define ZP_CELL0                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL0"))
+(define ZP_CALL_FRAME           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
+(define ZP_CELL_STACK_BASE_PTR  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_BASE_PTR"))
+(define ZP_CELL_STACK_TOS       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
+(define ZP_TEMP                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP"))
+(define ZP_VM_PC                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_PC"))
+(define ZP_LOCALS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_PTR"))
+(define ZP_PARAMS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PARAMS_PTR"))
 
 ;; naming convention
 ;; cell-stack         == stack of cells (could be any atomic or ptr cell)
@@ -322,12 +416,11 @@
 (define VM_CELL_STACK_POP
   (list
    (label VM_CELL_STACK_POP)
-          (LDX ZP_CELL_TOS)
+          (LDY ZP_CELL_STACK_TOS)
           (BMI STACK_EMPTY_ERROR__VM_CELL_STACK_POP)
 
           ;; now check whether deallocation needs to take place (that is the cell being popped is a ptr)
-          (DEX)
-          (LDA ZP_CELL0,x) ;; tagged low byte
+          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; tagged low byte
           (AND !$03)
           (BEQ DO_POP__VM_CELL_STACK_POP) ;; is no pointer => jump
 
@@ -343,22 +436,25 @@
 
    (label IS_CELL_PAIR_PTR__VM_CELL_STACK_POP)
           ;; move cell-pair-ptr (tos) -> zp_ptr
-          (LDA ZP_CELL0+1,x)  ;; high byte
-          (BEQ DO_POP__VM_CELL_STACK_POP) ;; hight byte = 0 => is nil => no need to decr cell pair
+          (DEY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)  ;; high byte
+          (BEQ DO_POP__VM_CELL_STACK_POP_NO_DEC) ;; hight byte = 0 => is nil => no need to decr cell pair
           (STA ZP_PTR+1)      ;; to zp_ptr+1
-          (LDA ZP_CELL0,x)    ;; low byte tagged
+          (INY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)  ;; tagged low byte
           (AND $fc)           ;; remove low 2 bits
           (STA ZP_PTR)        ;; to zp_ptr
           ;; no need for copying tagged low byte, since I already know it is a cell-pair-ptr
           (JSR VM_REFCOUNT_DECR_CELL_PAIR) ;; decrement and gc if necessary
 
    (label VM_CELL_STACK_POP__NO_GC) ;; entry for just popping!
-          (LDX ZP_CELL_TOS)   ;; restore tos
-          (DEX)               ;; dex (such that in total x-=3)
+          (LDY ZP_CELL_STACK_TOS)   ;; restore tos
+          (DEY)               ;; dex (such that in total x-=3)
 
    (label DO_POP__VM_CELL_STACK_POP)
-          (DEX) ;; x was already decremented => dec 2x
-          (STX ZP_CELL_TOS) ;; store new tos
+          (DEY) ;; y was already decremented => dec 2x
+   (label DO_POP__VM_CELL_STACK_POP_NO_DEC)
+          (STY ZP_CELL_STACK_TOS) ;; store new tos
           (RTS)))
 
 (module+ test #| vm_cell_stack_pop |#
@@ -369,21 +465,20 @@
            (JSR VM_CELL_STACK_POP)
            (JSR VM_CELL_STACK_POP) ;; stops at brk in this routine
            (LDA !$00)              ;; is never run
-           (STA ZP_CELL_TOS))))
+           (STA ZP_CELL_STACK_TOS))))
 
-  (check-equal? (memory-list test-vm_cell_stack_pop-a-state-after ZP_CELL_TOS (+ ZP_CELL_TOS 2))
+  (check-equal? (memory-list test-vm_cell_stack_pop-a-state-after ZP_CELL_STACK_TOS (+ ZP_CELL_STACK_TOS 2))
                 '(#xfe
                   #x02 #x00 )
                 "tos = fe (empty), nil is (still) in memory but off from stack, second pop runs into brk, no clearing of zp_cell_tos!"))
 
-;; push a cell in A/Y (low/high) onto the cell-stack
+;; push a cell in A/X (high/low) onto the cell-stack
 ;; input: stack
-;;        A = low, encoded cell (tagged)
-;;        Y = high, cell
+;;        X = low byte,  (tagged)
+;;        A = high byte,
 ;; output: stack++[nil]
 ;; registers: A  ?
-;;            X  TOS (on untagged low byte)
-;;            Y  unchanged
+;;            Y  TOS+2
 ;; check stack full!
 (define VM_CELL_STACK_PUSH
   (list
@@ -406,12 +501,11 @@
    ;;         flags: result of lda high byte of celly
    ;; check stack full!
    (label VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
-          (LDA (ZP_PTR),y)
-          (TAX)
           (INY)
           (LDA (ZP_PTR),y)
-          (TAY)
-          (TXA)
+          (TAX)
+          (DEY)
+          (LDA (ZP_PTR),y)
           (CLC)
           (BCC VM_CELL_STACK_PUSH)
 
@@ -436,67 +530,65 @@
           (TYA)
           (ASL A)
           (TAY)
+
           (LDA ZP_PTR+1,y)
-          (TAY)
-          (TXA)
           (CLC)
           (BCC VM_CELL_STACK_PUSH)
 
    ;; ints are saved high byte first, then low byte !!!!
    ;; input:  stack
-   ;;         A = high byte of int (max 31 = $1f)
-   ;;         Y = low byte of int (0..255)
+   ;;         A = high byte of int (max 31 = $1f) (stored in low byte (tagged) position)
+   ;;         X = low byte of int (0..255) (stored in high byte (untagged) position)
    ;; output: stack++[INT]
-   ;;         A  = transformed / tagged low byte of int
-   ;;         Y  = low byte of int
-   ;;         X  = tos
    ;; check stack full!
    (label VM_CELL_STACK_PUSH_INT)
           (ASL A)
           (ASL A)
           (AND !$7c)           ;; mask out top and two low bits!
-          (BPL VM_CELL_STACK_PUSH)
+          (CLC)
+          (BCC VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_INT_m1)
           (LDA !$7c) ;; 1f << 2
-          (LDY !$ff)
+          (LDX !$ff)
           (BNE VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_INT_2)
-          (LDY !$02)
           (LDA !$00)
-          (BEQ VM_CELL_STACK_PUSH)
+          (LDX !$02)
+          (BNE VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_INT_1)
-          (LDY !$01)
           (LDA !$00)
-          (BEQ VM_CELL_STACK_PUSH)
+          (LDX !$01)
+          (BNE VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_INT_0)
           (LDA !$00)
-          (TAY)
+          (TAX)
           (BEQ VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_NIL)
-          (LDA !<TAGGED_NIL)
-          (LDY !>TAGGED_NIL)
+          (LDX !<TAGGED_NIL)
+          (LDA !>TAGGED_NIL)
 
-   ;; ----------------------------------------
+   ;; ---------------------------------------- (a=high byte, x=tagged low)
    (label VM_CELL_STACK_PUSH)
-          (LDX ZP_CELL_TOS)
-          (INX)
-          (INX)
+          (LDY ZP_CELL_STACK_TOS)
 
-          ;; check that stack pointer does not run out of bound
-          (CPX !ZP_CELL7) ;; stack runs from  cell0 .. cell7
-          (BCS NO_ERROR__VM_CELL_STACK_PUSH)
+          ;; check that stack pointer does not run out of bound (over the page)
+          (CPY !$fd)
+          (BNE NO_ERROR__VM_CELL_STACK_PUSH)
 
           (BRK)
 
    (label NO_ERROR__VM_CELL_STACK_PUSH)
-          (STA ZP_CELL0,x)       ;; write lowbyte
-          (STY ZP_CELL0+1,x)     ;; write high byte
-          (STX ZP_CELL_TOS)      ;; set new tos
+          (INY)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte!
+          (INY)
+          (TXA)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte
+          (STY ZP_CELL_STACK_TOS)      ;; set new tos
           (RTS)))
 
 (module+ test #| vm_cell_stack_push_nil |#
@@ -519,7 +611,7 @@
            (JSR VM_CELL_STACK_PUSH_NIL) ;; 7
            (JSR VM_CELL_STACK_PUSH_NIL)))) ;; 8
 
-(check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-b-state-after)
+  (check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-b-state-after)
                 '("stack holds 8 items"
                   "cell-pair-ptr $0000"
                   "cell-pair-ptr $0000"
@@ -530,31 +622,34 @@
                   "cell-pair-ptr $0000"
                   "cell-pair-ptr $0000")))
 
-;; input: Y = lowbyte of int
+;; input: X = lowbyte of int
 ;;        A = tagged highbyte of int
 (define VM_CELL_STACK_WRITE_INT_TO_TOS
   (list
    (label VM_CELL_STACK_WRITE_INT_1_TO_TOS)
-          (LDY !$01)
+          (LDX !$01)
           (LDA !$00)
           (BEQ VM_CELL_STACK_WRITE_INT_TO_TOS)
 
    (label VM_CELL_STACK_WRITE_INT_0_TO_TOS)
           (LDA !$00)
-          (TAY)
+          (TAX)
 
    ;; ----------------------------------------
    (label VM_CELL_STACK_WRITE_INT_TO_TOS)
-          (LDX ZP_CELL_TOS)
+          (LDY ZP_CELL_STACK_TOS)
           (ASL A)
           (ASL A)
           (AND !$7c)            ;; mask out top and two low bits!
-          (STA ZP_CELL0,x)     ;; write int high byte first
-          (STY ZP_CELL0+1,x)   ;; write int low byte
+          (INY)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)   ;; write tagged int high byte first
+          (DEY)
+          (TXA)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)   ;; write untagged int low byte
           (RTS)))
 
 (module+ test #| vm_cell_push_int |#
-    (define test-vm_cell_stack_push_int-a-state-after
+  (define test-vm_cell_stack_push_int-a-state-after
     (run-code-in-test
      (list (JSR VM_CELL_STACK_PUSH_INT_m1)
            (LDA !$10) ;; -4096
@@ -613,34 +708,37 @@
 
 ;; write TOS into celly of cell-pair pointer to by zp_ptr (y=0 car-cell, y=2 cdr-cell)
 ;; input:  cell-stack
-;;         y register (0 = car-cell, 2 = cdr-cell)
+;;         x register (0 = car-cell, 2 = cdr-cell)
 ;;         zp_ptr pointing to the cells to write
 ;; output: cell-stack unchanged
 ;;         zp_ptr celly is set to tos cell
 ;;         a = ?
-;;         x = TOS-1 => to pop execute (DEX) (DEX) (STX ZP_CELL_TOS)
-;;         y = y+1
-;;         flags: result of lda high byte of tos-cell
 ;; no stack empty check!
 (define VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR
   (list
    (label VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
-          (LDY !$02)
+          (LDX !$02)
           (BNE VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
    (label VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
-          (LDY !$00)
+          (LDX !$00)
 
    ;;------------------------------------------------
    (label VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
           ;; move just tagged low byte and high byte, since CELLy has no untagged byte!!
-          (LDX ZP_CELL_TOS)
+          (LDY ZP_CELL_STACK_TOS)
 
    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR__XY_SET)
-          (LDA ZP_CELL0,x)
-          (STA (ZP_PTR),y) ;; cell low byte
+          (STX ZP_TEMP)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (PHA) ;; STA ZP_TEMP2
           (INY)
-          (LDA ZP_CELL0+1,x)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (LDY ZP_TEMP)
+          (INY)
           (STA (ZP_PTR),y) ;; cell high byte
+          (DEY)
+          (PLA) ;; LDA ZP_TEMP2
+          (STA (ZP_PTR),y) ;; cell low byte
           (RTS)))
 
 (module+ test #| vm_cell_stack_write_tos_to_celly_of_zp_ptr |#
@@ -669,7 +767,7 @@
                 '(#x08 #x12 #x02 #x00)
                 "zp_ptr => (int530 . nil)"))
 
-;; write zp_ptry (y=0 zp_ptr, y=1 zp_ptr1) into top of cell-stack
+;; write zp_ptry (x=0 zp_ptr, x=2 zp_ptr1) into top of cell-stack
 ;; input:  stack
 ;;         zp_ptry
 ;; output: stack[zp_ptry] (uses zp_ptr_tagged, too)
@@ -680,24 +778,27 @@
 (define VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS
   (list
    (label VM_CELL_STACK_WRITE_ZP_PTR2_TO_TOS)
-          (LDY !$01)
+          (LDX !$02)
           (BNE VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS)
    (label VM_CELL_STACK_WRITE_ZP_PTR_TO_TOS)
-          (LDY !$00)
+          (LDX !$00)
 
    ;; ----------------------------------------
    (label VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS)
-          (LDX ZP_CELL_TOS)
-          (LDA ZP_PTR_TAGGED,y)
-          (STA ZP_CELL0,x)    ;; tagged low byte
+          (LDY ZP_CELL_STACK_TOS)
 
-          ;; Y = Y*2
-          (TYA)
-          (ASL A)
-          (TAY)
+          ;; x = x/2
 
-          (LDA ZP_PTR+1,y) ;; high byte of ptr
-          (STA ZP_CELL0+1,x)
+          (LDA ZP_PTR+1,x) ;; high byte of ptr
+          (STA (ZP_CELL_STACK_BASE_PTR),y)
+          (INY)
+
+          (TXA)
+          (LSR)
+          (TAX)
+
+          (LDA ZP_PTR_TAGGED,x)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)    ;; tagged low byte
           (RTS))
 )
 
@@ -712,12 +813,15 @@
    ;; ----------------------------------------
    (label VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS)
           ;; write tagged low byte and high byte
-          (LDX ZP_CELL_TOS)
           (LDA (ZP_PTR),y) ;; cell low byte
-          (STA ZP_CELL0,x) ;; tagged
+          (STA ZP_TEMP)
           (INY)
           (LDA (ZP_PTR),y) ;; cell high byte
-          (STA ZP_CELL0+1,x)
+          (LDY ZP_CELL_STACK_TOS)
+          (STA (ZP_CELL_STACK_BASE_PTR),y) ;; store high first
+          (INY)
+          (PLA)
+          (STA (ZP_CELL_STACK_BASE_PTR),y) ;; store low there after
           (RTS)))
 
 (module+ test #| vm_cell_stack_push_zp_ptry |#
@@ -771,25 +875,30 @@
 (define VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy
   (list
    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR2)
-          (LDY !$01)
+          (LDX !$02)
           (BNE VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy)
    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR)
-          (LDY !$00)
+          (LDX !$00)
 
    ;;------------------------------------------------
    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRy)
-          (LDX ZP_CELL_TOS)
-          (LDA ZP_CELL0,x)    ;; tagged low byte
-          (STA ZP_PTR_TAGGED,y)
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)    ;; low byte tagged
+          (STA ZP_TEMP)
+          (INY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)    ;; high byte
+          (STA ZP_PTR+1,x)
+          (LDA ZP_TEMP)
           (AND !$fc)
-          (PHA)
-          (TYA)
-          (ASL A)
-          (TAY)
-          (PLA)
-          (STA ZP_PTR,y)
-          (LDA ZP_CELL0+1,x)  ;; high byte of ptr
-          (STA ZP_PTR+1,y)
+          (STA ZP_PTR,x)
+
+          ;; x/=2
+          (TXA)
+          (LSR)
+          (TAX)
+
+          (LDA ZP_TEMP)
+          (STA ZP_PTR_TAGGED,x)
           (RTS)))
 
 (module+ test #| vm_cell_stack_write_tos_to_zp_ptry |#
@@ -881,15 +990,6 @@
           (STA ZP_PTR2_TAGGED)
           (RTS)))
 
-;; jump table  page-type->allocation method
-(define VM_ALLOC_PAGE_JUMP_TABLE
-  (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
-   (list
-    (label VM_ALLOC_PAGE__LIST_CELLS_PAIRS_JT)
-           (word-ref VM_ALLOC_PAGE__LIST_CELL_PAIRS)
-    (label VM_ALLOC_PAGE__CALL_STACK_JT)
-           (word-ref VM_ALLOC_PAGE__CALL_STACK))))
-
 ;; initial data for the memory management registers
 ;; put into memory @ #xced0 - len (currently 3)
 (define VM_INITIAL_MM_REGS
@@ -971,7 +1071,7 @@
     (label VM_INITIALIZE_MEMORY_MANAGER)
 
            ;; initialize NEXT_FREE_PAGE_PAGE (256 byte)
-           (LDA !0)
+           (LDA !$00)
            (TAY)
     (label VM_INITIALIZE_MEMORY_MANAGER__LOOP)
            ;; highbyte of this address should be using the constant NEXT_FREE_PAGE_PAGE
@@ -982,8 +1082,8 @@
            (BNE VM_INITIALIZE_MEMORY_MANAGER__LOOP)
 
            ;; initialize cell stack
-           (LDX !$FE)          ;; negative and 2 x inc = cell0+x -> tagged low byte
-           (STX ZP_CELL_TOS)
+           (LDX !$ff)          ;; negative and iny will produce 0
+           (STX ZP_CELL_STACK_TOS)
 
            (RTS))))
 
@@ -1664,19 +1764,19 @@
           ;; set this new page as the TOS for call stack allocation
           (STA VM_FREE_CALL_STACK_PAGE)
 
-          ;; set zp_ptr to point to this page
+          ;; set zp_ptr to point to this page (in order to write previous page in here) <- probably not necessary, since zp_params_ptr should point there
           (STA ZP_PTR+1)
           (LDX !$00)
           (STX ZP_PTR)
-          (TAX)
+          (TAX) ;; now new page is in x (and not modified anymore => returned)
 
-          (LDA !$02)
-          (STA VM_FREE_SLOT_FOR_PAGE,x) ;; set first free slot to 02
+          (LDA !$02) ;; first free call frame byte is at offset 2
+          (STA VM_FREE_SLOT_FOR_PAGE,x) ;; set first free slot of the new page (in x) to 02
 
           ;; initialize allocated page
           (PLA)
           (LDY !$01)
-          (STA (ZP_PTR),y) ;; set previous page
+          (STA (ZP_PTR),y) ;; set previous page in byte 01 of the new allocated page
 
           (RTS)))
 
@@ -1725,6 +1825,7 @@
 ;; output: VM_FREE_CALL_STACK_PAGE
 ;;         VM_FREE_SLOT_FOR_PAGE,x
 (define VM_POP_CALL_FRAME
+  ;; TODO: rewrite completely!
   (list
    (label DEALLOCATE_PAGE__VM_POP_CALL_FRAME)
           (LDA !$00)
@@ -1795,35 +1896,87 @@
                 (list #x00)
                 "previous stack page is 00"))
 
-;; input: A = size
-;; output: ZP_PTR
+;; input: A = size (needs to include 32 bytes cell-stack + 6 byte (pc, old params, old locals) + 2 * #locals
+;; output: ZP_CALL_FRAME
 (define VM_ALLOC_CALL_FRAME
   (list
    ;; ----------------------------------------
    (label VM_ALLOC_CALL_FRAME)
-          (PHA)
           (LDX VM_FREE_CALL_STACK_PAGE) ;; get the tos page for call stacks
           (BEQ ALLOCATE_NEW_PAGE__VM_ALLOC_CALL_FRAME)
 
+          (LDY ZP_CELL_STACK_TOS) ;; make sure to have Y loaded if page is reused
           (SEC) ;; add one additionally for storing the size
-          (ADC VM_FREE_SLOT_FOR_PAGE,x)   ;; A = free + size + 1 == new free
-          (BCC USE_GIVEN_PAGE__VM_ALLOC_CALL_FRAME)
+          (ADC ZP_CELL_STACK_TOS)  ;; add number of bytes to allocate to current tos
+          (BCC USE_GIVEN_PAGE__VM_ALLOC_CALL_FRAME) ;; still on same page
+
+          ;; if this call frame (size) does not fit on existing page, continue to allocate a new page
 
    (label ALLOCATE_NEW_PAGE__VM_ALLOC_CALL_FRAME)
-          (JSR VM_ALLOC_PAGE__CALL_FRAME)
-          (PLA)
-          (PHA)      ;; A = size
-          (ADC !$03) ;; 03 = old-free (2) + size (A) + 1 = new free
+          (JSR VM_ALLOC_PAGE__CALL_FRAME)          ;; x = new allocated page
+          (LDY !$01) ;; first free byte is 02, but y is incremented
 
    (label USE_GIVEN_PAGE__VM_ALLOC_CALL_FRAME)
-          (LDY VM_FREE_SLOT_FOR_PAGE,x) ;; y = (old) free on page
-          (STA VM_FREE_SLOT_FOR_PAGE,x) ;; set new first free slot
+          (STX ZP_CALL_FRAME+1) ;; x = stack page
+          (INY)
+          (STY ZP_CALL_FRAME)   ;; new call frame start
 
-          (STX ZP_PTR+1) ;; x = stack page
-          (STY ZP_PTR)   ;; y = (old) free on page = first byte allocated
-          (PLA)          ;; A = size
-          (TAY)          ;; Y = size
-          (STA (ZP_PTR),y) ;; set size on last byte (for easy deallocation)
+          (RTS)))
+
+
+;; input: A = number of parameters on the stack to be used in this call frame
+;;        x = number of locals to allocate on call frame
+;;        zp_cell_frame = freshly allocated frame that has min size x*2 + 6 + 32
+;;        zp_vm_pc          -> saved into cell frame (for pop)
+;;        zp_vm_params_ptr  -> saved into cell frame (for pop)
+;;        zp_vm_locals_ptr  -> saved into cell frame (for pop)
+;; oputput: zp_vm_params_ptr = pointer into the previous cell-stack
+;;          xp_vm_locals_ptr = pointer into the current call frame locals
+;;          zp_cell_stack_base_ptr = point into the current call frame (right after locals)
+;;          zp_cell_stack_tos = 0
+;; NO CHECK IS DONE, zp_vm_pc is not overwritten
+(define VM_SAVE_EXEC_STATE_TO_CALL_FRAME
+  (list
+   (label VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+          (ASL A) ;; # params * 2 (number of bytes)
+          (STA ZP_TEMP)
+          (LDA ZP_CELL_STACK_TOS)
+          (SEC)
+          (SBC ZP_TEMP)
+          (STA ZP_TEMP) ;; keep offset to cell-stack-base-ptr for new parameter-ptr
+
+          ;; copy 6 bytes
+          (LDY !$05)
+   (label LOOP__VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+          (LDA ZP_VM_PC,y)
+          (STA (ZP_CALL_FRAME),y)
+          (DEY)
+          (BPL LOOP__VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+
+          ;; set new parameter pointer
+          (LDA ZP_CELL_STACK_BASE_PTR+1)
+          (STA ZP_PARAMS_PTR+1)
+          (LDA ZP_CELL_STACK_BASE_PTR)
+          (ADC ZP_TEMP)
+          (STA ZP_PARAMS_PTR)
+
+          ;; set new ZP_LOCALS_PTR and ZP_CELL_STACK_BASE_PTR
+          (LDA ZP_CALL_FRAME+1)
+          (STA ZP_LOCALS_PTR+1)
+          (STA ZP_CELL_STACK_BASE_PTR+1)
+          (LDA ZP_CALL_FRAME)
+          (CLC)
+          (ADC !$06)
+          (STA ZP_LOCALS_PTR)
+
+          (TXA)
+          (ASL A) ;; # of locals *2 = bytes
+          (ADC ZP_LOCALS_PTR)
+          (STA ZP_CELL_STACK_BASE_PTR)
+
+          (LDA !$00)
+          (STA ZP_CELL_STACK_TOS) ;; set this one to 0
+
           (RTS)))
 
 (module+ test #| vm_alloc_call_frame |#
@@ -1847,7 +2000,7 @@
   (check-equal? (memory-list alloc-call-frame-state-after #xcd82 #xcd82)
                 (list #x80)
                 "size of entry is 80")
-  (check-equal? (memory-list alloc-call-frame-state-after ZP_PTR (add1 ZP_PTR))
+  (check-equal? (memory-list alloc-call-frame-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
                 (list #x02 #xcd)
                 "pointer to allocated frame")
 
@@ -1870,7 +2023,7 @@
   (check-equal? (memory-list alloc-call-frame-2times-state-after #xcc01 #xcc01)
                 (list #xcd)
                 "previous stack page is cd")
-  (check-equal? (memory-list alloc-call-frame-2times-state-after ZP_PTR (add1 ZP_PTR))
+  (check-equal? (memory-list alloc-call-frame-2times-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
                 (list #x02 #xcc)
                 "pointer to allocated frame")
 
@@ -1896,65 +2049,9 @@
   (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after #xcd43 #xcd43)
                 (list #x20)
                 "size of second allocation is 20")
-  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after ZP_PTR (add1 ZP_PTR))
+  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
                 (list #x23 #xcd)
                 "pointer to allocated frame"))
-
-;; copy n cells to the call frame allocated to zp_ptr
-;; input: A = number of cells
-;;        zp_ptr = pointer to allocated call-frame (first free byte)
-;; output: stack-=x (x elements popped from the stack)
-;;         zp_ptr = points past the copied to the first local of the call-frame (if any)
-;;         zp_ptr_tagged = 0
-;; NO CHECK OF STACK SIZE!
-;; stack is copied in reverse order (tos is last in list)
-(define VM_POP_N_CELLS_TO_CALL_FRAME
-  (list
-   (label VM_POP_N_CELLS_TO_CALL_FRAME)
-          (ASL A)
-          (STA TEMP__VM_POP_N_CELLS_TO_CALL_FRAME) ;;
-          (LDA ZP_CELL_TOS)                        ;
-          (TAX)
-          (INX)
-          (SEC)
-          (SBC TEMP__VM_POP_N_CELLS_TO_CALL_FRAME)
-          (STA ZP_CELL_TOS)                        ;; tos -= 6
-          (LDY TEMP__VM_POP_N_CELLS_TO_CALL_FRAME)
-          (DEY)
-
-   (label LOOP__VM_POP_N_CELLS_TO_CALL_FRAME)
-          (LDA ZP_CELL0,x)  ;; is absolute,y since there is no zero-page,y (is not such a problem because clock cycles are same)
-          (STA (ZP_PTR),y)
-          (DEX)
-          (DEY)
-          (BPL LOOP__VM_POP_N_CELLS_TO_CALL_FRAME)
-
-          (RTS)
-
-   (label TEMP__VM_POP_N_CELLS_TO_CALL_FRAME)
-          (byte $00)))
-
-(module+ test #| vm_pop_n_cells_to_call_frame |#
-  (define test-pop-n-cells-code
-    (list
-     (JSR VM_CELL_STACK_PUSH_INT_1)
-     (JSR VM_CELL_STACK_PUSH_INT_0)
-     (JSR VM_CELL_STACK_PUSH_INT_2)
-     (JSR VM_CELL_STACK_PUSH_NIL)
-     (JSR VM_ALLOC_CALL_FRAME)
-     (LDA !$2)
-     (JSR VM_POP_N_CELLS_TO_CALL_FRAME)))
-
-  (define test-pop-n-cells-state-after
-    (run-code-in-test test-pop-n-cells-code))
-
-  (check-equal? (vm-stack->strings test-pop-n-cells-state-after)
-                '("stack holds 2 items"
-                  "cell-int $0000"    ;; tos
-                  "cell-int $0001"))
-  (check-equal? (vm-cells->strings (memory-list test-pop-n-cells-state-after #xcd02 #xcd05))
-                '("cell-int $0002"             ;; copy in memory order (not stack order)
-                  "cell-pair-ptr $0000")))
 
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -1973,7 +2070,9 @@
           VM_REFCOUNT_INCR_CELL_PAIR
 
           VM_ALLOC_CELL_PAIR
+
           VM_ALLOC_CALL_FRAME
+          VM_SAVE_EXEC_STATE_TO_CALL_FRAME
           VM_POP_CALL_FRAME
 
           VM_FREE_NON_ATOMIC
@@ -1986,8 +2085,6 @@
           VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS
           VM_CELL_STACK_POP
           VM_CELL_STACK_PUSH
-
-          VM_POP_N_CELLS_TO_CALL_FRAME
 
           VM_COPY_PTR2_TO_PTR
           VM_COPY_PTR_TO_PTR2

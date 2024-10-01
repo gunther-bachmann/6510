@@ -4,7 +4,7 @@
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
 
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings ast-const-get))
+(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings ast-const-get ZP_VM_PC ZP_LOCALS_PTR ZP_PARAMS_PTR))
 (require (only-in "./vm-lists.rkt" vm-lists))
 
 (module+ test
@@ -88,17 +88,12 @@
 
 (define VM_INTERPRETER_VARIABLES
   (list
-   (byte-const ZP_VM_PC #x14)      ;; $14..15 program counter
-   (byte-const ZP_LOCALS_PTR #x0b) ;; $0b..0c pointer to locals (in call-frame)
-   (byte-const ZP_PARAMS_PTR #x0d) ;; $0d..0e pointer to params (in call-frame)
    ;; avail:
+   ;; $0b..0e
+   ;; $14..15
    ;; $0f..11
    ;; $18..25
    ))
-
-(define ZP_VM_PC (ast-const-get VM_INTERPRETER_VARIABLES "ZP_VM_PC"))
-(define ZP_LOCALS_PTR (ast-const-get VM_INTERPRETER_VARIABLES "ZP_LOCALS_PTR"))
-(define ZP_PARAMS_PTR (ast-const-get VM_INTERPRETER_VARIABLES "ZP_PARAMS_PTR"))
 
 ;; initialize PC to $8000
 (define VM_INTERPRETER_INIT
