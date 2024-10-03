@@ -154,11 +154,11 @@
     [(> stack-tos-idx #xf0) (list "stack is empty")]
     [else
      (define stack-ptr (peek-word-at-address state ZP_CELL_STACK_BASE_PTR))
-     (define stack (memory-list state stack-ptr (+ stack-tos-idx stack-ptr)))
+     (define stack (memory-list state stack-ptr (+ 1 stack-tos-idx stack-ptr)))
      (define stack-values stack)
      (define stack-item-no (/ (add1 stack-tos-idx) 2))
      (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
-           (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair))) (pairing stack-values))))]))
+           (reverse (map (lambda (pair) (vm-cell->string (cdr pair) (car pair))) (pairing stack-values))))]))
 
 ;; make a list of adjacent pairs
 (define (pairing list (paired-list '()))
@@ -215,8 +215,8 @@
   (define test-vm_stack_to_string-a-code
     (list (JSR VM_CELL_STACK_PUSH_NIL)
           (JSR VM_CELL_STACK_PUSH_NIL)
-          (LDA !$03)
-          (LDY !$01)
+          (LDA !$01)
+          (LDX !$03)
           (JSR VM_CELL_STACK_PUSH_INT)))
 
   (define test-vm_stack_to_string-a-state-after
@@ -422,7 +422,7 @@
           ;; now check whether deallocation needs to take place (that is the cell being popped is a ptr)
           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; tagged low byte
           (AND !$03)
-          (BEQ DO_POP__VM_CELL_STACK_POP) ;; is no pointer => jump
+          (BEQ DO_POP_2DEY__VM_CELL_STACK_POP) ;; is no pointer => jump
 
           ;; is a pointer?
           (LSR)
@@ -438,7 +438,7 @@
           ;; move cell-pair-ptr (tos) -> zp_ptr
           (DEY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)  ;; high byte
-          (BEQ DO_POP__VM_CELL_STACK_POP_NO_DEC) ;; hight byte = 0 => is nil => no need to decr cell pair
+          (BEQ DO_POP__VM_CELL_STACK_POP) ;; hight byte = 0 => is nil
           (STA ZP_PTR+1)      ;; to zp_ptr+1
           (INY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)  ;; tagged low byte
@@ -449,11 +449,12 @@
 
    (label VM_CELL_STACK_POP__NO_GC) ;; entry for just popping!
           (LDY ZP_CELL_STACK_TOS)   ;; restore tos
+
+   (label DO_POP_2DEY__VM_CELL_STACK_POP)
           (DEY)               ;; dex (such that in total x-=3)
 
    (label DO_POP__VM_CELL_STACK_POP)
           (DEY) ;; y was already decremented => dec 2x
-   (label DO_POP__VM_CELL_STACK_POP_NO_DEC)
           (STY ZP_CELL_STACK_TOS) ;; store new tos
           (RTS)))
 
@@ -467,10 +468,9 @@
            (LDA !$00)              ;; is never run
            (STA ZP_CELL_STACK_TOS))))
 
-  (check-equal? (memory-list test-vm_cell_stack_pop-a-state-after ZP_CELL_STACK_TOS (+ ZP_CELL_STACK_TOS 2))
-                '(#xfe
-                  #x02 #x00 )
-                "tos = fe (empty), nil is (still) in memory but off from stack, second pop runs into brk, no clearing of zp_cell_tos!"))
+  (check-equal? (memory-list test-vm_cell_stack_pop-a-state-after ZP_CELL_STACK_TOS ZP_CELL_STACK_TOS)
+                '(#xff)
+                "tos = ff (empty)"))
 
 ;; push a cell in A/X (high/low) onto the cell-stack
 ;; input: stack
@@ -542,26 +542,30 @@
    ;; output: stack++[INT]
    ;; check stack full!
    (label VM_CELL_STACK_PUSH_INT)
+          (TAY)
+          (TXA)
           (ASL A)
           (ASL A)
           (AND !$7c)           ;; mask out top and two low bits!
+          (TAX)
+          (TYA)
           (CLC)
           (BCC VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_INT_m1)
-          (LDA !$7c) ;; 1f << 2
-          (LDX !$ff)
+          (LDA !$ff) ;; 1f << 2
+          (LDX !$7c)
           (BNE VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_INT_2)
-          (LDA !$00)
-          (LDX !$02)
+          (LDA !$02)
+          (LDX !$00)
           (BNE VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_INT_1)
-          (LDA !$00)
-          (LDX !$01)
-          (BNE VM_CELL_STACK_PUSH)
+          (LDA !$01)
+          (LDX !$00)
+          (BEQ VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_INT_0)
           (LDA !$00)
@@ -584,10 +588,10 @@
 
    (label NO_ERROR__VM_CELL_STACK_PUSH)
           (INY)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte!
+          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte! (untagged)
           (INY)
           (TXA)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte
+          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte (tagged)
           (STY ZP_CELL_STACK_TOS)      ;; set new tos
           (RTS)))
 
@@ -652,13 +656,13 @@
   (define test-vm_cell_stack_push_int-a-state-after
     (run-code-in-test
      (list (JSR VM_CELL_STACK_PUSH_INT_m1)
-           (LDA !$10) ;; -4096
-           (LDY !$00)
+           (LDA !$00) ;; -4096
+           (LDX !$10)
            (JSR VM_CELL_STACK_PUSH_INT)
            (JSR VM_CELL_STACK_PUSH_INT_1)
            (JSR VM_CELL_STACK_PUSH_INT_0)
-           (LDA !$0f) ;; 4095
-           (LDY !$ff)
+           (LDA !$ff) ;; 4095
+           (LDX !$0f)
            (JSR VM_CELL_STACK_PUSH_INT))))
 
   (check-equal? (vm-stack->strings test-vm_cell_stack_push_int-a-state-after)
@@ -673,8 +677,8 @@
   (define test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after
     (run-code-in-test
      (list
-      (LDA !$02)
-      (LDY !$12)
+      (LDX !$02)
+      (LDA !$12)
       (JSR VM_CELL_STACK_PUSH_INT)                      ;;  push cell-int $0212
 
       (JSR VM_ALLOC_CELL_PAIR)
@@ -731,7 +735,7 @@
           (STX ZP_TEMP)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)
           (PHA) ;; STA ZP_TEMP2
-          (INY)
+          (DEY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)
           (LDY ZP_TEMP)
           (INY)
@@ -747,8 +751,8 @@
      (list
       (JSR VM_ALLOC_CELL_PAIR)
       (JSR VM_REFCOUNT_INCR_CELL_PAIR)
-      (LDA !$02)
-      (LDY !$12)
+      (LDX !$02)
+      (LDA !$12)
       (JSR VM_CELL_STACK_PUSH_INT)
       (LDY !$00)
       (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLy_OF_ZP_PTR)
@@ -761,9 +765,9 @@
   (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after)
                 '("stack is empty"))
   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after ZP_PTR (+ 1 ZP_PTR))
-                '(#x04 #xcd)
+                '(#x04 #xcc)
                 "zp_ptr => cd04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after #xcd04 #xcd07)
+  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_celly_of_zp_ptr-a-state-after #xcc04 #xcc07)
                 '(#x08 #x12 #x02 #x00)
                 "zp_ptr => (int530 . nil)"))
 
@@ -1739,96 +1743,220 @@
                 '(#x04 #xcd )
                 "case 2c: root of free tree is cell-pair at $cd04"))
 
-;; ----------------------------------------
-;; page type: call-frame page
-;; => allocation/deallocation is always done on tos
-;;    no need for a free list (stack structure is coded into the stack pages)
-;;    need for max size left
-;; memory layout of call frame page (organized in stack)
-;;  00 : unused (page type)
-;;  01 : previous page (just high byte), 00 for first stack page
-;;  02 : first frame payload byte 0
-;;  ... : first frame payload byte size-1
-;;  free-1 : size of (prev) frame
-;;  free : unused
-;; ...ff : unused
-;;
-;; VM_FREE_SLOT_FOR_PAGE + pageidx: holds free-idx (initially 02) <- points to the first free byte (-1 = size of previous)
+;; input:  A = size (needs to include 32 bytes cell-stack + 8 byte (pc, old params, old locals, old cell stack base ptr) + 2 * #locals
+;;         ZP_CELL_STACK_BASE_PTR
+;;         ZP_CELL_STACK_TOS
+;;         VM_FREE_CALL_STACK_PAGE
+;; output: ZP_CALL_FRAME,
+;;         Y/X=low-byte, high-byte
+;; info: back linking previous page is automatically done through zp_params_ptr (pointing to the previous page, if so)
+(define VM_ALLOC_CALL_FRAME
+  (list
+   ;; ----------------------------------------
+   (label VM_ALLOC_CALL_FRAME)
+          (STA ZP_TEMP)
+          (LDX VM_FREE_CALL_STACK_PAGE) ;; get the tos page for call stacks
+          (BEQ ALLOCATE_NEW_PAGE__VM_ALLOC_CALL_FRAME)
+
+          (LDA ZP_CELL_STACK_TOS) ;; make sure to have Y loaded if page is reused
+          (CLC)
+          (ADC ZP_CELL_STACK_BASE_PTR)
+          (TAY) ;; y = tos + base_ptr
+          (CLC)
+          (ADC ZP_TEMP)
+          (BCC USE_GIVEN_PAGE__VM_ALLOC_CALL_FRAME) ;; still on same page
+
+          ;; if this call frame (size) does not fit on existing page, continue to allocate a new page
+
+   (label ALLOCATE_NEW_PAGE__VM_ALLOC_CALL_FRAME)
+          (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; A = new page
+          ;; set this new page as the TOS for call stack allocation
+          (STA VM_FREE_CALL_STACK_PAGE)
+          (TAX)
+          (LDY !$01) ;; first free byte is 02, but y is incremented
+
+   (label USE_GIVEN_PAGE__VM_ALLOC_CALL_FRAME)
+          (STX ZP_CALL_FRAME+1) ;; x = stack page
+          (INY)
+          (STY ZP_CALL_FRAME)   ;; new call frame start
+
+          (RTS)))
+
+(module+ test #| vm_alloc_call_frame |#
+  (define alloc-call-frame-code
+    (list
+     (LDA !$80)
+     (JSR VM_ALLOC_CALL_FRAME)))
+
+  (define alloc-call-frame-state-after
+    (run-code-in-test alloc-call-frame-code))
+
+  (check-equal? (memory-list alloc-call-frame-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
+                (list #x02 #xcd)
+                "pointer to allocated frame")
+
+  (define alloc-call-frame-2times-code
+    (list
+     (LDA !$80)
+     (JSR VM_ALLOC_CALL_FRAME)
+     (LDA ZP_CALL_FRAME)
+     (STA ZP_CELL_STACK_BASE_PTR)
+     (LDA !$80) ;; does not fit again in this call frame
+     (STA ZP_CELL_STACK_TOS) ;;
+     (JSR VM_ALLOC_CALL_FRAME)))
+
+  (define alloc-call-frame-2times-state-after
+    (run-code-in-test alloc-call-frame-2times-code))
+
+  (check-equal? (memory-list alloc-call-frame-2times-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
+                (list #x02 #xcc)
+                "pointer to allocated frame")
+
+  (define alloc-call-frame-2times-fitting-code
+    (list
+     (LDA !$20)
+     (JSR VM_ALLOC_CALL_FRAME)
+     (LDA ZP_CALL_FRAME)
+     (STA ZP_CELL_STACK_BASE_PTR)
+     (LDA !$1F) ;; stack used up $20 slots
+     (STA ZP_CELL_STACK_TOS)
+     (LDA !$20)
+     (JSR VM_ALLOC_CALL_FRAME)))
+
+  (define alloc-call-frame-2times-fitting-state-after
+    (run-code-in-test alloc-call-frame-2times-fitting-code))
+
+  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
+                (list #x22 #xcd)
+                "pointer to allocated frame"))
+
+(define VM_CELL_STACK_WRITE_TOS_TO_PARAM_0
+  (list
+   (label VM_CELL_STACK_WRITE_TOS_TO_PARAM_0)
+          (RTS)))
 
 
-;; input: X = previous call stack page
-;; output: X = page allocated
-;;         page bitmap is adjusted
-;;         page is initialized: previous call stack page is set
-;;         VM_FREE_SLOT_FOR_PAGE is set to 02
-;;         VM_FREE_CALL_STACK_PAGE is set to this allocated page
-;; (define VM_ALLOC_PAGE__CALL_FRAME
-;;   (list
-;;    (label VM_ALLOC_PAGE__CALL_FRAME)
-;;           ;; (TXA)
-;;           ;; (PHA)
+;; input:   A = number of parameters on the stack to be used in this call frame
+;;          x = number of locals to allocate on call frame
+;;          zp_cell_frame = freshly allocated frame that has min size x*2 + 6 + 32
+;;          zp_vm_pc          -> saved into cell frame (for pop)
+;;          zp_vm_params_ptr  -> saved into cell frame (for pop)
+;;          zp_vm_locals_ptr  -> saved into cell frame (for pop)
+;; oputput: zp_vm_params_ptr = pointer into the previous cell-stack
+;;          xp_vm_locals_ptr = pointer into the current call frame locals
+;;          zp_cell_stack_base_ptr = point into the current call frame (right after locals)
+;;          zp_cell_stack_tos = 0
+;; NO CHECK IS DONE, zp_vm_pc is not overwritten
+(define VM_SAVE_EXEC_STATE_TO_CALL_FRAME
+  (list
+   (label VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+          (ASL A) ;; # params * 2 (number of bytes)
+          (STA ZP_TEMP)
+          (LDA ZP_CELL_STACK_TOS)
+          (SEC)
+          (SBC ZP_TEMP)
+          (STA ZP_TEMP) ;; keep offset to cell-stack-base-ptr for new parameter-ptr
 
-;;           (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; A = new page
+          ;; copy 8 bytes
+          (LDY !$07)
+   (label LOOP__VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+          (LDA ZP_VM_PC,y)
+          (STA (ZP_CALL_FRAME),y)
+          (DEY)
+          (BPL LOOP__VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
 
-;;           ;; set this new page as the TOS for call stack allocation
-;;           (STA VM_FREE_CALL_STACK_PAGE)
+          ;; set new parameter pointer
+          (LDA ZP_CELL_STACK_BASE_PTR+1)
+          (STA ZP_PARAMS_PTR+1)
+          (LDA ZP_CELL_STACK_BASE_PTR)
+          (SEC)
+          (ADC ZP_TEMP)
+          (STA ZP_PARAMS_PTR)
 
-;;           ;; set zp_ptr to point to this page (in order to write previous page in here) <- probably not necessary, since zp_params_ptr should point there
-;;           ;; (STA ZP_PTR+1)
-;;           ;; (LDX !$00)
-;;           ;; (STX ZP_PTR)
-;;           (TAX) ;; now new page is in x (and not modified anymore => returned)
+          ;; set new ZP_LOCALS_PTR and ZP_CELL_STACK_BASE_PTR
+          (LDA ZP_CALL_FRAME+1)
+          (STA ZP_LOCALS_PTR+1)
+          (STA ZP_CELL_STACK_BASE_PTR+1)
+          (LDA ZP_CALL_FRAME)
+          (CLC)
+          (ADC !$08)
+          (STA ZP_LOCALS_PTR)
 
-;;           ;; (LDA !$02) ;; first free call frame byte is at offset 2
-;;           ;; (STA VM_FREE_SLOT_FOR_PAGE,x) ;; set first free slot of the new page (in x) to 02 <- not really used
+          (TXA)
+          (ASL A) ;; # of locals *2 = bytes
+          (ADC ZP_LOCALS_PTR)
+          (STA ZP_CELL_STACK_BASE_PTR)
 
-;;           ;; initialize allocated page
-;;           ;; (PLA)
-;;           ;; (LDY !$01)
-;;           ;; (STA (ZP_PTR),y) ;; set previous page in byte 01 of the new allocated page <- not really used either
+          (LDA !$ff)
+          (STA ZP_CELL_STACK_TOS) ;; set this one to 0
 
-;;           (RTS)))
+          (RTS)))
 
-;; (module+ test #| VM_ALLOC_PAGE__CALL_FRAME |#
-;;   (define alloc-page-call-frame-code
-;;     (list
-;;      (LDX !$00) ;; previous not existent
-;;      (JSR VM_ALLOC_PAGE__CALL_FRAME)))
+(module+ test #| vm_save_exec_state_to_call_frame |#
 
-;;   (define alloc-page-call-frame-state-after
-;;     (run-code-in-test alloc-page-call-frame-code))
+  ;; before
+  ;; cd04 <- ZP_PARAMS_PTR
+  ;; cd08 <- ZP_CALL_FRAME
+  ;; cd10 <- ZP_LOCALS_PTR
+  ;; cd16 <- ZP_CELL_STACK_BASE_PTR
+  ;; cd1b <- ZP_CELL_STACK_TOS (base ptr + 05, 3 elements on stack)
+  ;; cc06 <- ZP_VM_PC
 
-;;   (check-equal? (memory-list alloc-page-call-frame-state-after #xcd01 #xcd01)
-;;                 (list #x00)
-;;                 "point to previous call frame page is 00 (none)")
-;;   (check-equal? (memory-list alloc-page-call-frame-state-after #xcfcd #xcfcd)
-;;                 (list #x02)
-;;                 "first free slot of page cd is 02")
-;;   (check-equal? (memory-list alloc-page-call-frame-state-after #xcec1 #xcec1)
-;;                 (list #xcd)
-;;                 "tos for call frame ois page cd")
+  ;; after
+  ;; cd18 <- ZP_PARAMS_PTR (2 params, cd18..cd19, cd1a..cd1b)
+  ;; cd1c <- ZP_CALL_FRAME
+  ;; cd24 <- ZP_LOCALS_PTR
+  ;; cd2a <- ZP_CELL_STACK_BASE_PTR
+  ;; cd29 <- ZP_CELL_STACK_TOS ($ff)
+  ;; cc06 <- ZP_VM_PC (unchanged)
 
-;;   (define alloc-second-page-call-frame-code
-;;     (append
-;;      alloc-page-call-frame-code
-;;      (list
-;;       (LDX !$cd) ;; previous
-;;       (JSR VM_ALLOC_PAGE__CALL_FRAME))))
+  (define test-save-exec-state-code
+    (list
+     ;; fill pointers that will be saved
+     (LDX !$04)
+     (STX ZP_PARAMS_PTR) ;; $04
+     (LDX !$08)
+     (STX ZP_CALL_FRAME)
+     (LDX !$10)
+     (STX ZP_LOCALS_PTR) ;; $10
+     (LDX !$16)
+     (STX ZP_CELL_STACK_BASE_PTR)
+     (LDX !$05)
+     (STX ZP_CELL_STACK_TOS)
+     (INX)
+     (STX ZP_VM_PC)     ;; $17
 
-;;   (define alloc-second-page-call-frame-state-after
-;;     (run-code-in-test alloc-second-page-call-frame-code))
+     (LDX ZP_CALL_FRAME+1) ;; $cd
+     (STX ZP_PARAMS_PTR+1)
+     (STX ZP_LOCALS_PTR+1)
+     (STX ZP_CELL_STACK_BASE_PTR+1)
+     (DEX)                      ;; $cc
+     (STX ZP_VM_PC+1)
 
-;;   (check-equal? (memory-list alloc-second-page-call-frame-state-after #xcc01 #xcc01)
-;;                 (list #xcd)
-;;                 "point to previous call frame page is cd")
-;;   (check-equal? (memory-list alloc-second-page-call-frame-state-after #xcfcc #xcfcc)
-;;                 (list #x02)
-;;                 "first free slot of page cc is 02")
-;;   (check-equal? (memory-list alloc-second-page-call-frame-state-after #xcec1 #xcec1)
-;;                 (list #xcc)
-;;                 "tos for call frame ois page cc"))
+     ;; allocate new call frame space that can hold $20 bytes
+     (LDA !$20)
+     (JSR VM_ALLOC_CALL_FRAME)
 
+     (LDA !$02) ;; two params
+     (LDX !$03) ;; three locals
+     (JSR VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+     ))
 
+  (define test-save-exec-state-state-after
+    (run-code-in-test test-save-exec-state-code))
+
+  (check-equal? (memory-list test-save-exec-state-state-after ZP_PARAMS_PTR (add1 ZP_PARAMS_PTR))
+                (list #x18 #xcd))
+  (check-equal? (memory-list test-save-exec-state-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
+                (list #x1c #xcd))
+  (check-equal? (memory-list test-save-exec-state-state-after ZP_LOCALS_PTR (add1 ZP_LOCALS_PTR))
+                (list #x24 #xcd))
+  (check-equal? (memory-list test-save-exec-state-state-after ZP_CELL_STACK_BASE_PTR (add1 ZP_CELL_STACK_BASE_PTR))
+                (list #x2a #xcd))
+  (check-equal? (memory-list test-save-exec-state-state-after ZP_CELL_STACK_TOS ZP_CELL_STACK_TOS)
+                (list #xff))
+  (check-equal? (memory-list test-save-exec-state-state-after ZP_VM_PC (add1 ZP_VM_PC))
+                (list #x06 #xcc)))
 
 ;; zp_params_ptr := zp_cell_stack_base_ptr + zp_cell_stack_tos
 ;; if zp_params_ptr is on a different page than zp_call_frame,
@@ -1876,6 +2004,7 @@
           (SEC)
           (SBC ZP_CELL_STACK_BASE_PTR)
           (STA ZP_CELL_STACK_TOS)
+          (INC ZP_CELL_STACK_TOS) ;; point to the tagged lowbyte
 
           ;; set ZP_CALL_FRAME
           (LDA ZP_LOCALS_PTR+1)
@@ -1888,214 +2017,71 @@
           (RTS)))
 
 (module+ test #| vm_pop_call_frame |#
+  ;; before
+  ;; cd18 <- ZP_PARAMS_PTR (2 params, cd18..cd19, cd1a..cd1b)
+  ;; cd1c <- ZP_CALL_FRAME
+  ;; cd24 <- ZP_LOCALS_PTR
+  ;; cd2a <- ZP_CELL_STACK_BASE_PTR
+  ;; cd29 <- ZP_CELL_STACK_TOS ($ff)
+  ;; cc06 <- ZP_VM_PC (unchanged)
+
+  ;; after
+  ;; cd04 <- ZP_PARAMS_PTR
+  ;; cd08 <- ZP_CALL_FRAME
+  ;; cd10 <- ZP_LOCALS_PTR
+  ;; cd16 <- ZP_CELL_STACK_BASE_PTR
+  ;; cd19 <- ZP_CELL_STACK_TOS (base ptr + 03, 2 elements on stack, 1 remaining + 1 result)
+  ;; cc06 <- ZP_VM_PC
+
   (define test-pop-call-frame-code
     (list
-     (LDA !$80)
+     ;; fill pointers that will be saved
+     (LDX !$04)
+     (STX ZP_PARAMS_PTR) ;; $04
+     (LDX !$08)
+     (STX ZP_CALL_FRAME)
+     (LDX !$10)
+     (STX ZP_LOCALS_PTR) ;; $10
+     (LDX !$16)
+     (STX ZP_CELL_STACK_BASE_PTR)
+     (LDX !$05)
+     (STX ZP_CELL_STACK_TOS)
+     (INX)
+     (STX ZP_VM_PC)     ;; $17
+
+     (LDX ZP_CALL_FRAME+1) ;; $cd
+     (STX ZP_PARAMS_PTR+1)
+     (STX ZP_LOCALS_PTR+1)
+     (STX ZP_CELL_STACK_BASE_PTR+1)
+     (DEX)                      ;; $cc
+     (STX ZP_VM_PC+1)
+
+     ;; allocate new call frame space that can hold $20 bytes
+     (LDA !$20)
      (JSR VM_ALLOC_CALL_FRAME)
-     (LDA !$80)  ;; doesn't fit, second page is allocated
-     (JSR VM_ALLOC_CALL_FRAME)
-     (JSR VM_POP_CALL_FRAME)))
+
+     (LDA !$02) ;; two params
+     (LDX !$03) ;; three locals
+     (JSR VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+
+     (JSR VM_POP_CALL_FRAME)
+     ))
 
   (define test-pop-call-frame-state-after
     (run-code-in-test test-pop-call-frame-code))
 
-  (check-equal? (memory-list test-pop-call-frame-state-after #xcfcc #xcfcc)
-                (list #x02)
-                "first free slot of page cc is (again) 02")
-  (check-equal? (memory-list test-pop-call-frame-state-after #xcec1 #xcec1)
-                (list #xcc)
-                "tos for call frame is page cc")
-  (check-equal? (memory-list test-pop-call-frame-state-after #xcc01 #xcc01)
-                (list #xcd)
-                "previous stack page is cd")
-
-  (define test-pop-call-frame-2times-code
-    (list
-     (LDA !$80)
-     (JSR VM_ALLOC_CALL_FRAME)
-     (LDA !$80) ;; doesn't fit, second page is allocated
-     (JSR VM_ALLOC_CALL_FRAME)
-     (JSR VM_POP_CALL_FRAME)
-     (JSR VM_POP_CALL_FRAME)))
-
-  (define test-pop-call-frame-2times-state-after
-    (run-code-in-test test-pop-call-frame-2times-code))
-
-  (check-equal? (memory-list test-pop-call-frame-2times-state-after #xcfcd #xcfcd)
-                (list #x02)
-                "first free slot of page cd is (again) 02")
-  (check-equal? (memory-list test-pop-call-frame-2times-state-after #xcec1 #xcec1)
-                (list #xcd)
-                "tos for call frame is page (again) cd")
-  (check-equal? (memory-list test-pop-call-frame-2times-state-after #xcd01 #xcd01)
-                (list #x00)
-                "previous stack page is 00"))
-
-;; input: A = size (needs to include 32 bytes cell-stack + 8 byte (pc, old params, old locals, old cell stack base ptr) + 2 * #locals
-;; output: ZP_CALL_FRAME, Y/X=low-byte, high-byte
-(define VM_ALLOC_CALL_FRAME
-  (list
-   ;; ----------------------------------------
-   (label VM_ALLOC_CALL_FRAME)
-          (LDX VM_FREE_CALL_STACK_PAGE) ;; get the tos page for call stacks
-          (BEQ ALLOCATE_NEW_PAGE__VM_ALLOC_CALL_FRAME)
-
-          (LDY ZP_CELL_STACK_TOS) ;; make sure to have Y loaded if page is reused
-          (SEC) ;; add one additionally for storing the size
-          (ADC ZP_CELL_STACK_TOS)  ;; add number of bytes to allocate to current tos
-          (BCC USE_GIVEN_PAGE__VM_ALLOC_CALL_FRAME) ;; still on same page
-
-          ;; if this call frame (size) does not fit on existing page, continue to allocate a new page
-
-   (label ALLOCATE_NEW_PAGE__VM_ALLOC_CALL_FRAME)
-          (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; A = new page
-          ;; set this new page as the TOS for call stack allocation
-          (STA VM_FREE_CALL_STACK_PAGE)
-          (TAX)
-          (LDY !$01) ;; first free byte is 02, but y is incremented
-
-   (label USE_GIVEN_PAGE__VM_ALLOC_CALL_FRAME)
-          (STX ZP_CALL_FRAME+1) ;; x = stack page
-          (INY)
-          (STY ZP_CALL_FRAME)   ;; new call frame start
-
-          (RTS)))
-
-
-(define VM_CELL_STACK_WRITE_TOS_TO_PARAM_0
-  (list
-   (label VM_CELL_STACK_WRITE_TOS_TO_PARAM_0)
-          (RTS)))
-
-
-;; input: A = number of parameters on the stack to be used in this call frame
-;;        x = number of locals to allocate on call frame
-;;        zp_cell_frame = freshly allocated frame that has min size x*2 + 6 + 32
-;;        zp_vm_pc          -> saved into cell frame (for pop)
-;;        zp_vm_params_ptr  -> saved into cell frame (for pop)
-;;        zp_vm_locals_ptr  -> saved into cell frame (for pop)
-;; oputput: zp_vm_params_ptr = pointer into the previous cell-stack
-;;          xp_vm_locals_ptr = pointer into the current call frame locals
-;;          zp_cell_stack_base_ptr = point into the current call frame (right after locals)
-;;          zp_cell_stack_tos = 0
-;; NO CHECK IS DONE, zp_vm_pc is not overwritten
-(define VM_SAVE_EXEC_STATE_TO_CALL_FRAME
-  (list
-   (label VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
-          (ASL A) ;; # params * 2 (number of bytes)
-          (STA ZP_TEMP)
-          (LDA ZP_CELL_STACK_TOS)
-          (SEC)
-          (SBC ZP_TEMP)
-          (STA ZP_TEMP) ;; keep offset to cell-stack-base-ptr for new parameter-ptr
-
-          ;; copy 8 bytes
-          (LDY !$07)
-   (label LOOP__VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
-          (LDA ZP_VM_PC,y)
-          (STA (ZP_CALL_FRAME),y)
-          (DEY)
-          (BPL LOOP__VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
-
-          ;; set new parameter pointer
-          (LDA ZP_CELL_STACK_BASE_PTR+1)
-          (STA ZP_PARAMS_PTR+1)
-          (LDA ZP_CELL_STACK_BASE_PTR)
-          (ADC ZP_TEMP)
-          (STA ZP_PARAMS_PTR)
-
-          ;; set new ZP_LOCALS_PTR and ZP_CELL_STACK_BASE_PTR
-          (LDA ZP_CALL_FRAME+1)
-          (STA ZP_LOCALS_PTR+1)
-          (STA ZP_CELL_STACK_BASE_PTR+1)
-          (LDA ZP_CALL_FRAME)
-          (CLC)
-          (ADC !$08)
-          (STA ZP_LOCALS_PTR)
-
-          (TXA)
-          (ASL A) ;; # of locals *2 = bytes
-          (ADC ZP_LOCALS_PTR)
-          (STA ZP_CELL_STACK_BASE_PTR)
-
-          (LDA !$00)
-          (STA ZP_CELL_STACK_TOS) ;; set this one to 0
-
-          (RTS)))
-
-(module+ test #| vm_alloc_call_frame |#
-  (define alloc-call-frame-code
-    (list
-     (LDA !$80)
-     (JSR VM_ALLOC_CALL_FRAME)))
-
-  (define alloc-call-frame-state-after
-    (run-code-in-test alloc-call-frame-code))
-
-  (check-equal? (memory-list alloc-call-frame-state-after #xcfcd #xcfcd)
-                (list #x83)
-                "first free slot of page cc is 83")
-  (check-equal? (memory-list alloc-call-frame-state-after #xcec1 #xcec1)
-                (list #xcd)
-                "tos for call frame is page cd")
-  (check-equal? (memory-list alloc-call-frame-state-after #xcd01 #xcd01)
-                (list #x00)
-                "previous stack page is 00")
-  (check-equal? (memory-list alloc-call-frame-state-after #xcd82 #xcd82)
-                (list #x80)
-                "size of entry is 80")
-  (check-equal? (memory-list alloc-call-frame-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
-                (list #x02 #xcd)
-                "pointer to allocated frame")
-
-  (define alloc-call-frame-2times-code
-    (list
-     (LDA !$80)
-     (JSR VM_ALLOC_CALL_FRAME)
-     (LDA !$80) ;; does not fit again in this call frame
-     (JSR VM_ALLOC_CALL_FRAME)))
-
-  (define alloc-call-frame-2times-state-after
-    (run-code-in-test alloc-call-frame-2times-code))
-
-  (check-equal? (memory-list alloc-call-frame-2times-state-after #xcfcc #xcfcc)
-                (list #x83)
-                "first free slot of page cc is 83")
-  (check-equal? (memory-list alloc-call-frame-2times-state-after #xcec1 #xcec1)
-                (list #xcc)
-                "tos for call frame is page cc")
-  (check-equal? (memory-list alloc-call-frame-2times-state-after #xcc01 #xcc01)
-                (list #xcd)
-                "previous stack page is cd")
-  (check-equal? (memory-list alloc-call-frame-2times-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
-                (list #x02 #xcc)
-                "pointer to allocated frame")
-
-  (define alloc-call-frame-2times-fitting-code
-    (list
-     (LDA !$20)
-     (JSR VM_ALLOC_CALL_FRAME)
-     (LDA !$20)
-     (JSR VM_ALLOC_CALL_FRAME)))
-
-  (define alloc-call-frame-2times-fitting-state-after
-    (run-code-in-test alloc-call-frame-2times-fitting-code))
-
-  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after #xcfcd #xcfcd)
-                (list #x44)
-                "first free slot of page cd is 44")
-  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after #xcec1 #xcec1)
-                (list #xcd)
-                "tos for call frame is page cd")
-  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after #xcd22 #xcd22)
-                (list #x20)
-                "size of first allocation is 20")
-  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after #xcd43 #xcd43)
-                (list #x20)
-                "size of second allocation is 20")
-  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
-                (list #x23 #xcd)
-                "pointer to allocated frame"))
+  (check-equal? (memory-list test-pop-call-frame-state-after ZP_PARAMS_PTR (add1 ZP_PARAMS_PTR))
+                (list #x04 #xcd))
+  (check-equal? (memory-list test-pop-call-frame-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
+                (list #x08 #xcd))
+  (check-equal? (memory-list test-pop-call-frame-state-after ZP_LOCALS_PTR (add1 ZP_LOCALS_PTR))
+                (list #x10 #xcd))
+  (check-equal? (memory-list test-pop-call-frame-state-after ZP_CELL_STACK_BASE_PTR (add1 ZP_CELL_STACK_BASE_PTR))
+                (list #x16 #xcd))
+  (check-equal? (memory-list test-pop-call-frame-state-after ZP_CELL_STACK_TOS ZP_CELL_STACK_TOS)
+                (list #x03))
+  (check-equal? (memory-list test-pop-call-frame-state-after ZP_VM_PC (add1 ZP_VM_PC))
+                (list #x06 #xcc)))
 
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
