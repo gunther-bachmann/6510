@@ -122,7 +122,7 @@
   (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
   (require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
 
-  (define (wrap-bytecode-for-test bc)
+  (define (wrap-code-for-test bc)
     (append (list (org #xc000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER))
             bc
@@ -130,7 +130,7 @@
             vm-memory-manager))
 
   (define (run-code-in-test bc (debug #f))
-    (define wrapped-code (wrap-bytecode-for-test bc))
+    (define wrapped-code (wrap-code-for-test bc))
     (define state-before
       (6510-load-multiple (initialize-cpu)
                           (assemble-to-code-list wrapped-code)))
@@ -145,7 +145,8 @@
           ZP_VM_PC
           ZP_LOCALS_PTR
           ZP_PARAMS_PTR
-)
+          ZP_CELL_STACK_TOS
+          ZP_CELL_STACK_BASE_PTR)
 
 ;; produce strings describing the current cell-stack status
 (define (vm-stack->strings state)
@@ -550,7 +551,7 @@
    (label VM_CELL_STACK_PUSH_INT_2)
           (LDA !$02)
           (LDX !$00)
-          (BNE VM_CELL_STACK_PUSH)
+          (BEQ VM_CELL_STACK_PUSH)
 
    (label VM_CELL_STACK_PUSH_INT_1)
           (LDA !$01)
@@ -616,8 +617,8 @@
                   "cell-pair-ptr $0000"
                   "cell-pair-ptr $0000")))
 
-;; input: X = lowbyte of int
-;;        A = tagged highbyte of int
+;; input: A = lowbyte of int
+;;        X = tagged highbyte of int
 (define VM_CELL_STACK_WRITE_INT_TO_TOS
   (list
    (label VM_CELL_STACK_WRITE_INT_1_TO_TOS)
@@ -635,7 +636,6 @@
           (ASL A)
           (ASL A)
           (AND !$7c)            ;; mask out top and two low bits!
-          (INY)
           (STA (ZP_CELL_STACK_BASE_PTR),y)   ;; write tagged int high byte first
           (DEY)
           (TXA)
@@ -781,20 +781,13 @@
    (label VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS)
           (LDY ZP_CELL_STACK_TOS)
 
-          ;; x = x/2
-
-          (LDA ZP_PTR+1,x) ;; high byte of ptr
-          (STA (ZP_CELL_STACK_BASE_PTR),y)
-          (INY)
-
-          (TXA)
-          (LSR)
-          (TAX)
-
           (LDA ZP_PTR_TAGGED,x)
           (STA (ZP_CELL_STACK_BASE_PTR),y)    ;; tagged low byte
-          (RTS))
-)
+          (DEY)
+          (LDA ZP_PTR+1,x) ;; high byte of ptr
+          (STA (ZP_CELL_STACK_BASE_PTR),y)
+
+          (RTS)))
 
 (define VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS
   (list
@@ -1697,10 +1690,10 @@
                   #x00 #x00 #x02 #x00 ;; cc04 (old tail of list)
                   #x00 #x00 #x06 #xcc ;; cc08 (old head of list)
                   )
-                "case 2b: refcount cd08 = 0 (head), cd04 unchanged (tail)")
+                "case 2b: refcount cd08 = 0 (head), cc04 unchanged (tail)")
   (check-equal? (memory-list use-case-2-b-state-after #xcec5 #xcec6) ;;
-                '(#x08 #xcd )
-                "case 2b: root of free tree is cell-pair at $cd08")
+                '(#x08 #xcc )
+                "case 2b: root of free tree is cell-pair at $cc08")
 
   (define use-case-2-c-code
     (append use-case-2-b-code ;; free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
@@ -1726,7 +1719,7 @@
                 "case 2c: refcount cc08 = 1 reallocated, refcount cc04 = 0 (original tail, now in the free tree)")
   (check-equal? (memory-list use-case-2-c-state-after #xcec5 #xcec6) ;;
                 '(#x04 #xcc )
-                "case 2c: root of free tree is cell-pair at $cd04"))
+                "case 2c: root of free tree is cell-pair at $cc04"))
 
 ;; input:  A = size (needs to include 32 bytes cell-stack + 8 byte (pc, old params, old locals, old cell stack base ptr) + 2 * #locals
 ;;         ZP_CELL_STACK_BASE_PTR

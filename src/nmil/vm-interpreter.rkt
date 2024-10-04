@@ -4,7 +4,15 @@
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
 
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings ast-const-get ZP_VM_PC ZP_LOCALS_PTR ZP_PARAMS_PTR))
+(require (only-in "./vm-memory-manager.rkt"
+                  vm-memory-manager
+                  vm-stack->strings
+                  ast-const-get
+                  ZP_VM_PC
+                  ZP_LOCALS_PTR
+                  ZP_PARAMS_PTR
+                  ZP_CELL_STACK_TOS
+                  ZP_CELL_STACK_BASE_PTR))
 (require (only-in "./vm-lists.rkt" vm-lists))
 
 (module+ test
@@ -226,8 +234,6 @@
           (TAX)
           (INY)
           (LDA (ZP_VM_PC),y)
-          (TAY)
-          (TXA)
           (JSR VM_CELL_STACK_PUSH_INT)
           (LDA !$03)
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
@@ -246,26 +252,31 @@
 (define BC_INT_PLUS
   (list
    (label BC_INT_PLUS)
-          (LDX ZP_CELL_TOS)
-          (LDA ZP_CELL0+1,x)
-          (ADC ZP_CELL0-1,x)
-          (STA ZP_CELL0-1,x) ;; low byte
+          (LDY ZP_CELL_STACK_TOS)
+          (DEY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (DEY)
+          (DEY)
+          (CLC)
+          (ADC (ZP_CELL_STACK_BASE_PTR),y)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)
 
-          (LDA ZP_CELL0,x)
+          (INY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
           (BCC VM_INT_PLUS__NO_INC_HIGH)
           (CLC)
           (ADC !$04)
 
    (label VM_INT_PLUS__NO_INC_HIGH)
-          (ADC ZP_CELL0-2,x)
+          (INY)
+          (INY)
+          (ADC (ZP_CELL_STACK_BASE_PTR),y)
           (AND !$7c)
-          (STA ZP_CELL0-2,x) ;; high byte
 
-
-   (label VM_INT_PLUS__DONE)
-          (DEX)
-          (DEX)
-          (STX ZP_CELL_TOS)
+          (DEY)
+          (DEY)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)
+          (STY ZP_CELL_STACK_TOS)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| vm_interpreter |#
@@ -292,27 +303,30 @@
 (define BC_INT_MINUS
   (list
    (label BC_INT_MINUS)
-          (LDX ZP_CELL_TOS)
-
+          (LDY ZP_CELL_STACK_TOS)
+          (DEY)
           (SEC)
-          (LDA ZP_CELL0+1,x)
-          (SBC ZP_CELL0-1,x)
-          (STA ZP_CELL0-1,x) ;; low byte
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (DEY)
+          (DEY)
+          (SBC (ZP_CELL_STACK_BASE_PTR),y)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)
 
-          (LDA ZP_CELL0,x)
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
           (BCS VM_INT_MINUS__NO_DEC_HIGH)
           (SEC)
           (SBC !$04)
 
    (label VM_INT_MINUS__NO_DEC_HIGH)
-          (SBC ZP_CELL0-2,x)
+          (DEY)
+          (DEY)
+          (SBC (ZP_CELL_STACK_BASE_PTR),y)
           (AND !$7c)
-          (STA ZP_CELL0-2,x) ;; high byte
+          (STA (ZP_CELL_STACK_BASE_PTR),y)
 
    (label VM_INT_MINUS__DONE)
-          (DEX)
-          (DEX)
-          (STX ZP_CELL_TOS)
+          (STY ZP_CELL_STACK_TOS)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| vm_interpreter |#

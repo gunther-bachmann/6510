@@ -4,13 +4,32 @@
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
 
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager))
+(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings))
 
 (module+ test
   (require "../6510-test-utils.rkt")
   (require (only-in racket/port open-output-nowhere))
   (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
-  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on)))
+  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
+
+  (define (wrap-code-for-test bc)
+    (append (list (org #xc000)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER))
+            bc
+            (list (BRK))
+            vm-lists))
+
+  (define (run-code-in-test bc (debug #f))
+    (define wrapped-code (wrap-code-for-test bc))
+    (define state-before
+      (6510-load-multiple (initialize-cpu)
+                          (assemble-to-code-list wrapped-code)))
+    (if debug
+        (run-debugger-on state-before)
+        (parameterize ([current-output-port (open-output-nowhere)])
+          (run-interpreter-on state-before)))))
+
+
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator))
 
 (provide vm-lists)
@@ -31,16 +50,16 @@
    ;; ----------------------------------------
    (label VM_NIL_P)
           ;; check if stack is not empty
-          (LDX ZP_CELL_TOS)
+          (LDY ZP_CELL_STACK_TOS)
           (BMI STACK_EMPTY__VM_NIL_P)
           ;; check if tos is cell-pair-ptr
-          (LDA ZP_CELL0,x)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
           (AND !$02)
           (BEQ NO_CELL_PAIR_PTR__VM_NIL_P)
 
    (label VM_NIL_P__UC) ;; no checks
-          (LDX ZP_CELL_TOS)
-          (LDA ZP_CELL0,x) ;; get tagged byte
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; get tagged byte
           (CMP !<TAGGED_NIL) ;;
           (BNE NOT_NIL__VM_NIL_P)
           ;; this additional check should not be necessary, since tagged low byte of a non-nil cell-pair-ptr may never be #x02
@@ -52,46 +71,32 @@
           ))
 
 (module+ test #| VM_NIL_P |#
-  (define use-case-nil_p-a
+  (define use-case-nil_p-a-code
     (list
-     (JSR VM_INITIALIZE_MEMORY_MANAGER)
      (JSR VM_CELL_STACK_PUSH_NIL)
      (JSR VM_NIL_P)))
 
-  (define use-case-nil_p-a-code
-    (append (list (org #xc000))
-            use-case-nil_p-a
-            (list (BRK))
-            vm-lists))
+  (define use-case-nil_p-a-state-after  ;; (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-nil_p-a-state-before))
+    (run-code-in-test use-case-nil_p-a-code))
 
-  (define use-case-nil_p-a-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-nil_p-a-code)))
-  ;; (run-debugger-on use-case-nil_p-a-state-before)
-  (define use-case-nil_p-a-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-nil_p-a-state-before)))
-  (check-equal? (memory-list use-case-nil_p-a-state-after #xd9 #xdb)
-                '(#x00
-                  #x00 #x01) ;; int 1 = bool true
+  (check-equal? (vm-stack->strings use-case-nil_p-a-state-after)
+                (list "stack holds 1 item"
+                      "cell-int $0001")
                 "case nil_p: stack holds only int 1")
 
-  (define use-case-nil_p-b
+  (define use-case-nil_p-b-code
     (list
-     (JSR VM_INITIALIZE_MEMORY_MANAGER)
      (JSR VM_ALLOC_CELL_PAIR)
      (JSR VM_CELL_STACK_PUSH_ZP_PTR)
      (JSR VM_NIL_P)))
 
-  (define use-case-nil_p-b-code
-    (append (list (org #xc000))
-            use-case-nil_p-b
-            (list (BRK))
-            vm-lists))
+  (define use-case-nil_p-b-state-after
+    (run-code-in-test use-case-nil_p-b-code))
 
-  (define use-case-nil_p-b-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-nil_p-b-code)))
-  ;; (run-debugger-on use-case-nil_p-b-state-before)
-  (define use-case-nil_p-b-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-nil_p-b-state-before)))
-  (check-equal? (memory-list use-case-nil_p-b-state-after #xd9 #xdb)
-                '(#x00
-                  #x00 #x00) ;; int 0 = bool false
-                "case nil_p: stack holds only int 0"))
+  (check-equal? (vm-stack->strings use-case-nil_p-b-state-after)
+                (list "stack holds 1 item"
+                      "cell-int $0000")
+                "case nil_p: stack holds only int 10"))
 
 (define VM_CAR
   (list
@@ -103,11 +108,11 @@
    ;; ----------------------------------------
    (label VM_CAR)
           ;; check if stack is not empty
-          (LDX ZP_CELL_TOS)
+          (LDY ZP_CELL_STACK_TOS)
           (BMI STACK_EMPTY__VM_CAR)
 
           ;; check if tos not nil
-          (LDA ZP_CELL0,x)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
           (CMP !$02)
           (BEQ TOS_IS_NIL__VM_CAR)
 
@@ -129,11 +134,11 @@
    ;; ----------------------------------------
    (label VM_CDR)
           ;; check if stack is not empty
-          (LDX ZP_CELL_TOS)
+          (LDY ZP_CELL_STACK_TOS)
           (BMI STACK_EMPTY__VM_CDR)
 
           ;; check if tos not nil
-          (LDA ZP_CELL0,x)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
           (CMP !$02)
           (BEQ TOS_IS_NIL__VM_CDR)
 
@@ -153,8 +158,8 @@
 
    (label VM_CONS)
           ;; check stack size >= 2
-          (LDX ZP_CELL_TOS)
-          (CPX !$02) ;; 00 = one element 02 = two elements
+          (LDY ZP_CELL_STACK_TOS)
+          (CPY !$03) ;; 01 = one element 03 = two elements
           (BMI STACK_HAS_LESS_THAN_TWO__VM_CONS)
 
    (label VM_CONS__UC) ;; no checks
@@ -166,30 +171,23 @@
           (JMP VM_CELL_STACK_WRITE_ZP_PTR_TO_TOS)))
 
 (module+ test #| VM_CONS |#
-  (define use-case-cons
+  (define use-case-cons-code
     (list
-     (JSR VM_INITIALIZE_MEMORY_MANAGER)
      (JSR VM_CELL_STACK_PUSH_INT_1)
      (JSR VM_CELL_STACK_PUSH_NIL)
      (JSR VM_CONS)))
 
-  (define use-case-cons-code
-    (append (list (org #xc000))
-            use-case-cons
-            (list (BRK))
-            vm-lists))
+  (define use-case-cons-state-after
+    (run-code-in-test use-case-cons-code ))
 
-  (define use-case-cons-state-before (6510-load-multiple (initialize-cpu) (assemble-to-code-list use-case-cons-code)))
-  ;; (run-debugger-on use-case-cons-state-before)
-  (define use-case-cons-state-after  (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-cons-state-before)))
   (check-equal? (memory-list use-case-cons-state-after #xfb #xfc)
-                '(#x04 #xcd)
-                "case cons: zp_ptr -> $cd04")
-  (check-equal? (memory-list use-case-cons-state-after #xd9 #xdb)
-                '(#x00
-                  #x06 #xcd)
-                "case cons: stack holds single element pointing to cd04")
-  (check-equal? (memory-list use-case-cons-state-after #xcd00 #xcd07)
+                '(#x04 #xcc)
+                "case cons: zp_ptr -> $cc04")
+  (check-equal? (vm-stack->strings use-case-cons-state-after)
+                (list "stack holds 1 item"
+                      "cell-pair-ptr $cc04")
+                "case cons: stack holds single element pointing to cc04")
+  (check-equal? (memory-list use-case-cons-state-after #xcc00 #xcc07)
                 '(#x00 #x01 #x00 #x00
                   #x00 #x01 #x02 #x00) ;; (int1 . nil)
                 "case cons: cell-pair is "))
