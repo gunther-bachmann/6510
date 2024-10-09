@@ -329,6 +329,11 @@
          (value  (hash-ref labels (label-label label) #f)))
     (cond [value
            (let ([rel-value (two-complement-of (+ ex-offset (- value (+ offset 2))))])
+             (unless (byte? rel-value)
+               (raise-user-error (format "label ~a produces non byte offset ~a in rel opcode ~a"
+                                         (label-label label)
+                                         value
+                                         instruction)))
              (encode-label-rel-value instruction rel-value))]
           [else instruction])))
 

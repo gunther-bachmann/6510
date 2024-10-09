@@ -34,6 +34,7 @@ current items to work on are found in [[file:~/repo/+1/6510/mil.readlist.org::*n
   data is not copied but stays pinned at the same location. to reduce fragmentation, allocation buckets are used.
 - allocation buckets :: memory objects are allocated in fixed sized buckets. supported bucket sizes are 16-bit cells, 32-bit cell-pairs (for
   lists), 6-byte float slots, array/structures/string of sizes 8, 16, (31, 63, 127) bytes. Each bucket is held in one page (256 byte)
+  this prevents fragmentation but has the drawback of wasting bytes for elements not exactly the size of the bucket
 - basic data types :: the following basic data types exist, fitting in one cell (16-bit)
   - byte/char/boolean
   - int
@@ -44,6 +45,11 @@ current items to work on are found in [[file:~/repo/+1/6510/mil.readlist.org::*n
   - float (6 bytes) :: float as implemented by the c64 basic
   - array/structure/string (n-bytes) :: structures are arrays of fields, each a single cell, strings are arrays of char-cells (currently)
   - native-byte-array :: used for strings and buffers etc. (extension for later)
+- byte code data :: this may have two different usages
+  - removable :: code that may be dropped again and thus free data / pages
+    this type could be handled by using the regular page buckets of the right size (with the drawback of waste)
+  - resident :: code that will stay in memory (always) and cannot easily be deallocated?
+    special page type that allows for variable size slots, minimizing waste, but with fragmentation
 
 * open / debatable  decisions / questions
 - exact organization of vm implemented in 6510, especially

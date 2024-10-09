@@ -118,6 +118,23 @@
    (label BC_BRK)
           (BRK)))
 
+
+;; return id of this function (id = 16 bit ptr to function = zp_vm_pc to set when called)
+(define (load-function state byte-code param-no locals-no name)
+  ;; allocate code page to hold len(byte-code) + byte (param-no) + byte (locals-no) + byte (name-len) + len(name)
+  ;; mem layout:
+  ;;        00: # params
+  ;;        01: # locals
+  ;; id ->  02: first byte code
+  ;;            ...
+  ;;        01+len(byte-code) : last byte code
+  ;;        02+len(bc): name
+  ;;        02+len(bc)+len(name): len of name
+  ;;        03+len(bc)+len(name): len of this datarecord = 03+len(bc)+len(name)
+  ;;        --------
+  ;;        00+len(datarecord): next free record
+  '())
+
 (module+ test #| vm_interpreter |#
   (define use-case-brk-state-after
     (run-bc-wrapped-in-test
@@ -137,6 +154,8 @@
            (AND !$07) ;; lower three bits are encoded into the short command
            (LSR)
            (BCS PUSH_PARAM__BC_PUSH_PARAM_OR_LOCAL_SHORT)
+
+           ;; push local
            (ASL A) ;; * 2
            (TAY)
            (LDA (ZP_LOCALS_PTR),y)
