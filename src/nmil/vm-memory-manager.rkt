@@ -304,6 +304,7 @@
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in "../tools/6510-interpreter.rkt" peek-word-at-address))
 (require (only-in "../ast/6510-calc-opcode-facades.rkt" LDA-immediate))
+(require (only-in "../util.rkt" bytes->int))
 (require (only-in racket/list flatten take empty? drop))
 
 (module+ test
@@ -338,6 +339,50 @@
           ZP_CELL_STACK_TOS
           ZP_CELL_STACK_BASE_PTR)
 
+;; write a status string of a memory page
+(define (vm-page->strings state page)
+  (define page-type-enc (peek state (bytes->int 0 page)))
+  (define next-free-slot (peek state (bytes->int page #xcf)))
+  (define page-type
+    (cond
+      [(= #x10 (bitwise-and #xf8 page-type-enc))
+       (format "m1 page p~a" (bitwise-and #x03 page-type-enc))]
+      [(= #x80 (bitwise-and #x80 page-type-enc))
+       "cell page"]
+      [(= #x40 (bitwise-and #xc0 page-type-enc))
+       "cell-pair page"]
+      [(= #x20 (bitwise-and #xe0 page-type-enc))
+       "s8 page"]
+      [(= #x18 page-type-enc)
+       "call-frame page"]
+      [else (raise-user-error "unknown page type")]))
+  (define previous-page
+    (cond
+      [(not (= 0 (bitwise-and #xc0 page-type-enc)))
+       (peek state (bytes->int #xff page))]
+      [else (peek state (bytes->int 1 page))]))
+  (define slots-used
+    (cond
+      [(= #x10 (bitwise-and #xf0 page-type-enc))
+       (peek state (bytes->int 2 page))]
+      [(= #x80 (bitwise-and #x80 page-type-enc))
+       (bitwise-and #x7f page-type-enc)]
+      [(= #x40 (bitwise-and #xc0 page-type-enc))
+       (bitwise-and #x3f page-type-enc)]
+      [(= #x20 (bitwise-and #xe0 page-type-enc))
+       (bitwise-and #x1f page-type-enc)]
+      [else 0]
+      ))
+  (cond [(= #x18 page-type-enc)
+         (list (format "page-type:      ~a" page-type)
+               ;; (format "previous page:  $~a" (format-hex-byte previous-page))
+               (format "stack frame:    $~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME))))]
+        [else
+         (list (format "page-type:      ~a" page-type)
+               (format "previous page:  $~a" (format-hex-byte previous-page))
+               (format "slots used:     ~a" slots-used)
+               (format "next free slot: $~a" (format-hex-byte next-free-slot)))]))
+
 ;; produce strings describing the current cell-stack status
 (define (vm-stack->strings state)
   (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
@@ -364,6 +409,9 @@
 ;; format a hexadecimal byte
 (define (format-hex-byte byte)
   (~a (number->string byte 16) #:width 2 #:align 'right #:pad-string "0"))
+
+(define (format-hex-word word)
+  (~a (number->string word 16) #:width 4 #:align 'right #:pad-string "0"))
 
 (define (vm-cell->string low high)
   (cond
@@ -1942,6 +1990,11 @@
           (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; A = new page
           ;; set this new page as the TOS for call stack allocation
           (STA VM_FREE_CALL_STACK_PAGE)
+          (STA SET_PAGE_TYPE__VM_ALLOC_CALL_FRAME+2)
+          (LDY !$18) ;; page type call-frame
+   (label SET_PAGE_TYPE__VM_ALLOC_CALL_FRAME)
+          (STY $c000) ;; c0 is overwritten
+
           (TAX)
           (LDY !$01) ;; first free byte is 02, but y is incremented
 
@@ -1961,9 +2014,9 @@
   (define alloc-call-frame-state-after
     (run-code-in-test alloc-call-frame-code))
 
-  (check-equal? (memory-list alloc-call-frame-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
-                (list #x02 #xcd)
-                "pointer to allocated frame")
+  (check-equal? (vm-page->strings alloc-call-frame-state-after #xcd)
+                '("page-type:      call-frame page"
+                  "stack frame:    $cd02"))
 
   (define alloc-call-frame-2times-code
     (list
@@ -1978,9 +2031,9 @@
   (define alloc-call-frame-2times-state-after
     (run-code-in-test alloc-call-frame-2times-code))
 
-  (check-equal? (memory-list alloc-call-frame-2times-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
-                (list #x02 #xcc)
-                "pointer to allocated frame")
+  (check-equal? (vm-page->strings alloc-call-frame-2times-state-after #xcc)
+                '("page-type:      call-frame page"
+                  "stack frame:    $cc02"))
 
   (define alloc-call-frame-2times-fitting-code
     (list
@@ -1996,9 +2049,9 @@
   (define alloc-call-frame-2times-fitting-state-after
     (run-code-in-test alloc-call-frame-2times-fitting-code))
 
-  (check-equal? (memory-list alloc-call-frame-2times-fitting-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
-                (list #x22 #xcd)
-                "pointer to allocated frame"))
+  (check-equal? (vm-page->strings alloc-call-frame-2times-fitting-state-after #xcd)
+                '("page-type:      call-frame page"
+                  "stack frame:    $cd22")))
 
 (define VM_CELL_STACK_WRITE_TOS_TO_PARAMy
   (list
@@ -2150,10 +2203,11 @@
   (define test-save-exec-state-state-after
     (run-code-in-test test-save-exec-state-code))
 
+  (check-equal? (vm-page->strings test-save-exec-state-state-after #xcd)
+                '("page-type:      call-frame page"
+                  "stack frame:    $cd1c"))
   (check-equal? (memory-list test-save-exec-state-state-after ZP_PARAMS_PTR (add1 ZP_PARAMS_PTR))
                 (list #x18 #xcd))
-  (check-equal? (memory-list test-save-exec-state-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
-                (list #x1c #xcd))
   (check-equal? (memory-list test-save-exec-state-state-after ZP_LOCALS_PTR (add1 ZP_LOCALS_PTR))
                 (list #x24 #xcd))
   (check-equal? (memory-list test-save-exec-state-state-after ZP_CELL_STACK_BASE_PTR (add1 ZP_CELL_STACK_BASE_PTR))
@@ -2336,9 +2390,16 @@
           (STA (ZP_PTR2),y)          ;; store number of slots used
 
           (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_M1_PAGE,x) ;; y = refcount field for first slot
+          (INY)
+          (TYA)
+          (LDX ZP_PTR2+1)
+          (STA VM_FREE_SLOT_FOR_PAGE,x)                    ;; set first free slot, here x = page
+          (DEY)
+          (LDX SEL_PROFILE__VM_ALLOC_M1_PAGE) ;; profile = 0..3
+          (LDA !$00)
 
           ;; loop to initialize refcounts of each slot to 0-
-   (label REF_COUNT_LOOP__VM_ALLOC_M1_PAGE)
+          (label REF_COUNT_LOOP__VM_ALLOC_M1_PAGE)
           (STA (ZP_PTR2),y) ;; refcount = 0
           (TYA)
           (CLC)
@@ -2365,6 +2426,7 @@
    (label ALMOST_DONE__VM_ALLOC_M1_PAGE)
           (LDA !$00)
           (STA (ZP_PTR2),y) ;; last offset to next free slot is 00 = no next free slot!
+
           (RTS)
 
    (label SEL_PROFILE__VM_ALLOC_M1_PAGE)
@@ -2402,9 +2464,14 @@
   (define test-alloc-m1-01-state-after
     (run-code-in-test test-alloc-m1-01-code))
 
-  (check-equal? (memory-list test-alloc-m1-01-state-after #xcc00 #xcc04)
-                (list #x10 #x00 #x00 #x00 #x16)
-                "pagetype = $10, previous page = $00, slots allocated = $00, slot0: refcount 0, next free slot at offset $16")
+  (check-equal? (vm-page->strings test-alloc-m1-01-state-after #xcc)
+                '("page-type:      m1 page p0"
+                  "previous page:  $00"
+                  "slots used:     0"
+                  "next free slot: $04"))
+  (check-equal? (memory-list test-alloc-m1-01-state-after #xcc03 #xcc04)
+                (list #x00 #x16)
+                "slot0: refcount 0, next free slot at offset $16")
   (check-equal? (memory-list test-alloc-m1-01-state-after #xcc15 #xcc16)
                 (list #x00 #x28)
                 "slot1: refcount 0, next free slot at offset $28")
@@ -2432,9 +2499,11 @@
   (define test-alloc-m1-02-state-after
     (run-code-in-test test-alloc-m1-02-code))
 
-  (check-equal? (memory-list test-alloc-m1-02-state-after #xcc00 #xcc02)
-                (list #x11 #x00 #x00)
-                "page type $11, previous page = $00, slot number used = $00")
+  (check-equal? (vm-page->strings test-alloc-m1-02-state-after #xcc)
+                '("page-type:      m1 page p1"
+                  "previous page:  $00"
+                  "slots used:     0"
+                  "next free slot: $10"))
   (check-equal? (memory-list test-alloc-m1-02-state-after #xcc0f #xcc10)
                 (list #x00 #x2e)
                 "slot0: refcount 0, next free slot at offset $2c")
@@ -2465,9 +2534,11 @@
   (define test-alloc-m1-03-state-after
     (run-code-in-test test-alloc-m1-03-code))
 
-  (check-equal? (memory-list test-alloc-m1-03-state-after #xcc00 #xcc02)
-                (list #x12 #x00 #x00)
-                "page type $12, previous page = $00, slot number used = $00")
+  (check-equal? (vm-page->strings test-alloc-m1-03-state-after #xcc)
+                '("page-type:      m1 page p2"
+                  "previous page:  $00"
+                  "slots used:     0"
+                  "next free slot: $06"))
   (check-equal? (memory-list test-alloc-m1-03-state-after #xcc05 #xcc06)
                 (list #x00 #x38)
                 "slot0: refcount 0, next free slot at offset $38")
@@ -2509,7 +2580,12 @@
                 "slot1: refcount 0, next free slot at offset $aa")
   (check-equal? (memory-list test-alloc-m1-04-state-after #xccab #xccac)
                 (list #x00 #x00)
-                "slot2: refcount 0, next free slot at offset $00 = no next"))
+                "slot2: refcount 0, next free slot at offset $00 = no next")
+  (check-equal? (vm-page->strings test-alloc-m1-04-state-after #xcc)
+                '("page-type:      m1 page p3"
+                  "previous page:  $00"
+                  "slots used:     0"
+                  "next free slot: $04")))
 
 ;; input:  A = size
 ;; output: ZP_PTR2 = available slot of the given size (or a bit more)
@@ -2556,13 +2632,6 @@
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
           (JSR VM_ALLOC_M1_PAGE)
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (LDA ZP_PTR2+1)                                  ;; load new free page
-          (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_M1_PAGE,x) ;; x = page type (0,1,2,3)
-          (TAX)
-          (INY)
-          (TYA)
-          (STA VM_FREE_SLOT_FOR_PAGE,x)                    ;; set first free slot, here x = page
-          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)     ;; make sure to set x to page type before jump
           (CLC)
           (BCC VM_ALLOC_SLOT_TYPE_X)
 
@@ -2619,34 +2688,33 @@
   (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_PTR2 (add1 ZP_PTR2))
                 (list #x04 #xcc)
                 "allocated slot is at cc04")
-  (check-equal? (memory-list test-alloc-bucket-slot-state-after #xcc00 #xcc02)
-                (list #x10 #x00 #x01)
-                "page type = $10, previous free page is 0, number of slots used = $01")
-  (check-equal? (memory-list test-alloc-bucket-slot-state-after #xcfcc #xcfcc)
-                (list #x16)
-                "next free slot of page $cc is at $16")
   (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_TEMP ZP_TEMP)
                 (list #xcc)
                 "free page for slot type 0 is $cc")
+  (check-equal? (vm-page->strings test-alloc-bucket-slot-state-after #xcc)
+                '("page-type:      m1 page p0"
+                  "previous page:  $00"
+                  "slots used:     1"
+                  "next free slot: $16"))
 
   (define test-alloc-bucket-slot-2x-code
     (list
      ;; fill page with $ff
-            (LDA !$FF)
-            (LDX !$00)
+     (LDA !$FF)
+     (LDX !$00)
      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-            (DEX)
-            (STA $cc00,x)
-            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+     (DEX)
+     (STA $cc00,x)
+     (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-            ;; now allocate the page
-            (LDA !$0b) ;; want slot of size 11
-            (JSR VM_ALLOC_BUCKET_SLOT)
-            (LDA !$09) ;; want slot of size 9, should be on the same page
-            (JSR VM_ALLOC_BUCKET_SLOT)
+     ;; now allocate the page
+     (LDA !$0b) ;; want slot of size 11
+     (JSR VM_ALLOC_BUCKET_SLOT)
+     (LDA !$09) ;; want slot of size 9, should be on the same page
+     (JSR VM_ALLOC_BUCKET_SLOT)
 
-            (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
-            (STA ZP_TEMP)))
+     (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
+     (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-2x-state-after
     (run-code-in-test test-alloc-bucket-slot-2x-code))
@@ -2657,48 +2725,47 @@
   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_PTR2 (add1 ZP_PTR2))
                 (list #x16 #xcc)
                 "allocated slot is at cc16")
-  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after #xcc00 #xcc02)
-                (list #x10 #x00 #x02)
-                "page type = $10, previous free page is (still) 0, slots used = $02")
-  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after #xcfcc #xcfcc)
-                (list #x28)
-                "next free slot of page $cc is at $28")
   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_TEMP ZP_TEMP)
                 (list #xcc)
                 "free page for slot type 0 is $cc")
+  (check-equal? (vm-page->strings test-alloc-bucket-slot-2x-state-after #xcc)
+                '("page-type:      m1 page p0"
+                  "previous page:  $00"
+                  "slots used:     2"
+                  "next free slot: $28"))
 
   (define test-alloc-bucket-slot-xx-code
     (list
      ;; fill page with $ff
-            (LDA !$FF)
-            (LDY !$02) ;; 2 pages
-            (LDX !$00) ;; 256 bytes
+     (LDA !$FF)
+     (LDY !$02) ;; 2 pages
+     (LDX !$00) ;; 256 bytes
      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-            (DEX)
-            (STA $cb00,x)
-            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-            (DEY)
-            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+     (DEX)
+     (STA $cb00,x)
+     (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+     (DEY)
+     (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-            ;; loop over ...
-            (LDA !$0a)
-            (STA LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+     ;; loop over ...
+     (LDA !$0a)
+     (STA LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
 
      (label LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
-            (LDA !$14) ;; want slot of size 20
-            (JSR VM_ALLOC_BUCKET_SLOT) ;; ... slot allocation
-            (DEC LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
-            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
+     (LDA !$14) ;; want slot of size 20
+     (JSR VM_ALLOC_BUCKET_SLOT) ;; ... slot allocation
+     (DEC LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+     (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
 
-            (JMP TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
+     (JMP TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
 
      (label LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
-            (byte $20)
+     (byte $20)
 
 
      (label TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
-            (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
-            (STA ZP_TEMP)))
+     (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
+     (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-xx-state-after
     (run-code-in-test test-alloc-bucket-slot-xx-code))
@@ -2709,21 +2776,19 @@
   (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcb4b #xcb4c)
                 (list #x00 #x6a)
                 "first free slot page2: refcount 0, next free slot at offset $6a")
-  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcb00 #xcb02)
-                (list #x11 #xcc #x02)
-                "cb00: page type = $11, previous free page is $cc, slots used = $02")
-  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcc00 #xcc02)
-                (list #x11 #x00 #x08)
-                "cc00: page type = $11, previous free page is $00, slots used = $08")
-  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcfcc #xcfcc)
-                (list #x00)
-                "next free slot of page $cc is at 00 (no free slot avail)")
-  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcfcb #xcfcb)
-                (list #x4c)
-                "next free slot of page $cb is at $4c")
   (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_TEMP ZP_TEMP)
                 (list #xcb)
                 "free page for slot type 1 is $cb")
+  (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after #xcc)
+                '("page-type:      m1 page p1"
+                  "previous page:  $00"
+                  "slots used:     8"
+                  "next free slot: $00"))
+  (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after #xcb)
+                '("page-type:      m1 page p1"
+                  "previous page:  $cc"
+                  "slots used:     2"
+                  "next free slot: $4c"))
   ;; free-page for slot type 0 = cc
   )
 
@@ -2780,12 +2845,14 @@
   (define test-free-bucket-slot-state-after
     (run-code-in-test test-free-bucket-slot-code))
 
-  (check-equal? (memory-list test-free-bucket-slot-state-after #xcc00 #xcc04)
-                (list #x10 #x00 #x01 #x00 #x28)
-                "page type= $10, previous page = $00, slots used = $01, slot0 (now free): refcount 0, next free slot at offset $28")
-  (check-equal? (memory-list test-free-bucket-slot-state-after #xcfcc #xcfcc)
-                (list #x04)
-                "next free slot of page $cc is at $04"))
+  (check-equal? (memory-list test-free-bucket-slot-state-after #xcc03 #xcc04)
+                (list #x00 #x28)
+                "slot0 (now free): refcount 0, next free slot at offset $28")
+  (check-equal? (vm-page->strings test-free-bucket-slot-state-after #xcc)
+                '("page-type:      m1 page p0"
+                  "previous page:  $00"
+                  "slots used:     1"
+                  "next free slot: $04")))
 
 (define VM_INC_REF_BUCKET_SLOT
   (list
