@@ -1,5 +1,62 @@
 #lang racket/base
 
+;; naming: m1 page px       :: page for slots with ref count at -1 position, with profile x (0..3) <- defines size and payload start offset
+;;         call-frame page  :: page for call-frames (stack organized, no ref counting etc.)
+;;         cell-pairs page  :: page for cell-pairs, (lowbyte) lsr x 2 to get ref count position
+;;         cell page        :: page for cells, (lowbyte) lsr x 1 to get ref count position (last cell unusable)
+;;         s8 page          ;; page for slots of size <=8, (lowbyte) lsr x 3 to get ref count position
+;;
+;; idea: keep allocated #slots to detect empty pages (# drops to zero)
+;; idea: page 00 = page mod byte
+;;            1xxx xxxx = (cell page) page with cells (slots of byte 2), xxxxxx = number of used cells 0..127 (actually only 85 possible)
+;;            01yy yyyy = (cell-pairs page) page with cell-pairs (slots of byte 4) yyyyy = number of cells used 0..63 (actually only 51 possible)
+;;            001z zzzz = (s8 page) page with slots of (max) size 8 byte, zzzz = number of slots used 0..31 (actually only possible)
+;;            0001 0000 = (m1 page p0) page with buckets type 0 (byte at offset 02: holds the number of used slots)
+;;            0001 0001 = (m1 page p1) page with buckets type 1 (byte at offset 02: holds the number of used slots)
+;;            0001 0010 = (m1 page p2) page with buckets type 2 (byte at offset 02: holds the number of used slots)
+;;            0001 0011 = (m1 page p3) page with buckets type 3 (byte at offset 02: holds the number of used slots)
+;;            0001 1000 = (call-frame page) (stack organized, full+free detection already implemented)
+;;       page 01 = (m1 page px, call-frame page) previous page of same type (<- currently only for pages with buckets and call-frame pages)
+;;       page 02 = (m1 page px, s8 page) number of used slots
+;;       page ff = (cell-pairs and cell page) previous page (in case of cell page = last cell stays unused!!)
+
+;; existing: array of first free slot on the respective page (per page) (uses only the lower 7 bits) : uses 256 bytes cf00..cfff (idea to keep this data on the page itself?)
+;;           each page points to the previous page (initially in allocation order)                   : uses 1 byte on page
+;;           each page type points to the head of the (free) page list of this type                  : 1 byte per type (currently 8) [current free]
+;; new:      head of list of pages that are completely free                                          : 1 byte per type
+
+;; idea: allocate:
+;;   during alloc (full): current page is full, find next non full (remove all fulls from this list from here on), set found non-full to current free
+;;                        if no free is found, check list of completely free pages of this type,
+;;                        if none is found, allocate new page (don't link with any full page!)
+;;                        if none is left for allocation, check free list of other types
+;;                        +- first free page pointer (points to full page, because it just got full)
+;;                        [Ax]->[Bx]->[Cx]->[D-]->[E ]->[Fx]->[G-]
+;;                   =>   remove full pages (their pointers must be cleared!) until first non full is found (or new pages is allocated)
+;;                        +- first free page pointer
+;;                        [D-]->[E ]->[Fx]->[G-]
+;;
+;;   during free (full->non-full):  if already part of the free list, do nothing, if not, add it as head of the free list
+;;   during free (non-full->empty): naive: free,
+;;          idea: keep number of free pages per type, only free pages > than minimum
+;;          idea: move this behind at the end of the list (if it is the head),
+;;          idea: keep list of completely free pages to speed up allocation of this type (since page needs no initialization)
+
+;; worst case scenario:
+;;   each bucket allocates until n pages are filled, then on each page all but 1 slots are freed => lots of pages with just one slot used
+;;   (hopefully uncommon) Since no relocation of entries is possible, this "page"-level fragmentation is possible, even if unlikely
+
+;; to keep a list of pages with free slots, each time a slot is not full (free slot offset != $00), it should not have full pages before it
+;; => (alloc) a page getting full should be put behind the pages which have free slots
+;; => (free) a page not full anymore should be moved before the full ones
+;; algorithm:
+;;   during alloc: page getting full (can be anywhere in the list) swaps down the list until the next is either $00 (no previous) or full itself
+;;   during free:  page getting non-full (can be anywhere in the list) is put at the head of the free-page list
+;;                 (or: optimization:) if the first is a non full page: right behind that one
+;;                  -> this allows for a page that was "freshly" allocated to fill up before a page that has only one free slot is preferred
+;;   during free:  a page that is left empty, is removed from the list and returned to the free pages
+;;                 except if it is the last list of this type in the free list, then it is kept  (optimization: introduce a lower bound?, e.g. always keep 4+ free cell-pair pages to speed up allocation)
+
 ;; page attributes:
 ;;  - stack growing :: data will be allocated/deallocated as stack
 ;;  - randomly growing :: data will allocate/deallocate randomly
@@ -24,7 +81,7 @@
 ;;   fixed slot size
 ;;     free/used slots can be kept in a bitmap (but also in a free list)
 ;;   variable slot size
-;;     free/used slots are kept in a linked list
+;;     free/used slots are kept in a list
 
 ;; current page types and measures
 ;;   cell-pair-page
@@ -44,27 +101,27 @@
 ;; invariant: any slot must start on an even memory location (since bit0 is used as tag for a pointer)
 ;; invariant: any cell-pair slot must start on a memory location divisable by 4 (since bit0 and bit1 is used as tag for the pointer)
 
-;; ----------------------------------------
+;; ---------------------------------------- call-frame page
 ;; page type: call-frame page (its actually stack growing, variable slot size page)
 ;; => allocation/deallocation is always done on tos
 ;;    no need for a free list (stack structure is coded into the stack pages)
 ;;    need for max size left
 ;; memory layout of call frame page (organized in stack)
-;;  00 : unused (page type)
+;;  00 : #b0001 0000 page type call-frame
 ;;  01 : previous page (just high byte), 00 for first stack page
 ;;  02 : first frame payload byte 0
 ;;  ... : first frame payload byte size-1
 ;;  free-1 : size of (prev) frame
-;;  free : unused
-;; ...ff : unused
+;;  free : next payload
+;; ...ff :
 ;;
 ;; VM_FREE_SLOT_FOR_PAGE + pageidx: holds free-idx (initially 02) <- points to the first free byte (-1 = size of previous)
 
-;; ----------------------------------------
+;; ---------------------------------------- cell-pairs page
 ;; page type: cell-pairs page (its actually randomly growing, fixed slot size (4b), ref counted page)
 ;; memory layout of a cell-pairs page (refcount @ ptr >> 2) 51 cells
 ;; offset content
-;; 00     unused (page type)
+;; 00     #b01xx xxxx page type + number of used slots
 ;; 01     ref-count for cell-pair at 04 (cell-pair 0)
 ;; 02     ref-count for cell-pair at 08 (cell-pair 1)
 ;; 03     ref-count for cell-pair at 0C (cell-pair 2)
@@ -77,15 +134,17 @@
 ;; 40     cell-pair 3
 ;; 44     cell-pair 4
 ;; ..fc   cell-pair 50
+;; fd..fe unused
+;; ff    previous page of this type
 ;;
 ;; VM_FREE_SLOT_FOR_PAGE + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
 ;; the free cell-pair holds in byte 0 of the cell-pair the offset of the next free cell-pair (0 = no other free cell-pair)
 ;;
 
-;; ----------------------------------------
-;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 85 cells
+;; ---------------------------------------- cell page
+;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)
 ;; offset content
-;; 00     reserved
+;; 00     #b1zzz zzzz page type + number of used slots
 ;; 01     ref-count for cell at 02 (cell 0)
 ;; 02..03 cell 0
 ;; 04     ref-count for cell at 08 (cell 1)
@@ -100,142 +159,101 @@
 ;; 20..21 cell 5
 ;; ...
 ;; 3e..3f cell 20
-;; 40..7f ref-count for cell at 80..fe (cell 21..84)
-;; 80..ff cell 21..84
+;; 40..7e ref-count for cell at 80..fc (cell 21..83)
+;; 7f    unused
+;; 80..fd cell 21..83
+;; fe    unused
+;; ff    previous page of this type
 
-;; ----------------------------------------
+;; ---------------------------------------- s8 page
 ;; page type slot size 8 (refcount @ ptr >> 3) 28 cells
 ;; offset content
-;; 00     reserved
-;; 01..03 unused
+;; 00     #b001x xxxx  page type + number of used slots
+;; 01     previous page
+;; 02..03 unused
 ;; 04..1f refcount cell 0..27
 ;; 20..27  -> 04 (cell 0)
 ;; ...
 ;; f8..ff -> 1f (cell 27)
 
-;; ----------------------------------------
-;; page type slot size 15!  (refcount @ ptr-1) 15 cells, but uneven len
-;; math: first entry $10, refcount @ -1, next slot += $0e, slot-size = $0f
+;; ---------------------------------------- m1 page p0
+;; page type slot size 16!  (refcount @ ptr-1) 14 slots
+;; math: first entry $04, refcount @ -1, next slot += $12, slot-size = $11 (17)
 ;; offset content
-;; 00     reserved
-;; 0f     refcount cell0
-;; 10..1e cell0
-;; 1f    refcount cell1
-;; 20..2e cell1
+;; 00     #b0001 0000 page type bucket with slot size 17 (either use this or the one above)
+;; 01     previous page
+;; 02     number of slots used
+;; 03     refcount slot0
+;; 04..14 slot0
+;; 15    refcount slot1
+;; 16..26 slot1
+;; 27    refcount slot2
+;; 28..38 slot2
 ;; ...
-;; ef      refcount cell14
-;; f0..fe  cell14
-
-;; ----------------------------------------
-;; page type slot size 16!  (refcount @ ptr-1) 14 cells
-;; math: first entry $04, refcount @ -1, next slot += $12, slot-size = $10 ($11 possible)
-;; offset content
-;; 00     reserved
-;; 01..02  unused
-;; 03     refcount cell0
-;; 04..13 cell0
-;; 14    unused
-;; 15    refcount cell1
-;; 16..25 cell1
-;; 27    refcount cell2
-;; 28..37 cell2
-;; 39    refcount cell3
-;; 3a..49 cell3
-;; 4b    refcount cell4
-;; 4c..5b cell4
-;; 5d    refcount cell5
-;; 5e..6d cell5
-;; 6f    refcount cell6
-;; 70..7f cell6
-;; 81    refcount cell7
-;; 82..91 cell7
-;; 93    refcount cell8
-;; 94..93 cell8
-;; a5    refcount cell9
-;; a6..b5 cell9
-;; b7    refcount cell10
-;; b8..c7 cell10
-;; c9    refcount cell11
-;; ca..d9 cell11
-;; db    refcount cell12
-;; dc..eb cell12
-;; ed    refcount cell13
-;; ee..fd cell13
-
-
-;; ----------------------------------------
-;; page type slot size 29! (refcount @ ptr-1) 7 cells total
-;; math: first entry $02, refcount @ -1, next slot += $1e, slot-size = $1d (29)
-;; offset content
-;; 00     reserved
-;; 01     refcount cell0
-;; 02..1f cell0
-;; 20     unused
-;; 21     refcount cell1
-;; 22..3f cell1
-;; 40     reserved
-;; 41     refcount cell2
-;; 42 ..5f cell2
-;; ...
-;; d1    refcount cell6
-;; d2..ff cell6
-
-;; ----------------------------------------
-;; page type slot size 49! (refcount @ ptr-1) 5 cells total
-;; math: first entry $02, refcount @ -1, next slot += $32, slot-size = $31
-;; offset content
-;; 00     reserved
-;; 01     refcount cell0
-;; 02..32 cell0
-;; 33     refcount cell1
-;; 34..64 cell1
-;; 65     refcount cell2
-;; 66..96 cell2
-;; 97     refcount cell3
-;; 98..c8 cell3
-;; c9     refcount cell4
-;; ca..fa cell4
-;; fa..ff unused
-
-;; ----------------------------------------
-;; page type slot size 83! (refcount @ ptr-1) 3 cells total
-;; math: first entry $02, refcount @ -1, next slot += $54, slot-size = $53
-;; offset content
-;; 00     reserved
-;; 01     refcount cell0
-;; 02..54 cell0
-;; 55     refcount cell1
-;; 56..a8 cell1
-;; a9    refcount cell2
-;; aa..fe cell2
+;; ed    refcount slot13
+;; ee..fe slot13
 ;; ff    unused
 
-;; IDEA: zero page cell stack may not be beneficial (can be put in regular memory)
-;;       LDA zeropage,x  consumes 4 clocks,  LDA absolute,x consumes 4 clocks too => no speed just size benefit (2 vs. 3 bytes)
+
+;; ---------------------------------------- m1 page p1
+;; page type slot size 29! (refcount @ ptr-1) 8 slots total
+;; math: first entry $02, refcount @ -1, next slot += $1e, slot-size = $1d (29)
+;; offset content
+;; 00     #b0001 0001 page type bucket + slot size 29
+;; 01     previous page
+;; 02     number of used slots
+;; 03..0f unused
+;; 0f     refcount slot0
+;; 10..2c slot0
+;; 2d     refcount slot1
+;; 2e..4a slot1
+;; 4b     refcount slot2
+;; 4c..68 slot2
+;; ...
+;; e1    refcount slot7
+;; e2..fe slot7
+;; ff    unused
+
+;; ---------------------------------------- m1 page p2
+;; page type slot size 49! (refcount @ ptr-1) 5 slots total
+;; math: first entry $02, refcount @ -1, next slot += $32, slot-size = $31
+;; offset content
+;; 00     #b0001 0010
+;; 01     previous page
+;; 02     # of slots used
+;; 03..04 unused
+;; 05     refcount slot0
+;; 06..36 slot0
+;; 37     refcount slot1
+;; 38..68 slot1
+;; 69     refcount slot2
+;; 6a..9a slot2
+;; 9b     refcount slot3
+;; 9c..cc slot3
+;; cd     refcount slot4
+;; ce..fe slot4
+;; ff    unused
+
+;; ----------------------------------------m1 page p3
+;; page type slot size 83! (refcount @ ptr-1) 3 slots total
+;; math: first entry $02, refcount @ -1, next slot += $54, slot-size = $53
+;; offset content
+;; 00     #b001 0011
+;; 01     previous page
+;; 02     number of slots used
+;; 03     refcount slot0
+;; 04..56 slot0
+;; 57     refcount slot1
+;; 58..aa slot1
+;; ab     refcount slot2
+;; ac..fe slot2
+;; ff     unused
+
+;; DONE: zero page cell stack may not be beneficial (can be put in regular memory)
+;;       LDA zeropage,x  consumes 4 clocks,  LDA (zeropage),y consumes 6 clocks => no significant speedup that would justify the amount of copying
 ;;       LDA zeropage and LDA absolute differs in speed => storing registers not accessed through index makes sense
 ;;       indirect addressing can only be done on zp => zp_ptr and zp_ptr2 make sense, too
 
-;; IDEA: eval cell stack is held in pages growing from the bottom (to have continuous access)
-;;       tos is a ptr on the zp, pointing to the tos cell
-;;           LDY !$00
-;;           LDA (TOS),y    ;; tagged low byte of cell
-;;           INY ...
-;;       call-params os a ptr on the zp, pointing into the first parameter on the eval cell stack
-;;           LDY n * 2
-;;           LDA (call-params),y ;; get n-th parametere tagged low byte of cell
-;;       pop cell stack:
-;;           LDA TOS
-;;           BNE JUST_LOW
-;;           DEC TOS+1
-;;        JUST_LOW:
-;;           DEC TOS
-;;           DEC TOS
-;;       push cell stack:
-;;           INC TOS
-;;           INC TOS
-;;           BNE DONE
-;;           INC TOS+1
-;;        DONE:
 ;;       call frame is created by call, but there is not need to copy (portions of) the eval stack
 ;;       the call frame allocates space for locals and that's it (it's still a stack, so push/pop is supported)
 ;;       alternative to tos: function entry tos + index
@@ -522,8 +540,6 @@
 (define ZP_PTR_TAGGED           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR_TAGGED"))
 (define ZP_PTR2                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2"))
 (define ZP_PTR2_TAGGED          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2_TAGGED"))
-;; (define ZP_CELL_TOS             (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_TOS"))
-;; (define ZP_CELL0                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL0"))
 (define ZP_CALL_FRAME           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
 (define ZP_CELL_STACK_BASE_PTR  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_BASE_PTR"))
 (define ZP_CELL_STACK_TOS       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
@@ -532,24 +548,23 @@
 (define ZP_LOCALS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_PTR"))
 (define ZP_PARAMS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PARAMS_PTR"))
 
-;; naming convention
-;; cell-stack         == stack of cells (could be any atomic or ptr cell)
-;; zp_ptr             == cell ptr (either cell-ptr or cell-pair-ptr)
-;; cell-ptr           == pointer to any type of cell (except to cell-pairs)
-;; cell-pair-ptr      == pointer to cell-pair (only)
-;; untagged low byte  == low byte without ptr tags
-;; tagged low byte    == low byte with tags (ptr or other)
-;; page bitmap        == set of bits each indicating whether a page is free/used (total #x20 bytes long)
-;; ref count          == byte counting how many pointers to this value exist, there can be pointer to pointers
+;; naming
+;;   cell-stack         == stack of cells (could be any atomic or ptr cell)
+;;   zp_ptr             == cell ptr (either cell-ptr or cell-pair-ptr)
+;;   cell-ptr           == pointer to any type of cell (except to cell-pairs)
+;;   cell-pair-ptr      == pointer to cell-pair (only)
+;;   untagged low byte  == low byte without ptr tags
+;;   tagged low byte    == low byte with tags (ptr or other)
+;;   page bitmap        == set of bits each indicating whether a page is free/used (total #x20 bytes long)
+;;   ref count          == byte counting how many pointers to this value exist, there can be pointer to pointers
 
-
-;; rules
-;;   zp_ptr is regarded as volatile!
-;;   pointers pushed on the stack increase the ref count
-;;   pointers poped from the stack decrease the ref count
-;;   copying to zp_ptr does NOT change the ref count
-;;   writing a cell-ptr into a cell increases ref count (regardless where this cell-ptr comes from)
-;;   erasing cell-ptr from a cell decreases ref count
+;; rules (up to debate)
+;;   ? zp_ptr is regarded as volatile!
+;;   ? pointers pushed on the stack increase the ref count
+;;   ? pointers popped from the stack decrease the ref count
+;;   ? copying to zp_ptr does NOT change the ref count
+;;   ? writing a cell-ptr into a cell increases ref count (regardless where this cell-ptr comes from)
+;;   ? erasing cell-ptr from a cell decreases ref count
 
 ;; pop cell from stack, decrease ref count if it is a reference
 ;; input: stack
@@ -1147,6 +1162,13 @@
           (word $0000) ;; if high byte is 0, the tree is empty!
 
    ;; $cdc7
+   (label VM_FREE_M1_PAGE_P0)
+          (byte $00) ;; cell page with free slots for m1 page p0 pages
+          (byte $00) ;; cell page with free slots for m1 page p1 pages
+          (byte $00) ;; cell page with free slots for m1 page p2 pages
+          (byte $00) ;; cell page with free slots for m1 page p3 pages
+
+   ;; $cdcb
    ))
 
 ;; put into memory @ #xced0
@@ -1277,14 +1299,26 @@
           (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
           ;; now initialize page in A
 
+          (TAX)
+
           (STA ZP_PTR+1)
           (TAY) ;; page used as idx
           (LDA !$04) ;; first free slot (after initialization)
           (STA VM_FREE_SLOT_FOR_PAGE,y)
 
-          ;; first write all reference count fields (zero)
-          (LDY !$01)
+          (LDY !$00)
           (STY ZP_PTR)
+          (LDA !$40) ;; page type cell-pairs w/ 0 slots allocated
+          (STA (ZP_PTR),y)
+
+          (LDY !$ff)
+          (LDA VM_FREE_CELL_PAIR_PAGE)
+          (STA (ZP_PTR),y) ;; previous page of this type is (@$ff = )
+
+          (STX VM_FREE_CELL_PAIR_PAGE)
+
+          (INC ZP_PTR)
+          ;; first write all reference count fields (zero)
           (LDY !$02)
           (LDA !$00) ;; reference count initialized with 0
 
@@ -1453,7 +1487,6 @@
    (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE)
           (JSR VM_ALLOC_PAGE__LIST_CELL_PAIRS)
           (LDA ZP_PTR+1)
-          (STA VM_FREE_CELL_PAIR_PAGE)
 
    ;; ----------------------------------------
    (label VM_ALLOC_CELL_PAIR_ON_PAGE) ;; <-- real entry point of this function
@@ -1462,13 +1495,18 @@
           (LDA VM_FREE_SLOT_FOR_PAGE,x)
           (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE) ;; allocate new page first
 
-   (label CELL_ON_THIS_PAGE__VM_ALLOC_CELL_PAIR_ON_PAGE_)
+   (label CELL_ON_THIS_PAGE__VM_ALLOC_CELL_PAIR_ON_PAGE)
           (STA ZP_PTR)
-          (ORA !$02)
+          (ORA !$02) ;; sets the bit indicating that this is pointer to a cell-pair
           (STA ZP_PTR_TAGGED)
           (LDY !$00)
           (LDA (ZP_PTR),y) ;; next free cell
           (STA VM_FREE_SLOT_FOR_PAGE,x)
+
+          ;; increase the slot number on this page
+          (STX INC_CMD__VM_ALLOC_CELL_PAIR_ON_PAGE+2) ;; overwrite $c0
+   (label INC_CMD__VM_ALLOC_CELL_PAIR_ON_PAGE)
+          (INC $c000)
           (RTS)))
 
 ;; find out what kind of cell zp_ptr points to.
@@ -1680,10 +1718,12 @@
           (word $0000)))
 
 ;; zp_ptr = pointer to cell-pair that is added to the free list on its page
+;; reduces the number of used slots in byte 0
 (define VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST
   (list
    (label VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST)
           (LDX ZP_PTR+1)
+          (STX DEC_CMD__VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST+2) ;; set page for dec command
           (LDA VM_FREE_SLOT_FOR_PAGE,x) ;; old first free on page
           (LDY !$00)
           (STA (ZP_PTR),y) ;; set old free to next free on this very cell
@@ -1697,6 +1737,9 @@
           (LDA !$00)
           (STA ZP_PTR) ;; modify pointer such that zp_ptr points to beginning of page
           (STA (ZP_PTR),y) ;; clear refcount byte, too
+
+   (label DEC_CMD__VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST)
+          (DEC $c000) ;; $c0 is overwritten by actual page
           (RTS)))
 
 
@@ -1717,9 +1760,12 @@
   (check-equal? (memory-list use-case-1-a-state-after ZP_PTR (+ 1 ZP_PTR))
                 '(#x04 #xcc)
                 "zp_ptr -> $cd04 = first free cell-pair on page $cd after initialization")
-  (check-equal? (memory-list use-case-1-a-state-after #xcc01 #xcc01)
-                '(#x01)
-                "refcount for first cell-pair allocated = 1")
+  (check-equal? (memory-list use-case-1-a-state-after #xccff #xccff)
+                '(#x00)
+                "previous page of this type is 00 (none)")
+  (check-equal? (memory-list use-case-1-a-state-after #xcc00 #xcc01)
+                '(#x41 #x01)
+                "page type b0100 0001 refcount for first cell-pair allocated = 1")
   (check-equal? (memory-list use-case-1-a-state-after #xcc04 #xcc07)
                 '(#x00 #x00 #x00 #x00)
                 "cell1=int0 cell2=int0")
@@ -2271,7 +2317,23 @@
           (STA ZP_PTR2+1)
           (LDA !$00)
           (STA ZP_PTR2)
-          (LDX SEL_PROFILE__VM_ALLOC_M1_PAGE)
+
+          (LDY !$00)
+          (LDX SEL_PROFILE__VM_ALLOC_M1_PAGE) ;; profile = 0..3
+          (TXA)
+          (ORA !$10)
+          (STA (ZP_PTR2),y) ;; set page type in byte 0 to b0001 <profile>
+
+          (LDA VM_FREE_M1_PAGE_P0,x) ;; current free page
+          (INY)
+          (STA (ZP_PTR2),y)          ;; store previous page
+
+          (LDA ZP_PTR2+1)
+          (STA VM_FREE_M1_PAGE_P0,x) ;; set page with free slots to this allocated page
+
+          (LDA !$00)
+          (INY)
+          (STA (ZP_PTR2),y)          ;; store number of slots used
 
           (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_M1_PAGE,x) ;; y = refcount field for first slot
 
@@ -2281,10 +2343,13 @@
           (TYA)
           (CLC)
           (ADC INC_TO_NEXT_SLOT__VM_ALLOC_M1_PAGE,x) ;; calc next refcount field offset
+          (BCS END_REF_COUNT_LOOP__VM_ALLOC_M1_PAGE)
           (TAY)
+          (ADC !$01)
           (LDA !$00)
           (BCC REF_COUNT_LOOP__VM_ALLOC_M1_PAGE) ;; still on this page?
 
+   (label END_REF_COUNT_LOOP__VM_ALLOC_M1_PAGE)
           ;; loop to write free slot list
           (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_M1_PAGE,x)
           (INY)  ;; first slot  (refcount field offset + 1)
@@ -2300,9 +2365,6 @@
    (label ALMOST_DONE__VM_ALLOC_M1_PAGE)
           (LDA !$00)
           (STA (ZP_PTR2),y) ;; last offset to next free slot is 00 = no next free slot!
-          (LDA SEL_PROFILE__VM_ALLOC_M1_PAGE)
-          (LDY !$01)
-          (STA (ZP_PTR2),y) ;; set selected page slot type into byte 01
           (RTS)
 
    (label SEL_PROFILE__VM_ALLOC_M1_PAGE)
@@ -2320,11 +2382,6 @@
           (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), contains 5 slots
           (byte $54) ;; add 54 to get to next slot, slot-size $53 (83), contains 3 slots
 
-   (label FREE_PAGE__VM_ALLOC_M1_PAGE) ;; 0 = no free page available => allocate page
-          (byte $00) ;; page that holds free slots for slot sizes $11 (17)
-          (byte $00) ;; page that holds free slots for slot sizes $1d (29)
-          (byte $00) ;; page that holds free slots for slot sizes $31 (49)
-          (byte $00) ;; page that holds free slots for slot sizes $53 (83)
           ))
 
 (module+ test #| vm_alloc_m1_page |#
@@ -2345,9 +2402,9 @@
   (define test-alloc-m1-01-state-after
     (run-code-in-test test-alloc-m1-01-code))
 
-  (check-equal? (memory-list test-alloc-m1-01-state-after #xcc03 #xcc04)
-                (list #x00 #x16)
-                "slot0: refcount 0, next free slot at offset $16")
+  (check-equal? (memory-list test-alloc-m1-01-state-after #xcc00 #xcc04)
+                (list #x10 #x00 #x00 #x00 #x16)
+                "pagetype = $10, previous page = $00, slots allocated = $00, slot0: refcount 0, next free slot at offset $16")
   (check-equal? (memory-list test-alloc-m1-01-state-after #xcc15 #xcc16)
                 (list #x00 #x28)
                 "slot1: refcount 0, next free slot at offset $28")
@@ -2375,6 +2432,9 @@
   (define test-alloc-m1-02-state-after
     (run-code-in-test test-alloc-m1-02-code))
 
+  (check-equal? (memory-list test-alloc-m1-02-state-after #xcc00 #xcc02)
+                (list #x11 #x00 #x00)
+                "page type $11, previous page = $00, slot number used = $00")
   (check-equal? (memory-list test-alloc-m1-02-state-after #xcc0f #xcc10)
                 (list #x00 #x2e)
                 "slot0: refcount 0, next free slot at offset $2c")
@@ -2405,6 +2465,9 @@
   (define test-alloc-m1-03-state-after
     (run-code-in-test test-alloc-m1-03-code))
 
+  (check-equal? (memory-list test-alloc-m1-03-state-after #xcc00 #xcc02)
+                (list #x12 #x00 #x00)
+                "page type $12, previous page = $00, slot number used = $00")
   (check-equal? (memory-list test-alloc-m1-03-state-after #xcc05 #xcc06)
                 (list #x00 #x38)
                 "slot0: refcount 0, next free slot at offset $38")
@@ -2435,6 +2498,9 @@
   (define test-alloc-m1-04-state-after
     (run-code-in-test test-alloc-m1-04-code))
 
+  (check-equal? (memory-list test-alloc-m1-04-state-after #xcc00 #xcc02)
+                (list #x13 #x00 #x00)
+                "page type $13, previous page = $00, slot number used = $00")
   (check-equal? (memory-list test-alloc-m1-04-state-after #xcc03 #xcc04)
                 (list #x00 #x58)
                 "slot0: refcount 0, next free slot at offset $56")
@@ -2459,11 +2525,12 @@
           (STX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
 
    (label VM_ALLOC_SLOT_TYPE_X)
-          (LDA FREE_PAGE__VM_ALLOC_M1_PAGE,x) ;; +1, +2, +3
+          (LDA VM_FREE_M1_PAGE_P0,x) ;;
           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)
 
           ;; ensure zp_ptr2 points into the page
           (STA ZP_PTR2+1)
+          (STA INC_CMD__VM_ALLOC_SLOT_TYPE_X+2)
           (TAX)
           (LDY VM_FREE_SLOT_FOR_PAGE,x)           ;; first free slot offset
           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)  ;; if =0 allocate new page
@@ -2480,24 +2547,23 @@
           (LDY INC_TO_NEXT_SLOT__VM_ALLOC_M1_PAGE,x)
           (DEY)
 
+   (label INC_CMD__VM_ALLOC_SLOT_TYPE_X)
+          (INC $c002) ;; $c0 is overwritten with current page (increases the number of slots actually used)
+
           (RTS)
 
    (label NEW_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; allocate a complete new page for page type x
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
           (JSR VM_ALLOC_M1_PAGE)
-          (LDY !$01)
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (LDA FREE_PAGE__VM_ALLOC_M1_PAGE,x)              ;; x = page type (0,1,2,3)
-          (STA (ZP_PTR2),y)                                ;; store previous free page
           (LDA ZP_PTR2+1)                                  ;; load new free page
-          (STA FREE_PAGE__VM_ALLOC_M1_PAGE,x)              ;; x = page type (0,1,2,3)
           (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_M1_PAGE,x) ;; x = page type (0,1,2,3)
           (TAX)
           (INY)
           (TYA)
           (STA VM_FREE_SLOT_FOR_PAGE,x)                    ;; set first free slot, here x = page
-          (CLC)
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)     ;; make sure to set x to page type before jump
+          (CLC)
           (BCC VM_ALLOC_SLOT_TYPE_X)
 
    (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
@@ -2524,7 +2590,7 @@
 
    (label PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
           (byte $00) ;; local variable holding the selected page typ (0 = slots up to 17 bytes, 2 up to 29 bytes ...)
-))
+          ))
 
 (module+ test #| VM_ALLOC_BUCKET_SLOT |#
   (define test-alloc-bucket-slot-code
@@ -2541,7 +2607,7 @@
             (LDA !$0b) ;; want slot of size 11
             (JSR VM_ALLOC_BUCKET_SLOT)
 
-            (LDA FREE_PAGE__VM_ALLOC_M1_PAGE+0) ;; type 0
+            (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
             (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-state-after
@@ -2553,9 +2619,9 @@
   (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_PTR2 (add1 ZP_PTR2))
                 (list #x04 #xcc)
                 "allocated slot is at cc04")
-  (check-equal? (memory-list test-alloc-bucket-slot-state-after #xcc01 #xcc01)
-                (list #x00)
-                "previous free page is 0")
+  (check-equal? (memory-list test-alloc-bucket-slot-state-after #xcc00 #xcc02)
+                (list #x10 #x00 #x01)
+                "page type = $10, previous free page is 0, number of slots used = $01")
   (check-equal? (memory-list test-alloc-bucket-slot-state-after #xcfcc #xcfcc)
                 (list #x16)
                 "next free slot of page $cc is at $16")
@@ -2579,7 +2645,7 @@
             (LDA !$09) ;; want slot of size 9, should be on the same page
             (JSR VM_ALLOC_BUCKET_SLOT)
 
-            (LDA FREE_PAGE__VM_ALLOC_M1_PAGE+0) ;; type 0
+            (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
             (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-2x-state-after
@@ -2591,15 +2657,73 @@
   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_PTR2 (add1 ZP_PTR2))
                 (list #x16 #xcc)
                 "allocated slot is at cc16")
-  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after #xcc01 #xcc01)
-                (list #x00)
-                "previous free page is (still) 0")
+  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after #xcc00 #xcc02)
+                (list #x10 #x00 #x02)
+                "page type = $10, previous free page is (still) 0, slots used = $02")
   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after #xcfcc #xcfcc)
                 (list #x28)
                 "next free slot of page $cc is at $28")
   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_TEMP ZP_TEMP)
                 (list #xcc)
                 "free page for slot type 0 is $cc")
+
+  (define test-alloc-bucket-slot-xx-code
+    (list
+     ;; fill page with $ff
+            (LDA !$FF)
+            (LDY !$02) ;; 2 pages
+            (LDX !$00) ;; 256 bytes
+     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+            (DEX)
+            (STA $cb00,x)
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+            (DEY)
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+
+            ;; loop over ...
+            (LDA !$0a)
+            (STA LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+
+     (label LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
+            (LDA !$14) ;; want slot of size 20
+            (JSR VM_ALLOC_BUCKET_SLOT) ;; ... slot allocation
+            (DEC LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
+
+            (JMP TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
+
+     (label LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+            (byte $20)
+
+
+     (label TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
+            (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
+            (STA ZP_TEMP)))
+
+  (define test-alloc-bucket-slot-xx-state-after
+    (run-code-in-test test-alloc-bucket-slot-xx-code))
+
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_PTR2 (add1 ZP_PTR2))
+                (list #x2e #xcb)
+                "allocated slot is at cb2e (slot1 on page 2)")
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcb4b #xcb4c)
+                (list #x00 #x6a)
+                "first free slot page2: refcount 0, next free slot at offset $6a")
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcb00 #xcb02)
+                (list #x11 #xcc #x02)
+                "cb00: page type = $11, previous free page is $cc, slots used = $02")
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcc00 #xcc02)
+                (list #x11 #x00 #x08)
+                "cc00: page type = $11, previous free page is $00, slots used = $08")
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcfcc #xcfcc)
+                (list #x00)
+                "next free slot of page $cc is at 00 (no free slot avail)")
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcfcb #xcfcb)
+                (list #x4c)
+                "next free slot of page $cb is at $4c")
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_TEMP ZP_TEMP)
+                (list #xcb)
+                "free page for slot type 1 is $cb")
   ;; free-page for slot type 0 = cc
   )
 
@@ -2608,11 +2732,15 @@
 
 ;; input:  ZP_PTR2
 ;; output: ZP_PTR2 is invalid
+;; currently once allocated pages are not garbage collected. this is bad and needs to be changed
+;; (e.g. keep count of used slots)? used slots = 0 => free page
 (define VM_FREE_BUCKET_SLOT
   (list
    (label VM_FREE_BUCKET_SLOT)
           (LDX ZP_PTR2+1)
+          (STX DEC_CMD__VM_FREE_BUCKET_SLOT+2)    ;; write page for later dec execution
           (LDA VM_FREE_SLOT_FOR_PAGE,x)           ;; first free slot offset
+
           (LDY !$00)
           (STA (ZP_PTR2),y)                       ;; set (zp_ptr) = previous free
           (LDA ZP_PTR2)                           ;; low byte of pointer = new free slot
@@ -2621,6 +2749,9 @@
           (DEC ZP_PTR2)                           ;; now points to ref count
           (TYA)                                   ;; y is still 0 => a := 0
           (STA (ZP_PTR2),y)                       ;; set refcount := 0
+
+   (label DEC_CMD__VM_FREE_BUCKET_SLOT)
+          (DEC $c002)                             ;; $c0 is overwritten
 
           (RTS)))
 
@@ -2649,9 +2780,9 @@
   (define test-free-bucket-slot-state-after
     (run-code-in-test test-free-bucket-slot-code))
 
-  (check-equal? (memory-list test-free-bucket-slot-state-after #xcc03 #xcc04)
-                (list #x00 #x28)
-                "slot0 (now free): refcount 0, next free slot at offset $28")
+  (check-equal? (memory-list test-free-bucket-slot-state-after #xcc00 #xcc04)
+                (list #x10 #x00 #x01 #x00 #x28)
+                "page type= $10, previous page = $00, slots used = $01, slot0 (now free): refcount 0, next free slot at offset $28")
   (check-equal? (memory-list test-free-bucket-slot-state-after #xcfcc #xcfcc)
                 (list #x04)
                 "next free slot of page $cc is at $04"))
@@ -2683,12 +2814,12 @@
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
           VM_INITIALIZE_MEMORY_MANAGER
-          ;; VM_ALLOC_PAGE_JUMP_TABLE
-          ;; VM_ALLOC_PAGE
 
           VM_FREE_PAGE
-          VM_ALLOC_PAGE__LIST_CELL_PAIRS
           VM_ALLOC_PAGE__PAGE_UNINIT
+
+          VM_ALLOC_PAGE__LIST_CELL_PAIRS
+
           VM_ALLOC_CELL_PAIR_ON_PAGE
 
           VM_REFCOUNT_DECR
@@ -2710,6 +2841,7 @@
 
           VM_FREE_NON_ATOMIC
           VM_FREE_CELL_PAIR
+          VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST
 
           ;; vm_cell_stack_write_int_1_to_tos
           ;; vm_cell_stack_write_int_0_to_tos
