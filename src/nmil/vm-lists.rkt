@@ -4,7 +4,7 @@
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
 
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings))
+(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings vm-page->strings))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -187,10 +187,14 @@
                 (list "stack holds 1 item"
                       "cell-pair-ptr $cc04")
                 "case cons: stack holds single element pointing to cc04")
-  (check-equal? (memory-list use-case-cons-state-after #xcc00 #xcc07)
-                '(#x00 #x01 #x00 #x00
-                  #x00 #x01 #x02 #x00) ;; (int1 . nil)
-                "case cons: cell-pair is "))
+  (check-equal? (vm-page->strings use-case-cons-state-after #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $08"))
+  (check-equal? (memory-list use-case-cons-state-after #xcc04 #xcc07)
+                '(#x00 #x01 #x02 #x00)
+                "case cons: cell-pair is (int1 . nil) "))
 
 (define vm-lists
   (append VM_CONS
