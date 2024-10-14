@@ -4,16 +4,30 @@
 ;;         cell                     :: 16 bit value (finest granular memory managed block)
 ;;         atomic cell              :: a cell that has no followup value and is complete in itself
 ;;         cell-ptr                 :: an atomic cell, lowest bit of low byte is set, points to another cell
+;;                                    lowbyte mask: #bxxxx xxx1, (lowbyte payload = xxxx xxx0 => address at 2 bytes offsets)
+;;                                    highbyte = page
 ;;         cell-pair-ptr            :: an atomic cell, second lowest bit is set, lowest bit is unset, points to a cell-pair
+;;                                    lowbyte mask: #bxxxx xx10 (lowbyte payload = xxxx xx00 => address at 4 bytes offsets)
+;;                                    highbyte = page
 ;;         int-cell                 :: an atomic cell having 13 bit as payload
+;;                                    lowbyte mask: #b0xxx xx00, xxxxx = high bits of int
+;;                                    highbyte = lowbyte of int
 ;;         byte-cell (char|bool)    :: an atomic cell having one byte as payload
+;;                                    lowbyte mask: #b1111 1100
+;;                                    highbyte = payload
 ;;         complex cell             :: a cell that functions as header for followup values (follows directly in memory)
 ;;                                    complex cells cannot be pushed on the stack, they can only be pointed to by cell-ptr
 ;;         (cell-structure-header   :: a complex cell that defines a structure)
 ;;         cell-array-header        :: a complex cell that defines an array, defining the number of cells in the second byte
 ;;                                    a structure is an array of cells
+;;                                    lowbyte mask: #b1000 0000
+;;                                    highbyte: #of cells in this array
+;;                                    n*2 bytes with cells <- each cell needs to be gc'ed separately
 ;;         cell-native-array-header :: a complex cell that defines an array of bytes
 ;;                                    a string is an native array of bytes
+;;                                    lowbyte mask: #b1000 0100
+;;                                    highbyte: #of bytes in this array
+;;                                    n bytes with byte payloads <- no gc of this necessary
 ;;         (cell-float-header       :: a complex cell that defines a float)
 ;;         page                     :: 256 byte memory managed unit, holding slots
 ;;         slot                     :: a fixed size portion of memory on a page (sizes are 2, 4, 8 ...), only one size per page is allowed
@@ -23,7 +37,7 @@
 ;;         cell-pairs page  :: page for cell-pairs, (lowbyte) lsr x 2 to get ref count position
 ;;         cell page        :: page for cells, (lowbyte) lsr x 1 to get ref count position (last cell unusable)
 ;;         s8 page          ;; page for slots of size <=8, (lowbyte) lsr x 3 to get ref count position
-;;
+
 ;; idea: keep allocated #slots to detect empty pages (# drops to zero)
 ;; idea: page 00 = page mod byte
 ;;            1xxx xxxx = (cell page) page with cells (slots of byte 2), xxxxxx = number of used cells 0..127 (actually only 85 possible)
@@ -2916,6 +2930,8 @@
 ;; output: ZP_PTR2 is invalid
 ;; currently once allocated pages are not garbage collected. this is bad and needs to be changed
 ;; (e.g. keep count of used slots)? used slots = 0 => free page
+;; INFO: NO GC! (this must be done, freeing specific types (e.g. an array) <- knows the number of slots etc.
+;;       REF COUNT IS SET TO ZERO
 (define VM_FREE_BUCKET_SLOT
   (list
    (label VM_FREE_BUCKET_SLOT)
@@ -2929,7 +2945,10 @@
           (LDA VM_FREE_SLOT_FOR_PAGE,x)           ;; first free slot offset
           (BNE CONTINUE__VM_FREE_BUCKET_SLOT)     ;; regular free
 
+          ;; this page was full (since next free slot was 0) => register with the list of pages with free slots
           (JSR VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS)
+          (LDX DEC_CMD__VM_FREE_BUCKET_SLOT+2)    ;; restore x
+          (LDA !$00)                              ;; next free slot offset (=0)
 
    (label CONTINUE__VM_FREE_BUCKET_SLOT)
           (LDY !$00)
@@ -3055,6 +3074,7 @@
           (INC ZP_PTR)
           (RTS)))
 
+;; TODO: implement GC
 (define VM_DEC_REF_BUCKET_SLOT
   (list
    (label VM_DEC_REF_BUCKET_SLOT)
@@ -3064,8 +3084,37 @@
           (SEC)
           (SBC !$01)
           (STA (ZP_PTR),y)
+          (BNE NO_GC__VM_DEC_REF_BUCKET_SLOT)
+
+          ;; DO GC THIS SLOT and then FREE!!
+          ;; what kind of object is this (read header cell)
+          ;; then dispatch an header cell type
+          (INC ZP_PTR) ;; now pointing at the first (lowbyte) of the cell header
+          (LDA (ZP_PTR),y) ;; y still 0
+          (CMP !$80)       ;;
+          (BNE NEXT0__VM_DEC_REF_BUCKET_SLOT)
+
+          ;; its a regular array slot, (gc each slot, beware recursion!!!!)
+          (JSR VM_GC_ARRAY_SLOT_PTR)
+          (JMP VM_FREE_BUCKET_SLOT)
+
+   (label NEXT0__VM_DEC_REF_BUCKET_SLOT)
+          (CMP !$84)
+          (BNE NEXT1__VM_DEC_REF_BUCKET_SLOT)
+
+          ;; it's a native array slot (no gc necessary)
+          (JMP VM_FREE_BUCKET_SLOT)
+
+   (label NEXT1__VM_DEC_REF_BUCKET_SLOT)
+          (BRK) ;; error, unknown complex slot type
+
+(label NO_GC__VM_DEC_REF_BUCKET_SLOT)
           (INC ZP_PTR)
           (RTS)))
+
+(define VM_GC_ARRAY_SLOT_PTR
+  (list
+   (label VM_GC_ARRAY_SLOT_PTR)))
 
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -3097,6 +3146,8 @@
 
           VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS
           VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS
+
+          VM_GC_ARRAY_SLOT_PTR
 
           VM_FREE_NON_ATOMIC
           VM_FREE_CELL_PAIR

@@ -1,5 +1,11 @@
 #lang racket/base
 
+
+;; TODO: allow byte-code level debugging (with the possibility to step into 6510 code)?
+;;       idea: establish break point in interpreter loop,
+;;             print bc interpreter status (additionally)
+;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
+
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))

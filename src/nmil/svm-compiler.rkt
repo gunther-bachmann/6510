@@ -802,4 +802,4 @@
                       CDR                  ;; (cdr a-list)
                       TAIL_CALL            ;; write two stack values into param0 and 1 and jump to function start
                       )
-   "optimization should yields 9 bytes now (current min)"))
+   "optimization should yield 9 bytes (current min)"))
