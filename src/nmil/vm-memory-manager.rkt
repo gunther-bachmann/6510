@@ -457,7 +457,7 @@
     [(= 0 (bitwise-and #x83 low)) (format "cell-int $~a~a"
                                           (format-hex-byte (arithmetic-shift low -2))
                                           (format-hex-byte high))]
-    [(= #xfc (bitwise-and #xfc low)) (format "cell-byte $~a" (format-hex-byte high))]
+    [(= TAG_BYTE_BYTE_CELL (bitwise-and #xfc low)) (format "cell-byte $~a" (format-hex-byte high))]
     ;; TODO: a structure has a special value + follow bytes
     ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
     ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
@@ -470,7 +470,7 @@
                 "cell-pair-ptr $c0c0")
   (check-equal? (vm-cell->string #x78 #x15)
                 "cell-int $1e15")
-  (check-equal? (vm-cell->string #xfc #x15)
+  (check-equal? (vm-cell->string TAG_BYTE_BYTE_CELL #x15)
                 "cell-byte $15"))
 
 (define (vm-cells->strings byte-list (result (list)))
@@ -578,6 +578,12 @@
    (byte-const PT_CALL_STACK             $01)   ;; page type: call stack
    (byte-const PT_CODE                   $02)   ;; page type: code
 
+   ;; highest bit 0 and the lowest 2 bits are reserved for int, cell-ptr and cell-pair-ptr
+   ;; => 32 values still available
+   (byte-const TAG_BYTE_BYTE_CELL        $fc)
+   (byte-const TAG_BYTE_CELL_ARRAY       $80)
+   (byte-const TAG_BYTE_NATIVE_ARRAY     $84)
+
    (word-const VM_FREE_PAGE_BITMAP       $ced0) ;; location: free page bitmap (ced0..ceff)
 
    (byte-const NEXT_FREE_PAGE_PAGE       $cf)   ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
@@ -631,6 +637,9 @@
 (define ZP_VM_PC                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_PC"))
 (define ZP_LOCALS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_PTR"))
 (define ZP_PARAMS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PARAMS_PTR"))
+(define TAG_BYTE_BYTE_CELL      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_BYTE_CELL"))
+(define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
+(define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
 
 ;; naming
 ;;   cell-stack         == stack of cells (could be any atomic or ptr cell)
@@ -728,6 +737,24 @@
 ;; check stack full!
 (define VM_CELL_STACK_PUSH
   (list
+   ;; push array@a pointed to by zp_ptr onto the cell-stack
+   ;; input:  A       index into array (0 indexed)
+   ;;         ZP_PTR  pointer to array slot
+   ;; output: cell-stack with array element pushed pushed (=> ZP_CELL_TOS+=2)
+   ;;         zp_ptr and pointed to cells unchanged
+   (label VM_CELL_STACK_PUSH_ARRAY_ATa_PTR)
+          (ASL A)
+          (CLC)
+          (ADC !$02) ;; point to low byte of array@a
+          (TAY)
+
+          (LDA (ZP_PTR),y)
+          (TAX) ;; lowbyte -> x
+          (INY)
+          (LDA (ZP_PTR),y) ;; highbyte -> a
+          (CLC)
+          (BCC VM_CELL_STACK_PUSH)
+
    (label VM_CELL_STACK_PUSH_CELL1_OF_ZP_PTR)
           (LDY !$02)
           (BNE VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
@@ -739,7 +766,7 @@
    ;; input:  cell-stack
    ;;         y register (0 = car-cell, 2 = cdr-cell)
    ;;         zp_ptr pointing to the cells to read from (psuh to cell-stack)
-   ;; output: cell-stack with celly pushed (=> ZP_CELL_TOS+=3)
+   ;; output: cell-stack with celly pushed (=> ZP_CELL_TOS+=2)
    ;;         zp_ptr and pointed to cells unchanged
    ;;         flags: result of lda high byte of celly
    ;; check stack full!
@@ -1599,15 +1626,27 @@
   (list
    (label VM_REFCOUNT_DECR)
           (LDA ZP_PTR_TAGGED)
+          (TAX)
           (LSR)
           (BCS DECR_CELL_PTR__VM_REFCOUNT_DECR)
           (LSR)
           (BCS DECR_CELL_PAIR__VM_REFCOUNT_DECR)
           ;; check other types of cells
+          (CPX !TAG_BYTE_CELL_ARRAY)
+          (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR)
+          (CPX !TAG_BYTE_NATIVE_ARRAY)
+          (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR)
+
+          ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_PTR_TAGGED)
           (BRK)
+
+   (label DECR_CELL_ARRAY__VM_REFCOUNT_DECR)
+   (label DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR)
+          (JMP VM_DEC_REF_BUCKET_SLOT)
 
    (label DECR_CELL_PAIR__VM_REFCOUNT_DECR)
           (JMP VM_REFCOUNT_DECR_CELL_PAIR)
+
    (label DECR_CELL_PTR__VM_REFCOUNT_DECR)
           ;; implement VM_REFCOUNT_DECR_CELL_PTR
           (BRK)))
@@ -3074,47 +3113,157 @@
           (INC ZP_PTR)
           (RTS)))
 
-;; TODO: implement GC
+(module+ test #| vm_inc_ref_bucket_slot |#
+    ;; TODO
+)
+
+;; input: ZP_PTR  pointer to bucket slot
 (define VM_DEC_REF_BUCKET_SLOT
   (list
    (label VM_DEC_REF_BUCKET_SLOT)
-          (DEC ZP_PTR)
-          (LDY !$00)
-          (LDA (ZP_PTR),y)
-          (SEC)
-          (SBC !$01)
-          (STA (ZP_PTR),y)
-          (BNE NO_GC__VM_DEC_REF_BUCKET_SLOT)
+   (DEC ZP_PTR)
+   (LDY !$00)
+   (LDA (ZP_PTR),y)
+   (SEC)
+   (SBC !$01)
+   (STA (ZP_PTR),y)
+   (BNE NO_GC__VM_DEC_REF_BUCKET_SLOT)
 
-          ;; DO GC THIS SLOT and then FREE!!
-          ;; what kind of object is this (read header cell)
-          ;; then dispatch an header cell type
-          (INC ZP_PTR) ;; now pointing at the first (lowbyte) of the cell header
-          (LDA (ZP_PTR),y) ;; y still 0
-          (CMP !$80)       ;;
-          (BNE NEXT0__VM_DEC_REF_BUCKET_SLOT)
+   ;; DO GC THIS SLOT and then FREE!!
+   ;; what kind of object is this (read header cell)
+   ;; then dispatch an header cell type
+   (INC ZP_PTR) ;; now pointing at the first (lowbyte) of the cell header
+   (LDA (ZP_PTR),y) ;; y still 0
+   (CMP !TAG_BYTE_CELL_ARRAY)       ;;
+   (BNE NEXT0__VM_DEC_REF_BUCKET_SLOT)
 
-          ;; its a regular array slot, (gc each slot, beware recursion!!!!)
-          (JSR VM_GC_ARRAY_SLOT_PTR)
-          (JMP VM_FREE_BUCKET_SLOT)
+   ;; its a regular array slot, (gc each slot, beware recursion!!!!)
+   (JSR VM_GC_ARRAY_SLOT_PTR)
+   (JMP VM_FREE_BUCKET_SLOT)
 
    (label NEXT0__VM_DEC_REF_BUCKET_SLOT)
-          (CMP !$84)
-          (BNE NEXT1__VM_DEC_REF_BUCKET_SLOT)
+   (CMP !TAG_BYTE_NATIVE_ARRAY)
+   (BNE NEXT1__VM_DEC_REF_BUCKET_SLOT)
 
-          ;; it's a native array slot (no gc necessary)
-          (JMP VM_FREE_BUCKET_SLOT)
+   ;; it's a native array slot (no gc necessary)
+   (JMP VM_FREE_BUCKET_SLOT)
 
    (label NEXT1__VM_DEC_REF_BUCKET_SLOT)
-          (BRK) ;; error, unknown complex slot type
+   (BRK) ;; error, unknown complex slot type
 
-(label NO_GC__VM_DEC_REF_BUCKET_SLOT)
-          (INC ZP_PTR)
-          (RTS)))
+   (label NO_GC__VM_DEC_REF_BUCKET_SLOT)
+   (INC ZP_PTR)
+   (RTS)))
 
+
+(module+ test #| vm_dec_ref_bucket_slot |#
+    ;; TODO
+)
+
+;; input:  ZP_PTR = pointer to array slot
+;; output: ZP_PTR = pointer to last element of array
 (define VM_GC_ARRAY_SLOT_PTR
   (list
-   (label VM_GC_ARRAY_SLOT_PTR)))
+   (label VM_GC_ARRAY_SLOT_PTR)
+          ;; loop over slots and decrement their slots
+          (LDY !$01)
+          (LDA (ZP_PTR),y)
+          (STA LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR) ;;
+
+   (label LOOP__VM_GC_ARRAY_SLOT_PTR)
+          (INC ZP_PTR)
+          (INC ZP_PTR)
+          (JSR VM_REFCOUNT_DECR)
+          (DEC LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
+          (BNE LOOP__VM_GC_ARRAY_SLOT_PTR)
+
+          (RTS)
+
+   (label LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
+          (byte $00)
+   ))
+
+(module+ test #| vm_gc_array_slot_ptr |#
+    ;; TODO
+)
+
+;; allocate an array of cells (also useful for structures)
+;; input:  A = number of cells (1..)
+;; output: ZP_PTR2 -> points to an allocated array
+(define VM_ALLOCATE_CELL_ARRAY
+  (list
+   (label VM_ALLOCATE_CELL_ARRAY)
+          ;; optional: optimization for arrays with 3 cells => s8 page!
+          (PHA)
+          (ASL A)
+          (CLC)
+          (ADC !$02) ;; add to total slot size
+
+          (JSR VM_ALLOC_BUCKET_SLOT)
+
+          ;; write header cell
+          (LDY !$00)
+          (LDA !TAG_BYTE_CELL_ARRAY)
+          (STA (ZP_PTR2),y) ;; store tag byte
+
+          (INY)
+          (PLA)
+          (STA (ZP_PTR2),y) ;; store number of array elements
+
+          (TAX) ;; use number of array elements as loop counter
+
+          ;; initialize slots/array with nil
+   (label LOOP_INIT__VM_ALLOCATE_CELL_ARRAY)
+          (INY)
+          (LDA !<TAGGED_NIL)
+          (STA (ZP_PTR2),y)
+          (INY)
+          (LDA !>TAGGED_NIL)
+          (STA (ZP_PTR2),y)
+          (DEX)
+          (BNE LOOP_INIT__VM_ALLOCATE_CELL_ARRAY)
+
+          (RTS)))
+
+(module+ test #| vm_allocate_cell_array |#
+    ;; TODO
+)
+
+;; write the tos into array element a (0 indexed)
+;; input:  a = index (0 indexed)
+;;         ZP_PTR = pointer to array
+;; NO CHECKING (NO BOUNDS, NO TYPE ...)
+(define VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR
+  (list
+   (label VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR)
+          (ASL A)
+          (CLC)
+          (ADC !$02) ;; point to low byte
+          (STA ZP_TEMP) ;; keep for later
+
+          ;; copy high byte
+          (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
+          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
+          (LDY ZP_TEMP)
+          (STA (ZP_PTR),y)
+
+          ;; copy low byte
+          (LDY ZP_CELL_STACK_TOS)
+          (DEY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; high byte in stack
+          (LDY ZP_TEMP)
+          (INY)
+          (STA (ZP_PTR),y) ;; write high byte into array
+
+          (RTS)))
+
+(module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
+    ;; TODO
+    )
+
+(module+ test #| vm_cell_stack_push_array_ata_ptr |#
+    ;; TODO
+    )
 
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -3149,6 +3298,9 @@
 
           VM_GC_ARRAY_SLOT_PTR
 
+          VM_ALLOCATE_CELL_ARRAY
+          VM_GC_ARRAY_SLOT_PTR
+
           VM_FREE_NON_ATOMIC
           VM_FREE_CELL_PAIR
           VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST
@@ -3178,7 +3330,11 @@
           ;; vm_cell_stack_write_zp_ptr_to_tos
           VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS
 
+          VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR
+
           VM_CELL_STACK_POP
+
+          ;; vm_cell_stack_push_array_ata_ptr
 
           ;; vm_cell_stack_push_zp_ptr2
           ;; vm_cell_stack_push_zp_ptr
@@ -3203,5 +3359,4 @@
           (list (org #xcec0))
           VM_INITIAL_MM_REGS
           (list (org #xced0))
-          VM_FREE_PAGE_BITMAP
-          ))
+          VM_FREE_PAGE_BITMAP))
