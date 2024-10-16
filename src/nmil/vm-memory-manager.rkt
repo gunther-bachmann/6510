@@ -580,6 +580,8 @@
 
    ;; highest bit 0 and the lowest 2 bits are reserved for int, cell-ptr and cell-pair-ptr
    ;; => 32 values still available
+   (byte-const TAG_PTR_MASK              $fc)   ;; use bitwise-and this value to remove any pointer specific bits
+
    (byte-const TAG_BYTE_BYTE_CELL        $fc)
    (byte-const TAG_BYTE_CELL_ARRAY       $80)
    (byte-const TAG_BYTE_NATIVE_ARRAY     $84)
@@ -697,7 +699,7 @@
           (STA ZP_PTR+1)      ;; to zp_ptr+1
           (INY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)  ;; tagged low byte
-          (AND $fc)           ;; remove low 2 bits
+          (AND !TAG_PTR_MASK)           ;; remove low 2 bits
           (STA ZP_PTR)        ;; to zp_ptr
           ;; no need for copying tagged low byte, since I already know it is a cell-pair-ptr
           (JSR VM_REFCOUNT_DECR_CELL_PAIR) ;; decrement and gc if necessary
@@ -1148,7 +1150,7 @@
           (LDA (ZP_CELL_STACK_BASE_PTR),y)    ;; high byte
           (STA ZP_PTR+1,x)
           (LDA ZP_TEMP)
-          (AND !$fc)
+          (AND !TAG_PTR_MASK)
           (STA ZP_PTR,x)
 
           (LDA ZP_TEMP)
@@ -1772,7 +1774,7 @@
           (STA ZP_PTR+1)
           (PLA)
           (STA ZP_PTR_TAGGED) ;; tag
-          (AND $fc)
+          (AND !TAG_PTR_MASK)
           (STA ZP_PTR) ;; cleared from tag, => real pointer
           (JMP VM_REFCOUNT_DECR)
 
@@ -3241,13 +3243,15 @@
           (ADC !$02) ;; point to low byte
           (STA ZP_TEMP) ;; keep for later
 
-          ;; copy high byte
+          ;; copy low byte
           (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
           (LDY ZP_TEMP)
+          (STA ZP_PTR_TAGGED)
+          (AND !TAG_PTR_MASK)
           (STA (ZP_PTR),y)
 
-          ;; copy low byte
+          ;; copy high byte
           (LDY ZP_CELL_STACK_TOS)
           (DEY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; high byte in stack
