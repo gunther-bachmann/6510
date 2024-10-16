@@ -702,7 +702,7 @@
           (AND !TAG_PTR_MASK)           ;; remove low 2 bits
           (STA ZP_PTR)        ;; to zp_ptr
           ;; no need for copying tagged low byte, since I already know it is a cell-pair-ptr
-          (JSR VM_REFCOUNT_DECR_CELL_PAIR) ;; decrement and gc if necessary
+          (JSR VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR) ;; decrement and gc if necessary
 
    (label VM_CELL_STACK_POP__NO_GC) ;; entry for just popping!
           (LDY ZP_CELL_STACK_TOS)   ;; restore tos
@@ -1624,51 +1624,51 @@
 
 ;; find out what kind of cell zp_ptr points to.
 ;;   in case of cell-pair,
-(define VM_REFCOUNT_DECR
+(define VM_REFCOUNT_DECR_ZP_PTR
   (list
-   (label VM_REFCOUNT_DECR)
+   (label VM_REFCOUNT_DECR_ZP_PTR)
           (LDA ZP_PTR_TAGGED)
-          (TAX)
+          (TAY)
           (LSR)
-          (BCS DECR_CELL_PTR__VM_REFCOUNT_DECR)
+          (BCS DECR_CELL_PTR__VM_REFCOUNT_DECR_ZP_PTR)
           (LSR)
-          (BCS DECR_CELL_PAIR__VM_REFCOUNT_DECR)
+          (BCS DECR_CELL_PAIR__VM_REFCOUNT_DECR_ZP_PTR)
           ;; check other types of cells
-          (CPX !TAG_BYTE_CELL_ARRAY)
-          (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR)
-          (CPX !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR)
+          (CPY !TAG_BYTE_CELL_ARRAY)
+          (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
+          (CPY !TAG_BYTE_NATIVE_ARRAY)
+          (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
 
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_PTR_TAGGED)
           (BRK)
 
-   (label DECR_CELL_ARRAY__VM_REFCOUNT_DECR)
-   (label DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR)
+   (label DECR_CELL_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
+   (label DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
           (JMP VM_DEC_REF_BUCKET_SLOT)
 
-   (label DECR_CELL_PAIR__VM_REFCOUNT_DECR)
-          (JMP VM_REFCOUNT_DECR_CELL_PAIR)
+   (label DECR_CELL_PAIR__VM_REFCOUNT_DECR_ZP_PTR)
+          (JMP VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR)
 
-   (label DECR_CELL_PTR__VM_REFCOUNT_DECR)
-          ;; implement VM_REFCOUNT_DECR_CELL_PTR
+   (label DECR_CELL_PTR__VM_REFCOUNT_DECR_ZP_PTR)
+          ;; implement VM_REFCOUNT_DECR_ZP_PTR_CELL_PTR
           (BRK)))
 
 ;; input: cell ptr in ZP_PTR
 ;; decrement ref count, if 0 deallocate
-(define VM_REFCOUNT_DECR_CELL_PAIR
+(define VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR
   (list
-   (label VM_REFCOUNT_DECR_CELL_PAIR)
+   (label VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR)
           (LDA ZP_PTR+1)
-          (STA PAGE__VM_REFCOUNT_DECR_CELL_PAIR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+          (STA PAGE__VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
           (LDA ZP_PTR)
           (LSR)
           (LSR)
           (TAX)
-   (label PAGE__VM_REFCOUNT_DECR_CELL_PAIR)
+   (label PAGE__VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_CELL_PAIR)
+          (BNE DONE__VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR)
           (JMP VM_FREE_CELL_PAIR) ;; free delayed
-   (label DONE__VM_REFCOUNT_DECR_CELL_PAIR)
+   (label DONE__VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR)
           (RTS)))
 
 (define VM_REFCOUNT_INCR_CELL_PAIR
@@ -1776,7 +1776,7 @@
           (STA ZP_PTR_TAGGED) ;; tag
           (AND !TAG_PTR_MASK)
           (STA ZP_PTR) ;; cleared from tag, => real pointer
-          (JMP VM_REFCOUNT_DECR)
+          (JMP VM_REFCOUNT_DECR_ZP_PTR)
 
    (label TEMP_PTR__VM_ALLOC_CELL_PAIR)
           (word $0000)))
@@ -1903,7 +1903,7 @@
      use-case-1-code ;; cell was allocated and set to hold int 0 in car and cdr
      (list
       ;; refcount will drop to zero
-      (JSR VM_REFCOUNT_DECR_CELL_PAIR))))
+      (JSR VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR))))
 
   (define use-case-1-b-state-after
     (run-code-in-test use-case-1-b-code))
@@ -1994,7 +1994,7 @@
   (define use-case-2-b-code
     (append use-case-2-a-code ;; zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
             (list
-             (JSR VM_REFCOUNT_DECR_CELL_PAIR)
+             (JSR VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR)
              ;; now:
              ;;   free_tree -> [cc08|0] (int0 . ->[cc04|1] (int0 . nil))
              )))
@@ -3116,66 +3116,136 @@
           (RTS)))
 
 (module+ test #| vm_inc_ref_bucket_slot |#
-    ;; TODO
-)
+  (define test-inc-ref-bucket-slot-1-code
+    (list
+     (LDA !$a0)
+     (STA $a003)
+     (STA ZP_PTR+1)
+     (LDA !$04)
+     (STA ZP_PTR)
+
+     (JSR VM_INC_REF_BUCKET_SLOT)))
+
+  (define test-inc-ref-bucket-slot-1-state-after
+    (run-code-in-test test-inc-ref-bucket-slot-1-code))
+
+  (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after #xa003 #xa003)
+                (list #xa1))
+  (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after ZP_PTR (add1 ZP_PTR))
+                (list #x04 #xa0)))
 
 ;; input: ZP_PTR  pointer to bucket slot
 (define VM_DEC_REF_BUCKET_SLOT
   (list
    (label VM_DEC_REF_BUCKET_SLOT)
-   (DEC ZP_PTR)
-   (LDY !$00)
-   (LDA (ZP_PTR),y)
-   (SEC)
-   (SBC !$01)
-   (STA (ZP_PTR),y)
-   (BNE NO_GC__VM_DEC_REF_BUCKET_SLOT)
+          (DEC ZP_PTR)
+          (LDY !$00)
+          (LDA (ZP_PTR),y)
+          (SEC)
+          (SBC !$01)
+          (STA (ZP_PTR),y)
+          (BNE NO_GC__VM_DEC_REF_BUCKET_SLOT)
 
-   ;; DO GC THIS SLOT and then FREE!!
-   ;; what kind of object is this (read header cell)
-   ;; then dispatch an header cell type
-   (INC ZP_PTR) ;; now pointing at the first (lowbyte) of the cell header
-   (LDA (ZP_PTR),y) ;; y still 0
-   (CMP !TAG_BYTE_CELL_ARRAY)       ;;
-   (BNE NEXT0__VM_DEC_REF_BUCKET_SLOT)
+          ;; DO GC THIS SLOT and then FREE!!
+          ;; what kind of object is this (read header cell)
+          ;; then dispatch an header cell type
+          (INC ZP_PTR) ;; now pointing at the first (lowbyte) of the cell header
+          (LDA (ZP_PTR),y) ;; y still 0
+          (CMP !TAG_BYTE_CELL_ARRAY)       ;;
+          (BNE NEXT0__VM_DEC_REF_BUCKET_SLOT)
 
-   ;; its a regular array slot, (gc each slot, beware recursion!!!!)
-   (JSR VM_GC_ARRAY_SLOT_PTR)
-   (JMP VM_FREE_BUCKET_SLOT)
+          ;; its a regular array slot, (gc each slot, beware recursion!!!!)
+          (JSR VM_GC_ARRAY_SLOT_PTR)
+          (JMP VM_FREE_BUCKET_SLOT)
 
    (label NEXT0__VM_DEC_REF_BUCKET_SLOT)
-   (CMP !TAG_BYTE_NATIVE_ARRAY)
-   (BNE NEXT1__VM_DEC_REF_BUCKET_SLOT)
+          (CMP !TAG_BYTE_NATIVE_ARRAY)
+          (BNE NEXT1__VM_DEC_REF_BUCKET_SLOT)
 
-   ;; it's a native array slot (no gc necessary)
-   (JMP VM_FREE_BUCKET_SLOT)
+          ;; it's a native array slot (no gc necessary)
+          (JMP VM_FREE_BUCKET_SLOT)
 
    (label NEXT1__VM_DEC_REF_BUCKET_SLOT)
-   (BRK) ;; error, unknown complex slot type
+          (BRK) ;; error, unknown complex slot type
 
    (label NO_GC__VM_DEC_REF_BUCKET_SLOT)
-   (INC ZP_PTR)
-   (RTS)))
+          (INC ZP_PTR)
+          (RTS)))
 
 
-(module+ test #| vm_dec_ref_bucket_slot |#
+(module+ test #| vm_dec_ref_bucket_slot (no gc) |#
+  (define test-dec-ref-bucket-slot-1-code
+    (list
+     (LDA !$a0)
+     (STA $a003)
+     (STA ZP_PTR+1)
+     (LDA !$04)
+     (STA ZP_PTR)
+
+     (JSR VM_DEC_REF_BUCKET_SLOT)))
+
+  (define test-dec-ref-bucket-slot-1-state-after
+    (run-code-in-test test-dec-ref-bucket-slot-1-code))
+
+  (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after #xa003 #xa003)
+                (list #x9f))
+  (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after ZP_PTR (add1 ZP_PTR))
+                (list #x04 #xa0)))
+
+(module+ test #| vm_dec_ref_bucket_slot (gc native array) |#
     ;; TODO
 )
 
-;; input:  ZP_PTR = pointer to array slot
-;; output: ZP_PTR = pointer to last element of array
+(module+ test #| vm_dec_ref_bucket_slot (gc cell array) |#
+    ;; TODO
+)
+
+(define VM_DEREF_PTR2_INTO_PTR
+  (list
+   (label VM_DEREF_PTR2_INTO_PTR)
+          (LDY !$00)
+          (LDA (ZP_PTR2),y)
+          (STA ZP_PTR2_TAGGED)
+          (AND !TAG_PTR_MASK)
+          (STA ZP_PTR2)
+          (INY)
+          (LDA (ZP_PTR2),y)
+          (STA ZP_PTR2+1)
+          (RTS)))
+
+(module+ test #| vm_deref_ptr2_into_ptr |#
+    ;; TODO
+)
+
+;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
+;; input:  ZP_PTR(2) = pointer to array (slot)
+;; used:   ZP_PTR    = dreferenced array element (if array element is a ptr)
+;;         ZP_PTR2   = pointer to last element of array
+;; ouput: -
 (define VM_GC_ARRAY_SLOT_PTR
   (list
    (label VM_GC_ARRAY_SLOT_PTR)
+          (JSR VM_COPY_PTR_TO_PTR2)
+
+   (label VM_GC_ARRAY_SLOT_PTR2)
           ;; loop over slots and decrement their slots
           (LDY !$01)
-          (LDA (ZP_PTR),y)
+          (LDA (ZP_PTR2),y)  ;; a = number of array elements
           (STA LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR) ;;
 
+          (LDY !$00)
+
    (label LOOP__VM_GC_ARRAY_SLOT_PTR)
-          (INC ZP_PTR)
-          (INC ZP_PTR)
-          (JSR VM_REFCOUNT_DECR)
+          (INC ZP_PTR2)
+          (INC ZP_PTR2)
+          ;; deref zp_ptr into zp_ptr2?
+          (LDA (ZP_PTR2),y) ;; load tagged low byte
+          (AND !$03)
+          (BEQ NEXT__VM_GC_ARRAY_SLOT_PTR)
+          (JSR VM_DEREF_PTR2_INTO_PTR)
+          (JSR VM_REFCOUNT_DECR_ZP_PTR)
+          (LDY !$00)
+    (label NEXT__VM_GC_ARRAY_SLOT_PTR)
           (DEC LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
           (BNE LOOP__VM_GC_ARRAY_SLOT_PTR)
 
@@ -3280,8 +3350,12 @@
 
           VM_ALLOC_CELL_PAIR_ON_PAGE
 
-          VM_REFCOUNT_DECR
-          VM_REFCOUNT_DECR_CELL_PAIR
+          ;; VM_REFCOUNT_DECR_ZP_PTRx
+          VM_REFCOUNT_DECR_ZP_PTR
+
+          ;; VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIRx
+          VM_REFCOUNT_DECR_ZP_PTR_CELL_PAIR
+
           VM_REFCOUNT_INCR_CELL_PAIR
 
           VM_ALLOC_CELL_PAIR
@@ -3304,6 +3378,8 @@
 
           VM_ALLOCATE_CELL_ARRAY
           VM_GC_ARRAY_SLOT_PTR
+
+          VM_DEREF_PTR2_INTO_PTR
 
           VM_FREE_NON_ATOMIC
           VM_FREE_CELL_PAIR
