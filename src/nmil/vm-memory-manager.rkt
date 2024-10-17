@@ -744,16 +744,16 @@
    ;;         ZP_PTR  pointer to array slot
    ;; output: cell-stack with array element pushed pushed (=> ZP_CELL_TOS+=2)
    ;;         zp_ptr and pointed to cells unchanged
-   (label VM_CELL_STACK_PUSH_ARRAY_ATa_PTR)
+   (label VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2)
           (ASL A)
           (CLC)
           (ADC !$02) ;; point to low byte of array@a
           (TAY)
 
-          (LDA (ZP_PTR),y)
+          (LDA (ZP_PTR2),y)
           (TAX) ;; lowbyte -> x
           (INY)
-          (LDA (ZP_PTR),y) ;; highbyte -> a
+          (LDA (ZP_PTR2),y) ;; highbyte -> a
           (CLC)
           (BCC VM_CELL_STACK_PUSH)
 
@@ -3298,16 +3298,38 @@
           (RTS)))
 
 (module+ test #| vm_allocate_cell_array |#
-    ;; TODO
+  (define test-alloc-cell-array-code
+    (list
+     (LDA !$04)
+     (JSR VM_ALLOCATE_CELL_ARRAY)))
+
+  (define test-alloc-cell-array-state-after
+    (run-code-in-test test-alloc-cell-array-code))
+
+  (check-equal? (vm-page->strings test-alloc-cell-array-state-after #xcc)
+                (list
+                 "page-type:      m1 page p0"
+                 "previous page:  $00"
+                 "slots used:     1"
+                 "next free slot: $16"))
+  (check-equal? (memory-list test-alloc-cell-array-state-after ZP_PTR2 (add1 ZP_PTR2))
+                (list #x04 #xcc))
+  (check-equal? (memory-list test-alloc-cell-array-state-after #xcc04 #xcc0d)
+                (list TAG_BYTE_CELL_ARRAY #x04
+                      #x02 #x00
+                      #x02 #x00
+                      #x02 #x00
+                      #x02 #x00))
 )
 
-;; write the tos into array element a (0 indexed)
+;; write the tos into array element a (0 indexed), array pointed to by zp_ptr2
 ;; input:  a = index (0 indexed)
-;;         ZP_PTR = pointer to array
+;;         ZP_PTR2 = pointer to array
 ;; NO CHECKING (NO BOUNDS, NO TYPE ...)
-(define VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR
+;; DECREMENT ref of pointer if array element was a pointer
+(define VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2
   (list
-   (label VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR)
+   (label VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
           (ASL A)
           (CLC)
           (ADC !$02) ;; point to low byte
@@ -3317,9 +3339,37 @@
           (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
           (LDY ZP_TEMP)
+          (TAX)
+          (LDA (ZP_PTR2),y) ;; previous low byte in that slot
+          (AND !$03)
+          (BEQ NO_PTR_IN_SLOT__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+
+          ;; GC the slot before actually writing to it
+          (INY)
+          (LDA (ZP_PTR2),y) ;; if high byte is 0, it is nil, no gc there
+          (BEQ IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+
+          (DEY)
+
+          (LDA (ZP_PTR2),y) ;; previous low byte in that slot (load again)
           (STA ZP_PTR_TAGGED)
-          (AND !TAG_PTR_MASK)
-          (STA (ZP_PTR),y)
+          (AND !$fc)
+          (STA ZP_PTR)
+          (INY)
+          (LDA (ZP_PTR2),y)
+          (STA ZP_PTR+1)
+          (JSR VM_REFCOUNT_DECR_ZP_PTR)
+
+          ;; ensure x = lowbyte (or a and jump even further)
+
+   (label IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
+          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
+          (LDY ZP_TEMP)
+          (TAX)
+   (label NO_PTR_IN_SLOT__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          (TXA)
+          (STA (ZP_PTR2),y)
 
           ;; copy high byte
           (LDY ZP_CELL_STACK_TOS)
@@ -3327,17 +3377,68 @@
           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; high byte in stack
           (LDY ZP_TEMP)
           (INY)
-          (STA (ZP_PTR),y) ;; write high byte into array
+          (STA (ZP_PTR2),y) ;; write high byte into array
 
           (RTS)))
 
 (module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
-    ;; TODO
-    )
+  (define vm_cell_stack_write_tos_to_array_ata_ptr-code
+    (list
+     (LDA !$04)
+     (JSR VM_ALLOCATE_CELL_ARRAY)
+
+     (LDA !$ff)
+     (LDX !$01)
+     (JSR VM_CELL_STACK_PUSH_INT)
+
+     (LDA !$02)
+     (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)))
+
+  (define vm_cell_stack_write_tos_to_array_ata_ptr-state-after
+    (run-code-in-test vm_cell_stack_write_tos_to_array_ata_ptr-code))
+
+  (check-equal? (vm-page->strings vm_cell_stack_write_tos_to_array_ata_ptr-state-after #xcc)
+                (list
+                 "page-type:      m1 page p0"
+                 "previous page:  $00"
+                 "slots used:     1"
+                 "next free slot: $16"))
+  (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after ZP_PTR2 (add1 ZP_PTR2))
+                (list #x04 #xcc))
+  (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after #xcc04 #xcc0d)
+                (list TAG_BYTE_CELL_ARRAY #x04
+                      #x02 #x00
+                      #x02 #x00
+                      #x04 #xff
+                      #x02 #x00)))
 
 (module+ test #| vm_cell_stack_push_array_ata_ptr |#
-    ;; TODO
-    )
+  (define test-cell-stack-push-array-ata-ptr-code
+    (list
+     (LDA !$04)
+     (JSR VM_ALLOCATE_CELL_ARRAY)
+
+     (LDA !$02)
+     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2) ;; @2 = nil -> stack
+
+     (LDA !$ff)
+     (LDX !$01)
+     (JSR VM_CELL_STACK_PUSH_INT)            ;; int $1ff -> stack
+
+     (LDA !$02)
+     (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2) ;; tos (int $1ff) -> @2 (overwriting nil)
+
+     (LDA !$02)
+     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2)))  ;; @2 (now int $1ff) -> stack
+
+  (define test-cell-stack-push-array-ata-ptr-state-after
+    (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
+
+  (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
+                (list "stack holds 3 items"
+                      "cell-int $01ff"
+                      "cell-int $01ff"
+                      "cell-pair-ptr $0000")))
 
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -3410,11 +3511,11 @@
           ;; vm_cell_stack_write_zp_ptr_to_tos
           VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS
 
-          VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR
+          VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2
 
           VM_CELL_STACK_POP
 
-          ;; vm_cell_stack_push_array_ata_ptr
+          ;; vm_cell_stack_push_array_ata_ptr2
 
           ;; vm_cell_stack_push_zp_ptr2
           ;; vm_cell_stack_push_zp_ptr
