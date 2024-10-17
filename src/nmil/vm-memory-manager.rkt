@@ -3256,8 +3256,44 @@
    ))
 
 (module+ test #| vm_gc_array_slot_ptr |#
-    ;; TODO
-)
+  (define test-gc-array-slot-ptr-code
+    (list
+     (LDA !$04)
+     (JSR VM_ALLOCATE_CELL_ARRAY)                       ;; ZP_PTR2 = pointer to the allocated array (with 4 cells)
+
+     (JSR VM_ALLOC_CELL_PAIR)                           ;; ZP_PTR = allocated cell-pair
+     (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+     (JSR VM_CELL_STACK_PUSH_ZP_PTR)                    ;;cell-pair -> stack
+
+     ;; wrote a new cell-pair @2
+     (LDA !$02)
+     (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)    ;; tos (cell-pair) -> @2
+
+     (JSR VM_CELL_STACK_PUSH_INT_m1)                    ;; int -1 -> stack
+     (LDA !$01)
+     (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)    ;; tos (int -1) -> 1
+
+     (JSR VM_GC_ARRAY_SLOT_PTR2)
+     ))                      ;; gc array
+
+  (define test-gc-array-slot-ptr-state-after
+    (run-code-in-test test-gc-array-slot-ptr-code))
+
+  (check-equal? (vm-stack->strings test-gc-array-slot-ptr-state-after)
+                (list "stack holds 2 items"
+                      "cell-int $1fff"
+                      "cell-pair-ptr $cb04"))
+  (check-equal? (vm-page->strings test-gc-array-slot-ptr-state-after #xcb)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $08"))
+  (check-equal? (memory-list test-gc-array-slot-ptr-state-after #xcb01 #xcb01)
+                (list #x00)
+                "refcount for cell-pair at cb04..cb07 is at cb01 = 0 (was freed)")
+  (check-equal? (memory-list test-gc-array-slot-ptr-state-after #xcec5 #xcec6)
+                (list #x04 #xcb)
+                "...and added as free tree root (for reuse)"))
 
 ;; allocate an array of cells (also useful for structures)
 ;; input:  A = number of cells (1..)
@@ -3344,7 +3380,7 @@
           (AND !$03)
           (BEQ NO_PTR_IN_SLOT__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
 
-          ;; GC the slot before actually writing to it
+          ;; GC the slot before actually writing to it <- can maybe optimized be ensuring that this cannot happen
           (INY)
           (LDA (ZP_PTR2),y) ;; if high byte is 0, it is nil, no gc there
           (BEQ IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
