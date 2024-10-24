@@ -1895,7 +1895,7 @@
           ;; TODO: implement VM_REFCOUNT_DECR_ZP_PTR_CELL_PTR
    (BRK)))
 
-;; input: cell ptr in ZP_PTR
+;; input: cell-pair ptr in ZP_PTR
 ;; decrement ref count, if 0 deallocate
 (define VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR
   (list
@@ -1965,6 +1965,7 @@
   ;; TODO: implement
 )
 
+;; allocate a cell, allocating a new page if necessary
 ;; input:  none
 ;; output: zp_ptr = pointer to free cell
 (define VM_ALLOC_CELL_TO_ZP_PTR
@@ -3010,6 +3011,7 @@
                   "slots used:     0"
                   "next free slot: $04")))
 
+;; allocate a slot of min A size, allocating a new page if necessary
 ;; input:  A = size
 ;; output: ZP_PTR2 = available slot of the given size (or a bit more)
 ;;         Y = actual size
@@ -3978,41 +3980,45 @@
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
           VM_INITIALIZE_MEMORY_MANAGER
 
-          ;; ---------------------------------------- PAGES
-          VM_FREE_PAGE
-          VM_ALLOC_PAGE__PAGE_UNINIT
+          ;; ---------------------------------------- alloc/free pages
+          VM_FREE_PAGE                                       ;; free a page (the type specific stuff, of any, must have finished)
+          VM_ALLOC_PAGE__PAGE_UNINIT                         ;; allocate new page (not initialized)
 
-          VM_ALLOC_PAGE_FOR_CELLS
-          VM_ALLOC_PAGE_FOR_CELL_PAIRS
-          VM_ALLOC_PAGE_FOR_M1_SLOTS
+          VM_ALLOC_PAGE_FOR_CELLS                            ;; allocate page and initialize for cells
+          VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for cell-pairs
+          VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for m1 slots of a specific profile (and thus size)
 
+          ;; ---------------------------------------- alloc/free cells, pairs, slots
           VM_ALLOC_CELL_ON_PAGE
           VM_ALLOC_CELL_PAIR_ON_PAGE
 
-          ;; VM_REFCOUNT_DECR_ZP_PTRx
-          VM_REFCOUNT_DECR_ZP_PTR
+          VM_ALLOC_CELL_PAIR_TO_ZP_PTR                       ;; allocate a cell-pair, allocating a new page if necessary
+          VM_FREE_CELL_PAIR_IN_ZP_PTR                        ;; free this cell-pair (adding it to the free tree)
 
-          ;; VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIRx
-          VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR
-          VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT
+          VM_ALLOC_CELL_TO_ZP_PTR                            ;; allocate a cell, allocating a new page if necessary
+          VM_FREE_CELL_IN_ZP_PTR                             ;; free this cell (adding it to the free list)
 
-          VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR
-          VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT
+          VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
+          VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
 
-          VM_ALLOC_CELL_PAIR_TO_ZP_PTR
-          VM_FREE_CELL_PAIR_IN_ZP_PTR
+          ;; ---------------------------------------- refcount
+          VM_REFCOUNT_DECR_ZP_PTR                            ;; generic decrement of refcount (dispatches depending on type)
 
-          VM_ALLOC_CELL_TO_ZP_PTR
-          VM_FREE_CELL_IN_ZP_PTR
+          VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+          VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+          ;; TODO VM_REFCOUNT_DECR_ZP_PTR__CELL
 
-          VM_ALLOC_M1_SLOT_TO_ZP_PTR2
-          VM_FREE_M1_SLOT_IN_ZP_PTR2
+          VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR                 ;; increment refcount of cell-pair
+          VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT                   ;; increment refcount of m1-slot
+          ;; TODO VM_REFCOUNT_INCR_ZP_PTR__CELL
 
-          VM_ALLOC_CALL_FRAME
-          VM_SAVE_EXEC_STATE_TO_CALL_FRAME
-          VM_POP_CALL_FRAME
+          ;; ---------------------------------------- call frame
+          VM_ALLOC_CALL_FRAME                                ;; allocate a new call frame of minimum size
+          VM_SAVE_EXEC_STATE_TO_CALL_FRAME                   ;; write current execution state into the (allocated) call frame
+          VM_POP_CALL_FRAME                                  ;; pop the topmost call frame, restoring execution state of calling function
 
 
+          ;; ---------------------------------------- misc
 
           VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS
           VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS
@@ -4028,37 +4034,39 @@
           VM_FREE_NON_ATOMIC
           VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST
 
+          VM_COPY_PTR2_TO_PTR
+          VM_COPY_PTR_TO_PTR2
 
           ;; ---------------------------------------- CELL_STACK
 
           ;; vm_cell_stack_write_int_1_to_tos
           ;; vm_cell_stack_write_int_0_to_tos
-          VM_CELL_STACK_WRITE_INT_TO_TOS
+          VM_CELL_STACK_WRITE_INT_TO_TOS                     ;; write the given integer into the topmost element of the cell-stack
 
           ;; vm_cell_stack_write_tos_to_param_0
-          VM_CELL_STACK_WRITE_TOS_TO_PARAMy
+          VM_CELL_STACK_WRITE_TOS_TO_PARAMy                  ;; write the topmost cell into function parameter y
           ;; vm_cell_stack_write_tos_to_local_0
-          VM_CELL_STACK_WRITE_TOS_TO_LOCALy
+          VM_CELL_STACK_WRITE_TOS_TO_LOCALy                  ;; write the topmost cell into function local y
 
           ;; vm_cell_stack_write_tos_to_cell1_of_zp_ptr
           ;; vm_cell_stack_write_tos_to_cell0_of_zp_ptr
-          VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR
+          VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR         ;; write topmost cell into x-position of the cell-pair referenced by zp_ptr
 
           ;; vm_cell_stack_write_cell1_of_zp_ptr_to_tos
           ;; vm_cell_stack_write_cell0_of_zp_ptr_to_tos
-          VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS
+          VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS         ;; write the cell in y-position of the cell-pair referenced by zp_ptr into the topmost cell
 
           ;; vm_cell_stack_write_tos_to_zp_ptr2
           ;; vm_cell_stack_write_tos_to_zp_ptr
-          VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx
+          VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx                 ;; write the topmost cell into either zp_ptr or zp_ptr2 (must be a pointer)
 
           ;; vm_cell_stack_write_zp_ptr2_to_tos
           ;; vm_cell_stack_write_zp_ptr_to_tos
-          VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS
+          VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS                 ;; write the zp_ptr or zp_ptr2 into the topmost cell
 
-          VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2
+          VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2          ;; write the tos into an array at a position that is referenced through zp_ptr2
 
-          VM_CELL_STACK_POP
+          VM_CELL_STACK_POP                                  ;; pop the topmost element of the stack
 
           ;; vm_cell_stack_push_array_ata_ptr2
 
@@ -4077,11 +4085,9 @@
           ;; vm_cell_stack_push_int
 
           ;; vm_cell_stack_push_nil
-          VM_CELL_STACK_PUSH
+          VM_CELL_STACK_PUSH                                 ;; push a cell onto the stack
 
-          VM_COPY_PTR2_TO_PTR
-          VM_COPY_PTR_TO_PTR2
-
+          ;; ---------------------------------------- registers and maps
           (list (org #xcec0))
           VM_INITIAL_MM_REGS
           (list (org #xced0))
