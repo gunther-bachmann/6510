@@ -86,7 +86,7 @@
 
   (define use-case-nil_p-b-code
     (list
-     (JSR VM_ALLOC_CELL_PAIR)
+     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
      (JSR VM_CELL_STACK_PUSH_ZP_PTR)
      (JSR VM_NIL_P)))
 
@@ -163,8 +163,8 @@
           (BMI STACK_HAS_LESS_THAN_TWO__VM_CONS)
 
    (label VM_CONS__UC) ;; no checks
-          (JSR VM_ALLOC_CELL_PAIR)
-          (JSR VM_REFCOUNT_INCR_CELL_PAIR)
+          (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+          (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
           (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
           (JSR VM_CELL_STACK_POP__NO_GC)
           (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
