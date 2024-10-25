@@ -99,7 +99,9 @@
                    accumulator     ;; accumulator register (8 bit)
                    x-index         ;; x index register (8 bit)
                    y-index         ;; y index register (8 bit)
-                   stack-pointer)  ;; current stack pointer (8+1 bit) 1xx
+                   stack-pointer   ;; current stack pointer (8+1 bit) 1xx
+                   clock-cycles    ;; used clock cycles of the current interpretation
+                   )
   #:guard (struct-guard/c
            word/c
            byte/c
@@ -107,7 +109,8 @@
            byte/c
            byte/c
            byte/c
-           byte/c))
+           byte/c
+           nonnegative-integer?))
 
 (provide (struct-doc cpu-state ([program-counter word/c]
                                 [flags byte/c]
@@ -115,12 +118,13 @@
                                 [accumulator byte/c]
                                 [x-index byte/c]
                                 [y-index byte/c]
-                                [stack-pointer byte/c]) @{Doc test}))
+                                [stack-pointer byte/c]
+                                [clock-cycles nonnegative-integer?]) @{Doc test}))
 
 ;; flags all negative, program counter at 0, registers all 0, sp = 0xFF
 (define/c (initialize-cpu)
   (-> cpu-state?)
-  (cpu-state 0 0 (make-pvector 65536 0) 0 0 0 #xff))
+  (cpu-state 0 0 (make-pvector 65536 0) 0 0 0 #xff 0))
 
 ;; return state with program-counter set to word
 (define/c (with-program-counter state word)
@@ -2247,6 +2251,11 @@
 (define (interpreter-output-function str)
   (display str))
 
+(define/c (add-cycles state cycles)
+  (-> cpu-state? nonnegative-integer? cpu-state?)
+  (struct-copy cpu-state state
+               [clock-cycles (+ cycles (cpu-state-clock-cycles state))]))
+
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
 ;; zp = $00
@@ -2264,292 +2273,292 @@
   (->* [cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (case (peek-pc state)
     [(#x00) (interpret-brk state)]
-    [(#x01) (interpret-logic-op-mem state bitwise-ior peek-izx 2)]
+    [(#x01) (interpret-logic-op-mem (add-cycles state 6) bitwise-ior peek-izx 2)]
     ;; #x02 -io KIL
     ;; #x03 -io SLO izx
     ;; #x04 -io NOP zp
-    [(#x05) (interpret-logic-op-mem state bitwise-ior peek-zp 2)]
-    [(#x06) (interpret-asl-mem state peek-zp poke-zp 2)]
+    [(#x05) (interpret-logic-op-mem (add-cycles state 3) bitwise-ior peek-zp 2)]
+    [(#x06) (interpret-asl-mem (add-cycles state 5) peek-zp poke-zp 2)]
     ;; #x07 -io SLO zp
-    [(#x08) (interpret-php state)]
-    [(#x09) (interpret-logic-op-mem state bitwise-ior peek-pc+1 2)]
-    [(#x0a) (interpret-asl state)]
+    [(#x08) (interpret-php (add-cycles state 3))]
+    [(#x09) (interpret-logic-op-mem (add-cycles state 2) bitwise-ior peek-pc+1 2)]
+    [(#x0a) (interpret-asl (add-cycles state 2))]
     ;; #x0b -io ANC imm
     ;; #x0c -io NOP abs
-    [(#x0d) (interpret-logic-op-mem state bitwise-ior peek-abs 3)]
-    [(#x0e) (interpret-asl-mem state peek-abs poke-abs 3)]
+    [(#x0d) (interpret-logic-op-mem (add-cycles state 4) bitwise-ior peek-abs 3)]
+    [(#x0e) (interpret-asl-mem (add-cycles state 6) peek-abs poke-abs 3)]
     ;; #x0f -io SLO abs
-    [(#x10) (interpret-branch-rel state not-negative-flag?)]
-    [(#x11) (interpret-logic-op-mem state bitwise-ior peek-izy 2)]
+    [(#x10) (interpret-branch-rel (add-cycles state 2) not-negative-flag?)]
+    [(#x11) (interpret-logic-op-mem (add-cycles state 5) bitwise-ior peek-izy 2)]
     ;; #x12 -io KIL
     ;; #x13 -io SLO izy
     ;; #x14 -io NOP zpx
-    [(#x15) (interpret-logic-op-mem state bitwise-ior peek-zpx 2)]
-    [(#x16) (interpret-asl-mem state peek-zpx poke-zpx 2)]
+    [(#x15) (interpret-logic-op-mem (add-cycles state 4) bitwise-ior peek-zpx 2)]
+    [(#x16) (interpret-asl-mem (add-cycles state 6) peek-zpx poke-zpx 2)]
     ;; #x17 -io SLO zpx
-    [(#x18) (interpret-clc state)]
-    [(#x19) (interpret-logic-op-mem state bitwise-ior peek-absy 3)]
+    [(#x18) (interpret-clc (add-cycles state 2))]
+    [(#x19) (interpret-logic-op-mem (add-cycles state 4) bitwise-ior peek-absy 3)]
     ;; #x1a -io NOP
     ;; #x1b -io SLO abt
     ;; #x1c -io NOP abx
-    [(#x1d) (interpret-logic-op-mem state bitwise-ior peek-absx 3)]
-    [(#x1e) (interpret-asl-mem state peek-absx poke-absx 3)]
+    [(#x1d) (interpret-logic-op-mem (add-cycles state 4) bitwise-ior peek-absx 3)]
+    [(#x1e) (interpret-asl-mem (add-cycles state 7) peek-absx poke-absx 3)]
     ;; #x1f -io SLO abx
-    [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) state verbose string-output-function)]
-    [(#x21) (interpret-logic-op-mem state bitwise-and peek-izx 2)]
+    [(#x20) (interpret-jsr-abs (peek-pc+2 (add-cycles state 6)) (peek-pc+1 state) state verbose string-output-function)]
+    [(#x21) (interpret-logic-op-mem (add-cycles state 6) bitwise-and peek-izx 2)]
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
-    [(#x24) (interpret-bit-mem state peek-zp 2)]
-    [(#x25) (interpret-logic-op-mem state bitwise-and peek-zp 2)]
-    [(#x26) (interpret-rol-mem state peek-zp poke-zp 2)]
+    [(#x24) (interpret-bit-mem (add-cycles state 3) peek-zp 2)]
+    [(#x25) (interpret-logic-op-mem (add-cycles state 3) bitwise-and peek-zp 2)]
+    [(#x26) (interpret-rol-mem (add-cycles state 5) peek-zp poke-zp 2)]
     ;; #x27 -io RLA zp
-    [(#x28) (interpret-plp state)]
-    [(#x29) (interpret-logic-op-mem state bitwise-and peek-pc+1 2)]
-    [(#x2a) (interpret-rol state)]
+    [(#x28) (interpret-plp (add-cycles state 4))]
+    [(#x29) (interpret-logic-op-mem (add-cycles state 2) bitwise-and peek-pc+1 2)]
+    [(#x2a) (interpret-rol (add-cycles state 2))]
     ;; #x2b -io ANC imm
-    [(#x2c) (interpret-bit-mem state peek-abs 3)]
-    [(#x2d) (interpret-logic-op-mem state bitwise-and peek-abs 3)]
-    [(#x2e) (interpret-rol-mem state peek-abs poke-abs 3)]
+    [(#x2c) (interpret-bit-mem (add-cycles state 4) peek-abs 3)]
+    [(#x2d) (interpret-logic-op-mem (add-cycles state 4) bitwise-and peek-abs 3)]
+    [(#x2e) (interpret-rol-mem (add-cycles state 6) peek-abs poke-abs 3)]
     ;; #x2f -io RIA abs
-    [(#x30) (interpret-branch-rel state negative-flag?)]
-    [(#x31) (interpret-logic-op-mem state bitwise-and peek-izy 2)]
+    [(#x30) (interpret-branch-rel (add-cycles state 2) negative-flag?)]
+    [(#x31) (interpret-logic-op-mem (add-cycles state 5) bitwise-and peek-izy 2)]
     ;; #x32 -io KIL
     ;; #x33 -io RIA izy
     ;; #x34 -io NOP zpx 
-    [(#x35) (interpret-logic-op-mem state bitwise-and peek-zpx 2)]
-    [(#x36) (interpret-rol-mem state peek-zpx poke-abs 2)]
+    [(#x35) (interpret-logic-op-mem (add-cycles state 4) bitwise-and peek-zpx 2)]
+    [(#x36) (interpret-rol-mem (add-cycles state 6) peek-zpx poke-abs 2)]
     ;; #x37 -io RLA zpx
-    [(#x38) (interpret-sec state)]
-    [(#x39) (interpret-logic-op-mem state bitwise-and peek-absy 3)]
+    [(#x38) (interpret-sec (add-cycles state 2))]
+    [(#x39) (interpret-logic-op-mem (add-cycles state 4) bitwise-and peek-absy 3)]
     ;; #x3a -io NOP
     ;; #x3b -io RLA aby
     ;; #x3c -io NOP abx
-    [(#x3d) (interpret-logic-op-mem state bitwise-and peek-absx 3)]
-    [(#x3e) (interpret-rol-mem state peek-zpx poke-absx 3)]
+    [(#x3d) (interpret-logic-op-mem (add-cycles state 4) bitwise-and peek-absx 3)]
+    [(#x3e) (interpret-rol-mem (add-cycles state 7) peek-zpx poke-absx 3)]
     ;; #x3f -io RLA abx
-    [(#x40) (interpret-rti state)]
-    [(#x41) (interpret-logic-op-mem state bitwise-xor peek-izx 2)]
+    [(#x40) (interpret-rti (add-cycles state 6))]
+    [(#x41) (interpret-logic-op-mem (add-cycles state 6) bitwise-xor peek-izx 2)]
     ;; #x42 -io KIL
     ;; #x43 -io SRE izx
     ;; #x44 -io NOP zp
-    [(#x45) (interpret-logic-op-mem state bitwise-xor peek-zp 2)]
-    [(#x46) (interpret-lsr-mem state peek-zp poke-zp 2)]
+    [(#x45) (interpret-logic-op-mem (add-cycles state 3) bitwise-xor peek-zp 2)]
+    [(#x46) (interpret-lsr-mem (add-cycles state 5) peek-zp poke-zp 2)]
     ;; #x47 -io SRE zp
-    [(#x48) (interpret-pha state)]
-    [(#x49) (interpret-logic-op-mem state bitwise-xor peek-pc+1 2)]
-    [(#x4a) (interpret-lsr state cpu-state-accumulator)] ; peek-zp
+    [(#x48) (interpret-pha (add-cycles state 3))]
+    [(#x49) (interpret-logic-op-mem (add-cycles state 2) bitwise-xor peek-pc+1 2)]
+    [(#x4a) (interpret-lsr (add-cycles state 2) cpu-state-accumulator)] ; peek-zp
     ;; #x4b -io ALR imm
-    [(#x4c) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) state verbose string-output-function)]
-    [(#x4d) (interpret-logic-op-mem state bitwise-xor peek-abs 3)]
-    [(#x4e) (interpret-lsr-mem state peek-abs poke-abs 3)]
+    [(#x4c) (interpret-jmp-abs (peek-pc+2 state) (peek-pc+1 state) (add-cycles state 3) verbose string-output-function)]
+    [(#x4d) (interpret-logic-op-mem (add-cycles state 4) bitwise-xor peek-abs 3)]
+    [(#x4e) (interpret-lsr-mem (add-cycles state 6) peek-abs poke-abs 3)]
     ;; #x4f -io SRE abs
-    [(#x50) (interpret-branch-rel state not-overflow-flag?)]
-    [(#x51) (interpret-logic-op-mem state bitwise-xor peek-izy 2)]
+    [(#x50) (interpret-branch-rel (add-cycles state 2) not-overflow-flag?)]
+    [(#x51) (interpret-logic-op-mem (add-cycles state 5) bitwise-xor peek-izy 2)]
     ;; #x52 -io KIL
     ;; #x53 -io SRE izy
     ;; #x54 -io NOP zpx
-    [(#x55) (interpret-logic-op-mem state bitwise-xor peek-zpx 2)]
-    [(#x56) (interpret-lsr-mem state peek-zpx poke-zpx 2)]
+    [(#x55) (interpret-logic-op-mem (add-cycles state 4) bitwise-xor peek-zpx 2)]
+    [(#x56) (interpret-lsr-mem (add-cycles state 6) peek-zpx poke-zpx 2)]
     ;; #x57 -io SRE zpx
-    [(#x58) (interpret-cli state)]
-    [(#x59) (interpret-logic-op-mem state bitwise-xor peek-absy 3)]
+    [(#x58) (interpret-cli (add-cycles state 2))]
+    [(#x59) (interpret-logic-op-mem (add-cycles state 4) bitwise-xor peek-absy 3)]
     ;; #x5a -io NOP
     ;; #x5b -io SRE aby
     ;; #x5c -io NOP abx
-    [(#x5d) (interpret-logic-op-mem state bitwise-xor peek-absx 3)]
-    [(#x5e) (interpret-lsr-mem state peek-absx poke-absx 3)]
+    [(#x5d) (interpret-logic-op-mem (add-cycles state 4) bitwise-xor peek-absx 3)]
+    [(#x5e) (interpret-lsr-mem (add-cycles state 7) peek-absx poke-absx 3)]
     ;; #x5f -io SRE abx
-    [(#x60) (interpret-rts state)]
+    [(#x60) (interpret-rts (add-cycles state 6))]
     [(#x61) (if (decimal-flag? state)
                 (bcd-+ state peek-izx 2)
-                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition 2))]
+                (interpret-calc-op (add-cycles state 6) fx+ (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition 2))]
     ;; #x62 -io KIL
     ;; #x63 -io RRA izx
     ;; #x64 -io NOP zp
     [(#x65) (if (decimal-flag? state)
                 (bcd-+ state peek-zp 2)
-                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition 2))]
-    [(#x66) (interpret-ror-mem state peek-zp poke-zp 2)]
+                (interpret-calc-op (add-cycles state 3) fx+ (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition 2))]
+    [(#x66) (interpret-ror-mem (add-cycles state 5) peek-zp poke-zp 2)]
     ;; #x67 -io RRA zp
-    [(#x68) (interpret-pla state)]
+    [(#x68) (interpret-pla (add-cycles state 4))]
     [(#x69) (if (decimal-flag? state)
                 (bcd-+ state peek-pc+1 2)
-                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2))]
-    [(#x6a) (interpret-ror state)]
+                (interpret-calc-op (add-cycles state 2) fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2))]
+    [(#x6a) (interpret-ror (add-cycles state 2))]
     ;; #x6b -io ARR imm
-    [(#x6c) (interpret-jmp-ind state verbose string-output-function)]
+    [(#x6c) (interpret-jmp-ind (add-cycles state 5) verbose string-output-function)]
     [(#x6d) (if (decimal-flag? state)
                 (bcd-+ state peek-abs 3)
-                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3))]
-    [(#x6e) (interpret-ror-mem state peek-abs poke-abs 3)]
+                (interpret-calc-op (add-cycles state 4) fx+ (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3))]
+    [(#x6e) (interpret-ror-mem (add-cycles state 6) peek-abs poke-abs 3)]
     ;; #x6f -io RRA abs
-    [(#x70) (interpret-branch-rel state overflow-flag?)]
+    [(#x70) (interpret-branch-rel (add-cycles state 2) overflow-flag?)]
     [(#x71) (if (decimal-flag? state)
                 (bcd-+ state peek-izy 2)
-                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2))]
+                (interpret-calc-op (add-cycles state 5) fx+ (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2))]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
     ;; #x74 -io NOP zpx
     [(#x75) (if (decimal-flag? state)
                 (bcd-+ state peek-zpx 2)
-                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition 2))]
-    [(#x76) (interpret-ror-mem state peek-zpx poke-zpx 2)]
+                (interpret-calc-op (add-cycles state 4) fx+ (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition 2))]
+    [(#x76) (interpret-ror-mem (add-cycles state 6) peek-zpx poke-zpx 2)]
     ;; #x77 -io RRA zpx
-    [(#x78) (interpret-sei state)]
+    [(#x78) (interpret-sei (add-cycles state 2))]
     [(#x79) (if (decimal-flag? state)
                 (bcd-+ state peek-absy 3)
-                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absy derive-carry-after-addition 3))]
+                (interpret-calc-op (add-cycles state 4) fx+ (if (carry-flag? state) 1 0) peek-absy derive-carry-after-addition 3))]
     ;; #x7a -io NOP
     ;; #x7b -io RRA aby
     ;; #x7c -io NOP abx
     [(#x7d) (if (decimal-flag? state)
                 (bcd-+ state peek-absx 3)
-                (interpret-calc-op state fx+ (if (carry-flag? state) 1 0) peek-absx derive-carry-after-addition 3))]
-    [(#x7e) (interpret-ror-mem state peek-absx poke-absx 2)]
+                (interpret-calc-op (add-cycles state 4) fx+ (if (carry-flag? state) 1 0) peek-absx derive-carry-after-addition 3))]
+    [(#x7e) (interpret-ror-mem (add-cycles state 7) peek-absx poke-absx 2)]
     ;; #x7f -io RRA abx
     ;; #x80 -io NOP imm
-    [(#x81) (interpret-sta-mem state poke-izx 2)]
+    [(#x81) (interpret-sta-mem (add-cycles state 6) poke-izx 2)]
     ;; #x82 -io NOP imm
     ;; #x83 -io SAX izx
-    [(#x84) (interpret-sty-mem state poke-zp 2)]
-    [(#x85) (interpret-sta-mem state poke-zp 2)]
-    [(#x86) (interpret-stx-mem state poke-zp 2)]
+    [(#x84) (interpret-sty-mem (add-cycles state 3) poke-zp 2)]
+    [(#x85) (interpret-sta-mem (add-cycles state 3) poke-zp 2)]
+    [(#x86) (interpret-stx-mem (add-cycles state 3) poke-zp 2)]
     ;; #x87 -io SAX zp
-    [(#x88) (interpret-modify-y-index state -1)]
+    [(#x88) (interpret-modify-y-index (add-cycles state 2) -1)]
     ;; #x89 -io NOP imm
-    [(#x8a) (interpret-t_a state cpu-state-x-index)]
+    [(#x8a) (interpret-t_a (add-cycles state 2) cpu-state-x-index)]
     ;; #x8b -io XAA imm
-    [(#x8c) (interpret-sty-mem state poke-abs 3)]
-    [(#x8d) (interpret-sta-mem state poke-abs 3)]
-    [(#x8e) (interpret-stx-mem state poke-abs 3)]
+    [(#x8c) (interpret-sty-mem (add-cycles state 4) poke-abs 3)]
+    [(#x8d) (interpret-sta-mem (add-cycles state 4) poke-abs 3)]
+    [(#x8e) (interpret-stx-mem (add-cycles state 4) poke-abs 3)]
     ;; #x8f -io SAX abs
-    [(#x90) (interpret-branch-rel state not-carry-flag?)]
-    [(#x91) (interpret-sta-mem state poke-izy 2)]
+    [(#x90) (interpret-branch-rel (add-cycles state 2) not-carry-flag?)]
+    [(#x91) (interpret-sta-mem (add-cycles state 6) poke-izy 2)]
     ;; #x92 -io KIL
     ;; #x93 -io AHX izy
-    [(#x94) (interpret-sty-mem state poke-zpx 2)]
-    [(#x95) (interpret-sta-mem state poke-zpx 2)]
-    [(#x96) (interpret-stx-mem state poke-zpy 2)]
+    [(#x94) (interpret-sty-mem (add-cycles state 4) poke-zpx 2)]
+    [(#x95) (interpret-sta-mem (add-cycles state 4) poke-zpx 2)]
+    [(#x96) (interpret-stx-mem (add-cycles state 4) poke-zpy 2)]
     ;; #x97 -io SAX zpy
-    [(#x98) (interpret-t_a state cpu-state-y-index)]
-    [(#x99) (interpret-sta-mem state poke-absy 3)]
-    [(#x9a) (interpret-t_s state cpu-state-x-index)]
+    [(#x98) (interpret-t_a (add-cycles state 2) cpu-state-y-index)]
+    [(#x99) (interpret-sta-mem (add-cycles state 5) poke-absy 3)]
+    [(#x9a) (interpret-t_s (add-cycles state 2) cpu-state-x-index)]
     ;; #x9b -io TAS avt
     ;; #x9c -io SHY abx
-    [(#x9d) (interpret-sta-mem state poke-absx 3)]
+    [(#x9d) (interpret-sta-mem (add-cycles state 5) poke-absx 3)]
     ;; #x9e -io SHX aby
     ;; #x9f -io AHX aby
-    [(#xa0) (interpret-ldy-mem state peek-pc+1 2)]
-    [(#xa1) (interpret-lda-mem state peek-izx 2)]
-    [(#xa2) (interpret-ldx-mem state peek-pc+1 2)]
+    [(#xa0) (interpret-ldy-mem (add-cycles state 2) peek-pc+1 2)]
+    [(#xa1) (interpret-lda-mem (add-cycles state 6) peek-izx 2)]
+    [(#xa2) (interpret-ldx-mem (add-cycles state 2) peek-pc+1 2)]
     ;; #xa3 -io LAX izx
-    [(#xa4) (interpret-ldy-mem state peek-zp 2)]
-    [(#xa5) (interpret-lda-mem state peek-zp 2)]
-    [(#xa6) (interpret-ldx-mem state peek-zp 2)]
+    [(#xa4) (interpret-ldy-mem (add-cycles state 3) peek-zp 2)]
+    [(#xa5) (interpret-lda-mem (add-cycles state 3) peek-zp 2)]
+    [(#xa6) (interpret-ldx-mem (add-cycles state 3) peek-zp 2)]
     ;; #xa7 -io LAX zp
-    [(#xa8) (interpret-t_y state cpu-state-accumulator)]
-    [(#xa9) (interpret-lda-mem state peek-pc+1 2)]
-    [(#xaa) (interpret-t_x state cpu-state-accumulator)]
+    [(#xa8) (interpret-t_y (add-cycles state 2) cpu-state-accumulator)]
+    [(#xa9) (interpret-lda-mem (add-cycles state 2) peek-pc+1 2)]
+    [(#xaa) (interpret-t_x (add-cycles state 2) cpu-state-accumulator)]
     ;; #xab -io LAX imm
-    [(#xac) (interpret-ldy-mem state peek-abs 3)]
-    [(#xad) (interpret-lda-mem state peek-abs 3)]
-    [(#xae) (interpret-ldx-mem state peek-abs 3)]
+    [(#xac) (interpret-ldy-mem (add-cycles state 4) peek-abs 3)]
+    [(#xad) (interpret-lda-mem (add-cycles state 4) peek-abs 3)]
+    [(#xae) (interpret-ldx-mem (add-cycles state 4) peek-abs 3)]
     ;; #xaf -io LAX abs
-    [(#xb0) (interpret-branch-rel state carry-flag?)]
-    [(#xb1) (interpret-lda-mem state peek-izy 2)]
+    [(#xb0) (interpret-branch-rel (add-cycles state 2) carry-flag?)]
+    [(#xb1) (interpret-lda-mem (add-cycles state 5) peek-izy 2)]
     ;; #xb2 -io KIL
     ;; #xb3 -io LAX izy
-    [(#xb4) (interpret-ldy-mem state peek-zpx 2)]
-    [(#xb5) (interpret-lda-mem state peek-zpx 2)]
-    [(#xb6) (interpret-ldx-mem state peek-zpy 2)]
+    [(#xb4) (interpret-ldy-mem (add-cycles state 4) peek-zpx 2)]
+    [(#xb5) (interpret-lda-mem (add-cycles state 4) peek-zpx 2)]
+    [(#xb6) (interpret-ldx-mem (add-cycles state 4) peek-zpy 2)]
     ;; #xb7 -io LAX zpy
-    [(#xb8) (interpret-clv state)]
-    [(#xb9) (interpret-lda-mem state peek-absy 3)]
-    [(#xba) (interpret-t_x state cpu-state-stack-pointer)]
+    [(#xb8) (interpret-clv (add-cycles state 2))]
+    [(#xb9) (interpret-lda-mem (add-cycles state 4) peek-absy 3)]
+    [(#xba) (interpret-t_x (add-cycles state 2) cpu-state-stack-pointer)]
     ;; #xbb -io LAS aby
-    [(#xbc) (interpret-ldy-mem state peek-absx 3)]
-    [(#xbd) (interpret-lda-mem state peek-absx 3)]
-    [(#xbe) (interpret-ldx-mem state peek-absy 3)]
+    [(#xbc) (interpret-ldy-mem (add-cycles state 4) peek-absx 3)]
+    [(#xbd) (interpret-lda-mem (add-cycles state 4) peek-absx 3)]
+    [(#xbe) (interpret-ldx-mem (add-cycles state 4) peek-absy 3)]
     ;; #xbf -io LAX aby
-    [(#xc0) (interpret-compare state cpu-state-y-index peek-pc+1 2)]
-    [(#xc1) (interpret-compare state cpu-state-accumulator peek-izx 2)]
+    [(#xc0) (interpret-compare (add-cycles state 2) cpu-state-y-index peek-pc+1 2)]
+    [(#xc1) (interpret-compare (add-cycles state 6) cpu-state-accumulator peek-izx 2)]
     ;; #xc2 -io NOP imm
     ;; #xc3 -io DCP izx
-    [(#xc4) (interpret-compare state cpu-state-y-index peek-zp 2)]
-    [(#xc5) (interpret-compare state cpu-state-accumulator peek-zp 2)]
-    [(#xc6) (interpret-crement-mem state fx- peek-zp poke-zp 2)]
+    [(#xc4) (interpret-compare (add-cycles state 3) cpu-state-y-index peek-zp 2)]
+    [(#xc5) (interpret-compare (add-cycles state 3) cpu-state-accumulator peek-zp 2)]
+    [(#xc6) (interpret-crement-mem (add-cycles state 5) fx- peek-zp poke-zp 2)]
     ;; #xc7 -io DCP zp
-    [(#xc8) (interpret-modify-y-index state 1)]
-    [(#xc9) (interpret-compare state cpu-state-accumulator peek-pc+1 2)]
-    [(#xca) (interpret-modify-x-index state -1)]
+    [(#xc8) (interpret-modify-y-index (add-cycles state 2) 1)]
+    [(#xc9) (interpret-compare (add-cycles state 2) cpu-state-accumulator peek-pc+1 2)]
+    [(#xca) (interpret-modify-x-index (add-cycles state 2) -1)]
     ;; #xcb -io AXS imm
-    [(#xcc) (interpret-compare state cpu-state-y-index peek-abs 3)]
-    [(#xcd) (interpret-compare state cpu-state-accumulator peek-abs 3)]
-    [(#xce) (interpret-crement-mem state fx- peek-abs poke-abs 3)]
+    [(#xcc) (interpret-compare (add-cycles state 4) cpu-state-y-index peek-abs 3)]
+    [(#xcd) (interpret-compare (add-cycles state 4) cpu-state-accumulator peek-abs 3)]
+    [(#xce) (interpret-crement-mem (add-cycles state 6) fx- peek-abs poke-abs 3)]
     ;; #xcf -io DCP abs
-    [(#xd0) (interpret-branch-rel state not-zero-flag?)]
-    [(#xd1) (interpret-compare state cpu-state-accumulator peek-izy 2)]
+    [(#xd0) (interpret-branch-rel (add-cycles state 2) not-zero-flag?)]
+    [(#xd1) (interpret-compare (add-cycles state 5) cpu-state-accumulator peek-izy 2)]
     ;; #xd2 -io KIL
     ;; #xd3 -io DCP izy
     ;; #xd4 -io NOP zpx
-    [(#xd5) (interpret-compare state cpu-state-accumulator peek-zpx 2)]
-    [(#xd6) (interpret-crement-mem state fx- peek-zpx poke-zpx 2)]
+    [(#xd5) (interpret-compare (add-cycles state 4) cpu-state-accumulator peek-zpx 2)]
+    [(#xd6) (interpret-crement-mem (add-cycles state 6) fx- peek-zpx poke-zpx 2)]
     ;; #xd7 -io DCP zpx
-    [(#xd8) (interpret-cld state)]
-    [(#xd9) (interpret-compare state cpu-state-accumulator peek-absy 3)]
+    [(#xd8) (interpret-cld (add-cycles state 2))]
+    [(#xd9) (interpret-compare (add-cycles state 4) cpu-state-accumulator peek-absy 3)]
     ;; #xda -io NOP
     ;; #xdb -io DCP aby
     ;; #xdc -io NOP abx
-    [(#xdd) (interpret-compare state cpu-state-accumulator peek-absx 3)]
-    [(#xde) (interpret-crement-mem state fx- peek-absx poke-absx 3)]
+    [(#xdd) (interpret-compare (add-cycles state 4) cpu-state-accumulator peek-absx 3)]
+    [(#xde) (interpret-crement-mem (add-cycles state 7) fx- peek-absx poke-absx 3)]
     ;; #xdf -io DCP abx
-    [(#xe0) (interpret-compare state cpu-state-x-index peek-pc+1 2)]
+    [(#xe0) (interpret-compare (add-cycles state 2) cpu-state-x-index peek-pc+1 2)]
     [(#xe1) (if (decimal-flag? state)
                 (bcd-- state peek-izx 2)
-                (interpret-calc-op state fx- 0 peek-izx derive-carry-after-subtraction 2))]
+                (interpret-calc-op (add-cycles state 6) fx- 0 peek-izx derive-carry-after-subtraction 2))]
     ;; #xe2 -io NOP imm
     ;; #xe3 -io ISC izx
-    [(#xe4) (interpret-compare state cpu-state-x-index peek-zp 2)]
+    [(#xe4) (interpret-compare (add-cycles state 3) cpu-state-x-index peek-zp 2)]
     [(#xe5) (if (decimal-flag? state)
                 (bcd-- state peek-zp 2)
-                (interpret-calc-op state fx- 0 peek-zp derive-carry-after-subtraction 2))]
-    [(#xe6) (interpret-crement-mem state fx+ peek-zp poke-zp 2)]
+                (interpret-calc-op (add-cycles state 3) fx- 0 peek-zp derive-carry-after-subtraction 2))]
+    [(#xe6) (interpret-crement-mem (add-cycles state 5) fx+ peek-zp poke-zp 2)]
     ;; #xe7 -io ISC zp
-    [(#xe8) (interpret-modify-x-index state 1)]
+    [(#xe8) (interpret-modify-x-index (add-cycles state 2) 1)]
     [(#xe9) (if (decimal-flag? state)
                 (bcd-- state peek-pc+1 2)
-                (interpret-calc-op state fx- 0 peek-pc+1 derive-carry-after-subtraction 2))]
-    [(#xea) (interpret-nop state)]
+                (interpret-calc-op (add-cycles state 2) fx- 0 peek-pc+1 derive-carry-after-subtraction 2))]
+    [(#xea) (interpret-nop (add-cycles state 2))]
     ;; #xeb -io SBC imm
-    [(#xec) (interpret-compare state cpu-state-x-index peek-abs 3)]
+    [(#xec) (interpret-compare (add-cycles state 4) cpu-state-x-index peek-abs 3)]
     [(#xed) (if (decimal-flag? state)
                 (bcd-- state peek-abs 3)
-                (interpret-calc-op state fx- 0 peek-abs derive-carry-after-subtraction 3))]
-    [(#xee) (interpret-crement-mem state fx+ peek-abs poke-abs 3)]
+                (interpret-calc-op (add-cycles state 4) fx- 0 peek-abs derive-carry-after-subtraction 3))]
+    [(#xee) (interpret-crement-mem (add-cycles state 6) fx+ peek-abs poke-abs 3)]
     ;; #xef -io ISC abs
-    [(#xf0) (interpret-branch-rel state zero-flag?)]
+    [(#xf0) (interpret-branch-rel (add-cycles state 2) zero-flag?)]
     [(#xf1) (if (decimal-flag? state)
                 (bcd-- state peek-izy 2)
-                (interpret-calc-op state fx- 0 peek-izy derive-carry-after-subtraction 2))]
+                (interpret-calc-op (add-cycles state 5) fx- 0 peek-izy derive-carry-after-subtraction 2))]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
     ;; #xf4 -io NOP zpx
     [(#xf5) (if (decimal-flag? state)
                 (bcd-- state peek-zpx 2)
-                (interpret-calc-op state fx- 0 peek-zpx derive-carry-after-subtraction 2))]
-    [(#xf6) (interpret-crement-mem state fx+ peek-zpx poke-zpx 2)]
+                (interpret-calc-op (add-cycles state 4) fx- 0 peek-zpx derive-carry-after-subtraction 2))]
+    [(#xf6) (interpret-crement-mem (add-cycles state 6) fx+ peek-zpx poke-zpx 2)]
     ;; #xf7 -io ISC zpx
-    [(#xf8) (interpret-sed state)]
+    [(#xf8) (interpret-sed (add-cycles state 2))]
     [(#xf9) (if (decimal-flag? state)
                 (bcd-- state peek-absy 3)
-                (interpret-calc-op state fx- 0 peek-absy derive-carry-after-subtraction 3))]
+                (interpret-calc-op (add-cycles state 4) fx- 0 peek-absy derive-carry-after-subtraction 3))]
     ;; #xfa -io NOP
     ;; #xfb -io ISC aby
     ;; #xfc -io NOP abx
     [(#xfd) (if (decimal-flag? state)
                 (bcd-- state peek-absx 3)
-                (interpret-calc-op state fx- 0 peek-absx derive-carry-after-subtraction 3))]
-    [(#xfe) (interpret-crement-mem state fx+ peek-absx poke-absx 3)]
+                (interpret-calc-op (add-cycles state 4) fx- 0 peek-absx derive-carry-after-subtraction 3))]
+    [(#xfe) (interpret-crement-mem (add-cycles state 7) fx+ peek-absx poke-absx 3)]
     ;; #xff -io ISC abx
     [else (error "unknown opcode")]))
 
@@ -2602,7 +2611,11 @@
     (let ([result (~>> (at-2000_inc-2000-x_with-x-3 #x7f)
                     (execute-cpu-step _))])
     (check-false (zero-flag? result) "zero flag is false since ($7f + 1) != $00")
-    (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")))
+    (check-true (negative-flag? result) "negative flag true, bit7, sign flag set")
+
+    (check-equal? (cpu-state-clock-cycles result)
+                  7
+                  "inc absolute,x ($fe) takes 7 clocks")))
 
 ;; run the interpreter on the given cpu state
 (define/c (run-interpreter-on state (verbose #t) (string-output-function interpreter-output-function))
