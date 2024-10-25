@@ -1823,13 +1823,9 @@
           (RTS)
           ))
 
-;; next free lowbyte on this page is in A (or 0)
-;; resulting ptr is in ZP_PTR
-;; first free element is adjusted
-;; ---
 ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
-;;
-;; input:  A page to allocate cell-pair on (a new page is allocated, if this page does not have any free cell-pairs)
+;; this will not check the free cell-pair tree!
+;; input:  A : page to allocate cell-pair on (a new page is allocated, if this page does not have any free cell-pairs)
 ;; output: ZP_PTR
 (define VM_ALLOC_CELL_PAIR_ON_PAGE
   (list
@@ -1856,6 +1852,7 @@
           (STX INC_CMD__VM_ALLOC_CELL_PAIR_ON_PAGE+2) ;; overwrite $c0
    (label INC_CMD__VM_ALLOC_CELL_PAIR_ON_PAGE)
           (INC $c000)
+          (TXA)
           (RTS)))
 
 ;; find out what kind of cell zp_ptr points to,
@@ -1954,14 +1951,43 @@
           (INC $c000,x) ;; c0 is overwritten by page (see above)
           (RTS)))
 
-;; TODO: Free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 ;; parameter: zp_ptr
 (define VM_FREE_NON_ATOMIC
   (list
    (label VM_FREE_NON_ATOMIC)
-          (BRK)))
+          (LDA ZP_PTR_TAGGED)
+          (TAY)
+          (LSR)
+          (BCS FREE_CELL__VM_FREE_NON_ATOMIC)
+          (LSR)
+          (BCS FREE_CELL_PAIR__VM_FREE_NON_ATOMIC)
+          ;; check other types of cells
+          (CPY !TAG_BYTE_CELL_ARRAY)
+          (BEQ FREE_CELL_ARRAY__VM_FREE_NON_ATOMIC)
+          (CPY !TAG_BYTE_NATIVE_ARRAY)
+          (BEQ FREE_NATIVE_ARRAY__VM_FREE_NON_ATOMIC)
 
+          ;; unknown pointer type in zp_ptr
+          (BRK)
 
+   (label FREE_CELL__VM_FREE_NON_ATOMIC)
+          (JMP VM_FREE_CELL_IN_ZP_PTR)
+
+   (label FREE_CELL_PAIR__VM_FREE_NON_ATOMIC)
+          (JMP VM_FREE_CELL_PAIR_IN_ZP_PTR)
+
+   (label FREE_CELL_ARRAY__VM_FREE_NON_ATOMIC)
+   (label FREE_NATIVE_ARRAY__VM_FREE_NON_ATOMIC)
+          (JSR VM_COPY_PTR_TO_PTR2)
+          (JMP VM_FREE_M1_SLOT_IN_ZP_PTR2)))
+
+;; allocate a cell on the page in A (allocating a new one if page is full)
+;; this does not check for any free cells on the free list!
+;; input:  A - page to use (if full allocate new page)
+;; output: A - actual page used
+;;         # cells used on page is incremented
+;;         adjust page local list of free cell on this page
 (define VM_ALLOC_CELL_ON_PAGE
   (list
    (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_ON_PAGE)
@@ -1987,6 +2013,7 @@
           (STX INC_CMD__VM_ALLOC_CELL_ON_PAGE+2) ;; overwrite $c0
    (label INC_CMD__VM_ALLOC_CELL_ON_PAGE)
           (INC $c000)
+          (TXA)
           (RTS)))
 
 (module+ test #| vm_alloc_cell_on_page (allocating new page) |#
@@ -2027,7 +2054,7 @@
                 (list #x08)
                 "cb00 has one cell allocated => first free is 08"))
 
-;; allocate a cell, allocating a new page if necessary
+;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
 ;; input:  none
 ;; output: zp_ptr = pointer to free cell
 (define VM_ALLOC_CELL_TO_ZP_PTR
@@ -2059,9 +2086,95 @@
 
           (RTS)))
 
-(module+ test #| vm_alloc_cell_ptr |#
-  ;; TODO: implement
-)
+(module+ test #| vm_alloc_cell_to_zp_ptr (once on a new page) |#
+  (define test-alloc-cell-to-zp-ptr-code
+    (list
+     (JSR VM_ALLOC_CELL_TO_ZP_PTR)))
+
+  (define test-alloc-cell-to-zp-ptr-state-after
+    (run-code-in-test test-alloc-cell-to-zp-ptr-code))
+
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-state-after ZP_PTR (add1 ZP_PTR))
+                (list #x02 #xcc))
+
+  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-state-after #xcc)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $08")
+                "page has 1 slot in use"))
+
+(module+ test #| vm_alloc_cell_to_zp_ptr (twice on a new page) |#
+  (define test-alloc-cell-to-zp-ptr-twice-code
+    (list
+     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
+     (JSR VM_ALLOC_CELL_TO_ZP_PTR)))
+
+  (define test-alloc-cell-to-zp-ptr-twice-state-after
+    (run-code-in-test test-alloc-cell-to-zp-ptr-twice-code))
+
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twice-state-after ZP_PTR (add1 ZP_PTR))
+                (list #x08 #xcc))
+
+  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twice-state-after #xcc)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "page has 2 slots in use"))
+
+(module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page) |#
+  (define test-alloc-cell-to-zp-ptr-twicenfree-code
+    (list
+     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
+     (JSR VM_COPY_PTR_TO_PTR2)
+
+     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
+     (JSR VM_COPY_PTR2_TO_PTR)
+     (JSR VM_FREE_CELL_IN_ZP_PTR)))
+
+  (define test-alloc-cell-to-zp-ptr-twicenfree-state-after
+    (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfree-code))
+
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcecb #xcecc )
+                (list #x02 #xcc)
+                "free cell list has cc02 now as head of the list")
+
+  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcc)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "page has still 2 slots in use (even though $cc02 was freed)")
+
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcc02 #xcc03 )
+                (list #x00 #x00)
+                "since cc02 is now part of the free cell list, it points to the next free cell which is $0000 (none)"))
+
+(module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page, then allocate again) |#
+  (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-code
+    (list
+     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
+     (JSR VM_COPY_PTR_TO_PTR2)
+
+     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
+     (JSR VM_COPY_PTR2_TO_PTR)
+     (JSR VM_FREE_CELL_IN_ZP_PTR)
+
+     (JSR VM_ALLOC_CELL_TO_ZP_PTR)))
+
+  (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after
+    (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfreenalloc-code))
+
+  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after #xcc)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a"))
+
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after #xcecb #xcecb)
+                (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
+                "free cell list is initial again"))
 
 ;; input:  none
 ;; output: zp_ptr = free cell-pair
@@ -3682,15 +3795,15 @@
 (define VM_DEREF_PTR2_INTO_PTR
   (list
    (label VM_DEREF_PTR2_INTO_PTR)
-   (LDY !$00)
-   (LDA (ZP_PTR2),y)
-   (STA ZP_PTR_TAGGED)
-   (AND !TAG_PTR_MASK)
-   (STA ZP_PTR)
-   (INY)
-   (LDA (ZP_PTR2),y)
-   (STA ZP_PTR+1)
-   (RTS)))
+          (LDY !$00)
+          (LDA (ZP_PTR2),y)
+          (STA ZP_PTR_TAGGED)
+          (AND !TAG_PTR_MASK)
+          (STA ZP_PTR)
+          (INY)
+          (LDA (ZP_PTR2),y)
+          (STA ZP_PTR+1)
+          (RTS)))
 
 (module+ test #| vm_deref_ptr2_into_ptr |#
   (define test-dref-ptr2-into-ptr-code
@@ -4056,13 +4169,13 @@
           VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for m1 slots of a specific profile (and thus size)
 
           ;; ---------------------------------------- alloc/free cells, pairs, slots
-          VM_ALLOC_CELL_ON_PAGE
-          VM_ALLOC_CELL_PAIR_ON_PAGE
+          VM_ALLOC_CELL_ON_PAGE                              ;; allocate a cell on the page in A (allocating a new one if page is full)
+          VM_ALLOC_CELL_PAIR_ON_PAGE                         ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 
-          VM_ALLOC_CELL_PAIR_TO_ZP_PTR                       ;; allocate a cell-pair, allocating a new page if necessary
+          VM_ALLOC_CELL_PAIR_TO_ZP_PTR                       ;; allocate a cell-pair, allocating a new page if necessary, reusing cell-pairs from the free tree first
           VM_FREE_CELL_PAIR_IN_ZP_PTR                        ;; free this cell-pair (adding it to the free tree)
 
-          VM_ALLOC_CELL_TO_ZP_PTR                            ;; allocate a cell, allocating a new page if necessary
+          VM_ALLOC_CELL_TO_ZP_PTR                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
           VM_FREE_CELL_IN_ZP_PTR                             ;; free this cell (adding it to the free list)
 
           VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
@@ -4097,7 +4210,7 @@
 
           VM_DEREF_PTR2_INTO_PTR                             ;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
 
-          VM_FREE_NON_ATOMIC                                 ;; TODO: implement
+          VM_FREE_NON_ATOMIC                                 ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 
           VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST              ;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
 
