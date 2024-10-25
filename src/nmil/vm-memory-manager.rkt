@@ -1892,8 +1892,7 @@
           (JMP VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
 
    (label DECR_CELL_PTR__VM_REFCOUNT_DECR_ZP_PTR)
-          ;; TODO: implement VM_REFCOUNT_DECR_ZP_PTR_CELL_PTR
-   (BRK)))
+          (JMP VM_REFCOUNT_DECR_ZP_PTR__CELL)))
 
 ;; input: cell-pair ptr in ZP_PTR
 ;; decrement ref count, if 0 deallocate
@@ -1926,7 +1925,36 @@
           (INC $c000,x) ;; c0 is overwritten by page (see above)
           (RTS)))
 
-;; TODO: Free nonatomic (is cell-ptr, cell-pair)
+;; input: cell ptr in ZP_PTR
+;; decrement ref count, if 0 deallocate
+(define VM_REFCOUNT_DECR_ZP_PTR__CELL
+  (list
+   (label VM_REFCOUNT_DECR_ZP_PTR__CELL)
+          (LDA ZP_PTR+1)
+          (STA PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+          (LDA ZP_PTR)
+          (LSR)
+          (TAX)
+   (label PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL)
+          (DEC $c000,x) ;; c0 is overwritten by page (see above)
+          (BNE DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL)
+          (JMP VM_FREE_CELL_IN_ZP_PTR) ;; free delayed
+   (label DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL)
+          (RTS)))
+
+(define VM_REFCOUNT_INCR_ZP_PTR__CELL
+  (list
+   (label VM_REFCOUNT_INCR_ZP_PTR__CELL)
+          (LDA ZP_PTR+1)
+          (STA PAGE__VM_REFCOUNT_INCR_ZP_PTR__CELL+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
+          (LDA ZP_PTR)
+          (LSR)
+          (TAX)
+   (label PAGE__VM_REFCOUNT_INCR_ZP_PTR__CELL)
+          (INC $c000,x) ;; c0 is overwritten by page (see above)
+          (RTS)))
+
+;; TODO: Free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 ;; parameter: zp_ptr
 (define VM_FREE_NON_ATOMIC
   (list
@@ -1961,9 +1989,43 @@
           (INC $c000)
           (RTS)))
 
-(module+ test #| vm_alloc_cell_on_page |#
-  ;; TODO: implement
-)
+(module+ test #| vm_alloc_cell_on_page (allocating new page) |#
+  (define test-alloc-cell-on-papge-a-code
+    (list
+     (LDX !$cd)
+     (LDA !$00) ;; no free slot on this page, allocate new page
+     (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)
+     (TXA)
+     (JSR VM_ALLOC_CELL_ON_PAGE)
+     ))
+
+  (define test-alloc-cell-on-papge-a-state-after
+    (run-code-in-test test-alloc-cell-on-papge-a-code))
+
+  (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after ZP_PTR (add1 ZP_PTR))
+                (list #x02 #xcc))
+  (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after #xcfcc #xcfcc)
+                (list #x08)))
+
+(module+ test #| vm_alloc_cell_on_page (using previously allocated page) |#
+  (define test-alloc-cell-on-papge-b-code
+    (list
+     (JSR VM_ALLOC_PAGE_FOR_CELLS) ;; allocates cc00
+     (JSR VM_ALLOC_PAGE_FOR_CELLS) ;; allocates cb00
+     (JSR VM_ALLOC_CELL_ON_PAGE)
+     ))
+
+  (define test-alloc-cell-on-papge-b-state-after
+    (run-code-in-test test-alloc-cell-on-papge-b-code))
+
+  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after ZP_PTR (add1 ZP_PTR))
+                (list #x02 #xcb))
+  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after #xcfcc #xcfcc)
+                (list #x02)
+                "cc00 has all cells left => first free is 02")
+  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after #xcfcb #xcfcb)
+                (list #x08)
+                "cb00 has one cell allocated => first free is 08"))
 
 ;; allocate a cell, allocating a new page if necessary
 ;; input:  none
@@ -2000,7 +2062,6 @@
 (module+ test #| vm_alloc_cell_ptr |#
   ;; TODO: implement
 )
-
 
 ;; input:  none
 ;; output: zp_ptr = free cell-pair
@@ -4015,11 +4076,11 @@
 
           VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
           VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
-          ;; TODO VM_REFCOUNT_DECR_ZP_PTR__CELL
+          VM_REFCOUNT_DECR_ZP_PTR__CELL                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
 
           VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR                 ;; increment refcount of cell-pair
           VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT                   ;; increment refcount of m1-slot
-          ;; TODO VM_REFCOUNT_INCR_ZP_PTR__CELL
+          VM_REFCOUNT_INCR_ZP_PTR__CELL                      ;; increment refcount of cell
 
           ;; ---------------------------------------- call frame
           VM_ALLOC_CALL_FRAME                                ;; allocate a new call frame of minimum size
