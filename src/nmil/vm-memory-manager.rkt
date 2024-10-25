@@ -2183,8 +2183,10 @@
    (label TEMP_PTR__VM_FREE_CELL_PAIR_IN_ZP_PTR)
           (word $0000)))
 
-;; zp_ptr = pointer to cell-pair that is added to the free list on its page
-;; reduces the number of used slots in byte 0
+;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
+;; input:  zp_ptr = pointer to cell-pair that is added to the free list on its page
+;; output: reduces the number of used slots in byte 0
+;;         next free slot of this page is the given cell-pair
 (define VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST
   (list
    (label VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST)
@@ -3556,7 +3558,7 @@
 
      (label TEST_DEC_REF_BUCKET_SLOT_2_CODE)
             (LDA !$10)
-            (JSR VM_ALLOCATE_NATIVE_ARRAY)
+            (JSR VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
             (JSR VM_COPY_PTR2_TO_PTR) ;; allocation is in zp_ptr2
             (JSR VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT) ;; inc ref uses zp_ptr
 
@@ -3589,7 +3591,7 @@
 
      (label TEST_DEC_REF_BUCKET_SLOT_3_CODE)
             (LDA !$04)
-            (JSR VM_ALLOCATE_CELL_ARRAY)
+            (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
             (JSR VM_COPY_PTR2_TO_PTR) ;; allocation is in zp_ptr2
             (JSR VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT) ;; inc ref uses zp_ptr
 
@@ -3610,6 +3612,7 @@
                 "VM_GC_ARRAY_SLOT_PTR should have been called exactly once"))
 
 
+;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
 ;; input:  ZP_PTR2 (pointer another pointer)
 ;; output: ZP_PTR  (dereferenced ZP_PTR2)
 ;; use case:
@@ -3698,7 +3701,7 @@
   (define test-gc-array-slot-ptr-code
     (list
      (LDA !$04)
-     (JSR VM_ALLOCATE_CELL_ARRAY)                       ;; ZP_PTR2 = pointer to the allocated array (with 4 cells)
+     (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)                       ;; ZP_PTR2 = pointer to the allocated array (with 4 cells)
 
      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                           ;; ZP_PTR = allocated cell-pair
      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
@@ -3737,9 +3740,9 @@
 ;; allocate an array of bytes (native) (also useful for strings)
 ;; input:  A = number of bytes (1..)
 ;; output: ZP_PTR2 -> points to an allocated array
-(define VM_ALLOCATE_NATIVE_ARRAY
+(define VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2
 (list
-   (label VM_ALLOCATE_NATIVE_ARRAY)
+   (label VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
           (PHA)
           (CLC)
           (ADC !$02) ;; add to total slot size
@@ -3759,11 +3762,11 @@
 
           ;; initialize slots/array with 0
           (LDA !$00)
-   (label LOOP_INIT__VM_ALLOCATE_NATIVE_ARRAY)
+   (label LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
           (INY)
           (STA (ZP_PTR2),y)
           (DEX)
-          (BNE LOOP_INIT__VM_ALLOCATE_NATIVE_ARRAY)
+          (BNE LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
 
           (RTS)))
 
@@ -3771,7 +3774,7 @@
   (define test-alloc-native-array-code
     (list
      (LDA !$10)
-     (JSR VM_ALLOCATE_NATIVE_ARRAY)))
+     (JSR VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)))
 
   (define test-alloc-native-array-state-after
     (run-code-in-test test-alloc-native-array-code))
@@ -3798,9 +3801,9 @@
 ;; allocate an array of cells (also useful for structures)
 ;; input:  A = number of cells (1..)
 ;; output: ZP_PTR2 -> points to an allocated array
-(define VM_ALLOCATE_CELL_ARRAY
+(define VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2
   (list
-   (label VM_ALLOCATE_CELL_ARRAY)
+   (label VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
           ;; optional: optimization for arrays with 3 cells => s8 page!
           (PHA)
           (ASL A)
@@ -3821,7 +3824,7 @@
           (TAX) ;; use number of array elements as loop counter
 
           ;; initialize slots/array with nil
-   (label LOOP_INIT__VM_ALLOCATE_CELL_ARRAY)
+   (label LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
           (INY)
           (LDA !<TAGGED_NIL)
           (STA (ZP_PTR2),y)
@@ -3829,7 +3832,7 @@
           (LDA !>TAGGED_NIL)
           (STA (ZP_PTR2),y)
           (DEX)
-          (BNE LOOP_INIT__VM_ALLOCATE_CELL_ARRAY)
+          (BNE LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
 
           (RTS)))
 
@@ -3837,7 +3840,7 @@
   (define test-alloc-cell-array-code
     (list
      (LDA !$04)
-     (JSR VM_ALLOCATE_CELL_ARRAY)))
+     (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)))
 
   (define test-alloc-cell-array-state-after
     (run-code-in-test test-alloc-cell-array-code))
@@ -3921,7 +3924,7 @@
   (define vm_cell_stack_write_tos_to_array_ata_ptr-code
     (list
      (LDA !$04)
-     (JSR VM_ALLOCATE_CELL_ARRAY)
+     (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
 
      (LDA !$ff)
      (LDX !$01)
@@ -3952,7 +3955,7 @@
   (define test-cell-stack-push-array-ata-ptr-code
     (list
      (LDA !$04)
-     (JSR VM_ALLOCATE_CELL_ARRAY)
+     (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
 
      (LDA !$02)
      (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2) ;; @2 = nil -> stack
@@ -4001,6 +4004,9 @@
           VM_ALLOC_CELL_TO_ZP_PTR                            ;; allocate a cell, allocating a new page if necessary
           VM_FREE_CELL_IN_ZP_PTR                             ;; free this cell (adding it to the free list)
 
+          VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
+          VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2                     ;; allocate an array of cells (also useful for structures)
+
           VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
           VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
 
@@ -4023,22 +4029,19 @@
 
           ;; ---------------------------------------- misc
 
-          VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS
-          VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS
+          VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS                ;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
+          VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
 
-          VM_GC_ARRAY_SLOT_PTR
+          VM_GC_ARRAY_SLOT_PTR                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
 
-          VM_ALLOCATE_NATIVE_ARRAY
-          VM_ALLOCATE_CELL_ARRAY
-          VM_GC_ARRAY_SLOT_PTR
+          VM_DEREF_PTR2_INTO_PTR                             ;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
 
-          VM_DEREF_PTR2_INTO_PTR
+          VM_FREE_NON_ATOMIC                                 ;; TODO: implement
 
-          VM_FREE_NON_ATOMIC
-          VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST
+          VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST              ;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
 
-          VM_COPY_PTR2_TO_PTR
-          VM_COPY_PTR_TO_PTR2
+          VM_COPY_PTR2_TO_PTR                                ;; copy zp_ptr2 to zp_ptr (including tag byte)
+          VM_COPY_PTR_TO_PTR2                                ;; copy zp_ptr to zp_ptr2 (including tag byte)
 
           ;; ---------------------------------------- CELL_STACK
 
@@ -4071,23 +4074,23 @@
 
           VM_CELL_STACK_POP                                  ;; pop the topmost element of the stack
 
-          ;; vm_cell_stack_push_array_ata_ptr2
+          ;; vm_cell_stack_push_array_ata_ptr2                  push cell from an array (referenced through zp_ptr2) at a position
 
-          ;; vm_cell_stack_push_zp_ptr2
-          ;; vm_cell_stack_push_zp_ptr
+          ;; vm_cell_stack_push_zp_ptr2                         push cell referenced by zp_ptr2
+          ;; vm_cell_stack_push_zp_ptr                          push cell referenced by zp_ptr
           ;; vm_cell_stack_push_zp_ptry
 
-          ;; vm_cell_stack_push_cell1_of_zp_ptr
-          ;; vm_cell_stack_push_cell0_of_zp_ptr
+          ;; vm_cell_stack_push_cell1_of_zp_ptr                 push cell1 of a cell-pair referenced by zp_ptr
+          ;; vm_cell_stack_push_cell0_of_zp_ptr                 push cell0 of a cell-pair referenced by zp_ptr
           ;; vm_cell_stack_push_celly_of_zp_ptr
 
-          ;; vm_cell_stack_push_int_0
-          ;; vm_cell_stack_push_int_1
-          ;; vm_cell_stack_push_int_2
-          ;; vm_cell_stack_push_int_m1
+          ;; vm_cell_stack_push_int_0                           push int value 0
+          ;; vm_cell_stack_push_int_1                           push int value 1
+          ;; vm_cell_stack_push_int_2                           push int value 2
+          ;; vm_cell_stack_push_int_m1                          push int value -1
           ;; vm_cell_stack_push_int
 
-          ;; vm_cell_stack_push_nil
+          ;; vm_cell_stack_push_nil                             push cell-pair constant NIL
           VM_CELL_STACK_PUSH                                 ;; push a cell onto the stack
 
           ;; ---------------------------------------- registers and maps
