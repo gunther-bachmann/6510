@@ -91,6 +91,7 @@
          set-zero-flag clear-zero-flag
          with-accumulator
          with-program-counter
+         reset-cycles
          with-flags)
 
 (struct cpu-state (program-counter ;; pointer to current program execution (16 bit)
@@ -2255,6 +2256,11 @@
   (-> cpu-state? nonnegative-integer? cpu-state?)
   (struct-copy cpu-state state
                [clock-cycles (+ cycles (cpu-state-clock-cycles state))]))
+
+(define/c (reset-cycles state)
+  (-> cpu-state? cpu-state?)
+  (struct-copy cpu-state state
+               [clock-cycles 0]))
 
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00

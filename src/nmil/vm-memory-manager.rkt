@@ -334,7 +334,7 @@
 
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
-(require (only-in "../tools/6510-interpreter.rkt" peek-word-at-address))
+(require (only-in "../tools/6510-interpreter.rkt" peek-word-at-address cpu-state-clock-cycles))
 (require (only-in "../ast/6510-calc-opcode-facades.rkt" LDA-immediate))
 (require (only-in "../util.rkt" bytes->int))
 (require (only-in racket/list flatten take empty? drop make-list))
@@ -3965,11 +3965,14 @@
      (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2) ;; tos (int $1ff) -> @2 (overwriting nil)
 
      (LDA !$02)
-     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2)))  ;; @2 (now int $1ff) -> stack
+     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2)  ;; @2 (now int $1ff) -> stack
+     ))
 
   (define test-cell-stack-push-array-ata-ptr-state-after
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
+  (check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
+                3852)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 3 items"
                       "cell-int $01ff"
