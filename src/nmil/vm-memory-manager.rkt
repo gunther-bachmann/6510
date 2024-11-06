@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; IDEA: no memory bitmap, use free slot bytes to encode whether page is free or not
+;; DONE: no memory bitmap, use free slot bytes to encode whether page is free or not
 ;; this would reduce complexity in finding free pages, free blocks of pages etc.
 ;; (since free slots may never hold the value 00, 01, fe, ff, these values can be used to encode the state of the page
 ;;  e.g. 00 = allocated but full page (0 allows BEQ to be used easily to check whether page is full during slot allocation!)
@@ -593,7 +593,6 @@
 ;;  VM_MEMORY_MANAGEMENT_CONSTANTS              :: constants that are used by the assembler code
 ;;  VM_ALLOC_PAGE_JUMP_TABLE                    :: jump table  page-type->allocation method
 ;;  VM_INITIAL_MM_REGS                          :: (initial data for) the memory management registers
-;;  VM_FREE_PAGE_BITMAP                         :: bitmap indicating free pages (0) or allocated pages (1)
 ;;
 ;; CODE (FULL PAGE)
 ;;  VM_INITIALIZE_MEMORY_MANAGER                :: initialize memory management (paging, cell stack)
@@ -668,8 +667,6 @@
    (byte-const TAG_BYTE_BYTE_CELL        $fc)
    (byte-const TAG_BYTE_CELL_ARRAY       $80)
    (byte-const TAG_BYTE_NATIVE_ARRAY     $84)
-
-   (word-const VM_FREE_PAGE_BITMAP       $ced0) ;; location: free page bitmap (ced0..ceff)
 
    (byte-const NEXT_FREE_PAGE_PAGE       $cf)   ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
    (word-const VM_FIRST_FREE_SLOT_ON_PAGE     $cf00) ;; location: table of first free slot for each page
@@ -1351,7 +1348,7 @@
 
    ;; $cec4
    (label VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; what is the highest page to start searching for a free page
-          (byte $1f) ;; safe to start with $1F is index
+          (byte $cd) ;; safe to start with $cd is index
 
    ;; $cec5
    (label VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
@@ -1407,45 +1404,6 @@
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem F000-F7ff is unavailable (C64 KERNAL)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)))  ;; mem F800-Ffff is unavailable (C64 KERNAL)
 
-;; put into memory @ #xced0
-(define VM_FREE_PAGE_BITMAP
-  (list
-   (label VM_FREE_PAGE_BITMAP)
-          (byte #b11111111)     ;; mem 0000-07ff is unavailable (zero page, stack ... screen)
-          (byte #b11111111)     ;; mem 0800-0fff is unavailable (start of basic ram)
-          (byte #b11111111)     ;; mem 1000-17ff is unavailable
-          (byte #b11111111)     ;; mem 1800-1fff is unavailable
-          (byte #b00000011)     ;; mem 2000-27ff is unavailable, 2200-27ff is free
-          (byte #b00000000)     ;; mem 2800-2fff is free
-          (byte #b00000000)     ;; mem 3000-37ff is free
-          (byte #b00000000)     ;; mem 3800-3fff is free
-          (byte #b00000000)     ;; mem 4000-47ff is free
-          (byte #b00000000)     ;; mem 4800-4fff is free
-          (byte #b00000000)     ;; mem 5000-57ff is free
-          (byte #b00000000)     ;; mem 5800-5fff is free
-          (byte #b00000000)     ;; mem 6000-67ff is free
-          (byte #b00000000)     ;; mem 6800-6fff is free
-          (byte #b00000000)     ;; mem 7000-77ff is free
-          (byte #b00000000)     ;; mem 7800-7fff is free
-          (byte #b00000000)     ;; mem 8000-87ff is free
-          (byte #b00000000)     ;; mem 8800-8fff is free
-          (byte #b00000000)     ;; mem 9000-97ff is free
-          (byte #b11100000)     ;; mem 9800-9cff is free, 9d00..9dff = first free code page, 9e00..9eff stack page, 9f00..9fff cell page
-          (byte #b11111111)     ;; mem A000-A7ff is unavailable (C64 BASIC)
-          (byte #b11111111)     ;; mem A800-Afff is unavailable (C64 BASIC)
-          (byte #b11111111)     ;; mem B000-B7ff is unavailable (C64 BASIC)
-          (byte #b11111111)     ;; mem B800-Bfff is unavailable (C64 BASIC)
-          (byte #b00000000)     ;; mem C000-C7ff is free
-          (byte #b11000000)     ;; mem C800-Cdff is free, ce00-ceff = other memory management registers + bitmap, cf00-cfff =  used by next free page mapping
-          (byte #b11111111)     ;; mem D000-D7ff is unavailable (C64 I/O)
-          (byte #b11111111)     ;; mem D800-Dfff is unavailable (C64 I/O)
-          (byte #b11111111)     ;; mem E000-E7ff is unavailable (C64 KERNAL)
-          (byte #b11111111)     ;; mem E800-Efff is unavailable (C64 KERNAL)
-          (byte #b11111111)     ;; mem F000-F7ff is unavailable (C64 KERNAL)
-          (byte #b11111111)     ;; mem F800-Ffff is unavailable (C64 KERNAL)
-          ))
-
-
 ;; initialize memory management (paging)
 ;; - setup 'next free page' information, basically initializing the whole page with zeros
 ;; - setup cell stack (to empty)
@@ -1469,7 +1427,7 @@
 
            ;; initialize cell stack
            (LDA !$20)
-           (JSR  VM_ALLOC_CALL_FRAME)
+           (JSR VM_ALLOC_CALL_FRAME)
            (STY ZP_PARAMS_PTR)
            (STY ZP_LOCALS_PTR)
            (STY ZP_CELL_STACK_BASE_PTR)
@@ -1481,29 +1439,6 @@
            (STX ZP_CELL_STACK_TOS)
 
            (RTS))))
-
-;; INCOMPLETE!
-;; parameter:
-;;   A = page-type to allocate (see constants)
-;;       (00 = fixed slot size list-pair-cells,
-;;        01 = variable slot size native arrays for call-stack)
-;; result:
-;;   A = allocated page
-;; (define VM_ALLOC_PAGE
-;;   (list
-;;    (label VM_ALLOC_PAGE)
-;;           (ASL A)
-;;           (TAY)
-;;           (LDA VM_ALLOC_PAGE_FOR_CELL_PAIRS_JT+1,y) ;; high byte from jump table
-;;           (STA VM_ALLOC_PAGE__JT+2)                   ;; write high byte of jump target
-;;           (LDA VM_ALLOC_PAGE_FOR_CELL_PAIRS_JT,y)   ;; low byte from jump table
-;;           (STA VM_ALLOC_PAGE__JT+1)                   ;; write low byte of jump target
-;;    (label VM_ALLOC_PAGE__JT)
-;;           (JMP $0000)                                 ;; jump to
-;;    ))
-
-;; (JSR VM_ALLOC_PAGE__LIST_PAIR_CELLS)      ;; direct calls (if type is statically known)
-;; (JSR VM_ALLOC_PAGE__CALL_STACK)
 
 ;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)
 ;; offset content
@@ -1791,61 +1726,42 @@
 
             (RTS)))
 
-
-;; whether a page is free or used is kept in VM_FREE_PAGE_BITMAP
-;; each bit represents one page 1 = used, 0 = free
-;; VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH keeps the max idx to start looking for a page that is free
+;; whether a page is free or used is kept in the 256 bytes starting at VM_FIRST_FREE_SLOT_ON_PAGE
+;; each byte represents one page
+;;   00 = allocated (used) but no free slots
+;;   01 = system page, not available for memory management
+;;   ff = free page (not allocated yet)
+;; VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH  (255..0) keeps the max idx to start looking for a page that is free
 ;; parameter: a = page
 ;; result: (none)
 (define VM_FREE_PAGE
   (list
    (label VM_FREE_PAGE)
-          (PHA)
-
-          (LSR)
-          (LSR)
-          (LSR)
-          (CMP VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; check for max of highest page #
-          (BMI VM_FREE_PAGE__CONTINUE)
-          (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; store new max
-
-   (label VM_FREE_PAGE__CONTINUE)
-          (TAY) ;; index into bitmap
-          (PLA)
-          (AND !$07)
-          (TAX)
-          (LDA VM_FREE_PAGE_BITMAP,y)
-          (EOR BITS,x) ;; clear bit that must be set because this page was in use
-          (STA VM_FREE_PAGE_BITMAP,y)
-          (RTS)))
-
-
-
-(define VM_FREE_PAGE_NEW
-  (list
-   (label VM_FREE_PAGE_NEW)
           (CMP VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
-          (BMI NO_CHANGE__VM_FREE_PAGE_NEW)
-          (STA HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
+          (BMI NO_CHANGE__VM_FREE_PAGE)
+          (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
 
-   (label NO_CHANGE__VM_FREE_PAGE_NEW)
+   (label NO_CHANGE__VM_FREE_PAGE)
           (TAY)
           (LDA !$ff) ;; free/unallocated page
           (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
-          (RTS)
-))
+          (RTS)))
 
-(define VM_ALLOC_PAGE__PAGE_UNINIT_NEW
+;; allocate a page (completely uninitialized), just the page, update the memory page status in VM_FIRST_FREE_SLOT_ON_PAGE
+;; parameter: (none)
+;; result: A = allocated free page (uninitialized)
+;; uses: A, Y,
+(define VM_ALLOC_PAGE__PAGE_UNINIT
   (list
-   (label VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+   (label VM_ALLOC_PAGE__PAGE_UNINIT)
           (LDY VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
 
-   (label LOOP__VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+   (label LOOP__VM_ALLOC_PAGE__PAGE_UNINIT)
           (LDA VM_FIRST_FREE_SLOT_ON_PAGE,y)
           (DEY)
-          (BEQ OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+          (BEQ OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT)
           (CMP !$ff)
-          (BNE LOOP__VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+          (BNE LOOP__VM_ALLOC_PAGE__PAGE_UNINIT)
 
           (INY)
           (LDA !$00) ;; mark as initially full but allocated
@@ -1854,91 +1770,8 @@
           (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
           (RTS)
 
-   (label OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+   (label OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT)
           (BRK)
-          ))
-;; allocate a page (completely uninitialized), just the page, update the memory page bitmap (VM_FREE_PAGE_BITMAP)
-;; parameter: (none)
-;; result: A = allocated free page (uninitialized)
-;; uses: A, Y, X, one stack value
-(define VM_ALLOC_PAGE__PAGE_UNINIT
-  (list
-   (label VM_ALLOC_PAGE__PAGE_UNINIT)
-          (byte-const TEMP_TYPE #xfa)
-          (byte-const PAGE #xfc)
-
-          (word-const OUT_OF_MEMORY_ERROR #xc100)
-
-          ;; use a sensible place to start looking for free page, from top to bottom
-          (LDY VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
-
-
-  (label  CHECK_PAGE_BITMAP)
-          (LDA VM_FREE_PAGE_BITMAP,y)
-          (CMP !$FF) ;; all pages used?
-          (BNE FP_FOUND)
-          (DEY)
-          (BPL CHECK_PAGE_BITMAP)
-          (JMP OUT_OF_MEMORY_ERROR) ;; TODO if there are enqueued ref count decs, check those first
-
-   (label FP_FOUND)
-          (PHA)
-          (TYA) ;; Y = index into bitmap -> A
-          (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; remember last page allocated (<- since always allocating form top -> bottom) this is the new top
-          (ASL A)
-          (ASL A)
-          (ASL A)
-          ;; now A has the topmost 5 bits set to the free page
-          (STA PAGE)
-          ;; now get the lower three bits (look for first bit not set)
-          (LDX !$07)
-          (PLA) ;; get bit map byte again
-
-   (label SHIFT_OUT)
-          (ASL A)
-          (BCC UNSET_BIT_FOUND)
-          (DEX)
-          (BPL SHIFT_OUT)
-          (BRK) ;; should never get here, there must be at least one bit not set
-
-   (label UNSET_BIT_FOUND)
-          (TXA)      ;; get the index of the bit into A (can be of value 0..7) => lower 3 bits
-          (ORA PAGE) ;; combine with bits already found for page
-          (STA PAGE) ;; store the full page idx
-
-          ;; mark this page as used in the bitmap!
-          (LDA VM_FREE_PAGE_BITMAP,y) ;; y should still hold the index into the bitmap
-          (ORA BITS,x)                ;; x should still hold the index of the bit in the bitmap byte
-          ;; make sure to set the bit of allocated page in page bitmap
-          (STA VM_FREE_PAGE_BITMAP,y)
-          (LDA PAGE) ;; return the new page in A
-          (RTS)
-
-   (label BITS)
-          (byte #b00000001
-                #b00000010
-                #b00000100
-                #b00001000
-                #b00010000
-                #b00100000
-                #b01000000
-                #b10000000)
-
-   (label ALT_UNSET_BIT_FOUND) ;; 4 bytes less, mean 28 cycles more (calc BITS by shifting $01 x-times
-          (TXA)
-          (ORA PAGE) ;; combine with bits
-          (STA PAGE)
-
-          (LDA !$01)
-          (label SHIFT_AGAIN)
-          (ASL A)
-          (DEX)
-          (BPL SHIFT_AGAIN)
-          (ROR)
-          (ORA VM_FREE_PAGE_BITMAP,y)
-          (STA VM_FREE_PAGE_BITMAP,y)
-          (LDA PAGE)
-          (RTS)
           ))
 
 ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
@@ -4267,7 +4100,7 @@
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
   (check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                1532)
+                1366)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 3 items"
                       "cell-int $01ff"
@@ -4460,7 +4293,5 @@
           ;; ---------------------------------------- registers and maps
           (list (org #xcec0))
           VM_INITIAL_MM_REGS
-          (list (org #xced0))
-          VM_FREE_PAGE_BITMAP
           (list (org #xcf00))
           VM_PAGE_SLOT_DATA))
