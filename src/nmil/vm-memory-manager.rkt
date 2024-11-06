@@ -1,5 +1,44 @@
 #lang racket/base
 
+;; IDEA: no memory bitmap, use free slot bytes to encode whether page is free or not
+;; this would reduce complexity in finding free pages, free blocks of pages etc.
+;; (since free slots may never hold the value 00, 01, fe, ff, these values can be used to encode the state of the page
+;;  e.g. 00 = allocated but full page (0 allows BEQ to be used easily to check whether page is full during slot allocation!)
+;;       01 = system page (unavailable for memory management)
+;;       ... = allocated with free slots
+;;       fe = ???
+;;       ff = free page,
+;;
+;; code pages - granularity: modules
+;; each module is loaded as a whole, modules should be unloadable, relocatable
+;; modules are restricted to max 256 (loaded)?
+;; loading a module does
+;;   load all required modules (recursive until topmost module is found) <- no circles allowed
+;;   resolve required modules functions/variables to ids <- must have been loaded
+;;   assign ids to all functions/variables in this module
+;;   patch own loaded bytecode to use (required modules or own) functions/variable ids (<- module needs patch table)
+;; unloading a module does
+;; relocating a module does
+
+;; static calling a function does (e.g. w/i a module)
+;;   allocate call-frame (#params + #locals is known)
+;;   save current exec state->call frame
+;;   jump to bytecode of function called (location is known)
+
+;; dynamic calling a function does
+;;   resolve id to bytecode location (16-bit->16-bit translation)
+;;   get #params
+;;   get #locals (max)
+;;   allocate call-frame
+;;   save current exec state->call frame
+;;   jump to bytecode of function called
+
+;; return from function does
+;;   pop call frame (restoring saved exec state)
+
+;; idea: trace byte code execution
+;; idea: collect metrics of calls
+
 ;; naming: atomic cell
 ;;         cell                     :: 16 bit value (finest granular memory managed block)
 ;;         atomic cell              :: a cell that has no followup value and is complete in itself
@@ -36,19 +75,24 @@
 ;;         call-frame page  :: page for call-frames (stack organized, no ref counting etc.)
 ;;         cell-pairs page  :: page for cell-pairs, (lowbyte) lsr x 2 to get ref count position
 ;;         cell page        :: page for cells, (lowbyte) lsr x 1 to get ref count position (last cell unusable)
-;;         s8 page          ;; page for slots of size <=8, (lowbyte) lsr x 3 to get ref count position
+;;         [s8 page          :: page for slots of size <=8, (lowbyte) lsr x 3 to get ref count position] optional
+;;         fid->loc page    :: page that maps a function id to a location of first byte code
+;;         code page        :: page holding byte code (and function meta data, module meta data?)
+;;         constants page   :: page holding constants (not ref counted)
 
 ;; idea: keep allocated #slots to detect empty pages (# drops to zero)
 ;; idea: page 00 = page mod byte
 ;;            1xxx xxxx = (cell page) page with cells (slots of byte 2), xxxxxx = number of used cells 0..127 (actually only 85 possible)
 ;;            01yy yyyy = (cell-pairs page) page with cell-pairs (slots of byte 4) yyyyy = number of cells used 0..63 (actually only 51 possible)
-;;            001z zzzz = (s8 page) page with slots of (max) size 8 byte, zzzz = number of slots used 0..31 (actually only possible)
+;;            [001z zzzz = (s8 page) page with slots of (max) size 8 byte, zzzz = number of slots used 0..31 (actually only possible)]
 ;;            0001 0000 = (m1 page p0) page with buckets type 0 (byte at offset 02: holds the number of used slots)
 ;;            0001 0001 = (m1 page p1) page with buckets type 1 (byte at offset 02: holds the number of used slots)
 ;;            0001 0010 = (m1 page p2) page with buckets type 2 (byte at offset 02: holds the number of used slots)
 ;;            0001 0011 = (m1 page p3) page with buckets type 3 (byte at offset 02: holds the number of used slots)
 ;;            0001 1000 = (call-frame page) (stack organized, full+free detection already implemented)
-;;       page 01 = (m1 page px, call-frame page) previous page of same type (<- currently only for pages with buckets and call-frame pages)
+;;            0001 1001 = (fid->loc page) page with 16 bit values (starting at $02), filled without gaps, next slot = offset to free, no ref counting
+;;            0001 1010 = (code page) page with byte code and function meta data <- filled without gaps, next slot = offset to free, no ref counting
+;;       page 01 = (code page, m1 page px, call-frame page) previous page of same type (<- currently only for pages with buckets and call-frame pages)
 ;;       page 02 = (m1 page px, s8 page) number of used slots
 ;;       page ff = (cell-pairs and cell page) previous page (in case of cell page = last cell stays unused!!)
 
@@ -1327,6 +1371,42 @@
    ;; $cecd..$cecf (unused)
    ))
 
+(define VM_PAGE_SLOT_DATA
+  (list
+   (label VM_PAGE_SLOT_DATA)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 0000-07ff is unavailable (zero page, stack ... screen)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 0800-0fff is unavailable (start of basic ram)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 1000-17ff is unavailable
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 1800-1fff is unavailable
+          (byte $01 $01 $ff $ff  $ff $ff $ff $ff)     ;; mem 2000-27ff 2000-21ff is unavailable, 2200-27ff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 2800-2fff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 3000-37ff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 3800-3fff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 4000-47ff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 4800-4fff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 5000-57ff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 5800-5fff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 6000-67ff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 6800-6fff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 7000-77ff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 7800-7fff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 8000-87ff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 8800-8fff is free
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 9000-97ff is free
+          (byte $ff $ff $ff $ff  $ff $01 $01 $01)     ;; mem 9800-9cff is free, 9d00..9dff = first free code page, 9e00..9eff stack page, 9f00..9fff cell page
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem A000-A7ff is unavailable (C64 BASIC)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem A800-Afff is unavailable (C64 BASIC)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem B000-B7ff is unavailable (C64 BASIC)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem B800-Bfff is unavailable (C64 BASIC)
+          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem c000-c7ff is free
+          (byte $ff $ff $ff $ff  $ff $ff $01 $01)     ;; mem c800-cdff is free, ce00-ceff = other memory management registers + bitmap, cf00-cfff =  used by next free page mapping
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem D000-D7ff is unavailable (C64 I/O)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem D800-Dfff is unavailable (C64 I/O)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem E000-E7ff is unavailable (C64 KERNAL)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem E800-Efff is unavailable (C64 KERNAL)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem F000-F7ff is unavailable (C64 KERNAL)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)))  ;; mem F800-Ffff is unavailable (C64 KERNAL)
+
 ;; put into memory @ #xced0
 (define VM_FREE_PAGE_BITMAP
   (list
@@ -1377,7 +1457,7 @@
     (label VM_INITIALIZE_MEMORY_MANAGER)
 
            ;; initialize NEXT_FREE_PAGE_PAGE (256 byte)
-           (LDA !$00)
+           (LDA !$ff)
            (TAY)
     (label VM_INITIALIZE_MEMORY_MANAGER__LOOP)
            ;; highbyte of this address should be using the constant NEXT_FREE_PAGE_PAGE
@@ -1739,6 +1819,44 @@
           (STA VM_FREE_PAGE_BITMAP,y)
           (RTS)))
 
+
+
+(define VM_FREE_PAGE_NEW
+  (list
+   (label VM_FREE_PAGE_NEW)
+          (CMP VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
+          (BMI NO_CHANGE__VM_FREE_PAGE_NEW)
+          (STA HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
+
+   (label NO_CHANGE__VM_FREE_PAGE_NEW)
+          (TAY)
+          (LDA !$ff) ;; free/unallocated page
+          (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
+          (RTS)
+))
+
+(define VM_ALLOC_PAGE__PAGE_UNINIT_NEW
+  (list
+   (label VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+          (LDY VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
+
+   (label LOOP__VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+          (LDA VM_FIRST_FREE_SLOT_ON_PAGE,y)
+          (DEY)
+          (BEQ OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+          (CMP !$ff)
+          (BNE LOOP__VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+
+          (INY)
+          (LDA !$00) ;; mark as initially full but allocated
+          (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
+          (TYA)
+          (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
+          (RTS)
+
+   (label OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT_NEW)
+          (BRK)
+          ))
 ;; allocate a page (completely uninitialized), just the page, update the memory page bitmap (VM_FREE_PAGE_BITMAP)
 ;; parameter: (none)
 ;; result: A = allocated free page (uninitialized)
@@ -4149,12 +4267,77 @@
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
   (check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                3852)
+                1532)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 3 items"
                       "cell-int $01ff"
                       "cell-int $01ff"
                       "cell-pair-ptr NIL")))
+
+;; idea: have a list of code pages (adding new page as head if allocated)
+;;       TODO: how does relocation work here?
+;; idea: function id = ptr to bytecode
+;; idea: relocatable function ids = function id = ptr into reloc table (identified by lowest bit = 1)
+;;       reloc table is a page with entries:
+;;             function id -> [lowbyte] [highbyte] <- actual location of function
+;;             moving a function can be done by rewriting function id entry in that table
+;;             calling that function needs to do one more indirection
+;;             functions currently in the call stack cannot (easily) be relocated!
+;; module descriptor
+;;   module name string
+;;   child modules (list of references to child modules)
+;;   modules code pages head (ptr to the head of the list of code pages of this module)
+
+;; code page
+;;   00           : page type
+;;   01..02       : pointer to module descriptor
+;;   03           : len of bytecode 0..127 (blen), highest bit set means exported function <-- start of first function descriptor
+;;   04           : #locals
+;;   05           : #params
+;;   06..06+blen  : bytecode    <- function id points on first byte of byte code? [must start word aligned!]
+;;   07+blen      : len of function name str (slen) [only if exported function]
+;;   08+blen..    : function name                   [only if exported function]
+;;   09+blen+slen :                        <-- start of next function descriptor
+;;
+
+;; could a constants pool be put into these pages, too? (relocation would be difficult, though)
+
+;; load from disk: https://c64os.com/post/c64kernalrom#file_load
+
+
+;; input:  x,y  id
+;; output: x,y  ptr to function bytecode
+(define VM_LOCATE_FUNCTION_BY_ID
+  (list
+   (label VM_LOCATE_FUNCTION_BY_ID)
+   (RTS)))
+
+;; input:  zp_ptr ptr to function name string
+;; output: x,y    ptr to function bytecode
+(define VM_LOCATE_FUNCTION_BY_NAME
+  (list
+   (label VM_LOCATE_FUNCTION_BY_NAME)
+          (BRK))) ;; not implemented yet
+
+;; input:  x/y  ptr to the bytecode descriptor
+;;         descriptor:
+;;           00..01  ptr to corresponding module descriptor
+;;           02     byte code len
+;;           03     function name string len
+;;           04     #locals (max)
+;;           05     #params
+;;           06..   function byte code
+;;           ...    function name string
+;; output: x/y  function id
+;; make sure to have a page allocated that can hold this function
+;;
+(define VM_REGISTER_FUNCTION
+  (list
+   (label VM_REGISTER_FUNCTION)
+          ;; check for space on a code page of the given module (else allocate)
+          ;; copy data into the code page
+          ;; optional: create function id mapping on function id mapping page
+          (RTS))) ;; not implemented yet
 
 (define vm-memory-manager
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -4164,9 +4347,12 @@
           VM_FREE_PAGE                                       ;; free a page (the type specific stuff, of any, must have finished)
           VM_ALLOC_PAGE__PAGE_UNINIT                         ;; allocate new page (not initialized)
 
-          VM_ALLOC_PAGE_FOR_CELLS                            ;; allocate page and initialize for cells
-          VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for cell-pairs
-          VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for m1 slots of a specific profile (and thus size)
+          VM_ALLOC_PAGE_FOR_CELLS                            ;; allocate page and initialize for ref counted cells
+          VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for ref counted cell-pairs
+          VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
+          ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether
+
+          ;; VM_ALLOC_PAGE_FOR_MODULE_CODE                      ;; allocate page and initialize to hold immutable byte code (not ref counted)
 
           ;; ---------------------------------------- alloc/free cells, pairs, slots
           VM_ALLOC_CELL_ON_PAGE                              ;; allocate a cell on the page in A (allocating a new one if page is full)
@@ -4183,6 +4369,10 @@
 
           VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
           VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
+
+          ;; VM_ALLOC_MODULE_CODE_SLOT_TO_ZP_PTR                ;; allocate a slot for module code
+          ;; VM_FREE_MODULE
+          ;; VM_RELOCATE_MODULE_X_TO_                           ;; relocate module identified by page x to ??
 
           ;; ---------------------------------------- refcount
           VM_REFCOUNT_DECR_ZP_PTR                            ;; generic decrement of refcount (dispatches depending on type)
@@ -4271,4 +4461,6 @@
           (list (org #xcec0))
           VM_INITIAL_MM_REGS
           (list (org #xced0))
-          VM_FREE_PAGE_BITMAP))
+          VM_FREE_PAGE_BITMAP
+          (list (org #xcf00))
+          VM_PAGE_SLOT_DATA))

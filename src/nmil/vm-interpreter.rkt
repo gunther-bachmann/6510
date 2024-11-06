@@ -173,15 +173,16 @@
            (JSR VM_CELL_STACK_PUSH)
            (JMP VM_INTERPRETER_INC_PC)
 
-   (label  PUSH_PARAM__BC_PUSH_PARAM_OR_LOCAL_SHORT) ;; not implemented yet
+           ;; push param
+   (label  PUSH_PARAM__BC_PUSH_PARAM_OR_LOCAL_SHORT)
            (ASL A) ;; * 2
            (TAY)
            (LDA (ZP_PARAMS_PTR),y)
            (TAX)
            (INY)
            (LDA (ZP_PARAMS_PTR),y)
-           (TAY)
-           (TXA)
+           (TAY) ;; y = highbyte
+           (TXA) ;; a = lowbyte
            (JSR VM_CELL_STACK_PUSH)
            (JMP VM_INTERPRETER_INC_PC)
            )))
