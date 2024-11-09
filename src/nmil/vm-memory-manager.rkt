@@ -1,5 +1,45 @@
 #lang racket/base
 
+;; IDEA: tos is always a register held in zp (e.g. now zp_ptr, future zp_rt)
+;;       have additional "registers", capable of holding cells zp_ra, zp_rb ...
+;;       push zp_rt on stack only if necessary => operations working on one value only do no push/pop actions
+;;         e.g. (car a-list), a-list is in zp_rt, car replaces zp_rt with the head of a-list, no stack op necessary!
+;;              (push-int-0), pushes zp_rt, putting int-0 into zp_rt
+;;              empty stack does now mean: no value on the stack and no value in zp_rt
+;;              pop: fill zp_rt with new tos, popping it off the call-frame stack
+;;              pop last item:  discard zp_rt (and mark stack as empty)
+;;              push on empty stack: write pushed into zp_rt
+;;              push non empty stack: push zp_rt onto the stack in the call-frame and write pushed value into zp_rt
+;;              (cons a-val a-list): move a-val (from zp_rt) to zp_ra, pop (filling zp_rt with a-list) execute cons, result in zp_rt
+;;       BENEFIT: - less actual pushes of values into the call-frame stack (e.g. car none at all)
+;;                - call-frame stack size is always 1 item smaller!
+;;                - maybe some harmonization of zp register usage?
+;;       DRAWBACK: additional full/empty stack detection complexity (is it really complex? <- check before optimization)
+;;                     <- ideas to prevent that
+;;                        - statically compile first bytecode pushing into the stack
+;;                          - with prefix byte code [adds 1 byte to each function]
+;;                          - into specific byte code directly writing into zp_rt [wastes available byte codes])
+;;                          this could collide with tail call recursion
+;;                          upon function call change behavior such that first push will not copy zp_rt into stack (pop must be changed too)
+;;                          and all subsequent calls do (e.g. change jump target, rechanging it to regular behavior)
+;;                          pop might work accordingly (last actual stack manipulation will change pop/push target)
+;;                        - require always 1 additional dummy local (before first actual stack entry)
+;;                          this will allow to not have any special local but will loose the benefit of reduced stack size!
+;;
+;;       common operations (should be derived from byte-code functions):
+;;         start with car, cdr, cons, push: local/param/const, int+/-, call, tail-call?
+;;         e.g. zp_rt interpret as cell-pair-ptr, write, cellX of cell-pair into zp_rt again (or some other register?) <- used for car/cdr
+;;              zp_rt interpret as cell-ptr, write cell pointed to into zp_rt again (or some other register)?
+;;              copy zp_rt to other register (and vice versa)
+;;              copy call-frame stack value @ idx into cellX of cell-pair, pointed to by zp_rt
+;;              write zp_rt -> local / param of this function
+;;              copy local/param -> cellX of cell-apri in zp_rt
+;;              copy call-frame stack value @ idx into array pointed to by zp_rt
+;;
+;;       possible implementation steps:
+;;         implement in parallel to existing solution
+;;
+;;
 ;; DONE: no memory bitmap, use free slot bytes to encode whether page is free or not
 ;; this would reduce complexity in finding free pages, free blocks of pages etc.
 ;; (since free slots may never hold the value 00, 01, fe, ff, these values can be used to encode the state of the page
@@ -79,6 +119,7 @@
 ;;         fid->loc page    :: page that maps a function id to a location of first byte code
 ;;         code page        :: page holding byte code (and function meta data, module meta data?)
 ;;         constants page   :: page holding constants (not ref counted)
+;;         page block       :: a number of consecutive pages allocated/freed as a block, allowing for larger memory objects (having less wasted bytes (e.g. for call-frames)?)
 
 ;; idea: keep allocated #slots to detect empty pages (# drops to zero)
 ;; idea: page 00 = page mod byte
@@ -686,15 +727,25 @@
    (byte-const ZP_VM_PC                  $e0)
    (byte-const ZP_PARAMS_PTR             $e2) ;; pointer to first parameter in call-frame
    (byte-const ZP_LOCALS_PTR             $e4) ;; pointer to first local in call-frame
-   (byte-const ZP_CELL_STACK_BASE_PTR    $e6) ;; e6..e7 (pointer to the base of the eval stack of the currently running function
+   (byte-const ZP_CELL_STACK_BASE_PTR    $e6) ;; e6..e7 (pointer to the base of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
 
    (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2 <- may be not needed (zp_locals_ptr always = zp_call_frame + 6)
 
    ;; zp_ptr holds either a cell-ptr or a cell-pair (ptr) with out the tag bits!
-   (byte-const ZP_PTR                    $fb)   ;; fb = low byte (with out tag bits), fc = high byte,   tagged low byte is held in ZP_PTR_TAGGED
-   (byte-const ZP_PTR2                   $fd)   ;; fd = low byte (with out tag bits), fe = high byte
+   (byte-const ZP_PTR                    $fb)   ;; fb = low byte (without tag bits), fc = high byte,   tagged low byte is held in ZP_PTR_TAGGED
+   (byte-const ZP_PTR2                   $fd)   ;; fd = low byte (without tag bits), fe = high byte
+
+   ;; implementation using registers
+   ;; register T = top of stack, used as main register for operations, could be a pointer to a cell or an atomic cell. if it is a pointer to a cell, the low byte here is without tag bits => (zp_rt) points to the cell
+   (byte-const ZP_RT                     $fb) ;; fb = low byte (without tag bits), fc = high byte,   tagged low byte is held in ZP_RT_TAGGED_LB
+   (byte-const ZP_RT_TAGGED_LB           $dd) ;; dd = low byte with tag bits , tagged low bytes are 2 apart, to use same offset as ZP_RT <-> ZP_RA
+   ;; register A
+   (byte-const ZP_RA                     $fd) ;; fd = low byte (without tag bits), fe = high byte,   tagged low byte is held in ZP_RA_TAGGED_LB
+   (byte-const ZP_RA_TAGGED_LB           $df) ;; df = low byte with tag bits
+   ;; currently no need to register B (maybe someday)
    ))
 
+;; extract constant definition in assembler into racket constant
 (define (ast-const-get ast-commands key)
   (when (empty? ast-commands)
     (raise-user-error (format "key ~a not found in list of ast commands" key)))
@@ -708,6 +759,10 @@
      (ast-const-word-cmd-word ast-command)]
     [else (ast-const-get (cdr ast-commands) key)]))
 
+(define ZP_RT                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
+(define ZP_RT_TAGGED_LB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT_TAGGED_LB"))
+(define ZP_RA                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
+(define ZP_RA_TAGGED_LB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA_TAGGED_LB"))
 (define ZP_PTR                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR"))
 (define ZP_PTR_TAGGED           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR_TAGGED"))
 (define ZP_PTR2                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2"))
@@ -740,6 +795,426 @@
 ;;   ? copying to zp_ptr does NOT change the ref count
 ;;   ? writing a cell-ptr into a cell increases ref count (regardless where this cell-ptr comes from)
 ;;   ? erasing cell-ptr from a cell decreases ref count
+
+
+;; (define VM_WRITE_BYTE_A_TO_RT)
+;; (define VM_WRITE_RT_CELLy_TO_RT)
+
+;; input: A = lowbyte (untagged)
+;;        X = highbyte 
+;; output: RT = cell-ptr -> (A/X)
+(define VM_WRITE_CELL_PTR_AX_TO_RT
+  (list
+   (label VM_WRITE_CELL_PTR_AX_TO_RT)
+          (STA ZP_RT)
+          (STX ZP_RT+1)
+          (ORA !$01)
+          (STA ZP_RT_TAGGED_LB)
+          (RTS)))
+
+;; input: A = lowbyte  (untagged)
+;;        X = highbyte
+;; output: RT = cell-pair-ptr -> (A/X)
+(define VM_WRITE_CELL_PAIR_PTR_AX_TO_RT
+  (list
+   (label VM_WRITE_CELL_PAIR_PTR_AX_TO_RT)
+          (STA ZP_RT)
+          (STX ZP_RT+1)
+          (ORA !$02)
+          (STA ZP_RT_TAGGED_LB)
+          (RTS)))
+
+;; input: A = lowbyte of int (0..255), written into high byte of cell register RT
+;;        X = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register
+;; output: RT = cell-int
+(define VM_WRITE_INT_AX_TO_RT
+  (list
+   (label VM_WRITE_INTm1_TO_RT)
+          (LDA !$ff) 
+          (LDX !$7c) ;; 1f << 2
+          (BNE VM_WRITE_ENC_INT_AX_TO_RT)
+
+   (label VM_WRITE_INT1_TO_RT)
+          (LDA !$01)
+          (BNE VM_WRITE_INT_A_TO_RT)
+
+   (label VM_WRITE_INT0_TO_RT)
+          (LDA !$00)
+
+   (label VM_WRITE_INT_A_TO_RT)
+          (LDX !$00)
+   (label VM_WRITE_ENC_INT_AX_TO_RT)
+          (STX ZP_RT_TAGGED_LB)
+          (STX ZP_RT)
+          (STA ZP_RT+1)
+          (RTS)
+
+   (label VM_WRITE_INT_AX_TO_RT)
+          (STA ZP_RT+1)
+          (TXA)
+          (ASL A)
+          (ASL A)
+          (AND !$7c)           ;; mask out top and two low bits!
+          (STA ZP_RT_TAGGED_LB)
+          (STA ZP_RT)
+          (RTS)))
+
+;; push a cell onto the stack (that is push the RegT, if filled, and write the value into RegT)
+;; input: call-frame stack, RT
+;;        A = high byte,
+;;        X = tagged low
+;; output: call-frame stack, RT
+(define VM_CELL_STACK_PUSH_R
+  (list
+
+   ;; ints are saved high byte first, then low byte !!!!
+   ;; X = high byte of int (max 31 = $1f) (stored in low byte (tagged) position)
+   ;; A = low byte of int (0..255) (stored in high byte (untagged) position)
+   (label VM_CELL_STACK_PUSH_INT_R)         ;; idea: can be optimized since it is known that this is an atomic value
+          (TAY)
+          (TXA)
+          (ASL A)
+          (ASL A)
+          (AND !$7c)           ;; mask out top and two low bits!
+          (TAX)
+          (TYA)
+          (CLC)
+          (BCC VM_CELL_STACK_PUSH_R)
+
+   (label VM_CELL_STACK_PUSH_INT_m1_R)
+          (LDA !$ff) ;; 1f << 2
+          (LDX !$7c)
+          (BNE VM_CELL_STACK_PUSH_R)
+
+   (label VM_CELL_STACK_PUSH_INT_2_R)
+          (LDA !$02)
+          (LDX !$00)
+          (BEQ VM_CELL_STACK_PUSH_R)
+
+   (label VM_CELL_STACK_PUSH_INT_1_R)
+          (LDA !$01)
+          (LDX !$00)
+          (BEQ VM_CELL_STACK_PUSH_R)
+
+   (label VM_CELL_STACK_PUSH_INT_0_R)
+          (LDA !$00)
+          (TAX)
+          (BEQ VM_CELL_STACK_PUSH_R)
+
+   ;; push NIL (cell-pair-ptr)           ;; idea: can be optimized since it is known that this is cell-pair-ptr
+   (label VM_CELL_STACK_PUSH_NIL_R)
+          (LDX !<TAGGED_NIL)
+          (LDA !>TAGGED_NIL)
+
+   ;; push a cell
+   ;; A = high byte
+   ;; X = tagged low byte
+   (label VM_CELL_STACK_PUSH_R)
+          (LDY !$01)
+          (CPY ZP_RT_TAGGED_LB)     ;; if tagged-byte = 01 (empty marker) then push simply writes only into RT
+          (BEQ VM_WRITE_AX_TO_RT)
+
+   (label PUSH_RT__VM_CELL_STACK_PUSH_R)
+          (LDY ZP_CELL_STACK_TOS)
+
+          ;; check that stack pointer does not run out of bound (over the page)
+          (CPY !$fd) ;; marks the end of page, for pushes at least!
+          (BNE NO_ERROR__VM_CELL_STACK_PUSH_R)
+
+          (BRK)
+
+   (label NO_ERROR__VM_CELL_STACK_PUSH_R)
+          (PHA) ;; save A, X is not used => needs not to be saved
+
+          (LDA ZP_RT+1)
+          (INY)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte! (untagged)
+
+          (LDA ZP_RT_TAGGED_LB)
+          (INY)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte (tagged)
+
+          (STY ZP_CELL_STACK_TOS)      ;; set new tos
+
+          (PLA) ;; restore A from call
+
+   (label VM_WRITE_AX_TO_RT)
+          (STX ZP_RT_TAGGED_LB)          
+          (STA ZP_RT+1)
+          (TXA)
+
+          (LSR) ;; C = cell-ptr?
+          (BCC NO_CELL_PTR__VM_CELL_STACK_PUSH_R)
+
+          ;; it is a cell-ptr
+          (TXA)
+          (AND !$fe)  ;; mask out tag bit 0 (since this is a cell-ptr)
+          (STA ZP_RT)
+          (RTS)
+
+   (label NO_CELL_PTR__VM_CELL_STACK_PUSH_R)
+          (LSR) ;; C = cell-pair-ptr?
+          (BCC NO_CELL_PAIR_PTR__VM_CELL_STACK_PUSH_R)  
+
+          ;; it is a cell-pair ptr
+          (TXA)
+          (AND !$fc)  ;; mask out tag bit 0 and 1 (since this is a cell-pair-ptr)
+          (STA ZP_RT)
+          (RTS)
+
+   (label NO_CELL_PAIR_PTR__VM_CELL_STACK_PUSH_R)
+          (TXA)
+          (STA ZP_RT)
+          (RTS)))
+
+(module+ test #| vm_cell_stack_push_r (basically on write into rt, since stack is completely empty) |#
+
+  (define vm_cell_stack_push_r_int0_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
+     (JSR VM_CELL_STACK_PUSH_INT_0_R)))
+
+  (define vm_cell_stack_push_r_int0_state
+    (run-code-in-test vm_cell_stack_push_r_int0_code))
+
+  (check-equal? (memory-list vm_cell_stack_push_r_int0_state ZP_RT (add1 ZP_RT))
+                (list #x00 #x00))
+
+  (define vm_cell_stack_push_r_int1_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)))
+
+  (define vm_cell_stack_push_r_int1_state
+    (run-code-in-test vm_cell_stack_push_r_int1_code))
+
+  (check-equal? (memory-list vm_cell_stack_push_r_int1_state ZP_RT (add1 ZP_RT))
+                (list #x00 #x01))
+
+  (define vm_cell_stack_push_r_intm1_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
+     (JSR VM_CELL_STACK_PUSH_INT_m1_R)))
+
+  (define vm_cell_stack_push_r_intm1_state
+    (run-code-in-test vm_cell_stack_push_r_intm1_code))
+
+  (check-equal? (memory-list vm_cell_stack_push_r_intm1_state ZP_RT (add1 ZP_RT))
+                (list #x7c #xff))
+
+  (define vm_cell_stack_push_r_nil_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
+     (JSR VM_CELL_STACK_PUSH_NIL_R)))
+
+  (define vm_cell_stack_push_r_nil_state
+    (run-code-in-test vm_cell_stack_push_r_nil_code))
+
+  (check-equal? (memory-list vm_cell_stack_push_r_nil_state ZP_RT (add1 ZP_RT))
+                (list #x00 #x00))
+  (check-equal? (memory-list vm_cell_stack_push_r_nil_state ZP_RT_TAGGED_LB ZP_RT_TAGGED_LB)
+                (list #x02))
+
+  (define vm_cell_stack_push_r_cell_ptr_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
+     (LDX !$03)
+     (LDA !$ce)
+     (JSR VM_CELL_STACK_PUSH_R)))
+
+  (define vm_cell_stack_push_r_cell_ptr_state
+    (run-code-in-test vm_cell_stack_push_r_cell_ptr_code))
+
+  (check-equal? (memory-list vm_cell_stack_push_r_cell_ptr_state ZP_RT (add1 ZP_RT))
+                (list #x02 #xce))
+  (check-equal? (memory-list vm_cell_stack_push_r_cell_ptr_state ZP_RT_TAGGED_LB ZP_RT_TAGGED_LB)
+                (list #x03))
+
+  (define vm_cell_stack_push_r_cell_pair_ptr_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
+     (LDX !$06)
+     (LDA !$ce)
+     (JSR VM_CELL_STACK_PUSH_R)))
+
+  (define vm_cell_stack_push_r_cell_pair_ptr_state
+    (run-code-in-test vm_cell_stack_push_r_cell_pair_ptr_code))
+
+  (check-equal? (memory-list vm_cell_stack_push_r_cell_pair_ptr_state ZP_RT (add1 ZP_RT))
+                (list #x04 #xce))
+  (check-equal? (memory-list vm_cell_stack_push_r_cell_pair_ptr_state ZP_RT_TAGGED_LB ZP_RT_TAGGED_LB)
+                (list #x06)))
+
+(module+ test #| vm_cell_stack_push_r (push rt, and write rt) |#
+  (define vm_cell_stack_push_r_push1_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB)
+     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     ))
+
+  (define vm_cell_stack_push_r_push1_state
+    (run-code-in-test vm_cell_stack_push_r_push1_code))
+
+  (check-equal? (vm-stack->strings vm_cell_stack_push_r_push1_state)
+                (list "stack holds 1 item"
+                      "cell-int $1fff"))
+
+  (check-equal? (memory-list vm_cell_stack_push_r_push1_state ZP_RT (add1 ZP_RT))
+                (list #x00 #x01))
+
+  (define vm_cell_stack_push_r_push2_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB)
+     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR VM_CELL_STACK_PUSH_NIL_R)
+     ))
+
+  (define vm_cell_stack_push_r_push2_state
+    (run-code-in-test vm_cell_stack_push_r_push2_code))
+
+  (check-equal? (vm-stack->strings vm_cell_stack_push_r_push2_state)
+                (list "stack holds 2 items"
+                      "cell-int $0001"
+                      "cell-int $1fff"))
+
+  (check-equal? (memory-list vm_cell_stack_push_r_push2_state ZP_RT (add1 ZP_RT))
+                (list #x00 #x00)))
+
+;; pop cell from stack (that is, discard RegT, move tos of call-frame stack into RegT (if available))
+;; input: call-frame stack, RT
+;; output: call-frame stack, RT
+;; NO GC CHECKS!
+(define VM_CELL_STACK_POP_R
+  (list
+   (label VM_CELL_STACK_POP_R)
+          ;; optional: stack marked empty? => error: cannot pop from empty stack!
+          ;; (LDA !$03)
+          ;; (CMP ZP_RT_TAGGED_LB)
+          ;; (BEQ ERROR_NO_VALUE_ON_STACK)
+
+          ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
+          (LDY ZP_CELL_STACK_TOS)
+          (BMI WRITE_01_TO_RT) ;; which effectively clears the RT
+          ;; pop value from call-frame stack into RT!
+          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; tagged low byte
+          (STA ZP_RT_TAGGED_LB)
+          (TAX) ;; keep for later
+
+
+          ;; (optional) quick check for atomic cells [speeds up popping atomic cells, slows popping cell-ptr, slight slows popping cell-pair-ptr
+          ;; (AND !$03)
+          ;; (BEQ WRITE_TOS_TO_RT__VM_CELL_STACK_POP_R)
+          ;; (TXA)
+
+          ;; do pointer checks now
+          (LSR) ;; C = cell-ptr?
+          (BCC NO_CELL_PTR__VM_CELL_STACK_POP_R)          
+
+          ;; it is a cell-ptr
+          (TXA)
+          (AND !$fe)  ;; mask out tag bit 0 (since this is a cell-ptr)
+          (BCS WRITE_TOS_TO_RT_ASET__VM_CELL_STACK_POP_R) ;; C is still set, since TXA and AND do not change Carry!
+
+   (label NO_CELL_PTR__VM_CELL_STACK_POP_R)
+          (LSR) ;; C = cell-pair-ptr?                   ;; if pointer quick check is done, this is not necessary
+          (BCC WRITE_TOS_TO_RT__VM_CELL_STACK_POP_R)    ;; if pointer quick check is done, this is not necessary
+
+          ;; it is a cell-pair ptr
+          (TXA)
+          (AND !$fc)  ;; mask out tag bit 0 and 1 (since this is a cell-pair-ptr)
+          (BCS WRITE_TOS_TO_RT_ASET__VM_CELL_STACK_POP_R) ;; C is still set, since TXA and AND do not change Carry!
+
+   (label WRITE_TOS_TO_RT__VM_CELL_STACK_POP_R)
+          (TXA) ;; tagged low byte
+   (label WRITE_TOS_TO_RT_ASET__VM_CELL_STACK_POP_R)
+          (STA ZP_RT)
+          (DEY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; high byte
+          (STA ZP_RT+1) 
+          (DEY)
+          (STY ZP_CELL_STACK_TOS)
+          (RTS)
+
+   (label WRITE_01_TO_RT)
+          ;; simple write NIL into RT
+          (LDA !$01) ;; 01 is an invalid value, since it cannot be cell-ptr pointing to $xx00!
+          (STA ZP_RT_TAGGED_LB)
+          (LDA !$00)
+          (STA ZP_RT)
+          (STA ZP_RT+1)
+          (RTS)))
+
+(module+ test #| vm_cell_stack_pop_r (just one value) |#
+  (define vm_cell_stack_pop3_r_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB)
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_0_R)
+     (JSR VM_CELL_STACK_POP_R)))
+
+  (define vm_cell_stack_pop3_r_state
+    (run-code-in-test vm_cell_stack_pop3_r_code))
+
+  (check-equal? (vm-stack->strings vm_cell_stack_pop3_r_state)
+                (list "stack holds 1 item"
+                      "cell-int $0001"))
+
+  (check-equal? (memory-list vm_cell_stack_pop3_r_state ZP_RT (add1 ZP_RT))
+                (list #x7c #xff))
+
+  (define vm_cell_stack_pop2_r_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB)
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_0_R)
+     (JSR VM_CELL_STACK_POP_R)
+     (JSR VM_CELL_STACK_POP_R)))
+
+  (define vm_cell_stack_pop2_r_state
+    (run-code-in-test vm_cell_stack_pop2_r_code))
+
+  (check-equal? (vm-stack->strings vm_cell_stack_pop2_r_state)
+                (list "stack is empty"))
+
+  (check-equal? (memory-list vm_cell_stack_pop2_r_state ZP_RT (add1 ZP_RT))
+                (list #x00 #x01))
+
+  (define vm_cell_stack_pop1_r_code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB)
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_0_R)
+     (JSR VM_CELL_STACK_POP_R)
+     (JSR VM_CELL_STACK_POP_R)
+     (JSR VM_CELL_STACK_POP_R)))
+
+  (define vm_cell_stack_pop1_r_state
+    (run-code-in-test vm_cell_stack_pop1_r_code))
+
+  (check-equal? (vm-stack->strings vm_cell_stack_pop1_r_state)
+                (list "stack is empty"))
+
+  (check-equal? (memory-list vm_cell_stack_pop1_r_state ZP_RT (add1 ZP_RT))
+                (list #x00 #x00))
+
+  (check-equal? (memory-list vm_cell_stack_pop1_r_state ZP_RT_TAGGED_LB ZP_RT_TAGGED_LB)
+                (list #x01)))
 
 ;; pop cell from stack, decrease ref count if it is a reference
 ;; input: stack
@@ -1437,7 +1912,8 @@
 
            (LDX !$ff)          ;; negative and iny will produce 0
            (STX ZP_CELL_STACK_TOS)
-
+           (LDX !$01)
+           (STA ZP_RT_TAGGED_LB) ;; set RT to hold no value
            (RTS))))
 
 ;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)
@@ -4100,7 +4576,7 @@
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
   (check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                1366)
+                1371)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 3 items"
                       "cell-int $01ff"
@@ -4270,6 +4746,7 @@
           VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2          ;; write the tos into an array at a position that is referenced through zp_ptr2
 
           VM_CELL_STACK_POP                                  ;; pop the topmost element of the stack
+          VM_CELL_STACK_POP_R
 
           ;; vm_cell_stack_push_array_ata_ptr2                  push cell from an array (referenced through zp_ptr2) at a position
 
@@ -4289,6 +4766,9 @@
 
           ;; vm_cell_stack_push_nil                             push cell-pair constant NIL
           VM_CELL_STACK_PUSH                                 ;; push a cell onto the stack
+          VM_CELL_STACK_PUSH_R
+
+          VM_WRITE_INT_AX_TO_RT
 
           ;; ---------------------------------------- registers and maps
           (list (org #xcec0))
