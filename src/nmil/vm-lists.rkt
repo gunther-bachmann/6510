@@ -70,6 +70,36 @@
           (JMP VM_CELL_STACK_WRITE_INT_0_TO_TOS) ;; false
           ))
 
+
+(define VM_NIL_P_R
+  (list
+   (label STACK_EMPTY__VM_NIL_P_R)
+   (label NO_CELL_PAIR_PTR__VM_NIL_P_R)
+          (BRK)
+
+   ;; ----------------------------------------
+   (label VM_NIL_P_R)
+          ;; check if stack is not empty
+          (LDA ZP_RT_TAGGED_LB)
+          (CMP !$01)
+          (BEQ STACK_EMPTY__VM_NIL_P_R)
+
+          ;; check if tos is cell-pair-ptr
+          (AND !$02)
+          (BEQ NO_CELL_PAIR_PTR__VM_NIL_P_R)
+
+   (label VM_NIL_P_R__UC) ;; no checks
+          (LDA ZP_RT_TAGGED_LB) ;; get tagged byte
+          (CMP !<TAGGED_NIL) ;;
+          (BNE NOT_NIL__VM_NIL_P_R)
+          ;; this additional check should not be necessary, since tagged low byte of a non-nil cell-pair-ptr may never be #x02
+          ;; (LDA ZP_RT+1) ;; get high byte
+          ;; (BNE NOT_NIL__VM_NIL_P_R) ;; high byte of nil is 0! => branch if != 0
+          (JMP VM_WRITE_INT1_TO_RT) ;; true
+   (label NOT_NIL__VM_NIL_P_R)
+          (JMP VM_WRITE_INT0_TO_RT) ;; false
+          ))
+
 (module+ test #| VM_NIL_P |#
   (define use-case-nil_p-a-code
     (list
@@ -124,6 +154,50 @@
           (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR)
           (JMP VM_CELL_STACK_WRITE_CELL0_OF_ZP_PTR_TO_TOS)))
 
+(define VM_CAR_R
+  (list
+   (label STACK_EMPTY__VM_CAR_R)
+   (label TOS_IS_NIL__VM_CAR_R)
+   (label NO_CELL_PAIR_PTR__VM_CAR_R)
+          (BRK)
+   (label VM_CAR_R)
+          ;; check operand present
+          (LDA ZP_RT_TAGGED_LB)
+          (CMP !$01)
+          (BEQ STACK_EMPTY__VM_CAR_R)
+
+          ;; check RT is not nil
+          (CMP !$02)
+          (BEQ TOS_IS_NIL__VM_CAR_R)
+
+          ;; check RT is a cell-pair-ptr
+          (AND !$02)
+          (BEQ NO_CELL_PAIR_PTR__VM_CAR_R)
+
+          (JMP VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)))
+
+(define VM_CDR_R
+  (list
+   (label STACK_EMPTY__VM_CDR_R)
+   (label TOS_IS_NIL__VM_CDR_R)
+   (label NO_CELL_PAIR_PTR__VM_CDR_R)
+          (BRK)
+   (label VM_CDR_R)
+          ;; check operand present
+          (LDA ZP_RT_TAGGED_LB)
+          (CMP !$01)
+          (BEQ STACK_EMPTY__VM_CDR_R)
+
+          ;; check RT is not nil
+          (CMP !$02)
+          (BEQ TOS_IS_NIL__VM_CDR_R)
+
+          ;; check RT is a cell-pair-ptr
+          (AND !$02)
+          (BEQ NO_CELL_PAIR_PTR__VM_CDR_R)
+
+          (JMP VM_CELL_STACK_WRITE_RT_CELL1_TO_RT)))
+
 (define VM_CDR
   (list
    (label STACK_EMPTY__VM_CDR)
@@ -149,6 +223,22 @@
    (label VM_CDR__UC) ;; no checks
           (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR)
           (JMP VM_CELL_STACK_WRITE_CELL1_OF_ZP_PTR_TO_TOS)))
+
+
+(define VM_CONS_R
+  (list
+   (label STACK_HAS_LESS_THAN_TWO__VM_CONS_R)
+          (BRK)
+   (label VM_CONS_R)
+          (LDY ZP_CELL_STACK_TOS)
+          (CPY !$01) ;; 01 = one element + RT = two elements
+          (BMI STACK_HAS_LESS_THAN_TWO__VM_CONS_R)
+
+   (label VM_CONS_R__UC) ;; no checks
+          (JSR VM_CP_RT_TO_RA)
+          (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR) ;; is equivalent to VM_ALLOC_CELL_PAIR_TO_RT, since zp_ptr = zp_rt
+          (JSR VM_WRITE_RA_TO_CELL1_RT)
+          (JMP VM_POP_FSTOS_TO_CELL0_RT)))
 
 ;; cons TOS into list at TOS-1
 (define VM_CONS
@@ -201,4 +291,8 @@
           VM_CAR
           VM_CDR
           VM_NIL_P
+          VM_CONS_R
+          VM_CAR_R
+          VM_CDR_R
+          VM_NIL_P_R
           vm-memory-manager))

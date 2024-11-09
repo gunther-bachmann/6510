@@ -859,6 +859,163 @@
           (STA ZP_RT)
           (RTS)))
 
+;; input:  RT
+;;         RA must be cell-pair-ptr
+;; output: cell1 of cell-pair pointed to be RA is set to RT
+(define VM_WRITE_RT_TO_CELLy_RA
+  (list
+   (label VM_WRITE_RT_TO_CELL1_RA)
+          (LDY !$02)
+          (BNE VM_WRITE_RT_TO_CELLy_RA)
+
+   (label VM_WRITE_RT_TO_CELL0_RA)
+          (LDY !$00)
+
+   ;; ----------------------------------------
+   (label VM_WRITE_RT_TO_CELLy_RA)
+          (LDA ZP_RT_TAGGED_LB)
+          (STA (ZP_RA),y)
+          (INY)
+          (LDA ZP_RT+1)
+          (STA (ZP_RA),y)
+          (RTS)))
+
+;; input:  RT
+;;         RA must be cell-pair-ptr
+;; output: cell1 of cell-pair pointed to be RA is set to RT
+(define VM_WRITE_RA_TO_CELLy_RT
+  (list
+   (label VM_WRITE_RA_TO_CELL1_RT)
+          (LDY !$02)
+          (BNE VM_WRITE_RA_TO_CELLy_RT)
+
+   (label VM_WRITE_RA_TO_CELL0_RT)
+          (LDY !$00)
+
+   ;; ----------------------------------------
+   (label VM_WRITE_RA_TO_CELLy_RT)
+          (LDA ZP_RA_TAGGED_LB)
+          (STA (ZP_RT),y)
+          (INY)
+          (LDA ZP_RA+1)
+          (STA (ZP_RT),y)
+          (RTS)))
+
+;; input:  cell-stack (TOS)
+;;         RA (must be a cell-pair ptr
+;;         y = (0 = cell0, 2 = cell1)
+;; output: cell-stack (one value less)
+;;         cell0 of RA is set
+(define VM_POP_FSTOS_TO_CELLy_RA
+  (list 
+   (label VM_POP_FSTOS_TO_CELL1_RA)
+          (LDY !$03)
+          (BNE VM_POP_FSTOS_TO_CELLy_RA__UCY)
+
+   (label VM_POP_FSTOS_TO_CELL0_RA)
+          (LDY !$00)
+
+   ;; ----------------------------------------
+   (label VM_POP_FSTOS_TO_CELLy_RA)
+          (INY)
+   (label VM_POP_FSTOS_TO_CELLy_RA__UCY)
+          (STY ZP_TEMP)
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (TAX)
+          (INY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (LDY ZP_TEMP)
+          (STA (ZP_RA),y)
+          (DEY)
+          (TXA)
+          (STA (ZP_RA),y)
+          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_CELL_STACK_TOS)
+          (RTS)))
+
+;; input:  cell-stack (TOS)
+;;         RA (must be a cell-pair ptr
+;;         y = (0 = cell0, 2 = cell1)
+;; output: cell-stack (one value less)
+;;         cell0 of RA is set
+(define VM_POP_FSTOS_TO_CELLy_RT
+  (list 
+   (label VM_POP_FSTOS_TO_CELL1_RT)
+          (LDY !$03)
+          (BNE VM_POP_FSTOS_TO_CELLy_RT__UCY)
+
+   (label VM_POP_FSTOS_TO_CELL0_RT)
+          (LDY !$00)
+
+   ;; ----------------------------------------
+   (label VM_POP_FSTOS_TO_CELLy_RT)
+          (INY)
+   (label VM_POP_FSTOS_TO_CELLy_RT__UCY)
+          (STY ZP_TEMP)
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (TAX)
+          (INY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (LDY ZP_TEMP)
+          (STA (ZP_RT),y)
+          (DEY)
+          (TXA)
+          (STA (ZP_RT),y)
+          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_CELL_STACK_TOS)
+          (RTS)))
+
+
+
+;; input:  RA
+;; output: RT (copy of RA)
+(define VM_CP_RA_TO_RT
+  (list
+   (label VM_CP_RA_TO_RT)
+          (LDA ZP_RA_TAGGED_LB)
+          (STA ZP_RT_TAGGED_LB)
+   (label VM_CP_RT_TO_RA__VALUE) ;;just value, no tagged byte
+          (LDA ZP_RA)
+          (STA ZP_RT)
+          (LDA ZP_RA+1)
+          (STA ZP_RT+1)
+          (RTS)))
+
+;; input:  RT
+;; output: RA (copy of RT)
+(define VM_CP_RT_TO_RA
+  (list
+   (label VM_CP_RT_TO_RA)
+          (LDA ZP_RT_TAGGED_LB)
+          (STA ZP_RA_TAGGED_LB)
+   (label VM_CP_RA_TO_RT__VALUE) ;;just value, no tagged byte
+          (LDA ZP_RT)
+          (STA ZP_RA)
+          (LDA ZP_RT+1)
+          (STA ZP_RA+1)
+          (RTS)))
+
+;; input:  Y - 0 (cell0), 2 (cell1)
+;;         RT (must be cell-pair ptr)
+;; output: RT
+(define VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
+  (list
+   (label VM_CELL_STACK_WRITE_RT_CELL1_TO_RT)
+          (LDY !$02)
+          (BNE VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+   (label VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)
+          (LDY !$00)
+   (label VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+          (LDA (ZP_RT),y)
+          (TAX)
+          (INY)
+          (LDA (ZP_RT),y)
+          (STA ZP_RT+1)
+          (STX ZP_RT)
+          (RTS)))
+
 ;; push a cell onto the stack (that is push the RegT, if filled, and write the value into RegT)
 ;; input: call-frame stack, RT
 ;;        A = high byte,
@@ -919,7 +1076,7 @@
 
           ;; check that stack pointer does not run out of bound (over the page)
           (CPY !$fd) ;; marks the end of page, for pushes at least!
-          (BNE NO_ERROR__VM_CELL_STACK_PUSH_R)
+          [BNE NO_ERROR__VM_CELL_STACK_PUSH_R]
 
           (BRK)
 
@@ -4768,7 +4925,16 @@
           VM_CELL_STACK_PUSH                                 ;; push a cell onto the stack
           VM_CELL_STACK_PUSH_R
 
+          ;; vm_cell_stack_write_rt_cell0_to_rt
+          ;; vm_cell_stack_write_rt_cell1_to_rt
+          VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
           VM_WRITE_INT_AX_TO_RT
+          VM_CP_RT_TO_RA
+          VM_CP_RA_TO_RT
+          VM_POP_FSTOS_TO_CELLy_RT
+          VM_POP_FSTOS_TO_CELLy_RA
+          VM_WRITE_RA_TO_CELLy_RT
+          VM_WRITE_RT_TO_CELLy_RA          
 
           ;; ---------------------------------------- registers and maps
           (list (org #xcec0))
