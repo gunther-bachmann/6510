@@ -558,16 +558,23 @@
 (define (low-byte word) (bitwise-and #xff word))
 (define (high-byte word) (arithmetic-shift (bitwise-and #xff00 word) -8))
 
+;; write the car, cdr cell of the cell-pair at word in memory
 (define (vm-deref-cell-pair-w->string state word)
-  (define derefed-word (peek-word-at-address state word))
-  (vm-cell-w->string derefed-word))
+  (define derefed-word-car (peek-word-at-address state word))
+  (define derefed-word-cdr (peek-word-at-address state (+ 2 word)))
+  (format "(~a . ~a)"
+          (vm-cell-w->string derefed-word-car)
+          (vm-cell-w->string derefed-word-cdr)))
 
-(define (vm-deref-cell-pair->string state low high)
+;; write the car, cdr cell of the cell-pair at low/high in memory
+(define (vm-deref-cell-pair->string state low high)  
   (vm-deref-cell-pair-w->string state (bytes->int low high)))
 
+;; write decoded cell described by word
 (define (vm-cell-w->string word)
   (vm-cell->string (low-byte word) (high-byte word)))
 
+;; write decoded cell described by low high
 ;; the low 2 bits are used for pointer tagging
 (define (vm-cell->string low high)
   (cond
@@ -586,6 +593,16 @@
     ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
     ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
     [else "?"]))
+
+(define (vm-regt->string state)
+  (vm-cell->string
+   (peek state ZP_RT_TAGGED_LB)
+   (peek state (add1 ZP_RT))))
+
+(define (vm-rega->string state)
+  (vm-cell->string
+   (peek state ZP_RA_TAGGED_LB)
+   (peek state (add1 ZP_RA))))
 
 (module+ test #| vm-cell->string |#
   (check-equal? (vm-cell->string #xc5 #xc0)
@@ -825,39 +842,117 @@
           (RTS)))
 
 ;; input: A = lowbyte of int (0..255), written into high byte of cell register RT
-;;        X = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register
-;; output: RT = cell-int
-(define VM_WRITE_INT_AX_TO_RT
+;;        Y = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register
+;;        X = (0 = RT, 2 = RA)
+;; output: Rx = cell-int
+(define VM_WRITE_INT_AY_TO_Rx
   (list
+   (label VM_WRITE_INTm1_TO_RA)
+          (LDX !$02)
+          (BNE VM_WRITE_INTm1_TO_Rx)
    (label VM_WRITE_INTm1_TO_RT)
+          (LDX !$00)
+   (label VM_WRITE_INTm1_TO_Rx)
           (LDA !$ff) 
-          (LDX !$7c) ;; 1f << 2
-          (BNE VM_WRITE_ENC_INT_AX_TO_RT)
+          (LDY !$7c) ;; 1f << 2
+          (BNE VM_WRITE_ENC_INT_AY_TO_Rx)
 
+
+   (label VM_WRITE_INT1_TO_RA)
+          (LDX !$02)
+          (BNE VM_WRITE_INT1_TO_Rx)
    (label VM_WRITE_INT1_TO_RT)
+          (LDX !$00)
+   (label VM_WRITE_INT1_TO_Rx)
           (LDA !$01)
-          (BNE VM_WRITE_INT_A_TO_RT)
+          (BNE VM_WRITE_INT_A_TO_Rx)
 
+   (label VM_WRITE_INT0_TO_RA)
+          (LDX !$02)
+          (BNE VM_WRITE_INT0_TO_Rx)
    (label VM_WRITE_INT0_TO_RT)
+          (LDX !$00)
+   (label VM_WRITE_INT0_TO_Rx)
           (LDA !$00)
 
+   (label VM_WRITE_INT_A_TO_RA)
+          (LDX !$02)
+          (BNE VM_WRITE_INT_A_TO_Rx)
    (label VM_WRITE_INT_A_TO_RT)
           (LDX !$00)
-   (label VM_WRITE_ENC_INT_AX_TO_RT)
-          (STX ZP_RT_TAGGED_LB)
-          (STX ZP_RT)
-          (STA ZP_RT+1)
+   (label VM_WRITE_INT_A_TO_Rx)
+          (LDY !$00)
+   (label VM_WRITE_ENC_INT_AY_TO_Rx)
+          (STY ZP_RT_TAGGED_LB,x)
+          (STY ZP_RT,x)
+          (STA ZP_RT+1,x)
           (RTS)
 
-   (label VM_WRITE_INT_AX_TO_RT)
-          (STA ZP_RT+1)
-          (TXA)
+   (label VM_WRITE_INT_AY_TO_RA)
+          (LDX !$02)
+          (BNE VM_WRITE_INT_AY_TO_Rx)
+   (label VM_WRITE_INT_AY_TO_RT)
+          (LDX !$00)
+   (label VM_WRITE_INT_AY_TO_Rx)
+          (STA ZP_RT+1,x)
+          (TYA)
           (ASL A)
           (ASL A)
           (AND !$7c)           ;; mask out top and two low bits!
-          (STA ZP_RT_TAGGED_LB)
-          (STA ZP_RT)
+          (STA ZP_RT_TAGGED_LB,x)
+          (STA ZP_RT,x)
           (RTS)))
+
+(module+ test #| vm_write_int_ay_to_rx |#
+  (define vm-write-int-ay-to-rx-code
+    (list
+     (LDA !$01)
+     (LDY !$02)
+     (LDX !$00)
+     (JSR VM_WRITE_INT_AY_TO_Rx)))
+
+  (define vm-write-int-ay-to-rx-state
+    (run-code-in-test vm-write-int-ay-to-rx-code))
+
+  (check-equal? (vm-regt->string vm-write-int-ay-to-rx-state)
+                "cell-int $0201")
+
+  (define vm-write-int-ay-to-rx2-code
+    (list
+     (LDA !$01)
+     (LDY !$02)
+     (LDX !$02)
+     (JSR VM_WRITE_INT_AY_TO_Rx)))
+
+  (define vm-write-int-ay-to-rx2-state
+    (run-code-in-test vm-write-int-ay-to-rx2-code))
+
+  (check-equal? (vm-rega->string vm-write-int-ay-to-rx2-state)
+                "cell-int $0201")
+
+  (define vm-write-int-ay-to-rt-code
+    (list
+     (LDA !$01)
+     (LDY !$02)
+     (JSR VM_WRITE_INT_AY_TO_RT)))
+
+  (define vm-write-int-ay-to-rt-state
+    (run-code-in-test vm-write-int-ay-to-rt-code))
+
+  (check-equal? (vm-regt->string vm-write-int-ay-to-rt-state)
+                "cell-int $0201")
+
+  (define vm-write-int-ay-to-ra-code
+    (list
+     (LDA !$01)
+     (LDY !$02)
+     (JSR VM_WRITE_INT_AY_TO_RA)))
+
+  (define vm-write-int-ay-to-ra-state
+    (run-code-in-test vm-write-int-ay-to-ra-code))
+
+  (check-equal? (vm-rega->string vm-write-int-ay-to-ra-state)
+                "cell-int $0201"))
 
 ;; input:  RT
 ;;         RA must be cell-pair-ptr
@@ -880,6 +975,34 @@
           (STA (ZP_RA),y)
           (RTS)))
 
+(module+ test #| vm-write-rt-to-celly-ra |#
+  (define vm_write_rt_to_celly_ra_code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+     (JSR VM_CP_RT_TO_RA)
+     (LDA !$01)
+     (LDY !$10)
+     (JSR VM_WRITE_INT_AY_TO_RT)
+     (LDY !$00)
+     (JSR VM_WRITE_RT_TO_CELLy_RA)
+     (LDA !$10)
+     (LDY !$01)
+     (JSR VM_WRITE_INT_AY_TO_RT)
+     (LDY !$02)
+     (JSR VM_WRITE_RT_TO_CELLy_RA)))
+
+  (define vm_write_rt_to_celly_ra_state
+    (run-code-in-test vm_write_rt_to_celly_ra_code))
+
+  (check-equal? (vm-regt->string vm_write_rt_to_celly_ra_state)
+                "cell-int $0110")
+
+  (check-equal? (vm-rega->string vm_write_rt_to_celly_ra_state)
+                "cell-pair-ptr $cc04")
+
+  (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_ra_state #xcc04)
+                "(cell-int $1001 . cell-int $0110)"))
+
 ;; input:  RT
 ;;         RA must be cell-pair-ptr
 ;; output: cell1 of cell-pair pointed to be RA is set to RT
@@ -901,38 +1024,33 @@
           (STA (ZP_RT),y)
           (RTS)))
 
-;; input:  cell-stack (TOS)
-;;         RA (must be a cell-pair ptr
-;;         y = (0 = cell0, 2 = cell1)
-;; output: cell-stack (one value less)
-;;         cell0 of RA is set
-(define VM_POP_FSTOS_TO_CELLy_RA
-  (list 
-   (label VM_POP_FSTOS_TO_CELL1_RA)
-          (LDY !$03)
-          (BNE VM_POP_FSTOS_TO_CELLy_RA__UCY)
+(module+ test #| vm-write-ra-to-celly-rt |#
+  (define vm_write_ra_to_celly_rt_code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+     (LDA !$01)
+     (LDY !$10)
+     (JSR VM_WRITE_INT_AY_TO_RA)
+     (LDY !$00)
+     (JSR VM_WRITE_RA_TO_CELLy_RT)
+     (LDA !$10)
+     (LDY !$01)
+     (JSR VM_WRITE_INT_AY_TO_RA)
+     (LDY !$02)
+     (JSR VM_WRITE_RA_TO_CELLy_RT)))
 
-   (label VM_POP_FSTOS_TO_CELL0_RA)
-          (LDY !$00)
+  (define vm_write_ra_to_celly_rt_state
+    (run-code-in-test vm_write_ra_to_celly_rt_code))
 
-   ;; ----------------------------------------
-   (label VM_POP_FSTOS_TO_CELLy_RA)
-          (INY)
-   (label VM_POP_FSTOS_TO_CELLy_RA__UCY)
-          (STY ZP_TEMP)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (TAX)
-          (INY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (LDY ZP_TEMP)
-          (STA (ZP_RA),y)
-          (DEY)
-          (TXA)
-          (STA (ZP_RA),y)
-          (DEC ZP_CELL_STACK_TOS)
-          (DEC ZP_CELL_STACK_TOS)
-          (RTS)))
+  (check-equal? (vm-rega->string vm_write_ra_to_celly_rt_state)
+                "cell-int $0110")
+
+  (check-equal? (vm-regt->string vm_write_ra_to_celly_rt_state)
+                "cell-pair-ptr $cc04")
+
+  (check-equal? (vm-deref-cell-pair-w->string vm_write_ra_to_celly_rt_state #xcc04)
+                "(cell-int $1001 . cell-int $0110)"))
+
 
 ;; input:  cell-stack (TOS)
 ;;         RA (must be a cell-pair ptr
@@ -956,7 +1074,7 @@
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)
           (TAX)
-          (INY)
+          (DEY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)
           (LDY ZP_TEMP)
           (STA (ZP_RT),y)
@@ -967,7 +1085,30 @@
           (DEC ZP_CELL_STACK_TOS)
           (RTS)))
 
+(module+ test #| vm-pop-fstos-to-celly-rt |#
+  (define vm-pop-fstos-to-celly-rt-code
+    (list
+     (LDX !$01)
+     (STX ZP_RT_TAGGED_LB)
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR VM_ALLOC_CELL_PAIR_TO_RT)
+     (LDY !$00)
+     (JSR VM_POP_FSTOS_TO_CELLy_RT)
+     (LDY !$02)
+     (JSR VM_POP_FSTOS_TO_CELLy_RT)
+     ))
 
+  (define vm-pop-fstos-to-celly-rt-state
+    (run-code-in-test vm-pop-fstos-to-celly-rt-code))
+
+  (check-equal? (vm-stack->strings vm-pop-fstos-to-celly-rt-state)
+                (list "stack is empty"))
+  (check-equal? (vm-regt->string vm-pop-fstos-to-celly-rt-state)
+                "cell-pair-ptr $cc04")
+  (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state #xcc04)
+                "(cell-int $1fff . cell-int $0001)"))
 
 ;; input:  RA
 ;; output: RT (copy of RA)
@@ -983,6 +1124,20 @@
           (STA ZP_RT+1)
           (RTS)))
 
+(module+ test #| vm-cp-rt-to-ra |#
+  (define vm-cp-ra-to-rt-code
+    (list
+     (JSR VM_WRITE_INT1_TO_RA)
+     (JSR VM_CP_RA_TO_RT)))
+
+  (define vm-cp-ra-to-rt-state
+    (run-code-in-test vm-cp-ra-to-rt-code))
+
+  (check-equal? (vm-rega->string vm-cp-ra-to-rt-state)
+                "cell-int $0001")
+  (check-equal? (vm-regt->string vm-cp-ra-to-rt-state)
+                "cell-int $0001"))
+
 ;; input:  RT
 ;; output: RA (copy of RT)
 (define VM_CP_RT_TO_RA
@@ -996,6 +1151,20 @@
           (LDA ZP_RT+1)
           (STA ZP_RA+1)
           (RTS)))
+
+(module+ test #| vm-cp-rt-to-ra |#
+  (define vm-cp-rt-to-ra-code
+    (list
+     (JSR VM_WRITE_INT1_TO_RT)
+     (JSR VM_CP_RT_TO_RA)))
+
+  (define vm-cp-rt-to-ra-state
+    (run-code-in-test vm-cp-rt-to-ra-code))
+
+  (check-equal? (vm-rega->string vm-cp-rt-to-ra-state)
+                "cell-int $0001")
+  (check-equal? (vm-regt->string vm-cp-rt-to-ra-state)
+                "cell-int $0001"))
 
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RT (must be cell-pair ptr)
@@ -1013,8 +1182,54 @@
           (INY)
           (LDA (ZP_RT),y)
           (STA ZP_RT+1)
-          (STX ZP_RT)
+
+          (TXA)
+          (STA ZP_RT_TAGGED_LB)
+
+          (LSR)
+          (BCC NO_CELL_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+          ;; it is a cell-ptr
+          (TAX)
+          (AND !$fe)
+          (STA ZP_PTR)
+          (RTS)
+
+   (label NO_CELL_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+          (LSR)
+          (BCC NO_CELL_PAIR_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+          ;; it is a cell-pair-ptr
+          (TAX)
+          (AND !$fc)
+          (TAX)
+          
+   (label NO_CELL_PAIR_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+          (STX ZP_PTR)
           (RTS)))
+
+(module+ test #| vm-cell-stack-write-rt-celly-to-rt |#
+  (define vm-cell-stack-write-rt-celly-to-rt-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+     (LDA !$01)
+     (LDY !$10)
+     (JSR VM_WRITE_INT_AY_TO_RA)
+     (LDY !$00)
+     (JSR VM_WRITE_RA_TO_CELLy_RT)
+     (LDA !$10)
+     (LDY !$01)
+     (JSR VM_WRITE_INT_AY_TO_RA)
+     (LDY !$02)
+     (JSR VM_WRITE_RA_TO_CELLy_RT)
+     (JSR VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)))
+
+  (define vm-cell-stack-write-rt-celly-to-rt-state
+    (run-code-in-test vm-cell-stack-write-rt-celly-to-rt-code))
+
+  (check-equal? (vm-regt->string vm-cell-stack-write-rt-celly-to-rt-state)
+                "cell-int $1001")
+
+  (check-equal? (vm-deref-cell-pair-w->string vm-cell-stack-write-rt-celly-to-rt-state #xcc04)
+                "(cell-int $1001 . cell-int $0110)"))
 
 ;; push a cell onto the stack (that is push the RegT, if filled, and write the value into RegT)
 ;; input: call-frame stack, RT
@@ -2769,6 +2984,7 @@
 ;; NOTE: the cell-pair is not initialized (cell1 and/or cell2 may contain old data that needs to be overwritten!)
 (define VM_ALLOC_CELL_PAIR_TO_ZP_PTR
   (list
+   (label VM_ALLOC_CELL_PAIR_TO_RT) ;; ZP_RT and ZP_PTR are identical thus this alias is ok
    (label VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; get highbyte (page) from ptr to cell-pair
           (BNE REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)   ;; if != 0, cell-pair can be reused
@@ -4928,11 +5144,10 @@
           ;; vm_cell_stack_write_rt_cell0_to_rt
           ;; vm_cell_stack_write_rt_cell1_to_rt
           VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
-          VM_WRITE_INT_AX_TO_RT
+          VM_WRITE_INT_AY_TO_Rx
           VM_CP_RT_TO_RA
           VM_CP_RA_TO_RT
           VM_POP_FSTOS_TO_CELLy_RT
-          VM_POP_FSTOS_TO_CELLy_RA
           VM_WRITE_RA_TO_CELLy_RT
           VM_WRITE_RT_TO_CELLy_RA          
 
