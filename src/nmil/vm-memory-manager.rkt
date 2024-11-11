@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; IDEA: tos is always a register held in zp (e.g. now zp_ptr, future zp_rt)
+;; DONE: tos is always a register held in zp (e.g. now zp_ptr, future zp_rt)
 ;;       have additional "registers", capable of holding cells zp_ra, zp_rb ...
 ;;       push zp_rt on stack only if necessary => operations working on one value only do no push/pop actions
 ;;         e.g. (car a-list), a-list is in zp_rt, car replaces zp_rt with the head of a-list, no stack op necessary!
@@ -15,7 +15,7 @@
 ;;                - call-frame stack size is always 1 item smaller!
 ;;                - maybe some harmonization of zp register usage?
 ;;       DRAWBACK: additional full/empty stack detection complexity (is it really complex? <- check before optimization)
-;;                     <- ideas to prevent that
+;;                     <- ideas to prevent that (NONE IMPLEMENTED YET)
 ;;                        - statically compile first bytecode pushing into the stack
 ;;                          - with prefix byte code [adds 1 byte to each function]
 ;;                          - into specific byte code directly writing into zp_rt [wastes available byte codes])
@@ -463,8 +463,8 @@
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
-(provide vm-memory-manager vm-stack->strings ast-const-get vm-page->strings
-          ZP_VM_PC
+(provide vm-memory-manager vm-stack->strings ast-const-get vm-page->strings vm-regt->string vm-rega->string vm-deref-cell-pair-w->string vm-deref-cell-pair->string
+         ZP_VM_PC
           ZP_LOCALS_PTR
           ZP_PARAMS_PTR
           ZP_CELL_STACK_TOS
@@ -874,6 +874,7 @@
           (LDX !$00)
    (label VM_WRITE_INT0_TO_Rx)
           (LDA !$00)
+          (BEQ VM_WRITE_INT_A_TO_Rx)
 
    (label VM_WRITE_INT_A_TO_RA)
           (LDX !$02)
@@ -1088,8 +1089,6 @@
 (module+ test #| vm-pop-fstos-to-celly-rt |#
   (define vm-pop-fstos-to-celly-rt-code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB)
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
@@ -1343,8 +1342,6 @@
 
   (define vm_cell_stack_push_r_int0_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
      (JSR VM_CELL_STACK_PUSH_INT_0_R)))
 
   (define vm_cell_stack_push_r_int0_state
@@ -1355,8 +1352,6 @@
 
   (define vm_cell_stack_push_r_int1_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
      (JSR VM_CELL_STACK_PUSH_INT_1_R)))
 
   (define vm_cell_stack_push_r_int1_state
@@ -1367,8 +1362,6 @@
 
   (define vm_cell_stack_push_r_intm1_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)))
 
   (define vm_cell_stack_push_r_intm1_state
@@ -1379,8 +1372,6 @@
 
   (define vm_cell_stack_push_r_nil_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
      (JSR VM_CELL_STACK_PUSH_NIL_R)))
 
   (define vm_cell_stack_push_r_nil_state
@@ -1393,8 +1384,6 @@
 
   (define vm_cell_stack_push_r_cell_ptr_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
      (LDX !$03)
      (LDA !$ce)
      (JSR VM_CELL_STACK_PUSH_R)))
@@ -1409,8 +1398,6 @@
 
   (define vm_cell_stack_push_r_cell_pair_ptr_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB) ;; mark RT as empty
      (LDX !$06)
      (LDA !$ce)
      (JSR VM_CELL_STACK_PUSH_R)))
@@ -1426,8 +1413,6 @@
 (module+ test #| vm_cell_stack_push_r (push rt, and write rt) |#
   (define vm_cell_stack_push_r_push1_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      ))
@@ -1444,8 +1429,6 @@
 
   (define vm_cell_stack_push_r_push2_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_NIL_R)
@@ -1529,8 +1512,6 @@
 (module+ test #| vm_cell_stack_pop_r (just one value) |#
   (define vm_cell_stack_pop3_r_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB)
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_0_R)
@@ -1548,8 +1529,6 @@
 
   (define vm_cell_stack_pop2_r_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB)
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_0_R)
@@ -1567,8 +1546,6 @@
 
   (define vm_cell_stack_pop1_r_code
     (list
-     (LDX !$01)
-     (STX ZP_RT_TAGGED_LB)
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_0_R)
@@ -2285,7 +2262,7 @@
            (LDX !$ff)          ;; negative and iny will produce 0
            (STX ZP_CELL_STACK_TOS)
            (LDX !$01)
-           (STA ZP_RT_TAGGED_LB) ;; set RT to hold no value
+           (STX ZP_RT_TAGGED_LB) ;; set RT to hold no value
            (RTS))))
 
 ;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)

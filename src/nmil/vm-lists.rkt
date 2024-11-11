@@ -4,7 +4,7 @@
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
 
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings vm-page->strings))
+(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings vm-page->strings vm-regt->string vm-deref-cell-pair-w->string))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -100,33 +100,32 @@
           (JMP VM_WRITE_INT0_TO_RT) ;; false
           ))
 
-(module+ test #| VM_NIL_P |#
+(module+ test #| VM_NIL_P_R |#
   (define use-case-nil_p-a-code
     (list
-     (JSR VM_CELL_STACK_PUSH_NIL)
-     (JSR VM_NIL_P)))
+     (JSR VM_CELL_STACK_PUSH_NIL_R)
+     (JSR VM_NIL_P_R)))
 
   (define use-case-nil_p-a-state-after  ;; (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-nil_p-a-state-before))
     (run-code-in-test use-case-nil_p-a-code))
 
   (check-equal? (vm-stack->strings use-case-nil_p-a-state-after)
-                (list "stack holds 1 item"
-                      "cell-int $0001")
-                "case nil_p: stack holds only int 1")
+                (list "stack is empty"))
+  (check-equal? (vm-regt->string use-case-nil_p-a-state-after)
+                "cell-int $0001")
 
   (define use-case-nil_p-b-code
     (list
      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-     (JSR VM_CELL_STACK_PUSH_ZP_PTR)
-     (JSR VM_NIL_P)))
+     (JSR VM_NIL_P_R)))
 
   (define use-case-nil_p-b-state-after
     (run-code-in-test use-case-nil_p-b-code))
 
   (check-equal? (vm-stack->strings use-case-nil_p-b-state-after)
-                (list "stack holds 1 item"
-                      "cell-int $0000")
-                "case nil_p: stack holds only int 10"))
+                (list "stack is empty"))
+  (check-equal? (vm-regt->string use-case-nil_p-b-state-after)
+                "cell-int $0000"))
 
 (define VM_CAR
   (list
@@ -263,9 +262,9 @@
 (module+ test #| VM_CONS |#
   (define use-case-cons-code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_1)
-     (JSR VM_CELL_STACK_PUSH_NIL)
-     (JSR VM_CONS)))
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR VM_CELL_STACK_PUSH_NIL_R)
+     (JSR VM_CONS_R)))
 
   (define use-case-cons-state-after
     (run-code-in-test use-case-cons-code ))
@@ -273,18 +272,17 @@
   (check-equal? (memory-list use-case-cons-state-after #xfb #xfc)
                 '(#x04 #xcc)
                 "case cons: zp_ptr -> $cc04")
+  (check-equal? (vm-regt->string use-case-cons-state-after)
+                "cell-pair-ptr $cc04")
   (check-equal? (vm-stack->strings use-case-cons-state-after)
-                (list "stack holds 1 item"
-                      "cell-pair-ptr $cc04")
-                "case cons: stack holds single element pointing to cc04")
+                (list "stack is empty"))
   (check-equal? (vm-page->strings use-case-cons-state-after #xcc)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     1"
                       "next free slot: $08"))
-  (check-equal? (memory-list use-case-cons-state-after #xcc04 #xcc07)
-                '(#x00 #x01 #x02 #x00)
-                "case cons: cell-pair is (int1 . nil) "))
+  (check-equal? (vm-deref-cell-pair-w->string use-case-cons-state-after #xcc04)
+                "(cell-int $0001 . cell-pair-ptr NIL)"))
 
 (define vm-lists
   (append VM_CONS
