@@ -13,6 +13,7 @@
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
                   vm-stack->strings
+                  vm-regt->string
                   ast-const-get
                   ZP_VM_PC
                   ZP_LOCALS_PTR
@@ -124,6 +125,15 @@
    (label BC_BRK)
           (BRK)))
 
+(module+ test #| bc_brk |#
+  (define use-case-brk-state-after
+    (run-bc-wrapped-in-test
+     (list
+      (bc BRK))))
+
+  (check-equal? (vm-next-instruction-bytes use-case-brk-state-after)
+                (list BRK)
+                "stopped at byte code brk"))
 
 ;; return id of this function (id = 16 bit ptr to function = zp_vm_pc to set when called)
 (define (load-function state byte-code param-no locals-no name)
@@ -140,16 +150,6 @@
   ;;        --------
   ;;        00+len(datarecord): next free record
   '())
-
-(module+ test #| vm_interpreter |#
-  (define use-case-brk-state-after
-    (run-bc-wrapped-in-test
-     (list
-      (bc BRK))))
-
-  (check-equal? (vm-next-instruction-bytes use-case-brk-state-after)
-                (list BRK)
-                "stopped at byte code brk"))
 
 (define BC_PUSH_PARAM_OR_LOCAL_SHORT
   (flatten
@@ -168,9 +168,7 @@
            (TAX)
            (INY)
            (LDA (ZP_LOCALS_PTR),y)
-           (TAY)
-           (TXA)
-           (JSR VM_CELL_STACK_PUSH)
+           (JSR VM_CELL_STACK_PUSH_R)
            (JMP VM_INTERPRETER_INC_PC)
 
            ;; push param
@@ -181,14 +179,13 @@
            (TAX)
            (INY)
            (LDA (ZP_PARAMS_PTR),y)
-           (TAY) ;; y = highbyte
-           (TXA) ;; a = lowbyte
-           (JSR VM_CELL_STACK_PUSH)
+           (JSR VM_CELL_STACK_PUSH_R)
            (JMP VM_INTERPRETER_INC_PC)
            )))
 
 (define PUSH_LOCAL_0 #x80)
 
+;; TODO implement test
 (module+ test #| BC_PUSH_PARAM_OR_LOCAL_SHORT |#
   (define use-case-push-param-or-local-state-after
     (run-bc-wrapped-in-test
@@ -225,10 +222,10 @@
            (JMP VM_INTERPRETER_INC_PC)
 
     (label VM_PUSH_CONST_NUM_SHORT__JUMP_REFS)
-           (word-ref VM_CELL_STACK_PUSH_INT_0)
-           (word-ref VM_CELL_STACK_PUSH_INT_1)
-           (word-ref VM_CELL_STACK_PUSH_INT_2)
-           (word-ref VM_CELL_STACK_PUSH_INT_m1)
+           (word-ref VM_CELL_STACK_PUSH_INT_0_R)
+           (word-ref VM_CELL_STACK_PUSH_INT_1_R)
+           (word-ref VM_CELL_STACK_PUSH_INT_2_R)
+           (word-ref VM_CELL_STACK_PUSH_INT_m1_R)
            ;; (word-ref VM_CELL_STACK_PUSH_BYTE_0)
            ;; (word-ref VM_CELL_STACK_PUSH_BYTE_1)
            ;; (word-ref VM_CELL_STACK_PUSH_BYTE_2)
@@ -246,11 +243,12 @@
       (bc BRK))))
 
   (check-equal? (vm-stack->strings use-case-push-num-s-state-after)
-                (list "stack holds 4 items"
-                      "cell-int $1fff"      ;; tos = -1
+                (list "stack holds 3 items"
                       "cell-int $0002"
                       "cell-int $0001"
-                      "cell-int $0000")))
+                      "cell-int $0000"))
+  (check-equal? (vm-regt->string use-case-push-num-s-state-after)
+                "cell-int $1fff"))
 
 (define BC_PUSH_CONST_INT
   (list
@@ -260,7 +258,7 @@
           (TAX)
           (INY)
           (LDA (ZP_VM_PC),y)
-          (JSR VM_CELL_STACK_PUSH_INT)
+          (JSR VM_CELL_STACK_PUSH_INT_R)
           (LDA !$03)
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
 
@@ -272,8 +270,10 @@
       (bc BRK))))
 
   (check-equal? (vm-stack->strings use-case-push-int-state-after)
-                (list "stack holds 1 item"
-                      "cell-int $04f0")))
+                (list "stack is empty"))
+
+  (check-equal? (vm-regt->string use-case-push-int-state-after)
+                "cell-int $04f0"))
 
 (define BC_INT_PLUS
   (list
@@ -281,11 +281,9 @@
           (LDY ZP_CELL_STACK_TOS)
           (DEY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (DEY)
-          (DEY)
           (CLC)
-          (ADC (ZP_CELL_STACK_BASE_PTR),y)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)
+          (ADC ZP_RT+1)
+          (STA ZP_RT+1)
 
           (INY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)
@@ -294,15 +292,13 @@
           (ADC !$04)
 
    (label VM_INT_PLUS__NO_INC_HIGH)
-          (INY)
-          (INY)
-          (ADC (ZP_CELL_STACK_BASE_PTR),y)
+          (ADC ZP_RT)
           (AND !$7c)
 
-          (DEY)
-          (DEY)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)
-          (STY ZP_CELL_STACK_TOS)
+          (STA ZP_RT)
+          (STA ZP_RT_TAGGED_LB)
+          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_CELL_STACK_TOS)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| vm_interpreter |#
@@ -321,10 +317,11 @@
       (bc BRK))))
 
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
-                (list "stack holds 3 items"
-                      "cell-int $0000"      ;; tos
+                (list "stack holds 2 items"
                       "cell-int $060f"
-                      "cell-int $0003")))
+                      "cell-int $0003"))
+  (check-equal? (vm-regt->string use-case-int-plus-state-after)
+                "cell-int $0000"))
 
 (define BC_INT_MINUS
   (list
@@ -332,27 +329,25 @@
           (LDY ZP_CELL_STACK_TOS)
           (DEY)
           (SEC)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (DEY)
-          (DEY)
+          (LDA ZP_RT+1)
           (SBC (ZP_CELL_STACK_BASE_PTR),y)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)
+          (STA ZP_RT+1)
 
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (INY)
+          (LDA ZP_RT)
           (BCS VM_INT_MINUS__NO_DEC_HIGH)
           (SEC)
           (SBC !$04)
 
    (label VM_INT_MINUS__NO_DEC_HIGH)
-          (DEY)
-          (DEY)
           (SBC (ZP_CELL_STACK_BASE_PTR),y)
           (AND !$7c)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)
+          (STA ZP_RT)
+          (STA ZP_RT_TAGGED_LB)
 
-   (label VM_INT_MINUS__DONE)
-          (STY ZP_CELL_STACK_TOS)
+          (label VM_INT_MINUS__DONE)
+          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_CELL_STACK_TOS)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| vm_interpreter |#
@@ -371,10 +366,11 @@
       (bc BRK))))                    ;; brk
 
   (check-equal? (vm-stack->strings use-case-int-minus-state-after)
-                (list "stack holds 3 items"
-                      "cell-int $1fff"      ;; tos
+                (list "stack holds 2 items"
                       "cell-int $1c2f"
-                      "cell-int $0001")))
+                      "cell-int $0001"))
+  (check-equal? (vm-regt->string  use-case-int-minus-state-after)
+                "cell-int $1fff" ))
 
 ;; TODO: implement
 (define BC_PUSH_CONST_BYTE
@@ -386,14 +382,14 @@
 (define BC_NIL_P
   (list
    (label BC_NIL_P)
-          (JSR VM_NIL_P)
+          (JSR VM_NIL_P_R)
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; TODO: test
 (define BC_PUSH_CONST_NIL
   (list
    (label BC_PUSH_CONST_NIL)
-          (JSR VM_CELL_STACK_PUSH_NIL)
+          (JSR VM_CELL_STACK_PUSH_NIL_R)
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; must be page aligned!
@@ -466,9 +462,9 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7c  <-  3e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7e  <-  3f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 80  <-  c0..a7 reserved
-           (word-ref VM_CDR)                      ;; 82  <-  41 reserved
-           (word-ref VM_CONS)                     ;; 84  <-  42 reserved
-           (word-ref VM_CAR)                      ;; 86  <-  43 reserved
+           (word-ref VM_CDR_R)                    ;; 82  <-  41 reserved
+           (word-ref VM_CONS_R)                   ;; 84  <-  42 reserved
+           (word-ref VM_CAR_R)                    ;; 86  <-  43 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 88  <-  44 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8a  <-  45 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
