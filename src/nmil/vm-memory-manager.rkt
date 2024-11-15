@@ -1,8 +1,9 @@
 #lang racket/base
-
+;; [[pdfview:~/Downloads/Small memory software patterns for limited memory systems.2001.pdf::261++0.00][Small memory software patterns for limited memory systems.2001.pdf: Page 261]]
 ;; decision:
+;;   RT = 00 : rt is empty
 ;;   use new pointer tagging scheme (makes tagged-low-byte obsolete):
-;;     (new) zzzz zzz0 = cell-ptr (no change on cell-ptr pages)
+;;     (new) zzzz zzz0 = cell-ptr (no change on cell-ptr pages) 
 ;;     (new) xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)
 ;;     (new) 0iii ii11 = int-cell (no direct adding of highbyte possible)
 ;;     (new) 1111 1111 = byte-cell (char|bool) 
@@ -694,17 +695,18 @@
 ;; the low 2 bits are used for pointer tagging
 (define (vm-cell->string low high)
   (cond
-    [(= 1 (bitwise-and #x01 low)) (format "cell-ptr $~a~a"
+    [(= 0 low) "empty"]
+    [(= 0 (bitwise-and #x01 low)) (format "cell-ptr $~a~a"
                                           (format-hex-byte high)
                                           (format-hex-byte (bitwise-and #xfe low)))]
-    [(and (= 2 (bitwise-and #x02 low)) (= high 0)) "cell-pair-ptr NIL"]
-    [(= 2 (bitwise-and #x02 low)) (format "cell-pair-ptr $~a~a"
+    [(and (= 1 (bitwise-and #x03 low)) (= high 0)) "cell-pair-ptr NIL"]
+    [(= 1 (bitwise-and #x03 low)) (format "cell-pair-ptr $~a~a"
                                           (format-hex-byte high)
-                                          (format-hex-byte (bitwise-and #xfc low)))]
-    [(= 0 (bitwise-and #x83 low)) (format "cell-int $~a~a"
+                                          (format-hex-byte (bitwise-and #xfd low)))]
+    [(= 3 (bitwise-and #x83 low)) (format "cell-int $~a~a"
                                           (format-hex-byte (arithmetic-shift low -2))
                                           (format-hex-byte high))]
-    [(= TAG_BYTE_BYTE_CELL (bitwise-and #xfc low)) (format "cell-byte $~a" (format-hex-byte high))]
+    [(= TAG_BYTE_BYTE_CELL (bitwise-and #xff low)) (format "cell-byte $~a" (format-hex-byte high))]
     ;; TODO: a structure has a special value + follow bytes
     ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
     ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
@@ -712,20 +714,20 @@
 
 (define (vm-regt->string state)
   (vm-cell->string
-   (peek state ZP_RT_TAGGED_LB)
+   (peek state ZP_RT)
    (peek state (add1 ZP_RT))))
 
 (define (vm-rega->string state)
   (vm-cell->string
-   (peek state ZP_RA_TAGGED_LB)
+   (peek state ZP_RA)
    (peek state (add1 ZP_RA))))
 
 (module+ test #| vm-cell->string |#
-  (check-equal? (vm-cell->string #xc5 #xc0)
+  (check-equal? (vm-cell->string #xc4 #xc0)
                 "cell-ptr $c0c4")
-  (check-equal? (vm-cell->string #xc2 #xc0)
-                "cell-pair-ptr $c0c0")
-  (check-equal? (vm-cell->string #x78 #x15)
+  (check-equal? (vm-cell->string #xc1 #xc0)
+                "cell-pair-ptr $c0c1")
+  (check-equal? (vm-cell->string #x7b #x15)
                 "cell-int $1e15")
   (check-equal? (vm-cell->string TAG_BYTE_BYTE_CELL #x15)
                 "cell-byte $15"))
@@ -740,20 +742,23 @@
              result))))
 
 (module+ test #| vm-cells->strings |#
-  (check-equal? (vm-cells->strings '(#x02 #x00 #x00 #x01))
+  (check-equal? (vm-cells->strings '(#x01 #x00 #x03 #x01))
                 '("cell-pair-ptr NIL" "cell-int $0001")))
 
 (module+ test #| vm-stack->string |#
   (define test-vm_stack_to_string-a-code
-    (list (JSR VM_CELL_STACK_PUSH_NIL)
-          (JSR VM_CELL_STACK_PUSH_NIL)
+    (list (JSR VM_CELL_STACK_PUSH_NIL_R)
+          (JSR VM_CELL_STACK_PUSH_NIL_R)
           (LDA !$01)
           (LDX !$03)
-          (JSR VM_CELL_STACK_PUSH_INT)))
+          (JSR VM_CELL_STACK_PUSH_INT_R)
+          (JSR VM_CELL_STACK_PUSH_NIL_R)))
 
   (define test-vm_stack_to_string-a-state-after
     (run-code-in-test test-vm_stack_to_string-a-code))
 
+  (check-equal? (vm-regt->string test-vm_stack_to_string-a-state-after)
+                "cell-pair-ptr NIL")
   (check-equal? (vm-stack->strings test-vm_stack_to_string-a-state-after)
                 '("stack holds 3 items"
                   "cell-int $0301"
@@ -838,21 +843,21 @@
    ;; => 32 values still available
    (byte-const TAG_PTR_MASK              $fc)   ;; use bitwise-and this value to remove any pointer specific bits
 
-   (byte-const TAG_BYTE_BYTE_CELL        $fc)
+   (byte-const TAG_BYTE_BYTE_CELL        $ff)
    (byte-const TAG_BYTE_CELL_ARRAY       $80)
    (byte-const TAG_BYTE_NATIVE_ARRAY     $84)
 
    (byte-const NEXT_FREE_PAGE_PAGE       $cf)   ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
    (word-const VM_FIRST_FREE_SLOT_ON_PAGE     $cf00) ;; location: table of first free slot for each page
 
-   (word-const TAGGED_INT_0              $0000)
-   (word-const TAGGED_BYTE0              $00fc)
-   (word-const TAGGED_NIL                $0002) ;; tag indicates cell-pair-ptr
+   (word-const TAGGED_INT_0              $0003)
+   (word-const TAGGED_BYTE0              $00ff)
+   (word-const TAGGED_NIL                $0001) ;; tag indicates cell-pair-ptr
 
    (byte-const ZP_CELL_STACK_TOS         $dc) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
 
-   (byte-const ZP_PTR_TAGGED             $dd) ;; dd = low byte with tag bits , tagged low bytes are 2 appart, to use same offset as ZP_PTR <-> ZP_PTR2
-   (byte-const ZP_PTR2_TAGGED            $df) ;; df = low byte with tag bits
+   ;; (byte-const ZP_PTR_TAGGED             $dd) ;; dd = low byte with tag bits , tagged low bytes are 2 appart, to use same offset as ZP_PTR <-> ZP_PTR2
+   ;; (byte-const ZP_PTR2_TAGGED            $df) ;; df = low byte with tag bits
 
    (byte-const ZP_TEMP                   $de) ;; may not be used after sub calls (just within a routine without jsr)
 
@@ -865,16 +870,16 @@
    (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2 <- may be not needed (zp_locals_ptr always = zp_call_frame + 6)
 
    ;; zp_ptr holds either a cell-ptr or a cell-pair (ptr) with out the tag bits!
-   (byte-const ZP_PTR                    $fb)   ;; fb = low byte (without tag bits), fc = high byte,   tagged low byte is held in ZP_PTR_TAGGED
-   (byte-const ZP_PTR2                   $fd)   ;; fd = low byte (without tag bits), fe = high byte
+   ;; (byte-const ZP_PTR                    $fb)   ;; fb = low byte (without tag bits), fc = high byte,   tagged low byte is held in ZP_PTR_TAGGED
+   ;; (byte-const ZP_PTR2                   $fd)   ;; fd = low byte (without tag bits), fe = high byte
 
    ;; implementation using registers
    ;; register T = top of stack, used as main register for operations, could be a pointer to a cell or an atomic cell. if it is a pointer to a cell, the low byte here is without tag bits => (zp_rt) points to the cell
    (byte-const ZP_RT                     $fb) ;; fb = low byte (without tag bits), fc = high byte,   tagged low byte is held in ZP_RT_TAGGED_LB
-   (byte-const ZP_RT_TAGGED_LB           $dd) ;; dd = low byte with tag bits , tagged low bytes are 2 apart, to use same offset as ZP_RT <-> ZP_RA
+   ;; (byte-const ZP_RT_TAGGED_LB           $dd) ;; dd = low byte with tag bits , tagged low bytes are 2 apart, to use same offset as ZP_RT <-> ZP_RA
    ;; register A
    (byte-const ZP_RA                     $fd) ;; fd = low byte (without tag bits), fe = high byte,   tagged low byte is held in ZP_RA_TAGGED_LB
-   (byte-const ZP_RA_TAGGED_LB           $df) ;; df = low byte with tag bits
+   ;; (byte-const ZP_RA_TAGGED_LB           $df) ;; df = low byte with tag bits
    ;; currently no need to register B (maybe someday)
    ))
 
@@ -893,13 +898,13 @@
     [else (ast-const-get (cdr ast-commands) key)]))
 
 (define ZP_RT                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
-(define ZP_RT_TAGGED_LB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT_TAGGED_LB"))
+;; (define ZP_RT_TAGGED_LB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT_TAGGED_LB"))
 (define ZP_RA                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
-(define ZP_RA_TAGGED_LB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA_TAGGED_LB"))
-(define ZP_PTR                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR"))
-(define ZP_PTR_TAGGED           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR_TAGGED"))
-(define ZP_PTR2                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2"))
-(define ZP_PTR2_TAGGED          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2_TAGGED"))
+;; (define ZP_RA_TAGGED_LB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA_TAGGED_LB"))
+;; (define ZP_PTR                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR"))
+;; (define ZP_PTR_TAGGED           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR_TAGGED"))
+;; (define ZP_PTR2                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2"))
+;; (define ZP_PTR2_TAGGED          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PTR2_TAGGED"))
 (define ZP_CALL_FRAME           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
 (define ZP_CELL_STACK_BASE_PTR  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_BASE_PTR"))
 (define ZP_CELL_STACK_TOS       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
@@ -941,8 +946,6 @@
    (label VM_WRITE_CELL_PTR_AX_TO_RT)
           (STA ZP_RT)
           (STX ZP_RT+1)
-          (ORA !$01)
-          (STA ZP_RT_TAGGED_LB)
           (RTS)))
 
 ;; input: A = lowbyte  (untagged)
@@ -953,8 +956,6 @@
    (label VM_WRITE_CELL_PAIR_PTR_AX_TO_RT)
           (STA ZP_RT)
           (STX ZP_RT+1)
-          (ORA !$02)
-          (STA ZP_RT_TAGGED_LB)
           (RTS)))
 
 ;; input: A = lowbyte of int (0..255), written into high byte of cell register RT
@@ -998,9 +999,8 @@
    (label VM_WRITE_INT_A_TO_RT)
           (LDX !$00)
    (label VM_WRITE_INT_A_TO_Rx)
-          (LDY !$00)
+          (LDY !$03)
    (label VM_WRITE_ENC_INT_AY_TO_Rx)
-          (STY ZP_RT_TAGGED_LB,x)
           (STY ZP_RT,x)
           (STA ZP_RT+1,x)
           (RTS)
@@ -1013,10 +1013,11 @@
    (label VM_WRITE_INT_AY_TO_Rx)
           (STA ZP_RT+1,x)
           (TYA)
-          (ASL A)
-          (ASL A)
-          (AND !$7c)           ;; mask out top and two low bits!
-          (STA ZP_RT_TAGGED_LB,x)
+          (SEC) ;; make sure to shift in ones
+          (ROL)
+          (SEC)
+          (ROL)
+          (AND !$7f)           ;; mask out top bit!
           (STA ZP_RT,x)
           (RTS)))
 
@@ -1074,99 +1075,99 @@
 ;; input:  RT
 ;;         RA must be cell-pair-ptr
 ;; output: cell1 of cell-pair pointed to be RA is set to RT
-(define VM_WRITE_RT_TO_CELLy_RA
-  (list
-   (label VM_WRITE_RT_TO_CELL1_RA)
-          (LDY !$02)
-          (BNE VM_WRITE_RT_TO_CELLy_RA)
+;; (define VM_WRITE_RT_TO_CELLy_RA
+;;   (list
+;;    (label VM_WRITE_RT_TO_CELL1_RA)
+;;           (LDY !$02)
+;;           (BNE VM_WRITE_RT_TO_CELLy_RA)
 
-   (label VM_WRITE_RT_TO_CELL0_RA)
-          (LDY !$00)
+;;    (label VM_WRITE_RT_TO_CELL0_RA)
+;;           (LDY !$00)
 
-   ;; ----------------------------------------
-   (label VM_WRITE_RT_TO_CELLy_RA)
-          (LDA ZP_RT_TAGGED_LB)
-          (STA (ZP_RA),y)
-          (INY)
-          (LDA ZP_RT+1)
-          (STA (ZP_RA),y)
-          (RTS)))
+;;    ;; ----------------------------------------
+;;    (label VM_WRITE_RT_TO_CELLy_RA)
+;;           (LDA ZP_RT_TAGGED_LB)
+;;           (STA (ZP_RA),y)
+;;           (INY)
+;;           (LDA ZP_RT+1)
+;;           (STA (ZP_RA),y)
+;;           (RTS)))
 
-(module+ test #| vm-write-rt-to-celly-ra |#
-  (define vm_write_rt_to_celly_ra_code
-    (list
-     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-     (JSR VM_CP_RT_TO_RA)
-     (LDA !$01)
-     (LDY !$10)
-     (JSR VM_WRITE_INT_AY_TO_RT)
-     (LDY !$00)
-     (JSR VM_WRITE_RT_TO_CELLy_RA)
-     (LDA !$10)
-     (LDY !$01)
-     (JSR VM_WRITE_INT_AY_TO_RT)
-     (LDY !$02)
-     (JSR VM_WRITE_RT_TO_CELLy_RA)))
+;; (module+ test #| vm-write-rt-to-celly-ra |#
+;;   (define vm_write_rt_to_celly_ra_code
+;;     (list
+;;      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;      (JSR VM_CP_RT_TO_RA)
+;;      (LDA !$01)
+;;      (LDY !$10)
+;;      (JSR VM_WRITE_INT_AY_TO_RT)
+;;      (LDY !$00)
+;;      (JSR VM_WRITE_RT_TO_CELLy_RA)
+;;      (LDA !$10)
+;;      (LDY !$01)
+;;      (JSR VM_WRITE_INT_AY_TO_RT)
+;;      (LDY !$02)
+;;      (JSR VM_WRITE_RT_TO_CELLy_RA)))
 
-  (define vm_write_rt_to_celly_ra_state
-    (run-code-in-test vm_write_rt_to_celly_ra_code))
+;;   (define vm_write_rt_to_celly_ra_state
+;;     (run-code-in-test vm_write_rt_to_celly_ra_code))
 
-  (check-equal? (vm-regt->string vm_write_rt_to_celly_ra_state)
-                "cell-int $0110")
+;;   (check-equal? (vm-regt->string vm_write_rt_to_celly_ra_state)
+;;                 "cell-int $0110")
 
-  (check-equal? (vm-rega->string vm_write_rt_to_celly_ra_state)
-                "cell-pair-ptr $cc04")
+;;   (check-equal? (vm-rega->string vm_write_rt_to_celly_ra_state)
+;;                 "cell-pair-ptr $cc04")
 
-  (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_ra_state #xcc04)
-                "(cell-int $1001 . cell-int $0110)"))
+;;   (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_ra_state #xcc04)
+;;                 "(cell-int $1001 . cell-int $0110)"))
 
 ;; input:  RT
 ;;         RA must be cell-pair-ptr
 ;; output: cell1 of cell-pair pointed to be RA is set to RT
-(define VM_WRITE_RA_TO_CELLy_RT
-  (list
-   (label VM_WRITE_RA_TO_CELL1_RT)
-          (LDY !$02)
-          (BNE VM_WRITE_RA_TO_CELLy_RT)
+;; (define VM_WRITE_RA_TO_CELLy_RT
+;;   (list
+;;    (label VM_WRITE_RA_TO_CELL1_RT)
+;;           (LDY !$02)
+;;           (BNE VM_WRITE_RA_TO_CELLy_RT)
 
-   (label VM_WRITE_RA_TO_CELL0_RT)
-          (LDY !$00)
+;;    (label VM_WRITE_RA_TO_CELL0_RT)
+;;           (LDY !$00)
 
-   ;; ----------------------------------------
-   (label VM_WRITE_RA_TO_CELLy_RT)
-          (LDA ZP_RA_TAGGED_LB)
-          (STA (ZP_RT),y)
-          (INY)
-          (LDA ZP_RA+1)
-          (STA (ZP_RT),y)
-          (RTS)))
+;;    ;; ----------------------------------------
+;;    (label VM_WRITE_RA_TO_CELLy_RT)
+;;           (LDA ZP_RA_TAGGED_LB)
+;;           (STA (ZP_RT),y)
+;;           (INY)
+;;           (LDA ZP_RA+1)
+;;           (STA (ZP_RT),y)
+;;           (RTS)))
 
-(module+ test #| vm-write-ra-to-celly-rt |#
-  (define vm_write_ra_to_celly_rt_code
-    (list
-     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-     (LDA !$01)
-     (LDY !$10)
-     (JSR VM_WRITE_INT_AY_TO_RA)
-     (LDY !$00)
-     (JSR VM_WRITE_RA_TO_CELLy_RT)
-     (LDA !$10)
-     (LDY !$01)
-     (JSR VM_WRITE_INT_AY_TO_RA)
-     (LDY !$02)
-     (JSR VM_WRITE_RA_TO_CELLy_RT)))
+;; (module+ test #| vm-write-ra-to-celly-rt |#
+;;   (define vm_write_ra_to_celly_rt_code
+;;     (list
+;;      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;      (LDA !$01)
+;;      (LDY !$10)
+;;      (JSR VM_WRITE_INT_AY_TO_RA)
+;;      (LDY !$00)
+;;      (JSR VM_WRITE_RA_TO_CELLy_RT)
+;;      (LDA !$10)
+;;      (LDY !$01)
+;;      (JSR VM_WRITE_INT_AY_TO_RA)
+;;      (LDY !$02)
+;;      (JSR VM_WRITE_RA_TO_CELLy_RT)))
 
-  (define vm_write_ra_to_celly_rt_state
-    (run-code-in-test vm_write_ra_to_celly_rt_code))
+;;   (define vm_write_ra_to_celly_rt_state
+;;     (run-code-in-test vm_write_ra_to_celly_rt_code))
 
-  (check-equal? (vm-rega->string vm_write_ra_to_celly_rt_state)
-                "cell-int $0110")
+;;   (check-equal? (vm-rega->string vm_write_ra_to_celly_rt_state)
+;;                 "cell-int $0110")
 
-  (check-equal? (vm-regt->string vm_write_ra_to_celly_rt_state)
-                "cell-pair-ptr $cc04")
+;;   (check-equal? (vm-regt->string vm_write_ra_to_celly_rt_state)
+;;                 "cell-pair-ptr $cc04")
 
-  (check-equal? (vm-deref-cell-pair-w->string vm_write_ra_to_celly_rt_state #xcc04)
-                "(cell-int $1001 . cell-int $0110)"))
+;;   (check-equal? (vm-deref-cell-pair-w->string vm_write_ra_to_celly_rt_state #xcc04)
+;;                 "(cell-int $1001 . cell-int $0110)"))
 
 
 ;; input:  cell-stack (TOS)
@@ -1174,64 +1175,62 @@
 ;;         y = (0 = cell0, 2 = cell1)
 ;; output: cell-stack (one value less)
 ;;         cell0 of RA is set
-(define VM_POP_FSTOS_TO_CELLy_RT
-  (list 
-   (label VM_POP_FSTOS_TO_CELL1_RT)
-          (LDY !$03)
-          (BNE VM_POP_FSTOS_TO_CELLy_RT__UCY)
+;; (define VM_POP_FSTOS_TO_CELLy_RT
+;;   (list
+;;    (label VM_POP_FSTOS_TO_CELL1_RT)
+;;           (LDY !$03)
+;;           (BNE VM_POP_FSTOS_TO_CELLy_RT__UCY)
 
-   (label VM_POP_FSTOS_TO_CELL0_RT)
-          (LDY !$00)
+;;    (label VM_POP_FSTOS_TO_CELL0_RT)
+;;           (LDY !$00)
 
-   ;; ----------------------------------------
-   (label VM_POP_FSTOS_TO_CELLy_RT)
-          (INY)
-   (label VM_POP_FSTOS_TO_CELLy_RT__UCY)
-          (STY ZP_TEMP)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (TAX)
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (LDY ZP_TEMP)
-          (STA (ZP_RT),y)
-          (DEY)
-          (TXA)
-          (STA (ZP_RT),y)
-          (DEC ZP_CELL_STACK_TOS)
-          (DEC ZP_CELL_STACK_TOS)
-          (RTS)))
+;;    ;; ----------------------------------------
+;;    (label VM_POP_FSTOS_TO_CELLy_RT)
+;;           (INY)
+;;    (label VM_POP_FSTOS_TO_CELLy_RT__UCY)
+;;           (STY ZP_TEMP)
+;;           (LDY ZP_CELL_STACK_TOS)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
+;;           (TAX)
+;;           (DEY)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
+;;           (LDY ZP_TEMP)
+;;           (STA (ZP_RT),y)
+;;           (DEY)
+;;           (TXA)
+;;           (STA (ZP_RT),y)
+;;           (DEC ZP_CELL_STACK_TOS)
+;;           (DEC ZP_CELL_STACK_TOS)
+;;           (RTS)))
 
-(module+ test #| vm-pop-fstos-to-celly-rt |#
-  (define vm-pop-fstos-to-celly-rt-code
-    (list
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
-     (JSR VM_ALLOC_CELL_PAIR_TO_RT)
-     (LDY !$00)
-     (JSR VM_POP_FSTOS_TO_CELLy_RT)
-     (LDY !$02)
-     (JSR VM_POP_FSTOS_TO_CELLy_RT)
-     ))
+;; (module+ test #| vm-pop-fstos-to-celly-rt |#
+;;   (define vm-pop-fstos-to-celly-rt-code
+;;     (list
+;;      (JSR VM_CELL_STACK_PUSH_INT_1_R)
+;;      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
+;;      (JSR VM_CELL_STACK_PUSH_INT_1_R)
+;;      (JSR VM_ALLOC_CELL_PAIR_TO_RT)
+;;      (LDY !$00)
+;;      (JSR VM_POP_FSTOS_TO_CELLy_RT)
+;;      (LDY !$02)
+;;      (JSR VM_POP_FSTOS_TO_CELLy_RT)
+;;      ))
 
-  (define vm-pop-fstos-to-celly-rt-state
-    (run-code-in-test vm-pop-fstos-to-celly-rt-code))
+;;   (define vm-pop-fstos-to-celly-rt-state
+;;     (run-code-in-test vm-pop-fstos-to-celly-rt-code))
 
-  (check-equal? (vm-stack->strings vm-pop-fstos-to-celly-rt-state)
-                (list "stack is empty"))
-  (check-equal? (vm-regt->string vm-pop-fstos-to-celly-rt-state)
-                "cell-pair-ptr $cc04")
-  (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state #xcc04)
-                "(cell-int $1fff . cell-int $0001)"))
+;;   (check-equal? (vm-stack->strings vm-pop-fstos-to-celly-rt-state)
+;;                 (list "stack is empty"))
+;;   (check-equal? (vm-regt->string vm-pop-fstos-to-celly-rt-state)
+;;                 "cell-pair-ptr $cc04")
+;;   (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state #xcc04)
+;;                 "(cell-int $1fff . cell-int $0001)"))
 
 ;; input:  RA
 ;; output: RT (copy of RA)
 (define VM_CP_RA_TO_RT
   (list
    (label VM_CP_RA_TO_RT)
-          (LDA ZP_RA_TAGGED_LB)
-          (STA ZP_RT_TAGGED_LB)
    (label VM_CP_RT_TO_RA__VALUE) ;;just value, no tagged byte
           (LDA ZP_RA)
           (STA ZP_RT)
@@ -1258,8 +1257,6 @@
 (define VM_CP_RT_TO_RA
   (list
    (label VM_CP_RT_TO_RA)
-          (LDA ZP_RT_TAGGED_LB)
-          (STA ZP_RA_TAGGED_LB)
    (label VM_CP_RA_TO_RT__VALUE) ;;just value, no tagged byte
           (LDA ZP_RT)
           (STA ZP_RA)
@@ -1284,67 +1281,67 @@
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RT (must be cell-pair ptr)
 ;; output: RT
-(define VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
-  (list
-   (label VM_CELL_STACK_WRITE_RT_CELL1_TO_RT)
-          (LDY !$02)
-          (BNE VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-   (label VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)
-          (LDY !$00)
-   (label VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-          (LDA (ZP_RT),y)
-          (TAX)
-          (INY)
-          (LDA (ZP_RT),y)
-          (STA ZP_RT+1)
+;; (define VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
+;;   (list
+;;    (label VM_CELL_STACK_WRITE_RT_CELL1_TO_RT)
+;;           (LDY !$02)
+;;           (BNE VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+;;    (label VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)
+;;           (LDY !$00)
+;;    (label VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+;;           (LDA (ZP_RT),y)
+;;           (TAX)
+;;           (INY)
+;;           (LDA (ZP_RT),y)
+;;           (STA ZP_RT+1)
 
-          (TXA)
-          (STA ZP_RT_TAGGED_LB)
+;;           (TXA)
+;;           (STA ZP_RT_TAGGED_LB)
 
-          (LSR)
-          (BCC NO_CELL_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-          ;; it is a cell-ptr
-          (TAX)
-          (AND !$fe)
-          (STA ZP_PTR)
-          (RTS)
+;;           (LSR)
+;;           (BCC NO_CELL_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+;;           ;; it is a cell-ptr
+;;           (TAX)
+;;           (AND !$fe)
+;;           (STA ZP_PTR)
+;;           (RTS)
 
-   (label NO_CELL_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-          (LSR)
-          (BCC NO_CELL_PAIR_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-          ;; it is a cell-pair-ptr
-          (TAX)
-          (AND !$fc)
-          (TAX)
-          
-   (label NO_CELL_PAIR_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-          (STX ZP_PTR)
-          (RTS)))
+;;    (label NO_CELL_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+;;           (LSR)
+;;           (BCC NO_CELL_PAIR_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+;;           ;; it is a cell-pair-ptr
+;;           (TAX)
+;;           (AND !$fc)
+;;           (TAX)
 
-(module+ test #| vm-cell-stack-write-rt-celly-to-rt |#
-  (define vm-cell-stack-write-rt-celly-to-rt-code
-    (list
-     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-     (LDA !$01)
-     (LDY !$10)
-     (JSR VM_WRITE_INT_AY_TO_RA)
-     (LDY !$00)
-     (JSR VM_WRITE_RA_TO_CELLy_RT)
-     (LDA !$10)
-     (LDY !$01)
-     (JSR VM_WRITE_INT_AY_TO_RA)
-     (LDY !$02)
-     (JSR VM_WRITE_RA_TO_CELLy_RT)
-     (JSR VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)))
+;;    (label NO_CELL_PAIR_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+;;           (STX ZP_PTR)
+;;           (RTS)))
 
-  (define vm-cell-stack-write-rt-celly-to-rt-state
-    (run-code-in-test vm-cell-stack-write-rt-celly-to-rt-code))
+;; (module+ test #| vm-cell-stack-write-rt-celly-to-rt |#
+;;   (define vm-cell-stack-write-rt-celly-to-rt-code
+;;     (list
+;;      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;      (LDA !$01)
+;;      (LDY !$10)
+;;      (JSR VM_WRITE_INT_AY_TO_RA)
+;;      (LDY !$00)
+;;      (JSR VM_WRITE_RA_TO_CELLy_RT)
+;;      (LDA !$10)
+;;      (LDY !$01)
+;;      (JSR VM_WRITE_INT_AY_TO_RA)
+;;      (LDY !$02)
+;;      (JSR VM_WRITE_RA_TO_CELLy_RT)
+;;      (JSR VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)))
 
-  (check-equal? (vm-regt->string vm-cell-stack-write-rt-celly-to-rt-state)
-                "cell-int $1001")
+;;   (define vm-cell-stack-write-rt-celly-to-rt-state
+;;     (run-code-in-test vm-cell-stack-write-rt-celly-to-rt-code))
 
-  (check-equal? (vm-deref-cell-pair-w->string vm-cell-stack-write-rt-celly-to-rt-state #xcc04)
-                "(cell-int $1001 . cell-int $0110)"))
+;;   (check-equal? (vm-regt->string vm-cell-stack-write-rt-celly-to-rt-state)
+;;                 "cell-int $1001")
+
+;;   (check-equal? (vm-deref-cell-pair-w->string vm-cell-stack-write-rt-celly-to-rt-state #xcc04)
+;;                 "(cell-int $1001 . cell-int $0110)"))
 
 ;; input:  call-frame stack, RT
 ;; output: call-frame stack << RT
@@ -1353,8 +1350,8 @@
 (define VM_CELL_STACK_JUST_PUSH_RT
   (list
    (label VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
-          (LDY ZP_RT_TAGGED_LB)
-          (CPY !$01)                                    ;; if RT empty? (old = $01), new = $00 => remove cmp
+          (LDY ZP_RT)
+          ;; if RT empty?  = $00 
           (BEQ DONE__VM_CELL_STACK_JUST_PUSH_RT)        ;; then no push
 
    ;; ----------------------------------------
@@ -1370,11 +1367,11 @@
    (label NO_ERROR__VM_CELL_STACK_JUST_PUSH_RT)
           (LDA ZP_RT+1)
           (INY)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte! (untagged)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte! 
 
-          (LDA ZP_RT_TAGGED_LB)
+          (LDA ZP_RT)
           (INY)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte (tagged)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte 
 
           (STY ZP_CELL_STACK_TOS)      ;; set new tos
 
@@ -1395,9 +1392,11 @@
    (label VM_CELL_STACK_PUSH_INT_R)         ;; idea: can be optimized since it is known that this is an atomic value
           (TAY)
           (TXA)
-          (ASL A)
-          (ASL A)
-          (AND !$7c)           ;; mask out top and two low bits!
+          (SEC)
+          (ROL)
+          (SEC)
+          (ROL)
+          (AND !$7f)           ;; mask out top bit
           (TAX)
           (TYA)
           (CLC)
@@ -1405,23 +1404,23 @@
 
    (label VM_CELL_STACK_PUSH_INT_m1_R)
           (LDA !$ff) ;; 1f << 2
-          (LDX !$7c)
+          (LDX !$7f)
           (BNE VM_CELL_STACK_PUSH_R)
 
    (label VM_CELL_STACK_PUSH_INT_2_R)
           (LDA !$02)
-          (LDX !$00)
-          (BEQ VM_CELL_STACK_PUSH_R)
+          (LDX !$03)
+          (BNE VM_CELL_STACK_PUSH_R)
 
    (label VM_CELL_STACK_PUSH_INT_1_R)
           (LDA !$01)
-          (LDX !$00)
-          (BEQ VM_CELL_STACK_PUSH_R)
+          (LDX !$03)
+          (BNE VM_CELL_STACK_PUSH_R)
 
    (label VM_CELL_STACK_PUSH_INT_0_R)
           (LDA !$00)
-          (TAX)
-          (BEQ VM_CELL_STACK_PUSH_R)
+          (LDX !$03)
+          (BNE VM_CELL_STACK_PUSH_R)
 
    ;; push NIL (cell-pair-ptr)           ;; idea: can be optimized since it is known that this is cell-pair-ptr
    (label VM_CELL_STACK_PUSH_NIL_R)
@@ -1437,32 +1436,8 @@
           (PLA)
 
    (label VM_WRITE_AX_TO_RT)
-          (STX ZP_RT_TAGGED_LB)          
+          (STX ZP_RT)          
           (STA ZP_RT+1)
-          (TXA)
-
-          (LSR) ;; C = cell-ptr?
-          (BCC NO_CELL_PTR__VM_CELL_STACK_PUSH_R)
-
-          ;; it is a cell-ptr
-          (TXA)
-          (AND !$fe)  ;; mask out tag bit 0 (since this is a cell-ptr)
-          (STA ZP_RT)
-          (RTS)
-
-   (label NO_CELL_PTR__VM_CELL_STACK_PUSH_R)
-          (LSR) ;; C = cell-pair-ptr?
-          (BCC NO_CELL_PAIR_PTR__VM_CELL_STACK_PUSH_R)  
-
-          ;; it is a cell-pair ptr
-          (TXA)
-          (AND !$fc)  ;; mask out tag bit 0 and 1 (since this is a cell-pair-ptr)
-          (STA ZP_RT)
-          (RTS)
-
-   (label NO_CELL_PAIR_PTR__VM_CELL_STACK_PUSH_R)
-          (TXA)
-          (STA ZP_RT)
           (RTS)))
 
 (module+ test #| vm_cell_stack_push_r (basically on write into rt, since stack is completely empty) |#
@@ -1474,8 +1449,10 @@
   (define vm_cell_stack_push_r_int0_state
     (run-code-in-test vm_cell_stack_push_r_int0_code))
 
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_int0_state)
+                "cell-int $0000")
   (check-equal? (memory-list vm_cell_stack_push_r_int0_state ZP_RT (add1 ZP_RT))
-                (list #x00 #x00))
+                (list #x03 #x00))
 
   (define vm_cell_stack_push_r_int1_code
     (list
@@ -1484,8 +1461,10 @@
   (define vm_cell_stack_push_r_int1_state
     (run-code-in-test vm_cell_stack_push_r_int1_code))
 
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_int1_state)
+                "cell-int $0001")
   (check-equal? (memory-list vm_cell_stack_push_r_int1_state ZP_RT (add1 ZP_RT))
-                (list #x00 #x01))
+                (list #x03 #x01))
 
   (define vm_cell_stack_push_r_intm1_code
     (list
@@ -1494,8 +1473,10 @@
   (define vm_cell_stack_push_r_intm1_state
     (run-code-in-test vm_cell_stack_push_r_intm1_code))
 
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_intm1_state)
+                "cell-int $1fff")
   (check-equal? (memory-list vm_cell_stack_push_r_intm1_state ZP_RT (add1 ZP_RT))
-                (list #x7c #xff))
+                (list #x7f #xff))
 
   (define vm_cell_stack_push_r_nil_code
     (list
@@ -1504,10 +1485,11 @@
   (define vm_cell_stack_push_r_nil_state
     (run-code-in-test vm_cell_stack_push_r_nil_code))
 
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_nil_state)
+                "cell-pair-ptr NIL")
   (check-equal? (memory-list vm_cell_stack_push_r_nil_state ZP_RT (add1 ZP_RT))
-                (list #x00 #x00))
-  (check-equal? (memory-list vm_cell_stack_push_r_nil_state ZP_RT_TAGGED_LB ZP_RT_TAGGED_LB)
-                (list #x02))
+                (list #x01 #x00))
+
 
   (define vm_cell_stack_push_r_cell_ptr_code
     (list
@@ -1518,24 +1500,24 @@
   (define vm_cell_stack_push_r_cell_ptr_state
     (run-code-in-test vm_cell_stack_push_r_cell_ptr_code))
 
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_cell_ptr_state)
+                "cell-int $00ce")
   (check-equal? (memory-list vm_cell_stack_push_r_cell_ptr_state ZP_RT (add1 ZP_RT))
-                (list #x02 #xce))
-  (check-equal? (memory-list vm_cell_stack_push_r_cell_ptr_state ZP_RT_TAGGED_LB ZP_RT_TAGGED_LB)
-                (list #x03))
+                (list #x03 #xce))
 
   (define vm_cell_stack_push_r_cell_pair_ptr_code
     (list
-     (LDX !$06)
+     (LDX !$05)
      (LDA !$ce)
      (JSR VM_CELL_STACK_PUSH_R)))
 
   (define vm_cell_stack_push_r_cell_pair_ptr_state
     (run-code-in-test vm_cell_stack_push_r_cell_pair_ptr_code))
 
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_cell_pair_ptr_state)
+                "cell-pair-ptr $ce05")
   (check-equal? (memory-list vm_cell_stack_push_r_cell_pair_ptr_state ZP_RT (add1 ZP_RT))
-                (list #x04 #xce))
-  (check-equal? (memory-list vm_cell_stack_push_r_cell_pair_ptr_state ZP_RT_TAGGED_LB ZP_RT_TAGGED_LB)
-                (list #x06)))
+                (list #x05 #xce)))
 
 (module+ test #| vm_cell_stack_push_r (push rt, and write rt) |#
   (define vm_cell_stack_push_r_push1_code
@@ -1552,7 +1534,7 @@
                       "cell-int $1fff"))
 
   (check-equal? (memory-list vm_cell_stack_push_r_push1_state ZP_RT (add1 ZP_RT))
-                (list #x00 #x01))
+                (list #x03 #x01))
 
   (define vm_cell_stack_push_r_push2_code
     (list
@@ -1562,7 +1544,7 @@
      ))
 
   (define vm_cell_stack_push_r_push2_state
-    (run-code-in-test vm_cell_stack_push_r_push2_code))
+    [run-code-in-test vm_cell_stack_push_r_push2_code])
 
   (check-equal? (vm-stack->strings vm_cell_stack_push_r_push2_state)
                 (list "stack holds 2 items"
@@ -1570,7 +1552,7 @@
                       "cell-int $1fff"))
 
   (check-equal? (memory-list vm_cell_stack_push_r_push2_state ZP_RT (add1 ZP_RT))
-                (list #x00 #x00)))
+                (list #x01 #x00)))
 
 ;; pop cell from stack (that is, discard RegT, move tos of call-frame stack into RegT (if available))
 ;; input: call-frame stack, RT
@@ -1580,17 +1562,15 @@
   (list
    (label VM_CELL_STACK_POP_R)
           ;; optional: stack marked empty? => error: cannot pop from empty stack!
-          ;; (LDA !$03)
-          ;; (CMP ZP_RT_TAGGED_LB)
+          ;; (LDY !$00)
           ;; (BEQ ERROR_NO_VALUE_ON_STACK)
 
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
           (LDY ZP_CELL_STACK_TOS)
-          (BMI WRITE_01_TO_RT) ;; which effectively clears the RT
+          (BMI WRITE_00_TO_RT) ;; which effectively clears the RT
           ;; pop value from call-frame stack into RT!
           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; tagged low byte
-          (STA ZP_RT_TAGGED_LB)
-          (TAX) ;; keep for later
+          (STA ZP_RT)
 
 
           ;; (optional) quick check for atomic cells [speeds up popping atomic cells, slows popping cell-ptr, slight slows popping cell-pair-ptr
@@ -1599,27 +1579,6 @@
           ;; (TXA)
 
           ;; do pointer checks now
-          (LSR) ;; C = cell-ptr?
-          (BCC NO_CELL_PTR__VM_CELL_STACK_POP_R)          
-
-          ;; it is a cell-ptr
-          (TXA)
-          (AND !$fe)  ;; mask out tag bit 0 (since this is a cell-ptr)
-          (BCS WRITE_TOS_TO_RT_ASET__VM_CELL_STACK_POP_R) ;; C is still set, since TXA and AND do not change Carry!
-
-   (label NO_CELL_PTR__VM_CELL_STACK_POP_R)
-          (LSR) ;; C = cell-pair-ptr?                   ;; if pointer quick check is done, this is not necessary
-          (BCC WRITE_TOS_TO_RT__VM_CELL_STACK_POP_R)    ;; if pointer quick check is done, this is not necessary
-
-          ;; it is a cell-pair ptr
-          (TXA)
-          (AND !$fc)  ;; mask out tag bit 0 and 1 (since this is a cell-pair-ptr)
-          (BCS WRITE_TOS_TO_RT_ASET__VM_CELL_STACK_POP_R) ;; C is still set, since TXA and AND do not change Carry!
-
-   (label WRITE_TOS_TO_RT__VM_CELL_STACK_POP_R)
-          (TXA) ;; tagged low byte
-   (label WRITE_TOS_TO_RT_ASET__VM_CELL_STACK_POP_R)
-          (STA ZP_RT)
           (DEY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; high byte
           (STA ZP_RT+1) 
@@ -1627,10 +1586,8 @@
           (STY ZP_CELL_STACK_TOS)
           (RTS)
 
-   (label WRITE_01_TO_RT)
+   (label WRITE_00_TO_RT)
           ;; simple write NIL into RT
-          (LDA !$01) ;; 01 is an invalid value, since it cannot be cell-ptr pointing to $xx00!
-          (STA ZP_RT_TAGGED_LB)
           (LDA !$00)
           (STA ZP_RT)
           (STA ZP_RT+1)
@@ -1642,7 +1599,8 @@
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_0_R)
-     (JSR VM_CELL_STACK_POP_R)))
+     (JSR VM_CELL_STACK_POP_R)
+     ))
 
   (define vm_cell_stack_pop3_r_state
     (run-code-in-test vm_cell_stack_pop3_r_code))
@@ -1652,7 +1610,7 @@
                       "cell-int $0001"))
 
   (check-equal? (memory-list vm_cell_stack_pop3_r_state ZP_RT (add1 ZP_RT))
-                (list #x7c #xff))
+                (list #x7f #xff))
 
   (define vm_cell_stack_pop2_r_code
     (list
@@ -1667,9 +1625,8 @@
 
   (check-equal? (vm-stack->strings vm_cell_stack_pop2_r_state)
                 (list "stack is empty"))
-
   (check-equal? (memory-list vm_cell_stack_pop2_r_state ZP_RT (add1 ZP_RT))
-                (list #x00 #x01))
+                (list #x03 #x01))
 
   (define vm_cell_stack_pop1_r_code
     (list
@@ -1687,10 +1644,7 @@
                 (list "stack is empty"))
 
   (check-equal? (memory-list vm_cell_stack_pop1_r_state ZP_RT (add1 ZP_RT))
-                (list #x00 #x00))
-
-  (check-equal? (memory-list vm_cell_stack_pop1_r_state ZP_RT_TAGGED_LB ZP_RT_TAGGED_LB)
-                (list #x01)))
+                (list #x00 #x00)))
 
 ;; pop cell from stack, decrease ref count if it is a reference
 ;; input: stack
@@ -1701,64 +1655,50 @@
 ;;            ? if cell is a ptr
 ;;    zp_ptr  is overwritte if cell is a ptr
 ;; check stack empty!
-(define VM_CELL_STACK_POP
-  (list
-   (label VM_CELL_STACK_POP)
-          (LDY ZP_CELL_STACK_TOS)
-          (BMI STACK_EMPTY_ERROR__VM_CELL_STACK_POP)
+;; (define VM_CELL_STACK_POP
+;;   (list
+;;    (label VM_CELL_STACK_POP)
+;;           (LDY ZP_CELL_STACK_TOS)
+;;           (BMI STACK_EMPTY_ERROR__VM_CELL_STACK_POP)
 
-          ;; now check whether deallocation needs to take place (that is the cell being popped is a ptr)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; tagged low byte
-          (AND !$03)
-          (BEQ DO_POP_2DEY__VM_CELL_STACK_POP) ;; is no pointer => jump
+;;           ;; now check whether deallocation needs to take place (that is the cell being popped is a ptr)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; tagged low byte
+;;           (AND !$03)
+;;           (BEQ DO_POP_2DEY__VM_CELL_STACK_POP) ;; is no pointer => jump
 
-          ;; is a pointer?
-          (LSR)
-          (BCC IS_CELL_PAIR_PTR__VM_CELL_STACK_POP)
+;;           ;; is a pointer?
+;;           (LSR)
+;;           (BCC IS_CELL_PAIR_PTR__VM_CELL_STACK_POP)
 
-          ;; is a cell-ptr
-          ;; not implemented yet: should decrement cell-ptr and check whether it can be garbage collected!
+;;           ;; is a cell-ptr
+;;           ;; not implemented yet: should decrement cell-ptr and check whether it can be garbage collected!
 
-   (label STACK_EMPTY_ERROR__VM_CELL_STACK_POP)
-          (BRK) ;; not implemented yet
+;;    (label STACK_EMPTY_ERROR__VM_CELL_STACK_POP)
+;;           (BRK) ;; not implemented yet
 
-   (label IS_CELL_PAIR_PTR__VM_CELL_STACK_POP)
-          ;; move cell-pair-ptr (tos) -> zp_ptr
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)  ;; high byte
-          (BEQ DO_POP__VM_CELL_STACK_POP) ;; hight byte = 0 => is nil
-          (STA ZP_PTR+1)      ;; to zp_ptr+1
-          (INY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)  ;; tagged low byte
-          (AND !TAG_PTR_MASK)           ;; remove low 2 bits
-          (STA ZP_PTR)        ;; to zp_ptr
-          ;; no need for copying tagged low byte, since I already know it is a cell-pair-ptr
-          (JSR VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR) ;; decrement and gc if necessary
+;;    (label IS_CELL_PAIR_PTR__VM_CELL_STACK_POP)
+;;           ;; move cell-pair-ptr (tos) -> zp_ptr
+;;           (DEY)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)  ;; high byte
+;;           (BEQ DO_POP__VM_CELL_STACK_POP) ;; hight byte = 0 => is nil
+;;           (STA ZP_PTR+1)      ;; to zp_ptr+1
+;;           (INY)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)  ;; tagged low byte
+;;           (AND !TAG_PTR_MASK)           ;; remove low 2 bits
+;;           (STA ZP_PTR)        ;; to zp_ptr
+;;           ;; no need for copying tagged low byte, since I already know it is a cell-pair-ptr
+;;           (JSR VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR) ;; decrement and gc if necessary
 
-   (label VM_CELL_STACK_POP__NO_GC) ;; entry for just popping!
-          (LDY ZP_CELL_STACK_TOS)   ;; restore tos
+;;    (label VM_CELL_STACK_POP__NO_GC) ;; entry for just popping!
+;;           (LDY ZP_CELL_STACK_TOS)   ;; restore tos
 
-   (label DO_POP_2DEY__VM_CELL_STACK_POP)
-          (DEY)               ;; dex (such that in total x-=3)
+;;    (label DO_POP_2DEY__VM_CELL_STACK_POP)
+;;           (DEY)               ;; dex (such that in total x-=3)
 
-   (label DO_POP__VM_CELL_STACK_POP)
-          (DEY) ;; y was already decremented => dec 2x
-          (STY ZP_CELL_STACK_TOS) ;; store new tos
-          (RTS)))
-
-(module+ test #| vm_cell_stack_pop |#
-
-  (define test-vm_cell_stack_pop-a-state-after
-    (run-code-in-test
-     (list (JSR VM_CELL_STACK_PUSH_NIL)
-           (JSR VM_CELL_STACK_POP)
-           (JSR VM_CELL_STACK_POP) ;; stops at brk in this routine
-           (LDA !$00)              ;; is never run
-           (STA ZP_CELL_STACK_TOS))))
-
-  (check-equal? (memory-list test-vm_cell_stack_pop-a-state-after ZP_CELL_STACK_TOS ZP_CELL_STACK_TOS)
-                '(#xff)
-                "tos = ff (empty)"))
+;;    (label DO_POP__VM_CELL_STACK_POP)
+;;           (DEY) ;; y was already decremented => dec 2x
+;;           (STY ZP_CELL_STACK_TOS) ;; store new tos
+;;           (RTS)))
 
 ;; push a cell in A/X (high/low) onto the cell-stack
 ;; input: stack
@@ -1768,152 +1708,152 @@
 ;; registers: A  ?
 ;;            Y  TOS+2
 ;; check stack full!
-(define VM_CELL_STACK_PUSH
-  (list
-   ;; push array@a pointed to by zp_ptr onto the cell-stack
-   ;; input:  A       index into array (0 indexed)
-   ;;         ZP_PTR  pointer to array slot
-   ;; output: cell-stack with array element pushed pushed (=> ZP_CELL_TOS+=2)
-   ;;         zp_ptr and pointed to cells unchanged
-   (label VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2)
-          (ASL A)
-          (CLC)
-          (ADC !$02) ;; point to low byte of array@a
-          (TAY)
+;; (define VM_CELL_STACK_PUSH
+;;   (list
+;;    ;; push array@a pointed to by zp_ptr onto the cell-stack
+;;    ;; input:  A       index into array (0 indexed)
+;;    ;;         ZP_PTR  pointer to array slot
+;;    ;; output: cell-stack with array element pushed pushed (=> ZP_CELL_TOS+=2)
+;;    ;;         zp_ptr and pointed to cells unchanged
+;;    (label VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2)
+;;           (ASL A)
+;;           (CLC)
+;;           (ADC !$02) ;; point to low byte of array@a
+;;           (TAY)
 
-          (LDA (ZP_PTR2),y)
-          (TAX) ;; lowbyte -> x
-          (INY)
-          (LDA (ZP_PTR2),y) ;; highbyte -> a
-          (CLC)
-          (BCC VM_CELL_STACK_PUSH)
+;;           (LDA (ZP_PTR2),y)
+;;           (TAX) ;; lowbyte -> x
+;;           (INY)
+;;           (LDA (ZP_PTR2),y) ;; highbyte -> a
+;;           (CLC)
+;;           (BCC VM_CELL_STACK_PUSH)
 
-   (label VM_CELL_STACK_PUSH_CELL1_OF_ZP_PTR)
-          (LDY !$02)
-          (BNE VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
+;;    (label VM_CELL_STACK_PUSH_CELL1_OF_ZP_PTR)
+;;           (LDY !$02)
+;;           (BNE VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
 
-   (label VM_CELL_STACK_PUSH_CELL0_OF_ZP_PTR)
-          (LDY !$00)
+;;    (label VM_CELL_STACK_PUSH_CELL0_OF_ZP_PTR)
+;;           (LDY !$00)
 
-   ;; push celly of cell-pair pointer to by zp_ptr (y=0 car-cell, y=2 cdr-cell) onto cell-stack
-   ;; input:  cell-stack
-   ;;         y register (0 = car-cell, 2 = cdr-cell)
-   ;;         zp_ptr pointing to the cells to read from (psuh to cell-stack)
-   ;; output: cell-stack with celly pushed (=> ZP_CELL_TOS+=2)
-   ;;         zp_ptr and pointed to cells unchanged
-   ;;         flags: result of lda high byte of celly
-   ;; check stack full!
-   (label VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
-          (LDA (ZP_PTR),y)
-          (TAX)
-          (INY)
-          (LDA (ZP_PTR),y)
-          (CLC)
-          (BCC VM_CELL_STACK_PUSH)
+;;    ;; push celly of cell-pair pointer to by zp_ptr (y=0 car-cell, y=2 cdr-cell) onto cell-stack
+;;    ;; input:  cell-stack
+;;    ;;         y register (0 = car-cell, 2 = cdr-cell)
+;;    ;;         zp_ptr pointing to the cells to read from (psuh to cell-stack)
+;;    ;; output: cell-stack with celly pushed (=> ZP_CELL_TOS+=2)
+;;    ;;         zp_ptr and pointed to cells unchanged
+;;    ;;         flags: result of lda high byte of celly
+;;    ;; check stack full!
+;;    (label VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)
+;;           (LDA (ZP_PTR),y)
+;;           (TAX)
+;;           (INY)
+;;           (LDA (ZP_PTR),y)
+;;           (CLC)
+;;           (BCC VM_CELL_STACK_PUSH)
 
-   (label VM_CELL_STACK_PUSH_ZP_PTR2)
-          (LDY !$02)
-          (BNE VM_CELL_STACK_PUSH_ZP_PTRy)
-   (label VM_CELL_STACK_PUSH_ZP_PTR)
-          (LDY !$00)
+;;    (label VM_CELL_STACK_PUSH_ZP_PTR2)
+;;           (LDY !$02)
+;;           (BNE VM_CELL_STACK_PUSH_ZP_PTRy)
+;;    (label VM_CELL_STACK_PUSH_ZP_PTR)
+;;           (LDY !$00)
 
-   ;; push zp_ptry (y=0 zp_ptr, y=2 zp_ptr1) onto cell-stack
-   ;; input:  stack
-   ;;         zp_ptry
-   ;; output: stack++[zp_ptry] (uses zp_ptr_tagged, too)
-   ;;         A  high byte of zp_ptr
-   ;;         X  TOS
-   ;;         Y  0|2 (orig Y * 2)
-   ;; check stack full!
-   (label VM_CELL_STACK_PUSH_ZP_PTRy)
-          (LDX ZP_PTR_TAGGED,y)
-          (LDA ZP_PTR+1,y)
-          (CLC)
-          (BCC VM_CELL_STACK_PUSH)
+;;    ;; push zp_ptry (y=0 zp_ptr, y=2 zp_ptr1) onto cell-stack
+;;    ;; input:  stack
+;;    ;;         zp_ptry
+;;    ;; output: stack++[zp_ptry] (uses zp_ptr_tagged, too)
+;;    ;;         A  high byte of zp_ptr
+;;    ;;         X  TOS
+;;    ;;         Y  0|2 (orig Y * 2)
+;;    ;; check stack full!
+;;    (label VM_CELL_STACK_PUSH_ZP_PTRy)
+;;           (LDX ZP_PTR_TAGGED,y)
+;;           (LDA ZP_PTR+1,y)
+;;           (CLC)
+;;           (BCC VM_CELL_STACK_PUSH)
 
-   ;; ints are saved high byte first, then low byte !!!!
-   ;; input:  stack
-   ;;         X = high byte of int (max 31 = $1f) (stored in low byte (tagged) position)
-   ;;         A = low byte of int (0..255) (stored in high byte (untagged) position)
-   ;; output: stack++[INT]
-   ;; check stack full!
-   (label VM_CELL_STACK_PUSH_INT)
-          (TAY)
-          (TXA)
-          (ASL A)
-          (ASL A)
-          (AND !$7c)           ;; mask out top and two low bits!
-          (TAX)
-          (TYA)
-          (CLC)
-          (BCC VM_CELL_STACK_PUSH)
+;;    ;; ints are saved high byte first, then low byte !!!!
+;;    ;; input:  stack
+;;    ;;         X = high byte of int (max 31 = $1f) (stored in low byte (tagged) position)
+;;    ;;         A = low byte of int (0..255) (stored in high byte (untagged) position)
+;;    ;; output: stack++[INT]
+;;    ;; check stack full!
+;;    (label VM_CELL_STACK_PUSH_INT)
+;;           (TAY)
+;;           (TXA)
+;;           (ASL A)
+;;           (ASL A)
+;;           (AND !$7c)           ;; mask out top and two low bits!
+;;           (TAX)
+;;           (TYA)
+;;           (CLC)
+;;           (BCC VM_CELL_STACK_PUSH)
 
-   (label VM_CELL_STACK_PUSH_INT_m1)
-          (LDA !$ff) ;; 1f << 2
-          (LDX !$7c)
-          (BNE VM_CELL_STACK_PUSH)
+;;    (label VM_CELL_STACK_PUSH_INT_m1)
+;;           (LDA !$ff) ;; 1f << 2
+;;           (LDX !$7c)
+;;           (BNE VM_CELL_STACK_PUSH)
 
-   (label VM_CELL_STACK_PUSH_INT_2)
-          (LDA !$02)
-          (LDX !$00)
-          (BEQ VM_CELL_STACK_PUSH)
+;;    (label VM_CELL_STACK_PUSH_INT_2)
+;;           (LDA !$02)
+;;           (LDX !$00)
+;;           (BEQ VM_CELL_STACK_PUSH)
 
-   (label VM_CELL_STACK_PUSH_INT_1)
-          (LDA !$01)
-          (LDX !$00)
-          (BEQ VM_CELL_STACK_PUSH)
+;;    (label VM_CELL_STACK_PUSH_INT_1)
+;;           (LDA !$01)
+;;           (LDX !$00)
+;;           (BEQ VM_CELL_STACK_PUSH)
 
-   (label VM_CELL_STACK_PUSH_INT_0)
-          (LDA !$00)
-          (TAX)
-          (BEQ VM_CELL_STACK_PUSH)
+;;    (label VM_CELL_STACK_PUSH_INT_0)
+;;           (LDA !$00)
+;;           (TAX)
+;;           (BEQ VM_CELL_STACK_PUSH)
 
-   (label VM_CELL_STACK_PUSH_NIL)
-          (LDX !<TAGGED_NIL)
-          (LDA !>TAGGED_NIL)
+;;    (label VM_CELL_STACK_PUSH_NIL)
+;;           (LDX !<TAGGED_NIL)
+;;           (LDA !>TAGGED_NIL)
 
-   ;; ---------------------------------------- (a=high byte, x=tagged low)
-   (label VM_CELL_STACK_PUSH)
-          (LDY ZP_CELL_STACK_TOS)
+;;    ;; ---------------------------------------- (a=high byte, x=tagged low)
+;;    (label VM_CELL_STACK_PUSH)
+;;           (LDY ZP_CELL_STACK_TOS)
 
-          ;; check that stack pointer does not run out of bound (over the page)
-          (CPY !$fd)
-          (BNE NO_ERROR__VM_CELL_STACK_PUSH)
+;;           ;; check that stack pointer does not run out of bound (over the page)
+;;           (CPY !$fd)
+;;           (BNE NO_ERROR__VM_CELL_STACK_PUSH)
 
-          (BRK)
+;;           (BRK)
 
-   (label NO_ERROR__VM_CELL_STACK_PUSH)
-          (INY)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte! (untagged)
-          (INY)
-          (TXA)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte (tagged)
-          (STY ZP_CELL_STACK_TOS)      ;; set new tos
-          (RTS)))
+;;    (label NO_ERROR__VM_CELL_STACK_PUSH)
+;;           (INY)
+;;           (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte! (untagged)
+;;           (INY)
+;;           (TXA)
+;;           (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte (tagged)
+;;           (STY ZP_CELL_STACK_TOS)      ;; set new tos
+;;           (RTS)))
 
 (module+ test #| vm_cell_stack_push_nil |#
   (define test-vm_cell_stack_push_nil-a-state-after
     (run-code-in-test
-     (list (JSR VM_CELL_STACK_PUSH_NIL))))
+     (list (JSR VM_CELL_STACK_PUSH_NIL_R))))
 
-  (check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-a-state-after)
-                '("stack holds 1 item"
-                  "cell-pair-ptr NIL"))
+  (check-equal? (vm-regt->string test-vm_cell_stack_push_nil-a-state-after)
+                "cell-pair-ptr NIL")
 
   (define test-vm_cell_stack_push_nil-b-state-after
     (run-code-in-test
-     (list (JSR VM_CELL_STACK_PUSH_NIL) ;; 1
-           (JSR VM_CELL_STACK_PUSH_NIL) ;;
-           (JSR VM_CELL_STACK_PUSH_NIL) ;; 3
-           (JSR VM_CELL_STACK_PUSH_NIL) ;;
-           (JSR VM_CELL_STACK_PUSH_NIL) ;; 5
-           (JSR VM_CELL_STACK_PUSH_NIL) ;;
-           (JSR VM_CELL_STACK_PUSH_NIL) ;; 7
-           (JSR VM_CELL_STACK_PUSH_NIL)))) ;; 8
+     (list (JSR VM_CELL_STACK_PUSH_NIL_R) ;; 1
+           (JSR VM_CELL_STACK_PUSH_NIL_R) ;;
+           (JSR VM_CELL_STACK_PUSH_NIL_R) ;; 3
+           (JSR VM_CELL_STACK_PUSH_NIL_R) ;;
+           (JSR VM_CELL_STACK_PUSH_NIL_R) ;; 5
+           (JSR VM_CELL_STACK_PUSH_NIL_R) ;;
+           (JSR VM_CELL_STACK_PUSH_NIL_R) ;; 7
+           (JSR VM_CELL_STACK_PUSH_NIL_R)))) ;; 8
 
+  (check-equal? (vm-regt->string test-vm_cell_stack_push_nil-b-state-after)
+                "cell-pair-ptr NIL")
   (check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-b-state-after)
-                '("stack holds 8 items"
-                  "cell-pair-ptr NIL"
+                '("stack holds 7 items"
                   "cell-pair-ptr NIL"
                   "cell-pair-ptr NIL"
                   "cell-pair-ptr NIL"
@@ -1924,86 +1864,87 @@
 
 ;; input: A = lowbyte of int
 ;;        X = tagged highbyte of int
-(define VM_CELL_STACK_WRITE_INT_TO_TOS
-  (list
-   (label VM_CELL_STACK_WRITE_INT_1_TO_TOS)
-          (LDX !$01)
-          (LDA !$00)
-          (BEQ VM_CELL_STACK_WRITE_INT_TO_TOS)
+;; (define VM_CELL_STACK_WRITE_INT_TO_TOS
+;;   (list
+;;    (label VM_CELL_STACK_WRITE_INT_1_TO_TOS)
+;;           (LDX !$01)
+;;           (LDA !$00)
+;;           (BEQ VM_CELL_STACK_WRITE_INT_TO_TOS)
 
-   (label VM_CELL_STACK_WRITE_INT_0_TO_TOS)
-          (LDA !$00)
-          (TAX)
+;;    (label VM_CELL_STACK_WRITE_INT_0_TO_TOS)
+;;           (LDA !$00)
+;;           (TAX)
 
-   ;; ----------------------------------------
-   (label VM_CELL_STACK_WRITE_INT_TO_TOS)
-          (LDY ZP_CELL_STACK_TOS)
-          (ASL A)
-          (ASL A)
-          (AND !$7c)            ;; mask out top and two low bits!
-          (STA (ZP_CELL_STACK_BASE_PTR),y)   ;; write tagged int high byte first
-          (DEY)
-          (TXA)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)   ;; write untagged int low byte
-          (RTS)))
+;;    ;; ----------------------------------------
+;;    (label VM_CELL_STACK_WRITE_INT_TO_TOS)
+;;           (LDY ZP_CELL_STACK_TOS)
+;;           (ASL A)
+;;           (ASL A)
+;;           (AND !$7c)            ;; mask out top and two low bits!
+;;           (STA (ZP_CELL_STACK_BASE_PTR),y)   ;; write tagged int high byte first
+;;           (DEY)
+;;           (TXA)
+;;           (STA (ZP_CELL_STACK_BASE_PTR),y)   ;; write untagged int low byte
+;;           (RTS)))
 
 (module+ test #| vm_cell_push_int |#
   (define test-vm_cell_stack_push_int-a-state-after
     (run-code-in-test
-     (list (JSR VM_CELL_STACK_PUSH_INT_m1)
+     (list (JSR VM_CELL_STACK_PUSH_INT_m1_R)
            (LDA !$00) ;; -4096
            (LDX !$10)
-           (JSR VM_CELL_STACK_PUSH_INT)
-           (JSR VM_CELL_STACK_PUSH_INT_1)
-           (JSR VM_CELL_STACK_PUSH_INT_0)
+           (JSR VM_CELL_STACK_PUSH_INT_R)
+           (JSR VM_CELL_STACK_PUSH_INT_1_R)
+           (JSR VM_CELL_STACK_PUSH_INT_0_R)
            (LDA !$ff) ;; 4095
            (LDX !$0f)
-           (JSR VM_CELL_STACK_PUSH_INT))))
+           (JSR VM_CELL_STACK_PUSH_INT_R))))
 
+  (check-equal? (vm-regt->string test-vm_cell_stack_push_int-a-state-after)
+                "cell-int $0fff")
   (check-equal? (vm-stack->strings test-vm_cell_stack_push_int-a-state-after)
-                '("stack holds 5 items"
-                  "cell-int $0fff"
+                '("stack holds 4 items"
                   "cell-int $0000"
                   "cell-int $0001"
                   "cell-int $1000"
                   "cell-int $1fff")))
 
-(module+ test #| vm_cell_stack_push_celly_of_zp_ptr |#
-  (define test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after
-    (run-code-in-test
-     (list
-      (LDA !$12)
-      (LDX !$02)
-      (JSR VM_CELL_STACK_PUSH_INT)                      ;;  push cell-int $0212
+;; (module+ test #| vm_cell_stack_push_celly_of_zp_ptr |#
+;;   (define test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after
+;;     (run-code-in-test
+;;      (list
+;;       (LDA !$12)
+;;       (LDX !$02)
+;;       (JSR VM_CELL_STACK_PUSH_INT)                      ;;  push cell-int $0212
 
-      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-      (LDX !$00)
-      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)  ;; write cell-int $0212 -> car of allocated cell-pair
+;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;       (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;       (LDX !$00)
+;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)  ;; write cell-int $0212 -> car of allocated cell-pair
 
-      (JSR VM_CELL_STACK_POP)
-      (JSR VM_CELL_STACK_PUSH_NIL)                      ;; push cell-pair-ptr nil
+;;       (JSR VM_CELL_STACK_POP)
+;;       (JSR VM_CELL_STACK_PUSH_NIL)                      ;; push cell-pair-ptr nil
 
-      (LDX !$02)
-      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)  ;; write cell-pair-ptr nil -> cdr of allocated cell-pair
+;;       (LDX !$02)
+;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)  ;; write cell-pair-ptr nil -> cdr of allocated cell-pair
 
-      (JSR VM_CELL_STACK_POP)                           ;; empty stack
+;;       (JSR VM_CELL_STACK_POP)                           ;; empty stack
 
-      (LDY !$00)
-      (JSR VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)          ;; push car (should be cell-int $0212)
-      (LDY !$02)
-      (JSR VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR))))       ;; push cdr (should be cell-pair-ptr nil)
+;;       (LDY !$00)
+;;       (JSR VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR)          ;; push car (should be cell-int $0212)
+;;       (LDY !$02)
+;;       (JSR VM_CELL_STACK_PUSH_CELLy_OF_ZP_PTR))))       ;; push cdr (should be cell-pair-ptr nil)
 
-  (check-equal? (vm-stack->strings test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after)
-                '("stack holds 2 items"
-                  "cell-pair-ptr NIL"
-                  "cell-int $0212"))
-  (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after ZP_PTR (+ 1 ZP_PTR))
-                '(#x04 #xcc)
-                "zp_ptr => cd04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after #xcc04 #xcc07)
-                '(#x08 #x12 #x02 #x00)
-                "zp_ptr => (int530 . nil)"))
+;;   (check-equal? (vm-stack->strings test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after)
+;;                 '("stack holds 2 items"
+;;                   "cell-pair-ptr NIL"
+;;                   "cell-int $0212"))
+;;   (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after ZP_PTR (+ 1 ZP_PTR))
+;;                 '(#x04 #xcc)
+;;                 "zp_ptr => cd04 (first free pair cell)")
+;;   (check-equal? (memory-list test-vm_cell_stack_push_celly_to_zp_ptr-a-state-after #xcc04 #xcc07)
+;;                 '(#x08 #x12 #x02 #x00)
+;;                 "zp_ptr => (int530 . nil)"))
 
 ;; write TOS into celly of cell-pair pointer to by zp_ptr (y=0 car-cell, y=2 cdr-cell)
 ;; input:  cell-stack
@@ -2013,58 +1954,58 @@
 ;;         zp_ptr celly is set to tos cell
 ;;         a = ?
 ;; no stack empty check!
-(define VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR
-  (list
-   (label VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
-          (LDX !$02)
-          (BNE VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)
-   (label VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
-          (LDX !$00)
+;; (define VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR
+;;   (list
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
+;;           (LDX !$02)
+;;           (BNE VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
+;;           (LDX !$00)
 
-   ;;------------------------------------------------
-   (label VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)
-          ;; move just tagged low byte and high byte, since CELLy has no untagged byte!!
-          (LDY ZP_CELL_STACK_TOS)
+;;    ;;------------------------------------------------
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)
+;;           ;; move just tagged low byte and high byte, since CELLy has no untagged byte!!
+;;           (LDY ZP_CELL_STACK_TOS)
 
-   (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR__XY_SET)
-          (STX ZP_TEMP)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (PHA) ;; STA ZP_TEMP2
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (LDY ZP_TEMP)
-          (INY)
-          (STA (ZP_PTR),y) ;; cell high byte
-          (DEY)
-          (PLA) ;; LDA ZP_TEMP2
-          (STA (ZP_PTR),y) ;; cell low byte
-          (RTS)))
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR__XY_SET)
+;;           (STX ZP_TEMP)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
+;;           (PHA) ;; STA ZP_TEMP2
+;;           (DEY)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
+;;           (LDY ZP_TEMP)
+;;           (INY)
+;;           (STA (ZP_PTR),y) ;; cell high byte
+;;           (DEY)
+;;           (PLA) ;; LDA ZP_TEMP2
+;;           (STA (ZP_PTR),y) ;; cell low byte
+;;           (RTS)))
 
-(module+ test #| vm_cell_stack_write_tos_to_cellx_of_zp_ptr |#
-  (define test-vm_cell_stack_write_tos_to_cellx_of_zp_ptr-a-state-after
-    (run-code-in-test
-     (list
-      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-      (LDX !$02)
-      (LDA !$12)
-      (JSR VM_CELL_STACK_PUSH_INT)
-      (LDX !$00)
-      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)
-      (JSR VM_CELL_STACK_POP)
-      (JSR VM_CELL_STACK_PUSH_NIL)
-      (LDX !$02)
-      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)
-      (JSR VM_CELL_STACK_POP))))
+;; (module+ test #| vm_cell_stack_write_tos_to_cellx_of_zp_ptr |#
+;;   (define test-vm_cell_stack_write_tos_to_cellx_of_zp_ptr-a-state-after
+;;     (run-code-in-test
+;;      (list
+;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;       (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;       (LDX !$02)
+;;       (LDA !$12)
+;;       (JSR VM_CELL_STACK_PUSH_INT)
+;;       (LDX !$00)
+;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)
+;;       (JSR VM_CELL_STACK_POP)
+;;       (JSR VM_CELL_STACK_PUSH_NIL)
+;;       (LDX !$02)
+;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR)
+;;       (JSR VM_CELL_STACK_POP))))
 
-  (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_cellx_of_zp_ptr-a-state-after)
-                '("stack is empty"))
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_cellx_of_zp_ptr-a-state-after ZP_PTR (+ 1 ZP_PTR))
-                '(#x04 #xcc)
-                "zp_ptr => cd04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_cellx_of_zp_ptr-a-state-after #xcc04 #xcc07)
-                '(#x08 #x12 #x02 #x00)
-                "zp_ptr => (int530 . nil)"))
+;;   (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_cellx_of_zp_ptr-a-state-after)
+;;                 '("stack is empty"))
+;;   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_cellx_of_zp_ptr-a-state-after ZP_PTR (+ 1 ZP_PTR))
+;;                 '(#x04 #xcc)
+;;                 "zp_ptr => cd04 (first free pair cell)")
+;;   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_cellx_of_zp_ptr-a-state-after #xcc04 #xcc07)
+;;                 '(#x08 #x12 #x02 #x00)
+;;                 "zp_ptr => (int530 . nil)"))
 
 ;; write zp_ptry (x=0 zp_ptr, x=2 zp_ptr1) into top of cell-stack
 ;; input:  stack
@@ -2074,88 +2015,88 @@
 ;;         X  TOS
 ;;         Y  0|2 (orig Y * 2)
 ;; NO CHECKS WHATSO EVER, NO GC NO REFCOUNT STUFF
-(define VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS
-  (list
-   (label VM_CELL_STACK_WRITE_ZP_PTR2_TO_TOS)
-          (LDX !$02)
-          (BNE VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS)
-   (label VM_CELL_STACK_WRITE_ZP_PTR_TO_TOS)
-          (LDX !$00)
+;; (define VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS
+;;   (list
+;;    (label VM_CELL_STACK_WRITE_ZP_PTR2_TO_TOS)
+;;           (LDX !$02)
+;;           (BNE VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS)
+;;    (label VM_CELL_STACK_WRITE_ZP_PTR_TO_TOS)
+;;           (LDX !$00)
 
-   ;; ----------------------------------------
-   (label VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS)
-          (LDY ZP_CELL_STACK_TOS)
+;;    ;; ----------------------------------------
+;;    (label VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS)
+;;           (LDY ZP_CELL_STACK_TOS)
 
-          (LDA ZP_PTR_TAGGED,x)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)    ;; tagged low byte
-          (DEY)
-          (LDA ZP_PTR+1,x) ;; high byte of ptr
-          (STA (ZP_CELL_STACK_BASE_PTR),y)
+;;           (LDA ZP_PTR_TAGGED,x)
+;;           (STA (ZP_CELL_STACK_BASE_PTR),y)    ;; tagged low byte
+;;           (DEY)
+;;           (LDA ZP_PTR+1,x) ;; high byte of ptr
+;;           (STA (ZP_CELL_STACK_BASE_PTR),y)
 
-          (RTS)))
+;;           (RTS)))
 
-(define VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS
-  (list
-   (label VM_CELL_STACK_WRITE_CELL1_OF_ZP_PTR_TO_TOS)
-          (LDY !$02)
-          (BNE VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS)
-   (label VM_CELL_STACK_WRITE_CELL0_OF_ZP_PTR_TO_TOS)
-          (LDY !$00)
+;; (define VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS
+;;   (list
+;;    (label VM_CELL_STACK_WRITE_CELL1_OF_ZP_PTR_TO_TOS)
+;;           (LDY !$02)
+;;           (BNE VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS)
+;;    (label VM_CELL_STACK_WRITE_CELL0_OF_ZP_PTR_TO_TOS)
+;;           (LDY !$00)
 
-   ;; ----------------------------------------
-   (label VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS)
-          ;; write tagged low byte and high byte
-          (LDA (ZP_PTR),y) ;; cell low byte
-          (STA ZP_TEMP)
-          (INY)
-          (LDA (ZP_PTR),y) ;; cell high byte
-          (LDY ZP_CELL_STACK_TOS)
-          (STA (ZP_CELL_STACK_BASE_PTR),y) ;; store high first
-          (INY)
-          (PLA)
-          (STA (ZP_CELL_STACK_BASE_PTR),y) ;; store low there after
-          (RTS)))
+;;    ;; ----------------------------------------
+;;    (label VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS)
+;;           ;; write tagged low byte and high byte
+;;           (LDA (ZP_PTR),y) ;; cell low byte
+;;           (STA ZP_TEMP)
+;;           (INY)
+;;           (LDA (ZP_PTR),y) ;; cell high byte
+;;           (LDY ZP_CELL_STACK_TOS)
+;;           (STA (ZP_CELL_STACK_BASE_PTR),y) ;; store high first
+;;           (INY)
+;;           (PLA)
+;;           (STA (ZP_CELL_STACK_BASE_PTR),y) ;; store low there after
+;;           (RTS)))
 
-(module+ test #| vm_cell_stack_push_zp_ptry |#
-  (define test-vm_cell_stack_push_zp_ptry-a-state-after
-    (run-code-in-test
-     (list
-      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-      (LDY !$00)
-      (JSR VM_CELL_STACK_PUSH_ZP_PTRy))))
+;; (module+ test #| vm_cell_stack_push_zp_ptry |#
+;;   (define test-vm_cell_stack_push_zp_ptry-a-state-after
+;;     (run-code-in-test
+;;      (list
+;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;       (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;       (LDY !$00)
+;;       (JSR VM_CELL_STACK_PUSH_ZP_PTRy))))
 
-  (check-equal? (vm-stack->strings test-vm_cell_stack_push_zp_ptry-a-state-after)
-                '("stack holds 1 item"
-                  "cell-pair-ptr $cc04"))
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after ZP_PTR (+ ZP_PTR 1))
-                '(#x04 #xcc)
-                "zp_ptr => cc04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after ZP_PTR_TAGGED ZP_PTR_TAGGED)
-                '(#x06)
-                "tagged lowbyte is 04 | 02 = 06")
+;;   (check-equal? (vm-stack->strings test-vm_cell_stack_push_zp_ptry-a-state-after)
+;;                 '("stack holds 1 item"
+;;                   "cell-pair-ptr $cc04"))
+;;   (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after ZP_PTR (+ ZP_PTR 1))
+;;                 '(#x04 #xcc)
+;;                 "zp_ptr => cc04 (first free pair cell)")
+;;   (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-a-state-after ZP_PTR_TAGGED ZP_PTR_TAGGED)
+;;                 '(#x06)
+;;                 "tagged lowbyte is 04 | 02 = 06")
 
-  (define test-vm_cell_stack_push_zp_ptry-b-state-after
-    (run-code-in-test
-     (list
-      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-      (JSR VM_COPY_PTR_TO_PTR2)
-      (LDA !$00)
-      (STA ZP_PTR)
-      (STA ZP_PTR+1)
-      (LDY !$02)
-      (JSR VM_CELL_STACK_PUSH_ZP_PTRy))))
+;;   (define test-vm_cell_stack_push_zp_ptry-b-state-after
+;;     (run-code-in-test
+;;      (list
+;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;       (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;       (JSR VM_COPY_PTR_TO_PTR2)
+;;       (LDA !$00)
+;;       (STA ZP_PTR)
+;;       (STA ZP_PTR+1)
+;;       (LDY !$02)
+;;       (JSR VM_CELL_STACK_PUSH_ZP_PTRy))))
 
-  (check-equal? (vm-stack->strings test-vm_cell_stack_push_zp_ptry-b-state-after)
-                '("stack holds 1 item"
-                  "cell-pair-ptr $cc04"))
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after ZP_PTR2 (+ 1 ZP_PTR2))
-                '(#x04 #xcc)
-                "zp_ptr2 => cc04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after ZP_PTR2_TAGGED ZP_PTR2_TAGGED)
-                '(#x06)
-                "tagged lowbyte is 04 | 02 = 06"))
+;;   (check-equal? (vm-stack->strings test-vm_cell_stack_push_zp_ptry-b-state-after)
+;;                 '("stack holds 1 item"
+;;                   "cell-pair-ptr $cc04"))
+;;   (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after ZP_PTR2 (+ 1 ZP_PTR2))
+;;                 '(#x04 #xcc)
+;;                 "zp_ptr2 => cc04 (first free pair cell)")
+;;   (check-equal? (memory-list test-vm_cell_stack_push_zp_ptry-b-state-after ZP_PTR2_TAGGED ZP_PTR2_TAGGED)
+;;                 '(#x06)
+;;                 "tagged lowbyte is 04 | 02 = 06"))
 
 ;; write tos of cell-stack to zp_ptry (y=0 zp_ptr, y=1 zp_ptr2), (makes only sense if it is a cell-ptr or cell-pair-ptr
 ;; input:  stack
@@ -2164,84 +2105,84 @@
 ;;         A  high byte of cell-ptr
 ;;         X  TOS-1
 ;;         Y  0|2 (orig *2)
-(define VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx
-  (list
-   (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR2)
-          (LDX !$02)
-          (BNE VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx)
-   (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR)
-          (LDX !$00)
+;; (define VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx
+;;   (list
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR2)
+;;           (LDX !$02)
+;;           (BNE VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx)
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR)
+;;           (LDX !$00)
 
-   ;;------------------------------------------------
-   (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)    ;; low byte tagged
-          (STA ZP_TEMP)
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)    ;; high byte
-          (STA ZP_PTR+1,x)
-          (LDA ZP_TEMP)
-          (AND !TAG_PTR_MASK)
-          (STA ZP_PTR,x)
+;;    ;;------------------------------------------------
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx)
+;;           (LDY ZP_CELL_STACK_TOS)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)    ;; low byte tagged
+;;           (STA ZP_TEMP)
+;;           (DEY)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)    ;; high byte
+;;           (STA ZP_PTR+1,x)
+;;           (LDA ZP_TEMP)
+;;           (AND !TAG_PTR_MASK)
+;;           (STA ZP_PTR,x)
 
-          (LDA ZP_TEMP)
-          (STA ZP_PTR_TAGGED,x)
-          (RTS)))
+;;           (LDA ZP_TEMP)
+;;           (STA ZP_PTR_TAGGED,x)
+;;           (RTS)))
 
-(module+ test #| vm_cell_stack_write_tos_to_zp_ptry |#
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after
-    (run-code-in-test
-     (list
-      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-      (LDY !$00)
-      (JSR VM_CELL_STACK_PUSH_ZP_PTRy)
+;; (module+ test #| vm_cell_stack_write_tos_to_zp_ptry |#
+;;   (define test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after
+;;     (run-code-in-test
+;;      (list
+;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;       (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;       (LDY !$00)
+;;       (JSR VM_CELL_STACK_PUSH_ZP_PTRy)
 
-      (LDA !$00)
-      (STA ZP_PTR)
-      (STA ZP_PTR+1)
-      (STA ZP_PTR2)
-      (STA ZP_PTR2+1)
+;;       (LDA !$00)
+;;       (STA ZP_PTR)
+;;       (STA ZP_PTR+1)
+;;       (STA ZP_PTR2)
+;;       (STA ZP_PTR2+1)
 
-      (LDX !$00)
-      (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx))))
+;;       (LDX !$00)
+;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx))))
 
-  (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after)
-                '("stack holds 1 item"
-                  "cell-pair-ptr $cc04"))
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after ZP_PTR (+ 1 ZP_PTR))
-                '(#x04 #xcc)
-                "zp_ptr => cc04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after ZP_PTR_TAGGED ZP_PTR_TAGGED)
-                '(#x06)
-                "tagged lowbyte is 04 | 02 = 06")
+;;   (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after)
+;;                 '("stack holds 1 item"
+;;                   "cell-pair-ptr $cc04"))
+;;   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after ZP_PTR (+ 1 ZP_PTR))
+;;                 '(#x04 #xcc)
+;;                 "zp_ptr => cc04 (first free pair cell)")
+;;   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-a-state-after ZP_PTR_TAGGED ZP_PTR_TAGGED)
+;;                 '(#x06)
+;;                 "tagged lowbyte is 04 | 02 = 06")
 
-  (define test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after
-    (run-code-in-test
-     (list
-      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-      (LDY !$00)
-      (JSR VM_CELL_STACK_PUSH_ZP_PTRy)
+;;   (define test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after
+;;     (run-code-in-test
+;;      (list
+;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;       (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;       (LDY !$00)
+;;       (JSR VM_CELL_STACK_PUSH_ZP_PTRy)
 
-      (LDA !$00)
-      (STA ZP_PTR)
-      (STA ZP_PTR+1)
-      (STA ZP_PTR2)
-      (STA ZP_PTR2+1)
+;;       (LDA !$00)
+;;       (STA ZP_PTR)
+;;       (STA ZP_PTR+1)
+;;       (STA ZP_PTR2)
+;;       (STA ZP_PTR2+1)
 
-      (LDX !$02)
-      (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx))))
+;;       (LDX !$02)
+;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx))))
 
-  (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after)
-                '("stack holds 1 item"
-                  "cell-pair-ptr $cc04"))
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after ZP_PTR2 (+ 1 ZP_PTR2))
-                '(#x04 #xcc)
-                "zp_ptr2 => cc04 (first free pair cell)")
-  (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after ZP_PTR2_TAGGED ZP_PTR2_TAGGED)
-                '(#x06)
-                "tagged lowbyte is 04 | 02 = 06"))
+;;   (check-equal? (vm-stack->strings test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after)
+;;                 '("stack holds 1 item"
+;;                   "cell-pair-ptr $cc04"))
+;;   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after ZP_PTR2 (+ 1 ZP_PTR2))
+;;                 '(#x04 #xcc)
+;;                 "zp_ptr2 => cc04 (first free pair cell)")
+;;   (check-equal? (memory-list test-vm_cell_stack_write_tos_to_zp_ptry-b-state-after ZP_PTR2_TAGGED ZP_PTR2_TAGGED)
+;;                 '(#x06)
+;;                 "tagged lowbyte is 04 | 02 = 06"))
 
 ;; copy zp_ptr2 to zp_ptr (including tag byte)
 ;; input:  ZP_PTR2
@@ -2249,16 +2190,16 @@
 ;;         A  ?
 ;;         X  unchanged
 ;;         Y  unchanged
-(define VM_COPY_PTR2_TO_PTR
-  (list
-   (label VM_COPY_PTR2_TO_PTR)
-          (LDA ZP_PTR2+1)       ;; high byte
-          (STA ZP_PTR+1)
-          (LDA ZP_PTR2)         ;; low byte (clean of tag)
-          (STA ZP_PTR)
-          (LDA ZP_PTR2_TAGGED)  ;; tagged low byte
-          (STA ZP_PTR_TAGGED)
-          (RTS)))
+;; (define VM_COPY_PTR2_TO_PTR
+;;   (list
+;;    (label VM_COPY_PTR2_TO_PTR)
+;;           (LDA ZP_PTR2+1)       ;; high byte
+;;           (STA ZP_PTR+1)
+;;           (LDA ZP_PTR2)         ;; low byte (clean of tag)
+;;           (STA ZP_PTR)
+;;           (LDA ZP_PTR2_TAGGED)  ;; tagged low byte
+;;           (STA ZP_PTR_TAGGED)
+;;           (RTS)))
 
 ;; copy zp_ptr to zp_ptr2 (including tag byte)
 ;; input:  ZP_PTR
@@ -2266,16 +2207,16 @@
 ;;         A  ?
 ;;         X  unchanged
 ;;         Y  unchanged
-(define VM_COPY_PTR_TO_PTR2
-  (list
-   (label VM_COPY_PTR_TO_PTR2)
-          (LDA ZP_PTR+1)        ;; high byte
-          (STA ZP_PTR2+1)
-          (LDA ZP_PTR)          ;; low byte (clean of tag)
-          (STA ZP_PTR2)
-          (LDA ZP_PTR_TAGGED)   ;; tagged low byte
-          (STA ZP_PTR2_TAGGED)
-          (RTS)))
+;; (define VM_COPY_PTR_TO_PTR2
+;;   (list
+;;    (label VM_COPY_PTR_TO_PTR2)
+;;           (LDA ZP_PTR+1)        ;; high byte
+;;           (STA ZP_PTR2+1)
+;;           (LDA ZP_PTR)          ;; low byte (clean of tag)
+;;           (STA ZP_PTR2)
+;;           (LDA ZP_PTR_TAGGED)   ;; tagged low byte
+;;           (STA ZP_PTR2_TAGGED)
+;;           (RTS)))
 
 ;; initial data for the memory management registers
 ;; put into memory @ #xced0 - len (currently 3)
@@ -2388,8 +2329,8 @@
 
            (LDX !$ff)          ;; negative and iny will produce 0
            (STX ZP_CELL_STACK_TOS)
-           (LDX !$01)
-           (STX ZP_RT_TAGGED_LB) ;; set RT to hold no value
+           (LDX !$00)
+           (STX ZP_RT) ;; set RT to hold no value
            (RTS))))
 
 ;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)
@@ -2424,7 +2365,7 @@
    (label VM_ALLOC_PAGE_FOR_CELLS)
           (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A
 
-          (STA ZP_PTR+1)
+          (STA ZP_RT+1)
           (TAY)
           (LDA !$02)
           (STA VM_FIRST_FREE_SLOT_ON_PAGE,y) ;; set slot @02 as the first free slot
@@ -2433,7 +2374,7 @@
           (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3)
 
           (LDA !$00)
-          (STA ZP_PTR)
+          (STA ZP_RT)
 
           (LDY !$01)
           (LDX !$01)
@@ -2441,7 +2382,7 @@
 
           ;; option: optimization: maybe clearing the whole page would be faster (and shorter) for setting all refcounts to 0?
    (label LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (STA (ZP_PTR),y) ;; refcount set to 0
+          (STA (ZP_RT),y) ;; refcount set to 0
           (INY)
           (DEX)
           (BNE LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
@@ -2463,7 +2404,7 @@
           (LDY !$02)
           (LDA !$08)
           (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (STA (ZP_PTR),y)
+          (STA (ZP_RT),y)
 
           ;; block 2
           (TAY)
@@ -2479,7 +2420,7 @@
           ;; #40        80..7d <- 82.. last= 00
 
    (label LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
-          (STA (ZP_PTR),y)
+          (STA (ZP_RT),y)
           (TAY)
           (CLC)
           (ADC !$02)
@@ -2493,7 +2434,7 @@
           (TAX)
           (ASL A)
           (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (STA (ZP_PTR),y)
+          (STA (ZP_RT),y)
           (TAY)
           (CLC)
           (ADC !$02)
@@ -2504,18 +2445,18 @@
           ;; write last entry
           (LDA !$00)
           (LDY !$fc) ;; fc..fd is the last cell, fe..ff is unusable (since ff holds the previous page)
-          (STA (ZP_PTR),y)
+          (STA (ZP_RT),y)
 
           (LDY !$ff)
           (LDA VM_FREE_CELL_PAGE) ;; store last free cell page in $ff
-          (STA (ZP_PTR),y)
+          (STA (ZP_RT),y)
 
           ;; store page type in byte 0
           (LDY !$00)
           (LDA !$80)
-          (STA (ZP_PTR),y)
+          (STA (ZP_RT),y)
 
-          (LDA ZP_PTR+1) ;; page
+          (LDA ZP_RT+1) ;; page
           (STA VM_FREE_CELL_PAGE) ;; store allocated page as new free cell page
 
           (RTS)
@@ -2612,71 +2553,72 @@
   (define VM_ALLOC_PAGE_FOR_CELL_PAIRS
     (list
      (label VM_ALLOC_PAGE_FOR_CELL_PAIRS)
-            (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-            ;; now initialize page in A
+     ;;        (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+     ;;        ;; now initialize page in A
 
-            (TAX)
+     ;;        (TAX)
 
-            (STA ZP_PTR+1)
-            (TAY) ;; page used as idx
-            (LDA !$04) ;; first free slot (after initialization)
-            (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
+     ;;        (STA ZP_PTR+1)
+     ;;        (TAY) ;; page used as idx
+     ;;        (LDA !$04) ;; first free slot (after initialization)
+     ;;        (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
 
-            (LDY !$00)
-            (STY ZP_PTR)
-            (LDA !$40) ;; page type cell-pairs w/ 0 slots allocated
-            (STA (ZP_PTR),y)
+     ;;        (LDY !$00)
+     ;;        (STY ZP_PTR)
+     ;;        (LDA !$40) ;; page type cell-pairs w/ 0 slots allocated
+     ;;        (STA (ZP_PTR),y)
 
-            (LDY !$ff)
-            (LDA VM_FREE_CELL_PAIR_PAGE)
-            (STA (ZP_PTR),y) ;; previous page of this type is (@$ff = )
+     ;;        (LDY !$ff)
+     ;;        (LDA VM_FREE_CELL_PAIR_PAGE)
+     ;;        (STA (ZP_PTR),y) ;; previous page of this type is (@$ff = )
 
-            (STX VM_FREE_CELL_PAIR_PAGE)
+     ;;        (STX VM_FREE_CELL_PAIR_PAGE)
 
-            (INC ZP_PTR)
-            ;; first write all reference count fields (zero)
-            (LDY !$02)
-            (LDA !$00) ;; reference count initialized with 0
+     ;;        (INC ZP_PTR)
+     ;;        ;; first write all reference count fields (zero)
+     ;;        (LDY !$02)
+     ;;        (LDA !$00) ;; reference count initialized with 0
 
-     (label FIRST_RC_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
-            (STA (ZP_PTR),y)
-            (DEY)
-            (BPL FIRST_RC_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
+     ;; (label FIRST_RC_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
+     ;;        (STA (ZP_PTR),y)
+     ;;        (DEY)
+     ;;        (BPL FIRST_RC_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
 
-            (LDY !$10)
-            (STY ZP_PTR)
-            (LDY !$2F)
+     ;;        (LDY !$10)
+     ;;        (STY ZP_PTR)
+     ;;        (LDY !$2F)
 
-     (label SECOND_RC_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
-            (STA (ZP_PTR),y)
-            (DEY)
-            (BPL SECOND_RC_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
+     ;; (label SECOND_RC_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
+     ;;        (STA (ZP_PTR),y)
+     ;;        (DEY)
+     ;;        (BPL SECOND_RC_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
 
-            (STA ZP_PTR) ;; clear lowbyte of ptr
-            ;; write all cell-pairs to point to next free one
-            (LDA !$04)
-     (label FIRST_CELL_PAIR_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
-            (TAY)
-            (CLC)
-            (ADC !$04)
-            (STA (ZP_PTR),y)
-            (CMP !$0C)
-            (BMI FIRST_CELL_PAIR_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
+     ;;        (STA ZP_PTR) ;; clear lowbyte of ptr
+     ;;        ;; write all cell-pairs to point to next free one
+     ;;        (LDA !$04)
+     ;; (label FIRST_CELL_PAIR_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
+     ;;        (TAY)
+     ;;        (CLC)
+     ;;        (ADC !$04)
+     ;;        (STA (ZP_PTR),y)
+     ;;        (CMP !$0C)
+     ;;        (BMI FIRST_CELL_PAIR_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
 
-            ;; write last pointer in this block to next free cell pair (in next block)
-            (TAY)
-            (LDA !$40)
-            (STA (ZP_PTR),y)
+     ;;        ;; write last pointer in this block to next free cell pair (in next block)
+     ;;        (TAY)
+     ;;        (LDA !$40)
+     ;;        (STA (ZP_PTR),y)
 
-     (label SECOND_CELL_PAIR_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
-            (TAY)
-            (CLC)
-            (ADC !$04)
-            (STA (ZP_PTR),y)
-            (CMP !$FC)
-            (BNE SECOND_CELL_PAIR_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
+     ;; (label SECOND_CELL_PAIR_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
+     ;;        (TAY)
+     ;;        (CLC)
+     ;;        (ADC !$04)
+     ;;        (STA (ZP_PTR),y)
+     ;;        (CMP !$FC)
+     ;;        (BNE SECOND_CELL_PAIR_BLOCK__VM_ALLOC_PAGE_FOR_CELL_PAIRS)
 
-            (RTS)))
+            (RTS)
+            ))
 
 ;; whether a page is free or used is kept in the 256 bytes starting at VM_FIRST_FREE_SLOT_ON_PAGE
 ;; each byte represents one page
@@ -2734,21 +2676,19 @@
   (list
    (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE)
           (JSR VM_ALLOC_PAGE_FOR_CELL_PAIRS)
-          (LDA ZP_PTR+1)
+          (LDA ZP_RT+1)
 
    ;; ----------------------------------------
    (label VM_ALLOC_CELL_PAIR_ON_PAGE) ;; <-- real entry point of this function
-          (STA ZP_PTR+1) ;; safe as highbyte of ptr
+          (STA ZP_RT+1) ;; safe as highbyte of ptr
           (TAX)
           (LDA VM_FIRST_FREE_SLOT_ON_PAGE,x)
           (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE) ;; allocate new page first
 
    (label CELL_ON_THIS_PAGE__VM_ALLOC_CELL_PAIR_ON_PAGE)
-          (STA ZP_PTR)
-          (ORA !$02) ;; sets the bit indicating that this is pointer to a cell-pair
-          (STA ZP_PTR_TAGGED)
+          (STA ZP_RT)
           (LDY !$00)
-          (LDA (ZP_PTR),y) ;; next free cell
+          (LDA (ZP_RT),y) ;; next free cell
           (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)
 
           ;; increase the slot number on this page
@@ -2766,88 +2706,88 @@
 ;;         (in case of cell pages @ZP_PTR>>1)
 ;;         (in case of cell-pair pages @ZP_PTR>>2)
 ;;         (in case of 8s pages @ZP_PTR>>3)
-(define VM_REFCOUNT_DECR_ZP_PTR
-  (list
-   (label VM_REFCOUNT_DECR_ZP_PTR)
-          (LDA ZP_PTR_TAGGED)
-          (TAY)
-          (LSR)
-          (BCS DECR_CELL_PTR__VM_REFCOUNT_DECR_ZP_PTR)
-          (LSR)
-          (BCS DECR_CELL_PAIR__VM_REFCOUNT_DECR_ZP_PTR)
-          ;; check other types of cells
-          (CPY !TAG_BYTE_CELL_ARRAY)
-          (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
-          (CPY !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
+;; (define VM_REFCOUNT_DECR_ZP_PTR
+;;   (list
+;;    (label VM_REFCOUNT_DECR_ZP_PTR)
+;;           (LDA ZP_PTR_TAGGED)
+;;           (TAY)
+;;           (LSR)
+;;           (BCS DECR_CELL_PTR__VM_REFCOUNT_DECR_ZP_PTR)
+;;           (LSR)
+;;           (BCS DECR_CELL_PAIR__VM_REFCOUNT_DECR_ZP_PTR)
+;;           ;; check other types of cells
+;;           (CPY !TAG_BYTE_CELL_ARRAY)
+;;           (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
+;;           (CPY !TAG_BYTE_NATIVE_ARRAY)
+;;           (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
 
-          ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_PTR_TAGGED)
-          (BRK)
+;;           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_PTR_TAGGED)
+;;           (BRK)
 
-   (label DECR_CELL_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
-   (label DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
-          (JMP VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+;;    (label DECR_CELL_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
+;;    (label DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_ZP_PTR)
+;;           (JMP VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
 
-   (label DECR_CELL_PAIR__VM_REFCOUNT_DECR_ZP_PTR)
-          (JMP VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
+;;    (label DECR_CELL_PAIR__VM_REFCOUNT_DECR_ZP_PTR)
+;;           ;; (JMP VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
 
-   (label DECR_CELL_PTR__VM_REFCOUNT_DECR_ZP_PTR)
-          (JMP VM_REFCOUNT_DECR_ZP_PTR__CELL)))
+;;    (label DECR_CELL_PTR__VM_REFCOUNT_DECR_ZP_PTR)
+;;           (JMP VM_REFCOUNT_DECR_ZP_PTR__CELL)))
 
 ;; input: cell-pair ptr in ZP_PTR
 ;; decrement ref count, if 0 deallocate
-(define VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR
-  (list
-   (label VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
-          (LDA ZP_PTR+1)
-          (STA PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
-          (LDA ZP_PTR)
-          (LSR)
-          (LSR)
-          (TAX)
-   (label PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
-          (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
-          (JMP VM_FREE_CELL_PAIR_IN_ZP_PTR) ;; free delayed
-   (label DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
-          (RTS)))
+;; (define VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR
+;;   (list
+;;    (label VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
+;;           (LDA ZP_PTR+1)
+;;           (STA PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+;;           (LDA ZP_PTR)
+;;           (LSR)
+;;           (LSR)
+;;           (TAX)
+;;    (label PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
+;;           (DEC $c000,x) ;; c0 is overwritten by page (see above)
+;;           (BNE DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
+;;           (JMP VM_FREE_CELL_PAIR_IN_ZP_PTR) ;; free delayed
+;;    (label DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
+;;           (RTS)))
 
-(define VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR
-  (list
-   (label VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-          (LDA ZP_PTR+1)
-          (STA PAGE__VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
-          (LDA ZP_PTR)
-          (LSR)
-          (LSR)
-          (TAX)
-   (label PAGE__VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-          (INC $c000,x) ;; c0 is overwritten by page (see above)
-          (RTS)))
+;; (define VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR
+;;   (list
+;;    (label VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;           (LDA ZP_PTR+1)
+;;           (STA PAGE__VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
+;;           (LDA ZP_PTR)
+;;           (LSR)
+;;           (LSR)
+;;           (TAX)
+;;    (label PAGE__VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;           (INC $c000,x) ;; c0 is overwritten by page (see above)
+;;           (RTS)))
 
 ;; input: cell ptr in ZP_PTR
 ;; decrement ref count, if 0 deallocate
-(define VM_REFCOUNT_DECR_ZP_PTR__CELL
-  (list
-   (label VM_REFCOUNT_DECR_ZP_PTR__CELL)
-          (LDA ZP_PTR+1)
-          (STA PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
-          (LDA ZP_PTR)
-          (LSR)
-          (TAX)
-   (label PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL)
-          (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL)
-          (JMP VM_FREE_CELL_IN_ZP_PTR) ;; free delayed
-   (label DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL)
-          (RTS)))
+;; (define VM_REFCOUNT_DECR_ZP_PTR__CELL
+;;   (list
+;;    (label VM_REFCOUNT_DECR_ZP_PTR__CELL)
+;;           (LDA ZP_PTR+1)
+;;           (STA PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+;;           (LDA ZP_PTR)
+;;           (LSR)
+;;           (TAX)
+;;    (label PAGE__VM_REFCOUNT_DECR_ZP_PTR__CELL)
+;;           (DEC $c000,x) ;; c0 is overwritten by page (see above)
+;;           (BNE DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL)
+;;           (JMP VM_FREE_CELL_IN_ZP_PTR) ;; free delayed
+;;    (label DONE__VM_REFCOUNT_DECR_ZP_PTR__CELL)
+;;           (RTS)))
 
 (define VM_REFCOUNT_INCR_ZP_PTR__CELL
   (list
    (label VM_REFCOUNT_INCR_ZP_PTR__CELL)
-          (LDA ZP_PTR+1)
+          (LDA ZP_RT+1)
           (STA PAGE__VM_REFCOUNT_INCR_ZP_PTR__CELL+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
-          (LDA ZP_PTR)
+          (LDA ZP_RT)
           (LSR)
           (TAX)
    (label PAGE__VM_REFCOUNT_INCR_ZP_PTR__CELL)
@@ -2856,34 +2796,34 @@
 
 ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 ;; parameter: zp_ptr
-(define VM_FREE_NON_ATOMIC
-  (list
-   (label VM_FREE_NON_ATOMIC)
-          (LDA ZP_PTR_TAGGED)
-          (TAY)
-          (LSR)
-          (BCS FREE_CELL__VM_FREE_NON_ATOMIC)
-          (LSR)
-          (BCS FREE_CELL_PAIR__VM_FREE_NON_ATOMIC)
-          ;; check other types of cells
-          (CPY !TAG_BYTE_CELL_ARRAY)
-          (BEQ FREE_CELL_ARRAY__VM_FREE_NON_ATOMIC)
-          (CPY !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ FREE_NATIVE_ARRAY__VM_FREE_NON_ATOMIC)
+;; (define VM_FREE_NON_ATOMIC
+;;   (list
+;;    (label VM_FREE_NON_ATOMIC)
+;;           (LDA ZP_PTR_TAGGED)
+;;           (TAY)
+;;           (LSR)
+;;           (BCS FREE_CELL__VM_FREE_NON_ATOMIC)
+;;           (LSR)
+;;           (BCS FREE_CELL_PAIR__VM_FREE_NON_ATOMIC)
+;;           ;; check other types of cells
+;;           (CPY !TAG_BYTE_CELL_ARRAY)
+;;           (BEQ FREE_CELL_ARRAY__VM_FREE_NON_ATOMIC)
+;;           (CPY !TAG_BYTE_NATIVE_ARRAY)
+;;           (BEQ FREE_NATIVE_ARRAY__VM_FREE_NON_ATOMIC)
 
-          ;; unknown pointer type in zp_ptr
-          (BRK)
+;;           ;; unknown pointer type in zp_ptr
+;;           (BRK)
 
-   (label FREE_CELL__VM_FREE_NON_ATOMIC)
-          (JMP VM_FREE_CELL_IN_ZP_PTR)
+;;    (label FREE_CELL__VM_FREE_NON_ATOMIC)
+;;           (JMP VM_FREE_CELL_IN_ZP_PTR)
 
-   (label FREE_CELL_PAIR__VM_FREE_NON_ATOMIC)
-          (JMP VM_FREE_CELL_PAIR_IN_ZP_PTR)
+;;    (label FREE_CELL_PAIR__VM_FREE_NON_ATOMIC)
+;;           (JMP VM_FREE_CELL_PAIR_IN_ZP_PTR)
 
-   (label FREE_CELL_ARRAY__VM_FREE_NON_ATOMIC)
-   (label FREE_NATIVE_ARRAY__VM_FREE_NON_ATOMIC)
-          (JSR VM_COPY_PTR_TO_PTR2)
-          (JMP VM_FREE_M1_SLOT_IN_ZP_PTR2)))
+;;    (label FREE_CELL_ARRAY__VM_FREE_NON_ATOMIC)
+;;    (label FREE_NATIVE_ARRAY__VM_FREE_NON_ATOMIC)
+;;           (JSR VM_COPY_PTR_TO_PTR2)
+;;           (JMP VM_FREE_M1_SLOT_IN_ZP_PTR2)))
 
 ;; allocate a cell on the page in A (allocating a new one if page is full)
 ;; this does not check for any free cells on the free list!
@@ -2895,21 +2835,19 @@
   (list
    (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_ON_PAGE)
           (JSR VM_ALLOC_PAGE_FOR_CELLS)
-          (LDA ZP_PTR+1)
+          (LDA ZP_RT+1)
 
    ;; ----------------------------------------
    (label VM_ALLOC_CELL_ON_PAGE) ;; <-- real entry point of this function
-          (STA ZP_PTR+1) ;; safe as highbyte of ptr
+          (STA ZP_RT+1) ;; safe as highbyte of ptr
           (TAX)
           (LDA VM_FIRST_FREE_SLOT_ON_PAGE,x)
           (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_ON_PAGE) ;; allocate new page first
 
    (label CELL_ON_THIS_PAGE__VM_ALLOC_CELL_ON_PAGE)
-          (STA ZP_PTR)
-          (ORA !$01) ;; sets the bit indicating that this is pointer to a cell
-          (STA ZP_PTR_TAGGED)
+          (STA ZP_RT)
           (LDY !$00)
-          (LDA (ZP_PTR),y) ;; next free cell
+          (LDA (ZP_RT),y) ;; next free cell
           (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)
 
           ;; increase the slot number on this page
@@ -2932,7 +2870,7 @@
   (define test-alloc-cell-on-papge-a-state-after
     (run-code-in-test test-alloc-cell-on-papge-a-code))
 
-  (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after ZP_PTR (add1 ZP_PTR))
+  (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after ZP_RT (add1 ZP_RT))
                 (list #x02 #xcc))
   (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after #xcfcc #xcfcc)
                 (list #x08)))
@@ -2948,7 +2886,7 @@
   (define test-alloc-cell-on-papge-b-state-after
     (run-code-in-test test-alloc-cell-on-papge-b-code))
 
-  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after ZP_PTR (add1 ZP_PTR))
+  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after ZP_RT (add1 ZP_RT))
                 (list #x02 #xcb))
   (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after #xcfcc #xcfcc)
                 (list #x02)
@@ -2960,11 +2898,11 @@
 ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
 ;; input:  none
 ;; output: zp_ptr = pointer to free cell
-(define VM_ALLOC_CELL_TO_ZP_PTR
+(define VM_ALLOC_CELL_TO_RT
   (list
-   (label VM_ALLOC_CELL_TO_ZP_PTR)
+   (label VM_ALLOC_CELL_TO_RT)
           (LDA VM_LIST_OF_FREE_CELLS+1)
-          (BNE REUSE__VM_ALLOC_CELL_TO_ZP_PTR)
+          (BNE REUSE__VM_ALLOC_CELL_TO_RT)
 
           ;; get a cell on the given page (or allocate a new page)
           (LDA VM_FREE_CELL_PAGE)        ;; get the page that has cell available (can be 0)
@@ -2973,18 +2911,18 @@
    (label ALLOCATE_NEW_PAGE__VM_ALLOC_CELL)
           (JMP ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_ON_PAGE) ;; allocate new page and then a new cell on that page
 
-   (label REUSE__VM_ALLOC_CELL_TO_ZP_PTR)
+   (label REUSE__VM_ALLOC_CELL_TO_RT)
           ;; reuse old cell (and write the head into zp_ptr)
-          (STA ZP_PTR+1)
+          (STA ZP_RT+1)
           (LDA VM_LIST_OF_FREE_CELLS)
-          (STA ZP_PTR)
+          (STA ZP_RT)
 
           ;; read output this old cell and store its content as new head of the free list
           (LDY !$00)
-          (LDA (ZP_PTR),y)
+          (LDA (ZP_RT),y)
           (STA VM_LIST_OF_FREE_CELLS)
           (INY)
-          (LDA (ZP_PTR),y)
+          (LDA (ZP_RT),y)
           (STA VM_LIST_OF_FREE_CELLS)
 
           (RTS)))
@@ -2992,12 +2930,12 @@
 (module+ test #| vm_alloc_cell_to_zp_ptr (once on a new page) |#
   (define test-alloc-cell-to-zp-ptr-code
     (list
-     (JSR VM_ALLOC_CELL_TO_ZP_PTR)))
+     (JSR VM_ALLOC_CELL_TO_RT)))
 
   (define test-alloc-cell-to-zp-ptr-state-after
     (run-code-in-test test-alloc-cell-to-zp-ptr-code))
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-state-after ZP_PTR (add1 ZP_PTR))
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-state-after ZP_RT (add1 ZP_RT))
                 (list #x02 #xcc))
 
   (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-state-after #xcc)
@@ -3010,13 +2948,13 @@
 (module+ test #| vm_alloc_cell_to_zp_ptr (twice on a new page) |#
   (define test-alloc-cell-to-zp-ptr-twice-code
     (list
-     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
-     (JSR VM_ALLOC_CELL_TO_ZP_PTR)))
+     (JSR VM_ALLOC_CELL_TO_RT)
+     (JSR VM_ALLOC_CELL_TO_RT)))
 
   (define test-alloc-cell-to-zp-ptr-twice-state-after
     (run-code-in-test test-alloc-cell-to-zp-ptr-twice-code))
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twice-state-after ZP_PTR (add1 ZP_PTR))
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twice-state-after ZP_RT (add1 ZP_RT))
                 (list #x08 #xcc))
 
   (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twice-state-after #xcc)
@@ -3026,58 +2964,58 @@
                       "next free slot: $0a")
                 "page has 2 slots in use"))
 
-(module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page) |#
-  (define test-alloc-cell-to-zp-ptr-twicenfree-code
-    (list
-     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
-     (JSR VM_COPY_PTR_TO_PTR2)
+;; (module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page) |#
+;;   (define test-alloc-cell-to-zp-ptr-twicenfree-code
+;;     (list
+;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)
+;;      (JSR VM_COPY_PTR_TO_PTR2)
 
-     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
-     (JSR VM_COPY_PTR2_TO_PTR)
-     (JSR VM_FREE_CELL_IN_ZP_PTR)))
+;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)
+;;      (JSR VM_COPY_PTR2_TO_PTR)
+;;      (JSR VM_FREE_CELL_IN_ZP_PTR)))
 
-  (define test-alloc-cell-to-zp-ptr-twicenfree-state-after
-    (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfree-code))
+;;   (define test-alloc-cell-to-zp-ptr-twicenfree-state-after
+;;     (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfree-code))
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcecb #xcecc )
-                (list #x02 #xcc)
-                "free cell list has cc02 now as head of the list")
+;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcecb #xcecc )
+;;                 (list #x02 #xcc)
+;;                 "free cell list has cc02 now as head of the list")
 
-  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcc)
-                (list "page-type:      cell page"
-                      "previous page:  $00"
-                      "slots used:     2"
-                      "next free slot: $0a")
-                "page has still 2 slots in use (even though $cc02 was freed)")
+;;   (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcc)
+;;                 (list "page-type:      cell page"
+;;                       "previous page:  $00"
+;;                       "slots used:     2"
+;;                       "next free slot: $0a")
+;;                 "page has still 2 slots in use (even though $cc02 was freed)")
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcc02 #xcc03 )
-                (list #x00 #x00)
-                "since cc02 is now part of the free cell list, it points to the next free cell which is $0000 (none)"))
+;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcc02 #xcc03 )
+;;                 (list #x00 #x00)
+;;                 "since cc02 is now part of the free cell list, it points to the next free cell which is $0000 (none)"))
 
-(module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page, then allocate again) |#
-  (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-code
-    (list
-     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
-     (JSR VM_COPY_PTR_TO_PTR2)
+;; (module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page, then allocate again) |#
+;;   (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-code
+;;     (list
+;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)
+;;      (JSR VM_COPY_PTR_TO_PTR2)
 
-     (JSR VM_ALLOC_CELL_TO_ZP_PTR)
-     (JSR VM_COPY_PTR2_TO_PTR)
-     (JSR VM_FREE_CELL_IN_ZP_PTR)
+;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)
+;;      (JSR VM_COPY_PTR2_TO_PTR)
+;;      (JSR VM_FREE_CELL_IN_ZP_PTR)
 
-     (JSR VM_ALLOC_CELL_TO_ZP_PTR)))
+;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)))
 
-  (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after
-    (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfreenalloc-code))
+;;   (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after
+;;     (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfreenalloc-code))
 
-  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after #xcc)
-                (list "page-type:      cell page"
-                      "previous page:  $00"
-                      "slots used:     2"
-                      "next free slot: $0a"))
+;;   (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after #xcc)
+;;                 (list "page-type:      cell page"
+;;                       "previous page:  $00"
+;;                       "slots used:     2"
+;;                       "next free slot: $0a"))
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after #xcecb #xcecb)
-                (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
-                "free cell list is initial again"))
+;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after #xcecb #xcecb)
+;;                 (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
+;;                 "free cell list is initial again"))
 
 ;; input:  none
 ;; output: zp_ptr = free cell-pair
@@ -3086,94 +3024,94 @@
 ;; if no free tree available, find page with free cells (VM_FREE_CELL_PAIR_PAGE)
 ;; if no free cell page is available, allocate a new page and used the first free slot there
 ;; NOTE: the cell-pair is not initialized (cell1 and/or cell2 may contain old data that needs to be overwritten!)
-(define VM_ALLOC_CELL_PAIR_TO_ZP_PTR
-  (list
-   (label VM_ALLOC_CELL_PAIR_TO_RT) ;; ZP_RT and ZP_PTR are identical thus this alias is ok
-   (label VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; get highbyte (page) from ptr to cell-pair
-          (BNE REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)   ;; if != 0, cell-pair can be reused
-          ;; no cell-pair to reuse available => need to allocate a new one
+;; (define VM_ALLOC_CELL_PAIR_TO_ZP_PTR
+;;   (list
+;;    (label VM_ALLOC_CELL_PAIR_TO_RT) ;; ZP_RT and ZP_PTR are identical thus this alias is ok
+;;    (label VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; get highbyte (page) from ptr to cell-pair
+;;           (BNE REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)   ;; if != 0, cell-pair can be reused
+;;           ;; no cell-pair to reuse available => need to allocate a new one
 
-          ;; get a cell-pair on the given page (or allocate a new page)
-          (LDA VM_FREE_CELL_PAIR_PAGE)        ;; get the page that has cell-pairs available (can be 0)
-          (BEQ ALLOCATE_NEW_PAGE__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          (JMP VM_ALLOC_CELL_PAIR_ON_PAGE)                        ;; allocate a new cell on that page
-   (label ALLOCATE_NEW_PAGE__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          (JMP ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE) ;; allocate new page and then a new cell on that page
+;;           ;; get a cell-pair on the given page (or allocate a new page)
+;;           (LDA VM_FREE_CELL_PAIR_PAGE)        ;; get the page that has cell-pairs available (can be 0)
+;;           (BEQ ALLOCATE_NEW_PAGE__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           (JMP VM_ALLOC_CELL_PAIR_ON_PAGE)                        ;; allocate a new cell on that page
+;;    (label ALLOCATE_NEW_PAGE__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           (JMP ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE) ;; allocate new page and then a new cell on that page
 
-   (label REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          ;; put root of free tree into zp_ptr (and copy in TEMP_PTR of this function)
-          (STA ZP_PTR+1)
-          (STA TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR+1)
-          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
-          (STA ZP_PTR)
-          (STA TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;    (label REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           ;; put root of free tree into zp_ptr (and copy in TEMP_PTR of this function)
+;;           (STA ZP_PTR+1)
+;;           (STA TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR+1)
+;;           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+;;           (STA ZP_PTR)
+;;           (STA TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
 
-          ;; set new tree root for free tree to original cell0
-          (LDY !$00)
-          (LDA (ZP_PTR),y)
-          (AND !$03)
-          (BEQ CELL0_IS_ATOMIC__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           ;; set new tree root for free tree to original cell0
+;;           (LDY !$00)
+;;           (LDA (ZP_PTR),y)
+;;           (AND !$03)
+;;           (BEQ CELL0_IS_ATOMIC__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
 
-          ;; cell0 is a cell-ptr or cell-pair-ptr
-          (LSR)
-          (BCS CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           ;; cell0 is a cell-ptr or cell-pair-ptr
+;;           (LSR)
+;;           (BCS CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
 
-          ;; cell0 is a cell-pair-ptr
-          (LDA (ZP_PTR),y)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
-          (INY)
-          (LDA (ZP_PTR),y)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
-          (BNE CHECK_CELL1__VM_ALLOC_CELL_PAIR_TO_ZP_PTR) ;; since must be !=0, it cannot be on page 0 always branch!
+;;           ;; cell0 is a cell-pair-ptr
+;;           (LDA (ZP_PTR),y)
+;;           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+;;           (INY)
+;;           (LDA (ZP_PTR),y)
+;;           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+;;           (BNE CHECK_CELL1__VM_ALLOC_CELL_PAIR_TO_ZP_PTR) ;; since must be !=0, it cannot be on page 0 always branch!
 
-   (label CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          ;; cell0 is a cell-ptr => decrement cell0
-          (JSR WRITE_CELLy_INTO_ZP_PTR_AND_REFCOUNT_DECR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          (LDA !$00)
-          ;; continue as if cell0 was atomic, since cell-ptr was handled already
+;;    (label CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           ;; cell0 is a cell-ptr => decrement cell0
+;;           (JSR WRITE_CELLy_INTO_ZP_PTR_AND_REFCOUNT_DECR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           (LDA !$00)
+;;           ;; continue as if cell0 was atomic, since cell-ptr was handled already
 
-   (label CELL0_IS_ATOMIC__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          ;; a is zero (otherwise would not have branched here)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+;;    (label CELL0_IS_ATOMIC__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           ;; a is zero (otherwise would not have branched here)
+;;           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+;;           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
 
-   (label CHECK_CELL1__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          ;; check whether cell1 is atomic or ptr
-          (LDY !$02)
-          (LDA (ZP_PTR),y) ;; get low byte
-          (AND !$03)       ;; mask out all but low 2 bits
-          (BEQ CELL1_IS_ATOMIC__VM_ALLOC_CELL_PAIR_TO_ZP_PTR) ;; no need to do further deallocation
+;;    (label CHECK_CELL1__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           ;; check whether cell1 is atomic or ptr
+;;           (LDY !$02)
+;;           (LDA (ZP_PTR),y) ;; get low byte
+;;           (AND !$03)       ;; mask out all but low 2 bits
+;;           (BEQ CELL1_IS_ATOMIC__VM_ALLOC_CELL_PAIR_TO_ZP_PTR) ;; no need to do further deallocation
 
-          ;; write cell1 into zp_ptr and decrement
-          (JSR WRITE_CELLy_INTO_ZP_PTR_AND_REFCOUNT_DECR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          ;; continue as if cell1 is atomic, since it was already handled
+;;           ;; write cell1 into zp_ptr and decrement
+;;           (JSR WRITE_CELLy_INTO_ZP_PTR_AND_REFCOUNT_DECR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           ;; continue as if cell1 is atomic, since it was already handled
 
-   (label CELL1_IS_ATOMIC__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          ;; restore zp_ptr to the cell-pair to be reused
-          (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR+1)
-          (STA ZP_PTR+1)
-          (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          (STA ZP_PTR)
+;;    (label CELL1_IS_ATOMIC__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           ;; restore zp_ptr to the cell-pair to be reused
+;;           (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR+1)
+;;           (STA ZP_PTR+1)
+;;           (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           (STA ZP_PTR)
 
-          (RTS)
+;;           (RTS)
 
-   ;; subroutine that writes CELLy (00 = cell0, 02 = cell1) of zp_ptr into zp_ptr (overwriting it)
-   ;; and does a generic ref count decr, freeing (mark for freeing) handling cell-ptr and cell-pair-ptr
-   (label WRITE_CELLy_INTO_ZP_PTR_AND_REFCOUNT_DECR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          (LDA (ZP_PTR),y)
-          (PHA)
-          (INY)
-          (LDA (ZP_PTR),y)
-          (STA ZP_PTR+1)
-          (PLA)
-          (STA ZP_PTR_TAGGED) ;; tag
-          (AND !TAG_PTR_MASK)
-          (STA ZP_PTR) ;; cleared from tag, => real pointer
-          (JMP VM_REFCOUNT_DECR_ZP_PTR)
+;;    ;; subroutine that writes CELLy (00 = cell0, 02 = cell1) of zp_ptr into zp_ptr (overwriting it)
+;;    ;; and does a generic ref count decr, freeing (mark for freeing) handling cell-ptr and cell-pair-ptr
+;;    (label WRITE_CELLy_INTO_ZP_PTR_AND_REFCOUNT_DECR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           (LDA (ZP_PTR),y)
+;;           (PHA)
+;;           (INY)
+;;           (LDA (ZP_PTR),y)
+;;           (STA ZP_PTR+1)
+;;           (PLA)
+;;           (STA ZP_PTR_TAGGED) ;; tag
+;;           (AND !TAG_PTR_MASK)
+;;           (STA ZP_PTR) ;; cleared from tag, => real pointer
+;;           (JMP VM_REFCOUNT_DECR_ZP_PTR)
 
-   (label TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-          (word $0000)))
+;;    (label TEMP_PTR__VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;           (word $0000)))
 
 ;; input cell ptr is in ZP_PTR
 ;; ---
@@ -3289,171 +3227,171 @@
           (RTS)))
 
 
-(module+ test #| use case 1 allocate, free, reallocate single cell-pair |#
-  (define use-case-1-code
-    (list
-      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-      ;; set cell2 to int 0
-      (JSR VM_CELL_STACK_PUSH_INT_0)
-      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
-      ;; set cell1 to int 0
-      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)))
+;; (module+ test #| use case 1 allocate, free, reallocate single cell-pair |#
+;;   (define use-case-1-code
+;;     (list
+;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;       (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;       ;; set cell2 to int 0
+;;       (JSR VM_CELL_STACK_PUSH_INT_0_R)
+;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
+;;       ;; set cell1 to int 0
+;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)))
 
-  (define use-case-1-a-state-after
-    (run-code-in-test use-case-1-code))
+;;   (define use-case-1-a-state-after
+;;     (run-code-in-test use-case-1-code))
 
-  (check-equal? (memory-list use-case-1-a-state-after ZP_PTR (+ 1 ZP_PTR))
-                '(#x04 #xcc)
-                "zp_ptr -> $cd04 = first free cell-pair on page $cd after initialization")
-  (check-equal? (memory-list use-case-1-a-state-after #xccff #xccff)
-                '(#x00)
-                "previous page of this type is 00 (none)")
-  (check-equal? (memory-list use-case-1-a-state-after #xcc00 #xcc01)
-                '(#x41 #x01)
-                "page type b0100 0001 refcount for first cell-pair allocated = 1")
-  (check-equal? (memory-list use-case-1-a-state-after #xcc04 #xcc07)
-                '(#x00 #x00 #x00 #x00)
-                "cell1=int0 cell2=int0")
-  (check-equal? (memory-list use-case-1-a-state-after #xcfcc #xcfcc)
-                '(#x08)
-                "next free cell-pair on page $cd is at $08")
+;;   (check-equal? (memory-list use-case-1-a-state-after ZP_PTR (+ 1 ZP_PTR))
+;;                 '(#x04 #xcc)
+;;                 "zp_ptr -> $cd04 = first free cell-pair on page $cd after initialization")
+;;   (check-equal? (memory-list use-case-1-a-state-after #xccff #xccff)
+;;                 '(#x00)
+;;                 "previous page of this type is 00 (none)")
+;;   (check-equal? (memory-list use-case-1-a-state-after #xcc00 #xcc01)
+;;                 '(#x41 #x01)
+;;                 "page type b0100 0001 refcount for first cell-pair allocated = 1")
+;;   (check-equal? (memory-list use-case-1-a-state-after #xcc04 #xcc07)
+;;                 '(#x00 #x00 #x00 #x00)
+;;                 "cell1=int0 cell2=int0")
+;;   (check-equal? (memory-list use-case-1-a-state-after #xcfcc #xcfcc)
+;;                 '(#x08)
+;;                 "next free cell-pair on page $cd is at $08")
 
-  (define use-case-1-b-code
-    (append
-     use-case-1-code ;; cell was allocated and set to hold int 0 in car and cdr
-     (list
-      ;; refcount will drop to zero
-      (JSR VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR))))
+;;   (define use-case-1-b-code
+;;     (append
+;;      use-case-1-code ;; cell was allocated and set to hold int 0 in car and cdr
+;;      (list
+;;       ;; refcount will drop to zero
+;;       (JSR VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR))))
 
-  (define use-case-1-b-state-after
-    (run-code-in-test use-case-1-b-code))
+;;   (define use-case-1-b-state-after
+;;     (run-code-in-test use-case-1-b-code))
 
-  (check-equal? (vm-cell-pair-free-tree->string use-case-1-b-state-after)
-                "cell-pair $cc04 -> [ cell-int $0000 . cell-int $0000 ]")
-  (check-equal? (memory-list use-case-1-b-state-after #xcc01 #xcc01)
-                '(#x00)
-                "refcount for cell-pair freed = 0")
-  (check-equal? (memory-list use-case-1-b-state-after #xcfcc #xcfcc)
-                '(#x08)
-                "next free cell-pair on page $cd is still $08")
+;;   (check-equal? (vm-cell-pair-free-tree->string use-case-1-b-state-after)
+;;                 "cell-pair $cc04 -> [ cell-int $0000 . cell-int $0000 ]")
+;;   (check-equal? (memory-list use-case-1-b-state-after #xcc01 #xcc01)
+;;                 '(#x00)
+;;                 "refcount for cell-pair freed = 0")
+;;   (check-equal? (memory-list use-case-1-b-state-after #xcfcc #xcfcc)
+;;                 '(#x08)
+;;                 "next free cell-pair on page $cd is still $08")
 
-  (define use-case-1-c-code
-    (append
-     use-case-1-b-code ;; cell was freed and in the free tree
-     (list
-      ;; clear zp_ptr just to make sure
-      (LDA !$00)
-      (STA ZP_PTR)
-      (STA ZP_PTR+1)
+;;   (define use-case-1-c-code
+;;     (append
+;;      use-case-1-b-code ;; cell was freed and in the free tree
+;;      (list
+;;       ;; clear zp_ptr just to make sure
+;;       (LDA !$00)
+;;       (STA ZP_PTR)
+;;       (STA ZP_PTR+1)
 
-      ;; allocate a new cell (should reuse pair in free-tree)
-      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR))))
+;;       ;; allocate a new cell (should reuse pair in free-tree)
+;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR))))
 
-  (define use-case-1-c-state-after
-    (run-code-in-test use-case-1-c-code))
+;;   (define use-case-1-c-state-after
+;;     (run-code-in-test use-case-1-c-code))
 
-  (check-equal? (memory-list use-case-1-c-state-after ZP_PTR (+ 1 ZP_PTR))
-                '(#x04 #xcc )
-                "allocated cell-pair is reused cell-pair of free tree")
-  (check-equal? (vm-cell-pair-free-tree->string use-case-1-c-state-after)
-                "root is initial")
-  (check-equal? (memory-list use-case-1-c-state-after #xcc01 #xcc01)
-                '(#x00)
-                "refcount for (reused) cell-pair = 1")
-  (check-equal? (memory-list use-case-1-c-state-after #xcfcc #xcfcc)
-                '(#x08)
-                "next free cell-pair on page $cd is still $08"))
+;;   (check-equal? (memory-list use-case-1-c-state-after ZP_PTR (+ 1 ZP_PTR))
+;;                 '(#x04 #xcc )
+;;                 "allocated cell-pair is reused cell-pair of free tree")
+;;   (check-equal? (vm-cell-pair-free-tree->string use-case-1-c-state-after)
+;;                 "root is initial")
+;;   (check-equal? (memory-list use-case-1-c-state-after #xcc01 #xcc01)
+;;                 '(#x00)
+;;                 "refcount for (reused) cell-pair = 1")
+;;   (check-equal? (memory-list use-case-1-c-state-after #xcfcc #xcfcc)
+;;                 '(#x08)
+;;                 "next free cell-pair on page $cd is still $08"))
 
-(module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
-  (define use-case-2-a-code
-    (list
-     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                               ;; zp_ptr = freshly allocated cell (cd04)
-     (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)                       ;; ref(zp_ptr) ++ (=1)
-     ;; set cdr to nil
-     (JSR VM_CELL_STACK_PUSH_NIL)                           ;; cell-stack <- push nil
-     (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := nil
-     ;; set car to int 0
-     (JSR VM_CELL_STACK_PUSH_INT_0)                         ;; cell-stack <- push int0
-     (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := int0
+;; (module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
+;;   (define use-case-2-a-code
+;;     (list
+;;      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                               ;; zp_ptr = freshly allocated cell (cd04)
+;;      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)                       ;; ref(zp_ptr) ++ (=1)
+;;      ;; set cdr to nil
+;;      (JSR VM_CELL_STACK_PUSH_NIL)                           ;; cell-stack <- push nil
+;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := nil
+;;      ;; set car to int 0
+;;      (JSR VM_CELL_STACK_PUSH_INT_0)                         ;; cell-stack <- push int0
+;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := int0
 
-     (JSR VM_COPY_PTR_TO_PTR2)                              ;; zp_ptr2 := zp_ptr
+;;      (JSR VM_COPY_PTR_TO_PTR2)                              ;; zp_ptr2 := zp_ptr
 
-     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                               ;; zp_ptr = freshly allocated cell (cd08)
-     (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)                       ;; ref(zp_ptr) ++ (=1)
-     ;; set cdr to zp_ptr2->
-     (JSR VM_CELL_STACK_PUSH_ZP_PTR2)                       ;; cell-stack <- push zp_ptr2
-     (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := tos (which is zp_ptr2)
-     (JSR VM_CELL_STACK_POP__NO_GC)                         ;; just pop (no check, no gc)
-     ;; set car to int0
-     (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := tos (which is int0 again
+;;      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                               ;; zp_ptr = freshly allocated cell (cd08)
+;;      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)                       ;; ref(zp_ptr) ++ (=1)
+;;      ;; set cdr to zp_ptr2->
+;;      (JSR VM_CELL_STACK_PUSH_ZP_PTR2)                       ;; cell-stack <- push zp_ptr2
+;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := tos (which is zp_ptr2)
+;;      (JSR VM_CELL_STACK_POP__NO_GC)                         ;; just pop (no check, no gc)
+;;      ;; set car to int0
+;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := tos (which is int0 again
 
-     ;; now:
-     ;;   zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
-     ;; notation:
-     ;;   [<mem-location>|<ref-count>]
-     ;;   (<car-cell> . <cdr-cell>)
-     ;;   intX, nil :: atomic value cells
-     ;;   -> :: cell-ptr
-     ))
+;;      ;; now:
+;;      ;;   zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
+;;      ;; notation:
+;;      ;;   [<mem-location>|<ref-count>]
+;;      ;;   (<car-cell> . <cdr-cell>)
+;;      ;;   intX, nil :: atomic value cells
+;;      ;;   -> :: cell-ptr
+;;      ))
 
-  (define use-case-2-a-state-after
-    (run-code-in-test use-case-2-a-code))
+;;   (define use-case-2-a-state-after
+;;     (run-code-in-test use-case-2-a-code))
 
-  (check-equal? (memory-list use-case-2-a-state-after ZP_PTR (+ 3 ZP_PTR))
-                '(#x08 #xcc #x04 #xcc)
-                "case 2a: zp_ptr -> $cc08, zp_ptr2 -> $cc04 = first two free cell-pairs on page $cc after initialization")
-  (check-equal? (memory-list use-case-2-a-state-after #xcc01 #xcc0b)
-                '(#x01 #x01 #x00      ;; refcounts
-                  #x00 #x00 #x02 #x00 ;; tail cell
-                  #x00 #x00 #x06 #xcc ;; head cell
-                  )
-                "case 2a: cell-pairs contain (int0 . -> next cell), (int 0 . nil)")
+;;   (check-equal? (memory-list use-case-2-a-state-after ZP_PTR (+ 3 ZP_PTR))
+;;                 '(#x08 #xcc #x04 #xcc)
+;;                 "case 2a: zp_ptr -> $cc08, zp_ptr2 -> $cc04 = first two free cell-pairs on page $cc after initialization")
+;;   (check-equal? (memory-list use-case-2-a-state-after #xcc01 #xcc0b)
+;;                 '(#x01 #x01 #x00      ;; refcounts
+;;                   #x00 #x00 #x02 #x00 ;; tail cell
+;;                   #x00 #x00 #x06 #xcc ;; head cell
+;;                   )
+;;                 "case 2a: cell-pairs contain (int0 . -> next cell), (int 0 . nil)")
 
-  (define use-case-2-b-code
-    (append use-case-2-a-code ;; zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
-            (list
-             (JSR VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
-             ;; now:
-             ;;   free_tree -> [cc08|0] (int0 . ->[cc04|1] (int0 . nil))
-             )))
+;;   (define use-case-2-b-code
+;;     (append use-case-2-a-code ;; zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
+;;             (list
+;;              (JSR VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR)
+;;              ;; now:
+;;              ;;   free_tree -> [cc08|0] (int0 . ->[cc04|1] (int0 . nil))
+;;              )))
 
-  (define use-case-2-b-state-after
-    (run-code-in-test use-case-2-b-code))
+;;   (define use-case-2-b-state-after
+;;     (run-code-in-test use-case-2-b-code))
 
-  (check-equal? (memory-list use-case-2-b-state-after #xcc01 #xcc0b)
-                '(#x01 #x00 #x00      ;; refcounts
-                  #x00 #x00 #x02 #x00 ;; cc04 (old tail of list)
-                  #x00 #x00 #x06 #xcc ;; cc08 (old head of list)
-                  )
-                "case 2b: refcount cd08 = 0 (head), cc04 unchanged (tail)")
-  (check-equal? (vm-cell-pair-free-tree->string use-case-2-b-state-after)
-                "cell-pair $cc08 -> [ cell-int $0000 . cell-pair-ptr $cc04 ]")
+;;   (check-equal? (memory-list use-case-2-b-state-after #xcc01 #xcc0b)
+;;                 '(#x01 #x00 #x00      ;; refcounts
+;;                   #x00 #x00 #x02 #x00 ;; cc04 (old tail of list)
+;;                   #x00 #x00 #x06 #xcc ;; cc08 (old head of list)
+;;                   )
+;;                 "case 2b: refcount cd08 = 0 (head), cc04 unchanged (tail)")
+;;   (check-equal? (vm-cell-pair-free-tree->string use-case-2-b-state-after)
+;;                 "cell-pair $cc08 -> [ cell-int $0000 . cell-pair-ptr $cc04 ]")
 
-  (define use-case-2-c-code
-    (append use-case-2-b-code ;; free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
-            (list (LDA !$FF) ;; marker for debug, remove when done
-                  (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-                  (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-                  ;; now:
-                  ;;   zp_ptr = [cd08|1] not initialized
-                  ;;   free_tree -> [cd04|0] (int0 . nil)
-                  )))
+;;   (define use-case-2-c-code
+;;     (append use-case-2-b-code ;; free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
+;;             (list (LDA !$FF) ;; marker for debug, remove when done
+;;                   (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+;;                   (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;                   ;; now:
+;;                   ;;   zp_ptr = [cd08|1] not initialized
+;;                   ;;   free_tree -> [cd04|0] (int0 . nil)
+;;                   )))
 
-  (define use-case-2-c-state-after
-    (run-code-in-test use-case-2-c-code))
+;;   (define use-case-2-c-state-after
+;;     (run-code-in-test use-case-2-c-code))
 
-  (check-equal? (memory-list use-case-2-c-state-after ZP_PTR (+ 1 ZP_PTR))
-                '(#x08 #xcc)
-                "case 2c: zp_ptr -> $cc08, reallocated")
-  (check-equal? (memory-list use-case-2-c-state-after #xcc01 #xcc0b)
-                '(#x00 #x01 #x00      ;; refcounts
-                  #x00 #x00 #x02 #x00 ;; tail cell
-                  #x00 #x00 #x06 #xcc ;; head cell
-                  )
-                "case 2c: refcount cc08 = 1 reallocated, refcount cc04 = 0 (original tail, now in the free tree)")
-  (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
-                "cell-pair $cc04 -> [ cell-int $0000 . cell-pair-ptr NIL ]"))
+;;   (check-equal? (memory-list use-case-2-c-state-after ZP_PTR (+ 1 ZP_PTR))
+;;                 '(#x08 #xcc)
+;;                 "case 2c: zp_ptr -> $cc08, reallocated")
+;;   (check-equal? (memory-list use-case-2-c-state-after #xcc01 #xcc0b)
+;;                 '(#x00 #x01 #x00      ;; refcounts
+;;                   #x00 #x00 #x02 #x00 ;; tail cell
+;;                   #x00 #x00 #x06 #xcc ;; head cell
+;;                   )
+;;                 "case 2c: refcount cc08 = 1 reallocated, refcount cc04 = 0 (original tail, now in the free tree)")
+;;   (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
+;;                 "cell-pair $cc04 -> [ cell-int $0000 . cell-pair-ptr NIL ]"))
 
 ;; input:  A = size (needs to include 32 bytes cell-stack + 8 byte (pc, old params, old locals, old cell stack base ptr) + 2 * #locals
 ;;         ZP_CELL_STACK_BASE_PTR
@@ -3552,50 +3490,50 @@
 ;;         ZP_PARAMS_PTR
 ;; output: parameter @ Y (0) is overwritten
 ;; TODO: check to gc overwritten
-(define VM_CELL_STACK_WRITE_TOS_TO_PARAMy
-  (list
-   (label VM_CELL_STACK_WRITE_TOS_TO_PARAM_0)
-          (LDY !$00)
+;; (define VM_CELL_STACK_WRITE_TOS_TO_PARAMy
+;;   (list
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_PARAM_0)
+;;           (LDY !$00)
 
-   ;; ----------------------------------------
-   (label VM_CELL_STACK_WRITE_TOS_TO_PARAMy)
-          (STY ZP_TEMP)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (TAX)
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (LDY ZP_TEMP)
-          (STA (ZP_PARAMS_PTR),y)
-          (TXA)
-          (INY)
-          (STA (ZP_PARAMS_PTR),y)
-          (RTS)))
+;;    ;; ----------------------------------------
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_PARAMy)
+;;           (STY ZP_TEMP)
+;;           (LDY ZP_CELL_STACK_TOS)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
+;;           (TAX)
+;;           (DEY)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
+;;           (LDY ZP_TEMP)
+;;           (STA (ZP_PARAMS_PTR),y)
+;;           (TXA)
+;;           (INY)
+;;           (STA (ZP_PARAMS_PTR),y)
+;;           (RTS)))
 
 ;; input:  ZP_CELL_STACK_TOS
 ;;         ZP_CELL_STACK_BASE_PTR
 ;;         ZP_LOCALS_PTR
 ;; output: local @ Y (0) is overwritten
 ;; TODO: check to gc overwritten
-(define VM_CELL_STACK_WRITE_TOS_TO_LOCALy
-  (list
-   (label VM_CELL_STACK_WRITE_TOS_TO_LOCAL_0)
-          (LDY !$00)
+;; (define VM_CELL_STACK_WRITE_TOS_TO_LOCALy
+;;   (list
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_LOCAL_0)
+;;           (LDY !$00)
 
-   ;; ----------------------------------------
-   (label VM_CELL_STACK_WRITE_TOS_TO_LOCALy)
-          (STY ZP_TEMP)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (TAX)
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (LDY ZP_TEMP)
-          (STA (ZP_LOCALS_PTR),y)
-          (TXA)
-          (INY)
-          (STA (ZP_LOCALS_PTR),y)
-          (RTS)))
+;;    ;; ----------------------------------------
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_LOCALy)
+;;           (STY ZP_TEMP)
+;;           (LDY ZP_CELL_STACK_TOS)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
+;;           (TAX)
+;;           (DEY)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
+;;           (LDY ZP_TEMP)
+;;           (STA (ZP_LOCALS_PTR),y)
+;;           (TXA)
+;;           (INY)
+;;           (STA (ZP_LOCALS_PTR),y)
+;;           (RTS)))
 
 
 ;; input:   A = number of parameters on the stack to be used in this call frame
@@ -3655,8 +3593,8 @@
 
           (LDA !$ff)
           (STA ZP_CELL_STACK_TOS) ;; set this one to 0
-          (LDA !$01)
-          (STA ZP_RT_TAGGED_LB) ;; mark RT as empty
+          (LDA !$00)
+          (STA ZP_RT) ;; mark RT as empty
 
           (RTS)))
 
@@ -3878,457 +3816,457 @@
 ;; input : X = profile offset (0, 2, 4 ...)
 ;; uses  : ZP_PTR2
 ;; output:
-(define VM_ALLOC_PAGE_FOR_M1_SLOTS
-  (list
-   (label VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (STX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)      ;; save profile index in local var
+;; (define VM_ALLOC_PAGE_FOR_M1_SLOTS
+;;   (list
+;;    (label VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           (STX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)      ;; save profile index in local var
 
-          (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-          (STA ZP_PTR2+1)
-          (LDA !$00)
-          (STA ZP_PTR2)
+;;           (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+;;           (STA ZP_PTR2+1)
+;;           (LDA !$00)
+;;           (STA ZP_PTR2)
 
-          (LDY !$00)
-          (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
-          (TXA)
-          (ORA !$10)
-          (STA (ZP_PTR2),y) ;; set page type in byte 0 to b0001 <profile>
+;;           (LDY !$00)
+;;           (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
+;;           (TXA)
+;;           (ORA !$10)
+;;           (STA (ZP_PTR2),y) ;; set page type in byte 0 to b0001 <profile>
 
-          (LDA VM_FREE_M1_PAGE_P0,x) ;; current free page
-          (INY)
-          (STA (ZP_PTR2),y)          ;; store previous page
+;;           (LDA VM_FREE_M1_PAGE_P0,x) ;; current free page
+;;           (INY)
+;;           (STA (ZP_PTR2),y)          ;; store previous page
 
-          (LDA ZP_PTR2+1)
-          (STA VM_FREE_M1_PAGE_P0,x) ;; set page with free slots to this allocated page
+;;           (LDA ZP_PTR2+1)
+;;           (STA VM_FREE_M1_PAGE_P0,x) ;; set page with free slots to this allocated page
 
-          (LDA !$00)
-          (INY)
-          (STA (ZP_PTR2),y)          ;; store number of slots used
+;;           (LDA !$00)
+;;           (INY)
+;;           (STA (ZP_PTR2),y)          ;; store number of slots used
 
-          (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; y = refcount field for first slot
-          (INY)
-          (TYA)
-          (LDX ZP_PTR2+1)
-          (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)                    ;; set first free slot, here x = page
-          (DEY)
-          (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
-          (LDA !$00)
+;;           (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; y = refcount field for first slot
+;;           (INY)
+;;           (TYA)
+;;           (LDX ZP_PTR2+1)
+;;           (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)                    ;; set first free slot, here x = page
+;;           (DEY)
+;;           (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
+;;           (LDA !$00)
 
-          ;; loop to initialize refcounts of each slot to 0-
-          (label REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (STA (ZP_PTR2),y) ;; refcount = 0
-          (TYA)
-          (CLC)
-          (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; calc next refcount field offset
-          (BCS END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (TAY)
-          (ADC !$01)
-          (LDA !$00)
-          (BCC REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; still on this page?
+;;           ;; loop to initialize refcounts of each slot to 0-
+;;           (label REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           (STA (ZP_PTR2),y) ;; refcount = 0
+;;           (TYA)
+;;           (CLC)
+;;           (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; calc next refcount field offset
+;;           (BCS END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           (TAY)
+;;           (ADC !$01)
+;;           (LDA !$00)
+;;           (BCC REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; still on this page?
 
-   (label END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          ;; loop to write free slot list
-          (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
-          (INY)  ;; first slot  (refcount field offset + 1)
-          (TYA)
-   (label WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (CLC)
-          (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
-          (BCS ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; no longer on the same page => almost done
-          (STA (ZP_PTR2),y) ;; offset of next free cell == y for next write
-          (TAY)
-          (BCC WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; carry must be clear => always jump
+;;    (label END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           ;; loop to write free slot list
+;;           (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
+;;           (INY)  ;; first slot  (refcount field offset + 1)
+;;           (TYA)
+;;    (label WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           (CLC)
+;;           (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
+;;           (BCS ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; no longer on the same page => almost done
+;;           (STA (ZP_PTR2),y) ;; offset of next free cell == y for next write
+;;           (TAY)
+;;           (BCC WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; carry must be clear => always jump
 
-   (label ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (LDA !$00)
-          (STA (ZP_PTR2),y) ;; last offset to next free slot is 00 = no next free slot!
+;;    (label ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           (LDA !$00)
+;;           (STA (ZP_PTR2),y) ;; last offset to next free slot is 00 = no next free slot!
 
-          (RTS)
+;;           (RTS)
 
-   (label SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (byte $00) ;; local var
+;;    (label SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           (byte $00) ;; local var
 
-   (label FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), contains 14 slots
-          (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), contains 8 slots
-          (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), contains 5 slots
-          (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), contains 3 slots
+;;    (label FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), contains 14 slots
+;;           (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), contains 8 slots
+;;           (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), contains 5 slots
+;;           (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), contains 3 slots
 
-   (label INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (byte $12) ;; add 12 to get to next slot, slot size $11 (17), contains 14 slots
-          (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), contains 8 slots
-          (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), contains 5 slots
-          (byte $54) ;; add 54 to get to next slot, slot-size $53 (83), contains 3 slots
+;;    (label INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           (byte $12) ;; add 12 to get to next slot, slot size $11 (17), contains 14 slots
+;;           (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), contains 8 slots
+;;           (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), contains 5 slots
+;;           (byte $54) ;; add 54 to get to next slot, slot-size $53 (83), contains 3 slots
 
-          ))
+;;           ))
 
-(module+ test #| vm_alloc_m1_page |#
-  (define test-alloc-m1-01-code
-    (list
-     ;; fill page with $ff
-            (LDA !$FF)
-            (LDX !$00)
-     (label LOOP__TEST_ALLOC_M1_01_CODE)
-            (DEX)
-            (STA $cc00,x)
-            (BNE LOOP__TEST_ALLOC_M1_01_CODE)
+;; (module+ test #| vm_alloc_m1_page |#
+;;   (define test-alloc-m1-01-code
+;;     (list
+;;      ;; fill page with $ff
+;;             (LDA !$FF)
+;;             (LDX !$00)
+;;      (label LOOP__TEST_ALLOC_M1_01_CODE)
+;;             (DEX)
+;;             (STA $cc00,x)
+;;             (BNE LOOP__TEST_ALLOC_M1_01_CODE)
 
-            ;; now allocate the page
-            (LDX !$00) ;; do it explicitly
-            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+;;             ;; now allocate the page
+;;             (LDX !$00) ;; do it explicitly
+;;             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
-  (define test-alloc-m1-01-state-after
-    (run-code-in-test test-alloc-m1-01-code))
+;;   (define test-alloc-m1-01-state-after
+;;     (run-code-in-test test-alloc-m1-01-code))
 
-  (check-equal? (vm-page->strings test-alloc-m1-01-state-after #xcc)
-                '("page-type:      m1 page p0"
-                  "previous page:  $00"
-                  "slots used:     0"
-                  "next free slot: $04"))
-  (check-equal? (memory-list test-alloc-m1-01-state-after #xcc03 #xcc04)
-                (list #x00 #x16)
-                "slot0: refcount 0, next free slot at offset $16")
-  (check-equal? (memory-list test-alloc-m1-01-state-after #xcc15 #xcc16)
-                (list #x00 #x28)
-                "slot1: refcount 0, next free slot at offset $28")
-  (check-equal? (memory-list test-alloc-m1-01-state-after #xcc27 #xcc28)
-                (list #x00 #x3a)
-                "slot2: refcount 0, next free slot at offset $28")
-  (check-equal? (memory-list test-alloc-m1-01-state-after #xcced #xccee)
-                (list #x00 #x00)
-                "slot13: refcount 0, next free slot at offset $00 = no next")
+;;   (check-equal? (vm-page->strings test-alloc-m1-01-state-after #xcc)
+;;                 '("page-type:      m1 page p0"
+;;                   "previous page:  $00"
+;;                   "slots used:     0"
+;;                   "next free slot: $04"))
+;;   (check-equal? (memory-list test-alloc-m1-01-state-after #xcc03 #xcc04)
+;;                 (list #x00 #x16)
+;;                 "slot0: refcount 0, next free slot at offset $16")
+;;   (check-equal? (memory-list test-alloc-m1-01-state-after #xcc15 #xcc16)
+;;                 (list #x00 #x28)
+;;                 "slot1: refcount 0, next free slot at offset $28")
+;;   (check-equal? (memory-list test-alloc-m1-01-state-after #xcc27 #xcc28)
+;;                 (list #x00 #x3a)
+;;                 "slot2: refcount 0, next free slot at offset $28")
+;;   (check-equal? (memory-list test-alloc-m1-01-state-after #xcced #xccee)
+;;                 (list #x00 #x00)
+;;                 "slot13: refcount 0, next free slot at offset $00 = no next")
 
-  (define test-alloc-m1-02-code
-    (list
-     ;; fill page with $ff
-            (LDA !$FF)
-            (LDX !$00)
-     (label LOOP__TEST_ALLOC_M1_02_CODE)
-            (DEX)
-            (STA $cc00,x)
-            (BNE LOOP__TEST_ALLOC_M1_02_CODE)
+;;   (define test-alloc-m1-02-code
+;;     (list
+;;      ;; fill page with $ff
+;;             (LDA !$FF)
+;;             (LDX !$00)
+;;      (label LOOP__TEST_ALLOC_M1_02_CODE)
+;;             (DEX)
+;;             (STA $cc00,x)
+;;             (BNE LOOP__TEST_ALLOC_M1_02_CODE)
 
-            ;; now allocate the page
-            (LDX !$01) ;; do it explicitly
-            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+;;             ;; now allocate the page
+;;             (LDX !$01) ;; do it explicitly
+;;             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
-  (define test-alloc-m1-02-state-after
-    (run-code-in-test test-alloc-m1-02-code))
+;;   (define test-alloc-m1-02-state-after
+;;     (run-code-in-test test-alloc-m1-02-code))
 
-  (check-equal? (vm-page->strings test-alloc-m1-02-state-after #xcc)
-                '("page-type:      m1 page p1"
-                  "previous page:  $00"
-                  "slots used:     0"
-                  "next free slot: $10"))
-  (check-equal? (memory-list test-alloc-m1-02-state-after #xcc0f #xcc10)
-                (list #x00 #x2e)
-                "slot0: refcount 0, next free slot at offset $2c")
-  (check-equal? (memory-list test-alloc-m1-02-state-after #xcc2d #xcc2e)
-                (list #x00 #x4c)
-                "slot1: refcount 0, next free slot at offset $4a")
-  (check-equal? (memory-list test-alloc-m1-02-state-after #xcc4b #xcc4c)
-                (list #x00 #x6a)
-                "slot2: refcount 0, next free slot at offset $68")
-  (check-equal? (memory-list test-alloc-m1-02-state-after #xcce1 #xcce2)
-                (list #x00 #x00)
-                "slot7: refcount 0, next free slot at offset $00 = no next")
+;;   (check-equal? (vm-page->strings test-alloc-m1-02-state-after #xcc)
+;;                 '("page-type:      m1 page p1"
+;;                   "previous page:  $00"
+;;                   "slots used:     0"
+;;                   "next free slot: $10"))
+;;   (check-equal? (memory-list test-alloc-m1-02-state-after #xcc0f #xcc10)
+;;                 (list #x00 #x2e)
+;;                 "slot0: refcount 0, next free slot at offset $2c")
+;;   (check-equal? (memory-list test-alloc-m1-02-state-after #xcc2d #xcc2e)
+;;                 (list #x00 #x4c)
+;;                 "slot1: refcount 0, next free slot at offset $4a")
+;;   (check-equal? (memory-list test-alloc-m1-02-state-after #xcc4b #xcc4c)
+;;                 (list #x00 #x6a)
+;;                 "slot2: refcount 0, next free slot at offset $68")
+;;   (check-equal? (memory-list test-alloc-m1-02-state-after #xcce1 #xcce2)
+;;                 (list #x00 #x00)
+;;                 "slot7: refcount 0, next free slot at offset $00 = no next")
 
-  (define test-alloc-m1-03-code
-    (list
-     ;; fill page with $ff
-            (LDA !$FF)
-            (LDX !$00)
-     (label LOOP__TEST_ALLOC_M1_03_CODE)
-            (DEX)
-            (STA $cc00,x)
-            (BNE LOOP__TEST_ALLOC_M1_03_CODE)
+;;   (define test-alloc-m1-03-code
+;;     (list
+;;      ;; fill page with $ff
+;;             (LDA !$FF)
+;;             (LDX !$00)
+;;      (label LOOP__TEST_ALLOC_M1_03_CODE)
+;;             (DEX)
+;;             (STA $cc00,x)
+;;             (BNE LOOP__TEST_ALLOC_M1_03_CODE)
 
-            ;; now allocate the page
-            (LDX !$02) ;; do it explicitly
-            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+;;             ;; now allocate the page
+;;             (LDX !$02) ;; do it explicitly
+;;             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
-  (define test-alloc-m1-03-state-after
-    (run-code-in-test test-alloc-m1-03-code))
+;;   (define test-alloc-m1-03-state-after
+;;     (run-code-in-test test-alloc-m1-03-code))
 
-  (check-equal? (vm-page->strings test-alloc-m1-03-state-after #xcc)
-                '("page-type:      m1 page p2"
-                  "previous page:  $00"
-                  "slots used:     0"
-                  "next free slot: $06"))
-  (check-equal? (memory-list test-alloc-m1-03-state-after #xcc05 #xcc06)
-                (list #x00 #x38)
-                "slot0: refcount 0, next free slot at offset $38")
-  (check-equal? (memory-list test-alloc-m1-03-state-after #xcc37 #xcc38)
-                (list #x00 #x6a)
-                "slot1: refcount 0, next free slot at offset $6a")
-  (check-equal? (memory-list test-alloc-m1-03-state-after #xcc69 #xcc6a)
-                (list #x00 #x9c)
-                "slot2: refcount 0, next free slot at offset $9c")
-  (check-equal? (memory-list test-alloc-m1-03-state-after #xcccd #xccce)
-                (list #x00 #x00)
-                "slot4: refcount 0, next free slot at offset $00 = no next")
+;;   (check-equal? (vm-page->strings test-alloc-m1-03-state-after #xcc)
+;;                 '("page-type:      m1 page p2"
+;;                   "previous page:  $00"
+;;                   "slots used:     0"
+;;                   "next free slot: $06"))
+;;   (check-equal? (memory-list test-alloc-m1-03-state-after #xcc05 #xcc06)
+;;                 (list #x00 #x38)
+;;                 "slot0: refcount 0, next free slot at offset $38")
+;;   (check-equal? (memory-list test-alloc-m1-03-state-after #xcc37 #xcc38)
+;;                 (list #x00 #x6a)
+;;                 "slot1: refcount 0, next free slot at offset $6a")
+;;   (check-equal? (memory-list test-alloc-m1-03-state-after #xcc69 #xcc6a)
+;;                 (list #x00 #x9c)
+;;                 "slot2: refcount 0, next free slot at offset $9c")
+;;   (check-equal? (memory-list test-alloc-m1-03-state-after #xcccd #xccce)
+;;                 (list #x00 #x00)
+;;                 "slot4: refcount 0, next free slot at offset $00 = no next")
 
-  (define test-alloc-m1-04-code
-    (list
-     ;; fill page with $ff
-            (LDA !$FF)
-            (LDX !$00)
-     (label LOOP__TEST_ALLOC_M1_04_CODE)
-            (DEX)
-            (STA $cc00,x)
-            (BNE LOOP__TEST_ALLOC_M1_04_CODE)
+;;   (define test-alloc-m1-04-code
+;;     (list
+;;      ;; fill page with $ff
+;;             (LDA !$FF)
+;;             (LDX !$00)
+;;      (label LOOP__TEST_ALLOC_M1_04_CODE)
+;;             (DEX)
+;;             (STA $cc00,x)
+;;             (BNE LOOP__TEST_ALLOC_M1_04_CODE)
 
-            ;; now allocate the page
-            (LDX !$03) ;; do it explicitly
-            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+;;             ;; now allocate the page
+;;             (LDX !$03) ;; do it explicitly
+;;             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
-  (define test-alloc-m1-04-state-after
-    (run-code-in-test test-alloc-m1-04-code))
+;;   (define test-alloc-m1-04-state-after
+;;     (run-code-in-test test-alloc-m1-04-code))
 
-  (check-equal? (memory-list test-alloc-m1-04-state-after #xcc00 #xcc02)
-                (list #x13 #x00 #x00)
-                "page type $13, previous page = $00, slot number used = $00")
-  (check-equal? (memory-list test-alloc-m1-04-state-after #xcc03 #xcc04)
-                (list #x00 #x58)
-                "slot0: refcount 0, next free slot at offset $56")
-  (check-equal? (memory-list test-alloc-m1-04-state-after #xcc57 #xcc58)
-                (list #x00 #xac)
-                "slot1: refcount 0, next free slot at offset $aa")
-  (check-equal? (memory-list test-alloc-m1-04-state-after #xccab #xccac)
-                (list #x00 #x00)
-                "slot2: refcount 0, next free slot at offset $00 = no next")
-  (check-equal? (vm-page->strings test-alloc-m1-04-state-after #xcc)
-                '("page-type:      m1 page p3"
-                  "previous page:  $00"
-                  "slots used:     0"
-                  "next free slot: $04")))
+;;   (check-equal? (memory-list test-alloc-m1-04-state-after #xcc00 #xcc02)
+;;                 (list #x13 #x00 #x00)
+;;                 "page type $13, previous page = $00, slot number used = $00")
+;;   (check-equal? (memory-list test-alloc-m1-04-state-after #xcc03 #xcc04)
+;;                 (list #x00 #x58)
+;;                 "slot0: refcount 0, next free slot at offset $56")
+;;   (check-equal? (memory-list test-alloc-m1-04-state-after #xcc57 #xcc58)
+;;                 (list #x00 #xac)
+;;                 "slot1: refcount 0, next free slot at offset $aa")
+;;   (check-equal? (memory-list test-alloc-m1-04-state-after #xccab #xccac)
+;;                 (list #x00 #x00)
+;;                 "slot2: refcount 0, next free slot at offset $00 = no next")
+;;   (check-equal? (vm-page->strings test-alloc-m1-04-state-after #xcc)
+;;                 '("page-type:      m1 page p3"
+;;                   "previous page:  $00"
+;;                   "slots used:     0"
+;;                   "next free slot: $04")))
 
 ;; allocate a slot of min A size, allocating a new page if necessary
 ;; input:  A = size
 ;; output: ZP_PTR2 = available slot of the given size (or a bit more)
 ;;         Y = actual size
-(define VM_ALLOC_M1_SLOT_TO_ZP_PTR2
-  (list
-   (label VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
-          (LDX !$00)
-          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+0)
-          (BPL J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+;; (define VM_ALLOC_M1_SLOT_TO_ZP_PTR2
+;;   (list
+;;    (label VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+;;           (LDX !$00)
+;;           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+0)
+;;           (BPL J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
 
-   (label VM_ALLOC_SLOT__TYPE_X_STORE)
-          (STX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (JSR VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
+;;    (label VM_ALLOC_SLOT__TYPE_X_STORE)
+;;           (STX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (JSR VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
 
-   (label VM_ALLOC_SLOT_TYPE_X)
-          (LDA VM_FREE_M1_PAGE_P0,x) ;;
-          (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; if the current free page is $00 (there is no page marked as having free slots) => allocate new page
+;;    (label VM_ALLOC_SLOT_TYPE_X)
+;;           (LDA VM_FREE_M1_PAGE_P0,x) ;;
+;;           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; if the current free page is $00 (there is no page marked as having free slots) => allocate new page
 
-          ;; ensure zp_ptr2 points into the page
-          (STA ZP_PTR2+1)
-          (STA INC_CMD__VM_ALLOC_SLOT_TYPE_X+2)
-          (TAX)
-          (LDY VM_FIRST_FREE_SLOT_ON_PAGE,x)           ;; first free slot offset
-          (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)    ;; if =0 allocate new page (no more free slots on this page)
-          ;; ensure zp_ptr2 points to the slot!
+;;           ;; ensure zp_ptr2 points into the page
+;;           (STA ZP_PTR2+1)
+;;           (STA INC_CMD__VM_ALLOC_SLOT_TYPE_X+2)
+;;           (TAX)
+;;           (LDY VM_FIRST_FREE_SLOT_ON_PAGE,x)           ;; first free slot offset
+;;           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)    ;; if =0 allocate new page (no more free slots on this page)
+;;           ;; ensure zp_ptr2 points to the slot!
 
-   (label CONTINUE__VM_ALLOC_SLOT_TYPE_X)
-          (STY ZP_PTR2)
+;;    (label CONTINUE__VM_ALLOC_SLOT_TYPE_X)
+;;           (STY ZP_PTR2)
 
-          ;; now get the next free slot (from linked list in this page)
-          (LDY !$00)
-          (LDA (ZP_PTR2),y) ;; content of free slot points to the next free one (or 00)
-          (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)           ;; set next free slot for this page (x is still page)
+;;           ;; now get the next free slot (from linked list in this page)
+;;           (LDY !$00)
+;;           (LDA (ZP_PTR2),y) ;; content of free slot points to the next free one (or 00)
+;;           (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)           ;; set next free slot for this page (x is still page)
 
-          ;; ensure y holds the actual available slot size
-          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (LDY INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
-          (DEY)
+;;           ;; ensure y holds the actual available slot size
+;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (LDY INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
+;;           (DEY)
 
-   (label INC_CMD__VM_ALLOC_SLOT_TYPE_X)
-          (INC $c002) ;; $c0 is overwritten with current page (increases the number of slots actually used)
+;;    (label INC_CMD__VM_ALLOC_SLOT_TYPE_X)
+;;           (INC $c002) ;; $c0 is overwritten with current page (increases the number of slots actually used)
 
-          (RTS)
+;;           (RTS)
 
-   (label FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; current page is full, search first non full (or end of list)
-          ;; A = page, X = page, Y = 0
-          (STA NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X+2)
+;;    (label FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; current page is full, search first non full (or end of list)
+;;           ;; A = page, X = page, Y = 0
+;;           (STA NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X+2)
 
-   (label NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X)
-          (LDA $C001) ;; $c0 is overwritten
-          (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next page ptr = $00 => end reached, no more pages
-          ;; check whether this page is full
-          (TAX)
-          (LDY VM_FIRST_FREE_SLOT_ON_PAGE,x)
-          (BEQ FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next free slot for page is 00 => page is full, try to find next
-          ;; page is not full => this is the new head
-          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (STA VM_FREE_M1_PAGE_P0,x)
-          (STA ZP_PTR2+1)
-          (CLC)
-          (BCC CONTINUE__VM_ALLOC_SLOT_TYPE_X)
+;;    (label NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X)
+;;           (LDA $C001) ;; $c0 is overwritten
+;;           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next page ptr = $00 => end reached, no more pages
+;;           ;; check whether this page is full
+;;           (TAX)
+;;           (LDY VM_FIRST_FREE_SLOT_ON_PAGE,x)
+;;           (BEQ FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next free slot for page is 00 => page is full, try to find next
+;;           ;; page is not full => this is the new head
+;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (STA VM_FREE_M1_PAGE_P0,x)
+;;           (STA ZP_PTR2+1)
+;;           (CLC)
+;;           (BCC CONTINUE__VM_ALLOC_SLOT_TYPE_X)
 
-   (label NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
-          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (CLC)
-          (BCC VM_ALLOC_SLOT_TYPE_X)
+;;    (label NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
+;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)
+;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (CLC)
+;;           (BCC VM_ALLOC_SLOT_TYPE_X)
 
-   (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+1)
-          (BPL J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (LDX !$01)
-          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+;;    (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+1)
+;;           (BPL J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (LDX !$01)
+;;           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
-   (label J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+2)
-          (BPL J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (LDX !$02)
-          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+;;    (label J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+2)
+;;           (BPL J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (LDX !$02)
+;;           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
-   (label J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+3)
-          (BPL J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (LDX !$03)
-          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+;;    (label J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+3)
+;;           (BPL J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (LDX !$03)
+;;           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
-   (label J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          ;; error, no slot this large can be allocated
-          (BRK)
+;;    (label J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+;;           ;; error, no slot this large can be allocated
+;;           (BRK)
 
-   (label PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (byte $00) ;; local variable holding the selected page typ (0 = slots up to 17 bytes, 2 up to 29 bytes ...)
-          ))
+;;    (label PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+;;           (byte $00) ;; local variable holding the selected page typ (0 = slots up to 17 bytes, 2 up to 29 bytes ...)
+;;           ))
 
-(module+ test #| vm_alloc_bucket_slot, allocate one slot of size $0b |#
-  (define test-alloc-bucket-slot-code
-    (list
-     ;; fill page with $ff
-            (LDA !$FF)
-            (LDX !$00)
-     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-            (DEX)
-            (STA $cc00,x)
-            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;; (module+ test #| vm_alloc_bucket_slot, allocate one slot of size $0b |#
+;;   (define test-alloc-bucket-slot-code
+;;     (list
+;;      ;; fill page with $ff
+;;             (LDA !$FF)
+;;             (LDX !$00)
+;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;;             (DEX)
+;;             (STA $cc00,x)
+;;             (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-            ;; now allocate the page
-            (LDA !$0b) ;; want slot of size 11
-            (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+;;             ;; now allocate the page
+;;             (LDA !$0b) ;; want slot of size 11
+;;             (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
 
-            (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
-            (STA ZP_TEMP)))
+;;             (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
+;;             (STA ZP_TEMP)))
 
-  (define test-alloc-bucket-slot-state-after
-    (run-code-in-test test-alloc-bucket-slot-code))
+;;   (define test-alloc-bucket-slot-state-after
+;;     (run-code-in-test test-alloc-bucket-slot-code))
 
-  (check-equal? (memory-list test-alloc-bucket-slot-state-after #xcc03 #xcc04)
-                (list #x00 #x16)
-                "slot0: refcount 0, next free slot at offset $16")
-  (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_PTR2 (add1 ZP_PTR2))
-                (list #x04 #xcc)
-                "allocated slot is at cc04")
-  (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_TEMP ZP_TEMP)
-                (list #xcc)
-                "free page for slot type 0 is $cc")
-  (check-equal? (vm-page->strings test-alloc-bucket-slot-state-after #xcc)
-                '("page-type:      m1 page p0"
-                  "previous page:  $00"
-                  "slots used:     1"
-                  "next free slot: $16")))
+;;   (check-equal? (memory-list test-alloc-bucket-slot-state-after #xcc03 #xcc04)
+;;                 (list #x00 #x16)
+;;                 "slot0: refcount 0, next free slot at offset $16")
+;;   (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_PTR2 (add1 ZP_PTR2))
+;;                 (list #x04 #xcc)
+;;                 "allocated slot is at cc04")
+;;   (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_TEMP ZP_TEMP)
+;;                 (list #xcc)
+;;                 "free page for slot type 0 is $cc")
+;;   (check-equal? (vm-page->strings test-alloc-bucket-slot-state-after #xcc)
+;;                 '("page-type:      m1 page p0"
+;;                   "previous page:  $00"
+;;                   "slots used:     1"
+;;                   "next free slot: $16")))
 
-(module+ test #| vm_alloc_bucket_slot 2 times slot size $0b and $09 |#
-  (define test-alloc-bucket-slot-2x-code
-    (list
-     ;; fill page with $ff
-     (LDA !$FF)
-     (LDX !$00)
-     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-     (DEX)
-     (STA $cc00,x)
-     (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;; (module+ test #| vm_alloc_bucket_slot 2 times slot size $0b and $09 |#
+;;   (define test-alloc-bucket-slot-2x-code
+;;     (list
+;;      ;; fill page with $ff
+;;      (LDA !$FF)
+;;      (LDX !$00)
+;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;;      (DEX)
+;;      (STA $cc00,x)
+;;      (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-     ;; now allocate the page
-     (LDA !$0b) ;; want slot of size 11
-     (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
-     (LDA !$09) ;; want slot of size 9, should be on the same page
-     (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+;;      ;; now allocate the page
+;;      (LDA !$0b) ;; want slot of size 11
+;;      (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+;;      (LDA !$09) ;; want slot of size 9, should be on the same page
+;;      (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
 
-     (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
-     (STA ZP_TEMP)))
+;;      (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
+;;      (STA ZP_TEMP)))
 
-  (define test-alloc-bucket-slot-2x-state-after
-    (run-code-in-test test-alloc-bucket-slot-2x-code))
+;;   (define test-alloc-bucket-slot-2x-state-after
+;;     (run-code-in-test test-alloc-bucket-slot-2x-code))
 
-  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after #xcc15 #xcc16)
-                (list #x00 #x28)
-                "slot1: refcount 0, next free slot at offset $28")
-  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_PTR2 (add1 ZP_PTR2))
-                (list #x16 #xcc)
-                "allocated slot is at cc16")
-  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_TEMP ZP_TEMP)
-                (list #xcc)
-                "free page for slot type 0 is $cc")
-  (check-equal? (vm-page->strings test-alloc-bucket-slot-2x-state-after #xcc)
-                '("page-type:      m1 page p0"
-                  "previous page:  $00"
-                  "slots used:     2"
-                  "next free slot: $28")))
+;;   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after #xcc15 #xcc16)
+;;                 (list #x00 #x28)
+;;                 "slot1: refcount 0, next free slot at offset $28")
+;;   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_PTR2 (add1 ZP_PTR2))
+;;                 (list #x16 #xcc)
+;;                 "allocated slot is at cc16")
+;;   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_TEMP ZP_TEMP)
+;;                 (list #xcc)
+;;                 "free page for slot type 0 is $cc")
+;;   (check-equal? (vm-page->strings test-alloc-bucket-slot-2x-state-after #xcc)
+;;                 '("page-type:      m1 page p0"
+;;                   "previous page:  $00"
+;;                   "slots used:     2"
+;;                   "next free slot: $28")))
 
-(module+ test #| vm_alloc_bucket_slot, alloc 10 x slot size $14 (actual $20)  |#
-  (define test-alloc-bucket-slot-xx-code
-    (list
-     ;; fill page with $ff
-     (LDA !$FF)
-     (LDY !$02) ;; 2 pages
-     (LDX !$00) ;; 256 bytes
-     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-     (DEX)
-     (STA $cb00,x)
-     (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-     (DEY)
-     (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;; (module+ test #| vm_alloc_bucket_slot, alloc 10 x slot size $14 (actual $20)  |#
+;;   (define test-alloc-bucket-slot-xx-code
+;;     (list
+;;      ;; fill page with $ff
+;;      (LDA !$FF)
+;;      (LDY !$02) ;; 2 pages
+;;      (LDX !$00) ;; 256 bytes
+;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;;      (DEX)
+;;      (STA $cb00,x)
+;;      (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;;      (DEY)
+;;      (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-     ;; loop over ...
-     (LDA !$0a)
-     (STA LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+;;      ;; loop over ...
+;;      (LDA !$0a)
+;;      (STA LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
 
-     (label LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
-     (LDA !$14) ;; want slot of size 20
-     (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2) ;; ... slot allocation
-     (DEC LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
-     (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
+;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
+;;      (LDA !$14) ;; want slot of size 20
+;;      (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2) ;; ... slot allocation
+;;      (DEC LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+;;      (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
 
-     (JMP TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
+;;      (JMP TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
 
-     (label LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
-     (byte $20)
+;;      (label LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+;;      (byte $20)
 
 
-     (label TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
-     (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
-     (STA ZP_TEMP)))
+;;      (label TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
+;;      (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
+;;      (STA ZP_TEMP)))
 
-  (define test-alloc-bucket-slot-xx-state-after
-    (run-code-in-test test-alloc-bucket-slot-xx-code))
+;;   (define test-alloc-bucket-slot-xx-state-after
+;;     (run-code-in-test test-alloc-bucket-slot-xx-code))
 
-  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_PTR2 (add1 ZP_PTR2))
-                (list #x2e #xcb)
-                "allocated slot is at cb2e (slot1 on page 2)")
-  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcb4b #xcb4c)
-                (list #x00 #x6a)
-                "first free slot page2: refcount 0, next free slot at offset $6a")
-  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_TEMP ZP_TEMP)
-                (list #xcb)
-                "free page for slot type 1 is $cb")
-  (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after #xcc)
-                '("page-type:      m1 page p1"
-                  "previous page:  $00"
-                  "slots used:     8"
-                  "next free slot: $00"))
-  (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after #xcb)
-                '("page-type:      m1 page p1"
-                  "previous page:  $00"
-                  "slots used:     2"
-                  "next free slot: $4c")))
+;;   (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_PTR2 (add1 ZP_PTR2))
+;;                 (list #x2e #xcb)
+;;                 "allocated slot is at cb2e (slot1 on page 2)")
+;;   (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcb4b #xcb4c)
+;;                 (list #x00 #x6a)
+;;                 "first free slot page2: refcount 0, next free slot at offset $6a")
+;;   (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_TEMP ZP_TEMP)
+;;                 (list #xcb)
+;;                 "free page for slot type 1 is $cb")
+;;   (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after #xcc)
+;;                 '("page-type:      m1 page p1"
+;;                   "previous page:  $00"
+;;                   "slots used:     8"
+;;                   "next free slot: $00"))
+;;   (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after #xcb)
+;;                 '("page-type:      m1 page p1"
+;;                   "previous page:  $00"
+;;                   "slots used:     2"
+;;                   "next free slot: $4c")))
   ;; free-page for slot type 0 = cc
 
 
@@ -4446,260 +4384,260 @@
 
           (RTS)))
 
-(module+ test #| vm_free_bucket_slot  allocate two slots, free first slot |#
-  (define test-free-bucket-slot-code
-    (list
-     ;; fill page with $ff
-            (LDA !$FF)
-            (LDX !$00)
-     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-            (DEX)
-            (STA $cc00,x)
-            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;; (module+ test #| vm_free_bucket_slot  allocate two slots, free first slot |#
+;;   (define test-free-bucket-slot-code
+;;     (list
+;;      ;; fill page with $ff
+;;             (LDA !$FF)
+;;             (LDX !$00)
+;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;;             (DEX)
+;;             (STA $cc00,x)
+;;             (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-            ;; now allocate the page
-            (LDA !$0b) ;; want slot of size 11
-            (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
-            (JSR VM_COPY_PTR2_TO_PTR)
+;;             ;; now allocate the page
+;;             (LDA !$0b) ;; want slot of size 11
+;;             (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+;;             (JSR VM_COPY_PTR2_TO_PTR)
 
-            (LDA !$09) ;; want slot of size 9, should be on the same page
-            (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+;;             (LDA !$09) ;; want slot of size 9, should be on the same page
+;;             (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
 
-            (JSR VM_COPY_PTR_TO_PTR2)
-            (JSR VM_FREE_M1_SLOT_IN_ZP_PTR2)))
+;;             (JSR VM_COPY_PTR_TO_PTR2)
+;;             (JSR VM_FREE_M1_SLOT_IN_ZP_PTR2)))
 
-  (define test-free-bucket-slot-state-after
-    (run-code-in-test test-free-bucket-slot-code))
+;;   (define test-free-bucket-slot-state-after
+;;     (run-code-in-test test-free-bucket-slot-code))
 
-  (check-equal? (memory-list test-free-bucket-slot-state-after #xcc03 #xcc04)
-                (list #x00 #x28)
-                "slot0 (now free): refcount 0, next free slot at offset $28")
-  (check-equal? (vm-page->strings test-free-bucket-slot-state-after #xcc)
-                '("page-type:      m1 page p0"
-                  "previous page:  $00"
-                  "slots used:     1"
-                  "next free slot: $04")))
+;;   (check-equal? (memory-list test-free-bucket-slot-state-after #xcc03 #xcc04)
+;;                 (list #x00 #x28)
+;;                 "slot0 (now free): refcount 0, next free slot at offset $28")
+;;   (check-equal? (vm-page->strings test-free-bucket-slot-state-after #xcc)
+;;                 '("page-type:      m1 page p0"
+;;                   "previous page:  $00"
+;;                   "slots used:     1"
+;;                   "next free slot: $04")))
 
-(module+ test #| vm_free_bucket_slot  allocate 16 slots, free first slot |#
-  (define test-free-bucket-a20-slot-code
-    (list
-     ;; fill page with $ff
-            (LDY !$03) ;; fill two pages
-            (LDA !$FF) ;; with $ff
-            (LDX !$00) ;; each 256 bytes long
-     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-            (DEX)
-            (STA $cb00,x) ;; starting at $cb00
-            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-            (DEY)
-            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;; (module+ test #| vm_free_bucket_slot  allocate 16 slots, free first slot |#
+;;   (define test-free-bucket-a20-slot-code
+;;     (list
+;;      ;; fill page with $ff
+;;             (LDY !$03) ;; fill two pages
+;;             (LDA !$FF) ;; with $ff
+;;             (LDX !$00) ;; each 256 bytes long
+;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;;             (DEX)
+;;             (STA $cb00,x) ;; starting at $cb00
+;;             (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+;;             (DEY)
+;;             (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-            ;; now allocate the page
-            (LDA !$17)
-            (STA LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
-     (label LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
-            (LDA !$14) ;; want slot of size 14 (max size $1e)
-            (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
-            (DEC LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
-            (BPL LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
-            (JMP CONT__TEST_FREE_BUCKET_A20_SLOT_CODE )
-     (label LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
-            (byte $00)
+;;             ;; now allocate the page
+;;             (LDA !$17)
+;;             (STA LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
+;;      (label LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
+;;             (LDA !$14) ;; want slot of size 14 (max size $1e)
+;;             (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+;;             (DEC LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
+;;             (BPL LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
+;;             (JMP CONT__TEST_FREE_BUCKET_A20_SLOT_CODE )
+;;      (label LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
+;;             (byte $00)
 
-     (label CONT__TEST_FREE_BUCKET_A20_SLOT_CODE)
-            ;; select first pointer
-            (LDA !$cb)
-            (STA ZP_PTR2+1)
-            (LDA !$10)
-            (STA ZP_PTR2)
-            (JSR VM_FREE_M1_SLOT_IN_ZP_PTR2)
+;;      (label CONT__TEST_FREE_BUCKET_A20_SLOT_CODE)
+;;             ;; select first pointer
+;;             (LDA !$cb)
+;;             (STA ZP_PTR2+1)
+;;             (LDA !$10)
+;;             (STA ZP_PTR2)
+;;             (JSR VM_FREE_M1_SLOT_IN_ZP_PTR2)
 
-            (LDA !$cc)
-            (STA ZP_PTR2+1)
-            (LDA !$10)
-            (STA ZP_PTR2)
-            (JSR VM_FREE_M1_SLOT_IN_ZP_PTR2)
-            ))
+;;             (LDA !$cc)
+;;             (STA ZP_PTR2+1)
+;;             (LDA !$10)
+;;             (STA ZP_PTR2)
+;;             (JSR VM_FREE_M1_SLOT_IN_ZP_PTR2)
+;;             ))
 
-  (define test-free-bucket-a20-slot-state-after
-    (run-code-in-test test-free-bucket-a20-slot-code))
+;;   (define test-free-bucket-a20-slot-state-after
+;;     (run-code-in-test test-free-bucket-a20-slot-code))
 
-  (check-equal? (memory-list test-free-bucket-a20-slot-state-after #xcec7 #xceca)
-                (list #x00 #xcc #x00 #x00)
-                "first free page of profiles 0, 1, 2, 3 is $cc for page profile 1")
-  (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after #xca)
-                '("page-type:      m1 page p1"
-                  "previous page:  $00" ;; is removed, since full
-                  "slots used:     8"
-                  "next free slot: $00"))
-  (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after #xcb)
-                '("page-type:      m1 page p1"
-                  "previous page:  $00" ;; is the last in list
-                  "slots used:     7"
-                  "next free slot: $10"))
-  (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after #xcc)
-                '("page-type:      m1 page p1"
-                  "previous page:  $cb" ;; next free
-                  "slots used:     7"
-                  "next free slot: $10")))
+;;   (check-equal? (memory-list test-free-bucket-a20-slot-state-after #xcec7 #xceca)
+;;                 (list #x00 #xcc #x00 #x00)
+;;                 "first free page of profiles 0, 1, 2, 3 is $cc for page profile 1")
+;;   (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after #xca)
+;;                 '("page-type:      m1 page p1"
+;;                   "previous page:  $00" ;; is removed, since full
+;;                   "slots used:     8"
+;;                   "next free slot: $00"))
+;;   (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after #xcb)
+;;                 '("page-type:      m1 page p1"
+;;                   "previous page:  $00" ;; is the last in list
+;;                   "slots used:     7"
+;;                   "next free slot: $10"))
+;;   (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after #xcc)
+;;                 '("page-type:      m1 page p1"
+;;                   "previous page:  $cb" ;; next free
+;;                   "slots used:     7"
+;;                   "next free slot: $10")))
 
-(define VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT
-  (list
-   (label VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT)
-          (DEC ZP_PTR)
-          (LDY !$00)
-          (LDA (ZP_PTR),y)
-          (CLC)
-          (ADC !$01)
-          (STA (ZP_PTR),y)
-          (INC ZP_PTR)
-          (RTS)))
+;; (define VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT
+;;   (list
+;;    (label VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT)
+;;           (DEC ZP_PTR)
+;;           (LDY !$00)
+;;           (LDA (ZP_PTR),y)
+;;           (CLC)
+;;           (ADC !$01)
+;;           (STA (ZP_PTR),y)
+;;           (INC ZP_PTR)
+;;           (RTS)))
 
-(module+ test #| vm_inc_ref_bucket_slot |#
-  (define test-inc-ref-bucket-slot-1-code
-    (list
-     (LDA !$a0)
-     (STA $a003)
-     (STA ZP_PTR+1)
-     (LDA !$04)
-     (STA ZP_PTR)
+;; (module+ test #| vm_inc_ref_bucket_slot |#
+;;   (define test-inc-ref-bucket-slot-1-code
+;;     (list
+;;      (LDA !$a0)
+;;      (STA $a003)
+;;      (STA ZP_PTR+1)
+;;      (LDA !$04)
+;;      (STA ZP_PTR)
 
-     (JSR VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT)))
+;;      (JSR VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT)))
 
-  (define test-inc-ref-bucket-slot-1-state-after
-    (run-code-in-test test-inc-ref-bucket-slot-1-code))
+;;   (define test-inc-ref-bucket-slot-1-state-after
+;;     (run-code-in-test test-inc-ref-bucket-slot-1-code))
 
-  (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after #xa003 #xa003)
-                (list #xa1))
-  (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after ZP_PTR (add1 ZP_PTR))
-                (list #x04 #xa0)))
+;;   (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after #xa003 #xa003)
+;;                 (list #xa1))
+;;   (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after ZP_PTR (add1 ZP_PTR))
+;;                 (list #x04 #xa0)))
 
 ;; input: ZP_PTR  pointer to bucket slot (which can be anything, but most likely a cell-array or a native-array)
-(define VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT
-  (list
-   (label VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
-          (DEC ZP_PTR)
-          (LDY !$00)
-          (LDA (ZP_PTR),y)
-          (SEC)
-          (SBC !$01)            ;;  pointers are organized such that there is no page boundary crossed (=> no adjustment of highbyte necessary)
-          (STA (ZP_PTR),y)
-          (BNE NO_GC__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+;; (define VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT
+;;   (list
+;;    (label VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+;;           (DEC ZP_PTR)
+;;           (LDY !$00)
+;;           (LDA (ZP_PTR),y)
+;;           (SEC)
+;;           (SBC !$01)            ;;  pointers are organized such that there is no page boundary crossed (=> no adjustment of highbyte necessary)
+;;           (STA (ZP_PTR),y)
+;;           (BNE NO_GC__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
 
-          ;; DO GC THIS SLOT and then FREE!!
-          ;; what kind of object is this (read header cell)
-          ;; then dispatch an header cell type
-          (INC ZP_PTR) ;; now pointing at the first (lowbyte) of the cell header
-          (LDA (ZP_PTR),y) ;; y still 0
-          (CMP !TAG_BYTE_CELL_ARRAY)       ;;
-          (BNE NEXT0__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+;;           ;; DO GC THIS SLOT and then FREE!!
+;;           ;; what kind of object is this (read header cell)
+;;           ;; then dispatch an header cell type
+;;           (INC ZP_PTR) ;; now pointing at the first (lowbyte) of the cell header
+;;           (LDA (ZP_PTR),y) ;; y still 0
+;;           (CMP !TAG_BYTE_CELL_ARRAY)       ;;
+;;           (BNE NEXT0__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
 
-          ;; its a regular array slot, (gc each slot, beware recursion!!!!)
-          (JSR VM_GC_ARRAY_SLOT_PTR)
-          (JMP VM_FREE_M1_SLOT_IN_ZP_PTR2)
+;;           ;; its a regular array slot, (gc each slot, beware recursion!!!!)
+;;           (JSR VM_GC_ARRAY_SLOT_PTR)
+;;           (JMP VM_FREE_M1_SLOT_IN_ZP_PTR2)
 
-   (label NEXT0__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
-          (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BNE NEXT1__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+;;    (label NEXT0__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+;;           (CMP !TAG_BYTE_NATIVE_ARRAY)
+;;           (BNE NEXT1__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
 
-          ;; it's a native array slot (no gc necessary)
-          (JMP VM_FREE_M1_SLOT_IN_ZP_PTR2)
+;;           ;; it's a native array slot (no gc necessary)
+;;           (JMP VM_FREE_M1_SLOT_IN_ZP_PTR2)
 
-   (label NEXT1__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
-          (BRK) ;; error, unknown complex slot type
+;;    (label NEXT1__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+;;           (BRK) ;; error, unknown complex slot type
 
-   (label NO_GC__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
-          (INC ZP_PTR)
-          (RTS)))
+;;    (label NO_GC__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+;;           (INC ZP_PTR)
+;;           (RTS)))
 
 
-(module+ test #| vm_dec_ref_bucket_slot (no gc) |#
-  (define test-dec-ref-bucket-slot-1-code
-    (list
-     (LDA !$a0)
-     (STA $a003) ;; $a004 - 1 = location for ref counting (now set to $a0)
-     (STA ZP_PTR+1)
-     (LDA !$04)
-     (STA ZP_PTR) ;; ZP_PTR is set to $a004
+;; (module+ test #| vm_dec_ref_bucket_slot (no gc) |#
+;;   (define test-dec-ref-bucket-slot-1-code
+;;     (list
+;;      (LDA !$a0)
+;;      (STA $a003) ;; $a004 - 1 = location for ref counting (now set to $a0)
+;;      (STA ZP_PTR+1)
+;;      (LDA !$04)
+;;      (STA ZP_PTR) ;; ZP_PTR is set to $a004
 
-     (JSR VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)))
+;;      (JSR VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)))
 
-  (define test-dec-ref-bucket-slot-1-state-after
-    (run-code-in-test test-dec-ref-bucket-slot-1-code))
+;;   (define test-dec-ref-bucket-slot-1-state-after
+;;     (run-code-in-test test-dec-ref-bucket-slot-1-code))
 
-  (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after #xa003 #xa003)
-                (list #x9f)
-                "a0 - 1 = 9f")
-  (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after ZP_PTR (add1 ZP_PTR))
-                (list #x04 #xa0)
-                "points to $a004"))
+;;   (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after #xa003 #xa003)
+;;                 (list #x9f)
+;;                 "a0 - 1 = 9f")
+;;   (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after ZP_PTR (add1 ZP_PTR))
+;;                 (list #x04 #xa0)
+;;                 "points to $a004"))
 
-(module+ test #| vm_dec_ref_bucket_slot (gc native array) |#
+;; (module+ test #| vm_dec_ref_bucket_slot (gc native array) |#
 
-  (define test-dec-ref-bucket-slot-2-code
-    (list
-            (LDA !$00)
-            (STA $a000) ;; counter for how often VM_GC_ARRAY_SLOT_PTR was called
-            (JMP TEST_DEC_REF_BUCKET_SLOT_2_CODE)
+;;   (define test-dec-ref-bucket-slot-2-code
+;;     (list
+;;             (LDA !$00)
+;;             (STA $a000) ;; counter for how often VM_GC_ARRAY_SLOT_PTR was called
+;;             (JMP TEST_DEC_REF_BUCKET_SLOT_2_CODE)
 
-     (label VM_GC_ARRAY_SLOT_PTR)
-            (INC $a000)
-            (RTS)
+;;      (label VM_GC_ARRAY_SLOT_PTR)
+;;             (INC $a000)
+;;             (RTS)
 
-     (label TEST_DEC_REF_BUCKET_SLOT_2_CODE)
-            (LDA !$10)
-            (JSR VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
-            (JSR VM_COPY_PTR2_TO_PTR) ;; allocation is in zp_ptr2
-            (JSR VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT) ;; inc ref uses zp_ptr
+;;      (label TEST_DEC_REF_BUCKET_SLOT_2_CODE)
+;;             (LDA !$10)
+;;             (JSR VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
+;;             (JSR VM_COPY_PTR2_TO_PTR) ;; allocation is in zp_ptr2
+;;             (JSR VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT) ;; inc ref uses zp_ptr
 
-            (JSR VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT) ;; dec ref uses zp_ptr
-     ))
+;;             (JSR VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT) ;; dec ref uses zp_ptr
+;;      ))
 
-  (define test-dec-ref-bucket-slot-2-state-after
-    (run-code-in-test test-dec-ref-bucket-slot-2-code
-                      #:mock (list (label VM_GC_ARRAY_SLOT_PTR))))
+;;   (define test-dec-ref-bucket-slot-2-state-after
+;;     (run-code-in-test test-dec-ref-bucket-slot-2-code
+;;                       #:mock (list (label VM_GC_ARRAY_SLOT_PTR))))
 
-  (check-equal? (vm-page->strings test-dec-ref-bucket-slot-2-state-after #xcc)
-                (list "page-type:      m1 page p1"
-                      "previous page:  $00"
-                      "slots used:     0"
-                      "next free slot: $10"))
-  (check-equal? (memory-list test-dec-ref-bucket-slot-2-state-after #xa000 #xa000)
-                (list #x00)
-                "VM_GC_ARRAY_SLOT_PTR should NOT have been called (native arrays do not need to free any cells."))
+;;   (check-equal? (vm-page->strings test-dec-ref-bucket-slot-2-state-after #xcc)
+;;                 (list "page-type:      m1 page p1"
+;;                       "previous page:  $00"
+;;                       "slots used:     0"
+;;                       "next free slot: $10"))
+;;   (check-equal? (memory-list test-dec-ref-bucket-slot-2-state-after #xa000 #xa000)
+;;                 (list #x00)
+;;                 "VM_GC_ARRAY_SLOT_PTR should NOT have been called (native arrays do not need to free any cells."))
 
-(module+ test #| vm_dec_ref_bucket_slot (gc cell array) |#
-  ;; check that all cells ref counts (if present) in the bucket slot (cell-array) are decremented
-  (define test-dec-ref-bucket-slot-3-code
-    (list
-            (LDA !$00)
-            (STA $a000) ;; counter for how often VM_GC_ARRAY_SLOT_PTR was called
-            (JMP TEST_DEC_REF_BUCKET_SLOT_3_CODE)
-     (label VM_GC_ARRAY_SLOT_PTR)
-            (INC $a000)
-            (RTS)
+;; (module+ test #| vm_dec_ref_bucket_slot (gc cell array) |#
+;;   ;; check that all cells ref counts (if present) in the bucket slot (cell-array) are decremented
+;;   (define test-dec-ref-bucket-slot-3-code
+;;     (list
+;;             (LDA !$00)
+;;             (STA $a000) ;; counter for how often VM_GC_ARRAY_SLOT_PTR was called
+;;             (JMP TEST_DEC_REF_BUCKET_SLOT_3_CODE)
+;;      (label VM_GC_ARRAY_SLOT_PTR)
+;;             (INC $a000)
+;;             (RTS)
 
-     (label TEST_DEC_REF_BUCKET_SLOT_3_CODE)
-            (LDA !$04)
-            (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
-            (JSR VM_COPY_PTR2_TO_PTR) ;; allocation is in zp_ptr2
-            (JSR VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT) ;; inc ref uses zp_ptr
+;;      (label TEST_DEC_REF_BUCKET_SLOT_3_CODE)
+;;             (LDA !$04)
+;;             (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
+;;             (JSR VM_COPY_PTR2_TO_PTR) ;; allocation is in zp_ptr2
+;;             (JSR VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT) ;; inc ref uses zp_ptr
 
-            (JSR VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT) ;; dec ref uses zp_ptr
-            ))
+;;             (JSR VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT) ;; dec ref uses zp_ptr
+;;             ))
 
-  (define test-dec-ref-bucket-slot-3-state-after
-    (run-code-in-test test-dec-ref-bucket-slot-3-code
-                      #:mock (list (label VM_GC_ARRAY_SLOT_PTR))))
+;;   (define test-dec-ref-bucket-slot-3-state-after
+;;     (run-code-in-test test-dec-ref-bucket-slot-3-code
+;;                       #:mock (list (label VM_GC_ARRAY_SLOT_PTR))))
 
-  (check-equal? (vm-page->strings test-dec-ref-bucket-slot-3-state-after #xcc)
-                (list "page-type:      m1 page p0"
-                      "previous page:  $00"
-                      "slots used:     0"
-                      "next free slot: $04"))
-  (check-equal? (memory-list test-dec-ref-bucket-slot-3-state-after #xa000 #xa000)
-                (list #x01)
-                "VM_GC_ARRAY_SLOT_PTR should have been called exactly once"))
+;;   (check-equal? (vm-page->strings test-dec-ref-bucket-slot-3-state-after #xcc)
+;;                 (list "page-type:      m1 page p0"
+;;                       "previous page:  $00"
+;;                       "slots used:     0"
+;;                       "next free slot: $04"))
+;;   (check-equal? (memory-list test-dec-ref-bucket-slot-3-state-after #xa000 #xa000)
+;;                 (list #x01)
+;;                 "VM_GC_ARRAY_SLOT_PTR should have been called exactly once"))
 
 
 ;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
@@ -4708,369 +4646,369 @@
 ;; use case:
 ;;    e.g. ZP_PTR2 points to a car cell (of a cell-pair), which in turn points to a cell-array
 ;;    => ZP_PTR points to the cell-array
-(define VM_DEREF_PTR2_INTO_PTR
-  (list
-   (label VM_DEREF_PTR2_INTO_PTR)
-          (LDY !$00)
-          (LDA (ZP_PTR2),y)
-          (STA ZP_PTR_TAGGED)
-          (AND !TAG_PTR_MASK)
-          (STA ZP_PTR)
-          (INY)
-          (LDA (ZP_PTR2),y)
-          (STA ZP_PTR+1)
-          (RTS)))
+;; (define VM_DEREF_PTR2_INTO_PTR
+;;   (list
+;;    (label VM_DEREF_PTR2_INTO_PTR)
+;;           (LDY !$00)
+;;           (LDA (ZP_PTR2),y)
+;;           (STA ZP_PTR_TAGGED)
+;;           (AND !TAG_PTR_MASK)
+;;           (STA ZP_PTR)
+;;           (INY)
+;;           (LDA (ZP_PTR2),y)
+;;           (STA ZP_PTR+1)
+;;           (RTS)))
 
-(module+ test #| vm_deref_ptr2_into_ptr |#
-  (define test-dref-ptr2-into-ptr-code
-    (list
-     (LDA !$a0)
-     (STA ZP_PTR2+1)
-     (LDA !$04)
-     (STA ZP_PTR2)   ;; ZP_PTR2 = $a004
+;; (module+ test #| vm_deref_ptr2_into_ptr |#
+;;   (define test-dref-ptr2-into-ptr-code
+;;     (list
+;;      (LDA !$a0)
+;;      (STA ZP_PTR2+1)
+;;      (LDA !$04)
+;;      (STA ZP_PTR2)   ;; ZP_PTR2 = $a004
 
-     (LDA !$b0)
-     (STA $a005)
-     (LDA !$0a)
-     (STA $a004)        ;; $a004 b00a which is (untagged) b008 (bit 1 masked out)
+;;      (LDA !$b0)
+;;      (STA $a005)
+;;      (LDA !$0a)
+;;      (STA $a004)        ;; $a004 b00a which is (untagged) b008 (bit 1 masked out)
 
-     (JSR VM_DEREF_PTR2_INTO_PTR)))
+;;      (JSR VM_DEREF_PTR2_INTO_PTR)))
 
-  (define test-dref-ptr2-into-ptr-state-after
-    (run-code-in-test test-dref-ptr2-into-ptr-code))
+;;   (define test-dref-ptr2-into-ptr-state-after
+;;     (run-code-in-test test-dref-ptr2-into-ptr-code))
 
-  (check-equal? (memory-list test-dref-ptr2-into-ptr-state-after ZP_PTR (add1 ZP_PTR))
-                (list #x08 #xb0)
-                "pointer found at location zp_ptr2 points to, masking out the tag bits (lower two)")
-  (check-equal? (memory-list test-dref-ptr2-into-ptr-state-after ZP_PTR_TAGGED ZP_PTR_TAGGED)
-                (list #x0a)
-                "lowbyte of zp_ptr but with tag bits still set")
-  (check-equal? (memory-list test-dref-ptr2-into-ptr-state-after ZP_PTR2 (add1 ZP_PTR2))
-                (list #x04 #xa0)
-                "zp_ptr2 is not modified"))
+;;   (check-equal? (memory-list test-dref-ptr2-into-ptr-state-after ZP_PTR (add1 ZP_PTR))
+;;                 (list #x08 #xb0)
+;;                 "pointer found at location zp_ptr2 points to, masking out the tag bits (lower two)")
+;;   (check-equal? (memory-list test-dref-ptr2-into-ptr-state-after ZP_PTR_TAGGED ZP_PTR_TAGGED)
+;;                 (list #x0a)
+;;                 "lowbyte of zp_ptr but with tag bits still set")
+;;   (check-equal? (memory-list test-dref-ptr2-into-ptr-state-after ZP_PTR2 (add1 ZP_PTR2))
+;;                 (list #x04 #xa0)
+;;                 "zp_ptr2 is not modified"))
 
 ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
 ;; input:  ZP_PTR(2) = pointer to array (slot)
 ;; used:   ZP_PTR    = dreferenced array element (if array element is a ptr)
 ;;         ZP_PTR2   = pointer to last element of array
 ;; ouput: -
-(define VM_GC_ARRAY_SLOT_PTR
-  (list
-   (label VM_GC_ARRAY_SLOT_PTR)
-          (JSR VM_COPY_PTR_TO_PTR2)
+;; (define VM_GC_ARRAY_SLOT_PTR
+;;   (list
+;;    (label VM_GC_ARRAY_SLOT_PTR)
+;;           (JSR VM_COPY_PTR_TO_PTR2)
 
-   (label VM_GC_ARRAY_SLOT_PTR2)
-          ;; loop over slots and decrement their slots
-          (LDY !$01)
-          (LDA (ZP_PTR2),y)  ;; a = number of array elements
-          (STA LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR) ;;
+;;    (label VM_GC_ARRAY_SLOT_PTR2)
+;;           ;; loop over slots and decrement their slots
+;;           (LDY !$01)
+;;           (LDA (ZP_PTR2),y)  ;; a = number of array elements
+;;           (STA LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR) ;;
 
-          (LDY !$00)
+;;           (LDY !$00)
 
-   (label LOOP__VM_GC_ARRAY_SLOT_PTR)
-          (INC ZP_PTR2)
-          (INC ZP_PTR2)
-          ;; deref zp_ptr into zp_ptr2?
-          (LDA (ZP_PTR2),y) ;; load tagged low byte
-          (AND !$03)
-          (BEQ NEXT__VM_GC_ARRAY_SLOT_PTR)
-          (JSR VM_DEREF_PTR2_INTO_PTR)
-          (JSR VM_REFCOUNT_DECR_ZP_PTR)
-          (LDY !$00)
-    (label NEXT__VM_GC_ARRAY_SLOT_PTR)
-          (DEC LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
-          (BNE LOOP__VM_GC_ARRAY_SLOT_PTR)
+;;    (label LOOP__VM_GC_ARRAY_SLOT_PTR)
+;;           (INC ZP_PTR2)
+;;           (INC ZP_PTR2)
+;;           ;; deref zp_ptr into zp_ptr2?
+;;           (LDA (ZP_PTR2),y) ;; load tagged low byte
+;;           (AND !$03)
+;;           (BEQ NEXT__VM_GC_ARRAY_SLOT_PTR)
+;;           (JSR VM_DEREF_PTR2_INTO_PTR)
+;;           (JSR VM_REFCOUNT_DECR_ZP_PTR)
+;;           (LDY !$00)
+;;     (label NEXT__VM_GC_ARRAY_SLOT_PTR)
+;;           (DEC LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
+;;           (BNE LOOP__VM_GC_ARRAY_SLOT_PTR)
 
-          (RTS)
+;;           (RTS)
 
-   (label LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
-          (byte $00)
-   ))
+;;    (label LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
+;;           (byte $00)
+;;    ))
 
-(module+ test #| vm_gc_array_slot_ptr |#
-  (define test-gc-array-slot-ptr-code
-    (list
-     (LDA !$04)
-     (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)                       ;; ZP_PTR2 = pointer to the allocated array (with 4 cells)
+;; (module+ test #| vm_gc_array_slot_ptr |#
+;;   (define test-gc-array-slot-ptr-code
+;;     (list
+;;      (LDA !$04)
+;;      (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)                       ;; ZP_PTR2 = pointer to the allocated array (with 4 cells)
 
-     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                           ;; ZP_PTR = allocated cell-pair
-     (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-     (JSR VM_CELL_STACK_PUSH_ZP_PTR)                    ;;cell-pair -> stack
+;;      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                           ;; ZP_PTR = allocated cell-pair
+;;      (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
+;;      (JSR VM_CELL_STACK_PUSH_ZP_PTR)                    ;;cell-pair -> stack
 
-     ;; wrote a new cell-pair @2
-     (LDA !$02)
-     (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)    ;; tos (cell-pair) -> @2
+;;      ;; wrote a new cell-pair @2
+;;      (LDA !$02)
+;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)    ;; tos (cell-pair) -> @2
 
-     (JSR VM_CELL_STACK_PUSH_INT_m1)                    ;; int -1 -> stack
-     (LDA !$01)
-     (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)    ;; tos (int -1) -> 1
+;;      (JSR VM_CELL_STACK_PUSH_INT_m1)                    ;; int -1 -> stack
+;;      (LDA !$01)
+;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)    ;; tos (int -1) -> 1
 
-     (JSR VM_GC_ARRAY_SLOT_PTR2)
-     ))                      ;; gc array
+;;      (JSR VM_GC_ARRAY_SLOT_PTR2)
+;;      ))                      ;; gc array
 
-  (define test-gc-array-slot-ptr-state-after
-    (run-code-in-test test-gc-array-slot-ptr-code))
+;;   (define test-gc-array-slot-ptr-state-after
+;;     (run-code-in-test test-gc-array-slot-ptr-code))
 
-  (check-equal? (vm-stack->strings test-gc-array-slot-ptr-state-after)
-                (list "stack holds 2 items"
-                      "cell-int $1fff"
-                      "cell-pair-ptr $cb04"))
-  (check-equal? (vm-page->strings test-gc-array-slot-ptr-state-after #xcb)
-                (list "page-type:      cell-pair page"
-                      "previous page:  $00"
-                      "slots used:     1"
-                      "next free slot: $08"))
-  (check-equal? (memory-list test-gc-array-slot-ptr-state-after #xcb01 #xcb01)
-                (list #x00)
-                "refcount for cell-pair at cb04..cb07 is at cb01 = 0 (was freed)")
-  (check-equal? (vm-cell-pair-free-tree->string test-gc-array-slot-ptr-state-after)
-                "cell-pair $cb04 -> [ cell-int $0000 . cell-int $0000 ]"
-                "...and added as free tree root (for reuse)"))
+;;   (check-equal? (vm-stack->strings test-gc-array-slot-ptr-state-after)
+;;                 (list "stack holds 2 items"
+;;                       "cell-int $1fff"
+;;                       "cell-pair-ptr $cb04"))
+;;   (check-equal? (vm-page->strings test-gc-array-slot-ptr-state-after #xcb)
+;;                 (list "page-type:      cell-pair page"
+;;                       "previous page:  $00"
+;;                       "slots used:     1"
+;;                       "next free slot: $08"))
+;;   (check-equal? (memory-list test-gc-array-slot-ptr-state-after #xcb01 #xcb01)
+;;                 (list #x00)
+;;                 "refcount for cell-pair at cb04..cb07 is at cb01 = 0 (was freed)")
+;;   (check-equal? (vm-cell-pair-free-tree->string test-gc-array-slot-ptr-state-after)
+;;                 "cell-pair $cb04 -> [ cell-int $0000 . cell-int $0000 ]"
+;;                 "...and added as free tree root (for reuse)"))
 
 ;; allocate an array of bytes (native) (also useful for strings)
 ;; input:  A = number of bytes (1..)
 ;; output: ZP_PTR2 -> points to an allocated array
-(define VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2
-(list
-   (label VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
-          (PHA)
-          (CLC)
-          (ADC !$02) ;; add to total slot size
+;; (define VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2
+;; (list
+;;    (label VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
+;;           (PHA)
+;;           (CLC)
+;;           (ADC !$02) ;; add to total slot size
 
-          (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+;;           (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
 
-          ;; write header cell
-          (LDY !$00)
-          (LDA !TAG_BYTE_NATIVE_ARRAY)
-          (STA (ZP_PTR2),y) ;; store tag byte
+;;           ;; write header cell
+;;           (LDY !$00)
+;;           (LDA !TAG_BYTE_NATIVE_ARRAY)
+;;           (STA (ZP_PTR2),y) ;; store tag byte
 
-          (INY)
-          (PLA)
-          (STA (ZP_PTR2),y) ;; store number of array elements
+;;           (INY)
+;;           (PLA)
+;;           (STA (ZP_PTR2),y) ;; store number of array elements
 
-          (TAX) ;; use number of array elements as loop counter
+;;           (TAX) ;; use number of array elements as loop counter
 
-          ;; initialize slots/array with 0
-          (LDA !$00)
-   (label LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
-          (INY)
-          (STA (ZP_PTR2),y)
-          (DEX)
-          (BNE LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
+;;           ;; initialize slots/array with 0
+;;           (LDA !$00)
+;;    (label LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
+;;           (INY)
+;;           (STA (ZP_PTR2),y)
+;;           (DEX)
+;;           (BNE LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
 
-          (RTS)))
+;;           (RTS)))
 
-(module+ test #| vm_allocate_native_array |#
-  (define test-alloc-native-array-code
-    (list
-     (LDA !$10)
-     (JSR VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)))
+;; (module+ test #| vm_allocate_native_array |#
+;;   (define test-alloc-native-array-code
+;;     (list
+;;      (LDA !$10)
+;;      (JSR VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)))
 
-  (define test-alloc-native-array-state-after
-    (run-code-in-test test-alloc-native-array-code))
+;;   (define test-alloc-native-array-state-after
+;;     (run-code-in-test test-alloc-native-array-code))
 
-  (check-equal? (vm-page->strings test-alloc-native-array-state-after #xcc)
-                (list
-                 "page-type:      m1 page p1"
-                 "previous page:  $00"
-                 "slots used:     1"
-                 "next free slot: $2e"))
-  (check-equal? (memory-list test-alloc-native-array-state-after ZP_PTR2 (add1 ZP_PTR2))
-                (list #x10 #xcc))
-  (check-equal? (memory-list test-alloc-native-array-state-after #xcc10 #xcc21)
-                (list TAG_BYTE_NATIVE_ARRAY #x10
-                      #x00 #x00
-                      #x00 #x00
-                      #x00 #x00
-                      #x00 #x00
-                      #x00 #x00
-                      #x00 #x00
-                      #x00 #x00
-                      #x00 #x00)))
+;;   (check-equal? (vm-page->strings test-alloc-native-array-state-after #xcc)
+;;                 (list
+;;                  "page-type:      m1 page p1"
+;;                  "previous page:  $00"
+;;                  "slots used:     1"
+;;                  "next free slot: $2e"))
+;;   (check-equal? (memory-list test-alloc-native-array-state-after ZP_PTR2 (add1 ZP_PTR2))
+;;                 (list #x10 #xcc))
+;;   (check-equal? (memory-list test-alloc-native-array-state-after #xcc10 #xcc21)
+;;                 (list TAG_BYTE_NATIVE_ARRAY #x10
+;;                       #x00 #x00
+;;                       #x00 #x00
+;;                       #x00 #x00
+;;                       #x00 #x00
+;;                       #x00 #x00
+;;                       #x00 #x00
+;;                       #x00 #x00
+;;                       #x00 #x00)))
 
-;; allocate an array of cells (also useful for structures)
-;; input:  A = number of cells (1..)
-;; output: ZP_PTR2 -> points to an allocated array
-(define VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2
-  (list
-   (label VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
-          ;; optional: optimization for arrays with 3 cells => s8 page!
-          (PHA)
-          (ASL A)
-          (CLC)
-          (ADC !$02) ;; add to total slot size
+;; ;; allocate an array of cells (also useful for structures)
+;; ;; input:  A = number of cells (1..)
+;; ;; output: ZP_PTR2 -> points to an allocated array
+;; (define VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2
+;;   (list
+;;    (label VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
+;;           ;; optional: optimization for arrays with 3 cells => s8 page!
+;;           (PHA)
+;;           (ASL A)
+;;           (CLC)
+;;           (ADC !$02) ;; add to total slot size
 
-          (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+;;           (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
 
-          ;; write header cell
-          (LDY !$00)
-          (LDA !TAG_BYTE_CELL_ARRAY)
-          (STA (ZP_PTR2),y) ;; store tag byte
+;;           ;; write header cell
+;;           (LDY !$00)
+;;           (LDA !TAG_BYTE_CELL_ARRAY)
+;;           (STA (ZP_PTR2),y) ;; store tag byte
 
-          (INY)
-          (PLA)
-          (STA (ZP_PTR2),y) ;; store number of array elements
+;;           (INY)
+;;           (PLA)
+;;           (STA (ZP_PTR2),y) ;; store number of array elements
 
-          (TAX) ;; use number of array elements as loop counter
+;;           (TAX) ;; use number of array elements as loop counter
 
-          ;; initialize slots/array with nil
-   (label LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
-          (INY)
-          (LDA !<TAGGED_NIL)
-          (STA (ZP_PTR2),y)
-          (INY)
-          (LDA !>TAGGED_NIL)
-          (STA (ZP_PTR2),y)
-          (DEX)
-          (BNE LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
+;;           ;; initialize slots/array with nil
+;;    (label LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
+;;           (INY)
+;;           (LDA !<TAGGED_NIL)
+;;           (STA (ZP_PTR2),y)
+;;           (INY)
+;;           (LDA !>TAGGED_NIL)
+;;           (STA (ZP_PTR2),y)
+;;           (DEX)
+;;           (BNE LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
 
-          (RTS)))
+;;           (RTS)))
 
-(module+ test #| vm_allocate_cell_array |#
-  (define test-alloc-cell-array-code
-    (list
-     (LDA !$04)
-     (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)))
+;; (module+ test #| vm_allocate_cell_array |#
+;;   (define test-alloc-cell-array-code
+;;     (list
+;;      (LDA !$04)
+;;      (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)))
 
-  (define test-alloc-cell-array-state-after
-    (run-code-in-test test-alloc-cell-array-code))
+;;   (define test-alloc-cell-array-state-after
+;;     (run-code-in-test test-alloc-cell-array-code))
 
-  (check-equal? (vm-page->strings test-alloc-cell-array-state-after #xcc)
-                (list
-                 "page-type:      m1 page p0"
-                 "previous page:  $00"
-                 "slots used:     1"
-                 "next free slot: $16"))
-  (check-equal? (memory-list test-alloc-cell-array-state-after ZP_PTR2 (add1 ZP_PTR2))
-                (list #x04 #xcc))
-  (check-equal? (memory-list test-alloc-cell-array-state-after #xcc04 #xcc0d)
-                (list TAG_BYTE_CELL_ARRAY #x04
-                      #x02 #x00
-                      #x02 #x00
-                      #x02 #x00
-                      #x02 #x00))
-)
+;;   (check-equal? (vm-page->strings test-alloc-cell-array-state-after #xcc)
+;;                 (list
+;;                  "page-type:      m1 page p0"
+;;                  "previous page:  $00"
+;;                  "slots used:     1"
+;;                  "next free slot: $16"))
+;;   (check-equal? (memory-list test-alloc-cell-array-state-after ZP_PTR2 (add1 ZP_PTR2))
+;;                 (list #x04 #xcc))
+;;   (check-equal? (memory-list test-alloc-cell-array-state-after #xcc04 #xcc0d)
+;;                 (list TAG_BYTE_CELL_ARRAY #x04
+;;                       #x02 #x00
+;;                       #x02 #x00
+;;                       #x02 #x00
+;;                       #x02 #x00))
+;; )
 
-;; write the tos into array element a (0 indexed), array pointed to by zp_ptr2
-;; input:  a = index (0 indexed)
-;;         ZP_PTR2 = pointer to array
-;; NO CHECKING (NO BOUNDS, NO TYPE ...)
-;; DECREMENT ref of pointer if array element was a pointer
-(define VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2
-  (list
-   (label VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-          (ASL A)
-          (CLC)
-          (ADC !$02) ;; point to low byte
-          (STA ZP_TEMP) ;; keep for later
+;; ;; write the tos into array element a (0 indexed), array pointed to by zp_ptr2
+;; ;; input:  a = index (0 indexed)
+;; ;;         ZP_PTR2 = pointer to array
+;; ;; NO CHECKING (NO BOUNDS, NO TYPE ...)
+;; ;; DECREMENT ref of pointer if array element was a pointer
+;; (define VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2
+;;   (list
+;;    (label VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+;;           (ASL A)
+;;           (CLC)
+;;           (ADC !$02) ;; point to low byte
+;;           (STA ZP_TEMP) ;; keep for later
 
-          ;; copy low byte
-          (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
-          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
-          (LDY ZP_TEMP)
-          (TAX)
-          (LDA (ZP_PTR2),y) ;; previous low byte in that slot
-          (AND !$03)
-          (BEQ NO_PTR_IN_SLOT__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+;;           ;; copy low byte
+;;           (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
+;;           (LDY ZP_TEMP)
+;;           (TAX)
+;;           (LDA (ZP_PTR2),y) ;; previous low byte in that slot
+;;           (AND !$03)
+;;           (BEQ NO_PTR_IN_SLOT__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
 
-          ;; GC the slot before actually writing to it <- can maybe optimized be ensuring that this cannot happen
-          (INY)
-          (LDA (ZP_PTR2),y) ;; if high byte is 0, it is nil, no gc there
-          (BEQ IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+;;           ;; GC the slot before actually writing to it <- can maybe optimized be ensuring that this cannot happen
+;;           (INY)
+;;           (LDA (ZP_PTR2),y) ;; if high byte is 0, it is nil, no gc there
+;;           (BEQ IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
 
-          (DEY)
+;;           (DEY)
 
-          (LDA (ZP_PTR2),y) ;; previous low byte in that slot (load again)
-          (STA ZP_PTR_TAGGED)
-          (AND !$fc)
-          (STA ZP_PTR)
-          (INY)
-          (LDA (ZP_PTR2),y)
-          (STA ZP_PTR+1)
-          (JSR VM_REFCOUNT_DECR_ZP_PTR)
+;;           (LDA (ZP_PTR2),y) ;; previous low byte in that slot (load again)
+;;           (STA ZP_PTR_TAGGED)
+;;           (AND !$fc)
+;;           (STA ZP_PTR)
+;;           (INY)
+;;           (LDA (ZP_PTR2),y)
+;;           (STA ZP_PTR+1)
+;;           (JSR VM_REFCOUNT_DECR_ZP_PTR)
 
-          ;; ensure x = lowbyte (or a and jump even further)
+;;           ;; ensure x = lowbyte (or a and jump even further)
 
-   (label IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-          (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
-          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
-          (LDY ZP_TEMP)
-          (TAX)
-   (label NO_PTR_IN_SLOT__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-          (TXA)
-          (STA (ZP_PTR2),y)
+;;    (label IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+;;           (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
+;;           (LDY ZP_TEMP)
+;;           (TAX)
+;;    (label NO_PTR_IN_SLOT__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+;;           (TXA)
+;;           (STA (ZP_PTR2),y)
 
-          ;; copy high byte
-          (LDY ZP_CELL_STACK_TOS)
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; high byte in stack
-          (LDY ZP_TEMP)
-          (INY)
-          (STA (ZP_PTR2),y) ;; write high byte into array
+;;           ;; copy high byte
+;;           (LDY ZP_CELL_STACK_TOS)
+;;           (DEY)
+;;           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; high byte in stack
+;;           (LDY ZP_TEMP)
+;;           (INY)
+;;           (STA (ZP_PTR2),y) ;; write high byte into array
 
-          (RTS)))
+;;           (RTS)))
 
-(module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
-  (define vm_cell_stack_write_tos_to_array_ata_ptr-code
-    (list
-     (LDA !$04)
-     (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
+;; (module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
+;;   (define vm_cell_stack_write_tos_to_array_ata_ptr-code
+;;     (list
+;;      (LDA !$04)
+;;      (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
 
-     (LDA !$ff)
-     (LDX !$01)
-     (JSR VM_CELL_STACK_PUSH_INT)
+;;      (LDA !$ff)
+;;      (LDX !$01)
+;;      (JSR VM_CELL_STACK_PUSH_INT)
 
-     (LDA !$02)
-     (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)))
+;;      (LDA !$02)
+;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)))
 
-  (define vm_cell_stack_write_tos_to_array_ata_ptr-state-after
-    (run-code-in-test vm_cell_stack_write_tos_to_array_ata_ptr-code))
+;;   (define vm_cell_stack_write_tos_to_array_ata_ptr-state-after
+;;     (run-code-in-test vm_cell_stack_write_tos_to_array_ata_ptr-code))
 
-  (check-equal? (vm-page->strings vm_cell_stack_write_tos_to_array_ata_ptr-state-after #xcc)
-                (list
-                 "page-type:      m1 page p0"
-                 "previous page:  $00"
-                 "slots used:     1"
-                 "next free slot: $16"))
-  (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after ZP_PTR2 (add1 ZP_PTR2))
-                (list #x04 #xcc))
-  (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after #xcc04 #xcc0d)
-                (list TAG_BYTE_CELL_ARRAY #x04
-                      #x02 #x00
-                      #x02 #x00
-                      #x04 #xff
-                      #x02 #x00)))
+;;   (check-equal? (vm-page->strings vm_cell_stack_write_tos_to_array_ata_ptr-state-after #xcc)
+;;                 (list
+;;                  "page-type:      m1 page p0"
+;;                  "previous page:  $00"
+;;                  "slots used:     1"
+;;                  "next free slot: $16"))
+;;   (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after ZP_PTR2 (add1 ZP_PTR2))
+;;                 (list #x04 #xcc))
+;;   (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after #xcc04 #xcc0d)
+;;                 (list TAG_BYTE_CELL_ARRAY #x04
+;;                       #x02 #x00
+;;                       #x02 #x00
+;;                       #x04 #xff
+;;                       #x02 #x00)))
 
-(module+ test #| vm_cell_stack_push_array_ata_ptr |#
-  (define test-cell-stack-push-array-ata-ptr-code
-    (list
-     (LDA !$04)
-     (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
+;; (module+ test #| vm_cell_stack_push_array_ata_ptr |#
+;;   (define test-cell-stack-push-array-ata-ptr-code
+;;     (list
+;;      (LDA !$04)
+;;      (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
 
-     (LDA !$02)
-     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2) ;; @2 = nil -> stack
+;;      (LDA !$02)
+;;      (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2) ;; @2 = nil -> stack
 
-     (LDA !$ff)
-     (LDX !$01)
-     (JSR VM_CELL_STACK_PUSH_INT)            ;; int $1ff -> stack
+;;      (LDA !$ff)
+;;      (LDX !$01)
+;;      (JSR VM_CELL_STACK_PUSH_INT)            ;; int $1ff -> stack
 
-     (LDA !$02)
-     (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2) ;; tos (int $1ff) -> @2 (overwriting nil)
+;;      (LDA !$02)
+;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2) ;; tos (int $1ff) -> @2 (overwriting nil)
 
-     (LDA !$02)
-     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2)  ;; @2 (now int $1ff) -> stack
-     ))
+;;      (LDA !$02)
+;;      (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2)  ;; @2 (now int $1ff) -> stack
+;;      ))
 
-  (define test-cell-stack-push-array-ata-ptr-state-after
-    (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
+;;   (define test-cell-stack-push-array-ata-ptr-state-after
+;;     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
-  (check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                1371)
-  (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
-                (list "stack holds 3 items"
-                      "cell-int $01ff"
-                      "cell-int $01ff"
-                      "cell-pair-ptr NIL")))
+;;   (check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
+;;                 1371)
+;;   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
+;;                 (list "stack holds 3 items"
+;;                       "cell-int $01ff"
+;;                       "cell-int $01ff"
+;;                       "cell-pair-ptr NIL")))
 
 ;; idea: have a list of code pages (adding new page as head if allocated)
 ;;       TODO: how does relocation work here?
@@ -5146,42 +5084,42 @@
           VM_ALLOC_PAGE__PAGE_UNINIT                         ;; allocate new page (not initialized)
 
           VM_ALLOC_PAGE_FOR_CELLS                            ;; allocate page and initialize for ref counted cells
-          VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for ref counted cell-pairs
-          VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
+          ;; VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for ref counted cell-pairs
+          ;; VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
           ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether
 
           ;; VM_ALLOC_PAGE_FOR_MODULE_CODE                      ;; allocate page and initialize to hold immutable byte code (not ref counted)
 
           ;; ---------------------------------------- alloc/free cells, pairs, slots
           VM_ALLOC_CELL_ON_PAGE                              ;; allocate a cell on the page in A (allocating a new one if page is full)
-          VM_ALLOC_CELL_PAIR_ON_PAGE                         ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
+          ;; VM_ALLOC_CELL_PAIR_ON_PAGE                         ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 
-          VM_ALLOC_CELL_PAIR_TO_ZP_PTR                       ;; allocate a cell-pair, allocating a new page if necessary, reusing cell-pairs from the free tree first
-          VM_FREE_CELL_PAIR_IN_ZP_PTR                        ;; free this cell-pair (adding it to the free tree)
+          ;; VM_ALLOC_CELL_PAIR_TO_ZP_PTR                       ;; allocate a cell-pair, allocating a new page if necessary, reusing cell-pairs from the free tree first
+          ;; VM_FREE_CELL_PAIR_IN_ZP_PTR                        ;; free this cell-pair (adding it to the free tree)
 
-          VM_ALLOC_CELL_TO_ZP_PTR                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
-          VM_FREE_CELL_IN_ZP_PTR                             ;; free this cell (adding it to the free list)
+          VM_ALLOC_CELL_TO_RT                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
+          ;; VM_FREE_CELL_IN_ZP_PTR                             ;; free this cell (adding it to the free list)
 
-          VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
-          VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2                     ;; allocate an array of cells (also useful for structures)
+          ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
+          ;; VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2                     ;; allocate an array of cells (also useful for structures)
 
-          VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
-          VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
+          ;; VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
+          ;; VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
 
           ;; VM_ALLOC_MODULE_CODE_SLOT_TO_ZP_PTR                ;; allocate a slot for module code
           ;; VM_FREE_MODULE
           ;; VM_RELOCATE_MODULE_X_TO_                           ;; relocate module identified by page x to ??
 
           ;; ---------------------------------------- refcount
-          VM_REFCOUNT_DECR_ZP_PTR                            ;; generic decrement of refcount (dispatches depending on type)
+          ;; VM_REFCOUNT_DECR_ZP_PTR                            ;; generic decrement of refcount (dispatches depending on type)
 
-          VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
-          VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
-          VM_REFCOUNT_DECR_ZP_PTR__CELL                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_ZP_PTR__CELL_PAIR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_ZP_PTR__CELL                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
 
-          VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR                 ;; increment refcount of cell-pair
-          VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT                   ;; increment refcount of m1-slot
-          VM_REFCOUNT_INCR_ZP_PTR__CELL                      ;; increment refcount of cell
+          ;; VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR                 ;; increment refcount of cell-pair
+          ;; VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT                   ;; increment refcount of m1-slot
+          ;; VM_REFCOUNT_INCR_ZP_PTR__CELL                      ;; increment refcount of cell
 
           ;; ---------------------------------------- call frame
           VM_ALLOC_CALL_FRAME                                ;; allocate a new call frame of minimum size
@@ -5191,50 +5129,50 @@
 
           ;; ---------------------------------------- misc
 
-          VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS                ;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
-          VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
+          ;; VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS                ;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
+          ;; VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
 
-          VM_GC_ARRAY_SLOT_PTR                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
+          ;; VM_GC_ARRAY_SLOT_PTR                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
 
-          VM_DEREF_PTR2_INTO_PTR                             ;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
+          ;; VM_DEREF_PTR2_INTO_PTR                             ;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
 
-          VM_FREE_NON_ATOMIC                                 ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+          ;; VM_FREE_NON_ATOMIC                                 ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 
-          VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST              ;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
+          ;; VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST              ;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
 
-          VM_COPY_PTR2_TO_PTR                                ;; copy zp_ptr2 to zp_ptr (including tag byte)
-          VM_COPY_PTR_TO_PTR2                                ;; copy zp_ptr to zp_ptr2 (including tag byte)
+          ;; VM_COPY_PTR2_TO_PTR                                ;; copy zp_ptr2 to zp_ptr (including tag byte)
+          ;; VM_COPY_PTR_TO_PTR2                                ;; copy zp_ptr to zp_ptr2 (including tag byte)
 
           ;; ---------------------------------------- CELL_STACK
 
           ;; vm_cell_stack_write_int_1_to_tos
           ;; vm_cell_stack_write_int_0_to_tos
-          VM_CELL_STACK_WRITE_INT_TO_TOS                     ;; write the given integer into the topmost element of the cell-stack
+          ;; VM_CELL_STACK_WRITE_INT_TO_TOS                     ;; write the given integer into the topmost element of the cell-stack
 
           ;; vm_cell_stack_write_tos_to_param_0
-          VM_CELL_STACK_WRITE_TOS_TO_PARAMy                  ;; write the topmost cell into function parameter y
+          ;; VM_CELL_STACK_WRITE_TOS_TO_PARAMy                  ;; write the topmost cell into function parameter y
           ;; vm_cell_stack_write_tos_to_local_0
-          VM_CELL_STACK_WRITE_TOS_TO_LOCALy                  ;; write the topmost cell into function local y
+          ;; VM_CELL_STACK_WRITE_TOS_TO_LOCALy                  ;; write the topmost cell into function local y
 
           ;; vm_cell_stack_write_tos_to_cell1_of_zp_ptr
           ;; vm_cell_stack_write_tos_to_cell0_of_zp_ptr
-          VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR         ;; write topmost cell into x-position of the cell-pair referenced by zp_ptr
+          ;; VM_CELL_STACK_WRITE_TOS_TO_CELLx_OF_ZP_PTR         ;; write topmost cell into x-position of the cell-pair referenced by zp_ptr
 
           ;; vm_cell_stack_write_cell1_of_zp_ptr_to_tos
           ;; vm_cell_stack_write_cell0_of_zp_ptr_to_tos
-          VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS         ;; write the cell in y-position of the cell-pair referenced by zp_ptr into the topmost cell
+          ;; VM_CELL_STACK_WRITE_CELLy_OF_ZP_PTR_TO_TOS         ;; write the cell in y-position of the cell-pair referenced by zp_ptr into the topmost cell
 
           ;; vm_cell_stack_write_tos_to_zp_ptr2
           ;; vm_cell_stack_write_tos_to_zp_ptr
-          VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx                 ;; write the topmost cell into either zp_ptr or zp_ptr2 (must be a pointer)
+          ;; VM_CELL_STACK_WRITE_TOS_TO_ZP_PTRx                 ;; write the topmost cell into either zp_ptr or zp_ptr2 (must be a pointer)
 
           ;; vm_cell_stack_write_zp_ptr2_to_tos
           ;; vm_cell_stack_write_zp_ptr_to_tos
-          VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS                 ;; write the zp_ptr or zp_ptr2 into the topmost cell
+          ;; VM_CELL_STACK_WRITE_ZP_PTRy_TO_TOS                 ;; write the zp_ptr or zp_ptr2 into the topmost cell
 
-          VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2          ;; write the tos into an array at a position that is referenced through zp_ptr2
+          ;; VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2          ;; write the tos into an array at a position that is referenced through zp_ptr2
 
-          VM_CELL_STACK_POP                                  ;; pop the topmost element of the stack
+          ;; VM_CELL_STACK_POP                                  ;; pop the topmost element of the stack
           VM_CELL_STACK_POP_R
 
           ;; vm_cell_stack_push_array_ata_ptr2                  push cell from an array (referenced through zp_ptr2) at a position
@@ -5254,20 +5192,20 @@
           ;; vm_cell_stack_push_int
 
           ;; vm_cell_stack_push_nil                             push cell-pair constant NIL
-          VM_CELL_STACK_PUSH                                 ;; push a cell onto the stack
+          ;; VM_CELL_STACK_PUSH                                 ;; push a cell onto the stack
           VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
           VM_CELL_STACK_JUST_PUSH_RT                         ;; push RT onto call frame cell stack
 
           ;; vm_cell_stack_write_rt_cell0_to_rt
           ;; vm_cell_stack_write_rt_cell1_to_rt
-          VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
+          ;; VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
           VM_WRITE_INT_AY_TO_Rx
           VM_CP_RT_TO_RA
           VM_CP_RA_TO_RT
-          VM_POP_FSTOS_TO_CELLy_RT
-          VM_WRITE_RA_TO_CELLy_RT
-          VM_WRITE_RT_TO_CELLy_RA          
+          ;; VM_POP_FSTOS_TO_CELLy_RT
+          ;; VM_WRITE_RA_TO_CELLy_RT
+          ;; VM_WRITE_RT_TO_CELLy_RA          
 
           ;; ---------------------------------------- registers and maps
           (list (org #xcec0))
