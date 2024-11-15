@@ -1,5 +1,121 @@
 #lang racket/base
 
+;; decision:
+;;   use new pointer tagging scheme (makes tagged-low-byte obsolete):
+;;     (new) zzzz zzz0 = cell-ptr (no change on cell-ptr pages)
+;;     (new) xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)
+;;     (new) 0iii ii11 = int-cell (no direct adding of highbyte possible)
+;;     (new) 1111 1111 = byte-cell (char|bool) 
+;;     (new) 1000 0011 = cell-array-header
+;;     (new) 1000 0111 = cell-native-array-header
+;;   implementation steps:
+;;   - cleanup dangling changes from tos/rt change!
+;;   - replace RT = $01 empty marker checks!, new! 01 = nil, 00 = empty marker
+;;   - replace NIL (old $0002, new $0001)
+;;   - change pointer detection (lsr + bcc = cell-ptr, next lsr + bcc = cell-pair ptr, else no pointer cell)
+;;   - remove tagged low byte / replace with regular low byte (since regular low byte = tagged low byte)
+;;   - change cell-pair allocation and initialization
+;;   - change int detection and calculation
+;;   - change cell-array-header + cell-native-array-header detection (if applicable an existent)
+;;
+;; IDEA: if cell-ptr and cell-pair-ptr would use the bytes as is (with having to separately hold a tagged low byte),
+;;       additionally masking out the tagged byte + copying during stack push and pop would not be necessary
+;;       problem: lda (zp_rt),y must then point to a cell or a cell-pair
+;;                if cell-ptr lowbyte has at bit0 a 0 this would work
+;;                however, cell-pair-ptr (to be able to differentiate from cell-ptr) would have to set bit0 to 1 and this lda (zp_rt),y would point to a different location
+;;                => cell-pair pages need to be organized differently (or cell pages)
+;;                   current memory layout
+;;                   page type: cell-pairs page (its actually randomly growing, fixed slot size (4b), ref counted page)
+;;                   memory layout of a cell-pairs page (refcount @ ptr >> 2) 51 cells
+;;                   offset content
+;;                   00     #b01xx xxxx page type + number of used slots
+;;                   01     ref-count for cell-pair at 04 (cell-pair 0)
+;;                   02     ref-count for cell-pair at 08 (cell-pair 1)
+;;                   03     ref-count for cell-pair at 0C (cell-pair 2)
+;;                   04..07  cell-pair 0
+;;                   08..0b  cell-pair 1
+;;                   0c..0f  cell-pair 2
+;;                   10     ref-count for cell-pair at 40 (cell-pair 3)
+;;                   11     ref-count for cell-pair at 44 (cell-pair 4)
+;;                   ..3e   ref-count for cell-pair at fc (cell-pair 49)
+;;                   3f    unused
+;;                   40     cell-pair 3
+;;                   44     cell-pair 4
+;;                   ..fb  cell-pair 49
+;;                   fc..fe unused
+;;                   ff    previous page of this type
+;;
+;;                   old c004 = cell pair ptr,
+;;                   new zzzz zzz0 = cell-ptr, xxxx xx01 = cell-pair-ptr (looses one cell-pair), 0iii ii11 = int (no direct adding of highbyte possible)
+;;                       00
+;;                       01     ref count cell pair at 05 (cellpair0)
+;;                       02     ref-count for cell-pair at 08 (cell-pair 1)
+;;                       03..04  unused
+;;                       05..08  cell-pair 0
+;;                       09..0c  cell-pair 1
+;;                       0d..0f  unused
+;;                       10     ref-count for cell-pair at 40 (cell-pair 2)
+;;                       11     ref-count for cell-pair at 44 (cell-pair 3)
+;;                       ..3e   ref-count for cell-pair at fc (cell-pair 48)
+;;                       3f..40 unused
+;;                       41     cell-pair 2
+;;                       45     cell-pair 3
+;;                       ..fc   cell-pair 48
+;;                       fd..fe unused
+;;                       ff    previous page of this type
+;;
+;;                => alternative cell pages
+;;                   current memory layout
+;;                   page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)
+;;                   offset content
+;;                   00     #b1zzz zzzz page type + number of used slots
+;;                   01     ref-count for cell at 02 (cell 0)
+;;                   02..03 cell 0
+;;                   04     ref-count for cell at 08 (cell 1)
+;;                   ...
+;;                   07     ref-count for cell at 08 (cell 4)
+;;                   08..09 cell 1
+;;                   ...
+;;                   0e..0f cell 4
+;;                   10    ref-count for cell at 20 (cell 5)
+;;                   ...
+;;                   1f    ref-count for cell at 20 (cell 20)
+;;                   20..21 cell 5
+;;                   ...
+;;                   3e..3f cell 20
+;;                   40..7e ref-count for cell at 80..fc (cell 21..83)
+;;                   7f    unused
+;;                   80..fd cell 21..83
+;;                   fe    unused
+;;                   ff    previous page of this type
+;;
+;;                   old c002 = cell ptr,
+;;                   new: zzzz zzz1 = cell-ptr (looses 3 cells), xxxx xx00 = cell-pair ptr (uses most compact layout), 0iii ii10 = int (no direct adding of highbyte possible!
+;;                   new page layout
+;;                       00        page type
+;;                       01        ref count cell0
+;;                       02        unused?
+;;                       c003..c004 cell0
+;;                       05         ref count cell1
+;;                       ..
+;;                       07         ref count cell3
+;;                       0b..0c     cell 1 1011
+;;                       0d..0e     cell 2 1101
+;;                       10         ref count 3
+;;                       11         ref count 4
+;;                       ...
+;;                       1f         unused?
+;;                       21..22      cell3 0010 0001
+;;                       ...
+;;                       3d..3e      cell17 0011 1101
+;;                       3f         unused?
+;;                       40..7e      ref count for cell 81..fe (cell 18..80)
+;;                       7f..80      unused?
+;;                       81..82      cell 18 1000 0001
+;;                       83..fc      cells 19..79
+;;                       fd..fe      cell 80 1111 1101 .. 1111 1110
+;;                       ff         previous page of this type
+;;
 ;; DONE: tos is always a register held in zp (e.g. now zp_ptr, future zp_rt)
 ;;       have additional "registers", capable of holding cells zp_ra, zp_rb ...
 ;;       push zp_rt on stack only if necessary => operations working on one value only do no push/pop actions
@@ -250,8 +366,8 @@
 ;; ..3F   ref-count for cell-pair at fc (cell-pair 50)
 ;; 40     cell-pair 3
 ;; 44     cell-pair 4
-;; ..fc   cell-pair 50
-;; fd..fe unused
+;; ..fb   cell-pair 50
+;; fc..fe unused
 ;; ff    previous page of this type
 ;;
 ;; VM_FIRST_FREE_SLOT_ON_PAGE + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
@@ -1230,6 +1346,41 @@
   (check-equal? (vm-deref-cell-pair-w->string vm-cell-stack-write-rt-celly-to-rt-state #xcc04)
                 "(cell-int $1001 . cell-int $0110)"))
 
+;; input:  call-frame stack, RT
+;; output: call-frame stack << RT
+;; uses:   A Y
+;; CHECK STACK PAGE OVERFLOW
+(define VM_CELL_STACK_JUST_PUSH_RT
+  (list
+   (label VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+          (LDY ZP_RT_TAGGED_LB)
+          (CPY !$01)                                    ;; if RT empty? (old = $01), new = $00 => remove cmp
+          (BEQ DONE__VM_CELL_STACK_JUST_PUSH_RT)        ;; then no push
+
+   ;; ----------------------------------------
+   (label VM_CELL_STACK_JUST_PUSH_RT)
+          (LDY ZP_CELL_STACK_TOS)
+
+          ;; check that stack pointer does not run out of bound (over the page)
+          (CPY !$fd) ;; marks the end of page, for pushes at least!
+          [BNE NO_ERROR__VM_CELL_STACK_JUST_PUSH_RT]
+
+          (BRK)
+
+   (label NO_ERROR__VM_CELL_STACK_JUST_PUSH_RT)
+          (LDA ZP_RT+1)
+          (INY)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte! (untagged)
+
+          (LDA ZP_RT_TAGGED_LB)
+          (INY)
+          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte (tagged)
+
+          (STY ZP_CELL_STACK_TOS)      ;; set new tos
+
+   (label DONE__VM_CELL_STACK_JUST_PUSH_RT)
+          (RTS)))
+
 ;; push a cell onto the stack (that is push the RegT, if filled, and write the value into RegT)
 ;; input: call-frame stack, RT
 ;;        A = high byte,
@@ -1281,33 +1432,9 @@
    ;; A = high byte
    ;; X = tagged low byte
    (label VM_CELL_STACK_PUSH_R)
-          (LDY !$01)
-          (CPY ZP_RT_TAGGED_LB)     ;; if tagged-byte = 01 (empty marker) then push simply writes only into RT
-          (BEQ VM_WRITE_AX_TO_RT)
-
-   (label PUSH_RT__VM_CELL_STACK_PUSH_R)
-          (LDY ZP_CELL_STACK_TOS)
-
-          ;; check that stack pointer does not run out of bound (over the page)
-          (CPY !$fd) ;; marks the end of page, for pushes at least!
-          [BNE NO_ERROR__VM_CELL_STACK_PUSH_R]
-
-          (BRK)
-
-   (label NO_ERROR__VM_CELL_STACK_PUSH_R)
-          (PHA) ;; save A, X is not used => needs not to be saved
-
-          (LDA ZP_RT+1)
-          (INY)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte! (untagged)
-
-          (LDA ZP_RT_TAGGED_LB)
-          (INY)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte (tagged)
-
-          (STY ZP_CELL_STACK_TOS)      ;; set new tos
-
-          (PLA) ;; restore A from call
+          (PHA)
+          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY) ;; uses A and Y
+          (PLA)
 
    (label VM_WRITE_AX_TO_RT)
           (STX ZP_RT_TAGGED_LB)          
@@ -3473,6 +3600,7 @@
 
 ;; input:   A = number of parameters on the stack to be used in this call frame
 ;;          x = number of locals to allocate on call frame
+;;          carry set = NO RT PUSH before save (in effect discard tos = rt, useful if function id/number is in rt for the call)
 ;;          zp_cell_frame = freshly allocated frame that has min size x*2 + 6 + 32
 ;;          zp_vm_pc          -> saved into cell frame (for pop)
 ;;          zp_vm_params_ptr  -> saved into cell frame (for pop)
@@ -3485,8 +3613,11 @@
 (define VM_SAVE_EXEC_STATE_TO_CALL_FRAME
   (list
    (label VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
-          (ASL A) ;; # params * 2 (number of bytes)
           (STA ZP_TEMP)
+          (BCS NO_RT_PUSH__VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+   (label NO_RT_PUSH__VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+          (ASL ZP_TEMP) ;; # params * 2 (number of bytes)
           (LDA ZP_CELL_STACK_TOS)
           (SEC)
           (SBC ZP_TEMP)
@@ -3524,6 +3655,8 @@
 
           (LDA !$ff)
           (STA ZP_CELL_STACK_TOS) ;; set this one to 0
+          (LDA !$01)
+          (STA ZP_RT_TAGGED_LB) ;; mark RT as empty
 
           (RTS)))
 
@@ -3559,7 +3692,7 @@
      (LDX !$05)
      (STX ZP_CELL_STACK_TOS)
      (INX)
-     (STX ZP_VM_PC)     ;; $17
+     (STX ZP_VM_PC)     ;; $06
 
      (LDX ZP_CALL_FRAME+1) ;; $cd
      (STX ZP_PARAMS_PTR+1)
@@ -3574,6 +3707,7 @@
 
      (LDA !$02) ;; two params
      (LDX !$03) ;; three locals
+     (CLC)
      (JSR VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
      ))
 
@@ -3619,7 +3753,8 @@
 (define VM_POP_CALL_FRAME
   (list
    (label VM_POP_CALL_FRAME)
-          (JSR VM_CELL_STACK_WRITE_TOS_TO_PARAM_0)
+          ;; result is in rt (no stack manipulation necessary)
+          ;; (JSR VM_CELL_STACK_WRITE_TOS_TO_PARAM_0) 
 
           (LDA ZP_CALL_FRAME+1)         ;; get current page
           (CMP ZP_PARAMS_PTR+1)         ;; compare with old page
@@ -3648,7 +3783,7 @@
           (SEC)
           (SBC ZP_CELL_STACK_BASE_PTR)
           (STA ZP_CELL_STACK_TOS)
-          (INC ZP_CELL_STACK_TOS) ;; point to the tagged lowbyte
+          (DEC ZP_CELL_STACK_TOS) ;; point to the tagged lowbyte
 
           ;; set ZP_CALL_FRAME
           (LDA ZP_LOCALS_PTR+1)
@@ -3688,10 +3823,10 @@
      (STX ZP_LOCALS_PTR) ;; $10
      (LDX !$16)
      (STX ZP_CELL_STACK_BASE_PTR)
-     (LDX !$05)
+     (LDX !$ff)  ;; (2 items on the stack + 1 in RT)
      (STX ZP_CELL_STACK_TOS)
-     (INX)
-     (STX ZP_VM_PC)     ;; $17
+     (LDX !$04)
+     (STX ZP_VM_PC)     ;; $04
 
      (LDX ZP_CALL_FRAME+1) ;; $cd
      (STX ZP_PARAMS_PTR+1)
@@ -3700,17 +3835,23 @@
      (DEX)                      ;; $cc
      (STX ZP_VM_PC+1)
 
+     (JSR VM_WRITE_INT1_TO_RT)         ;; 1
+     (JSR VM_CELL_STACK_PUSH_INT_0_R)  ;; 0 <- parameter 0
+     (JSR VM_CELL_STACK_PUSH_INT_m1_R) ;; -1 <- parameter 1
+
      ;; allocate new call frame space that can hold $20 bytes
      (LDA !$20)
      (JSR VM_ALLOC_CALL_FRAME)
 
-     (LDA !$02) ;; two params
+     (LDA !$02) ;; pass two params, (push rt, then two topmost)
      (LDX !$03) ;; three locals
+     (CLC)      ;; push RT before saving
      (JSR VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
 
-     (JSR VM_CELL_STACK_PUSH_INT_1)
+     (JSR VM_WRITE_INT1_TO_RT)
+     (INC ZP_VM_PC)
 
-     (JSR VM_POP_CALL_FRAME)
+     (JSR VM_POP_CALL_FRAME) ;; should restore to 1 item on the stack, RT = returned value (int1)
      ))
 
   (define test-pop-call-frame-state-after
@@ -3724,12 +3865,10 @@
                 (list #x10 #xcd))
   (check-equal? (memory-list test-pop-call-frame-state-after ZP_CELL_STACK_BASE_PTR (add1 ZP_CELL_STACK_BASE_PTR))
                 (list #x16 #xcd))
-  (check-equal? (memory-list test-pop-call-frame-state-after ZP_CELL_STACK_TOS ZP_CELL_STACK_TOS)
-                (list #x03))
   (check-equal? (memory-list test-pop-call-frame-state-after ZP_VM_PC (add1 ZP_VM_PC))
-                (list #x06 #xcc))
+                (list #x04 #xcc))
   (check-equal? (take (vm-stack->strings test-pop-call-frame-state-after) 2)
-                '("stack holds 2 items" ;; 3 before, 2 were parameters => 1 old + 1 result (old tos)
+                '("stack holds 1 item" ;; 3 before, 2 were parameters => 1 old + 1 result in RT
                   "cell-int $0001")))
 
 
@@ -5116,7 +5255,9 @@
 
           ;; vm_cell_stack_push_nil                             push cell-pair constant NIL
           VM_CELL_STACK_PUSH                                 ;; push a cell onto the stack
-          VM_CELL_STACK_PUSH_R
+          VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
+          ;; vm_cell_stack_push_rt_if_nonempty
+          VM_CELL_STACK_JUST_PUSH_RT                         ;; push RT onto call frame cell stack
 
           ;; vm_cell_stack_write_rt_cell0_to_rt
           ;; vm_cell_stack_write_rt_cell1_to_rt

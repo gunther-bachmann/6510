@@ -34,42 +34,11 @@
 
 (provide vm-lists)
 
-
 ;; code
 ;;   VM_NIL_P :: TOS := (TOS = nil?)
 ;;   VM_CAR   :: TOS := (car TOS)
 ;;   VM_CDR   :: TOS := (cdr TOS)
 ;;   VM_CONS  :: TOS := (TOS . TOS-1)
-
-;; (define VM_NIL_P
-;;   (list
-;;    (label STACK_EMPTY__VM_NIL_P)
-;;    (label NO_CELL_PAIR_PTR__VM_NIL_P)
-;;           (BRK)
-
-;;    ;; ----------------------------------------
-;;    (label VM_NIL_P)
-;;           ;; check if stack is not empty
-;;           (LDY ZP_CELL_STACK_TOS)
-;;           (BMI STACK_EMPTY__VM_NIL_P)
-;;           ;; check if tos is cell-pair-ptr
-;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
-;;           (AND !$02)
-;;           (BEQ NO_CELL_PAIR_PTR__VM_NIL_P)
-
-;;    (label VM_NIL_P__UC) ;; no checks
-;;           (LDY ZP_CELL_STACK_TOS)
-;;           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; get tagged byte
-;;           (CMP !<TAGGED_NIL) ;;
-;;           (BNE NOT_NIL__VM_NIL_P)
-;;           ;; this additional check should not be necessary, since tagged low byte of a non-nil cell-pair-ptr may never be #x02
-;;           ;; (LDA ZP_CELL0_LOW,x) ;; get high byte
-;;           ;; (BNE NOT_NIL__VM_NIL_P) ;; high byte of nil is 0! => branch if != 0
-;;           (JMP VM_CELL_STACK_WRITE_INT_1_TO_TOS) ;; true
-;;    (label NOT_NIL__VM_NIL_P)
-;;           (JMP VM_CELL_STACK_WRITE_INT_0_TO_TOS) ;; false
-;;           ))
-
 
 (define VM_NIL_P_R
   (list
@@ -127,32 +96,6 @@
   (check-equal? (vm-regt->string use-case-nil_p-b-state-after)
                 "cell-int $0000"))
 
-;; (define VM_CAR
-;;   (list
-;;    (label STACK_EMPTY__VM_CAR)
-;;    (label TOS_IS_NIL__VM_CAR)
-;;    (label NO_CELL_PAIR_PTR__VM_CAR)
-;;           (BRK)
-
-;;    ;; ----------------------------------------
-;;    (label VM_CAR)
-;;           ;; check if stack is not empty
-;;           (LDY ZP_CELL_STACK_TOS)
-;;           (BMI STACK_EMPTY__VM_CAR)
-
-;;           ;; check if tos not nil
-;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
-;;           (CMP !$02)
-;;           (BEQ TOS_IS_NIL__VM_CAR)
-
-;;           ;; check if tos is cell-pair-ptr
-;;           (AND !$02)
-;;           (BEQ NO_CELL_PAIR_PTR__VM_CAR)
-
-;;    (label VM_CDR__UC) ;; no checks
-;;           (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR)
-;;           (JMP VM_CELL_STACK_WRITE_CELL0_OF_ZP_PTR_TO_TOS)))
-
 (define VM_CAR_R
   (list
    (label STACK_EMPTY__VM_CAR_R)
@@ -197,33 +140,6 @@
 
           (JMP VM_CELL_STACK_WRITE_RT_CELL1_TO_RT)))
 
-;; (define VM_CDR
-;;   (list
-;;    (label STACK_EMPTY__VM_CDR)
-;;    (label TOS_IS_NIL__VM_CDR)
-;;    (label NO_CELL_PAIR_PTR__VM_CDR)
-;;           (BRK)
-
-;;    ;; ----------------------------------------
-;;    (label VM_CDR)
-;;           ;; check if stack is not empty
-;;           (LDY ZP_CELL_STACK_TOS)
-;;           (BMI STACK_EMPTY__VM_CDR)
-
-;;           ;; check if tos not nil
-;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
-;;           (CMP !$02)
-;;           (BEQ TOS_IS_NIL__VM_CDR)
-
-;;           ;; check if tos is cell-pair-ptr
-;;           (AND !$02)
-;;           (BEQ NO_CELL_PAIR_PTR__VM_CDR)
-
-;;    (label VM_CDR__UC) ;; no checks
-;;           (JSR VM_CELL_STACK_WRITE_TOS_TO_ZP_PTR)
-;;           (JMP VM_CELL_STACK_WRITE_CELL1_OF_ZP_PTR_TO_TOS)))
-
-
 (define VM_CONS_R
   (list
    (label STACK_HAS_LESS_THAN_TWO__VM_CONS_R)
@@ -239,26 +155,6 @@
           (JSR VM_WRITE_RA_TO_CELL1_RT)
           (JMP VM_POP_FSTOS_TO_CELL0_RT)))
 
-;; cons TOS into list at TOS-1
-;; (define VM_CONS
-;;   (list
-;;    (label STACK_HAS_LESS_THAN_TWO__VM_CONS)
-;;           (BRK)
-
-;;    (label VM_CONS)
-;;           ;; check stack size >= 2
-;;           (LDY ZP_CELL_STACK_TOS)
-;;           (CPY !$03) ;; 01 = one element 03 = two elements
-;;           (BMI STACK_HAS_LESS_THAN_TWO__VM_CONS)
-
-;;    (label VM_CONS__UC) ;; no checks
-;;           (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-;;           (JSR VM_REFCOUNT_INCR_ZP_PTR__CELL_PAIR)
-;;           (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
-;;           (JSR VM_CELL_STACK_POP__NO_GC)
-;;           (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)
-;;           (JMP VM_CELL_STACK_WRITE_ZP_PTR_TO_TOS)))
-
 (module+ test #| VM_CONS |#
   (define use-case-cons-code
     (list
@@ -269,9 +165,6 @@
   (define use-case-cons-state-after
     (run-code-in-test use-case-cons-code ))
 
-  (check-equal? (memory-list use-case-cons-state-after #xfb #xfc)
-                '(#x04 #xcc)
-                "case cons: zp_ptr -> $cc04")
   (check-equal? (vm-regt->string use-case-cons-state-after)
                 "cell-pair-ptr $cc04")
   (check-equal? (vm-stack->strings use-case-cons-state-after)
@@ -285,11 +178,7 @@
                 "(cell-int $0001 . cell-pair-ptr NIL)"))
 
 (define vm-lists
-  (append ;; VM_CONS
-          ;; VM_CAR
-          ;; VM_CDR
-          ;; VM_NIL_P
-          VM_CONS_R
+  (append VM_CONS_R
           VM_CAR_R
           VM_CDR_R
           VM_NIL_P_R
