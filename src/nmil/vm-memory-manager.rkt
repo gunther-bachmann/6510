@@ -1,25 +1,45 @@
 #lang racket/base
 ;; [[pdfview:~/Downloads/Small memory software patterns for limited memory systems.2001.pdf::261++0.00][Small memory software patterns for limited memory systems.2001.pdf: Page 261]]
 ;; decision:
-;;   RT = 00 : rt is empty
-;;   use new pointer tagging scheme (makes tagged-low-byte obsolete):
-;;     (new) zzzz zzz0 = cell-ptr (no change on cell-ptr pages) 
-;;     (new) xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)
-;;     (new) 0iii ii11 = int-cell (no direct adding of highbyte possible)
-;;     (new) 1111 1111 = byte-cell (char|bool) 
-;;     (new) 1000 0011 = cell-array-header
-;;     (new) 1000 0111 = cell-native-array-header
+;;   RT = 00 (low byte) : rt is empty
+;;   use new pointer tagging scheme (makes tagged-low-byte obsolete):            examples (low, then high byte):
+;;     (new) zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                  0000 001[0]    1100 1101   cd02 (first allocated slot in cell-ptr page)
+;;     (new) xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)          0000 01[01]    1100 1101   cd05 (first allocated slot in a cell-pair-ptr page)
+;;     (new) 0iii ii11 = int-cell (no direct adding of highbyte possible)        [0]000 10[11]  0001 1000   0218 (decimal 512+16+8 = 536) <- high byte comes first in this special int encoding
+;;     (new) 1111 1111 = byte-cell (char|bool)                                   [1111 1111]    0000 0001   01  <- payload is in high byte
+;;     (new) 1000 0011 = cell-array-header                                       [1000 0011]    0000 0100   04 cells in array
+;;     (new) 1000 0111 = cell-native-array-header                                [1000 0111]    0000 1000   08 bytes in array 
+;;
+;;     (new) cell-pair-ptr page layout 
+;;                       00     #b01xx xxxx page type + number of used slots
+;;                       01     ref-count cell-pair at 05 (cell-pair 0)
+;;                       02     ref-count cell-pair at 09 (cell-pair 1)
+;;                       03..04  unused (2)
+;;                       05..08  cell-pair 0
+;;                       09..0c  cell-pair 1
+;;                       0d..0f  unused (3)
+;;                       10     ref-count for cell-pair at 40 (cell-pair 2)
+;;                       11     ref-count for cell-pair at 44 (cell-pair 3)
+;;                       ..3e   ref-count for cell-pair at f9 (cell-pair 48)
+;;                       3f..40 unused (2)
+;;                       41..44 cell-pair 2
+;;                       45..48 cell-pair 3
+;;                       ...
+;;                       f9..fc   cell-pair 48
+;;                       fd..fe unused (2)
+;;                       ff    previous page of this type
+;;
 ;;   implementation steps:
-;;   - cleanup dangling changes from tos/rt change!
-;;   - replace RT = $01 empty marker checks!, new! 01 = nil, 00 = empty marker
-;;   - replace NIL (old $0002, new $0001)
-;;   - change pointer detection (lsr + bcc = cell-ptr, next lsr + bcc = cell-pair ptr, else no pointer cell)
-;;   - remove tagged low byte / replace with regular low byte (since regular low byte = tagged low byte)
+;;   - [X] cleanup dangling changes from tos/rt change!
+;;   - [X] replace RT = $01 empty marker checks!, new! 01 = nil, 00 = empty marker
+;;   - [X] replace NIL (old $0002, new $0001)
+;;   - [X] change pointer detection (lsr + bcc = cell-ptr, next lsr + bcc = cell-pair ptr, else no pointer cell)
+;;   - [X] remove tagged low byte / replace with regular low byte (since regular low byte = tagged low byte)
 ;;   - change cell-pair allocation and initialization
 ;;   - change int detection and calculation
 ;;   - change cell-array-header + cell-native-array-header detection (if applicable an existent)
 ;;
-;; IDEA: if cell-ptr and cell-pair-ptr would use the bytes as is (with having to separately hold a tagged low byte),
+;; DONE: if cell-ptr and cell-pair-ptr would use the bytes as is (with having to separately hold a tagged low byte),
 ;;       additionally masking out the tagged byte + copying during stack push and pop would not be necessary
 ;;       problem: lda (zp_rt),y must then point to a cell or a cell-pair
 ;;                if cell-ptr lowbyte has at bit0 a 0 this would work
@@ -351,7 +371,7 @@
 ;;
 ;; VM_FIRST_FREE_SLOT_ON_PAGE + pageidx: holds free-idx (initially 02) <- points to the first free byte (-1 = size of previous)
 
-;; ---------------------------------------- cell-pairs page
+;; OLD OUTDATED: SEE TOP OF FILE-------------------------------------- cell-pairs page
 ;; page type: cell-pairs page (its actually randomly growing, fixed slot size (4b), ref counted page)
 ;; memory layout of a cell-pairs page (refcount @ ptr >> 2) 51 cells
 ;; offset content
@@ -364,11 +384,12 @@
 ;; 0c..0f  cell-pair 2
 ;; 10     ref-count for cell-pair at 40 (cell-pair 3)
 ;; 11     ref-count for cell-pair at 44 (cell-pair 4)
-;; ..3F   ref-count for cell-pair at fc (cell-pair 50)
+;; ..3e   ref-count for cell-pair at fc (cell-pair 50)
+;; 3f    unused (1)
 ;; 40     cell-pair 3
 ;; 44     cell-pair 4
 ;; ..fb   cell-pair 50
-;; fc..fe unused
+;; fc..fe unused (3)
 ;; ff    previous page of this type
 ;;
 ;; VM_FIRST_FREE_SLOT_ON_PAGE + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
@@ -383,20 +404,20 @@
 ;; 02..03 cell 0
 ;; 04     ref-count for cell at 08 (cell 1)
 ;; ...
-;; 07     ref-count for cell at 08 (cell 4)
+;; 07     ref-count for cell at 0e (cell 4)
 ;; 08..09 cell 1
 ;; ...
 ;; 0e..0f cell 4
 ;; 10    ref-count for cell at 20 (cell 5)
 ;; ...
-;; 1f    ref-count for cell at 20 (cell 20)
+;; 1f    ref-count for cell at 3e (cell 20)
 ;; 20..21 cell 5
 ;; ...
 ;; 3e..3f cell 20
 ;; 40..7e ref-count for cell at 80..fc (cell 21..83)
-;; 7f    unused
+;; 7f    unused (1)
 ;; 80..fd cell 21..83
-;; fe    unused
+;; fe    unused (1)
 ;; ff    previous page of this type
 
 ;; ---------------------------------------- s8 page
@@ -651,9 +672,13 @@
      (define stack-ptr (peek-word-at-address state ZP_CELL_STACK_BASE_PTR))
      (define stack (memory-list state stack-ptr (+ 1 stack-tos-idx stack-ptr)))
      (define stack-values stack)
-     (define stack-item-no (/ (add1 stack-tos-idx) 2))
+     (define stack-item-no (+ (/ (add1 stack-tos-idx) 2)
+                              (if (regt-empty? state) 0 1)))
+     (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (cdr pair) (car pair))) (pairing stack-values))))
      (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
-           (reverse (map (lambda (pair) (vm-cell->string (cdr pair) (car pair))) (pairing stack-values))))]))
+           (if (regt-empty? state)
+               stack-strings
+               (cons (format "~a  (rt)" (vm-regt->string state)) stack-strings)))]))
 
 ;; make a list of adjacent pairs
 (define (pairing list (paired-list '()))
@@ -712,6 +737,10 @@
     ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
     [else "?"]))
 
+
+(define (regt-empty? state)
+  (= 0 (peek state ZP_RT)))
+
 (define (vm-regt->string state)
   (vm-cell->string
    (peek state ZP_RT)
@@ -757,10 +786,9 @@
   (define test-vm_stack_to_string-a-state-after
     (run-code-in-test test-vm_stack_to_string-a-code))
 
-  (check-equal? (vm-regt->string test-vm_stack_to_string-a-state-after)
-                "cell-pair-ptr NIL")
   (check-equal? (vm-stack->strings test-vm_stack_to_string-a-state-after)
-                '("stack holds 3 items"
+                '("stack holds 4 items"
+                  "cell-pair-ptr NIL  (rt)"
                   "cell-int $0301"
                   "cell-pair-ptr NIL"
                   "cell-pair-ptr NIL")))
@@ -1075,23 +1103,23 @@
 ;; input:  RT
 ;;         RA must be cell-pair-ptr
 ;; output: cell1 of cell-pair pointed to be RA is set to RT
-;; (define VM_WRITE_RT_TO_CELLy_RA
-;;   (list
-;;    (label VM_WRITE_RT_TO_CELL1_RA)
-;;           (LDY !$02)
-;;           (BNE VM_WRITE_RT_TO_CELLy_RA)
+(define VM_WRITE_RT_TO_CELLy_RA
+  (list
+   (label VM_WRITE_RT_TO_CELL1_RA)
+          (LDY !$02)
+          (BNE VM_WRITE_RT_TO_CELLy_RA)
 
-;;    (label VM_WRITE_RT_TO_CELL0_RA)
-;;           (LDY !$00)
+   (label VM_WRITE_RT_TO_CELL0_RA)
+          (LDY !$00)
 
-;;    ;; ----------------------------------------
-;;    (label VM_WRITE_RT_TO_CELLy_RA)
-;;           (LDA ZP_RT_TAGGED_LB)
-;;           (STA (ZP_RA),y)
-;;           (INY)
-;;           (LDA ZP_RT+1)
-;;           (STA (ZP_RA),y)
-;;           (RTS)))
+   ;; ----------------------------------------
+   (label VM_WRITE_RT_TO_CELLy_RA)
+          (LDA ZP_RT)
+          (STA (ZP_RA),y)
+          (INY)
+          (LDA ZP_RT+1)
+          (STA (ZP_RA),y)
+          (RTS)))
 
 ;; (module+ test #| vm-write-rt-to-celly-ra |#
 ;;   (define vm_write_rt_to_celly_ra_code
@@ -1124,23 +1152,23 @@
 ;; input:  RT
 ;;         RA must be cell-pair-ptr
 ;; output: cell1 of cell-pair pointed to be RA is set to RT
-;; (define VM_WRITE_RA_TO_CELLy_RT
-;;   (list
-;;    (label VM_WRITE_RA_TO_CELL1_RT)
-;;           (LDY !$02)
-;;           (BNE VM_WRITE_RA_TO_CELLy_RT)
+(define VM_WRITE_RA_TO_CELLy_RT
+  (list
+   (label VM_WRITE_RA_TO_CELL1_RT)
+          (LDY !$02)
+          (BNE VM_WRITE_RA_TO_CELLy_RT)
 
-;;    (label VM_WRITE_RA_TO_CELL0_RT)
-;;           (LDY !$00)
+   (label VM_WRITE_RA_TO_CELL0_RT)
+          (LDY !$00)
 
-;;    ;; ----------------------------------------
-;;    (label VM_WRITE_RA_TO_CELLy_RT)
-;;           (LDA ZP_RA_TAGGED_LB)
-;;           (STA (ZP_RT),y)
-;;           (INY)
-;;           (LDA ZP_RA+1)
-;;           (STA (ZP_RT),y)
-;;           (RTS)))
+   ;; ----------------------------------------
+   (label VM_WRITE_RA_TO_CELLy_RT)
+          (LDA ZP_RA)
+          (STA (ZP_RT),y)
+          (INY)
+          (LDA ZP_RA+1)
+          (STA (ZP_RT),y)
+          (RTS)))
 
 ;; (module+ test #| vm-write-ra-to-celly-rt |#
 ;;   (define vm_write_ra_to_celly_rt_code
@@ -1175,33 +1203,33 @@
 ;;         y = (0 = cell0, 2 = cell1)
 ;; output: cell-stack (one value less)
 ;;         cell0 of RA is set
-;; (define VM_POP_FSTOS_TO_CELLy_RT
-;;   (list
-;;    (label VM_POP_FSTOS_TO_CELL1_RT)
-;;           (LDY !$03)
-;;           (BNE VM_POP_FSTOS_TO_CELLy_RT__UCY)
+(define VM_POP_FSTOS_TO_CELLy_RT
+  (list
+   (label VM_POP_FSTOS_TO_CELL1_RT)
+          (LDY !$03)
+          (BNE VM_POP_FSTOS_TO_CELLy_RT__UCY)
 
-;;    (label VM_POP_FSTOS_TO_CELL0_RT)
-;;           (LDY !$00)
+   (label VM_POP_FSTOS_TO_CELL0_RT)
+          (LDY !$00)
 
-;;    ;; ----------------------------------------
-;;    (label VM_POP_FSTOS_TO_CELLy_RT)
-;;           (INY)
-;;    (label VM_POP_FSTOS_TO_CELLy_RT__UCY)
-;;           (STY ZP_TEMP)
-;;           (LDY ZP_CELL_STACK_TOS)
-;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
-;;           (TAX)
-;;           (DEY)
-;;           (LDA (ZP_CELL_STACK_BASE_PTR),y)
-;;           (LDY ZP_TEMP)
-;;           (STA (ZP_RT),y)
-;;           (DEY)
-;;           (TXA)
-;;           (STA (ZP_RT),y)
-;;           (DEC ZP_CELL_STACK_TOS)
-;;           (DEC ZP_CELL_STACK_TOS)
-;;           (RTS)))
+   ;; ----------------------------------------
+   (label VM_POP_FSTOS_TO_CELLy_RT)
+          (INY)
+   (label VM_POP_FSTOS_TO_CELLy_RT__UCY)
+          (STY ZP_TEMP)
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (TAX)
+          (DEY)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (LDY ZP_TEMP)
+          (STA (ZP_RT),y)
+          (DEY)
+          (TXA)
+          (STA (ZP_RT),y)
+          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_CELL_STACK_TOS)
+          (RTS)))
 
 ;; (module+ test #| vm-pop-fstos-to-celly-rt |#
 ;;   (define vm-pop-fstos-to-celly-rt-code
@@ -1281,42 +1309,25 @@
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RT (must be cell-pair ptr)
 ;; output: RT
-;; (define VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
-;;   (list
-;;    (label VM_CELL_STACK_WRITE_RT_CELL1_TO_RT)
-;;           (LDY !$02)
-;;           (BNE VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-;;    (label VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)
-;;           (LDY !$00)
-;;    (label VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-;;           (LDA (ZP_RT),y)
-;;           (TAX)
-;;           (INY)
-;;           (LDA (ZP_RT),y)
-;;           (STA ZP_RT+1)
+(define VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
+  (list
+   (label VM_CELL_STACK_WRITE_RT_CELL1_TO_RT)
+          (LDY !$02)
+          (BNE VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
 
-;;           (TXA)
-;;           (STA ZP_RT_TAGGED_LB)
+   (label VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)
+          (LDY !$00)
 
-;;           (LSR)
-;;           (BCC NO_CELL_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-;;           ;; it is a cell-ptr
-;;           (TAX)
-;;           (AND !$fe)
-;;           (STA ZP_PTR)
-;;           (RTS)
-
-;;    (label NO_CELL_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-;;           (LSR)
-;;           (BCC NO_CELL_PAIR_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-;;           ;; it is a cell-pair-ptr
-;;           (TAX)
-;;           (AND !$fc)
-;;           (TAX)
-
-;;    (label NO_CELL_PAIR_PTR__VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
-;;           (STX ZP_PTR)
-;;           (RTS)))
+   ;; ----------------------------------------
+   (label VM_CELL_STACK_WRITE_RT_CELLy_TO_RT)
+          (LDA (ZP_RT),y)
+          (TAX)
+          (INY)
+          (LDA (ZP_RT),y)
+          (STA ZP_RT+1)
+          (TXA)
+          (STA ZP_RT)
+          (RTS)))
 
 ;; (module+ test #| vm-cell-stack-write-rt-celly-to-rt |#
 ;;   (define vm-cell-stack-write-rt-celly-to-rt-code
@@ -1530,7 +1541,8 @@
     (run-code-in-test vm_cell_stack_push_r_push1_code))
 
   (check-equal? (vm-stack->strings vm_cell_stack_push_r_push1_state)
-                (list "stack holds 1 item"
+                (list "stack holds 2 items"
+                      "cell-int $0001  (rt)"
                       "cell-int $1fff"))
 
   (check-equal? (memory-list vm_cell_stack_push_r_push1_state ZP_RT (add1 ZP_RT))
@@ -1547,7 +1559,8 @@
     [run-code-in-test vm_cell_stack_push_r_push2_code])
 
   (check-equal? (vm-stack->strings vm_cell_stack_push_r_push2_state)
-                (list "stack holds 2 items"
+                (list "stack holds 3 items"
+                      "cell-pair-ptr NIL  (rt)"
                       "cell-int $0001"
                       "cell-int $1fff"))
 
@@ -1606,7 +1619,8 @@
     (run-code-in-test vm_cell_stack_pop3_r_code))
 
   (check-equal? (vm-stack->strings vm_cell_stack_pop3_r_state)
-                (list "stack holds 1 item"
+                (list "stack holds 2 items"
+                      "cell-int $1fff  (rt)"
                       "cell-int $0001"))
 
   (check-equal? (memory-list vm_cell_stack_pop3_r_state ZP_RT (add1 ZP_RT))
@@ -1850,10 +1864,9 @@
            (JSR VM_CELL_STACK_PUSH_NIL_R) ;; 7
            (JSR VM_CELL_STACK_PUSH_NIL_R)))) ;; 8
 
-  (check-equal? (vm-regt->string test-vm_cell_stack_push_nil-b-state-after)
-                "cell-pair-ptr NIL")
   (check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-b-state-after)
-                '("stack holds 7 items"
+                '("stack holds 8 items"
+                  "cell-pair-ptr NIL  (rt)"
                   "cell-pair-ptr NIL"
                   "cell-pair-ptr NIL"
                   "cell-pair-ptr NIL"
@@ -1903,7 +1916,8 @@
   (check-equal? (vm-regt->string test-vm_cell_stack_push_int-a-state-after)
                 "cell-int $0fff")
   (check-equal? (vm-stack->strings test-vm_cell_stack_push_int-a-state-after)
-                '("stack holds 4 items"
+                '("stack holds 5 items"
+                  "cell-int $0fff  (rt)"
                   "cell-int $0000"
                   "cell-int $0001"
                   "cell-int $1000"
@@ -3806,8 +3820,10 @@
   (check-equal? (memory-list test-pop-call-frame-state-after ZP_VM_PC (add1 ZP_VM_PC))
                 (list #x04 #xcc))
   (check-equal? (take (vm-stack->strings test-pop-call-frame-state-after) 2)
-                '("stack holds 1 item" ;; 3 before, 2 were parameters => 1 old + 1 result in RT
-                  "cell-int $0001")))
+                '("stack holds 2 items" ;; 3 before, 2 were parameters => 1 old + 1 result in RT
+                  "cell-int $0001  (rt)"
+                  ;; don't show the uninitialized second value on the stack (see take 2)
+                  )))
 
 
 ;; ----------------------------------------
@@ -5199,13 +5215,13 @@
 
           ;; vm_cell_stack_write_rt_cell0_to_rt
           ;; vm_cell_stack_write_rt_cell1_to_rt
-          ;; VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
+          VM_CELL_STACK_WRITE_RT_CELLy_TO_RT
           VM_WRITE_INT_AY_TO_Rx
           VM_CP_RT_TO_RA
           VM_CP_RA_TO_RT
-          ;; VM_POP_FSTOS_TO_CELLy_RT
-          ;; VM_WRITE_RA_TO_CELLy_RT
-          ;; VM_WRITE_RT_TO_CELLy_RA          
+          VM_POP_FSTOS_TO_CELLy_RT
+          VM_WRITE_RA_TO_CELLy_RT
+          VM_WRITE_RT_TO_CELLy_RA          
 
           ;; ---------------------------------------- registers and maps
           (list (org #xcec0))
