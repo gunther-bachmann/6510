@@ -781,11 +781,27 @@
 (define (regt-empty? state)
   (= 0 (peek state ZP_RT)))
 
+;; write string of current RT
 (define (vm-regt->string state)
   (vm-cell->string
    (peek state ZP_RT)
    (peek state (add1 ZP_RT))))
 
+;; get the actual refcount of a cell-pair-ptr
+(define (vm-refcount-cell-pair-ptr state cell-pair-ptr)
+  (define lowb  (low-byte cell-pair-ptr))
+  (define highb (high-byte cell-pair-ptr))
+  (define refc  (arithmetic-shift lowb -2))
+  (peek state (bytes->int refc highb) ))
+
+;; get the actual refcount of a cell-pair-ptr
+(define (vm-refcount-cell-ptr state cell-ptr)
+  (define lowb  (low-byte cell-ptr))
+  (define highb (high-byte cell-ptr))
+  (define refc  (arithmetic-shift lowb -1))
+  (peek state (bytes->int refc highb) ))
+
+;; write string of current RA
 (define (vm-rega->string state)
   (vm-cell->string
    (peek state ZP_RA)
@@ -1284,7 +1300,29 @@
           (STA ZP_RA+1)
           (RTS)))
 
-;; TODO: write test
+(module+ test #| vm-write-rt-celly-to-ra |#
+  (define vm-write-rt-celly-to-ra-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     (LDA !$01)
+     (LDY !$10)
+     (JSR VM_WRITE_INT_AY_TO_RA)
+     (JSR VM_WRITE_RA_TO_CELL0_RT)
+     (LDA !$10)
+     (LDY !$01)
+     (JSR VM_WRITE_INT_AY_TO_RA)
+     (JSR VM_WRITE_RA_TO_CELL1_RT)
+     (JSR VM_WRITE_INT0_TO_RA) ;; clear ra
+     (JSR VM_WRITE_RT_CELL0_TO_RA)))
+
+  (define vm-write-rt-celly-to-ra-state
+    (run-code-in-test vm-write-rt-celly-to-ra-code))
+
+  (check-equal? (vm-rega->string vm-write-rt-celly-to-ra-state)
+                "cell-int $1001")
+
+  (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-ra-state #xcc05)
+                "(cell-int $1001 . cell-int $0110)"))
 
 ;; input:  call-frame stack, RT
 ;; output: call-frame stack << RT
@@ -1321,7 +1359,19 @@
    (label DONE__VM_CELL_STACK_JUST_PUSH_RT)
           (RTS)))
 
-;; TODO: write test
+(module+ test #| vm-cell-stack-just-push-rt |#
+  (define vm-cell-stack-just-push-rt-code
+    (list     
+     (JSR VM_WRITE_INTm1_TO_RT)
+     (JSR VM_CELL_STACK_JUST_PUSH_RT)))
+
+  (define vm-cell-stack-just-push-rt-state
+    (run-code-in-test vm-cell-stack-just-push-rt-code))
+
+  (check-equal? (vm-stack->strings vm-cell-stack-just-push-rt-state)
+                (list "stack holds 2 items"
+                      "cell-int $1fff  (rt)"
+                      "cell-int $1fff")))
 
 ;; push a cell onto the stack (that is push the RegT, if filled, and write the value into RegT)
 ;; input: call-frame stack, RT
@@ -2118,8 +2168,7 @@
           (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
           (RTS)))
 
-;; TODO: write test
-
+;; does a linear search for the next free page
 ;; allocate a page (completely uninitialized), just the page, update the memory page status in VM_FIRST_FREE_SLOT_ON_PAGE
 ;; parameter: (none)
 ;; result: A = allocated free page (uninitialized)
@@ -2132,22 +2181,41 @@
    (label LOOP__VM_ALLOC_PAGE__PAGE_UNINIT)
           (LDA VM_FIRST_FREE_SLOT_ON_PAGE,y)
           (DEY)
-          (BEQ OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT)
+          (BEQ OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT) ;; cannot be lower then 1!!
           (CMP !$ff)
           (BNE LOOP__VM_ALLOC_PAGE__PAGE_UNINIT)
 
-          (INY)
+          ;; found page marked unallocated ($ff)
+          (INY) ;; restore original index
           (LDA !$00) ;; mark as initially full but allocated
           (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
           (TYA)
-          (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
+          (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; set index for next search
           (RTS)
 
    (label OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT)
           (BRK)
           ))
 
-;; TODO: write test
+(module+ test #| vm-free-page and vm-alloc-page--page-uninit |#
+  (define vm-free-page-code
+    (list
+     (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A ($cc)
+     (PHA)
+     (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A ($cb)
+     (JSR VM_WRITE_INT_A_TO_RT)
+     (PLA)
+     (JSR VM_FREE_PAGE )
+     (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; allocated page should be $cc again
+     (JSR VM_WRITE_INT_A_TO_RA)))
+
+  (define vm-free-page-state
+    (run-code-in-test vm-free-page-code))
+
+  (check-equal? (vm-rega->string vm-free-page-state)
+                "cell-int $00cc")
+  (check-equal? (vm-regt->string vm-free-page-state)
+                "cell-int $00cb"))
 
 ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 ;; this will not check the free cell-pair tree!
@@ -2179,9 +2247,41 @@
           (INC $c000)
           (RTS)))
 
-;; TODO: write test
+(module+ test #| vm-alloc-cell-pair-on-page-a-into-rt |#
+  (define vm-alloc-cell-pair-on-page-a-into-rt-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)))
 
-;; find out what kind of cell zp_ptr points to,
+  (define vm-alloc-cell-pair-on-page-a-into-rt-state
+    (run-code-in-test vm-alloc-cell-pair-on-page-a-into-rt-code))
+
+  (check-equal? (vm-page->strings vm-alloc-cell-pair-on-page-a-into-rt-state #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $09"))
+  (check-equal? (vm-regt->string vm-alloc-cell-pair-on-page-a-into-rt-state)
+                "cell-pair-ptr $cc05"))
+
+(module+ test #| vm-alloc-cell-pair-on-page-a-into-rt 2 times|#
+  (define vm-alloc-cell-pair-on-page-a-into-rt-code2
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
+     (LDA !$cc)
+     (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)))
+
+  (define vm-alloc-cell-pair-on-page-a-into-rt-state2
+    (run-code-in-test vm-alloc-cell-pair-on-page-a-into-rt-code2))
+
+  (check-equal? (vm-page->strings vm-alloc-cell-pair-on-page-a-into-rt-state2 #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41"))
+  (check-equal? (vm-regt->string vm-alloc-cell-pair-on-page-a-into-rt-state2)
+                "cell-pair-ptr $cc09"))
+
+;; find out what kind of cell zp_rt points to,
 ;; then call the right decrement refcounts function
 ;; input:  ZP_RT
 ;; output: the right refcount is decremented
@@ -2212,13 +2312,74 @@
           ;; (JMP VM_REFCOUNT_DECR_RT__M1_SLOT_PTR)
           (BRK)
 
-          (label DECR_CELL_PAIR__VM_REFCOUNT_DECR_RT)
+   (label DECR_CELL_PAIR__VM_REFCOUNT_DECR_RT)
           (JMP VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
 
    (label DECR_CELL_PTR__VM_REFCOUNT_DECR_RT)
           (JMP VM_REFCOUNT_DECR_RT__CELL_PTR)))
 
-;; TODO: write test
+;; find out what kind of cell zp_rt points to,
+;; then call the right decrement refcounts function
+;; input:  ZP_RT
+;; output: the right refcount is decremented
+;;         (in case of m1 pages, @ZP_RT-1)
+;;         (in case of cell pages @ZP_RT>>1)
+;;         (in case of cell-pair pages @ZP_RT>>2)
+;;         (in case of 8s pages @ZP_RT>>3)
+(define VM_REFCOUNT_INCR_RT
+  (list
+   (label VM_REFCOUNT_INCR_RT)
+          (LDA ZP_RT)
+          (TAY)
+          (LSR)
+          (BCC INCR_CELL_PTR__VM_REFCOUNT_INCR_RT)
+          (LSR)
+          (BCC INCR_CELL_PAIR__VM_REFCOUNT_INCR_RT)
+          ;; check other types of cells
+          (CPY !TAG_BYTE_CELL_ARRAY)
+          (BEQ INCR_CELL_ARRAY__VM_REFCOUNT_INCR_RT)
+          (CPY !TAG_BYTE_NATIVE_ARRAY)
+          (BEQ INCR_NATIVE_ARRAY__VM_REFCOUNT_INCR_RT)
+
+          ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RT)
+          (BRK)
+
+   (label INCR_CELL_ARRAY__VM_REFCOUNT_INCR_RT)
+   (label INCR_NATIVE_ARRAY__VM_REFCOUNT_INCR_RT)
+          ;; (JMP VM_REFCOUNT_INCR_RT__M1_SLOT_PTR)
+          (BRK)
+
+   (label INCR_CELL_PAIR__VM_REFCOUNT_INCR_RT)
+          (JMP VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+
+   (label INCR_CELL_PTR__VM_REFCOUNT_INCR_RT)
+          (JMP VM_REFCOUNT_INCR_RT__CELL_PTR)))
+
+(module+ test #| vm-refcount-decr-rt |#
+  (define vm-refcount-decr-rt-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     (JSR VM_REFCOUNT_INCR_RT)
+     (JSR VM_REFCOUNT_INCR_RT)))
+
+  (define vm-refcount-decr-rt-state
+    (run-code-in-test vm-refcount-decr-rt-code))
+
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-decr-rt-state #xcc05)
+                2)
+
+  (define vm-refcount-decr-rt-code2
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     (JSR VM_REFCOUNT_INCR_RT)
+     (JSR VM_REFCOUNT_INCR_RT)
+     (JSR VM_REFCOUNT_DECR_RT)))
+
+  (define vm-refcount-decr-rt-state2
+    (run-code-in-test vm-refcount-decr-rt-code2))
+
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-decr-rt-state2 #xcc05)
+                1))
 
 ;; input: cell-pair ptr in ZP_RT
 ;; decrement ref count, if 0 deallocate
@@ -2238,9 +2399,8 @@
    (label DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
           (RTS)))
 
-;; TODO: write test
-
-;; TODO: document
+;; input: cell-pair ptr in ZP_RT
+;; increment ref count
 (define VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR
   (list
    (label VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
@@ -2254,7 +2414,35 @@
           (INC $c000,x) ;; c0 is overwritten by page (see above)
           (RTS)))
 
-;; TODO: write test
+(module+ test #| vm-refcount-mmcr-rt--cell-pair-ptr |#
+  (define vm-refcount-mmcr-rt--cell-pair-ptr-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)))
+
+  (define vm-refcount-mmcr-rt--cell-pair-ptr-state
+    (run-code-in-test vm-refcount-mmcr-rt--cell-pair-ptr-code))
+
+  (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-pair-ptr-state)
+                "cell-pair-ptr $cc05")
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state #xcc05)
+                2)
+
+  (define vm-refcount-mmcr-rt--cell-pair-ptr-code2
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+     (JSR VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)))
+
+  (define vm-refcount-mmcr-rt--cell-pair-ptr-state2
+    (run-code-in-test vm-refcount-mmcr-rt--cell-pair-ptr-code2))
+
+  (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-pair-ptr-state2)
+                "cell-pair-ptr $cc05")
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state2 #xcc05)
+                1))
 
 ;; input: cell ptr in ZP_RT
 ;; decrement ref count, if 0 deallocate
@@ -2273,8 +2461,6 @@
    (label DONE__VM_REFCOUNT_DECR_RT__CELL_PTR)
           (RTS)))
 
-;; TODO: write test
-
 ;; input: cell ptr in ZP_RT
 ;; increment ref count
 (define VM_REFCOUNT_INCR_RT__CELL_PTR
@@ -2289,7 +2475,35 @@
           (INC $c000,x) ;; c0 is overwritten by page (see above)
           (RTS)))
 
-;; TODO: write test
+(module+ test #| vm-refcount-mmcr-rt--cell-pair-ptr |#
+  (define vm-refcount-mmcr-rt--cell-ptr-code
+    (list
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)))
+
+  (define vm-refcount-mmcr-rt--cell-ptr-state
+    (run-code-in-test vm-refcount-mmcr-rt--cell-ptr-code))
+
+  (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-ptr-state)
+                "cell-ptr $cc02")
+  (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state #xcc02)
+                2)
+
+  (define vm-refcount-mmcr-rt--cell-ptr-code2
+    (list
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)
+     (JSR VM_REFCOUNT_DECR_RT__CELL_PTR)))
+
+  (define vm-refcount-mmcr-rt--cell-ptr-state2
+    (run-code-in-test vm-refcount-mmcr-rt--cell-ptr-code2))
+
+  (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-ptr-state2)
+                "cell-ptr $cc02")
+  (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state2 #xcc02)
+                1))
 
 ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 ;; parameter: zp_rt
@@ -4601,9 +4815,9 @@
 
           ;; ---------------------------------------- alloc/free cells, pairs, slots
           VM_ALLOC_CELL_ON_PAGE                              ;; allocate a cell on the page in A (allocating a new one if page is full)
-          VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT                         ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
-          VM_ALLOC_CELL_PAIR_PTR_TO_RT
+          VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT               ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 
+          VM_ALLOC_CELL_PAIR_PTR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
 
           VM_ALLOC_CELL_PTR_TO_RT                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
@@ -4620,7 +4834,8 @@
           ;; VM_RELOCATE_MODULE_X_TO_                           ;; relocate module identified by page x to ??
 
           ;; ---------------------------------------- refcount
-          VM_REFCOUNT_DECR_RT                              ;; generic decrement of refcount (dispatches depending on type)
+          VM_REFCOUNT_DECR_RT                                ;; generic decrement of refcount (dispatches depending on type)
+          VM_REFCOUNT_INCR_RT                                ;; generic increment of refcount (dispatches depending on type)
 
           VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
           ;; VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
@@ -4628,7 +4843,7 @@
 
           VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR                 ;; increment refcount of cell-pair
           ;; VM_REFCOUNT_INCR_RT__M1_SLOT_PTR                   ;; increment refcount of m1-slot
-          VM_REFCOUNT_INCR_RT__CELL_PTR                        ;; increment refcount of the cell, rt is pointing to
+          VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
 
           ;; ---------------------------------------- call frame
           VM_ALLOC_CALL_FRAME                                ;; allocate a new call frame of minimum size
@@ -4645,12 +4860,12 @@
 
           ;; VM_DEREF_PTR2_INTO_PTR                             ;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
 
-          VM_FREE_NON_ATOMIC_RT                                 ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+          VM_FREE_NON_ATOMIC_RT                              ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 
           ;; VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST              ;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
 
           ;; ---------------------------------------- CELL_STACK / RT / RA
-          VM_CELL_STACK_POP_R                                  ;; pop cell-stack into RT (discarding RT)
+          VM_CELL_STACK_POP_R                                ;; pop cell-stack into RT (discarding RT)
 
           VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
