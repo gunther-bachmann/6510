@@ -1739,6 +1739,8 @@
    ;; $cecd..$cecf (unused)
    ))
 
+(define VM_LIST_OF_FREE_CELLS #xcecb)
+
 (define VM_PAGE_SLOT_DATA
   (list
    (label VM_PAGE_SLOT_DATA)
@@ -2647,6 +2649,10 @@
   (define test-alloc-cell-to-zp-ptr-state-after
     (run-code-in-test test-alloc-cell-to-zp-ptr-code))
 
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+                (list #x00)
+                "list of free cells is empty")
+
   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-state-after ZP_RT (add1 ZP_RT))
                 (list #x02 #xcc))
 
@@ -2665,6 +2671,10 @@
 
   (define test-alloc-cell-to-zp-ptr-twice-state-after
     (run-code-in-test test-alloc-cell-to-zp-ptr-twice-code))
+
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twice-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+                (list #x00)
+                "list of free cells is empty")
 
   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twice-state-after ZP_RT (add1 ZP_RT))
                 (list #x08 #xcc))
@@ -2689,7 +2699,7 @@
 ;;   (define test-alloc-cell-to-zp-ptr-twicenfree-state-after
 ;;     (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfree-code))
 
-;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcecb #xcecc )
+;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
 ;;                 (list #x02 #xcc)
 ;;                 "free cell list has cc02 now as head of the list")
 
@@ -2725,7 +2735,7 @@
 ;;                       "slots used:     2"
 ;;                       "next free slot: $0a"))
 
-;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after #xcecb #xcecb)
+;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
 ;;                 (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
 ;;                 "free cell list is initial again"))
 
@@ -2846,6 +2856,83 @@
           (RTS)))
 
 ;; TODO: write test
+(module+ test #| vm-free-cell-ptr-in-rt |#
+  (define vm-free-cell-ptr-in-rt-code
+    (list
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_FREE_CELL_PTR_IN_RT)))
+
+  (define vm-free-cell-ptr-in-rt-state
+    (run-code-in-test vm-free-cell-ptr-in-rt-code))
+
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+                (list #x02 #xcc)
+                "allocated cell is freed by adding it as head to the list of free cells")
+
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-state #xcc02 #xcc03)
+                (list #x00 #x00)
+                "the cell is set to 00 00, marking the end of the list of free cells")
+
+  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-state #xcc)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $08")
+                "page has still 1 slot in use (it was freed, but is no in free list, not completely unallocated)")
+
+  (define vm-free-cell-ptr-in-rt-realloc-code
+    (list
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_FREE_CELL_PTR_IN_RT)
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)))
+
+  (define vm-free-cell-ptr-in-rt-realloc-state
+    (run-code-in-test vm-free-cell-ptr-in-rt-realloc-code))
+
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-realloc-state VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+                (list #x00)
+                "list of free cells is empty again")
+
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-realloc-state ZP_RT (add1 ZP_RT))
+                (list #x02 #xcc))
+
+  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-realloc-state #xcc)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $08")
+                "page has 1 slot in use")
+
+  (define vm-free-cell-ptr-in-rt-2xfree-code
+    (list
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_CP_RT_TO_RA)
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_FREE_CELL_PTR_IN_RT)       ;; free cc08
+     (JSR VM_CP_RA_TO_RT)
+     (JSR VM_FREE_CELL_PTR_IN_RT)))     ;; then free cc02
+
+  (define vm-free-cell-ptr-in-rt-2xfree-state
+    (run-code-in-test vm-free-cell-ptr-in-rt-2xfree-code))
+
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+                (list #x02 #xcc)
+                "last allocated cell is freed by adding it as head to the list of free cells")
+
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state #xcc02 #xcc03)
+                (list #x08 #xcc)
+                "the cell is set to $cc08, the next element in the free list")
+
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state #xcc08 #xcc08)
+                (list #x00)
+                "the cell is set to 00, marking the end of the list of free cells")
+
+  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-2xfree-state #xcc)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "page has still 2 slot in use (it was freed, but is no in free list, not completely unallocated)"))
 
 ;; input:  cell-pair ptr is in ZP_RT
 ;; uses: ZP_TEMP, ZP_TEMP+1
