@@ -928,7 +928,7 @@
    (label VM_WRITE_INTm1_TO_Rx)
           (LDA !$ff) ;; int lowbyte = ff
           (LDY !$7f) ;; #b[0]111 11[11] = $1f for int high byte
-          (BNE VM_WRITE_ENC_INT_AY_TO_Rx)
+          (BNE VM_WRITE_AY_TO_Rx)
 
 
    (label VM_WRITE_INT1_TO_RA)
@@ -956,7 +956,7 @@
           (LDX !$00) ;; index 0 => RT
    (label VM_WRITE_INT_A_TO_Rx)
           (LDY !$03) ;; #b[0]000 00[11] = high byte of int  0
-   (label VM_WRITE_ENC_INT_AY_TO_Rx)
+   (label VM_WRITE_AY_TO_Rx)
           (STY ZP_RT,x)
           (STA ZP_RT+1,x)
           (RTS)
@@ -1724,6 +1724,9 @@
    ;; $cec5
    (label VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE) ;; tree of cell-pairs that are unused but still allocated (reusable)
           (word $0000) ;; if high byte is 0, the tree is empty!
+          ;; this queue holds only cell-pairs, cell0 is always the pointer to the next in queue of this free cells
+          ;; cell1 is left untouched => may still hold live references => to reuse a cell-pair of this queue,
+          ;; cell1 must be checked (if ptr, decr ref count and possibly free, else ignore)
 
    ;; $cec7
    (label VM_FREE_M1_PAGE_P0)
@@ -1739,7 +1742,9 @@
    ;; $cecd..$cecf (unused)
    ))
 
-(define VM_LIST_OF_FREE_CELLS #xcecb)
+(define VM_LIST_OF_FREE_CELLS               #xcecb)
+(define VM_FREE_CELL_PAIR_PAGE              #xcec3)
+(define VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE #xcec5)
 
 (define VM_PAGE_SLOT_DATA
   (list
@@ -2772,44 +2777,46 @@
           (LDY !$00)
           (LDA (ZP_RT),y)
           (AND !$03)
+          (BEQ CELL0_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; is zero => completely empty
           (CMP !$03)
-          (BEQ CELL0_IS_ATOMIC__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+          (BEQ CELL0_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; is no ptr
 
-          ;; cell0 is a cell-ptr or cell-pair-ptr
-          (LSR)
-          (BCC CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+          ;; ;; cell0 is a cell-ptr or cell-pair-ptr
+          ;; (LSR)
+          ;; (BCC CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; TODO: <- this cannot happen! cell0 is freed before entering it into the tree
 
-          ;; cell0 is a cell-pair-ptr
-          (LDA (ZP_RT),y)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
-          (INY)
+          ;; cell0 is a cell-pair-ptr => make new root of free queue 
           (LDA (ZP_RT),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (INY)
+          (LDA (ZP_RT),y)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (BNE CHECK_CELL1__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; since must be !=0, it cannot be on page 0 always branch!
 
-   (label CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
-          ;; cell0 is a cell-ptr => decrement cell0
-          (JSR VM_WRITE_RT_CELL0_TO_RT)
-          (JSR VM_REFCOUNT_DECR_RT)
-          ;; restore original cell-pair-ptr
-          (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT+1)
-          (STA ZP_RT+1)
-          (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
-          (STA ZP_RT)
-          ;; continue as if cell0 was atomic, since cell-ptr was handled already
+   ;; (label CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+   ;;        ;; cell0 is a cell-ptr => decrement cell0
+   ;;        (JSR VM_WRITE_RT_CELL0_TO_RT)
+   ;;        (JSR VM_REFCOUNT_DECR_RT)
+   ;;        ;; restore original cell-pair-ptr
+   ;;        (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT+1)
+   ;;        (STA ZP_RT+1)
+   ;;        (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+   ;;        (STA ZP_RT)
+   ;;        ;; continue as if cell0 was no ptr, since cell-ptr was handled already
 
-   (label CELL0_IS_ATOMIC__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+   (label CELL0_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
           (LDA !$00)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
 
    (label CHECK_CELL1__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
-          ;; check whether cell1 is atomic or ptr
+          ;; check whether cell1 is non-ptr or ptr
           (LDY !$02)
           (LDA (ZP_RT),y) ;; get low byte
           (AND !$03)       ;; mask out all but low 2 bits
+          (BEQ CELL1_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; = 0 means totally empty => no ptr
           (CMP !$03)
-          (BEQ CELL1_IS_ATOMIC__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; no need to do further deallocation
+          (BEQ CELL1_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; no need to do further deallocation
 
           ;; write cell1 into zp_ptr and decrement
           (JSR VM_WRITE_RT_CELL1_TO_RT)
@@ -2822,13 +2829,193 @@
           (LDA TEMP_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
           (STA ZP_RT)
 
-   (label CELL1_IS_ATOMIC__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+   (label CELL1_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
           (RTS)
 
    (label TEMP_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
           (word $0000)))
 
-;; TODO: write test
+(module+ test #| vm-allocate-cell-pair-ptr-to-rt |#
+  ;; test case 1: allocate new page, allocate first cell-pair on new page, no existing (reusable) pair available
+  (define vm-allocate-cell-pair-ptr-to-rt-1-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)))
+
+  (define vm-allocate-cell-pair-ptr-to-rt-1-state
+    (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-1-code))
+
+  (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-1-state)
+                "cell-pair-ptr $cc05")
+
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-1-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
+                (list #xcc))
+
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-1-state #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $09"))
+
+  ;; test case 2: allocate another cell-pair on existing page with already allocated slots
+  (define vm-allocate-cell-pair-ptr-to-rt-2-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)))
+
+  (define vm-allocate-cell-pair-ptr-to-rt-2-state
+    (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-2-code))
+
+  (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-2-state)
+                "cell-pair-ptr $cc09")
+
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-2-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
+                (list #xcc))
+
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-2-state #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41"))
+
+  ;; test case 3: allocate last cell-pair on existing page
+  (define vm-allocate-cell-pair-ptr-to-rt-3-code
+    (list
+            (LDX !49)
+     (label TEST_LOOP__VM_ALLOC_CELL_PAIR_PTR_TO_RT_3_CODE)
+            (TXA)
+            (PHA)
+            (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+            (PLA)
+            (TAX)
+            (DEX)
+            (BNE TEST_LOOP__VM_ALLOC_CELL_PAIR_PTR_TO_RT_3_CODE)))
+
+  (define vm-allocate-cell-pair-ptr-to-rt-3-state
+    (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-3-code))
+
+  (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3-state)
+                "cell-pair-ptr $ccf9")
+
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
+                (list #xcc))
+
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3-state #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     49"
+                      "next free slot: $00"))
+
+  ;; test case 3a: allocate one past last cell-pair on existing page
+  (define vm-allocate-cell-pair-ptr-to-rt-3a-code
+    (list
+            (LDX !50)
+     (label TEST_LOOP__VM_ALLOC_CELL_PAIR_PTR_TO_RT_3A_CODE)
+            (TXA)
+            (PHA)
+            (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+            (PLA)
+            (TAX)
+            (DEX)
+            (BNE TEST_LOOP__VM_ALLOC_CELL_PAIR_PTR_TO_RT_3A_CODE)))
+
+  (define vm-allocate-cell-pair-ptr-to-rt-3a-state
+    (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-3a-code))
+
+  (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3a-state)
+                "cell-pair-ptr $cb05")
+
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3a-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
+                (list #xcb))
+
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3a-state #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     49"
+                      "next free slot: $00"))
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3a-state #xcb)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $cc"
+                      "slots used:     1"
+                      "next free slot: $09"))
+
+  ;; test case 4: allocate first of pairs stored in the free tree, which is filled with just non ptr atomic cells => no gc
+  (define vm-allocate-cell-pair-ptr-to-rt-4-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     ;; copy allocated cell-pair ptr to the tree
+     (LDA ZP_RT)
+     (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+     (LDA ZP_RT+1)
+     (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+
+     ;; fill cell0 with zeros, cell1 within int1
+     (LDA !$00)
+     (STA ZP_RA)
+     (STA ZP_RA+1)
+     (JSR VM_WRITE_RA_TO_CELL0_RT)
+     (JSR VM_WRITE_INT1_TO_RA)
+     (JSR VM_WRITE_RA_TO_CELL1_RT)
+
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)))
+
+  (define vm-allocate-cell-pair-ptr-to-rt-4-state
+    (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-4-code))
+
+  (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-4-state)
+                "cell-pair-ptr $cc05"
+                "cell pair at cc05 is reused (was head of tree)")
+  (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-4-state)
+                "root is initial")
+
+  ;; test case 4: allocate first of pairs stored in the free tree, which has its slot1 filled with ptr that needs to be gc'ed
+  (define vm-allocate-cell-pair-ptr-to-rt-5-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     (JSR VM_WRITE_INT1_TO_RA)
+     (JSR VM_WRITE_RA_TO_CELL0_RT)
+     (JSR VM_WRITE_RA_TO_CELL1_RT)                      ;; cc05: 03 01 03 01
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)           ;; cc01 = 1
+     (JSR VM_CP_RT_TO_RA)                               ;; RA = cc05
+
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)                 ;; RT = cc09
+
+     ;; copy allocated cell-pair ptr to the tree
+     (LDA ZP_RT)
+     (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+     (LDA ZP_RT+1)
+     (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+
+     ;; fill cell0 with zeros, cell1 cell-pair-ptr (with refcount = 1)
+     (JSR VM_WRITE_RA_TO_CELL1_RT)                     ;; cc09: 05 cc 00 00
+
+     (LDA !$00)
+     (STA ZP_RA)
+     (STA ZP_RA+1)
+     (JSR VM_WRITE_RA_TO_CELL0_RT)
+
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)))
+
+  (define vm-allocate-cell-pair-ptr-to-rt-5-state
+    (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-5-code))
+
+  (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-5-state)
+                "cell-pair-ptr $cc09"
+                "cellp-pair at cc09 is reused (was at head of tree)")
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state #xcc01 #xcc01)
+                (list #x00)
+                "refcount of cc05 (is at cc01) is zero again!")
+  (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-5-state)
+                "cell-pair $cc05 -> [ empty . cell-int $0001 ]")
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state #xcc05 #xcc08)
+                (list #x00 #x00 #x03 #x01)
+                "cell-pair at cc05 holds 00 in cell0 (no further elements in queue) and int 1 in cell1")
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-5-state #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41")
+                "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree")
+)
 
 ;; input cell ptr is in ZP_RT
 ;; ---
@@ -2840,8 +3027,26 @@
 (define VM_FREE_CELL_PTR_IN_RT
   (list
    (label VM_FREE_CELL_PTR_IN_RT)
-          ;; copy previous head of free cells into this cell
+          ;; check if previous content was a pointer
           (LDY !$00)
+          (STY ZP_TEMP+1)
+
+          (LDA (ZP_RT),y)
+          (AND !$03)
+          (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RT)
+          (CMP !$03)
+          (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RT)
+
+          ;; cell is a pointer => save for tail call in temp
+          (LDA (ZP_RT),y)
+          (STA ZP_TEMP)
+          (INY)
+          (LDA (ZP_RT),y)
+          (STA ZP_TEMP+1)
+          (DEY)
+
+          ;; copy previous head of free cells into this cell
+   (label CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RT)
           (LDA VM_LIST_OF_FREE_CELLS)
           (STA (ZP_RT),y)
           (LDA VM_LIST_OF_FREE_CELLS+1)
@@ -2853,9 +3058,20 @@
           (STA VM_LIST_OF_FREE_CELLS)
           (LDA ZP_RT+1)
           (STA VM_LIST_OF_FREE_CELLS+1)
+
+          (LDA ZP_TEMP+1)
+          (BEQ DONE__VM_FREE_CELL_PTR_IN_RT) ;; there wasn't any further pointer => done with free
+          ;; fill rt for tail calling
+          (STA ZP_RT+1)
+          (LDA ZP_TEMP)
+          (STA ZP_RT)
+          (JMP VM_REFCOUNT_DECR_RT) ;; tail call if cell did hold a reference
+
+   (label DONE__VM_FREE_CELL_PTR_IN_RT)
           (RTS)))
 
-;; TODO: write test
+;; TODO: write test for tail call
+
 (module+ test #| vm-free-cell-ptr-in-rt |#
   (define vm-free-cell-ptr-in-rt-code
     (list
@@ -2952,8 +3168,9 @@
           ;; check cell0
           (LDA (ZP_RT),y) ;; LOWBYTE OF FIRST cell0
           (AND !$03)
+          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
           (CMP !$03)
-          (BEQ CELL_0_ATOMIC__VM_FREE_CELL_PAIR_PTR_IN_RT)
+          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
           ;; make sure to call free on cell0 (could be any type of cell)
           ;; remember ZP_PTR
 
@@ -2964,8 +3181,8 @@
           (LDA (ZP_RT),y)
           (STA ZP_TEMP+1)
 
-   (label CELL_0_ATOMIC__VM_FREE_CELL_PAIR_PTR_IN_RT)
-          ;; cell0 is atomic and can thus be discarded (directly)
+   (label CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
+          ;; cell0 is no ptr and can thus be discarded (directly)
 
           ;; simply add this cell-pair as head to free tree
           ;; set cell0 to point to old root
@@ -2984,11 +3201,12 @@
           ;; write original cell0 -> zp_rt
           (LDA ZP_TEMP+1)
           (BEQ DONE__VM_FREE_CELL_PAIR_PTR_IN_RT)
+          ;; otherwise zp_temp was used to store a pointer that needs to be decremented
           (STA ZP_RT+1)
           (LDA ZP_TEMP)
           (STA ZP_RT)
 
-          (JMP VM_FREE_NON_ATOMIC_RT) ;; chain call
+          (JMP VM_REFCOUNT_DECR_RT) ;; chain call
 
    (label DONE__VM_FREE_CELL_PAIR_PTR_IN_RT)
           (RTS)))
