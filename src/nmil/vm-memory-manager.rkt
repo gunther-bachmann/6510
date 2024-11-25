@@ -3383,6 +3383,11 @@
                 "(cell-int $0001 . cell-pair-ptr NIL)")
   (check-equal? (vm-regt->string use-case-2-a-state-after)
                 "cell-pair-ptr $cc09")
+  (check-equal? (vm-page->strings use-case-2-a-state-after #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41"))
 
   (define use-case-2-b-code
     (append use-case-2-a-code ;; zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
@@ -3397,34 +3402,34 @@
 
   (check-equal? (vm-cell-pair-free-tree->string use-case-2-b-state-after)
                 "cell-pair $cc09 -> [ empty . cell-pair-ptr $cc05 ]")
+  (check-equal? (vm-page->strings use-case-2-b-state-after #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41"))
 
-;; TODO: activate test case 2c
+  (define use-case-2-c-code
+    (append use-case-2-b-code ;; free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
+            (list (LDA !$FF) ;; marker for debug, remove when done
+                  (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+                  (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+                  ;; now:
+                  ;;   zp_rt = [cd08|1] not initialized
+                  ;;   free_tree -> [cd04|0] (int0 . nil)
+                  )))
 
-;;   (define use-case-2-c-code
-;;     (append use-case-2-b-code ;; free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
-;;             (list (LDA !$FF) ;; marker for debug, remove when done
-;;                   (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-;;                   (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
-;;                   ;; now:
-;;                   ;;   zp_ptr = [cd08|1] not initialized
-;;                   ;;   free_tree -> [cd04|0] (int0 . nil)
-;;                   )))
+  (define use-case-2-c-state-after
+    (run-code-in-test use-case-2-c-code))
 
-;;   (define use-case-2-c-state-after
-;;     (run-code-in-test use-case-2-c-code))
-
-;;   (check-equal? (memory-list use-case-2-c-state-after ZP_PTR (+ 1 ZP_PTR))
-;;                 '(#x08 #xcc)
-;;                 "case 2c: zp_ptr -> $cc08, reallocated")
-;;   (check-equal? (memory-list use-case-2-c-state-after #xcc01 #xcc0b)
-;;                 '(#x00 #x01 #x00      ;; refcounts
-;;                   #x00 #x00 #x02 #x00 ;; tail cell
-;;                   #x00 #x00 #x06 #xcc ;; head cell
-;;                   )
-;;                 "case 2c: refcount cc08 = 1 reallocated, refcount cc04 = 0 (original tail, now in the free tree)")
-;;   (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
-;;                 "cell-pair $cc04 -> [ cell-int $0000 . cell-pair-ptr NIL ]")
-)
+  (check-equal? (vm-regt->string use-case-2-c-state-after)
+                "cell-pair-ptr $cc09")
+  (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
+                "cell-pair $cc05 -> [ empty . cell-pair-ptr NIL ]")
+  (check-equal? (vm-page->strings use-case-2-c-state-after #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41")))
 
 ;; input:  A = size (needs to include 32 bytes cell-stack + 8 byte (pc, old params, old locals, old cell stack base ptr) + 2 * #locals
 ;;         ZP_CELL_STACK_BASE_PTR
