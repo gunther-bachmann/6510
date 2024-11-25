@@ -914,6 +914,24 @@
 (define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
 (define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
 
+
+;; input:  x  (00 = RT, 02 = RA)
+;; output: Rx
+;; NO PUSH IS DONE, Rx IS SIMPLY OVERWRITTEN!
+(define VM_WRITE_NIL_TO_Rx
+  (list
+   (label VM_WRITE_NIL_TO_RA)
+          (LDX !$02) ;; index 2 => RA
+          (BNE VM_WRITE_NIL_TO_Rx)
+   (label VM_WRITE_NIL_TO_RT)
+          (LDX !$00) ;; index 0 => RT
+   (label VM_WRITE_NIL_TO_Rx)
+          (LDA !<TAGGED_NIL)
+          (STA ZP_RT,x)
+          (LDA !>TAGGED_NIL)
+          (STA ZP_RT+1,x)
+          (RTS)))
+
 ;; input: A = lowbyte of int (0..255), written into high byte of cell register RT
 ;;        Y = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register
 ;;        X = (0 = RT, 2 = RA)
@@ -3284,15 +3302,15 @@
 ;; input:  zp_ptr = pointer to cell-pair that is added to the free list on its page
 ;; output: reduces the number of used slots in byte 0
 ;;         next free slot of this page is the given cell-pair
-(define VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST
+(define VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST
   (list
-   (label VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST)
-          (LDX ZP_PTR+1)
-          (STX DEC_CMD__VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST+2) ;; set page for dec command
+   (label VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST)
+          (LDX ZP_RT+1)
+          (STX DEC_CMD__VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST+2) ;; set page for dec command
           (LDA VM_FIRST_FREE_SLOT_ON_PAGE,x) ;; old first free on page
           (LDY !$00)
-          (STA (ZP_PTR),y) ;; set old free to next free on this very cell
-          (LDA ZP_PTR) ;; load idx within page
+          (STA (ZP_RT),y) ;; set old free to next free on this very cell
+          (LDA ZP_RT) ;; load idx within page
           (STA VM_FIRST_FREE_SLOT_ON_PAGE,x) ;; set this cell as new first free cell on page
 
           ;; clear refcount, too (should have been done already)
@@ -3300,155 +3318,87 @@
           (LSR)
           (TAY);; y now pointer to refcount byte
           (LDA !$00)
-          (STA ZP_PTR) ;; modify pointer such that zp_ptr points to beginning of page
-          (STA (ZP_PTR),y) ;; clear refcount byte, too
+          (STA ZP_RT) ;; modify pointer such that zp_ptr points to beginning of page
+          (STA (ZP_RT),y) ;; clear refcount byte, too
 
-   (label DEC_CMD__VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST)
+   (label DEC_CMD__VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST)
           (DEC $c000) ;; $c0 is overwritten by actual page
           (RTS)))
 
-;; TODO: write test
+(module+ test #| vm-add-cell-pair-in-rt-to-on-page-free-list |#
+  (define vm-add-cell-pair-in-rt-to-on-page-free-list-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     (JSR VM_FREE_CELL_PAIR_PTR_IN_RT)
+     (JSR VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST)))
 
-;; (module+ test #| use case 1 allocate, free, reallocate single cell-pair |#
-;;   (define use-case-1-code
-;;     (list
-;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
-;;       (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
-;;       ;; set cell1 to int 0
-;;       (JSR VM_CELL_STACK_PUSH_INT_0_R)
-;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)
-;;       ;; set cell1 to int 0
-;;       (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)))
+  (define vm-add-cell-pair-in-rt-to-on-page-free-list-state
+    (run-code-in-test vm-add-cell-pair-in-rt-to-on-page-free-list-code))
 
-;;   (define use-case-1-a-state-after
-;;     (run-code-in-test use-case-1-code))
+  (check-equal? (vm-page->strings vm-add-cell-pair-in-rt-to-on-page-free-list-state #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     0"
+                      "next free slot: $05")
+                "again all slots are available on that page"))
 
-;;   (check-equal? (memory-list use-case-1-a-state-after ZP_PTR (+ 1 ZP_PTR))
-;;                 '(#x04 #xcc)
-;;                 "zp_ptr -> $cd04 = first free cell-pair on page $cd after initialization")
-;;   (check-equal? (memory-list use-case-1-a-state-after #xccff #xccff)
-;;                 '(#x00)
-;;                 "previous page of this type is 00 (none)")
-;;   (check-equal? (memory-list use-case-1-a-state-after #xcc00 #xcc01)
-;;                 '(#x41 #x01)
-;;                 "page type b0100 0001 refcount for first cell-pair allocated = 1")
-;;   (check-equal? (memory-list use-case-1-a-state-after #xcc04 #xcc07)
-;;                 '(#x00 #x00 #x00 #x00)
-;;                 "cell0=int0 cell1=int0")
-;;   (check-equal? (memory-list use-case-1-a-state-after #xcfcc #xcfcc)
-;;                 '(#x08)
-;;                 "next free cell-pair on page $cd is at $08")
+(module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
+  (define use-case-2-a-code
+    (list
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)                     ;; rt = freshly allocated cell (cc05)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)               ;; ref(rt) ++ (=1)
+     ;; set cdr to nil     
+     (JSR VM_WRITE_NIL_TO_RA)
+     (JSR VM_WRITE_RA_TO_CELL1_RT)                          ;; (cdr rt) := nil
+     ;; set car to int 0
+     (JSR VM_WRITE_INT1_TO_RA)
+     (JSR VM_WRITE_RA_TO_CELL0_RT)                          ;; (car rt) := int0
 
-;;   (define use-case-1-b-code
-;;     (append
-;;      use-case-1-code ;; cell was allocated and set to hold int 0 in car and cdr
-;;      (list
-;;       ;; refcount will drop to zero
-;;       (JSR VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR))))
+     (JSR VM_CP_RT_TO_RA)                                   ;; ra := rt
 
-;;   (define use-case-1-b-state-after
-;;     (run-code-in-test use-case-1-b-code))
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)                     ;; rt = freshly allocated cell (cc09)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)               ;; ref(rt) ++ (=1)
 
-;;   (check-equal? (vm-cell-pair-free-tree->string use-case-1-b-state-after)
-;;                 "cell-pair $cc04 -> [ cell-int $0000 . cell-int $0000 ]")
-;;   (check-equal? (memory-list use-case-1-b-state-after #xcc01 #xcc01)
-;;                 '(#x00)
-;;                 "refcount for cell-pair freed = 0")
-;;   (check-equal? (memory-list use-case-1-b-state-after #xcfcc #xcfcc)
-;;                 '(#x08)
-;;                 "next free cell-pair on page $cd is still $08")
+     ;; set cdr 
+     (JSR VM_WRITE_RA_TO_CELL1_RT)                          ;; (cdr rt) := ra 
+     ;; set car to int0
+     (JSR VM_WRITE_INT0_TO_RA)
+     (JSR VM_WRITE_RA_TO_CELL0_RT)                          ;; (car rt) := int0
 
-;;   (define use-case-1-c-code
-;;     (append
-;;      use-case-1-b-code ;; cell was freed and in the free tree
-;;      (list
-;;       ;; clear zp_ptr just to make sure
-;;       (LDA !$00)
-;;       (STA ZP_PTR)
-;;       (STA ZP_PTR+1)
+     ;; now:
+     ;;   rt[cc09|1] (int0 . ->[cc05|1](int0 . nil))
+     ;; notation:
+     ;;   [<mem-location>|<ref-count>]
+     ;;   (<car-cell> . <cdr-cell>)
+     ;;   intX, nil :: atomic value cells
+     ;;   -> :: cell-ptr
+     ))
 
-;;       ;; allocate a new cell (should reuse pair in free-tree)
-;;       (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR))))
+  (define use-case-2-a-state-after
+    (run-code-in-test use-case-2-a-code))
 
-;;   (define use-case-1-c-state-after
-;;     (run-code-in-test use-case-1-c-code))
+  (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after #xcc09)
+                "(cell-int $0000 . cell-pair-ptr $cc05)")
+  (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after #xcc05)
+                "(cell-int $0001 . cell-pair-ptr NIL)")
+  (check-equal? (vm-regt->string use-case-2-a-state-after)
+                "cell-pair-ptr $cc09")
 
-;;   (check-equal? (memory-list use-case-1-c-state-after ZP_PTR (+ 1 ZP_PTR))
-;;                 '(#x04 #xcc )
-;;                 "allocated cell-pair is reused cell-pair of free tree")
-;;   (check-equal? (vm-cell-pair-free-tree->string use-case-1-c-state-after)
-;;                 "root is initial")
-;;   (check-equal? (memory-list use-case-1-c-state-after #xcc01 #xcc01)
-;;                 '(#x00)
-;;                 "refcount for (reused) cell-pair = 1")
-;;   (check-equal? (memory-list use-case-1-c-state-after #xcfcc #xcfcc)
-;;                 '(#x08)
-;;                 "next free cell-pair on page $cd is still $08"))
+  (define use-case-2-b-code
+    (append use-case-2-a-code ;; zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
+            (list
+             (JSR VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+             ;; now:
+             ;;   free_tree -> [cc08|0] (int0 . ->[cc04|1] (int0 . nil))
+             )))
 
-;; (module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
-;;   (define use-case-2-a-code
-;;     (list
-;;      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                               ;; zp_ptr = freshly allocated cell (cd04)
-;;      (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)                       ;; ref(zp_ptr) ++ (=1)
-;;      ;; set cdr to nil
-;;      (JSR VM_CELL_STACK_PUSH_NIL)                           ;; cell-stack <- push nil
-;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := nil
-;;      ;; set car to int 0
-;;      (JSR VM_CELL_STACK_PUSH_INT_0)                         ;; cell-stack <- push int0
-;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := int0
+  (define use-case-2-b-state-after
+    (run-code-in-test use-case-2-b-code))
 
-;;      (JSR VM_COPY_PTR_TO_PTR2)                              ;; zp_ptr2 := zp_ptr
+  (check-equal? (vm-cell-pair-free-tree->string use-case-2-b-state-after)
+                "cell-pair $cc09 -> [ empty . cell-pair-ptr $cc05 ]")
 
-;;      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                               ;; zp_ptr = freshly allocated cell (cd08)
-;;      (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)                       ;; ref(zp_ptr) ++ (=1)
-;;      ;; set cdr to zp_ptr2->
-;;      (JSR VM_CELL_STACK_PUSH_ZP_PTR2)                       ;; cell-stack <- push zp_ptr2
-;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL1_OF_ZP_PTR)       ;; (cdr zp_ptr) := tos (which is zp_ptr2)
-;;      (JSR VM_CELL_STACK_POP__NO_GC)                         ;; just pop (no check, no gc)
-;;      ;; set car to int0
-;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_CELL0_OF_ZP_PTR)       ;; (car zp_ptr) := tos (which is int0 again
-
-;;      ;; now:
-;;      ;;   zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
-;;      ;; notation:
-;;      ;;   [<mem-location>|<ref-count>]
-;;      ;;   (<car-cell> . <cdr-cell>)
-;;      ;;   intX, nil :: atomic value cells
-;;      ;;   -> :: cell-ptr
-;;      ))
-
-;;   (define use-case-2-a-state-after
-;;     (run-code-in-test use-case-2-a-code))
-
-;;   (check-equal? (memory-list use-case-2-a-state-after ZP_PTR (+ 3 ZP_PTR))
-;;                 '(#x08 #xcc #x04 #xcc)
-;;                 "case 2a: zp_ptr -> $cc08, zp_ptr2 -> $cc04 = first two free cell-pairs on page $cc after initialization")
-;;   (check-equal? (memory-list use-case-2-a-state-after #xcc01 #xcc0b)
-;;                 '(#x01 #x01 #x00      ;; refcounts
-;;                   #x00 #x00 #x02 #x00 ;; tail cell
-;;                   #x00 #x00 #x06 #xcc ;; head cell
-;;                   )
-;;                 "case 2a: cell-pairs contain (int0 . -> next cell), (int 0 . nil)")
-
-;;   (define use-case-2-b-code
-;;     (append use-case-2-a-code ;; zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
-;;             (list
-;;              (JSR VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-;;              ;; now:
-;;              ;;   free_tree -> [cc08|0] (int0 . ->[cc04|1] (int0 . nil))
-;;              )))
-
-;;   (define use-case-2-b-state-after
-;;     (run-code-in-test use-case-2-b-code))
-
-;;   (check-equal? (memory-list use-case-2-b-state-after #xcc01 #xcc0b)
-;;                 '(#x01 #x00 #x00      ;; refcounts
-;;                   #x00 #x00 #x02 #x00 ;; cc04 (old tail of list)
-;;                   #x00 #x00 #x06 #xcc ;; cc08 (old head of list)
-;;                   )
-;;                 "case 2b: refcount cd08 = 0 (head), cc04 unchanged (tail)")
-;;   (check-equal? (vm-cell-pair-free-tree->string use-case-2-b-state-after)
-;;                 "cell-pair $cc08 -> [ cell-int $0000 . cell-pair-ptr $cc04 ]")
+;; TODO: activate test case 2c
 
 ;;   (define use-case-2-c-code
 ;;     (append use-case-2-b-code ;; free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
@@ -3473,7 +3423,8 @@
 ;;                   )
 ;;                 "case 2c: refcount cc08 = 1 reallocated, refcount cc04 = 0 (original tail, now in the free tree)")
 ;;   (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
-;;                 "cell-pair $cc04 -> [ cell-int $0000 . cell-pair-ptr NIL ]"))
+;;                 "cell-pair $cc04 -> [ cell-int $0000 . cell-pair-ptr NIL ]")
+)
 
 ;; input:  A = size (needs to include 32 bytes cell-stack + 8 byte (pc, old params, old locals, old cell stack base ptr) + 2 * #locals
 ;;         ZP_CELL_STACK_BASE_PTR
@@ -5234,7 +5185,7 @@
 
           VM_FREE_PTR_IN_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 
-          ;; VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST              ;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
+          VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
 
           ;; ---------------------------------------- CELL_STACK / RT / RA
           VM_CELL_STACK_POP_R                                ;; pop cell-stack into RT (discarding RT)
@@ -5264,6 +5215,10 @@
           ;; VM_WRITE_INT_AY_TO_RA                            ;; int in A(lowbyte)/Y(highbyte) into RA
           ;; VM_WRITE_INT_AY_TO_RT
           VM_WRITE_INT_AY_TO_Rx                              ;; int in A(lowbyte)/Y(highbyte), x=0 -> RT, x=2 -> RA
+
+          ;; VM_WRITE_NIL_TO_RA
+          ;; VM_WRITE_NIL_TO_RT
+          VM_WRITE_NIL_TO_Rx
 
           ;; VM_WRITE_RT_CELL1_TO_RT
           ;; VM_WRITE_RT_CELL0_TO_RT
