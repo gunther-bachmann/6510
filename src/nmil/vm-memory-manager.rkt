@@ -2514,36 +2514,77 @@
 
 ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 ;; parameter: zp_rt
-(define VM_FREE_NON_ATOMIC_RT
+(define VM_FREE_PTR_IN_RT
   (list
-   (label VM_FREE_NON_ATOMIC_RT)
+   (label VM_FREE_PTR_IN_RT)
           (LDA ZP_RT)
           (TAY)
           (LSR)
-          (BCC FREE_CELL__VM_FREE_NON_ATOMIC_RT)
+          (BCC FREE_CELL__VM_FREE_PTR_IN_RT)
           (LSR)
-          (BCC FREE_CELL_PAIR__VM_FREE_NON_ATOMIC_RT)
+          (BCC FREE_CELL_PAIR__VM_FREE_PTR_IN_RT)
           ;; check other types of cells
           (CPY !TAG_BYTE_CELL_ARRAY)
-          (BEQ FREE_CELL_ARRAY__VM_FREE_NON_ATOMIC_RT)
+          (BEQ FREE_CELL_ARRAY__VM_FREE_PTR_IN_RT)
           (CPY !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ FREE_NATIVE_ARRAY__VM_FREE_NON_ATOMIC_RT)
+          (BEQ FREE_NATIVE_ARRAY__VM_FREE_PTR_IN_RT)
 
           ;; unknown pointer type in zp_ptr
           (BRK)
 
-   (label FREE_CELL__VM_FREE_NON_ATOMIC_RT)
+   (label FREE_CELL__VM_FREE_PTR_IN_RT)
           (JMP VM_FREE_CELL_PTR_IN_RT)
 
-   (label FREE_CELL_PAIR__VM_FREE_NON_ATOMIC_RT)
+   (label FREE_CELL_PAIR__VM_FREE_PTR_IN_RT)
           (JMP VM_FREE_CELL_PAIR_PTR_IN_RT)
 
-   (label FREE_CELL_ARRAY__VM_FREE_NON_ATOMIC_RT)
-   (label FREE_NATIVE_ARRAY__VM_FREE_NON_ATOMIC_RT)
+   (label FREE_CELL_ARRAY__VM_FREE_PTR_IN_RT)
+   (label FREE_NATIVE_ARRAY__VM_FREE_PTR_IN_RT)
           ;; VM_FREE_M1_SLOT_IN_RT
           (BRK)))
 
-;; TODO: write test
+(module+ test #| vm-free-ptr-in-rt |#
+  (define vm-free-ptr-in-rt-code
+    (list
+            (LDA !$00)
+            (STA $ff)
+            (JMP TEST_START__VM_FREE_PTR_IN_RT)
+
+     (label VM_FREE_CELL_PTR_IN_RT)
+            (INC $ff)
+            (RTS)
+
+     (label TEST_START__VM_FREE_PTR_IN_RT )
+            (JSR VM_ALLOC_CELL_PTR_TO_RT)
+            (JSR VM_FREE_PTR_IN_RT)))
+
+  (define vm-free-ptr-in-rt-state
+    (run-code-in-test vm-free-ptr-in-rt-code #:mock (list (label VM_FREE_CELL_PTR_IN_RT))))
+
+  (check-equal? (memory-list vm-free-ptr-in-rt-state #xff #xff)
+                (list #x01)
+                "dispatches call to free-cell-ptr routine")
+
+  (define vm-free-ptr-in-rt-2-code
+    (list
+            (LDA !$00)
+            (STA $ff)
+            (JMP TEST_START__VM_FREE_PTR_IN_RT)
+
+     (label VM_FREE_CELL_PAIR_PTR_IN_RT)
+            (INC $ff)
+            (RTS)
+
+     (label TEST_START__VM_FREE_PTR_IN_RT )
+            (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+            (JSR VM_FREE_PTR_IN_RT)))
+
+  (define vm-free-ptr-in-rt-2-state
+    (run-code-in-test vm-free-ptr-in-rt-2-code #:mock (list (label VM_FREE_CELL_PAIR_PTR_IN_RT))))
+
+  (check-equal? (memory-list vm-free-ptr-in-rt-2-state #xff #xff)
+                (list #x01)
+                "dispatches call to free-cell-pair-ptr routine"))
 
 ;; allocate a cell on the page in A (allocating a new one if page is full)
 ;; this does not check for any free cells on the free list!
@@ -2783,7 +2824,7 @@
 
           ;; ;; cell0 is a cell-ptr or cell-pair-ptr
           ;; (LSR)
-          ;; (BCC CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; TODO: <- this cannot happen! cell0 is freed before entering it into the tree
+          ;; (BCC CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; <- this cannot happen! cell0 is freed before entering it into the tree
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue 
           (LDA (ZP_RT),y)
@@ -5165,7 +5206,7 @@
 
           ;; VM_DEREF_PTR2_INTO_PTR                             ;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
 
-          VM_FREE_NON_ATOMIC_RT                              ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+          VM_FREE_PTR_IN_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 
           ;; VM_ADD_CELL_PAIR_TO_ON_PAGE_FREE_LIST              ;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
 
