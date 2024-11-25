@@ -49,16 +49,16 @@
    ;; ----------------------------------------
    (label VM_NIL_P_R)
           ;; check if stack is not empty
-          (LDA ZP_RT_TAGGED_LB)
-          (CMP !$01)
+          (LDA ZP_RT)
           (BEQ STACK_EMPTY__VM_NIL_P_R)
 
           ;; check if tos is cell-pair-ptr
-          (AND !$02)
-          (BEQ NO_CELL_PAIR_PTR__VM_NIL_P_R)
+          (AND !$03)
+          (CMP !$01)
+          (BNE NO_CELL_PAIR_PTR__VM_NIL_P_R)
 
    (label VM_NIL_P_R__UC) ;; no checks
-          (LDA ZP_RT_TAGGED_LB) ;; get tagged byte
+          (LDA ZP_RT) ;; get tagged byte
           (CMP !<TAGGED_NIL) ;;
           (BNE NOT_NIL__VM_NIL_P_R)
           ;; this additional check should not be necessary, since tagged low byte of a non-nil cell-pair-ptr may never be #x02
@@ -72,7 +72,7 @@
 (module+ test #| VM_NIL_P_R |#
   (define use-case-nil_p-a-code
     (list
-     (JSR VM_CELL_STACK_PUSH_NIL_R)
+     (JSR VM_WRITE_NIL_TO_RT)
      (JSR VM_NIL_P_R)))
 
   (define use-case-nil_p-a-state-after  ;; (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-nil_p-a-state-before))
@@ -85,7 +85,7 @@
 
   (define use-case-nil_p-b-code
     (list
-     (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
      (JSR VM_NIL_P_R)))
 
   (define use-case-nil_p-b-state-after
@@ -94,51 +94,52 @@
   (check-equal? (vm-stack->strings use-case-nil_p-b-state-after)
                 (list "stack is empty"))
   (check-equal? (vm-regt->string use-case-nil_p-b-state-after)
-                "cell-int $0000"))
+                "cell-int $0000"
+                "which is false"))
 
 (define VM_CAR_R
   (list
    (label STACK_EMPTY__VM_CAR_R)
-   (label TOS_IS_NIL__VM_CAR_R)
+   (label RT_IS_NIL__VM_CAR_R)
    (label NO_CELL_PAIR_PTR__VM_CAR_R)
           (BRK)
    (label VM_CAR_R)
           ;; check operand present
-          (LDA ZP_RT_TAGGED_LB)
-          (CMP !$01)
+          (LDA ZP_RT)
           (BEQ STACK_EMPTY__VM_CAR_R)
 
           ;; check RT is not nil
-          (CMP !$02)
-          (BEQ TOS_IS_NIL__VM_CAR_R)
+          (CMP !$01)
+          (BEQ RT_IS_NIL__VM_CAR_R)
 
           ;; check RT is a cell-pair-ptr
-          (AND !$02)
-          (BEQ NO_CELL_PAIR_PTR__VM_CAR_R)
+          (AND !$03)
+          (CMP !$01)
+          (BNE NO_CELL_PAIR_PTR__VM_CAR_R)
 
-          (JMP VM_CELL_STACK_WRITE_RT_CELL0_TO_RT)))
+          (JMP VM_WRITE_RT_CELL0_TO_RT)))
 
 (define VM_CDR_R
   (list
    (label STACK_EMPTY__VM_CDR_R)
-   (label TOS_IS_NIL__VM_CDR_R)
+   (label RT_IS_NIL__VM_CDR_R)
    (label NO_CELL_PAIR_PTR__VM_CDR_R)
           (BRK)
    (label VM_CDR_R)
           ;; check operand present
-          (LDA ZP_RT_TAGGED_LB)
-          (CMP !$01)
+          (LDA ZP_RT)
           (BEQ STACK_EMPTY__VM_CDR_R)
 
           ;; check RT is not nil
-          (CMP !$02)
-          (BEQ TOS_IS_NIL__VM_CDR_R)
+          (CMP !$01)
+          (BEQ RT_IS_NIL__VM_CDR_R)
 
           ;; check RT is a cell-pair-ptr
-          (AND !$02)
-          (BEQ NO_CELL_PAIR_PTR__VM_CDR_R)
+          (AND !$03)
+          (CMP !$01)
+          (BNE NO_CELL_PAIR_PTR__VM_CDR_R)
 
-          (JMP VM_CELL_STACK_WRITE_RT_CELL1_TO_RT)))
+          (JMP VM_WRITE_RT_CELL1_TO_RT)))
 
 (define VM_CONS_R
   (list
@@ -151,7 +152,7 @@
 
    (label VM_CONS_R__UC) ;; no checks
           (JSR VM_CP_RT_TO_RA)
-          (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR) ;; is equivalent to VM_ALLOC_CELL_PAIR_TO_RT, since zp_ptr = zp_rt
+          (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; is equivalent to VM_ALLOC_CELL_PAIR_TO_RT, since zp_ptr = zp_rt
           (JSR VM_WRITE_RA_TO_CELL1_RT)
           (JMP VM_POP_FSTOS_TO_CELL0_RT)))
 
@@ -166,15 +167,15 @@
     (run-code-in-test use-case-cons-code ))
 
   (check-equal? (vm-regt->string use-case-cons-state-after)
-                "cell-pair-ptr $cc04")
+                "cell-pair-ptr $cc05")
   (check-equal? (vm-stack->strings use-case-cons-state-after)
                 (list "stack is empty"))
   (check-equal? (vm-page->strings use-case-cons-state-after #xcc)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     1"
-                      "next free slot: $08"))
-  (check-equal? (vm-deref-cell-pair-w->string use-case-cons-state-after #xcc04)
+                      "next free slot: $09"))
+  (check-equal? (vm-deref-cell-pair-w->string use-case-cons-state-after #xcc05)
                 "(cell-int $0001 . cell-pair-ptr NIL)"))
 
 (define vm-lists
