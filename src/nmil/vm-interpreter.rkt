@@ -15,6 +15,7 @@
                   vm-stack->strings
                   vm-regt->string
                   ast-const-get
+                  ZP_RT
                   ZP_VM_PC
                   ZP_LOCALS_PTR
                   ZP_PARAMS_PTR
@@ -73,14 +74,15 @@
             (list (org #xc000))
             vm-interpreter))
 
-  (define (run-bc-wrapped-in-test bc)
+  (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
     (define state-before
       (6510-load-multiple (initialize-cpu)
                           (assemble-to-code-list wrapped-code)))
-    ;; (run-debugger-on state-before)
-    (parameterize ([current-output-port (open-output-nowhere)])
-      (run-interpreter-on state-before)))
+    (if debug
+        (run-debugger-on state-before)
+        (parameterize ([current-output-port (open-output-nowhere)])
+          (run-interpreter-on state-before))))
 
   (define (vm-pc state)
     (absolute (peek state (add1 ZP_VM_PC))
@@ -218,7 +220,7 @@
            (LDA VM_PUSH_CONST_NUM_SHORT__JUMP_REFS,y)
            (STA VM_PUSH_CONST_NUM_SHORT__JSR_TARGET+2)
     (label VM_PUSH_CONST_NUM_SHORT__JSR_TARGET)
-           (JSR VM_CELL_STACK_PUSH_INT_0)
+           (JSR VM_CELL_STACK_PUSH_INT_0_R)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label VM_PUSH_CONST_NUM_SHORT__JUMP_REFS)
@@ -243,12 +245,11 @@
       (bc BRK))))
 
   (check-equal? (vm-stack->strings use-case-push-num-s-state-after)
-                (list "stack holds 3 items"
+                (list "stack holds 4 items"
+                      "cell-int $1fff  (rt)"
                       "cell-int $0002"
                       "cell-int $0001"
-                      "cell-int $0000"))
-  (check-equal? (vm-regt->string use-case-push-num-s-state-after)
-                "cell-int $1fff"))
+                      "cell-int $0000")))
 
 (define BC_PUSH_CONST_INT
   (list
@@ -269,11 +270,11 @@
       (bc PUSH_INT) (byte #x04 #xf0)
       (bc BRK))))
 
+  (check-equal? (memory-list use-case-push-int-state-after ZP_RT (add1 ZP_RT))
+                (list #x13 #xf0))
   (check-equal? (vm-stack->strings use-case-push-int-state-after)
-                (list "stack is empty"))
-
-  (check-equal? (vm-regt->string use-case-push-int-state-after)
-                "cell-int $04f0"))
+                (list "stack holds 1 item"
+                      "cell-int $04f0  (rt)")))
 
 (define BC_INT_PLUS
   (list
@@ -287,16 +288,16 @@
 
           (INY)
           (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (AND !$7c)
           (BCC VM_INT_PLUS__NO_INC_HIGH)
-          (CLC)
+          (CLC)          
           (ADC !$04)
 
-   (label VM_INT_PLUS__NO_INC_HIGH)
+    (label VM_INT_PLUS__NO_INC_HIGH)
           (ADC ZP_RT)
-          (AND !$7c)
+          (AND !$7f)
 
           (STA ZP_RT)
-          (STA ZP_RT_TAGGED_LB)
           (DEC ZP_CELL_STACK_TOS)
           (DEC ZP_CELL_STACK_TOS)
           (JMP VM_INTERPRETER_INC_PC)))
@@ -317,11 +318,11 @@
       (bc BRK))))
 
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
-                (list "stack holds 2 items"
+                (list "stack holds 3 items"
+                      "cell-int $0000  (rt)"
                       "cell-int $060f"
-                      "cell-int $0003"))
-  (check-equal? (vm-regt->string use-case-int-plus-state-after)
-                "cell-int $0000"))
+                      "cell-int $0003"
+                      )))
 
 (define BC_INT_MINUS
   (list
@@ -342,10 +343,10 @@
    (label VM_INT_MINUS__NO_DEC_HIGH)
           (SBC (ZP_CELL_STACK_BASE_PTR),y)
           (AND !$7c)
+          (ORA !$03)
           (STA ZP_RT)
-          (STA ZP_RT_TAGGED_LB)
-
-          (label VM_INT_MINUS__DONE)
+          
+   (label VM_INT_MINUS__DONE)
           (DEC ZP_CELL_STACK_TOS)
           (DEC ZP_CELL_STACK_TOS)
           (JMP VM_INTERPRETER_INC_PC)))
@@ -366,11 +367,10 @@
       (bc BRK))))                    ;; brk
 
   (check-equal? (vm-stack->strings use-case-int-minus-state-after)
-                (list "stack holds 2 items"
+                (list "stack holds 3 items"
+                      "cell-int $1fff  (rt)"
                       "cell-int $1c2f"
-                      "cell-int $0001"))
-  (check-equal? (vm-regt->string  use-case-int-minus-state-after)
-                "cell-int $1fff" ))
+                      "cell-int $0001")))
 
 ;; TODO: implement
 (define BC_PUSH_CONST_BYTE

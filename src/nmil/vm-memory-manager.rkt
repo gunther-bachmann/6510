@@ -642,6 +642,7 @@
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
 (provide vm-memory-manager vm-stack->strings ast-const-get vm-page->strings vm-regt->string vm-rega->string vm-deref-cell-pair-w->string vm-deref-cell-pair->string
+         ZP_RT
          ZP_VM_PC
           ZP_LOCALS_PTR
           ZP_PARAMS_PTR
@@ -707,17 +708,17 @@
 (define (vm-stack->strings state)
   (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
   (cond
-    [(> stack-tos-idx #xf0) (list "stack is empty")]
+    [(and (regt-empty? state) (> stack-tos-idx #xf0)) (list "stack is empty")]
     [else
      (define stack-ptr (peek-word-at-address state ZP_CELL_STACK_BASE_PTR))
-     (define stack (memory-list state stack-ptr (+ 1 stack-tos-idx stack-ptr)))
-     (define stack-values stack)
-     (define stack-item-no (+ (/ (add1 stack-tos-idx) 2)
+     (define stack (memory-list state stack-ptr (+ (bitwise-and #xff (+ 1 stack-tos-idx)) stack-ptr)))
+     (define stack-values (if (regt-empty? state) '()  stack))
+     (define stack-item-no (+ (/ (bitwise-and #xff (add1 stack-tos-idx)) 2)
                               (if (regt-empty? state) 0 1)))
      (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (cdr pair) (car pair))) (pairing stack-values))))
      (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
            (if (regt-empty? state)
-               stack-strings
+               "stack is empty"
                (cons (format "~a  (rt)" (vm-regt->string state)) stack-strings)))]))
 
 ;; make a list of adjacent pairs
@@ -727,6 +728,8 @@
       (pairing (drop list 2) (cons `(,(car list) . ,(cadr list)) paired-list))))
 
 (module+ test #| pairing |#
+  (check-equal? (pairing '())
+                '())
   (check-equal? (pairing '(1 2 3 4 5 6))
                 '((1 . 2) (3 . 4) (5 . 6))))
 
@@ -994,8 +997,9 @@
    (label VM_WRITE_INT_AY_TO_Rx)
           (STA ZP_RT+1,x)
           (TYA)      ;; #b???x xxxx
-          (ORA !$c0) ;; #b11?x xxx
-          (ROL)      ;; #b1?xx xxx1
+          (SEC)
+          (ROL)      ;; #b??xx xxx1
+          (SEC)
           (ROL)      ;; #b?xxx xx11
           (AND !$7f) ;; #xb0xxx xx11 (mask out top bit!)
           (STA ZP_RT,x) ;; encoded tagged byte of int goes into first memory cell, even though it is the high-byte part of int
@@ -1199,9 +1203,8 @@
     (run-code-in-test vm-pop-fstos-to-celly-rt-code))
 
   (check-equal? (vm-stack->strings vm-pop-fstos-to-celly-rt-state)
-                (list "stack is empty"))
-  (check-equal? (vm-regt->string vm-pop-fstos-to-celly-rt-state)
-                "cell-pair-ptr $cc05")
+                (list "stack holds 1 item"
+                      "cell-pair-ptr $cc05  (rt)"))
   (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state #xcc05)
                 "(cell-int $1fff . cell-int $0001)"))
 
@@ -1647,9 +1650,8 @@
     (run-code-in-test vm_cell_stack_pop2_r_code))
 
   (check-equal? (vm-stack->strings vm_cell_stack_pop2_r_state)
-                (list "stack is empty"))
-  (check-equal? (memory-list vm_cell_stack_pop2_r_state ZP_RT (add1 ZP_RT))
-                (list #x03 #x01))
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)"))
 
   (define vm_cell_stack_pop1_r_code
     (list

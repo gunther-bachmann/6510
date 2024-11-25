@@ -79,9 +79,8 @@
     (run-code-in-test use-case-nil_p-a-code))
 
   (check-equal? (vm-stack->strings use-case-nil_p-a-state-after)
-                (list "stack is empty"))
-  (check-equal? (vm-regt->string use-case-nil_p-a-state-after)
-                "cell-int $0001")
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)"))
 
   (define use-case-nil_p-b-code
     (list
@@ -92,9 +91,8 @@
     (run-code-in-test use-case-nil_p-b-code))
 
   (check-equal? (vm-stack->strings use-case-nil_p-b-state-after)
-                (list "stack is empty"))
-  (check-equal? (vm-regt->string use-case-nil_p-b-state-after)
-                "cell-int $0000"
+                (list "stack holds 1 item"
+                      "cell-int $0000  (rt)")
                 "which is false"))
 
 (define VM_CAR_R
@@ -166,10 +164,9 @@
   (define use-case-cons-state-after
     (run-code-in-test use-case-cons-code ))
 
-  (check-equal? (vm-regt->string use-case-cons-state-after)
-                "cell-pair-ptr $cc05")
   (check-equal? (vm-stack->strings use-case-cons-state-after)
-                (list "stack is empty"))
+                (list "stack holds 1 item"
+                      "cell-pair-ptr $cc05  (rt)"))
   (check-equal? (vm-page->strings use-case-cons-state-after #xcc)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
