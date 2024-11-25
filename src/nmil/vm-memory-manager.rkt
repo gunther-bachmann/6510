@@ -2776,8 +2776,8 @@
           ;; set new tree root for free tree to original cell0
           (LDY !$00)
           (LDA (ZP_RT),y)
-          (AND !$03)
           (BEQ CELL0_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; is zero => completely empty
+          (AND !$03)
           (CMP !$03)
           (BEQ CELL0_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; is no ptr
 
@@ -2813,8 +2813,8 @@
           ;; check whether cell1 is non-ptr or ptr
           (LDY !$02)
           (LDA (ZP_RT),y) ;; get low byte
-          (AND !$03)       ;; mask out all but low 2 bits
           (BEQ CELL1_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; = 0 means totally empty => no ptr
+          (AND !$03)       ;; mask out all but low 2 bits
           (CMP !$03)
           (BEQ CELL1_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; no need to do further deallocation
 
@@ -3032,8 +3032,8 @@
           (STY ZP_TEMP+1)
 
           (LDA (ZP_RT),y)
-          (AND !$03)
           (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RT)
+          (AND !$03)
           (CMP !$03)
           (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RT)
 
@@ -3167,8 +3167,8 @@
 
           ;; check cell0
           (LDA (ZP_RT),y) ;; LOWBYTE OF FIRST cell0
-          (AND !$03)
           (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
+          (AND !$03)
           (CMP !$03)
           (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
           ;; make sure to call free on cell0 (could be any type of cell)
