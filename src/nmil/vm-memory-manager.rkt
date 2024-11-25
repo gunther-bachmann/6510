@@ -3111,9 +3111,35 @@
    (label DONE__VM_FREE_CELL_PTR_IN_RT)
           (RTS)))
 
-;; TODO: write test for tail call
-
 (module+ test #| vm-free-cell-ptr-in-rt |#
+  (define vm-free-cell-ptr-in-rt-tailcall-code
+    (list
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)
+     (JSR VM_CP_RT_TO_RA)
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_WRITE_RA_TO_CELL0_RT)
+     (JSR VM_FREE_CELL_PTR_IN_RT)))
+
+  (define vm-free-cell-ptr-in-rt-tailcall-state
+    (run-code-in-test vm-free-cell-ptr-in-rt-tailcall-code))
+
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+                (list #x02 #xcc)
+                "cc02 is new head of the free list")
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state #xcc02 #xcc03)
+                (list #x08 #xcc)
+                "cc02, which was freed, is referencing cc08 as next in the free list")
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state #xcc08 #xcc09)
+                (list #x00 #x00)
+                "cc08, which was freed, is the tail of the free list")
+  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-tailcall-state #xcc)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "two slots still allocated on page, they are however on the free list to be reused")
+
   (define vm-free-cell-ptr-in-rt-code
     (list
      (JSR VM_ALLOC_CELL_PTR_TO_RT)
