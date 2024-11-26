@@ -9,11 +9,14 @@
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
+(require (only-in "../6510-utils.rkt" word->hex-string high-byte low-byte))
+(require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
 
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
                   vm-stack->strings
                   vm-regt->string
+                  vm-deref-cell-pair-w->string
                   ast-const-get
                   ZP_RT
                   ZP_VM_PC
@@ -118,7 +121,7 @@
    (label VM_INTERPRETER_INIT)
           (LDA !$00)
           (STA ZP_VM_PC)
-          (LDA !$80)
+          (LDA !$80)         ;; bc start at $8000
           (STA ZP_VM_PC+1)
           (RTS)))
 
@@ -210,18 +213,17 @@
   (flatten
    (list
     (label BC_PUSH_CONST_NUM_SHORT)
-           (LDA (ZP_VM_PC),y)
-           (AND !$07) ;; lower three bits are encoded into the short command
-           (ASL A) ;; * 2
-           (TAY)
-           (LDA VM_PUSH_CONST_NUM_SHORT__JUMP_REFS,y)
-           (STA VM_PUSH_CONST_NUM_SHORT__JSR_TARGET+1)
-           (INY)
-           (LDA VM_PUSH_CONST_NUM_SHORT__JUMP_REFS,y)
-           (STA VM_PUSH_CONST_NUM_SHORT__JSR_TARGET+2)
+           (LDA (ZP_VM_PC),y)                             ;; load bytecode itself (y must be 0)
+           (AND !$07)                                     ;; lower three bits are encoded into the short command
+           (ASL A)                                        ;; * 2 (for 2 byte index into jump_refs)!
+           (TAY)                                          ;; -> Y
+           (LDA VM_PUSH_CONST_NUM_SHORT__JUMP_REFS,y)     ;; get lowbyte of jumpref
+           (STA VM_PUSH_CONST_NUM_SHORT__JSR_TARGET+1)    ;; store into lowbyte of jsr command
+           (LDA VM_PUSH_CONST_NUM_SHORT__JUMP_REFS+1,y)   ;; load highbyte of jumpref
+           (STA VM_PUSH_CONST_NUM_SHORT__JSR_TARGET+2)    ;; store into highbyte of jsr command
     (label VM_PUSH_CONST_NUM_SHORT__JSR_TARGET)
-           (JSR VM_CELL_STACK_PUSH_INT_0_R)
-           (JMP VM_INTERPRETER_INC_PC)
+           (JSR VM_CELL_STACK_PUSH_INT_0_R)               ;; execute (modified) jsr 
+           (JMP VM_INTERPRETER_INC_PC)                    ;; interpreter loop
 
     (label VM_PUSH_CONST_NUM_SHORT__JUMP_REFS)
            (word-ref VM_CELL_STACK_PUSH_INT_0_R)
@@ -254,14 +256,14 @@
 (define BC_PUSH_CONST_INT
   (list
    (label BC_PUSH_CONST_INT)
-          (LDY !$01)
-          (LDA (ZP_VM_PC),y)
-          (TAX)
-          (INY)
-          (LDA (ZP_VM_PC),y)
-          (JSR VM_CELL_STACK_PUSH_INT_R)
-          (LDA !$03)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+          (LDY !$01)                             ;; index 1 past the byte code itself
+          (LDA (ZP_VM_PC),y)                     ;; load high byte of int (not encoded)
+          (TAX)                                  ;; -> X
+          (INY)                                  ;; index 2 past the byte code
+          (LDA (ZP_VM_PC),y)                     ;; load low byte of int  -> A
+          (JSR VM_CELL_STACK_PUSH_INT_R)         ;; push A/X as int onto stack
+          (LDA !$03)                             ;; increment program counter by 3 (bytecode + int)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))  ;; interpreter loop
 
 (module+ test #| VM_PUSH_CONST_INT |#
   (define use-case-push-int-state-after
@@ -279,30 +281,51 @@
 (define BC_INT_PLUS
   (list
    (label BC_INT_PLUS)
-          (LDY ZP_CELL_STACK_TOS)
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (CLC)
-          (ADC ZP_RT+1)
-          (STA ZP_RT+1)
+          (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte
+          (DEY)                                 ;; index to high byte
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)      ;; A = untagged lowbyte of int (stored in high byte)
+          (CLC)                                 ;; for addition the carry flags needs to be clear
+          (ADC ZP_RT+1)                         ;; A = A + stack value (int low byte)
+          (STA ZP_RT+1)                         ;; RT untagged lowbyte = result
 
-          (INY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
-          (AND !$7c)
-          (BCC VM_INT_PLUS__NO_INC_HIGH)
-          (CLC)          
-          (ADC !$04)
+          (INY)                                 ;; index to tagged low byte (bit0 and 1 set, bit 7 clear)
+          (LDA (ZP_CELL_STACK_BASE_PTR),y)      ;; A = tagged high byte of int (stored in low byte)
+          (AND !$7c)                            ;; mask out lower two and highest bit
+          (BCC VM_INT_PLUS__NO_INC_HIGH)        ;; if previous addition had no overflow, skip inc
+          (CLC)                                 ;; clear for addition
+          (ADC !$04)                            ;; increment int (adding 4 into the enoded int starting at bit 2)
 
     (label VM_INT_PLUS__NO_INC_HIGH)
-          (ADC ZP_RT)
-          (AND !$7f)
+          (ADC ZP_RT)                           ;; A = A + stack value (int high byte)
+          (AND !$7f)                            ;; since ZP_RT hat the lower two bits set, just mask out the highest bit
+          (STA ZP_RT)                           ;; RT tagged high byte = result
 
-          (STA ZP_RT)
-          (DEC ZP_CELL_STACK_TOS)
-          (DEC ZP_CELL_STACK_TOS)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (DEY)
+          (DEY)
+          (STY ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in RT as tos)
+          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (module+ test #| vm_interpreter |#
+  (define (bc-int-plus-state a b)
+    (define ra (if (< a 0) (+ #x2000 a) a))
+    (define rb (if (< b 0) (+ #x2000 b) b))
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
+      (bc PUSH_INT) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
+      (bc INT+)                     
+      (bc BRK))))
+
+  (define (bc-int-plus-expectation state c)
+    (check-equal? (vm-stack->strings state)
+                (list "stack holds 1 item"
+                      (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
+ 
+  ;; (define _run-bc-int-plus-tests
+  ;;   (for/list ([j '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
+  ;;     (for/list ([i '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
+  ;;       (bc-int-plus-expectation (bc-int-plus-state i j) (+ i j)))))
+
   (define use-case-int-plus-state-after
     (run-bc-wrapped-in-test
      (list
@@ -317,6 +340,8 @@
       (bc INT+)                      ;; byte code for INT_PLUS = 0
       (bc BRK))))
 
+  (check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
+                1142)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                 (list "stack holds 3 items"
                       "cell-int $0000  (rt)"
@@ -327,31 +352,53 @@
 (define BC_INT_MINUS
   (list
    (label BC_INT_MINUS)
-          (LDY ZP_CELL_STACK_TOS)
-          (DEY)
-          (SEC)
-          (LDA ZP_RT+1)
-          (SBC (ZP_CELL_STACK_BASE_PTR),y)
-          (STA ZP_RT+1)
+          (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte
+          (DEY)                                 ;; index to high byte
+          (SEC)                                 ;; for subtraction carry needs to be set
+          (LDA ZP_RT+1)                         ;; A = untagged lowbyte of int (stored in high byte)
+          (SBC (ZP_CELL_STACK_BASE_PTR),y)      ;; A = A - stack value (int low byte)
+          (STA ZP_RT+1)                         ;; RT untagged lowbyte = result
 
-          (INY)
-          (LDA ZP_RT)
-          (BCS VM_INT_MINUS__NO_DEC_HIGH)
-          (SEC)
-          (SBC !$04)
+          (INY)                                 ;; index to tagged low byte (bit0 and 1 set, bit 7 clear)
+          (LDA ZP_RT)                           ;; A = tagged highbyte of int (stored in low byte)
+          (BCS VM_INT_MINUS__NO_DEC_HIGH)       ;; if carry is set from subtraction of lower bits, no subtraction carry over necessary
+          (SEC)                                 ;; for subtraction carry needs to be set
+          (SBC !$04)                            ;; subtract 1 in the masked int highbyte (starting at bit2) => 4
 
    (label VM_INT_MINUS__NO_DEC_HIGH)
-          (SBC (ZP_CELL_STACK_BASE_PTR),y)
-          (AND !$7c)
-          (ORA !$03)
-          (STA ZP_RT)
+          (SBC (ZP_CELL_STACK_BASE_PTR),y)      ;; A = A - stack value (int high byte)
+          (AND !$7c)                            ;; mask out under/overflow (lower two bits and high bit)
+          (ORA !$03)                            ;; set lower two bits to tag it as integer value
+          (STA ZP_RT)                           ;; RT tagged high byte = result
           
    (label VM_INT_MINUS__DONE)
-          (DEC ZP_CELL_STACK_TOS)
-          (DEC ZP_CELL_STACK_TOS)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (DEY)
+          (DEY)
+          (STY ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in rt untouched)
+          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (module+ test #| vm_interpreter |#
+  (define (bc-int-minus-state a b)
+    (define ra (if (< a 0) (+ #x2000 a) a))
+    (define rb (if (< b 0) (+ #x2000 b) b))
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
+      (bc PUSH_INT) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
+      (bc INT-)
+      (bc BRK))))
+
+  (define (bc-int-minus-expectation state c)
+    (check-equal? (vm-stack->strings state)
+                  (list "stack holds 1 item"
+                        (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
+
+  ;; (define _run-bc-int-minus-tests
+  ;;   (for/list ([j '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
+  ;;     (for/list ([i '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
+  ;;       (bc-int-minus-expectation (bc-int-minus-state i j) (- j i)))))
+
+
   (define use-case-int-minus-state-after
     (run-bc-wrapped-in-test
      (list
@@ -360,12 +407,15 @@
       (bc INT-)                      ;; byte code for INT_MINUS = 2 - 1 = 1
       (bc PUSH_INT) (byte #x04 #xf0) ;; push int #x4f0 (1264)
       (bc PUSH_INT) (byte #x01 #x1f) ;; push int #x11f (287)
-      (bc INT-)                      ;; byte code for INT_MINUS (- #x011f #x04f0) ( -977 = #x1c2f -> encoded #x602f)
+      (bc INT-)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x1c2f)
       (bc PUSH_INT_1)
       (bc PUSH_INT_0)
       (bc INT-)                      ;; byte code for INT_MINUS => -1
       (bc BRK))))                    ;; brk
 
+
+  (check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
+                1142)
   (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                 (list "stack holds 3 items"
                       "cell-int $1fff  (rt)"
@@ -378,19 +428,116 @@
    (label BC_PUSH_CONST_BYTE)
           (JMP VM_INTERPRETER_INC_PC)))
 
-;; TODO: test
 (define BC_NIL_P
   (list
    (label BC_NIL_P)
-          (JSR VM_NIL_P_R)
+          (JSR VM_NIL_P_R)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
+          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
+
+(module+ test #| bc-nil-p |#
+  (define bc-nil-p-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_NIL)
+      (bc NIL?)
+      (bc BRK))))
+
+  (check-equal? (vm-stack->strings bc-nil-p-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)"))
+
+  (define bc-nil-p-2-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc PUSH_NIL)
+      (bc CONS)
+      (bc NIL?)
+      (bc BRK))))
+
+  (check-equal? (vm-deref-cell-pair-w->string bc-nil-p-2-state #xcc05)
+                "(cell-int $0000 . cell-pair-ptr NIL)")
+  (check-equal? (vm-stack->strings bc-nil-p-2-state)
+                (list "stack holds 1 item"
+                      "cell-int $0000  (rt)")))
+
+(define BC_CONS
+  (list
+   (label BC_CONS)
+          (JSR VM_CONS_R)
           (JMP VM_INTERPRETER_INC_PC)))
 
-;; TODO: test
+(module+ test #| bc-cons |#
+   (define bc-cons-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc PUSH_NIL)
+      (bc CONS)
+      (bc BRK))))
+
+  (check-equal? (vm-stack->strings bc-cons-state)
+                (list "stack holds 1 item"
+                      "cell-pair-ptr $cc05  (rt)"))
+  (check-equal? (vm-deref-cell-pair-w->string bc-cons-state #xcc05)
+                "(cell-int $0000 . cell-pair-ptr NIL)"))
+
+(define BC_CAR
+  (list
+   (label BC_CAR)
+          (JSR VM_CAR_R)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| bc-car |#
+   (define bc-car-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc PUSH_NIL)
+      (bc CONS)
+      (bc CAR)
+      (bc BRK))))
+
+  (check-equal? (vm-stack->strings bc-car-state)
+                (list "stack holds 1 item"
+                      "cell-int $0000  (rt)")))
+
+(define BC_CDR
+  (list
+   (label BC_CDR)
+          (JSR VM_CDR_R)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| bc-cdr |#
+   (define bc-cdr-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc PUSH_NIL)
+      (bc CONS)
+      (bc CDR)
+      (bc BRK))))
+
+  (check-equal? (vm-stack->strings bc-cdr-state)
+                (list "stack holds 1 item"
+                      "cell-pair-ptr NIL  (rt)")))
+
 (define BC_PUSH_CONST_NIL
   (list
-   (label BC_PUSH_CONST_NIL)
-          (JSR VM_CELL_STACK_PUSH_NIL_R)
-          (JMP VM_INTERPRETER_INC_PC)))
+   (label BC_PUSH_CONST_NIL)    
+          (JSR VM_CELL_STACK_PUSH_NIL_R)        ;; push NIL on the stack
+          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
+
+(module+ test #| bc-push-const-nil |#
+  (define bc-push-const-nil-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_NIL)
+      (bc BRK))))
+
+  (check-equal? (vm-stack->strings bc-push-const-nil-state)
+                (list "stack holds 1 item"
+                      "cell-pair-ptr NIL  (rt)")))
 
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
@@ -462,9 +609,9 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7c  <-  3e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7e  <-  3f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 80  <-  c0..a7 reserved
-           (word-ref VM_CDR_R)                    ;; 82  <-  41 reserved
-           (word-ref VM_CONS_R)                   ;; 84  <-  42 reserved
-           (word-ref VM_CAR_R)                    ;; 86  <-  43 reserved
+           (word-ref BC_CDR)                      ;; 82  <-  41 reserved
+           (word-ref BC_CONS)                     ;; 84  <-  42 reserved
+           (word-ref BC_CAR)                      ;; 86  <-  43 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 88  <-  44 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8a  <-  45 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
@@ -531,31 +678,31 @@
 (define VM_INTERPRETER
   (list
    (label VM_INTERPRETER_INC_PC_A_TIMES)
-          (CLC)
-          (ADC ZP_VM_PC)
-          (STA ZP_VM_PC)
-          (BCC VM_INTERPRETER)
-          (BCS VM_INTERPRETER__NEXT_PAGE)
+          (CLC)                                 ;; clear for add
+          (ADC ZP_VM_PC)                        ;; PC = PC + A
+          (STA ZP_VM_PC)                        
+          (BCC VM_INTERPRETER)                  ;; same page -> no further things to do
+          (BCS VM_INTERPRETER__NEXT_PAGE)       ;; always branch to pc now on next page
 
-   (label VM_INTERPRETER_INC_PC)            ;; inc by one
-          (INC ZP_VM_PC)
-          (BNE VM_INTERPRETER)
+   (label VM_INTERPRETER_INC_PC)                ;; inc by one (regular case)
+          (INC ZP_VM_PC)                    
+          (BNE VM_INTERPRETER)                  ;; same page -> no further things to do
    (label VM_INTERPRETER__NEXT_PAGE)
-          (INC ZP_VM_PC+1)
+          (INC ZP_VM_PC+1)                      ;; increment high byte of pc (into next page)
 
     ;; ----------------------------------------
    (label VM_INTERPRETER)
-          (LDY !$00)                        ;; use 0 offset to ZP_VM_PV
+          (LDY !$00)                            ;; use 0 offset to ZP_VM_PV
    (label VM_INTERPRETERy)
-          (LDA (ZP_VM_PC),y)
-          (ASL A)                           ;; *2
-          (BCC OPERAND__VM_INTERPRETER)     ;; bit7 was not set => normal command
+          (LDA (ZP_VM_PC),y)                    ;; load byte code
+          (ASL A)                               ;; *2 (for jump table)
+          (BCC OPERAND__VM_INTERPRETER)         ;; bit7 was not set => normal command
           ;; short command
-          (AND !$F0)
+          (AND !$F0)                            ;; only top 4 bits are used for the opcode dispatch!
    (label OPERAND__VM_INTERPRETER)
-          (STA JMPOP__VM_INTERPRETER+1)     ;; lowbyte of the table
+          (STA JMPOP__VM_INTERPRETER+1)         ;; lowbyte of the table
    (label JMPOP__VM_INTERPRETER)
-          (JMP (VM_INTERPRETER_OPTABLE))))  ;; jump by table
+          (JMP (VM_INTERPRETER_OPTABLE))))      ;; jump by table
 
 (define vm-interpreter
   (append VM_INTERPRETER_VARIABLES
@@ -566,6 +713,9 @@
           BC_PUSH_CONST_BYTE
           BC_PUSH_CONST_NIL
           BC_NIL_P
+          BC_CONS
+          BC_CAR
+          BC_CDR
           VM_INTERPRETER
           BC_BRK
           BC_INT_PLUS
