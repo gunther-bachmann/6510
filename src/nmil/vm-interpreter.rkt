@@ -14,6 +14,7 @@
 
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
+                  vm-call-frame->strings
                   vm-stack->strings
                   vm-regt->string
                   vm-deref-cell-pair-w->string
@@ -125,6 +126,144 @@
           (STA ZP_VM_PC+1)
           (RTS)))
 
+
+(define BC_CALL
+  (list
+   (label BC_CALL)
+          (JSR VM_CELL_STACK_JUST_PUSH_RT)
+          (LDA !$00)
+          (STA ZP_RT) ;; mark rt as empty
+
+          ;; load the two bytes following into ZP_RA (ptr to function descriptor)
+          (LDY !$01)
+          (LDA (ZP_VM_PC),y)
+          (STA ZP_RA)
+          (INY)
+          (LDA (ZP_VM_PC),y)
+          (STA ZP_RA+1)
+
+          ;; put return to adress into zp_vm_pc (for save)
+          (LDA !$03)
+          (CLC)
+          (ADC ZP_VM_PC)
+          (STA ZP_VM_PC)
+          (BCC DONE_INC_PC__BC_CALL)
+          (INC ZP_VM_PC+1)
+    (label DONE_INC_PC__BC_CALL)
+
+          ;; ZP_RA holds pointer to function descriptor          
+          (LDY !$01)                            ;; index to number of locals 
+          (LDA (ZP_RA),y)                       ;; A = #locals
+          (ASL A)                               ;; A = 2*#locals
+          (CLC)       
+          (ADC !40)                             ;; A = 32+8+2*#locals
+
+          ;; A = 32 (possible stack size: 16 cells) + 8 (old pointers etc.) + 2*#locals
+          (JSR VM_ALLOC_CALL_FRAME)
+
+          ;; A = number of parameters on stack to be used
+          ;; X = number of locals
+          ;; Carry: 1 = NO RT PUSH! 0 = push RT before call
+          (LDY !$01)                            ;; index to number of locals 
+          (LDA (ZP_RA),y)
+          (TAX)                                 ;; X = number of locals
+          (DEY)
+          (LDA (ZP_RA),y)                       ;; A = number of parameters
+          (SEC)
+          (JSR VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
+
+          ;; load zp_vm_pc with address of function bytecode
+          (LDA ZP_RA)
+          (STA ZP_VM_PC)
+          (LDA ZP_RA+1)
+          (STA ZP_VM_PC+1)
+
+          (LDA !$02)                            ;; byte code starts at zp_ra + 2
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+
+;; TODO: complete test
+(module+ test #| bc_call |#
+  (define test-bc-before-call-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc BRK))
+     ))
+
+  (check-equal? (vm-call-frame->strings test-bc-before-call-state)
+                (list "call-frame:       $cd02"
+                      "program-counter:  $8001"
+                      "params start@:    $cd02"
+                      "locals start@:    $cd0a"
+                      "cell-stack start: $cd0a"))
+  (check-equal? (vm-stack->strings test-bc-before-call-state)
+                (list "stack holds 1 item"
+                      "cell-int $0000  (rt)")
+                "stack holds just the pushed int")
+
+  (define test-bc-call-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc CALL) (byte 00) (byte $8f)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 0)            ;; number of parameters
+             (byte 0)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc BRK))
+     ))
+
+  (check-equal? (vm-call-frame->strings test-bc-call-state)
+                (list "call-frame:       $cd0c"
+                      "program-counter:  $8f03"
+                      "params start@:    $cd0c"
+                      "locals start@:    $cd14"
+                      "cell-stack start: $cd14"))
+  (check-equal? (vm-stack->strings test-bc-call-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)")
+                "stack holds just the pushed int, nothing that was there before the call"))
+
+(define BC_RET
+  (list
+   (label BC_RET)
+          ;; restore from previous call frame, keep RT as result
+          (JSR VM_POP_CALL_FRAME)
+          (JMP VM_INTERPRETER)))
+
+;; TODO: complete tests
+(module+ test #| bc_call |#
+  (define test-bc-ret-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc CALL) (byte 00) (byte $8f)
+             (bc BRK)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 0)            ;; number of parameters
+             (byte 0)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc RET))
+     ))
+
+  
+  (check-equal? (vm-call-frame->strings test-bc-ret-state)
+                (list "call-frame:       $cd02"
+                      "program-counter:  $8004"
+                      "params start@:    $cd02"
+                      "locals start@:    $cd0a"
+                      "cell-stack start: $cd0a"))
+  ;; TODO: fix this test
+  (check-equal? (vm-stack->strings test-bc-ret-state)
+                  (list "stack holds 2 items"
+                        "cell-int $0001  (rt)"
+                        "cell-int $0000")
+                  "previous value on the stack is restored to be there + returned value (in rt)"))
+
 (define BC_BRK
   (list
    (label BC_BRK)
@@ -141,7 +280,14 @@
                 "stopped at byte code brk"))
 
 ;; return id of this function (id = 16 bit ptr to function = zp_vm_pc to set when called)
-(define (load-function state byte-code param-no locals-no name)
+;; e.g. (register-function '() (list INT+ BRK) 2 3 "hello")
+(define (register-function state byte-code param-no locals-no name)  
+  (list
+   (ast-bytes-cmd '() (list param-no locals-no))
+   (ast-label-def-cmd '() name)
+   (ast-bytes-cmd '() byte-code)
+   (ast-bytes-cmd '() (bytes->list (string->bytes/locale name)))
+   (ast-bytes-cmd '() (list (string-length name))))
   ;; allocate code page to hold len(byte-code) + byte (param-no) + byte (locals-no) + byte (name-len) + len(name)
   ;; mem layout:
   ;;        00: # params
@@ -154,7 +300,7 @@
   ;;        03+len(bc)+len(name): len of this datarecord = 03+len(bc)+len(name)
   ;;        --------
   ;;        00+len(datarecord): next free record
-  '())
+  )
 
 (define BC_PUSH_PARAM_OR_LOCAL_SHORT
   (flatten
@@ -341,7 +487,7 @@
       (bc BRK))))
 
   (check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                1142)
+                1148)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                 (list "stack holds 3 items"
                       "cell-int $0000  (rt)"
@@ -415,7 +561,7 @@
 
 
   (check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                1142)
+                1148)
   (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                 (list "stack holds 3 items"
                       "cell-int $1fff  (rt)"
@@ -595,8 +741,8 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 60  <-  b0..b7 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 62  <-  31 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 64  <-  32 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 66  <-  33 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 68  <-  34 reserved
+           (word-ref BC_RET)                      ;; 66  <-  33 reserved
+           (word-ref BC_CALL)                     ;; 68  <-  34 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6a  <-  35 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6c  <-  36 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6e  <-  37 reserved
@@ -716,6 +862,8 @@
           BC_CONS
           BC_CAR
           BC_CDR
+          BC_CALL
+          BC_RET
           VM_INTERPRETER
           BC_BRK
           BC_INT_PLUS

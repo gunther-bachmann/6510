@@ -641,7 +641,15 @@
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
-(provide vm-memory-manager vm-stack->strings ast-const-get vm-page->strings vm-regt->string vm-rega->string vm-deref-cell-pair-w->string vm-deref-cell-pair->string
+(provide vm-memory-manager
+         vm-call-frame->strings
+         vm-stack->strings
+         ast-const-get
+         vm-page->strings
+         vm-regt->string
+         vm-rega->string
+         vm-deref-cell-pair-w->string
+         vm-deref-cell-pair->string
          ZP_RT
          ZP_VM_PC
           ZP_LOCALS_PTR
@@ -659,6 +667,14 @@
              (format-hex-word cell-pair-root)
              (vm-cell-w->string (peek-word-at-address state cell-pair-root))
              (vm-cell-w->string (peek-word-at-address state (+ 2 cell-pair-root))))]))
+
+;; write call stack status
+(define (vm-call-frame->strings state)
+  (list (format "call-frame:       $~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME)))
+        (format "program-counter:  $~a" (format-hex-word (peek-word-at-address state ZP_VM_PC)))
+        (format "params start@:    $~a" (format-hex-word (peek-word-at-address state ZP_PARAMS_PTR)))
+        (format "locals start@:    $~a" (format-hex-word (peek-word-at-address state ZP_LOCALS_PTR)))
+        (format "cell-stack start: $~a" (format-hex-word (peek-word-at-address state ZP_CELL_STACK_BASE_PTR)))))
 
 ;; write a status string of a memory page
 (define (vm-page->strings state page)
@@ -1833,9 +1849,12 @@
            ;; initialize cell stack
            (LDA !$20)
            (JSR VM_ALLOC_CALL_FRAME)
-           (STY ZP_PARAMS_PTR)
-           (STY ZP_LOCALS_PTR)
-           (STY ZP_CELL_STACK_BASE_PTR)
+           (TYA)
+           (STA ZP_PARAMS_PTR)
+           (CLC)
+           (ADC !$08)
+           (STA ZP_LOCALS_PTR)
+           (STA ZP_CELL_STACK_BASE_PTR)
            (STX ZP_PARAMS_PTR+1)
            (STX ZP_LOCALS_PTR+1)
            (STX ZP_CELL_STACK_BASE_PTR+1)
@@ -2284,7 +2303,7 @@
 (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt |#
   (define vm-alloc-cell-pair-on-page-a-into-rt-code
     (list
-     (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)))
+     (JSR ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)))
 
   (define vm-alloc-cell-pair-on-page-a-into-rt-state
     (run-code-in-test vm-alloc-cell-pair-on-page-a-into-rt-code))
@@ -2300,7 +2319,7 @@
 (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt 2 times|#
   (define vm-alloc-cell-pair-on-page-a-into-rt-code2
     (list
-     (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
+     (JSR ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
      (LDA !$cc)
      (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)))
 
@@ -3600,7 +3619,7 @@
 
   (check-equal? (vm-page->strings alloc-call-frame-state-after #xcd)
                 '("page-type:      call-frame page"
-                  "stack frame:    $cd02"))
+                  "stack frame:    $cd0a"))
 
   (define alloc-call-frame-2times-code
     (list
@@ -3635,7 +3654,7 @@
 
   (check-equal? (vm-page->strings alloc-call-frame-2times-fitting-state-after #xcd)
                 '("page-type:      call-frame page"
-                  "stack frame:    $cd22")))
+                  "stack frame:    $cd2a")))
 
 ;; TODO: check vm_write_rx_to_paramy
 
@@ -3846,7 +3865,6 @@
   (list
    (label VM_POP_CALL_FRAME)
           ;; result is in rt (no stack manipulation necessary)
-          ;; (JSR VM_CELL_STACK_WRITE_TOS_TO_PARAM_0) 
 
           (LDA ZP_CALL_FRAME+1)         ;; get current page
           (CMP ZP_PARAMS_PTR+1)         ;; compare with old page
