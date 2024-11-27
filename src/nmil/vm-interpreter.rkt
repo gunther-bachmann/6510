@@ -17,6 +17,7 @@
                   vm-call-frame->strings
                   vm-stack->strings
                   vm-regt->string
+                  vm-cell-at->string
                   vm-deref-cell-pair-w->string
                   ast-const-get
                   ZP_RT
@@ -130,10 +131,6 @@
 (define BC_CALL
   (list
    (label BC_CALL)
-          (JSR VM_CELL_STACK_JUST_PUSH_RT)
-          (LDA !$00)
-          (STA ZP_RT) ;; mark rt as empty
-
           ;; load the two bytes following into ZP_RA (ptr to function descriptor)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
@@ -149,8 +146,14 @@
           (STA ZP_VM_PC)
           (BCC DONE_INC_PC__BC_CALL)
           (INC ZP_VM_PC+1)
-    (label DONE_INC_PC__BC_CALL)
+   (label DONE_INC_PC__BC_CALL)
 
+   (label VM_CALL_PUSH_RT_FUN_IN_RA)
+          (JSR VM_CELL_STACK_JUST_PUSH_RT)
+          (LDA !$00)
+          (STA ZP_RT) ;; mark rt as empty
+
+   (label VM_CALL_NO_PUSH_FUN_IN_RA)
           ;; ZP_RA holds pointer to function descriptor          
           (LDY !$01)                            ;; index to number of locals 
           (LDA (ZP_RA),y)                       ;; A = #locals
@@ -181,7 +184,6 @@
           (LDA !$02)                            ;; byte code starts at zp_ra + 2
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
 
-;; TODO: complete test
 (module+ test #| bc_call |#
   (define test-bc-before-call-state
     (run-bc-wrapped-in-test
@@ -224,6 +226,88 @@
   (check-equal? (vm-stack->strings test-bc-call-state)
                 (list "stack holds 1 item"
                       "cell-int $0001  (rt)")
+                "stack holds just the pushed int, nothing that was there before the call")
+
+  (define test-bc-call-wp-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc PUSH_INT_m1)
+             (bc CALL) (byte 00) (byte $8f)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 2)            ;; number of parameters
+             (byte 0)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc BRK))
+     ))
+
+  (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
+                (list "call-frame:       $cd0e"
+                      "program-counter:  $8f03"
+                      "params start@:    $cd0a"
+                      "locals start@:    $cd16"
+                      "cell-stack start: $cd16"))
+  (check-equal? (memory-list  test-bc-call-wp-state #xcd0a #xcd0d)
+                (list #x00 #x03 #xff #x7f)
+                "cell int 0, cell int -1 in reverse order (since on stack)")
+  (check-equal? (vm-stack->strings test-bc-call-wp-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)")
+                "stack holds just the pushed int, nothing that was there before the call")
+
+  (define test-bc-call-wl-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc PUSH_INT_m1)
+             (bc CALL) (byte 00) (byte $8f)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 0)            ;; number of parameters
+             (byte 2)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc BRK))))
+
+  (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
+                (list "call-frame:       $cd0e"
+                      "program-counter:  $8f03"
+                      "params start@:    $cd0e"
+                      "locals start@:    $cd16"
+                      "cell-stack start: $cd1a"))
+  (check-equal? (vm-stack->strings test-bc-call-wl-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)")
+                "stack holds just the pushed int, nothing that was there before the call")
+
+  (define test-bc-call-wpnl-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc PUSH_INT_m1)
+             (bc CALL) (byte 00) (byte $8f)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 1)            ;; number of parameters
+             (byte 2)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc BRK))))
+
+  (check-equal? (memory-list  test-bc-call-wpnl-state #xcd0c #xcd0d)
+                (list #xff #x7f)
+                "cell int -1 in reverse order (since on stack)")
+  (check-equal? (vm-call-frame->strings test-bc-call-wpnl-state)
+                (list "call-frame:       $cd0e"
+                      "program-counter:  $8f03"
+                      "params start@:    $cd0c"
+                      "locals start@:    $cd16"
+                      "cell-stack start: $cd1a"))
+  (check-equal? (vm-stack->strings test-bc-call-wpnl-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)")
                 "stack holds just the pushed int, nothing that was there before the call"))
 
 (define BC_RET
@@ -233,7 +317,6 @@
           (JSR VM_POP_CALL_FRAME)
           (JMP VM_INTERPRETER)))
 
-;; TODO: complete tests
 (module+ test #| bc_call |#
   (define test-bc-ret-state
     (run-bc-wrapped-in-test
@@ -247,9 +330,7 @@
              (byte 0)            ;; number of parameters
              (byte 0)            ;; number of locals
              (bc PUSH_INT_1)     ;; value to return
-             (bc RET))
-     ))
-
+             (bc RET))))
   
   (check-equal? (vm-call-frame->strings test-bc-ret-state)
                 (list "call-frame:       $cd02"
@@ -257,12 +338,38 @@
                       "params start@:    $cd02"
                       "locals start@:    $cd0a"
                       "cell-stack start: $cd0a"))
-  ;; TODO: fix this test
   (check-equal? (vm-stack->strings test-bc-ret-state)
                   (list "stack holds 2 items"
                         "cell-int $0001  (rt)"
                         "cell-int $0000")
-                  "previous value on the stack is restored to be there + returned value (in rt)"))
+                  "previous value on the stack is restored to be there + returned value (in rt)")
+
+  (define test-bc-ret-wpnl-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc PUSH_INT_m1)
+             (bc CALL) (byte 00) (byte $8f)
+             (bc BRK)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 1)            ;; number of parameters
+             (byte 2)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc RET))))
+
+  (check-equal? (vm-stack->strings test-bc-ret-wpnl-state)
+                (list "stack holds 2 items"
+                      "cell-int $0001  (rt)"
+                      "cell-int $0000")
+                "the value returned and the original stack with its parameters (1) removed")
+  (check-equal? (vm-call-frame->strings test-bc-ret-wpnl-state)
+                (list "call-frame:       $cd02"
+                      "program-counter:  $8005"
+                      "params start@:    $cd02"
+                      "locals start@:    $cd0a"
+                      "cell-stack start: $cd0a")))
 
 (define BC_BRK
   (list

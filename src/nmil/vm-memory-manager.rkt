@@ -644,6 +644,7 @@
 (provide vm-memory-manager
          vm-call-frame->strings
          vm-stack->strings
+         vm-cell-at->string
          ast-const-get
          vm-page->strings
          vm-regt->string
@@ -806,6 +807,9 @@
 
 (define (regt-empty? state)
   (= 0 (peek state ZP_RT)))
+
+(define (vm-cell-at->string state loc)
+  (vm-cell-w->string (peek-word-at-address state loc)))
 
 ;; write string of current RT
 (define (vm-regt->string state)
