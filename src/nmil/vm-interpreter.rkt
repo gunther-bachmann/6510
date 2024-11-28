@@ -103,9 +103,8 @@
 (provide vm-interpreter)
 
 
-;; TODO: implement CALL, PUSH_LOCAL, PUSH_PARAM_OR_LOCAL, TAIL_CALL, CONS, CAR, CDR, NIL?-RET-PARAM
-;; TODO: supporting functions like create local frame
-;; TODO: implement some functions to make status of the interpreter more accessible (e.g. print cell-stack, zp_ptrX, disassemble command, step through byte code ...)
+;; TODO: implement PUSH_LOCAL, PUSH_PARAM_OR_LOCAL, TAIL_CALL, NIL?-RET-PARAM
+;; TODO: implement some functions to make status of the interpreter more accessible (e.g. disassemble command, step through byte code ...)
 
 
 (define VM_INTERPRETER_VARIABLES
@@ -133,25 +132,29 @@
    (label BC_CALL)
           ;; load the two bytes following into ZP_RA (ptr to function descriptor)
           (LDY !$01)
-          (LDA (ZP_VM_PC),y)
-          (STA ZP_RA)
+          (LDA (ZP_VM_PC),y)                    ;; load lowbyte of call target, right behind byte-code
+          (STA ZP_RA)                           ;; -> RA
           (INY)
-          (LDA (ZP_VM_PC),y)
-          (STA ZP_RA+1)
+          (LDA (ZP_VM_PC),y)                    ;; load highbyte of call target, behind lowbyte
+          (STA ZP_RA+1)                         ;; -> RA
+          ;; RA now holds the call target function address
 
           ;; put return to adress into zp_vm_pc (for save)
-          (LDA !$03)
+          (LDA !$03)                            ;; call is 3 bytes long (bc + address)
           (CLC)
           (ADC ZP_VM_PC)
-          (STA ZP_VM_PC)
+          (STA ZP_VM_PC)                        ;; write into program counter
           (BCC DONE_INC_PC__BC_CALL)
-          (INC ZP_VM_PC+1)
-   (label DONE_INC_PC__BC_CALL)
+          (INC ZP_VM_PC+1)                      ;; inc page of program counter
+          ;; zp_vm_pc holds follow bc after this call
+   (label DONE_INC_PC__BC_CALL)          
 
    (label VM_CALL_PUSH_RT_FUN_IN_RA)
-          (JSR VM_CELL_STACK_JUST_PUSH_RT)
+          ;; push RT into pre call stack
+          (JSR VM_CELL_STACK_JUST_PUSH_RT)      ;; push rt onto (current = pre call) the cell-stack
           (LDA !$00)
-          (STA ZP_RT) ;; mark rt as empty
+          (STA ZP_RT)                           ;; mark rt as empty
+          ;; RT is pushed and empty
 
    (label VM_CALL_NO_PUSH_FUN_IN_RA)
           ;; ZP_RA holds pointer to function descriptor          
@@ -314,7 +317,7 @@
   (list
    (label BC_RET)
           ;; restore from previous call frame, keep RT as result
-          (JSR VM_POP_CALL_FRAME)
+          (JSR VM_POP_CALL_FRAME)             ;; maybe move the respective code into here, (save jsr)
           (JMP VM_INTERPRETER)))
 
 (module+ test #| bc_call |#
@@ -414,48 +417,226 @@
    (list
     (label BC_PUSH_PARAM_OR_LOCAL_SHORT)
            (LDY !$00)
-           (LDA (ZP_VM_PC),y)
-           (AND !$07) ;; lower three bits are encoded into the short command
-           (LSR)
+           (LDA (ZP_VM_PC),y)                   ;; load bytecode
+           (AND !$07)                           ;; lower three bits are encoded into the short command
+           (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
            (BCS PUSH_PARAM__BC_PUSH_PARAM_OR_LOCAL_SHORT)
 
            ;; push local
-           (ASL A) ;; * 2
-           (TAY)
-           (LDA (ZP_LOCALS_PTR),y)
-           (TAX)
-           (INY)
-           (LDA (ZP_LOCALS_PTR),y)
-           (JSR VM_CELL_STACK_PUSH_R)
-           (JMP VM_INTERPRETER_INC_PC)
+           (ASL A)                              ;; A = 0000 xxx0
+           (TAY)                                ;; index -> Y
+           (LDA (ZP_LOCALS_PTR),y)              ;; load low byte of local at index
+           (TAX)                                ;; low byte -> X
+           (INY)                                ;; 
+           (LDA (ZP_LOCALS_PTR),y)              ;; load high byte of local at index -> A
+           (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack
+           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 
            ;; push param
    (label  PUSH_PARAM__BC_PUSH_PARAM_OR_LOCAL_SHORT)
-           (ASL A) ;; * 2
-           (TAY)
-           (LDA (ZP_PARAMS_PTR),y)
-           (TAX)
-           (INY)
-           (LDA (ZP_PARAMS_PTR),y)
-           (JSR VM_CELL_STACK_PUSH_R)
-           (JMP VM_INTERPRETER_INC_PC)
+           (ASL A)                              ;; A = 0000 xxx0                         
+           (TAY)                                ;; index -> Y               
+           (INY)                                ;; params are in low/high reversed order (stack)
+           (LDA (ZP_PARAMS_PTR),y)              ;; load low byte of param at index       
+           (TAX)                                ;; low byte -> X                          
+           (DEY)                                ;;                                       
+           (LDA (ZP_PARAMS_PTR),y)              ;; load high byte of param at index -> A  
+           (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack                     
+           (JMP VM_INTERPRETER_INC_PC)          ;; next bc                               
            )))
 
 (define PUSH_LOCAL_0 #x80)
+(define PUSH_LOCAL_1 #x82)
+(define PUSH_LOCAL_2 #x84)
+(define PUSH_LOCAL_3 #x86)
 
-;; TODO implement test
+(define PUSH_PARAM_0 #x81)
+(define PUSH_PARAM_1 #x83)
+(define PUSH_PARAM_2 #x85)
+(define PUSH_PARAM_3 #x87)
+
+(define BC_POP_TO_PARAM_OR_LOCAL_SHORT
+  (flatten
+   (list
+    (label BC_POP_TO_PARAM_OR_LOCAL_SHORT)
+           (LDY !$00)
+           (LDA (ZP_VM_PC),y)                   ;; load bytecode
+           (AND !$07)                           ;; lower three bits are encoded into the short command
+           (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
+           (BCS POP_TO_PARAM__BC_POP_TO_PARAM_OR_LOCAL_SHORT)
+
+           ;; pop to local
+           (ASL A)                              ;; A = 0000 xxx0
+           (TAY)                                ;; index -> Y
+           (LDA ZP_RT)
+           (STA (ZP_LOCALS_PTR),y)              ;; load low byte of local at index           
+           (INY)                                ;;
+           (LDA ZP_RT+1)
+           (STA (ZP_LOCALS_PTR),y)              ;; load high byte of local at index -> A
+           (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
+           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
+
+           ;; pop to param
+   (label  POP_TO_PARAM__BC_POP_TO_PARAM_OR_LOCAL_SHORT)
+           (ASL A)                              ;; A = 0000 xxx0
+           (TAY)                                ;; index -> Y
+           (LDA ZP_RT+1)                        ;; put in params in reverse low/high order!
+           (STA (ZP_PARAMS_PTR),y)              ;; load low byte of param at index           
+           (INY)                                ;;
+           (LDA ZP_RT)
+           (STA (ZP_PARAMS_PTR),y)              ;; load high byte of param at index -> A
+           (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
+           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
+           )))
+
+(define POP_TO_LOCAL_0 #x90)
+(define POP_TO_LOCAL_1 #x92)
+(define POP_TO_LOCAL_2 #x94)
+(define POP_TO_LOCAL_3 #x96)
+
+(define POP_TO_PARAM_0 #x91)
+(define POP_TO_PARAM_1 #x93)
+(define POP_TO_PARAM_2 #x95)
+(define POP_TO_PARAM_3 #x97)
+
 (module+ test #| BC_PUSH_PARAM_OR_LOCAL_SHORT |#
-  (define use-case-push-param-or-local-state-after
+  (define test-bc-pop-to-l-state
     (run-bc-wrapped-in-test
      (list
-      ;; todo: setup local0 to be a cell-int $0333
-      (bc PUSH_LOCAL_0)
-      (bc BRK))))
+             (bc PUSH_INT_0)
+             (bc PUSH_INT_m1)
+             (bc CALL) (byte 00) (byte $8f)
 
-  (skip (check-equal? (vm-stack->strings use-case-push-param-or-local-state-after)
-                      (list "stack holds 1 item"
-                            "cell-int $0333"      ;; tos = 0
-                            ))))
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 1)            ;; number of parameters
+             (byte 2)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc POP_TO_LOCAL_0) ;;
+             (bc BRK))))
+
+  (check-equal? (vm-stack->strings test-bc-pop-to-l-state)
+                (list "stack is empty"))
+  (check-equal? (vm-cell-at->string test-bc-pop-to-l-state #xcd16)
+                "cell-int $0001")
+  (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
+                (list "call-frame:       $cd0e"
+                      "program-counter:  $8f04"
+                      "params start@:    $cd0c"
+                      "locals start@:    $cd16"
+                      "cell-stack start: $cd1a"))
+
+(define test-bc-pop-to-p-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc PUSH_INT_m1)
+             (bc CALL) (byte 00) (byte $8f)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 1)            ;; number of parameters
+             (byte 2)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc POP_TO_PARAM_0) ;; overwrites -1
+             (bc BRK))))
+
+  (check-equal? (vm-stack->strings test-bc-pop-to-p-state)
+                (list "stack is empty"))
+  (check-equal? (memory-list test-bc-pop-to-p-state #xcd0c #xcd0d)
+                (list #x01 #x03))
+  (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
+                (list "call-frame:       $cd0e"
+                      "program-counter:  $8f04"
+                      "params start@:    $cd0c"
+                      "locals start@:    $cd16"
+                      "cell-stack start: $cd1a"))
+
+  (define test-bc-push-l-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc PUSH_INT_m1)
+             (bc CALL) (byte 00) (byte $8f)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 1)            ;; number of parameters
+             (byte 2)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc POP_TO_LOCAL_0) ;;
+             (bc PUSH_INT_0)
+             (bc PUSH_LOCAL_0)
+             (bc BRK))))
+
+  (check-equal? (vm-stack->strings test-bc-push-l-state)
+                (list "stack holds 2 items"
+                      "cell-int $0001  (rt)"
+                      "cell-int $0000")
+                "int 1 was pushed from local")
+  (check-equal? (vm-cell-at->string test-bc-push-l-state #xcd16)
+                "cell-int $0001")
+  (check-equal? (vm-call-frame->strings test-bc-push-l-state)
+                (list "call-frame:       $cd0e"
+                      "program-counter:  $8f06"
+                      "params start@:    $cd0c"
+                      "locals start@:    $cd16"
+                      "cell-stack start: $cd1a"))
+
+  (define test-bc-push-p-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc PUSH_INT_m1)
+             (bc CALL) (byte 00) (byte $8f)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 1)            ;; number of parameters
+             (byte 2)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc PUSH_PARAM_0)
+             (bc BRK))))
+
+  (check-equal? (vm-stack->strings test-bc-push-p-state)
+                (list "stack holds 2 items"
+                      "cell-int $1fff  (rt)"
+                      "cell-int $0001")
+                "int -1 was pushed from parameter")
+  (check-equal? (vm-call-frame->strings test-bc-push-p-state)
+                (list "call-frame:       $cd0e"
+                      "program-counter:  $8f04"
+                      "params start@:    $cd0c"
+                      "locals start@:    $cd16"
+                      "cell-stack start: $cd1a"))
+
+  (define test-bc-pop-push-to-p-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc PUSH_INT_m1)
+             (bc CALL) (byte 00) (byte $8f)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 1)            ;; number of parameters
+             (byte 2)            ;; number of locals
+             (bc PUSH_INT_1)     ;; value to return
+             (bc POP_TO_PARAM_0) ;; overwrites -1
+             (bc PUSH_PARAM_0)
+             (bc BRK))))
+
+  (check-equal? (vm-stack->strings test-bc-pop-push-to-p-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)"))
+  (check-equal? (memory-list test-bc-pop-push-to-p-state #xcd0c #xcd0d)
+                (list #x01 #x03))
+  (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
+                (list "call-frame:       $cd0e"
+                      "program-counter:  $8f05"
+                      "params start@:    $cd0c"
+                      "locals start@:    $cd16"
+                      "cell-stack start: $cd1a")))
 
 (define PUSH_INT_0 #xb8)
 (define PUSH_INT_1 #xb9)
@@ -813,7 +994,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1a  <-  0d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1c  <-  0e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1e  <-  0f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 20  <-  90..97 reserved
+           (word-ref BC_POP_TO_PARAM_OR_LOCAL_SHORT) ;; 20  <-  90..97 -> 20
            (word-ref VM_INTERPRETER_INC_PC)       ;; 22  <-  11 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 24  <-  12 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 26  <-  13 reserved
@@ -961,6 +1142,7 @@
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT
           BC_PUSH_PARAM_OR_LOCAL_SHORT
+          BC_POP_TO_PARAM_OR_LOCAL_SHORT
           BC_PUSH_CONST_NUM_SHORT
           BC_PUSH_CONST_INT
           BC_PUSH_CONST_BYTE
