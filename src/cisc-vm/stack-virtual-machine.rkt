@@ -1506,6 +1506,17 @@
                 (list (cell-byte- 4) (cell-byte- 3) (cell-byte- 2))))
 
 
+;; actual 6510 implementation does this differently
+;; CELL_PTR        #b00000000 ;; pppp ppp0  no masking is done on pointers!
+;; CELL_PTR_M      #b11111110 ;;
+;; CELL_PAIR_PTR   #b00000001 ;; pppp pp01  no masking is done on pointers!
+;; CELL_PAIR_PTR_M #b11111100 ;;
+;; CELL_INT        #b00000011 ;; 0iii ii11  for int arithmetic, the relevant bits are masked out
+;; CELL_INT_M      #b01111100 ;;
+;; CELL_BYTE       #b11111111 ;; 1111 1111
+;; CELL_BYTE_M     #b00000000 ;; no payload in low byte, payload completely in high byte
+;; see src/nmil/vm-memory-manager.rkt
+;;
 ;;                                        low-byte  high byte  (low-byte is first)
 (define CELL_PTR #b00000001)           ;; xxxx xxx1 xxxx xxxx (ptr to words/cells)
 (define CELL_LIST_PTR #b00000010)      ;; xxxx xx10 xxxx xxxx (ptr to (cell-pairs, car and cdr cell)) NIL= 0000 0010 0000 0000

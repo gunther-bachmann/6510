@@ -10,10 +10,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 
 ;; TODO: allow byte-code level debugging (with the possibility to step into 6510 code)?
-;;       idea: establish break point in interpreter loop,
+;;       idea: establish break point in interpreter loop, (tell debugger to break at resolved-label)
+;;             run own routine at break point,
+;;             allow custom commands for this debugger mode
+;;               e.g. pretty print next byte code commands (disassembler)
+;;                    inspect and manipulate memory, call stack, locals, parameters
+;;                    allow setting breakpoints on bytecode (at a certain address)
+;;             allow in place execution of bytecode
+;;             allow to switch debugger to byte code debugger and vice versa
 ;;             print bc interpreter status (additionally)
 ;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
-;; TODO: implement some functions to make status of the interpreter more accessible (e.g. disassemble command, step through byte code ...)
 ;; TODO: numbering of parameter/locals may still be different compared to stack-virtual-machein and svm-compiler/generator!
 ;; TODO: implement refcount gc for reverse list implementation/interpretation
 ;; TODO: implement structure access, allocation, deallocation
@@ -142,8 +148,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA !$00)
           (STA ZP_VM_PC)
           (STA ZP_VM_FUNC_PTR)
-          (STA ZP_VM_FUNC_PTR+1)
-          (LDA !$80)         ;; bc start at $8000
+          (STA ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $0000 as initial
+          (LDA !$80)                            ;; bc start at $8000
           (STA ZP_VM_PC+1)          
           (RTS)))
 
@@ -151,38 +157,39 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_NIL_P_RET_PARAM_OR_LOCAL)
           (LDA ZP_RT)
-          (CMP !<TAGGED_NIL)
-          (BEQ RETURN__BC_NIL_P_RET_PARAM_OR_LOCAL)
-          (JMP VM_INTERPRETER_INC_PC)
+          (CMP !<TAGGED_NIL)                            ;; lowbyte = tagged_nil lowbyte
+          (BEQ RETURN__BC_NIL_P_RET_PARAM_OR_LOCAL)     ;; is nil => return param or local
+          (JMP VM_INTERPRETER_INC_PC)                   ;; next instruction
 
    (label RETURN__BC_NIL_P_RET_PARAM_OR_LOCAL)
-          (LDY !$00)
+          (LDY !$00)                                    ;; get byte code
           (LDA (ZP_VM_PC),y)
-          (AND !$07)
-          (LSR)
+          (AND !$07)                                    ;; mask out lower 3 bits
+          (LSR)                                         ;; lowest bit set = param, 0 = local
           (BCS RETURN_PARAM__BC_NIL_P_RET_PARAM_OR_LOCAL)
 
           ;; localxxx into rt and retrun
-          (ASL A)
+          (ASL A)                                       ;; * 2 to get index into locals
           (TAY)
-          (LDA (ZP_LOCALS_PTR),y)
-          (STA ZP_RT)
+          (LDA (ZP_LOCALS_PTR),y)                       ;; load low byte from local
+          (STA ZP_RT)                                   ;; -> RT
           (INY)
-          (LDA (ZP_LOCALS_PTR),y)
-          (STA ZP_RT+1)
-          (JSR VM_POP_CALL_FRAME)             
-          (JMP VM_INTERPRETER)
+          (LDA (ZP_LOCALS_PTR),y)                       ;; load high byte from local
+          (STA ZP_RT+1)                                 ;; -> RT
+          (JSR VM_POP_CALL_FRAME)                       ;; now pop the call frame
+          (JMP VM_INTERPRETER)                          ;; and continue 
 
    (label RETURN_PARAM__BC_NIL_P_RET_PARAM_OR_LOCAL)
-          (ASL A)
-          (TAY)
-          (LDA (ZP_PARAMS_PTR),y)
-          (STA ZP_RT+1)
-          (INY)
-          (LDA (ZP_PARAMS_PTR),y)
-          (STA ZP_RT)
-          (JSR VM_POP_CALL_FRAME)             
-          (JMP VM_INTERPRETER)))
+          (ASL A)                                       ;; * 2 to get index into params
+          (TAY)                                                                       
+          (LDA (ZP_PARAMS_PTR),y)                       ;; load high byte from param (organized high/low, since part of the calling functions' stack)
+          (STA ZP_RT+1)                                 ;; -> RT                        
+          (INY)                                                                       
+          (LDA (ZP_PARAMS_PTR),y)                       ;; load low byte from param   
+          (STA ZP_RT)                                   ;; -> RT                        
+          (JSR VM_POP_CALL_FRAME)                       ;; now pop the call frame      
+          (JMP VM_INTERPRETER)                          ;; and continue
+          ))
 
 (define NIL?_RET_LOCAL_0 #x98)
 (define NIL?_RET_LOCAL_1 #x9a)
@@ -256,7 +263,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_TAIL_CALL)
           ;; pop stack values into parameters (number?)
           (LDY !$00)
-          (LDA (ZP_VM_FUNC_PTR),y)              ;; number of parameters
+          (LDA (ZP_VM_FUNC_PTR),y)                      ;; number of parameters
           (BEQ DONE_PARAM_COPY____BC_TAIL_CALL)
           ;; get A elements from the cell-stack into params
           (ASL A)
@@ -264,20 +271,20 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label PARAM_SET_LOOP__BC_TAIL_CALL)
           (DEY)
           (STY COUNT__BC_TAIL_CALL)
-          (LDA ZP_RT)                        ;; put in params in reverse low/high order!
-          (STA (ZP_PARAMS_PTR),y)              ;; load low byte of param at index
-          (DEY)                                ;;
+          (LDA ZP_RT)                                   ;; put in params in reverse low/high order!
+          (STA (ZP_PARAMS_PTR),y)                       ;; load low byte of param at index
+          (DEY)                                         ;;
           (LDA ZP_RT+1)
-          (STA (ZP_PARAMS_PTR),y)              ;; load high byte of param at index -> A
-          (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
+          (STA (ZP_PARAMS_PTR),y)                       ;; load high byte of param at index -> A
+          (JSR VM_CELL_STACK_POP_R)                     ;; fill RT with next tos
           (LDY COUNT__BC_TAIL_CALL)
           (DEY)
           (BNE PARAM_SET_LOOP__BC_TAIL_CALL)
 
    (label DONE_PARAM_COPY____BC_TAIL_CALL)
-          (STY ZP_RT)                           ;; clear RT
+          (STY ZP_RT)                                   ;; clear RT
           (DEY)
-          (STY ZP_CELL_STACK_TOS)               ;; set stack tos ptr to $ff (empty)
+          (STY ZP_CELL_STACK_TOS)                       ;; set stack tos ptr to $ff (empty)
 
 
           ;; copy function ptr to pc
