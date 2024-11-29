@@ -128,20 +128,20 @@
           (STA ZP_VM_PC+1)          
           (RTS)))
 
-(define BC_NIL_P_RET_PARAM
+(define BC_NIL_P_RET_PARAM_OR_LOCAL
   (list
-   (label BC_NIL_P_RET_PARAM)
+   (label BC_NIL_P_RET_PARAM_OR_LOCAL)
           (LDA ZP_RT)
           (CMP !<TAGGED_NIL)
-          (BEQ RETURN__)
-          (JMP VM_VM_INTERPRETER_INC_PC)
+          (BEQ RETURN__BC_NIL_P_RET_PARAM_OR_LOCAL)
+          (JMP VM_INTERPRETER_INC_PC)
 
-   (label RETURN__)
-          (LDY !$01)
+   (label RETURN__BC_NIL_P_RET_PARAM_OR_LOCAL)
+          (LDY !$00)
           (LDA (ZP_VM_PC),y)
           (AND !$07)
           (LSR)
-          (BCS RETURN_PARAM__)
+          (BCS RETURN_PARAM__BC_NIL_P_RET_PARAM_OR_LOCAL)
 
           ;; localxxx into rt and retrun
           (ASL A)
@@ -151,20 +151,19 @@
           (INY)
           (LDA (ZP_LOCALS_PTR),y)
           (STA ZP_RT+1)
-          (JSR VM_POP_CALL_FRAME)             ;; maybe move the respective code into here, (save jsr)
+          (JSR VM_POP_CALL_FRAME)             
           (JMP VM_INTERPRETER)
 
-   (label RETURN_LOCAL__)
+   (label RETURN_PARAM__BC_NIL_P_RET_PARAM_OR_LOCAL)
           (ASL A)
           (TAY)
-          (LDA (ZP_PARAM_PTR),y)
+          (LDA (ZP_PARAMS_PTR),y)
           (STA ZP_RT+1)
           (INY)
-          (LDA (ZP_PARAM_PTR),y)
+          (LDA (ZP_PARAMS_PTR),y)
           (STA ZP_RT)
-          (JSR VM_POP_CALL_FRAME)             ;; maybe move the respective code into here, (save jsr)
-          (JMP VM_INTERPRETER)
-   ))
+          (JSR VM_POP_CALL_FRAME)             
+          (JMP VM_INTERPRETER)))
 
 (define NIL?_RET_LOCAL_0 #x98)
 (define NIL?_RET_LOCAL_1 #x9a)
@@ -176,24 +175,33 @@
 (define NIL?_RET_PARAM_2 #x9d)
 (define NIL?_RET_PARAM_3 #x9f)
 
-(module+ test #| bc-tail-call |#
+(module+ test #| bc-nil-ret |#
   (define bc-nil-ret-state
     (run-bc-wrapped-in-test
      (list
+             (bc PUSH_INT_1)
              (bc PUSH_NIL)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
 
              (org #x8F00)
       (label TEST_FUN)
-             (byte 1)            ;; number of parameters
+             (byte 2)            ;; number of parameters
              (byte 0)            ;; number of locals
-             (bc PUSH_PARAM_0)
+             (bc PUSH_PARAM_1)
              (bc NIL?_RET_PARAM_0)     ;; return param0 if nil
              (bc BRK))))
 
-  (skip (check-equal? #t
-                      #f)))
+  (check-equal? (vm-stack->strings bc-nil-ret-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)"))
+  (check-equal? (vm-call-frame->strings bc-nil-ret-state)
+                (list "call-frame:       $cd02"
+                      "program-counter:  $8005"
+                      "function-ptr:     $0000"
+                      "params start@:    $cd02"
+                      "locals start@:    $cd0a"
+                      "cell-stack start: $cd0a")))
 
 (define BC_TAIL_CALL
   (list
@@ -1140,7 +1148,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2a  <-  15 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2c  <-  16 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2f  <-  17 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 30  <-  98..9f reserved
+           (word-ref BC_NIL_P_RET_PARAM_OR_LOCAL) ;; 30  <-  98..9f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 36  <-  1b reserved
@@ -1245,7 +1253,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; fc  <-  7e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; fe  <-  7f reserved
            ;; ...
-    )))
+           )))
 
 (define VM_INTERPRETER
   (list
@@ -1286,15 +1294,16 @@
           BC_PUSH_CONST_BYTE
           BC_PUSH_CONST_NIL
           BC_NIL_P
+          BC_NIL_P_RET_PARAM_OR_LOCAL
           BC_CONS
           BC_CAR
           BC_CDR
           BC_CALL
           BC_RET
-          VM_INTERPRETER
           BC_BRK
           BC_INT_PLUS
           BC_INT_MINUS
+          VM_INTERPRETER
           (list (org-align #x100)) ;; align to next page
           VM_INTERPRETER_OPTABLE
           vm-lists))
