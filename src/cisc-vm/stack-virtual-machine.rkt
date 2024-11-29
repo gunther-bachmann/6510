@@ -926,7 +926,7 @@
   (define active-frame (car (vm--frame-stack vm)))
   (define parameter-tail (vm-frame--parameter-tail active-frame))
   (define param-number (active-function-param-no vm))
-  (define new-params (take value-stack param-number))
+  (define new-params (reverse (take value-stack param-number)))
   (define new-value-stack (append new-params
                                   (drop parameter-tail param-number)))
   (define new-frame (struct-copy vm-frame- active-frame
@@ -1348,11 +1348,11 @@
         #:byte-code (vector-immutable (sPUSH_PARAMc 1)
                                       (sNIL?-RET-PARAMc 0)
                                       (sPUSH_PARAMc 1)
-                                      CDR
-                                      (sPUSH_PARAMc 1)
                                       CAR
                                       (sPUSH_PARAMc 0)
                                       BYTE+
+                                      (sPUSH_PARAMc 1)
+                                      CDR
                                       TAIL_CALL))))))
 
   (check-equal? (vm--value-stack test-tail-recursion--run-until-break)
@@ -1386,12 +1386,12 @@
         #:parameter-count 2 ;; param0 = original list, param1 = nil (reversed list in the end)
         #:byte-code (vector-immutable (sPUSH_PARAMc 0)
                                       (sNIL?-RET-PARAMc 1)
+                                      (sPUSH_PARAMc 0)
+                                      CDR
                                       (sPUSH_PARAMc 1)
                                       (sPUSH_PARAMc 0)
                                       CAR
                                       CONS
-                                      (sPUSH_PARAMc 0)
-                                      CDR
                                       TAIL_CALL))))))
 
   (check-equal? (vm--value-stack test-tail-recursion--run-until-break2)
@@ -1414,12 +1414,12 @@
         #:byte-code (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
                       NIL?
                       BRA 8
+                      (sPUSH_PARAMc 0)
+                      CDR
                       (sPUSH_PARAMc 1)
                       (sPUSH_PARAMc 0)
                       CAR
                       CONS
-                      (sPUSH_PARAMc 0)
-                      CDR
                       TAIL_CALL
                       (sPUSH_PARAMc 1)
                       RET))))))
@@ -1485,15 +1485,15 @@
                #:parameter-count 3
                #:byte-code (vector-immutable (sPUSH_PARAMc 1)
                                              (sNIL?-RET-PARAMc 2)
+                                             (sPUSH_PARAMc 0)
+                                             (sPUSH_PARAMc 1)
+                                             CDR
                                              (sPUSH_PARAMc 2)
                                              (sPUSH_PARAMc 1)
                                              CAR
                                              (sPUSH_PARAMc 0)
                                              CALL
                                              CONS
-                                             (sPUSH_PARAMc 1)
-                                             CDR
-                                             (sPUSH_PARAMc 0)
                                              TAIL_CALL))
               (make-function-def ;; inc
                #:parameter-count 1

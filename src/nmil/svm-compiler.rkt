@@ -636,7 +636,19 @@
 ;; generate for a call to a function (built in or user)
 (define (svm-generate--fun-call (call : ast-ex-fun-call-) (artifact : generation-artifact-)) : generation-artifact-
   ;; open: tail call, user function call, runtime function call, complete list of vm internal function calls
-(define call-symbol (ast-ex-fun-call--fun call))
+  (define call-symbol (ast-ex-fun-call--fun call))
+  (define call-byte (case call-symbol
+                      [(nil?) NIL?]
+                      [(car)  CAR]
+                      [(cdr)  CDR]
+                      [(cons) CONS]
+                      [else
+                       (if (eq? call-symbol
+                                (string->symbol (generation-artifact--function-scope artifact)))
+                           (if (generation-artifact--tail-call-position artifact)
+                               TAIL_CALL
+                               (raise-user-error (format "function call to \"~a\" is not in tail call position" (ast-ex-fun-call--fun call))))
+                           (raise-user-error (format "unknown function \"~a\""  (ast-ex-fun-call--fun call))))]))
   (struct-copy generation-artifact- artifact
                [bytes
                 (cast
@@ -648,19 +660,10 @@
                                                                           [bytes (vector-immutable)]
                                                                           [tail-call-position #f]
                                                                           [ret-follows-directly #f]))))
-                                      (reverse (ast-ex-fun-call--parameters call)) )
-                                 (list (case call-symbol
-                                         [(nil?) (vector-immutable NIL?)]
-                                         [(car) (vector-immutable CAR)]
-                                         [(cdr) (vector-immutable CDR)]
-                                         [(cons) (vector-immutable CONS)]
-                                         [else
-                                          (if (eq? call-symbol
-                                                   (string->symbol (generation-artifact--function-scope artifact)))
-                                              (if (generation-artifact--tail-call-position artifact)
-                                                  (vector-immutable TAIL_CALL)
-                                                  (raise-user-error (format "function call to \"~a\" is not in tail call position" (ast-ex-fun-call--fun call))))
-                                              (raise-user-error (format "unknown function \"~a\""  (ast-ex-fun-call--fun call))))])))))
+                                      (if (= TAIL_CALL call-byte)
+                                          (ast-ex-fun-call--parameters call)
+                                          (reverse (ast-ex-fun-call--parameters call))) )
+                                 (list (vector-immutable call-byte)))))
                  (Immutable-Vectorof Byte))]))
 
 ;; used during generation of byte-code to track information between separate generational steps
@@ -794,12 +797,12 @@
      (make-generation-artifact)))
     (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
                       (sNIL?-RET-PARAMc 1) ;; if a-list is nil, return b-list
+                      (sPUSH_PARAMc 0)
+                      CDR                  ;; (cdr a-list)
                       (sPUSH_PARAMc 1)
                       (sPUSH_PARAMc 0)
                       CAR
                       CONS                 ;; (cons (car a-list) b-list)
-                      (sPUSH_PARAMc 0)
-                      CDR                  ;; (cdr a-list)
                       TAIL_CALL            ;; write two stack values into param0 and 1 and jump to function start
                       )
    "optimization should yield 9 bytes (current min)"))
