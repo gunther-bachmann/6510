@@ -201,6 +201,35 @@
                       "function-ptr:     $0000"
                       "params start@:    $cd02"
                       "locals start@:    $cd0a"
+                      "cell-stack start: $cd0a"))
+
+  (define bc-nil-ret-local-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_1)
+             (bc PUSH_NIL)
+             (bc CALL) (byte 00) (byte $8f)
+             (bc BRK)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 2)            ;; number of parameters
+             (byte 1)            ;; number of locals
+             (bc PUSH_PARAM_0)
+             (bc POP_TO_LOCAL_0)
+             (bc PUSH_PARAM_1)
+             (bc NIL?_RET_LOCAL_0)     ;; return param0 if nil
+             (bc BRK))))
+
+  (check-equal? (vm-stack->strings bc-nil-ret-local-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)"))
+  (check-equal? (vm-call-frame->strings bc-nil-ret-local-state)
+                (list "call-frame:       $cd02"
+                      "program-counter:  $8005"
+                      "function-ptr:     $0000"
+                      "params start@:    $cd02"
+                      "locals start@:    $cd0a"
                       "cell-stack start: $cd0a")))
 
 (define BC_TAIL_CALL
@@ -209,23 +238,28 @@
           ;; pop stack values into parameters (number?)
           (LDY !$00)
           (LDA (ZP_VM_FUNC_PTR),y)              ;; number of parameters
-
-          ;; pop A times from the stack into param
+          (BEQ DONE_PARAM_COPY____BC_TAIL_CALL)
+          ;; get A elements from the cell-stack into params
           (ASL A)
           (TAY)
-          (LDA ZP_RT+1)                        ;; put in params in reverse low/high order!
+   (label PARAM_SET_LOOP__BC_TAIL_CALL)
+          (DEY)
+          (STY COUNT__BC_TAIL_CALL)
+          (LDA ZP_RT)                        ;; put in params in reverse low/high order!
           (STA (ZP_PARAMS_PTR),y)              ;; load low byte of param at index
-          (INY)                                ;;
-          (LDA ZP_RT)
+          (DEY)                                ;;
+          (LDA ZP_RT+1)
           (STA (ZP_PARAMS_PTR),y)              ;; load high byte of param at index -> A
           (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
-          (DEY)
-          (DEY)
+          (LDY COUNT__BC_TAIL_CALL)
           (DEY)
           (BNE PARAM_SET_LOOP__BC_TAIL_CALL)
-          (STX ZP_RT)                           ;; clear RT
-          (DEX)
-          (STX ZP_CELL_STACK_TOS)               ;; set stack tos ptr to $ff (empty)
+
+   (label DONE_PARAM_COPY____BC_TAIL_CALL)
+          (STY ZP_RT)                           ;; clear RT
+          (DEY)
+          (STY ZP_CELL_STACK_TOS)               ;; set stack tos ptr to $ff (empty)
+
 
           ;; copy function ptr to pc
           (LDA ZP_VM_FUNC_PTR)
@@ -235,7 +269,10 @@
 
           ;; adjust pc to start executing function ptr +2
           (LDA !$02)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)
+
+  (label  COUNT__BC_TAIL_CALL)
+          (byte 2)))
 
 (module+ test #| bc-tail-call |#
   (define bc-tail-call-state
@@ -254,10 +291,19 @@
              (bc PUSH_PARAM_0)
              (bc NIL?_RET_PARAM_0)     ;; return param0 if nil
              (bc PUSH_NIL)       ;; value to use with tail call             
-             (bc TAIL_CALL))))
+             (bc TAIL_CALL)
+             (bc BRK))))
 
-  (skip (check-equal? #t
-                      #f)))
+  (check-equal? (vm-stack->strings bc-tail-call-state)
+                (list "stack holds 1 item"
+                      "cell-pair-ptr NIL  (rt)"))
+  (check-equal? (vm-call-frame->strings bc-tail-call-state)
+                (list "call-frame:       $cd02"
+                      "program-counter:  $8006"
+                      "function-ptr:     $0000"
+                      "params start@:    $cd02"
+                      "locals start@:    $cd0a"
+                      "cell-stack start: $cd0a")))
 
 (define BC_CALL
   (list
@@ -1177,7 +1223,7 @@
            (word-ref VM_INTERPRETER_INC_PC)       ;; 64  <-  32 reserved
            (word-ref BC_RET)                      ;; 66  <-  33 reserved
            (word-ref BC_CALL)                     ;; 68  <-  34 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 6a  <-  35 reserved
+           (word-ref BC_TAIL_CALL)                ;; 6a  <-  35 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6c  <-  36 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6e  <-  37 reserved
            (word-ref BC_PUSH_CONST_NUM_SHORT)     ;; 70  <-  b8..bf reserved
@@ -1303,6 +1349,7 @@
           BC_BRK
           BC_INT_PLUS
           BC_INT_MINUS
+          BC_TAIL_CALL
           VM_INTERPRETER
           (list (org-align #x100)) ;; align to next page
           VM_INTERPRETER_OPTABLE
