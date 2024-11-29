@@ -653,10 +653,11 @@
          vm-deref-cell-pair->string
          ZP_RT
          ZP_VM_PC
-          ZP_LOCALS_PTR
-          ZP_PARAMS_PTR
-          ZP_CELL_STACK_TOS
-          ZP_CELL_STACK_BASE_PTR)
+         ZP_VM_FUNC_PTR
+         ZP_LOCALS_PTR
+         ZP_PARAMS_PTR
+         ZP_CELL_STACK_TOS
+         ZP_CELL_STACK_BASE_PTR)
 
 ;; write out the cells that are marked as reallocatable
 (define (vm-cell-pair-free-tree->string state)
@@ -673,6 +674,7 @@
 (define (vm-call-frame->strings state)
   (list (format "call-frame:       $~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME)))
         (format "program-counter:  $~a" (format-hex-word (peek-word-at-address state ZP_VM_PC)))
+        (format "function-ptr:     $~a" (format-hex-word (peek-word-at-address state ZP_VM_FUNC_PTR)))
         (format "params start@:    $~a" (format-hex-word (peek-word-at-address state ZP_PARAMS_PTR)))
         (format "locals start@:    $~a" (format-hex-word (peek-word-at-address state ZP_LOCALS_PTR)))
         (format "cell-stack start: $~a" (format-hex-word (peek-word-at-address state ZP_CELL_STACK_BASE_PTR)))))
@@ -895,14 +897,17 @@
    (word-const TAGGED_BYTE0              $00ff)
    (word-const TAGGED_NIL                $0001) ;; tag indicates cell-pair-ptr
 
-   (byte-const ZP_CELL_STACK_TOS         $dc) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
+   ;; d9..da free to use
+
+   (byte-const ZP_CELL_STACK_TOS         $db) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
 
    ;; ZP_TEMP may be used as pointer (in combination with ZP_TEMP2)
-   (byte-const ZP_TEMP                   $de) ;; may not be used after sub calls (just within a routine without jsr)
-   (byte-const ZP_TEMP2                  $df) ;; may not be used after sub calls (just within a routine without jsr)
+   (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
+   (byte-const ZP_TEMP2                  $dd) ;; may not be used after sub calls (just within a routine without jsr)
 
-   ;; the following eight bytes need to be continuous, since they are saved into the call frame!
-   (byte-const ZP_VM_PC                  $e0)
+   ;; the following ten bytes need to be continuous, since they are saved into the call frame!
+   (byte-const ZP_VM_PC                  $de) ;; program counter (ptr to currently executing byte code)
+   (byte-const ZP_VM_FUNC_PTR            $e0) ;; pointer to the currently running function
    (byte-const ZP_PARAMS_PTR             $e2) ;; pointer to first parameter in call-frame
    (byte-const ZP_LOCALS_PTR             $e4) ;; pointer to first local in call-frame
    (byte-const ZP_CELL_STACK_BASE_PTR    $e6) ;; e6..e7 (pointer to the base of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
@@ -938,11 +943,13 @@
 (define ZP_CELL_STACK_TOS       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
 (define ZP_TEMP                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP"))
 (define ZP_VM_PC                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_PC"))
+(define ZP_VM_FUNC_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_FUNC_PTR"))
 (define ZP_LOCALS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_PTR"))
 (define ZP_PARAMS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PARAMS_PTR"))
 (define TAG_BYTE_BYTE_CELL      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_BYTE_CELL"))
 (define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
 (define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
+
 
 
 ;; input:  x  (00 = RT, 02 = RA)
@@ -3568,7 +3575,7 @@
                       "slots used:     2"
                       "next free slot: $41")))
 
-;; input:  A = size (needs to include 32 bytes cell-stack + 8 byte (pc, old params, old locals, old cell stack base ptr) + 2 * #locals
+;; input:  A = size (needs to include 32 bytes cell-stack + 10 byte (pc, func ptr, old params, old locals, old cell stack base ptr) + 2 * #locals
 ;;         ZP_CELL_STACK_BASE_PTR
 ;;         ZP_CELL_STACK_TOS
 ;;         VM_FREE_CALL_STACK_PAGE
@@ -3738,8 +3745,8 @@
           (SBC ZP_TEMP)
           (STA ZP_TEMP) ;; keep offset to cell-stack-base-ptr for new parameter-ptr
 
-          ;; copy 8 bytes
-          (LDY !$07)
+          ;; copy 10 bytes
+          (LDY !$09)
    (label LOOP__VM_SAVE_EXEC_STATE_TO_CALL_FRAME)
           (LDA ZP_VM_PC,y)
           (STA (ZP_CALL_FRAME),y)
@@ -3760,7 +3767,7 @@
           (STA ZP_CELL_STACK_BASE_PTR+1)
           (LDA ZP_CALL_FRAME)
           (CLC)
-          (ADC !$08)
+          (ADC !$0a)
           (STA ZP_LOCALS_PTR)
 
           (TXA)
@@ -3783,6 +3790,7 @@
   ;; cd10 <- ZP_LOCALS_PTR
   ;; cd16 <- ZP_CELL_STACK_BASE_PTR
   ;; cd1b <- ZP_CELL_STACK_TOS (base ptr + 05, 3 elements on stack)
+  ;; cc05 <- ZP_VM_FUNC_PTR
   ;; cc06 <- ZP_VM_PC
 
   ;; after
@@ -3791,6 +3799,7 @@
   ;; cd24 <- ZP_LOCALS_PTR
   ;; cd2a <- ZP_CELL_STACK_BASE_PTR
   ;; cd29 <- ZP_CELL_STACK_TOS ($ff)
+  ;; cc05 <- ZP_VM_FUNC_PTR (unchanged)
   ;; cc06 <- ZP_VM_PC (unchanged)
 
   (define test-save-exec-state-code
@@ -3806,15 +3815,17 @@
      (STX ZP_CELL_STACK_BASE_PTR)
      (LDX !$05)
      (STX ZP_CELL_STACK_TOS)
+     (STX ZP_VM_FUNC_PTR)
      (INX)
      (STX ZP_VM_PC)     ;; $06
 
      (LDX ZP_CALL_FRAME+1) ;; $cd
      (STX ZP_PARAMS_PTR+1)
      (STX ZP_LOCALS_PTR+1)
-     (STX ZP_CELL_STACK_BASE_PTR+1)
+     (STX ZP_CELL_STACK_BASE_PTR+1)     
      (DEX)                      ;; $cc
      (STX ZP_VM_PC+1)
+     (STX ZP_VM_FUNC_PTR+1)
 
      ;; allocate new call frame space that can hold $20 bytes
      (LDA !$20)
@@ -3832,12 +3843,14 @@
   (check-equal? (vm-page->strings test-save-exec-state-state-after #xcd)
                 '("page-type:      call-frame page"
                   "stack frame:    $cd1c"))
+  (check-equal? (memory-list test-save-exec-state-state-after ZP_VM_FUNC_PTR (add1 ZP_VM_FUNC_PTR))
+                (list #x05 #xcc))  ;; not changed (yet)
   (check-equal? (memory-list test-save-exec-state-state-after ZP_PARAMS_PTR (add1 ZP_PARAMS_PTR))
                 (list #x18 #xcd))
   (check-equal? (memory-list test-save-exec-state-state-after ZP_LOCALS_PTR (add1 ZP_LOCALS_PTR))
-                (list #x24 #xcd))
+                (list #x26 #xcd))
   (check-equal? (memory-list test-save-exec-state-state-after ZP_CELL_STACK_BASE_PTR (add1 ZP_CELL_STACK_BASE_PTR))
-                (list #x2a #xcd))
+                (list #x2c #xcd))
   (check-equal? (memory-list test-save-exec-state-state-after ZP_CELL_STACK_TOS ZP_CELL_STACK_TOS)
                 (list #xff))
   (check-equal? (memory-list test-save-exec-state-state-after ZP_VM_PC (add1 ZP_VM_PC))
@@ -3864,6 +3877,7 @@
 ;;         zp_params_ptr
 ;;         zp_locals_ptr
 ;;         zp_cell_stack_base_ptr
+;;         zp_vm_func_ptr
 ;;         zp_vm_pc
 (define VM_POP_CALL_FRAME
   (list
@@ -3884,7 +3898,7 @@
           (LDA ZP_PARAMS_PTR)
           (STA ZP_CELL_STACK_TOS) ;; needs to subtract base ptr (which is available after the following copy loop
 
-          (LDY !$07) ;; 07..00 offset (8 bytes are copied)
+          (LDY !$09) ;; 09..00 offset (10 bytes are copied)
 
    (label LOOP__VM_POP_CALL_FRAME)
           (LDA (ZP_CALL_FRAME),y)
@@ -3916,7 +3930,7 @@
   ;; cd24 <- ZP_LOCALS_PTR
   ;; cd2a <- ZP_CELL_STACK_BASE_PTR
   ;; cd29 <- ZP_CELL_STACK_TOS ($ff)
-  ;; cc06 <- ZP_VM_PC (unchanged)
+  ;; cc04 <- ZP_VM_PC
 
   ;; after
   ;; cd04 <- ZP_PARAMS_PTR
@@ -3941,11 +3955,14 @@
      (STX ZP_CELL_STACK_TOS)
      (LDX !$04)
      (STX ZP_VM_PC)     ;; $04
+     (DEX)
+     (STX ZP_VM_FUNC_PTR)
 
      (LDX ZP_CALL_FRAME+1) ;; $cd
      (STX ZP_PARAMS_PTR+1)
      (STX ZP_LOCALS_PTR+1)
      (STX ZP_CELL_STACK_BASE_PTR+1)
+     (STX ZP_VM_FUNC_PTR+1)
      (DEX)                      ;; $cc
      (STX ZP_VM_PC+1)
 
@@ -3964,6 +3981,7 @@
 
      (JSR VM_WRITE_INT1_TO_RT)
      (INC ZP_VM_PC)
+     (INC ZP_VM_FUNC_PTR)
 
      (JSR VM_POP_CALL_FRAME) ;; should restore to 1 item on the stack, RT = returned value (int1)
      ))
@@ -3979,6 +3997,8 @@
                 (list #x10 #xcd))
   (check-equal? (memory-list test-pop-call-frame-state-after ZP_CELL_STACK_BASE_PTR (add1 ZP_CELL_STACK_BASE_PTR))
                 (list #x16 #xcd))
+  (check-equal? (memory-list test-pop-call-frame-state-after ZP_VM_FUNC_PTR (add1 ZP_VM_FUNC_PTR))
+                (list #x03 #xcd))
   (check-equal? (memory-list test-pop-call-frame-state-after ZP_VM_PC (add1 ZP_VM_PC))
                 (list #x04 #xcc))
   (check-equal? (take (vm-stack->strings test-pop-call-frame-state-after) 2)

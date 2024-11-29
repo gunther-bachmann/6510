@@ -103,7 +103,7 @@
 (provide vm-interpreter)
 
 
-;; TODO: implement PUSH_LOCAL, PUSH_PARAM_OR_LOCAL, TAIL_CALL, NIL?-RET-PARAM
+;; TODO: implement TAIL_CALL, NIL?-RET-PARAM
 ;; TODO: implement some functions to make status of the interpreter more accessible (e.g. disassemble command, step through byte code ...)
 
 
@@ -113,7 +113,7 @@
    ;; $0b..0e
    ;; $14..15
    ;; $0f..11
-   ;; $18..25
+   ;; $18..25   
    ))
 
 ;; initialize PC to $8000
@@ -122,10 +122,134 @@
    (label VM_INTERPRETER_INIT)
           (LDA !$00)
           (STA ZP_VM_PC)
+          (STA ZP_VM_FUNC_PTR)
+          (STA ZP_VM_FUNC_PTR+1)
           (LDA !$80)         ;; bc start at $8000
-          (STA ZP_VM_PC+1)
+          (STA ZP_VM_PC+1)          
           (RTS)))
 
+(define BC_NIL_P_RET_PARAM
+  (list
+   (label BC_NIL_P_RET_PARAM)
+          (LDA ZP_RT)
+          (CMP !<TAGGED_NIL)
+          (BEQ RETURN__)
+          (JMP VM_VM_INTERPRETER_INC_PC)
+
+   (label RETURN__)
+          (LDY !$01)
+          (LDA (ZP_VM_PC),y)
+          (AND !$07)
+          (LSR)
+          (BCS RETURN_PARAM__)
+
+          ;; localxxx into rt and retrun
+          (ASL A)
+          (TAY)
+          (LDA (ZP_LOCALS_PTR),y)
+          (STA ZP_RT)
+          (INY)
+          (LDA (ZP_LOCALS_PTR),y)
+          (STA ZP_RT+1)
+          (JSR VM_POP_CALL_FRAME)             ;; maybe move the respective code into here, (save jsr)
+          (JMP VM_INTERPRETER)
+
+   (label RETURN_LOCAL__)
+          (ASL A)
+          (TAY)
+          (LDA (ZP_PARAM_PTR),y)
+          (STA ZP_RT+1)
+          (INY)
+          (LDA (ZP_PARAM_PTR),y)
+          (STA ZP_RT)
+          (JSR VM_POP_CALL_FRAME)             ;; maybe move the respective code into here, (save jsr)
+          (JMP VM_INTERPRETER)
+   ))
+
+(define NIL?_RET_LOCAL_0 #x98)
+(define NIL?_RET_LOCAL_1 #x9a)
+(define NIL?_RET_LOCAL_2 #x9c)
+(define NIL?_RET_LOCAL_3 #x9e)
+
+(define NIL?_RET_PARAM_0 #x99)
+(define NIL?_RET_PARAM_1 #x9b)
+(define NIL?_RET_PARAM_2 #x9d)
+(define NIL?_RET_PARAM_3 #x9f)
+
+(module+ test #| bc-tail-call |#
+  (define bc-nil-ret-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_NIL)
+             (bc CALL) (byte 00) (byte $8f)
+             (bc BRK)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 1)            ;; number of parameters
+             (byte 0)            ;; number of locals
+             (bc PUSH_PARAM_0)
+             (bc NIL?_RET_PARAM_0)     ;; return param0 if nil
+             (bc BRK))))
+
+  (skip (check-equal? #t
+                      #f)))
+
+(define BC_TAIL_CALL
+  (list
+   (label BC_TAIL_CALL)
+          ;; pop stack values into parameters (number?)
+          (LDY !$00)
+          (LDA (ZP_VM_FUNC_PTR),y)              ;; number of parameters
+
+          ;; pop A times from the stack into param
+          (ASL A)
+          (TAY)
+          (LDA ZP_RT+1)                        ;; put in params in reverse low/high order!
+          (STA (ZP_PARAMS_PTR),y)              ;; load low byte of param at index
+          (INY)                                ;;
+          (LDA ZP_RT)
+          (STA (ZP_PARAMS_PTR),y)              ;; load high byte of param at index -> A
+          (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
+          (DEY)
+          (DEY)
+          (DEY)
+          (BNE PARAM_SET_LOOP__BC_TAIL_CALL)
+          (STX ZP_RT)                           ;; clear RT
+          (DEX)
+          (STX ZP_CELL_STACK_TOS)               ;; set stack tos ptr to $ff (empty)
+
+          ;; copy function ptr to pc
+          (LDA ZP_VM_FUNC_PTR)
+          (STA ZP_VM_PC)
+          (LDA ZP_VM_FUNC_PTR+1)
+          (STA ZP_VM_PC+1)
+
+          ;; adjust pc to start executing function ptr +2
+          (LDA !$02)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+
+(module+ test #| bc-tail-call |#
+  (define bc-tail-call-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_INT_0)
+             (bc PUSH_NIL)
+             (bc CONS)
+             (bc CALL) (byte 00) (byte $8f)
+             (bc BRK)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 1)            ;; number of parameters
+             (byte 0)            ;; number of locals
+             (bc PUSH_PARAM_0)
+             (bc NIL?_RET_PARAM_0)     ;; return param0 if nil
+             (bc PUSH_NIL)       ;; value to use with tail call             
+             (bc TAIL_CALL))))
+
+  (skip (check-equal? #t
+                      #f)))
 
 (define BC_CALL
   (list
@@ -181,8 +305,10 @@
           ;; load zp_vm_pc with address of function bytecode
           (LDA ZP_RA)
           (STA ZP_VM_PC)
+          (STA ZP_VM_FUNC_PTR)
           (LDA ZP_RA+1)
           (STA ZP_VM_PC+1)
+          (STA ZP_VM_FUNC_PTR+1)
 
           (LDA !$02)                            ;; byte code starts at zp_ra + 2
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
@@ -198,6 +324,7 @@
   (check-equal? (vm-call-frame->strings test-bc-before-call-state)
                 (list "call-frame:       $cd02"
                       "program-counter:  $8001"
+                      "function-ptr:     $0000"
                       "params start@:    $cd02"
                       "locals start@:    $cd0a"
                       "cell-stack start: $cd0a"))
@@ -223,9 +350,10 @@
   (check-equal? (vm-call-frame->strings test-bc-call-state)
                 (list "call-frame:       $cd0c"
                       "program-counter:  $8f03"
+                      "function-ptr:     $8f00"
                       "params start@:    $cd0c"
-                      "locals start@:    $cd14"
-                      "cell-stack start: $cd14"))
+                      "locals start@:    $cd16"
+                      "cell-stack start: $cd16"))
   (check-equal? (vm-stack->strings test-bc-call-state)
                 (list "stack holds 1 item"
                       "cell-int $0001  (rt)")
@@ -249,9 +377,10 @@
   (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
                 (list "call-frame:       $cd0e"
                       "program-counter:  $8f03"
+                      "function-ptr:     $8f00"
                       "params start@:    $cd0a"
-                      "locals start@:    $cd16"
-                      "cell-stack start: $cd16"))
+                      "locals start@:    $cd18"
+                      "cell-stack start: $cd18"))
   (check-equal? (memory-list  test-bc-call-wp-state #xcd0a #xcd0d)
                 (list #x00 #x03 #xff #x7f)
                 "cell int 0, cell int -1 in reverse order (since on stack)")
@@ -277,9 +406,10 @@
   (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
                 (list "call-frame:       $cd0e"
                       "program-counter:  $8f03"
+                      "function-ptr:     $8f00"
                       "params start@:    $cd0e"
-                      "locals start@:    $cd16"
-                      "cell-stack start: $cd1a"))
+                      "locals start@:    $cd18"
+                      "cell-stack start: $cd1c"))
   (check-equal? (vm-stack->strings test-bc-call-wl-state)
                 (list "stack holds 1 item"
                       "cell-int $0001  (rt)")
@@ -305,9 +435,10 @@
   (check-equal? (vm-call-frame->strings test-bc-call-wpnl-state)
                 (list "call-frame:       $cd0e"
                       "program-counter:  $8f03"
+                      "function-ptr:     $8f00"
                       "params start@:    $cd0c"
-                      "locals start@:    $cd16"
-                      "cell-stack start: $cd1a"))
+                      "locals start@:    $cd18"
+                      "cell-stack start: $cd1c"))
   (check-equal? (vm-stack->strings test-bc-call-wpnl-state)
                 (list "stack holds 1 item"
                       "cell-int $0001  (rt)")
@@ -338,6 +469,7 @@
   (check-equal? (vm-call-frame->strings test-bc-ret-state)
                 (list "call-frame:       $cd02"
                       "program-counter:  $8004"
+                      "function-ptr:     $0000"
                       "params start@:    $cd02"
                       "locals start@:    $cd0a"
                       "cell-stack start: $cd0a"))
@@ -370,6 +502,7 @@
   (check-equal? (vm-call-frame->strings test-bc-ret-wpnl-state)
                 (list "call-frame:       $cd02"
                       "program-counter:  $8005"
+                      "function-ptr:     $0000"
                       "params start@:    $cd02"
                       "locals start@:    $cd0a"
                       "cell-stack start: $cd0a")))
@@ -517,14 +650,15 @@
 
   (check-equal? (vm-stack->strings test-bc-pop-to-l-state)
                 (list "stack is empty"))
-  (check-equal? (vm-cell-at->string test-bc-pop-to-l-state #xcd16)
+  (check-equal? (vm-cell-at->string test-bc-pop-to-l-state #xcd18)
                 "cell-int $0001")
   (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
                 (list "call-frame:       $cd0e"
                       "program-counter:  $8f04"
+                      "function-ptr:     $8f00"
                       "params start@:    $cd0c"
-                      "locals start@:    $cd16"
-                      "cell-stack start: $cd1a"))
+                      "locals start@:    $cd18"
+                      "cell-stack start: $cd1c"))
 
 (define test-bc-pop-to-p-state
     (run-bc-wrapped-in-test
@@ -548,9 +682,10 @@
   (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
                 (list "call-frame:       $cd0e"
                       "program-counter:  $8f04"
+                      "function-ptr:     $8f00"
                       "params start@:    $cd0c"
-                      "locals start@:    $cd16"
-                      "cell-stack start: $cd1a"))
+                      "locals start@:    $cd18"
+                      "cell-stack start: $cd1c"))
 
   (define test-bc-push-l-state
     (run-bc-wrapped-in-test
@@ -574,14 +709,15 @@
                       "cell-int $0001  (rt)"
                       "cell-int $0000")
                 "int 1 was pushed from local")
-  (check-equal? (vm-cell-at->string test-bc-push-l-state #xcd16)
+  (check-equal? (vm-cell-at->string test-bc-push-l-state #xcd18)
                 "cell-int $0001")
   (check-equal? (vm-call-frame->strings test-bc-push-l-state)
                 (list "call-frame:       $cd0e"
                       "program-counter:  $8f06"
+                      "function-ptr:     $8f00"
                       "params start@:    $cd0c"
-                      "locals start@:    $cd16"
-                      "cell-stack start: $cd1a"))
+                      "locals start@:    $cd18"
+                      "cell-stack start: $cd1c"))
 
   (define test-bc-push-p-state
     (run-bc-wrapped-in-test
@@ -606,9 +742,10 @@
   (check-equal? (vm-call-frame->strings test-bc-push-p-state)
                 (list "call-frame:       $cd0e"
                       "program-counter:  $8f04"
+                      "function-ptr:     $8f00"
                       "params start@:    $cd0c"
-                      "locals start@:    $cd16"
-                      "cell-stack start: $cd1a"))
+                      "locals start@:    $cd18"
+                      "cell-stack start: $cd1c"))
 
   (define test-bc-pop-push-to-p-state
     (run-bc-wrapped-in-test
@@ -634,9 +771,10 @@
   (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
                 (list "call-frame:       $cd0e"
                       "program-counter:  $8f05"
+                      "function-ptr:     $8f00"
                       "params start@:    $cd0c"
-                      "locals start@:    $cd16"
-                      "cell-stack start: $cd1a")))
+                      "locals start@:    $cd18"
+                      "cell-stack start: $cd1c")))
 
 (define PUSH_INT_0 #xb8)
 (define PUSH_INT_1 #xb9)
@@ -775,7 +913,7 @@
       (bc BRK))))
 
   (check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                1148)
+                1154)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                 (list "stack holds 3 items"
                       "cell-int $0000  (rt)"
@@ -849,7 +987,7 @@
 
 
   (check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                1148)
+                1154)
   (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                 (list "stack holds 3 items"
                       "cell-int $1fff  (rt)"
