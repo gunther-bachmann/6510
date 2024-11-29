@@ -1,11 +1,28 @@
 #lang racket/base
 
+#|
+
+implementation of a byte code interpreter completely in 6510 assembler
+this is a proof of concept and used to identify problems in the architecture of the overall implementation.
+if something cannot be elegantly implemented using 6510 assembler, some redesign has to take place.
+
+|#
+
 
 ;; TODO: allow byte-code level debugging (with the possibility to step into 6510 code)?
 ;;       idea: establish break point in interpreter loop,
 ;;             print bc interpreter status (additionally)
 ;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
 ;; TODO: implement some functions to make status of the interpreter more accessible (e.g. disassemble command, step through byte code ...)
+;; TODO: numbering of parameter/locals may still be different compared to stack-virtual-machein and svm-compiler/generator!
+;; TODO: implement refcount gc for reverse list implementation/interpretation
+;; TODO: implement structure access, allocation, deallocation
+;; TODO: implement array access, allocation, deallocation (native arrays, regular arrays)
+;; TODO: implement constant pool
+;; TODO: implement structure creation
+;; TODO: implement strings
+;; TODO: implement string-operations and output
+;; IDEA: implement exact numbers (as list of bcd digits e.g. 3 bcds in 16 bit?)
 
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))

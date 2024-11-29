@@ -1,5 +1,11 @@
 #lang racket/base
 
+#|
+
+implementation of list primitives (car, cdr, cons) using 6510 assembler routines
+
+|#
+
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))

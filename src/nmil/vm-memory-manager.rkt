@@ -1,6 +1,16 @@
 #lang racket/base
 ;; [[pdfview:~/Downloads/Small memory software patterns for limited memory systems.2001.pdf::261++0.00][Small memory software patterns for limited memory systems.2001.pdf: Page 261]]
 
+#|
+
+implementation of basic memory primitives for the native 6510 assembler implementation of mil.
+
+primitives are e.g. allocation of cell-pair(s)
+evalation stack operations
+call frame primitives etc.
+
+|#
+
 ;; IDEA: programs/processes have their own allocation pages => terminating a process means, all pages allocated by the process can be freed
 ;;       alternative: shared, process allocates using shared pages, terminating the process will free all entries (not the pages), possibly leading to pages, not freed, because some slots remain allocated.
 ;;       - each process has (a copy of) the following
@@ -36,7 +46,7 @@
 ;;     (new) zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                  0000 001[0]    1100 1101   cd02 (first allocated slot in cell-ptr page)
 ;;     (new) xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)          0000 01[01]    1100 1101   cd05 (first allocated slot in a cell-pair-ptr page)
 ;;     (new) 0iii ii11 = int-cell (no direct adding of highbyte possible)        [0]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
-;;     (new) 1111 1111 = byte-cell (char|bool)                                   [1111 1111]    0000 0001   01  <- payload is in high byte
+;;     (new) 1111 1111 = byte-cell (char|bool|bcd digits)                        [1111 1111]    0000 0001   01  <- payload is in high byte
 ;;     (new) 1000 0011 = cell-array-header                                       [1000 0011]    0000 0100   04 cells in array
 ;;     (new) 1000 0111 = cell-native-array-header                                [1000 0111]    0000 1000   08 bytes in array 
 ;;
