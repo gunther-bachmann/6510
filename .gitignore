@@ -11,3 +11,4 @@ doc/
 /src/vm-interpreter/*.png
 /**/ltximg/*.png
 /src/example/*.map
+*.elc

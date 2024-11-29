@@ -155,7 +155,7 @@
   - accumulator (A), 8 bit
   - index register x (X), 8 bit
   - index register y (Y), 8 bit
-  - status flags (register), 8 bit, one unused
+  - status flags (register), 8 bit, 7 flags
     - zero flag
     - carry flag
     - interrupt disable flag
