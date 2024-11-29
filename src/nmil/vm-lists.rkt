@@ -151,14 +151,14 @@
    (label VM_CONS_R__UC) ;; no checks
           (JSR VM_CP_RT_TO_RA)
           (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; is equivalent to VM_ALLOC_CELL_PAIR_TO_RT, since zp_ptr = zp_rt
-          (JSR VM_WRITE_RA_TO_CELL1_RT)
-          (JMP VM_POP_FSTOS_TO_CELL0_RT)))
+          (JSR VM_WRITE_RA_TO_CELL0_RT)
+          (JMP VM_POP_FSTOS_TO_CELL1_RT)))
 
 (module+ test #| VM_CONS |#
   (define use-case-cons-code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_NIL_R)
+     (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CONS_R)))
 
   (define use-case-cons-state-after

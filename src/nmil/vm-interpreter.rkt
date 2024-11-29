@@ -5,20 +5,27 @@
 ;;       idea: establish break point in interpreter loop,
 ;;             print bc interpreter status (additionally)
 ;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
+;; TODO: implement some functions to make status of the interpreter more accessible (e.g. disassemble command, step through byte code ...)
 
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
-(require (only-in "../6510-utils.rkt" word->hex-string high-byte low-byte))
-(require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
+(require (only-in "../6510-utils.rkt" word->hex-string high-byte low-byte ))
+(require (only-in "../util.rkt" bytes->int))
+(require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek-word-at-address))
 
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
                   vm-call-frame->strings
+                  vm-cell-at-nil?
+                  vm-page->strings
                   vm-stack->strings
                   vm-regt->string
                   vm-cell-at->string
                   vm-deref-cell-pair-w->string
+
+                  VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
+
                   ast-const-get
                   ZP_RT
                   ZP_VM_PC
@@ -101,11 +108,6 @@
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator cpu-state-program-counter peek))
 
 (provide vm-interpreter)
-
-
-;; TODO: implement TAIL_CALL, NIL?-RET-PARAM
-;; TODO: implement some functions to make status of the interpreter more accessible (e.g. disassemble command, step through byte code ...)
-
 
 (define VM_INTERPRETER_VARIABLES
   (list
@@ -278,8 +280,8 @@
   (define bc-tail-call-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
              (bc PUSH_NIL)
+             (bc PUSH_INT_0)
              (bc CONS)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
@@ -300,6 +302,76 @@
   (check-equal? (vm-call-frame->strings bc-tail-call-state)
                 (list "call-frame:       $cd02"
                       "program-counter:  $8006"
+                      "function-ptr:     $0000"
+                      "params start@:    $cd02"
+                      "locals start@:    $cd0a"
+                      "cell-stack start: $cd0a"))
+
+  ;; convert the list given by cell-pair-ptr (address) as a list of strings
+  (define (vm-list->strings state address (string-list '()))   
+    (unless (= (bitwise-and #x03 address) #x01)
+      (raise-user-error "address is not a cell-pair-ptr"))
+    (define cell-cdr (peek-word-at-address state (+ address 2)))
+    (unless (= (bitwise-and #x03 cell-cdr) #x01)
+      (raise-user-error "cdr cell is not a cell-pair-ptr => this is no list" ))
+    (if (vm-cell-at-nil? state address)
+        string-list
+        (vm-list->strings state
+                         cell-cdr
+                         (cons (vm-cell-at->string state address)
+                               string-list))))
+
+  (define bc-tail-call-reverse-state
+    (run-bc-wrapped-in-test
+     (list
+             (bc PUSH_NIL)
+             (bc PUSH_INT_0)
+             (bc CONS)
+             (bc PUSH_INT_1)
+             (bc CONS)
+             (bc PUSH_INT_2)
+             (bc CONS) ;; list to reverse (param0)
+             (bc PUSH_NIL)
+             (bc PUSH_NIL)
+             (bc CONS) ;; target list (param1)
+             (bc CALL) (byte 00) (byte $8f)
+             (bc BRK)
+
+             (org #x8F00)
+      (label TEST_FUN)
+             (byte 2)                   ;; number of parameters
+             (byte 0)                   ;; number of locals
+             (bc PUSH_PARAM_0) 
+             (bc NIL?_RET_PARAM_1)      ;; return param0 if nil
+             (bc PUSH_PARAM_0)
+             (bc CDR)                   ;; shrinking original list
+             (bc PUSH_PARAM_1)
+             (bc PUSH_PARAM_0)
+             (bc CAR) 
+             (bc CONS)                  ;; growing reverse list
+             (bc TAIL_CALL)
+             (bc BRK))))
+
+  (check-equal? (memory-list bc-tail-call-reverse-state VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE (add1 VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE))
+                (list #x00 #x00))
+  (check-equal? (vm-page->strings bc-tail-call-reverse-state #xcc)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     7"
+                      "next free slot: $55"))
+  (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
+                7002) ;; 3575 offset
+  (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
+                (list "cell-int $0002"
+                      "cell-int $0001"
+                      "cell-int $0000")
+                "list got reversed")
+  (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
+                (list "stack holds 1 item"
+                      "cell-pair-ptr $cc51  (rt)"))
+  (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
+                (list "call-frame:       $cd02"
+                      "program-counter:  $800d"
                       "function-ptr:     $0000"
                       "params start@:    $cd02"
                       "locals start@:    $cd0a"
@@ -1075,8 +1147,8 @@
   (define bc-nil-p-2-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
       (bc PUSH_NIL)
+      (bc PUSH_INT_0)
       (bc CONS)
       (bc NIL?)
       (bc BRK))))
@@ -1097,8 +1169,8 @@
    (define bc-cons-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
       (bc PUSH_NIL)
+      (bc PUSH_INT_0)
       (bc CONS)
       (bc BRK))))
 
@@ -1118,8 +1190,8 @@
    (define bc-car-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
       (bc PUSH_NIL)
+      (bc PUSH_INT_0)
       (bc CONS)
       (bc CAR)
       (bc BRK))))
@@ -1138,8 +1210,8 @@
    (define bc-cdr-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
       (bc PUSH_NIL)
+      (bc PUSH_INT_0)
       (bc CONS)
       (bc CDR)
       (bc BRK))))

@@ -642,6 +642,7 @@
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
 (provide vm-memory-manager
+         vm-cell-at-nil?
          vm-call-frame->strings
          vm-stack->strings
          vm-cell-at->string
@@ -651,6 +652,9 @@
          vm-rega->string
          vm-deref-cell-pair-w->string
          vm-deref-cell-pair->string
+
+         VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
+
          ZP_RT
          ZP_VM_PC
          ZP_VM_FUNC_PTR
@@ -810,6 +814,9 @@
 (define (regt-empty? state)
   (= 0 (peek state ZP_RT)))
 
+(define (vm-cell-at-nil? state loc)
+  (= TAGGED_NIL (peek-word-at-address state loc)))
+
 (define (vm-cell-at->string state loc)
   (vm-cell-w->string (peek-word-at-address state loc)))
 
@@ -949,6 +956,7 @@
 (define TAG_BYTE_BYTE_CELL      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_BYTE_CELL"))
 (define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
 (define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
+(define TAGGED_NIL              (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_NIL"))
 
 
 
