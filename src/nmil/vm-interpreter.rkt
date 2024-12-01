@@ -31,11 +31,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 ;; IDEA: implement exact numbers (as list of bcd digits e.g. 3 bcds in 16 bit?)
 
 (require "../6510.rkt")
-(require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
+(require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader org-for-code-seq))
 (require (only-in racket/list flatten take))
 (require (only-in "../6510-utils.rkt" word->hex-string high-byte low-byte ))
 (require (only-in "../util.rkt" bytes->int))
 (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek-word-at-address))
+(require (only-in "../ast/6510-relocator.rkt" label-string-offsets))
 
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
@@ -111,11 +112,25 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
+    (define org-code-start (org-for-code-seq wrapped-code))
+    (define label->offset (label-string-offsets org-code-start wrapped-code))
+    (define interpreter-loop (hash-ref label->offset "VM_INTERPRETER"))
+    (define interpreter-code-start (hash-ref label->offset "VM_INTERPRETER_INIT"))
+    (define last-routine-of-memory-man (hash-ref label->offset "END__MEMORY_MANAGER"))
+    (define end-of-interpreter-code (hash-ref label->offset "END__INTERPRETER"))
+    (define end-of-interpreter-data (hash-ref label->offset "END__INTERPRETER_DATA"))
     (define state-before
       (6510-load-multiple (initialize-cpu)
                           (assemble-to-code-list wrapped-code)))
     (if debug
-        (run-debugger-on state-before)
+        (begin
+          (display (format "code starts      $~a\n" (number->string org-code-start 16)))
+          (display (format "interpreter-code $~a\n" (number->string interpreter-code-start 16)))
+          (display (format "interpreter-loop $~a\n" (number->string interpreter-loop 16)))
+          (display (format "inter code end   $~a\n" (number->string end-of-interpreter-code 16)))
+          (display (format "interpreter end  $~a\n" (number->string end-of-interpreter-data 16)))
+          (display (format "last mem man     $~a\n" (number->string last-routine-of-memory-man 16)))
+          (run-debugger-on state-before))
         (parameterize ([current-output-port (open-output-nowhere)])
           (run-interpreter-on state-before))))
 
@@ -1447,6 +1462,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INT_MINUS
           BC_TAIL_CALL
           VM_INTERPRETER
+          (list (label END__INTERPRETER))
           (list (org-align #x100)) ;; align to next page
           VM_INTERPRETER_OPTABLE
+          (list (label END__INTERPRETER_DATA))
           vm-lists))

@@ -5416,6 +5416,7 @@ call frame primitives etc.
 
           VM_POP_FSTOS_TO_CELLy_RT                           ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
+          (list (label END__MEMORY_MANAGER))
           ;; ---------------------------------------- registers and maps
           (list (org #xcec0))
           VM_INITIAL_MM_REGS
