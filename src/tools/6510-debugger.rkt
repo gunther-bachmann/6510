@@ -38,7 +38,7 @@
                   6510-debugger--has-proc-display-cap))
 (require "6510-debugger-shared.rkt")
 
-(provide run-debugger run-debugger-on)
+(provide run-debugger run-debugger-on debugger--assembler-interactor dispatch-debugger-command)
 
 (module+ test
   (require threading)
@@ -409,7 +409,7 @@ EOF
                                                           (pc-source-map-entry-line s-entry)
                                                           (create-disassemble-annotation-string (car (debug-state-states d-state))))]
         [else
-         (debugger--pretty-print #f #f d-state)
+         (display (apply (debug-state-pre-prompter d-state) (list d-state)))
          (displayln "")])
   (when (emacs-capabilities-print-proc-status capabilities)
     (6510-debugger--proc-buffer-display d-state)))
@@ -428,20 +428,38 @@ EOF
   (when (emacs-capabilities-sync-step-with-source capabilities)
     (6510-debugger--remove-all-addresses-on-source file-name)))
 
+
+(define (debugger--assembler-prompter d-state)
+  (format "Step-Debugger[~x] > " (length (debug-state-states d-state))))
+
+(define (debugger--assembler-pre-prompter d-state)
+  (define c-state (car (debug-state-states d-state)))
+  (disassemble c-state (cpu-state-program-counter c-state) 1))
+
+;; definition of an repl interactor for regular assembly level debug repl sessions
+(define debugger--assembler-interactor
+  (list
+   `(prompter . ,debugger--assembler-prompter)
+   `(dispatcher . ,dispatch-debugger-command)
+   `(pre-prompter . ,debugger--assembler-pre-prompter)))
+
 ;; run an read eval print loop debugger on the passed program
-(define/c (run-debugger-on state (file-name "") (verbose #t))
-  (->* [cpu-state?] [string? boolean?] any/c)
+(define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (interactor debugger--assembler-interactor))
+  (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof any/c)] any/c)
   (define capabilities (collect-emacs-capabilities file-name))
   (define file-does-exist (and (non-empty-string? file-name) (file-exists? file-name)))
   (define d-state
     (debug-state (list state)
-                 '()
+                 breakpoints
                  (if file-does-exist
                    (load-source-map file-name)
                    (hash))
                  (if (emacs-capabilities-output capabilities)
                      6510-debugger--print-string
-                     debugger-output-function)))
+                     debugger-output-function)
+                 (dict-ref interactor 'prompter debugger--assembler-prompter)
+                 (dict-ref interactor 'dispatcher dispatch-debugger-command)
+                 (dict-ref interactor 'pre-prompter debugger--assembler-pre-prompter)))
 
   (when file-does-exist
     (run-debugger--prepare-emacs-integration capabilities file-name d-state))
@@ -468,8 +486,8 @@ EOF
     (define s-entry (hash-ref (debug-state-pc-source-map d-state)
                               (cpu-state-program-counter (car (debug-state-states d-state)))
                               #f))
-    (run-debugger--step-update-emacs-integration capabilities s-entry d-state)
-    (display (format "Step-Debugger[~x] > " (length (debug-state-states d-state))))
+    (run-debugger--step-update-emacs-integration capabilities s-entry d-state)    
+    (display (apply (debug-state-prompter d-state) (list d-state)))
     (define input (begin (readline "")))
     (run-debugger--step-cleanup-emacs-integration capabilities s-entry)
     #:break (string=? input "q")
@@ -478,14 +496,14 @@ EOF
           [else
            (begin
              (set! previous-input input)
-             (set! d-state (dispatch-debugger-command input d-state)))])))
+             (set! d-state (apply (debug-state-dispatcher d-state) (list input d-state))))])))
 
 ;; dispatch the given debugger command n-times starting with the current debug-state
 (define/c (run-debugger--dispatch-debugger-command-n-times command d-state (n 1))
   [->* [string? debug-state?] [nonnegative-integer?] debug-state?]
   (let ([local-d-state (struct-copy debug-state d-state)])
     (for ([_ (in-range n)])
-      (set! local-d-state (dispatch-debugger-command command local-d-state)))
+      (set! local-d-state (apply (debug-state-dispatcher d-state) (list  command local-d-state))))
     local-d-state))
 
 ;; (run-debugger #xc000 (list #xa9 #x41 #x48 #x20 #xd2 #xff #x00))

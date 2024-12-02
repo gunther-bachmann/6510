@@ -64,7 +64,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (require (only-in "../6510-utils.rkt" absolute))
   (require (only-in racket/port open-output-nowhere))
   (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
-  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
+  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on dispatch-debugger-command))
+  (require (only-in "../tools/6510-debugger-shared.rkt" debug-state-states))
 
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                     CONS
@@ -110,6 +111,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
             (list (org #xc000))
             vm-interpreter))
 
+  (define debugger--bc-interactor
+    (list
+     `(dispatcher . ,dispatch-debugger-command)
+     `(prompter . ,(lambda (d-state) (format "BC-Debugger[~x] > " (length (debug-state-states d-state)))))
+     `(pre-prompter . ,(lambda (d-state) (format "print disassembled next bytecode here")))))
+
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
     (define org-code-start (org-for-code-seq wrapped-code))
@@ -130,7 +137,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (display (format "inter code end   $~a\n" (number->string end-of-interpreter-code 16)))
           (display (format "interpreter end  $~a\n" (number->string end-of-interpreter-data 16)))
           (display (format "last mem man     $~a\n" (number->string last-routine-of-memory-man 16)))
-          (run-debugger-on state-before))
+          ;; TODO: add a the breakpoint to the debugger and provide an alternative callback (for handling bc level debugging)
+          ;;       extend bc breakpoint to fire only on certain values of zp_vm_pc (for the wanted byte code) etc.
+          ;;       write a handler to handle repl part of debugger (read, eval, print of debugger status)
+          (run-debugger-on state-before "" #t '() debugger--bc-interactor))
         (parameterize ([current-output-port (open-output-nowhere)])
           (run-interpreter-on state-before))))
 
