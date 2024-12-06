@@ -11,9 +11,9 @@
 (provide (struct-out breakpoint)
          (struct-out debug-state))
 
-(struct breakpoint (description fn)
+(struct breakpoint (description fn verbose)
   #:transparent
-  #:guard (struct-guard/c string? any/c))
+  #:guard (struct-guard/c string? any/c boolean?))
 
 (struct debug-state (states breakpoints pc-source-map output-function prompter dispatcher pre-prompter)
   #:guard (struct-guard/c (listof cpu-state?)

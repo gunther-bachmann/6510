@@ -11,6 +11,35 @@ call frame primitives etc.
 
 |#
 
+
+;; IDEA: use the following idea in more situations:
+;;       store high byte in one page
+;;       and store low byte in another page (same index)
+;;       32 bit values may as well be spread of 4 pages, storing all at one index!
+;;       e.g: cell-value-stack (since cells are always 16 bit)
+;;            store lowbyte in page I
+;;            store highbyte in page J
+;;       advantage: use same index (for pop/push inc/dec only once)
+;;                  doubles the number of objects before new allocation is needed
+;;                  e.g. push a value onto the stack:
+;;                       ZP_CS_LB_PAGE (cell-stack page of low bytes) (ZP_CS_LB_PAGE-1 contains 0) such that ZP_CS_LB_PAGE-1 can be used as ptr
+;;                       ZP_CS_HB_PAGE (cell-stack page of high bytes) (ZP_CS_HB_PAGE-1 contains 0) such that ZP_CS_LB_PAGE-1 can be used as ptr
+;;                       ZP_CS_IDX is the current tos
+;;
+;;                       ;; PUSH A/X onto stack
+;;                       LDY ZP_CS_IDX
+;;                       INY                       ;; just one increment
+;;                       STA (ZP_CS_LB_PAGE-1),y
+;;                       STX (ZP_CS_HB_PAGE-1),y
+;;                       STY ZP_CS_IDX             ;; store new tos idx
+;;                       ;; that's it
+;;
+;;       are there any advantages to store cells in this way?
+;;       where does the reference counting byte go in that case (maybe just into another page?)
+;;       ==> cell-ptr's could be stored in 2+1 pages, lowbytes, highbytes and refcounts
+;;       ==> cell-pair-ptr's could be store in 4+1 pages, lowbyte car, highbyte car, lowbyte cdr, highbyte cdr, refcounts
+;;       allocation of these "pages" will then
+
 ;; IDEA: programs/processes have their own allocation pages => terminating a process means, all pages allocated by the process can be freed
 ;;       alternative: shared, process allocates using shared pages, terminating the process will free all entries (not the pages), possibly leading to pages, not freed, because some slots remain allocated.
 ;;       - each process has (a copy of) the following
@@ -662,6 +691,8 @@ call frame primitives etc.
          vm-rega->string
          vm-deref-cell-pair-w->string
          vm-deref-cell-pair->string
+         format-hex-byte
+         format-hex-word
 
          VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
 

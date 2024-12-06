@@ -38,7 +38,7 @@
                   6510-debugger--has-proc-display-cap))
 (require "6510-debugger-shared.rkt")
 
-(provide run-debugger run-debugger-on debugger--assembler-interactor dispatch-debugger-command)
+(provide run-debugger run-debugger-on debugger--assembler-interactor dispatch-debugger-command debugger--run)
 
 (module+ test
   (require threading)
@@ -142,10 +142,10 @@
                                       description
                                       (breakpoint-description breakpoint))))]))
 
-(define/c (debugger--push-breakpoint d-state fun description)
-  (-> debug-state? any/c string? debug-state?)
+(define/c (debugger--push-breakpoint d-state fun description (verbose #t))
+  (->* [debug-state? any/c string?] [boolean?] debug-state?)
   (struct-copy debug-state d-state
-               [breakpoints (cons (breakpoint description fun)
+               [breakpoints (cons (breakpoint description fun verbose)
                                   (debug-state-breakpoints d-state))]))
 
 (define/c (debugger--pop-breakpoint d-state)
@@ -157,7 +157,7 @@
   (define c-states (debug-state-states d-state))
   (define next-states (cons (execute-cpu-step (car c-states) #t (debug-state-output-function d-state)) c-states))
   (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state) 0 (debug-state-output-function d-state))))
-    (when (and breakpoint display)
+    (when (and breakpoint display (breakpoint-verbose breakpoint))
       (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))
     (struct-copy debug-state d-state [states new-states])))
 
@@ -430,7 +430,7 @@ EOF
 
 
 (define (debugger--assembler-prompter d-state)
-  (format "Step-Debugger[~x] > " (length (debug-state-states d-state))))
+  (format "6510 [~x] > " (length (debug-state-states d-state))))
 
 (define (debugger--assembler-pre-prompter d-state)
   (define c-state (car (debug-state-states d-state)))
@@ -444,8 +444,8 @@ EOF
    `(pre-prompter . ,debugger--assembler-pre-prompter)))
 
 ;; run an read eval print loop debugger on the passed program
-(define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (interactor debugger--assembler-interactor))
-  (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof any/c)] any/c)
+(define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (interactor debugger--assembler-interactor) (run #t))
+  (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof any/c) boolean?] any/c)
   (define capabilities (collect-emacs-capabilities file-name))
   (define file-does-exist (and (non-empty-string? file-name) (file-exists? file-name)))
   (define d-state
@@ -463,7 +463,9 @@ EOF
 
   (when file-does-exist
     (run-debugger--prepare-emacs-integration capabilities file-name d-state))
-  (run-debugger--repl d-state capabilities)
+  (if run
+      (run-debugger--repl (debugger--run d-state verbose) capabilities)
+      (run-debugger--repl d-state capabilities))
   (when file-does-exist
     (run-debugger--cleanup-emacs-integration capabilities file-name)))
 
