@@ -38,7 +38,13 @@
                   6510-debugger--has-proc-display-cap))
 (require "6510-debugger-shared.rkt")
 
-(provide run-debugger run-debugger-on debugger--assembler-interactor dispatch-debugger-command debugger--run)
+(provide run-debugger
+         run-debugger-on
+         debugger--assembler-interactor
+         dispatch-debugger-command
+         debugger--run
+         debugger--push-breakpoint
+         debugger--remove-breakpoints)
 
 (module+ test
   (require threading)

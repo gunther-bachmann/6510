@@ -1454,11 +1454,12 @@
   (check-false (overflow-flag? (interpret-clv (interpret-adc-i (poke  (interpret-adc-i (poke  (initialize-cpu) 1 #x7f)) 3 1))))))
 
 ;; return word (2 byte) value stored at ADDRESS
-(define/c (peek-word-at-address state address)
-  (-> cpu-state? word/c word/c)
+(define/c (peek-word-at-address state address (rev-endian #f))
+  (->* [cpu-state? word/c] [boolean?] word/c)
   (let* [(low-byte  (peek state address))
          (high-byte (peek state (word (fx+ address 1))))]
-    (absolute high-byte low-byte)))
+    (absolute (if rev-endian low-byte high-byte)
+              (if rev-endian high-byte low-byte))))
 
 ;; return word (2 bytes) stored at program-counter + 1
 (define/c (peek-word-at-pc+1 state)

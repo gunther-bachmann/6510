@@ -39,6 +39,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "../ast/6510-relocator.rkt" label-string-offsets))
 
 (require (only-in racket/string string-prefix?))
+(require (only-in racket/match match-let))
 
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
@@ -68,7 +69,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (require (only-in racket/port open-output-nowhere))
   (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
   (require (only-in "../ast/6510-resolver.rkt" ->resolved-decisions label-instructions))
-  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on dispatch-debugger-command debugger--run))
+  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on dispatch-debugger-command debugger--run debugger--push-breakpoint debugger--remove-breakpoints))
   (require (only-in "../tools/6510-debugger-shared.rkt" debug-state-states breakpoint))
 
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
@@ -116,29 +117,74 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
             vm-interpreter))
 
   (define (debugger--bc-help d-state)
-    (displayln "help on bc state")
+    (for-each displayln (list "bc commands"
+                              ""
+                              "? | h    print this help screen"
+                              "ps       print the (local) stack"
+                              "pf       print the call frame"
+                              "pa n     print the n-th parameter (of the call frame)"
+                              "pl n     print the n-th local (of the call frame)"
+                              "rt       print register t"
+                              "s        run one step"
+                              "^        (prefix) pass the following commands to the assembly debugger"))
     d-state)
 
-  (define (debugger--bc-dispatcher command d-state)
-    ;; commands:
-    ;;  ps       print cell eval stack
-    ;;  pr0      print reg0
-    ;;  s        step (byte code)
-    ;;  pp n     disassemble byte code (n lines)
-    ;;  q        quit
-    (define c-state (car (debug-state-states d-state)))
-    (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
-          [(string=? command "ps") (begin (for-each (lambda (str) (displayln str)) (vm-stack->strings c-state)) d-state)]
-          [(string=? command "s") (debugger--run d-state #t)]
-          [(string-prefix? command "^")
-           (dispatch-debugger-command (substring command 1) d-state) ]
-          [else
-           (displayln "dispatching -> assembler-debugger")
-           (dispatch-debugger-command command d-state)]))
+  (define (debugger--bc-dispatcher- interpreter-loop-adr)
+    (lambda (command d-state)
+      ;; commands:
+      ;;  ps       print cell eval stack
+      ;;  pr0      print reg0
+      ;;  s        step (byte code)
+      ;;  pp n     disassemble byte code (n lines)
+      ;;  q        quit
+      (define c-state (car (debug-state-states d-state)))
+      (define pa-regex #px"^pa ([[:xdigit:]])$")
+      (define pl-regex #px"^pl ([[:xdigit:]])$")
+      (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
+            [(string=? command "ps") (begin (for-each (lambda (str) (displayln str)) (vm-stack->strings c-state)) d-state)]
+            [(string=? command "pt") (begin (displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
+            [(string=? command "s") (debugger--run d-state #t)]
+            [(string=? command "pf") (begin (for-each displayln (vm-call-frame->strings c-state)) d-state)]
+            [(regexp-match? pa-regex command)
+             (match-let (((list _ num) (regexp-match pa-regex command)))
+               (begin (displayln (format "param #~a: ~a" num (vm-cell-at->string c-state (+ (* 2 (string->number num 16)) (peek-word-at-address c-state ZP_PARAMS_PTR)) #t)))
+                      d-state))]
+            [(regexp-match? pl-regex command)
+             (match-let (((list _ num) (regexp-match pl-regex command)))
+               (begin (displayln (format "local #~a: ~a" num (vm-cell-at->string c-state (+ (* 2 (string->number num 16)) (peek-word-at-address c-state ZP_LOCALS_PTR)) #f)))
+                      d-state))]
+            [(string=? command "ruc")
+             (debugger--push-breakpoint
+              (debugger--remove-breakpoints
+               (debugger--run
+                (debugger--push-breakpoint
+                 (debugger--remove-breakpoints d-state "stop on bytecode interpreter")
+                 (breakpoint "next instruction is a call"
+                             (lambda (bc-state)
+                               (and
+                                (= #x34
+                                   (peek-byte bc-state (peek-word-at-address bc-state ZP_VM_PC)))
+                                (= (cpu-state-program-counter bc-state)
+                                   interpreter-loop-adr)))
+                             #f)))
+               "next instruction is a call")
+              (breakpoint "stop on bytecode interpreter"
+                          (lambda (lc-state)
+                            (eq? (cpu-state-program-counter lc-state)
+                                 interpreter-loop-adr))
+                          #f))]
+            ;; ruc  run until next call: idea, set a break point that checks to next byte code to be of a certain value
+            ;; rur  run until next return (same here)
+            ;; so   step over (call) instruction: idea, set break point that checks for the vm_pc after the call
+            [(string-prefix? command "^")
+             (dispatch-debugger-command (substring command 1) d-state) ]
+            [else
+             (displayln "dispatching -> assembler-debugger")
+             (dispatch-debugger-command command d-state)])))
 
-  (define debugger--bc-interactor
+  (define (debugger--bc-interactor interpreter-loop-adr)
     (list
-     `(dispatcher . ,debugger--bc-dispatcher)
+     `(dispatcher . ,(debugger--bc-dispatcher- interpreter-loop-adr))
      `(prompter . ,(lambda (d-state) (format "BC [~x] > " (length (debug-state-states d-state)))))
      `(pre-prompter . ,(lambda (d-state)
                          (define c-state (car (debug-state-states d-state)))
@@ -172,7 +218,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                         (eq? (cpu-state-program-counter lc-state)
                                              interpreter-loop))
                                       #f))
-                         debugger--bc-interactor
+                         (debugger--bc-interactor interpreter-loop)
                          #t)
         (parameterize ([current-output-port (open-output-nowhere)])
           (run-interpreter-on state-before))))

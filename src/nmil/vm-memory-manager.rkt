@@ -858,8 +858,8 @@ call frame primitives etc.
 (define (vm-cell-at-nil? state loc)
   (= TAGGED_NIL (peek-word-at-address state loc)))
 
-(define (vm-cell-at->string state loc)
-  (vm-cell-w->string (peek-word-at-address state loc)))
+(define (vm-cell-at->string state loc (rev-endian #f))
+  (vm-cell-w->string (peek-word-at-address state loc rev-endian)))
 
 ;; write string of current RT
 (define (vm-regt->string state)
