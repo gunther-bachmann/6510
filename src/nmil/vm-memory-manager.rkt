@@ -2039,7 +2039,7 @@ call frame primitives etc.
            (TYA)
            (STA ZP_PARAMS_PTR)
            (CLC)
-           (ADC !$08)
+           (ADC !$0a)
            (STA ZP_LOCALS_PTR)
            (STA ZP_CELL_STACK_BASE_PTR)
            (STX ZP_PARAMS_PTR+1)
@@ -3806,7 +3806,7 @@ call frame primitives etc.
 
   (check-equal? (vm-page->strings alloc-call-frame-state-after #xcd)
                 '("page-type:      call-frame page"
-                  "stack frame:    $cd0a"))
+                  "stack frame:    $cd0c"))
 
   (define alloc-call-frame-2times-code
     (list
@@ -3841,7 +3841,7 @@ call frame primitives etc.
 
   (check-equal? (vm-page->strings alloc-call-frame-2times-fitting-state-after #xcd)
                 '("page-type:      call-frame page"
-                  "stack frame:    $cd2a")))
+                  "stack frame:    $cd2c")))
 
 ;; TODO: check vm_write_rx_to_paramy
 

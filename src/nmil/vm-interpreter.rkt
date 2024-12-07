@@ -17,7 +17,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 ;;                    inspect and manipulate memory, call stack, locals, parameters
 ;;                    allow setting breakpoints on bytecode (at a certain address)
 ;;             allow in place execution of bytecode
-;;             allow to switch debugger to byte code debugger and vice versa
+;;             !allow to switch debugger to byte code debugger and vice versa
 ;;             print bc interpreter status (additionally)
 ;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
 ;; TODO: numbering of parameter/locals may still be different compared to stack-virtual-machein and svm-compiler/generator!
@@ -321,7 +321,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc PUSH_PARAM_1)
              (bc NIL?_RET_PARAM_0)     ;; return param0 if nil
              (bc BRK))
-     #t))
+     ))
 
   (check-equal? (vm-stack->strings bc-nil-ret-state)
                 (list "stack holds 1 item"
@@ -331,8 +331,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "program-counter:  $8005"
                       "function-ptr:     $0000"
                       "params start@:    $cd02"
-                      "locals start@:    $cd0a"
-                      "cell-stack start: $cd0a"))
+                      "locals start@:    $cd0c"
+                      "cell-stack start: $cd0c"))
 
   (define bc-nil-ret-local-state
     (run-bc-wrapped-in-test
@@ -360,8 +360,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "program-counter:  $8005"
                       "function-ptr:     $0000"
                       "params start@:    $cd02"
-                      "locals start@:    $cd0a"
-                      "cell-stack start: $cd0a")))
+                      "locals start@:    $cd0c"
+                      "cell-stack start: $cd0c")))
 
 (define BC_TAIL_CALL
   (list
@@ -433,8 +433,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "program-counter:  $8006"
                       "function-ptr:     $0000"
                       "params start@:    $cd02"
-                      "locals start@:    $cd0a"
-                      "cell-stack start: $cd0a"))
+                      "locals start@:    $cd0c"
+                      "cell-stack start: $cd0c"))
 
   ;; convert the list given by cell-pair-ptr (address) as a list of strings
   (define (vm-list->strings state address (string-list '()))   
@@ -503,8 +503,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "program-counter:  $800d"
                       "function-ptr:     $0000"
                       "params start@:    $cd02"
-                      "locals start@:    $cd0a"
-                      "cell-stack start: $cd0a")))
+                      "locals start@:    $cd0c"
+                      "cell-stack start: $cd0c")))
 
 (define BC_CALL
   (list
@@ -581,8 +581,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "program-counter:  $8001"
                       "function-ptr:     $0000"
                       "params start@:    $cd02"
-                      "locals start@:    $cd0a"
-                      "cell-stack start: $cd0a"))
+                      "locals start@:    $cd0c"
+                      "cell-stack start: $cd0c"))
   (check-equal? (vm-stack->strings test-bc-before-call-state)
                 (list "stack holds 1 item"
                       "cell-int $0000  (rt)")
@@ -603,12 +603,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-call-state)
-                (list "call-frame:       $cd0c"
+                (list "call-frame:       $cd0e"
                       "program-counter:  $8f03"
                       "function-ptr:     $8f00"
-                      "params start@:    $cd0c"
-                      "locals start@:    $cd16"
-                      "cell-stack start: $cd16"))
+                      "params start@:    $cd0e"
+                      "locals start@:    $cd18"
+                      "cell-stack start: $cd18"))
   (check-equal? (vm-stack->strings test-bc-call-state)
                 (list "stack holds 1 item"
                       "cell-int $0001  (rt)")
@@ -630,13 +630,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
-                (list "call-frame:       $cd0e"
+                (list "call-frame:       $cd10"
                       "program-counter:  $8f03"
                       "function-ptr:     $8f00"
-                      "params start@:    $cd0a"
-                      "locals start@:    $cd18"
-                      "cell-stack start: $cd18"))
-  (check-equal? (memory-list  test-bc-call-wp-state #xcd0a #xcd0d)
+                      "params start@:    $cd0c"
+                      "locals start@:    $cd1a"
+                      "cell-stack start: $cd1a"))
+  (check-equal? (memory-list  test-bc-call-wp-state #xcd0c #xcd0f)
                 (list #x00 #x03 #xff #x7f)
                 "cell int 0, cell int -1 in reverse order (since on stack)")
   (check-equal? (vm-stack->strings test-bc-call-wp-state)
@@ -659,12 +659,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc BRK))))
 
   (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
-                (list "call-frame:       $cd0e"
+                (list "call-frame:       $cd10"
                       "program-counter:  $8f03"
                       "function-ptr:     $8f00"
-                      "params start@:    $cd0e"
-                      "locals start@:    $cd18"
-                      "cell-stack start: $cd1c"))
+                      "params start@:    $cd10"
+                      "locals start@:    $cd1a"
+                      "cell-stack start: $cd1e"))
   (check-equal? (vm-stack->strings test-bc-call-wl-state)
                 (list "stack holds 1 item"
                       "cell-int $0001  (rt)")
@@ -684,16 +684,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc PUSH_INT_1)     ;; value to return
              (bc BRK))))
 
-  (check-equal? (memory-list  test-bc-call-wpnl-state #xcd0c #xcd0d)
+  (check-equal? (memory-list  test-bc-call-wpnl-state #xcd0e #xcd0f)
                 (list #xff #x7f)
                 "cell int -1 in reverse order (since on stack)")
   (check-equal? (vm-call-frame->strings test-bc-call-wpnl-state)
-                (list "call-frame:       $cd0e"
+                (list "call-frame:       $cd10"
                       "program-counter:  $8f03"
                       "function-ptr:     $8f00"
-                      "params start@:    $cd0c"
-                      "locals start@:    $cd18"
-                      "cell-stack start: $cd1c"))
+                      "params start@:    $cd0e"
+                      "locals start@:    $cd1a"
+                      "cell-stack start: $cd1e"))
   (check-equal? (vm-stack->strings test-bc-call-wpnl-state)
                 (list "stack holds 1 item"
                       "cell-int $0001  (rt)")
@@ -726,8 +726,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "program-counter:  $8004"
                       "function-ptr:     $0000"
                       "params start@:    $cd02"
-                      "locals start@:    $cd0a"
-                      "cell-stack start: $cd0a"))
+                      "locals start@:    $cd0c"
+                      "cell-stack start: $cd0c"))
   (check-equal? (vm-stack->strings test-bc-ret-state)
                   (list "stack holds 2 items"
                         "cell-int $0001  (rt)"
@@ -759,8 +759,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "program-counter:  $8005"
                       "function-ptr:     $0000"
                       "params start@:    $cd02"
-                      "locals start@:    $cd0a"
-                      "cell-stack start: $cd0a")))
+                      "locals start@:    $cd0c"
+                      "cell-stack start: $cd0c")))
 
 (define BC_BRK
   (list
@@ -905,15 +905,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings test-bc-pop-to-l-state)
                 (list "stack is empty"))
-  (check-equal? (vm-cell-at->string test-bc-pop-to-l-state #xcd18)
+  (check-equal? (vm-cell-at->string test-bc-pop-to-l-state #xcd1a)
                 "cell-int $0001")
   (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
-                (list "call-frame:       $cd0e"
+                (list "call-frame:       $cd10"
                       "program-counter:  $8f04"
                       "function-ptr:     $8f00"
-                      "params start@:    $cd0c"
-                      "locals start@:    $cd18"
-                      "cell-stack start: $cd1c"))
+                      "params start@:    $cd0e"
+                      "locals start@:    $cd1a"
+                      "cell-stack start: $cd1e"))
 
 (define test-bc-pop-to-p-state
     (run-bc-wrapped-in-test
@@ -932,15 +932,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings test-bc-pop-to-p-state)
                 (list "stack is empty"))
-  (check-equal? (memory-list test-bc-pop-to-p-state #xcd0c #xcd0d)
+  (check-equal? (memory-list test-bc-pop-to-p-state #xcd0e #xcd0f)
                 (list #x01 #x03))
   (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
-                (list "call-frame:       $cd0e"
+                (list "call-frame:       $cd10"
                       "program-counter:  $8f04"
                       "function-ptr:     $8f00"
-                      "params start@:    $cd0c"
-                      "locals start@:    $cd18"
-                      "cell-stack start: $cd1c"))
+                      "params start@:    $cd0e"
+                      "locals start@:    $cd1a"
+                      "cell-stack start: $cd1e"))
 
   (define test-bc-push-l-state
     (run-bc-wrapped-in-test
@@ -964,15 +964,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "cell-int $0001  (rt)"
                       "cell-int $0000")
                 "int 1 was pushed from local")
-  (check-equal? (vm-cell-at->string test-bc-push-l-state #xcd18)
+  (check-equal? (vm-cell-at->string test-bc-push-l-state #xcd1a)
                 "cell-int $0001")
   (check-equal? (vm-call-frame->strings test-bc-push-l-state)
-                (list "call-frame:       $cd0e"
+                (list "call-frame:       $cd10"
                       "program-counter:  $8f06"
                       "function-ptr:     $8f00"
-                      "params start@:    $cd0c"
-                      "locals start@:    $cd18"
-                      "cell-stack start: $cd1c"))
+                      "params start@:    $cd0e"
+                      "locals start@:    $cd1a"
+                      "cell-stack start: $cd1e"))
 
   (define test-bc-push-p-state
     (run-bc-wrapped-in-test
@@ -995,12 +995,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "cell-int $0001")
                 "int -1 was pushed from parameter")
   (check-equal? (vm-call-frame->strings test-bc-push-p-state)
-                (list "call-frame:       $cd0e"
+                (list "call-frame:       $cd10"
                       "program-counter:  $8f04"
                       "function-ptr:     $8f00"
-                      "params start@:    $cd0c"
-                      "locals start@:    $cd18"
-                      "cell-stack start: $cd1c"))
+                      "params start@:    $cd0e"
+                      "locals start@:    $cd1a"
+                      "cell-stack start: $cd1e"))
 
   (define test-bc-pop-push-to-p-state
     (run-bc-wrapped-in-test
@@ -1021,15 +1021,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (check-equal? (vm-stack->strings test-bc-pop-push-to-p-state)
                 (list "stack holds 1 item"
                       "cell-int $0001  (rt)"))
-  (check-equal? (memory-list test-bc-pop-push-to-p-state #xcd0c #xcd0d)
-                (list #x01 #x03))
+  (check-equal? (memory-list test-bc-pop-push-to-p-state #xcd0e #xcd0f)
+                (list #x01 #x03)
+                "param0 holds a cell-int 1")
   (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
-                (list "call-frame:       $cd0e"
+                (list "call-frame:       $cd10"
                       "program-counter:  $8f05"
                       "function-ptr:     $8f00"
-                      "params start@:    $cd0c"
-                      "locals start@:    $cd18"
-                      "cell-stack start: $cd1c")))
+                      "params start@:    $cd0e"
+                      "locals start@:    $cd1a"
+                      "cell-stack start: $cd1e")))
 
 (define PUSH_INT_0 #xb8)
 (define PUSH_INT_1 #xb9)
