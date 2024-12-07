@@ -12,6 +12,130 @@ call frame primitives etc.
 |#
 
 
+;; WANT: fast call stack
+;;       measures:
+;;         - less bytes to copy
+;;         - reuse as much as possible
+;;       current status:
+;;         the following values are copied (constructed)
+;;         ZP_VM_PC                  $de ;; program counter (ptr to currently executing byte code)
+;;         ZP_VM_FUNC_PTR            $e0 ;; pointer to the currently running function
+;;         ZP_PARAMS_PTR             $e2 ;; pointer to first parameter in call-frame
+;;         ZP_LOCALS_PTR             $e4 ;; pointer to first local in call-frame
+;;         ZP_CELL_STACK_BASE_PTR    $e6 ;; e6..e7 (pointer to the base of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+;;
+;;         ZP_CALL_FRAME             $f1
+;;
+;;
+;;
+;;         Stack (growing downwards)       Current ZP pointer settings      
+;;         
+;;         |  param - 0            |  <-- params ptr
+;;         |  . . .                |
+;;         |  param - n            |
+;;         |-----------------------|  
+;;       * |         pc            |  <-- call frame 
+;;         |-----------------------|
+;;       * |       func ptr        |  (pc and func-ptr share high byte, if functions do not run over multiple pages)
+;;         |-----------------------|
+;;       * |      params ptr       |  (params high byte should be the same as this page, if call frame is allocated on same page)
+;;         |-----------------------|
+;;       * |      locals ptr       |  (locals high byte should be the same as this page, if call frame is allocated on same page)
+;;         |-----------------------|
+;;       * |  cell stack base ptr  |  (definitely same high byte as params ptr!)
+;;         |-----------------------|
+;;         |  local - 0            | <-- locals ptr = call frame + $0a (call frame is calculated from locals-ptr on return)
+;;         |  . . .                |
+;;         |  local - n            |
+;;         |-----------------------|
+;;         |                       | <-- cell stack base ptr
+;;
+;;         *) fields are copied
+;;
+;;       separate page stack allocation case
+;;         |  param - 0            |  <-- params ptr       |-----------------------|                                                                                              
+;;         |  . . .                |                     * |         pc            |  <-- call frame                                                                                
+;;         |  param - n            |                       |-----------------------|                                                                                              
+;;         |-----------------------|                     * |       func ptr        |  (pc and func-ptr share high byte, if functions do not run over multiple pages)              
+;;       (no more space left on page)                      |-----------------------|                                                                                              
+;;                                                       * |      params ptr       |  (params high byte should be the same as this page, if call frame is allocated on same page) 
+;;                                                         |-----------------------|                                                                                              
+;;                                                       * |      locals ptr       |  (locals high byte should be the same as this page, if call frame is allocated on same page) 
+;;                                                         |-----------------------|                                                                                              
+;;                                                       * |  cell stack base ptr  |  (definitely same high byte as locals ptr!)                                                  
+;;                                                         |-----------------------|                                                                                              
+;;                                                         |  local - 0            | <-- locals ptr = call frame + $0a (call frame is calculated from locals-ptr on return)         
+;;                                                         |  . . .                |                                                                                              
+;;                                                         |  local - n            |                                                                                              
+;;                                                         |-----------------------|                                                                                              
+;;                                                         |                       | <-- cell stack base ptr = locals ptr + 2*(n+1)
+;;
+;;
+;;    => current call frame            \
+;;       current locals ptr            |  always share the same page (high byte)
+;;       current call stack base ptr   /
+
+;; IDEA: define fast frames (allocated on same stack page, and pc and func ptr share the same page)
+;;
+;;       popping call frames
+;;       how can a fast frame be identified? (e.g. check locals ptr - call frame = $06) <- save copying 4 bytes?
+;;           SEC                ;;               (2)      ;; copying 4 bytes  [15*4 = 60 cycles]
+;;           LDA ZP_LOCALS_PTR  ;; low byte      (3)      ;; LDA (zp-ptr),y         (6)
+;;           SBC ZP_CALL_FRAME  ;;               (3)      ;; STA zp-memory,y        (4) <- only avail for non zp memory
+;;           CMP !#06           ;;               (2)      ;; DEY                    (2)
+;;           BEQ SLOW_FRAME     ;;               (2-3)    ;; BNE LOOP               (2-3)
+;;                                               ---SUM 12                         ---SUM 60 (15*4)
+;;        write highbyte for params ptr, locals ptr, csb ptr + func ptr
+;;          LDA (ZP_...),y               ;;   (6)
+;;          STA ZP_LOCALS_PTR+1          ;;   (3)
+;;          STA ZP_PARAMS_PTR+1          ;;   (3)
+;;          STA ZP_CELL_STACK_BASE_PTR+1 ;;   (3)
+;;          LDA (ZP_...),y               ;;   (6)
+;;          STA ZP_FUNC_PTR+1            ;;   (3)
+;;                                           ---SUM 24
+;;
+;;       => save 24 (60 - 12 - 24) cycles per fast frame pop
+;;          add 13 cycles per slow frame pop
+;;          add 9 bytes detect routine
+;;          add x bytes for fast pop code
+;;
+;;
+;;       pushing fast frames
+;;       how to detect that fast frame can be used? 
+;;           1st check that func ptr and pc share the same high byte (this has to be done additionally)
+;;               LDA ZP_VM_PC+1     ;;               (3)
+;;               CMP ZP_FUNC_PTR+1  ;;               (3)
+;;               BNE SLOW_FRAME     ;;               (2-3)
+;;                                        
+;;           2nd stack allocation stays on same page (this is done anyhow)
+;;      => save 52 (60-8) cycles per fast push  (copying takes as long as in pop case)
+;;         add 9 cycles per slow push
+;;         add 6 bytes detection routine
+;;         add x bytes for fast push code
+;;         save 4 bytes on call-stack per call
+;;         
+;;
+;;         |  param - 0              |  <-- params ptr
+;;         |  . . .                  |
+;;         |  param - n              |
+;;         |-------------------------|  
+;;       * |          pc             |  <-- call frame 
+;;         |------------+------------|
+;;       * | params ptr | locals ptr | 
+;;         |------------+------------|
+;;       * |  csb ptr   | func ptr   |
+;;         |------------+------------|
+;;         |  local - 0              |  <-- locals ptr = call frame + $06 (call frame is calculated from locals-ptr on return)
+;;         |  . . .                  |
+;;         |  local - n              |
+;;         |-------------------------|
+;;         |                         |  <-- cell stack base ptr
+
+
+;; IDEA: use fast locals on zero page (just as regular locals, but not allocated on the stack but on zero page)
+;;       possible for functions that do not call subroutines, or do so but the local is no longer used
+;;       use short bytecodes for params 0..3, locals 0..3, fast-locals 0..3
+
 ;; IDEA: use the following idea in more situations:
 ;;       store high byte in one page
 ;;       and store low byte in another page (same index)
@@ -34,11 +158,14 @@ call frame primitives etc.
 ;;                       STY ZP_CS_IDX             ;; store new tos idx
 ;;                       ;; that's it
 ;;
-;;       are there any advantages to store cells in this way?
+;;       are there any advantages to store cells in this way? 
 ;;       where does the reference counting byte go in that case (maybe just into another page?)
 ;;       ==> cell-ptr's could be stored in 2+1 pages, lowbytes, highbytes and refcounts
-;;       ==> cell-pair-ptr's could be store in 4+1 pages, lowbyte car, highbyte car, lowbyte cdr, highbyte cdr, refcounts
-;;       allocation of these "pages" will then
+;;           <-- not really, it would mean that each cell-ptr access needs to make use of two (different) pages
+;;               which either are calculated (since allocated next to one another) or kept
+;;       ==> cell-pair-ptr's could be stored in 4+1 pages, lowbyte car, highbyte car, lowbyte cdr, highbyte cdr, refcounts
+;;           <-- not really, it would mean that each cell-ptr access needs to make use of four (different) pages
+;;               which either are calculated (since allocated next to one another) or kept
 
 ;; IDEA: programs/processes have their own allocation pages => terminating a process means, all pages allocated by the process can be freed
 ;;       alternative: shared, process allocates using shared pages, terminating the process will free all entries (not the pages), possibly leading to pages, not freed, because some slots remain allocated.
