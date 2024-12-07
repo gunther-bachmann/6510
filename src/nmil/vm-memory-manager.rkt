@@ -3967,7 +3967,7 @@ call frame primitives etc.
           (STA ZP_CALL_FRAME+1)
           (LDA ZP_LOCALS_PTR)
           (SEC)
-          (SBC !$08)
+          (SBC !$0a)
           (STA ZP_CALL_FRAME)
 
           (RTS)))
@@ -4041,7 +4041,7 @@ call frame primitives etc.
   (check-equal? (memory-list test-pop-call-frame-state-after ZP_PARAMS_PTR (add1 ZP_PARAMS_PTR))
                 (list #x04 #xcd))
   (check-equal? (memory-list test-pop-call-frame-state-after ZP_CALL_FRAME (add1 ZP_CALL_FRAME))
-                (list #x08 #xcd))
+                (list #x06 #xcd))
   (check-equal? (memory-list test-pop-call-frame-state-after ZP_LOCALS_PTR (add1 ZP_LOCALS_PTR))
                 (list #x10 #xcd))
   (check-equal? (memory-list test-pop-call-frame-state-after ZP_CELL_STACK_BASE_PTR (add1 ZP_CELL_STACK_BASE_PTR))
