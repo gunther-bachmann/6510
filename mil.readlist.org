@@ -3329,15 +3329,33 @@ this will include the implementation of
 - [X] local vars
 - [X] tail call recursion
 - [X] returning from a call
+- [ ] optimizations for call stack/frame
+  - [ ] spread low/high over two pages
+    - allocation needs to allocate two pages for stack
+    - there need to be two zero page pointers, one for lowbyte-stack, one for highbyte-stack
+  - [ ] allow fast call frames (less copying, less space consumption)
 - [-] allocation/deallocation of lists, cells, structures, strings
   - [X] cells
   - [X] lists
   - [ ] structures
   - [ ] strings/native arrays
   - [ ] arrays
+- [ ] field access to
+  - [ ] structures
+  - [ ]  strings/native arrays
+  - [ ]  arrays
 - [-] get a notion on when to do ref-counting inc/dec and garbage collection
   - [X] refcount primitives (inc/dec/free)
   - [ ] implement refcount gc for revers function
+- [-] implement byte code debugger on top of 6510 debugger
+  - [X] single step
+  - [ ] run to next call/return
+  - [ ] step over call
+  - [ ] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
+  - [X] inspect/manipulate value stack
+  - [ ] inspect/manipulate call frame
+  - [ ] allow setting breakpoints on bytecode (at a certain address)
+  - [ ] allow in place execution of bytecode
 **** how much of the 6510 code should be actually written and tested with the interpreter (and actually used to interpret byte code)?
 **** IDEA for native code implemenation of (parts of) functions
 (have a rough idea of how this could be done, don't actually implement)
@@ -3353,9 +3371,6 @@ this will include the implementation of
 **** IMPLEMENT glue together mil + vm + loader and linker
 - (m-def ...) -> vm, execute, debug?
 - see [[file:src/cisc-vm/mil-svm-generator.rkt]]
-**** allow 6510 interpreter to validate designed vm assembly code
-- write assembly code, validate behavior with test code <- make this easy/feasable
-**** write executable 6510 vm for (some) commands
 **** glue together mil + 6510 vm
 **** IDEA: make compilation phases more explicit
 - macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
