@@ -450,7 +450,7 @@ EOF
    `(pre-prompter . ,debugger--assembler-pre-prompter)))
 
 ;; run an read eval print loop debugger on the passed program
-(define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (interactor debugger--assembler-interactor) (run #t))
+(define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (interactor debugger--assembler-interactor) (run #f))
   (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof any/c) boolean?] any/c)
   (define capabilities (collect-emacs-capabilities file-name))
   (define file-does-exist (and (non-empty-string? file-name) (file-exists? file-name)))
