@@ -3329,6 +3329,117 @@ this will include the implementation of
 - [X] local vars
 - [X] tail call recursion
 - [X] returning from a call
+- [ ] optimization idea: no parameter ptr, just cell-stack
+  - example reverse list
+    (def (reverse (a-list cell*) (b-list cell* '()))
+      "reverse the a-list into b-list"
+       (if (nil? a-list)
+           b-list
+           (reverse (cdr a-list) (cons (car a-list) b-list)))
+
+    push nil
+    push a-list
+    call reverse
+
+    entry without
+    push nil
+    swap
+    entry with default explicitly set
+    nil? return pop1       ;; one behind tos (if nil pop1 and return)
+    write-to-fast-local #0 ;; a-list b-list
+    car                    ;; car-a-list b-list
+    cons                   ;; new b-list
+    push fast local #0     ;; a-list new-b-list
+    cdr                    ;; new-a-list new-b-list
+    tail-call
+  - inline code
+    expected stack: a-list nil
+
+    loop:
+      nil? bra done
+      write-to-local #n ;; a-list b-list   (local #n = a-list)
+      car               ;; car-a-list b-list
+      cons              ;; new b-list
+      push local #n     ;; a-list new-b-list
+      cdr               ;; new-a-list new-b-list
+      bra loop
+    done:
+      pop               ;; new-b-list
+  - other parameter order
+
+    push a-list
+    push nil
+    call reverse
+
+    ;; push nil ;; <- entry if default is not set
+    pop to local#0         ;; b-list
+    write to local#1       ;; a-list
+    nil? return local#0    ;; a-list
+    cdr                    ;; new-a-list
+    push local#0           ;; b-list new-a-list
+    push local#1           ;; a-list b-list new-a-list
+    car                    ;; car-a-list b-list new-a-list
+    cons                   ;; new b-list new-a-list
+    tail-call
+  - check out other functions to check validity of this optimization
+    - function 1: fibonacci
+      (def (fib n (a 0) (b 1))
+        (cond [(= n 0) a]
+              [(= n 1) b]
+              [else (fib (- n 1) b (+ a b))]))
+
+      bytecode:
+      caller:
+      push int n
+      call fib
+
+      function:
+      push int 0  ;; default for a
+      push int 1  ;; default for b
+      
+      pop to local#0              ;; b
+      pop to local#1              ;; a
+      write to local #2           ;; n
+      zero? ret local#1           ;;
+      push int 1                  ;; 1
+      push local#2                ;; n 1
+      eq? ret local#0 and pop 2   ;;
+      push local #2               ;; n
+      push int -1                 ;; -1 n
+      add                         ;; n-1
+      push local #0               ;; b n-1
+      push local #0               ;; b b n-1
+      push local #1               ;; a b b n-1
+      add                         ;; a+b b n-1
+      tail-call                   ;; just a goto
+    - alternative with parameters and other order
+      ;; push int 1
+      ;; push int 0
+      push n
+      call-defaults#2 fib       ;; use 2 more param slots for this call and jump @ -4
+
+      fib-def-2
+      push int 1                ;; fill param slots
+      pop-to-param#2
+      push int 0
+      pop to param#1
+
+      push param#0              ;; n
+      zero? ret param#1         
+      push param#0              ;; n
+      push int 1                ;; 1 n
+      eq? ret param#2           ;;
+      push param#2              ;; b
+      push param#1              ;; a b
+      add                       ;; a+b
+      push param#2              ;; b a+b
+      push param#0              ;; n b a+b
+      push int -1               ;; -1 n b a+b
+      add                       ;; n-1 b a+b
+      tail-call
+    - function 2: 
+    - function 3:
+    - function 4:
 - [ ] optimizations for call stack/frame
   - [ ] spread low/high over two pages
     - allocation needs to allocate two pages for stack
