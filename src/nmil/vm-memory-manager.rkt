@@ -11,6 +11,112 @@ call frame primitives etc.
 
 |#
 
+;; REMOVE when done
+
+(define ZP_CELL_STACK_BASE_PTR #x00)
+(define ZP_PARAMS_PTR #x00)
+(define ZP_LOCALS_PTR #x00)
+
+;;;;;;;;;;;;;;;;
+;; DECISION ;;
+;;;;;;;;;;;;;;;;
+;; ZP_VM_PC                    *  ptr to the current byte code
+;; ZP_FUNC_PTR                 *  ptr to the current running function
+;; ZP_CELL_STACK_LB_PTR           ptr to the low byte of the cell stack (cell-eval-stack is spread over two pages) [the lb of this ptr itself is always 0]
+;; ZP_CELL_STACK_HB_PTR           ptr to the high byte of the cell stack [the lb of this ptr itself is always 0]
+;; ZP_LOCALS_LB_PTR            *  ptr to the low bytes of the locals of the currently running function [lowbyte of the ptr itself is equal to the highbytes one]
+;; ZP_LOCALS_HB_PTR            *  ptr to the high bytes of the locals of the currently running function [lowbyte of the ptr itself is equal to the lowbytes one]
+;; ZP_CELL_STACK_TOP              index to the top element on the cell stack
+
+;; ZP_CALL_FRAME                  pointer to start of current call frame 
+;; ZP_CALL_FRAME_TOP_MARK         index to byte behind current call frame (byte) (is stored into page at $02, when page is full)
+
+;; OPEN! how to adjust call-frame-ptr during push/pop (especially when switching to new page and returning to old page)
+
+;; fast stack call frame (4b): allowed for calls w/o overflows (neither stack, nor local overflow nor function running over page boundary)
+;;
+;;    |                  vm pc                  | <-- call-frame-ptr
+;;    | func-ptr low-byte | locals-ptr low byte |   ;; locals-ptr low byte must be != $00/$01
+;;                                                
+;;    push: possible if - vm_pc and func-ptr share the same page
+;;                      - cell-stack does not overflow (has 16 entries reserve)
+;;                      - locals do not overflow (has reserves to hold functions' need)
+;;    pop: if (call-frame-tr + 3) != $00 (or $01), its a a fast frame
+;;
+;; slow stack call frame (10b): allowed for any call (including page overflows: stack, locals allocation or function running over page boundary)
+;;
+;;    |                   vm pc                     | <-- call-frame-ptr
+;;    |     (reserved)       | locals ptr shared lb |  
+;;    | locals-lb page       | locals-hb-page       |
+;;    |  func-ptr  low       | $00 / $01            | func-ptr could be encoded into: lowbyte, highbyte =  vm_pc page + $00/$01 (of byte 4 in this stack) <- would save two bytes of stack size
+;;
+;;    NOTE: if func-ptr page would be copied into (reserved), additional encoding/decoding into last byte could be removed, saving code bytes and complexity
+;;          reserved byte could be used for somthing else, though => remove later?
+;;          last byte must be either $00 or $01 to identify frame type!
+;;
+;;    NOTE:  | cell-stack-lb page   | cell-stack-hb-page   | (copying the cell stack should not be necessary, the resulting stack should be cleaned up by the called method, known the # of parameters to actually remove etc.)
+;;           cell-stack-tos  (copying not necessayr!)
+;;                                                
+;;    push: all relevant data
+;;    pop: if (call-frame-ptr + 9) == $00(or $01)), its a a slow frame
+;;         in a slow frame, high byte of func-ptr is high byte of vm_pc - byte at 9 (either 00 or 01)
+;;
+;; function descriptor holds only # of locals needed (parameter number is meta data, that is not needed for interpretation)
+;; function descriptor:
+;;    00 : #of locals
+;;    01 : start of byte code  (defaults offset?)
+;;    ...
+;;    meta-data byte-code-len
+;;              str-len
+;;              function name string
+;;
+;; obsolete byte codes:
+;;   any ...to_param
+;;       ...from_param
+;;
+;; new byte codes:
+;;   write_to_local#
+;;
+;; locals are stored on a stack (single page)
+;;    00: page type
+;;    01: previous page
+;;    02: low byte cell 0
+;;    03: high byte cell 0
+;;    ...
+;; cell-stack is organized as stack (page pair)
+;;    00: page type           00: page type
+;;    01: previous lb page    01: previous hb page
+;;    02: lowbyte cell 0      02: high byte cell 0
+;;    ...
+
+
+;; IDEA: keep only parameters and the cell-eval-stack on the stack spread over two pages to make push and pop fast
+;;       => zp_cell_stack_lb_ptr, zp_cell_stack_hb_ptr must be held (2 bytes each)
+;;          the parameters may as well be on the cell-stack when entering the function and form the start of the stack for function execution
+;;       all else (vm_pc, func_ptr, locals_xb_ptr, cell_stack_xb_ptr) go into a separate stack to share page and make storing fast.
+
+;;       locals are held in own dedicated stack (no fast pushing/popping necessary, but stacking during function call)
+;;
+;;       fast stack call frame (size: 4b)
+;;         pc (2b), func-ptr (1b, shares hb with pc), locals-ptr (1b <- no page change), cell-stack-base-ptr is kept
+;;
+;;         cell-stack-base-ptr may change on function entry ->
+;;
+;;       slow stack call frame (7+1)
+;;         pc (2b), func-ptr (1+1b low byte + encoded page byte), locals-ptr (3b), 1 reserved (currently)
+;;
+;;       call frame could be unified to 6 byte usage (pc 2, func 1(+1 encoded into locals-lb), locals 2+1)
+;;         => copy 2 bytes more than fast frame (takes 20 cycles more), detection takes 14 cycles, still feasable to have slow and fast frames
+;;
+;;       fast/slow detection push
+;;         - func-page = pc-page
+;;         - locals fit on same page in locals stack (lowbyte+2*n*locals < 256)
+;;         - cell-stack-tos < 240 (enough space to stay on page)
+;;
+;;       fast/slow detection pop
+;;         (e.g. local stack holds byte for fast/slow call frame detection)
+;;         (use the 10th byte in slow stack to mark it thus (eg 0|255) depending on what is impossible to be valid for slow stack values)
+
 
 ;; WANT: fast call stack
 ;;       measures:
@@ -477,7 +583,7 @@ call frame primitives etc.
 ;;            0001 1001 = (fid->loc page) page with 16 bit values (starting at $02), filled without gaps, next slot = offset to free, no ref counting
 ;;            0001 1010 = (code page) page with byte code and function meta data <- filled without gaps, next slot = offset to free, no ref counting
 ;;       page 01 = (code page, m1 page px, call-frame page) previous page of same type (<- currently only for pages with buckets and call-frame pages)
-;;       page 02 = (m1 page px, s8 page) number of used slots
+;;       page 02 = (m1 page px, s8 page) number of used slots, call-frame page: top mark (if full)
 ;;       page ff = (cell-pairs and cell page) previous page (in case of cell page = last cell stays unused!!)
 
 ;; existing: array of first free slot on the respective page (per page) (uses only the lower 7 bits) : uses 256 bytes cf00..cfff (idea to keep this data on the page itself?)
@@ -549,8 +655,8 @@ call frame primitives etc.
 ;;     - keep free slots in a linked list
 ;;     - ref count is achieved by lsr x 2 (fixed size 4 bytes => 1 byte ref count)
 ;;   call-frame-page
-;;     - keep first free slot
-;;     - keep backward pointer to previous slot
+;;     - keep first free slot (since this is global, this is held in zp_call_frame_top_mark
+;;     - if full, keep top mark of this page 
 ;;     - keep id of previous page
 ;;   perma-bytecode-page
 ;;     - keep first free slot
@@ -569,7 +675,8 @@ call frame primitives etc.
 ;; memory layout of call frame page (organized in stack)
 ;;  00 : #b0001 0000 page type call-frame
 ;;  01 : previous page (just high byte), 00 for first stack page
-;;  02 : first frame payload byte 0
+;;  02 : top mark (one past last allocated frame payload
+;;  03 : first frame payload byte 0
 ;;  ... : first frame payload byte size-1
 ;;  free-1 : size of (prev) frame
 ;;  free : next payload
@@ -826,10 +933,11 @@ call frame primitives etc.
          ZP_RT
          ZP_VM_PC
          ZP_VM_FUNC_PTR
-         ZP_LOCALS_PTR
-         ZP_PARAMS_PTR
+         ZP_LOCALS_HB_PTR
+         ZP_LOCALS_LB_PTR
          ZP_CELL_STACK_TOS
-         ZP_CELL_STACK_BASE_PTR)
+         ZP_CELL_STACK_LB_PTR
+         ZP_CELL_STACK_HB_PTR)
 
 ;; write out the cells that are marked as reallocatable
 (define (vm-cell-pair-free-tree->string state)
@@ -847,9 +955,9 @@ call frame primitives etc.
   (list (format "call-frame:       $~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME)))
         (format "program-counter:  $~a" (format-hex-word (peek-word-at-address state ZP_VM_PC)))
         (format "function-ptr:     $~a" (format-hex-word (peek-word-at-address state ZP_VM_FUNC_PTR)))
-        (format "params start@:    $~a" (format-hex-word (peek-word-at-address state ZP_PARAMS_PTR)))
-        (format "locals start@:    $~a" (format-hex-word (peek-word-at-address state ZP_LOCALS_PTR)))
-        (format "cell-stack start: $~a" (format-hex-word (peek-word-at-address state ZP_CELL_STACK_BASE_PTR)))))
+        (format "locals start:     $~a" (format-hex-word (bytes->int (peek state ZP_LOCALS_LB_PTR) (peek state ZP_LOCALS_HB_PTR))))
+        (format "cell-stack start: $~a" (format-hex-word (bytes->int (peek state ZP_CELL_STACK_LB_PTR) (peek state ZP_CELL_STACK_HB_PTR))))
+        (format "tos index:        $~a" (format-hex-byte (peek state ZP_CELL_STACK_TOS)))))
 
 ;; write a status string of a memory page
 (define (vm-page->strings state page)
@@ -1080,14 +1188,15 @@ call frame primitives etc.
    (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
    (byte-const ZP_TEMP2                  $dd) ;; may not be used after sub calls (just within a routine without jsr)
 
-   ;; the following ten bytes need to be continuous, since they are saved into the call frame!
+   ;; the following twelve bytes need to be continuous, since they are saved into the call frame!
    (byte-const ZP_VM_PC                  $de) ;; program counter (ptr to currently executing byte code)
    (byte-const ZP_VM_FUNC_PTR            $e0) ;; pointer to the currently running function
-   (byte-const ZP_PARAMS_PTR             $e2) ;; pointer to first parameter in call-frame
-   (byte-const ZP_LOCALS_PTR             $e4) ;; pointer to first local in call-frame
-   (byte-const ZP_CELL_STACK_BASE_PTR    $e6) ;; e6..e7 (pointer to the base of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
-
-   (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2 <- may be not needed (zp_locals_ptr always = zp_call_frame + 6)
+   (byte-const ZP_LOCALS_LB_PTR          $e2) ;; pointer to low byte of first local in call-frame
+   (byte-const ZP_LOCALS_HB_PTR          $e4) ;; pointer to high byte of first local in call-frame
+   (byte-const ZP_CELL_STACK_LB_PTR      $e6) ;; e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+   (byte-const ZP_CELL_STACK_HB_PTR      $e8) ;; e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+   (byte-const ZP_CALL_FRAME_TOP_MARK    $ea) ;; ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
+   (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2 
 
    ;; implementation using registers
    ;; register T = top of stack, used as main register for operations, could be a pointer to a cell or an atomic cell. if it is a pointer to a cell, the low byte here is without tag bits => (zp_rt) points to the cell
@@ -1114,13 +1223,15 @@ call frame primitives etc.
 (define ZP_RT                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
 (define ZP_RA                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
 (define ZP_CALL_FRAME           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
-(define ZP_CELL_STACK_BASE_PTR  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_BASE_PTR"))
+(define ZP_CALL_FRAME_TOP_MARK  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME_TOP_MARK"))
+(define ZP_CELL_STACK_LB_PTR    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_LB_PTR"))
+(define ZP_CELL_STACK_HB_PTR    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_HB_PTR"))
 (define ZP_CELL_STACK_TOS       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
 (define ZP_TEMP                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP"))
 (define ZP_VM_PC                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_PC"))
 (define ZP_VM_FUNC_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_FUNC_PTR"))
-(define ZP_LOCALS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_PTR"))
-(define ZP_PARAMS_PTR           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PARAMS_PTR"))
+(define ZP_LOCALS_LB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_LB_PTR"))
+(define ZP_LOCALS_HB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_HB_PTR"))
 (define TAG_BYTE_BYTE_CELL      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_BYTE_CELL"))
 (define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
 (define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
@@ -2034,10 +2145,10 @@ call frame primitives etc.
            (BNE VM_INITIALIZE_MEMORY_MANAGER__LOOP)
 
            ;; initialize cell stack
+           ;; TODO: adjust to new stack behaviour!
            (LDA !$20)
            (JSR VM_ALLOC_CALL_FRAME)
            (TYA)
-           (STA ZP_PARAMS_PTR)
            (CLC)
            (ADC !$0a)
            (STA ZP_LOCALS_PTR)
@@ -3896,10 +4007,255 @@ call frame primitives etc.
 ;;           (RTS)))
 
 
+;; input:  X = number of locals to allocate on locals frame
+;;         zp_call_frame 
+;;         zp_call_frame_top_mark
+;;         zp_locals_lb_ptr
+;;         zp_cell_stack_tos
+;;         zp_func_ptr
+;;         zp_vm_pc
+;; output: zp_call_frame
+;;         zp_call_frame_top_mark
+;;         additionally: 
+;;            if call frame needs to be put on a new page:
+;;               $02 on old page holds top mark of old call stack
+;; NOTE: for a complete call,
+;;           1. push call frame (use this method)
+;;           2. allocated # of locals needed, set zp_vm_locals_lb_ptr and zp_vm_locals_hb_ptr
+;;           3. set zp_vm_pc to new function
+(define VM_PUSH_CALL_FRAME_N
+  (list
+   (label VM_PUSH_CALL_FRAME_N)
+          ;; check for fast frames
+          ;;    push: possible if - vm_pc and func-ptr share the same page
+          (LDA ZP_VM_PC+1)
+          (CMP ZP_FUNC_PTR+1)
+          (BNE SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
+          ;; check not necessary, stack keeps its state, pushing, popping takes care of cell-stack ptr
+          ;; ;;                      - cell-stack does not overflow (has 16 entries reserve)
+          ;; (LDA ZP_CELL_STACK_TOS)
+          ;; (CMP !$F0)
+          ;; (BPL SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
+          ;;                      - locals do not overflow (has reserves to hold functions' need)
+          (TXA)                  ;; x = number of locals for this function
+          (CLC)
+          (ADC ZP_LOCALS_LB_PTR)
+          (BCS SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
+
+          ;; do fast frame 
+          ;; alloc for fast frame
+          ;; ensure call frame allows 4 additional bytes
+          (LDA ZP_CALL_FRAME_TOP_MARK)
+          (TAY)
+          (ADC !$04)
+          (BCC NO_NEW_PAGE_FOR_FAST_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
+
+          (LDA ZP_CALL_FRAME+1)
+          (STA STORE_TOP_MARK_ON_PAGE_FAST_FRAME__VM_PUSH_CALL_FRAME_N+2)  ;; set the right page
+          (LDA ZP_CALL_FRAME_TOP_MARK)
+   (label STORE_TOP_MARK_ON_PAGE_FAST_FRAME__VM_PUSH_CALL_FRAME_N)
+          (STA $c002)                                  ;; c0 is overwritten with the right page, 02 is offset to top mark on cell frame page
+
+          (JSR VM_ALLOC_CALL_FRAME_N)                  ;; now allocate a new page
+
+          (STA ZP_CALL_FRAME+1)
+          (LDY !$03)                                   ;; next payload starts a 03
+
+   (label NO_NEW_PAGE_FOR_FAST_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
+          (STY ZP_CALL_FRAME)                          ;; set lowbyte of call frame
+
+          ;; now copy fast frame values
+          (LDY !$00)
+          ;;                             |                 vm pc                   |
+          (LDA ZP_VM_PC)
+          (STA (ZP_CALL_FRAME),y)
+          (INY)
+          (LDA ZP_VM_PC)
+          (STA (ZP_CALL_FRAME),y)
+          (INY)
+          ;;                             | func-ptr low-byte | locals-ptr low byte |
+          (LDA ZP_FUNC_PTR)
+          (STA (ZP_CALL_FRAME),y)
+          (INY)
+          (LDA ZP_LOCALS_LB_PTR)
+          (STA (ZP_CALL_FRAME),y)
+          (INY)
+
+          ;; store new top mark
+          (TYA)
+          (CLC)
+          (ADC ZP_CALL_FRAME)
+          (STA ZP_CALL_FRAME_TOP_MARK)
+          (RTS)
+
+   (label SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
+          ;; alloc for slow frame
+          ;; ensure call frame allows 10 additional bytes
+          (LDA ZP_CALL_FRAME_TOP_MARK)
+          (TAY)
+          (ADC !$08) ;; length of slow call frame
+          (BCC NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
+
+          (LDA ZP_CALL_FRAME+1)
+          (STA STORE_TOP_MARK_ON_PAGE_SLOW_FRAME__VM_PUSH_CALL_FRAME_N+2)
+          (LDA ZP_CALL_FRAME)
+   (label STORE_TOP_MARK_ON_PAGE_SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
+          (STA $c001)
+
+          (JSR VM_ALLOC_CALL_FRAME_N)
+
+          (STA ZP_CALL_FRAME+1)
+          (LDY !$03) ;; first payload byte available on call frame page
+
+   (label NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
+          (STY ZP_CALL_FRAME)
+
+          ;; now copy slow frame values
+
+          ;; len of slow call frame
+          (LDY !$08)
+
+          ;; set new top mark
+          (CLC)
+          (ADC ZP_CALL_FRAME)
+          (STA ZP_CALL_FRAME_TOP_MARK)
+          (DEY)
+
+          ;; set encoded page for function pointer
+          (SEC)
+          (LDA ZP_VM_PC+1)
+          (SBC ZP_FUNC_PTR+1)
+          ;; (AND !$01)                    ;; make sure that only bit 0 can be set (should not happen, since function code may max spread over two pages!)
+          (STA (ZP_CALL_FRAME),y)         ;; y currently = 7
+          (DEY)
+
+          ;; copy rest of zero page values
+          ;; naiive copy: 7 * 5 bytes = 35 bytes, 7 * 9 cycles = 63 cycles
+          ;; looped copy: 10 bytes + 7 table bytes, 7 * 18 cycles = 126 cycles
+    (label LOOP_ZP_COPY__VM_PUSH_CALL_FRAME_N)
+          (LDX SLOW_STACK_ZP_LOCATIONS,y)
+          (LDA $00,x)
+          (STA (ZP_CALL_FRAME),y)        ;; y currently = 6..0  (7 bytes) copied
+          (DEY)
+          (BPL LOOP_ZP_COPY__VM_PUSH_CALL_FRAME_N)           ;; >= 0? -> loop
+
+          (RTS)
+
+   (label SLOW_STACK_ZP_LOCATIONS) ;; processed in reverse order, starting with offset+08 (used be vm_pop_call_frame_n, too!!)
+          (byte-ref ZP_VM_PC)               ;; |                   vm pc                     |
+          (byte-ref ZP_VM_PC+1)
+          (byte-ref ZP_TEMP)                ;; |   reserved           | locals ptr shared lb |
+          (byte-ref ZP_LOCALS_LB_PTR)
+          (byte-ref ZP_LOCALS_LB_PTR+1)     ;; | locals-lb page       | locals-hb-page       |
+          (byte-ref ZP_LOCALS_HB_PTR+1)
+          (byte-ref ZP_FUNC_PTR)            ;; |  func-ptr  low       | $00 / $01            | func-ptr could be encoded into: lowbyte, highbyte =  vm_pc page + $00/$01 (of byte 4 in this stack) <- would save two bytes of stack size
+          ))
+
+;; input:  zp_call_frame_top_mark
+;;         zp_call_frame
+;; output: zp_call_frame_top_mark
+;;         zp_call_frame
+;;         zp_vm_pc
+;;         zp_func_ptr
+;;         zp_locals_lb_ptr
+;;         zp_locals_hb_ptr
+;;         if slow frame is popped, additionally:
+;;            zp_cell_stack_lb_ptr
+;;            zp_cell_stack_hb_ptr
+;;            zp_cell_stack_tos
+;; NOTE: pop call completely restores the invocation frame
+;;       it does no GC check on locals!
+(define VM_POP_CALL_FRAME_N
+  (list
+   (label VM_POP_CALL_FRAME_N)
+          ;; current frame fast?
+          (SEC)
+          (LDA ZP_CALL_FRAME_TOP_MARK)
+          (SBC ZP_CALL_FRAME)
+          (CMP !$04)
+          (BNE SLOW_FRAME__VM_POP_CALL_FRAME_N)
+
+          ;; is a fast frame
+          (LDY !$00)
+          (LDA (ZP_CALL_FRAME),y)
+          (STA ZP_VM_PC)
+          (INY)
+          (LDA (ZP_CALL_FRAME),y)
+          (STA ZP_VM_PC+1)
+          (INY)
+          (LDA (ZP_CALL_FRAME),y)
+          (STA ZP_FUNC_PTR)
+          (INY)
+          (LDA (ZP_CALL_FRAME),y)
+          (STA ZP_LOCALS_LB_PTR)
+          (STA ZP_LOCALS_HB_PTR)
+          (BCC RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; carry is always clear (since iny stays below 256)
+
+   (label SLOW_FRAME__VM_POP_CALL_FRAME_N)
+          (LDY !$06)                    ;; copy 7 bytes
+
+   (label LOOP_ZP_RESTORE__VM_POP_CALL_FRAME_N)
+          (LDX SLOW_STACK_ZP_LOCATIONS,y)
+          (LDA (ZP_CALL_FRAME),y)
+          (STA $00,x)
+          (DEY)
+          (BPL LOOP_ZP_RESTORE__VM_POP_CALL_FRAME_N)
+
+          ;; now get function pointer page from encoded byte
+          (LDY !$07)                    ;; index of last byte in slow call frame
+          (LDA ZP_VM_PC+1)              ;; was just set by copy loop before
+          (SEC)
+          (SBC (ZP_CALL_FRAME),y)       ;; contains either $00 or $01 since this is a slow frame
+          (STA ZP_FUNC_PTR+1)           ;; page of func ptr is page of pc - $00/$01
+          
+
+   (label RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)
+          (LDA ZP_CALL_FRAME)
+          (CMP !$02)
+          (BNE STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
+
+          ;; get previous call frame page
+          (LDA !$00)
+          (STA ZP_CALL_FRAME)
+          (LDY !$01)
+          (LDA (ZP_CALL_FRAME),y) ;; get previous page
+          (STA ZP_CALL_FRAME+1)
+          (INY)
+          (LDA (ZP_CALL_FRAME),y) ;; get top mark from previous page
+          (STA ZP_CALL_FRAME_TOP_MARK)
+          ;; continue with previous call frame recon
+
+   (label STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
+          ;; one one below top mark
+          (LDA ZP_CALL_FRAME+1)
+          (STA LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N+2)
+          (LDY ZP_CALL_FRAME_TOP_MARK)
+          (DEY)
+   (label LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N)
+          (LDA $c000,y)
+          (AND !$fe)
+          (BEQ PREVIOUS_IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N)
+
+          ;; previous is fast frame
+          (LDA !$04) ;; length of fast frame
+          (BNE SET_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
+
+   (label PREVIOUS_IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N)
+          (LDA !$08) ;; length of slow frame
+
+   (label SET_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
+          (STA ZP_TEMP)
+          (LDA ZP_CALL_FRAME)
+          (STA ZP_CALL_FRAME_TOP_MARK)
+          (SEC)
+          (SBC ZP_TEMP)                 ;; temp holds len of call frame (04 = fast, 0a = slow)
+          (STA ZP_CALL_FRAME)
+          (RTS)))
+
 ;; input:   A = number of parameters on the stack to be used in this call frame
 ;;          x = number of locals to allocate on call frame
 ;;          carry set = NO RT PUSH before save (in effect discard tos = rt, useful if function id/number is in rt for the call)
-;;          zp_cell_frame = freshly allocated frame that has min size x*2 + 6 + 32
+;;          zp_call_frame = freshly allocated frame that has min size x*2 + 6 + 32
 ;;          zp_vm_pc          -> saved into cell frame (for pop)
 ;;          zp_vm_params_ptr  -> saved into cell frame (for pop)
 ;;          zp_vm_locals_ptr  -> saved into cell frame (for pop)
