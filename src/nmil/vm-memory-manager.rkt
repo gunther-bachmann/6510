@@ -4355,6 +4355,7 @@ call frame primitives etc.
           (INY)
           (LDA (ZP_CALL_FRAME),y)
           (STA ZP_VM_PC+1)
+          (STA ZP_VM_FUNC_PTR+1)
           (INY)
           (LDA (ZP_CALL_FRAME),y)
           (STA ZP_VM_FUNC_PTR)
@@ -4362,7 +4363,7 @@ call frame primitives etc.
           (LDA (ZP_CALL_FRAME),y)
           (STA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_HB_PTR)
-          (BCC RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; carry is always clear (since iny stays below 256)
+          (BCS RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; carry is always clear (since iny stays below 256)
 
    (label SLOW_FRAME__VM_POP_CALL_FRAME_N)
           (LDY !$06)                    ;; copy 7 bytes
@@ -4384,7 +4385,7 @@ call frame primitives etc.
 
    (label RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)
           (LDA ZP_CALL_FRAME)
-          (CMP !$02)
+          (CMP !$03)
           (BNE STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
 
           (LDA ZP_CALL_FRAME+1) ;; get previous page
@@ -4432,6 +4433,46 @@ call frame primitives etc.
           (SBC ZP_TEMP)                 ;; temp holds len of call frame (04 = fast, 0a = slow)
           (STA ZP_CALL_FRAME)
           (RTS)))
+
+(module+ test #| pop call frame n |#
+  (define pop-call-frame-n-fast-cf-code
+    (append push-call-frame-n-fit-page-prep-code
+            (list
+             (LDX !$04)
+             (JSR VM_PUSH_CALL_FRAME_N)
+             (LDX !$04)
+             (JSR VM_PUSH_CALL_FRAME_N)
+
+             ;; now change pc
+             (LDY !$91)
+             (STY ZP_VM_PC)
+             (INY)
+             (STY ZP_VM_PC+1)
+             (INY)
+             ;; function pointer
+             (STY ZP_VM_FUNC_PTR)
+             (INY)
+             (STY ZP_VM_FUNC_PTR+1)
+             (INY)
+             ;; and lowbyte of locals ptr
+             (STY ZP_LOCALS_LB_PTR)
+             (INY)
+             (STY ZP_LOCALS_HB_PTR)
+
+             (JSR VM_POP_CALL_FRAME_N)
+             )))
+  (define pop-call-frame-n-fast-cf-state
+    (run-code-in-test pop-call-frame-n-fast-cf-code))
+
+  (check-equal? (vm-call-frame->strings pop-call-frame-n-fast-cf-state)
+                (list "call-frame-ptr:   $cc03"
+                      "program-counter:  $090b"
+                      "function-ptr:     $090a"
+                      "locals-ptr:       $0504, $0604 (lb, hb)")
+                "restore original call-frame-ptr, 
+                         program counter,
+                         functions-ptr
+                         and locals pointer"))
 
 ;; input:   A = number of parameters on the stack to be used in this call frame
 ;;          x = number of locals to allocate on call frame
