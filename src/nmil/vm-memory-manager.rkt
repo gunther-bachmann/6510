@@ -12,8 +12,6 @@ call frame primitives etc.
 |#
 
 
-;; TODO: allocate pages for locals     <- stack oriented [n-push pop]
-;; TODO: allocate pages for eval stack <- stack oriented [1-push pop]
 ;; TODO: complete init memory management routine (initialize locals and eval stack)
 ;; TODO: rewrite local->RT/A, RT/A->local
 ;; TODO: rewrite RT/A op TOS->RT/A
@@ -593,7 +591,8 @@ call frame primitives etc.
 ;;            0001 1000 = (call-frame page) (stack organized, full+free detection already implemented)
 ;;            0001 1001 = (fid->loc page) page with 16 bit values (starting at $02), filled without gaps, next slot = offset to free, no ref counting
 ;;            0001 1010 = (code page) page with byte code and function meta data <- filled without gaps, next slot = offset to free, no ref counting
-;;       page 01 = (code page, m1 page px, call-frame page) previous page of same type (<- currently only for pages with buckets and call-frame pages)
+;;            0001 1011 = cell stack page (come in pairs for low and high byte)
+;;       page 01 = (code page, m1 page px, call-frame page, cell stack page) previous page of same type (<- currently only for pages with buckets and call-frame pages)
 ;;       page 02 = (m1 page px, s8 page) number of used slots, call-frame page: top mark (if full)
 ;;       page ff = (cell-pairs and cell page) previous page (in case of cell page = last cell stays unused!!)
 
@@ -923,6 +922,12 @@ call frame primitives etc.
         (parameterize ([current-output-port (open-output-nowhere)])
           (run-interpreter-on state-before)))))
 
+(module+ test #| after mem init |#
+  (define PAGE_AVAIL_0 #x97)
+  (define PAGE_AVAIL_0_W #x9700)
+  (define PAGE_AVAIL_1 #x96)
+  (define PAGE_AVAIL_1_W #x9600))
+
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
 (provide vm-memory-manager
@@ -1203,6 +1208,8 @@ call frame primitives etc.
    ;; ZP_TEMP may be used as pointer (in combination with ZP_TEMP2)
    (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
    (byte-const ZP_TEMP2                  $dd) ;; may not be used after sub calls (just within a routine without jsr)
+   (byte-const ZP_TEMP3                  $d9)
+   ;; (byte-const ZP_TEMP4                $da)
 
    ;; the following twelve bytes need to be continuous, since they are saved into the call frame!
    (byte-const ZP_VM_PC                  $de) ;; program counter (ptr to currently executing byte code)
@@ -1244,6 +1251,8 @@ call frame primitives etc.
 (define ZP_CELL_STACK_HB_PTR    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_HB_PTR"))
 (define ZP_CELL_STACK_TOS       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
 (define ZP_TEMP                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP"))
+(define ZP_TEMP2                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP2"))
+(define ZP_TEMP3                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP3"))
 (define ZP_VM_PC                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_PC"))
 (define ZP_VM_FUNC_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_FUNC_PTR"))
 (define ZP_LOCALS_LB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_LB_PTR"))
@@ -1252,6 +1261,7 @@ call frame primitives etc.
 (define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
 (define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
 (define TAGGED_NIL              (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_NIL"))
+
 
 
 
@@ -1430,9 +1440,9 @@ call frame primitives etc.
                 "cell-int $0110")
 
   (check-equal? (vm-rega->string vm_write_rt_to_celly_ra_state)
-                "cell-pair-ptr $cc05")
+                (format "cell-pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
 
-  (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_ra_state #xcc05)
+  (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_ra_state (+ PAGE_AVAIL_0_W #x05))
                 "(cell-int $1001 . cell-int $0110)"))
 
 ;; input:  RT
@@ -1478,9 +1488,9 @@ call frame primitives etc.
                 "cell-int $0110")
 
   (check-equal? (vm-regt->string vm_write_ra_to_celly_rt_state)
-                "cell-pair-ptr $cc05")
+                (format "cell-pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
 
-  (check-equal? (vm-deref-cell-pair-w->string vm_write_ra_to_celly_rt_state #xcc05)
+  (check-equal? (vm-deref-cell-pair-w->string vm_write_ra_to_celly_rt_state (+ PAGE_AVAIL_0_W #x05))
                 "(cell-int $1001 . cell-int $0110)"))
 
 ;; input:  cell-stack (TOS)
@@ -1534,8 +1544,8 @@ call frame primitives etc.
 
   (check-equal? (vm-stack->strings vm-pop-fstos-to-celly-rt-state)
                 (list "stack holds 1 item"
-                      "cell-pair-ptr $cc05  (rt)"))
-  (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state #xcc05)
+                      (format  "cell-pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+  (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state (+ PAGE_AVAIL_0_W #x05))
                 "(cell-int $1fff . cell-int $0001)"))
 
 ;; input:  RA
@@ -1634,7 +1644,7 @@ call frame primitives etc.
   (check-equal? (vm-regt->string vm-write-rt-celly-to-rt-state)
                 "cell-int $1001")
 
-  (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rt-state #xcc05)
+  (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rt-state (+ PAGE_AVAIL_0_W #x05))
                 "(cell-int $1001 . cell-int $0110)"))
 
 ;; input:  Y - 0 (cell0), 2 (cell1)
@@ -1679,7 +1689,7 @@ call frame primitives etc.
   (check-equal? (vm-rega->string vm-write-rt-celly-to-ra-state)
                 "cell-int $1001")
 
-  (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-ra-state #xcc05)
+  (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-ra-state (+ PAGE_AVAIL_0_W #x05))
                 "(cell-int $1001 . cell-int $0110)"))
 
 ;; input:  call-frame stack, RT
@@ -2130,14 +2140,14 @@ call frame primitives etc.
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem A800-Afff is unavailable (C64 BASIC)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem B000-B7ff is unavailable (C64 BASIC)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem B800-Bfff is unavailable (C64 BASIC)
-          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem c000-c7ff is free
-          (byte $ff $ff $ff $ff  $ff $ff $01 $01)     ;; mem c800-cdff is free, ce00-ceff = other memory management registers + bitmap, cf00-cfff =  used by next free page mapping
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem c000-c7ff is unavailable (vm code)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem c800-cdff is unavailable (vm code, ce00-ceff = other memory management registers + bitmap, cf00-cfff =  used by next free page mapping          
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem D000-D7ff is unavailable (C64 I/O)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem D800-Dfff is unavailable (C64 I/O)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem E000-E7ff is unavailable (C64 KERNAL)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem E800-Efff is unavailable (C64 KERNAL)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem F000-F7ff is unavailable (C64 KERNAL)
-          (byte $01 $01 $01 $01  $01 $01 $01 $01)))  ;; mem F800-Ffff is unavailable (C64 KERNAL)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)))   ;; mem F800-Ffff is unavailable (C64 KERNAL)
 
 ;; initialize memory management (paging)
 ;; - setup 'next free page' information, basically initializing the whole page with zeros
@@ -2169,9 +2179,27 @@ call frame primitives etc.
            (STA ZP_CALL_FRAME_TOP_MARK)
            (JSR VM_ALLOC_CALL_FRAME_N)
 
-           ;; TODO: init locals space and pointers (2 pages, one for low bytes, one for high bytes ?one for ref count?)
+           ;; alloc locals
+           (LDX !$00)
+           (LDY !$00)
+           (JSR VM_ALLOC_CELL_STACK_PAGES)
+           (STX ZP_LOCALS_LB_PTR+1)
+           (STY ZP_LOCALS_HB_PTR+1)
+           (LDA !$02) ;; payload start for locals
+           (STA ZP_LOCALS_LB_PTR)
+           (STA ZP_LOCALS_HB_PTR)
 
-           ;; TODO: init cell eval stack and pointers (2 pages, one for low bytes, one for high bytes ?one for ref count?)
+           ;; alloc cell stack
+           (LDX !$00)
+           (LDY !$00)
+           (JSR VM_ALLOC_CELL_STACK_PAGES)
+           (STX ZP_CELL_STACK_LB_PTR+1)
+           (STY ZP_CELL_STACK_HB_PTR+1)
+           (LDA !$00) ;; stack pointers always contain 0 in lowbyte, TOS is used to point to top of element
+           (STA ZP_CELL_STACK_LB_PTR)
+           (STA ZP_CELL_STACK_HB_PTR)
+           (LDA !$02)
+           (STA ZP_CELL_STACK_TOS)
 
            ;; (LDA !$20)
            ;; (JSR VM_ALLOC_CALL_FRAME)
@@ -2190,148 +2218,149 @@ call frame primitives etc.
            (STX ZP_RT) ;; set RT to hold no value
            (RTS))))
 
-;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)
-;; offset content
-;; 00     #b1zzz zzzz page type + number of used slots
-;; 01     ref-count for cell at 02 (cell 0)
-;; 02..03 cell 0  (@2 = 8 = next free cell)
-;; 04     ref-count for cell at 08 (cell 1)
-;; ...
-;; 07     ref-count for cell at 08 (cell 4)
-;; 08..09 cell 1 (@08 = 0a = next free cell)
-;; ...
-;; 0e..0f cell 4 (@0e = 20 = next free cell
-;; 10    ref-count for cell at 20 (cell 5)
-;; ...
-;; 1f    ref-count for cell at 20 (cell 20)
-;; 20..21 cell 5 (@20 = 22 = next free cell)
-;; ...
-;; 3e..3f cell 20 (@3e = 80 = next free cell)
-;; 40..7e ref-count for cell at 80..fc (cell 21..83)
-;; 7f    unused
-;; 80..fd cell 21..83
-;; fe    unused
-;; ff    previous page of this type
-;;
-;; input:  none
-;; output: A = allocated page (of type cell page)
-;;         vm_free_cell_page is new head of the list
-;;         the page is initialized with each cell pointing to the next free cell on this page (0 marks the end)
-;; uses: ZP_TEMP, ZP_TEMP2
-(define VM_ALLOC_PAGE_FOR_CELLS
-  (list
-   (label VM_ALLOC_PAGE_FOR_CELLS)
-          (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A
+  ;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)
+  ;; offset content
+  ;; 00     #b1zzz zzzz page type + number of used slots
+  ;; 01     ref-count for cell at 02 (cell 0)
+  ;; 02..03 cell 0  (@2 = 8 = next free cell)
+  ;; 04     ref-count for cell at 08 (cell 1)
+  ;; ...
+  ;; 07     ref-count for cell at 08 (cell 4)
+  ;; 08..09 cell 1 (@08 = 0a = next free cell)
+  ;; ...
+  ;; 0e..0f cell 4 (@0e = 20 = next free cell
+  ;; 10    ref-count for cell at 20 (cell 5)
+  ;; ...
+  ;; 1f    ref-count for cell at 20 (cell 20)
+  ;; 20..21 cell 5 (@20 = 22 = next free cell)
+  ;; ...
+  ;; 3e..3f cell 20 (@3e = 80 = next free cell)
+  ;; 40..7e ref-count for cell at 80..fc (cell 21..83)
+  ;; 7f    unused
+  ;; 80..fd cell 21..83
+  ;; fe    unused
+  ;; ff    previous page of this type
+  ;;
+  ;; input:  none
+  ;; output: A = allocated page (of type cell page)
+  ;;         vm_free_cell_page is new head of the list
+  ;;         the page is initialized with each cell pointing to the next free cell on this page (0 marks the end)
+  ;; uses: ZP_TEMP, ZP_TEMP2
+  (define VM_ALLOC_PAGE_FOR_CELLS
+    (list
+     (label VM_ALLOC_PAGE_FOR_CELLS)
+     (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A
 
-          (STA ZP_TEMP+1)
-          (TAY)
-          (LDA !$02)
-          (STA VM_FIRST_FREE_SLOT_ON_PAGE,y) ;; set slot @02 as the first free slot
+     (STA ZP_TEMP+1)
+     (TAY)
+     (LDA !$02)
+     (STA VM_FIRST_FREE_SLOT_ON_PAGE,y) ;; set slot @02 as the first free slot
 
-          (LDA !$03)
-          (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3)
+     (LDA !$03)
+     (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3)
 
-          (LDA !$00)
-          (STA ZP_TEMP)
+     (LDA !$00)
+     (STA ZP_TEMP)
 
-          (LDY !$01)
-          (LDX !$01)
-          (STX LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (LDY !$01)
+     (LDX !$01)
+     (STX LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
 
-          ;; option: optimization: maybe clearing the whole page would be faster (and shorter) for setting all refcounts to 0?
-   (label LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (STA (ZP_TEMP),y) ;; refcount set to 0
-          (INY)
-          (DEX)
-          (BNE LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (ASL A)
-          (ASL A) ;; times 4
-          (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (TAX)
-          (TAY) ;;
-          (LDA !$00)
-          (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (BPL LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     ;; option: optimization: maybe clearing the whole page would be faster (and shorter) for setting all refcounts to 0?
+     (label LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (STA (ZP_TEMP),y) ;; refcount set to 0
+     (INY)
+     (DEX)
+     (BNE LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (ASL A)
+     (ASL A) ;; times 4
+     (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (TAX)
+     (TAY) ;;
+     (LDA !$00)
+     (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (BPL LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
 
-          ;; initialize the free list of the cells (first byte in a cell = offset to next free cell)
-          (LDA !$02)
-          (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3, but the first block is written separately)
+     ;; initialize the free list of the cells (first byte in a cell = offset to next free cell)
+     (LDA !$02)
+     (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3, but the first block is written separately)
 
-          ;; block 1
-          (LDY !$02)
-          (LDA !$08)
-          (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (STA (ZP_TEMP),y)
+     ;; block 1
+     (LDY !$02)
+     (LDA !$08)
+     (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (STA (ZP_TEMP),y)
 
-          ;; block 2
-          (TAY)
-          (LDX !$04)
-          (LDA !$0a)
-          (DEX) ;; one loop less
+     ;; block 2
+     (TAY)
+     (LDX !$04)
+     (LDA !$0a)
+     (DEX) ;; one loop less
 
-          ;; blocks and their numbers
-          ;; iterations offset next free (
-          ;; #01        02     <- 08
-          ;; #04        08..0f <- 0a.. last= 20   ->  # = prev offset*2, offset = prev offset*4
-          ;; #10        20..3f <- 22.. last= 80
-          ;; #40        80..7d <- 82.. last= 00
+     ;; blocks and their numbers
+     ;; iterations offset next free (
+     ;; #01        02     <- 08
+     ;; #04        08..0f <- 0a.. last= 20   ->  # = prev offset*2, offset = prev offset*4
+     ;; #10        20..3f <- 22.. last= 80
+     ;; #40        80..7d <- 82.. last= 00
 
-   (label LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
-          (STA (ZP_TEMP),y)
-          (TAY)
-          (CLC)
-          (ADC !$02)
-          (DEX)
-          (BNE LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
+     (label LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
+     (STA (ZP_TEMP),y)
+     (TAY)
+     (CLC)
+     (ADC !$02)
+     (DEX)
+     (BNE LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
 
-          ;; block n+1
-          ;; write last entry
-          (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (ASL A)
-          (TAX)
-          (ASL A)
-          (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (STA (ZP_TEMP),y)
-          (TAY)
-          (CLC)
-          (ADC !$02)
-          (DEX)
-          (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (BPL LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
+     ;; block n+1
+     ;; write last entry
+     (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (ASL A)
+     (TAX)
+     (ASL A)
+     (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (STA (ZP_TEMP),y)
+     (TAY)
+     (CLC)
+     (ADC !$02)
+     (DEX)
+     (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (BPL LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
 
-          ;; write last entry
-          (LDA !$00)
-          (LDY !$fc) ;; fc..fd is the last cell, fe..ff is unusable (since ff holds the previous page)
-          (STA (ZP_TEMP),y)
+     ;; write last entry
+     (LDA !$00)
+     (LDY !$fc) ;; fc..fd is the last cell, fe..ff is unusable (since ff holds the previous page)
+     (STA (ZP_TEMP),y)
 
-          (LDY !$ff)
-          (LDA VM_FREE_CELL_PAGE) ;; store last free cell page in $ff
-          (STA (ZP_TEMP),y)
+     (LDY !$ff)
+     (LDA VM_FREE_CELL_PAGE) ;; store last free cell page in $ff
+     (STA (ZP_TEMP),y)
 
-          ;; store page type in byte 0
-          (LDY !$00)
-          (LDA !$80)
-          (STA (ZP_TEMP),y)
+     ;; store page type in byte 0
+     (LDY !$00)
+     (LDA !$80)
+     (STA (ZP_TEMP),y)
 
-          (LDA ZP_TEMP+1) ;; page
-          (STA VM_FREE_CELL_PAGE) ;; store allocated page as new free cell page
+     (LDA ZP_TEMP+1) ;; page
+     (STA VM_FREE_CELL_PAGE) ;; store allocated page as new free cell page
 
-          (RTS)
+     (RTS)
 
-   (label LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (byte $00)
-   (label BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-          (byte $00)))
+     (label LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (byte $00)
+     (label BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (byte $00)))
 
 (module+ test #| vm_alloc_page__cell |#
   (define test-alloc-page--cell-code
     (list
             ;; fill page with cc
             (LDX !$00)
-            (LDA !$77)
+            (LDA !$77)            
      (label FILL_PAGE__TEST_ALLOC_PAGE__CELL)
-            (STA $cc00,x)
+            ;; (STA $9700,x)
+            (ast-opcode-cmd '() (list 157 0 PAGE_AVAIL_0))
             (DEX)
             (BNE FILL_PAGE__TEST_ALLOC_PAGE__CELL)
 
@@ -2341,7 +2370,7 @@ call frame primitives etc.
   (define test-alloc-page--cell-state-after
     (run-code-in-test test-alloc-page--cell-code))
 
-  (check-equal? (memory-list test-alloc-page--cell-state-after #xcc00 #xcc0f)
+  (check-equal? (memory-list test-alloc-page--cell-state-after PAGE_AVAIL_0_W (+ PAGE_AVAIL_0_W #x0f))
                 (list #x80
                       #x00       ;; ref count cell 0 (@2)
                       #x08 #x77  ;; cell0: next free @8
@@ -2354,36 +2383,105 @@ call frame primitives etc.
                       #x0e #x77  ;; cell3: next free @14
                       #x20 #x77  ;; cell4: next free @32
                       ))
-  (check-equal? (memory-list test-alloc-page--cell-state-after #xcc10 #xcc1f)
+  (check-equal? (memory-list test-alloc-page--cell-state-after (+ PAGE_AVAIL_0_W #x10) (+ PAGE_AVAIL_0_W #x1f))
                 (make-list #x10 #x0))
-  (check-equal? (memory-list test-alloc-page--cell-state-after #xcc20 #xcc27)
+  (check-equal? (memory-list test-alloc-page--cell-state-after (+ PAGE_AVAIL_0_W #x20) (+ PAGE_AVAIL_0_W #x27))
                 (list #x22 #x77  ;; cell5: next free @34
                       #x24 #x77  ;; cell6: next free @36
                       #x26 #x77  ;; cell7: next free @38
                       #x28 #x77  ;; cell8: next free @40
                       ))
-  (check-equal? (memory-list test-alloc-page--cell-state-after #xcc38 #xcc3f)
+  (check-equal? (memory-list test-alloc-page--cell-state-after (+ PAGE_AVAIL_0_W #x38) (+ PAGE_AVAIL_0_W #x3f))
                 (list #x3a #x77  ;; cell17: next free @58
                       #x3c #x77  ;; cell18: next free @60
                       #x3e #x77  ;; cell19: next free @62
                       #x80 #x77  ;; cell20: next free @128
                       ))
-  (check-equal? (memory-list test-alloc-page--cell-state-after #xcc40 #xcc7e)
+  (check-equal? (memory-list test-alloc-page--cell-state-after (+ PAGE_AVAIL_0_W #x40) (+ PAGE_AVAIL_0_W #x7e))
                 (make-list #x3f #x0)
                 "refcounts are all zero")
-  (check-equal? (memory-list test-alloc-page--cell-state-after #xcc80 #xcc87)
+  (check-equal? (memory-list test-alloc-page--cell-state-after (+ PAGE_AVAIL_0_W #x80) (+ PAGE_AVAIL_0_W #x87))
                 (list #x82 #x77  ;; cell21: next free @130
                       #x84 #x77  ;; cell22: next free @132
                       #x86 #x77  ;; cell23: next free @134
                       #x88 #x77  ;; cell24: next free @136
                       ))
-  (check-equal? (memory-list test-alloc-page--cell-state-after #xccf8 #xccff)
+  (check-equal? (memory-list test-alloc-page--cell-state-after (+ PAGE_AVAIL_0_W #xf8) (+ PAGE_AVAIL_0_W #xff))
                 (list #xfa #x77  ;; cell: next free @250
                       #xfc #x77  ;; cell: next free @252
                       #x00 #x77  ;; cell: next free 0
                       #x00       ;; unused
                       #x00       ;; pointer to previous page
                       )))
+
+
+  ;; cell stack page(s)
+  ;; offset  content
+  ;; ---------------
+  ;; 00      #b1111 1010
+  ;; 01      previous page (of the stack)
+  ;; 02..ff  payload (either lowbyte or highbyte of the cell)
+  ;;
+  ;; input:  X old lowbyte page
+  ;;         Y old highbyte page
+  ;; output: X new lowbyte page
+  ;;         Y new highbyte page
+  ;; uses:   A, X, Y
+  ;;         ZP_TEMP, ZP_TEMP+1 and ZP_TEMP3
+(define VM_ALLOC_CELL_STACK_PAGES
+  (list
+   (label VM_ALLOC_CELL_STACK_PAGES)
+         (STY ZP_TEMP3)                    ;; keep y (old highbyte page) in temp3
+      
+         ;; allocate highbyte page
+         (JSR VM_ALLOC_PAGE__PAGE_UNINIT)  ;; uses A and Y
+         (STA ZP_TEMP+1)
+         (LDA !$00)
+         (STA ZP_TEMP)
+         (LDY !$00)
+         (LDA !$1b)                        ;; PAGE TYPE cell-stack
+         (STA (ZP_TEMP),y)
+         (LDA ZP_TEMP3)                    ;; get old highbyte page
+         (INY)
+         (STA (ZP_TEMP),y)
+      
+         (LDA ZP_TEMP+1)                   ;; keep new highbyte page in temp3
+         (STA ZP_TEMP3)
+      
+         ;; allocate lowbyte page
+         (JSR VM_ALLOC_PAGE__PAGE_UNINIT)  ;; uses A and Y
+         (STA ZP_TEMP+1)
+         (LDY !$00)
+         (LDA !$1b)                        ;; PAGE TYPE cell-stack
+         (STA (ZP_TEMP),y)
+         (TXA)                             ;; get old lowbyte page
+         (INY)
+         (STA (ZP_TEMP),y)
+      
+         (LDX ZP_TEMP+1)                   ;; x = new lowbyte page
+         (LDY ZP_TEMP3)                    ;; y = new highbyte page
+         (RTS)))
+
+(module+ test #| alloc cell stack pages |#
+  (define alloc-cell-stack-pages-code
+    (list
+     (LDX !$03)
+     (LDY !$05)
+     (JSR VM_ALLOC_CELL_STACK_PAGES)
+     (STX ZP_RT)
+     (STY ZP_RT+1)))
+  (define alloc-cell-stack-pages-state
+    (run-code-in-test alloc-cell-stack-pages-code))
+
+  (check-equal? (memory-list alloc-cell-stack-pages-state ZP_RT (add1 ZP_RT))
+                (list PAGE_AVAIL_1 PAGE_AVAIL_0)
+                ".. is new low byte page, .. is new high byte page")
+  (check-equal? (memory-list alloc-cell-stack-pages-state PAGE_AVAIL_1_W (add1 PAGE_AVAIL_1_W))
+                (list #x1b #x03)
+                "new low byte page is initialized with cell-stack page type and 03")
+  (check-equal? (memory-list alloc-cell-stack-pages-state PAGE_AVAIL_0_W (add1 PAGE_AVAIL_0_W))
+                (list #x1b #x05)
+                "new low byte page is initialized with cell-stack page type and 05"))
 
 
   ;; cell-pair page layout  (new layout with cell-pair-ptr having bit0 always set and bit1 always unset!)
@@ -2495,33 +2593,33 @@ call frame primitives etc.
     (run-code-in-test vm-alloc-page-for-cell-pairs-code))
 
   (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state ZP_RT ZP_RT)
-                (list #xcc)
-                "page cc was allocated")
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state #xcc00 #xcc02)
+                (list PAGE_AVAIL_0)
+                "page .. was allocated")
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state PAGE_AVAIL_0_W (+ PAGE_AVAIL_0_W #x02))
                 (list #b01000000 #x00 #x00)
                 "page type is #b01000000 and refcounts cell0 and cell1 are both 0")
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state #xcc05 #xcc05)
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state (+ PAGE_AVAIL_0_W #x05) (+ PAGE_AVAIL_0_W #x05))
                 (list #x09)
                 "cell0 first byte points to next free (09)")
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state #xcc09 #xcc09)
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state (+ PAGE_AVAIL_0_W #x09) (+ PAGE_AVAIL_0_W #x09))
                 (list #x41)
                 "cell1 first byte points to next free (41)")
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state #xcc10 #xcc3e)
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state (+ PAGE_AVAIL_0_W #x10) (+ PAGE_AVAIL_0_W #x3e))
                 (make-list #x2f #x00)
                 "refcounts are all 0 (in block 2)")
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state #xcc41 #xcc41)
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state (+ PAGE_AVAIL_0_W #x41) (+ PAGE_AVAIL_0_W #x41))
                 (list #x45)
                 "cell1 first byte points to next free (45)")
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state #xcc45 #xcc45)
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state (+ PAGE_AVAIL_0_W #x45) (+ PAGE_AVAIL_0_W #x45))
                 (list #x49)
                 "cell2 first byte points to next free (49)")
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state #xccf5 #xccf5)
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state (+ PAGE_AVAIL_0_W #xf5) (+ PAGE_AVAIL_0_W #xf5))
                 (list #xf9)
                 "cell47 first byte points to next free (f9)")
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state #xccf9 #xccf9)
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state (+ PAGE_AVAIL_0_W #xf9) (+ PAGE_AVAIL_0_W #xf9))
                 (list #x00)
                 "last cell first byte points to 0 (no next free)")
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state #xccff #xccff)
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state (+ PAGE_AVAIL_0_W #xff) (+ PAGE_AVAIL_0_W #xff))
                 (list #xa0)
                 "last byte on page points to previous free page of cell-pairs"))
 
@@ -2591,9 +2689,9 @@ call frame primitives etc.
     (run-code-in-test vm-free-page-code))
 
   (check-equal? (vm-rega->string vm-free-page-state)
-                "cell-int $00cc")
+                (format "cell-int $00~a" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-regt->string vm-free-page-state)
-                "cell-int $00cb"))
+                (format "cell-int $00~a" (format-hex-byte PAGE_AVAIL_1))))
 
 ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 ;; this will not check the free cell-pair tree!
@@ -2633,31 +2731,32 @@ call frame primitives etc.
   (define vm-alloc-cell-pair-on-page-a-into-rt-state
     (run-code-in-test vm-alloc-cell-pair-on-page-a-into-rt-code))
 
-  (check-equal? (vm-page->strings vm-alloc-cell-pair-on-page-a-into-rt-state #xcc)
+  (check-equal? (vm-page->strings vm-alloc-cell-pair-on-page-a-into-rt-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     1"
                       "next free slot: $09"))
   (check-equal? (vm-regt->string vm-alloc-cell-pair-on-page-a-into-rt-state)
-                "cell-pair-ptr $cc05"))
+                (format "cell-pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0))))
 
 (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt 2 times|#
   (define vm-alloc-cell-pair-on-page-a-into-rt-code2
     (list
      (JSR ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
-     (LDA !$cc)
+     ;; (LDA !$cc)
+     (ast-opcode-cmd '() (list 169 PAGE_AVAIL_0))
      (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)))
 
   (define vm-alloc-cell-pair-on-page-a-into-rt-state2
     (run-code-in-test vm-alloc-cell-pair-on-page-a-into-rt-code2))
 
-  (check-equal? (vm-page->strings vm-alloc-cell-pair-on-page-a-into-rt-state2 #xcc)
+  (check-equal? (vm-page->strings vm-alloc-cell-pair-on-page-a-into-rt-state2 PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     2"
                       "next free slot: $41"))
   (check-equal? (vm-regt->string vm-alloc-cell-pair-on-page-a-into-rt-state2)
-                "cell-pair-ptr $cc09"))
+                (format "cell-pair-ptr $~a09" (format-hex-byte PAGE_AVAIL_0))))
 
 ;; find out what kind of cell zp_rt points to,
 ;; then call the right decrement refcounts function
@@ -2743,7 +2842,7 @@ call frame primitives etc.
   (define vm-refcount-decr-rt-state
     (run-code-in-test vm-refcount-decr-rt-code))
 
-  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-decr-rt-state #xcc05)
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-decr-rt-state (+ PAGE_AVAIL_0_W #x05))
                 2)
 
   (define vm-refcount-decr-rt-code2
@@ -2756,7 +2855,7 @@ call frame primitives etc.
   (define vm-refcount-decr-rt-state2
     (run-code-in-test vm-refcount-decr-rt-code2))
 
-  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-decr-rt-state2 #xcc05)
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-decr-rt-state2 (+ PAGE_AVAIL_0_W #x05))
                 1))
 
 ;; input: cell-pair ptr in ZP_RT
@@ -2803,8 +2902,8 @@ call frame primitives etc.
     (run-code-in-test vm-refcount-mmcr-rt--cell-pair-ptr-code))
 
   (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-pair-ptr-state)
-                "cell-pair-ptr $cc05")
-  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state #xcc05)
+                (format "cell-pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state (+ PAGE_AVAIL_0_W #x05))
                 2)
 
   (define vm-refcount-mmcr-rt--cell-pair-ptr-code2
@@ -2818,8 +2917,8 @@ call frame primitives etc.
     (run-code-in-test vm-refcount-mmcr-rt--cell-pair-ptr-code2))
 
   (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-pair-ptr-state2)
-                "cell-pair-ptr $cc05")
-  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state2 #xcc05)
+                (format "cell-pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state2 (+ PAGE_AVAIL_0_W #x05))
                 1))
 
 ;; input: cell ptr in ZP_RT
@@ -2864,8 +2963,8 @@ call frame primitives etc.
     (run-code-in-test vm-refcount-mmcr-rt--cell-ptr-code))
 
   (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-ptr-state)
-                "cell-ptr $cc02")
-  (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state #xcc02)
+                (format "cell-ptr $~a02" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state (+ PAGE_AVAIL_0_W #x02))
                 2)
 
   (define vm-refcount-mmcr-rt--cell-ptr-code2
@@ -2879,8 +2978,8 @@ call frame primitives etc.
     (run-code-in-test vm-refcount-mmcr-rt--cell-ptr-code2))
 
   (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-ptr-state2)
-                "cell-ptr $cc02")
-  (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state2 #xcc02)
+                (format "cell-ptr $~a02" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state2 (+ PAGE_AVAIL_0_W #x02))
                 1))
 
 ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
@@ -3002,8 +3101,8 @@ call frame primitives etc.
     (run-code-in-test test-alloc-cell-on-papge-a-code))
 
   (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after ZP_RT (add1 ZP_RT))
-                (list #x02 #xcc))
-  (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after #xcfcc #xcfcc)
+                (list #x02 PAGE_AVAIL_0))
+  (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after (+ #xcf00 PAGE_AVAIL_0) (+ #xcf00 PAGE_AVAIL_0))
                 (list #x08)))
 
 (module+ test #| vm_alloc_cell_on_page (using previously allocated page) |#
@@ -3018,13 +3117,13 @@ call frame primitives etc.
     (run-code-in-test test-alloc-cell-on-papge-b-code))
 
   (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after ZP_RT (add1 ZP_RT))
-                (list #x02 #xcb))
-  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after #xcfcc #xcfcc)
+                (list #x02 PAGE_AVAIL_1))
+  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after (+ #xcf00 PAGE_AVAIL_0) (+ #xcf00 PAGE_AVAIL_0))
                 (list #x02)
-                "cc00 has all cells left => first free is 02")
-  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after #xcfcb #xcfcb)
+                "..00 has all cells left => first free is 02")
+  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after (+ #xcf00 PAGE_AVAIL_1) (+ #xcf00 PAGE_AVAIL_1))
                 (list #x08)
-                "cb00 has one cell allocated => first free is 08"))
+                "..00 has one cell allocated => first free is 08"))
 
 ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
 ;; input:  none
@@ -3071,9 +3170,9 @@ call frame primitives etc.
                 "list of free cells is empty")
 
   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-state-after ZP_RT (add1 ZP_RT))
-                (list #x02 #xcc))
+                (list #x02 PAGE_AVAIL_0))
 
-  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-state-after #xcc)
+  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     1"
@@ -3094,9 +3193,9 @@ call frame primitives etc.
                 "list of free cells is empty")
 
   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twice-state-after ZP_RT (add1 ZP_RT))
-                (list #x08 #xcc))
+                (list #x08 PAGE_AVAIL_0))
 
-  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twice-state-after #xcc)
+  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twice-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     2"
@@ -3257,12 +3356,12 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-1-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-1-state)
-                "cell-pair-ptr $cc05")
+                (format "cell-pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
 
   (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-1-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
-                (list #xcc))
+                (list PAGE_AVAIL_0))
 
-  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-1-state #xcc)
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-1-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     1"
@@ -3278,12 +3377,12 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-2-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-2-state)
-                "cell-pair-ptr $cc09")
+                (format "cell-pair-ptr $~a09" (format-hex-byte PAGE_AVAIL_0)))
 
   (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-2-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
-                (list #xcc))
+                (list PAGE_AVAIL_0))
 
-  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-2-state #xcc)
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-2-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     2"
@@ -3306,12 +3405,12 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-3-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3-state)
-                "cell-pair-ptr $ccf9")
+                (format "cell-pair-ptr $~af9" (format-hex-byte PAGE_AVAIL_0)))
 
   (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
-                (list #xcc))
+                (list PAGE_AVAIL_0))
 
-  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3-state #xcc)
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     49"
@@ -3334,19 +3433,19 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-3a-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3a-state)
-                "cell-pair-ptr $cb05")
+                (format "cell-pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_1)))
 
   (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3a-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
-                (list #xcb))
+                (list PAGE_AVAIL_1))
 
-  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3a-state #xcc)
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3a-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     49"
                       "next free slot: $00"))
-  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3a-state #xcb)
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3a-state PAGE_AVAIL_1)
                 (list "page-type:      cell-pair page"
-                      "previous page:  $cc"
+                      (format "previous page:  $~a" (format-hex-byte PAGE_AVAIL_0))
                       "slots used:     1"
                       "next free slot: $09"))
 
@@ -3374,7 +3473,7 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-4-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-4-state)
-                "cell-pair-ptr $cc05"
+                (format "cell-pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0))
                 "cell pair at cc05 is reused (was head of tree)")
   (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-4-state)
                 "root is initial")
@@ -3411,23 +3510,23 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-5-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-5-state)
-                "cell-pair-ptr $cc09"
+                (format "cell-pair-ptr $~a09" (format-hex-byte PAGE_AVAIL_0))
                 "cellp-pair at cc09 is reused (was at head of tree)")
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state #xcc01 #xcc01)
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state (+ PAGE_AVAIL_0_W #x01) (+ PAGE_AVAIL_0_W #x01))
                 (list #x00)
                 "refcount of cc05 (is at cc01) is zero again!")
   (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-5-state)
-                "cell-pair $cc05 -> [ empty . cell-int $0001 ]")
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state #xcc05 #xcc08)
+                (format "cell-pair $~a05 -> [ empty . cell-int $0001 ]" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state (+ PAGE_AVAIL_0_W #x05) (+ PAGE_AVAIL_0_W #x08))
                 (list #x00 #x00 #x03 #x01)
                 "cell-pair at cc05 holds 00 in cell0 (no further elements in queue) and int 1 in cell1")
-  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-5-state #xcc)
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-5-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     2"
                       "next free slot: $41")
-                "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree")
-)
+                "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree"))
+
 
 ;; input cell ptr is in ZP_RT
 ;; ---
@@ -3496,15 +3595,15 @@ call frame primitives etc.
     (run-code-in-test vm-free-cell-ptr-in-rt-tailcall-code))
 
   (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
-                (list #x02 #xcc)
+                (list #x02 PAGE_AVAIL_0)
                 "cc02 is new head of the free list")
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state #xcc02 #xcc03)
-                (list #x08 #xcc)
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+                (list #x08 PAGE_AVAIL_0)
                 "cc02, which was freed, is referencing cc08 as next in the free list")
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state #xcc08 #xcc09)
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x09))
                 (list #x00 #x00)
                 "cc08, which was freed, is the tail of the free list")
-  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-tailcall-state #xcc)
+  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-tailcall-state PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     2"
@@ -3520,14 +3619,14 @@ call frame primitives etc.
     (run-code-in-test vm-free-cell-ptr-in-rt-code))
 
   (check-equal? (memory-list vm-free-cell-ptr-in-rt-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
-                (list #x02 #xcc)
+                (list #x02 PAGE_AVAIL_0)
                 "allocated cell is freed by adding it as head to the list of free cells")
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-state #xcc02 #xcc03)
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
                 (list #x00 #x00)
                 "the cell is set to 00 00, marking the end of the list of free cells")
 
-  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-state #xcc)
+  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-state PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     1"
@@ -3548,9 +3647,9 @@ call frame primitives etc.
                 "list of free cells is empty again")
 
   (check-equal? (memory-list vm-free-cell-ptr-in-rt-realloc-state ZP_RT (add1 ZP_RT))
-                (list #x02 #xcc))
+                (list #x02 PAGE_AVAIL_0))
 
-  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-realloc-state #xcc)
+  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-realloc-state PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     1"
@@ -3570,18 +3669,18 @@ call frame primitives etc.
     (run-code-in-test vm-free-cell-ptr-in-rt-2xfree-code))
 
   (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
-                (list #x02 #xcc)
+                (list #x02 PAGE_AVAIL_0)
                 "last allocated cell is freed by adding it as head to the list of free cells")
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state #xcc02 #xcc03)
-                (list #x08 #xcc)
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+                (list #x08 PAGE_AVAIL_0)
                 "the cell is set to $cc08, the next element in the free list")
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state #xcc08 #xcc08)
+  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x08))
                 (list #x00)
                 "the cell is set to 00, marking the end of the list of free cells")
 
-  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-2xfree-state #xcc)
+  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-2xfree-state PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     2"
@@ -3671,14 +3770,14 @@ call frame primitives etc.
   (define vm-free-cell-pair-ptr-in-rt-2-state
     (run-code-in-test vm-free-cell-pair-ptr-in-rt-2-code))
 
-  (check-equal? (vm-page->strings vm-free-cell-pair-ptr-in-rt-2-state #xcc)
+  (check-equal? (vm-page->strings vm-free-cell-pair-ptr-in-rt-2-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     1"
                       "next free slot: $09")
                 "page has still 1 slot in use (it was freed, but is now in free list, not completely unallocated)")
   (check-equal? (vm-cell-pair-free-tree->string vm-free-cell-pair-ptr-in-rt-2-state)
-                "cell-pair $cc05 -> [ empty . empty ]")
+                (format "cell-pair $~a05 -> [ empty . empty ]" (format-hex-byte PAGE_AVAIL_0)))
 
   (define vm-free-cell-pair-ptr-in-rt-3-code
     (list
@@ -3704,15 +3803,17 @@ call frame primitives etc.
   (define vm-free-cell-pair-ptr-in-rt-3-state
     (run-code-in-test vm-free-cell-pair-ptr-in-rt-3-code))
 
-  (check-equal? (vm-page->strings vm-free-cell-pair-ptr-in-rt-3-state #xcc)
+  (check-equal? (vm-page->strings vm-free-cell-pair-ptr-in-rt-3-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     2"
                       "next free slot: $41")
                 "page has still 2 slot in use (it was freed, but is now in free list, not completely unallocated)")
   (check-equal? (vm-cell-pair-free-tree->string vm-free-cell-pair-ptr-in-rt-3-state)
-                "cell-pair $cc05 -> [ cell-pair-ptr $cc09 . cell-int $0001 ]")
-  (check-equal? (vm-deref-cell-pair-w->string vm-free-cell-pair-ptr-in-rt-3-state #xcc09)
+                (format "cell-pair $~a05 -> [ cell-pair-ptr $~a09 . cell-int $0001 ]"
+                        (format-hex-byte PAGE_AVAIL_0)
+                        (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-deref-cell-pair-w->string vm-free-cell-pair-ptr-in-rt-3-state (+ PAGE_AVAIL_0_W #x09))
                 "(empty . cell-pair-ptr NIL)")
 
   (define vm-free-cell-pair-ptr-in-rt-4-code
@@ -3737,23 +3838,23 @@ call frame primitives etc.
   (define vm-free-cell-pair-ptr-in-rt-4-state
     (run-code-in-test vm-free-cell-pair-ptr-in-rt-4-code))
 
-  (check-equal? (vm-page->strings vm-free-cell-pair-ptr-in-rt-4-state #xcc)
+  (check-equal? (vm-page->strings vm-free-cell-pair-ptr-in-rt-4-state PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     1"
                       "next free slot: $08")
                 "page has still 1 slot in use (it was freed, but is now in free list, not completely unallocated)")
-  (check-equal? (vm-page->strings vm-free-cell-pair-ptr-in-rt-4-state #xcb)
+  (check-equal? (vm-page->strings vm-free-cell-pair-ptr-in-rt-4-state PAGE_AVAIL_1)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     1"
                       "next free slot: $09")
                 "page has still 1 slot in use (it was freed, but is now in free list, not completely unallocated)")
   (check-equal? (vm-cell-pair-free-tree->string vm-free-cell-pair-ptr-in-rt-4-state)
-                "cell-pair $cb05 -> [ empty . cell-int $0001 ]")
+                (format "cell-pair $~a05 -> [ empty . cell-int $0001 ]" (format-hex-byte PAGE_AVAIL_1)))
   (check-equal? (vm-deref-cell-w->string vm-free-cell-pair-ptr-in-rt-4-state VM_LIST_OF_FREE_CELLS)
-                "cell-ptr $cc02")
-  (check-equal? (vm-deref-cell-w->string vm-free-cell-pair-ptr-in-rt-4-state #xcc02)
+                (format "cell-ptr $~a02" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-deref-cell-w->string vm-free-cell-pair-ptr-in-rt-4-state (+ PAGE_AVAIL_0 #x02))
                 "empty"))
 
 ;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
@@ -3793,7 +3894,7 @@ call frame primitives etc.
   (define vm-add-cell-pair-in-rt-to-on-page-free-list-state
     (run-code-in-test vm-add-cell-pair-in-rt-to-on-page-free-list-code))
 
-  (check-equal? (vm-page->strings vm-add-cell-pair-in-rt-to-on-page-free-list-state #xcc)
+  (check-equal? (vm-page->strings vm-add-cell-pair-in-rt-to-on-page-free-list-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     0"
@@ -3835,13 +3936,13 @@ call frame primitives etc.
   (define use-case-2-a-state-after
     (run-code-in-test use-case-2-a-code))
 
-  (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after #xcc09)
-                "(cell-int $0000 . cell-pair-ptr $cc05)")
-  (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after #xcc05)
+  (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after (+ PAGE_AVAIL_0_W #x09))
+                (format "(cell-int $0000 . cell-pair-ptr $~a05)" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after (+ PAGE_AVAIL_0_W #x05))
                 "(cell-int $0001 . cell-pair-ptr NIL)")
   (check-equal? (vm-regt->string use-case-2-a-state-after)
-                "cell-pair-ptr $cc09")
-  (check-equal? (vm-page->strings use-case-2-a-state-after #xcc)
+                (format "cell-pair-ptr $~a09" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-page->strings use-case-2-a-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     2"
@@ -3859,8 +3960,10 @@ call frame primitives etc.
     (run-code-in-test use-case-2-b-code))
 
   (check-equal? (vm-cell-pair-free-tree->string use-case-2-b-state-after)
-                "cell-pair $cc09 -> [ empty . cell-pair-ptr $cc05 ]")
-  (check-equal? (vm-page->strings use-case-2-b-state-after #xcc)
+                (format "cell-pair $~a09 -> [ empty . cell-pair-ptr $~a05 ]"
+                        (format-hex-byte PAGE_AVAIL_0)
+                        (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-page->strings use-case-2-b-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     2"
@@ -3880,10 +3983,11 @@ call frame primitives etc.
     (run-code-in-test use-case-2-c-code))
 
   (check-equal? (vm-regt->string use-case-2-c-state-after)
-                "cell-pair-ptr $cc09")
+                (format "cell-pair-ptr $~a09"
+                        (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
-                "cell-pair $cc05 -> [ empty . cell-pair-ptr NIL ]")
-  (check-equal? (vm-page->strings use-case-2-c-state-after #xcc)
+                (format "cell-pair $~a05 -> [ empty . cell-pair-ptr NIL ]" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-page->strings use-case-2-c-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     2"
@@ -4098,7 +4202,7 @@ call frame primitives etc.
     (run-code-in-test push-call-frame-n-fit-page-prep-code))
 
   (check-equal? (vm-call-frame->strings push-call-frame-n-fit-page-prep-state)
-                (list "call-frame-ptr:   $cc03"
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
                       "locals-ptr:       $0504, $0604 (lb, hb)")
@@ -4115,13 +4219,13 @@ call frame primitives etc.
   (define push-call-frame-n-fit-page-state
     (run-code-in-test push-call-frame-n-fit-page-code))
 
-  (check-equal? (memory-list push-call-frame-n-fit-page-state #xcc03 #xcc06)
+  (check-equal? (memory-list push-call-frame-n-fit-page-state (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x06))
                 (list #x0b #x09
                       #x0a
                       #x04)
                 "the call frame is a fast frame (4 bytes) holding the full pc (2b), low byte of function-ptr and low byte of locals-ptr")
   (check-equal? (vm-call-frame->strings push-call-frame-n-fit-page-state)
-                (list "call-frame-ptr:   $cc03"
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
                       "locals-ptr:       $0504, $0604 (lb, hb)")
@@ -4144,18 +4248,18 @@ call frame primitives etc.
     (run-code-in-test push-call-frame-misfit-page-sl-frame-0-code))
 
   (check-equal? (vm-call-frame->strings push-call-frame-misfit-page-sl-frame-0-state)
-                (list "call-frame-ptr:   $cb03"
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_1))
                       "program-counter:  $0a0b"
                       "function-ptr:     $090a"
                       "locals-ptr:       $0504, $0604 (lb, hb)"))
   (check-equal? (peek push-call-frame-misfit-page-sl-frame-0-state ZP_CALL_FRAME_TOP_MARK)
                 #x0b
                 "top mark points to the first free byte on the call frame stack (past the one pushed)")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state #xcb03 #xcb04)
+  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state (+ PAGE_AVAIL_1_W #x03) (+ PAGE_AVAIL_1_W #x04))
                 (list #x0b #x0a)
                 "the call frame is a slow frame (8 bytes)
                  holding the full pc (2b)")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state #xcb06 #xcb0a)
+  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state (+ PAGE_AVAIL_1_W #x06) (+ PAGE_AVAIL_1_W #x0a))
                 (list #x04
                       #x05
                       #x06
@@ -4178,18 +4282,18 @@ call frame primitives etc.
     (run-code-in-test push-call-frame-misfit-page-sl-frame-1-code))
 
   (check-equal? (vm-call-frame->strings push-call-frame-misfit-page-sl-frame-1-state)
-                (list "call-frame-ptr:   $cb03"
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_1))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
                       "locals-ptr:       $05fe, $06fe (lb, hb)"))
   (check-equal? (peek push-call-frame-misfit-page-sl-frame-1-state ZP_CALL_FRAME_TOP_MARK)
                 #x0b
                 "top mark points to the first free byte on the call frame stack (past the one pushed)")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state #xcb03 #xcb04)
+  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state (+ PAGE_AVAIL_1_W #x03) (+ PAGE_AVAIL_1_W #x04))
                 (list #x0b #x09)
                 "the call frame is a slow frame (8 bytes)
                  holding the full pc $090b")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state #xcb06 #xcb0a)
+  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state (+ PAGE_AVAIL_1_W #x06) (+ PAGE_AVAIL_1_W #x0a))
                 (list #xfe
                       #x05
                       #x06
@@ -4345,7 +4449,7 @@ call frame primitives etc.
   (check-equal? (peek pop-call-frame-n-fast-cf-state ZP_CALL_FRAME_TOP_MARK)
                 #x07)
   (check-equal? (vm-call-frame->strings pop-call-frame-n-fast-cf-state)
-                (list "call-frame-ptr:   $cc03"
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
                       "locals-ptr:       $0504, $0604 (lb, hb)")
@@ -4386,7 +4490,7 @@ call frame primitives etc.
     (run-code-in-test pop-call-frame-n-slow-cf-code))
 
   (check-equal? (vm-call-frame->strings pop-call-frame-n-slow-cf-state)
-                (list "call-frame-ptr:   $ccfb"
+                (list (format "call-frame-ptr:   $~afb" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $0a0b"
                       "function-ptr:     $090a"
                       "locals-ptr:       $0504, $0604 (lb, hb)"))
@@ -5631,6 +5735,8 @@ call frame primitives etc.
 
           VM_ALLOC_PAGE_FOR_CELLS                            ;; allocate page and initialize for ref counted cells
           VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for ref counted cell-pairs
+          VM_ALLOC_CELL_STACK_PAGES                          ;; allocate page pair and initialize with previous references to previous cell stack pages
+
           ;; VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
           ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether
 
