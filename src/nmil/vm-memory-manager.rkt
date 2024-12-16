@@ -119,6 +119,7 @@ call frame primitives etc.
          vm-cell-at-nil?
          vm-stack->strings
          vm-cell-at->string
+         vm-cell->string
          vm-page->strings
          vm-regt->string
          vm-rega->string

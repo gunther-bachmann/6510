@@ -34,7 +34,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader org-for-code-seq))
 (require (only-in racket/list flatten take empty?))
 (require (only-in "../6510-utils.rkt" word->hex-string high-byte low-byte ))
-(require (only-in "../util.rkt" bytes->int))
+(require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek-word-at-address))
 (require (only-in "../ast/6510-relocator.rkt" label-string-offsets))
 
@@ -43,25 +43,25 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
-                  vm-call-frame->strings
                   vm-cell-at-nil?
                   vm-page->strings
                   vm-stack->strings
                   vm-regt->string
                   vm-cell-at->string
+                  vm-cell->string
                   vm-deref-cell-pair-w->string
-                  format-hex-byte
-                  format-hex-word
                   VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
 
                   ast-const-get
                   ZP_RT
                   ZP_VM_PC
-                  ZP_LOCALS_PTR
-                  ZP_PARAMS_PTR
+                  ZP_LOCALS_LB_PTR
+                  ZP_LOCALS_HB_PTR
                   ZP_CELL_STACK_TOS
-                  ZP_CELL_STACK_BASE_PTR))
+                  ZP_CELL_STACK_LB_PTR
+                  ZP_CELL_STACK_HB_PTR))
 (require (only-in "./vm-lists.rkt" vm-lists))
+(require (only-in "./vm-call-frame.rkt" vm-call-frame->strings))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -145,13 +145,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
             [(string=? command "pt") (begin (displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
             [(string=? command "s") (debugger--run d-state #t)]
             [(string=? command "pf") (begin (for-each displayln (vm-call-frame->strings c-state)) d-state)]
-            [(regexp-match? pa-regex command)
-             (match-let (((list _ num) (regexp-match pa-regex command)))
-               (begin (displayln (format "param #~a: ~a" num (vm-cell-at->string c-state (+ (* 2 (string->number num 16)) (peek-word-at-address c-state ZP_PARAMS_PTR)) #t)))
-                      d-state))]
+            ;; [(regexp-match? pa-regex command)
+            ;;  (match-let (((list _ num) (regexp-match pa-regex command)))
+            ;;    (begin (displayln (format "param #~a: ~a" num (vm-cell-at->string c-state (+ (* 2 (string->number num 16)) (peek-word-at-address c-state ZP_PARAMS_PTR)) #t)))
+            ;;           d-state))]
             [(regexp-match? pl-regex command)
              (match-let (((list _ num) (regexp-match pl-regex command)))
-               (begin (displayln (format "local #~a: ~a" num (vm-cell-at->string c-state (+ (* 2 (string->number num 16)) (peek-word-at-address c-state ZP_LOCALS_PTR)) #f)))
+               (begin (displayln (format "local #~a: ~a"
+                                         num
+                                         (vm-cell->string
+                                          (peek c-state
+                                                (+ (string->number num 16)
+                                                   (peek-word-at-address c-state ZP_LOCALS_LB_PTR)))
+                                          (peek c-state
+                                                (+ (string->number num 16)
+                                                   (peek-word-at-address c-state ZP_LOCALS_HB_PTR))))))
                       d-state))]
             [(string=? command "ruc")
              (debugger--push-breakpoint
@@ -280,7 +288,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (INY)
           (LDA (ZP_LOCALS_PTR),y)                       ;; load high byte from local
           (STA ZP_RT+1)                                 ;; -> RT
-          (JSR VM_POP_CALL_FRAME)                       ;; now pop the call frame
+          (JSR VM_POP_CALL_FRAME_N)                       ;; now pop the call frame
           (JMP VM_INTERPRETER)                          ;; and continue 
 
    (label RETURN_PARAM__BC_NIL_P_RET_PARAM_OR_LOCAL)
@@ -291,7 +299,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (INY)                                                                       
           (LDA (ZP_PARAMS_PTR),y)                       ;; load low byte from param   
           (STA ZP_RT)                                   ;; -> RT                        
-          (JSR VM_POP_CALL_FRAME)                       ;; now pop the call frame      
+          (JSR VM_POP_CALL_FRAME_N)                       ;; now pop the call frame      
           (JMP VM_INTERPRETER)                          ;; and continue
           ))
 
@@ -703,7 +711,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_RET)
           ;; restore from previous call frame, keep RT as result
-          (JSR VM_POP_CALL_FRAME)             ;; maybe move the respective code into here, (save jsr)
+          (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
           (JMP VM_INTERPRETER)))
 
 (module+ test #| bc_call |#
