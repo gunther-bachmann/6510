@@ -1,11 +1,14 @@
 #lang typed/racket/base
 
 (require/typed racket/struct (struct->list (Any -> (Listof Any))))
+(require (only-in racket/format ~a))
 
 (provide nested->list
          low-byte
          high-byte
-         bytes->int)
+         bytes->int
+         format-hex-word
+         format-hex-byte)
 
 ;; convert a deeply nested structure into a list that can easily be matched
 (define (nested->list (deeply-nested : Any)) : Any
@@ -57,3 +60,10 @@
                 #xA5)
   (check-equal? (bytes->int #xFE #xA5)
                 #xA5FE))
+
+;; format a hexadecimal byte
+(define (format-hex-byte (byte : Byte))
+  (~a (number->string byte 16) #:width 2 #:align 'right #:pad-string "0"))
+
+(define (format-hex-word (word : Integer))
+  (~a (number->string word 16) #:width 4 #:align 'right #:pad-string "0"))

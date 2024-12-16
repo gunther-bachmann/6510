@@ -12,7 +12,6 @@ call frame primitives etc.
 |#
 
 
-;; TODO: complete init memory management routine (initialize locals and eval stack)
 ;; TODO: rewrite local->RT/A, RT/A->local
 ;; TODO: rewrite RT/A op TOS->RT/A
 ;; TODO: write dup, swap
@@ -882,67 +881,50 @@ call frame primitives etc.
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in "../tools/6510-interpreter.rkt" peek-word-at-address cpu-state-clock-cycles))
 (require (only-in "../ast/6510-calc-opcode-facades.rkt" LDA-immediate))
-(require (only-in "../util.rkt" bytes->int))
+(require (only-in "../util.rkt" bytes->int low-byte high-byte format-hex-byte format-hex-word))
 (require (only-in racket/list flatten take empty? drop make-list))
 
 (module+ test
   (require "../6510-test-utils.rkt")
-  (require (only-in racket/port open-output-nowhere))
-  (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
-  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
-  (require (only-in "../ast/6510-command.rkt" ast-label-def-cmd? ast-label-def-cmd-label))
+  ;; (require (only-in racket/port open-output-nowhere))
+  ;; (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
+  ;; (require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
+  ;; (require (only-in "../ast/6510-command.rkt" ast-label-def-cmd? ast-label-def-cmd-label))
 
-  (define (remove-labels-for code labels-to-remove (result (list)))
-    (cond
-      [(empty? code) (reverse result)]
-      [else
-       (define cmd (car code))
-       (cond
-         [(ast-label-def-cmd? cmd)
-          (define label (ast-label-def-cmd-label cmd))
-          (if (findf (lambda (label-cmd) (string=? label (ast-label-def-cmd-label label-cmd))) labels-to-remove)
-              (remove-labels-for (cdr code) labels-to-remove result)
-              (remove-labels-for (cdr code) labels-to-remove (cons cmd result)))]
-         [else (remove-labels-for (cdr code) labels-to-remove (cons cmd result))])]))
+  (require (only-in "./vm-memory-manager-test-utils.rkt"
+                    run-code-in-test-on-code
+                    remove-labels-for
+                    ))
 
-  (define (wrap-code-for-test bc (mocked-code-list (list)))
+  (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
     (append (list (org #xc000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER))
             bc
             (list (BRK))
-            (remove-labels-for vm-memory-manager (filter (lambda (ast-cmd) (ast-label-def-cmd? ast-cmd)) mocked-code-list))))
+            (remove-labels-for complete-code (filter (lambda (ast-cmd) (ast-label-def-cmd? ast-cmd)) mocked-code-list))))
 
   (define (run-code-in-test bc (debug #f) #:mock (mocked-code-list (list)))
-    (define wrapped-code (wrap-code-for-test bc mocked-code-list))
-    (define state-before
-      (6510-load-multiple (initialize-cpu)
-                          (assemble-to-code-list wrapped-code)))
-    (if debug
-        (run-debugger-on state-before)
-        (parameterize ([current-output-port (open-output-nowhere)])
-          (run-interpreter-on state-before)))))
+    (run-code-in-test-on-code (wrap-code-for-test bc vm-memory-manager mocked-code-list) debug)))
 
 (module+ test #| after mem init |#
-  (define PAGE_AVAIL_0 #x97)
-  (define PAGE_AVAIL_0_W #x9700)
-  (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600))
+  (define PAGE_AVAIL_0 #x9c)
+  (define PAGE_AVAIL_0_W #x9c00)
+  (define PAGE_AVAIL_1 #x9b)
+  (define PAGE_AVAIL_1_W #x9b00))
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
 (provide vm-memory-manager
+         ast-const-get
+
          vm-cell-at-nil?
-         vm-call-frame->strings
          vm-stack->strings
          vm-cell-at->string
-         ast-const-get
          vm-page->strings
          vm-regt->string
          vm-rega->string
          vm-deref-cell-pair-w->string
          vm-deref-cell-pair->string
-         format-hex-byte
-         format-hex-word
 
          VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
 
@@ -953,237 +935,9 @@ call frame primitives etc.
          ZP_LOCALS_LB_PTR
          ZP_CELL_STACK_TOS
          ZP_CELL_STACK_LB_PTR
-         ZP_CELL_STACK_HB_PTR)
-
-;; write out the cells that are marked as reallocatable
-(define (vm-cell-pair-free-tree->string state)
-  (define cell-pair-root (peek-word-at-address state #xcec5))
-  (cond
-    [(= 0 cell-pair-root) "root is initial"]
-    [else
-     (format "cell-pair $~a -> [ ~a . ~a ]"
-             (format-hex-word cell-pair-root)
-             (vm-cell-w->string (peek-word-at-address state cell-pair-root))
-             (vm-cell-w->string (peek-word-at-address state (+ 2 cell-pair-root))))]))
-
-;; write call stack status
-(define (vm-call-frame->strings state)
-  (list (format "call-frame-ptr:   $~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME)))
-        (format "program-counter:  $~a" (format-hex-word (peek-word-at-address state ZP_VM_PC)))
-        (format "function-ptr:     $~a" (format-hex-word (peek-word-at-address state ZP_VM_FUNC_PTR)))
-        (format "locals-ptr:       $~a, $~a (lb, hb)" 
-                (format-hex-word (bytes->int (peek state ZP_LOCALS_LB_PTR) (peek state (add1 ZP_LOCALS_LB_PTR))))
-                (format-hex-word (bytes->int (peek state ZP_LOCALS_HB_PTR) (peek state (add1 ZP_LOCALS_HB_PTR)))))
-        ;; (format "cell-stack start: $~a,$~a"
-        ;;         (format-hex-word (bytes->int (peek state ZP_CELL_STACK_LB_PTR) (peek state (add1 ZP_CELL_STACK_LB_PTR))))
-        ;;         (format-hex-word (bytes->int (peek state ZP_CELL_STACK_HB_PTR) (peek state (add1 ZP_CELL_STACK_HB_PTR)))))
-        ;; (format "tos index:        $~a" (format-hex-byte (peek state ZP_CELL_STACK_TOS)))
-        ))
-
-;; write a status string of a memory page
-(define (vm-page->strings state page)
-  (define page-type-enc (peek state (bytes->int 0 page)))
-  (define next-free-slot (peek state (bytes->int page #xcf)))
-  (define page-type
-    (cond
-      [(= #x10 (bitwise-and #xf8 page-type-enc))
-       (format "m1 page p~a" (bitwise-and #x03 page-type-enc))]
-      [(= #x80 (bitwise-and #x80 page-type-enc))
-       "cell page"]
-      [(= #x40 (bitwise-and #xc0 page-type-enc))
-       "cell-pair page"]
-      [(= #x20 (bitwise-and #xe0 page-type-enc))
-       "s8 page"]
-      [(= #x18 page-type-enc)
-       "call-frame page"]
-      [else (raise-user-error "unknown page type")]))
-  (define previous-page
-    (cond
-      [(not (= 0 (bitwise-and #xc0 page-type-enc)))
-       (peek state (bytes->int #xff page))]
-      [else (peek state (bytes->int 1 page))]))
-  (define slots-used
-    (cond
-      [(= #x10 (bitwise-and #xf0 page-type-enc))
-       (peek state (bytes->int 2 page))]
-      [(= #x80 (bitwise-and #x80 page-type-enc))
-       (bitwise-and #x7f page-type-enc)]
-      [(= #x40 (bitwise-and #xc0 page-type-enc))
-       (bitwise-and #x3f page-type-enc)]
-      [(= #x20 (bitwise-and #xe0 page-type-enc))
-       (bitwise-and #x1f page-type-enc)]
-      [else 0]
-      ))
-  (cond [(= #x18 page-type-enc)
-         (list (format "page-type:      ~a" page-type)
-               ;; (format "previous page:  $~a" (format-hex-byte previous-page))
-               (format "stack frame:    $~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME))))]
-        [else
-         (list (format "page-type:      ~a" page-type)
-               (format "previous page:  $~a" (format-hex-byte previous-page))
-               (format "slots used:     ~a" slots-used)
-               (format "next free slot: $~a" (format-hex-byte next-free-slot)))]))
-
-;; produce strings describing the current cell-stack status
-(define (vm-stack->strings state)
-  (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
-  (cond
-    [(and (regt-empty? state) (> stack-tos-idx #xf0)) (list "stack is empty")]
-    [else
-     (define stack-ptr (peek-word-at-address state ZP_CELL_STACK_BASE_PTR))
-     (define stack (memory-list state stack-ptr (+ (bitwise-and #xff (+ 1 stack-tos-idx)) stack-ptr)))
-     (define stack-values (if (regt-empty? state) '()  stack))
-     (define stack-item-no (+ (/ (bitwise-and #xff (add1 stack-tos-idx)) 2)
-                              (if (regt-empty? state) 0 1)))
-     (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (cdr pair) (car pair))) (pairing stack-values))))
-     (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
-           (if (regt-empty? state)
-               "stack is empty"
-               (cons (format "~a  (rt)" (vm-regt->string state)) stack-strings)))]))
-
-;; make a list of adjacent pairs
-(define (pairing list (paired-list '()))
-  (if (< (length list) 2)
-      (reverse paired-list)
-      (pairing (drop list 2) (cons `(,(car list) . ,(cadr list)) paired-list))))
-
-(module+ test #| pairing |#
-  (check-equal? (pairing '())
-                '())
-  (check-equal? (pairing '(1 2 3 4 5 6))
-                '((1 . 2) (3 . 4) (5 . 6))))
-
-;; format a hexadecimal byte
-(define (format-hex-byte byte)
-  (~a (number->string byte 16) #:width 2 #:align 'right #:pad-string "0"))
-
-(define (format-hex-word word)
-  (~a (number->string word 16) #:width 4 #:align 'right #:pad-string "0"))
-
-(define (low-byte word) (bitwise-and #xff word))
-(define (high-byte word) (arithmetic-shift (bitwise-and #xff00 word) -8))
-
-;; write the car, cdr cell of the cell-pair at word in memory
-(define (vm-deref-cell-pair-w->string state word)
-  (define derefed-word-car (peek-word-at-address state word))
-  (define derefed-word-cdr (peek-word-at-address state (+ 2 word)))
-  (format "(~a . ~a)"
-          (vm-cell-w->string derefed-word-car)
-          (vm-cell-w->string derefed-word-cdr)))
-
-(define (vm-deref-cell-w->string state word)
-  (define derefed-word (peek-word-at-address state word))
-  (format "~a" (vm-cell-w->string derefed-word)))
-
-;; write the car, cdr cell of the cell-pair at low/high in memory
-(define (vm-deref-cell-pair->string state low high)  
-  (vm-deref-cell-pair-w->string state (bytes->int low high)))
-
-(define (vm-deref-cell->string state low high)
-  (vm-deref-cell-w->string state (bytes->int low high)))
-
-;; write decoded cell described by word
-(define (vm-cell-w->string word)
-  (vm-cell->string (low-byte word) (high-byte word)))
-
-;; write decoded cell described by low high
-;; the low 2 bits are used for pointer tagging
-(define (vm-cell->string low high)
-  (cond
-    [(= 0 low) "empty"]
-    [(= 0 (bitwise-and #x01 low)) (format "cell-ptr $~a~a"
-                                          (format-hex-byte high)
-                                          (format-hex-byte (bitwise-and #xfe low)))]
-    [(and (= 1 (bitwise-and #x03 low)) (= high 0)) "cell-pair-ptr NIL"]
-    [(= 1 (bitwise-and #x03 low)) (format "cell-pair-ptr $~a~a"
-                                          (format-hex-byte high)
-                                          (format-hex-byte (bitwise-and #xfd low)))]
-    [(= 3 (bitwise-and #x83 low)) (format "cell-int $~a~a"
-                                          (format-hex-byte (arithmetic-shift low -2))
-                                          (format-hex-byte high))]
-    [(= TAG_BYTE_BYTE_CELL (bitwise-and #xff low)) (format "cell-byte $~a" (format-hex-byte high))]
-    ;; TODO: a structure has a special value + follow bytes
-    ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
-    ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
-    [else "?"]))
-
-
-(define (regt-empty? state)
-  (= 0 (peek state ZP_RT)))
-
-(define (vm-cell-at-nil? state loc)
-  (= TAGGED_NIL (peek-word-at-address state loc)))
-
-(define (vm-cell-at->string state loc (rev-endian #f))
-  (vm-cell-w->string (peek-word-at-address state loc rev-endian)))
-
-;; write string of current RT
-(define (vm-regt->string state)
-  (vm-cell->string
-   (peek state ZP_RT)
-   (peek state (add1 ZP_RT))))
-
-;; get the actual refcount of a cell-pair-ptr
-(define (vm-refcount-cell-pair-ptr state cell-pair-ptr)
-  (define lowb  (low-byte cell-pair-ptr))
-  (define highb (high-byte cell-pair-ptr))
-  (define refc  (arithmetic-shift lowb -2))
-  (peek state (bytes->int refc highb) ))
-
-;; get the actual refcount of a cell-pair-ptr
-(define (vm-refcount-cell-ptr state cell-ptr)
-  (define lowb  (low-byte cell-ptr))
-  (define highb (high-byte cell-ptr))
-  (define refc  (arithmetic-shift lowb -1))
-  (peek state (bytes->int refc highb) ))
-
-;; write string of current RA
-(define (vm-rega->string state)
-  (vm-cell->string
-   (peek state ZP_RA)
-   (peek state (add1 ZP_RA))))
-
-(module+ test #| vm-cell->string |#
-  (check-equal? (vm-cell->string #xc4 #xc0)
-                "cell-ptr $c0c4")
-  (check-equal? (vm-cell->string #xc1 #xc0)
-                "cell-pair-ptr $c0c1")
-  (check-equal? (vm-cell->string #x7b #x15)
-                "cell-int $1e15")
-  (check-equal? (vm-cell->string TAG_BYTE_BYTE_CELL #x15)
-                "cell-byte $15"))
-
-(define (vm-cells->strings byte-list (result (list)))
-  (if (empty? byte-list)
-      (reverse result)
-      (vm-cells->strings
-       (cddr byte-list)
-       (cons (vm-cell->string (car byte-list)
-                             (cadr byte-list))
-             result))))
-
-(module+ test #| vm-cells->strings |#
-  (check-equal? (vm-cells->strings '(#x01 #x00 #x03 #x01))
-                '("cell-pair-ptr NIL" "cell-int $0001")))
-
-(module+ test #| vm-stack->string |#
-  (define test-vm_stack_to_string-a-code
-    (list (JSR VM_CELL_STACK_PUSH_NIL_R)
-          (JSR VM_CELL_STACK_PUSH_NIL_R)
-          (LDA !$01)
-          (LDX !$03)
-          (JSR VM_CELL_STACK_PUSH_INT_R)
-          (JSR VM_CELL_STACK_PUSH_NIL_R)))
-
-  (define test-vm_stack_to_string-a-state-after
-    (run-code-in-test test-vm_stack_to_string-a-code))
-
-  (check-equal? (vm-stack->strings test-vm_stack_to_string-a-state-after)
-                '("stack holds 4 items"
-                  "cell-pair-ptr NIL  (rt)"
-                  "cell-int $0301"
-                  "cell-pair-ptr NIL"
-                  "cell-pair-ptr NIL")))
+         ZP_CELL_STACK_HB_PTR
+         ZP_CALL_FRAME
+         ZP_CALL_FRAME_TOP_MARK)
 
 ;; constants that are used by the assembler code
 (define VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -1264,6 +1018,210 @@ call frame primitives etc.
 
 
 
+
+;; write out the cells that are marked as reallocatable
+(define (vm-cell-pair-free-tree->string state)
+  (define cell-pair-root (peek-word-at-address state #xcec5))
+  (cond
+    [(= 0 cell-pair-root) "root is initial"]
+    [else
+     (format "cell-pair $~a -> [ ~a . ~a ]"
+             (format-hex-word cell-pair-root)
+             (vm-cell-w->string (peek-word-at-address state cell-pair-root))
+             (vm-cell-w->string (peek-word-at-address state (+ 2 cell-pair-root))))]))
+
+;; write a status string of a memory page
+(define (vm-page->strings state page)
+  (define page-type-enc (peek state (bytes->int 0 page)))
+  (define next-free-slot (peek state (bytes->int page #xcf)))
+  (define page-type
+    (cond
+      [(= #x10 (bitwise-and #xf8 page-type-enc))
+       (format "m1 page p~a" (bitwise-and #x03 page-type-enc))]
+      [(= #x80 (bitwise-and #x80 page-type-enc))
+       "cell page"]
+      [(= #x40 (bitwise-and #xc0 page-type-enc))
+       "cell-pair page"]
+      [(= #x20 (bitwise-and #xe0 page-type-enc))
+       "s8 page"]
+      [(= #x18 page-type-enc)
+       "call-frame page"]
+      [else (raise-user-error "unknown page type")]))
+  (define previous-page
+    (cond
+      [(not (= 0 (bitwise-and #xc0 page-type-enc)))
+       (peek state (bytes->int #xff page))]
+      [else (peek state (bytes->int 1 page))]))
+  (define slots-used
+    (cond
+      [(= #x10 (bitwise-and #xf0 page-type-enc))
+       (peek state (bytes->int 2 page))]
+      [(= #x80 (bitwise-and #x80 page-type-enc))
+       (bitwise-and #x7f page-type-enc)]
+      [(= #x40 (bitwise-and #xc0 page-type-enc))
+       (bitwise-and #x3f page-type-enc)]
+      [(= #x20 (bitwise-and #xe0 page-type-enc))
+       (bitwise-and #x1f page-type-enc)]
+      [else 0]
+      ))
+  (cond [(= #x18 page-type-enc)
+         (list (format "page-type:      ~a" page-type)
+               (format "previous page:  $~a" (format-hex-byte previous-page)))]
+        [else
+         (list (format "page-type:      ~a" page-type)
+               (format "previous page:  $~a" (format-hex-byte previous-page))
+               (format "slots used:     ~a" slots-used)
+               (format "next free slot: $~a" (format-hex-byte next-free-slot)))]))
+
+;; produce strings describing the current cell-stack status
+(define (vm-stack->strings state)
+  (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
+  (cond
+    [(and (regt-empty? state) (> stack-tos-idx #xf0)) (list "stack is empty")]
+    [else
+     (define stack-ptr (peek-word-at-address state ZP_CELL_STACK_BASE_PTR))
+     (define stack (memory-list state stack-ptr (+ (bitwise-and #xff (+ 1 stack-tos-idx)) stack-ptr)))
+     (define stack-values (if (regt-empty? state) '()  stack))
+     (define stack-item-no (+ (/ (bitwise-and #xff (add1 stack-tos-idx)) 2)
+                              (if (regt-empty? state) 0 1)))
+     (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (cdr pair) (car pair))) (pairing stack-values))))
+     (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
+           (if (regt-empty? state)
+               "stack is empty"
+               (cons (format "~a  (rt)" (vm-regt->string state)) stack-strings)))]))
+
+;; make a list of adjacent pairs
+(define (pairing list (paired-list '()))
+  (if (< (length list) 2)
+      (reverse paired-list)
+      (pairing (drop list 2) (cons `(,(car list) . ,(cadr list)) paired-list))))
+
+(module+ test #| pairing |#
+  (check-equal? (pairing '())
+                '())
+  (check-equal? (pairing '(1 2 3 4 5 6))
+                '((1 . 2) (3 . 4) (5 . 6))))
+
+;; write the car, cdr cell of the cell-pair at word in memory
+(define (vm-deref-cell-pair-w->string state word)
+  (define derefed-word-car (peek-word-at-address state word))
+  (define derefed-word-cdr (peek-word-at-address state (+ 2 word)))
+  (format "(~a . ~a)"
+          (vm-cell-w->string derefed-word-car)
+          (vm-cell-w->string derefed-word-cdr)))
+
+(define (vm-deref-cell-w->string state word)
+  (define derefed-word (peek-word-at-address state word))
+  (format "~a" (vm-cell-w->string derefed-word)))
+
+;; write the car, cdr cell of the cell-pair at low/high in memory
+(define (vm-deref-cell-pair->string state low high)
+  (vm-deref-cell-pair-w->string state (bytes->int low high)))
+
+(define (vm-deref-cell->string state low high)
+  (vm-deref-cell-w->string state (bytes->int low high)))
+
+;; write decoded cell described by word
+(define (vm-cell-w->string word)
+  (vm-cell->string (low-byte word) (high-byte word)))
+
+;; write decoded cell described by low high
+;; the low 2 bits are used for pointer tagging
+(define (vm-cell->string low high)
+  (cond
+    [(= 0 low) "empty"]
+    [(= 0 (bitwise-and #x01 low)) (format "cell-ptr $~a~a"
+                                          (format-hex-byte high)
+                                          (format-hex-byte (bitwise-and #xfe low)))]
+    [(and (= 1 (bitwise-and #x03 low)) (= high 0)) "cell-pair-ptr NIL"]
+    [(= 1 (bitwise-and #x03 low)) (format "cell-pair-ptr $~a~a"
+                                          (format-hex-byte high)
+                                          (format-hex-byte (bitwise-and #xfd low)))]
+    [(= 3 (bitwise-and #x83 low)) (format "cell-int $~a~a"
+                                          (format-hex-byte (arithmetic-shift low -2))
+                                          (format-hex-byte high))]
+    [(= TAG_BYTE_BYTE_CELL (bitwise-and #xff low)) (format "cell-byte $~a" (format-hex-byte high))]
+    ;; TODO: a structure has a special value + follow bytes
+    ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
+    ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
+    [else "?"]))
+
+
+(define (regt-empty? state)
+  (= 0 (peek state ZP_RT)))
+
+(define (vm-cell-at-nil? state loc)
+  (= TAGGED_NIL (peek-word-at-address state loc)))
+
+(define (vm-cell-at->string state loc (rev-endian #f))
+  (vm-cell-w->string (peek-word-at-address state loc rev-endian)))
+
+;; write string of current RT
+(define (vm-regt->string state)
+  (vm-cell->string
+   (peek state ZP_RT)
+   (peek state (add1 ZP_RT))))
+
+;; get the actual refcount of a cell-pair-ptr
+(define (vm-refcount-cell-pair-ptr state cell-pair-ptr)
+  (define lowb  (low-byte cell-pair-ptr))
+  (define highb (high-byte cell-pair-ptr))
+  (define refc  (arithmetic-shift lowb -2))
+  (peek state (bytes->int refc highb) ))
+
+;; get the actual refcount of a cell-pair-ptr
+(define (vm-refcount-cell-ptr state cell-ptr)
+  (define lowb  (low-byte cell-ptr))
+  (define highb (high-byte cell-ptr))
+  (define refc  (arithmetic-shift lowb -1))
+  (peek state (bytes->int refc highb) ))
+
+;; write string of current RA
+(define (vm-rega->string state)
+  (vm-cell->string
+   (peek state ZP_RA)
+   (peek state (add1 ZP_RA))))
+
+(module+ test #| vm-cell->strings |#
+  (check-equal? (vm-cell->string #xc4 #xc0)
+                "cell-ptr $c0c4")
+  (check-equal? (vm-cell->string #xc1 #xc0)
+                "cell-pair-ptr $c0c1")
+  (check-equal? (vm-cell->string #x7b #x15)
+                "cell-int $1e15")
+  (check-equal? (vm-cell->string TAG_BYTE_BYTE_CELL #x15)
+                "cell-byte $15"))
+
+(define (vm-cells->strings byte-list (result (list)))
+  (if (empty? byte-list)
+      (reverse result)
+      (vm-cells->strings
+       (cddr byte-list)
+       (cons (vm-cell->string (car byte-list)
+                             (cadr byte-list))
+             result))))
+
+(module+ test #| vm-cells->strings |#
+  (check-equal? (vm-cells->strings '(#x01 #x00 #x03 #x01))
+                '("cell-pair-ptr NIL" "cell-int $0001")))
+
+(module+ test #| vm-stack->strings |#
+  (define test-vm_stack_to_string-a-code
+    (list (JSR VM_CELL_STACK_PUSH_NIL_R)
+          (JSR VM_CELL_STACK_PUSH_NIL_R)
+          (LDA !$01)
+          (LDX !$03)
+          (JSR VM_CELL_STACK_PUSH_INT_R)
+          (JSR VM_CELL_STACK_PUSH_NIL_R)))
+  (define test-vm_stack_to_string-a-state-after
+    (run-code-in-test test-vm_stack_to_string-a-code))
+
+  (check-equal? (vm-stack->strings test-vm_stack_to_string-a-state-after)
+                '("stack holds 4 items"
+                  "cell-pair-ptr NIL  (rt)"
+                  "cell-int $0301"
+                  "cell-pair-ptr NIL"
+                  "cell-pair-ptr NIL")))
 
 ;; input:  x  (00 = RT, 02 = RA)
 ;; output: Rx
@@ -2173,34 +2131,6 @@ call frame primitives etc.
            ;; initialize cell stack
            ;; TODO: adjust to new stack behaviour!
 
-           ;; init current call frame (initial) no popping
-           (LDA !$00)
-           (STA ZP_CALL_FRAME+1)         ;; this ensures that NO previous call frame page is heeded!
-           (STA ZP_CALL_FRAME_TOP_MARK)
-           (JSR VM_ALLOC_CALL_FRAME_N)
-
-           ;; alloc locals
-           (LDX !$00)
-           (LDY !$00)
-           (JSR VM_ALLOC_CELL_STACK_PAGES)
-           (STX ZP_LOCALS_LB_PTR+1)
-           (STY ZP_LOCALS_HB_PTR+1)
-           (LDA !$02) ;; payload start for locals
-           (STA ZP_LOCALS_LB_PTR)
-           (STA ZP_LOCALS_HB_PTR)
-
-           ;; alloc cell stack
-           (LDX !$00)
-           (LDY !$00)
-           (JSR VM_ALLOC_CELL_STACK_PAGES)
-           (STX ZP_CELL_STACK_LB_PTR+1)
-           (STY ZP_CELL_STACK_HB_PTR+1)
-           (LDA !$00) ;; stack pointers always contain 0 in lowbyte, TOS is used to point to top of element
-           (STA ZP_CELL_STACK_LB_PTR)
-           (STA ZP_CELL_STACK_HB_PTR)
-           (LDA !$02)
-           (STA ZP_CELL_STACK_TOS)
-
            ;; (LDA !$20)
            ;; (JSR VM_ALLOC_CALL_FRAME)
            ;; (TYA)
@@ -2249,54 +2179,54 @@ call frame primitives etc.
   (define VM_ALLOC_PAGE_FOR_CELLS
     (list
      (label VM_ALLOC_PAGE_FOR_CELLS)
-     (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A
+            (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A
 
-     (STA ZP_TEMP+1)
-     (TAY)
-     (LDA !$02)
-     (STA VM_FIRST_FREE_SLOT_ON_PAGE,y) ;; set slot @02 as the first free slot
+            (STA ZP_TEMP+1)
+            (TAY)
+            (LDA !$02)
+            (STA VM_FIRST_FREE_SLOT_ON_PAGE,y) ;; set slot @02 as the first free slot
 
-     (LDA !$03)
-     (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3)
+            (LDA !$03)
+            (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3)
 
-     (LDA !$00)
-     (STA ZP_TEMP)
+            (LDA !$00)
+            (STA ZP_TEMP)
 
-     (LDY !$01)
-     (LDX !$01)
-     (STX LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (LDY !$01)
+            (LDX !$01)
+            (STX LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
 
      ;; option: optimization: maybe clearing the whole page would be faster (and shorter) for setting all refcounts to 0?
      (label LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (STA (ZP_TEMP),y) ;; refcount set to 0
-     (INY)
-     (DEX)
-     (BNE LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (ASL A)
-     (ASL A) ;; times 4
-     (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (TAX)
-     (TAY) ;;
-     (LDA !$00)
-     (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (BPL LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (STA (ZP_TEMP),y) ;; refcount set to 0
+            (INY)
+            (DEX)
+            (BNE LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (ASL A)
+            (ASL A) ;; times 4
+            (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (TAX)
+            (TAY) ;;
+            (LDA !$00)
+            (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (BPL LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
 
-     ;; initialize the free list of the cells (first byte in a cell = offset to next free cell)
-     (LDA !$02)
-     (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3, but the first block is written separately)
+            ;; initialize the free list of the cells (first byte in a cell = offset to next free cell)
+            (LDA !$02)
+            (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3, but the first block is written separately)
 
-     ;; block 1
-     (LDY !$02)
-     (LDA !$08)
-     (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (STA (ZP_TEMP),y)
+            ;; block 1
+            (LDY !$02)
+            (LDA !$08)
+            (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (STA (ZP_TEMP),y)
 
-     ;; block 2
-     (TAY)
-     (LDX !$04)
-     (LDA !$0a)
-     (DEX) ;; one loop less
+            ;; block 2
+            (TAY)
+            (LDX !$04)
+            (LDA !$0a)
+            (DEX) ;; one loop less
 
      ;; blocks and their numbers
      ;; iterations offset next free (
@@ -2306,51 +2236,51 @@ call frame primitives etc.
      ;; #40        80..7d <- 82.. last= 00
 
      (label LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
-     (STA (ZP_TEMP),y)
-     (TAY)
-     (CLC)
-     (ADC !$02)
-     (DEX)
-     (BNE LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
+            (STA (ZP_TEMP),y)
+            (TAY)
+            (CLC)
+            (ADC !$02)
+            (DEX)
+            (BNE LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
 
-     ;; block n+1
-     ;; write last entry
-     (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (ASL A)
-     (TAX)
-     (ASL A)
-     (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (STA (ZP_TEMP),y)
-     (TAY)
-     (CLC)
-     (ADC !$02)
-     (DEX)
-     (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (BPL LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
+            ;; block n+1
+            ;; write last entry
+            (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (ASL A)
+            (TAX)
+            (ASL A)
+            (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (STA (ZP_TEMP),y)
+            (TAY)
+            (CLC)
+            (ADC !$02)
+            (DEX)
+            (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (BPL LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
 
-     ;; write last entry
-     (LDA !$00)
-     (LDY !$fc) ;; fc..fd is the last cell, fe..ff is unusable (since ff holds the previous page)
-     (STA (ZP_TEMP),y)
+            ;; write last entry
+            (LDA !$00)
+            (LDY !$fc) ;; fc..fd is the last cell, fe..ff is unusable (since ff holds the previous page)
+            (STA (ZP_TEMP),y)
 
-     (LDY !$ff)
-     (LDA VM_FREE_CELL_PAGE) ;; store last free cell page in $ff
-     (STA (ZP_TEMP),y)
+            (LDY !$ff)
+            (LDA VM_FREE_CELL_PAGE) ;; store last free cell page in $ff
+            (STA (ZP_TEMP),y)
 
-     ;; store page type in byte 0
-     (LDY !$00)
-     (LDA !$80)
-     (STA (ZP_TEMP),y)
+            ;; store page type in byte 0
+            (LDY !$00)
+            (LDA !$80)
+            (STA (ZP_TEMP),y)
 
-     (LDA ZP_TEMP+1) ;; page
-     (STA VM_FREE_CELL_PAGE) ;; store allocated page as new free cell page
+            (LDA ZP_TEMP+1) ;; page
+            (STA VM_FREE_CELL_PAGE) ;; store allocated page as new free cell page
 
-     (RTS)
+            (RTS)
 
      (label LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (byte $00)
+            (byte $00)
      (label BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-     (byte $00)))
+            (byte $00)))
 
 (module+ test #| vm_alloc_page__cell |#
   (define test-alloc-page--cell-code
@@ -3993,510 +3923,6 @@ call frame primitives etc.
                       "slots used:     2"
                       "next free slot: $41")))
 
-;; close the current call frame (set top mark)
-;; allocate a new call frame
-;; and initialize the page accordingly
-;; input:  ZP_CALL_FRAME
-;;         ZP_CALL_FRAME_TOP_MARK
-;; output: ZP_CALL_FRAME
-;;         ZP_CALL_FRAME_TOP_MARK
-;;         Y index for first byte available as payload (03) = ZP_CALL_FRAME_TOP_MARK
-(define VM_ALLOC_CALL_FRAME_N
-  (list
-   (label VM_ALLOC_CALL_FRAME_N)
-          (LDA ZP_CALL_FRAME+1)          
-          (BEQ NO_SAVE_OF_OLD_FRAME_DATA__)
-
-          ;; make sure to write old top mark to old call frame page (if existent)
-          (LDA !$00)
-          (STA ZP_CALL_FRAME)           ;; clear low byte if pointer
-          (LDY !$02)
-          (LDA ZP_CALL_FRAME_TOP_MARK)
-          (STA (ZP_CALL_FRAME),y)       ;; write (old) top mark at current page $02
-
-   (label NO_SAVE_OF_OLD_FRAME_DATA__)
-          ;; allocate completely new page
-          (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-
-          ;; init page as new call frame page (00 = page type, 01 = previous call frame page, 02 = top mark [uninitialized until full], rest uninitialized)
-          (LDX ZP_CALL_FRAME+1)         ;; keep old page in X
-          (STA ZP_CALL_FRAME+1)         ;; write new page into call-frame-ptr
-          (LDA !$18)
-          (LDY !$00)
-          (STA (ZP_CALL_FRAME),y)       ;; set page type to #b0001 1000  (call frame page)
-          (INY)
-          (TXA)
-          (STA (ZP_CALL_FRAME),y)       ;; set previous page to current page of call frame
-          (INY)
-          (INY)          
-          (STY ZP_CALL_FRAME_TOP_MARK)  ;; write top mark                    
-          (STY ZP_CALL_FRAME)           ;; write new 03 into lowbyte of call-frame
-          (RTS)))
-
-;; input:  X = number of locals to allocate on locals frame
-;;         zp_call_frame 
-;;         zp_call_frame_top_mark
-;;         zp_locals_lb_ptr
-;;         zp_cell_stack_tos
-;;         zp_func_ptr
-;;         zp_vm_pc
-;; output: zp_call_frame
-;;         zp_call_frame_top_mark
-;;         additionally: 
-;;            if call frame needs to be put on a new page:
-;;               $02 on old page holds top mark of old call stack
-;; NOTE: for a complete call,
-;;           1. push call frame (use this method)
-;;           2. allocated # of locals needed, set zp_vm_locals_lb_ptr and zp_vm_locals_hb_ptr
-;;           3. set zp_vm_pc to new function
-(define VM_PUSH_CALL_FRAME_N
-(flatten
-  (list
-   (label VM_PUSH_CALL_FRAME_N)
-          ;; check for fast frames
-          ;;    push: possible if - vm_pc and func-ptr share the same page
-          (LDA ZP_VM_PC+1)
-          (CMP ZP_VM_FUNC_PTR+1)
-          (BNE SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
-          ;; check not necessary, stack keeps its state, pushing, popping takes care of cell-stack ptr
-          ;; ;;                      - cell-stack does not overflow (has 16 entries reserve)
-          ;; (LDA ZP_CELL_STACK_TOS)
-          ;; (CMP !$F0)
-          ;; (BPL SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
-          ;;                      - locals do not overflow (has reserves to hold functions' need)
-          (TXA)                  ;; x = number of locals for this function
-          (CLC)
-          (ADC ZP_LOCALS_LB_PTR)
-          (BCS SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
-
-          ;; do fast frame 
-          ;; alloc for fast frame
-          ;; ensure call frame allows 4 additional bytes
-          (LDA ZP_CALL_FRAME_TOP_MARK)
-          (TAY)
-          (ADC !$04)
-          (BCC NO_NEW_PAGE_FOR_FAST_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
-
-          (JSR VM_ALLOC_CALL_FRAME_N)                  ;; now allocate a new page
-
-   (label NO_NEW_PAGE_FOR_FAST_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
-          (STY ZP_CALL_FRAME)                          ;; set lowbyte of call frame
-
-          ;; now copy fast frame values
-          (LDY !$00)
-          ;;                             |                 vm pc                   |
-          (LDA ZP_VM_PC)
-          (STA (ZP_CALL_FRAME),y)
-          (INY)
-          (LDA ZP_VM_PC+1)
-          (STA (ZP_CALL_FRAME),y)
-          (INY)
-          ;;                             | func-ptr low-byte | locals-ptr low byte |
-          (LDA ZP_VM_FUNC_PTR)
-          (STA (ZP_CALL_FRAME),y)
-          (INY)
-          (LDA ZP_LOCALS_LB_PTR)
-          (STA (ZP_CALL_FRAME),y)
-          (INY)
-
-          (TYA)
-          (CLC)
-          (ADC ZP_CALL_FRAME)
-          (STA ZP_CALL_FRAME_TOP_MARK)
-          (RTS)
-
-   (label SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
-          ;; alloc for slow frame
-          ;; ensure call frame allows 10 additional bytes
-          (LDA ZP_CALL_FRAME_TOP_MARK)
-          (TAY)
-          (CLC)
-          (ADC !$08) ;; length of slow call frame
-          (BCC NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
-
-          (JSR VM_ALLOC_CALL_FRAME_N)
-          (LDY ZP_CALL_FRAME_TOP_MARK) ;; first payload byte available on call frame page
-
-   (label NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
-          (STY ZP_CALL_FRAME)
-
-          ;; now copy slow frame values
-
-          ;; len of slow call frame
-          (LDA !$08)
-
-          ;; set new top mark
-          (CLC)
-          (ADC ZP_CALL_FRAME)
-          (STA ZP_CALL_FRAME_TOP_MARK)
-
-          (LDY !$07) ;; copy 08 bytes starting at 07
-
-          ;; set encoded page for function pointer
-          (SEC)
-          (LDA ZP_VM_PC+1)
-          (SBC ZP_VM_FUNC_PTR+1)
-          ;; (AND !$01)                    ;; make sure that only bit 0 can be set (should not happen, since function code may max spread over two pages!)
-          (STA (ZP_CALL_FRAME),y)         ;; y currently = 7
-          (DEY)
-
-          ;; copy rest of zero page values
-          ;; naiive copy: 7 * 5 bytes = 35 bytes, 7 * 9 cycles = 63 cycles
-          ;; looped copy: 10 bytes + 7 table bytes, 7 * 18 cycles = 126 cycles
-    (label LOOP_ZP_COPY__VM_PUSH_CALL_FRAME_N)
-          (LDX SLOW_STACK_ZP_LOCATIONS,y)
-          (LDA $00,x)
-          (STA (ZP_CALL_FRAME),y)        ;; y currently = 6..0  (7 bytes) copied
-          (DEY)
-          (BPL LOOP_ZP_COPY__VM_PUSH_CALL_FRAME_N)           ;; >= 0? -> loop
-
-          (RTS)
-
-   (label SLOW_STACK_ZP_LOCATIONS) ;; processed in reverse order, starting with offset+08 (used be vm_pop_call_frame_n, too!!)
-          (byte-ref ZP_VM_PC)               ;; |                   vm pc                     |
-          (byte-ref ZP_VM_PC+1)
-          (byte-ref ZP_TEMP)                ;; |   reserved           | locals ptr shared lb |
-          (byte-ref ZP_LOCALS_LB_PTR)
-          (byte-ref ZP_LOCALS_LB_PTR+1)     ;; | locals-lb page       | locals-hb-page       |
-          (byte-ref ZP_LOCALS_HB_PTR+1)
-          (byte-ref ZP_VM_FUNC_PTR)         ;; |  func-ptr  low       | $00 / $01            | func-ptr could be encoded into: lowbyte, highbyte =  vm_pc page + $00/$01 (of byte 4 in this stack) <- would save two bytes of stack size
-          )))
-
-(module+ test #| VM_PUSH_CALL_FRAME_N |#
-  (define push-call-frame-n-fit-page-prep-code
-    (list
-       ;; set complete vm state to values to be pushed
-      (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-      (STA ZP_CALL_FRAME+1)             ;;         zp_call_frame
-      (LDY !$03)
-      (STY ZP_CALL_FRAME)               ;; => zp_call_frame $cc03
-      (STY ZP_CALL_FRAME_TOP_MARK)      ;; => zp_call_frame_top_mark $03
-      (INY) ;;04
-      (STY ZP_LOCALS_LB_PTR)
-      (STY ZP_LOCALS_HB_PTR)            ;; same index (low enough for alloc to stay on page)
-      (INY) ;; 05
-      (STY ZP_LOCALS_LB_PTR+1)          ;; => zp_locals_lb_ptr $0504
-      (INY) ;; 06
-      (STY ZP_LOCALS_HB_PTR+1)          ;; => zp_locals_hb_ptr $0604
-      (INY) ;; 07
-      (STY ZP_CELL_STACK_LB_PTR)
-      (STY ZP_CELL_STACK_HB_PTR)        ;; same index (low enough for alloc to stay on page)
-      (INY) ;; 08
-      (STY ZP_CELL_STACK_LB_PTR+1)      ;; => zp_cell_stack_hb_ptr $0807
-      (INY) ;; 09
-      (STY ZP_CELL_STACK_HB_PTR+1)      ;; => zp_cell_stack_hb_ptr $0907
-      (STY ZP_CELL_STACK_TOS)
-      (STY ZP_VM_FUNC_PTR+1)            ;; share same page
-      (STY ZP_VM_PC+1)
-      (INY) ;; 0a
-      (STY ZP_VM_FUNC_PTR)              ;; => zp_vm_func_ptr $090a
-      (INY) ;; 0b
-      (STY ZP_VM_PC)                    ;; => zp_vm_pc $090b
-
-      ;;  ;; push the call frame
-      ;; (LDX !$04) ;; reserve 4 local cells
-      ;; (JSR VM_PUSH_CALL_FRAME_N)
-      ))
-
-  (define push-call-frame-n-fit-page-prep-state
-    (run-code-in-test push-call-frame-n-fit-page-prep-code))
-
-  (check-equal? (vm-call-frame->strings push-call-frame-n-fit-page-prep-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
-                      "program-counter:  $090b"
-                      "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)")
-                "prepared call-frame is initial (and empty)")
-  (check-equal? (peek push-call-frame-n-fit-page-prep-state ZP_CALL_FRAME_TOP_MARK)
-                #x03
-                "top mark points to the first free byte on the call frame stack")
-
-  (define push-call-frame-n-fit-page-code
-    (append push-call-frame-n-fit-page-prep-code
-             (list
-              (LDX !$04) ;; need 4 local cells
-              (JSR VM_PUSH_CALL_FRAME_N))))
-  (define push-call-frame-n-fit-page-state
-    (run-code-in-test push-call-frame-n-fit-page-code))
-
-  (check-equal? (memory-list push-call-frame-n-fit-page-state (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x06))
-                (list #x0b #x09
-                      #x0a
-                      #x04)
-                "the call frame is a fast frame (4 bytes) holding the full pc (2b), low byte of function-ptr and low byte of locals-ptr")
-  (check-equal? (vm-call-frame->strings push-call-frame-n-fit-page-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
-                      "program-counter:  $090b"
-                      "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)")
-                "call-frame is pointing to the current one push ")
-  (check-equal? (peek push-call-frame-n-fit-page-state ZP_CALL_FRAME_TOP_MARK)
-                #x07
-                "top mark points to the first free byte on the call frame stack (past the one pushed)")
-
-  (define push-call-frame-misfit-page-sl-frame-0-code
-    (append push-call-frame-n-fit-page-code ;; one frame has been pushed
-             (list
-              (LDA !$fb)
-              (STA ZP_CALL_FRAME_TOP_MARK) ;; set mark such that push will need new page
-              (JSR VM_PUSH_CALL_FRAME_N)
-              (INC ZP_VM_PC+1)             ;; pc on other page => need for slow call frame
-
-              (LDX !$03) ;; need 3 local cells
-              (JSR VM_PUSH_CALL_FRAME_N))))
-  (define push-call-frame-misfit-page-sl-frame-0-state
-    (run-code-in-test push-call-frame-misfit-page-sl-frame-0-code))
-
-  (check-equal? (vm-call-frame->strings push-call-frame-misfit-page-sl-frame-0-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_1))
-                      "program-counter:  $0a0b"
-                      "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)"))
-  (check-equal? (peek push-call-frame-misfit-page-sl-frame-0-state ZP_CALL_FRAME_TOP_MARK)
-                #x0b
-                "top mark points to the first free byte on the call frame stack (past the one pushed)")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state (+ PAGE_AVAIL_1_W #x03) (+ PAGE_AVAIL_1_W #x04))
-                (list #x0b #x0a)
-                "the call frame is a slow frame (8 bytes)
-                 holding the full pc (2b)")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state (+ PAGE_AVAIL_1_W #x06) (+ PAGE_AVAIL_1_W #x0a))
-                (list #x04
-                      #x05
-                      #x06
-                      #x0a
-                      #x01)
-                "the call frame is a slow frame (8 bytes)
-                 low byte of locals-ptr")
-
-  (define push-call-frame-misfit-page-sl-frame-1-code
-    (append push-call-frame-n-fit-page-code ;; one frame has been pushed
-             (list
-              (LDA !$fe)
-              (STA ZP_CALL_FRAME_TOP_MARK) ;; set mark such that push will need new page
-              (STA ZP_LOCALS_HB_PTR)
-              (STA ZP_LOCALS_LB_PTR)       ;; locals don't fit on same page => need for slow call frame
-
-              (LDX !$03) ;; need 3 local cells
-              (JSR VM_PUSH_CALL_FRAME_N))))
-  (define push-call-frame-misfit-page-sl-frame-1-state
-    (run-code-in-test push-call-frame-misfit-page-sl-frame-1-code))
-
-  (check-equal? (vm-call-frame->strings push-call-frame-misfit-page-sl-frame-1-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_1))
-                      "program-counter:  $090b"
-                      "function-ptr:     $090a"
-                      "locals-ptr:       $05fe, $06fe (lb, hb)"))
-  (check-equal? (peek push-call-frame-misfit-page-sl-frame-1-state ZP_CALL_FRAME_TOP_MARK)
-                #x0b
-                "top mark points to the first free byte on the call frame stack (past the one pushed)")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state (+ PAGE_AVAIL_1_W #x03) (+ PAGE_AVAIL_1_W #x04))
-                (list #x0b #x09)
-                "the call frame is a slow frame (8 bytes)
-                 holding the full pc $090b")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state (+ PAGE_AVAIL_1_W #x06) (+ PAGE_AVAIL_1_W #x0a))
-                (list #xfe
-                      #x05
-                      #x06
-                      #x0a
-                      #x00)
-                "the call frame is a slow frame (8 bytes)
-                 low byte of locals-ptr"))
-
-;; input:  zp_call_frame_top_mark
-;;         zp_call_frame
-;; output: zp_call_frame_top_mark
-;;         zp_call_frame
-;;         zp_vm_pc
-;;         zp_func_ptr
-;;         zp_locals_lb_ptr
-;;         zp_locals_hb_ptr
-;;         if slow frame is popped, additionally:
-;;            zp_cell_stack_lb_ptr
-;;            zp_cell_stack_hb_ptr
-;;            zp_cell_stack_tos
-;; NOTE: pop call completely restores the invocation frame
-;;       it does no GC check on locals!
-(define VM_POP_CALL_FRAME_N
-  (list
-   (label VM_POP_CALL_FRAME_N)
-          ;; current frame fast?
-          (SEC)
-          (LDA ZP_CALL_FRAME_TOP_MARK)
-          (SBC ZP_CALL_FRAME)
-          (CMP !$04)
-          (BNE SLOW_FRAME__VM_POP_CALL_FRAME_N)
-
-          ;; is a fast frame
-          (LDY !$00)
-          (LDA (ZP_CALL_FRAME),y)
-          (STA ZP_VM_PC)
-          (INY)
-          (LDA (ZP_CALL_FRAME),y)
-          (STA ZP_VM_PC+1)
-          (STA ZP_VM_FUNC_PTR+1)
-          (INY)
-          (LDA (ZP_CALL_FRAME),y)
-          (STA ZP_VM_FUNC_PTR)
-          (INY)
-          (LDA (ZP_CALL_FRAME),y)
-          (STA ZP_LOCALS_LB_PTR)
-          (STA ZP_LOCALS_HB_PTR)
-          (BCS RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; carry is always clear (since iny stays below 256)
-
-   (label SLOW_FRAME__VM_POP_CALL_FRAME_N)
-          (LDY !$06)                    ;; copy 7 bytes
-
-   (label LOOP_ZP_RESTORE__VM_POP_CALL_FRAME_N)
-          (LDX SLOW_STACK_ZP_LOCATIONS,y)
-          (LDA (ZP_CALL_FRAME),y)
-          (STA $00,x)
-          (DEY)
-          (BPL LOOP_ZP_RESTORE__VM_POP_CALL_FRAME_N)
-
-          ;; now get function pointer page from encoded byte
-          (LDY !$07)                    ;; index of last byte in slow call frame
-          (LDA ZP_VM_PC+1)              ;; was just set by copy loop before
-          (SEC)
-          (SBC (ZP_CALL_FRAME),y)       ;; contains either $00 or $01 since this is a slow frame
-          (STA ZP_VM_FUNC_PTR+1)           ;; page of func ptr is page of pc - $00/$01
-
-          ;; make sure the locals ptr are synchronized (only locals-lb-ptr is put on stack completely)
-          (LDA ZP_LOCALS_LB_PTR)           
-          (STA ZP_LOCALS_HB_PTR)          
-
-   (label RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)
-          (LDA ZP_CALL_FRAME)
-          (CMP !$03)
-          (BNE STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
-
-          (LDA ZP_CALL_FRAME+1) ;; get previous page
-          (TAX)                 ;; into X
-
-          ;; get previous call frame page
-          (LDA !$00)
-          (STA ZP_CALL_FRAME)
-          (LDY !$01)
-          (LDA (ZP_CALL_FRAME),y) ;; get previous page
-          (STA ZP_CALL_FRAME+1)
-          (INY)
-          (LDA (ZP_CALL_FRAME),y) ;; get top mark from previous page
-          (STA ZP_CALL_FRAME_TOP_MARK)
-          (STA ZP_CALL_FRAME) ;; do this so zp_call_frame behaves as if no page change took place (will be put into top mark eventually)
-
-          ;; free old call frame page!
-          (TXA)
-          (JSR VM_FREE_PAGE)
-
-          ;; continue with previous call frame recon
-
-   (label STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
-          ;; one one below top mark
-          (LDA ZP_CALL_FRAME+1)
-          (STA LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N+2)
-          (LDY ZP_CALL_FRAME_TOP_MARK)
-          (DEY)
-   (label LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N)
-          (LDA $c000,y)
-          (AND !$fe)
-          (BEQ PREVIOUS_IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N)
-
-          ;; previous is fast frame
-          (LDA !$04) ;; length of fast frame
-          (BNE SET_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
-
-   (label PREVIOUS_IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N)
-          (LDA !$08) ;; length of slow frame
-
-   (label SET_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
-          (STA ZP_TEMP)
-          (LDA ZP_CALL_FRAME)
-          (STA ZP_CALL_FRAME_TOP_MARK)
-          (SEC)
-          (SBC ZP_TEMP)                 ;; temp holds len of call frame (04 = fast, 0a = slow)
-          (STA ZP_CALL_FRAME)
-          (RTS)))
-
-(module+ test #| pop call frame n |#
-  (define pop-call-frame-n-fast-cf-code
-    (append push-call-frame-n-fit-page-prep-code
-            (list
-             (LDX !$04)
-             (JSR VM_PUSH_CALL_FRAME_N)
-             (LDX !$04)
-             (JSR VM_PUSH_CALL_FRAME_N)
-
-             ;; now change pc
-             (LDY !$91)
-             (STY ZP_VM_PC)
-             (INY)
-             (STY ZP_VM_PC+1)
-             (INY)
-             ;; function pointer
-             (STY ZP_VM_FUNC_PTR)
-             (INY)
-             (STY ZP_VM_FUNC_PTR+1)
-             (INY)
-             ;; and lowbyte of locals ptr
-             (STY ZP_LOCALS_LB_PTR)
-             (INY)
-             (STY ZP_LOCALS_HB_PTR)
-
-             (JSR VM_POP_CALL_FRAME_N)
-             )))
-  (define pop-call-frame-n-fast-cf-state
-    (run-code-in-test pop-call-frame-n-fast-cf-code))
-
-  (check-equal? (peek pop-call-frame-n-fast-cf-state ZP_CALL_FRAME_TOP_MARK)
-                #x07)
-  (check-equal? (vm-call-frame->strings pop-call-frame-n-fast-cf-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
-                      "program-counter:  $090b"
-                      "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)")
-                "restore original call-frame-ptr, 
-                         program counter,
-                         functions-ptr
-                         and locals pointer")
-
-  (define pop-call-frame-n-slow-cf-code
-    (append push-call-frame-misfit-page-sl-frame-0-code
-            ;; now the call frame is set to
-            ;; (list "call-frame-ptr:   $cb03"   <-- slow frame with 8 bytes 
-            ;;       "program-counter:  $0a0b"
-            ;;       "function-ptr:     $090a"
-            ;;       "locals-ptr:       $0504, $0604 (lb, hb)")
-            (list
-             ;; overwrite call-frame data: pc, function pointer and locals ptr (hi/lo bytes)
-             (LDY !$21)
-             (STY ZP_VM_PC)
-             (INY)
-             (STY ZP_VM_PC+1)
-             (INY)
-             (STY ZP_VM_FUNC_PTR)
-             (INY)
-             (STY ZP_VM_FUNC_PTR+1)
-             (INY)
-             (STY ZP_LOCALS_LB_PTR)
-             (STY ZP_LOCALS_HB_PTR)
-             (INY)
-             (STY ZP_LOCALS_LB_PTR+1)
-             (INY)
-             (STY ZP_LOCALS_HB_PTR+1)
-
-             ;; restore should restore all pointers of the pushed call-frame
-             (JSR VM_POP_CALL_FRAME_N)
-             )))
-  (define pop-call-frame-n-slow-cf-state
-    (run-code-in-test pop-call-frame-n-slow-cf-code))
-
-  (check-equal? (vm-call-frame->strings pop-call-frame-n-slow-cf-state)
-                (list (format "call-frame-ptr:   $~afb" (format-hex-byte PAGE_AVAIL_0))
-                      "program-counter:  $0a0b"
-                      "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)"))
-  (check-equal? (peek pop-call-frame-n-slow-cf-state ZP_CALL_FRAME_TOP_MARK)
-                #xff
-                "top mark points to the first free byte on the call frame stack (past the one pushed)"))
 
 ;; TODO: active m1 pages code and tests
 
@@ -5775,10 +5201,6 @@ call frame primitives etc.
           VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
 
           ;; ---------------------------------------- call frame
-          VM_ALLOC_CALL_FRAME_N                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
-          VM_PUSH_CALL_FRAME_N                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
-          VM_POP_CALL_FRAME_N                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
-
 
           ;; ---------------------------------------- misc
 
