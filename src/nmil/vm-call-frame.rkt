@@ -90,18 +90,6 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (STA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_HB_PTR)
 
-          ;; alloc cell stack
-          (LDX !$00)
-          (LDY !$00)
-          (JSR VM_ALLOC_CELL_STACK_PAGES)
-          (STX ZP_CELL_STACK_LB_PTR+1)
-          (STY ZP_CELL_STACK_HB_PTR+1)
-          (LDA !$00) ;; stack pointers always contain 0 in lowbyte, TOS is used to point to top of element
-          (STA ZP_CELL_STACK_LB_PTR)
-          (STA ZP_CELL_STACK_HB_PTR)
-          (LDA !$02)
-          (STA ZP_CELL_STACK_TOS)
-
           (RTS)))
 
 

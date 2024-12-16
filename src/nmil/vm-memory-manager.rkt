@@ -18,14 +18,15 @@ call frame primitives etc.
 
 ;; REMOVE when done
 
-(define ZP_CELL_STACK_BASE_PTR #x14)
+;; (define ZP_CELL_STACK_BASE_PTR #x14)
 (define ZP_PARAMS_PTR #x12)
 (define ZP_LOCALS_PTR #x10)
 (define OBSOLETE_DEFINITIONS
   (list
    (byte-const ZP_LOCALS_PTR          $10)
    (byte-const ZP_PARAMS_PTR          $12)
-   (byte-const ZP_CELL_STACK_BASE_PTR $14)))
+   ;; (byte-const ZP_CELL_STACK_BASE_PTR $14)
+   ))
 
 ;; naming: atomic cell
 ;;         cell                      :: 16 bit value (finest granular memory managed block)
@@ -61,15 +62,13 @@ call frame primitives etc.
 ;;         page                      :: 256 byte memory managed unit, holding slots
 ;;         slot                      :: a fixed size portion of memory on a page (sizes are 2=cell, 4=cell=pair, 8 ...), only one size per page is allowed
 ;;         ref count                 :: byte counting how many pointers to this value exist, there can be pointer to pointers
-;;         cell-stack aka eval-stack :: stack of cells. ZP_CELL_STACK_TOS holds the index, ZP_CELL_STACK_BASE_PTR holds the pointer to the base
-;;                                                                      [RT]         RT is the top of the stack (even though not on the stack memory wise)
-;;                                                                  n*2 [cell n]     
-;;                                                                      ...
-;;                                                                  02  [cell 1]
-;;                                      ZP_CELL_STACK_BASE_PTR -->  00  [cell 0]
-;;                                      Each cell on the stack is organzed as 00 highbyte, 01 lowbyte, 02 ... next entry <- highbyte comes first
-;;                                      ZP_CELL_STACK_TOS points to the lowbyte of the current element below RT (cell n), = n*2+1
-
+;;         cell-stack aka eval-stack :: stack of cells. ZP_​CELL_​STACK_​TOS holds the index (on current page), ZP_​CELL_​STACK_​LB_​PTR, ZP_​CELL_​STACK_​HB_​PTR holds the pointer to the low/high byte
+;;                                      [RT]         RT is the top of the stack (even though not on the stack memory wise)
+;;                                      [cell n lb] [cell n hb]
+;;                                             ...
+;;                                      [cell 1 lb] [cell 1 hb]
+;;                                      [cell 0 lb] [cell 0 hb]
+;;                                      ZP_​CELL_​STACK_​TOS points to the current element below RT (cell n)
 ;;         m1 page px       :: page for slots with ref count at -1 position, with profile x (0..3) <- defines size and payload start offset
 ;;         call-frame page  :: page for call-frames (stack organized, no ref counting etc.)
 ;;         cell-pairs page  :: page for cell-pairs, (lowbyte) lsr x 2 to get ref count position
@@ -107,10 +106,10 @@ call frame primitives etc.
     (run-code-in-test-on-code (wrap-code-for-test bc vm-memory-manager mocked-code-list) debug)))
 
 (module+ test #| after mem init |#
-  (define PAGE_AVAIL_0 #x9c)
-  (define PAGE_AVAIL_0_W #x9c00)
-  (define PAGE_AVAIL_1 #x9b)
-  (define PAGE_AVAIL_1_W #x9b00))
+  (define PAGE_AVAIL_0 #x9a)
+  (define PAGE_AVAIL_0_W #x9a00)
+  (define PAGE_AVAIL_1 #x99)
+  (define PAGE_AVAIL_1_W #x9900))
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator peek))
 
@@ -274,17 +273,18 @@ call frame primitives etc.
                (format "next free slot: $~a" (format-hex-byte next-free-slot)))]))
 
 ;; produce strings describing the current cell-stack status
-(define (vm-stack->strings state)
+(define (vm-stack->strings state (max-count 10))
   (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
+  (define stack-lb-page-start (peek-word-at-address state ZP_CELL_STACK_LB_PTR))
+  (define stack-hb-page-start (peek-word-at-address state ZP_CELL_STACK_HB_PTR))
   (cond
-    [(and (regt-empty? state) (> stack-tos-idx #xf0)) (list "stack is empty")]
+    [(and (regt-empty? state) (= stack-tos-idx #x01) (= 0 (peek state (add1 stack-lb-page-start)))) (list "stack is empty")]
     [else
-     (define stack-ptr (peek-word-at-address state ZP_CELL_STACK_BASE_PTR))
-     (define stack (memory-list state stack-ptr (+ (bitwise-and #xff (+ 1 stack-tos-idx)) stack-ptr)))
-     (define stack-values (if (regt-empty? state) '()  stack))
-     (define stack-item-no (+ (/ (bitwise-and #xff (add1 stack-tos-idx)) 2)
-                              (if (regt-empty? state) 0 1)))
-     (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (cdr pair) (car pair))) (pairing stack-values))))
+     (define values-count (min (- stack-tos-idx 1) max-count))
+     (define low-bytes (memory-list state (+ stack-lb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-lb-page-start stack-tos-idx)))
+     (define high-bytes (memory-list state (+ stack-hb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-hb-page-start stack-tos-idx)))
+     (define stack-item-no (+ values-count (if (regt-empty? state) 0 1)))
+     (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair))) (map cons low-bytes high-bytes))))
      (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
            (if (regt-empty? state)
                "stack is empty"
@@ -671,16 +671,14 @@ call frame primitives etc.
    (label VM_POP_FSTOS_TO_CELLy_RT__UCY)
           (STY ZP_TEMP)
           (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (LDA (ZP_CELL_STACK_LB_PTR),y)
           (TAX)
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)
+          (LDA (ZP_CELL_STACK_HB_PTR),y)
           (LDY ZP_TEMP)
           (STA (ZP_RT),y)
           (DEY)
           (TXA)
           (STA (ZP_RT),y)
-          (DEC ZP_CELL_STACK_TOS)
           (DEC ZP_CELL_STACK_TOS)
           (RTS)))
 
@@ -864,23 +862,23 @@ call frame primitives etc.
    ;; ----------------------------------------
    (label VM_CELL_STACK_JUST_PUSH_RT)
           (LDY ZP_CELL_STACK_TOS)
-
-          ;; check that stack pointer does not run out of bound (over the page)
-          (CPY !$fd) ;; marks the end of page, for pushes at least!
+          (INY)
           [BNE NO_ERROR__VM_CELL_STACK_JUST_PUSH_RT]
 
-          (BRK)
+   (label ALLOCATE_NEW_STACK_PAGE__VM_CELL_STACK_JUST_PUSH_RT)
+          (LDX ZP_CELL_STACK_LB_PTR+1)
+          (LDY ZP_CELL_STACK_HB_PTR+1)
+          (JSR VM_ALLOC_CELL_STACK_PAGES)
+          (STX ZP_CELL_STACK_LB_PTR+1)
+          (STY ZP_CELL_STACK_HB_PTR+1)
+          (LDY !$02)                          ;; new tos starts 
 
    (label NO_ERROR__VM_CELL_STACK_JUST_PUSH_RT)
           (LDA ZP_RT+1)
-          (INY)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)       ;; write high byte! 
-
+          (STA (ZP_CELL_STACK_HB_PTR),y)      ;; write high byte! 
           (LDA ZP_RT)
-          (INY)
-          (STA (ZP_CELL_STACK_BASE_PTR),y)      ;; write low byte 
-
-          (STY ZP_CELL_STACK_TOS)      ;; set new tos
+          (STA (ZP_CELL_STACK_LB_PTR),y)      ;; write low byte 
+          (STY ZP_CELL_STACK_TOS)             ;; set new tos
 
    (label DONE__VM_CELL_STACK_JUST_PUSH_RT)
           (RTS)))
@@ -1090,9 +1088,10 @@ call frame primitives etc.
 
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
           (LDY ZP_CELL_STACK_TOS)
-          (BMI WRITE_00_TO_RT) ;; which effectively clears the RT
+          (CPY !$01) ;; stack empty?
+          (BEQ WRITE_00_TO_RT) ;; which effectively clears the RT
           ;; pop value from call-frame stack into RT!
-          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; tagged low byte
+          (LDA (ZP_CELL_STACK_LB_PTR),y) ;; tagged low byte
           (STA ZP_RT)
 
 
@@ -1101,9 +1100,7 @@ call frame primitives etc.
           ;; (BEQ WRITE_TOS_TO_RT__VM_CELL_STACK_POP_R)
           ;; (TXA)
 
-          ;; do pointer checks now
-          (DEY)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; high byte
+          (LDA (ZP_CELL_STACK_HB_PTR),y) ;; high byte
           (STA ZP_RT+1) 
           (DEY)
           (STY ZP_CELL_STACK_TOS)
@@ -1328,22 +1325,17 @@ call frame primitives etc.
            (INY)
            (BNE VM_INITIALIZE_MEMORY_MANAGER__LOOP)
 
-           ;; initialize cell stack
-           ;; TODO: adjust to new stack behaviour!
+           ;; alloc cell stack
+           (LDX !$00)
+           (LDY !$00)
+           (STX ZP_CELL_STACK_LB_PTR)
+           (STX ZP_CELL_STACK_HB_PTR)
+           (JSR VM_ALLOC_CELL_STACK_PAGES)
+           (STX ZP_CELL_STACK_LB_PTR+1)
+           (STY ZP_CELL_STACK_HB_PTR+1)
+           (LDA !$01)
+           (STA ZP_CELL_STACK_TOS)
 
-           ;; (LDA !$20)
-           ;; (JSR VM_ALLOC_CALL_FRAME)
-           ;; (TYA)
-           ;; (CLC)
-           ;; (ADC !$0a)
-           ;; (STA ZP_LOCALS_PTR)
-           ;; (STA ZP_CELL_STACK_BASE_PTR)
-           ;; (STX ZP_PARAMS_PTR+1)
-           ;; (STX ZP_LOCALS_PTR+1)
-           ;; (STX ZP_CELL_STACK_BASE_PTR+1)
-
-           (LDX !$ff)          ;; negative and iny will produce 0
-           (STX ZP_CELL_STACK_TOS)
            (LDX !$00)
            (STX ZP_RT) ;; set RT to hold no value
            (RTS))))
