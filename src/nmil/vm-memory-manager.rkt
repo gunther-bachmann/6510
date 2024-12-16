@@ -27,504 +27,6 @@ call frame primitives etc.
    (byte-const ZP_PARAMS_PTR          $12)
    (byte-const ZP_CELL_STACK_BASE_PTR $14)))
 
-;;;;;;;;;;;;;;;;
-;; DECISION ;;
-;;;;;;;;;;;;;;;;
-;; ZP_VM_PC                    *  ptr to the current byte code
-;; ZP_VM_FUNC_PTR                 *  ptr to the current running function
-;; ZP_CELL_STACK_LB_PTR           ptr to the low byte of the cell stack (cell-eval-stack is spread over two pages) [the lb of this ptr itself is always 0]
-;; ZP_CELL_STACK_HB_PTR           ptr to the high byte of the cell stack [the lb of this ptr itself is always 0]
-;; ZP_LOCALS_LB_PTR            *  ptr to the low bytes of the locals of the currently running function [lowbyte of the ptr itself is equal to the highbytes one]
-;; ZP_LOCALS_HB_PTR            *  ptr to the high bytes of the locals of the currently running function [lowbyte of the ptr itself is equal to the lowbytes one]
-;; ZP_CELL_STACK_TOP              index to the top element on the cell stack
-
-;; ZP_CALL_FRAME                  pointer to start of current call frame 
-;; ZP_CALL_FRAME_TOP_MARK         index to byte behind current call frame (byte) (is stored into page at $02, when page is full)
-
-;; fast stack call frame (4b): allowed for calls w/o overflows (neither stack, nor local overflow nor function running over page boundary)
-;;
-;;    |                  vm pc                  | <-- call-frame-ptr
-;;    | func-ptr low-byte | locals-ptr low byte |   ;; locals-ptr low byte must be != $00/$01
-;;                                                
-;;    push: possible if - vm_pc and func-ptr share the same page
-;;                      - cell-stack does not overflow (has 16 entries reserve)
-;;                      - locals do not overflow (has reserves to hold functions' need)
-;;    pop: if (call-frame-tr + 3) != $00 (or $01), its a a fast frame
-;;
-;; slow stack call frame (10b): allowed for any call (including page overflows: stack, locals allocation or function running over page boundary)
-;;
-;;    |                   vm pc                     | <-- call-frame-ptr
-;;    |     (reserved)       | locals ptr shared lb |  
-;;    | locals-lb page       | locals-hb-page       |
-;;    |  func-ptr  low       | $00 / $01            | func-ptr could be encoded into: lowbyte, highbyte =  vm_pc page + $00/$01 (of byte 4 in this stack) <- would save two bytes of stack size
-;;
-;;    NOTE: if func-ptr page would be copied into (reserved), additional encoding/decoding into last byte could be removed, saving code bytes and complexity
-;;          reserved byte could be used for somthing else, though => remove later?
-;;          last byte must be either $00 or $01 to identify frame type!
-;;
-;;    NOTE:  | cell-stack-lb page   | cell-stack-hb-page   | (copying the cell stack should not be necessary, the resulting stack should be cleaned up by the called method, known the # of parameters to actually remove etc.)
-;;           cell-stack-tos  (copying not necessayr!)
-;;                                                
-;;    push: all relevant data
-;;    pop: if (call-frame-ptr + 9) == $00(or $01)), its a a slow frame
-;;         in a slow frame, high byte of func-ptr is high byte of vm_pc - byte at 9 (either 00 or 01)
-;;
-;; function descriptor holds only # of locals needed (parameter number is meta data, that is not needed for interpretation)
-;; function descriptor:
-;;    00 : #of locals
-;;    01 : start of byte code  (defaults offset?)
-;;    ...
-;;    meta-data byte-code-len
-;;              str-len
-;;              function name string
-;;
-;; obsolete byte codes:
-;;   any ...to_param
-;;       ...from_param
-;;
-;; new byte codes:
-;;   write_to_local#
-;;
-;; locals are stored on a stack (single page)
-;;    00: page type
-;;    01: previous page
-;;    02: low byte cell 0
-;;    03: high byte cell 0
-;;    ...
-;; cell-stack is organized as stack (page pair)
-;;    00: page type           00: page type
-;;    01: previous lb page    01: previous hb page
-;;    02: lowbyte cell 0      02: high byte cell 0
-;;    ...
-
-
-;; IDEA: keep only parameters and the cell-eval-stack on the stack spread over two pages to make push and pop fast
-;;       => zp_cell_stack_lb_ptr, zp_cell_stack_hb_ptr must be held (2 bytes each)
-;;          the parameters may as well be on the cell-stack when entering the function and form the start of the stack for function execution
-;;       all else (vm_pc, func_ptr, locals_xb_ptr, cell_stack_xb_ptr) go into a separate stack to share page and make storing fast.
-
-;;       locals are held in own dedicated stack (no fast pushing/popping necessary, but stacking during function call)
-;;
-;;       fast stack call frame (size: 4b)
-;;         pc (2b), func-ptr (1b, shares hb with pc), locals-ptr (1b <- no page change), cell-stack-base-ptr is kept
-;;
-;;         cell-stack-base-ptr may change on function entry ->
-;;
-;;       slow stack call frame (7+1)
-;;         pc (2b), func-ptr (1+1b low byte + encoded page byte), locals-ptr (3b), 1 reserved (currently)
-;;
-;;       call frame could be unified to 6 byte usage (pc 2, func 1(+1 encoded into locals-lb), locals 2+1)
-;;         => copy 2 bytes more than fast frame (takes 20 cycles more), detection takes 14 cycles, still feasable to have slow and fast frames
-;;
-;;       fast/slow detection push
-;;         - func-page = pc-page
-;;         - locals fit on same page in locals stack (lowbyte+2*n*locals < 256)
-;;         - cell-stack-tos < 240 (enough space to stay on page)
-;;
-;;       fast/slow detection pop
-;;         (e.g. local stack holds byte for fast/slow call frame detection)
-;;         (use the 10th byte in slow stack to mark it thus (eg 0|255) depending on what is impossible to be valid for slow stack values)
-
-
-;; WANT: fast call stack
-;;       measures:
-;;         - less bytes to copy
-;;         - reuse as much as possible
-;;       current status:
-;;         the following values are copied (constructed)
-;;         ZP_VM_PC                  $de ;; program counter (ptr to currently executing byte code)
-;;         ZP_VM_FUNC_PTR            $e0 ;; pointer to the currently running function
-;;         ZP_PARAMS_PTR             $e2 ;; pointer to first parameter in call-frame
-;;         ZP_LOCALS_PTR             $e4 ;; pointer to first local in call-frame
-;;         ZP_CELL_STACK_BASE_PTR    $e6 ;; e6..e7 (pointer to the base of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
-;;
-;;         ZP_CALL_FRAME             $f1
-;;
-;;
-;;
-;;         Stack (growing downwards)       Current ZP pointer settings      
-;;         
-;;         |  param - 0            |  <-- params ptr
-;;         |  . . .                |
-;;         |  param - n            |
-;;         |-----------------------|  
-;;       * |         pc            |  <-- call frame 
-;;         |-----------------------|
-;;       * |       func ptr        |  (pc and func-ptr share high byte, if functions do not run over multiple pages)
-;;         |-----------------------|
-;;       * |      params ptr       |  (params high byte should be the same as this page, if call frame is allocated on same page)
-;;         |-----------------------|
-;;       * |      locals ptr       |  (locals high byte should be the same as this page, if call frame is allocated on same page)
-;;         |-----------------------|
-;;       * |  cell stack base ptr  |  (definitely same high byte as params ptr!)
-;;         |-----------------------|
-;;         |  local - 0            | <-- locals ptr = call frame + $0a (call frame is calculated from locals-ptr on return)
-;;         |  . . .                |
-;;         |  local - n            |
-;;         |-----------------------|
-;;         |                       | <-- cell stack base ptr
-;;
-;;         *) fields are copied
-;;
-;;       separate page stack allocation case
-;;         |  param - 0            |  <-- params ptr       |-----------------------|                                                                                              
-;;         |  . . .                |                     * |         pc            |  <-- call frame                                                                                
-;;         |  param - n            |                       |-----------------------|                                                                                              
-;;         |-----------------------|                     * |       func ptr        |  (pc and func-ptr share high byte, if functions do not run over multiple pages)              
-;;       (no more space left on page)                      |-----------------------|                                                                                              
-;;                                                       * |      params ptr       |  (params high byte should be the same as this page, if call frame is allocated on same page) 
-;;                                                         |-----------------------|                                                                                              
-;;                                                       * |      locals ptr       |  (locals high byte should be the same as this page, if call frame is allocated on same page) 
-;;                                                         |-----------------------|                                                                                              
-;;                                                       * |  cell stack base ptr  |  (definitely same high byte as locals ptr!)                                                  
-;;                                                         |-----------------------|                                                                                              
-;;                                                         |  local - 0            | <-- locals ptr = call frame + $0a (call frame is calculated from locals-ptr on return)         
-;;                                                         |  . . .                |                                                                                              
-;;                                                         |  local - n            |                                                                                              
-;;                                                         |-----------------------|                                                                                              
-;;                                                         |                       | <-- cell stack base ptr = locals ptr + 2*(n+1)
-;;
-;;
-;;    => current call frame            \
-;;       current locals ptr            |  always share the same page (high byte)
-;;       current call stack base ptr   /
-
-;; IDEA: define fast frames (allocated on same stack page, and pc and func ptr share the same page)
-;;
-;;       popping call frames
-;;       how can a fast frame be identified? (e.g. check locals ptr - call frame = $06) <- save copying 4 bytes?
-;;           SEC                ;;               (2)      ;; copying 4 bytes  [15*4 = 60 cycles]
-;;           LDA ZP_LOCALS_PTR  ;; low byte      (3)      ;; LDA (zp-ptr),y         (6)
-;;           SBC ZP_CALL_FRAME  ;;               (3)      ;; STA zp-memory,y        (4) <- only avail for non zp memory
-;;           CMP !#06           ;;               (2)      ;; DEY                    (2)
-;;           BEQ SLOW_FRAME     ;;               (2-3)    ;; BNE LOOP               (2-3)
-;;                                               ---SUM 12                         ---SUM 60 (15*4)
-;;        write highbyte for params ptr, locals ptr, csb ptr + func ptr
-;;          LDA (ZP_...),y               ;;   (6)
-;;          STA ZP_LOCALS_PTR+1          ;;   (3)
-;;          STA ZP_PARAMS_PTR+1          ;;   (3)
-;;          STA ZP_CELL_STACK_BASE_PTR+1 ;;   (3)
-;;          LDA (ZP_...),y               ;;   (6)
-;;          STA ZP_VM_FUNC_PTR+1            ;;   (3)
-;;                                           ---SUM 24
-;;
-;;       => save 24 (60 - 12 - 24) cycles per fast frame pop
-;;          add 13 cycles per slow frame pop
-;;          add 9 bytes detect routine
-;;          add x bytes for fast pop code
-;;
-;;
-;;       pushing fast frames
-;;       how to detect that fast frame can be used? 
-;;           1st check that func ptr and pc share the same high byte (this has to be done additionally)
-;;               LDA ZP_VM_PC+1     ;;               (3)
-;;               CMP ZP_VM_FUNC_PTR+1  ;;               (3)
-;;               BNE SLOW_FRAME     ;;               (2-3)
-;;                                        
-;;           2nd stack allocation stays on same page (this is done anyhow)
-;;      => save 52 (60-8) cycles per fast push  (copying takes as long as in pop case)
-;;         add 9 cycles per slow push
-;;         add 6 bytes detection routine
-;;         add x bytes for fast push code
-;;         save 4 bytes on call-stack per call
-;;         
-;;
-;;         |  param - 0              |  <-- params ptr
-;;         |  . . .                  |
-;;         |  param - n              |
-;;         |-------------------------|  
-;;       * |          pc             |  <-- call frame 
-;;         |------------+------------|
-;;       * | params ptr | locals ptr | 
-;;         |------------+------------|
-;;       * |  csb ptr   | func ptr   |
-;;         |------------+------------|
-;;         |  local - 0              |  <-- locals ptr = call frame + $06 (call frame is calculated from locals-ptr on return)
-;;         |  . . .                  |
-;;         |  local - n              |
-;;         |-------------------------|
-;;         |                         |  <-- cell stack base ptr
-
-
-;; IDEA: use fast locals on zero page (just as regular locals, but not allocated on the stack but on zero page)
-;;       possible for functions that do not call subroutines, or do so but the local is no longer used
-;;       use short bytecodes for params 0..3, locals 0..3, fast-locals 0..3
-
-;; IDEA: use the following idea in more situations:
-;;       store high byte in one page
-;;       and store low byte in another page (same index)
-;;       32 bit values may as well be spread of 4 pages, storing all at one index!
-;;       e.g: cell-value-stack (since cells are always 16 bit)
-;;            store lowbyte in page I
-;;            store highbyte in page J
-;;       advantage: use same index (for pop/push inc/dec only once)
-;;                  doubles the number of objects before new allocation is needed
-;;                  e.g. push a value onto the stack:
-;;                       ZP_CS_LB_PAGE (cell-stack page of low bytes) (ZP_CS_LB_PAGE-1 contains 0) such that ZP_CS_LB_PAGE-1 can be used as ptr
-;;                       ZP_CS_HB_PAGE (cell-stack page of high bytes) (ZP_CS_HB_PAGE-1 contains 0) such that ZP_CS_LB_PAGE-1 can be used as ptr
-;;                       ZP_CS_IDX is the current tos
-;;
-;;                       ;; PUSH A/X onto stack
-;;                       LDY ZP_CS_IDX
-;;                       INY                       ;; just one increment
-;;                       STA (ZP_CS_LB_PAGE-1),y
-;;                       STX (ZP_CS_HB_PAGE-1),y
-;;                       STY ZP_CS_IDX             ;; store new tos idx
-;;                       ;; that's it
-;;
-;;       are there any advantages to store cells in this way? 
-;;       where does the reference counting byte go in that case (maybe just into another page?)
-;;       ==> cell-ptr's could be stored in 2+1 pages, lowbytes, highbytes and refcounts
-;;           <-- not really, it would mean that each cell-ptr access needs to make use of two (different) pages
-;;               which either are calculated (since allocated next to one another) or kept
-;;       ==> cell-pair-ptr's could be stored in 4+1 pages, lowbyte car, highbyte car, lowbyte cdr, highbyte cdr, refcounts
-;;           <-- not really, it would mean that each cell-ptr access needs to make use of four (different) pages
-;;               which either are calculated (since allocated next to one another) or kept
-
-;; IDEA: programs/processes have their own allocation pages => terminating a process means, all pages allocated by the process can be freed
-;;       alternative: shared, process allocates using shared pages, terminating the process will free all entries (not the pages), possibly leading to pages, not freed, because some slots remain allocated.
-;;       - each process has (a copy of) the following
-;;         VM_FREE_CELL_PAIR_PAGE                 (1b)
-;;         VM_FREE_CODE_PAGE                      (1b)
-;;         VM_FREE_CALL_STACK_PAGE                (1b)
-;;         VM_FREE_CELL_PAGE                      (1b)
-;;         VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE    (2b)
-;;         VM_FREE_M1_PAGE_P0         (P0..P3)    (4b) 
-;;         VM_LIST_OF_FREE_CELLS                  (2b)
-;;       - each process running needs (a copy of) the following interpreter values
-;;         (lots of these values are restored when returning from a function, maybe this can be used to not copy too much during process switch (after function or on function call)
-;;         ZP_CELL_STACK_TOS                      (1b)
-;;         ZP_VM_PC                               (2b)
-;;         ZP_PARAMS_PTR                          (2b)
-;;         ZP_LOCALS_PTR                          (2b)
-;;         ZP_CELL_STACK_BASE_PTR                 (2b)
-;;         ZP_CALL_FRAME                          (2b)
-;;         ZP_RT                                  (2b)
-;;
-;;
-;; IDEA: don't do any ref counting on register (RT, RA)
-;;       inc ref count of cell, pointed to by RT if pushed on cell-stack (only if RT holds a pointer, of course) 
-;;       dec ref count of cell, pointed to by TOS, if popped from cell-stack (into RT), only if TOS (then RT) holds a pointer
-;;       additionally, if a pointer is written into a heap allocated object (e.g. cell-ptr, cell-pair-ptr, cell-m1-ptr), then the pointed to cells ref count is incremented
-;;                     if a cell is written into a heap allocated object, overwriting a pointer, the pointed to cells ref count is decremented
-;;                     if a heap allocated object is collected (ref count drops to 0), all referenced cells ref count is decremented
-;;       is this enough?
-;;
-;; decision:
-;;   RT = 00 (low byte) is equivalent to RT is empty!
-;;   use new pointer tagging scheme (makes tagged-low-byte obsolete):            examples (low, then high byte):
-;;     (new) zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                  0000 001[0]    1100 1101   cd02 (first allocated slot in cell-ptr page)
-;;     (new) xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)          0000 01[01]    1100 1101   cd05 (first allocated slot in a cell-pair-ptr page)
-;;     (new) 0iii ii11 = int-cell (no direct adding of highbyte possible)        [0]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
-;;     (new) 1111 1111 = byte-cell (char|bool|bcd digits)                        [1111 1111]    0000 0001   01  <- payload is in high byte
-;;     (new) 1000 0011 = cell-array-header                                       [1000 0011]    0000 0100   04 cells in array
-;;     (new) 1000 0111 = cell-native-array-header                                [1000 0111]    0000 1000   08 bytes in array 
-;;
-;;     (new) cell-pair-ptr page layout 
-;;                       00     #b01xx xxxx page type + number of used slots
-;;                       01     ref-count cell-pair at 05 (cell-pair 0)
-;;                       02     ref-count cell-pair at 09 (cell-pair 1)
-;;                       03..04  unused (2)
-;;                       05..08  cell-pair 0
-;;                       09..0c  cell-pair 1
-;;                       0d..0f  unused (3)
-;;                       10     ref-count for cell-pair at 40 (cell-pair 2)
-;;                       11     ref-count for cell-pair at 44 (cell-pair 3)
-;;                       ..3e    ref-count for cell-pair at f9 (cell-pair 48)
-;;                       3f..40  unused (2)
-;;                       41..44  cell-pair 2
-;;                       45..48  cell-pair 3
-;;                       ...
-;;                       f9..fc  cell-pair 48
-;;                       fd..fe  unused (2)
-;;                       ff     previous page of this type
-;;
-;;   implementation steps:
-;;   - change int detection and calculation
-;;   - change cell-array-header + cell-native-array-header detection (if applicable an existent)
-;;
-;; DONE: if cell-ptr and cell-pair-ptr would use the bytes as is (with having to separately hold a tagged low byte),
-;;       additionally masking out the tagged byte + copying during stack push and pop would not be necessary
-;;       problem: lda (zp_rt),y must then point to a cell or a cell-pair
-;;                if cell-ptr lowbyte has at bit0 a 0 this would work
-;;                however, cell-pair-ptr (to be able to differentiate from cell-ptr) would have to set bit0 to 1 and this lda (zp_rt),y would point to a different location
-;;                => cell-pair pages need to be organized differently (or cell pages)
-;;                   current memory layout
-;;                   page type: cell-pairs page (its actually randomly growing, fixed slot size (4b), ref counted page)
-;;                   memory layout of a cell-pairs page (refcount @ ptr >> 2) 51 cells
-;;                   offset content
-;;                   00     #b01xx xxxx page type + number of used slots
-;;                   01     ref-count for cell-pair at 04 (cell-pair 0)
-;;                   02     ref-count for cell-pair at 08 (cell-pair 1)
-;;                   03     ref-count for cell-pair at 0C (cell-pair 2)
-;;                   04..07  cell-pair 0
-;;                   08..0b  cell-pair 1
-;;                   0c..0f  cell-pair 2
-;;                   10     ref-count for cell-pair at 40 (cell-pair 3)
-;;                   11     ref-count for cell-pair at 44 (cell-pair 4)
-;;                   ..3e   ref-count for cell-pair at fc (cell-pair 49)
-;;                   3f    unused
-;;                   40     cell-pair 3
-;;                   44     cell-pair 4
-;;                   ..fb  cell-pair 49
-;;                   fc..fe unused
-;;                   ff    previous page of this type
-;;
-;;                   old c004 = cell pair ptr,
-;;                   new zzzz zzz0 = cell-ptr, xxxx xx01 = cell-pair-ptr (looses one cell-pair), 0iii ii11 = int (no direct adding of highbyte possible)
-;;                       00
-;;                       01     ref count cell pair at 05 (cellpair0)
-;;                       02     ref-count for cell-pair at 08 (cell-pair 1)
-;;                       03..04  unused
-;;                       05..08  cell-pair 0
-;;                       09..0c  cell-pair 1
-;;                       0d..0f  unused
-;;                       10     ref-count for cell-pair at 40 (cell-pair 2)
-;;                       11     ref-count for cell-pair at 44 (cell-pair 3)
-;;                       ..3e   ref-count for cell-pair at fc (cell-pair 48)
-;;                       3f..40 unused
-;;                       41     cell-pair 2
-;;                       45     cell-pair 3
-;;                       ..fc   cell-pair 48
-;;                       fd..fe unused
-;;                       ff    previous page of this type
-;;
-;;                => alternative cell pages
-;;                   current memory layout
-;;                   page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)
-;;                   offset content
-;;                   00     #b1zzz zzzz page type + number of used slots
-;;                   01     ref-count for cell at 02 (cell 0)
-;;                   02..03 cell 0
-;;                   04     ref-count for cell at 08 (cell 1)
-;;                   ...
-;;                   07     ref-count for cell at 08 (cell 4)
-;;                   08..09 cell 1
-;;                   ...
-;;                   0e..0f cell 4
-;;                   10    ref-count for cell at 20 (cell 5)
-;;                   ...
-;;                   1f    ref-count for cell at 20 (cell 20)
-;;                   20..21 cell 5
-;;                   ...
-;;                   3e..3f cell 20
-;;                   40..7e ref-count for cell at 80..fc (cell 21..83)
-;;                   7f    unused
-;;                   80..fd cell 21..83
-;;                   fe    unused
-;;                   ff    previous page of this type
-;;
-;;                   old c002 = cell ptr,
-;;                   new: zzzz zzz1 = cell-ptr (looses 3 cells), xxxx xx00 = cell-pair ptr (uses most compact layout), 0iii ii10 = int (no direct adding of highbyte possible!
-;;                   new page layout
-;;                       00        page type
-;;                       01        ref count cell0
-;;                       02        unused?
-;;                       c003..c004 cell0
-;;                       05         ref count cell1
-;;                       ..
-;;                       07         ref count cell3
-;;                       0b..0c     cell 1 1011
-;;                       0d..0e     cell 2 1101
-;;                       10         ref count 3
-;;                       11         ref count 4
-;;                       ...
-;;                       1f         unused?
-;;                       21..22      cell3 0010 0001
-;;                       ...
-;;                       3d..3e      cell17 0011 1101
-;;                       3f         unused?
-;;                       40..7e      ref count for cell 81..fe (cell 18..80)
-;;                       7f..80      unused?
-;;                       81..82      cell 18 1000 0001
-;;                       83..fc      cells 19..79
-;;                       fd..fe      cell 80 1111 1101 .. 1111 1110
-;;                       ff         previous page of this type
-;;
-;; DONE: tos is always a register held in zp (e.g. now zp_ptr, future zp_rt)
-;;       have additional "registers", capable of holding cells zp_ra, zp_rb ...
-;;       push zp_rt on stack only if necessary => operations working on one value only do no push/pop actions
-;;         e.g. (car a-list), a-list is in zp_rt, car replaces zp_rt with the head of a-list, no stack op necessary!
-;;              (push-int-0), pushes zp_rt, putting int-0 into zp_rt
-;;              empty stack does now mean: no value on the stack and no value in zp_rt
-;;              pop: fill zp_rt with new tos, popping it off the call-frame stack
-;;              pop last item:  discard zp_rt (and mark stack as empty)
-;;              push on empty stack: write pushed into zp_rt
-;;              push non empty stack: push zp_rt onto the stack in the call-frame and write pushed value into zp_rt
-;;              (cons a-val a-list): move a-val (from zp_rt) to zp_ra, pop (filling zp_rt with a-list) execute cons, result in zp_rt
-;;       BENEFIT: - less actual pushes of values into the call-frame stack (e.g. car none at all)
-;;                - call-frame stack size is always 1 item smaller!
-;;                - maybe some harmonization of zp register usage?
-;;       DRAWBACK: additional full/empty stack detection complexity (is it really complex? <- check before optimization)
-;;                     <- ideas to prevent that (NONE IMPLEMENTED YET)
-;;                        - statically compile first bytecode pushing into the stack
-;;                          - with prefix byte code [adds 1 byte to each function]
-;;                          - into specific byte code directly writing into zp_rt [wastes available byte codes])
-;;                          this could collide with tail call recursion
-;;                          upon function call change behavior such that first push will not copy zp_rt into stack (pop must be changed too)
-;;                          and all subsequent calls do (e.g. change jump target, rechanging it to regular behavior)
-;;                          pop might work accordingly (last actual stack manipulation will change pop/push target)
-;;                        - require always 1 additional dummy local (before first actual stack entry)
-;;                          this will allow to not have any special local but will loose the benefit of reduced stack size!
-;;
-;;       common operations (should be derived from byte-code functions):
-;;         start with car, cdr, cons, push: local/param/const, int+/-, call, tail-call?
-;;         e.g. zp_rt interpret as cell-pair-ptr, write, cellX of cell-pair into zp_rt again (or some other register?) <- used for car/cdr
-;;              zp_rt interpret as cell-ptr, write cell pointed to into zp_rt again (or some other register)?
-;;              copy zp_rt to other register (and vice versa)
-;;              copy call-frame stack value @ idx into cellX of cell-pair, pointed to by zp_rt
-;;              write zp_rt -> local / param of this function
-;;              copy local/param -> cellX of cell-apri in zp_rt
-;;              copy call-frame stack value @ idx into array pointed to by zp_rt
-;;
-;;       possible implementation steps:
-;;         implement in parallel to existing solution
-;;
-;;
-;; DONE: no memory bitmap, use free slot bytes to encode whether page is free or not
-;; this would reduce complexity in finding free pages, free blocks of pages etc.
-;; (since free slots may never hold the value 00, 01, fe, ff, these values can be used to encode the state of the page
-;;  e.g. 00 = allocated but full page (0 allows BEQ to be used easily to check whether page is full during slot allocation!)
-;;       01 = system page (unavailable for memory management)
-;;       ... = allocated with free slots
-;;       fe = ???
-;;       ff = free page,
-;;
-;; code pages - granularity: modules
-;; each module is loaded as a whole, modules should be unloadable, relocatable
-;; modules are restricted to max 256 (loaded)?
-;; loading a module does
-;;   load all required modules (recursive until topmost module is found) <- no circles allowed
-;;   resolve required modules functions/variables to ids <- must have been loaded
-;;   assign ids to all functions/variables in this module
-;;   patch own loaded bytecode to use (required modules or own) functions/variable ids (<- module needs patch table)
-;; unloading a module does
-;; relocating a module does
-
-;; static calling a function does (e.g. w/i a module)
-;;   allocate call-frame (#params + #locals is known)
-;;   save current exec state->call frame
-;;   jump to bytecode of function called (location is known)
-
-;; dynamic calling a function does
-;;   resolve id to bytecode location (16-bit->16-bit translation)
-;;   get #params
-;;   get #locals (max)
-;;   allocate call-frame
-;;   save current exec state->call frame
-;;   jump to bytecode of function called
-
-;; return from function does
-;;   pop call frame (restoring saved exec state)
-
-;; idea: trace byte code execution
-;; idea: collect metrics of calls
-
-
-;; naming
-
-
-
 ;; naming: atomic cell
 ;;         cell                      :: 16 bit value (finest granular memory managed block)
 ;;         atomic cell               :: a cell that has no followup value and is complete in itself (currently int-cell, byte-cell, cell-ptr, cell-pair-ptr)
@@ -568,7 +70,7 @@ call frame primitives etc.
 ;;                                      Each cell on the stack is organzed as 00 highbyte, 01 lowbyte, 02 ... next entry <- highbyte comes first
 ;;                                      ZP_CELL_STACK_TOS points to the lowbyte of the current element below RT (cell n), = n*2+1
 
-;; naming: m1 page px       :: page for slots with ref count at -1 position, with profile x (0..3) <- defines size and payload start offset
+;;         m1 page px       :: page for slots with ref count at -1 position, with profile x (0..3) <- defines size and payload start offset
 ;;         call-frame page  :: page for call-frames (stack organized, no ref counting etc.)
 ;;         cell-pairs page  :: page for cell-pairs, (lowbyte) lsr x 2 to get ref count position
 ;;         cell page        :: page for cells, (lowbyte) lsr x 1 to get ref count position (last cell unusable)
@@ -577,303 +79,6 @@ call frame primitives etc.
 ;;         code page        :: page holding byte code (and function meta data, module meta data?)
 ;;         constants page   :: page holding constants (not ref counted)
 ;;         page block       :: a number of consecutive pages allocated/freed as a block, allowing for larger memory objects (having less wasted bytes (e.g. for call-frames)?)
-
-;; DONE: keep allocated #slots to detect empty pages (# drops to zero)
-;; DONE: page 00 = page mod byte
-;;            1xxx xxxx = (cell page) page with cells (slots of byte 2), xxxxxx = number of used cells 0..127 (actually only 85 possible)
-;;            01yy yyyy = (cell-pairs page) page with cell-pairs (slots of byte 4) yyyyy = number of cells used 0..63 (actually only 51 possible)
-;;            [001z zzzz = (s8 page) page with slots of (max) size 8 byte, zzzz = number of slots used 0..31 (actually only possible)]
-;;            0001 0000 = (m1 page p0) page with buckets type 0 (byte at offset 02: holds the number of used slots)
-;;            0001 0001 = (m1 page p1) page with buckets type 1 (byte at offset 02: holds the number of used slots)
-;;            0001 0010 = (m1 page p2) page with buckets type 2 (byte at offset 02: holds the number of used slots)
-;;            0001 0011 = (m1 page p3) page with buckets type 3 (byte at offset 02: holds the number of used slots)
-;;            0001 1000 = (call-frame page) (stack organized, full+free detection already implemented)
-;;            0001 1001 = (fid->loc page) page with 16 bit values (starting at $02), filled without gaps, next slot = offset to free, no ref counting
-;;            0001 1010 = (code page) page with byte code and function meta data <- filled without gaps, next slot = offset to free, no ref counting
-;;            0001 1011 = cell stack page (come in pairs for low and high byte)
-;;       page 01 = (code page, m1 page px, call-frame page, cell stack page) previous page of same type (<- currently only for pages with buckets and call-frame pages)
-;;       page 02 = (m1 page px, s8 page) number of used slots, call-frame page: top mark (if full)
-;;       page ff = (cell-pairs and cell page) previous page (in case of cell page = last cell stays unused!!)
-
-;; existing: array of first free slot on the respective page (per page) (uses only the lower 7 bits) : uses 256 bytes cf00..cfff (idea to keep this data on the page itself?)
-;;           each page points to the previous page (initially in allocation order)                   : uses 1 byte on page
-;;           each page type points to the head of the (free) page list of this type                  : 1 byte per type (currently 8) [current free]
-;; new:      head of list of pages that are completely free                                          : 1 byte per type
-
-;; idea: allocate:
-;;   during alloc (full): current page is full, find next non full (remove all fulls from this list from here on), set found non-full to current free
-;;                        if no free is found, check list of completely free pages of this type,
-;;                        if none is found, allocate new page (don't link with any full page!)
-;;                        if none is left for allocation, check free list of other types
-;;                        +- first free page pointer (points to full page, because it just got full)
-;;                        [Ax]->[Bx]->[Cx]->[D-]->[E ]->[Fx]->[G-]
-;;                   =>   remove full pages (their pointers must be cleared!) until first non full is found (or new pages is allocated)
-;;                        +- first free page pointer
-;;                        [D-]->[E ]->[Fx]->[G-]
-;;
-;;   during free (full->non-full):  if already part of the free list, do nothing, if not, add it as head of the free list
-;;   during free (non-full->empty): naive: free,
-;;          idea: keep number of free pages per type, only free pages > than minimum
-;;          idea: move this behind at the end of the list (if it is the head),
-;;          idea: keep list of completely free pages to speed up allocation of this type (since page needs no initialization)
-
-;; worst case scenario:
-;;   each bucket allocates until n pages are filled, then on each page all but 1 slots are freed => lots of pages with just one slot used
-;;   (hopefully uncommon) Since no relocation of entries is possible, this "page"-level fragmentation is possible, even if unlikely
-
-;; to keep a list of pages with free slots, each time a slot is not full (free slot offset != $00), it should not have full pages before it
-;; => (alloc) a page getting full should be put behind the pages which have free slots
-;; => (free) a page not full anymore should be moved before the full ones
-;; algorithm:
-;;   during alloc: page getting full (can be anywhere in the list) swaps down the list until the next is either $00 (no previous) or full itself
-;;   during free:  page getting non-full (can be anywhere in the list) is put at the head of the free-page list
-;;                 (or: optimization:) if the first is a non full page: right behind that one
-;;                  -> this allows for a page that was "freshly" allocated to fill up before a page that has only one free slot is preferred
-;;   during free:  a page that is left empty, is removed from the list and returned to the free pages
-;;                 except if it is the last list of this type in the free list, then it is kept  (optimization: introduce a lower bound?, e.g. always keep 4+ free cell-pair pages to speed up allocation)
-
-;; page attributes:
-;;  - stack growing :: data will be allocated/deallocated as stack
-;;  - randomly growing :: data will allocate/deallocate randomly
-;;  - variable slot size :: slots have any size within the same page
-;;  - fixed slot size :: slots have one size (or smaller) within this page
-;;  - ref counted :: slots are ref counted and deallocated if ref count drops to 0 (used only in randomly growing pages)
-
-;; valid combinations:
-;;   stack growing, variable slot size :: used e.g. for call frame (stack)
-;;   randomly growing, fixed slot size, ref counted  :: used e.g. for cell-pairs, cells, structures?
-;;   randomly growing (but no deallocation), variable slot size, no ref couting :: permanent byte code routines
-
-;; measures to ensure ease of allocation/deallocation etc.
-;;   stack growing
-;;     keep backward pointer to previous slot / page (for pop)
-;;     keep first free slot on page (for push)
-;;   randomly growing
-;;     keep first free slot on page (for alloc)
-;;     keep an easy way to get to the next free slot/add a freed slot to the existing free slots
-;;   ref counted
-;;     keep ref count per slot (on page), with an easy way to get the offset from the slot offset
-;;   fixed slot size
-;;     free/used slots can be kept in a bitmap (but also in a free list)
-;;   variable slot size
-;;     free/used slots are kept in a list
-
-;; current page types and measures
-;;   cell-pair-page
-;;     - keep first free slot
-;;     - keep free slots in a linked list
-;;     - ref count is achieved by lsr x 2 (fixed size 4 bytes => 1 byte ref count)
-;;   call-frame-page
-;;     - keep first free slot (since this is global, this is held in zp_call_frame_top_mark
-;;     - if full, keep top mark of this page 
-;;     - keep id of previous page
-;;   perma-bytecode-page
-;;     - keep first free slot
-;;     - keep id of previous page
-;;     - if next allocation does not fit, check previous pages
-;;   ref-counted-fixed-slot-page (cell-pair-page should be a special case for this)
-
-;; invariant: any slot must start on an even memory location (since bit0 is used as tag for a pointer)
-;; invariant: any cell-pair slot must start on a memory location divisable by 4 (since bit0 and bit1 is used as tag for the pointer)
-
-;; ---------------------------------------- call-frame page
-;; page type: call-frame page (its actually stack growing, variable slot size page)
-;; => allocation/deallocation is always done on tos
-;;    no need for a free list (stack structure is coded into the stack pages)
-;;    need for max size left
-;; memory layout of call frame page (organized in stack)
-;;  00 : #b0001 1000 page type call-frame
-;;  01 : previous page (just high byte), 00 for first stack page
-;;  02 : top mark (one past last allocated frame payload
-;;  03 : first frame payload byte 0
-;;  ... : first frame payload byte size-1
-;;  free-1 : size of (prev) frame
-;;  free : next payload
-;; ...ff :
-;;
-;; VM_FIRST_FREE_SLOT_ON_PAGE + pageidx: holds free-idx (initially 02) <- points to the first free byte (-1 = size of previous)
-
-;; OLD OUTDATED: SEE TOP OF FILE-------------------------------------- cell-pairs page
-;; page type: cell-pairs page (its actually randomly growing, fixed slot size (4b), ref counted page)
-;; memory layout of a cell-pairs page (refcount @ ptr >> 2) 51 cells
-;; offset content
-;; 00     #b01xx xxxx page type + number of used slots
-;; 01     ref-count for cell-pair at 04 (cell-pair 0)
-;; 02     ref-count for cell-pair at 08 (cell-pair 1)
-;; 03     ref-count for cell-pair at 0C (cell-pair 2)
-;; 04..07  cell-pair 0
-;; 08..0b  cell-pair 1
-;; 0c..0f  cell-pair 2
-;; 10     ref-count for cell-pair at 40 (cell-pair 3)
-;; 11     ref-count for cell-pair at 44 (cell-pair 4)
-;; ..3e   ref-count for cell-pair at fc (cell-pair 50)
-;; 3f    unused (1)
-;; 40     cell-pair 3
-;; 44     cell-pair 4
-;; ..fb   cell-pair 50
-;; fc..fe unused (3)
-;; ff    previous page of this type
-;;
-;; VM_FIRST_FREE_SLOT_ON_PAGE + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
-;; the free cell-pair holds in byte 0 of the cell-pair the offset of the next free cell-pair (0 = no other free cell-pair)
-;;
-
-;; ---------------------------------------- cell page
-;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)
-;; offset content
-;; 00     #b1zzz zzzz page type + number of used slots
-;; 01     ref-count for cell at 02 (cell 0)
-;; 02..03 cell 0
-;; 04     ref-count for cell at 08 (cell 1)
-;; ...
-;; 07     ref-count for cell at 0e (cell 4)
-;; 08..09 cell 1
-;; ...
-;; 0e..0f cell 4
-;; 10    ref-count for cell at 20 (cell 5)
-;; ...
-;; 1f    ref-count for cell at 3e (cell 20)
-;; 20..21 cell 5
-;; ...
-;; 3e..3f cell 20
-;; 40..7e ref-count for cell at 80..fc (cell 21..83)
-;; 7f    unused (1)
-;; 80..fd cell 21..83
-;; fe    unused (1)
-;; ff    previous page of this type
-
-;; ---------------------------------------- s8 page
-;; page type slot size 8 (refcount @ ptr >> 3) 28 cells
-;; offset content
-;; 00     #b001x xxxx  page type + number of used slots
-;; 01     previous page
-;; 02..03 unused
-;; 04..1f refcount cell 0..27
-;; 20..27  -> 04 (cell 0)
-;; ...
-;; f8..ff -> 1f (cell 27)
-
-;; ---------------------------------------- m1 page p0
-;; page type slot size 16!  (refcount @ ptr-1) 14 slots
-;; math: first entry $04, refcount @ -1, next slot += $12, slot-size = $11 (17)
-;; offset content
-;; 00     #b0001 0000 page type bucket with slot size 17 (either use this or the one above)
-;; 01     previous page
-;; 02     number of slots used
-;; 03     refcount slot0
-;; 04..14 slot0
-;; 15    refcount slot1
-;; 16..26 slot1
-;; 27    refcount slot2
-;; 28..38 slot2
-;; ...
-;; ed    refcount slot13
-;; ee..fe slot13
-;; ff    unused
-
-
-;; ---------------------------------------- m1 page p1
-;; page type slot size 29! (refcount @ ptr-1) 8 slots total
-;; math: first entry $02, refcount @ -1, next slot += $1e, slot-size = $1d (29)
-;; offset content
-;; 00     #b0001 0001 page type bucket + slot size 29
-;; 01     previous page
-;; 02     number of used slots
-;; 03..0f unused
-;; 0f     refcount slot0
-;; 10..2c slot0
-;; 2d     refcount slot1
-;; 2e..4a slot1
-;; 4b     refcount slot2
-;; 4c..68 slot2
-;; ...
-;; e1    refcount slot7
-;; e2..fe slot7
-;; ff    unused
-
-;; ---------------------------------------- m1 page p2
-;; page type slot size 49! (refcount @ ptr-1) 5 slots total
-;; math: first entry $02, refcount @ -1, next slot += $32, slot-size = $31
-;; offset content
-;; 00     #b0001 0010
-;; 01     previous page
-;; 02     # of slots used
-;; 03..04 unused
-;; 05     refcount slot0
-;; 06..36 slot0
-;; 37     refcount slot1
-;; 38..68 slot1
-;; 69     refcount slot2
-;; 6a..9a slot2
-;; 9b     refcount slot3
-;; 9c..cc slot3
-;; cd     refcount slot4
-;; ce..fe slot4
-;; ff    unused
-
-;; ----------------------------------------m1 page p3
-;; page type slot size 83! (refcount @ ptr-1) 3 slots total
-;; math: first entry $02, refcount @ -1, next slot += $54, slot-size = $53
-;; offset content
-;; 00     #b001 0011
-;; 01     previous page
-;; 02     number of slots used
-;; 03     refcount slot0
-;; 04..56 slot0
-;; 57     refcount slot1
-;; 58..aa slot1
-;; ab     refcount slot2
-;; ac..fe slot2
-;; ff     unused
-
-;; DONE: zero page cell stack may not be beneficial (can be put in regular memory)
-;;       LDA zeropage,x  consumes 4 clocks,  LDA (zeropage),y consumes 6 clocks => no significant speedup that would justify the amount of copying
-;;       LDA zeropage and LDA absolute differs in speed => storing registers not accessed through index makes sense
-;;       indirect addressing can only be done on zp => zp_ptr and zp_ptr2 make sense, too
-
-;;       call frame is created by call, but there is not need to copy (portions of) the eval stack
-;;       the call frame allocates space for locals and that's it (it's still a stack, so push/pop is supported)
-;;       alternative to tos: function entry tos + index
-;;         upon function entry, the fe tos is written (once) and a separate index is held in zero page
-;;         such that fe0-tos + index = actual tos => push pop work in index only (restriction value stack w/i one page to 128 cells)
-;;       alternative continuous stack space: allocate pages, but how? function call will fix the parameters => that part does not change
-;;       within one function, one page is enough, but an almost full page could be a problem:
-;;         one solution: page grows until function call, then, if page is free enough continues with the given page, if page is not enough allocated new one
-;;         minimum free space = 16 cells? = 32 byte => 256 - 32 = 224 (roughly) are available, can be used in combination with call-frame
-;;      zp_vm_params -> [params]            <- actually previous eval stack
-;;        callframe:    -----               <- new allocation starts here
-;;                      [old zp_vm_pc]      <- pointer to code to return to (zp_vm_pc)
-;;                      [old zp_vm_locals]  <- used to restore zp_vm_locals
-;;                      [old zp_vm_params]  <- used to restore zp_vm_params
-;;      zp_vm_locals -> [locals]            <- fixed number of slots kept for function execution
-;;         zp_vm_tos -> [eval-stack]        <- size must fit into page (16 cells) <- could later be derived from actual function implementation
-;;                                            (part of the eval stack is then again [params] for the next function called)
-;; call to function:
-;;      new zp_vm_params = zp_vm_tos - 2 * n-params (of the function called)
-;;      allocated call frame [call-back] = zp_vm_pc
-;;      new zp_vm_locals = allocated call frame + 6
-;;      new zp_vm_tos    = allocated call frame + 2 * (n-locals + 3)  (of the function called)
-;;      zp_vm_pc         = function called
-;;
-;; return from function:
-;;      zp_vm_params     = (new) zp_vm_locals - 2 * (n-params + 3) (of function returned to)
-;;      zp_vm_locals     = ? <- must be saved too
-;;      zp_vm_tos        = (old) zp_vm_params - 2
-;;      zp_vm_pc         = call-frame [call-back] = ((old) zp_vm_locals-6)
-;;
-;; NEW STACK STRUCTURE:
-;;      ZP_CELL_STACK_BASE_PTR -> points to the start of the stack of the current (executing) function
-;;      ZP_CELL_STACK_TOS      -> offset for ZP_CELL_STACK_BASE_PTR, pointing to the tagged (low) byte, ff = empty, 01 = 1 el on stack, 03 = 2 el on stack ...
-;;                                LDA (ZP_CELL_STACK_BASE_PTR),ZP_CELL_STACK_TOS   = tagged low byte
-;;                                LDA (ZP_CELL_STACK_BASE_PTR),ZP_CELL_STACK_TOS-1 = high byte
-;;                                => pushing is done in reverse order (push high byte first, then push tagged low byte)
-;;                             reading tos:
-;;                                LDY ZP_CELL_STACK_TOS;
-;;                                LDA (ZP_CELL_STACK_BASE_PTR),y  ;; gets tagged low byte
-;;                                DEY
-;;                                LDA (ZP_CELL_STACK_BASE_PTR),y  ;; gets untagged high byte
-;;
-;; IDEA: use larger block page allocation (e.g. not used one page but 4 pages as a block => less waste
 
 (require (only-in racket/format ~a))
 
@@ -886,11 +91,6 @@ call frame primitives etc.
 
 (module+ test
   (require "../6510-test-utils.rkt")
-  ;; (require (only-in racket/port open-output-nowhere))
-  ;; (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
-  ;; (require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
-  ;; (require (only-in "../ast/6510-command.rkt" ast-label-def-cmd? ast-label-def-cmd-label))
-
   (require (only-in "./vm-memory-manager-test-utils.rkt"
                     run-code-in-test-on-code
                     remove-labels-for
@@ -949,7 +149,7 @@ call frame primitives etc.
    (byte-const TAG_BYTE_NATIVE_ARRAY     $84)
 
    (byte-const NEXT_FREE_PAGE_PAGE       $cf)   ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
-   (word-const VM_FIRST_FREE_SLOT_ON_PAGE     $cf00) ;; location: table of first free slot for each page
+   ;; (word-const VM_FIRST_FREE_SLOT_ON_PAGE     $cf00) ;; location: table of first free slot for each page
 
    (word-const TAGGED_INT_0              $0003)
    (word-const TAGGED_BYTE0              $00ff)
@@ -2184,7 +1384,7 @@ call frame primitives etc.
             (STA ZP_TEMP+1)
             (TAY)
             (LDA !$02)
-            (STA VM_FIRST_FREE_SLOT_ON_PAGE,y) ;; set slot @02 as the first free slot
+            (STA VM_PAGE_SLOT_DATA,y) ;; set slot @02 as the first free slot
 
             (LDA !$03)
             (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3)
@@ -2348,7 +1548,7 @@ call frame primitives etc.
   ;; cell stack page(s)
   ;; offset  content
   ;; ---------------
-  ;; 00      #b1111 1010
+  ;; 00      #b0001 1011
   ;; 01      previous page (of the stack)
   ;; 02..ff  payload (either lowbyte or highbyte of the cell)
   ;;
@@ -2435,12 +1635,12 @@ call frame primitives etc.
   ;; fd..fe   unused (2)
   ;; ff      previous page of this type
   ;;
-  ;; VM_FIRST_FREE_SLOT_ON_PAGE + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
+  ;; VM_PAGE_SLOT_DATA + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
   ;; the free cell-pair holds in byte 0 of the cell-pair the offset of the next free cell-pair (0 = no other free cell-pair)
   ;;
   ;; allocate a complete new page and initialize it to hold reference counted cell-pairs
   ;; connect all cell-pairs in a free-list
-  ;; also set the first free slot of this allocated page (in VM_FIRST_FREE_SLOT_ON_PAGE + pageidx)
+  ;; also set the first free slot of this allocated page (in VM_PAGE_SLOT_DATA + pageidx)
   ;;
   ;; input:  -
   ;; output: X = page allocated (for cell-pairs)
@@ -2456,7 +1656,7 @@ call frame primitives etc.
             (STA ZP_TEMP+1)
             (TAY) ;; page used as idx
             (LDA !$05) ;; offset to first free slot (after initialization)
-            (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
+            (STA VM_PAGE_SLOT_DATA,y)
 
             (LDY !$00)
             (STY ZP_TEMP)
@@ -2553,7 +1753,7 @@ call frame primitives etc.
                 (list #xa0)
                 "last byte on page points to previous free page of cell-pairs"))
 
-;; whether a page is free or used is kept in the 256 bytes starting at VM_FIRST_FREE_SLOT_ON_PAGE
+;; whether a page is free or used is kept in the 256 bytes starting at VM_PAGE_SLOT_DATA
 ;; each byte represents one page
 ;;   00 = allocated (used) but no free slots
 ;;   01 = system page, not available for memory management
@@ -2571,11 +1771,11 @@ call frame primitives etc.
    (label NO_CHANGE__VM_FREE_PAGE)
           (TAY)
           (LDA !$ff) ;; free/unallocated page
-          (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
+          (STA VM_PAGE_SLOT_DATA,y)
           (RTS)))
 
 ;; does a linear search for the next free page
-;; allocate a page (completely uninitialized), just the page, update the memory page status in VM_FIRST_FREE_SLOT_ON_PAGE
+;; allocate a page (completely uninitialized), just the page, update the memory page status in VM_PAGE_SLOT_DATA
 ;; parameter: (none)
 ;; result: A = allocated free page (uninitialized)
 ;; uses: A, Y,
@@ -2585,7 +1785,7 @@ call frame primitives etc.
           (LDY VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
 
    (label LOOP__VM_ALLOC_PAGE__PAGE_UNINIT)
-          (LDA VM_FIRST_FREE_SLOT_ON_PAGE,y)
+          (LDA VM_PAGE_SLOT_DATA,y)
           (DEY)
           (BEQ OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT) ;; cannot be lower then 1!!
           (CMP !$ff)
@@ -2594,7 +1794,7 @@ call frame primitives etc.
           ;; found page marked unallocated ($ff)
           (INY) ;; restore original index
           (LDA !$00) ;; mark as initially full but allocated
-          (STA VM_FIRST_FREE_SLOT_ON_PAGE,y)
+          (STA VM_PAGE_SLOT_DATA,y)
           (TYA)
           (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; set index for next search
           (RTS)
@@ -2638,14 +1838,14 @@ call frame primitives etc.
    (label VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT) ;; <-- real entry point of this function
           (STA ZP_RT+1) ;; safe as highbyte of ptr
           (TAX)
-          (LDA VM_FIRST_FREE_SLOT_ON_PAGE,x)
+          (LDA VM_PAGE_SLOT_DATA,x)
           (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT) ;; allocate new page first
 
    (label CELL_ON_THIS_PAGE__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
           (STA ZP_RT)
           (LDY !$00)
           (LDA (ZP_RT),y) ;; next free cell
-          (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)
+          (STA VM_PAGE_SLOT_DATA,x)
 
           ;; increase the slot number used on this page
           (STX INC_CMD__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT+2) ;; overwrite $c0 (page in following INC command)
@@ -3001,14 +2201,14 @@ call frame primitives etc.
    (label VM_ALLOC_CELL_ON_PAGE) ;; <-- real entry point of this function
           (STA ZP_RT+1) ;; safe as highbyte of ptr
           (TAX)
-          (LDA VM_FIRST_FREE_SLOT_ON_PAGE,x)
+          (LDA VM_PAGE_SLOT_DATA,x)
           (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_ON_PAGE) ;; allocate new page first
 
    (label CELL_ON_THIS_PAGE__VM_ALLOC_CELL_ON_PAGE)
           (STA ZP_RT)
           (LDY !$00)
           (LDA (ZP_RT),y) ;; next free cell
-          (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)
+          (STA VM_PAGE_SLOT_DATA,x)
 
           ;; increase the slot number on this page
           (STX INC_CMD__VM_ALLOC_CELL_ON_PAGE+2) ;; overwrite $c0
@@ -3022,7 +2222,7 @@ call frame primitives etc.
     (list
      (LDX !$cd)
      (LDA !$00) ;; no free slot on this page, allocate new page
-     (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)
+     (STA VM_PAGE_SLOT_DATA,x)
      (TXA)
      (JSR VM_ALLOC_CELL_ON_PAGE)
      ))
@@ -3796,11 +2996,11 @@ call frame primitives etc.
    (label VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST)
           (LDX ZP_RT+1)
           (STX DEC_CMD__VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST+2) ;; set page for dec command
-          (LDA VM_FIRST_FREE_SLOT_ON_PAGE,x) ;; old first free on page
+          (LDA VM_PAGE_SLOT_DATA,x) ;; old first free on page
           (LDY !$00)
           (STA (ZP_RT),y) ;; set old free to next free on this very cell
           (LDA ZP_RT) ;; load idx within page
-          (STA VM_FIRST_FREE_SLOT_ON_PAGE,x) ;; set this cell as new first free cell on page
+          (STA VM_PAGE_SLOT_DATA,x) ;; set this cell as new first free cell on page
 
           ;; clear refcount, too (should have been done already)
           (LSR)
@@ -3963,7 +3163,7 @@ call frame primitives etc.
 ;;           (INY)
 ;;           (TYA)
 ;;           (LDX ZP_PTR2+1)
-;;           (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)                    ;; set first free slot, here x = page
+;;           (STA VM_PAGE_SLOT_DATA,x)                    ;; set first free slot, here x = page
 ;;           (DEY)
 ;;           (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
 ;;           (LDA !$00)
@@ -4180,7 +3380,7 @@ call frame primitives etc.
 ;;           (STA ZP_PTR2+1)
 ;;           (STA INC_CMD__VM_ALLOC_SLOT_TYPE_X+2)
 ;;           (TAX)
-;;           (LDY VM_FIRST_FREE_SLOT_ON_PAGE,x)           ;; first free slot offset
+;;           (LDY VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
 ;;           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)    ;; if =0 allocate new page (no more free slots on this page)
 ;;           ;; ensure zp_ptr2 points to the slot!
 
@@ -4190,7 +3390,7 @@ call frame primitives etc.
 ;;           ;; now get the next free slot (from linked list in this page)
 ;;           (LDY !$00)
 ;;           (LDA (ZP_PTR2),y) ;; content of free slot points to the next free one (or 00)
-;;           (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)           ;; set next free slot for this page (x is still page)
+;;           (STA VM_PAGE_SLOT_DATA,x)           ;; set next free slot for this page (x is still page)
 
 ;;           ;; ensure y holds the actual available slot size
 ;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
@@ -4211,7 +3411,7 @@ call frame primitives etc.
 ;;           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next page ptr = $00 => end reached, no more pages
 ;;           ;; check whether this page is full
 ;;           (TAX)
-;;           (LDY VM_FIRST_FREE_SLOT_ON_PAGE,x)
+;;           (LDY VM_PAGE_SLOT_DATA,x)
 ;;           (BEQ FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next free slot for page is 00 => page is full, try to find next
 ;;           ;; page is not full => this is the new head
 ;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
@@ -4408,7 +3608,7 @@ call frame primitives etc.
 
    (label LOOP_REMOVE_FULL_PAGES__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
           (TAY) ;; y = page now
-          (LDA VM_FIRST_FREE_SLOT_ON_PAGE,y)
+          (LDA VM_PAGE_SLOT_DATA,y)
           (BNE DONE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
 
           ;; remove this page (in y) from list
@@ -4458,7 +3658,7 @@ call frame primitives etc.
    (label CONTINUE_WITH_RESTORE__VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS)
           (LDA ZP_TEMP)
           (STA ZP_PTR2) ;; restore
-          (LDA VM_FIRST_FREE_SLOT_ON_PAGE,x)           ;; first free slot offset
+          (LDA VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
 
           (RTS)
 ))
@@ -4479,7 +3679,7 @@ call frame primitives etc.
    ;; (label REGULAR_FREE__VM_FREE_M1_SLOT_IN_ZP_PTR2)
    ;;        (LDX ZP_PTR2+1)
    ;;        (STX DEC_CMD__VM_FREE_M1_SLOT_IN_ZP_PTR2+2)    ;; write page for later dec execution
-   ;;        (LDA VM_FIRST_FREE_SLOT_ON_PAGE,x)           ;; first free slot offset
+   ;;        (LDA VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
    ;;        (BNE CONTINUE__VM_FREE_M1_SLOT_IN_ZP_PTR2)     ;; regular free
 
    ;;        ;; this page was full (since next free slot was 0) => register with the list of pages with free slots
@@ -4491,7 +3691,7 @@ call frame primitives etc.
    ;;        (LDY !$00)
    ;;        (STA (ZP_PTR2),y)                       ;; set (zp_ptr) = previous free
    ;;        (LDA ZP_PTR2)                           ;; low byte of pointer = new free slot
-   ;;        (STA VM_FIRST_FREE_SLOT_ON_PAGE,x)           ;; set new first free slot offset
+   ;;        (STA VM_PAGE_SLOT_DATA,x)           ;; set new first free slot offset
 
    ;;        (DEC ZP_PTR2)                           ;; now points to ref count
    ;;        (TYA)                                   ;; y is still 0 => a := 0
