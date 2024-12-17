@@ -133,6 +133,7 @@ call frame primitives etc.
          ZP_VM_FUNC_PTR
          ZP_LOCALS_HB_PTR
          ZP_LOCALS_LB_PTR
+         ZP_LOCALS_TOP_MARK
          ZP_CELL_STACK_TOS
          ZP_CELL_STACK_LB_PTR
          ZP_CELL_STACK_HB_PTR
@@ -166,13 +167,14 @@ call frame primitives etc.
    ;; (byte-const ZP_TEMP4                $da)
 
    ;; the following twelve bytes need to be continuous, since they are saved into the call frame!
-   (byte-const ZP_VM_PC                  $de) ;; program counter (ptr to currently executing byte code)
-   (byte-const ZP_VM_FUNC_PTR            $e0) ;; pointer to the currently running function
-   (byte-const ZP_LOCALS_LB_PTR          $e2) ;; pointer to low byte of first local in call-frame
-   (byte-const ZP_LOCALS_HB_PTR          $e4) ;; pointer to high byte of first local in call-frame
+   (byte-const ZP_VM_PC                  $de) ;; de..df program counter (ptr to currently executing byte code)
+   (byte-const ZP_VM_FUNC_PTR            $e0) ;; e0..e1 pointer to the currently running function
+   (byte-const ZP_LOCALS_LB_PTR          $e2) ;; e2..e3 pointer to low byte of first local in call-frame
+   (byte-const ZP_LOCALS_HB_PTR          $e4) ;; e4..e5 pointer to high byte of first local in call-frame
    (byte-const ZP_CELL_STACK_LB_PTR      $e6) ;; e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
    (byte-const ZP_CELL_STACK_HB_PTR      $e8) ;; e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
    (byte-const ZP_CALL_FRAME_TOP_MARK    $ea) ;; ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
+   (byte-const ZP_LOCALS_TOP_MARK        $eb) ;; eb byte pointing to the byte past the last local on the locals stack
    (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2 
 
    ;; implementation using registers
@@ -211,6 +213,7 @@ call frame primitives etc.
 (define ZP_VM_FUNC_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_FUNC_PTR"))
 (define ZP_LOCALS_LB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_LB_PTR"))
 (define ZP_LOCALS_HB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_HB_PTR"))
+(define ZP_LOCALS_TOP_MARK      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_TOP_MARK"))
 (define TAG_BYTE_BYTE_CELL      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_BYTE_CELL"))
 (define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
 (define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))

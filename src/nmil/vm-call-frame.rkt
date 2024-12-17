@@ -86,10 +86,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (JSR VM_ALLOC_CELL_STACK_PAGES)
           (STX ZP_LOCALS_LB_PTR+1)
           (STY ZP_LOCALS_HB_PTR+1)
-          (LDA !$02) ;; payload start for locals
+          (LDA !$03) ;; payload start for locals
           (STA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_HB_PTR)
-
+          (STA ZP_LOCALS_TOP_MARK)
           (RTS)))
 
 
@@ -599,7 +599,120 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                 #xff
                 "top mark points to the first free byte on the call frame stack (past the one pushed)"))
 
+;; input:  A number of locals needed by this function
+;;         zp_locals_lb_ptr
+;;         zp_locals_hb_ptr
+;;         zp_locals_top_mark
+;; output: A  new topmark
+;;         zp_locals_lb_ptr
+;;         zp_locals_hb_ptr
+;;         zp_locals_top_mark
+;; uses:   A, X, Y
+(define VM_ALLOC_LOCALS
+  (list
+   (label VM_ALLOC_LOCALS)
+          (TAX)                          ;; save original number of locals for after new page allocation (if necessary)
+          (CLC)
+          (ADC ZP_LOCALS_TOP_MARK)      
+          (BCS ALLOCATE_NEW_LOCALS_PAGES__)
 
+   (label STAY_ON_PAGE__)               ;; a holds new top mark
+          (LDX ZP_LOCALS_TOP_MARK)      ;; x no longer needed, now loading current topmark
+          (STX ZP_LOCALS_LB_PTR)
+          (STX ZP_LOCALS_HB_PTR)        
+          (STA ZP_LOCALS_TOP_MARK)
+          (RTS)
+
+   (label ALLOCATE_NEW_LOCALS_PAGES__)  ;; x holds number of parameters
+          ;; store old topmark on page
+          (LDA ZP_LOCALS_TOP_MARK)      ;; a can be discarded
+          (LDY !$02)
+          (STY ZP_LOCALS_LB_PTR)
+          (STY ZP_LOCALS_HB_PTR)        ;; actually on lb is necessary, room for optimization
+          (LDY !$00)
+          (STA (ZP_LOCALS_LB_PTR),y)    ;; store topmark @02
+          (STA (ZP_LOCALS_HB_PTR),y)    ;; actually on lb is necessary, room for optimization
+          
+          (STX ZP_LOCALS_TOP_MARK)      ;; remember X (number of parameters)
+
+          ;; prepare call to new pages allocation
+          (LDX ZP_LOCALS_LB_PTR+1)
+          (LDY ZP_LOCALS_HB_PTR+1)
+          (JSR VM_ALLOC_CELL_STACK_PAGES)
+          (STX ZP_LOCALS_LB_PTR+1)
+          (STY ZP_LOCALS_PTR+1)
+
+          ;; now set the locals pointers to local#0 and set the top mark
+          (LDA !$03)
+          (STA ZP_LOCALS_LB_PTR)
+          (STA ZP_LOCALS_HB_PTR)   ;; new locals start here
+          (CLC)
+          (ADC ZP_LOCALS_TOP_MARK) ;; add number of locals allocated
+          (STA ZP_LOCALS_TOP_MARK) ;; store top mark
+          (RTS)))
+
+(module+ test #| alloc locals |#
+  (check-equal? #t #f))
+
+;; input:  A number of locals to keep after free (locals of current function?)
+;;         zp_locals_lb_ptr
+;;         zp_locals_hb_ptr
+;;         zp_locals_top_mark
+;; output: A  new topmark
+;;         zp_locals_lb_ptr
+;;         zp_locals_hb_ptr
+;;         zp_locals_top_mark
+;; uses:   A, X, Y
+(define VM_FREE_LOCALS
+  (list
+   (label VM_FREE_LOCALS)
+          (LDY ZP_LOCALS_LB_PTR)
+          (CPY !$03)
+          (BEQ FREE_LOCALS_PAGES__)
+
+   (label STAY_ON_PAGE__)              
+          (STA ZP_LOCALS_TOP_MARK)      ;; keep # parameters to keep
+          (LDA ZP_LOCALS_LB_PTR)    
+          (TAX)                         ;; keep old locals lb ptr lowbyte for new top mark
+          (SEC)
+          (SBC ZP_LOCALS_TOP_MARK)      ;; A = A (lb ptr low byte) - # params
+          (STA ZP_LOCALS_LB_PTR)
+          (STA ZP_LOCALS_HB_PTR)
+          (STX ZP_LOCALS_TOP_MARK)
+          (RTS)
+
+   (label FREE_LOCALS_PAGES__)          ;; a = number of parameters
+          (STA ZP_LOCALS_TOP_MARK)      ;; keep #
+
+          ;; free the pages
+          (LDA ZP_LOCALS_LB_PTR+1)
+          (JSR VM_FREE_PAGE)
+          (LDA ZP_LOCALS_HB_PTR+1)
+          (JSR VM_FREE_PAGE)
+
+          ;; get previous page (using data from the just freed pages, so make sure no one interferes!)
+          (LDY !$01)
+          (STA ZP_LOCALS_LB_PTR)
+          (STA ZP_LOCALS_HB_PTR)
+          (LDY !$00)
+          (LDA (ZP_LOCALS_LB_PTR),y)
+          (STA ZP_LOCALS_LB_PTR+1)
+          (LDA (ZP_LOCALS_HB_PTR),y)
+          (STA ZP_LOCALS_HB_PTR+1)
+
+          ;; now get old top mark
+          (INY)
+          (LDA (ZP_LOCALS_LB_PTR),y)
+          (SEC)
+          (SBC ZP_LOCALS_TOP_MARK)
+          (STA ZP_LOCALS_TOP_MARK)
+          (STA ZP_LOCALS_LB_PTR)
+          (STA ZP_LOCALS_HB_PTR)
+
+          (RTS)))
+
+(module+ test #| free locals |#
+  (check-equal? #t #f))
 
 (define vm-call-frame
   (append vm-memory-manager
@@ -607,4 +720,6 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           VM_ALLOC_CALL_FRAME_N                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
           VM_PUSH_CALL_FRAME_N                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
           VM_POP_CALL_FRAME_N                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
+          VM_ALLOC_LOCALS
+          VM_FREE_LOCALS
           ))

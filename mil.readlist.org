@@ -3372,15 +3372,18 @@ this will include the implementation of
     call reverse
 
     ;; push nil ;; <- entry if default is not set
-    pop to local#0         ;; b-list
+                           ;; resulting stack
+                           ;; b-list a-list
+    pop to local#0         ;; a-list
     write to local#1       ;; a-list
-    nil? return local#0    ;; a-list
+    nil? return local#0 pop 1 ;; a-list    ;; a-list = nil? => return b-list and pop one value
     cdr                    ;; new-a-list
     push local#0           ;; b-list new-a-list
     push local#1           ;; a-list b-list new-a-list
     car                    ;; car-a-list b-list new-a-list
     cons                   ;; new b-list new-a-list
-    tail-call
+    tail-call              ;; ...call into no defaults
+
   - check out other functions to check validity of this optimization
     - function 1: fibonacci
       (def (fib n (a 0) (b 1))
@@ -3440,11 +3443,12 @@ this will include the implementation of
     - function 2: 
     - function 3:
     - function 4:
-- [ ] optimizations for call stack/frame
-  - [ ] spread low/high over two pages
+- [-] optimizations for call stack/frame
+  - [X] spread low/high over two pages
     - allocation needs to allocate two pages for stack
     - there need to be two zero page pointers, one for lowbyte-stack, one for highbyte-stack
-  - [ ] allow fast call frames (less copying, less space consumption)
+  - [X] allow fast call frames (less copying, less space consumption)
+  - [ ] fix call-frame functions in vm-interpreter
 - [-] allocation/deallocation of lists, cells, structures, strings
   - [X] cells
   - [X] lists
