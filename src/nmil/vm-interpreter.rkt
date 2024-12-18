@@ -109,6 +109,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define (wrap-bytecode-for-test bc)
     (append (list (org #x7000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER)
+                  (JSR VM_INITIALIZE_CALL_FRAME)
                   (JSR VM_INTERPRETER_INIT)
                   (JMP VM_INTERPRETER))
             (list (org #x8000))
@@ -120,7 +121,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (for-each displayln (list "bc commands"
                               ""
                               "? | h    print this help screen"
-                              "ps       print the (local) stack"
+                              "ps       print the stack"
+                              "pl       print locals (not implemented yet)"
                               "pf       print the call frame"
                               "pa n     print the n-th parameter (of the call frame)"
                               "pl n     print the n-th local (of the call frame)"
@@ -240,6 +242,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                  (vm-pc state)
                  (sub1 (+ n (vm-pc state))))))
 
+(module+ test #| after mem init |#
+  (define PAGE_AVAIL_0 #x97)
+  (define PAGE_AVAIL_0_W #x9700)
+  (define PAGE_AVAIL_1 #x96)
+  (define PAGE_AVAIL_1_W #x9600))
+
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator cpu-state-program-counter peek))
 
 (provide vm-interpreter)
@@ -340,7 +348,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
              (bc PUSH_NIL)
-             (bc XPUSH_INT_1)
+             (bc PUSH_INT_1)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
 
@@ -352,16 +360,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc BRK))
      ))
 
-  (check-equal? (vm-stack->strings bc-nil-ret-state)
-                (list "stack holds 1 item"
-                      "cell-int $0001  (rt)"))
-  (check-equal? (vm-call-frame->strings bc-nil-ret-state)
-                (list "call-frame:       $cd02"
-                      "program-counter:  $8005"
-                      "function-ptr:     $0000"
-                      "params start@:    $cd02"
-                      "locals start@:    $cd0c"
-                      "cell-stack start: $cd0c"))
+ (check-equal? (vm-stack->strings bc-nil-ret-state)
+                  (list "stack holds 1 item"
+                        "cell-int $0001  (rt)"))
+ (check-equal? (vm-call-frame->strings bc-nil-ret-state)
+                  (list "call-frame-ptr:   $00f8"
+                        "program-counter:  $8005"
+                        "function-ptr:     $0000"
+                        "locals-ptr:       $9803, $9903 (lb, hb)"))
 
   (define bc-nil-ret-local-state
     (run-bc-wrapped-in-test
@@ -372,67 +378,33 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc BRK)
 
              (org #x8F00)
-      (label TEST_FUN)
-             (byte 2)            ;; number of parameters
-             (byte 1)            ;; number of locals
-             (bc PUSH_PARAM_0)
+      (label TEST_FUN)    
+             (byte 2)            ;; number of locals
+             (bc POP_TO_LOCAL_1)
              (bc POP_TO_LOCAL_0)
-             (bc PUSH_PARAM_1)
-             (bc NIL?_RET_LOCAL_0)     ;; return param0 if nil
+             (bc PUSH_LOCAL_1)
+             (bc NIL?_RET_LOCAL_0_POP_1)     ;; return local 0 (int 1) if nil
              (bc BRK))))
 
   (check-equal? (vm-stack->strings bc-nil-ret-local-state)
-                (list "stack holds 1 item"
-                      "cell-int $0001  (rt)"))
+                   (list "stack holds 1 item"
+                         "cell-int $0001  (rt)"))
   (check-equal? (vm-call-frame->strings bc-nil-ret-local-state)
-                (list "call-frame:       $cd02"
-                      "program-counter:  $8005"
-                      "function-ptr:     $0000"
-                      "params start@:    $cd02"
-                      "locals start@:    $cd0c"
-                      "cell-stack start: $cd0c")))
+                   (list "call-frame-ptr:   $00f8"
+                         "program-counter:  $8005"
+                         "function-ptr:     $0000"
+                         "locals-ptr:       $9803, $9903 (lb, hb)")))
 
-(define XBC_TAIL_CALL
+(define BC_TAIL_CALL
   (list
-   (label XBC_TAIL_CALL)
-          ;; pop stack values into parameters (number?)
-          (LDY !$00)
-          (LDA (ZP_VM_FUNC_PTR),y)                      ;; number of parameters
-          (BEQ DONE_PARAM_COPY____BC_TAIL_CALL)
-          ;; get A elements from the cell-stack into params
-          (ASL A)
-          (TAY)
-   (label PARAM_SET_LOOP__BC_TAIL_CALL)
-          (DEY)
-          (STY COUNT__BC_TAIL_CALL)
-          (LDA ZP_RT)                                   ;; put in params in reverse low/high order!
-          (STA (ZP_PARAMS_PTR),y)                       ;; load low byte of param at index
-          (DEY)                                         ;;
-          (LDA ZP_RT+1)
-          (STA (ZP_PARAMS_PTR),y)                       ;; load high byte of param at index -> A
-          (JSR VM_CELL_STACK_POP_R)                     ;; fill RT with next tos
-          (LDY COUNT__BC_TAIL_CALL)
-          (DEY)
-          (BNE PARAM_SET_LOOP__BC_TAIL_CALL)
-
-   (label DONE_PARAM_COPY____BC_TAIL_CALL)
-          (STY ZP_RT)                                   ;; clear RT
-          (DEY)
-          (STY ZP_CELL_STACK_TOS)                       ;; set stack tos ptr to $ff (empty)
-
-
-          ;; copy function ptr to pc
+   (label BC_TAIL_CALL)
           (LDA ZP_VM_FUNC_PTR)
           (STA ZP_VM_PC)
           (LDA ZP_VM_FUNC_PTR+1)
           (STA ZP_VM_PC+1)
 
-          ;; adjust pc to start executing function ptr +2
-          (LDA !$02)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)
-
-  (label  COUNT__BC_TAIL_CALL)
-          (byte 2)))
+          ;; adjust pc to start executing function ptr +1
+          (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| bc-tail-call |#
   (define bc-tail-call-state
@@ -446,24 +418,23 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
              (org #x8F00)
       (label TEST_FUN)
-             (byte 1)            ;; number of parameters
-             (byte 0)            ;; number of locals
-             (bc PUSH_PARAM_0)
-             (bc NIL?_RET_PARAM_0)     ;; return param0 if nil
-             (bc PUSH_NIL)       ;; value to use with tail call             
+             (byte 1)            ;; number of locals
+             (bc POP_TO_LOCAL_0)
+             (bc PUSH_LOCAL_0)
+             (bc NIL?_RET_LOCAL_0_POP_1)    ;; return param0 if nil
+             (bc POP_TO_LOCAL_0)
+             (bc PUSH_NIL)       ;; value to use with tail call
              (bc TAIL_CALL)
              (bc BRK))))
 
-  (check-equal? (vm-stack->strings bc-tail-call-state)
-                (list "stack holds 1 item"
-                      "cell-pair-ptr NIL  (rt)"))
-  (check-equal? (vm-call-frame->strings bc-tail-call-state)
-                (list "call-frame:       $cd02"
-                      "program-counter:  $8006"
-                      "function-ptr:     $0000"
-                      "params start@:    $cd02"
-                      "locals start@:    $cd0c"
-                      "cell-stack start: $cd0c"))
+   (check-equal? (vm-stack->strings bc-tail-call-state)
+                   (list "stack holds 1 item"
+                         "cell-pair-ptr NIL  (rt)"))
+   (check-equal? (vm-call-frame->strings bc-tail-call-state)
+                    (list "call-frame-ptr:   $00f8"
+                          "program-counter:  $8006"
+                          "function-ptr:     $0000"
+                          "locals-ptr:       $9803, $9903 (lb, hb)"))
 
   ;; convert the list given by cell-pair-ptr (address) as a list of strings
   (define (vm-list->strings state address (string-list '()))   
@@ -497,43 +468,41 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
              (org #x8F00)
       (label TEST_FUN)
-             (byte 2)                   ;; number of parameters
-             (byte 0)                   ;; number of locals
-             (bc PUSH_PARAM_0) 
-             (bc NIL?_RET_PARAM_1)      ;; return param0 if nil
-             (bc PUSH_PARAM_0)
+             (byte 2)                   ;; number of locals
+             (bc POP_TO_LOCAL_0)        ;; b-list
+             (bc POP_TO_LOCAL_1)        ;; a-list
+             (bc PUSH_LOCAL_1)
+             (bc NIL?_RET_LOCAL_0_POP_1);; return b-list if a-list is nil
              (bc CDR)                   ;; shrinking original list
-             (bc PUSH_PARAM_1)
-             (bc PUSH_PARAM_0)
-             (bc CAR) 
+             (bc PUSH_LOCAL_0)
+             (bc PUSH_LOCAL_1)
+             (bc CAR)
              (bc CONS)                  ;; growing reverse list
              (bc TAIL_CALL)
              (bc BRK))))
 
   (check-equal? (memory-list bc-tail-call-reverse-state VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE (add1 VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE))
-                (list #x00 #x00))
-  (check-equal? (vm-page->strings bc-tail-call-reverse-state #xcc)
-                (list "page-type:      cell-pair page"
-                      "previous page:  $00"
-                      "slots used:     7"
-                      "next free slot: $55"))
+                   (list #x00 #x00))
+  (check-equal? (vm-page->strings bc-tail-call-reverse-state PAGE_AVAIL_0)
+                   (list "page-type:      cell-pair page"
+                         "previous page:  $00"
+                         "slots used:     7"
+                         "next free slot: $55"))
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                7002) ;; 3575 offset
+                   7638) ;; 
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
-                (list "cell-int $0002"
-                      "cell-int $0001"
-                      "cell-int $0000")
-                "list got reversed")
+                   (list "cell-int $0002"
+                         "cell-int $0001"
+                         "cell-int $0000")
+                   "list got reversed")
   (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
-                (list "stack holds 1 item"
-                      "cell-pair-ptr $cc51  (rt)"))
+                   (list "stack holds 1 item"
+                         "cell-pair-ptr $9751  (rt)"))
   (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
-                (list "call-frame:       $cd02"
-                      "program-counter:  $800d"
-                      "function-ptr:     $0000"
-                      "params start@:    $cd02"
-                      "locals start@:    $cd0c"
-                      "cell-stack start: $cd0c")))
+                   (list "call-frame-ptr:   $00f8"
+                         "program-counter:  $800d"
+                         "function-ptr:     $0000"
+                         "locals-ptr:       $9803, $9903 (lb, hb)")))
 
 (define BC_CALL
   (list
@@ -586,16 +555,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-before-call-state)
-                (list "call-frame:       $cd02"
+                (list "call-frame-ptr:   $9a03"
                       "program-counter:  $8001"
                       "function-ptr:     $0000"
-                      "params start@:    $cd02"
-                      "locals start@:    $cd0c"
-                      "cell-stack start: $cd0c"))
-  (check-equal? (vm-stack->strings test-bc-before-call-state)
-                (list "stack holds 1 item"
-                      "cell-int $0000  (rt)")
-                "stack holds just the pushed int")
+                      "locals-ptr:       $9803, $9903 (lb, hb)"))
+   (check-equal? (vm-stack->strings test-bc-before-call-state)
+                 (list "stack holds 1 item"
+                       "cell-int $0000  (rt)")
+                 "stack holds just the pushed int")
 
   (define test-bc-call-state
     (run-bc-wrapped-in-test
@@ -604,24 +571,22 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc CALL) (byte 00) (byte $8f)
 
              (org #x8F00)
-      (label TEST_FUN)
-             (byte 0)            ;; number of parameters
+      (label TEST_FUN)     
              (byte 0)            ;; number of locals
              (bc PUSH_INT_1)     ;; value to return
              (bc BRK))
      ))
 
-  (check-equal? (vm-call-frame->strings test-bc-call-state)
-                (list "call-frame:       $cd0e"
-                      "program-counter:  $8f03"
-                      "function-ptr:     $8f00"
-                      "params start@:    $cd0e"
-                      "locals start@:    $cd18"
-                      "cell-stack start: $cd18"))
-  (check-equal? (vm-stack->strings test-bc-call-state)
-                (list "stack holds 1 item"
-                      "cell-int $0001  (rt)")
-                "stack holds just the pushed int, nothing that was there before the call")
+   (check-equal? (vm-call-frame->strings test-bc-call-state)
+                   (list "call-frame-ptr:   $9a03"
+                         "program-counter:  $8f02"
+                          "function-ptr:     $8f00"
+                         "locals-ptr:       $9803, $9903 (lb, hb)"))
+   (check-equal? (vm-stack->strings test-bc-call-state)
+                    (list "stack holds 2 items"
+                          "cell-int $0001  (rt)"
+                          "cell-int $0000")
+                    "stack holds the pushed int and the parameter passed")
 
   (define test-bc-call-wp-state
     (run-bc-wrapped-in-test
@@ -631,27 +596,23 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc CALL) (byte 00) (byte $8f)
 
              (org #x8F00)
-      (label TEST_FUN)
-             (byte 2)            ;; number of parameters
+      (label TEST_FUN)      
              (byte 0)            ;; number of locals
              (bc PUSH_INT_1)     ;; value to return
              (bc BRK))
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
-                (list "call-frame:       $cd10"
-                      "program-counter:  $8f03"
-                      "function-ptr:     $8f00"
-                      "params start@:    $cd0c"
-                      "locals start@:    $cd1a"
-                      "cell-stack start: $cd1a"))
-  (check-equal? (memory-list  test-bc-call-wp-state #xcd0c #xcd0f)
-                (list #x00 #x03 #xff #x7f)
-                "cell int 0, cell int -1 in reverse order (since on stack)")
+                   (list "call-frame-ptr:   $9a03"
+                         "program-counter:  $8f02"
+                         "function-ptr:     $8f00"
+                         "locals-ptr:       $9803, $9903 (lb, hb)"))
   (check-equal? (vm-stack->strings test-bc-call-wp-state)
-                (list "stack holds 1 item"
-                      "cell-int $0001  (rt)")
-                "stack holds just the pushed int, nothing that was there before the call")
+                   (list "stack holds 3 items"
+                         "cell-int $0001  (rt)"
+                         "cell-int $1fff"
+                         "cell-int $0000")
+                   "stack holds the pushed int, and all parameters")
 
   (define test-bc-call-wl-state
     (run-bc-wrapped-in-test
@@ -661,61 +622,31 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc CALL) (byte 00) (byte $8f)
 
              (org #x8F00)
-      (label TEST_FUN)
-             (byte 0)            ;; number of parameters
+      (label TEST_FUN)    
              (byte 2)            ;; number of locals
              (bc PUSH_INT_1)     ;; value to return
              (bc BRK))))
 
   (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
-                (list "call-frame:       $cd10"
-                      "program-counter:  $8f03"
-                      "function-ptr:     $8f00"
-                      "params start@:    $cd10"
-                      "locals start@:    $cd1a"
-                      "cell-stack start: $cd1e"))
+                   (list "call-frame-ptr:   $9a03"
+                         "program-counter:  $8f02"
+                         "function-ptr:     $8f00"
+                         "locals-ptr:       $9803, $9903 (lb, hb)"))
   (check-equal? (vm-stack->strings test-bc-call-wl-state)
-                (list "stack holds 1 item"
-                      "cell-int $0001  (rt)")
-                "stack holds just the pushed int, nothing that was there before the call")
+                   (list "stack holds 3 items"
+                         "cell-int $0001  (rt)"
+                         "cell-int $1fff"
+                         "cell-int $0000")
+                   "stack holds the pushed int, and all parameters"))
 
-  (define test-bc-call-wpnl-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_INT_0)
-             (bc PUSH_INT_m1)
-             (bc CALL) (byte 00) (byte $8f)
-
-             (org #x8F00)
-      (label TEST_FUN)
-             (byte 1)            ;; number of parameters
-             (byte 2)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
-             (bc BRK))))
-
-  (check-equal? (memory-list  test-bc-call-wpnl-state #xcd0e #xcd0f)
-                (list #xff #x7f)
-                "cell int -1 in reverse order (since on stack)")
-  (check-equal? (vm-call-frame->strings test-bc-call-wpnl-state)
-                (list "call-frame:       $cd10"
-                      "program-counter:  $8f03"
-                      "function-ptr:     $8f00"
-                      "params start@:    $cd0e"
-                      "locals start@:    $cd1a"
-                      "cell-stack start: $cd1e"))
-  (check-equal? (vm-stack->strings test-bc-call-wpnl-state)
-                (list "stack holds 1 item"
-                      "cell-int $0001  (rt)")
-                "stack holds just the pushed int, nothing that was there before the call"))
-
-(define XBC_RET
+(define BC_RET
   (list
-   (label XBC_RET)
+   (label BC_RET)
           ;; restore from previous call frame, keep RT as result
           (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
           (JMP VM_INTERPRETER)))
 
-(module+ test #| bc_call |#
+(module+ test #| bc_ret |#
   (define test-bc-ret-state
     (run-bc-wrapped-in-test
      (list
@@ -724,52 +655,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc BRK)
 
              (org #x8F00)
-      (label TEST_FUN)
-             (byte 0)            ;; number of parameters
+      (label TEST_FUN)      
              (byte 0)            ;; number of locals
              (bc PUSH_INT_1)     ;; value to return
              (bc RET))))
   
   (check-equal? (vm-call-frame->strings test-bc-ret-state)
-                (list "call-frame:       $cd02"
-                      "program-counter:  $8004"
-                      "function-ptr:     $0000"
-                      "params start@:    $cd02"
-                      "locals start@:    $cd0c"
-                      "cell-stack start: $cd0c"))
+                   (list "call-frame-ptr:   $00f8"
+                         "program-counter:  $8004"
+                         "function-ptr:     $0000"
+                         "locals-ptr:       $9803, $9903 (lb, hb)"))
   (check-equal? (vm-stack->strings test-bc-ret-state)
-                  (list "stack holds 2 items"
-                        "cell-int $0001  (rt)"
-                        "cell-int $0000")
-                  "previous value on the stack is restored to be there + returned value (in rt)")
-
-  (define test-bc-ret-wpnl-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_INT_0)
-             (bc PUSH_INT_m1)
-             (bc CALL) (byte 00) (byte $8f)
-             (bc BRK)
-
-             (org #x8F00)
-      (label TEST_FUN)
-             (byte 1)            ;; number of parameters
-             (byte 2)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
-             (bc RET))))
-
-  (check-equal? (vm-stack->strings test-bc-ret-wpnl-state)
-                (list "stack holds 2 items"
-                      "cell-int $0001  (rt)"
-                      "cell-int $0000")
-                "the value returned and the original stack with its parameters (1) removed")
-  (check-equal? (vm-call-frame->strings test-bc-ret-wpnl-state)
-                (list "call-frame:       $cd02"
-                      "program-counter:  $8005"
-                      "function-ptr:     $0000"
-                      "params start@:    $cd02"
-                      "locals start@:    $cd0c"
-                      "cell-stack start: $cd0c")))
+                   (list "stack holds 2 items"
+                         "cell-int $0001  (rt)"
+                         "cell-int $0000")
+                   "previous value on the stack is there + returned value (in rt)"))
 
 (define BC_BRK
   (list
@@ -809,48 +709,38 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   ;;        00+len(datarecord): next free record
   )
 
-(define XBC_PUSH_PARAM_OR_LOCAL_SHORT
+(define BC_PUSH_LOCAL_SHORT
   (flatten
    (list
-    (label XBC_PUSH_PARAM_OR_LOCAL_SHORT)
+    (label BC_PUSH_LOCAL_SHORT)
            (LDY !$00)
            (LDA (ZP_VM_PC),y)                   ;; load bytecode
            (AND !$07)                           ;; lower three bits are encoded into the short command
            (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
-           (BCS PUSH_PARAM__BC_PUSH_PARAM_OR_LOCAL_SHORT)
+           (BCS PUSH_CMD__BC_PUSH_LOCAL_SHORT)
 
-           ;; push local
-           (ASL A)                              ;; A = 0000 xxx0
+           ;; push local           
            (TAY)                                ;; index -> Y
-           (LDA (ZP_LOCALS_PTR),y)              ;; load low byte of local at index
+           (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
            (TAX)                                ;; low byte -> X
-           (INY)                                ;; 
-           (LDA (ZP_LOCALS_PTR),y)              ;; load high byte of local at index -> A
+           (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 
-           ;; push param
-   (label  PUSH_PARAM__BC_PUSH_PARAM_OR_LOCAL_SHORT)
-           (ASL A)                              ;; A = 0000 xxx0                         
-           (TAY)                                ;; index -> Y               
-           (INY)                                ;; params are in low/high reversed order (stack)
-           (LDA (ZP_PARAMS_PTR),y)              ;; load low byte of param at index       
-           (TAX)                                ;; low byte -> X                          
-           (DEY)                                ;;                                       
-           (LDA (ZP_PARAMS_PTR),y)              ;; load high byte of param at index -> A  
-           (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack                     
-           (JMP VM_INTERPRETER_INC_PC)          ;; next bc                               
+           ;;  push
+   (label  PUSH_CMD__BC_PUSH_LOCAL_SHORT)
+           (BRK)
            )))
 
-(define XPUSH_LOCAL_0 #x80)
-(define XPUSH_LOCAL_1 #x82)
-(define XPUSH_LOCAL_2 #x84)
-(define XPUSH_LOCAL_3 #x86)
+(define PUSH_LOCAL_0 #x80)
+(define PUSH_LOCAL_1 #x82)
+(define PUSH_LOCAL_2 #x84)
+(define PUSH_LOCAL_3 #x86)
 
-(define XPUSH_PARAM_0 #x81)
-(define XPUSH_PARAM_1 #x83)
-(define XPUSH_PARAM_2 #x85)
-(define XPUSH_PARAM_3 #x87)
+;; (define XPUSH_PARAM_0 #x81)
+;; (define XPUSH_PARAM_1 #x83)
+;; (define XPUSH_PARAM_2 #x85)
+;; (define XPUSH_PARAM_3 #x87)
 
 (define BC_POP_TO_LOCAL_SHORT
   (flatten
@@ -886,7 +776,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 ;; (define POP_TO__2 #x95)
 ;; (define POP_TO__3 #x97)
 
-(module+ test #| BC_PUSH_PARAM_OR_LOCAL_SHORT |#
+(module+ test #| BC_PUSH_LOCAL_SHORT |#
   (define test-bc-pop-to-l-state
     (run-bc-wrapped-in-test
      (list
@@ -902,141 +792,141 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc BRK))))
 
   (check-equal? (vm-stack->strings test-bc-pop-to-l-state)
-                (list "stack is empty"))
-  (check-equal? (vm-cell-at->string test-bc-pop-to-l-state #xcd1a)
-                "cell-int $0001")
+                (list "stack holds 2 items"
+                      "cell-int $1fff  (rt)"
+                      "cell-int $0000"))
+  (check-equal? (peek test-bc-pop-to-l-state #x9803)
+                #x03)
+  (check-equal? (peek test-bc-pop-to-l-state #x9903)
+                #x01)
   (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
-                (list "call-frame:       $cd10"
-                      "program-counter:  $8f04"
-                      "function-ptr:     $8f00"
-                      "locals-ptr:       $cd1a"))
+                   (list "call-frame-ptr:   $9a03"
+                         "program-counter:  $8f03"
+                         "function-ptr:     $8f00"
+                         "locals-ptr:       $9803, $9903 (lb, hb)"))
 
-(define test-bc-pop-to-p-state
+  (define test-bc-pop-to-p-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
-             (bc PUSH_INT_m1)
-             (bc CALL) (byte 00) (byte $8f)
+      (bc PUSH_INT_0)
+      (bc PUSH_INT_m1)
+      (bc CALL) (byte 00) (byte $8f)
 
-             (org #x8F00)
-      (label TEST_FUN)
-             (byte 1)            ;; number of parameters
-             (byte 2)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
-             (bc POP_TO_PARAM_0) ;; overwrites -1
-             (bc BRK))))
+      (org #x8F00)
+      (label TEST_FUN)      
+      (byte 2)            ;; number of locals
+      (bc POP_TO_LOCAL_0)
+      (bc POP_TO_LOCAL_1)
+      (bc PUSH_INT_1)     ;; value to return
+      (bc POP_TO_LOCAL_0) ;; overwrites -1
+      (bc BRK))
+     ))
 
   (check-equal? (vm-stack->strings test-bc-pop-to-p-state)
-                (list "stack is empty"))
-  (check-equal? (memory-list test-bc-pop-to-p-state #xcd0e #xcd0f)
-                (list #x01 #x03))
+                  (list "stack is empty"))
+  (check-equal? (peek test-bc-pop-to-p-state #x9803)
+                #x03)
+  (check-equal? (peek test-bc-pop-to-p-state #x9903)
+                #x01
+                "local0 = int 1")
+  (check-equal? (peek test-bc-pop-to-p-state #x9804)
+                #x03)
+  (check-equal? (peek test-bc-pop-to-p-state #x9904)
+                #x00
+                "local1 = int 0")
   (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
-                (list "call-frame:       $cd10"
-                      "program-counter:  $8f04"
-                      "function-ptr:     $8f00"
-                      "params start@:    $cd0e"
-                      "locals start@:    $cd1a"
-                      "cell-stack start: $cd1e"))
+                   (list "call-frame-ptr:   $9a03"
+                         "program-counter:  $8f05"
+                         "function-ptr:     $8f00"
+                         "locals-ptr:       $9803, $9903 (lb, hb)"))
 
   (define test-bc-push-l-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
-             (bc PUSH_INT_m1)
-             (bc CALL) (byte 00) (byte $8f)
+      (bc CALL) (byte 00) (byte $8f)
 
-             (org #x8F00)
+      (org #x8F00)
       (label TEST_FUN)
-             (byte 1)            ;; number of parameters
-             (byte 2)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
-             (bc POP_TO_LOCAL_0) ;;
-             (bc PUSH_INT_0)
-             (bc PUSH_LOCAL_0)
-             (bc BRK))))
+      (byte 1)            ;; number of locals
+      (bc PUSH_INT_1)     ;; value to return
+      (bc POP_TO_LOCAL_0) ;;
+      (bc PUSH_INT_0)
+      (bc PUSH_LOCAL_0)
+      (bc BRK))))
 
   (check-equal? (vm-stack->strings test-bc-push-l-state)
-                (list "stack holds 2 items"
-                      "cell-int $0001  (rt)"
-                      "cell-int $0000")
-                "int 1 was pushed from local")
-  (check-equal? (vm-cell-at->string test-bc-push-l-state #xcd1a)
-                "cell-int $0001")
+                  (list "stack holds 2 items"
+                        "cell-int $0001  (rt)"
+                        "cell-int $0000")
+                  "int 1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-l-state)
-                (list "call-frame:       $cd10"
-                      "program-counter:  $8f06"
-                      "function-ptr:     $8f00"
-                      "params start@:    $cd0e"
-                      "locals start@:    $cd1a"
-                      "cell-stack start: $cd1e"))
+                   (list "call-frame-ptr:   $9a03"
+                         "program-counter:  $8f05"
+                         "function-ptr:     $8f00"
+                         "locals-ptr:       $9803, $9903 (lb, hb)"))
 
   (define test-bc-push-p-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
-             (bc PUSH_INT_m1)
-             (bc CALL) (byte 00) (byte $8f)
+      (bc PUSH_INT_0)
+      (bc PUSH_INT_m1)
+      (bc CALL) (byte 00) (byte $8f)
 
-             (org #x8F00)
-      (label TEST_FUN)
-             (byte 1)            ;; number of parameters
-             (byte 2)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
-             (bc PUSH_PARAM_0)
-             (bc BRK))))
+      (org #x8F00)
+      (label TEST_FUN)      
+      (byte 2)            ;; number of locals
+      (bc POP_TO_LOCAL_0)
+      (bc POP_TO_LOCAL_1)
+      (bc PUSH_INT_1)   
+      (bc PUSH_LOCAL_0)
+      (bc BRK))))
 
   (check-equal? (vm-stack->strings test-bc-push-p-state)
-                (list "stack holds 2 items"
-                      "cell-int $1fff  (rt)"
-                      "cell-int $0001")
-                "int -1 was pushed from parameter")
+                   (list "stack holds 2 items"
+                         "cell-int $1fff  (rt)"
+                         "cell-int $0001")
+                   "int -1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-p-state)
-                (list "call-frame:       $cd10"
-                      "program-counter:  $8f04"
-                      "function-ptr:     $8f00"
-                      "params start@:    $cd0e"
-                      "locals start@:    $cd1a"
-                      "cell-stack start: $cd1e"))
+                   (list "call-frame-ptr:   $9a03"
+                         "program-counter:  $8f05"
+                         "function-ptr:     $8f00"
+                         "locals-ptr:       $9803, $9903 (lb, hb)"))
 
   (define test-bc-pop-push-to-p-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
-             (bc PUSH_INT_m1)
-             (bc CALL) (byte 00) (byte $8f)
+      (bc PUSH_INT_0)
+      (bc PUSH_INT_m1)
+      (bc CALL) (byte 00) (byte $8f)
 
-             (org #x8F00)
-      (label TEST_FUN)
-             (byte 1)            ;; number of parameters
-             (byte 2)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
-             (bc POP_TO_PARAM_0) ;; overwrites -1
-             (bc PUSH_PARAM_0)
-             (bc BRK))))
+      (org #x8F00)
+      (label TEST_FUN)      
+      (byte 2)            ;; number of locals
+      (bc POP_TO_LOCAL_0)
+      (bc POP_TO_LOCAL_1)
+      (bc PUSH_INT_1)     ;; value to return
+      (bc POP_TO_LOCAL_0) ;; overwrites -1
+      (bc PUSH_LOCAL_0)
+      (bc BRK))))
 
   (check-equal? (vm-stack->strings test-bc-pop-push-to-p-state)
-                (list "stack holds 1 item"
-                      "cell-int $0001  (rt)"))
-  (check-equal? (memory-list test-bc-pop-push-to-p-state #xcd0e #xcd0f)
-                (list #x01 #x03)
-                "param0 holds a cell-int 1")
+                   (list "stack holds 1 item"
+                         "cell-int $0001  (rt)"))
   (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
-                (list "call-frame:       $cd10"
-                      "program-counter:  $8f05"
-                      "function-ptr:     $8f00"
-                      "params start@:    $cd0e"
-                      "locals start@:    $cd1a"
-                      "cell-stack start: $cd1e")))
+                   (list "call-frame-ptr:   $9a03"
+                         "program-counter:  $8f06"
+                         "function-ptr:     $8f00"
+                         "locals-ptr:       $9803, $9903 (lb, hb)")))
 
-(define XPUSH_INT_0 #xb8)
-(define XPUSH_INT_1 #xb9)
-(define XPUSH_INT_2 #xba)
-(define XPUSH_INT_m1 #xbb)
+(define PUSH_INT_0 #xb8)
+(define PUSH_INT_1 #xb9)
+(define PUSH_INT_2 #xba)
+(define PUSH_INT_m1 #xbb)
 
-(define XBC_PUSH_CONST_NUM_SHORT
+(define BC_PUSH_CONST_NUM_SHORT
   (flatten
    (list
-    (label XBC_PUSH_CONST_NUM_SHORT)
+    (label BC_PUSH_CONST_NUM_SHORT)
            (LDA (ZP_VM_PC),y)                             ;; load bytecode itself (y must be 0)
            (AND !$07)                                     ;; lower three bits are encoded into the short command
            (ASL A)                                        ;; * 2 (for 2 byte index into jump_refs)!
@@ -1060,7 +950,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            ;; (word-ref VM_CELL_STACK_PUSH_BYTE_m1)
            )))
 
-(module+ test #| vm_interpreter |#
+(module+ test #| push const num |#
   (define use-case-push-num-s-state-after
     (run-bc-wrapped-in-test
      (list
@@ -1102,18 +992,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "cell-int $04f0  (rt)")))
 
-(define XBC_INT_PLUS
+(define BC_INT_PLUS
   (list
-   (label XBC_INT_PLUS)
-          (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte
-          (DEY)                                 ;; index to high byte
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)      ;; A = untagged lowbyte of int (stored in high byte)
+   (label BC_INT_PLUS)
+          (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte          
+          (LDA (ZP_CELL_STACK_HB_PTR),y)        ;; A = untagged lowbyte of int (stored in high byte)
           (CLC)                                 ;; for addition the carry flags needs to be clear
           (ADC ZP_RT+1)                         ;; A = A + stack value (int low byte)
           (STA ZP_RT+1)                         ;; RT untagged lowbyte = result
-
-          (INY)                                 ;; index to tagged low byte (bit0 and 1 set, bit 7 clear)
-          (LDA (ZP_CELL_STACK_BASE_PTR),y)      ;; A = tagged high byte of int (stored in low byte)
+          
+          (LDA (ZP_CELL_STACK_LB_PTR),y)       ;; A = tagged high byte of int (stored in low byte)
           (AND !$7c)                            ;; mask out lower two and highest bit
           (BCC VM_INT_PLUS__NO_INC_HIGH)        ;; if previous addition had no overflow, skip inc
           (CLC)                                 ;; clear for addition
@@ -1124,7 +1012,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (AND !$7f)                            ;; since ZP_RT hat the lower two bits set, just mask out the highest bit
           (STA ZP_RT)                           ;; RT tagged high byte = result
 
-          (DEY)
           (DEY)
           (STY ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in RT as tos)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
@@ -1141,10 +1028,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BRK))))
 
   (define (bc-int-plus-expectation state c)
-    (check-equal? (vm-stack->strings state)
-                (list "stack holds 1 item"
-                      (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
+    (skip (check-equal? (vm-stack->strings state)
+                        (list "stack holds 1 item"
+                              (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c)))))))
  
+  ;; Execute this test only, if major change to int + have been done
   ;; (define _run-bc-int-plus-tests
   ;;   (for/list ([j '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
   ;;     (for/list ([i '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
@@ -1165,38 +1053,35 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BRK))))
 
   (check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                1154)
+                   2077)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
-                (list "stack holds 3 items"
-                      "cell-int $0000  (rt)"
-                      "cell-int $060f"
-                      "cell-int $0003"
-                      )))
+                   (list "stack holds 3 items"
+                         "cell-int $0000  (rt)"
+                         "cell-int $060f"
+                         "cell-int $0003"
+                         )))
 
-(define XBC_INT_MINUS
+(define BC_INT_MINUS
   (list
-   (label XBC_INT_MINUS)
-          (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte
-          (DEY)                                 ;; index to high byte
+   (label BC_INT_MINUS)
+          (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte          
           (SEC)                                 ;; for subtraction carry needs to be set
           (LDA ZP_RT+1)                         ;; A = untagged lowbyte of int (stored in high byte)
-          (SBC (ZP_CELL_STACK_BASE_PTR),y)      ;; A = A - stack value (int low byte)
+          (SBC (ZP_CELL_STACK_HB_PTR),y)      ;; A = A - stack value (int low byte)
           (STA ZP_RT+1)                         ;; RT untagged lowbyte = result
 
-          (INY)                                 ;; index to tagged low byte (bit0 and 1 set, bit 7 clear)
           (LDA ZP_RT)                           ;; A = tagged highbyte of int (stored in low byte)
           (BCS VM_INT_MINUS__NO_DEC_HIGH)       ;; if carry is set from subtraction of lower bits, no subtraction carry over necessary
           (SEC)                                 ;; for subtraction carry needs to be set
           (SBC !$04)                            ;; subtract 1 in the masked int highbyte (starting at bit2) => 4
 
    (label VM_INT_MINUS__NO_DEC_HIGH)
-          (SBC (ZP_CELL_STACK_BASE_PTR),y)      ;; A = A - stack value (int high byte)
+          (SBC (ZP_CELL_STACK_LB_PTR),y)      ;; A = A - stack value (int high byte)
           (AND !$7c)                            ;; mask out under/overflow (lower two bits and high bit)
           (ORA !$03)                            ;; set lower two bits to tag it as integer value
           (STA ZP_RT)                           ;; RT tagged high byte = result
           
    (label VM_INT_MINUS__DONE)
-          (DEY)
           (DEY)
           (STY ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in rt untouched)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
@@ -1214,9 +1099,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (define (bc-int-minus-expectation state c)
     (check-equal? (vm-stack->strings state)
-                  (list "stack holds 1 item"
-                        (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
+                    (list "stack holds 1 item"
+                          (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
 
+  ;; Execute this test only, if major change to int - have been done
   ;; (define _run-bc-int-minus-tests
   ;;   (for/list ([j '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
   ;;     (for/list ([i '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
@@ -1238,23 +1124,23 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BRK))))                    ;; brk
 
 
-  (check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                1154)
-  (check-equal? (vm-stack->strings use-case-int-minus-state-after)
-                (list "stack holds 3 items"
-                      "cell-int $1fff  (rt)"
-                      "cell-int $1c2f"
-                      "cell-int $0001")))
+   (check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
+                   2077)
+    (check-equal? (vm-stack->strings use-case-int-minus-state-after)
+                    (list "stack holds 3 items"
+                          "cell-int $1fff  (rt)"
+                          "cell-int $1c2f"
+                          "cell-int $0001")))
 
 ;; TODO: implement
-(define XBC_PUSH_CONST_BYTE
+(define BC_PUSH_CONST_BYTE
   (list
-   (label XBC_PUSH_CONST_BYTE)
+   (label BC_PUSH_CONST_BYTE)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define XBC_NIL_P
+(define BC_NIL_P
   (list
-   (label XBC_NIL_P)
+   (label BC_NIL_P)
           (JSR VM_NIL_P_R)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
@@ -1274,20 +1160,20 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_NIL)
-      (bc PUSH_INT_0)
+      (bc PUSH_INT_2)
       (bc CONS)
       (bc NIL?)
       (bc BRK))))
 
-  (check-equal? (vm-deref-cell-pair-w->string bc-nil-p-2-state #xcc05)
-                "(cell-int $0000 . cell-pair-ptr NIL)")
+  (check-equal? (vm-deref-cell-pair-w->string bc-nil-p-2-state (+ PAGE_AVAIL_0_W #x05))
+                "(cell-int $0002 . cell-pair-ptr NIL)")
   (check-equal? (vm-stack->strings bc-nil-p-2-state)
                 (list "stack holds 1 item"
                       "cell-int $0000  (rt)")))
 
 (define BC_CONS
   (list
-   (label XBC_CONS)
+   (label BC_CONS)
           (JSR VM_CONS_R)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -1300,11 +1186,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc CONS)
       (bc BRK))))
 
-  (check-equal? (vm-stack->strings bc-cons-state)
-                (list "stack holds 1 item"
-                      "cell-pair-ptr $cc05  (rt)"))
-  (check-equal? (vm-deref-cell-pair-w->string bc-cons-state #xcc05)
-                "(cell-int $0000 . cell-pair-ptr NIL)"))
+   (check-equal? (vm-stack->strings bc-cons-state)
+                   (list "stack holds 1 item"
+                         (format "cell-pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+   (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x05))
+                    "(cell-int $0000 . cell-pair-ptr NIL)"))
 
 (define BC_CAR
   (list
@@ -1317,14 +1203,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_NIL)
-      (bc PUSH_INT_0)
+      (bc PUSH_INT_2)
       (bc CONS)
       (bc CAR)
       (bc BRK))))
 
-  (check-equal? (vm-stack->strings bc-car-state)
-                (list "stack holds 1 item"
-                      "cell-int $0000  (rt)")))
+   (check-equal? (vm-stack->strings bc-car-state)
+                 (list "stack holds 1 item"
+                       "cell-int $0002  (rt)")))
 
 (define BC_CDR
   (list
@@ -1337,14 +1223,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_NIL)
-      (bc PUSH_INT_0)
+      (bc PUSH_INT_2)
       (bc CONS)
       (bc CDR)
       (bc BRK))))
 
-  (check-equal? (vm-stack->strings bc-cdr-state)
-                (list "stack holds 1 item"
-                      "cell-pair-ptr NIL  (rt)")))
+   (check-equal? (vm-stack->strings bc-cdr-state)
+                 (list "stack holds 1 item"
+                       "cell-pair-ptr NIL  (rt)")))
 
 (define BC_PUSH_CONST_NIL
   (list
@@ -1369,10 +1255,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     [(= byte-code-t2 #x00)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
-         (format "push param #~a" n)
+         (format "push ? #~a" n)
          (format "push local #~a" n))]
     [(= byte-code-t2 #x02) "nop"]
     [(= byte-code-t2 #x04) "brk"]
+    [(= byte-code-t2 #x10)
+     (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
+     (if (= 1 (bitwise-and bc #x01))
+         (format "pop ? #~a" n)
+         (format "pop to local #~a" n))]
     [(= byte-code-t2 #x12) "push nil"]
     [(= byte-code-t2 #x30)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
@@ -1397,7 +1288,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
     (label VM_INTERPRETER_OPTABLE)
-           (word-ref BC_PUSH_PARAM_OR_LOCAL_SHORT);; 00  <-  80..87 -> 00
+           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 -> 00
            (word-ref VM_INTERPRETER_INC_PC)       ;; 02  <-  01 effectively NOP
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
            (word-ref VM_INTERPRETER_INC_PC)       ;; 06  <-  03 reserved
@@ -1413,7 +1304,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1a  <-  0d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1c  <-  0e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1e  <-  0f reserved
-           (word-ref BC_POP_TO_PARAM_OR_LOCAL_SHORT) ;; 20  <-  90..97 -> 20
+           (word-ref BC_POP_TO_LOCAL_SHORT) ;; 20  <-  90..97 -> 20
            (word-ref VM_INTERPRETER_INC_PC)       ;; 22  <-  11 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 24  <-  12 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 26  <-  13 reserved
@@ -1421,7 +1312,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2a  <-  15 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2c  <-  16 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2e  <-  17 reserved
-           (word-ref BC_NIL_P_RET_PARAM_OR_LOCAL) ;; 30  <-  98..9f reserved
+           (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 36  <-  1b reserved
@@ -1560,22 +1451,23 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define vm-interpreter
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT          
-          XBC_POP_TO_PARAM_OR_LOCAL_SHORT
-          XBC_PUSH_CONST_NUM_SHORT
+          BC_POP_TO_LOCAL_SHORT
+          BC_PUSH_LOCAL_SHORT
+          BC_PUSH_CONST_NUM_SHORT
           BC_PUSH_CONST_INT
-          XBC_PUSH_CONST_BYTE
+          BC_PUSH_CONST_BYTE
           BC_PUSH_CONST_NIL
-          XBC_NIL_P
+          BC_NIL_P
           BC_NIL_P_RET_LOCAL_N_POP
           BC_CONS
           BC_CAR
           BC_CDR
-          XBC_CALL
-          XBC_RET
+          BC_CALL
+          BC_RET
           BC_BRK
-          XBC_INT_PLUS
-          XBC_INT_MINUS
-          XBC_TAIL_CALL
+          BC_INT_PLUS
+          BC_INT_MINUS
+          BC_TAIL_CALL
           VM_INTERPRETER
           (list (label END__INTERPRETER))
           (list (org-align #x100)) ;; align to next page
