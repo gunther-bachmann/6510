@@ -243,6 +243,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                  (sub1 (+ n (vm-pc state))))))
 
 (module+ test #| after mem init |#
+  (define PAGE_CALL_FRAME #x9a)
+  (define PAGE_LOCALS_LB #x98)
+  (define PAGE_LOCALS_HB #x99)
   (define PAGE_AVAIL_0 #x97)
   (define PAGE_AVAIL_0_W #x9700)
   (define PAGE_AVAIL_1 #x96)
@@ -367,7 +370,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   (list "call-frame-ptr:   $00f8"
                         "program-counter:  $8005"
                         "function-ptr:     $0000"
-                        "locals-ptr:       $9803, $9903 (lb, hb)"))
+                        (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
 
   (define bc-nil-ret-local-state
     (run-bc-wrapped-in-test
@@ -393,7 +398,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    (list "call-frame-ptr:   $00f8"
                          "program-counter:  $8005"
                          "function-ptr:     $0000"
-                         "locals-ptr:       $9803, $9903 (lb, hb)")))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB)))))
 
 (define BC_TAIL_CALL
   (list
@@ -434,7 +441,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                     (list "call-frame-ptr:   $00f8"
                           "program-counter:  $8006"
                           "function-ptr:     $0000"
-                          "locals-ptr:       $9803, $9903 (lb, hb)"))
+                          (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
 
   ;; convert the list given by cell-pair-ptr (address) as a list of strings
   (define (vm-list->strings state address (string-list '()))   
@@ -470,8 +479,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (label TEST_FUN)
              (byte 2)                   ;; number of locals
              (bc POP_TO_LOCAL_0)        ;; b-list
-             (bc POP_TO_LOCAL_1)        ;; a-list
-             (bc PUSH_LOCAL_1)
+             (bc WRITE_TO_LOCAL_1)      ;; a-list
              (bc NIL?_RET_LOCAL_0_POP_1);; return b-list if a-list is nil
              (bc CDR)                   ;; shrinking original list
              (bc PUSH_LOCAL_0)
@@ -489,7 +497,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     7"
                          "next free slot: $55"))
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                   7638) ;; 
+                   7198) ;; offset 3910
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "cell-int $0002"
                          "cell-int $0001"
@@ -502,7 +510,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    (list "call-frame-ptr:   $00f8"
                          "program-counter:  $800d"
                          "function-ptr:     $0000"
-                         "locals-ptr:       $9803, $9903 (lb, hb)")))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB)))))
 
 (define BC_CALL
   (list
@@ -555,10 +565,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-before-call-state)
-                (list "call-frame-ptr:   $9a03"
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                       "program-counter:  $8001"
                       "function-ptr:     $0000"
-                      "locals-ptr:       $9803, $9903 (lb, hb)"))
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
    (check-equal? (vm-stack->strings test-bc-before-call-state)
                  (list "stack holds 1 item"
                        "cell-int $0000  (rt)")
@@ -578,10 +590,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
    (check-equal? (vm-call-frame->strings test-bc-call-state)
-                   (list "call-frame-ptr:   $9a03"
+                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f02"
                           "function-ptr:     $8f00"
-                         "locals-ptr:       $9803, $9903 (lb, hb)"))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
    (check-equal? (vm-stack->strings test-bc-call-state)
                     (list "stack holds 2 items"
                           "cell-int $0001  (rt)"
@@ -603,10 +617,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
-                   (list "call-frame-ptr:   $9a03"
+                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f02"
                          "function-ptr:     $8f00"
-                         "locals-ptr:       $9803, $9903 (lb, hb)"))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-call-wp-state)
                    (list "stack holds 3 items"
                          "cell-int $0001  (rt)"
@@ -628,10 +644,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc BRK))))
 
   (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
-                   (list "call-frame-ptr:   $9a03"
+                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f02"
                          "function-ptr:     $8f00"
-                         "locals-ptr:       $9803, $9903 (lb, hb)"))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-call-wl-state)
                    (list "stack holds 3 items"
                          "cell-int $0001  (rt)"
@@ -664,7 +682,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    (list "call-frame-ptr:   $00f8"
                          "program-counter:  $8004"
                          "function-ptr:     $0000"
-                         "locals-ptr:       $9803, $9903 (lb, hb)"))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-ret-state)
                    (list "stack holds 2 items"
                          "cell-int $0001  (rt)"
@@ -750,7 +770,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LDA (ZP_VM_PC),y)                   ;; load bytecode
            (AND !$07)                           ;; lower three bits are encoded into the short command
            (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
-           (BCS SHORTCMD__POP_TO_LOCAL_SHORT)
+           (BCS WRITE__POP_TO_LOCAL_SHORT)
 
            ;; pop to local           
            (TAY)                                ;; index -> Y
@@ -762,8 +782,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 
            ;; unused yet
-   (label  SHORTCMD__POP_TO_LOCAL_SHORT)
-           (BRK)
+   (label  WRITE__POP_TO_LOCAL_SHORT)
+           (TAY)                                ;; index -> Y
+           (LDA ZP_RT)
+           (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
+           (LDA ZP_RT+1)
+           (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
            )))
 
 (define POP_TO_LOCAL_0 #x90)
@@ -771,10 +796,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define POP_TO_LOCAL_2 #x94)
 (define POP_TO_LOCAL_3 #x96)
 
-;; (define POP_TO__0 #x91)
-;; (define POP_TO__1 #x93)
-;; (define POP_TO__2 #x95)
-;; (define POP_TO__3 #x97)
+(define WRITE_TO_LOCAL_0 #x91)
+(define WRITE_TO_LOCAL_1 #x93)
+(define WRITE_TO_LOCAL_2 #x95)
+(define WRITE_TO_LOCAL_3 #x97)
 
 (module+ test #| BC_PUSH_LOCAL_SHORT |#
   (define test-bc-pop-to-l-state
@@ -800,10 +825,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (check-equal? (peek test-bc-pop-to-l-state #x9903)
                 #x01)
   (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
-                   (list "call-frame-ptr:   $9a03"
+                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f03"
                          "function-ptr:     $8f00"
-                         "locals-ptr:       $9803, $9903 (lb, hb)"))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
 
   (define test-bc-pop-to-p-state
     (run-bc-wrapped-in-test
@@ -835,10 +862,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 #x00
                 "local1 = int 0")
   (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
-                   (list "call-frame-ptr:   $9a03"
+                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f05"
                          "function-ptr:     $8f00"
-                         "locals-ptr:       $9803, $9903 (lb, hb)"))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
 
   (define test-bc-push-l-state
     (run-bc-wrapped-in-test
@@ -860,10 +889,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                         "cell-int $0000")
                   "int 1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-l-state)
-                   (list "call-frame-ptr:   $9a03"
+                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f05"
                          "function-ptr:     $8f00"
-                         "locals-ptr:       $9803, $9903 (lb, hb)"))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
 
   (define test-bc-push-p-state
     (run-bc-wrapped-in-test
@@ -887,10 +918,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "cell-int $0001")
                    "int -1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-p-state)
-                   (list "call-frame-ptr:   $9a03"
+                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f05"
                          "function-ptr:     $8f00"
-                         "locals-ptr:       $9803, $9903 (lb, hb)"))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))))
 
   (define test-bc-pop-push-to-p-state
     (run-bc-wrapped-in-test
@@ -913,10 +946,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    (list "stack holds 1 item"
                          "cell-int $0001  (rt)"))
   (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
-                   (list "call-frame-ptr:   $9a03"
+                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f06"
                          "function-ptr:     $8f00"
-                         "locals-ptr:       $9803, $9903 (lb, hb)")))
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB)))))
 
 (define PUSH_INT_0 #xb8)
 (define PUSH_INT_1 #xb9)
@@ -1262,7 +1297,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     [(= byte-code-t2 #x10)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
-         (format "pop ? #~a" n)
+         (format "write to local #~a" n)
          (format "pop to local #~a" n))]
     [(= byte-code-t2 #x12) "push nil"]
     [(= byte-code-t2 #x30)
@@ -1304,7 +1339,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1a  <-  0d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1c  <-  0e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1e  <-  0f reserved
-           (word-ref BC_POP_TO_LOCAL_SHORT) ;; 20  <-  90..97 -> 20
+           (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref VM_INTERPRETER_INC_PC)       ;; 22  <-  11 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 24  <-  12 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 26  <-  13 reserved
@@ -1312,7 +1347,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2a  <-  15 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2c  <-  16 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2e  <-  17 reserved
-           (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f reserved
+           (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 36  <-  1b reserved
@@ -1320,7 +1355,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3a  <-  1d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3c  <-  1e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 40  <-  a0..a7
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 40  <-  a0..a7 reserved
            (word-ref BC_NIL_P)                    ;; 42  <-  21
            (word-ref VM_INTERPRETER_INC_PC)       ;; 44  <-  22 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
@@ -1344,7 +1379,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_TAIL_CALL)                ;; 6a  <-  35 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6c  <-  36 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6e  <-  37 reserved
-           (word-ref BC_PUSH_CONST_NUM_SHORT)     ;; 70  <-  b8..bf reserved
+           (word-ref BC_PUSH_CONST_NUM_SHORT)     ;; 70  <-  b8..bf 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 72  <-  39 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 74  <-  3a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 76  <-  3b reserved
