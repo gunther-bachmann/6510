@@ -38,8 +38,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek-word-at-address))
 (require (only-in "../ast/6510-relocator.rkt" label-string-offsets))
 
-(require (only-in racket/string string-prefix?))
+(require (only-in racket/string string-prefix? string-join))
+(require (only-in racket/format ~a))
 (require (only-in racket/match match-let))
+(require (only-in racket/list range))
 
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
@@ -57,6 +59,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   ZP_VM_PC
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
+                  ZP_VM_FUNC_PTR
+                  ZP_CALL_FRAME
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
@@ -94,9 +98,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                     PUSH_LOCAL
                     PUSH_GLOBAL
                     PUSH_STRUCT_FIELD
-                    PUSH_PARAM
-
-                    POP_TO_PARAM
+                    
                     POP_TO_LOCAL
                     POP_TO_GLOBAL
 
@@ -121,87 +123,146 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (for-each displayln (list "bc commands"
                               ""
                               "? | h    print this help screen"
+                              "q        quit debugger"
+                              ""
                               "ps       print the stack"
-                              "pl       print locals (not implemented yet)"
                               "pf       print the call frame"
-                              "pa n     print the n-th parameter (of the call frame)"
+                              "pfn      print running function meta data"
                               "pl n     print the n-th local (of the call frame)"
+                              "pml adr  print memory location as list (must be the address of a cell-pair!)"
                               "rt       print register t"
+                              "ruc      run until next call or return instruction"
+                              "rur      run until returned from current call"
                               "s        run one step"
+                              "so       step over the current bc (even calls)"
+                              "sa adr   stop at bytecode at the given adr (not implemented)"
+                              "sab byte stop at the given bytecode (not implemented)"
                               "^        (prefix) pass the following commands to the assembly debugger"))
     d-state)
 
+  (define (vm-local->string state num)
+    (define num-i
+      (if (string? num)
+          (string->number num 16)
+          num))
+    (format "local #$~a: ~a"
+            (format-hex-byte num-i)
+            (vm-cell->string
+             (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_LB_PTR)))
+             (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_HB_PTR))))))
+
+  (define bc-debugger--instruction-breakpoint-name "stop on bytecode interpreter")
+
+  ;; remove default instruction break point
+  ;; install new breakpoint
+  ;; run until hitting this new breakpoint, remove this break point and
+  ;; reinstall the default instruction break point
+  (define (debugger--bc-run-until d-state interpreter-loop-adr condition-fn)
+    (debugger--push-breakpoint
+     (debugger--remove-breakpoints
+      (debugger--run
+       (debugger--push-breakpoint
+        (debugger--remove-breakpoints d-state bc-debugger--instruction-breakpoint-name)
+        (lambda (bc-state)
+          (and
+           (condition-fn bc-state)
+           (= (cpu-state-program-counter bc-state)
+              interpreter-loop-adr)))
+        "next instruction is a call or return"
+        #f))
+      "next instruction is a call or return")
+     (lambda (lc-state)
+       (eq? (cpu-state-program-counter lc-state)
+            interpreter-loop-adr))
+     bc-debugger--instruction-breakpoint-name
+     #f))
+
+  (define (debugger--disassemble-lines d-state (lines 10) (offset 0))
+    (when (> lines 0)
+      (displayln (debugger--disassemble d-state offset))
+      (define c-state (car (debug-state-states d-state)))
+      (debugger--disassemble-lines
+       d-state
+       (- lines 1)
+       (+ offset 
+          (disassembler-byte-code--byte-count (peek c-state (+ offset (peek-word-at-address c-state ZP_VM_PC))))))))
+
   (define (debugger--bc-dispatcher- interpreter-loop-adr)
     (lambda (command d-state)
-      ;; commands:
-      ;;  ps       print cell eval stack
-      ;;  pr0      print reg0
-      ;;  s        step (byte code)
-      ;;  pp n     disassemble byte code (n lines)
-      ;;  q        quit
       (define c-state (car (debug-state-states d-state)))
       (define pa-regex #px"^pa ([[:xdigit:]])$")
       (define pl-regex #px"^pl ([[:xdigit:]])$")
+      (define pml-regex #px"^pml ([[:xdigit:]]*)$")
       (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
+            [(string=? command "pp") (debugger--disassemble-lines d-state) d-state]
             [(string=? command "ps") (begin (for-each (lambda (str) (displayln str)) (vm-stack->strings c-state)) d-state)]
             [(string=? command "pt") (begin (displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
+            [(string=? command "pfn") (begin
+                                        (define func-ptr (peek-word-at-address c-state ZP_VM_FUNC_PTR))
+                                        (displayln (format "function-ptr: $~a" (format-hex-word func-ptr)))
+                                        (define locals-num (peek c-state func-ptr))
+                                        (displayln (format "locals used : ~a" (number->string locals-num)))
+                                        (for-each  displayln (map (lambda (n) (vm-local->string c-state n)) (range locals-num)))
+                                        d-state)]
             [(string=? command "s") (debugger--run d-state #t)]
             [(string=? command "pf") (begin (for-each displayln (vm-call-frame->strings c-state)) d-state)]
-            ;; [(regexp-match? pa-regex command)
-            ;;  (match-let (((list _ num) (regexp-match pa-regex command)))
-            ;;    (begin (displayln (format "param #~a: ~a" num (vm-cell-at->string c-state (+ (* 2 (string->number num 16)) (peek-word-at-address c-state ZP_PARAMS_PTR)) #t)))
-            ;;           d-state))]
             [(regexp-match? pl-regex command)
              (match-let (((list _ num) (regexp-match pl-regex command)))
-               (begin (displayln (format "local #~a: ~a"
-                                         num
-                                         (vm-cell->string
-                                          (peek c-state
-                                                (+ (string->number num 16)
-                                                   (peek-word-at-address c-state ZP_LOCALS_LB_PTR)))
-                                          (peek c-state
-                                                (+ (string->number num 16)
-                                                   (peek-word-at-address c-state ZP_LOCALS_HB_PTR))))))
+               (begin (displayln (vm-local->string c-state num))
+                      d-state))]
+            [(regexp-match? pml-regex command)
+             (match-let (((list _ num) (regexp-match pml-regex command)))
+               (begin (displayln (format "list at $~a > ~a" num (vm-list->strings c-state (string->number num 16))))
                       d-state))]
             [(string=? command "ruc")
-             (debugger--push-breakpoint
-              (debugger--remove-breakpoints
-               (debugger--run
-                (debugger--push-breakpoint
-                 (debugger--remove-breakpoints d-state "stop on bytecode interpreter")
-                 (breakpoint "next instruction is a call"
-                             (lambda (bc-state)
-                               (and
-                                (= #x34
-                                   (peek-byte bc-state (peek-word-at-address bc-state ZP_VM_PC)))
-                                (= (cpu-state-program-counter bc-state)
-                                   interpreter-loop-adr)))
-                             #f)))
-               "next instruction is a call")
-              (breakpoint "stop on bytecode interpreter"
-                          (lambda (lc-state)
-                            (eq? (cpu-state-program-counter lc-state)
-                                 interpreter-loop-adr))
-                          #f))]
-            ;; ruc  run until next call: idea, set a break point that checks to next byte code to be of a certain value
-            ;; rur  run until next return (same here)
-            ;; so   step over (call) instruction: idea, set break point that checks for the vm_pc after the call
+             (debugger--bc-run-until d-state interpreter-loop-adr
+                                     (lambda (bc-state)
+                                       (memq (peek bc-state (peek-word-at-address bc-state ZP_VM_PC))
+                                             '(#x34 ;; call
+                                               #x35 ;; tail call
+                                               ))))]
+            [(string=? command "so")
+             (cond [(= #x34 (peek c-state (peek-word-at-address c-state ZP_VM_PC)))
+                    ;; step over, since it is a call!
+                    (define state-after-call (debugger--run d-state #t))
+                    (define nc-state (car (debug-state-states state-after-call)))
+                    (define parent-pc (peek-word-at-address nc-state (peek-word-at-address nc-state ZP_CALL_FRAME)))
+                    (display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
+                    (debugger--bc-run-until state-after-call interpreter-loop-adr
+                                            (lambda (bc-state)
+                                              (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
+                   [else (debugger--run d-state #t)])]
+            [(string=? command "rur")
+             ;; get previous (stored vm_pc, to which to return to)
+             (define parent-pc (peek-word-at-address c-state (peek-word-at-address c-state ZP_CALL_FRAME)))
+             (display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
+             (debugger--bc-run-until d-state interpreter-loop-adr
+                                     (lambda (bc-state)
+                                       (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
             [(string-prefix? command "^")
              (dispatch-debugger-command (substring command 1) d-state) ]
             [else
              (displayln "dispatching -> assembler-debugger")
              (dispatch-debugger-command command d-state)])))
 
+
+  (define (debugger--disassemble d-state (offset 0))
+    (define c-state (car (debug-state-states d-state)))
+    (define pc (+ (peek-word-at-address c-state ZP_VM_PC) offset))
+    (define bc (peek c-state pc))
+    (define bc_p1 (peek c-state (add1 pc)))
+    (define bc_p2 (peek c-state (+ 2 pc)))
+    (format "$~a: $~a ~a"
+            (format-hex-word pc)
+            (~a (string-join (take (map format-hex-byte (list bc bc_p1 bc_p2)) (disassembler-byte-code--byte-count bc)) " $")
+                #:min-width 10)
+            (disassemble-byte-code bc bc_p1 bc_p2)))
+
   (define (debugger--bc-interactor interpreter-loop-adr)
     (list
      `(dispatcher . ,(debugger--bc-dispatcher- interpreter-loop-adr))
      `(prompter . ,(lambda (d-state) (format "BC [~x] > " (length (debug-state-states d-state)))))
-     `(pre-prompter . ,(lambda (d-state)
-                         (define c-state (car (debug-state-states d-state)))
-                         (define bc (peek c-state (peek-word-at-address c-state ZP_VM_PC)))
-                         (define bc_p1 (peek c-state (add1 (peek-word-at-address c-state ZP_VM_PC))))
-                         (define bc_p2 (peek c-state (+ 2 (peek-word-at-address c-state ZP_VM_PC))))
-                         (format "$~a: $~a   ~a" (format-hex-word (peek-word-at-address c-state ZP_VM_PC)) (format-hex-byte bc) (disassemble-byte-code bc bc_p1 bc_p2))))))
+     `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble d-state))))))
 
   (define (print-list-of-labels label-list label-offsets)
     (unless (empty? label-list)
@@ -223,7 +284,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          ""                                                    
                          #t
                          (list
-                          (breakpoint "stop on bytecode interpreter"
+                          (breakpoint bc-debugger--instruction-breakpoint-name
                                       (lambda (lc-state)
                                         (eq? (cpu-state-program-counter lc-state)
                                              interpreter-loop))
@@ -445,19 +506,22 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
 
-  ;; convert the list given by cell-pair-ptr (address) as a list of strings
-  (define (vm-list->strings state address (string-list '()))   
-    (unless (= (bitwise-and #x03 address) #x01)
-      (raise-user-error "address is not a cell-pair-ptr"))
-    (define cell-cdr (peek-word-at-address state (+ address 2)))
-    (unless (= (bitwise-and #x03 cell-cdr) #x01)
-      (raise-user-error "cdr cell is not a cell-pair-ptr => this is no list" ))
-    (if (vm-cell-at-nil? state address)
-        string-list
-        (vm-list->strings state
-                         cell-cdr
-                         (cons (vm-cell-at->string state address)
-                               string-list))))
+  ;; convert the list given by cell-pair-ptr (addresss) as a list of strings
+  (define (vm-list->strings state address (string-list '()))
+    (cond [(= address #x0001) ;; this is the nil ptr           
+           (reverse string-list)]
+          [else
+           (unless (= (bitwise-and #x03 address) #x01)
+             (raise-user-error (format "address is not a cell-pair-ptr ~a" (format-hex-word address))))
+           (define cell-cdr (peek-word-at-address state (+ address 2)))
+           (unless (= (bitwise-and #x03 cell-cdr) #x01)
+             (raise-user-error (format "cdr cell is not a cell-pair-ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
+           (if (vm-cell-at-nil? state address)
+               (reverse string-list)
+               (vm-list->strings state
+                                cell-cdr
+                                (cons (vm-cell-at->string state address)
+                                      string-list)))]))
 
   (define bc-tail-call-reverse-state
     (run-bc-wrapped-in-test
@@ -470,8 +534,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc PUSH_INT_2)
              (bc CONS) ;; list to reverse (param0)
              (bc PUSH_NIL)
-             (bc PUSH_NIL)
-             (bc CONS) ;; target list (param1)
+             ;; (bc PUSH_NIL)
+             ;; (bc CONS) ;; target list (param1)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
 
@@ -487,28 +551,29 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc CAR)
              (bc CONS)                  ;; growing reverse list
              (bc TAIL_CALL)
-             (bc BRK))))
+             (bc BRK))
+     #t))
 
   (check-equal? (memory-list bc-tail-call-reverse-state VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE (add1 VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE))
                    (list #x00 #x00))
   (check-equal? (vm-page->strings bc-tail-call-reverse-state PAGE_AVAIL_0)
                    (list "page-type:      cell-pair page"
                          "previous page:  $00"
-                         "slots used:     7"
-                         "next free slot: $55"))
+                         "slots used:     6"
+                         "next free slot: $51"))
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                   7198) ;; offset 3910
+                (+ 3288 3623)) ;; offset 3623
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
-                   (list "cell-int $0002"
+                   (list "cell-int $0000"
                          "cell-int $0001"
-                         "cell-int $0000")
+                         "cell-int $0002")
                    "list got reversed")
   (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
                    (list "stack holds 1 item"
-                         "cell-pair-ptr $9751  (rt)"))
+                         "cell-pair-ptr $974d  (rt)"))
   (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
                    (list "call-frame-ptr:   $00f8"
-                         "program-counter:  $800d"
+                         "program-counter:  $800b"
                          "function-ptr:     $0000"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
@@ -737,9 +802,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LDA (ZP_VM_PC),y)                   ;; load bytecode
            (AND !$07)                           ;; lower three bits are encoded into the short command
            (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
-           (BCS PUSH_CMD__BC_PUSH_LOCAL_SHORT)
+           (BCS WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
 
-           ;; push local           
+    ;; push local           
            (TAY)                                ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
            (TAX)                                ;; low byte -> X
@@ -747,15 +812,24 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 
-           ;;  push
-   (label  PUSH_CMD__BC_PUSH_LOCAL_SHORT)
-           (BRK)
+    (label WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
+           (TAY)                                ;; index -> Y
+           (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
+           (STA ZP_RT)                          ;; 
+           (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index 
+           (STA ZP_RT+1)                        ;; 
+           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
            )))
 
 (define PUSH_LOCAL_0 #x80)
 (define PUSH_LOCAL_1 #x82)
 (define PUSH_LOCAL_2 #x84)
 (define PUSH_LOCAL_3 #x86)
+
+(define WRITE_FROM_LOCAL_0 #x81)
+(define WRITE_FROM_LOCAL_1 #x83)
+(define WRITE_FROM_LOCAL_2 #x85)
+(define WRITE_FROM_LOCAL_3 #x87)
 
 ;; (define XPUSH_PARAM_0 #x81)
 ;; (define XPUSH_PARAM_1 #x83)
@@ -1284,17 +1358,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "cell-pair-ptr NIL  (rt)")))
 
+(define (disassembler-byte-code--byte-count bc)
+  (cond [(memq bc (list #x34 #x0c)) 3]
+        [else 1]))
+
 (define (disassemble-byte-code bc bc_p1 bc_p2)
   (define byte-code-t2 (arithmetic-shift (if (> bc 127) (bitwise-and #x78 bc) (bitwise-and #x7f bc)) 1))
   (cond
     [(= byte-code-t2 #x00)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
-         (format "push ? #~a" n)
+         (format "write from local #~a" n)
          (format "push local #~a" n))]
     [(= byte-code-t2 #x02) "nop"]
     [(= byte-code-t2 #x04) "brk"]
-    [(= byte-code-t2 #x10)
+    [(= byte-code-t2 #x20)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
          (format "write to local #~a" n)
@@ -1305,7 +1383,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (if (= 1 (bitwise-and bc #x01))
          (format "nil? ret param #~a" n)
          (format "nil? ret local #~a" n))]
-    [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (bytes->int (+ 2 bc_p1) bc_p2)))] ;; add 2 because byte code starts there
+    [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (bytes->int (+ 1 bc_p1) bc_p2)))] ;; add 2 because byte code starts there
+    [(= byte-code-t2 #x6a) "tail call"]
     [(= byte-code-t2 #x70)
      (define n (bitwise-and bc #x03))
      (define is-int (= 0 (bitwise-and bc #x04)))
@@ -1316,6 +1395,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              [(= n 3) "-1"]
              [else (raise-user-error "unexpected number encoding")]))
      (format "push ~a ~a" (if is-int "int" "byte") num-str)]
+    [(= byte-code-t2 #x82) "cdr"]
+    [(= byte-code-t2 #x84) "cons"]
+    [(= byte-code-t2 #x86) "car"]
     [else "unknown bc"]))
 
 ;; must be page aligned!
