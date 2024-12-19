@@ -215,7 +215,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (BCC NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
 
           (JSR VM_ALLOC_CALL_FRAME_N)
-          (LDY ZP_CALL_FRAME_TOP_MARK) ;; first payload byte available on call frame page
+          ;; alloc call frame returns y with topmark
+          ;; (LDY ZP_CALL_FRAME_TOP_MARK) ;; first payload byte available on call frame page
 
    (label NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
           (STY ZP_CALL_FRAME)

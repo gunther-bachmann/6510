@@ -552,7 +552,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc CONS)                  ;; growing reverse list
              (bc TAIL_CALL)
              (bc BRK))
-     #t))
+     ))
 
   (check-equal? (memory-list bc-tail-call-reverse-state VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE (add1 VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE))
                    (list #x00 #x00))
