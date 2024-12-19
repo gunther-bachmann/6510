@@ -306,7 +306,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| after mem init |#
   (define PAGE_CALL_FRAME #x9a)
   (define PAGE_LOCALS_LB #x98)
+  (define PAGE_LOCALS_LB_W #x9800)
   (define PAGE_LOCALS_HB #x99)
+  (define PAGE_LOCALS_HB_W #x9900)
   (define PAGE_AVAIL_0 #x97)
   (define PAGE_AVAIL_0_W #x9700)
   (define PAGE_AVAIL_1 #x96)
@@ -570,7 +572,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    "list got reversed")
   (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
                    (list "stack holds 1 item"
-                         "cell-pair-ptr $974d  (rt)"))
+                         (format "cell-pair-ptr $~a4d  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
                    (list "call-frame-ptr:   $00f8"
                          "program-counter:  $800b"
@@ -894,9 +896,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 2 items"
                       "cell-int $1fff  (rt)"
                       "cell-int $0000"))
-  (check-equal? (peek test-bc-pop-to-l-state #x9803)
+  (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_LB_W #x03))
                 #x03)
-  (check-equal? (peek test-bc-pop-to-l-state #x9903)
+  (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_HB_W #x03))
                 #x01)
   (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
                    (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
@@ -925,16 +927,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings test-bc-pop-to-p-state)
                   (list "stack is empty"))
-  (check-equal? (peek test-bc-pop-to-p-state #x9803)
+  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_LB_W #x03))
                 #x03)
-  (check-equal? (peek test-bc-pop-to-p-state #x9903)
+  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_HB_W #x03))
                 #x01
                 "local0 = int 1")
-  (check-equal? (peek test-bc-pop-to-p-state #x9804)
+  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_LB_W #x04))
                 #x03)
-  (check-equal? (peek test-bc-pop-to-p-state #x9904)
-                #x00
-                "local1 = int 0")
+  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_HB_W #x04))
+                #x00 "local1 = int 0")
   (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
                    (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f05"
