@@ -3329,7 +3329,7 @@ this will include the implementation of
 - [X] local vars
 - [X] tail call recursion
 - [X] returning from a call
-- [ ] optimization idea: no parameter ptr, just cell-stack
+- [X] optimization idea: no parameter ptr, just cell-stack
   - example reverse list
     (def (reverse (a-list cell*) (b-list cell* '()))
       "reverse the a-list into b-list"
@@ -3443,12 +3443,153 @@ this will include the implementation of
     - function 2: 
     - function 3:
     - function 4:
-- [-] optimizations for call stack/frame
+- [X] optimizations for call stack/frame
   - [X] spread low/high over two pages
     - allocation needs to allocate two pages for stack
     - there need to be two zero page pointers, one for lowbyte-stack, one for highbyte-stack
   - [X] allow fast call frames (less copying, less space consumption)
-  - [ ] fix call-frame functions in vm-interpreter
+  - [X] fix call-frame functions in vm-interpreter
+- [ ] implement tree algorithm
+  - binary tree of integers
+    (useful for what?)
+    node: car = (ptr = level down | value)
+          cdr = (ptr = level down | value)
+          binary tree:   1
+          maps to: (1 . NIL)
+
+          binary tree:   o        ---- level_0
+                        / \
+                       1   2      ---- level_1
+          maps to: (l_1 1 .  2)
+
+          binary tree:     o      ---- level_0
+                          / \
+                         o   3    ---- level_1
+                        / \
+                       1   2      ---- level_2
+          maps to: (l_1 (l_2 1 . 2) . 3)
+  
+          binary tree:   o        ---- level_0 
+                        / \                  
+                       o   o      ---- level_1
+                      /|   |\               
+                     1 2   o 5    ---- level_2
+                          / \               
+                         3   4    ---- Level_3
+          maps to: (l_1 (l_2 1 . 2) . (l_2 (l_3 3 . 4) . 5))
+  - n-ary tree of integers
+    (useful for what?)
+    node: car = (ptr = level-down | value)
+          cdr = ptr to sibling | NIL <- n-arry tree allows for n siblings (same level)
+          binary tree:   1        ---- level_0
+          maps to: (l_0 1 . NIL )
+          in list notation: (l_0 1)
+
+          binary tree:   o        ---- level_0
+                        / \
+                       1   2      ---- level_1
+          maps to: (l_0 (l_1 1 . (l_1 2 . NIL ) ) . NIL )
+          in list notation: (l_0 (l_1 1 2))
+
+          binary tree:     o      ---- level_0
+                          / \
+                         o   3    ---- level_1
+                        / \
+                       1   2      ---- level_2
+          maps to: (l_0 (l_1 (l_2 1 . (l_2 2 . NIL ) ) . (l_1 (l_2 3 . NIL ) . NIL ) ) . NIL )
+          in list notation: (l_0 (l_1 (l_2 1 2 ) (l_1 (l_2 3 ))))
+
+          binary tree:   o        ---- level_0       [ . NIL ]
+                        / \                         /   
+                       o   o      ---- level_1     [ . ]----------->[ . NIL ]   
+                      /|   |\                     /                /
+                     1 2   o 5    ---- level_2   [1.]->[2.NIL]    [ . ]->[5.NIL]
+                          / \                                    /
+                         3   4    ---- Level_3                  [3.]-->[4.NIL]
+          maps to: (l_0 (l_1 (l_2 1 . (l_2 2 . NIL ) ) . (l_1 (l_2 (l_3 3 . (l_3 4 . NIL ) ) . (l_2 5 . NIL ) ) )) . NIL )
+          in list notation: (l_0 (l_1 (l_2 1 2) (l_1 (l_2 (l_3 3 4) 5))))
+    - (make-node val) -> node
+      creates a list: (list val)
+    - (add-sibling node val) -> node
+      extends list (node) by inserting (list val) as last element of the list <- cannot be put at the head, because tree structure would be lost
+    - (first-child node) -> node
+      is car (with result being a ptr, otherwise it has no children!)
+    - (next-sibling node) -> node
+      is cdr
+    - (data node) -> val
+      is car (with result being no ptr, otherwise it would have children!)
+    - necessary lisp functions: car, cdr, cons, append <- append can be simplified in case of binary trees!
+      (def (append (a list) (b list) list)
+           (reverse (reverse a) b))
+  - [ ] tree for ordered traversal/find (each node needs data to decide <=, >)
+    useful for set implementation, sorted/ordered dynamic growing/shrinking data structure.
+    could be implemented as persistent data structure (rewriting parents to the root on changes)
+    first implementation with overwriting through addition byte codes set-car, set-cdr operations (gc-ing overwritten pointers)
+        invariant: all values of left-subtree ov level-a node A are < value of the level-a node!
+                   level-a nodes do not hold value payloads (only compare values/hashes)
+                   level-b nodes hold references to level-a nodes or values!
+                   level-b nodes must hold either a value or a ref in car position (never NIL), cdr may be NIL (or a value or reference).
+        there are level a and level b nodes. level a nodes are for holding values in car position,
+        level b nodes are the actual binary tree structure
+        level a nodes have the (actual) sub tree (level b) in cdr and the max left subtree value in car position
+          binary tree:   o        ---- level_0
+                        /
+                       1  
+          maps to: (l_0a c1 . (l_0b 1 . NIL))
+          (these binary trees do not always map to lists, since they may hold values in cdr position)
+
+          binary tree:   o        ---- level_0
+                        / \
+                       1   2      ---- level_1
+          maps to: (l_0a c1 . (l_0b 1 . 2))
+                       
+          binary tree:     o      ---- level_0
+                          / \
+                         o   3    ---- level_1
+                        / \
+                       1   2      ---- level_2
+          maps to: (l_0a c2 . (l_0b (l_1a c2 . (l_1b 1. 2)) . 3))
+
+          binary tree:   o        ---- level_0 
+                        / \
+                       o   o      ---- level_1
+                      /|   |\
+                     1 2   o 5    ---- level_2
+                          / \
+                         3   4    ---- Level_3
+          maps to: (l_0a c2 . (l_0b (l_1a c2 . (l_1b 1 . 2)) (l_1a c4 . (l_1b (l_2a c4 . (l_2b 3 . 4)) . 5))))
+    - tree construction/update
+      - (make-la level-b-sub-tree) => (cValue . B-SubTree)
+        get max value of left subtree of the given b-sub-tree as cValue
+      - (add level-a-root value)
+        traverse tree to find right spot where to add the new value
+      - (remove level-a-root value)
+        travers tree to find value and remove it from the tree
+
+        travers to node with value, returning keeping tree trail to it
+        (fn (tree-trail-to la-node val (trail '()))
+          (cond [(<= val (car node)) ;; search left sub tree
+                 (tree-left-trail-to (cdr node) value (cons node trail))]
+                [else
+                 (tree-right-trail-to (cdr node) value (cons node trail))]))
+        (fn (tree-left-trail-to lb-node value trail)
+          (def new-trail (cons lb-node trail))
+          (cond [(and (atomic-value? (car lb-node))
+                      (= (car lb-node) value))
+                 new-trail]  
+                [else (tree-trail-to (car lb-node) value new-trail)]))
+        (fn (tree-right-trail-to lb-node value trail)
+          (def new-trail (cons lb-node trail))
+          (cond [(and (atomic-value? (cdr lb-node))
+                      (= (cdr lb-node) value))
+                 new-trail]
+                [else (tree-trail-to (cdr lb-node) value new-trail)]))
+
+        to make it tail recursive, move code from tree-left/right-... to tree-trail!
+
+    - tree traversal
+  - [ ] reverse order of binary tree
+  - [ ] depth of binary tree (travers full tree, tail-call-recursively, keeping max depth)
 - [-] allocation/deallocation of lists, cells, structures, strings
   - [X] cells
   - [X] lists
@@ -3462,10 +3603,65 @@ this will include the implementation of
 - [-] get a notion on when to do ref-counting inc/dec and garbage collection
   - [X] refcount primitives (inc/dec/free)
   - [ ] implement refcount gc for revers function
+
+    cell2: [int2 . cell1: [int1 . cell0: [int0 . NIL]]]
+    cell5: [int0 . cell4: [int1 . cell3: [int2 . NIL]]]
+
+    refcounts on enter: cell2 refcount = 1, cell1: recount = 1, cell0: refcount = 1
+
+    iteration1: enter stack: [NIL][cell2], leave stack: [cell3][cell1]     : local0 := NIL,   local1 := cell2
+    | code                    | cell2-i1 | cell1-i1 | cell3-i1 |
+    |-------------------------+----------+----------+----------|
+    | POP​_TO​_LOCAL​_0         |          |          |          |
+    | WRITE​_TO​_LOCAL​_1       |       +1 |          |          |
+    | NIL?​_RET​_LOCAL​_0​_POP​_1 |        0 |          |          |
+    | CDR                     |       -1 |       +1 |          |
+    | PUSH​_LOCAL​_0           |          |          |          |
+    | PUSH​_LOCAL​_1           |       +1 |          |          |
+    | CAR                     |       -1 |          |          |
+    | CONS                    |          |          |       +1 |
+    | TAIL​_CALL              |          |          |          |
+
+    iteration2: enter stack: [cell3][cell1], leave stack: [cell4][cell0]   : local0 := cell3, local1 := cell1
+    | code                    | cell2-i2 | cell1-i2 | cell0-i2 | cell4-i2 | cell3-i2 |
+    |-------------------------+----------+----------+----------+----------+----------|
+    | POP​_TO​_LOCAL​_0         |          |          |          |          |        0 |
+    | WRITE​_TO​_LOCAL​_1       |       -1 |       +1 |          |          |          |
+    | NIL?​_RET​_LOCAL​_0​_POP​_1 |          |        0 |          |          |          |
+    | CDR                     |          |       -1 |       +1 |          |          |
+    | PUSH​_LOCAL​_0           |          |          |          |          |       +1 |
+    | PUSH​_LOCAL​_1           |          |       +1 |          |          |          |
+    | CAR                     |          |       -1 |          |          |          |
+    | CONS                    |          |          |          |       +1 |        0 |
+    | TAIL​_CALL              |          |          |          |          |          |
+
+    iteration3: enter stack: [cell4][cell0], leave stack: [cell5][NIL]     : local0 := cell4, local1 := cell0
+    | code                    | cell1-i3 | cell0-i3 | cell5-i3 | cell4-i3 | cell3-i3 |
+    |-------------------------+----------+----------+----------+----------+----------|
+    | POP​_TO​_LOCAL​_0         |          |          |          |        0 |       -1 |
+    | WRITE​_TO​_LOCAL​_1       |       -1 |       +1 |          |          |          |
+    | NIL?​_RET​_LOCAL​_0​_POP​_1 |          |        0 |          |          |          |
+    | CDR                     |          |        -1 |          |          |          |
+    | PUSH​_LOCAL​_0           |          |          |          |       +1 |          |
+    | PUSH​_LOCAL​_1           |          |       +1 |          |          |          |
+    | CAR                     |          |       -1 |          |          |          |
+    | CONS                    |          |          |        0 |          |          |
+    | TAIL​_CALL              |          |          |          |          |          |
+
+    iteration4: enter stack: [cell5][NIL] -> return                        : local0 := cell5, local1 := NIL
+    | code                    | cell0-i4 | cell5-i4 | cell4-i4 |
+    |-------------------------+----------+----------+----------|
+    | POP​_TO​_LOCAL​_0         |          |        0 |       -1 |
+    | WRITE​_TO​_LOCAL​_1       |       -1 |          |          |
+    | NIL?​_RET​_LOCAL​_0​_POP​_1 |          |          |          |
+
+
+  - [ ] implement refcount gc for tree functions (having pointers in both cells)
+    
 - [-] implement byte code debugger on top of 6510 debugger
   - [X] single step
-  - [ ] run to next call/return
-  - [ ] step over call
+  - [X] run to next call/return
+  - [X] step over call
   - [ ] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
   - [X] inspect/manipulate value stack
   - [ ] inspect/manipulate call frame

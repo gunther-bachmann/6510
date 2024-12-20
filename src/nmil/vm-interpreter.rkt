@@ -9,26 +9,52 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 |#
 
 
-;; TODO: allow byte-code level debugging (with the possibility to step into 6510 code)?
-;;       idea: establish break point in interpreter loop, (tell debugger to break at resolved-label)
-;;             run own routine at break point,
-;;             allow custom commands for this debugger mode
-;;               e.g. pretty print next byte code commands (disassembler)
-;;                    inspect and manipulate memory, call stack, locals, parameters
-;;                    allow setting breakpoints on bytecode (at a certain address)
-;;             allow in place execution of bytecode
-;;             !allow to switch debugger to byte code debugger and vice versa
-;;             print bc interpreter status (additionally)
 ;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
-;; TODO: numbering of parameter/locals may still be different compared to stack-virtual-machein and svm-compiler/generator!
 ;; TODO: implement refcount gc for reverse list implementation/interpretation
+;; TODO: implement sorted binary tree
+;; TODO: implement refcount gc for sorted binary tree functions
 ;; TODO: implement structure access, allocation, deallocation
 ;; TODO: implement array access, allocation, deallocation (native arrays, regular arrays)
 ;; TODO: implement constant pool
 ;; TODO: implement structure creation
 ;; TODO: implement strings
 ;; TODO: implement string-operations and output
+
+;; PLANNED: harmonize virtual byte code machine with this implementation?
+
 ;; IDEA: implement exact numbers (as list of bcd digits e.g. 3 bcds in 16 bit?)
+;; IDEA allow to switch debugger to byte code debugger and vice versa
+
+#|
+  Byte code command list and description
+  opcode                 len       options                   description
+  -----------------------------------------------------------------------------------
+  BRK                      1  01                             break (stop)
+  CALL                     3  34                             statically call function pointed to be following two bytes
+  CAR                      1  43                             replace tos with car
+  CDR                      1  41                             replace tos with cdr
+  CONS                     1  42                             pop car and cdr and push cons of car cdr
+  INT_MINUS                1  61                             pop two integers and push the subtraction of them
+  INT_PLUS                 1  62                             pop two integers and push the sum of them
+  NIL?                     1  21                             replace tos with 0 (false) or 1 (true) if tos was nil
+  NIL?_RET_LOCAL_0_POP_n   1  98+  n=1..4                     if tos is nil, pop n from eval-stack and return local0 as result (on tos)
+  POP_TO_LOCAL_n           1  90+  n=0..4                     pop tos into local#n
+  PUSH_INT int             3       int=0..8191, -4096..4095   push integer constant onto eval-stack
+  PUSH_INT_i               1  b8+  i=0,1,2,-1(m1)            push constant 0,1,2,-1 onto eval-stack
+  PUSH_LOCAL_n             1  80+  n=0..4                     push local#n onto eval-stack
+  PUSH_NIL                 1  09                             push nil onto eval-stack
+  RET                      1  33                             return from function
+  TAIL_CALL                1  35                             tail call same function
+  WRITE_FROM_LOCAL_n       1  81+  n=0..4                     write local#n into tos (overwriting old tos)
+  WRITE_TO_LOCAL_n         1  91+  n=0..4                     write tos into local#n (without popping)
+
+
+  (not implemented yet)
+  PUSH_BYTE byte           2  05   byte=0..255, -128..127      push byte constant onto eval-stack
+  POP_n                    1       n=1..4                     pop top n values
+  SET_CAR                  1                                 set car element to tos (of car-cdr-pair-ptr behind tos) and pop 2 values
+  SET_CDR                  1                                 set cdr element to tos (of car-cdr-pair-ptr behind tos) and pop 2 values
+|#
 
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader org-for-code-seq))
@@ -404,10 +430,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define NIL?_RET_LOCAL_0_POP_2 #x9a)
 (define NIL?_RET_LOCAL_0_POP_3 #x9c)
 (define NIL?_RET_LOCAL_0_POP_4 #x9e)
-;; (define NIL?_RET__POP_0 #x99)
-;; (define NIL?_RET__POP_1 #x9b)
-;; (define NIL?_RET__POP_2 #x9d)
-;; (define NIL?_RET__POP_3 #x9f)
+;; (define ZERO?_RET_LOCAL0_POP_1 #x99)
+;; (define ZERO?_RET_LOCAL0_POP_2 #x9b)
+;; (define ZERO?_RET_LOCAL0_POP_3 #x9d)
+;; (define ZERO?_RET_LOCAL0_POP_4 #x9f)
 
 (module+ test #| bc-nil-ret |#
   (define bc-nil-ret-state
@@ -530,30 +556,28 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
              (bc PUSH_NIL)
              (bc PUSH_INT_0)
-             (bc CONS)
+             (bc CONS)                  ;; (add ref to this cell) does allocate a cell
              (bc PUSH_INT_1)
-             (bc CONS)
+             (bc CONS)                  ;; (add ref to this cell) does allocate a cell (removes a cell-ref from stack and adds a ref in the pair cell)
              (bc PUSH_INT_2)
-             (bc CONS) ;; list to reverse (param0)
+             (bc CONS)                  ;; (add ref to this cell) does allocate a cell (removes a cell-ref from stack and adds a ref in the pair cell)
              (bc PUSH_NIL)
-             ;; (bc PUSH_NIL)
-             ;; (bc CONS) ;; target list (param1)
              (bc CALL) (byte 00) (byte $8f)
-             (bc BRK)
+             (bc BRK)                   ;; << to make debugger stop/exit
 
              (org #x8F00)
       (label TEST_FUN)
              (byte 2)                   ;; number of locals
-             (bc POP_TO_LOCAL_0)        ;; b-list
-             (bc WRITE_TO_LOCAL_1)      ;; a-list
-             (bc NIL?_RET_LOCAL_0_POP_1);; return b-list if a-list is nil
-             (bc CDR)                   ;; shrinking original list
-             (bc PUSH_LOCAL_0)
-             (bc PUSH_LOCAL_1)
-             (bc CAR)
-             (bc CONS)                  ;; growing reverse list
+             (bc POP_TO_LOCAL_0)        ;; b-list (#refs stay)
+             (bc WRITE_TO_LOCAL_1)      ;; a-list (#refs increase)
+             (bc NIL?_RET_LOCAL_0_POP_1);; return b-list if a-list is nil (if popping, #refs decrease)
+             (bc CDR)                   ;; shrinking original list (ref to cdr cell increases, ref of original cell decreases, order!)
+             (bc PUSH_LOCAL_0)          ;; (ref to local0 cell increases)
+             (bc PUSH_LOCAL_1)          ;; (ref to local1 cell increases)
+             (bc CAR)                   ;; (ref to car increases, ref to original decreases)
+             (bc CONS)                  ;; growing reverse list (ref to this cell set to 1), refs to cells consed, stay the same)
              (bc TAIL_CALL)
-             (bc BRK))
+             (bc BRK))                  ;; just in case to make debugger stop/exit
      ))
 
   (check-equal? (memory-list bc-tail-call-reverse-state VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE (add1 VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE))
@@ -1359,10 +1383,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "cell-pair-ptr NIL  (rt)")))
 
+;; get count of bytes belonging to the given bc command
 (define (disassembler-byte-code--byte-count bc)
   (cond [(memq bc (list #x34 #x0c)) 3]
         [else 1]))
 
+;; return disassembled string for bc (and byte 1, byte 2 thereafter)
 (define (disassemble-byte-code bc bc_p1 bc_p2)
   (define byte-code-t2 (arithmetic-shift (if (> bc 127) (bitwise-and #x78 bc) (bitwise-and #x7f bc)) 1))
   (cond
