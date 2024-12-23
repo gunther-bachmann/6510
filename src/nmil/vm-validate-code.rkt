@@ -1,5 +1,6 @@
 #lang racket/base
 
+(require (only-in racket/list empty?))
 
 #|
 
@@ -51,7 +52,7 @@ la-node: car: value for comparison (car of pointed to lb-node contains values <=
 
 (B.3) V2 < v:        o   (update lb-nodes above to hold comparison value V2  
                     / \
-              c=V2 o   v 
+              c=V1 o   v 
                    |
                    o
                   / \
@@ -101,6 +102,175 @@ la-node: car: value for comparison (car of pointed to lb-node contains values <=
 (module+ test #| btree add value|#
   (check-equal? (btree-make-root 1)
                 (mcons 1 (mcons 1 '()))))
+
+
+(define (btree-add-value la-node value)
+  (define lb-node (mcdr la-node))
+  (define l (mcar lb-node))
+  (define r (mcdr lb-node))
+  (cond
+    ;; A.1
+    [(and (not (mpair? l))
+        (empty? r)
+        (< value l))
+     (mcons value (mcons value l))]
+    ;; A.2
+    [(and (not (mpair? l))
+        (empty? r)
+        (>= value l))
+     (mcons (mcar la-node) (mcons l value))]
+    ;; B.1
+    [(and (not (mpair? l))
+        (not (mpair? r))
+        (< value l))
+     (mcons (mcar la-node) (mcons (mcons value (mcons value l)) r))]
+    ;; B.2
+    [(and (not (mpair? l))
+        (not (mpair? r))
+        (< value r))
+     (mcons value (mcons (mcons l (mcons l value)) r))]
+    ;; B.3
+    [(and (not (mpair? l))
+        (not (mpair? r))
+        (< r value))
+     (mcons r (mcons (mcons l (mcons l r)) value))]
+    ;; C.1
+    [(and (mpair? l)
+        (empty? r)
+        (< value (mcar la-node)))
+     (mcons (mcar la-node) (mcons (btree-add-value l value) r))]
+    ;; C.2
+    [(and (mpair? l)
+        (empty? r)
+        (> value (mcar la-node)))
+     (mcons (mcar la-node) (mcons l value))]
+    ;; D.1
+    [(and (mpair? l)
+        (not (mpair? r))
+        (< value (mcar la-node)))
+     (mcons (mcar la-node) (mcons (btree-add-value l value) r))]
+    ;; D.2
+    [(and (mpair? l)
+        (not (mpair? r))
+        (> value (mcar la-node))
+        (< value r))
+     (mcons (mcar la-node) (mcons l (mcons value (mcons value r))))]
+    ;; D.3
+    [(and (mpair? l)
+        (not (mpair? r))
+        (> value (mcar la-node))
+        (> value  r))
+     (mcons (mcar la-node) (mcons l (mcons r (mcons r value))))]
+    ;; E.1
+    [(and (mpair? l)
+        (mpair? r)
+        (< value (mcar l)))
+     (mcons (mcar la-node) (mcons (btree-add-value l value) r))]
+    [(and (mpair? l)
+        (mpair? r)
+        (> value (mcar l))
+        (< value (mcar r)))
+     (mcons (mcar la-node) (mcons l (btree-add-value r value)))]
+    [(and (mpair? l)
+        (mpair? r)
+        (> value (mcar r)))
+     (mcons (mcar la-node) (mcons l (mcons (btree-max-value r) (mcons r value))))]
+    [else (raise-user-error "unknown case")]))
+
+(module+ test #| btree add value |#
+  (check-equal? (btree-add-value (mcons 5 (mcons 5 null)) 3)
+                (mcons 3 (mcons 3 5)))
+
+  (check-equal? (btree-add-value (mcons 2 (mcons 2 null)) 3)
+                (mcons 2 (mcons 2 3)))
+
+  (check-equal? (btree-add-value (mcons 4 (mcons 4 5)) 3)
+                (mcons 4 (mcons (mcons 3 (mcons 3 4)) 5)))
+
+  (check-equal? (btree-add-value (mcons 2 (mcons 2 5)) 3)
+                (mcons 3 (mcons (mcons 2 (mcons 2 3)) 5)))
+
+  (check-equal? (btree-add-value (mcons 1 (mcons 1 2)) 3)
+                (mcons 2 (mcons (mcons 1 (mcons 1 2)) 3)))
+
+  (check-equal? (btree-add-value (mcons 5 (mcons (mcons 4 (mcons 4 5)) null)) 3)
+                (mcons 5 (mcons (mcons 4 (mcons (mcons 3 (mcons 3 4)) 5)) null)))
+
+  (check-equal? (btree-add-value (mcons 5 (mcons (mcons 2 (mcons 2 5)) null)) 3)
+                (mcons 5 (mcons (mcons 3 (mcons (mcons 2 (mcons 2 3)) 5)) null)))
+
+  (check-equal? (btree-add-value (mcons 5 (mcons (mcons 2 (mcons 2 5)) null)) 6)
+                (mcons 5 (mcons (mcons 2 (mcons 2 5)) 6)))
+
+  (check-equal? (btree-add-value (mcons 5 (mcons (mcons 2 (mcons 2 5)) 6)) 3)
+                (mcons 5 (mcons (mcons 3 (mcons (mcons 2 (mcons 2 3)) 5)) 6)))
+
+  (check-equal? (btree-add-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) 6)) 5)
+                (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 5 (mcons 5 6)))))
+
+  (check-equal? (btree-add-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) 5)) 6)
+                (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 5 (mcons 5 6)))))
+
+  (check-equal? (btree-add-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 5 (mcons 5 6)))) 1)
+                (mcons 3 (mcons (mcons 2 (mcons (mcons 1 (mcons 1 2)) 3)) (mcons 5 (mcons 5 6)))))
+
+  (check-equal? (btree-add-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 5 (mcons 5 6)))) 4)
+                (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 5 (mcons (mcons 4 (mcons 4 5)) 6)))))
+
+  (check-equal? (btree-add-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 5 (mcons 5 6)))) 7)
+                (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 6 (mcons (mcons 5 (mcons 5 6)) 7))))))
+
+(define (btree-max-value la-node)
+  (cond [(empty? la-node) null]
+        [(not (mpair? la-node)) la-node]
+        [else
+         (define cv (mcar la-node))
+         (define r (mcdr (mcdr la-node)))
+         (cond [(empty? r) cv]
+               [else (btree-max-value r)])]))
+
+(module+ test #| btree max value |#
+  (check-equal? (btree-max-value (mcons 5 (mcons 5 null)))
+                5)
+
+  (check-equal? (btree-max-value (mcons 2 (mcons 2 null)))
+                2)
+
+  (check-equal? (btree-max-value (mcons 4 (mcons 4 5)))
+                5)
+
+  (check-equal? (btree-max-value (mcons 2 (mcons 2 5)))
+                5)
+
+  (check-equal? (btree-max-value (mcons 1 (mcons 1 2)))
+                2)
+
+  (check-equal? (btree-max-value (mcons 5 (mcons (mcons 4 (mcons 4 5)) null)))
+                5)
+
+  (check-equal? (btree-max-value (mcons 5 (mcons (mcons 2 (mcons 2 5)) null)))
+                5)
+
+  (check-equal? (btree-max-value (mcons 5 (mcons (mcons 2 (mcons 2 5)) null)))
+                5)
+
+  (check-equal? (btree-max-value (mcons 5 (mcons (mcons 2 (mcons 2 5)) 6)))
+                6)
+
+  (check-equal? (btree-max-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) 6)))
+                6)
+
+  (check-equal? (btree-max-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) 5)))
+                5)
+
+  (check-equal? (btree-max-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 5 (mcons 5 6)))))
+                6)
+
+  (check-equal? (btree-max-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 5 (mcons 5 6)))))
+                6)
+
+  (check-equal? (btree-max-value (mcons 3 (mcons (mcons 2 (mcons 2 3)) (mcons 5 (mcons 5 6)))))
+                6))
 
 ;; INFO: trails are interesting for implementing a persistent version of this tree
 ;; return the trail to the given value,

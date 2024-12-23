@@ -3523,6 +3523,8 @@ this will include the implementation of
            (reverse (reverse a) b))
   - [ ] tree for ordered traversal/find (each node needs data to decide <=, >)
     useful for set implementation, sorted/ordered dynamic growing/shrinking data structure.
+    useful for implementation of editor metadata for each line (with int = linenumber, value=line-string), but maybe n-ary tree is better suited
+    useful for implementation and validation reference counting algorithm for byte code commands, stack, locals, register and heap usage!
     could be implemented as persistent data structure (rewriting parents to the root on changes)
     first implementation with overwriting through addition byte codes set-car, set-cdr operations (gc-ing overwritten pointers)
         invariant: all values of left-subtree ov level-a node A are < value of the level-a node!
@@ -3588,7 +3590,9 @@ this will include the implementation of
         to make it tail recursive, move code from tree-left/right-... to tree-trail!
 
     - tree traversal
-  - [ ] reverse order of binary tree
+  - [ ] tree algorithms + gc implementation (rc)
+    - add/remove/cut/paste ... (as in editors)
+  - [ ] reverse order of binary tree + implementation of refcounting
   - [ ] depth of binary tree (travers full tree, tail-call-recursively, keeping max depth)
 - [-] allocation/deallocation of lists, cells, structures, strings
   - [X] cells
