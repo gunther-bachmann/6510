@@ -3449,25 +3449,25 @@ this will include the implementation of
     - there need to be two zero page pointers, one for lowbyte-stack, one for highbyte-stack
   - [X] allow fast call frames (less copying, less space consumption)
   - [X] fix call-frame functions in vm-interpreter
-- [ ] implement tree algorithm
-  - binary tree of integers
-    (useful for what?)
-    node: car = (ptr = level down | value)
-          cdr = (ptr = level down | value)
-          binary tree:   1
-          maps to: (1 . NIL)
+- [ ] implement simple tree algorithms
+  - ordered (not sorted) binary tree (of editor strings)
+    see [[file:src/nmil/vm-validate-bt-naive.rkt][scheme implementation]]
+    node: car = (ptr = level down | value) <- may not be nil
+          cdr = (ptr = level down | value | nil)
+          binary tree:   "1"
+          maps to: (->"1" . NIL)
 
           binary tree:   o        ---- level_0
                         / \
                        1   2      ---- level_1
-          maps to: (l_1 1 .  2)
+          maps to: (l_1 "1" .  "2")
 
           binary tree:     o      ---- level_0
                           / \
                          o   3    ---- level_1
                         / \
                        1   2      ---- level_2
-          maps to: (l_1 (l_2 1 . 2) . 3)
+          maps to: (l_1 (l_2 "1" . "2") . "3")
   
           binary tree:   o        ---- level_0 
                         / \                  
@@ -3476,38 +3476,11 @@ this will include the implementation of
                      1 2   o 5    ---- level_2
                           / \               
                          3   4    ---- Level_3
-          maps to: (l_1 (l_2 1 . 2) . (l_2 (l_3 3 . 4) . 5))
-  - n-ary tree of integers
-    (useful for what?)
+          maps to: (l_1 (l_2 "1" . "2") . (l_2 (l_3 "3" . "4") . "5"))
+  - n-ary tree (of editor strings)
     node: car = (ptr = level-down | value)
           cdr = ptr to sibling | NIL <- n-arry tree allows for n siblings (same level)
-          binary tree:   1        ---- level_0
-          maps to: (l_0 1 . NIL )
-          in list notation: (l_0 1)
 
-          binary tree:   o        ---- level_0
-                        / \
-                       1   2      ---- level_1
-          maps to: (l_0 (l_1 1 . (l_1 2 . NIL ) ) . NIL )
-          in list notation: (l_0 (l_1 1 2))
-
-          binary tree:     o      ---- level_0
-                          / \
-                         o   3    ---- level_1
-                        / \
-                       1   2      ---- level_2
-          maps to: (l_0 (l_1 (l_2 1 . (l_2 2 . NIL ) ) . (l_1 (l_2 3 . NIL ) . NIL ) ) . NIL )
-          in list notation: (l_0 (l_1 (l_2 1 2 ) (l_1 (l_2 3 ))))
-
-          binary tree:   o        ---- level_0       [ . NIL ]
-                        / \                         /   
-                       o   o      ---- level_1     [ . ]----------->[ . NIL ]   
-                      /|   |\                     /                /
-                     1 2   o 5    ---- level_2   [1.]->[2.NIL]    [ . ]->[5.NIL]
-                          / \                                    /
-                         3   4    ---- Level_3                  [3.]-->[4.NIL]
-          maps to: (l_0 (l_1 (l_2 1 . (l_2 2 . NIL ) ) . (l_1 (l_2 (l_3 3 . (l_3 4 . NIL ) ) . (l_2 5 . NIL ) ) )) . NIL )
-          in list notation: (l_0 (l_1 (l_2 1 2) (l_1 (l_2 (l_3 3 4) 5))))
     - (make-node val) -> node
       creates a list: (list val)
     - (add-sibling node val) -> node
@@ -3521,75 +3494,6 @@ this will include the implementation of
     - necessary lisp functions: car, cdr, cons, append <- append can be simplified in case of binary trees!
       (def (append (a list) (b list) list)
            (reverse (reverse a) b))
-  - [ ] tree for ordered traversal/find (each node needs data to decide <=, >)
-    useful for set implementation, sorted/ordered dynamic growing/shrinking data structure.
-    useful for implementation of editor metadata for each line (with int = linenumber, value=line-string), but maybe n-ary tree is better suited
-    useful for implementation and validation reference counting algorithm for byte code commands, stack, locals, register and heap usage!
-    could be implemented as persistent data structure (rewriting parents to the root on changes)
-    first implementation with overwriting through addition byte codes set-car, set-cdr operations (gc-ing overwritten pointers)
-        invariant: all values of left-subtree ov level-a node A are < value of the level-a node!
-                   level-a nodes do not hold value payloads (only compare values/hashes)
-                   level-b nodes hold references to level-a nodes or values!
-                   level-b nodes must hold either a value or a ref in car position (never NIL), cdr may be NIL (or a value or reference).
-        there are level a and level b nodes. level a nodes are for holding values in car position,
-        level b nodes are the actual binary tree structure
-        level a nodes have the (actual) sub tree (level b) in cdr and the max left subtree value in car position
-          binary tree:   o        ---- level_0
-                        /
-                       1  
-          maps to: (l_0a c1 . (l_0b 1 . NIL))
-          (these binary trees do not always map to lists, since they may hold values in cdr position)
-
-          binary tree:   o        ---- level_0
-                        / \
-                       1   2      ---- level_1
-          maps to: (l_0a c1 . (l_0b 1 . 2))
-                       
-          binary tree:     o      ---- level_0
-                          / \
-                         o   3    ---- level_1
-                        / \
-                       1   2      ---- level_2
-          maps to: (l_0a c2 . (l_0b (l_1a c2 . (l_1b 1. 2)) . 3))
-
-          binary tree:   o        ---- level_0 
-                        / \
-                       o   o      ---- level_1
-                      /|   |\
-                     1 2   o 5    ---- level_2
-                          / \
-                         3   4    ---- Level_3
-          maps to: (l_0a c2 . (l_0b (l_1a c2 . (l_1b 1 . 2)) (l_1a c4 . (l_1b (l_2a c4 . (l_2b 3 . 4)) . 5))))
-    - tree construction/update
-      - (make-la level-b-sub-tree) => (cValue . B-SubTree)
-        get max value of left subtree of the given b-sub-tree as cValue
-      - (add level-a-root value)
-        traverse tree to find right spot where to add the new value
-      - (remove level-a-root value)
-        travers tree to find value and remove it from the tree
-
-        travers to node with value, returning keeping tree trail to it
-        (fn (tree-trail-to la-node val (trail '()))
-          (cond [(<= val (car node)) ;; search left sub tree
-                 (tree-left-trail-to (cdr node) value (cons node trail))]
-                [else
-                 (tree-right-trail-to (cdr node) value (cons node trail))]))
-        (fn (tree-left-trail-to lb-node value trail)
-          (def new-trail (cons lb-node trail))
-          (cond [(and (atomic-value? (car lb-node))
-                      (= (car lb-node) value))
-                 new-trail]  
-                [else (tree-trail-to (car lb-node) value new-trail)]))
-        (fn (tree-right-trail-to lb-node value trail)
-          (def new-trail (cons lb-node trail))
-          (cond [(and (atomic-value? (cdr lb-node))
-                      (= (cdr lb-node) value))
-                 new-trail]
-                [else (tree-trail-to (cdr lb-node) value new-trail)]))
-
-        to make it tail recursive, move code from tree-left/right-... to tree-trail!
-
-    - tree traversal
   - [ ] tree algorithms + gc implementation (rc)
     - add/remove/cut/paste ... (as in editors)
   - [ ] reverse order of binary tree + implementation of refcounting
@@ -3710,11 +3614,148 @@ What information is needed for the different phases? => check the different opti
 - previous node :: reference to node before change (to track changes through compilation)
 - previous note :: note that describes the transformation done from previous node to current node
 *** some iteration (ideas)
+**** more elaborate data structures
+- OPTIONAL tree for ordered traversal/find (each node needs data to decide <=, >)
+  useful for set implementation, sorted/ordered dynamic growing/shrinking data structure.
+  useful for implementation of editor metadata for each line (with int = linenumber, value=line-string), but maybe n-ary tree is better suited
+  useful for implementation and validation reference counting algorithm for byte code commands, stack, locals, register and heap usage!
+  could be implemented as persistent data structure (rewriting parents to the root on changes)
+  first implementation with overwriting through addition byte codes set-car, set-cdr operations (gc-ing overwritten pointers)
+      invariant: all values of left-subtree ov level-a node A are < value of the level-a node!
+                 level-a nodes do not hold value payloads (only compare values/hashes)
+                 level-b nodes hold references to level-a nodes or values!
+                 level-b nodes must hold either a value or a ref in car position (never NIL), cdr may be NIL (or a value or reference).
+      there are level a and level b nodes. level a nodes are for holding values in car position,
+      level b nodes are the actual binary tree structure
+      level a nodes have the (actual) sub tree (level b) in cdr and the max left subtree value in car position
+        binary tree:   o        ---- level_0
+                      /
+                     1  
+        maps to: (l_0a c1 . (l_0b 1 . NIL))
+        (these binary trees do not always map to lists, since they may hold values in cdr position)
+       binary tree:   o        ---- level_0
+                      / \
+                     1   2      ---- level_1
+        maps to: (l_0a c1 . (l_0b 1 . 2))
+                     
+        binary tree:     o      ---- level_0
+                        / \
+                       o   3    ---- level_1
+                      / \
+                     1   2      ---- level_2
+        maps to: (l_0a c2 . (l_0b (l_1a c2 . (l_1b 1. 2)) . 3))
+       binary tree:   o        ---- level_0 
+                      / \
+                     o   o      ---- level_1
+                    /|   |\
+                   1 2   o 5    ---- level_2
+                        / \
+                       3   4    ---- Level_3
+        maps to: (l_0a c2 . (l_0b (l_1a c2 . (l_1b 1 . 2)) (l_1a c4 . (l_1b (l_2a c4 . (l_2b 3 . 4)) . 5))))
+  - tree construction/update
+    - (make-la level-b-sub-tree) => (cValue . B-SubTree)
+      get max value of left subtree of the given b-sub-tree as cValue
+    - (add level-a-root value)
+      traverse tree to find right spot where to add the new value
+    - (remove level-a-root value)
+      travers tree to find value and remove it from the tree
+     travers to node with value, returning keeping tree trail to it
+      (fn (tree-trail-to la-node val (trail '()))
+        (cond [(<= val (car node)) ;; search left sub tree
+               (tree-left-trail-to (cdr node) value (cons node trail))]
+              [else
+               (tree-right-trail-to (cdr node) value (cons node trail))]))
+      (fn (tree-left-trail-to lb-node value trail)
+        (def new-trail (cons lb-node trail))
+        (cond [(and (atomic-value? (car lb-node))
+                      (= (car lb-node) value))
+                 new-trail]
+                [else (tree-trail-to (car lb-node) value new-trail)]))
+      (fn (tree-right-trail-to lb-node value trail)
+        (def new-trail (cons lb-node trail))
+        (cond [(and (atomic-value? (cdr lb-node))
+                    (= (cdr lb-node) value))
+               new-trail]
+              [else (tree-trail-to (cdr lb-node) value new-trail)]))
+     to make it tail recursive, move code from tree-left/right-... to tree-trail!
+  - tree traversal
+- b-tree (persistent) <- keep somewhat balanced? balancing tree will enlarge undo/redo buffer usage!
+  - eval b-tree compared to n-ary tree for source code (line) meta data (or multiple lines on one leaf?)
+  - avl tree ? (https://en.wikipedia.org/wiki/AVL_tree)
+  - read-black tree maybe, to keep it somewhat balanced ?
+    how to keep the color on a car/cdr node? (could be kept in the reference count byte e.g. bit 7)
+    tree may contain pointer to other tree nodes (cons pairs) or native arrays (leading spaces, total len, character data). no payload bit is free.
+    red,black nodes may be used from different page sets. => there is a function to determine whether a cons pair comes from a "red" (or a "black") page => changing color = moving cons cell to other page?
+- n-ary tree (non-persistent)
+
 **** keep meta information (related to debugging)
 - source code location
 - default values
 - types
 - name -> index
+**** implement text editor (mostly) in mil
+  Data structures for a text editor:
+
+  gap buffer:
+  - keep text two separate portions of memory, copying between them.
+  - cursor is at the end of the left buffer, inserting = adding to first buffer
+  - second buffer is the text behind the cursor
+  - moving cursor = copying first buffer <-> second buffer (can be delayed until insertion is done)
+
+  - gap buffer implementation using a list of pages before cursor, list of pages after cursor
+    (head of gap_pre_buffers is page with cursor) lines + text before cursor
+    (head of gap_post_buffers is page right after cursor) <- text + lines after cursor
+
+  - IDEA: no gap buffer, use screen data only, storing lines into memory when scrolling out of visibility?
+          => there cannot be invisible data (scrolled out left and right)? => need for line break
+             alternative: left|right invisible chars need to be saved/rendered efficiently <- is this really possible / not overly complex?
+          ADVANTAGE: no dual changes (memory model + render)
+          PROBLEM: undo/redo?
+
+  - IDEA: gap buffer modification
+          put current edit line (when actually editing, not if moving)
+              into one extra page (text before cursor at start of page, text behind cursor, end of page),
+              text is plain, without any encoding (like leading spaces or length data)
+              cursor = ptr in page, typing = inserting text at cursor position
+                                    erasing = deleting text before cursor position
+              [<text before cursor>| ........  <text behind cursor>]
+                                   /\        /\
+                  pointer to cursor            pointer to text behind cursor
+          once editing a line is done, it is copied into the regular text buffers
+          format: [len][#leading-spaces]characters[len][0],
+                  with len = total length of this line (including leading spaces) [stored two times, to do fast scanning|moving
+                       #leading-spaces = number of spaces before first char starts
+                       characters = actual text
+                       0 = zero, marking end of line (for scanning)
+                  lines are always kept completely on one page!
+
+  - IDEA: keep current line# up to date <- needs to be updated with insertions / deletions
+  - IDEA: keep line anchors (limited number of pointers to strings with their line number) <- need to be updated once lines are inserted (or invalidated)
+  - IDEA: keep line anchors for all visible lines
+
+    fast implementation:
+    - render-line 'a starting from column 'b [to column 'c] at visual line 'd (two variants: 1. for currently edited line, 2. regular encoded text line)
+    - scroll up/down 'n lines
+    - scroll left/right 'n columns
+
+    - insert/delete char
+    - insert/delete line
+    - insert/delete block
+    - undo/redo (keep modifications + undo data)
+
+  - multiple cursors (are not supported for fast operation)
+
+  - IDEA: use mil data structures to implement the above
+          => native array for currently edited line <- indexed access + copy left<->right from cursor
+             tree of strings for current buffer text
+             path to current line (for moving cursor line-wise through the text) = search previous/next leaf based on current node-path
+             (e.g. line of a buffer = cell-pair (car = int, leading spaces + strlen, cdr = pointer to native string/array))
+             buffer = n-ary tree of lines <- binary tree has advantage of using car/cdr pair only <- start out with this
+             (rebalance tree once in a while)
+             undo/redo = persistent tree data structure?, undo/redo organized in n-ary tree itself.
+             <- when to discard? (running low on memory, discard most distant (tree distance) nodes)
+                siblings are ordered last touched first
+
 **** debugging
 - level 0: debug vm code (byte code), trace, inspect, step-debugger, memory inspector
 - level 1: debug mil, function/expression entry, inspect parameters, locals, etc, call stack, memory inspector
