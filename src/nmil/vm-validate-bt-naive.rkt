@@ -6,70 +6,79 @@
 
 simplest valued tree
 
+case A
    o
   / \
- 1   nil
+ P   T
 
-add 2 after 1
-
+case B
    o
   / \
- 1   2
+ P   nil
 
-add 4 after 2
 
-     o
-    / \
-   o   4
+add X after P:
+  case A:          case B
+      o                o
+    /   \             / \
+   P     o           P   X
+        / \
+       X   T
+
+add X after T (only case A):
+  case B:
+      o
+    /   \
+   P     o
+        / \
+       T   X
+
+add X before P:
+  case A:          case B
+      o                o
+    /   \             / \
+   o     T           X   P
   / \
- 1   2
+ X   P 
 
-add 5 after 4                  alternative
-
-      o                                o
-    /   \                             / \
-   o     o                           o   5
-  / \   / \                         / \  
- 1   2 4   5                       o   4 
-                                  / \
-                                 1   2
-
-
-add 3 after 2 (before 4)        alternative           alternative      alternative
-        o                             o                    o                    o     
-      /   \                         /   \                /   \                /   \   
-    o      o                      o      o             o      o             o      o  
-   / \    / \                    / \    / \           / \    / \           / \    / \ 
-  o   3  4   5                  1   o  4   5         1   2  o   5         o   3  4   5
- / \                               / \                     / \           / \          
-1   2                             2   3                   3   4         1   2         
-push down existing             create new node o
-node           o               and replace    / \
-add new node  / \              2 with it     2   3
-  o          1   2
- / \
-    3
-
-add 0 before 1              alternative
-
-       ...                         ...   
-     /                         /     
-    o                         o      
-   / \                       / \     
-  0   o                     o   2    
-     / \                   / \   
-    1   2                 0   1  
-
-
-strategies for adding:
-  add after leaf x:  x is left, has right = nil, set right to new value
-  add after leaf x:  x is left, alt1: create new node with leaf x as left and the new value as r and replace original leaf x with it
-  add after leaf x:  x is right, alt1:
+add X before T (only case A)
+  case A:
+      o
+    /   \
+   P     o
+        / \       
+       X   T
 
 strategies for deleting:
   if right node: just set nil
-  if left, right is not nil: swap
+  if left node and right is not nil: swap
   if both are nil delete parent node (recurse)
+
+strategies for finding next/prev
+
+  next:
+    if left node and has right node: find first of right node
+    if left node and has no right node
+       or if right node: go up until coming from a left node (and right node != null), get first of right node
+
+  prev:
+   if right node: find last of left node
+   if left node: go up until coming from a right node. get last of left node
+
+
+  first of node:
+    keep going left to first leaf
+
+
+  last of node:
+    keep going right to first leaf, if leaf is nil, take last of left of same level
+    
+    
+invariants:
+  - left is never nil, tree is reorganized if left is deleted!
+  - left may be subtree or leaf value
+  - right may be nil, subtree or leaf value
+
 
  |#
 (module+ test #| btree add value|#
@@ -135,172 +144,264 @@ strategies for deleting:
                 3))
 
 (define (btree-path-to-first node (path (list)))
-  (cond [(btree-value? node) (reverse path)]
-        [else (btree-path-to-first (car node) (cons -1 path))]))
+  (cond [(btree-value? node) path]
+        [else (btree-path-to-first (car node) (cons (cons -1 node) path))]))
 
 (module+ test #| btree-path-to-first |#
   (check-equal? (btree-path-to-first (btree-make-root "1"))
-                (list -1))
+                '((-1 . ("1" . ()))))
 
   (check-equal? (btree-path-to-first '(((1 . ()) . 3) . (4 . 5)))
-                (list -1 -1 -1)))
+                '((-1 . (1 . ()))
+                  (-1 . ((1 . ()) . 3))
+                  (-1 . (((1 . ()) . 3) . (4 . 5))))))
 
 (define (btree-path-to-last  node (path (list)))
-  (cond [(btree-value? node) (reverse path)]
-        [(empty? (cdr node)) (btree-path-to-last (car node) (cons -1 path))]
-        [else (btree-path-to-last (cdr node) (cons 1 path))]))
+  (cond [(btree-value? node) path]
+        [(empty? (cdr node)) (btree-path-to-last (car node) (cons (cons -1 node) path))]
+        [else (btree-path-to-last (cdr node) (cons (cons 1 node) path))]))
 
 (module+ test #| btree-path-to-last |#
   (check-equal? (btree-path-to-last (btree-make-root "1"))
-                (list -1))
+                '((-1 . ("1" . ()))))
 
   (check-equal? (btree-path-to-last '(((1 . 2) . 3) . (4 . 5)))
-                (list 1 1))
+                '((1 . (4 . 5))
+                  (1 . (((1 . 2) . 3) . (4 . 5)))))
   (check-equal? (btree-path-to-last '(((1 . 2) . 3) . (4 . ())))
-                (list 1 -1)))
+                '((-1 . (4 . ()))
+                  (1 . (((1 . 2) . 3) . (4 . ()))))))
 
-(define (btree-node-for-path node path)
-  (cond [(empty? path) node]
-        [(= -1 (car path)) (btree-node-for-path (car node) (cdr path))]
-        [(= 1 (car path)) (btree-node-for-path (cdr node) (cdr path))]
+(define (btree-node-for-path path)
+  (cond [(empty? path) '()]
+        [(= -1 (caar path)) (car (cdar path))]
+        [(= 1 (caar path)) (cdr (cdar path))]
         [else (raise-user-error (format "btree path may only contain 1 | -1:" path))]))
-
+ 
 (module+ test #| btree-node-for-path |#
-  (check-equal? (btree-node-for-path (btree-make-root "1")
-                                     (list -1))
+  (check-equal? (btree-node-for-path '((-1 . ("1" . ()))))
                 "1")
 
-  (check-equal? (btree-node-for-path '(((1 . 2) . 3) . (4 . 5))
-                                     (list 1 1))
+  (check-equal? (btree-node-for-path '((1 . (4 . 5))
+                                       (1 . (((1 . 2) . 3) . (4 . 5)))))
                 5)
-  (check-equal? (btree-node-for-path '(((1 . 2) . 3) . (4 . 5))
-                                     (list 1))
+  (check-equal? (btree-node-for-path '((1 . (((1 . 2) . 3) . (4 . 5)))))
                 '(4 . 5))
-  (check-equal? (btree-node-for-path '(((1 . 2) . 3) . (4 . ()))
-                                     (list 1 -1))
+  (check-equal? (btree-node-for-path '((-1 . (4 . ()))
+                                       (1 . (((1 . 2) . 3) . (4 . ())))))
                 4))
 
-;; return nodes traversed by the given path
-;; (returning root + nodes which will be 1 element more than in path)
-(define (btree-nodes-for-path node path (path-nodes (list)))
-  (cond
-    [(empty? path) (reverse (cons node path-nodes))]
-    [(= -1 (car path)) (btree-nodes-for-path (car node) (cdr path) (cons node path-nodes))]
-    [(= 1 (car path)) (btree-nodes-for-path (cdr node) (cdr path) (cons node path-nodes))]
-    [else (raise-user-error (format "btree path may only contain 1 | -1:" path))]))
+(define (btree-prev path)
+  (cond [(empty? path)
+         '()]
+        [(= 1 (caar path))
+         ;; left must not be empyt => no additional check
+         (define top-most-relevant  path)
+         (append (btree-path-to-last (cadar top-most-relevant))
+                 (list (cons -1 (cdar top-most-relevant)))
+                 (cdr top-most-relevant))]
+        [(= -1 (caar path))
+         (define top-most-relevant (dropf (cdr path)
+                                          (lambda (pe) (= -1 (car pe))
+                                                  ;; left must not be empyt => no further check
+                                            )))
+         (if (empty? top-most-relevant)
+             '()
+             (append (btree-path-to-last (cadar top-most-relevant))
+                     (list (cons -1 (cdar top-most-relevant)))
+                     (cdr top-most-relevant)))]
+        [else (raise-user-error "unknown case")]))
 
-(module+ test #| btree-nodes-for-path |#
-  (check-equal? (drop (btree-nodes-for-path (btree-make-root "1")
-                                            (list -1))
-                      1)
-                '("1"))
+(module+ test #| btree-prev |#
+  (check-equal? (btree-prev '((-1 . (5 . ()))))
+                '()
+                "if no left is present any level firther up, result is '()")
 
-  (check-equal? (drop (btree-nodes-for-path '(((1 . 2) . 3) . (4 . 5))
-                                            (list 1 1))
-                      1)
-                '((4 . 5)
-                  5))
-  (check-equal? (drop (btree-nodes-for-path '(((1 . 2) . 3) . (4 . 5))
-                                            (list 1))
-                      1)
-                '((4 . 5)))
-  (check-equal? (drop (btree-nodes-for-path '(((1 . 2) . 3) . (4 . ()))
-                                            (list 1 -1))
-                      1)
-                '((4)
-                  4)))
+  (check-equal? (btree-prev '((1 . (5 . 6))))
+                '((-1 . (5 . 6)))
+                "choose last of left if current path element is right")
 
-;; get first non nil next node in the tree
-(define (btree-next root-node path (path-nodes (list)))
-  (define rev-path (reverse path))
-  (define rev-non-1-path (dropf rev-path (lambda (pe) (= 1 pe))))
-  (define p-nodes
-    (cond [(empty? path-nodes) (btree-nodes-for-path root-node path)]
-          [else path-nodes]))
+  (check-equal? (btree-prev '((1 . (((4 . (5 . 6)) . ()) . 7))))
+                '((1 . (5 . 6))
+                  (1 . (4 . (5 . 6)))
+                  (-1 . ((4 . (5 . 6)) . ()))
+                  (-1 . (((4 . (5 . 6)) . ()) . 7)))
+                "choose last of left if current path is right")
 
-  (cond [(empty? path) '()]
-        [(empty? rev-non-1-path) '()]
-        [(= 1 (car rev-path)) ;; path backtracked to first -1
-         (btree-next root-node (reverse (cons 1 (cdr rev-non-1-path))))
-         ]
-        [else (btree-path-to-first root-node (reverse (cons 1 (cdr rev-non-1-path))))])
-  
-  '())
+  (check-equal? (btree-prev '((-1 . (6 . 7))
+                              (1 . (((1 . 2) . ()) . (6 . 7)))
+                              (-1 . ((((1 . 2) . ()) . (6 . 7)) . ()))
+                              (-1 . (((((1 . 2) . ()) . (6 . 7)) . ()) . 8))
+                              ;; (-1 . ((((((1 . 2) . ()) . (6 . 7)) . ()) . 8) . 9) )
+                              ;; (-1 . (((((((1 . 2) . ()) . (6 . 7)) . ()) . 8) . 9) . 10) )
+                              ))
+               '((1 . (1 . 2))
+                 (-1 . ((1 . 2) . ()))
+                 (-1 . (((1 . 2) . ()) . (6 . 7)))
+                 (-1 . ((((1 . 2) . ()) . (6 . 7)) . ()))
+                 (-1 . (((((1 . 2) . ()) . (6 . 7)) . ()) . 8) ))))
+
+(define (btree-next path)
+  (cond [(empty? path)
+         '()]
+        [(and (= -1 (caar path))
+            (not (empty? (cddar path))))
+         (define top-most-relevant path)
+         (append (btree-path-to-first (cddar top-most-relevant))
+                     (list (cons 1 (cdar top-most-relevant)))
+                     (cdr top-most-relevant))]
+        [(or (and (= -1 (caar path))
+               (empty? (cddar path)))
+            (= 1 (caar path)))
+         (define top-most-relevant (dropf (cdr path)
+                                          (lambda (pe) (or (= 1 (car pe))
+                                                     (empty? (cdr (cdr pe)))))))
+         (if (empty? top-most-relevant)
+             '()
+             (append (btree-path-to-first (cddar top-most-relevant))
+                     (list (cons 1 (cdar top-most-relevant)))
+                     (cdr top-most-relevant)))]
+        [else (raise-user-error "unknown case")]))
 
 (module+ test #| btree-next |#
-  (check-equal? (btree-next '(1 . ())
-                            '(-1))
-                '())
+  (check-equal? (btree-next '((-1 . (5 . ()))))
+                '()
+                "if right is nil and there is no way to go one level up, result is '()")
 
-  (check-equal? (btree-next '(1 . 2)
-                            '(-1))
-                '(1))
+  (check-equal? (btree-next '((-1 . (5 . ()))
+                              (-1 . ((5 . ()) . ()))
+                              (-1 . (((5 . ()) . ()) . ()))))
+                '()
+                "if right is nil and all the way to the root there is no right, result is '()")
 
-  ;; (check-equal? (btree-next '(((1 . 2) . 3) . (4 . 5))
-  ;;                           (list 1 1) ;; points to 5
-  ;;                           )
-  ;;               '())
+  (check-equal? (btree-next '((-1 . (5 . 6))))
+                '((1 . (5 . 6)))
+                "no need to go any level up, just select right")
 
-  ;; (check-equal? (btree-next '(((1 . 2) . 3) . (4 . ()))
-  ;;                           (list 1 -1) ;; points to 4
-  ;;                           )
-  ;;               '())
-
-  ;; (check-equal? (btree-next '(((1 . 2) . 3) . (4 . ()))
-  ;;                           (list -1 -1 -1) ;; points to 1
-  ;;                           )
-  ;;               (list -1 -1 1) ;; points to 2
-  ;;               )
-
-  ;; (check-equal? (btree-next '(((1 . ()) . 3) . (4 . ()))
-  ;;                           (list -1 -1 -1) ;; points to 1
-  ;;                           )
-  ;;               (list -1 1) ;; points to 3
-  ;;               )
-  )
+  (check-equal? (btree-next '((-1 . (5 . ()))
+                              (-1 . ((5 . ()) . (6 . ())))))
+                '((-1 . (6 . ()))
+                  (1 . ((5 . ()) . (6 . ()))))
+                "go one level up (since right is '()), replace -1 with 1 and select first of subtree (6 . ())")
 
 
-;; (define (btree-validate node (print-error #f))
-;;   (define node-must-be-pair (mpair? node))
-;;   (when (and print-error (not node-must-be-pair))
-;;     displayln (format "failed rule: node must be pair, ~a" node))
+  (check-equal? (btree-next '((-1 . (5 . ()))
+                              (-1 . ((5 . ()) . (((6 . 7) . 9) . ())))))
+                '((-1 . (6 . 7))
+                  (-1 . ((6 . 7) . 9))
+                  (-1 . (((6 . 7) . 9) . ()))
+                  (1 . ((5 . ()) . (((6 . 7) . 9) . ()))))
+                "go one level up (since right is '()), replace -1 with 1 and select first of subtree (((6 . 7) . 9) . ())")
 
-;;   (define lb-node (mcdr node))
-;;   (define l (mcar lb-node))
-;;   (define r (mcdr lb-node))
+  (check-equal? (btree-next '((-1 . (5 . ()))
+                              (-1 . ((5 . ()) . ()))
+                              (-1 . (((5 . ()) . ()) . ()))
+                              (-1 . ((((5 . ()) . ()) . ()) . 8))))
+                '((1 . ((((5 . ()) . ()) . ()) . 8)))
+                "go all the way up to the root and then select path to 8 as next")
 
-;;   (define comparator-must-be-int (integer? (mcar node)))
-;;   (when (and print-error (not comparator-must-be-int))
-;;     (displayln (format "failed rule: comparator must be an integer, ~a" node)))
+  (check-equal? (btree-next '((-1 . (5 . ()))
+                              (-1 . ((5 . ()) . ()))
+                              (-1 . (((5 . ()) . ()) . ()))
+                              (-1 . ((((5 . ()) . ()) . ()) . ((8 . 9) . (10 11))))))
+                '((-1 . (8 . 9))
+                  (-1 . ((8 . 9) . (10 11)))
+                  (1 . ((((5 . ()) . ()) . ()) . ((8 . 9) . (10 11)))))
+                "skip over all levels that have () as right, selecting first of subtree ((8 . 9) . (10 11))")
 
-;;   (define left-is-integer-or-pair
-;;     (or (integer? l)
-;;       (and (mpair? l)
-;;          (btree-validate l print-error))))
-;;   (when (and print-error (not left-is-integer-or-pair))
-;;     (displayln (format "failed rule: left is integer or pair, ~a" node)))
+  (check-equal? (btree-next '((1 . (8 . 9))
+                              (-1 . ((8 . 9) . ((10 . 11) . ()))) ;; level X
+                              (1 . (7 . ((8 . 9) . ((10 . 11) . ()))))))
+                '((-1 . (10 . 11))
+                  (-1 . ((10 . 11) . ()))
+                  (1 . ((8 . 9) . ((10 . 11) . ())))
+                  (1 . (7 . ((8 . 9) . ((10 . 11) . ())))))
+                "go up to level X, replace -1 with 1 and search first in that subtree ((10 . 11) . ())"))
 
-;;   (define right-is-integer-or-pair-or-empty
-;;     (or (integer? l)
-;;       (empty? r)
-;;       (and (mpair? l)
-;;          (btree-validate l print-error))))
-;;   (when (and print-error (not right-is-integer-or-pair-or-empty))
-;;     (displayln (format "failed rule: right is integer or pair or empty, ~a" node)))
 
-;;   (define max-of-left-matches-c-value
-;;     (= (mcar node)
-;;        (btree-max-value l)))
-;;   (when (and print-error (not max-of-left-matches-c-value))
-;;     (displayln (format "failed rule: max of left matches c-value ~a" node)))
+;; TODO: implement tail recursive!
+;; replace new nodes up the tree, making the tree persistent
+;; balanced: O(lg N), worst case O(N)
+(define (recursive-rebuild-path-at-with path repl-node)
+  (cond [(empty? path) '()]
+        [(= (caar path) -1)
+         (define new-node (cons repl-node (cddar path)))
+         (define new-pe
+           (cons (caar path) new-node))
+         (cons new-pe
+               (recursive-rebuild-path-at-with (cdr path) new-node))]
+        [(= (caar path) 1)
+         (define new-node (cons (cadar path) repl-node))
+         (define new-pe
+           (cons (caar path) new-node))
+         (cons new-pe
+               (recursive-rebuild-path-at-with (cdr path) new-node))]
+        [else (raise-user-error "unknown case")]))
 
-;;   (and
-;;    node-must-be-pair
-;;    comparator-must-be-int
-;;    left-is-integer-or-pair
-;;    right-is-integer-or-pair-or-empty
-;;    max-of-left-matches-c-value))
+(module+ test #| recursive-rebuild-path-at-with |#
+  (check-equal? (recursive-rebuild-path-at-with
+                 '((-1 . (5 . 6))
+                   (-1 . ((5 . 6) . 7))
+                   (1 . (3 . ((5 . 6) . 7)))
+                   (-1 . ((3 . ((5 . 6) . 7)) . 8)))
+                 '(4 . 5))
 
+                '((-1 . ((4 . 5) . 6))
+                   (-1 . (((4 . 5) . 6) . 7))
+                   (1 . (3 . (((4 . 5) . 6) . 7)))
+                   (-1 . ((3 . (((4 . 5) . 6) . 7)) . 8)))
+
+                "replace node 5 with (4 . 5) and rewrite all nodes up to the root"))
+
+;; add value after the given path, returning the new path (with the tail holding the new root, because tree is persistent)
+;; balanced: O(lg N), worst case O(N)
+(define (btree-add-value-after value path)
+  (cond [(empty? path) (raise-user-error "path may not be empty")]
+        [(and (= -1 (caar path))
+            (empty? (cddar path)))
+         (cons
+          (cons 1 (cons (cadar path) value))
+          (cdr path))]
+        [(and (= -1 (caar path))
+            (not (empty? (cddar path))))
+         (define new-right-node (cons value (cddar path)))
+         (define repl-node (cons (cadar path) new-right-node))
+         (cons
+          (cons -1 new-right-node)          
+          (cons (cons 1 repl-node)
+                (recursive-rebuild-path-at-with (cdr path) repl-node)))]
+        [(= 1 (caar path))
+         (define new-right-node (cons (cddar path) value))
+         (define repl-node (cons (cadar path) new-right-node))
+         (cons
+          (cons 1 new-right-node)
+          (cons (cons 1 repl-node)
+                (recursive-rebuild-path-at-with (cdr path) repl-node)))]
+        [else (raise-user-error "unknown case")]))
+
+(module+ test #| add value after |#
+  (check-equal? (btree-add-value-after 5 '((-1 . (4 . ()))))
+                '((1 . (4 . 5))))
+
+  (check-equal? (btree-add-value-after 5 '((-1 . (4 . 6))))
+                '((-1 . (5 . 6))
+                  (1 . (4 . (5 . 6)))))
+  (check-equal? (btree-add-value-after 5 '((-1 . (4 . (6 . 7)))))
+                '((-1 . (5 . (6 . 7)))
+                  (1 . (4 . (5 . (6 . 7))))))
+
+  (check-equal? (btree-add-value-after 7 '((1 . (5 . 6))))
+                '((1 . (6 . 7))
+                  (1 . (5 . (6 . 7)))))
+
+  (check-equal? (btree-add-value-after 7 '((1 . (5 . 6))
+                                           (1 . (4 . (5 . 6)))
+                                           (1 . (3 . (4 . (5 . 6))))))
+                '((1 . (6 . 7))
+                  (1 . (5 . (6 . 7)))
+                  (1 . (4 . (5 . (6 . 7))))
+                  (1 . (3 . (4 . (5 . (6 . 7))))))
+                "currently failing: update of new cons cells needs to go up to the root!"))
 
 ;; (define (btree-add-value la-node value)
 ;;   (define lb-node (mcdr la-node))
