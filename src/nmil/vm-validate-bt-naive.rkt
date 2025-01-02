@@ -477,20 +477,21 @@ invariants:
                   (-1 . ((3 . ((4 . (5 . 6)) . 7)) . 8)))
                 "replace node 6 with (5 . 6) and replace all up to the root"))
 
-;; TODO: make tail recursive
-(define (btree->list node (result (list)))
-  (cond [(empty? node) result]
-        [(btree-value? node) (cons node result)]
-        [(btree-node? node)
-         (btree->list (car node)                     
-                     (btree->list (cdr node) result))]
+(define (btree->list node (result (list)) (btree-prefix (list)))
+  (cond [(and (empty? node)
+            (not (empty? btree-prefix)))
+         (btree->list (car btree-prefix) result (cdr btree-prefix))]
+        [(empty? node) result]
+        [(btree-value? node) (btree->list '() (cons node result) btree-prefix)]
+        [(btree-node? node)         
+         (btree->list (cdr node) result (cons (car node) btree-prefix))]
         [else (raise-user-error "unknown case")]))
 
 (module+ test #| btree->list |#
   (check-equal? (btree->list '(1 . ()))
                 '(1))
 
-  (check-equal? (btree->list '((3 . ((4 . (5 . 6)) . 7)) . 8))
+  (check-equal? (btree->list '((3 . ((4 . (5 . ((6 . 7) . ()))) . ())) . 8))
                 '(3 4 5 6 7 8)))
 
 (define (btree<-nodes nodes (result (list)))
