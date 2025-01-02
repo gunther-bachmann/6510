@@ -5,13 +5,6 @@
 #|
 
 TODO: make all recursive functions tail-callable
-      implement
-      - btree-add-value-before :: add given value before the given path
-      - btree<-list :: creating a balanced tree with all elements in the ordered list
-      - btree->list :: creating an ordered list of elements
-      - btree-remove :: remove value from given path in tree
-                       (since nodes may be rewritten, return path the next || last)
-      - btree-root-of-path :: give the root of the current tree (referenced through this patH)
 
 simplest valued tree
 
@@ -374,9 +367,10 @@ invariants:
   (cond [(empty? path) (raise-user-error "path may not be empty")]
         [(and (= -1 (caar path))
             (empty? (cddar path)))
+         (define new-node (cons (cadar path) value))
          (cons
-          (cons 1 (cons (cadar path) value))
-          (cdr path))]
+          (cons 1 new-node)
+          (recursive-rebuild-path-at-with (cdr path) new-node))]
         [(and (= -1 (caar path))
             (not (empty? (cddar path))))
          (define new-right-node (cons value (cddar path)))
@@ -417,3 +411,245 @@ invariants:
                   (1 . (4 . (5 . (6 . 7))))
                   (1 . (3 . (4 . (5 . (6 . 7))))))
                 "update of new cons cells needs to go up to the root (persistent tree)!"))
+
+(define (btree-add-value-before value path)
+  (cond [(empty? path) (raise-user-error "path may not be empty")]
+        [(and (= -1 (caar path))
+            (empty? (cddar path)))
+         (define new-node (cons value (cadar path)))
+         (cons
+          (cons -1 new-node)
+          (recursive-rebuild-path-at-with (cdr path) new-node))]
+        [(and (= -1 (caar path))
+            (not (empty? (cddar path))))
+         (define new-left-node (cons value (cadar path)))
+         (define repl-node (cons new-left-node (cddar path)))
+         (cons
+          (cons -1 new-left-node)
+          (cons (cons -1 repl-node)
+                (recursive-rebuild-path-at-with (cdr path) repl-node)))]
+        [(= 1 (caar path))
+         (define new-right-node (cons value (cddar path)))
+         (define repl-node (cons (cadar path) new-right-node))
+         (cons
+          (cons -1 new-right-node)
+          (cons (cons 1 repl-node)
+                (recursive-rebuild-path-at-with (cdr path) repl-node)))]
+        [else (raise-user-error "unknown case")]))
+
+(module+ test #| add value before |#
+  (check-equal? (btree-add-value-before 5 '((-1 . (6 . ()))))
+                '((-1 . (5 . 6)))
+                "replace null with value and make new node")
+
+  (check-equal? (btree-add-value-before 5 '((-1 . (6 . ()))
+                                            ( 1 . (3 . (6 . ())))
+                                            (-1 . ((3 . (6 . ())) . 7))))
+                '((-1 . (5 . 6))
+                  ( 1 . (3 . (5 . 6)))
+                  (-1 . ((3 . (5 . 6)) . 7)))
+                "replace null with value, make new node and replace all up to the root")
+
+  (check-equal? (btree-add-value-before 5 '((-1 . (6 . 7))))
+                '((-1 . (5 . 6))
+                  (-1 . ((5 . 6) . 7)))
+                "replace old node 6 with (5 . 6)")
+
+  (check-equal? (btree-add-value-before 5 '((-1 . (6 . 7))
+                                            ( 1 . (3 . (6 . 7)))
+                                            (-1 . ((3 . (6 . 7)) . 8))))
+                '((-1 . (5 . 6))
+                  (-1 . ((5 . 6) . 7))
+                  ( 1 . (3 . ((5 . 6) . 7)))
+                  (-1 . ((3 . ((5 . 6) . 7)) . 8)))
+                "replace old node 6 with (5 . 6) and replace all up to the root")
+
+  (check-equal? (btree-add-value-before 5 '((1 . (4 . 6))))
+                '((-1 . (5 . 6))
+                  ( 1 . (4 . (5 . 6))))
+                "replace node 6 with (5 . 6)")
+
+  (check-equal? (btree-add-value-before 5 '(( 1 . (4 . 6))
+                                            (-1 . ((4 . 6) . 7))
+                                            ( 1 . (3 . ((4 . 6) . 7)))
+                                            (-1 . ((3 . ((4 . 6) . 7)) . 8))))
+                '((-1 . (5 . 6))
+                  ( 1 . (4 . (5 . 6)))
+                  (-1 . ((4 . (5 . 6)) . 7))
+                  ( 1 . (3 . ((4 . (5 . 6)) . 7)))
+                  (-1 . ((3 . ((4 . (5 . 6)) . 7)) . 8)))
+                "replace node 6 with (5 . 6) and replace all up to the root"))
+
+;; TODO: make tail recursive
+(define (btree->list node (result (list)))
+  (cond [(empty? node) result]
+        [(btree-value? node) (cons node result)]
+        [(btree-node? node)
+         (btree->list (car node)                     
+                     (btree->list (cdr node) result))]
+        [else (raise-user-error "unknown case")]))
+
+(module+ test #| btree->list |#
+  (check-equal? (btree->list '(1 . ()))
+                '(1))
+
+  (check-equal? (btree->list '((3 . ((4 . (5 . 6)) . 7)) . 8))
+                '(3 4 5 6 7 8)))
+
+(define (btree<-nodes nodes (result (list)))
+  (cond 
+    [(and (empty? nodes) (empty? result)) '()]
+    [(and (empty? nodes)
+        (not (empty? result))
+        (empty? (cdr result))) 
+     (car result)]
+    [(and (empty? nodes)
+        (not (empty? result)))
+     (btree<-nodes (reverse result))]
+    [(empty? (cdr nodes))
+     (btree<-nodes (cdr nodes) (cons (cons (car nodes) '()) result))]
+    [else
+     (btree<-nodes (cddr nodes)
+                  (cons (cons (car nodes) (cadr nodes)) result))]))
+
+(module+ test #| <-nodes |#
+  (check-equal? (btree<-nodes '(1))
+                '(1 . ()))
+
+  (check-equal? (btree<-nodes '(1 2 3))
+                '((1 . 2) . (3 . ())))
+
+  (check-equal? (btree<-nodes '(1 2 3 4))
+                '((1 . 2) . (3 . 4)))
+
+  (check-equal? (btree<-nodes '(1 2 3 4 5))
+                '(((1 . 2) . (3 . 4)) . ((5 . ()) . ())))
+
+  (check-equal? (btree<-nodes '(1 2 3 4 5 6))
+                '(((1 . 2) . (3 . 4)) . ((5 . 6) . ())))
+
+  (check-equal? (btree<-nodes '(1 2 3 4 5 6 7))
+                '(((1 . 2) . (3 . 4)) . ((5 . 6) . (7 . ()))))
+
+  (check-equal? (btree<-nodes '(1 2 3 4 5 6 7 8))
+                '(((1 . 2) . (3 . 4)) . ((5 . 6) . (7 . 8)))))
+
+;; TODO: make tail call recursive!
+(define (btree-remove-value-at path)
+  (cond [(= 1 (caar path))
+         (define new-node (cons (cadar path) '()))
+         (cons
+          (cons -1 new-node)
+          (recursive-rebuild-path-at-with (cdr path) new-node))]
+        [(and (= -1 (caar path))
+            (not (empty? (cddar path))))
+         (define new-node (cons (cddar path) '()))
+         (cons
+          (cons -1 new-node)
+          (recursive-rebuild-path-at-with (cdr path) new-node))]
+        [(and (= -1 (caar path))
+            (empty? (cddar path))
+            (empty? (cdr path)))
+         '()]
+        [(and (= -1 (caar path))
+            (empty? (cddar path))
+            (not (empty? (cdr path))))
+         (define old-next-node (btree-node-for-path (btree-next path)))
+         (define node-path (btree-remove-value-at (cdr path)))
+         (define node (btree-node-for-path node-path))
+         (define next-node-path (btree-next node-path))
+         (if (or (eq? node old-next-node)
+                (empty? next-node-path))
+             node-path
+             next-node-path)]
+        [else (raise-user-error "unknown case")]))
+
+(module+ test #| remove-value |#
+  (check-equal? (btree-remove-value-at '((1 . (5 . 6))))
+                '((-1 . (5 . ())))
+                "replace (5 . 6) with (5 . ())")
+
+  (check-equal? (btree-remove-value-at '(( 1 . (5 . 6))
+                                         (-1 . ((5 . 6) . 7))
+                                         ( 1 . (4 . ((5 . 6) . 7)))
+                                         (-1 . ((4 . ((5 . 6) . 7)) .8))))
+                '((-1 . (5 . ()))
+                  (-1 . ((5 . ()) . 7))
+                  ( 1 . (4 . ((5 . ()) . 7)))
+                  (-1 . ((4 . ((5 . ()) . 7)) .8)))
+                "replace (5 . 6) with (5 . ()) and do replace recursively up to the root")
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . 6))))
+                '((-1 . (6 . ())))
+                "replace (5 . 6) with (6 . ())")
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . 6))
+                                         (-1 . ((5 . 6) . 7))
+                                         ( 1 . (4 . ((5 . 6) . 7)))
+                                         (-1 . ((4 . ((5 . 6) . 7)) .8))))
+                '((-1 . (6 . ()))
+                  (-1 . ((6 . ()) . 7))
+                  ( 1 . (4 . ((6 . ()) . 7)))
+                  (-1 . ((4 . ((6 . ()) . 7)) .8)))
+                "replace (5 . 6) with (6 . ()) and do replace recursively up to the root")
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . ()))))
+                '())
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . ()))
+                                         ( 1 . (4 . (5 . ())))
+                                         (-1 . ((4 . (5 . ())) . 6))
+                                         ( 1 . (3 . ((4 . (5 . ())) . 6)))))
+                '(( 1 . ((4 . ()) . 6))
+                  ( 1 . (3 . ((4 . ()) . 6))))
+                "make sure to select next node and resursively replace nodes up to the root")
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . ()))
+                                         (-1 . ((5 . ()) . ()))
+                                         (-1 . (((5 . ()) . ()) . ()))))
+                '()
+                "if this is the last node to be deleted, return nil")
+
+  (check-equal? (btree-remove-value-at '((-1 . ((5 . ()) . 6))))
+                '((-1 . (6 . ())))
+                "if the node deleted has a next, return that one")
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . ()))
+                                         (-1 . ((5 . ()) . 6))))
+                '((-1 . (6 . ())))
+                "if the node deleted has a next, return that one")
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . ()))
+                                         (-1 . ((5 . ()) . ()))
+                                         (-1 . (((5 . ()) . ()) . ()))
+                                         (-1 . ((((5 . ()) . ()) . ()) . 6))))
+                '((-1 . (6 . ())))
+                "if the node deleted has a next, return that one")
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . ()))
+                                         (-1 . ((5 . ()) . ()))
+                                         (-1 . (((5 . ()) . ()) . ()))
+                                         (-1 . ((((5 . ()) . ()) . ()) . 6))
+                                         ( 1 . (4 . ((((5 . ()) . ()) . ()) . 6)))
+                                         ( 1 . (3 . (4 . ((((5 . ()) . ()) . ()) . 6))))
+                                         (-1 . ((3 . (4 . ((((5 . ()) . ()) . ()) . 6))) . 7))))
+                '((-1 . (6 . ()))
+                  ( 1 . (4 . (6 . ())))
+                  ( 1 . (3 . (4 . (6 . ()))))
+                  (-1 . ((3 . (4 . (6 . ()))) . 7)))
+                "if the node deleted has a next, return that one and recursively replace up to root"))
+
+(define (btree-root-of-path path)
+  (cond [(empty? path) '()]
+        [(not (empty? (cdr path))) (btree-root-of-path (cdr path))]
+        [else (cdar path)]))
+
+(module+ test #| root of path |#
+  (check-equal? (btree-root-of-path '())
+                '())
+
+  (check-equal? (btree-root-of-path '(( 1 . (5 . 6))
+                                      (-1 . ((5 . 6) . (7 . 8)))
+                                      ( 1 . (4 . ((5 . 6) . (7 . 8))))
+                                      (-1 . ((4 . ((5 . 6) . (7 . 8))) . 9))))
+                '((4 . ((5 . 6) . (7 . 8))) . 9)))
