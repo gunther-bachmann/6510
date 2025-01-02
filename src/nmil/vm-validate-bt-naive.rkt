@@ -329,22 +329,22 @@ invariants:
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
-(define (recursive-rebuild-path-at-with path repl-node (result (list)))
+(define (recursive-rebuild-path-with path repl-node (result (list)))
   (cond [(empty? path) (reverse result)]
         [(= (caar path) -1)
          (define new-node (cons repl-node (cddar path)))
          (define new-pe
            (cons (caar path) new-node))                 
-         (recursive-rebuild-path-at-with (cdr path) new-node (cons new-pe result))]
+         (recursive-rebuild-path-with (cdr path) new-node (cons new-pe result))]
         [(= (caar path) 1)
          (define new-node (cons (cadar path) repl-node))
          (define new-pe
            (cons (caar path) new-node))                 
-         (recursive-rebuild-path-at-with (cdr path) new-node (cons new-pe result))]
+         (recursive-rebuild-path-with (cdr path) new-node (cons new-pe result))]
         [else (raise-user-error "unknown case")]))
 
 (module+ test #| recursive-rebuild-path-at-with |#
-  (check-equal? (recursive-rebuild-path-at-with
+  (check-equal? (recursive-rebuild-path-with
                  '((-1 . (5 . 6))
                    (-1 . ((5 . 6) . 7))
                    (1 . (3 . ((5 . 6) . 7)))
@@ -367,7 +367,7 @@ invariants:
          (define new-node (cons (cadar path) value))
          (cons
           (cons 1 new-node)
-          (recursive-rebuild-path-at-with (cdr path) new-node))]
+          (recursive-rebuild-path-with (cdr path) new-node))]
         [(and (= -1 (caar path))
             (not (empty? (cddar path))))
          (define new-right-node (cons value (cddar path)))
@@ -375,14 +375,14 @@ invariants:
          (cons
           (cons -1 new-right-node)          
           (cons (cons 1 repl-node)
-                (recursive-rebuild-path-at-with (cdr path) repl-node)))]
+                (recursive-rebuild-path-with (cdr path) repl-node)))]
         [(= 1 (caar path))
          (define new-right-node (cons (cddar path) value))
          (define repl-node (cons (cadar path) new-right-node))
          (cons
           (cons 1 new-right-node)
           (cons (cons 1 repl-node)
-                (recursive-rebuild-path-at-with (cdr path) repl-node)))]
+                (recursive-rebuild-path-with (cdr path) repl-node)))]
         [else (raise-user-error "unknown case")]))
 
 (module+ test #| add value after |#
@@ -416,7 +416,7 @@ invariants:
          (define new-node (cons value (cadar path)))
          (cons
           (cons -1 new-node)
-          (recursive-rebuild-path-at-with (cdr path) new-node))]
+          (recursive-rebuild-path-with (cdr path) new-node))]
         [(and (= -1 (caar path))
             (not (empty? (cddar path))))
          (define new-left-node (cons value (cadar path)))
@@ -424,14 +424,14 @@ invariants:
          (cons
           (cons -1 new-left-node)
           (cons (cons -1 repl-node)
-                (recursive-rebuild-path-at-with (cdr path) repl-node)))]
+                (recursive-rebuild-path-with (cdr path) repl-node)))]
         [(= 1 (caar path))
          (define new-right-node (cons value (cddar path)))
          (define repl-node (cons (cadar path) new-right-node))
          (cons
           (cons -1 new-right-node)
           (cons (cons 1 repl-node)
-                (recursive-rebuild-path-at-with (cdr path) repl-node)))]
+                (recursive-rebuild-path-with (cdr path) repl-node)))]
         [else (raise-user-error "unknown case")]))
 
 (module+ test #| add value before |#
@@ -549,7 +549,7 @@ invariants:
       (list)
       (cons
        (cons -1 new-node)
-       (recursive-rebuild-path-at-with (cdr path) new-node))
+       (recursive-rebuild-path-with (cdr path) new-node))
       old-next)]
     [(and (= -1 (caar path))
         (not (empty? (cddar path))))
@@ -558,7 +558,7 @@ invariants:
       (list)
       (cons
        (cons -1 new-node)
-       (recursive-rebuild-path-at-with (cdr path) new-node))
+       (recursive-rebuild-path-with (cdr path) new-node))
       old-next)]
     [(and (= -1 (caar path))
         (empty? (cddar path))

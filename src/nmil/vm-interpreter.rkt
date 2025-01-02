@@ -58,16 +58,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (require "../6510.rkt")
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader org-for-code-seq))
-(require (only-in racket/list flatten take empty?))
 (require (only-in "../6510-utils.rkt" word->hex-string high-byte low-byte ))
 (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek-word-at-address))
 (require (only-in "../ast/6510-relocator.rkt" label-string-offsets))
 
-(require (only-in racket/string string-prefix? string-join))
-(require (only-in racket/format ~a))
-(require (only-in racket/match match-let))
-(require (only-in racket/list range))
+(require (only-in racket/list flatten take empty? range))
 
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
@@ -95,12 +91,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test
   (require "../6510-test-utils.rkt")
-  (require (only-in "../6510-utils.rkt" absolute))
-  (require (only-in racket/port open-output-nowhere))
-  (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
-  (require (only-in "../ast/6510-resolver.rkt" ->resolved-decisions label-instructions))
-  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on dispatch-debugger-command debugger--run debugger--push-breakpoint debugger--remove-breakpoints))
-  (require (only-in "../tools/6510-debugger-shared.rkt" debug-state-states breakpoint))
+  (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-next-instruction-bytes))
 
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                     CONS
@@ -131,9 +122,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                     sPUSH_PARAMc
                     sNIL?-RET-PARAMc))
 
-  (define (bc code)
-    (ast-bytes-cmd '()  (list code)))
-
   (define (wrap-bytecode-for-test bc)
     (append (list (org #x7000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER)
@@ -145,189 +133,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
             (list (org #xc000))
             vm-interpreter))
 
-  (define (debugger--bc-help d-state)
-    (for-each displayln (list "bc commands"
-                              ""
-                              "? | h    print this help screen"
-                              "q        quit debugger"
-                              ""
-                              "ps       print the stack"
-                              "pf       print the call frame"
-                              "pfn      print running function meta data"
-                              "pl n     print the n-th local (of the call frame)"
-                              "pml adr  print memory location as list (must be the address of a cell-pair!)"
-                              "rt       print register t"
-                              "ruc      run until next call or return instruction"
-                              "rur      run until returned from current call"
-                              "s        run one step"
-                              "so       step over the current bc (even calls)"
-                              "sa adr   stop at bytecode at the given adr (not implemented)"
-                              "sab byte stop at the given bytecode (not implemented)"
-                              "^        (prefix) pass the following commands to the assembly debugger"))
-    d-state)
-
-  (define (vm-local->string state num)
-    (define num-i
-      (if (string? num)
-          (string->number num 16)
-          num))
-    (format "local #$~a: ~a"
-            (format-hex-byte num-i)
-            (vm-cell->string
-             (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_LB_PTR)))
-             (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_HB_PTR))))))
-
-  (define bc-debugger--instruction-breakpoint-name "stop on bytecode interpreter")
-
-  ;; remove default instruction break point
-  ;; install new breakpoint
-  ;; run until hitting this new breakpoint, remove this break point and
-  ;; reinstall the default instruction break point
-  (define (debugger--bc-run-until d-state interpreter-loop-adr condition-fn)
-    (debugger--push-breakpoint
-     (debugger--remove-breakpoints
-      (debugger--run
-       (debugger--push-breakpoint
-        (debugger--remove-breakpoints d-state bc-debugger--instruction-breakpoint-name)
-        (lambda (bc-state)
-          (and
-           (condition-fn bc-state)
-           (= (cpu-state-program-counter bc-state)
-              interpreter-loop-adr)))
-        "next instruction is a call or return"
-        #f))
-      "next instruction is a call or return")
-     (lambda (lc-state)
-       (eq? (cpu-state-program-counter lc-state)
-            interpreter-loop-adr))
-     bc-debugger--instruction-breakpoint-name
-     #f))
-
-  (define (debugger--disassemble-lines d-state (lines 10) (offset 0))
-    (when (> lines 0)
-      (displayln (debugger--disassemble d-state offset))
-      (define c-state (car (debug-state-states d-state)))
-      (debugger--disassemble-lines
-       d-state
-       (- lines 1)
-       (+ offset 
-          (disassembler-byte-code--byte-count (peek c-state (+ offset (peek-word-at-address c-state ZP_VM_PC))))))))
-
-  (define (debugger--bc-dispatcher- interpreter-loop-adr)
-    (lambda (command d-state)
-      (define c-state (car (debug-state-states d-state)))
-      (define pa-regex #px"^pa ([[:xdigit:]])$")
-      (define pl-regex #px"^pl ([[:xdigit:]])$")
-      (define pml-regex #px"^pml ([[:xdigit:]]*)$")
-      (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
-            [(string=? command "pp") (debugger--disassemble-lines d-state) d-state]
-            [(string=? command "ps") (begin (for-each (lambda (str) (displayln str)) (vm-stack->strings c-state)) d-state)]
-            [(string=? command "pt") (begin (displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
-            [(string=? command "pfn") (begin
-                                        (define func-ptr (peek-word-at-address c-state ZP_VM_FUNC_PTR))
-                                        (displayln (format "function-ptr: $~a" (format-hex-word func-ptr)))
-                                        (define locals-num (peek c-state func-ptr))
-                                        (displayln (format "locals used : ~a" (number->string locals-num)))
-                                        (for-each  displayln (map (lambda (n) (vm-local->string c-state n)) (range locals-num)))
-                                        d-state)]
-            [(string=? command "s") (debugger--run d-state #t)]
-            [(string=? command "pf") (begin (for-each displayln (vm-call-frame->strings c-state)) d-state)]
-            [(regexp-match? pl-regex command)
-             (match-let (((list _ num) (regexp-match pl-regex command)))
-               (begin (displayln (vm-local->string c-state num))
-                      d-state))]
-            [(regexp-match? pml-regex command)
-             (match-let (((list _ num) (regexp-match pml-regex command)))
-               (begin (displayln (format "list at $~a > ~a" num (vm-list->strings c-state (string->number num 16))))
-                      d-state))]
-            [(string=? command "ruc")
-             (debugger--bc-run-until d-state interpreter-loop-adr
-                                     (lambda (bc-state)
-                                       (memq (peek bc-state (peek-word-at-address bc-state ZP_VM_PC))
-                                             '(#x34 ;; call
-                                               #x35 ;; tail call
-                                               ))))]
-            [(string=? command "so")
-             (cond [(= #x34 (peek c-state (peek-word-at-address c-state ZP_VM_PC)))
-                    ;; step over, since it is a call!
-                    (define state-after-call (debugger--run d-state #t))
-                    (define nc-state (car (debug-state-states state-after-call)))
-                    (define parent-pc (peek-word-at-address nc-state (peek-word-at-address nc-state ZP_CALL_FRAME)))
-                    (display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
-                    (debugger--bc-run-until state-after-call interpreter-loop-adr
-                                            (lambda (bc-state)
-                                              (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
-                   [else (debugger--run d-state #t)])]
-            [(string=? command "rur")
-             ;; get previous (stored vm_pc, to which to return to)
-             (define parent-pc (peek-word-at-address c-state (peek-word-at-address c-state ZP_CALL_FRAME)))
-             (display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
-             (debugger--bc-run-until d-state interpreter-loop-adr
-                                     (lambda (bc-state)
-                                       (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
-            [(string-prefix? command "^")
-             (dispatch-debugger-command (substring command 1) d-state) ]
-            [else
-             (displayln "dispatching -> assembler-debugger")
-             (dispatch-debugger-command command d-state)])))
-
-
-  (define (debugger--disassemble d-state (offset 0))
-    (define c-state (car (debug-state-states d-state)))
-    (define pc (+ (peek-word-at-address c-state ZP_VM_PC) offset))
-    (define bc (peek c-state pc))
-    (define bc_p1 (peek c-state (add1 pc)))
-    (define bc_p2 (peek c-state (+ 2 pc)))
-    (format "$~a: $~a ~a"
-            (format-hex-word pc)
-            (~a (string-join (take (map format-hex-byte (list bc bc_p1 bc_p2)) (disassembler-byte-code--byte-count bc)) " $")
-                #:min-width 10)
-            (disassemble-byte-code bc bc_p1 bc_p2)))
-
-  (define (debugger--bc-interactor interpreter-loop-adr)
-    (list
-     `(dispatcher . ,(debugger--bc-dispatcher- interpreter-loop-adr))
-     `(prompter . ,(lambda (d-state) (format "BC [~x] > " (length (debug-state-states d-state)))))
-     `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble d-state))))))
-
-  (define (print-list-of-labels label-list label-offsets)
-    (unless (empty? label-list)
-      (define str (symbol->string (car label-list)))
-      (displayln (format "~a : ~a" str (number->string (hash-ref label-offsets str) 16)))
-      (print-list-of-labels (cdr label-list) label-offsets)))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
-    (define org-code-start (org-for-code-seq wrapped-code))
-    (define resolved-dec (->resolved-decisions (label-instructions wrapped-code) wrapped-code))
-    (define label->offset (label-string-offsets org-code-start resolved-dec))
-    (define interpreter-loop (hash-ref label->offset "VM_INTERPRETER"))
-    (define state-before
-      (6510-load-multiple (initialize-cpu)
-                          (assemble-to-code-list wrapped-code)))
-    (if debug
-        (run-debugger-on state-before
-                         ""                                                    
-                         #t
-                         (list
-                          (breakpoint bc-debugger--instruction-breakpoint-name
-                                      (lambda (lc-state)
-                                        (eq? (cpu-state-program-counter lc-state)
-                                             interpreter-loop))
-                                      #f))
-                         (debugger--bc-interactor interpreter-loop)
-                         #t)
-        (parameterize ([current-output-port (open-output-nowhere)])
-          (run-interpreter-on state-before))))
-
-  (define (vm-pc state)
-    (absolute (peek state (add1 ZP_VM_PC))
-              (peek state ZP_VM_PC)))
-
-  (define (vm-next-instruction-bytes state (n 1))
-    (memory-list state
-                 (vm-pc state)
-                 (sub1 (+ n (vm-pc state))))))
+    (run-bc-wrapped-in-test- bc wrapped-code debug)))
 
 (module+ test #| after mem init |#
   (define PAGE_CALL_FRAME #x9a)
@@ -342,7 +151,35 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator cpu-state-program-counter peek))
 
-(provide vm-interpreter)
+(provide vm-interpreter
+         bc
+         PUSH_INT_0
+         PUSH_INT_1
+         PUSH_INT_2
+         PUSH_INT_m1
+         CONS_PAIR_P
+         TRUE_P_RET
+         INT_P
+         SWAP
+         POP_TO_LOCAL_0
+         POP_TO_LOCAL_1
+         POP_TO_LOCAL_2
+         POP_TO_LOCAL_3
+         WRITE_TO_LOCAL_0
+         WRITE_TO_LOCAL_1
+         WRITE_TO_LOCAL_2
+         WRITE_TO_LOCAL_3
+         PUSH_LOCAL_0
+         PUSH_LOCAL_1
+         PUSH_LOCAL_2
+         PUSH_LOCAL_3
+         WRITE_FROM_LOCAL_0
+         WRITE_FROM_LOCAL_1
+         WRITE_FROM_LOCAL_2
+         WRITE_FROM_LOCAL_3)
+
+(define (bc code)
+    (ast-bytes-cmd '()  (list code)))
 
 (define VM_INTERPRETER_VARIABLES
   (list
@@ -1365,12 +1202,78 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (check-equal? (vm-stack->strings bc-cdr-state)
                  (list "stack holds 1 item"
                        "cell-pair-ptr NIL  (rt)")))
+(define SWAP #x03)
+(define BC_SWAP
+  (list
+   (label BC_SWAP)
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA (ZP_CELL_STACK_LB_PTR),y)
+          (TAX)
+          (LDA ZP_RT)
+          (STA (ZP_CELL_STACK_LB_PTR),y)
+          (STX ZP_RT)
+          (LDA (ZP_CELL_STACK_HB_PTR),y)
+          (TAX)
+          (LDA ZP_RT+1)
+          (STA (ZP_CELL_STACK_HB_PTR),y)
+          (STX ZP_RT+1)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| swap |#
+  (check-equal? #t #f "implement"))
+
+(define INT_P #x07)
+(define BC_INT_P
+  (list
+   (label BC_INT_P)
+          (LDA ZP_RT)
+          (LDX !$01)
+          (AND !$83)
+          (CMP !$03)
+          (BEQ IS_INT__BC_INT_P)
+          (LDA !$03)
+          (DEX)
+   (label IS_INT__BC_INT_P)
+          (STA ZP_RT)
+          (STX ZP_RT+1)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| int? |#
+  (check-equal? #t #f "implement"))
+
+(define TRUE_P_RET #x0b)
+(define BC_TRUE_P_RET
+  (list
+   (label BC_TRUE_P_RET)
+          (LDA ZP_RT+1)
+          (BEQ IS_FALSE__BC_TRUE_P_RET)
+          (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
+   (label IS_FALSE__BC_TRUE_P_RET)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| int? |#
+  (check-equal? #t #f "implement"))
+
+(define CONS_PAIR_P #x0a)
+(define BC_CONS_PAIR_P
+  (list
+   (label BC_CONS_PAIR_P)
+          (LDA ZP_RT)
+          (LDX !$03) ;; low byte of int (for bool)
+          (STX ZP_RT)
+          (AND !$03)
+          (CMP !$01)
+          (BEQ IS_PAIR__BC_CONS_PAIR_P)
+          (LDA !$00)
+   (label IS_PAIR__BC_CONS_PAIR_P)
+          (STA ZP_RT+1)
+          (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_PUSH_CONST_NIL
   (list
    (label BC_PUSH_CONST_NIL)    
-          (JSR VM_CELL_STACK_PUSH_NIL_R)        ;; push NIL on the stack
-          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
+   (JSR VM_CELL_STACK_PUSH_NIL_R)        ;; push NIL on the stack
+   (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (module+ test #| bc-push-const-nil |#
   (define bc-push-const-nil-state
@@ -1383,50 +1286,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "cell-pair-ptr NIL  (rt)")))
 
-;; get count of bytes belonging to the given bc command
-(define (disassembler-byte-code--byte-count bc)
-  (cond [(memq bc (list #x34 #x0c)) 3]
-        [else 1]))
-
-;; return disassembled string for bc (and byte 1, byte 2 thereafter)
-(define (disassemble-byte-code bc bc_p1 bc_p2)
-  (define byte-code-t2 (arithmetic-shift (if (> bc 127) (bitwise-and #x78 bc) (bitwise-and #x7f bc)) 1))
-  (cond
-    [(= byte-code-t2 #x00)
-     (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
-     (if (= 1 (bitwise-and bc #x01))
-         (format "write from local #~a" n)
-         (format "push local #~a" n))]
-    [(= byte-code-t2 #x02) "nop"]
-    [(= byte-code-t2 #x04) "brk"]
-    [(= byte-code-t2 #x20)
-     (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
-     (if (= 1 (bitwise-and bc #x01))
-         (format "write to local #~a" n)
-         (format "pop to local #~a" n))]
-    [(= byte-code-t2 #x12) "push nil"]
-    [(= byte-code-t2 #x30)
-     (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
-     (if (= 1 (bitwise-and bc #x01))
-         (format "nil? ret param #~a" n)
-         (format "nil? ret local #~a" n))]
-    [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (bytes->int (+ 1 bc_p1) bc_p2)))] ;; add 2 because byte code starts there
-    [(= byte-code-t2 #x6a) "tail call"]
-    [(= byte-code-t2 #x70)
-     (define n (bitwise-and bc #x03))
-     (define is-int (= 0 (bitwise-and bc #x04)))
-     (define num-str
-       (cond [(= n 0) "0"]
-             [(= n 1) "1"]
-             [(= n 2) "2"]
-             [(= n 3) "-1"]
-             [else (raise-user-error "unexpected number encoding")]))
-     (format "push ~a ~a" (if is-int "int" "byte") num-str)]
-    [(= byte-code-t2 #x82) "cdr"]
-    [(= byte-code-t2 #x84) "cons"]
-    [(= byte-code-t2 #x86) "car"]
-    [else "unknown bc"]))
-
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
@@ -1435,15 +1294,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 -> 00
            (word-ref VM_INTERPRETER_INC_PC)       ;; 02  <-  01 effectively NOP
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 06  <-  03 reserved
+           (word-ref BC_SWAP)                     ;; 06  <-  03 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 08  <-  04 reserved
-           (word-ref BC_PUSH_CONST_BYTE)          ;; 0a  <-  05 reserved
+           (word-ref BC_PUSH_CONST_BYTE)          ;; 0a  <-  05 
            (word-ref BC_PUSH_CONST_INT)           ;; 0c  <-  06
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 0e  <-  07 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  88..8F
-           (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 14  <-  0a reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 16  <-  0b reserved
+           (word-ref BC_INT_P)                    ;; 0e  <-  07 
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  88..8F reserved
+           (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 
+           (word-ref BC_CONS_PAIR_P)              ;; 14  <-  0a 
+           (word-ref BC_TRUE_P_RET)               ;; 16  <-  0b 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 18  <-  0c reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1a  <-  0d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1c  <-  0e reserved
@@ -1483,9 +1342,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 60  <-  b0..b7 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 62  <-  31 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 64  <-  32 reserved
-           (word-ref BC_RET)                      ;; 66  <-  33 reserved
-           (word-ref BC_CALL)                     ;; 68  <-  34 reserved
-           (word-ref BC_TAIL_CALL)                ;; 6a  <-  35 reserved
+           (word-ref BC_RET)                      ;; 66  <-  33 
+           (word-ref BC_CALL)                     ;; 68  <-  34 
+           (word-ref BC_TAIL_CALL)                ;; 6a  <-  35 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6c  <-  36 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 6e  <-  37 reserved
            (word-ref BC_PUSH_CONST_NUM_SHORT)     ;; 70  <-  b8..bf 
@@ -1497,9 +1356,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7c  <-  3e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7e  <-  3f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 80  <-  c0..a7 reserved
-           (word-ref BC_CDR)                      ;; 82  <-  41 reserved
-           (word-ref BC_CONS)                     ;; 84  <-  42 reserved
-           (word-ref BC_CAR)                      ;; 86  <-  43 reserved
+           (word-ref BC_CDR)                      ;; 82  <-  41 
+           (word-ref BC_CONS)                     ;; 84  <-  42 
+           (word-ref BC_CAR)                      ;; 86  <-  43 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 88  <-  44 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8a  <-  45 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
@@ -1611,7 +1470,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_BRK
           BC_INT_PLUS
           BC_INT_MINUS
+          BC_INT_P
           BC_TAIL_CALL
+          BC_SWAP
+          BC_TRUE_P_RET
+          BC_CONS_PAIR_P
           VM_INTERPRETER
           (list (label END__INTERPRETER))
           (list (org-align #x100)) ;; align to next page

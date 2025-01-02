@@ -3449,8 +3449,8 @@ this will include the implementation of
     - there need to be two zero page pointers, one for lowbyte-stack, one for highbyte-stack
   - [X] allow fast call frames (less copying, less space consumption)
   - [X] fix call-frame functions in vm-interpreter
-- [ ] implement simple tree algorithms
-  - ordered (not sorted) binary tree (of editor strings)
+- [-] implement simple tree algorithms
+  - [X] ordered (not sorted) binary tree (of editor strings)
     see [[file:src/nmil/vm-validate-bt-naive.rkt][scheme implementation]]
     node: car = (ptr = level down | value) <- may not be nil
           cdr = (ptr = level down | value | nil)
@@ -3477,23 +3477,7 @@ this will include the implementation of
                           / \               
                          3   4    ---- Level_3
           maps to: (l_1 (l_2 "1" . "2") . (l_2 (l_3 "3" . "4") . "5"))
-  - n-ary tree (of editor strings)
-    node: car = (ptr = level-down | value)
-          cdr = ptr to sibling | NIL <- n-arry tree allows for n siblings (same level)
-
-    - (make-node val) -> node
-      creates a list: (list val)
-    - (add-sibling node val) -> node
-      extends list (node) by inserting (list val) as last element of the list <- cannot be put at the head, because tree structure would be lost
-    - (first-child node) -> node
-      is car (with result being a ptr, otherwise it has no children!)
-    - (next-sibling node) -> node
-      is cdr
-    - (data node) -> val
-      is car (with result being no ptr, otherwise it would have children!)
-    - necessary lisp functions: car, cdr, cons, append <- append can be simplified in case of binary trees!
-      (def (append (a list) (b list) list)
-           (reverse (reverse a) b))
+  - [ ] translate scheme implementation to nmil byte code functions
   - [ ] tree algorithms + gc implementation (rc)
     - add/remove/cut/paste ... (as in editors)
   - [ ] reverse order of binary tree + implementation of refcounting
@@ -3687,7 +3671,22 @@ What information is needed for the different phases? => check the different opti
     tree may contain pointer to other tree nodes (cons pairs) or native arrays (leading spaces, total len, character data). no payload bit is free.
     red,black nodes may be used from different page sets. => there is a function to determine whether a cons pair comes from a "red" (or a "black") page => changing color = moving cons cell to other page?
 - n-ary tree (non-persistent)
-
+- n-ary tree (of editor strings)
+  node: car = (ptr = level-down | value)
+        cdr = ptr to sibling | NIL <- n-arry tree allows for n siblings (same level)
+  - (make-node val) -> node
+      creates a list: (list val)
+  - (add-sibling node val) -> node
+      extends list (node) by inserting (list val) as last element of the list <- cannot be put at the head, because tree structure would be lost
+  - (first-child node) -> node
+      is car (with result being a ptr, otherwise it has no children!)
+  - (next-sibling node) -> node
+      is cdr
+  - (data node) -> val
+      is car (with result being no ptr, otherwise it would have children!)
+  - necessary lisp functions: car, cdr, cons, append <- append can be simplified in case of binary trees!
+      (def (append (a list) (b list) list)
+           (reverse (reverse a) b))
 **** keep meta information (related to debugging)
 - source code location
 - default values

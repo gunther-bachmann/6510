@@ -39,10 +39,10 @@ call frame primitives etc.
 ;;         cell-pair-ptr             :: an atomic cell, second lowest bit is set, lowest bit is unset, points to a cell-pair
 ;;                                     lowbyte: #bxxxx xx01 
 ;;                                     highbyte = page
-;;         int-cell                  :: an atomic cell having 13 bit as payload
+;;         int-cell (bool)          :: an atomic cell having 13 bit as payload
 ;;                                     lowbyte mask: #b0xxx xx11, xxxxx = high bits of int
 ;;                                     highbyte = lowbyte of int
-;;         byte-cell (char|bool)     :: an atomic cell having one byte as payload
+;;         byte-cell (char)         :: an atomic cell having one byte as payload
 ;;                                     lowbyte mask: #b1111 1111
 ;;                                     highbyte = payload
 ;;         complex cell              :: a cell that functions as header for followup values (follows directly in memory)
