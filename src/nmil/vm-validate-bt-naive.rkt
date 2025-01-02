@@ -327,23 +327,20 @@ invariants:
                 "go up to level X, replace -1 with 1 and search first in that subtree ((10 . 11) . ())"))
 
 
-;; TODO: implement tail recursive!
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
-(define (recursive-rebuild-path-at-with path repl-node)
-  (cond [(empty? path) '()]
+(define (recursive-rebuild-path-at-with path repl-node (result (list)))
+  (cond [(empty? path) (reverse result)]
         [(= (caar path) -1)
          (define new-node (cons repl-node (cddar path)))
          (define new-pe
-           (cons (caar path) new-node))
-         (cons new-pe
-               (recursive-rebuild-path-at-with (cdr path) new-node))]
+           (cons (caar path) new-node))                 
+         (recursive-rebuild-path-at-with (cdr path) new-node (cons new-pe result))]
         [(= (caar path) 1)
          (define new-node (cons (cadar path) repl-node))
          (define new-pe
-           (cons (caar path) new-node))
-         (cons new-pe
-               (recursive-rebuild-path-at-with (cdr path) new-node))]
+           (cons (caar path) new-node))                 
+         (recursive-rebuild-path-at-with (cdr path) new-node (cons new-pe result))]
         [else (raise-user-error "unknown case")]))
 
 (module+ test #| recursive-rebuild-path-at-with |#
