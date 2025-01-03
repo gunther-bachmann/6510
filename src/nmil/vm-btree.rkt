@@ -8,11 +8,10 @@ this implementation will be the testbed for all refcounting gc testing
 
 
 TODOS:
-  implement:
     DONE btree-make-root
-    btree-node?
-    btree-value?
-    btree-validate
+    DONE btree-node?
+    DONE btree-value?
+    IMPLEMENT btree-validate
     btree-depth
     btree-path-to-first
     btree-path-to-list
@@ -57,6 +56,8 @@ TODOS:
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  FALSE_P_BRANCH
+                  TRUE_P_BRANCH
                   CONS_PAIR_P
                   TRUE_P_RET
                   INT_P
@@ -81,9 +82,11 @@ TODOS:
                   WRITE_FROM_LOCAL_1
                   WRITE_FROM_LOCAL_2
                   WRITE_FROM_LOCAL_3])
+(require (only-in "./vm-memory-manager.rkt" ZP_VM_PC))
 
 
-  (require "../6510.rkt")
+(require "../6510.rkt")
+(require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
 
 
@@ -94,13 +97,13 @@ TODOS:
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
 
   (require (only-in "./vm-memory-manager.rkt"
-                  vm-cell-at-nil?
-                  vm-page->strings
-                  vm-stack->strings
-                  vm-regt->string
-                  vm-cell-at->string
-                  vm-cell->string
-                  vm-deref-cell-pair-w->string))
+                    vm-cell-at-nil?
+                    vm-page->strings
+                    vm-stack->strings
+                    vm-regt->string
+                    vm-cell-at->string
+                    vm-cell->string
+                    vm-deref-cell-pair-w->string))
   (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 
 
@@ -172,22 +175,189 @@ TODOS:
 ;; (define (btree-value? node)
 ;;   (or (string? node) (integer? node)))
 (define BTREE_VALUE_P
-  (list (byte 1)   ;; local
-        (bc WRITE_TO_LOCAL_0)
-        (bc INT_P)
-        (bc TRUE_P_RET) ;; or (bc TRUE_P_BRANCH +3) ;; <- to RET
-        ;; (bc PUSH_LOCAL_0) ;; currently only int (later maybe strings)
-        ;; (bc STRING_P)
-        (bc RET)))
+  (list
+   (label BTREE_VALUE_P)
+          (byte 1)   ;; local
+          (bc WRITE_TO_LOCAL_0)
+          (bc INT_P)
+          (bc TRUE_P_RET) ;; or (bc TRUE_P_BRANCH +3) ;; <- to RET
+          ;; (bc PUSH_LOCAL_0) ;; currently only int (later maybe strings)
+          ;; (bc STRING_P)
+          (bc RET)))
 
-(module+ test #|  |#)
+(module+ test #| value? |#
+  (define btree-value-p-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc CAR)
+       (bc CALL) (word-ref BTREE_VALUE_P)
+       (bc BRK))
+
+      (list (org #x8F00))
+      BTREE_MAKE_ROOT
+      BTREE_VALUE_P)
+     ))
+
+  (check-equal? (vm-stack->strings btree-value-p-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)")
+                "car of the btree root is the value 2 => result is true (which is int 1)")
+
+  (define btree-value-p2-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc CDR)
+       (bc CALL) (word-ref BTREE_VALUE_P)
+       (bc BRK))
+
+      (list (org #x8F00))
+      BTREE_MAKE_ROOT
+      BTREE_VALUE_P)
+     ))
+
+  (check-equal? (vm-stack->strings btree-value-p2-state)
+                (list "stack holds 1 item"
+                      "cell-int $0000  (rt)")
+                "cdr of the btree root is NIL => result is false (which is int 0)"))
 
 ;; (define (btree-node? node)
 ;;   (pair? node))
 (define BTREE_NODE_P
-  (list (byte 0) ;; locals
-        (bc CONS_PAIR_P)
-        (bc RET)))
+  (list
+   (label BTREE_NODE_P)
+          (byte 0) ;; locals
+          (bc CONS_PAIR_P)
+          (bc RET)))
 
-(module+ test #|  |#)
+(module+ test #| node? |#
+  (define btree-node-p-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc CAR)
+       (bc CALL) (word-ref BTREE_NODE_P)
+       (bc BRK))
 
+      (list (org #x8F00))
+      BTREE_MAKE_ROOT
+      BTREE_NODE_P)
+     ))
+
+  (check-equal? (vm-stack->strings btree-node-p-state)
+                (list "stack holds 1 item"
+                      "cell-int $0000  (rt)")
+                "car of the btree root is the value 2 => result is false (which is int 0)")
+
+  (define btree-node-p2-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc CDR)
+       (bc CALL) (word-ref BTREE_NODE_P)
+       (bc BRK))
+
+      (list (org #x8F00))
+      BTREE_MAKE_ROOT
+      BTREE_NODE_P)
+     ))
+
+  (check-equal? (vm-stack->strings btree-node-p2-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)")
+                "cdr of the btree root is NIL => result is true (which is int 1)"))
+
+;; (define (btree-validate node (print-error #f))
+;;   (define is-pair-or-value (or (btree-node? node) (btree-value? node)))
+
+;;   (when (and print-error (not is-pair-or-value))
+;;     (displayln (format "validation failed: is pair or value: ~a" node)))
+
+;;   (cond [(pair? node)
+;;          (define car-is-not-nil (not (empty? (car node))))
+
+;;          (when (and print-error (not car-is-not-nil))
+;;            (displayln (format "validation failed: car is not nil: ~a" node)))
+
+;;          (define left-is-valid
+;;            (btree-validate (car node) print-error))
+
+;;          (define right-is-valid
+;;            (if (empty? (cdr node))
+;;                #t
+;;                (btree-validate (cdr node) print-error)))
+
+;;          (and is-pair-or-value
+;;             car-is-not-nil
+;;             left-is-valid
+;;             right-is-valid)]
+;;         [else
+;;          (and is-pair-or-value)]))
+(define BTREE_VALIDATE
+  (list
+   (label BTREE_VALIDATE)
+          (byte 2) ;; locals (0 = node, 1 = car/cdr
+          (bc WRITE_TO_LOCAL_0)
+          (bc CALL) (word-ref BTREE_NODE_P)
+          (bc TRUE_P_BRANCH) (byte 7) ;; jump to is-pair
+          (bc PUSH_LOCAL_0)
+          (bc CALL) (word-ref BTREE_VALUE_P)
+          (bc TRUE_P_BRANCH) (byte 22) ;; jump to is-value
+          (byte 2)               ;; BRK error, passed parameter is neither value nor node!
+
+   (label IS_PAIR__BTREE_VALIDATE)
+          (bc PUSH_LOCAL_0)
+          (bc CAR)
+          (bc WRITE_TO_LOCAL_1) ;; local 1 now car of node
+          (bc NIL?)
+          (bc FALSE_P_BRANCH) (byte 1)
+          (byte 2)               ;; BRK error, car of pair must not be nil!
+
+          (bc PUSH_LOCAL_1) ;; car of node
+          (bc CALL) (word-ref BTREE_VALIDATE) ;; recursive call (not tail recursive)
+
+          (bc PUSH_LOCAL_0)
+          (bc CDR)
+          (bc WRITE_TO_LOCAL_1) ;; local 1 now cdr of node
+          (bc NIL?)
+          (bc TRUE_P_BRANCH) (byte 4)
+
+          (bc PUSH_LOCAL_1) ;; cdr of node
+          (bc CALL) (word-ref BTREE_VALIDATE) ;; recursive call (not tail recursive)
+
+   (label IS_VALUE__BTREE_VALIDATE)
+
+          (bc RET)))
+
+(module+ test #| validate |#
+  (define btree-validate-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc CALL) (word-ref BTREE_VALIDATE)
+       (bc BRK))
+
+      (list (org #x8F00))
+      BTREE_MAKE_ROOT
+      BTREE_NODE_P
+      BTREE_VALUE_P
+      BTREE_VALIDATE)
+    ))
+
+  (check-equal? (vm-stack->strings btree-validate-state)
+                (list "stack is empty")
+                "validation leaves no value on the stack")
+  (check-equal? (memory-list btree-validate-state ZP_VM_PC (add1 ZP_VM_PC))
+                (list #x07 #x80)
+                "program counter points to expected break"))

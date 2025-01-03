@@ -7,7 +7,8 @@
 
 ;; get count of bytes belonging to the given bc command
 (define (disassembler-byte-code--byte-count bc)
-  (cond [(memq bc (list #x34 #x0c)) 3]
+  (cond [(memq bc (list #x34)) 3] ;; call
+        [(memq bc (list #x0c #x0d)) 2] ;; branch on true
         [else 1]))
 
 ;; return disassembled string for bc (and byte 1, byte 2 thereafter)
@@ -22,17 +23,25 @@
     [(= byte-code-t2 #x02) "nop"]
     [(= byte-code-t2 #x04) "brk"]
     [(= byte-code-t2 #x06) "swap"]
+    [(= byte-code-t2 #x0e) "int?"]
+    [(= byte-code-t2 #x12) "push nil"]
+    [(= byte-code-t2 #x14) "pair?"]
+    [(= byte-code-t2 #x16) "ret on true?"]
+    [(= byte-code-t2 #x18)
+     (format "branch on true? by $~a" (format-hex-byte bc_p1))]
+    [(= byte-code-t2 #x1a)
+     (format "branch on false? by $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x20)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
          (format "write to local #~a" n)
          (format "pop to local #~a" n))]
-    [(= byte-code-t2 #x12) "push nil"]
     [(= byte-code-t2 #x30)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
          (format "nil? ret param #~a" n)
          (format "nil? ret local #~a" n))]
+    [(= byte-code-t2 #x42) "nil?"]
     [(= byte-code-t2 #x66) "return"]
     [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (bytes->int (+ 1 bc_p1) bc_p2)))] ;; add 2 because byte code starts there
     [(= byte-code-t2 #x6a) "tail call"]

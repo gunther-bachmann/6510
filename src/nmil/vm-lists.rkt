@@ -65,7 +65,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           ;; check if tos is cell-pair-ptr
           (AND !$03)
           (CMP !$01)
-          (BNE NO_CELL_PAIR_PTR__VM_NIL_P_R)
+          (BNE NOT_NIL__VM_NIL_P_R)
 
    (label VM_NIL_P_R__UC) ;; no checks
           (LDA ZP_RT) ;; get tagged byte

@@ -153,6 +153,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         TRUE_P_BRANCH
+         FALSE_P_BRANCH
          PUSH_INT_0
          PUSH_INT_1
          PUSH_INT_2
@@ -197,9 +199,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA !$00)
           (STA ZP_VM_PC)
           (STA ZP_VM_FUNC_PTR)
-          (STA ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $0000 as initial
           (LDA !$80)                            ;; bc start at $8000
           (STA ZP_VM_PC+1)          
+          (STA ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $8000 
           (RTS)))
 
 (define BC_NIL_P_RET_LOCAL_N_POP
@@ -1248,8 +1250,40 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA ZP_RT+1)
           (BEQ IS_FALSE__BC_TRUE_P_RET)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
+          (JMP VM_INTERPRETER)
    (label IS_FALSE__BC_TRUE_P_RET)
           (JMP VM_INTERPRETER_INC_PC)))
+
+(define FALSE_P_BRANCH #x0d)
+(define BC_FALSE_P_BRANCH
+  (list
+   (label BC_FALSE_P_BRANCH)
+          (LDA ZP_RT+1)
+          (BNE POP_AND_CONTINUE__BC_TRUE_P_BRANCH)
+          (BEQ BRANCH__BC_TRUE_P_BRANCH)))
+
+(define TRUE_P_BRANCH #x0c)
+(define BC_TRUE_P_BRANCH
+  (list
+   (label BC_TRUE_P_BRANCH)
+          (LDA ZP_RT+1)
+          (BEQ POP_AND_CONTINUE__BC_TRUE_P_BRANCH) ;; when false, just continue, no branch
+
+   (label BRANCH__BC_TRUE_P_BRANCH)
+   ;; branch by adding second byte code
+          (LDY !$01)
+          (LDA (ZP_VM_PC),y)
+          (CLC)
+          (ADC ZP_VM_PC)
+          (STA ZP_VM_PC)
+          (BCC NO_PAGE_CHANGE__BC_TRUE_BRANCH)
+          (INC ZP_VM_PC+1)
+   (label NO_PAGE_CHANGE__BC_TRUE_BRANCH)
+
+   (label POP_AND_CONTINUE__BC_TRUE_P_BRANCH)
+          (JSR VM_CELL_STACK_POP_R)
+          (LDA !$02)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
 
 (module+ test #| int? |#
   (check-equal? #t #f "implement"))
@@ -1303,8 +1337,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 
            (word-ref BC_CONS_PAIR_P)              ;; 14  <-  0a 
            (word-ref BC_TRUE_P_RET)               ;; 16  <-  0b 
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 18  <-  0c reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 1a  <-  0d reserved
+           (word-ref BC_TRUE_P_BRANCH)            ;; 18  <-  0c
+           (word-ref BC_FALSE_P_BRANCH)           ;; 1a  <-  0d 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1c  <-  0e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1e  <-  0f reserved
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
@@ -1475,6 +1509,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_SWAP
           BC_TRUE_P_RET
           BC_CONS_PAIR_P
+          BC_TRUE_P_BRANCH
+          BC_FALSE_P_BRANCH
           VM_INTERPRETER
           (list (label END__INTERPRETER))
           (list (org-align #x100)) ;; align to next page

@@ -467,7 +467,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (STA ZP_LOCALS_HB_PTR)
 
    (label RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)
-          (LDA ZP_CALL_FRAME)
+          (LDA ZP_CALL_FRAME_TOP_MARK) ;; TODO: check if this should NOT be _TOP_MARK !!
           (CMP !$03)
           (BNE STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
 
@@ -492,15 +492,20 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           ;; continue with previous call frame recon
 
    (label STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
+          (LDA ZP_CALL_FRAME)
+          (STA ZP_CALL_FRAME_TOP_MARK)
+          (CMP !$03) ;; alread at bottom => no sub
+          (BEQ NO_SUB__VM_POP_CALL_FRAME_N)
+
           ;; one one below top mark
-          (LDA ZP_CALL_FRAME+1)
-          (STA LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N+2)
-          (LDY ZP_CALL_FRAME_TOP_MARK)
-          (DEY)
+          (LDA ZP_CALL_FRAME+1)                                 ;; get page
+          (STA LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N+2)         ;; write into load instruction
+          (LDY ZP_CALL_FRAME_TOP_MARK)                          ;; get index to top
+          (DEY)                                                 ;; index one behind top mark
    (label LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N)
-          (LDA $c000,y)
-          (AND !$fe)
-          (BEQ PREVIOUS_IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N)
+          (LDA $c000,y)                                         ;; load that value
+          (AND !$fe)                                            ;; all but bit0  are 0?
+          (BEQ PREVIOUS_IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N) ;; => slow frame
 
           ;; previous is fast frame
           (LDA !$04) ;; length of fast frame
@@ -512,9 +517,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
    (label SET_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
           (STA ZP_TEMP)
           (LDA ZP_CALL_FRAME)
-          (STA ZP_CALL_FRAME_TOP_MARK)
           (SEC)
-          (SBC ZP_TEMP)                 ;; temp holds len of call frame (04 = fast, 0a = slow)
+          (SBC ZP_TEMP)                 ;; temp holds len of call frame (04 = fast, 08 = slow)
+   (label NO_SUB__VM_POP_CALL_FRAME_N)
           (STA ZP_CALL_FRAME)
           (RTS)))
 

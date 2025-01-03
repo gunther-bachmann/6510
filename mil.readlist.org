@@ -3575,6 +3575,12 @@ this will include the implementation of
 - (m-def ...) -> vm, execute, debug?
 - see [[file:src/cisc-vm/mil-svm-generator.rkt]]
 **** glue together mil + 6510 vm
+**** IDEA: restrict function names to one case and only some special chars => function meta data as name is compact
+- store 3 characters in 2 bytes (each 5 bit)
+- A-Z (26) or a-z
+- _-?>< and byte 0 to mark end?
+- drawbacks: no numbers, no lower/upper case characters <- worth it?
+  probably not! get rid of metadata if possible (e.g. through static linking?)
 **** IDEA: make compilation phases more explicit
 - macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
 - transformation from ast/stack orientation -> register oriented atomic commands
