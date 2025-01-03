@@ -244,17 +244,44 @@ offset  content
 
 ** pointer tagging
 RT = 00 (low byte) is equivalent to RT is empty!
-use new pointer tagging scheme (makes tagged-low-byte obsolete):            examples (low, then high byte):
-  zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                  0000 001[0]    1100 1101   cd02 (first allocated slot in cell-ptr page)
-  xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)          0000 01[01]    1100 1101   cd05 (first allocated slot in a cell-pair-ptr page)
-  0iii ii11 = int-cell (no direct adding of highbyte possible)        [0]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
-  1111 1111 = byte-cell (char|bool|bcd digits)                        [1111 1111]    0000 0001   01  <- payload is in high byte
-  1000 0011 = cell-array-header                                       [1000 0011]    0000 0100   04 cells in array
-  1000 0111 = cell-native-array-header                                [1000 0111]    0000 1000   08 bytes in array
+use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples (low, then high byte):
+  zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                    0000 001[0]    1100 1101   cd02 (first allocated slot in cell-ptr page)
+  xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)            0000 01[01]    1100 1101   cd05 (first allocated slot in a cell-pair-ptr page)
+  0iii ii11 = int-cell (bool) (no direct adding of highbyte possible)   [0]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
+  1111 1111 = byte-cell (char|bcd digits)                               [1111 1111]    0000 0001   01  <- payload is in high byte
+  1000 0011 = cell-array-header                                         [1000 0011]    0000 0100   04 cells in array
+  1000 0111 = cell-native-array-header                                  [1000 0111]    0000 1000   08 bytes in array
 
   1000 1011   (29 values reserved)
   ...
   1111 1011
+#+begin_src asm
+  ;; check for cell-ptr
+          AND !$01
+          BEQ IS_CELL_PTR
+
+  ;; check for cell-pair-ptr
+          AND !$03
+          CMP !$01
+          BEQ IS_CELL_PAIR_PTR
+
+  ;; check for int-cell
+          AND !$83
+          CMP !$03
+          BEQ IS_INT_CELL
+
+  ;; check for byte-cell
+          CMP !$FF
+          BEQ IS_BYTE_CELL
+
+  ;; check for cell-array-header
+          CMP !$83
+          BEQ IS_CELL_ARRAY_HEADER
+
+  ;; check for cell-native-array-header
+          CMP !$87
+          BEQ IS_CELL_NATIVE_ARRAY_HEADER
+#+end_src
 ** call frames
 - a call frame is defined by the following variables (on the zero page)
   ZP_​​VM_​PC                    *  ptr to the current byte code

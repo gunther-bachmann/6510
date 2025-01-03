@@ -9,7 +9,7 @@ this implementation will be the testbed for all refcounting gc testing
 
 TODOS:
   implement:
-    btree-make-root
+    DONE btree-make-root
     btree-node?
     btree-value?
     btree-validate
