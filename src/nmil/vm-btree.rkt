@@ -11,7 +11,7 @@ TODOS:
     DONE btree-make-root
     DONE btree-node?
     DONE btree-value?
-    IMPLEMENT btree-validate
+    DONE btree-validate
     btree-depth
     btree-path-to-first
     btree-path-to-list
@@ -360,4 +360,44 @@ TODOS:
                 "validation leaves no value on the stack")
   (check-equal? (memory-list btree-validate-state ZP_VM_PC (add1 ZP_VM_PC))
                 (list #x07 #x80)
-                "program counter points to expected break"))
+                "program counter points to expected break")
+
+  (define btree-validate2-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_2)
+       (bc PUSH_NIL)
+       (bc CONS)
+       (bc CALL) (word-ref BTREE_VALIDATE)
+       (bc BRK))
+
+      (list (org #x8F00))
+      BTREE_NODE_P
+      BTREE_VALUE_P
+      BTREE_VALIDATE)
+    ))
+
+  (check-equal? (memory-list btree-validate2-state (add1 ZP_VM_PC) (add1 ZP_VM_PC))
+                (list #x8f)
+                "program counter on other page => validation failed ")
+
+  (define btree-validate3-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_BYTE) (byte 15)
+       (bc CONS)
+       (bc CALL) (word-ref BTREE_VALIDATE)
+       (bc BRK))
+
+      (list (org #x8F00))
+      BTREE_NODE_P
+      BTREE_VALUE_P
+      BTREE_VALIDATE)
+    ))
+
+  (check-equal? (memory-list btree-validate3-state (add1 ZP_VM_PC) (add1 ZP_VM_PC))
+                (list #x8f)
+                "program counter on other page => validation failed (bytes are not allowed, yet)"))

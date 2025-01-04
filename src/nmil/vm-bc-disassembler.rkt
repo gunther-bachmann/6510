@@ -7,8 +7,8 @@
 
 ;; get count of bytes belonging to the given bc command
 (define (disassembler-byte-code--byte-count bc)
-  (cond [(memq bc (list #x34)) 3] ;; call
-        [(memq bc (list #x0c #x0d)) 2] ;; branch on true
+  (cond [(memq bc (list #x34 #x06)) 3] ;; call, push int
+        [(memq bc (list #x0c #x0d #x05)) 2] ;; branch on true, branch on false, push byte
         [else 1]))
 
 ;; return disassembled string for bc (and byte 1, byte 2 thereafter)
@@ -23,6 +23,8 @@
     [(= byte-code-t2 #x02) "nop"]
     [(= byte-code-t2 #x04) "brk"]
     [(= byte-code-t2 #x06) "swap"]
+    [(= byte-code-t2 #x0a) (format "push byte $~a" (format-hex-byte bc_p1))]
+    [(= byte-code-t2 #x0c) (format "push int $~a" (format-hex-word (bytes->int bc_p1 bc_p2)))]
     [(= byte-code-t2 #x0e) "int?"]
     [(= byte-code-t2 #x12) "push nil"]
     [(= byte-code-t2 #x14) "pair?"]

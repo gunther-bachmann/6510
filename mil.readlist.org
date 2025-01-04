@@ -3482,6 +3482,15 @@ this will include the implementation of
     - add/remove/cut/paste ... (as in editors)
   - [ ] reverse order of binary tree + implementation of refcounting
   - [ ] depth of binary tree (travers full tree, tail-call-recursively, keeping max depth)
+- [ ] implement concept of constants
+  be aware of pointer tagging that should still work
+  constants do not need reference counting and must never be put on the free-list (free-tree)
+  (use constant pages w/o refcounts? <- too much waste)
+  (use code space <- loader may have to resolve due to relocatable constants)
+  (constants->heap [and inc ref count] upon loading?)
+  - lists
+  - arrays, native-arrays (strings)
+  - structures
 - [-] allocation/deallocation of lists, cells, structures, strings
   - [X] cells
   - [X] lists
@@ -3546,19 +3555,22 @@ this will include the implementation of
     | POP​_TO​_LOCAL​_0         |          |        0 |       -1 |
     | WRITE​_TO​_LOCAL​_1       |       -1 |          |          |
     | NIL?​_RET​_LOCAL​_0​_POP​_1 |          |          |          |
-
-
   - [ ] implement refcount gc for tree functions (having pointers in both cells)
-    
-- [-] implement byte code debugger on top of 6510 debugger
+- [X] implement basic byte code debugger on top of 6510 debugger
   - [X] single step
   - [X] run to next call/return
   - [X] step over call
-  - [ ] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
-  - [X] inspect/manipulate value stack
-  - [ ] inspect/manipulate call frame
-  - [ ] allow setting breakpoints on bytecode (at a certain address)
-  - [ ] allow in place execution of bytecode
+**** enhance debugger
+- [ ] make inspection routines fail safe (ignore exceptions)
+- [ ] switch from/to bc/assembler debugger
+- [ ] inspection of vm variables (zp_​vm_​pc, zp_...)
+- [ ] inspect/manipulate call frame
+- [ ] going back bc steps
+- [ ] use colors to separate prompt, output, disassembly
+- [ ] inspect/manipulate value stack
+- [ ] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
+- [ ] allow setting breakpoints on bytecode (at a certain address)
+- [ ] allow in place execution of bytecode
 **** how much of the 6510 code should be actually written and tested with the interpreter (and actually used to interpret byte code)?
 **** IDEA for native code implemenation of (parts of) functions
 (have a rough idea of how this could be done, don't actually implement)

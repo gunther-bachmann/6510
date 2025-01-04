@@ -31,7 +31,12 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (define PAGE_AVAIL_0 #x97)
   (define PAGE_AVAIL_0_W #x9700)
   (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600))
+  (define PAGE_AVAIL_1_W #x9600)
+
+  (define PAGE_CALL_FRAME #x9a)
+  (define PAGE_CALL_FRAME_W #x9a00)
+  (define PAGE_LOCALS_LB #x98)
+  (define PAGE_LOCALS_HB #x99))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -78,11 +83,11 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDA !$00)
           (STA ZP_CALL_FRAME+1)         ;; this ensures that NO previous call frame page is heeded!
           (STA ZP_CALL_FRAME_TOP_MARK)
-          (JSR VM_ALLOC_CALL_FRAME_N)
+          (JSR VM_ALLOC_CALL_FRAME_N)   ;; call-frame initialized (top mark set, too)
 
           ;; alloc locals
-          (LDX !$00)
-          (LDY !$00)
+          (LDX !$00) ;; previous locals lb page (none => 0)
+          (LDY !$00) ;; previous locals hb page (none => 0)
           (JSR VM_ALLOC_CELL_STACK_PAGES)
           (STX ZP_LOCALS_LB_PTR+1)
           (STY ZP_LOCALS_HB_PTR+1)
@@ -105,7 +110,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (list
    (label VM_ALLOC_CALL_FRAME_N)
           (LDA ZP_CALL_FRAME+1)
-          (BEQ NO_SAVE_OF_OLD_FRAME_DATA__)
+          (BEQ NO_SAVE_OF_OLD_FRAME_DATA__VM_ALLOC_CALL_FRAME_N)
 
           ;; make sure to write old top mark to old call frame page (if existent)
           (LDA !$00)
@@ -114,7 +119,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (STA (ZP_CALL_FRAME),y)       ;; write (old) top mark at current page $02
 
-   (label NO_SAVE_OF_OLD_FRAME_DATA__)
+   (label NO_SAVE_OF_OLD_FRAME_DATA__VM_ALLOC_CALL_FRAME_N)
           ;; allocate completely new page
           (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
 
@@ -266,47 +271,24 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (module+ test #| VM_PUSH_CALL_FRAME_N |#
   (define push-call-frame-n-fit-page-prep-code
     (list
-       ;; set complete vm state to values to be pushed
-      (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-      (STA ZP_CALL_FRAME+1)             ;;         zp_call_frame
-      (LDY !$03)
-      (STY ZP_CALL_FRAME)               ;; => zp_call_frame $cc03
-      (STY ZP_CALL_FRAME_TOP_MARK)      ;; => zp_call_frame_top_mark $03
-      (INY) ;;04
-      (STY ZP_LOCALS_LB_PTR)
-      (STY ZP_LOCALS_HB_PTR)            ;; same index (low enough for alloc to stay on page)
-      (INY) ;; 05
-      (STY ZP_LOCALS_LB_PTR+1)          ;; => zp_locals_lb_ptr $0504
-      (INY) ;; 06
-      (STY ZP_LOCALS_HB_PTR+1)          ;; => zp_locals_hb_ptr $0604
-      (INY) ;; 07
-      (STY ZP_CELL_STACK_LB_PTR)
-      (STY ZP_CELL_STACK_HB_PTR)        ;; same index (low enough for alloc to stay on page)
-      (INY) ;; 08
-      (STY ZP_CELL_STACK_LB_PTR+1)      ;; => zp_cell_stack_hb_ptr $0807
-      (INY) ;; 09
-      (STY ZP_CELL_STACK_HB_PTR+1)      ;; => zp_cell_stack_hb_ptr $0907
-      (STY ZP_CELL_STACK_TOS)
+       ;; set complete vm state to values to be pushed (mostly done by call stack init)
+      (LDY !$09) ;; 09
       (STY ZP_VM_FUNC_PTR+1)            ;; share same page
       (STY ZP_VM_PC+1)
       (INY) ;; 0a
       (STY ZP_VM_FUNC_PTR)              ;; => zp_vm_func_ptr $090a
       (INY) ;; 0b
       (STY ZP_VM_PC)                    ;; => zp_vm_pc $090b
-
-      ;;  ;; push the call frame
-      ;; (LDX !$04) ;; reserve 4 local cells
-      ;; (JSR VM_PUSH_CALL_FRAME_N)
       ))
 
   (define push-call-frame-n-fit-page-prep-state
     (run-code-in-test push-call-frame-n-fit-page-prep-code))
 
   (check-equal? (vm-call-frame->strings push-call-frame-n-fit-page-prep-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)")
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
                 "prepared call-frame is initial (and empty)")
   (check-equal? (peek push-call-frame-n-fit-page-prep-state ZP_CALL_FRAME_TOP_MARK)
                 #x03
@@ -320,16 +302,16 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (define push-call-frame-n-fit-page-state
     (run-code-in-test push-call-frame-n-fit-page-code))
 
-  (check-equal? (memory-list push-call-frame-n-fit-page-state (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x06))
+  (check-equal? (memory-list push-call-frame-n-fit-page-state (+ PAGE_CALL_FRAME_W #x03) (+ PAGE_CALL_FRAME_W #x06))
                 (list #x0b #x09
                       #x0a
-                      #x04)
+                      #x03)
                 "the call frame is a fast frame (4 bytes) holding the full pc (2b), low byte of function-ptr and low byte of locals-ptr")
   (check-equal? (vm-call-frame->strings push-call-frame-n-fit-page-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)")
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
                 "call-frame is pointing to the current one push ")
   (check-equal? (peek push-call-frame-n-fit-page-state ZP_CALL_FRAME_TOP_MARK)
                 #x07
@@ -349,21 +331,21 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (run-code-in-test push-call-frame-misfit-page-sl-frame-0-code))
 
   (check-equal? (vm-call-frame->strings push-call-frame-misfit-page-sl-frame-0-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_1))
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $0a0b"
                       "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)"))
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (peek push-call-frame-misfit-page-sl-frame-0-state ZP_CALL_FRAME_TOP_MARK)
                 #x0b
                 "top mark points to the first free byte on the call frame stack (past the one pushed)")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state (+ PAGE_AVAIL_1_W #x03) (+ PAGE_AVAIL_1_W #x04))
+  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x04))
                 (list #x0b #x0a)
                 "the call frame is a slow frame (8 bytes)
                  holding the full pc (2b)")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state (+ PAGE_AVAIL_1_W #x06) (+ PAGE_AVAIL_1_W #x0a))
-                (list #x04
-                      #x05
-                      #x06
+  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-0-state (+ PAGE_AVAIL_0_W #x06) (+ PAGE_AVAIL_0_W #x0a))
+                (list #x03
+                      PAGE_LOCALS_LB
+                      PAGE_LOCALS_HB
                       #x0a
                       #x01)
                 "the call frame is a slow frame (8 bytes)
@@ -383,21 +365,21 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (run-code-in-test push-call-frame-misfit-page-sl-frame-1-code))
 
   (check-equal? (vm-call-frame->strings push-call-frame-misfit-page-sl-frame-1-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_1))
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
-                      "locals-ptr:       $05fe, $06fe (lb, hb)"))
+                      (format "locals-ptr:       $~afe, $~afe (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (peek push-call-frame-misfit-page-sl-frame-1-state ZP_CALL_FRAME_TOP_MARK)
                 #x0b
                 "top mark points to the first free byte on the call frame stack (past the one pushed)")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state (+ PAGE_AVAIL_1_W #x03) (+ PAGE_AVAIL_1_W #x04))
+  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x04))
                 (list #x0b #x09)
                 "the call frame is a slow frame (8 bytes)
                  holding the full pc $090b")
-  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state (+ PAGE_AVAIL_1_W #x06) (+ PAGE_AVAIL_1_W #x0a))
+  (check-equal? (memory-list push-call-frame-misfit-page-sl-frame-1-state (+ PAGE_AVAIL_0_W #x06) (+ PAGE_AVAIL_0_W #x0a))
                 (list #xfe
-                      #x05
-                      #x06
+                      PAGE_LOCALS_LB
+                      PAGE_LOCALS_HB
                       #x0a
                       #x00)
                 "the call frame is a slow frame (8 bytes)
@@ -421,9 +403,49 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (define VM_POP_CALL_FRAME_N
   (list
    (label VM_POP_CALL_FRAME_N)
+          (LDA ZP_CALL_FRAME_TOP_MARK)
+          (CMP !$03)                                     
+          (BNE NO_PAGE_CHANGE__VM_POP_CALL_FRAME_N) 
+
+          ;; if top mark points to base, the previous call frame page must be loaded
+          (LDA ZP_CALL_FRAME+1) ;; get previous page
+          (TAX)                 ;; into X
+
+          ;; get previous call frame page
+          (LDA !$00)
+          (STA ZP_CALL_FRAME)
+          (LDY !$01)
+          (LDA (ZP_CALL_FRAME),y) ;; get previous page
+          (STA ZP_CALL_FRAME+1)
+          (INY)
+          (LDA (ZP_CALL_FRAME),y) ;; get top mark from previous page
+          (STA ZP_CALL_FRAME_TOP_MARK)
+
+          ;; reconstruct old call-frame after page change
+          (TAY)
+          (DEY)
+          (LDA (ZP_CALL_FRAME),y) ;; get one behind top mark
+          (AND !$7e)
+          (BEQ IS_SLOW_FRAME__)
+          (LDA !$03) ;; 4-1 (since y is already old topmark -1)
+          (BNE CONT__)
+   (label IS_SLOW_FRAME__)
+          (LDA !$07)  ;; 8-1 (since y is already old topmark -1)
+   (label CONT__)
+          (STA ZP_TEMP)
+          (TYA)
+          (SEC)
+          (SBC ZP_TEMP)
+          (STA ZP_CALL_FRAME) ;; do this so zp_call_frame behaves as if no page change took place (will be put into top mark eventually)
+
+          ;; free old call frame page!
+          (TXA)
+          (JSR VM_FREE_PAGE)
+
+          (LDA ZP_CALL_FRAME_TOP_MARK)
+   (label NO_PAGE_CHANGE__VM_POP_CALL_FRAME_N)
           ;; current frame fast?
           (SEC)
-          (LDA ZP_CALL_FRAME_TOP_MARK)
           (SBC ZP_CALL_FRAME)
           (CMP !$04)
           (BNE SLOW_FRAME__VM_POP_CALL_FRAME_N)
@@ -443,7 +465,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDA (ZP_CALL_FRAME),y)
           (STA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_HB_PTR)
-          (BCS RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; carry is always clear (since iny stays below 256)
+          (BCS RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; TODO?? wrong->carry is always clear (since iny stays below 256)
 
    (label SLOW_FRAME__VM_POP_CALL_FRAME_N)
           (LDY !$06)                    ;; copy 7 bytes
@@ -468,7 +490,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
    (label RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)
           (LDA ZP_CALL_FRAME_TOP_MARK) ;; TODO: check if this should NOT be _TOP_MARK !!
-          (CMP !$03)
+          (CMP !$03)                   ;; TODO: don't!! this is done on pop entry!
           (BNE STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
 
           (LDA ZP_CALL_FRAME+1) ;; get previous page
@@ -556,10 +578,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (check-equal? (peek pop-call-frame-n-fast-cf-state ZP_CALL_FRAME_TOP_MARK)
                 #x07)
   (check-equal? (vm-call-frame->strings pop-call-frame-n-fast-cf-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)")
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
                 "restore original call-frame-ptr,
                          program counter,
                          functions-ptr
@@ -568,10 +590,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (define pop-call-frame-n-slow-cf-code
     (append push-call-frame-misfit-page-sl-frame-0-code
             ;; now the call frame is set to
-            ;; (list "call-frame-ptr:   $cb03"   <-- slow frame with 8 bytes
+            ;; (list "call-frame-ptr:   $xx03"   <-- slow frame with 8 bytes
             ;;       "program-counter:  $0a0b"
             ;;       "function-ptr:     $090a"
-            ;;       "locals-ptr:       $0504, $0604 (lb, hb)")
+            ;;       "locals-ptr:       $xx03, $x03 (lb, hb)")
             (list
              ;; overwrite call-frame data: pc, function pointer and locals ptr (hi/lo bytes)
              (LDY !$21)
@@ -597,13 +619,38 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (run-code-in-test pop-call-frame-n-slow-cf-code))
 
   (check-equal? (vm-call-frame->strings pop-call-frame-n-slow-cf-state)
-                (list (format "call-frame-ptr:   $~afb" (format-hex-byte PAGE_AVAIL_0))
+                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $0a0b"
                       "function-ptr:     $090a"
-                      "locals-ptr:       $0504, $0604 (lb, hb)"))
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (peek pop-call-frame-n-slow-cf-state ZP_CALL_FRAME_TOP_MARK)
-                #xff
-                "top mark points to the first free byte on the call frame stack (past the one pushed)"))
+                #x03
+                "top mark points to the first free byte on the call frame stack")
+
+  (define pop-call-frame-n-slow-2-cf-code
+    (append pop-call-frame-n-slow-cf-code
+            ;; now the call frame is set to
+            ;; (list "call-frame-ptr:   $xx03"   <-- no frame here any more, needs to go back to previous page
+            ;;       "program-counter:  $090b"
+            ;;       "function-ptr:     $090a"
+            ;;       "locals-ptr:       $xx03, $xx03 (lb, hb)")
+            (list
+             (LDA !$02)
+             (ast-bytes-cmd '() (list #x8d #xfa PAGE_CALL_FRAME)) ;; store 02 right behind top mark => ensure this is detected as fast frame
+             (JSR VM_POP_CALL_FRAME_N)
+             )))
+  (define pop-call-frame-n-slow-2-cf-state
+    (run-code-in-test pop-call-frame-n-slow-2-cf-code)) 
+
+  (check-equal? (vm-call-frame->strings pop-call-frame-n-slow-2-cf-state)
+                (list (format "call-frame-ptr:   $~af7" (format-hex-byte PAGE_CALL_FRAME))
+                      "program-counter:  $090b"
+                      "function-ptr:     $090a"
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
+                "f7 = fb (top mark) - 4 (slow frame)")
+  (check-equal? (peek pop-call-frame-n-slow-2-cf-state ZP_CALL_FRAME_TOP_MARK)
+                #xfb
+                "top mark points to the first free byte on the call frame stack"))
 
 ;; input:  A number of locals needed by this function
 ;;         zp_locals_lb_ptr
@@ -658,7 +705,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (RTS)))
 
 (module+ test #| alloc locals |#
-  (check-equal? #t #f))
+  (skip (check-equal? #t #f)))
 
 ;; input:  A number of locals to keep after free (locals of current function?)
 ;;         zp_locals_lb_ptr
@@ -718,14 +765,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (RTS)))
 
 (module+ test #| free locals |#
-  (check-equal? #t #f))
+  (skip (check-equal? #t #f)))
 
 (define vm-call-frame
-  (append vm-memory-manager
-          VM_INITIALIZE_CALL_FRAME
+  (append VM_INITIALIZE_CALL_FRAME
           VM_ALLOC_CALL_FRAME_N                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
           VM_PUSH_CALL_FRAME_N                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
           VM_POP_CALL_FRAME_N                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
           VM_ALLOC_LOCALS
           VM_FREE_LOCALS
+          vm-memory-manager
           ))
