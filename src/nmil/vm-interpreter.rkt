@@ -11,7 +11,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 ;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
 ;; TODO: implement refcount gc for reverse list implementation/interpretation
-;; TODO: implement sorted binary tree
 ;; TODO: implement refcount gc for sorted binary tree functions
 ;; TODO: implement structure access, allocation, deallocation
 ;; TODO: implement array access, allocation, deallocation (native arrays, regular arrays)
@@ -427,7 +426,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     6"
                          "next free slot: $51"))
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                (+ 3014 3623)) ;; offset 3623
+                (+ 3016 3623)) ;; offset 3623
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "cell-int $0000"
                          "cell-int $0001"
@@ -474,7 +473,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_PUSH_CALL_FRAME_N)
           (LDY !$00)                            ;; index to number of locals (0)
           (LDA (ZP_RA),y)                       ;; A = #locals
+          (BEQ NO_LOCALS_NEEDED__BC_CALL)
           (JSR VM_ALLOC_LOCALS)
+   (label NO_LOCALS_NEEDED__BC_CALL)
 
           ;; load zp_vm_pc with address of function bytecode
           (LDA ZP_RA)
