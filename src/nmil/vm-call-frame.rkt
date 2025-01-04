@@ -425,17 +425,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (TAY)
           (DEY)
           (LDA (ZP_CALL_FRAME),y) ;; get one behind top mark
-          (AND !$7e)
-          (BEQ IS_SLOW_FRAME__)
-          (LDA !$03) ;; 4-1 (since y is already old topmark -1)
-          (BNE CONT__)
-   (label IS_SLOW_FRAME__)
-          (LDA !$07)  ;; 8-1 (since y is already old topmark -1)
-   (label CONT__)
-          (STA ZP_TEMP)
-          (TYA)
-          (SEC)
-          (SBC ZP_TEMP)
+          (JSR LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
           (STA ZP_CALL_FRAME) ;; do this so zp_call_frame behaves as if no page change took place (will be put into top mark eventually)
 
           ;; free old call frame page!
@@ -465,7 +455,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDA (ZP_CALL_FRAME),y)
           (STA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_HB_PTR)
-          (BCS RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; TODO?? wrong->carry is always clear (since iny stays below 256)
+          (BCS RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; carry always set (because of SEC before)
 
    (label SLOW_FRAME__VM_POP_CALL_FRAME_N)
           (LDY !$06)                    ;; copy 7 bytes
@@ -489,31 +479,6 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (STA ZP_LOCALS_HB_PTR)
 
    (label RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)
-          (LDA ZP_CALL_FRAME_TOP_MARK) ;; TODO: check if this should NOT be _TOP_MARK !!
-          (CMP !$03)                   ;; TODO: don't!! this is done on pop entry!
-          (BNE STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
-
-          (LDA ZP_CALL_FRAME+1) ;; get previous page
-          (TAX)                 ;; into X
-
-          ;; get previous call frame page
-          (LDA !$00)
-          (STA ZP_CALL_FRAME)
-          (LDY !$01)
-          (LDA (ZP_CALL_FRAME),y) ;; get previous page
-          (STA ZP_CALL_FRAME+1)
-          (INY)
-          (LDA (ZP_CALL_FRAME),y) ;; get top mark from previous page
-          (STA ZP_CALL_FRAME_TOP_MARK)
-          (STA ZP_CALL_FRAME) ;; do this so zp_call_frame behaves as if no page change took place (will be put into top mark eventually)
-
-          ;; free old call frame page!
-          (TXA)
-          (JSR VM_FREE_PAGE)
-
-          ;; continue with previous call frame recon
-
-   (label STAY_ON_CALL_FRAME_PAGE__VM_POP_CALL_FRAME_N)
           (LDA ZP_CALL_FRAME)
           (STA ZP_CALL_FRAME_TOP_MARK)
           (CMP !$03) ;; alread at bottom => no sub
@@ -526,24 +491,35 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (DEY)                                                 ;; index one behind top mark
    (label LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N)
           (LDA $c000,y)                                         ;; load that value
+          (JSR LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
+
+   (label NO_SUB__VM_POP_CALL_FRAME_N)
+          (STA ZP_CALL_FRAME)
+          (RTS)
+
+
+   ;; calc zp_call_frame by looking at the call-frame right below zp_call_frame_top
+   ;; this value (one byte below top) must be in A
+   ;; fast frame = there are bits set other than just bit0
+   ;; slow frame = only bit0 is used (all else is 0)
+   (label LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
           (AND !$fe)                                            ;; all but bit0  are 0?
-          (BEQ PREVIOUS_IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N) ;; => slow frame
+          (BEQ LOCAL__IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N) ;; => slow frame
 
           ;; previous is fast frame
           (LDA !$04) ;; length of fast frame
-          (BNE SET_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
+          (BNE LOCAL__CALC_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
 
-   (label PREVIOUS_IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N)
+   (label LOCAL__IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N)
           (LDA !$08) ;; length of slow frame
 
-   (label SET_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
+   (label LOCAL__CALC_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
           (STA ZP_TEMP)
-          (LDA ZP_CALL_FRAME)
+          (LDA ZP_CALL_FRAME_TOP_MARK)
           (SEC)
           (SBC ZP_TEMP)                 ;; temp holds len of call frame (04 = fast, 08 = slow)
-   (label NO_SUB__VM_POP_CALL_FRAME_N)
-          (STA ZP_CALL_FRAME)
-          (RTS)))
+          (RTS)
+))
 
 (module+ test #| pop call frame n |#
   (define pop-call-frame-n-fast-cf-code

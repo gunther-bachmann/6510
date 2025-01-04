@@ -427,7 +427,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     6"
                          "next free slot: $51"))
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                (+ 3021 3623)) ;; offset 3623
+                (+ 3014 3623)) ;; offset 3623
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "cell-int $0000"
                          "cell-int $0001"
