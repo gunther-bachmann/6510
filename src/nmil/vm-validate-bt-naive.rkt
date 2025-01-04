@@ -129,21 +129,34 @@ invariants:
 (module+ test #| |#
   (check-true (btree-validate (btree-make-root 1) #t)))
 
-(define (btree-depth node)
-  (cond [(not (pair? node)) 0]
+(define (btree-depth node (depth 0) (right-list (list)) (max-depth 0))
+  (cond [(and (not (pair? node))
+            (empty? right-list))
+         (max depth max-depth)]
+        [(not (pair? node))
+         (btree-depth (caar right-list) (cdar right-list) (cdr right-list) (max depth max-depth))]
         [else
          (define l (car node))
          (define r (cdr node))
-         (add1 (max (btree-depth l) (btree-depth r)))]))
+         (btree-depth l (add1 depth) (cons (cons r (add1 depth)) right-list) max-depth)]))
 
 (module+ test #| btree-depth |#
+  (check-equal? (btree-depth "1")
+                0)
   (check-equal? (btree-depth (btree-make-root 1))
                 1)
   (check-equal? (btree-depth (btree-make-root "1"))
                 1)
-
   (check-equal? (btree-depth '(((1 . ()) . 3) . (4 . 5)))
-                3))
+                3)
+  (check-equal? (btree-depth '((3 . ((4 . (5 . ((6 . 7) . ()))) . ())) . 8))
+                7)
+  (check-equal? (btree-depth '((1 . (2 . 3))))
+                3)
+  (check-equal? (btree-depth '((1 . ((2 . ()) . (((3 . 4) . ()) . ()))) . 5))
+                6)
+  (check-equal? (btree-depth '((3 . ((4 . (5 . ((6 . ()) . (7 . (8 . (9 . 9)))))) . ())) . 10))
+                9))
 
 (define (btree-path-to-first node (path (list)))
   (cond [(btree-value? node) path]
