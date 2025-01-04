@@ -423,8 +423,6 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
           ;; reconstruct old call-frame after page change
           (TAY)
-          (DEY)
-          (LDA (ZP_CALL_FRAME),y) ;; get one behind top mark
           (JSR LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
           (STA ZP_CALL_FRAME) ;; do this so zp_call_frame behaves as if no page change took place (will be put into top mark eventually)
 
@@ -484,13 +482,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (CMP !$03) ;; alread at bottom => no sub
           (BEQ NO_SUB__VM_POP_CALL_FRAME_N)
 
-          ;; one one below top mark
-          (LDA ZP_CALL_FRAME+1)                                 ;; get page
-          (STA LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N+2)         ;; write into load instruction
+          ;; one below top mark
+          (LDA !$00)
+          (STA ZP_CALL_FRAME)
           (LDY ZP_CALL_FRAME_TOP_MARK)                          ;; get index to top
-          (DEY)                                                 ;; index one behind top mark
-   (label LOAD_TOP_M1_BYTE__VM_POP_CALL_FRAME_N)
-          (LDA $c000,y)                                         ;; load that value
           (JSR LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
 
    (label NO_SUB__VM_POP_CALL_FRAME_N)
@@ -499,27 +494,25 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 
    ;; calc zp_call_frame by looking at the call-frame right below zp_call_frame_top
-   ;; this value (one byte below top) must be in A
+   ;; Y = top mark
+   ;; ZP_CALL_FRAME (00 page)
    ;; fast frame = there are bits set other than just bit0
    ;; slow frame = only bit0 is used (all else is 0)
    (label LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
+          (DEY)                                                 ;; index one behind top mark
+          (LDA (ZP_CALL_FRAME),y)                               ;; load that value
           (AND !$fe)                                            ;; all but bit0  are 0?
-          (BEQ LOCAL__IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N) ;; => slow frame
+          (BNE LOCAL__IS_FAST_CALL_FRAME__VM_POP_CALL_FRAME_N) ;; => slow frame
 
-          ;; previous is fast frame
-          (LDA !$04) ;; length of fast frame
-          (BNE LOCAL__CALC_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
-
-   (label LOCAL__IS_SLOW_CALL_FRAME__VM_POP_CALL_FRAME_N)
-          (LDA !$08) ;; length of slow frame
-
-   (label LOCAL__CALC_TOP_MARK_AND_FRAME__VM_POP_CALL_FRAME_N)
-          (STA ZP_TEMP)
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (SEC)
-          (SBC ZP_TEMP)                 ;; temp holds len of call frame (04 = fast, 08 = slow)
-          (RTS)
-))
+          (SBC !$04)
+
+   (label LOCAL__IS_FAST_CALL_FRAME__VM_POP_CALL_FRAME_N)
+          (LDA ZP_CALL_FRAME_TOP_MARK)
+          (SEC)
+          (SBC !$04)
+          (RTS)))
 
 (module+ test #| pop call frame n |#
   (define pop-call-frame-n-fast-cf-code
