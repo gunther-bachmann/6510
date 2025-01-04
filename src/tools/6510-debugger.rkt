@@ -44,7 +44,9 @@
          dispatch-debugger-command
          debugger--run
          debugger--push-breakpoint
-         debugger--remove-breakpoints)
+         debugger--remove-breakpoints
+         push-debugger-interactor
+         pop-debugger-interactor)
 
 (module+ test
   (require threading)
@@ -227,6 +229,7 @@ run                   run until a break point is hit
 inc pc                increment program counter (e.g. to step over a BRK instruction)
 p                     print cpu state
 clear stops           clear all breakpoints
+surface               pop interactor
 q                     quit
 .                     repeat last command (multiple dots repeat multiple times)
 EOF
@@ -258,6 +261,13 @@ EOF
   (define incpc_regex #px"^i(nc)? *p(c)?")
   (define options-refex #px"^t(oggle)? o(ption)? (verbose-step)")
   (cond [(or (string=? command "?") (string=? command "h")) (debugger--help d-state)]
+        ;; pop debugger interactor
+        [(string=? command "surface")
+         (cond [(empty? (debug-state-interactor-queue d-state))
+                (displayln "no interactor left to pop")
+                d-state]
+               [else
+                (pop-debugger-interactor d-state)])]
         ;; increment pc (to step over brk for example)
         [(regexp-match? incpc_regex command)
          (struct-copy debug-state d-state
@@ -449,6 +459,33 @@ EOF
    `(dispatcher . ,dispatch-debugger-command)
    `(pre-prompter . ,debugger--assembler-pre-prompter)))
 
+(define/c (push-debugger-interactor interactor d-state)
+  (-> (listof any/c) debug-state? debug-state?)
+  (define new-interactor-queue
+    (cons (list
+           `(breakpoints . ,(debug-state-breakpoints d-state))
+           `(prompter . ,(debug-state-prompter d-state))
+           `(dispatcher . ,(debug-state-dispatcher d-state))
+           `(pre-prompter . ,(debug-state-pre-prompter d-state)))
+          (debug-state-interactor-queue d-state)))
+  (struct-copy debug-state d-state
+               [breakpoints      '()]
+               [prompter         (dict-ref interactor 'prompter interactor)]
+               [dispatcher       (dict-ref interactor 'dispatcher interactor)]
+               [pre-prompter     (dict-ref interactor 'pre-prompter interactor)]
+               [interactor-queue new-interactor-queue]))
+
+(define/c (pop-debugger-interactor d-state)
+  (-> debug-state? debug-state?)
+  (define interactor (car (debug-state-interactor-queue d-state)))
+  (define new-interactor-queue (cdr (debug-state-interactor-queue d-state)))
+  (struct-copy debug-state d-state
+               [breakpoints      (dict-ref interactor 'breakpoints interactor)]
+               [prompter         (dict-ref interactor 'prompter interactor)]
+               [dispatcher       (dict-ref interactor 'dispatcher interactor)]
+               [pre-prompter     (dict-ref interactor 'pre-prompter interactor)]
+               [interactor-queue new-interactor-queue]))
+
 ;; run an read eval print loop debugger on the passed program
 (define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (interactor debugger--assembler-interactor) (run #f))
   (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof any/c) boolean?] any/c)
@@ -458,14 +495,15 @@ EOF
     (debug-state (list state)
                  breakpoints
                  (if file-does-exist
-                   (load-source-map file-name)
-                   (hash))
+                     (load-source-map file-name)
+                     (hash))
                  (if (emacs-capabilities-output capabilities)
                      6510-debugger--print-string
                      debugger-output-function)
                  (dict-ref interactor 'prompter debugger--assembler-prompter)
                  (dict-ref interactor 'dispatcher dispatch-debugger-command)
-                 (dict-ref interactor 'pre-prompter debugger--assembler-pre-prompter)))
+                 (dict-ref interactor 'pre-prompter debugger--assembler-pre-prompter)
+                 (list)))
 
   (when file-does-exist
     (run-debugger--prepare-emacs-integration capabilities file-name d-state))

@@ -27,6 +27,8 @@
                   run-debugger-on
                   dispatch-debugger-command
                   debugger--run
+                  push-debugger-interactor
+                  debugger--assembler-interactor
                   debugger--push-breakpoint
                   debugger--remove-breakpoints))
 (require (only-in "../tools/6510-debugger-shared.rkt" debug-state-states breakpoint))
@@ -127,6 +129,7 @@
                             "so       step over the current bc (even calls)"
                             "sa adr   stop at bytecode at the given adr (not implemented)"
                             "sab byte stop at the given bytecode (not implemented)"
+                            "dive     push assembler interactor"
                             "^        (prefix) pass the following commands to the assembly debugger"))
   d-state)
 
@@ -182,6 +185,7 @@
     (define pl-regex #px"^pl ([[:xdigit:]])$")
     (define pml-regex #px"^pml ([[:xdigit:]]*)$")
     (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
+          [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
           [(string=? command "pp") (debugger--disassemble-lines d-state) d-state]
           [(string=? command "ps") (begin (for-each (lambda (str) (displayln str)) (vm-stack->strings c-state)) d-state)]
           [(string=? command "pt") (begin (displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
