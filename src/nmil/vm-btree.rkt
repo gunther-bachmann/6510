@@ -58,6 +58,7 @@ TODOS:
                   bc
                   FALSE_P_BRANCH
                   TRUE_P_BRANCH
+                  INT_GREATER_P
                   CONS_PAIR_P
                   TRUE_P_RET
                   INT_P
@@ -273,8 +274,8 @@ TODOS:
 
   (check-equal? (vm-stack->strings btree-node-p2-state)
                 (list "stack holds 1 item"
-                      "cell-int $0001  (rt)")
-                "cdr of the btree root is NIL => result is true (which is int 1)"))
+                      "cell-int $0000  (rt)")
+                "cdr of the btree root is NIL => result is false (which is int 0)"))
 
 ;; (define (btree-validate node (print-error #f))
 ;;   (define is-pair-or-value (or (btree-node? node) (btree-value? node)))
@@ -401,3 +402,219 @@ TODOS:
   (check-equal? (memory-list btree-validate3-state (add1 ZP_VM_PC) (add1 ZP_VM_PC))
                 (list #x8f)
                 "program counter on other page => validation failed (bytes are not allowed, yet)"))
+
+;; (define (btree-depth node (right-list (list)) (depth 0) (max-depth 0))
+;;   (cond [(and (not (pair? node))
+;;             (empty? right-list))
+;;          (max depth max-depth)]
+;;         [(not (pair? node))
+;;          (btree-depth (caar right-list) (cdr right-list) (cdar right-list) (max depth max-depth))]
+;;         [else
+;;          (define l (car node))
+;;          (define r (cdr node))
+;;          (btree-depth l (cons (cons r (add1 depth)) right-list) (add1 depth) max-depth)]))
+
+;; possible optimizations:
+;;   bytecode for INT_MAX (save ~13 bytes)
+;;   bytecode for CAAR (save 1 byte)
+;;   bytecode for CDAR (save 1 byte)
+;;   bytecode for INT_INC (save 1 byte)
+(define BTREE_DEPTH
+  (list
+   (label BTREE_DEPTH)
+          (byte 4) ;;# of locals
+          (bc WRITE_TO_LOCAL_0) ;; local0 <- node
+          (bc CONS_PAIR_P)
+          (bc TRUE_P_BRANCH) (byte 33) ;; jump to else
+          (bc WRITE_TO_LOCAL_1)        ;; local1 <- right list
+          (bc NIL?)
+          (bc FALSE_P_BRANCH) (byte 10);; jump to (not (pair? node)) case
+
+    ;;   [(and (not (pair? node))
+    ;;             (empty? right-list))
+    ;;          (max depth max-depth)]
+          (bc POP_TO_LOCAL_0)          ;; local0 <- depth
+          (bc WRITE_TO_LOCAL_1)        ;; local1 <- max-depth
+          (bc PUSH_LOCAL_0)
+          (bc INT_GREATER_P)           ;; depth > max-depth
+          (bc TRUE_P_BRANCH) (byte 2)  ;; jump to return depth
+          (bc PUSH_LOCAL_1)            ;; return max-depth
+          (bc RET)
+          (bc PUSH_LOCAL_0)            ;; return depth
+          (bc RET)
+
+   ;;     [(not (pair? node))  
+   ;;      (btree-depth (caar right-list) (cdr right-list) (cdar right-list) (max depth max-depth))]
+          (bc POP_TO_LOCAL_2)          ;; local0 <- depth
+          (bc WRITE_TO_LOCAL_3)        ;; local1 <- max-depth
+          (bc PUSH_LOCAL_2)
+          (bc INT_GREATER_P)           ;; depth > max-depth
+          (bc TRUE_P_BRANCH) (byte 3)  ;; jump to return depth
+          (bc PUSH_LOCAL_3)            ;; max-depth = max-depth
+          (bc GOTO) (byte 1)
+          (bc PUSH_LOCAL_2)            ;; max-depth = depth
+
+          (bc PUSH_LOCAL_1)            ;; right-list
+          (bc CAR)                     ;; optimization: write to local_2 (is not needed anymore)
+          (bc CDR)
+          
+          (bc PUSH_LOCAL_1)
+          (bc CDR)
+
+          (bc PUSH_LOCAL_1)            ;; optimization: push local_2
+          (bc CAR)
+          (bc CAR)
+          (bc TAIL_CALL)
+
+   ;;     [else
+   ;;          (define l (car node))
+   ;;          (define r (cdr node))
+   ;;          (btree-depth l (cons (cons r (add1 depth)) right-list) (add1 depth) max-depth)]))
+   ;;                                 ;; stack currently: [right-list :: depth :: max-depth]
+          (bc POP_TO_LOCAL_1)         ;; local1 = right-list
+          (bc PUSH_INT_1)
+          (bc INT+)
+          (bc WRITE_TO_LOCAL_2)       ;; local2 = depth +1
+          (bc PUSH_LOCAL_1)           ;; [right-list :: depth+1 :: max-depth]
+          (bc PUSH_LOCAL_2)           ;; [depth+1 :: right-list :: depth+1 :: max-depth]
+          (bc PUSH_LOCAL_0)           ;; [node :: depth+1 :: right-list :: depth+1 :: max-depth]
+          (bc CDR)                    ;; [right :: depth+1 :: right-list :: depth+1 :: max-depth]
+          (bc CONS)                   ;; [(right . depth+1) :: right-list :: depth+1 :: max-depth]
+          (bc CONS)                   ;; [((right . depth+1) . right-list) :: depth+1 :: max-depth]
+          (bc PUSH_LOCAL_0)           ;; [node :: ((right . depth+1) . right-list) :: depth+1 :: max-depth]
+          (bc CAR)                    ;; [left :: ((right . depth+1) . right-list) :: depth+1 :: max-depth]
+          (bc TAIL_CALL)))
+
+
+(module+ test #| btree depth |#
+  (define btree-depth-1-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0)
+       (bc PUSH_INT_0)
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc CALL) (word-ref BTREE_DEPTH)
+       (bc BRK))
+      BTREE_MAKE_ROOT
+      BTREE_DEPTH)
+     ))
+
+  (check-equal? (vm-regt->string btree-depth-1-state)
+                "cell-int $0001")
+
+  (define btree-depth-2-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0)
+       (bc PUSH_INT_0)
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc CALL) (word-ref BTREE_DEPTH)
+       (bc BRK))
+      BTREE_MAKE_ROOT
+      BTREE_DEPTH)
+    ))
+
+  (check-equal? (vm-regt->string btree-depth-2-state)
+                "cell-int $0002")
+
+  (define btree-depth-3-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0)
+       (bc PUSH_INT_0)
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CALL) (word-ref BTREE_DEPTH)
+       (bc BRK))
+      BTREE_MAKE_ROOT
+      BTREE_DEPTH)
+    ))
+
+  (check-equal? (vm-regt->string btree-depth-3-state)
+                "cell-int $0003")
+
+  (define btree-depth-5-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0)
+       (bc PUSH_INT_0)
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;-> o
+       (bc PUSH_INT_1)                          ;;  / \
+       (bc SWAP)                                ;; 2  nil
+       (bc CONS)                                ;;            ->o
+       (bc CALL) (word-ref BTREE_DEPTH)         ;;            /   \    
+       (bc BRK))                                ;;           o     1                 
+      BTREE_MAKE_ROOT                           ;;          / \                      
+      BTREE_DEPTH)                              ;;          2  nil                   
+    ))                                          ;;                    
+                                                ;;                    
+  (check-equal? (vm-regt->string btree-depth-5-state)
+                "cell-int $0002")
+
+  (define btree-depth-4-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0)
+       (bc PUSH_INT_0)
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;-> o
+       (bc PUSH_INT_1)                          ;;  / \
+       (bc SWAP)                                ;; 2  nil
+       (bc CONS)                                ;;             ->o
+       (bc PUSH_INT_0)                          ;;             /   \
+       (bc SWAP)                                ;;            o     1
+       (bc CONS)                                ;;           / \                 o
+       (bc CALL) (word-ref BTREE_DEPTH)         ;;          2  nil             /   \
+       (bc BRK))                                ;;                            o     0 
+      BTREE_MAKE_ROOT                           ;;                          /   \
+      BTREE_DEPTH)                              ;;                         o     1
+    ))                                          ;;                        / \
+                                                ;;                       2  nil
+
+  (check-equal? (vm-regt->string btree-depth-4-state)
+                "cell-int $0003")
+
+
+  (define btree-depth-6-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0)
+       (bc PUSH_INT_0)
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;-> o
+       (bc PUSH_INT_1)                          ;;  / \
+       (bc SWAP)                                ;; 2  nil
+       (bc CONS)                                ;;             ->o
+       (bc PUSH_INT_0)                          ;;             /   \
+       ;; (bc SWAP)                             ;;            o     1
+       (bc CONS)                                ;;           / \        -> o
+       (bc CALL) (word-ref BTREE_DEPTH)         ;;          2  nil       /   \ 
+       (bc BRK))                                ;;                      0     o     
+      BTREE_MAKE_ROOT                           ;;                          /   \
+      BTREE_DEPTH)                              ;;                         o     1
+    ))                                          ;;                        / \
+                                                ;;                       2  nil
+
+   (check-equal? (vm-regt->string btree-depth-6-state)
+                   "cell-int $0003"))

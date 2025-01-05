@@ -129,16 +129,16 @@ invariants:
 (module+ test #| |#
   (check-true (btree-validate (btree-make-root 1) #t)))
 
-(define (btree-depth node (depth 0) (right-list (list)) (max-depth 0))
+(define (btree-depth node (right-list (list)) (depth 0) (max-depth 0))
   (cond [(and (not (pair? node))
             (empty? right-list))
          (max depth max-depth)]
         [(not (pair? node))
-         (btree-depth (caar right-list) (cdar right-list) (cdr right-list) (max depth max-depth))]
+         (btree-depth (caar right-list) (cdr right-list) (cdar right-list) (max depth max-depth))]
         [else
          (define l (car node))
          (define r (cdr node))
-         (btree-depth l (add1 depth) (cons (cons r (add1 depth)) right-list) max-depth)]))
+         (btree-depth l (cons (cons r (add1 depth)) right-list) (add1 depth) max-depth)]))
 
 (module+ test #| btree-depth |#
   (check-equal? (btree-depth "1")

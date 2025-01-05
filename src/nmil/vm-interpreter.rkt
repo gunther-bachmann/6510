@@ -121,14 +121,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                     sPUSH_PARAMc
                     sNIL?-RET-PARAMc))
 
-  (define (wrap-bytecode-for-test bc)
+  (define (wrap-bytecode-for-test bc-to-wrap)
     (append (list (org #x7000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_INITIALIZE_CALL_FRAME)
                   (JSR VM_INTERPRETER_INIT)
                   (JMP VM_INTERPRETER))
             (list (org #x8000))
-            bc
+            bc-to-wrap
+            (list (bc BRK))
             (list (org #xc000))
             vm-interpreter))
 
@@ -154,6 +155,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          bc
          TRUE_P_BRANCH
          FALSE_P_BRANCH
+         INT_GREATER_P
          PUSH_INT_0
          PUSH_INT_1
          PUSH_INT_2
@@ -512,6 +514,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
              (bc PUSH_INT_0)
              (bc CALL) (byte 00) (byte $8f)
+             (bc BRK)
 
              (org #x8F00)
       (label TEST_FUN)     
@@ -539,6 +542,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc PUSH_INT_0)
              (bc PUSH_INT_m1)
              (bc CALL) (byte 00) (byte $8f)
+             (bc BRK) 
 
              (org #x8F00)
       (label TEST_FUN)      
@@ -567,6 +571,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc PUSH_INT_0)
              (bc PUSH_INT_m1)
              (bc CALL) (byte 00) (byte $8f)
+             (bc BRK)
 
              (org #x8F00)
       (label TEST_FUN)    
@@ -1002,9 +1007,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BRK))))
 
   (define (bc-int-plus-expectation state c)
-    (skip (check-equal? (vm-stack->strings state)
-                        (list "stack holds 1 item"
-                              (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c)))))))
+    (check-equal? (vm-stack->strings state)
+                  (list "stack holds 1 item"
+                        (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
  
   ;; Execute this test only, if major change to int + have been done
   ;; (define _run-bc-int-plus-tests
@@ -1229,6 +1234,102 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| swap |#
   (skip (check-equal? #t #f "implement")))
 
+(define INT_GREATER_P #x63)
+(define BC_INT_GREATER_P
+  (list
+   (label BC_INT_GREATER_P)
+          (LDA ZP_RT)
+          (STA ZP_TEMP)
+          (LDA ZP_RT+1)
+          (STA ZP_TEMP2)
+          (JSR VM_CELL_STACK_POP_R)
+          (LDA ZP_RT)
+          (CMP ZP_TEMP)
+          (BMI GREATER__BC_INT_GREATER_P)
+          (BNE LESS_OR_EQUAL__BC_INT_GREATER_P)
+          (LDA ZP_RT+1)
+          (CMP ZP_TEMP+1)
+          (BMI GREATER__BC_INT_GREATER_P)
+   (label LESS_OR_EQUAL__BC_INT_GREATER_P)
+          (JSR VM_WRITE_INT0_TO_RT)
+          (JMP VM_INTERPRETER_INC_PC)
+    (label GREATER__BC_INT_GREATER_P)
+          (JSR VM_WRITE_INT1_TO_RT)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| INT GREATER? |#
+  (define int-greater-0>-1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_m1)
+      (bc PUSH_INT_0)
+      (bc INT_GREATER_P))
+     ))
+
+  (skip (check-equal? (vm-regt->string int-greater-0>-1-state)
+                      "cell-int $0001"
+                      "comparison of negative with positive number (failing currently)"))
+
+  (define int-greater-0>0-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc PUSH_INT_0)
+      (bc INT_GREATER_P))))
+
+  (check-equal? (vm-regt->string int-greater-0>0-state)
+                "cell-int $0000")
+
+  (define int-greater-1>1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_1)
+      (bc INT_GREATER_P))))
+
+  (check-equal? (vm-regt->string int-greater-1>1-state)
+                "cell-int $0000")
+
+  (define int-greater-2>2-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_2)
+      (bc PUSH_INT_2)
+      (bc INT_GREATER_P))))
+
+  (check-equal? (vm-regt->string int-greater-2>2-state)
+                "cell-int $0000")
+
+  (define int-greater-2>1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_2)
+      (bc INT_GREATER_P))))
+
+  (check-equal? (vm-regt->string int-greater-2>1-state)
+                "cell-int $0001")
+
+  (define int-greater-1>0-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc PUSH_INT_1)
+      (bc INT_GREATER_P))))
+
+  (check-equal? (vm-regt->string int-greater-1>0-state)
+                "cell-int $0001")
+
+    (define int-greater-0>1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_0)
+      (bc INT_GREATER_P))))
+
+  (check-equal? (vm-regt->string int-greater-0>1-state)
+                "cell-int $0000"))
+
 (define INT_P #x07)
 (define BC_INT_P
   (list
@@ -1267,6 +1368,20 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (BNE POP_AND_CONTINUE__BC_TRUE_P_BRANCH)
           (BEQ BRANCH__BC_TRUE_P_BRANCH)))
 
+(define BC_GOTO
+  (list
+   (label BC_GOTO)
+          (LDY !$01)
+          (LDA (ZP_VM_PC),y)
+          (CLC)
+          (ADC ZP_VM_PC)
+          (ADC !$02)
+          (STA ZP_VM_PC)
+          (BCC NO_PAGE_CHANGE__BC_GOTO)
+          (INC ZP_VM_PC+1)
+   (label NO_PAGE_CHANGE__BC_GOTO)
+          (JMP VM_INTERPRETER)))
+
 (define TRUE_P_BRANCH #x0c)
 (define BC_TRUE_P_BRANCH
   (list
@@ -1300,9 +1415,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA ZP_RT)
           (LDX !$03) ;; low byte of int (for bool)
           (STX ZP_RT)
+          (CMP !$01)
+          (BEQ IS_NO_PAIR_SINCE_NIL__BC_CONS_PAIR_P)
           (AND !$03)
           (CMP !$01)
           (BEQ IS_PAIR__BC_CONS_PAIR_P)
+   (label IS_NO_PAIR_SINCE_NIL__BC_CONS_PAIR_P)
           (LDA !$00)
    (label IS_PAIR__BC_CONS_PAIR_P)
           (STA ZP_RT+1)
@@ -1380,7 +1498,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 5e  <-  2f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 60  <-  b0..b7 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 62  <-  31 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 64  <-  32 reserved
+           (word-ref BC_GOTO)                     ;; 64  <-  32 
            (word-ref BC_RET)                      ;; 66  <-  33 
            (word-ref BC_CALL)                     ;; 68  <-  34 
            (word-ref BC_TAIL_CALL)                ;; 6a  <-  35 
@@ -1429,7 +1547,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; c0  <-  e0..e7 reserved
            (word-ref BC_INT_MINUS)                ;; c2  <-  61
            (word-ref BC_INT_PLUS)                 ;; c4  <-  62
-           (word-ref VM_INTERPRETER_INC_PC)       ;; c6  <-  63 reserved
+           (word-ref BC_INT_GREATER_P)            ;; c6  <-  63 
            (word-ref VM_INTERPRETER_INC_PC)       ;; c8  <-  64 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ca  <-  65 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; cc  <-  66 reserved
@@ -1510,12 +1628,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INT_PLUS
           BC_INT_MINUS
           BC_INT_P
+          BC_INT_GREATER_P
           BC_TAIL_CALL
           BC_SWAP
           BC_TRUE_P_RET
           BC_CONS_PAIR_P
           BC_TRUE_P_BRANCH
           BC_FALSE_P_BRANCH
+          BC_GOTO
           VM_INTERPRETER
           (list (label END__INTERPRETER))
           (list (org-align #x100)) ;; align to next page

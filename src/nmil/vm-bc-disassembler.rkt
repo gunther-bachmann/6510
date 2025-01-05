@@ -7,8 +7,12 @@
 
 ;; get count of bytes belonging to the given bc command
 (define (disassembler-byte-code--byte-count bc)
-  (cond [(memq bc (list #x34 #x06)) 3] ;; call, push int
-        [(memq bc (list #x0c #x0d #x05)) 2] ;; branch on true, branch on false, push byte
+  (cond [(memq bc (list #x34                ;; call
+                        #x06)) 3]           ;; push int
+        [(memq bc (list #x0c                ;; branch on true, 
+                        #x0d                ;; branch on false,
+                        #x32                ;; goto
+                        #x05)) 2]           ;; push byte
         [else 1]))
 
 ;; return disassembled string for bc (and byte 1, byte 2 thereafter)
@@ -44,6 +48,7 @@
          (format "nil? ret param #~a" n)
          (format "nil? ret local #~a" n))]
     [(= byte-code-t2 #x42) "nil?"]
+    [(= byte-code-t2 #x64) (format "goto $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x66) "return"]
     [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (bytes->int (+ 1 bc_p1) bc_p2)))] ;; add 2 because byte code starts there
     [(= byte-code-t2 #x6a) "tail call"]
@@ -60,4 +65,6 @@
     [(= byte-code-t2 #x82) "cdr"]
     [(= byte-code-t2 #x84) "cons"]
     [(= byte-code-t2 #x86) "car"]
+    [(= byte-code-t2 #xc4) "int +"]
+    [(= byte-code-t2 #xc6) "int > ?"]
     [else "unknown bc"]))
