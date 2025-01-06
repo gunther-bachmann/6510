@@ -56,6 +56,8 @@ TODOS:
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  EXT
+                  MAX_INT
                   FALSE_P_BRANCH
                   TRUE_P_BRANCH
                   INT_GREATER_P
@@ -422,37 +424,25 @@ TODOS:
 (define BTREE_DEPTH
   (list
    (label BTREE_DEPTH)
-          (byte 4) ;;# of locals
+          (byte 3) ;;# of locals
           (bc WRITE_TO_LOCAL_0) ;; local0 <- node
           (bc CONS_PAIR_P)
-          (bc TRUE_P_BRANCH) (byte 33) ;; jump to else
+          (bc TRUE_P_BRANCH) (byte 18) ;; jump to else
           (bc WRITE_TO_LOCAL_1)        ;; local1 <- right list
           (bc NIL?)
-          (bc FALSE_P_BRANCH) (byte 10);; jump to (not (pair? node)) case
+          (bc FALSE_P_BRANCH) (byte 3);; jump to (not (pair? node)) case
 
     ;;   [(and (not (pair? node))
     ;;             (empty? right-list))
     ;;          (max depth max-depth)]
-          (bc POP_TO_LOCAL_0)          ;; local0 <- depth
-          (bc WRITE_TO_LOCAL_1)        ;; local1 <- max-depth
-          (bc PUSH_LOCAL_0)
-          (bc INT_GREATER_P)           ;; depth > max-depth
-          (bc TRUE_P_BRANCH) (byte 2)  ;; jump to return depth
-          (bc PUSH_LOCAL_1)            ;; return max-depth
-          (bc RET)
-          (bc PUSH_LOCAL_0)            ;; return depth
+          (bc EXT)
+          (bc MAX_INT)
           (bc RET)
 
    ;;     [(not (pair? node))  
    ;;      (btree-depth (caar right-list) (cdr right-list) (cdar right-list) (max depth max-depth))]
-          (bc POP_TO_LOCAL_2)          ;; local0 <- depth
-          (bc WRITE_TO_LOCAL_3)        ;; local1 <- max-depth
-          (bc PUSH_LOCAL_2)
-          (bc INT_GREATER_P)           ;; depth > max-depth
-          (bc TRUE_P_BRANCH) (byte 3)  ;; jump to return depth
-          (bc PUSH_LOCAL_3)            ;; max-depth = max-depth
-          (bc GOTO) (byte 1)
-          (bc PUSH_LOCAL_2)            ;; max-depth = depth
+          (bc EXT)
+          (bc MAX_INT)
 
           (bc PUSH_LOCAL_1)            ;; right-list
           (bc CAR)                     ;; optimization: write to local_2 (is not needed anymore)

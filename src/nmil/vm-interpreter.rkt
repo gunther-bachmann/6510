@@ -153,6 +153,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         EXT
+         MAX_INT
          TRUE_P_BRANCH
          FALSE_P_BRANCH
          INT_GREATER_P
@@ -1430,6 +1432,90 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "cell-pair-ptr NIL  (rt)")))
 
+(define MAX_INT #x01)
+(define BC_MAX_INT
+  (list
+   (label BC_MAX_INT)
+          (LDY ZP_CELL_STACK_TOS)
+
+          ;; compare high byte of int (which is lb)
+          (LDA (ZP_CELL_STACK_LB_PTR),y)
+          (CMP ZP_RT)
+          (BNE NO_OTHER_COMPARE__BC_MAX_INT) ;; already different => no need to compare low byte
+
+          ;; compare low byte of int (which is hb)
+          (LDA (ZP_CELL_STACK_HB_PTR),y)
+          (CMP ZP_RT+1)
+
+   (label NO_OTHER_COMPARE__BC_MAX_INT)
+          (BMI KEEP_RT__BC_MAX_INT)
+
+          (JSR VM_CELL_STACK_POP_R)     ;; pop RT and move TOS into RT
+          (CLC)
+          (BCC AND_RETURN__BC_MAX_INT)
+
+    (label KEEP_RT__BC_MAX_INT)
+          (DEC ZP_CELL_STACK_TOS) ;; just pop but keep RT
+    (label AND_RETURN__BC_MAX_INT)
+          (LDA !$02)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+
+(define VM_INTERPRETER_OPTABLE_EXT1_LB
+  (flatten
+   (list
+    (label VM_INTERPRETER_OPTABLE_EXT1_LB)
+           (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00
+           (byte-ref <BC_MAX_INT)                ;; 01
+           )))
+
+(define VM_INTERPRETER_OPTABLE_EXT1_HB
+  (flatten
+   (list
+    (label VM_INTERPRETER_OPTABLE_EXT1_HB)
+           (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00
+           (byte-ref >BC_MAX_INT)                ;; 01
+           )))
+
+(define EXT #x04)
+(define BC_EXT1_CMD
+  (list
+   (label BC_EXT1_CMD)
+          (INY)
+          (LDA (ZP_VM_PC),y)
+          (TAY)
+          (LDA VM_INTERPRETER_OPTABLE_EXT1_LB,y)
+          (STA CALL_COMMAND__BC_EXT1_CMD+1)
+          (LDA VM_INTERPRETER_OPTABLE_EXT1_HB,y)
+          (STA CALL_COMMAND__BC_EXT1_CMD+2)
+   (label CALL_COMMAND__BC_EXT1_CMD)
+          (JMP $cf00)))
+
+
+(module+ test #| ext max-int |#
+  (define max-int-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_2)
+      (bc PUSH_INT_1)
+      (bc EXT)
+      (bc MAX_INT))))
+
+  (check-equal? (vm-stack->strings max-int-state)
+                (list "stack holds 1 item"
+                      "cell-int $0002  (rt)"))
+
+  (define max-int-2-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_2)
+      (bc EXT)
+      (bc MAX_INT))))
+
+  (check-equal? (vm-stack->strings max-int-2-state)
+                (list "stack holds 1 item"
+                      "cell-int $0002  (rt)")))
+
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
@@ -1439,7 +1525,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 02  <-  01 effectively NOP
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
            (word-ref BC_SWAP)                     ;; 06  <-  03 
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 08  <-  04 reserved
+           (word-ref BC_EXT1_CMD)                 ;; 08  <-  04 
            (word-ref BC_PUSH_CONST_BYTE)          ;; 0a  <-  05 
            (word-ref BC_PUSH_CONST_INT)           ;; 0c  <-  06
            (word-ref BC_INT_P)                    ;; 0e  <-  07 
@@ -1630,9 +1716,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_CONS_PAIR_P
           BC_TRUE_P_BRANCH
           BC_FALSE_P_BRANCH
+          BC_MAX_INT
           BC_GOTO
+          BC_EXT1_CMD
           VM_INTERPRETER
           (list (label END__INTERPRETER))
+          VM_INTERPRETER_OPTABLE_EXT1_HB
+          VM_INTERPRETER_OPTABLE_EXT1_LB
           (list (org-align #x100)) ;; align to next page
           VM_INTERPRETER_OPTABLE
           (list (label END__INTERPRETER_DATA))
