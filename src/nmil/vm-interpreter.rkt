@@ -165,6 +165,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_INT_m1
          CONS_PAIR_P
          TRUE_P_RET
+         FALSE_P_RET
          INT_P
          SWAP
          POP_TO_LOCAL_0
@@ -1337,15 +1338,30 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| int? |#
   (skip (check-equal? #t #f "implement")))
 
+(define FALSE_P_RET #x0e)
+(define BC_FALSE_P_RET
+  (list
+   (label BC_FALSE_P_RET)
+          (LDA ZP_RT+1)
+          (BNE IS_TRUE__BC_FALSE_P_RET)
+          (JSR VM_CELL_STACK_POP_R)
+          (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
+          (JMP VM_INTERPRETER)
+   (label IS_TRUE__BC_FALSE_P_RET)
+          (JSR VM_CELL_STACK_POP_R)
+          (JMP VM_INTERPRETER_INC_PC)))
+
 (define TRUE_P_RET #x0b)
 (define BC_TRUE_P_RET
   (list
    (label BC_TRUE_P_RET)
           (LDA ZP_RT+1)
           (BEQ IS_FALSE__BC_TRUE_P_RET)
+          (JSR VM_CELL_STACK_POP_R)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_FALSE__BC_TRUE_P_RET)
+          (JSR VM_CELL_STACK_POP_R)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define FALSE_P_BRANCH #x0d)
@@ -1599,7 +1615,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_TRUE_P_RET)               ;; 16  <-  0b 
            (word-ref BC_TRUE_P_BRANCH)            ;; 18  <-  0c
            (word-ref BC_FALSE_P_BRANCH)           ;; 1a  <-  0d 
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 1c  <-  0e reserved
+           (word-ref BC_FALSE_P_RET)              ;; 1c  <-  0e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1e  <-  0f reserved
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref VM_INTERPRETER_INC_PC)       ;; 22  <-  11 reserved
@@ -1777,6 +1793,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_TAIL_CALL
           BC_SWAP
           BC_TRUE_P_RET
+          BC_FALSE_P_RET
           BC_CONS_PAIR_P
           BC_TRUE_P_BRANCH
           BC_FALSE_P_BRANCH

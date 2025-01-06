@@ -64,6 +64,7 @@ TODOS:
                   INT_GREATER_P
                   CONS_PAIR_P
                   TRUE_P_RET
+                  FALSE_P_RET
                   INT_P
                   SWAP
                   POP_TO_LOCAL_0
@@ -181,12 +182,8 @@ TODOS:
 (define BTREE_VALUE_P
   (list
    (label BTREE_VALUE_P)
-          (byte 1)   ;; local
-          (bc WRITE_TO_LOCAL_0)
+          (byte 0)   ;; local
           (bc INT_P)
-          (bc TRUE_P_RET) ;; or (bc TRUE_P_BRANCH +3) ;; <- to RET
-          ;; (bc PUSH_LOCAL_0) ;; currently only int (later maybe strings)
-          ;; (bc STRING_P)
           (bc RET)))
 
 (module+ test #| value? |#
@@ -617,17 +614,15 @@ TODOS:
           (byte 1)
           (bc WRITE_TO_LOCAL_0)                 ;; local0 = node
           (bc CALL) (word-ref BTREE_VALUE_P)
-          (bc FALSE_P_BRANCH) (byte 1)
-   ;; [(btree-value? node) path]
-          (bc RET)
+          (bc TRUE_P_RET)  ;; [(btree-value? node) path]
 
    ;; [else (btree-path-to-first (car node) (cons (cons -1 node) path))]))
           (bc PUSH_LOCAL_0)                     ;; node :: path
-          (bc PUSH_INT_m1)                      ;; -1 :: node :: path
-          (bc CONS)                             ;; (-1 . node) :: path
-          (bc CONS)                             ;; ((-1 . node) . path)
-          (bc PUSH_LOCAL_0)                     ;; node :: ((-1 . node) . path)
-          (bc CAR)                              ;; (car node) :: ((-1 . node) . path)
+          (bc PUSH_INT_0)                       ;; 0 :: node :: path
+          (bc CONS)                             ;; (0 . node) :: path
+          (bc CONS)                             ;; ((0 . node) . path)
+          (bc PUSH_LOCAL_0)                     ;; node :: ((0 . node) . path)
+          (bc CAR)                              ;; (car node) :: ((0 . node) . path)
           (bc TAIL_CALL)))
 
 (module+ test #| path to first |#
@@ -648,8 +643,8 @@ TODOS:
   (check-equal? (regexp-replace*
                  "pair-ptr (\\$[0-9A-Fa-f]*)?"
                  (vm-regt->string path-to-first-0-state #t) "")
-                "((int $1fff . (int $0002 . NIL)) . NIL)"
-                "result is a path to the node with value 2: ((-1 . (2 . NIL)))")
+                "((int $0000 . (int $0002 . NIL)) . NIL)"
+                "result is a path to the node with value 2: ((0 . (2 . NIL)))")
 
   (define path-to-first-1-state
     (run-bc-wrapped-in-test
@@ -673,8 +668,8 @@ TODOS:
   (check-equal? (regexp-replace*
                  "pair-ptr (\\$[0-9A-Fa-f]*)?"
                  (vm-regt->string path-to-first-1-state #t) "")
-                "((int $1fff . (int $0000 . ((int $0002 . NIL) . int $0001))) . NIL)"
-                "result is a path to the node with value 1: ((-1 . (1 . ((2 . nil) . 1))"))
+                "((int $0000 . (int $0000 . ((int $0002 . NIL) . int $0001))) . NIL)"
+                "result is a path to the node with value 1: ((0 . (1 . ((2 . nil) . 1))"))
 
 
 ;; (define (btree-path-to-last  node (path (list)))
@@ -686,11 +681,8 @@ TODOS:
    (label BTREE_PATH_TO_LAST)
           (byte 1)
           (bc WRITE_TO_LOCAL_0)             ;; local0 = node
-          (bc CALL) (word-ref BTREE_VALUE_P)
-          (bc FALSE_P_BRANCH) (byte 1)
-
-    ;;     [(btree-value? node) path]
-          (bc RET)
+          (bc CALL) (word-ref BTREE_VALUE_P) ;; 
+          (bc TRUE_P_RET)                   ;;     [(btree-value? node) path]
 
     ;;     [(empty? (cdr node)) (btree-path-to-last (car node) (cons (cons -1 node) path))]
           (bc PUSH_LOCAL_0)
@@ -699,7 +691,7 @@ TODOS:
           (bc FALSE_P_BRANCH) (byte 7)
 
           (bc PUSH_LOCAL_0)
-          (bc PUSH_INT_m1)
+          (bc PUSH_INT_0)
           (bc CONS)
           (bc CONS)
           (bc PUSH_LOCAL_0)
@@ -735,7 +727,7 @@ TODOS:
                  "pair-ptr (\\$[0-9A-Fa-f]*)?"
                  (vm-regt->string path-to-last-0-state #t)
                  "")
-                "((int $1fff . (int $0002 . NIL)) . NIL)")
+                "((int $0000 . (int $0002 . NIL)) . NIL)")
 
   (define path-to-last-1-state
     (run-bc-wrapped-in-test
@@ -761,8 +753,8 @@ TODOS:
                    (vm-regt->string path-to-last-1-state #t)
                    "")
                 (string-append
-                 "((int $1fff . (int $0002 . NIL))"
-                 " . ((int $1fff . ((int $0002 . NIL) . NIL))"
+                 "((int $0000 . (int $0002 . NIL))"
+                 " . ((int $0000 . ((int $0002 . NIL) . NIL))"
                  " . ((int $0001 . (int $0000 . ((int $0002 . NIL) . NIL)))"
                  " . NIL)))"))
 

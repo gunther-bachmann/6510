@@ -3560,6 +3560,13 @@ this will include the implementation of
   - [X] single step
   - [X] run to next call/return
   - [X] step over call
+**** optimize byte code
+- cadr cdar caar cddr :: could be put into a fast instruction
+- [X] true?-ret false?-ret :: combine true?-branch ret, false?-branch ret
+- conons :: two conses ?
+- move inc_​int, max_​int into single byte opcodes
+- push_​local_​n_​car, push_​local_​n_​cdr :: push and car or cdr
+- nil?_​branch, not_​nil?_​branch :: branch on (not) nil
 **** enhance debugger
 - [ ] make inspection routines fail safe (ignore exceptions)
 - [X] switch from/to bc/assembler debugger

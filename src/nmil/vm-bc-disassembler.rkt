@@ -44,6 +44,7 @@
      (format "branch on true? by $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x1a)
      (format "branch on false? by $~a" (format-hex-byte bc_p1))]
+    [(= byte-code-t2 #x1c) "ret on false?"]
     [(= byte-code-t2 #x20)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
