@@ -32,6 +32,7 @@
     [(= byte-code-t2 #x08)
      (cond
        [(= bc_p1 #x01) "x max int"]
+       [(= bc_p1 #x02) "x inc int"]
        [else "x unknown"])]
     [(= byte-code-t2 #x0a) (format "push byte $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x0c) (format "push int $~a" (format-hex-word (bytes->int bc_p1 bc_p2)))]

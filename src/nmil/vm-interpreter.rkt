@@ -155,6 +155,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          bc
          EXT
          MAX_INT
+         INC_INT
          TRUE_P_BRANCH
          FALSE_P_BRANCH
          INT_GREATER_P
@@ -940,10 +941,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_PUSH_CONST_INT
   (list
    (label BC_PUSH_CONST_INT)
-          (LDY !$01)                             ;; index 1 past the byte code itself
+          (LDY !$02)                             ;; index 1 past the byte code itself
           (LDA (ZP_VM_PC),y)                     ;; load high byte of int (not encoded)
           (TAX)                                  ;; -> X
-          (INY)                                  ;; index 2 past the byte code
+          (DEY)                                  ;; index 2 past the byte code
           (LDA (ZP_VM_PC),y)                     ;; load low byte of int  -> A
           (JSR VM_CELL_STACK_PUSH_INT_R)         ;; push A/X as int onto stack
           (LDA !$03)                             ;; increment program counter by 3 (bytecode + int)
@@ -953,11 +954,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define use-case-push-int-state-after
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT) (byte #x04 #xf0)
+      (bc PUSH_INT) (byte #xf0 #x04)
       (bc BRK))))
 
-  (check-equal? (memory-list use-case-push-int-state-after ZP_RT (add1 ZP_RT))
-                (list #x13 #xf0))
   (check-equal? (vm-stack->strings use-case-push-int-state-after)
                 (list "stack holds 1 item"
                       "cell-int $04f0  (rt)")))
@@ -1013,8 +1012,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_INT_1)
       (bc PUSH_INT_2)
       (bc INT+)                      ;; byte code for INT_PLUS = 3
-      (bc PUSH_INT) (byte #x04 #xf0) ;; push int #x4f0 (1264)
-      (bc PUSH_INT) (byte #x01 #x1f) ;; push int #x11f (287)
+      (bc PUSH_INT) (byte #xf0 #x04) ;; push int #x4f0 (1264)
+      (bc PUSH_INT) (byte #x1f #x01) ;; push int #x11f (287)
       (bc INT+)                      ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
       (bc PUSH_INT_1)
       (bc PUSH_INT_m1)
@@ -1083,8 +1082,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_INT_1)
       (bc PUSH_INT_2)
       (bc INT-)                      ;; byte code for INT_MINUS = 2 - 1 = 1
-      (bc PUSH_INT) (byte #x04 #xf0) ;; push int #x4f0 (1264)
-      (bc PUSH_INT) (byte #x01 #x1f) ;; push int #x11f (287)
+      (bc PUSH_INT) (byte #xf0 #x04) ;; push int #x4f0 (1264)
+      (bc PUSH_INT) (byte #x1f #x01) ;; push int #x11f (287)
       (bc INT-)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x1c2f)
       (bc PUSH_INT_1)
       (bc PUSH_INT_0)
@@ -1432,7 +1431,70 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "cell-pair-ptr NIL  (rt)")))
 
-(define MAX_INT #x01)
+(define INC_INT #x02) ;; extended (could be mapped to regular byte code, if needed very often!)
+(define BC_INC_INT
+  (list
+   (label BC_INC_INT)
+          (INC ZP_RT+1)
+          (BNE DONE__BC_INC_INT)
+          (INC ZP_RT)
+          (LDA ZP_RT)
+          (ORA !$03)
+          (AND !$7f)
+          (STA ZP_RT)
+   (label DONE__BC_INC_INT)
+          (LDA !$02)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+
+(module+ test #| inc int |#
+  (define inc-int-0-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc EXT)
+      (bc INC_INT))))
+
+  (check-equal? (vm-stack->strings inc-int-0-state)
+                (list "stack holds 1 item"
+                      "cell-int $0001  (rt)"))
+
+  (define inc-int-1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT) (byte 255) (byte 0)
+      (bc EXT)
+      (bc INC_INT))
+     ))
+
+  (check-equal? (vm-stack->strings inc-int-1-state)
+                (list "stack holds 1 item"
+                      "cell-int $0100  (rt)"))
+
+  (define inc-int-2-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_m1)
+      (bc EXT)
+      (bc INC_INT))
+     ))
+
+  (check-equal? (vm-stack->strings inc-int-2-state)
+                (list "stack holds 1 item"
+                      "cell-int $0000  (rt)"))
+
+  (define inc-int-3-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT) (byte 255) (byte 05)
+      (bc EXT)
+      (bc INC_INT))
+     ))
+
+  (check-equal? (vm-stack->strings inc-int-3-state)
+                (list "stack holds 1 item"
+                      "cell-int $0600  (rt)")))
+
+(define MAX_INT #x01) ;; extended
 (define BC_MAX_INT
   (list
    (label BC_MAX_INT)
@@ -1464,16 +1526,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label VM_INTERPRETER_OPTABLE_EXT1_LB)
-           (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00
+           (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
            (byte-ref <BC_MAX_INT)                ;; 01
+           (byte-ref <BC_INC_INT)                ;; 02
            )))
 
 (define VM_INTERPRETER_OPTABLE_EXT1_HB
   (flatten
    (list
     (label VM_INTERPRETER_OPTABLE_EXT1_HB)
-           (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00
+           (byte-ref >VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
            (byte-ref >BC_MAX_INT)                ;; 01
+           (byte-ref >BC_INC_INT)                ;; 02
            )))
 
 (define EXT #x04)
@@ -1719,6 +1783,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_MAX_INT
           BC_GOTO
           BC_EXT1_CMD
+          BC_INC_INT
           VM_INTERPRETER
           (list (label END__INTERPRETER))
           VM_INTERPRETER_OPTABLE_EXT1_HB

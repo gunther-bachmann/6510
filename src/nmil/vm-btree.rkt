@@ -57,6 +57,7 @@ TODOS:
                   vm-interpreter
                   bc
                   EXT
+                  INC_INT
                   MAX_INT
                   FALSE_P_BRANCH
                   TRUE_P_BRANCH
@@ -417,10 +418,8 @@ TODOS:
 ;;          (btree-depth l (cons (cons r (add1 depth)) right-list) (add1 depth) max-depth)]))
 
 ;; possible optimizations:
-;;   bytecode for INT_MAX (save ~13 bytes)
 ;;   bytecode for CAAR (save 1 byte)
 ;;   bytecode for CDAR (save 1 byte)
-;;   bytecode for INT_INC (save 1 byte)
 (define BTREE_DEPTH
   (list
    (label BTREE_DEPTH)
@@ -446,13 +445,13 @@ TODOS:
 
           (bc PUSH_LOCAL_1)            ;; right-list
           (bc CAR)                     ;; optimization: write to local_2 (is not needed anymore)
+          (bc WRITE_TO_LOCAL_2)        ;; remember car of right-list for later
           (bc CDR)
           
           (bc PUSH_LOCAL_1)
           (bc CDR)
 
-          (bc PUSH_LOCAL_1)            ;; optimization: push local_2
-          (bc CAR)
+          (bc PUSH_LOCAL_2)            ;; push car of right-list
           (bc CAR)
           (bc TAIL_CALL)
 
@@ -462,8 +461,8 @@ TODOS:
    ;;          (btree-depth l (cons (cons r (add1 depth)) right-list) (add1 depth) max-depth)]))
    ;;                                 ;; stack currently: [right-list :: depth :: max-depth]
           (bc POP_TO_LOCAL_1)         ;; local1 = right-list
-          (bc PUSH_INT_1)
-          (bc INT+)
+          (bc EXT)
+          (bc INC_INT)
           (bc WRITE_TO_LOCAL_2)       ;; local2 = depth +1
           (bc PUSH_LOCAL_1)           ;; [right-list :: depth+1 :: max-depth]
           (bc PUSH_LOCAL_2)           ;; [depth+1 :: right-list :: depth+1 :: max-depth]
