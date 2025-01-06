@@ -65,7 +65,9 @@
 (require (only-in racket/list flatten take empty? range))
 (require (only-in racket/port open-output-nowhere))
 
-(provide run-bc-wrapped-in-test- vm-next-instruction-bytes)
+(provide run-bc-wrapped-in-test-
+         vm-next-instruction-bytes
+         vm-list->strings)
 
 
 (define (print-list-of-labels label-list label-offsets)

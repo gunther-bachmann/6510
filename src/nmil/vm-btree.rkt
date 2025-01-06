@@ -97,7 +97,7 @@ TODOS:
 (module+ test #|  |#
   (require "../6510-test-utils.rkt")
 
-  (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test-))
+  (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
 
   (require (only-in "./vm-memory-manager.rkt"
@@ -158,7 +158,7 @@ TODOS:
 
   (check-equal? (vm-stack->strings btree-make-root-state)
                   (list "stack holds 1 item"
-                        (format "cell-pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                        (format "pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
 
   (define btree-make-root-2-state
     (run-bc-wrapped-in-test
@@ -174,7 +174,7 @@ TODOS:
 
   (check-equal? (vm-stack->strings btree-make-root-2-state)
                   (list "stack holds 1 item"
-                        "cell-int $0001  (rt)")))
+                        "int $0001  (rt)")))
 
 ;; (define (btree-value? node)
 ;;   (or (string? node) (integer? node)))
@@ -207,7 +207,7 @@ TODOS:
 
   (check-equal? (vm-stack->strings btree-value-p-state)
                 (list "stack holds 1 item"
-                      "cell-int $0001  (rt)")
+                      "int $0001  (rt)")
                 "car of the btree root is the value 2 => result is true (which is int 1)")
 
   (define btree-value-p2-state
@@ -227,7 +227,7 @@ TODOS:
 
   (check-equal? (vm-stack->strings btree-value-p2-state)
                 (list "stack holds 1 item"
-                      "cell-int $0000  (rt)")
+                      "int $0000  (rt)")
                 "cdr of the btree root is NIL => result is false (which is int 0)"))
 
 ;; (define (btree-node? node)
@@ -257,7 +257,7 @@ TODOS:
 
   (check-equal? (vm-stack->strings btree-node-p-state)
                 (list "stack holds 1 item"
-                      "cell-int $0000  (rt)")
+                      "int $0000  (rt)")
                 "car of the btree root is the value 2 => result is false (which is int 0)")
 
   (define btree-node-p2-state
@@ -277,7 +277,7 @@ TODOS:
 
   (check-equal? (vm-stack->strings btree-node-p2-state)
                 (list "stack holds 1 item"
-                      "cell-int $0000  (rt)")
+                      "int $0000  (rt)")
                 "cdr of the btree root is NIL => result is false (which is int 0)"))
 
 ;; (define (btree-validate node (print-error #f))
@@ -492,7 +492,7 @@ TODOS:
      ))
 
   (check-equal? (vm-regt->string btree-depth-1-state)
-                "cell-int $0001")
+                "int $0001")
 
   (define btree-depth-2-state
     (run-bc-wrapped-in-test
@@ -512,7 +512,7 @@ TODOS:
     ))
 
   (check-equal? (vm-regt->string btree-depth-2-state)
-                "cell-int $0002")
+                "int $0002")
 
   (define btree-depth-3-state
     (run-bc-wrapped-in-test
@@ -534,7 +534,7 @@ TODOS:
     ))
 
   (check-equal? (vm-regt->string btree-depth-3-state)
-                "cell-int $0003")
+                "int $0003")
 
   (define btree-depth-5-state
     (run-bc-wrapped-in-test
@@ -555,7 +555,7 @@ TODOS:
     ))                                          ;;                    
                                                 ;;                    
   (check-equal? (vm-regt->string btree-depth-5-state)
-                "cell-int $0002")
+                "int $0002")
 
   (define btree-depth-4-state
     (run-bc-wrapped-in-test
@@ -580,7 +580,7 @@ TODOS:
                                                 ;;                       2  nil
 
   (check-equal? (vm-regt->string btree-depth-4-state)
-                "cell-int $0003")
+                "int $0003")
 
 
   (define btree-depth-6-state
@@ -606,4 +606,72 @@ TODOS:
                                                 ;;                       2  nil
 
    (check-equal? (vm-regt->string btree-depth-6-state)
-                   "cell-int $0003"))
+                   "int $0003"))
+
+;; (define (btree-path-to-first node (path (list)))
+;;   (cond [(btree-value? node) path]
+;;         [else (btree-path-to-first (car node) (cons (cons -1 node) path))]))
+(define BTREE_PATH_TO_FIRST
+  (list
+   (label BTREE_PATH_TO_FIRST)
+          (byte 1)
+          (bc WRITE_TO_LOCAL_0)                 ;; local0 = node
+          (bc CALL) (word-ref BTREE_VALUE_P)
+          (bc FALSE_P_BRANCH) (byte 1)
+   ;; [(btree-value? node) path]
+          (bc RET)
+
+   ;; [else (btree-path-to-first (car node) (cons (cons -1 node) path))]))
+          (bc PUSH_LOCAL_0)                     ;; node :: path
+          (bc PUSH_INT_m1)                      ;; -1 :: node :: path
+          (bc CONS)                             ;; (-1 . node) :: path
+          (bc CONS)                             ;; ((-1 . node) . path)
+          (bc PUSH_LOCAL_0)                     ;; node :: ((-1 . node) . path)
+          (bc CAR)                              ;; (car node) :: ((-1 . node) . path)
+          (bc TAIL_CALL)))
+
+(module+ test #| path to first |#
+  (define path-to-first-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
+       (bc BRK))
+      BTREE_MAKE_ROOT
+      BTREE_VALUE_P
+      BTREE_PATH_TO_FIRST)
+     ))
+
+  (check-equal? (regexp-replace*
+                 "pair-ptr (\\$[0-9A-Fa-f]*)?"
+                 (vm-regt->string path-to-first-0-state #t) "")
+                "((int $1fff . (int $0002 . NIL)) . NIL)"
+                "result is a path to the node with value 2: ((-1 . (2 . NIL)))")
+
+  (define path-to-first-1-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;
+       (bc PUSH_INT_1)                          ;;         o        
+       (bc SWAP)                                ;;       /   \      
+       (bc CONS)                                ;;    ->0     o      
+       (bc PUSH_INT_0)                          ;;          /   \   
+       (bc CONS)                                ;;         o     1  
+       (bc CALL) (word-ref BTREE_PATH_TO_FIRST) ;;        / \       
+       (bc BRK))                                ;;       2  nil     
+      BTREE_MAKE_ROOT                           ;;
+      BTREE_VALUE_P                             ;;
+      BTREE_PATH_TO_FIRST)                      ;;
+     ))                                         ;;
+
+  (check-equal? (regexp-replace*
+                 "pair-ptr (\\$[0-9A-Fa-f]*)?"
+                 (vm-regt->string path-to-first-1-state #t) "")
+                "((int $1fff . (int $0000 . ((int $0002 . NIL) . int $0001))) . NIL)"
+                "result is a path to the node with value 1: ((-1 . (1 . ((2 . nil) . 1))"))

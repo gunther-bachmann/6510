@@ -91,7 +91,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
   (check-equal? (vm-stack->strings use-case-nil_p-a-state-after)
                 (list "stack holds 1 item"
-                      "cell-int $0001  (rt)"))
+                      "int $0001  (rt)"))
 
   (define use-case-nil_p-b-code
     (list
@@ -103,7 +103,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
   (check-equal? (vm-stack->strings use-case-nil_p-b-state-after)
                 (list "stack holds 1 item"
-                      "cell-int $0000  (rt)")
+                      "int $0000  (rt)")
                 "which is false"))
 
 (define VM_CAR_R
@@ -178,14 +178,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
   (check-equal? (vm-stack->strings use-case-cons-state-after)
                 (list "stack holds 1 item"
-                      (format "cell-pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                      (format "pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-page->strings use-case-cons-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     1"
                       "next free slot: $09"))
   (check-equal? (vm-deref-cell-pair-w->string use-case-cons-state-after (+ PAGE_AVAIL_0_W #x05))
-                "(cell-int $0001 . cell-pair-ptr NIL)"))
+                "(int $0001 . pair-ptr NIL)"))
 
 (define vm-lists
   (append VM_CONS_R

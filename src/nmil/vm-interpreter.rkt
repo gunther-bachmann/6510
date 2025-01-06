@@ -294,7 +294,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
  (check-equal? (vm-stack->strings bc-nil-ret-state)
                   (list "stack holds 1 item"
-                        "cell-int $0001  (rt)"))
+                        "int $0001  (rt)"))
  (check-equal? (vm-call-frame->strings bc-nil-ret-state)
                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                      "program-counter:  $8005"
@@ -322,7 +322,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings bc-nil-ret-local-state)
                    (list "stack holds 1 item"
-                         "cell-int $0001  (rt)"))
+                         "int $0001  (rt)"))
   (check-equal? (vm-call-frame->strings bc-nil-ret-local-state)
                 (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8005"
@@ -365,7 +365,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
    (check-equal? (vm-stack->strings bc-tail-call-state)
                    (list "stack holds 1 item"
-                         "cell-pair-ptr NIL  (rt)"))
+                         "pair-ptr NIL  (rt)"))
    (check-equal? (vm-call-frame->strings bc-tail-call-state)
                  (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                           "program-counter:  $8006"
@@ -430,13 +430,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
                 (+ 3007 3623)) ;; offset 3623
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
-                   (list "cell-int $0000"
-                         "cell-int $0001"
-                         "cell-int $0002")
+                   (list "int $0000"
+                         "int $0001"
+                         "int $0002")
                    "list got reversed")
   (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
                    (list "stack holds 1 item"
-                         (format "cell-pair-ptr $~a4d  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                         (format "pair-ptr $~a4d  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
                    (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $800b"
@@ -506,7 +506,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_HB))))
    (check-equal? (vm-stack->strings test-bc-before-call-state)
                  (list "stack holds 1 item"
-                       "cell-int $0000  (rt)")
+                       "int $0000  (rt)")
                  "stack holds just the pushed int")
 
   (define test-bc-call-state
@@ -532,8 +532,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_HB))))
    (check-equal? (vm-stack->strings test-bc-call-state)
                     (list "stack holds 2 items"
-                          "cell-int $0001  (rt)"
-                          "cell-int $0000")
+                          "int $0001  (rt)"
+                          "int $0000")
                     "stack holds the pushed int and the parameter passed")
 
   (define test-bc-call-wp-state
@@ -560,9 +560,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-call-wp-state)
                    (list "stack holds 3 items"
-                         "cell-int $0001  (rt)"
-                         "cell-int $1fff"
-                         "cell-int $0000")
+                         "int $0001  (rt)"
+                         "int $1fff"
+                         "int $0000")
                    "stack holds the pushed int, and all parameters")
 
   (define test-bc-call-wl-state
@@ -588,9 +588,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-call-wl-state)
                    (list "stack holds 3 items"
-                         "cell-int $0001  (rt)"
-                         "cell-int $1fff"
-                         "cell-int $0000")
+                         "int $0001  (rt)"
+                         "int $1fff"
+                         "int $0000")
                    "stack holds the pushed int, and all parameters"))
 
 (define BC_RET
@@ -623,8 +623,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-ret-state)
                    (list "stack holds 2 items"
-                         "cell-int $0001  (rt)"
-                         "cell-int $0000")
+                         "int $0001  (rt)"
+                         "int $0000")
                    "previous value on the stack is there + returned value (in rt)"))
 
 (define BC_BRK
@@ -757,8 +757,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings test-bc-pop-to-l-state)
                 (list "stack holds 2 items"
-                      "cell-int $1fff  (rt)"
-                      "cell-int $0000"))
+                      "int $1fff  (rt)"
+                      "int $0000"))
   (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_LB_W #x03))
                 #x03)
   (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_HB_W #x03))
@@ -823,8 +823,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings test-bc-push-l-state)
                   (list "stack holds 2 items"
-                        "cell-int $0001  (rt)"
-                        "cell-int $0000")
+                        "int $0001  (rt)"
+                        "int $0000")
                   "int 1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-l-state)
                    (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
@@ -852,8 +852,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings test-bc-push-p-state)
                    (list "stack holds 2 items"
-                         "cell-int $1fff  (rt)"
-                         "cell-int $0001")
+                         "int $1fff  (rt)"
+                         "int $0001")
                    "int -1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-p-state)
                    (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
@@ -882,7 +882,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings test-bc-pop-push-to-p-state)
                    (list "stack holds 1 item"
-                         "cell-int $0001  (rt)"))
+                         "int $0001  (rt)"))
   (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
                    (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f06"
@@ -933,10 +933,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings use-case-push-num-s-state-after)
                 (list "stack holds 4 items"
-                      "cell-int $1fff  (rt)"
-                      "cell-int $0002"
-                      "cell-int $0001"
-                      "cell-int $0000")))
+                      "int $1fff  (rt)"
+                      "int $0002"
+                      "int $0001"
+                      "int $0000")))
 
 (define BC_PUSH_CONST_INT
   (list
@@ -959,7 +959,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings use-case-push-int-state-after)
                 (list "stack holds 1 item"
-                      "cell-int $04f0  (rt)")))
+                      "int $04f0  (rt)")))
 
 (define BC_INT_PLUS
   (list
@@ -998,7 +998,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define (bc-int-plus-expectation state c)
     (check-equal? (vm-stack->strings state)
                   (list "stack holds 1 item"
-                        (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
+                        (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
  
   ;; Execute this test only, if major change to int + have been done
   ;; (define _run-bc-int-plus-tests
@@ -1024,9 +1024,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    2077)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                    (list "stack holds 3 items"
-                         "cell-int $0000  (rt)"
-                         "cell-int $060f"
-                         "cell-int $0003"
+                         "int $0000  (rt)"
+                         "int $060f"
+                         "int $0003"
                          )))
 
 (define BC_INT_MINUS
@@ -1067,7 +1067,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define (bc-int-minus-expectation state c)
     (check-equal? (vm-stack->strings state)
                     (list "stack holds 1 item"
-                          (format  "cell-int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
+                          (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
 
   ;; Execute this test only, if major change to int - have been done
   ;; (define _run-bc-int-minus-tests
@@ -1095,9 +1095,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    2077)
     (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                     (list "stack holds 3 items"
-                          "cell-int $1fff  (rt)"
-                          "cell-int $1c2f"
-                          "cell-int $0001")))
+                          "int $1fff  (rt)"
+                          "int $1c2f"
+                          "int $0001")))
 
 (define BC_PUSH_CONST_BYTE
   (list
@@ -1125,7 +1125,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings bc-nil-p-state)
                 (list "stack holds 1 item"
-                      "cell-int $0001  (rt)"))
+                      "int $0001  (rt)"))
 
   (define bc-nil-p-2-state
     (run-bc-wrapped-in-test
@@ -1137,10 +1137,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BRK))))
 
   (check-equal? (vm-deref-cell-pair-w->string bc-nil-p-2-state (+ PAGE_AVAIL_0_W #x05))
-                "(cell-int $0002 . cell-pair-ptr NIL)")
+                "(int $0002 . pair-ptr NIL)")
   (check-equal? (vm-stack->strings bc-nil-p-2-state)
                 (list "stack holds 1 item"
-                      "cell-int $0000  (rt)")))
+                      "int $0000  (rt)")))
 
 (define BC_CONS
   (list
@@ -1159,9 +1159,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
    (check-equal? (vm-stack->strings bc-cons-state)
                    (list "stack holds 1 item"
-                         (format "cell-pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                         (format "pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
    (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x05))
-                    "(cell-int $0000 . cell-pair-ptr NIL)"))
+                    "(int $0000 . pair-ptr NIL)"))
 
 (define BC_CAR
   (list
@@ -1181,7 +1181,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
    (check-equal? (vm-stack->strings bc-car-state)
                  (list "stack holds 1 item"
-                       "cell-int $0002  (rt)")))
+                       "int $0002  (rt)")))
 
 (define BC_CDR
   (list
@@ -1201,7 +1201,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
    (check-equal? (vm-stack->strings bc-cdr-state)
                  (list "stack holds 1 item"
-                       "cell-pair-ptr NIL  (rt)")))
+                       "pair-ptr NIL  (rt)")))
 (define SWAP #x03)
 (define BC_SWAP
   (list
@@ -1255,7 +1255,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
   (skip (check-equal? (vm-regt->string int-greater-0>-1-state)
-                      "cell-int $0001"
+                      "int $0001"
                       "comparison of negative with positive number (failing currently)"))
 
   (define int-greater-0>0-state
@@ -1266,7 +1266,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-0>0-state)
-                "cell-int $0000")
+                "int $0000")
 
   (define int-greater-1>1-state
     (run-bc-wrapped-in-test
@@ -1276,7 +1276,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-1>1-state)
-                "cell-int $0000")
+                "int $0000")
 
   (define int-greater-2>2-state
     (run-bc-wrapped-in-test
@@ -1286,7 +1286,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-2>2-state)
-                "cell-int $0000")
+                "int $0000")
 
   (define int-greater-2>1-state
     (run-bc-wrapped-in-test
@@ -1296,7 +1296,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-2>1-state)
-                "cell-int $0001")
+                "int $0001")
 
   (define int-greater-1>0-state
     (run-bc-wrapped-in-test
@@ -1306,7 +1306,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-1>0-state)
-                "cell-int $0001")
+                "int $0001")
 
     (define int-greater-0>1-state
     (run-bc-wrapped-in-test
@@ -1316,7 +1316,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-0>1-state)
-                "cell-int $0000"))
+                "int $0000"))
 
 (define INT_P #x07)
 (define BC_INT_P
@@ -1429,7 +1429,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings bc-push-const-nil-state)
                 (list "stack holds 1 item"
-                      "cell-pair-ptr NIL  (rt)")))
+                      "pair-ptr NIL  (rt)")))
 
 (define INC_INT #x02) ;; extended (could be mapped to regular byte code, if needed very often!)
 (define BC_INC_INT
@@ -1456,7 +1456,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings inc-int-0-state)
                 (list "stack holds 1 item"
-                      "cell-int $0001  (rt)"))
+                      "int $0001  (rt)"))
 
   (define inc-int-1-state
     (run-bc-wrapped-in-test
@@ -1468,7 +1468,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings inc-int-1-state)
                 (list "stack holds 1 item"
-                      "cell-int $0100  (rt)"))
+                      "int $0100  (rt)"))
 
   (define inc-int-2-state
     (run-bc-wrapped-in-test
@@ -1480,7 +1480,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings inc-int-2-state)
                 (list "stack holds 1 item"
-                      "cell-int $0000  (rt)"))
+                      "int $0000  (rt)"))
 
   (define inc-int-3-state
     (run-bc-wrapped-in-test
@@ -1492,7 +1492,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings inc-int-3-state)
                 (list "stack holds 1 item"
-                      "cell-int $0600  (rt)")))
+                      "int $0600  (rt)")))
 
 (define MAX_INT #x01) ;; extended
 (define BC_MAX_INT
@@ -1566,7 +1566,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings max-int-state)
                 (list "stack holds 1 item"
-                      "cell-int $0002  (rt)"))
+                      "int $0002  (rt)"))
 
   (define max-int-2-state
     (run-bc-wrapped-in-test
@@ -1578,7 +1578,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings max-int-2-state)
                 (list "stack holds 1 item"
-                      "cell-int $0002  (rt)")))
+                      "int $0002  (rt)")))
 
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
