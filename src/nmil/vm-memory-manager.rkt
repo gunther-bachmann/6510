@@ -1106,8 +1106,7 @@ call frame primitives etc.
 
           (LDA (ZP_CELL_STACK_HB_PTR),y) ;; high byte
           (STA ZP_RT+1) 
-          (DEY)
-          (STY ZP_CELL_STACK_TOS)
+          (DEC ZP_CELL_STACK_TOS)
           (RTS)
 
    (label WRITE_00_TO_RT)

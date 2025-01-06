@@ -3587,6 +3587,14 @@ this will include the implementation of
 - (m-def ...) -> vm, execute, debug?
 - see [[file:src/cisc-vm/mil-svm-generator.rkt]]
 **** glue together mil + 6510 vm
+**** IDEA: instruction cache (see python caching) (see https://github.com/python/cpython/blob/main/InternalDocs/interpreter.md#Specialization and https://www.youtube.com/watch?v=PGZPSWZSkJI&t=1470s)
+- use specialized byte code instruction (with guard to fall back to more general byte code)
+- fallback/specialization rewrites bytecode
+- right behind bytecode some information is 'cached'
+  - fallback/specialization counts
+- byte code that can be specialized is organized in 'families' that define how much extra bytes are needed
+- special byte code execution should be much faster than general byte code execution
+  (e.g. int-add vs. finding the right add and then use conversions + float-add?)
 **** IDEA: restrict function names to one case and only some special chars => function meta data as name is compact
 - store 3 characters in 2 bytes (each 5 bit)
 - A-Z (26) or a-z

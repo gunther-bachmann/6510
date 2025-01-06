@@ -208,15 +208,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_NIL_P_RET_LOCAL_N_POP
   (list
    (label BC_NIL_P_RET_LOCAL_N_POP)
-          (LDA ZP_RT)
-          (CMP !<TAGGED_NIL)                            ;; lowbyte = tagged_nil lowbyte
+          (LDX ZP_RT)
+          (CPX !<TAGGED_NIL)                            ;; lowbyte = tagged_nil lowbyte
           (BEQ RETURN__BC_NIL_P_RET_LOCAL_N_POP)        ;; is nil => return param or local
           (JMP VM_INTERPRETER_INC_PC)                   ;; next instruction
 
    (label RETURN__BC_NIL_P_RET_LOCAL_N_POP)
-          (LDY !$00)                                    ;; get byte code
-          (LDA (ZP_VM_PC),y)
-          (AND !$07)                                    ;; mask out lower 3 bits 
           (LSR)                                         ;; lowest bit decides 0 = LOCAL_0, 1 = some other short command
           (TAX)
           (BCS SHORTCMD__BC_NIL_P_RET_LOCAL_N_POP)
@@ -428,7 +425,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     6"
                          "next free slot: $51"))
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                (+ 3016 3623)) ;; offset 3623
+                (+ 3007 3623)) ;; offset 3623
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "cell-int $0000"
                          "cell-int $0001"
@@ -669,9 +666,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label BC_PUSH_LOCAL_SHORT)
-           (LDY !$00)
-           (LDA (ZP_VM_PC),y)                   ;; load bytecode
-           (AND !$07)                           ;; lower three bits are encoded into the short command
            (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
            (BCS WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
 
@@ -711,9 +705,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label BC_POP_TO_LOCAL_SHORT)
-           (LDY !$00)
-           (LDA (ZP_VM_PC),y)                   ;; load bytecode
-           (AND !$07)                           ;; lower three bits are encoded into the short command
            (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
            (BCS WRITE__POP_TO_LOCAL_SHORT)
 
@@ -906,8 +897,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label BC_PUSH_CONST_NUM_SHORT)
-           (LDA (ZP_VM_PC),y)                             ;; load bytecode itself (y must be 0)
-           (AND !$07)                                     ;; lower three bits are encoded into the short command
            (ASL A)                                        ;; * 2 (for 2 byte index into jump_refs)!
            (TAY)                                          ;; -> Y
            (LDA VM_PUSH_CONST_NUM_SHORT__JUMP_REFS,y)     ;; get lowbyte of jumpref
@@ -988,11 +977,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     (label VM_INT_PLUS__NO_INC_HIGH)
           (ADC ZP_RT)                           ;; A = A + stack value (int high byte)
-          (AND !$7f)                            ;; since ZP_RT hat the lower two bits set, just mask out the highest bit
+          (AND !$7f)                            ;; since ZP_RT has the lower two bits set, just mask out the highest bit
           (STA ZP_RT)                           ;; RT tagged high byte = result
 
-          (DEY)
-          (STY ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in RT as tos)
+          (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in RT as tos)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (module+ test #| vm_interpreter |#
@@ -1061,8 +1049,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_RT)                           ;; RT tagged high byte = result
           
    (label VM_INT_MINUS__DONE)
-          (DEY)
-          (STY ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in rt untouched)
+          (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in rt untouched)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (module+ test #| vm_interpreter |#
@@ -1601,8 +1588,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA (ZP_VM_PC),y)                    ;; load byte code
           (ASL A)                               ;; *2 (for jump table)
           (BCC OPERAND__VM_INTERPRETER)         ;; bit7 was not set => normal command
+
           ;; short command
           (AND !$F0)                            ;; only top 4 bits are used for the opcode dispatch!
+          (STA SHORT_CMD_JMPOP__VM_INTERPRETER+1);; lowbyte of the table
+          (LDA (ZP_VM_PC),y)                    ;; load byte code
+          (AND !$07)                            ;; mask out lower 7 bits (of the fast command)
+   (label SHORT_CMD_JMPOP__VM_INTERPRETER)
+          (JMP (VM_INTERPRETER_OPTABLE))         ;; jump by table
+
+          ;; normal bytecode command
    (label OPERAND__VM_INTERPRETER)
           (STA JMPOP__VM_INTERPRETER+1)         ;; lowbyte of the table
    (label JMPOP__VM_INTERPRETER)
