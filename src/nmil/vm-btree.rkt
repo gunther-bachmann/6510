@@ -57,6 +57,7 @@ TODOS:
                   vm-interpreter
                   bc
                   EXT
+                  INT_0_P
                   INC_INT
                   MAX_INT
                   FALSE_P_BRANCH
@@ -786,3 +787,80 @@ TODOS:
                  " . ((int $0001 . (int $0000 . ((int $0002 . NIL) . int $0001)))"
                  " . NIL))"))
   )
+
+;; (define (btree-node-for-path path)
+;;   (cond [(empty? path) '()]
+;;         [(= -1 (caar path)) (car (cdar path))]
+;;         [(= 1 (caar path)) (cdr (cdar path))]
+;;         [else (raise-user-error (format "btree path may only contain 1 | -1:" path))]))
+(define BTREE_NODE_FOR_PATH
+  (list
+   (label BTREE_NODE_FOR_PATH)
+          (byte 1) ;; locals
+          (bc WRITE_TO_LOCAL_0)
+          (bc NIL?)
+          (bc FALSE_P_BRANCH) (byte 2)
+
+    ;; [(empty? path) '()]
+          (bc PUSH_NIL)
+          (bc RET)
+
+    ;; [(= 0 (caar path)) (car (cdar path))]
+          (bc PUSH_LOCAL_0)
+          (bc CAR)
+          (bc WRITE_TO_LOCAL_0)
+
+          (bc CAR)
+          (bc INT_0_P)
+          (bc FALSE_P_BRANCH) (byte 4) ;; ??
+
+          (bc PUSH_LOCAL_0)
+          (bc CDR)
+          (bc CAR)
+          (bc RET)
+
+    ;; [else (cdr (cdar path))]
+          (bc PUSH_LOCAL_0)
+          (bc CDR)
+          (bc CDR)
+          (bc RET)))
+
+(module+ test #| node for path |#
+  (define node-for-path-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+       (bc CALL) (word-ref BTREE_NODE_FOR_PATH)
+       (bc BRK))
+      BTREE_NODE_FOR_PATH
+      BTREE_MAKE_ROOT
+      BTREE_VALUE_P)))
+
+  (check-equal? (vm-regt->string node-for-path-0-state)
+                "int $0002")
+
+  (define node-for-path-1-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT_0)  ;; right
+       (bc PUSH_INT_2)  ;; left
+       (bc CONS)        ;; node
+       (bc PUSH_INT_1)  ;; path selector
+       (bc CONS)
+       (bc CONS)
+       (bc CALL) (word-ref BTREE_NODE_FOR_PATH)
+       (bc BRK))
+      BTREE_NODE_FOR_PATH
+      BTREE_MAKE_ROOT
+      BTREE_VALUE_P)))
+
+  (check-equal? (vm-regt->string node-for-path-1-state)
+                "int $0000"))

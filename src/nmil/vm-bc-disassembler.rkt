@@ -56,6 +56,7 @@
          (format "nil? ret param #~a" n)
          (format "nil? ret local #~a" n))]
     [(= byte-code-t2 #x42) "nil?"]
+    [(= byte-code-t2 #x44) "int 0?"]
     [(= byte-code-t2 #x64) (format "goto $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x66) "return"]
     [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (bytes->int (+ 1 bc_p1) bc_p2)))] ;; add 2 because byte code starts there

@@ -153,6 +153,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         INT_0_P
          EXT
          MAX_INT
          INC_INT
@@ -1538,6 +1539,28 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA !$02)
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
 
+(define INT_0_P #x22)
+(define BC_INT_0_P
+  (list
+   (label BC_INT_0_P)
+          (LDA ZP_RT+1)
+          (BNE IS_NOT_ZERO__BC_INT_0_P)
+          (LDA ZP_RT)
+          (CMP !$03)
+          (BEQ IS_ZERO__BC_INT_0_P)
+
+   (label IS_NOT_ZERO__BC_INT_0_P)
+          (LDA !$00)
+          (STA ZP_RT+1)
+          (LDA !$03)
+          (STA ZP_RT)
+          (JMP VM_INTERPRETER_INC_PC)
+
+   (label IS_ZERO__BC_INT_0_P)
+          (LDA !$01)    
+          (STA ZP_RT+1)
+          (JMP VM_INTERPRETER_INC_PC)))
+
 (define VM_INTERPRETER_OPTABLE_EXT1_LB
   (flatten
    (list
@@ -1601,7 +1624,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
     (label VM_INTERPRETER_OPTABLE)
-           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 -> 00
+           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 02  <-  01 effectively NOP
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
            (word-ref BC_SWAP)                     ;; 06  <-  03 
@@ -1615,7 +1638,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_TRUE_P_RET)               ;; 16  <-  0b 
            (word-ref BC_TRUE_P_BRANCH)            ;; 18  <-  0c
            (word-ref BC_FALSE_P_BRANCH)           ;; 1a  <-  0d 
-           (word-ref BC_FALSE_P_RET)              ;; 1c  <-  0e reserved
+           (word-ref BC_FALSE_P_RET)              ;; 1c  <-  0e 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 1e  <-  0f reserved
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref VM_INTERPRETER_INC_PC)       ;; 22  <-  11 reserved
@@ -1635,7 +1658,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 40  <-  a0..a7 reserved
            (word-ref BC_NIL_P)                    ;; 42  <-  21
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 44  <-  22 reserved
+           (word-ref BC_INT_0_P)                  ;; 44  <-  22 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 48  <-  24 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
@@ -1779,6 +1802,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_CONST_BYTE
           BC_PUSH_CONST_NIL
           BC_NIL_P
+          BC_INT_0_P
           BC_NIL_P_RET_LOCAL_N_POP
           BC_CONS
           BC_CAR
