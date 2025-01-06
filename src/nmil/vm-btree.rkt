@@ -675,3 +675,122 @@ TODOS:
                  (vm-regt->string path-to-first-1-state #t) "")
                 "((int $1fff . (int $0000 . ((int $0002 . NIL) . int $0001))) . NIL)"
                 "result is a path to the node with value 1: ((-1 . (1 . ((2 . nil) . 1))"))
+
+
+;; (define (btree-path-to-last  node (path (list)))
+;;   (cond [(btree-value? node) path]
+;;         [(empty? (cdr node)) (btree-path-to-last (car node) (cons (cons -1 node) path))]
+;;         [else (btree-path-to-last (cdr node) (cons (cons 1 node) path))]))
+(define BTREE_PATH_TO_LAST
+  (list
+   (label BTREE_PATH_TO_LAST)
+          (byte 1)
+          (bc WRITE_TO_LOCAL_0)             ;; local0 = node
+          (bc CALL) (word-ref BTREE_VALUE_P)
+          (bc FALSE_P_BRANCH) (byte 1)
+
+    ;;     [(btree-value? node) path]
+          (bc RET)
+
+    ;;     [(empty? (cdr node)) (btree-path-to-last (car node) (cons (cons -1 node) path))]
+          (bc PUSH_LOCAL_0)
+          (bc CDR)
+          (bc NIL?)
+          (bc FALSE_P_BRANCH) (byte 7)
+
+          (bc PUSH_LOCAL_0)
+          (bc PUSH_INT_m1)
+          (bc CONS)
+          (bc CONS)
+          (bc PUSH_LOCAL_0)
+          (bc CAR)
+          (bc TAIL_CALL)
+
+    ;;    [else (btree-path-to-last (cdr node) (cons (cons 1 node) path))]))
+          (bc PUSH_LOCAL_0)
+          (bc PUSH_INT_1)
+          (bc CONS)
+          (bc CONS)
+          (bc PUSH_LOCAL_0)
+          (bc CDR)
+          (bc TAIL_CALL)))
+
+(module+ test #| path to last |#
+  (define path-to-last-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)
+
+       (bc CALL) (word-ref BTREE_PATH_TO_LAST)
+       (bc BRK))
+      BTREE_PATH_TO_LAST
+      BTREE_VALUE_P
+      BTREE_MAKE_ROOT)))
+
+  (check-equal? (regexp-replace*
+                 "pair-ptr (\\$[0-9A-Fa-f]*)?"
+                 (vm-regt->string path-to-last-0-state #t)
+                 "")
+                "((int $1fff . (int $0002 . NIL)) . NIL)")
+
+  (define path-to-last-1-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;
+       (bc PUSH_NIL)                            ;;         o
+       (bc SWAP)                                ;;       /   \
+       (bc CONS)                                ;;    ->0     o
+       (bc PUSH_INT_0)                          ;;          /   \
+       (bc CONS)                                ;;         o     nil
+       (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;;        / \       
+       (bc BRK))                                ;;    -> 2  nil
+      BTREE_MAKE_ROOT                           ;;
+      BTREE_VALUE_P                             ;;
+      BTREE_PATH_TO_LAST)                       ;;
+     ))
+
+  (check-equal? (regexp-replace*
+                   "pair-ptr (\\$[0-9A-Fa-f]*)?"
+                   (vm-regt->string path-to-last-1-state #t)
+                   "")
+                (string-append
+                 "((int $1fff . (int $0002 . NIL))"
+                 " . ((int $1fff . ((int $0002 . NIL) . NIL))"
+                 " . ((int $0001 . (int $0000 . ((int $0002 . NIL) . NIL)))"
+                 " . NIL)))"))
+
+  (define path-to-last-2-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT_2)
+       (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;
+       (bc PUSH_INT_1)                          ;;         o
+       (bc SWAP)                                ;;       /   \
+       (bc CONS)                                ;;      0     o
+       (bc PUSH_INT_0)                          ;;          /   \
+       (bc CONS)                                ;;         o  -> 1
+       (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;;        / \       
+       (bc BRK))                                ;;       2  nil
+      BTREE_MAKE_ROOT                           ;;
+      BTREE_VALUE_P                             ;;
+      BTREE_PATH_TO_LAST)                       ;;
+     ))
+
+  (check-equal? (regexp-replace*
+                   "pair-ptr (\\$[0-9A-Fa-f]*)?"
+                   (vm-regt->string path-to-last-2-state #t)
+                   "")
+                (string-append
+                 "((int $0001 . ((int $0002 . NIL) . int $0001))"
+                 " . ((int $0001 . (int $0000 . ((int $0002 . NIL) . int $0001)))"
+                 " . NIL))"))
+  )
