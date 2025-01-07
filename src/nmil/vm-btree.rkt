@@ -12,11 +12,11 @@ TODOS:
     DONE btree-node?
     DONE btree-value?
     DONE btree-validate
-    btree-depth
-    btree-path-to-first
-    btree-path-to-list
-    btree-node-for-path
-    btree-prev
+    DONE btree-depth
+    DONE btree-path-to-first
+    DONE btree-path-to-list
+    DONE btree-node-for-path
+    IMPLEMENT btree-prev
     btree-next
     recursive-rebuild-path-at-with
     btree-add-value-after
@@ -57,6 +57,7 @@ TODOS:
                   vm-interpreter
                   bc
                   EXT
+                  BNOP
                   INT_0_P
                   INC_INT
                   MAX_INT
@@ -109,6 +110,7 @@ TODOS:
 
   (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
+  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
 
   (require (only-in "./vm-memory-manager.rkt"
                     vm-cell-at-nil?
@@ -593,15 +595,17 @@ TODOS:
        (bc PUSH_INT_0)                          ;;             /   \
        ;; (bc SWAP)                             ;;            o     1
        (bc CONS)                                ;;           / \        -> o
-       (bc CALL) (word-ref BTREE_DEPTH)         ;;          2  nil       /   \ 
-       (bc BRK))                                ;;                      0     o     
-      BTREE_MAKE_ROOT                           ;;                          /   \
-      BTREE_DEPTH)                              ;;                         o     1
-    ))                                          ;;                        / \
-                                                ;;                       2  nil
+       (bc BNOP)                                ;;          2  nil       /   \
+       (bc CALL) (word-ref BTREE_DEPTH)         ;;                      0     o    
+       (bc BRK))                                ;;                          /   \   
+      BTREE_MAKE_ROOT                           ;;                         o     1 
+      BTREE_DEPTH)                              ;;                        / \      
+    ))                                          ;;                       2  nil    
 
    (check-equal? (vm-regt->string btree-depth-6-state)
-                   "int $0003"))
+                   "int $0003")
+   (check-equal? (cpu-state-clock-cycles btree-depth-6-state)
+                 8967))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -949,7 +953,7 @@ TODOS:
 
 (module+ test #| path to last |#)
 
-
+;; optimization idea: NIL?_RET instead of NIL?, TRUE_P_RET
 (define REVERSE
   (list
    (label REVERSE)
@@ -960,6 +964,7 @@ TODOS:
           (bc PUSH_LOCAL_0_CAR)
           (bc CONS)
           (bc PUSH_LOCAL_0_CDR)
+          ;; (bc GOTO) (byte $fa)
           (bc TAIL_CALL)))
 
 (module+ test #| reverse |#
@@ -978,6 +983,7 @@ TODOS:
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)
+       (bc BNOP)
        (bc CALL) (word-ref REVERSE)
        (bc BRK))
       REVERSE)
@@ -987,7 +993,9 @@ TODOS:
                  "pair-ptr (\\$[0-9A-Fa-f]*)?"
                  (vm-regt->string reverse-0-state #t)
                  "")
-                "(int $0000 . (int $0001 . (int $0002 . (int $1fff . NIL))))"))
+                "(int $0000 . (int $0001 . (int $0002 . (int $1fff . NIL))))")
+  (check-equal? (cpu-state-clock-cycles reverse-0-state)
+                3679))
 
 (define APPEND
   (list
@@ -1027,6 +1035,7 @@ TODOS:
        (bc PUSH_INT) (word $0005)
        (bc CONS)
 
+       (bc BNOP)
        (bc CALL) (word-ref APPEND)
        (bc BRK))
       APPEND
@@ -1036,4 +1045,6 @@ TODOS:
                  "pair-ptr (\\$[0-9A-Fa-f]*)?"
                  (vm-regt->string append-0-state #t)
                  "")
-                "(int $0005 . (int $0004 . (int $0003 . (int $0002 . (int $0001 . (int $0000 . NIL))))))"))
+                "(int $0005 . (int $0004 . (int $0003 . (int $0002 . (int $0001 . (int $0000 . NIL))))))")
+  (check-equal? (cpu-state-clock-cycles append-0-state)
+                5932))

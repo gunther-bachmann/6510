@@ -987,8 +987,16 @@
 
 (define/c (c64-rom-routine? high low)
   (-> byte? byte? boolean?)
-  (or (= (absolute high low) #xFFD2)
-     (= (absolute high low) #xAB1E)))
+  (or (= (absolute high low) #xFFD2) ;; kernel output character
+     (= (absolute high low) #xAB1E) ;; basic output string
+     ))
+
+;; since the 6502/6510 has its cpu stack located 0100-01ff, it should be safe to use JSR to these locations
+;; for some "magic" functionality 
+(define/c (magic-interpreter-routine? high low)
+  (-> byte? byte? boolean?)
+  (or (= (absolute high low) #x0100) ;; reset cpu cycles
+     ))
 
 (define/c (interpret-c64-rom-routine high low state (verbose #t) (string-output-function interpreter-output-function))
   (->* [byte? byte? cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
@@ -1011,6 +1019,11 @@
   (cond [(c64-rom-routine? high low)
          (let ([after-rom-state (interpret-c64-rom-routine high low state verbose string-output-function)])
            (struct-copy cpu-state after-rom-state [program-counter (next-program-counter after-rom-state 3)]))]
+        [(magic-interpreter-routine? high low)
+         (case (absolute high low)
+           [(#x0100) (struct-copy cpu-state state
+                                  [program-counter (word (fx+ 3 (cpu-state-program-counter state)))]
+                                  [clock-cycles 0])])]
         [else
          (let* ([new-program-counter (absolute high low)]
                 [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
@@ -1929,9 +1942,11 @@
          [rel            (peek-pc+1 state)]
          [new-pc-jump    (word (fx+ pc 2 (if (< #x80 rel) (fx- rel 256) rel)))]
          [new-pc-no-jump (word (fx+ pc 2))]
-         [new-pc         (if (test state) new-pc-jump new-pc-no-jump)])
+         [new-pc         (if (test state) new-pc-jump new-pc-no-jump)]
+         [new-clock-cycles (fx+ (if (test state) 1 0) (cpu-state-clock-cycles state))])
     (struct-copy cpu-state state
-                 [program-counter new-pc])))
+                 [program-counter new-pc]
+                 [clock-cycles new-clock-cycles])))
 
 ;; interpret bit test on memory
 ;; sets carry, zero, negative, overflow flag (CZNV)

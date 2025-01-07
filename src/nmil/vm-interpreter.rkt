@@ -153,6 +153,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         BNOP
          INT_0_P
          EXT
          MAX_INT
@@ -412,6 +413,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc PUSH_INT_2)
              (bc CONS)                  ;; (add ref to this cell) does allocate a cell (removes a cell-ref from stack and adds a ref in the pair cell)
              (bc PUSH_NIL)
+             (bc BNOP)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)                   ;; << to make debugger stop/exit
 
@@ -423,8 +425,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc NIL?_RET_LOCAL_0_POP_1);; return b-list if a-list is nil (if popping, #refs decrease)
              (bc CDR)                   ;; shrinking original list (ref to cdr cell increases, ref of original cell decreases, order!)
              (bc PUSH_LOCAL_0)          ;; (ref to local0 cell increases)
-             (bc PUSH_LOCAL_1)          ;; (ref to local1 cell increases)
-             (bc CAR)                   ;; (ref to car increases, ref to original decreases)
+             (bc PUSH_LOCAL_1_CAR)      ;; (ref to local1 cell increases)
              (bc CONS)                  ;; growing reverse list (ref to this cell set to 1), refs to cells consed, stay the same)
              (bc TAIL_CALL)
              (bc BRK))                  ;; just in case to make debugger stop/exit
@@ -438,7 +439,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     6"
                          "next free slot: $51"))
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                (+ 3007 3623)) ;; offset 3623
+                3016)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -449,7 +450,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          (format "pair-ptr $~a4d  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
                    (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $800b"
+                         "program-counter:  $800c"
                          "function-ptr:     $8000"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
@@ -749,39 +750,31 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define WRITE_FROM_LOCAL_2 #x85)
 (define WRITE_FROM_LOCAL_3 #x87)
 
-;; (define XPUSH_PARAM_0 #x81)
-;; (define XPUSH_PARAM_1 #x83)
-;; (define XPUSH_PARAM_2 #x85)
-;; (define XPUSH_PARAM_3 #x87)
-
 (define BC_POP_TO_LOCAL_SHORT
   (flatten
    (list
     (label BC_POP_TO_LOCAL_SHORT)
-    (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
-    (BCS WRITE__POP_TO_LOCAL_SHORT)
+           (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
+           (BCS WRITE__POP_TO_LOCAL_SHORT)
+       
+           ;; pop to local           
+           (TAY)                                ;; index -> Y
+           (LDA ZP_RT)
+           (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index                      
+           (LDA ZP_RT+1)
+           (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+           (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
+           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 
-    ;; pop to local           
-    (TAY)                                ;; index -> Y
-    (LDA ZP_RT)
-    (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index                      
-    (LDA ZP_RT+1)
-    (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
-    (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
-    (JMP VM_INTERPRETER_INC_PC)          ;; next bc
-
-    ;; unused yet
-    (label  WRITE__POP_TO_LOCAL_SHORT)
-    (TAY)                                ;; index -> Y
-    (LDA ZP_RT)
-    (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
-    (LDA ZP_RT+1)
-    (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
-    (JMP VM_INTERPRETER_INC_PC)          ;; next bc
+    ;; write to local
+   (label  WRITE__POP_TO_LOCAL_SHORT)
+           (TAY)                                ;; index -> Y
+           (LDA ZP_RT)
+           (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
+           (LDA ZP_RT+1)
+           (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
     )))
-
-
-
 
 (define POP_TO_LOCAL_0 #x90)
 (define POP_TO_LOCAL_1 #x92)
@@ -1074,7 +1067,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BRK))))
 
   (check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                   2077)
+                2157)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                    (list "stack holds 3 items"
                          "int $0000  (rt)"
@@ -1145,7 +1138,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 
    (check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                   2077)
+                   2157)
     (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                     (list "stack holds 3 items"
                           "int $1fff  (rt)"
@@ -2049,13 +2042,28 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
+(define BNOP #x01)
+(define BC_BNOP
+  (list
+   (label BC_BNOP)
+          (JSR $0100)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| nop |#
+  (define nop-state
+    (run-bc-wrapped-in-test
+     (list (bc BNOP))))
+
+  (check-equal? (cpu-state-clock-cycles nop-state)
+                31))
+
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
     (label VM_INTERPRETER_OPTABLE)
            (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 02  <-  01 effectively NOP
+           (word-ref BC_BNOP)                      ;; 02  <-  01 
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
            (word-ref BC_SWAP)                     ;; 06  <-  03 
            (word-ref BC_EXT1_CMD)                 ;; 08  <-  04 
@@ -2206,21 +2214,24 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label VM_INTERPRETERy)
           (LDA (ZP_VM_PC),y)                    ;; load byte code
           (ASL A)                               ;; *2 (for jump table)
-          (BCC OPERAND__VM_INTERPRETER)         ;; bit7 was not set => normal command
-
-          ;; short command
-          (AND !$F0)                            ;; only top 4 bits are used for the opcode dispatch!
-          (STA SHORT_CMD_JMPOP__VM_INTERPRETER+1);; lowbyte of the table
-          (LDA (ZP_VM_PC),y)                    ;; load byte code
-          (AND !$07)                            ;; mask out lower 7 bits (of the fast command)
-   (label SHORT_CMD_JMPOP__VM_INTERPRETER)
-          (JMP (VM_INTERPRETER_OPTABLE))         ;; jump by table
+          (BCS SHORT_CMD__VM_INTERPRETER)       ;; bit7 was not set => normal command
 
           ;; normal bytecode command
    (label OPERAND__VM_INTERPRETER)
           (STA JMPOP__VM_INTERPRETER+1)         ;; lowbyte of the table
    (label JMPOP__VM_INTERPRETER)
-          (JMP (VM_INTERPRETER_OPTABLE))))      ;; jump by table
+          (JMP (VM_INTERPRETER_OPTABLE))        ;; jump by table
+
+   (label SHORT_CMD__VM_INTERPRETER)
+          ;; short command
+          (AND !$F0)                            ;; only top 4 bits are used for the opcode dispatch!
+          (STA SHORT_CMD_JMPOP__VM_INTERPRETER+1);; lowbyte of the table
+          (LDA (ZP_VM_PC),y)                    ;; load byte code
+          (AND !$07)                            ;; mask out lower 3 bits (of the fast command)
+   (label SHORT_CMD_JMPOP__VM_INTERPRETER)
+          (JMP (VM_INTERPRETER_OPTABLE))         ;; jump by table
+
+))
 
 (define vm-interpreter
   (append VM_INTERPRETER_VARIABLES
@@ -2256,6 +2267,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_GOTO
           BC_EXT1_CMD
           BC_INC_INT
+          BC_BNOP
           VM_INTERPRETER
           (list (label END__INTERPRETER))
           VM_INTERPRETER_OPTABLE_EXT1_HB

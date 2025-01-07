@@ -3563,6 +3563,7 @@ this will include the implementation of
 **** add profiler for code length
 **** enable restting cpu cycle count (e.g. via extended byte codes)
 **** optimize byte code
+- push_​local_​0, write_​to_​local_​0 :: make this a one byte command (not a short instruction) => speeds up decoding
 - cadr cdar caar cddr :: could be put into a fast instruction
 - [X] true?-ret false?-ret :: combine true?-branch ret, false?-branch ret
 - conons :: two conses ?
