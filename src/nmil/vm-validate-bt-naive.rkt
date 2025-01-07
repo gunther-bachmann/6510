@@ -210,13 +210,6 @@ invariants:
   (cond [(empty? path)
          '()]
 
-        [(= 1 (caar path))
-         ;; left must not be empyt => no additional check
-         (define top-most-relevant  path)
-         (append (btree-path-to-last (cadar top-most-relevant))
-                 (cons (cons -1 (cdar top-most-relevant))
-                       (cdr top-most-relevant)))]
-
         [(= -1 (caar path))
          (define top-most-relevant (dropf (cdr path)
                                           (lambda (pe) (= -1 (car pe))
@@ -227,6 +220,13 @@ invariants:
              (append (btree-path-to-last (cadar top-most-relevant))
                      (cons (cons -1 (cdar top-most-relevant))
                            (cdr top-most-relevant))))]
+
+        [(= 1 (caar path))
+         ;; left must not be empyt => no additional check
+         (define top-most-relevant  path)
+         (append (btree-path-to-last (cadar top-most-relevant))
+                 (cons (cons -1 (cdar top-most-relevant))
+                       (cdr top-most-relevant)))]
 
         [else (raise-user-error "unknown case")]))
 
@@ -673,3 +673,27 @@ invariants:
                                       ( 1 . (4 . ((5 . 6) . (7 . 8))))
                                       (-1 . ((4 . ((5 . 6) . (7 . 8))) . 9))))
                 '((4 . ((5 . 6) . (7 . 8))) . 9)))
+
+(define (c-append- rev-a-list b-list )
+  (cond [(empty? rev-a-list) b-list]
+        [else (c-append- (cdr rev-a-list) (cons (car rev-a-list) b-list))]))
+
+(define (c-append a-list b-list)
+  (c-append- (reverse a-list) b-list))
+
+
+(module+ test #| c-append |#
+  (check-equal? (c-append '() '())
+                '())
+
+  (check-equal? (c-append '(1) '())
+                '(1))
+
+  (check-equal? (c-append '() '(1))
+                '(1))
+
+  (check-equal? (c-append '(2) '(1))
+                '(2 1))
+
+  (check-equal? (c-append '(3 2) '(1 0))
+                '(3 2 1 0)))

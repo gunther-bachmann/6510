@@ -181,6 +181,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_LOCAL_1
          PUSH_LOCAL_2
          PUSH_LOCAL_3
+         PUSH_LOCAL_0_CAR
+         PUSH_LOCAL_1_CAR
+         PUSH_LOCAL_2_CAR
+         PUSH_LOCAL_3_CAR
+         PUSH_LOCAL_0_CDR
+         PUSH_LOCAL_1_CDR
+         PUSH_LOCAL_2_CDR
+         PUSH_LOCAL_3_CDR
          WRITE_FROM_LOCAL_0
          WRITE_FROM_LOCAL_1
          WRITE_FROM_LOCAL_2
@@ -667,11 +675,51 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   ;;        00+len(datarecord): next free record
   )
 
+
+
+(define PUSH_LOCAL_0_CAR #xa0)
+(define PUSH_LOCAL_1_CAR #xa2)
+(define PUSH_LOCAL_2_CAR #xa4)
+(define PUSH_LOCAL_3_CAR #xa6)
+
+(define PUSH_LOCAL_0_CDR #xa1)
+(define PUSH_LOCAL_1_CDR #xa3)
+(define PUSH_LOCAL_2_CDR #xa5)
+(define PUSH_LOCAL_3_CDR #xa7)
+
+(define BC_PUSH_LOCAL_CXR
+  (flatten
+   (list
+    (label BC_PUSH_LOCAL_CXR)
+           (LSR)                                ;; encoding is ---- xxxp (p=1 CDR, p=0 CAR)
+           (BCS CDR__BC_PUSH_LOCAL_SHORT)
+
+    ;; CAR
+           (TAY)                                ;; index -> Y
+           (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
+           (TAX)                                ;; low byte -> X
+           (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
+           (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack
+           (JSR VM_CAR_R)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    (label CDR__BC_PUSH_LOCAL_SHORT)
+           (TAY)                                ;; index -> Y
+           (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
+           (TAX)                                ;; low byte -> X
+           (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
+           (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack
+           (JSR VM_CDR_R)
+           (JMP VM_INTERPRETER_INC_PC)
+
+
+    )))
+
 (define BC_PUSH_LOCAL_SHORT
   (flatten
    (list
     (label BC_PUSH_LOCAL_SHORT)
-           (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
+           (LSR)                                ;; encoding is ---- xxxp (p=1 write local, p=0 push local)
            (BCS WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
 
     ;; push local           
@@ -710,27 +758,30 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label BC_POP_TO_LOCAL_SHORT)
-           (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
-           (BCS WRITE__POP_TO_LOCAL_SHORT)
+    (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
+    (BCS WRITE__POP_TO_LOCAL_SHORT)
 
-           ;; pop to local           
-           (TAY)                                ;; index -> Y
-           (LDA ZP_RT)
-           (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index                      
-           (LDA ZP_RT+1)
-           (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
-           (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
-           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
+    ;; pop to local           
+    (TAY)                                ;; index -> Y
+    (LDA ZP_RT)
+    (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index                      
+    (LDA ZP_RT+1)
+    (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+    (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
+    (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 
-           ;; unused yet
-   (label  WRITE__POP_TO_LOCAL_SHORT)
-           (TAY)                                ;; index -> Y
-           (LDA ZP_RT)
-           (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
-           (LDA ZP_RT+1)
-           (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
-           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
-           )))
+    ;; unused yet
+    (label  WRITE__POP_TO_LOCAL_SHORT)
+    (TAY)                                ;; index -> Y
+    (LDA ZP_RT)
+    (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
+    (LDA ZP_RT+1)
+    (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+    (JMP VM_INTERPRETER_INC_PC)          ;; next bc
+    )))
+
+
+
 
 (define POP_TO_LOCAL_0 #x90)
 (define POP_TO_LOCAL_1 #x92)
@@ -1365,53 +1416,432 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_CELL_STACK_POP_R)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define FALSE_P_BRANCH #x0d)
-(define BC_FALSE_P_BRANCH
-  (list
-   (label BC_FALSE_P_BRANCH)
-          (LDA ZP_RT+1)
-          (BNE POP_AND_CONTINUE__BC_TRUE_P_BRANCH)
-          (BEQ BRANCH__BC_TRUE_P_BRANCH)))
-
 (define BC_GOTO
   (list
    (label BC_GOTO)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
+          (BMI JUMP_BACK__BC_GOTO)
+          (CLC)
+          (ADC !$02)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)
+
+   (label JUMP_BACK__BC_GOTO)
           (CLC)
           (ADC ZP_VM_PC)
-          (ADC !$02)
           (STA ZP_VM_PC)
-          (BCC NO_PAGE_CHANGE__BC_GOTO)
-          (INC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE__BC_GOTO)
+          (BCS NO_PAGE_CHANGE_ON_BACK__BC_GOTO)
+          (DEC ZP_VM_PC+1)
+   (label NO_PAGE_CHANGE_ON_BACK__BC_GOTO)
           (JMP VM_INTERPRETER)))
+
+(module+ test #| goto |#
+  (define goto-0-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc GOTO) (byte 2)
+      (bc PUSH_INT_m1)
+      (bc BRK)
+      (bc PUSH_INT_1))))
+  (check-equal? (vm-stack->strings goto-0-state)
+                (list "stack holds 2 items"
+                      "int $0001  (rt)"
+                      "int $0000"))
+
+  (define goto-1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc GOTO) (byte $70)
+      (bc BRK)
+      (org-align #x73)
+      (bc PUSH_INT_1))))
+  (check-equal? (vm-stack->strings goto-1-state)
+                (list "stack holds 2 items"
+                      "int $0001  (rt)"
+                      "int $0000"))
+
+  (define goto-2-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_0)
+       (bc GOTO) (byte $7d)
+       (bc BRK)
+       (org-align #x80)
+       (bc PUSH_INT_1)
+       (bc GOTO) (byte $6d)
+       (bc BRK)
+       (org-align #xf0)
+       (bc PUSH_INT_2)
+       ;; 80f1
+       (bc GOTO) (byte $0d)
+       (build-list 13 (lambda (_i) (bc BRK)))
+       ;; now at 8100
+       (bc PUSH_INT_m1)))
+   ))
+  (check-equal? (vm-stack->strings goto-2-state)
+                (list "stack holds 4 items"
+                      "int $1fff  (rt)"
+                      "int $0002"
+                      "int $0001"
+                      "int $0000"))
+
+  (define goto-3-state
+    (run-bc-wrapped-in-test
+     (flatten 
+      (list
+       (bc PUSH_INT_0)
+       (bc GOTO) (byte $7d)
+       (bc BRK)
+       (org-align #x80)
+       (bc PUSH_INT_1)
+       ;; now at 8081
+       (bc GOTO) (byte $6d)
+       ;; 8083
+       (bc BRK)
+       (org-align #xf0)
+       (bc PUSH_INT_2)
+       ;; now at 80f1
+       (bc GOTO) (byte $0e)
+       (build-list 14 (lambda (_i) (bc BRK)))
+       ;; now at 8102
+       (bc PUSH_INT_m1)))
+   ))
+  (check-equal? (vm-stack->strings goto-3-state)
+                (list "stack holds 4 items"
+                      "int $1fff  (rt)"
+                      "int $0002"
+                      "int $0001"
+                      "int $0000"))
+
+  (define goto-4-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_0)
+       (bc GOTO) (byte 3)
+       (bc BRK)
+       (bc PUSH_INT_1)
+       (bc BRK)
+       (bc GOTO) (byte $fe)))
+     ))
+  (check-equal? (vm-stack->strings goto-4-state)
+                (list "stack holds 2 items"
+                      "int $0001  (rt)"
+                      "int $0000"))
+
+  (define goto-5-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_0)
+       (bc GOTO) (byte $7d)
+       (bc BRK)
+       (org-align #x80)
+       (bc PUSH_INT_1)
+       ;; now at 8081
+       (bc GOTO) (byte $6d)
+       ;; 8083
+       (bc BRK)
+       (org-align #xf0)
+       (bc PUSH_INT_2)
+       ;; now at 80f1
+       (bc GOTO) (byte $0e)
+       (build-list 12 (lambda (_i) (bc BRK)))
+       ;; 80ff
+       (bc PUSH_INT_0)
+       ;; 8100
+       (bc BRK)
+       ;; now at 8101
+       (bc PUSH_INT_m1)
+       (bc GOTO) (byte $fd)))
+     ))
+  (check-equal? (vm-stack->strings goto-5-state)
+                (list "stack holds 5 items"
+                      "int $0000  (rt)"
+                      "int $1fff"
+                      "int $0002"
+                      "int $0001"
+                      "int $0000")))
+
+(define FALSE_P_BRANCH #x0d)
+(define BC_FALSE_P_BRANCH
+  (list
+   (label BC_FALSE_P_BRANCH)
+          (LDA ZP_RT+1)
+          (BEQ BRANCH__BC_TRUE_P_BRANCH)
+          (LDA !$00)
+          (BEQ POP_AND_CONTINUE__BC_TRUE_P_BRANCH)))
+
+(module+ test #| branch true |#
+  (define branch-false-0-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc FALSE_P_BRANCH) (byte 2)
+      (bc PUSH_INT_0)
+      (bc BRK)
+      (bc PUSH_INT_2))))
+  (check-equal? (vm-stack->strings branch-false-0-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-false-1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc FALSE_P_BRANCH) (byte $70)
+      (bc BRK)
+      (org-align #x73)
+      (bc PUSH_INT_2))))
+  (check-equal? (vm-stack->strings branch-false-1-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-false-2-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_0)
+       (bc FALSE_P_BRANCH) (byte $7d)
+       (bc BRK)
+       (org-align #x80)
+       (bc PUSH_INT_0)
+       (bc FALSE_P_BRANCH) (byte $6d)
+       (bc BRK)
+       (org-align #xf0)
+       (bc PUSH_INT_0)
+       ;; 80f1
+       (bc FALSE_P_BRANCH) (byte $0d)
+       (build-list 13 (lambda (_i) (bc BRK)))
+       ;; now at 8100
+       (bc PUSH_INT_2)))
+   ))
+  (check-equal? (vm-stack->strings branch-false-2-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-false-3-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_0)
+       (bc FALSE_P_BRANCH) (byte $7d)
+       (bc BRK)
+       (org-align #x80)
+       (bc PUSH_INT_0)
+       ;; now at 8081
+       (bc FALSE_P_BRANCH) (byte $6d)
+       ;; 8083
+       (bc BRK)
+       (org-align #xf0)
+       (bc PUSH_INT_0)
+       ;; now at 80f1
+       (bc FALSE_P_BRANCH) (byte $0e)
+       (build-list 14 (lambda (_i) (bc BRK)))
+       ;; now at 8102
+       (bc PUSH_INT_2)))
+   ))
+  (check-equal? (vm-stack->strings branch-false-3-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-false-4-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_0)
+       (bc FALSE_P_BRANCH) (byte 3)
+       (bc BRK)
+       (bc PUSH_INT_2)
+       (bc BRK)
+       (bc PUSH_INT_0)
+       (bc FALSE_P_BRANCH) (byte $fd)))
+     ))
+  (check-equal? (vm-stack->strings branch-false-4-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-false-5-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_0)
+       (bc FALSE_P_BRANCH) (byte $7d)
+       (bc BRK)
+       (org-align #x80)
+       (bc PUSH_INT_0)
+       ;; now at 8081
+       (bc FALSE_P_BRANCH) (byte $6d)
+       ;; 8083
+       (bc BRK)
+       (org-align #xf0)
+       (bc PUSH_INT_0)
+       ;; now at 80f1
+       (bc FALSE_P_BRANCH) (byte $0e)
+       (build-list 12 (lambda (_i) (bc BRK)))
+       ;; 80ff
+       (bc PUSH_INT_2)
+       ;; 8100
+       (bc BRK)
+       ;; now at 8101
+       (bc PUSH_INT_0)
+       (bc FALSE_P_BRANCH) (byte $fd)))
+     ))
+  (check-equal? (vm-stack->strings branch-false-5-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)")))
 
 (define TRUE_P_BRANCH #x0c)
 (define BC_TRUE_P_BRANCH
   (list
    (label BC_TRUE_P_BRANCH)
           (LDA ZP_RT+1)
-          (BEQ POP_AND_CONTINUE__BC_TRUE_P_BRANCH) ;; when false, just continue, no branch
+          (BEQ POP_AND_CONTINUE__BC_TRUE_P_BRANCH) ;; when false (A = 0), just continue, no branch
 
    (label BRANCH__BC_TRUE_P_BRANCH)
    ;; branch by adding second byte code
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
+          (BMI NEGATIVE_BRANCH__BC_TRUE_P_BRANCH)
+   (label POP_AND_CONTINUE__BC_TRUE_P_BRANCH)
+          (CLC)
+          (ADC !$02)
+          (PHA)
+          (JSR VM_CELL_STACK_POP_R)
+          (PLA)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)
+
+   (label NEGATIVE_BRANCH__BC_TRUE_P_BRANCH)
           (CLC)
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)
-          (BCC NO_PAGE_CHANGE__BC_TRUE_BRANCH)
-          (INC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE__BC_TRUE_BRANCH)
-
-   (label POP_AND_CONTINUE__BC_TRUE_P_BRANCH)
+          (BCS NO_PAGE_CHANGE_ON_BACK__BC_TRUE_P_BRANCH)
+          (DEC ZP_VM_PC+1)
+   (label NO_PAGE_CHANGE_ON_BACK__BC_TRUE_P_BRANCH)
           (JSR VM_CELL_STACK_POP_R)
-          (LDA !$02)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+          (JMP VM_INTERPRETER)))
 
-(module+ test #| int? |#
-  (skip (check-equal? #t #f "implement")))
+(module+ test #| branch true |#
+  (define branch-true-0-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_1)
+      (bc TRUE_P_BRANCH) (byte 2)
+      (bc PUSH_INT_1)
+      (bc BRK)
+      (bc PUSH_INT_2))))
+  (check-equal? (vm-stack->strings branch-true-0-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-true-1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_1)
+      (bc TRUE_P_BRANCH) (byte $70)
+      (bc BRK)
+      (org-align #x73)
+      (bc PUSH_INT_2))))
+  (check-equal? (vm-stack->strings branch-true-1-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-true-2-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_1)
+       (bc TRUE_P_BRANCH) (byte $7d)
+       (bc BRK)
+       (org-align #x80)
+       (bc PUSH_INT_1)
+       (bc TRUE_P_BRANCH) (byte $6d)
+       (bc BRK)
+       (org-align #xf0)
+       (bc PUSH_INT_1)
+       ;; 80f1
+       (bc TRUE_P_BRANCH) (byte $0d)
+       (build-list 13 (lambda (_i) (bc BRK)))
+       ;; now at 8100
+       (bc PUSH_INT_2)))
+   ))
+  (check-equal? (vm-stack->strings branch-true-2-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-true-3-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_1)
+       (bc TRUE_P_BRANCH) (byte $7d)
+       (bc BRK)
+       (org-align #x80)
+       (bc PUSH_INT_1)
+       ;; now at 8081
+       (bc TRUE_P_BRANCH) (byte $6d)
+       ;; 8083
+       (bc BRK)
+       (org-align #xf0)
+       (bc PUSH_INT_1)
+       ;; now at 80f1
+       (bc TRUE_P_BRANCH) (byte $0e)
+       (build-list 14 (lambda (_i) (bc BRK)))
+       ;; now at 8102
+       (bc PUSH_INT_2)))
+   ))
+  (check-equal? (vm-stack->strings branch-true-3-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-true-4-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_1)
+       (bc TRUE_P_BRANCH) (byte 3)
+       (bc BRK)
+       (bc PUSH_INT_2)
+       (bc BRK)
+       (bc PUSH_INT_1)
+       (bc TRUE_P_BRANCH) (byte $fd)))
+     ))
+  (check-equal? (vm-stack->strings branch-true-4-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define branch-true-5-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_INT_1)
+       (bc TRUE_P_BRANCH) (byte $7d)
+       (bc BRK)
+       (org-align #x80)
+       (bc PUSH_INT_1)
+       ;; now at 8081
+       (bc TRUE_P_BRANCH) (byte $6d)
+       ;; 8083
+       (bc BRK)
+       (org-align #xf0)
+       (bc PUSH_INT_1)
+       ;; now at 80f1
+       (bc TRUE_P_BRANCH) (byte $0e)
+       (build-list 12 (lambda (_i) (bc BRK)))
+       ;; 80ff
+       (bc PUSH_INT_2)
+       ;; 8100
+       (bc BRK)
+       ;; now at 8101
+       (bc PUSH_INT_1)
+       (bc TRUE_P_BRANCH) (byte $fd)))
+     ))
+  (check-equal? (vm-stack->strings branch-true-5-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)")))
 
 (define CONS_PAIR_P #x0a)
 (define BC_CONS_PAIR_P
@@ -1656,7 +2086,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3a  <-  1d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3c  <-  1e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 40  <-  a0..a7 reserved
+           (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 reserved
            (word-ref BC_NIL_P)                    ;; 42  <-  21
            (word-ref BC_INT_0_P)                  ;; 44  <-  22 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
@@ -1797,6 +2227,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           VM_INTERPRETER_INIT          
           BC_POP_TO_LOCAL_SHORT
           BC_PUSH_LOCAL_SHORT
+          BC_PUSH_LOCAL_CXR
           BC_PUSH_CONST_NUM_SHORT
           BC_PUSH_CONST_INT
           BC_PUSH_CONST_BYTE

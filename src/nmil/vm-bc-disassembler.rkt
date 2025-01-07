@@ -55,6 +55,11 @@
      (if (= 1 (bitwise-and bc #x01))
          (format "nil? ret param #~a" n)
          (format "nil? ret local #~a" n))]
+    [(= byte-code-t2 #x40)
+     (define n (arithmetic-shift (bitwise-and #x0e bc) -1))
+     (if (= 1 (bitwise-and bc #x01))
+         (format "push local #~a, cdr" n)
+         (format "push local #~a, car" n))]
     [(= byte-code-t2 #x42) "nil?"]
     [(= byte-code-t2 #x44) "int 0?"]
     [(= byte-code-t2 #x64) (format "goto $~a" (format-hex-byte bc_p1))]
