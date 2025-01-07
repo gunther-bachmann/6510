@@ -439,7 +439,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     6"
                          "next free slot: $51"))
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                3016)
+                2878)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -696,25 +696,27 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (BCS CDR__BC_PUSH_LOCAL_SHORT)
 
     ;; CAR
-           (TAY)                                ;; index -> Y
+           (STA ZP_RA)
+           (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+           (LDY ZP_RA) ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
-           (TAX)                                ;; low byte -> X
+           (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
-           (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack
-           (JSR VM_CAR_R)
+           (STA ZP_RT+1)
+           (JSR VM_WRITE_RT_CELL0_TO_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label CDR__BC_PUSH_LOCAL_SHORT)
-           (TAY)                                ;; index -> Y
+           (STA ZP_RA)
+           (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+           (LDY ZP_RA) ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
-           (TAX)                                ;; low byte -> X
+           (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
-           (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack
-           (JSR VM_CDR_R)
+           (STA ZP_RT+1)
+           (JSR VM_WRITE_RT_CELL1_TO_RT)
            (JMP VM_INTERPRETER_INC_PC)
-
-
-    )))
+)))
 
 (define BC_PUSH_LOCAL_SHORT
   (flatten
@@ -724,12 +726,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (BCS WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
 
     ;; push local           
-           (TAY)                                ;; index -> Y
+           (STA ZP_RA)
+           (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+           (LDY ZP_RA) ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
-           (TAX)                                ;; low byte -> X
+           (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
-           (JSR VM_CELL_STACK_PUSH_R)           ;; push A/X on stack
-           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
+           (STA ZP_RT+1)
+           (JMP VM_INTERPRETER_INC_PC)
 
     (label WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
            (TAY)                                ;; index -> Y

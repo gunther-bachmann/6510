@@ -605,7 +605,7 @@ TODOS:
    (check-equal? (vm-regt->string btree-depth-6-state)
                    "int $0003")
    (check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 8967))
+                 8430))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -995,7 +995,7 @@ TODOS:
                  "")
                 "(int $0000 . (int $0001 . (int $0002 . (int $1fff . NIL))))")
   (check-equal? (cpu-state-clock-cycles reverse-0-state)
-                3679))
+                3423))
 
 (define APPEND
   (list
@@ -1047,4 +1047,4 @@ TODOS:
                  "")
                 "(int $0005 . (int $0004 . (int $0003 . (int $0002 . (int $0001 . (int $0000 . NIL))))))")
   (check-equal? (cpu-state-clock-cycles append-0-state)
-                5932))
+                5548))

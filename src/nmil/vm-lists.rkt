@@ -160,8 +160,11 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (BMI STACK_HAS_LESS_THAN_TWO__VM_CONS_R)
 
    (label VM_CONS_R__UC) ;; no checks
-          (JSR VM_CP_RT_TO_RA)
-          (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; is equivalent to VM_ALLOC_CELL_PAIR_TO_RT, since zp_ptr = zp_rt
+          (LDA ZP_RT)
+          (STA ZP_RA)
+          (LDA ZP_RT+1)
+          (STA ZP_RA+1)
+          (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
           (JSR VM_WRITE_RA_TO_CELL0_RT)
           (JMP VM_POP_FSTOS_TO_CELL1_RT)))
 
