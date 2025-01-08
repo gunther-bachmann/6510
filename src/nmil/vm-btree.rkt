@@ -904,20 +904,21 @@ TODOS:
 
           (bc PUSH_LOCAL_0_CDR)
           (bc WRITE_TO_LOCAL_2)         ;; top-most-relevant = local2 = (cdr path) <- looping cdr
-          (bc NIL?)                     ;; loop entry <--
+          (bc NIL?)                     ;; 
           (bc TRUE_P_BRANCH) (byte $f6) ;; -10 return nil
           (bc PUSH_LOCAL_2_CAR)
           (bc CAR)
           (bc INT_0_P)
           (bc FALSE_P_BRANCH) (byte 3) 
           (bc PUSH_LOCAL_2_CDR)
-          (bc GOTO) (byte $f7)          ;; cdr and loop -->
+          (bc GOTO) (byte $f6)          ;; cdr and loop -->
 
           (bc PUSH_LOCAL_2)             ;; top-most-relevant
           (bc NIL?)
           (bc TRUE_P_BRANCH) (byte $ea) ;; -22 return nil
 
           (bc PUSH_LOCAL_2)             ;; top-most-relevant
+
           (bc CDR)                      ;; entry for construct path <-- 
           (bc PUSH_LOCAL_2_CAR)         ;; top-most-relevant
           (bc CDR)
@@ -934,25 +935,10 @@ TODOS:
           (bc RET)
 
     ;; [else
-          ;; alternative
-          ;; (bc PUSH_LOCAL_0)
-          ;; (bc WRITE_TO_LOCAL_2)         ;; write other top-most-relevant and jump to first CDR
-          ;; (bc GOTO) (byte -18)          ;; construct path -->
-
-          (bc PUSH_LOCAL_0_CDR)
-          (bc PUSH_LOCAL_0_CAR)
-          (bc CDR)
-          (bc WRITE_TO_LOCAL_1)       ;; local1 = (cdar top-most-relevant)
-          (bc PUSH_INT_0)
-          (bc CONS)
-          (bc CONS)
-
-          (bc PUSH_NIL)
-          (bc PUSH_LOCAL_1_CAR)           ;; (cadar top-most-relevant)
-          (bc CALL) (word-ref BTREE_PATH_TO_LAST)
-
-          (bc CALL) (word-ref APPEND)          
-          (bc RET)))
+          (bc PUSH_LOCAL_0)
+          (bc WRITE_TO_LOCAL_2)         ;; write other top-most-relevant and jump to first CDR
+          (bc GOTO) (byte $ee)          ;; (-18) construct path -->
+          ))
 
 (module+ test #| prev |#
   (define prev-0-state
@@ -1123,7 +1109,75 @@ TODOS:
                     "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
                     (vm-regt->string prev-5-state #t)
                     "")
-                "((1 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))"))
+                "((1 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))")
+
+  (define prev-6-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)                            ;; for call to path_to_first
+       (bc PUSH_INT) (word $0004)               ;;     o
+       (bc PUSH_INT) (word $0003)               ;;    / \
+       (bc PUSH_INT_2)                          ;;   1   o
+       (bc CONS)                                ;;      / \
+       (bc CONS)                                ;;     o   4
+       (bc PUSH_INT_1)                          ;;    / \
+       (bc CONS)                                ;;   2   3
+       (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;; ((1 . (2 . 3)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))
+       (bc CALL) (word-ref BTREE_PREV)          ;; ((1 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_PREV)          ;; ((0 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))
+       (bc BRK))
+      BTREE_PATH_TO_FIRST
+      BTREE_MAKE_ROOT
+      BTREE_PREV
+      BTREE_PATH_TO_LAST
+      BTREE_VALUE_P
+      BTREE_NODE_P
+      APPEND
+      REVERSE)
+     ))
+
+  (check-equal? (regexp-replace*
+                    "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
+                    (vm-regt->string prev-6-state #t)
+                    "")
+                "((0 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))")
+
+  (define prev-7-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)                            ;; for call to path_to_first
+       (bc PUSH_INT) (word $0004)               ;;     o
+       (bc PUSH_INT) (word $0003)               ;;    / \
+       (bc PUSH_INT_2)                          ;;   1   o
+       (bc CONS)                                ;;      / \
+       (bc CONS)                                ;;     o   4
+       (bc PUSH_INT_1)                          ;;    / \
+       (bc CONS)                                ;;   2   3
+       (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;; ((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))
+       (bc CALL) (word-ref BTREE_PREV)          ;; ((1 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))
+       (bc CALL) (word-ref BTREE_PREV)          ;; ((0 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_PREV)          ;; ((0 . (1 . ((2 . 3) . 4))) . NIL)))
+       (bc BRK))
+      BTREE_PATH_TO_FIRST
+      BTREE_MAKE_ROOT
+      BTREE_PREV
+      BTREE_PATH_TO_LAST
+      BTREE_VALUE_P
+      BTREE_NODE_P
+      APPEND
+      REVERSE)
+     ))
+
+  (check-equal? (regexp-replace*
+                    "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
+                    (vm-regt->string prev-7-state #t)
+                    "")
+                "((0 . (1 . ((2 . 3) . 4))) . NIL)")
+  )
 
 ;; optimization idea: NIL?_RET instead of NIL?, TRUE_P_RET
 (define REVERSE
