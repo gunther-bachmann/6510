@@ -153,6 +153,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         DUP
          BNOP
          INT_0_P
          EXT
@@ -1966,6 +1967,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA !$02)
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
 
+(define DUP #x0f)
+(define BC_DUP
+  (list
+   (label BC_DUP)
+          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+          (JMP VM_INTERPRETER_INC_PC)))
+
 (define INT_0_P #x22)
 (define BC_INT_0_P
   (list
@@ -2081,7 +2089,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_TRUE_P_BRANCH)            ;; 18  <-  0c
            (word-ref BC_FALSE_P_BRANCH)           ;; 1a  <-  0d 
            (word-ref BC_FALSE_P_RET)              ;; 1c  <-  0e 
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 1e  <-  0f reserved
+           (word-ref BC_DUP)                      ;; 1e  <-  0f 
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref VM_INTERPRETER_INC_PC)       ;; 22  <-  11 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 24  <-  12 reserved
@@ -2262,6 +2270,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INT_GREATER_P
           BC_TAIL_CALL
           BC_SWAP
+          BC_DUP
           BC_TRUE_P_RET
           BC_FALSE_P_RET
           BC_CONS_PAIR_P
