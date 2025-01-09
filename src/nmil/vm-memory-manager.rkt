@@ -277,7 +277,7 @@ call frame primitives etc.
                (format "next free slot: $~a" (format-hex-byte next-free-slot)))]))
 
 ;; produce strings describing the current cell-stack status
-(define (vm-stack->strings state (max-count 10))
+(define (vm-stack->strings state (max-count 10) (follow #f))
   (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
   (define stack-lb-page-start (peek-word-at-address state ZP_CELL_STACK_LB_PTR))
   (define stack-hb-page-start (peek-word-at-address state ZP_CELL_STACK_HB_PTR))
@@ -288,11 +288,11 @@ call frame primitives etc.
      (define low-bytes (memory-list state (+ stack-lb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-lb-page-start stack-tos-idx)))
      (define high-bytes (memory-list state (+ stack-hb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-hb-page-start stack-tos-idx)))
      (define stack-item-no (+ values-count (if (regt-empty? state) 0 1)))
-     (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair))) (map cons low-bytes high-bytes))))
+     (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair) state follow)) (map cons low-bytes high-bytes))))
      (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
            (if (regt-empty? state)
                "stack is empty"
-               (cons (format "~a  (rt)" (vm-regt->string state)) stack-strings)))]))
+               (cons (format "~a  (rt)" (vm-regt->string state follow)) stack-strings)))]))
 
 ;; make a list of adjacent pairs
 (define (pairing list (paired-list '()))
