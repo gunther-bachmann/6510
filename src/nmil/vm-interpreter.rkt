@@ -115,9 +115,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                     PUSH_GLOBAL
                     PUSH_STRUCT_FIELD
                     
-                    POP_TO_LOCAL
-                    POP_TO_GLOBAL
-
                     sPUSH_PARAMc
                     sNIL?-RET-PARAMc))
 
@@ -154,6 +151,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (provide vm-interpreter
          bc
          DUP
+         POP
          BNOP
          INT_0_P
          EXT
@@ -2069,6 +2067,46 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (check-equal? (cpu-state-clock-cycles nop-state)
                 31))
 
+(define POP #x11)
+(define BC_POP
+  (list
+   (label BC_POP)
+          (JSR VM_CELL_STACK_POP_R)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| pop |#
+  (define pop-0-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc POP))))
+
+  (check-equal? (vm-stack->strings pop-0-state)
+                (list "stack is empty"))
+
+  (define pop-1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc PUSH_INT_1)
+      (bc POP))))
+
+  (check-equal? (vm-stack->strings pop-1-state)
+                (list "stack holds 1 item"
+                      "int $0000  (rt)"))
+  (define pop-2-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_INT_0)
+      (bc PUSH_INT_1)
+      (bc PUSH_INT_2)
+      (bc POP))))
+
+  (check-equal? (vm-stack->strings pop-2-state)
+                (list "stack holds 2 items"
+                      "int $0001  (rt)"
+                      "int $0000")))
+
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
@@ -2091,7 +2129,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_FALSE_P_RET)              ;; 1c  <-  0e 
            (word-ref BC_DUP)                      ;; 1e  <-  0f 
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 22  <-  11 reserved
+           (word-ref BC_POP)                      ;; 22  <-  11
            (word-ref VM_INTERPRETER_INC_PC)       ;; 24  <-  12 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 26  <-  13 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 28  <-  14 reserved
@@ -2248,6 +2286,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define vm-interpreter
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT          
+          BC_POP
           BC_POP_TO_LOCAL_SHORT
           BC_PUSH_LOCAL_SHORT
           BC_PUSH_LOCAL_CXR

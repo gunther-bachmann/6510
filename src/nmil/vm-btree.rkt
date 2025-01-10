@@ -57,6 +57,7 @@ TODOS:
                   vm-interpreter
                   bc
                   EXT
+                  POP
                   DUP
                   BNOP
                   INT_0_P
@@ -1231,7 +1232,7 @@ TODOS:
           (bc PUSH_LOCAL_0_CAR)
           (bc CAR)
           (bc INT_0_P)
-          (bc FALSE_P_BRANCH) (byte 05)  ;; !=0 => goto to else branch
+          (bc FALSE_P_BRANCH) (byte 06)  ;; !=0 => goto to else branch
 
           (bc PUSH_LOCAL_0_CAR)
           (bc CDR)
@@ -1434,4 +1435,160 @@ TODOS:
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)"))
 
   (check-equal? (cpu-state-clock-cycles next-4-state)
-                1872))
+                1844))
+
+;; replace new nodes up the tree, making the tree persistent
+;; balanced: O(lg N), worst case O(N)
+;; (define (recursive-rebuild-path-with path repl-node (result (list)))
+;;   (cond [(empty? path) (reverse result)]
+;;         [(= (caar path) -1)
+;;          (define new-node (cons repl-node (cddar path)))
+;;          (define new-pe
+;;            (cons (caar path) new-node))
+;;          (recursive-rebuild-path-with (cdr path) new-node (cons new-pe result))]
+;;         [(= (caar path) 1)
+;;          (define new-node (cons (cadar path) repl-node))
+;;          (define new-pe
+;;            (cons (caar path) new-node))
+;;          (recursive-rebuild-path-with (cdr path) new-node (cons new-pe result))]
+;;         [else (raise-user-error "unknown case")]))
+(define BTREE_REC_REBUILD_PATH_WITH
+  (list
+   (label BTREE_REC_REBUILD_PATH_WITH)
+          (byte 2)
+          (bc WRITE_TO_LOCAL_0)
+
+          ;; check cond
+          (bc NIL?)
+          (bc FALSE_P_BRANCH) (byte 7) ;; check next cond expression
+
+          (bc POP) ;; ignore repl-node
+          (bc PUSH_NIL)
+          (bc SWAP)
+          (bc CALL) (word-ref REVERSE)
+          (bc RET) ;; return result
+
+          ;; check cond
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CAR)
+          (bc INT_0_P)                 ;; (== 0 (caar path)
+          (bc FALSE_P_BRANCH) (byte 13) ;; check next cond expression
+
+          (bc PUSH_LOCAL_0_CAR)        
+          (bc CDR)
+          (bc CDR)                     ;; (cddar path) :: repl-node :: result
+          (bc SWAP)                    ;; repl-node :: (cddar path) :: result
+          (bc CONS)                    ;; newnode = (repl-node . (cddar path)) :: result
+
+          (bc WRITE_TO_LOCAL_1)        ;; local1 = new node  <-- goto target of else
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CAR)                     ;; (caar path) :: (repl-node . (cddar path)) :: result
+          (bc CONS)                    ;; new-pe = ((caar path) . new-node) :: result
+
+          (bc CONS)                    ;; (new-pe . result)
+          (bc PUSH_LOCAL_1)            ;; new-node :: (new-pe . result)
+          (bc PUSH_LOCAL_0_CDR)        ;; (cdr path) :: new-node :: (new-pe . result)
+          (bc TAIL_CALL)
+
+          ;; else
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CDR)
+          (bc CAR)
+          (bc CONS)                    ;; ((cadar path) . repl-node) :: result
+
+          (bc GOTO) (byte $f4)             ;; -12
+          ))
+
+(module+ test #| rec rebuild path with |#
+  (define rec-rebuild-path-with-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       ;; build path
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0008)
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)                           ;; (5 . 6)
+       (bc CONS)                           ;; ((5 . 6) . 7)
+       (bc PUSH_INT) (word $0003)
+       (bc CONS)                           ;; (3 . ((5 . 6) . 7))
+       (bc CONS)                           ;; ((3 . ((5 . 6) . 7)) . 8)
+       (bc PUSH_INT_0)
+       (bc CONS)                           ;; (0 . ((3 . ((5 . 6) . 7)) . 8))
+       (bc CONS)                           ;; list
+
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)                           ;; (5 . 6)
+       (bc CONS)                           ;; ((5 . 6) . 7)
+       (bc PUSH_INT) (word $0003)
+       (bc CONS)                           ;; (3 . ((5 . 6) . 7))
+       (bc PUSH_INT_1)
+       (bc CONS)                           ;; (1 . (3 . ((5 . 6) . 7)))
+       (bc CONS)                           ;; list
+
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)                           ;; (5 . 6)
+       (bc CONS)                           ;; ((5 . 6) . 7)
+       (bc PUSH_INT_0)
+       (bc CONS)                           ;; (0 . ((5 . 6) . 7))
+       (bc CONS)                           ;; list
+
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)                           ;; (5 . 6)
+       (bc PUSH_INT_0)
+       (bc CONS)                           ;; (0 . (5 . 6))
+       (bc CONS)                           ;; list
+
+       (bc CALL) (word-ref APPEND)
+       (bc CALL) (word-ref APPEND)
+       (bc CALL) (word-ref APPEND)
+
+       (bc DUP)
+
+       (bc PUSH_NIL) ;; result
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0005)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)     ;; repl-node
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
+       (bc BRK))
+      BTREE_REC_REBUILD_PATH_WITH
+      APPEND
+      REVERSE)
+    ))
+
+  (check-equal? (map (lambda (str) (regexp-replace*
+                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
+                               str
+                               ""))
+                     (vm-stack->strings rec-rebuild-path-with-0-state 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                      "((0 . ((4 . 5) . 6))"
+                      " . ((0 . (((4 . 5) . 6) . 7))"
+                      " . ((1 . (3 . (((4 . 5) . 6) . 7)))"
+                      " . ((0 . ((3 . (((4 . 5) . 6) . 7)) . 8))"
+                      " . NIL))))  (rt)")
+
+                      (string-append
+                       "((0 . (5 . 6))"
+                       " . ((0 . ((5 . 6) . 7))"
+                       " . ((1 . (3 . ((5 . 6) . 7)))"
+                       " . ((0 . ((3 . ((5 . 6) . 7)) . 8))"
+                       " . NIL))))"))
+
+                "replaces the node '5' with '(4 . 5)' all the way up to the root in this path"))
