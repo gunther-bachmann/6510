@@ -18,8 +18,8 @@ TODOS:
     DONE btree-node-for-path
     DONE btree-prev
     DONE btree-next
-    recursive-rebuild-path-at-with
-    btree-add-value-after
+    DONE recursive-rebuild-path-at-with
+    IMPLEMENT btree-add-value-after
     btree-add-value-before
     btree->list
     btree<-list
@@ -1592,3 +1592,159 @@ TODOS:
                        " . NIL))))"))
 
                 "replaces the node '5' with '(4 . 5)' all the way up to the root in this path"))
+
+;; add value after the given path, returning the new path (with the tail holding the new root, because tree is persistent)
+;; balanced: O(lg N), worst case O(N)
+;; (define (btree-add-value-after value path)
+;;   (cond [(empty? path) (raise-user-error "path may not be empty")]
+;;         [(and (= -1 (caar path))
+;;             (empty? (cddar path)))
+;;          (define new-node (cons (cadar path) value))
+;;          (cons
+;;           (cons 1 new-node)
+;;           (recursive-rebuild-path-with (cdr path) new-node))]
+;;         [(and (= -1 (caar path))
+;;             (not (empty? (cddar path))))
+;;          (define new-right-node (cons value (cddar path)))
+;;          (define repl-node (cons (cadar path) new-right-node))
+;;          (cons
+;;           (cons -1 new-right-node)
+;;           (cons (cons 1 repl-node)
+;;                 (recursive-rebuild-path-with (cdr path) repl-node)))]
+;;         [(= 1 (caar path))
+;;          (define new-right-node (cons (cddar path) value))
+;;          (define repl-node (cons (cadar path) new-right-node))
+;;          (cons
+;;           (cons 1 new-right-node)
+;;           (cons (cons 1 repl-node)
+;;                 (recursive-rebuild-path-with (cdr path) repl-node)))]
+;;         [else (raise-user-error "unknown case")]))
+(define BTREE_ADD_VALUE_AFTER
+  (list
+   (label BTREE_ADD_VALUE_AFTER)
+          (byte 4)
+          (bc POP_TO_LOCAL_0)           ;; local0 = value
+          (bc WRITE_TO_LOCAL_1)         ;; local1 = path
+
+          ;; cond (nil? path)
+          (bc NIL?)
+          (bc FALSE_P_BRANCH) (byte 2)  ;; -> next cond
+
+          (bc PUSH_NIL)
+          (bc RET)
+
+          ;; cond (and (= -1 (caar path)) (empty? (cddar path)))
+          (bc PUSH_LOCAL_1_CAR)
+          (bc CAR)
+          (bc INT_0_P)
+          (bc FALSE_P_BRANCH) (byte 47) ;; -> else cond
+          (bc PUSH_LOCAL_1_CAR)
+          (bc CDR)
+          (bc CDR)
+          (bc NIL?)
+          (bc FALSE_P_BRANCH) (byte 16) ;; -> next cond
+
+          (bc PUSH_NIL)                ;; (list)
+          (bc PUSH_LOCAL_0)            ;; value :: (list)
+          (bc PUSH_LOCAL_1_CAR)
+          (bc CDR)
+          (bc CAR)                        ;; (cadar path) :: value  :: (list)
+          (bc CONS)                       ;; ((cadar path) . value)  :: (list)
+          (bc WRITE_TO_LOCAL_0)        ;; local0 = new-node (no longer value)!
+
+          (bc PUSH_LOCAL_1_CDR)       ;; (cdr path) :: new-node :: (list)
+          (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
+
+          (bc PUSH_LOCAL_0)
+          (bc PUSH_INT_1)
+          (bc CONS)                     ;; (1 . new-node) :: rec-rebuild
+          (bc CONS)                     ;; ((1 . new-node) . rec-rebuild)
+          (bc RET)
+
+
+          ;; cond (and (= -1 (caar path)) (not (empty? (cddar path))))
+          ;; cond already checked
+          (bc PUSH_NIL)
+
+          (bc PUSH_LOCAL_1_CAR)
+          (bc CDR)
+          (bc CDR)                     ;; (cddar path) :: (list)
+          (bc PUSH_LOCAL_0)            ;; value :: (cddar path) :: (list)
+          (bc CONS)                    ;; (value . (cddar path)) :: (list)
+          (bc WRITE_TO_LOCAL_0)        ;; local0 = new-right-node (no longer value)!
+
+          (bc PUSH_INT_0)
+          (bc CONS)
+          (bc POP_TO_LOCAL_3)          ;; local3 = (0 . new-right-node)
+
+          ;; entry for tail of else condition
+          (bc PUSH_LOCAL_0)            ;; new-right-node :: (list)    <--
+
+          (bc PUSH_LOCAL_1_CAR)        ;; 
+          (bc CDR)
+          (bc CAR)                    ;; (cadar path) :: new-right-node :: (list)
+          (bc CONS)                   ;; ((cadar path) . new-right-node) :: (list)
+          (bc WRITE_TO_LOCAL_2)       ;; local2= repl-node 
+
+          (bc PUSH_LOCAL_1_CDR)       ;; (cdr path) :: repl-node :: (list)
+          (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
+
+          (bc PUSH_LOCAL_2)
+          (bc PUSH_INT_1)
+          (bc CONS)                   ;; (1 . repl-node) :: rec-rebuild
+
+          (bc CONS)                   ;; ((1 . repl-node) . rec-rebuild)
+
+          (bc PUSH_LOCAL_3)           ;; (0 . new-right-node) :: ((1 . repl-node) . rec-rebuild)
+
+          (bc CONS)                   ;; ((0 . new-right-node) . ((1 . repl-node) . rec-rebuild))
+          (bc RET)
+
+          ;; cond else
+          (bc PUSH_NIL)
+
+          (bc PUSH_LOCAL_0)            ;; value :: (list)
+          (bc PUSH_LOCAL_1_CAR)
+          (bc CDR)
+          (bc CDR)                     ;; (cddar path) :: value :: (list)
+          (bc CONS)                    ;; ((cddar path) . value) :: (list)
+          (bc WRITE_TO_LOCAL_0)        ;; local0 = new-right-node (no longer value)!
+
+          (bc PUSH_INT_1)
+          (bc CONS)
+          (bc POP_TO_LOCAL_3)          ;; local3 = (1 . new-right-node)
+
+          (bc GOTO) (byte $e5)         ;; -27 -->
+          ))
+
+(module+ test #| add after |#
+  (define add-after-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+
+       (bc PUSH_INT) (word $0005)
+       (bc BNOP)
+
+       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+       (bc BRK))
+      BTREE_ADD_VALUE_AFTER
+      BTREE_REC_REBUILD_PATH_WITH
+      REVERSE)
+     ))
+
+  (check-equal? (map (lambda (str) (regexp-replace*
+                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
+                               str
+                               ""))
+                     (vm-stack->strings add-after-0-state 10 #t))
+                (list "stack holds 1 item"
+                      "((1 . (4 . 5)) . NIL)  (rt)")))
