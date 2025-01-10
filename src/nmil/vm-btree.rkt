@@ -1903,3 +1903,151 @@ TODOS:
                        " . ((1 . (3 . (4 . (5 . (6 . 7)))))"
                        " . NIL))))  (rt)")
                       "((1 . (5 . 6)) . ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL)))")))
+
+;; (define (btree-add-value-before value path)
+;;   (cond [(empty? path) (raise-user-error "path may not be empty")]
+;;         [(and (= -1 (caar path))
+;;             (empty? (cddar path)))
+;;          (define new-node (cons value (cadar path)))
+;;          (cons
+;;           (cons -1 new-node)
+;;           (recursive-rebuild-path-with (cdr path) new-node))]
+;;         [(and (= -1 (caar path))
+;;             (not (empty? (cddar path))))
+;;          (define new-left-node (cons value (cadar path)))
+;;          (define repl-node (cons new-left-node (cddar path)))
+;;          (cons
+;;           (cons -1 new-left-node)
+;;           (cons (cons -1 repl-node)
+;;                 (recursive-rebuild-path-with (cdr path) repl-node)))]
+;;         [(= 1 (caar path))
+;;          (define new-right-node (cons value (cddar path)))
+;;          (define repl-node (cons (cadar path) new-right-node))
+;;          (cons
+;;           (cons -1 new-right-node)
+;;           (cons (cons 1 repl-node)
+;;                 (recursive-rebuild-path-with (cdr path) repl-node)))]
+;;         [else (raise-user-error "unknown case")]))
+(define BTREE_ADD_VALUE_BEFORE
+  (list
+   (label BTREE_ADD_VALUE_BEFORE)
+          (byte 3)
+
+          (bc POP_TO_LOCAL_1)           ;; local1 = value
+          (bc WRITE_TO_LOCAL_0)         ;; local0 = path
+
+          (bc NIL?_RET_LOCAL_0_POP_1)
+
+          (bc CAAR)
+          (bc INT_0_P)
+          (bc FALSE_P_BRANCH) (byte 41) ;; -> else cond
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CDDR)
+          (bc NIL?)
+          (bc FALSE_P_BRANCH) (byte 14) ;; -> next option
+
+          ;; cond (and (= -1 (caar path)) (empty? (cddar path)))
+          (bc PUSH_NIL)                ;; param 3 for rec-rebuild call
+
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CADR)                    ;; (cadar path)
+          (bc PUSH_LOCAL_1)
+          (bc CONS)
+          (bc WRITE_TO_LOCAL_1)        ;; local1 = new-node
+                                       ;; param 2 for rec-rebuild call
+          
+          (bc PUSH_LOCAL_0_CDR)        ;; param 3 for rec-rebuild call
+          (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
+
+          (bc PUSH_LOCAL_1)
+          (bc PUSH_INT_0)
+                                       ;; (0 . new-node)
+          (bc COONS)                   ;; ((0 . new-node) . rec-build)
+          (bc RET)
+
+          ;; cond (and (= -1 (caar path)) (not (empty? (cddar path))))
+          (bc PUSH_NIL)                ;; param 3 for rec-rebuild call
+
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CADR)
+          (bc PUSH_LOCAL_1)
+          (bc CONS)
+          (bc WRITE_TO_LOCAL_1)       ;; local1 = new left node (no longer value)!
+
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CDDR)
+          (bc SWAP)
+          (bc CONS)
+          (bc WRITE_TO_LOCAL_2)       ;; local2 = repl-node
+                                      ;; param 2 for rec-rebuild call
+
+          (bc PUSH_LOCAL_0_CDR)       ;; param 1 for rec-rebuild call
+          (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
+
+          (bc PUSH_LOCAL_2)
+          (bc PUSH_INT_0)
+          (bc COONS)
+          (bc PUSH_LOCAL_1)
+          (bc PUSH_INT_0)
+          (bc COONS)
+          (bc RET)
+
+          ;; cond else
+          (bc PUSH_NIL)                ;; param 3 for rec-rebuild call
+
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CDDR)
+          (bc PUSH_LOCAL_1)
+          (bc CONS)
+          (bc WRITE_TO_LOCAL_1)       ;; local1 = new right node (no longer value)!
+
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CADR)
+          (bc CONS)
+          (bc WRITE_TO_LOCAL_2)      ;; local2 = repl=node
+                                     ;; param 2 for rec-rebuild call
+          (bc PUSH_LOCAL_1_CDR)      ;; param 1 for rec-rebuild call
+          (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
+
+          (bc PUSH_LOCAL_2)
+          (bc PUSH_INT_1)
+          (bc COONS)
+
+          (bc PUSH_LOCAL_1)
+          (bc PUSH_INT_0)
+          (bc COONS)
+          (bc RET)
+          ))
+
+(module+ test #| add value before |#
+  (define add-before-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0006)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_INT) (word $0005)
+
+       (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
+       (bc BRK))
+      BTREE_ADD_VALUE_BEFORE
+      BTREE_REC_REBUILD_PATH_WITH
+      REVERSE)))
+
+  (check-equal? (map (lambda (str) (regexp-replace*
+                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
+                               str
+                               ""))
+                     (vm-stack->strings add-before-0-state 10 #t))
+                (list "stack holds 2 items"
+                      "((0 . (5 . 6)) . NIL)  (rt)"
+                      "((0 . (6 . NIL)) . NIL)")))
