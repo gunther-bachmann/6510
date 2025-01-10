@@ -19,7 +19,7 @@ TODOS:
     DONE btree-prev
     DONE btree-next
     DONE recursive-rebuild-path-at-with
-    IMPLEMENT btree-add-value-after
+    DONE btree-add-value-after
     btree-add-value-before
     btree->list
     btree<-list
@@ -1640,17 +1640,17 @@ TODOS:
           (bc PUSH_NIL)                ;; (list)
           (bc PUSH_LOCAL_1)            ;; value :: (list)
           (bc PUSH_LOCAL_0_CAR)
-          (bc CADR)                        ;; (cadar path) :: value  :: (list)
-          (bc CONS)                       ;; ((cadar path) . value)  :: (list)
+          (bc CADR)                    ;; (cadar path) :: value  :: (list)
+          (bc CONS)                    ;; ((cadar path) . value)  :: (list)
           (bc WRITE_TO_LOCAL_1)        ;; local1 = new-node (no longer value)!
 
-          (bc PUSH_LOCAL_0_CDR)       ;; (cdr path) :: new-node :: (list)
+          (bc PUSH_LOCAL_0_CDR)        ;; (cdr path) :: new-node :: (list)
           (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
 
           (bc PUSH_LOCAL_1)
           (bc PUSH_INT_1)
-                                        ;; (1 . new-node) :: rec-rebuild
-          (bc COONS)                    ;; ((1 . new-node) . rec-rebuild)
+                                       ;; (1 . new-node) :: rec-rebuild
+          (bc COONS)                   ;; ((1 . new-node) . rec-rebuild)
           (bc RET)
 
 
@@ -1659,7 +1659,7 @@ TODOS:
           (bc PUSH_NIL)
 
           (bc PUSH_LOCAL_0_CAR)
-          (bc CDDR)                     ;; (cddar path) :: (list)
+          (bc CDDR)                    ;; (cddar path) :: (list)
           (bc PUSH_LOCAL_1)            ;; value :: (cddar path) :: (list)
           (bc CONS)                    ;; (value . (cddar path)) :: (list)
           (bc WRITE_TO_LOCAL_1)        ;; local1 = new-right-node (no longer value)!
@@ -1671,12 +1671,12 @@ TODOS:
           ;; entry for tail of else condition
           (bc PUSH_LOCAL_1)            ;; new-right-node :: (list)    <--
 
-          (bc PUSH_LOCAL_0_CAR)       ;; 
-          (bc CADR)                   ;; (cadar path) :: new-right-node :: (list)
-          (bc CONS)                   ;; ((cadar path) . new-right-node) :: (list)
-          (bc WRITE_TO_LOCAL_2)       ;; local2= repl-node 
+          (bc PUSH_LOCAL_0_CAR)        ;; 
+          (bc CADR)                    ;; (cadar path) :: new-right-node :: (list)
+          (bc CONS)                    ;; ((cadar path) . new-right-node) :: (list)
+          (bc WRITE_TO_LOCAL_2)        ;; local2= repl-node 
 
-          (bc PUSH_LOCAL_0_CDR)       ;; (cdr path) :: repl-node :: (list)
+          (bc PUSH_LOCAL_0_CDR)        ;; (cdr path) :: repl-node :: (list)
           (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
 
           (bc PUSH_LOCAL_2)
@@ -1684,9 +1684,9 @@ TODOS:
                                        ;; (1 . repl-node) :: rec-rebuild
           (bc COONS)                   ;; ((1 . repl-node) . rec-rebuild)
 
-          (bc PUSH_LOCAL_3)           ;; (0 . new-right-node) :: ((1 . repl-node) . rec-rebuild)
+          (bc PUSH_LOCAL_3)            ;; (0 . new-right-node) :: ((1 . repl-node) . rec-rebuild)
 
-          (bc CONS)                   ;; ((0 . new-right-node) . ((1 . repl-node) . rec-rebuild))
+          (bc CONS)                    ;; ((0 . new-right-node) . ((1 . repl-node) . rec-rebuild))
           (bc RET)
 
           ;; cond else
@@ -1694,7 +1694,7 @@ TODOS:
 
           (bc PUSH_LOCAL_1)            ;; value :: (list)
           (bc PUSH_LOCAL_0_CAR)
-          (bc CDDR)                     ;; (cddar path) :: value :: (list)
+          (bc CDDR)                    ;; (cddar path) :: value :: (list)
           (bc CONS)                    ;; ((cddar path) . value) :: (list)
           (bc WRITE_TO_LOCAL_1)        ;; local1 = new-right-node (no longer value)!
 
@@ -1719,6 +1719,8 @@ TODOS:
        (bc CONS)
        (bc CONS)
 
+       (bc DUP)
+
        (bc PUSH_INT) (word $0005)
        (bc BNOP)
 
@@ -1734,5 +1736,170 @@ TODOS:
                                str
                                ""))
                      (vm-stack->strings add-after-0-state 10 #t))
-                (list "stack holds 1 item"
-                      "((1 . (4 . 5)) . NIL)  (rt)")))
+                (list "stack holds 2 items"
+                      "((1 . (4 . 5)) . NIL)  (rt)"
+                      "((0 . (4 . NIL)) . NIL)"))
+
+  (define add-after-1-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_INT) (word $0005)
+       (bc BNOP)
+
+       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+       (bc BRK))
+      BTREE_ADD_VALUE_AFTER
+      BTREE_REC_REBUILD_PATH_WITH
+      REVERSE)
+     ))
+
+  (check-equal? (map (lambda (str) (regexp-replace*
+                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
+                               str
+                               ""))
+                     (vm-stack->strings add-after-1-state 10 #t))
+                (list "stack holds 2 items"
+                      "((0 . (5 . 6)) . ((1 . (4 . (5 . 6))) . NIL))  (rt)"
+                      "((0 . (4 . 6)) . NIL)"))
+
+  (define add-after-2-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc CONS)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_INT) (word $0005)
+       (bc BNOP)
+
+       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+       (bc BRK)) 
+      BTREE_ADD_VALUE_AFTER
+      BTREE_REC_REBUILD_PATH_WITH
+      REVERSE)
+     ))
+
+  (check-equal? (map (lambda (str) (regexp-replace*
+                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
+                               str
+                               ""))
+                     (vm-stack->strings add-after-2-state 10 #t))
+                (list "stack holds 2 items"
+                      "((0 . (5 . (6 . 7))) . ((1 . (4 . (5 . (6 . 7)))) . NIL))  (rt)"
+                      "((0 . (4 . (6 . 7))) . NIL)"))
+
+  (define add-after-3-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc BNOP)
+
+       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+       (bc BRK))
+      BTREE_ADD_VALUE_AFTER
+      BTREE_REC_REBUILD_PATH_WITH
+      REVERSE)
+     ))
+
+  (check-equal? (map (lambda (str) (regexp-replace*
+                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
+                               str
+                               ""))
+                     (vm-stack->strings add-after-3-state 10 #t))
+                (list "stack holds 2 items"
+                      "((1 . (6 . 7)) . ((1 . (5 . (6 . 7))) . NIL))  (rt)"
+                      "((1 . (5 . 6)) . NIL)"))
+
+
+  (define add-after-4-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+
+       (bc PUSH_INT) (word $0006)       ;; 6
+       (bc PUSH_INT) (word $0005)       ;; 5 :: 6
+       (bc CONS)                        ;; (5 . 6)
+       (bc DUP)                         ;; (5 . 6) :: (5 . 6)
+
+       (bc PUSH_INT) (word $0004)       ;; 4 :: (5 . 6) :: (5 . 6)
+       (bc CONS)                        ;; (4 . (5 . 6)) :: (5 . 6)
+       (bc DUP)                         ;; (4 . (5 . 6)) :: (4 . (5 . 6)) :: (5 . 6)
+
+       (bc PUSH_INT) (word $0003)       ;; 3 :: (4 . (5 . 6)) :: (4 . (5 . 6)) :: (5 . 6)
+       (bc CONS)                        ;; (3 . (4 . (5 . 6))) :: (4 . (5 . 6)) :: (5 . 6)
+       (bc PUSH_INT_1)                  ;; 1 :: (3 . (4 . (5 . 6))) :: (4 . (5 . 6)) :: (5 . 6)
+       (bc CONS)                        ;; (1 . (3 . (4 . (5 . 6)))) :: (4 . (5 . 6)) :: (5 . 6)
+
+       (bc PUSH_NIL)                    ;; NIL :: (1 . (3 . (4 . (5 . 6)))) :: (4 . (5 . 6)) :: (5 . 6)
+       (bc SWAP)                        ;; (1 . (3 . (4 . (5 . 6)))) :: NIL :: (4 . (5 . 6)) :: (5 . 6)
+       (bc CONS)                        ;; ((1 . (3 . (4 . (5 . 6)))) . NIL) :: (4 . (5 . 6)) :: (5 . 6)
+
+       (bc SWAP)                        ;; (4 . (5 . 6)) :: ((1 . (3 . (4 . (5 . 6)))) . NIL) :: (5 . 6)
+       (bc PUSH_INT_1)                  ;; 1 :: (4 . (5 . 6)) :: ((1 . (3 . (4 . (5 . 6)))) . NIL) :: (5 . 6)
+       (bc CONS)                        ;; (1 . (4 . (5 . 6))) :: ((1 . (3 . (4 . (5 . 6)))) . NIL) :: (5 . 6)
+       (bc CONS)                        ;; ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL)) :: (5 . 6)
+
+       (bc SWAP)                        ;; (5 . 6) :: ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL))
+       (bc PUSH_INT_1)                  ;; 1 :: (5 . 6) :: ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL))
+       (bc CONS)                        ;; (1 . (5 . 6)) :: ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL))
+       (bc CONS)                        ;; ((1 . (5 . 6)) . ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL)))
+
+       (bc DUP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc BNOP)
+
+       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+       (bc BRK))
+      BTREE_ADD_VALUE_AFTER
+      BTREE_REC_REBUILD_PATH_WITH
+      REVERSE)
+     ))
+
+  (check-equal? (map (lambda (str) (regexp-replace*
+                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
+                               str
+                               ""))
+                     (vm-stack->strings add-after-4-state 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((1 . (6 . 7))"
+                       " . ((1 . (5 . (6 . 7)))"
+                       " . ((1 . (4 . (5 . (6 . 7))))"
+                       " . ((1 . (3 . (4 . (5 . (6 . 7)))))"
+                       " . NIL))))  (rt)")
+                      "((1 . (5 . 6)) . ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL)))")))
