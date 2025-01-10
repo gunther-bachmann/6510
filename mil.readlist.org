@@ -3564,9 +3564,12 @@ this will include the implementation of
 **** enable restting cpu cycle count (e.g. via extended byte codes)
 **** optimize byte code
 - push_​local_​0, write_​to_​local_​0 :: make this a one byte command (not a short instruction) => speeds up decoding
-- cadr cdar caar cddr :: could be put into a fast instruction
+- [X] cadr cdar caar cddr :: could be put into a fast instruction
+- cxyzr :: 2 byte instruction, where the second byte is encoded to do
+  lldddddd : ll = 0..3 => 3..6 times apply car/cdr depending on bit d at position 0..5
+             d = 1 = cdr, d = 0 = car.
 - [X] true?-ret false?-ret :: combine true?-branch ret, false?-branch ret
-- conons :: two conses ?
+- [X] coons :: two conses ?
 - move inc_​int, max_​int into single byte opcodes
 - [X] push_​local_​n_​car, push_​local_​n_​cdr :: push and car or cdr
 - nil?_​branch, not_​nil?_​branch :: branch on (not) nil

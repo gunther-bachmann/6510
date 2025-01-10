@@ -57,6 +57,13 @@ TODOS:
                   vm-interpreter
                   bc
                   EXT
+                  CAAR
+                  CADR
+                  CDAR
+                  CDDR
+                  COONS
+                  CONDR
+                  CONAR
                   POP
                   DUP
                   BNOP
@@ -69,6 +76,7 @@ TODOS:
                   CONS_PAIR_P
                   TRUE_P_RET
                   FALSE_P_RET
+                  NIL?_RET_LOCAL_0_POP_1
                   INT_P
                   SWAP
                   POP_TO_LOCAL_0
@@ -468,8 +476,8 @@ TODOS:
           (bc PUSH_LOCAL_1)           ;; [right-list :: depth+1 :: max-depth]
           (bc PUSH_LOCAL_2)           ;; [depth+1 :: right-list :: depth+1 :: max-depth]
           (bc PUSH_LOCAL_0_CDR)       ;; [right :: depth+1 :: right-list :: depth+1 :: max-depth]
-          (bc CONS)                   ;; [(right . depth+1) :: right-list :: depth+1 :: max-depth]
-          (bc CONS)                   ;; [((right . depth+1) . right-list) :: depth+1 :: max-depth]
+                                      ;; [(right . depth+1) :: right-list :: depth+1 :: max-depth]
+          (bc COONS)                  ;; [((right . depth+1) . right-list) :: depth+1 :: max-depth]
           (bc PUSH_LOCAL_0_CAR)       ;; [left :: ((right . depth+1) . right-list) :: depth+1 :: max-depth]
           (bc TAIL_CALL)))
 
@@ -607,7 +615,7 @@ TODOS:
    (check-equal? (vm-regt->string btree-depth-6-state)
                    "int $0003")
    (check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 8430))
+                 8427))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -623,8 +631,8 @@ TODOS:
    ;; [else (btree-path-to-first (car node) (cons (cons -1 node) path))]))
           (bc PUSH_LOCAL_0)                     ;; node :: path
           (bc PUSH_INT_0)                       ;; 0 :: node :: path
-          (bc CONS)                             ;; (0 . node) :: path
-          (bc CONS)                             ;; ((0 . node) . path)
+                                                ;; (0 . node) :: path
+          (bc COONS)                            ;; ((0 . node) . path)
           (bc PUSH_LOCAL_0_CAR)                 ;; (car node) :: ((0 . node) . path)
           (bc TAIL_CALL)))
 
@@ -690,20 +698,18 @@ TODOS:
     ;;     [(empty? (cdr node)) (btree-path-to-last (car node) (cons (cons -1 node) path))]
           (bc PUSH_LOCAL_0_CDR)
           (bc NIL?)
-          (bc FALSE_P_BRANCH) (byte 6)
+          (bc FALSE_P_BRANCH) (byte 5)
 
           (bc PUSH_LOCAL_0)
           (bc PUSH_INT_0)
-          (bc CONS)
-          (bc CONS)
+          (bc COONS)
           (bc PUSH_LOCAL_0_CAR)
           (bc TAIL_CALL)
 
     ;;    [else (btree-path-to-last (cdr node) (cons (cons 1 node) path))]))
           (bc PUSH_LOCAL_0)
           (bc PUSH_INT_1)
-          (bc CONS)
-          (bc CONS)
+          (bc COONS)
           (bc PUSH_LOCAL_0_CDR)
           (bc TAIL_CALL)))
 
@@ -902,7 +908,7 @@ TODOS:
           (bc PUSH_LOCAL_0_CAR)
           (bc CAR)
           (bc INT_0_P)
-          (bc FALSE_P_BRANCH) (byte 34) 
+          (bc FALSE_P_BRANCH) (byte 33) 
 
           (bc PUSH_LOCAL_0_CDR)
           (bc WRITE_TO_LOCAL_2)         ;; top-most-relevant = local2 = (cdr path) <- looping cdr
@@ -926,8 +932,7 @@ TODOS:
           (bc CDR)
           (bc WRITE_TO_LOCAL_1)         ;; local1 = (cdar top-most-relevant)
           (bc PUSH_INT_0)
-          (bc CONS)
-          (bc CONS)
+          (bc COONS)
 
           (bc PUSH_NIL)
           (bc PUSH_LOCAL_1_CAR)         ;; (cdar top-most-relevant)
@@ -939,7 +944,7 @@ TODOS:
     ;; [else
           (bc PUSH_LOCAL_0)
           (bc WRITE_TO_LOCAL_2)         ;; write other top-most-relevant and jump to first CDR
-          (bc GOTO) (byte $ee)          ;; (-18) construct path -->
+          (bc GOTO) (byte $ef)          ;; (-17) construct path -->
           ))
 
 (module+ test #| prev |#
@@ -1094,7 +1099,7 @@ TODOS:
                       "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"))
 
   (check-equal? (cpu-state-clock-cycles prev-4-state)
-                5966))
+                5965))
 
 ;; optimization idea: NIL?_RET instead of NIL?, TRUE_P_RET
 (define REVERSE
@@ -1232,31 +1237,28 @@ TODOS:
           (bc PUSH_LOCAL_0_CAR)
           (bc CAR)
           (bc INT_0_P)
-          (bc FALSE_P_BRANCH) (byte 06)  ;; !=0 => goto to else branch
+          (bc FALSE_P_BRANCH) (byte 5)  ;; !=0 => goto to else branch
 
           (bc PUSH_LOCAL_0_CAR)
-          (bc CDR)
-          (bc CDR)
+          (bc CDDR)
           (bc NIL?)
-          (bc FALSE_P_BRANCH) (byte 17)   ;; not nil? => goto (and ...) branch
+          (bc FALSE_P_BRANCH) (byte 15)   ;; not nil? => goto (and ...) branch
 
     ;; [else
           (bc PUSH_LOCAL_0_CDR)         ;; (cdr path)
           (bc NIL?)                      
-          (bc TRUE_P_BRANCH) (byte $f1) ;; return nil
+          (bc TRUE_P_BRANCH) (byte $f2) ;; return nil
 
           ;; loop start
           (bc PUSH_LOCAL_0_CDR)         ;; (cdr path) <-- loop entry
           (bc WRITE_TO_LOCAL_0)         ;; local2= (list pe ...) 
-          (bc CAR)                      ;; pe
-          (bc CAR)                      ;; (car pe)
+          (bc CAAR)                      ;; (car pe)
           (bc INT_0_P)
-          (bc FALSE_P_BRANCH) (byte $fb) ;; next --> loop
+          (bc FALSE_P_BRANCH) (byte $fc) ;; next --> loop
           (bc PUSH_LOCAL_0_CAR)         ;; pe
-          (bc CDR)                      ;; (cdr pe)
-          (bc CDR)                      ;; (cddr pe)
+          (bc CDDR)                      ;; (cddr pe)
           (bc NIL?)
-          (bc TRUE_P_BRANCH) (byte $f5) ;; next --> loop
+          (bc TRUE_P_BRANCH) (byte $f7) ;; next --> loop
 
           ;; inner loop done
           ;; local2 = top most relevant
@@ -1269,8 +1271,7 @@ TODOS:
           (bc CDR)                      ;; (cdar top-most-relevant
           (bc WRITE_TO_LOCAL_1)         ;; local1 = (cdar top-most-relevant)
           (bc PUSH_INT_1)
-          (bc CONS)
-          (bc CONS)
+          (bc COONS)
 
           (bc PUSH_NIL)
           (bc PUSH_LOCAL_1_CDR)         ;; (cddar top-most-relevant)
@@ -1435,7 +1436,7 @@ TODOS:
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)"))
 
   (check-equal? (cpu-state-clock-cycles next-4-state)
-                1844))
+                1868))
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
@@ -1472,31 +1473,29 @@ TODOS:
           (bc PUSH_LOCAL_0_CAR)
           (bc CAR)
           (bc INT_0_P)                 ;; (== 0 (caar path)
-          (bc FALSE_P_BRANCH) (byte 13) ;; check next cond expression
+          (bc FALSE_P_BRANCH) (byte 11) ;; check next cond expression
 
           (bc PUSH_LOCAL_0_CAR)        
-          (bc CDR)
-          (bc CDR)                     ;; (cddar path) :: repl-node :: result
+          (bc CDDR)                     ;; (cddar path) :: repl-node :: result
           (bc SWAP)                    ;; repl-node :: (cddar path) :: result
           (bc CONS)                    ;; newnode = (repl-node . (cddar path)) :: result
 
           (bc WRITE_TO_LOCAL_1)        ;; local1 = new node  <-- goto target of else
           (bc PUSH_LOCAL_0_CAR)
           (bc CAR)                     ;; (caar path) :: (repl-node . (cddar path)) :: result
-          (bc CONS)                    ;; new-pe = ((caar path) . new-node) :: result
+                                       ;; new-pe = ((caar path) . new-node) :: result
 
-          (bc CONS)                    ;; (new-pe . result)
+          (bc COONS)                   ;; (new-pe . result)
           (bc PUSH_LOCAL_1)            ;; new-node :: (new-pe . result)
           (bc PUSH_LOCAL_0_CDR)        ;; (cdr path) :: new-node :: (new-pe . result)
           (bc TAIL_CALL)
 
           ;; else
           (bc PUSH_LOCAL_0_CAR)
-          (bc CDR)
-          (bc CAR)
+          (bc CADR)
           (bc CONS)                    ;; ((cadar path) . repl-node) :: result
 
-          (bc GOTO) (byte $f4)             ;; -12
+          (bc GOTO) (byte $f6)             ;; -10
           ))
 
 (module+ test #| rec rebuild path with |#
@@ -1623,42 +1622,35 @@ TODOS:
   (list
    (label BTREE_ADD_VALUE_AFTER)
           (byte 4)
-          (bc POP_TO_LOCAL_0)           ;; local0 = value
-          (bc WRITE_TO_LOCAL_1)         ;; local1 = path
+          (bc POP_TO_LOCAL_1)           ;; local1 = value
+          (bc WRITE_TO_LOCAL_0)         ;; local0 = path
 
           ;; cond (nil? path)
-          (bc NIL?)
-          (bc FALSE_P_BRANCH) (byte 2)  ;; -> next cond
-
-          (bc PUSH_NIL)
-          (bc RET)
+          (bc NIL?_RET_LOCAL_0_POP_1)   ;; return local0 if it is nil (thus return nil)
 
           ;; cond (and (= -1 (caar path)) (empty? (cddar path)))
-          (bc PUSH_LOCAL_1_CAR)
-          (bc CAR)
+          (bc CAAR)
           (bc INT_0_P)
-          (bc FALSE_P_BRANCH) (byte 47) ;; -> else cond
-          (bc PUSH_LOCAL_1_CAR)
-          (bc CDR)
-          (bc CDR)
+          (bc FALSE_P_BRANCH) (byte 43) ;; -> else cond
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CDDR)
           (bc NIL?)
-          (bc FALSE_P_BRANCH) (byte 16) ;; -> next cond
+          (bc FALSE_P_BRANCH) (byte 14) ;; -> next cond
 
           (bc PUSH_NIL)                ;; (list)
-          (bc PUSH_LOCAL_0)            ;; value :: (list)
-          (bc PUSH_LOCAL_1_CAR)
-          (bc CDR)
-          (bc CAR)                        ;; (cadar path) :: value  :: (list)
+          (bc PUSH_LOCAL_1)            ;; value :: (list)
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CADR)                        ;; (cadar path) :: value  :: (list)
           (bc CONS)                       ;; ((cadar path) . value)  :: (list)
-          (bc WRITE_TO_LOCAL_0)        ;; local0 = new-node (no longer value)!
+          (bc WRITE_TO_LOCAL_1)        ;; local1 = new-node (no longer value)!
 
-          (bc PUSH_LOCAL_1_CDR)       ;; (cdr path) :: new-node :: (list)
+          (bc PUSH_LOCAL_0_CDR)       ;; (cdr path) :: new-node :: (list)
           (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
 
-          (bc PUSH_LOCAL_0)
+          (bc PUSH_LOCAL_1)
           (bc PUSH_INT_1)
-          (bc CONS)                     ;; (1 . new-node) :: rec-rebuild
-          (bc CONS)                     ;; ((1 . new-node) . rec-rebuild)
+                                        ;; (1 . new-node) :: rec-rebuild
+          (bc COONS)                    ;; ((1 . new-node) . rec-rebuild)
           (bc RET)
 
 
@@ -1666,34 +1658,31 @@ TODOS:
           ;; cond already checked
           (bc PUSH_NIL)
 
-          (bc PUSH_LOCAL_1_CAR)
-          (bc CDR)
-          (bc CDR)                     ;; (cddar path) :: (list)
-          (bc PUSH_LOCAL_0)            ;; value :: (cddar path) :: (list)
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CDDR)                     ;; (cddar path) :: (list)
+          (bc PUSH_LOCAL_1)            ;; value :: (cddar path) :: (list)
           (bc CONS)                    ;; (value . (cddar path)) :: (list)
-          (bc WRITE_TO_LOCAL_0)        ;; local0 = new-right-node (no longer value)!
+          (bc WRITE_TO_LOCAL_1)        ;; local1 = new-right-node (no longer value)!
 
           (bc PUSH_INT_0)
           (bc CONS)
           (bc POP_TO_LOCAL_3)          ;; local3 = (0 . new-right-node)
 
           ;; entry for tail of else condition
-          (bc PUSH_LOCAL_0)            ;; new-right-node :: (list)    <--
+          (bc PUSH_LOCAL_1)            ;; new-right-node :: (list)    <--
 
-          (bc PUSH_LOCAL_1_CAR)        ;; 
-          (bc CDR)
-          (bc CAR)                    ;; (cadar path) :: new-right-node :: (list)
+          (bc PUSH_LOCAL_0_CAR)       ;; 
+          (bc CADR)                   ;; (cadar path) :: new-right-node :: (list)
           (bc CONS)                   ;; ((cadar path) . new-right-node) :: (list)
           (bc WRITE_TO_LOCAL_2)       ;; local2= repl-node 
 
-          (bc PUSH_LOCAL_1_CDR)       ;; (cdr path) :: repl-node :: (list)
+          (bc PUSH_LOCAL_0_CDR)       ;; (cdr path) :: repl-node :: (list)
           (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
 
           (bc PUSH_LOCAL_2)
           (bc PUSH_INT_1)
-          (bc CONS)                   ;; (1 . repl-node) :: rec-rebuild
-
-          (bc CONS)                   ;; ((1 . repl-node) . rec-rebuild)
+                                       ;; (1 . repl-node) :: rec-rebuild
+          (bc COONS)                   ;; ((1 . repl-node) . rec-rebuild)
 
           (bc PUSH_LOCAL_3)           ;; (0 . new-right-node) :: ((1 . repl-node) . rec-rebuild)
 
@@ -1703,18 +1692,17 @@ TODOS:
           ;; cond else
           (bc PUSH_NIL)
 
-          (bc PUSH_LOCAL_0)            ;; value :: (list)
-          (bc PUSH_LOCAL_1_CAR)
-          (bc CDR)
-          (bc CDR)                     ;; (cddar path) :: value :: (list)
+          (bc PUSH_LOCAL_1)            ;; value :: (list)
+          (bc PUSH_LOCAL_0_CAR)
+          (bc CDDR)                     ;; (cddar path) :: value :: (list)
           (bc CONS)                    ;; ((cddar path) . value) :: (list)
-          (bc WRITE_TO_LOCAL_0)        ;; local0 = new-right-node (no longer value)!
+          (bc WRITE_TO_LOCAL_1)        ;; local1 = new-right-node (no longer value)!
 
           (bc PUSH_INT_1)
           (bc CONS)
           (bc POP_TO_LOCAL_3)          ;; local3 = (1 . new-right-node)
 
-          (bc GOTO) (byte $e5)         ;; -27 -->
+          (bc GOTO) (byte $e8)         ;; -24 -->
           ))
 
 (module+ test #| add after |#

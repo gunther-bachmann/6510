@@ -150,6 +150,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         CAAR
+         CADR
+         CDAR
+         CDDR
+         COONS
+         CONDR
+         CONAR
          DUP
          POP
          BNOP
@@ -167,6 +174,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          CONS_PAIR_P
          TRUE_P_RET
          FALSE_P_RET
+         NIL?_RET_LOCAL_0_POP_1
+         NIL?_RET_LOCAL_0_POP_2
+         NIL?_RET_LOCAL_0_POP_3
+         NIL?_RET_LOCAL_0_POP_4
          INT_P
          SWAP
          POP_TO_LOCAL_0
@@ -2107,6 +2118,77 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0001  (rt)"
                       "int $0000")))
 
+(define CAAR #xa8)
+(define CADR #xaa)
+(define CDAR #xac)
+(define CDDR #xae)
+(define COONS #xa9)
+(define CONDR #xab)
+(define CONAR #xad)
+;; (define ? #xaf)
+(define BC_CxxR
+  (list
+   (label BC_CxxR)
+          (JSR VM_CxxR_R)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| cxxr |#
+  (define cxxr-0-state
+    (run-bc-wrapped-in-test
+      (list
+         (bc PUSH_NIL)
+         (bc PUSH_INT_2)
+         (bc PUSH_INT_1)
+         (bc CONS)
+         (bc CONS)
+         (bc CAAR))
+      ))
+  (check-equal? (vm-stack->strings cxxr-0-state)
+                (list "stack holds 1 item"
+                      "int $0001  (rt)"))
+
+  (define cxxr-1-state
+    (run-bc-wrapped-in-test
+      (list
+         (bc PUSH_NIL)
+         (bc PUSH_INT_2)
+         (bc PUSH_INT_1)
+         (bc CONS)
+         (bc CONS)
+         (bc CDAR))
+      ))
+  (check-equal? (vm-stack->strings cxxr-1-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
+
+  (define cxxr-2-state
+    (run-bc-wrapped-in-test
+      (list
+         (bc PUSH_INT_2)
+         (bc PUSH_INT_1)
+         (bc CONS)
+         (bc PUSH_NIL)
+         (bc CONS)
+         (bc CADR))
+      ))
+  (check-equal? (vm-stack->strings cxxr-2-state)
+                (list "stack holds 1 item"
+                      "int $0001  (rt)"))
+
+  (define cxxr-3-state
+    (run-bc-wrapped-in-test
+      (list
+         (bc PUSH_INT_2)
+         (bc PUSH_INT_1)
+         (bc CONS)
+         (bc PUSH_NIL)
+         (bc CONS)
+         (bc CDDR))
+      ))
+  (check-equal? (vm-stack->strings cxxr-3-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)")))
+
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
@@ -2144,7 +2226,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3a  <-  1d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3c  <-  1e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
-           (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 reserved
+           (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 
            (word-ref BC_NIL_P)                    ;; 42  <-  21
            (word-ref BC_INT_0_P)                  ;; 44  <-  22 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
@@ -2152,7 +2234,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4c  <-  26 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4e  <-  27 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 50  <-  a8..af reserved
+           (word-ref BC_CxxR)                     ;; 50  <-  a8..af reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 52  <-  29 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 54  <-  2a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 56  <-  2b reserved
@@ -2300,6 +2382,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_CONS
           BC_CAR
           BC_CDR
+          BC_CxxR
           BC_CALL
           BC_RET
           BC_BRK

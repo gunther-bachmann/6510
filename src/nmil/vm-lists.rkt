@@ -150,6 +150,49 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
           (JMP VM_WRITE_RT_CELL1_TO_RT)))
 
+;; short command for doing caar, cadr, cdar, cddr, coons, conar, condr
+;; caar =  (car (car x))
+;; cadr =  (car (cdr x))
+;; cdar =  (cdr (car x))
+;; cddr =  (cdr (cdr x))
+;; coons = (cons (cons a b) c)  ;; with tos = a :: b :: c
+;; conar = (cons (car a) b)     ;; with tos = a :: b
+;; condr = (cons (cdr a) b)     ;; with tos = a :: b
+(define VM_CxxR_R
+  (list 
+   (label VM_CxxR_R)
+          (LSR)
+          (BCS CONSES__VM_CxxR_R)
+          (TAX)
+          (LDA BRANCH_TARGETS__VM_CxxR_R,x)
+          (STA BRANCH_COMMAND__VM_CxxR_R+1)
+   (label BRANCH_COMMAND__VM_CxxR_R)
+          (BNE $00)
+          (JSR VM_CAR_R) ;; caar
+          (JMP VM_CAR_R)
+          (JSR VM_CDR_R) ;; cadr
+          (JMP VM_CAR_R)
+          (JSR VM_CAR_R) ;; cdar
+          (JMP VM_CDR_R)
+          (JSR VM_CDR_R) ;; cddr
+          (JMP VM_CDR_R)
+   (label CONSES__VM_CxxR_R)
+          (TAX)
+          (LDA BRANCH_TARGETS__VM_CxxR_R,x)
+          (STA BRANCH_COMMAND2__VM_CxxR_R+1)
+   (label BRANCH_COMMAND2__VM_CxxR_R)
+          (BNE $00)
+          (JSR VM_CONS_R) ;; coons
+          (JMP VM_CONS_R)
+          (JSR VM_CDR_R)  ;; condr
+          (JMP VM_CONS_R)
+          (JSR VM_CAR_R)  ;; conar
+          (JMP VM_CONS_R)
+          (RTS)
+
+   (label BRANCH_TARGETS__VM_CxxR_R)
+          (byte $00 $06 $0c $12)))
+
 (define VM_CONS_R
   (list
    (label STACK_HAS_LESS_THAN_TWO__VM_CONS_R)
@@ -195,4 +238,5 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           VM_CAR_R
           VM_CDR_R
           VM_NIL_P_R
+          VM_CxxR_R
           vm-call-frame))
