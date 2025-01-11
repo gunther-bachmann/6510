@@ -29,31 +29,31 @@ TODOS:
 
 (require (only-in racket/list flatten))
 (require "./bc-ast.rkt")
-(require (only-in "./bc-resolver.rkt" bc-resolve))
+(require (only-in "./bc-resolver.rkt" bc-resolve bc-bytes))
 
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
-                    CONS
-                    CAR
-                    CDR
-                    GOTO
-                    RET
-                    BYTE+
-                    INT+
-                    INT-
-                    BRA
-                    CALL
-                    NIL?
-                    TAIL_CALL
+(require (only-in "../cisc-vm/stack-virtual-machine.rkt"
+                  CONS
+                  CAR
+                  CDR
+                  GOTO
+                  RET
+                  BYTE+
+                  INT+
+                  INT-
+                  BRA
+                  CALL
+                  NIL?
+                  TAIL_CALL
 
-                    PUSH_INT
-                    PUSH_BYTE
-                    PUSH_NIL
-                    PUSH_LOCAL
-                    PUSH_GLOBAL
-                    PUSH_STRUCT_FIELD
+                  PUSH_INT
+                  PUSH_BYTE
+                  PUSH_NIL
+                  PUSH_LOCAL
+                  PUSH_GLOBAL
+                  PUSH_STRUCT_FIELD
 
-                    POP_TO_LOCAL
-                    POP_TO_GLOBAL))
+                  POP_TO_LOCAL
+                  POP_TO_GLOBAL))
 
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
@@ -2165,3 +2165,33 @@ TODOS:
                        " . ((0 . ((3 . (6 . NIL)) . 7))"
                        " . NIL)))"))
                 "replace null with value, make new node and replace all up to the root"))
+
+
+(define vm-btree
+  (flatten
+   (append
+    REVERSE
+    APPEND
+
+    BTREE_MAKE_ROOT
+
+    BTREE_VALUE_P
+    BTREE_NODE_P
+    BTREE_DEPTH
+
+    BTREE_PATH_TO_LAST
+    BTREE_PATH_TO_FIRST
+    BTREE_NEXT
+    BTREE_PREV
+
+    BTREE_NODE_FOR_PATH
+
+    BTREE_REC_REBUILD_PATH_WITH
+    ;; BTREE_VALIDATE   
+
+    BTREE_ADD_VALUE_BEFORE
+    BTREE_ADD_VALUE_AFTER)))
+
+(module+ test #| vm-btree |#
+  (check-equal? (bc-bytes (flatten vm-btree))
+                374))

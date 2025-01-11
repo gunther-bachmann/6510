@@ -26,7 +26,7 @@ resolve unresolved reference in byte code ast
                   ast-resolve-word-scmd?
                   ast-unresolved-bytes-cmd-resolve-sub-command))
 
-(provide bc-resolve)
+(provide bc-resolve bc-bytes)
 
 (module+ test
   (require rackunit)
@@ -171,5 +171,22 @@ resolve unresolved reference in byte code ast
                  (ast-bytes-cmd '() '(12))
                  (ast-bytes-cmd '() '(20))
                  (ast-bytes-cmd '() '(2))
-                 (ast-label-def-cmd '() "IS_PAIR__BTREE_VALIDATE")))
-  )
+                 (ast-label-def-cmd '() "IS_PAIR__BTREE_VALIDATE"))))
+
+(define/c (bc-bytes bc-cmds (result 0))
+  (-> (listof bc-cmd?) integer?)
+  (cond [(empty? bc-cmds) result]
+        [(ast-unresolved-bytes-cmd? (car bc-cmds))
+         (define bytes-count
+           (cond
+             [(ast-resolve-word-scmd? (ast-unresolved-bytes-cmd-resolve-sub-command (car bc-cmds))) 2]
+             [(ast-resolve-byte-scmd? (ast-unresolved-bytes-cmd-resolve-sub-command (car bc-cmds))) 1]
+             [else (raise-user-error "unknown case")]))
+         (bc-bytes (cdr bc-cmds) (+ result bytes-count))]
+        [(ast-bytes-cmd? (car bc-cmds))
+         (define bytes-count (length (ast-bytes-cmd-bytes (car bc-cmds))))
+         (when (= 0 bytes-count) (raise-user-error "suspicious byte cound"))
+         (bc-bytes (cdr bc-cmds) (+ result bytes-count))]
+        [(ast-label-def-cmd? (car bc-cmds))
+         (bc-bytes (cdr bc-cmds) result)]
+        [else (raise-user-error "unknown case")]))
