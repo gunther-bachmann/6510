@@ -12,7 +12,8 @@ resolve unresolved reference in byte code ast
                   bc-ast-rel-branch-reference
                   bc-ast-rel-branch-reference-label-ref
                   bc-ast-rel-branch-reference?
-                  bc-cmd?))
+                  bc-cmd?
+                  bc-rel-ref))
 (require (only-in "../ast/6510-command.rkt"
                   ast-label-def-cmd
                   ast-label-def-cmd?
@@ -30,7 +31,7 @@ resolve unresolved reference in byte code ast
 (module+ test
   (require rackunit)
   (require "../6510.rkt")
-  (require (only-in "./vm-interpreter.rkt" bc BNOP))
+  (require (only-in "./vm-interpreter.rkt" bc BNOP WRITE_TO_LOCAL_0 TRUE_P_BRANCH PUSH_LOCAL_0))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" GOTO CALL)))
 
 
@@ -80,25 +81,16 @@ resolve unresolved reference in byte code ast
     [(empty? bc-ast-cmds) (reverse result)]
     ;; resolve relative label
     [(bc-ast-rel-branch-reference? (car bc-ast-cmds))
-     (define rel (- (hash-ref labels
-                              (bc-ast-rel-branch-reference-label-ref (car bc-ast-cmds)))
-                    offset))
+     (define label (bc-ast-rel-branch-reference-label-ref (car bc-ast-cmds)))
+     (define rel (- (hash-ref labels label) offset))
+     (define bytes (list (if (> 0 rel)
+                             (+ 257 rel) ;; 256 + 1 (+1 since the branch command has increment the offset already)
+                             (sub1 rel))))  ;; (-1 since the branch bytecode has incremented the offset already
      (bc-resolve- (cdr bc-ast-cmds)
                  labels
                  (add1 offset)
-                 (cons (ast-bytes-cmd
-                        '()
-                        (list (if (> 0 rel)
-                                  (+ 257 rel) ;; 256 + 1 (+1 since the branch command has increment the offset already)
-                                  (sub1 rel)))) ;; (-1 since the branch bytecode has incremented the offset already
+                 (cons (ast-bytes-cmd '() bytes)
                        result))]
-    ;; take regular ast-bytes-cmds as is
-    [(ast-bytes-cmd? (car bc-ast-cmds))
-     (bc-resolve-
-      (cdr bc-ast-cmds)
-      labels
-      (+ offset (length (ast-bytes-cmd-bytes (car bc-ast-cmds))))
-      (cons (car bc-ast-cmds) result))]
     ;; take unresolved bytes as is
     [(ast-unresolved-bytes-cmd? (car bc-ast-cmds))
      (bc-resolve- (cdr bc-ast-cmds)
@@ -109,9 +101,16 @@ resolve unresolved reference in byte code ast
                       [else (raise-user-error "unknown case")])
                     offset)
                  (cons (car bc-ast-cmds) result))]
+    ;; take regular ast-bytes-cmds as is
+    [(ast-bytes-cmd? (car bc-ast-cmds))
+     (bc-resolve-
+      (cdr bc-ast-cmds)
+      labels
+      (+ offset (length (ast-bytes-cmd-bytes (car bc-ast-cmds))))
+      (cons (car bc-ast-cmds) result))]
     ;; ignore label definitions
     [(ast-label-def-cmd? (car bc-ast-cmds))
-     (bc-resolve- (cdr bc-ast-cmds) labels offset result)]
+     (bc-resolve- (cdr bc-ast-cmds) labels offset (cons (car bc-ast-cmds) result))]
     [else (raise-user-error "unknown case")]])
 
 (module+ test #| resolve |#
@@ -128,10 +127,49 @@ resolve unresolved reference in byte code ast
 
   (check-equal? (bc-resolve- bc-cmds-unresolved (bc-collect-labels bc-cmds-unresolved))
                 (list
+                 (ast-label-def-cmd '() "first")
                  (ast-bytes-cmd '() (list BNOP))
+                 (ast-label-def-cmd '() "next")
                  (ast-bytes-cmd '() (list GOTO))
                  (ast-bytes-cmd '() '(255))
                  (ast-bytes-cmd '() (list GOTO))
                  (ast-bytes-cmd '() '(3))
                  (ast-bytes-cmd '() (list CALL))
-                 (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "yz")))))
+                 (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "yz"))
+                 (ast-label-def-cmd '() "last")))
+
+
+  (define bc-cmds-unresolved-2
+    (flatten
+     (list
+      (label BTREE_VALIDATE)
+             (byte 2) ;; locals (0 = node, 1 = car/cdr
+             (bc WRITE_TO_LOCAL_0)
+             (bc CALL) (word-ref BTREE_NODE_P)
+             (bc TRUE_P_BRANCH) (bc-rel-ref IS_PAIR__BTREE_VALIDATE);; (byte 7) ;; jump to is-pair
+             (bc PUSH_LOCAL_0)
+             (bc CALL) (word-ref BTREE_VALUE_P)
+             (bc TRUE_P_BRANCH) (byte 20) ;; jump to is-value
+             (byte 2)               ;; BRK error, passed parameter is neither value nor node!
+
+      (label IS_PAIR__BTREE_VALIDATE))))
+
+  (check-equal? (bc-collect-labels bc-cmds-unresolved-2)
+                (hash "BTREE_VALIDATE" 0 "IS_PAIR__BTREE_VALIDATE" 14))
+  (check-equal? (bc-resolve bc-cmds-unresolved-2)
+                (list
+                 (ast-label-def-cmd '() "BTREE_VALIDATE")
+                 (ast-bytes-cmd '() '(2))
+                 (ast-bytes-cmd '() '(145))
+                 (ast-bytes-cmd '() '(52))
+                 (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BTREE_NODE_P"))
+                 (ast-bytes-cmd '() '(12))
+                 (ast-bytes-cmd '() '(7))
+                 (ast-bytes-cmd '() '(128))
+                 (ast-bytes-cmd '() '(52))
+                 (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BTREE_VALUE_P"))
+                 (ast-bytes-cmd '() '(12))
+                 (ast-bytes-cmd '() '(20))
+                 (ast-bytes-cmd '() '(2))
+                 (ast-label-def-cmd '() "IS_PAIR__BTREE_VALIDATE")))
+  )
