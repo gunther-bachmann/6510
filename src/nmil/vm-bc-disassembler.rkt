@@ -45,11 +45,13 @@
     [(= byte-code-t2 #x1a)
      (format "branch on false? by $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x1c) "ret on false?"]
+    [(= byte-code-t2 #x1e) "dup"]
     [(= byte-code-t2 #x20)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
          (format "write to local #~a" n)
          (format "pop to local #~a" n))]
+    [(= byte-code-t2 #x22) "pop"]
     [(= byte-code-t2 #x30)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
@@ -62,6 +64,17 @@
          (format "push local #~a, car" n))]
     [(= byte-code-t2 #x42) "nil?"]
     [(= byte-code-t2 #x44) "int 0?"]
+    [(= byte-code-t2 #x50)
+     (define n (bitwise-and #x07 bc))
+     (case n
+       [(0) "caar"]
+       [(1) "coons"]
+       [(2) "cadr"]
+       [(3) "condr"]
+       [(4) "cdar"]
+       [(5) "conar"]
+       [(6) "cddr"]
+       [(7) "unknown"])]
     [(= byte-code-t2 #x64) (format "goto $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x66) "return"]
     [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (bytes->int (+ 1 bc_p1) bc_p2)))] ;; add 2 because byte code starts there
@@ -79,6 +92,7 @@
     [(= byte-code-t2 #x82) "cdr"]
     [(= byte-code-t2 #x84) "cons"]
     [(= byte-code-t2 #x86) "car"]
+    [(= byte-code-t2 #xc2) "int -"]
     [(= byte-code-t2 #xc4) "int +"]
     [(= byte-code-t2 #xc6) "int > ?"]
     [else "unknown bc"]))
