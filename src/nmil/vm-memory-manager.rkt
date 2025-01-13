@@ -125,6 +125,8 @@ call frame primitives etc.
          vm-rega->string
          vm-deref-cell-pair-w->string
          vm-deref-cell-pair->string
+         cleanup-string
+         cleanup-strings
 
          VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
 
@@ -276,6 +278,15 @@ call frame primitives etc.
                (format "slots used:     ~a" slots-used)
                (format "next free slot: $~a" (format-hex-byte next-free-slot)))]))
 
+(define (cleanup-string str)
+  (regexp-replace*
+   #px"(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
+   str
+   ""))
+
+(define (cleanup-strings strings)
+  (map cleanup-string strings))
+
 ;; produce strings describing the current cell-stack status
 (define (vm-stack->strings state (max-count 10) (follow #f))
   (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
@@ -361,8 +372,8 @@ call frame primitives etc.
 (define (vm-cell-at-nil? state loc)
   (= TAGGED_NIL (peek-word-at-address state loc)))
 
-(define (vm-cell-at->string state loc (rev-endian #f))
-  (vm-cell-w->string (peek-word-at-address state loc rev-endian)))
+(define (vm-cell-at->string state loc (rev-endian #f) (follow #f))
+  (vm-cell-w->string (peek-word-at-address state loc rev-endian) state follow))
 
 ;; write string of current RT
 (define (vm-regt->string state (follow #f))

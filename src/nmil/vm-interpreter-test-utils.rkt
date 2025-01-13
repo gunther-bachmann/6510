@@ -37,6 +37,8 @@
                   disassembler-byte-code--byte-count
                   disassemble-byte-code))
 (require (only-in "./vm-memory-manager.rkt"
+                  cleanup-string
+                  cleanup-strings
                   vm-cell-at-nil?
                   vm-page->strings
                   vm-stack->strings
@@ -98,7 +100,7 @@
            (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_LB_PTR)))
            (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_HB_PTR))))))
 
-(define (vm-list->strings state address (string-list '()))
+(define (vm-list->strings state address (string-list '()) (follow #f))
   (cond [(= address #x0001) ;; this is the nil ptr
          (reverse string-list)]
         [else
@@ -111,8 +113,9 @@
              (reverse string-list)
              (vm-list->strings state
                               cell-cdr
-                              (cons (vm-cell-at->string state address)
-                                    string-list)))]))
+                              (cons (vm-cell-at->string state address #f follow)
+                                    string-list)
+                              follow))]))
 (define (debugger--bc-help d-state)
   (for-each displayln (list "bc commands"
                             ""
@@ -124,6 +127,9 @@
                             "pfn      print running function meta data"
                             "pl n     print the n-th local (of the call frame)"
                             "pml adr  print memory location as list (must be the address of a cell-pair!)"
+                            "ppml adr pretty print memory location as list (must be the address of a cell-pair!)"
+                            "pma adr  print cell at memory location (can be anything)"
+                            "ppma adr pretty print cell at memory location (can be anything)"
                             "rt       print register t"
                             "ruc      run until next call or return instruction"
                             "rur      run until returned from current call"
@@ -186,6 +192,9 @@
     (define pa-regex #px"^pa ([[:xdigit:]])$")
     (define pl-regex #px"^pl ([[:xdigit:]])$")
     (define pml-regex #px"^pml ([[:xdigit:]]*)$")
+    (define ppml-regex #px"^ppml ([[:xdigit:]]*)$")
+    (define pma-regex #px"^pma ([[:xdigit:]]*)$")
+    (define ppma-regex #px"^ppma ([[:xdigit:]]*)$")
     (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
           [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
           [(string=? command "pp") (debugger--disassemble-lines d-state) d-state]
@@ -206,8 +215,26 @@
                     d-state))]
           [(regexp-match? pml-regex command)
            (match-let (((list _ num) (regexp-match pml-regex command)))
-             (begin (displayln (format "list at $~a > ~a" num (vm-list->strings c-state (string->number num 16))))
+             (begin (displayln (vm-list->strings c-state (string->number num 16)))
                     d-state))]
+          [(regexp-match? ppml-regex command)
+           (match-let (((list _ num) (regexp-match ppml-regex command)))
+             (begin (displayln (format "list at $~a > ~a" num (cleanup-strings (vm-list->strings c-state (string->number num 16) (list) #t))))
+                    d-state))]
+          [(regexp-match? pma-regex command)
+           (match-let (((list _ num) (regexp-match pma-regex command)))
+             (begin
+               (define low (peek c-state (string->number num 16)))
+               (define high (peek c-state (add1 (string->number num 16))))
+               (displayln (vm-cell->string low high c-state #t))
+               d-state))]
+          [(regexp-match? ppma-regex command)
+           (match-let (((list _ num) (regexp-match ppma-regex command)))
+             (begin
+               (define low (peek c-state (string->number num 16)))
+               (define high (peek c-state (add1 (string->number num 16))))
+               (displayln (cleanup-string (vm-cell->string low high c-state #t)))
+               d-state))]
           [(string=? command "ruc")
            (debugger--bc-run-until d-state interpreter-loop-adr
                                    (lambda (bc-state)
