@@ -1668,11 +1668,11 @@ TODOS:
             (bc WRITE_TO_LOCAL_1)        ;; local1 = new-right-node (no longer value)!
   
             (bc PUSH_INT_0)
+     (label COMMON_RET__BTREE_ADD_VALUE_AFTER)
             (bc CONS)
             (bc POP_TO_LOCAL_3)          ;; local3 = (0 . new-right-node)
   
             ;; entry for tail of else condition
-     (label COMMON_RET__BTREE_ADD_VALUE_AFTER)
             (bc PUSH_LOCAL_1)            ;; new-right-node :: (list)    <--
   
             (bc PUSH_LOCAL_0_CAR)        ;; 
@@ -1704,9 +1704,7 @@ TODOS:
             (bc WRITE_TO_LOCAL_1)        ;; local1 = new-right-node (no longer value)!
   
             (bc PUSH_INT_1)
-            (bc CONS)
-            (bc POP_TO_LOCAL_3)          ;; local3 = (1 . new-right-node)
-  
+ 
             (bc GOTO) (bc-rel-ref COMMON_RET__BTREE_ADD_VALUE_AFTER)         ;; -24 -->
             ))))
 
@@ -1929,7 +1927,7 @@ TODOS:
    (flatten
     (list
      (label BTREE_ADD_VALUE_BEFORE)
-            (byte 3)
+            (byte 4)
   
             (bc POP_TO_LOCAL_1)           ;; local1 = value
             (bc WRITE_TO_LOCAL_0)         ;; local0 = path
@@ -1938,12 +1936,8 @@ TODOS:
   
             (bc CAAR)
             (bc INT_0_P)
-            (bc FALSE_P_BRANCH) (bc-rel-ref ELSE_COND__BTREE_ADD_VALUE_AFTER) ;; -> else cond
-            (bc PUSH_LOCAL_0_CAR)
-            (bc CDDR)
-            (bc NIL?)
-            (bc FALSE_P_BRANCH) (bc-rel-ref NEXT_COND__BTREE_ADD_VALUE_AFTER) ;; -> next option
-  
+            (bc FALSE_P_BRANCH) (bc-rel-ref ELSE_COND__BTREE_ADD_VALUE_BEFORE) ;; -> else cond
+
             ;; cond (and (= -1 (caar path)) (empty? (cddar path)))
             (bc PUSH_NIL)                ;; param 3 for rec-rebuild call
   
@@ -1954,6 +1948,12 @@ TODOS:
             (bc WRITE_TO_LOCAL_1)        ;; local1 = new-node
                                          ;; param 2 for rec-rebuild call
             
+            (bc PUSH_LOCAL_0_CAR)
+            (bc CDDR)
+            (bc NIL?)
+            (bc FALSE_P_BRANCH) (bc-rel-ref NEXT_COND__BTREE_ADD_VALUE_BEFORE) ;; -> next option
+
+
             (bc PUSH_LOCAL_0_CDR)        ;; param 3 for rec-rebuild call
             (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
   
@@ -1963,30 +1963,27 @@ TODOS:
             (bc COONS)                   ;; ((0 . new-node) . rec-build)
             (bc RET)
   
-     (label NEXT_COND__BTREE_ADD_VALUE_AFTER)
-            ;; cond (and (= -1 (caar path)) (not (empty? (cddar path))))
-            (bc PUSH_NIL)                ;; param 3 for rec-rebuild call
-  
-            (bc PUSH_LOCAL_0_CAR)
-            (bc CADR)
-            (bc PUSH_LOCAL_1)
-            (bc CONS)
-            (bc WRITE_TO_LOCAL_1)       ;; local1 = new left node (no longer value)!
+
+     (label NEXT_COND__BTREE_ADD_VALUE_BEFORE)
   
             (bc PUSH_LOCAL_0_CAR)
             (bc CDDR)
             (bc SWAP)
+
+            (bc PUSH_INT_0)
+
+     (label COMMON_RETURN__BTREE_ADD_VALUE_BEFORE)
+            (bc POP_TO_LOCAL_3)
             (bc CONS)
             (bc WRITE_TO_LOCAL_2)       ;; local2 = repl-node
                                         ;; param 2 for rec-rebuild call
   
             (bc PUSH_LOCAL_0_CDR)       ;; param 1 for rec-rebuild call
 
-     (label COMMON_RETURN__BTREE_ADD_VALUE_AFTER)
             (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
   
             (bc PUSH_LOCAL_2)
-            (bc PUSH_INT_0)
+            (bc PUSH_LOCAL_3)
             (bc COONS)
 
             (bc PUSH_LOCAL_1)
@@ -1995,7 +1992,7 @@ TODOS:
             (bc RET)
   
             ;; cond else
-     (label ELSE_COND__BTREE_ADD_VALUE_AFTER)
+     (label ELSE_COND__BTREE_ADD_VALUE_BEFORE)
             (bc PUSH_NIL)                ;; param 3 for rec-rebuild call
   
             (bc PUSH_LOCAL_0_CAR)
@@ -2006,20 +2003,9 @@ TODOS:
   
             (bc PUSH_LOCAL_0_CAR)
             (bc CADR)
-            (bc CONS)
-            (bc WRITE_TO_LOCAL_2)      ;; local2 = repl=node
-                                       ;; param 2 for rec-rebuild call
-            (bc PUSH_LOCAL_0_CDR)      ;; param 1 for rec-rebuild call
-            (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
-  
-            (bc PUSH_LOCAL_2)
+
             (bc PUSH_INT_1)
-            (bc COONS)
-  
-            (bc PUSH_LOCAL_1)
-            (bc PUSH_INT_0)
-            (bc COONS)
-            (bc RET)
+            (bc GOTO) (bc-rel-ref COMMON_RETURN__BTREE_ADD_VALUE_BEFORE)
           ))))
 
 (module+ test #| add value before |#
@@ -2302,7 +2288,7 @@ TODOS:
      ))
 
   (check-equal? (cpu-state-clock-cycles add-before-5-state)
-                13303)
+                13553)
 
   (check-equal? (cleanup-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -2350,4 +2336,4 @@ TODOS:
 
 (module+ test #| vm-btree |#
   (check-equal? (bc-bytes (flatten vm-btree))
-                351))
+                335))
