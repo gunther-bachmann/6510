@@ -814,30 +814,24 @@ TODOS:
      (label BTREE_NODE_FOR_PATH)
             (byte 1) ;; locals
             (bc WRITE_TO_LOCAL_0)
-            (bc NIL?)
-            (bc FALSE_P_BRANCH) (bc-rel-ref LEFT_NODE_COND__BTREE_NODE_FOR_PATH)
-  
-      ;; [(empty? path) '()]
-            (bc PUSH_NIL)
-            (bc RET)
-  
+            (bc NIL?_RET_LOCAL_0_POP_1)
+
       (label LEFT_NODE_COND__BTREE_NODE_FOR_PATH)
       ;; [(= 0 (caar path)) (car (cdar path))]
             (bc PUSH_LOCAL_0_CAR)
-            (bc WRITE_TO_LOCAL_0)
   
             (bc CAR)
             (bc INT_0_P)
             (bc FALSE_P_BRANCH) (bc-rel-ref ELSE_COND__BTREE_NODE_FOR_PATH) 
   
-            (bc PUSH_LOCAL_0_CDR)
-            (bc CAR)
+            (bc PUSH_LOCAL_0_CAR)
+            (bc CADR)
             (bc RET)
   
       (label ELSE_COND__BTREE_NODE_FOR_PATH)
       ;; [else (cdr (cdar path))]  ;; no error handling
-            (bc PUSH_LOCAL_0_CDR)
-            (bc CDR)
+            (bc PUSH_LOCAL_0_CAR)
+            (bc CDDR)
             (bc RET)))))
 
 (module+ test #| node for path |#
@@ -911,42 +905,29 @@ TODOS:
             (byte 3)
   
             (bc WRITE_TO_LOCAL_0)
-            (bc NIL?)
-            (bc FALSE_P_BRANCH) (bc-rel-ref LEFT_NODE_COND__BTREE_PREV)
-  
-      ;; [(empty? path) '()]
-     (label RET_NIL__BTREE_PREV)
-            (bc PUSH_NIL)
-            (bc RET)
-    
+            (bc NIL?_RET_LOCAL_0_POP_1)
+
      (label LEFT_NODE_COND__BTREE_PREV) 
       ;; [(= 0 (caar path))
-            (bc PUSH_LOCAL_0_CAR)
-            (bc CAR)
+            (bc CAAR)
             (bc INT_0_P)
             (bc FALSE_P_BRANCH) (bc-rel-ref ELSE_COND__BTREE_PREV) 
   
-            (bc PUSH_LOCAL_0_CDR)
      (label LOOP_FN__BTREE_PREV)
-            (bc WRITE_TO_LOCAL_2)         ;; top-most-relevant = local2 = (cdr path) <- looping cdr
-            (bc NIL?)                     ;; 
-            (bc TRUE_P_BRANCH) (bc-rel-ref RET_NIL__BTREE_PREV) ;; -10 return nil
-            (bc PUSH_LOCAL_2_CAR)
-            (bc CAR)
+            (bc PUSH_LOCAL_0_CDR)
+            (bc WRITE_TO_LOCAL_0)         ;; top-most-relevant = local0 = (cdr path) <- looping cdr
+            (bc NIL?_RET_LOCAL_0_POP_1)
+            (bc CAAR)
             (bc INT_0_P)
-            (bc FALSE_P_BRANCH) (bc-rel-ref END_LOOP__BTREE_PREV) 
-            (bc PUSH_LOCAL_2_CDR)
-            (bc GOTO) (bc-rel-ref LOOP_FN__BTREE_PREV)          ;; cdr and loop -->
+            (bc TRUE_P_BRANCH) (bc-rel-ref LOOP_FN__BTREE_PREV) 
   
      (label END_LOOP__BTREE_PREV)
-            (bc PUSH_LOCAL_2)             ;; top-most-relevant
-            (bc NIL?)
-            (bc TRUE_P_BRANCH) (bc-rel-ref RET_NIL__BTREE_PREV) ;; -22 return nil
+            (bc PUSH_LOCAL_0)             ;; top-most-relevant
+            (bc NIL?_RET_LOCAL_0_POP_1)
   
-            (bc PUSH_LOCAL_2)             ;; top-most-relevant
-  
+     (label CONSTRUCT_PATH__BTREE_PATH_TO_LAST)
             (bc CDR)                      ;; entry for construct path <-- 
-            (bc PUSH_LOCAL_2_CAR)         ;; top-most-relevant
+            (bc PUSH_LOCAL_0_CAR)         ;; top-most-relevant
             (bc CDR)
             (bc WRITE_TO_LOCAL_1)         ;; local1 = (cdar top-most-relevant)
             (bc PUSH_INT_0)
@@ -962,8 +943,7 @@ TODOS:
       (label ELSE_COND__BTREE_PREV)
       ;; [else
             (bc PUSH_LOCAL_0)
-            (bc WRITE_TO_LOCAL_2)         ;; write other top-most-relevant and jump to first CDR
-            (bc GOTO) (byte $ef)          ;; (-17) construct path -->
+            (bc GOTO) (bc-rel-ref CONSTRUCT_PATH__BTREE_PATH_TO_LAST)          ;; (-17) construct path -->
             ))))
 
 (module+ test #| prev |#
@@ -1115,7 +1095,7 @@ TODOS:
                       "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"))
 
   (check-equal? (cpu-state-clock-cycles prev-4-state)
-                5965))
+                5158))
 
 ;; optimization idea: NIL?_RET instead of NIL?, TRUE_P_RET
 (define REVERSE
@@ -1246,17 +1226,10 @@ TODOS:
       (label BTREE_NEXT)
              (byte 2)
              (bc WRITE_TO_LOCAL_0)         ;; local0= path
-             (bc NIL?)
-             (bc FALSE_P_BRANCH) (bc-rel-ref COND__BTREE_NEXT)
-   
-      ;; [(empty? path) '()]
-      (label RET_NIL__BTREE_NEXT)
-             (bc PUSH_NIL)
-             (bc RET)
-   
+             (bc NIL?_RET_LOCAL_0_POP_1)
+
       (label COND__BTREE_NEXT)
-             (bc PUSH_LOCAL_0_CAR)
-             (bc CAR)
+             (bc CAAR)
              (bc INT_0_P)
              (bc FALSE_P_BRANCH) (bc-rel-ref ELSE_COND__BTREE_NEXT)  ;; !=0 => goto to else branch
    
@@ -1269,8 +1242,11 @@ TODOS:
        ;; [else
              (bc PUSH_LOCAL_0_CDR)         ;; (cdr path)
              (bc NIL?)                      
-             (bc TRUE_P_BRANCH) (bc-rel-ref RET_NIL__BTREE_NEXT) ;; return nil
-   
+             (bc FALSE_P_BRANCH) (bc-rel-ref LOOP_FN__BTREE_NEXT) 
+
+             (bc PUSH_NIL)
+             (bc RET)
+
              ;; loop start
        (label LOOP_FN__BTREE_NEXT)
              (bc PUSH_LOCAL_0_CDR)         ;; (cdr path) <-- loop entry
@@ -1457,7 +1433,7 @@ TODOS:
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)"))
 
   (check-equal? (cpu-state-clock-cycles next-4-state)
-                1868))
+                1695))
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
@@ -1481,10 +1457,6 @@ TODOS:
      (label BTREE_REC_REBUILD_PATH_WITH)
             (byte 2)
             (bc WRITE_TO_LOCAL_0)
-
-            ;; (bc CALL) (word-ref BTREE_VALUE_P)
-            ;; (bc TRUE_P_BRANCH) (bc-rel-ref DONE__BTREE_REC_REBUILD_PATH_WITH)
-            ;; (bc PUSH_LOCAL_0)
 
             ;; check cond
             (bc NIL?)
@@ -2319,6 +2291,8 @@ TODOS:
 
        (bc DUP)
        (bc PUSH_INT) (word $0005)
+
+       (bc BNOP)
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
        (bc BRK))
       BTREE_ADD_VALUE_BEFORE
@@ -2326,6 +2300,9 @@ TODOS:
       BTREE_VALUE_P
       REVERSE)
      ))
+
+  (check-equal? (cpu-state-clock-cycles add-before-5-state)
+                13303)
 
   (check-equal? (cleanup-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -2373,4 +2350,4 @@ TODOS:
 
 (module+ test #| vm-btree |#
   (check-equal? (bc-bytes (flatten vm-btree))
-                374))
+                351))

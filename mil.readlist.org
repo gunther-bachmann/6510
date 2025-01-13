@@ -3575,6 +3575,15 @@ this will include the implementation of
 - move inc_​int, max_​int into single byte opcodes
 - [X] push_​local_​n_​car, push_​local_​n_​cdr :: push and car or cdr
 - nil?_​branch, not_​nil?_​branch :: branch on (not) nil
+- int_​0_​branch, not_​int_​0_​branch :: branch on (not) int = 0
+- int_​1_​branch, not_​int_​1_​branch :: branch on (not) int = 1
+- byte_​0_​branch, not_​byte_​0_​branch :: branch on (not) byte = 0
+- byte_​1_​branch, not_​byte_​1_​branch :: branch on (not) byte = 1
+- string_​empty_​branch, not_​string_​empty_​branch :: branch on (not) string empty
+- pop + push :: can be done by a write
+- call + ret :: can be combined to a jump
+  iff enough locals are available (in current function)
+  careful! function pointer must be adjusted (for tail calls of the called function)
 **** IMPLEMENT enhance debugger
 - [X] pretty print the next x byte code instructions
 - [X] make inspection routines fail safe (ignore exceptions)
