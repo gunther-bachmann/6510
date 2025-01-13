@@ -144,11 +144,11 @@
 (define/c (debugger--remove-breakpoints d-state description)
   (-> debug-state? string? debug-state?)
   (struct-copy debug-state d-state
-               [breakpoints (dropf (debug-state-breakpoints d-state)
-                                   (lambda (breakpoint)
-                                     (string=?
-                                      description
-                                      (breakpoint-description breakpoint))))]))
+               [breakpoints (filter (lambda (breakpoint)
+                                      (not (string=?
+                                          description
+                                          (breakpoint-description breakpoint))))
+                                   (debug-state-breakpoints d-state))]))
 
 (define/c (debugger--push-breakpoint d-state fun description (verbose #t))
   (->* [debug-state? any/c string?] [boolean?] debug-state?)

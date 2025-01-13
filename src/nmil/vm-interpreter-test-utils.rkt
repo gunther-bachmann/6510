@@ -3,6 +3,7 @@
 (require "../6510.rkt")
 (require "../6510-test-utils.rkt")
 
+(require racket/exn)
 (require (only-in "../6510-utils.rkt" absolute))
 (require (only-in "../ast/6510-assembler.rkt"
                   assemble
@@ -119,26 +120,29 @@
 (define (debugger--bc-help d-state)
   (for-each displayln (list "bc commands"
                             ""
-                            "? | h    print this help screen"
-                            "q        quit debugger"
+                            "? | h          print this help screen"
+                            "q              quit debugger"
                             ""
-                            "ps       print the stack"
-                            "pf       print the call frame"
-                            "pfn      print running function meta data"
-                            "pl n     print the n-th local (of the call frame)"
-                            "pml adr  print memory location as list (must be the address of a cell-pair!)"
-                            "ppml adr pretty print memory location as list (must be the address of a cell-pair!)"
-                            "pma adr  print cell at memory location (can be anything)"
-                            "ppma adr pretty print cell at memory location (can be anything)"
-                            "rt       print register t"
-                            "ruc      run until next call or return instruction"
-                            "rur      run until returned from current call"
-                            "s        run one step"
-                            "so       step over the current bc (even calls)"
-                            "sa adr   stop at bytecode at the given adr (not implemented)"
-                            "sab byte stop at the given bytecode (not implemented)"
-                            "dive     push assembler interactor"
-                            "^        (prefix) pass the following commands to the assembly debugger"))
+                            "ps             print the stack"
+                            "pf             print the call frame"
+                            "pfn            print running function meta data"
+                            "pl n           print the n-th local (of the call frame)"
+                            "pml adr        print cell at memory location as list (must be the address of a cell-pair!)"
+                            "ppml adr       pretty print cell at memory location as list (must be the address of a cell-pair!)"
+                            "pma adr        print cell at memory location (can be anything)"
+                            "ppma adr       pretty print cell at memory location (can be anything)"
+                            "pp <B?> <A?>   pretty print the next B (hex) commands starting at address A (hex)" 
+                            "rt             print cell register t"
+                            "ruc            run until next call or return instruction"
+                            "rur            run until returned from current call"
+                            "run            run up to next breakpoint set"
+                            "s              run one step"
+                            "so             step over the current bc (even calls)"
+                            "stop pc = <A>  stop byte code interpretation at address <A>"
+                            "clear stop pc = <A>  clear that breakpoint"
+                            "sab byte       stop at the given bytecode (not implemented)"
+                            "dive           push assembler interactor"
+                            "^              (prefix) pass the following commands to the assembly debugger"))
   d-state)
 
 (define (debugger--disassemble d-state (offset 0))
@@ -166,6 +170,19 @@
      (+ offset
         (disassembler-byte-code--byte-count (peek c-state (+ offset (peek-word-at-address c-state ZP_VM_PC))))))))
 
+;; run until a breakpoint other than the regular bc instruction break point hits
+(define (debugger--bc-run d-state interpreter-loop-adr)
+  (debugger--push-breakpoint
+   (debugger--run
+    (debugger--remove-breakpoints d-state bc-debugger--instruction-breakpoint-name))   
+   (lambda (lc-state)
+     (eq? (cpu-state-program-counter lc-state)
+          interpreter-loop-adr))
+   bc-debugger--instruction-breakpoint-name
+   #f))
+
+;; run until the given condition hits (or any other break point) other than the regular bc instruction level break
+;; remove the breakpoint with this condition again (regardless which breakpoint actually triggered)
 (define (debugger--bc-run-until d-state interpreter-loop-adr condition-fn)
   (debugger--push-breakpoint
    (debugger--remove-breakpoints
@@ -195,76 +212,111 @@
     (define ppml-regex #px"^ppml ([[:xdigit:]]*)$")
     (define pma-regex #px"^pma ([[:xdigit:]]*)$")
     (define ppma-regex #px"^ppma ([[:xdigit:]]*)$")
-    (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
-          [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
-          [(string=? command "pp") (debugger--disassemble-lines d-state) d-state]
-          [(string=? command "ps") (begin (for-each (lambda (str) (displayln str)) (vm-stack->strings c-state)) d-state)]
-          [(string=? command "pt") (begin (displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
-          [(string=? command "pfn") (begin
-                                      (define func-ptr (peek-word-at-address c-state ZP_VM_FUNC_PTR))
-                                      (displayln (format "function-ptr: $~a" (format-hex-word func-ptr)))
-                                      (define locals-num (peek c-state func-ptr))
-                                      (displayln (format "locals used : ~a" (number->string locals-num)))
-                                      (for-each  displayln (map (lambda (n) (vm-local->string c-state n)) (range locals-num)))
-                                      d-state)]
-          [(string=? command "s") (debugger--run d-state #t)]
-          [(string=? command "pf") (begin (for-each displayln (vm-call-frame->strings c-state)) d-state)]
-          [(regexp-match? pl-regex command)
-           (match-let (((list _ num) (regexp-match pl-regex command)))
-             (begin (displayln (vm-local->string c-state num))
-                    d-state))]
-          [(regexp-match? pml-regex command)
-           (match-let (((list _ num) (regexp-match pml-regex command)))
-             (begin (displayln (vm-list->strings c-state (string->number num 16)))
-                    d-state))]
-          [(regexp-match? ppml-regex command)
-           (match-let (((list _ num) (regexp-match ppml-regex command)))
-             (begin (displayln (format "list at $~a > ~a" num (cleanup-strings (vm-list->strings c-state (string->number num 16) (list) #t))))
-                    d-state))]
-          [(regexp-match? pma-regex command)
-           (match-let (((list _ num) (regexp-match pma-regex command)))
-             (begin
-               (define low (peek c-state (string->number num 16)))
-               (define high (peek c-state (add1 (string->number num 16))))
-               (displayln (vm-cell->string low high c-state #t))
-               d-state))]
-          [(regexp-match? ppma-regex command)
-           (match-let (((list _ num) (regexp-match ppma-regex command)))
-             (begin
-               (define low (peek c-state (string->number num 16)))
-               (define high (peek c-state (add1 (string->number num 16))))
-               (displayln (cleanup-string (vm-cell->string low high c-state #t)))
-               d-state))]
-          [(string=? command "ruc")
-           (debugger--bc-run-until d-state interpreter-loop-adr
-                                   (lambda (bc-state)
-                                     (memq (peek bc-state (peek-word-at-address bc-state ZP_VM_PC))
-                                           '(#x34 ;; call
-                                             #x35 ;; tail call
-                                             ))))]
-          [(string=? command "so")
-           (cond [(= #x34 (peek c-state (peek-word-at-address c-state ZP_VM_PC)))
-                  ;; step over, since it is a call!
-                  (define state-after-call (debugger--run d-state #t))
-                  (define nc-state (car (debug-state-states state-after-call)))
-                  (define parent-pc (peek-word-at-address nc-state (peek-word-at-address nc-state ZP_CALL_FRAME)))
-                  (display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
-                  (debugger--bc-run-until state-after-call interpreter-loop-adr
-                                          (lambda (bc-state)
-                                            (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
-                 [else (debugger--run d-state #t)])]
-          [(string=? command "rur")
-           ;; get previous (stored vm_pc, to which to return to)
-           (define parent-pc (peek-word-at-address c-state (peek-word-at-address c-state ZP_CALL_FRAME)))
-           (display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
-           (debugger--bc-run-until d-state interpreter-loop-adr
-                                   (lambda (bc-state)
-                                     (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
-          [(string-prefix? command "^")
-           (dispatch-debugger-command (substring command 1) d-state) ]
-          [else
-           (displayln "dispatching -> assembler-debugger")
-           (dispatch-debugger-command command d-state)])))
+    (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4})?$")
+    (define stop-pc-regex #px"^(clear *)?stop *pc *= *([[:xdigit:]]{1,4})$")
+    (with-handlers ([ exn:fail:user? (lambda (e)
+                                       (displayln (format "ignored exception (~a)" (exn->string e)))
+                                       d-state)])
+      (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
+            [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
+            [(regexp-match? pp-regex command)
+             (match-let (((list _ len address) (regexp-match pp-regex command)))
+               (begin
+                 (debugger--disassemble-lines 
+                  d-state
+                  (if len (string->number len 16) 10)
+                  (if address
+                      (- (string->number address 16)
+                         (peek-word-at-address c-state ZP_VM_PC))
+                      0))
+                 d-state))]
+            [(string=? command "ps") (begin (for-each (lambda (str) (displayln str)) (vm-stack->strings c-state)) d-state)]
+            [(string=? command "pt") (begin (displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
+            [(string=? command "pfn") (begin
+                                        (define func-ptr (peek-word-at-address c-state ZP_VM_FUNC_PTR))
+                                        (displayln (format "function-ptr: $~a" (format-hex-word func-ptr)))
+                                        (define locals-num (peek c-state func-ptr))
+                                        (displayln (format "locals used : ~a" (number->string locals-num)))
+                                        (for-each  displayln (map (lambda (n) (vm-local->string c-state n)) (range locals-num)))
+                                        d-state)]
+            [(string=? command "s") (debugger--run d-state #t)]
+            [(string=? command "pf") (begin (for-each displayln (vm-call-frame->strings c-state)) d-state)]
+            [(regexp-match? pl-regex command)
+             (match-let (((list _ num) (regexp-match pl-regex command)))
+               (begin (displayln (vm-local->string c-state num))
+                      d-state))]
+            [(regexp-match? pml-regex command)
+             (match-let (((list _ num) (regexp-match pml-regex command)))
+               (begin (displayln (vm-list->strings c-state (string->number num 16)))
+                      d-state))]
+            [(regexp-match? ppml-regex command)
+             (match-let (((list _ num) (regexp-match ppml-regex command)))
+               (begin (displayln (cleanup-strings (vm-list->strings c-state (string->number num 16) (list) #t)))
+                      d-state))]
+            [(regexp-match? pma-regex command)
+             (match-let (((list _ num) (regexp-match pma-regex command)))
+               (begin
+                 (define low (peek c-state (string->number num 16)))
+                 (define high (peek c-state (add1 (string->number num 16))))
+                 (displayln (vm-cell->string low high c-state #t))
+                 d-state))]
+            [(regexp-match? ppma-regex command)
+             (match-let (((list _ num) (regexp-match ppma-regex command)))
+               (begin
+                 (define low (peek c-state (string->number num 16)))
+                 (define high (peek c-state (add1 (string->number num 16))))
+                 (displayln (cleanup-string (vm-cell->string low high c-state #t)))
+                 d-state))]
+            [(string=? command "ruc")
+             (debugger--bc-run-until d-state interpreter-loop-adr
+                                     (lambda (bc-state)
+                                       (memq (peek bc-state (peek-word-at-address bc-state ZP_VM_PC))
+                                             '(#x34 ;; call
+                                               #x35 ;; tail call
+                                               ))))]
+            [(or (string=? command "run")
+                (string=? command "r"))
+             (debugger--bc-run d-state interpreter-loop-adr)]
+            [(string=? command "so")
+             (cond [(= #x34 (peek c-state (peek-word-at-address c-state ZP_VM_PC)))
+                    ;; step over, since it is a call!
+                    (define state-after-call (debugger--run d-state #t))
+                    (define nc-state (car (debug-state-states state-after-call)))
+                    (define parent-pc (peek-word-at-address nc-state (peek-word-at-address nc-state ZP_CALL_FRAME)))
+                    (display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
+                    (debugger--bc-run-until state-after-call interpreter-loop-adr
+                                            (lambda (bc-state)
+                                              (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
+                   [else (debugger--run d-state #t)])]
+            [(regexp-match? stop-pc-regex command)
+             (match-let (((list _ cl value) (regexp-match stop-pc-regex command)))
+               (cond [cl
+                      (begin
+                        (displayln (format "clear breakpoint at byte code pc = $~a" value))
+                        (debugger--remove-breakpoints d-state (format "stop at bc pc = $~a" value)))]
+                     [else
+                      (begin                      
+                        (displayln (format "set breakpoint at bc pc = $~a" value))
+                        (debugger--push-breakpoint
+                         d-state
+                         (lambda (lc-state)
+                           (and (= (peek-word-at-address lc-state ZP_VM_PC)
+                                 (string->number value 16))
+                              (= (cpu-state-program-counter lc-state)
+                                 interpreter-loop-adr)))
+                         (format "stop at bc pc = $~a" value)))]))]
+            [(string=? command "rur")
+             ;; get previous (stored vm_pc, to which to return to)
+             (define parent-pc (peek-word-at-address c-state (peek-word-at-address c-state ZP_CALL_FRAME)))
+             (display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
+             (debugger--bc-run-until d-state interpreter-loop-adr
+                                     (lambda (bc-state)
+                                       (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
+            [(string-prefix? command "^")
+             (dispatch-debugger-command (substring command 1) d-state) ]
+            [else
+             (displayln "dispatching -> assembler-debugger")
+             (dispatch-debugger-command command d-state)]))))
 
 (define (debugger--bc-interactor interpreter-loop-adr)
   (list

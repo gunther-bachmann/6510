@@ -3317,6 +3317,10 @@ describes some lisp implementations (with some techn. detail) and does perforamc
               to-free-array A[o,o,o, ....]
                               |
                               C[o,o,o,o,o,o]
+**** DONE add profiler for code length
+- simply count bytecode length
+**** DONE enable restting cpu cycle count (e.g. via extended byte codes)
+- done through magic jsr address (used by BNOP operation)
 **** IMPLEMENT what part of the 6510 vm design should be implement w/ racket to validate design?
 implement all necessary to do a reverse function tail called implementation with space optimized byte code
 see [[file:src/nmil/svm-compiler.rkt::(m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*][test with reverse function]]
@@ -3560,9 +3564,7 @@ this will include the implementation of
   - [X] single step
   - [X] run to next call/return
   - [X] step over call
-**** add profiler for code length
-**** enable restting cpu cycle count (e.g. via extended byte codes)
-**** optimize byte code
+**** IMPLEMENT optimize byte code
 - push_​local_​0, write_​to_​local_​0 :: make this a one byte command (not a short instruction) => speeds up decoding
 - [X] cadr cdar caar cddr :: could be put into a fast instruction
 - cxyzr :: 2 byte instruction, where the second byte is encoded to do
@@ -3573,17 +3575,22 @@ this will include the implementation of
 - move inc_​int, max_​int into single byte opcodes
 - [X] push_​local_​n_​car, push_​local_​n_​cdr :: push and car or cdr
 - nil?_​branch, not_​nil?_​branch :: branch on (not) nil
-**** enhance debugger
-- [ ] pretty print the next x byte code instructions
-- [ ] make inspection routines fail safe (ignore exceptions)
+**** IMPLEMENT enhance debugger
+- [X] pretty print the next x byte code instructions
+- [X] make inspection routines fail safe (ignore exceptions)
 - [X] switch from/to bc/assembler debugger
 - [ ] inspection of vm variables (zp_​vm_​pc, zp_...)
 - [ ] inspect/manipulate call frame
 - [ ] going back bc steps
 - [ ] use colors to separate prompt, output, disassembly
 - [ ] inspect/manipulate value stack
-- [ ] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
-- [ ] allow setting breakpoints on bytecode (at a certain address)
+- [-] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
+  - [X] cells
+  - [X] lists
+  - [ ] structures
+  - [ ] strings/native arrays
+  - [ ] arrays
+- [X] allow setting breakpoints on bytecode (at a certain address)
 - [ ] allow in place execution of bytecode
 **** how much of the 6510 code should be actually written and tested with the interpreter (and actually used to interpret byte code)?
 **** IDEA for native code implemenation of (parts of) functions
