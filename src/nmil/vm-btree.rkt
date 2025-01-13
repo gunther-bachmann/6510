@@ -20,7 +20,7 @@ TODOS:
     DONE btree-next
     DONE recursive-rebuild-path-at-with
     DONE btree-add-value-after
-    btree-add-value-before
+    DONE btree-add-value-before
     btree->list
     btree<-list
     btree-remove-value-at
@@ -109,13 +109,10 @@ TODOS:
                   WRITE_FROM_LOCAL_1
                   WRITE_FROM_LOCAL_2
                   WRITE_FROM_LOCAL_3])
-(require (only-in "./vm-memory-manager.rkt" ZP_VM_PC))
-
+(require (only-in "./vm-memory-manager.rkt" ZP_VM_PC cleanup-strings cleanup-string))
 
 (require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt" memory-list))
-
-
 
 (module+ test #|  |#
   (require "../6510-test-utils.rkt")
@@ -1109,10 +1106,7 @@ TODOS:
       REVERSE)
      ))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings prev-4-state 10 #t))
                 (list "stack holds 4 items"
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)  (rt)"                      
@@ -1159,11 +1153,9 @@ TODOS:
       REVERSE)
      ))
 
-  (check-equal? (regexp-replace*
-                 "pair-ptr (\\$[0-9A-Fa-f]*)?"
-                 (vm-regt->string reverse-0-state #t)
-                 "")
-                "(int $0000 . (int $0001 . (int $0002 . (int $1fff . NIL))))")
+  (check-equal? (cleanup-string
+                 (vm-regt->string reverse-0-state #t))
+                "(0 . (1 . (2 . (1fff . NIL))))")
   (check-equal? (cpu-state-clock-cycles reverse-0-state)
                 3423))
 
@@ -1455,10 +1447,7 @@ TODOS:
       REVERSE)
      ))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings next-4-state 10 #t))
                 (list "stack holds 5 items"
                       "NIL  (rt)"
@@ -1492,11 +1481,16 @@ TODOS:
      (label BTREE_REC_REBUILD_PATH_WITH)
             (byte 2)
             (bc WRITE_TO_LOCAL_0)
-  
+
+            ;; (bc CALL) (word-ref BTREE_VALUE_P)
+            ;; (bc TRUE_P_BRANCH) (bc-rel-ref DONE__BTREE_REC_REBUILD_PATH_WITH)
+            ;; (bc PUSH_LOCAL_0)
+
             ;; check cond
             (bc NIL?)
             (bc FALSE_P_BRANCH) (bc-rel-ref CHECK_COND__BTREE_REC_REBUILD_PATH_WITH) ;; check next cond expression
   
+     (label DONE__BTREE_REC_REBUILD_PATH_WITH)
             (bc POP) ;; ignore repl-node
             (bc PUSH_NIL)
             (bc SWAP)
@@ -1603,14 +1597,12 @@ TODOS:
        (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
        (bc BRK))
       BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
       APPEND
       REVERSE)
     ))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings rec-rebuild-path-with-0-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -1769,13 +1761,11 @@ TODOS:
        (bc BRK))
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
       REVERSE)
      ))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings add-after-0-state 10 #t))
                 (list "stack holds 2 items"
                       "((1 . (4 . 5)) . NIL)  (rt)"
@@ -1803,13 +1793,11 @@ TODOS:
        (bc BRK))
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
       REVERSE)
      ))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings add-after-1-state 10 #t))
                 (list "stack holds 2 items"
                       "((0 . (5 . 6)) . ((1 . (4 . (5 . 6))) . NIL))  (rt)"
@@ -1839,13 +1827,11 @@ TODOS:
        (bc BRK)) 
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
       REVERSE)
      ))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings add-after-2-state 10 #t))
                 (list "stack holds 2 items"
                       "((0 . (5 . (6 . 7))) . ((1 . (4 . (5 . (6 . 7)))) . NIL))  (rt)"
@@ -1873,13 +1859,11 @@ TODOS:
        (bc BRK))
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
       REVERSE)
      ))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings add-after-3-state 10 #t))
                 (list "stack holds 2 items"
                       "((1 . (6 . 7)) . ((1 . (5 . (6 . 7))) . NIL))  (rt)"
@@ -1929,13 +1913,11 @@ TODOS:
        (bc BRK))
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
       REVERSE)
      ))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings add-after-4-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -2055,7 +2037,7 @@ TODOS:
             (bc CONS)
             (bc WRITE_TO_LOCAL_2)      ;; local2 = repl=node
                                        ;; param 2 for rec-rebuild call
-            (bc PUSH_LOCAL_1_CDR)      ;; param 1 for rec-rebuild call
+            (bc PUSH_LOCAL_0_CDR)      ;; param 1 for rec-rebuild call
             (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
   
             (bc PUSH_LOCAL_2)
@@ -2090,12 +2072,10 @@ TODOS:
        (bc BRK))
       BTREE_ADD_VALUE_BEFORE
       BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
       REVERSE)))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings add-before-0-state 10 #t))
                 (list "stack holds 2 items"
                       "((0 . (5 . 6)) . NIL)  (rt)"
@@ -2146,12 +2126,10 @@ TODOS:
 
       BTREE_ADD_VALUE_BEFORE
       BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
       REVERSE)))
 
-  (check-equal? (map (lambda (str) (regexp-replace*
-                               "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                               str
-                               ""))
+  (check-equal? (cleanup-strings
                      (vm-stack->strings add-before-1-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -2164,7 +2142,208 @@ TODOS:
                        " . ((1 . (3 . (6 . NIL)))"
                        " . ((0 . ((3 . (6 . NIL)) . 7))"
                        " . NIL)))"))
-                "replace null with value, make new node and replace all up to the root"))
+                "replace null with value, make new node and replace all up to the root")
+
+  (define add-before-2-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT) (word $0005)
+       (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
+       (bc BRK))
+      BTREE_ADD_VALUE_BEFORE
+      BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
+      REVERSE)))
+
+  (check-equal? (cleanup-strings
+                     (vm-stack->strings add-before-2-state 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (5 . 6))"
+                       " . ((0 . ((5 . 6) . 7))"
+                       " . NIL))  (rt)")
+                      (string-append
+                       "((0 . (6 . 7)) . NIL)"))
+                "replace old node 6 with (5 . 6)")
+
+  (define add-before-3-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0008)
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc CONS)                        ;; (6 . 7)
+       (bc PUSH_INT) (word $0003)
+       (bc CONS)                        ;; (3 . (6 . 7))
+       (bc CONS)                        ;; ((3 . (6 . 7)) . 8)
+       (bc PUSH_INT_0)
+       (bc CONS)                        ;; (0 . ((3 . (6 . 7)) . 8))
+       (bc CONS)                        ;; ((0 . ((3 . (6 . 7)) . 8)) . NIL)
+
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc CONS)                        ;; (6 . 7)
+       (bc PUSH_INT) (word $0003)       
+       (bc CONS)                        ;; (3 . (6 . 7))
+       (bc PUSH_INT_1)                 
+       (bc CONS)                        ;; (1 . (3 . (6 . 7)))
+       (bc CONS)                        ;; ((1 . (3 . (6 . 7))) . ((0 . ((3 . (6 . 7)) . 8)) . NIL))
+
+       (bc PUSH_INT) (word $0007)       
+       (bc PUSH_INT) (word $0006)
+       (bc CONS)                        ;; (6 . 7)
+       (bc PUSH_INT_0)                  
+       (bc CONS)                        ;; (0 . (6 . 7))
+       (bc CONS)                        ;; ((0 . (6 . 7)) . ((1 . (3 . (6 . 7))) . ((0 . ((3 . (6 . 7)) . 8)) . NIL)))
+
+       (bc DUP)
+       (bc PUSH_INT) (word $0005)
+
+       (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
+       
+       (bc BRK))
+      BTREE_ADD_VALUE_BEFORE
+      BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
+      REVERSE)))
+
+  (check-equal? (cleanup-strings
+                     (vm-stack->strings add-before-3-state 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (5 . 6))"
+                       " . ((0 . ((5 . 6) . 7))"
+                       " . ((1 . (3 . ((5 . 6) . 7)))"
+                       " . ((0 . ((3 . ((5 . 6) . 7)) . 8))"
+                       " . NIL))))  (rt)")
+                      (string-append ""
+                       "((0 . (6 . 7))"
+                       " . ((1 . (3 . (6 . 7)))"
+                       " . ((0 . ((3 . (6 . 7)) . 8))"
+                       " . NIL)))"))
+                "replace old node 6 with (5 . 6)")
+
+  (define add-before-4-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+       (bc PUSH_INT) (word $0005)
+       (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
+       (bc BRK))
+      BTREE_ADD_VALUE_BEFORE
+      BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
+      REVERSE)
+     ))
+
+  (check-equal? (cleanup-strings
+                     (vm-stack->strings add-before-4-state 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (5 . 6))"
+                       " . ((1 . (4 . (5 . 6)))"
+                       " . NIL))  (rt)")
+                      (string-append ""
+                       "((1 . (4 . 6)) . NIL)"))
+                "replace old node 6 with (5 . 6)")
+
+  (define add-before-5-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+
+       (bc PUSH_INT) (word $0008)
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc CONS)
+       (bc PUSH_INT) (word $0003)
+       (bc CONS)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc CONS)
+       (bc PUSH_INT) (word $0003)
+       (bc CONS)
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc CONS)
+
+       (bc PUSH_INT) (word $0007)
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+       (bc PUSH_INT) (word $0005)
+       (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
+       (bc BRK))
+      BTREE_ADD_VALUE_BEFORE
+      BTREE_REC_REBUILD_PATH_WITH
+      BTREE_VALUE_P
+      REVERSE)
+     ))
+
+  (check-equal? (cleanup-strings
+                     (vm-stack->strings add-before-5-state 10 #t))
+                (list "stack holds 2 items"
+                      (string-append 
+                       "((0 . (5 . 6))"
+                       " . ((1 . (4 . (5 . 6)))"
+                       " . ((0 . ((4 . (5 . 6)) . 7))"
+                       " . ((1 . (3 . ((4 . (5 . 6)) . 7)))"
+                       " . ((0 . ((3 . ((4 . (5 . 6)) . 7)) . 8))"
+                       " . NIL)))))  (rt)")
+                      (string-append
+                       "((1 . (4 . 6))"
+                       " . ((0 . ((4 . 6) . 7))"
+                       " . ((1 . (3 . ((4 . 6) . 7)))"
+                       " . ((0 . ((3 . ((4 . 6) . 7)) . 8))"
+                       " . NIL))))"))
+                "replace old node 6 with (5 . 6)"))
 
 
 (define vm-btree
