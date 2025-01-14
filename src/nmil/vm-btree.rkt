@@ -21,8 +21,8 @@ TODOS:
     DONE recursive-rebuild-path-at-with
     DONE btree-add-value-after
     DONE btree-add-value-before
-    btree->list
-    btree<-list
+    DONE btree->list
+    IMPLEMENT btree<-list
     btree-remove-value-at
     btree-root-of-path
 |#
@@ -2308,6 +2308,267 @@ TODOS:
                        " . NIL))))"))
                 "replace old node 6 with (5 . 6)"))
 
+;; (define (btree<-nodes nodes (result (list)))
+;;   (cond
+;;     [(and (empty? nodes) (empty? result)) '()]
+;;     [(and (empty? nodes)
+;;         (not (empty? result))
+;;         (empty? (cdr result)))
+;;      (car result)]
+;;     [(and (empty? nodes)
+;;         (not (empty? result)))
+;;      (btree<-nodes (reverse result))]
+;;     [(empty? (cdr nodes))
+;;      (btree<-nodes (cdr nodes) (cons (cons (car nodes) '()) result))]
+;;     [else
+;;      (btree<-nodes (cddr nodes)
+;;                   (cons (cons (car nodes) (cadr nodes)) result))]))
+(define BTREE_FROM_LIST
+  (bc-resolve
+   (flatten
+    (list
+     (label BTREE_FROM_LIST)
+            (byte 2)
+  
+            (bc WRITE_TO_LOCAL_1)
+            (bc NIL?)
+            (bc FALSE_P_BRANCH) (bc-rel-ref NODES_NOT_EMPTY__BTREE_FROM_LIST)
+  
+            ;; nodes empty
+            (bc WRITE_TO_LOCAL_0)
+            (bc NIL?_RET_LOCAL_0_POP_1) ;; nodes empty && result empty -> return nil
+            
+  
+     (label NODES_EMPTY_RESULT_NOT_EMPTY__BTREE_FROM_LIST)
+            (bc CDR)
+            (bc NIL?)
+            (bc FALSE_P_BRANCH) (bc-rel-ref NODES_EMPTY_RESULT_CDR_NOT_EMPTY__BTREE_FROM_LIST)
+  
+            (bc PUSH_LOCAL_0_CAR)
+            (bc RET)
+  
+     (label NODES_EMPTY_RESULT_CDR_NOT_EMPTY__BTREE_FROM_LIST)
+            (bc PUSH_NIL)                ;; param 2 for tail call = nil
+            (bc PUSH_NIL)                ;; param 2 for reverse = nil
+            (bc PUSH_LOCAL_0)            ;; param 1 for reverse = result
+            (bc CALL) (word-ref REVERSE) ;; param 1 for tail call = (reverse result)
+            (bc TAIL_CALL)
+            
+  
+     (label NODES_NOT_EMPTY__BTREE_FROM_LIST)
+            (bc POP_TO_LOCAL_0)
+            (bc PUSH_LOCAL_1_CDR)
+            (bc NIL?)
+            (bc FALSE_P_BRANCH) (bc-rel-ref ELSE__BTREE_FROM_LIST)
+  
+            (bc PUSH_LOCAL_0)
+            (bc PUSH_NIL)
+            (bc PUSH_LOCAL_1_CAR)
+            (bc COONS)
+            (bc PUSH_LOCAL_1_CDR)
+            (bc TAIL_CALL)
+  
+     (label ELSE__BTREE_FROM_LIST)
+            (bc PUSH_LOCAL_0)
+            (bc PUSH_LOCAL_1_CDR)
+            (bc CAR)
+            (bc PUSH_LOCAL_1_CAR)
+            (bc COONS)
+            (bc PUSH_LOCAL_1_CDR)
+            (bc CDR)
+            (bc TAIL_CALL)))))
+
+(module+ test #| btree from list |#
+  (define btree-from-list-1-state
+    (run-bc-wrapped-in-test     
+     (append
+      (list       
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0001)
+       (bc CONS)
+
+       (bc DUP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_FROM_LIST)
+       (bc BRK))
+      BTREE_FROM_LIST
+      REVERSE)
+     ))
+  (check-equal? (cleanup-strings (vm-stack->strings btree-from-list-1-state 10 #t))
+                (list "stack holds 2 items"
+                      "(1 . NIL)  (rt)"
+                      "(1 . NIL)"))
+
+  (define btree-from-list-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0009)
+       (bc CONS)
+       (bc PUSH_INT) (word $0008)
+       (bc CONS)
+       (bc PUSH_INT) (word $0007)
+       (bc CONS)
+       (bc PUSH_INT) (word $0006)
+       (bc CONS)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc PUSH_INT) (word $0003)
+       (bc CONS)
+       (bc PUSH_INT) (word $0002)
+       (bc CONS)
+       (bc PUSH_INT) (word $0001)
+       (bc CONS)
+
+       (bc DUP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_FROM_LIST)
+       (bc BRK))
+      BTREE_FROM_LIST
+      REVERSE)))
+
+  (check-equal? (cleanup-strings (vm-stack->strings btree-from-list-0-state 10 #t))
+                (list "stack holds 2 items"                                            
+                      "((((1 . 2) . (3 . 4)) . ((5 . 6) . (7 . 8))) . (((9 . NIL) . NIL) . NIL))  (rt)"
+                      "(1 . (2 . (3 . (4 . (5 . (6 . (7 . (8 . (9 . NIL)))))))))"))
+
+    (define btree-from-list-2-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc PUSH_INT) (word $0003)
+       (bc CONS)
+       (bc PUSH_INT) (word $0002)
+       (bc CONS)
+       (bc PUSH_INT) (word $0001)
+       (bc CONS)
+
+       (bc DUP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_FROM_LIST)
+       (bc BRK))
+      BTREE_FROM_LIST
+      REVERSE)))
+
+  (check-equal? (cleanup-strings (vm-stack->strings btree-from-list-2-state 10 #t))
+                (list "stack holds 2 items"
+                      "((1 . 2) . (3 . 4))  (rt)"
+                      "(1 . (2 . (3 . (4 . NIL))))")))
+
+;; (define (btree->list node (result (list)) (btree-prefix (list)))
+;;   (cond [(and (empty? node)
+;;             (not (empty? btree-prefix)))
+;;          (btree->list (car btree-prefix) result (cdr btree-prefix))]
+;;         [(empty? node) result]
+;;         [(btree-value? node) (btree->list '() (cons node result) btree-prefix)]
+;;         [(btree-node? node)
+;;          (btree->list (cdr node) result (cons (car node) btree-prefix))]
+;;         [else (raise-user-error "unknown case")]))
+(define BTREE_TO_LIST
+  (bc-resolve
+   (flatten
+    (list
+     (label BTREE_TO_LIST)
+            (byte 3)
+            (bc POP_TO_LOCAL_1) ;; local1 = node
+            (bc POP_TO_LOCAL_0) ;; local0 = result
+            (bc POP_TO_LOCAL_2) ;; local2 = btree-prefix
+            (bc PUSH_LOCAL_1)
+            (bc NIL?)
+            (bc FALSE_P_BRANCH) (bc-rel-ref NODE_NOT_NIL__BTREE_TO_LIST)
+
+            (bc PUSH_LOCAL_2)
+            (bc NIL?)
+            (bc TRUE_P_BRANCH) (bc-rel-ref PREFIX_NIL__BTREE_TO_LIST)
+
+            ;; Node Nil, Prefix Not Nil
+            (bc PUSH_LOCAL_2_CDR)
+            (bc PUSH_LOCAL_0)
+            (bc PUSH_LOCAL_2_CAR)
+            (bc TAIL_CALL)
+
+     (label PREFIX_NIL__BTREE_TO_LIST)
+            (bc PUSH_LOCAL_0)
+            (bc RET)
+
+     (label NODE_NOT_NIL__BTREE_TO_LIST)
+            (bc PUSH_LOCAL_1)
+            (bc CALL) (word-ref BTREE_VALUE_P)
+            (bc FALSE_P_BRANCH) (bc-rel-ref NO_BT_VALUE__BTREE_TO_LIST)
+
+            (bc PUSH_LOCAL_2)
+            (bc PUSH_LOCAL_0)
+            (bc PUSH_LOCAL_1)
+            (bc CONS)
+            (bc PUSH_NIL)
+            (bc TAIL_CALL)
+
+     (label NO_BT_VALUE__BTREE_TO_LIST)
+            (bc PUSH_LOCAL_2)
+            (bc PUSH_LOCAL_1_CAR)
+            (bc CONS)
+            (bc PUSH_LOCAL_0)
+            (bc PUSH_LOCAL_1_CDR)
+            (bc TAIL_CALL)))))
+
+(module+ test #| btree to list |#
+  (define btree-to-list-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0003)
+       (bc CONS)
+       (bc CONS)
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0002)
+       (bc PUSH_INT) (word $0001)
+       (bc CONS)
+       (bc CONS)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_TO_LIST)
+       (bc BRK))
+      BTREE_TO_LIST
+      BTREE_VALUE_P)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings btree-to-list-0-state 10 #t))
+                (list "stack holds 2 items"
+                      "(1 . (2 . (3 . (4 . NIL))))  (rt)"
+                      "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
+
+  (check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
+                30490))
 
 (define vm-btree
   (flatten
@@ -2332,8 +2593,11 @@ TODOS:
     ;; BTREE_VALIDATE   
 
     BTREE_ADD_VALUE_BEFORE
-    BTREE_ADD_VALUE_AFTER)))
+    BTREE_ADD_VALUE_AFTER
+
+    BTREE_TO_LIST
+    BTREE_FROM_LIST)))
 
 (module+ test #| vm-btree |#
   (check-equal? (bc-bytes (flatten vm-btree))
-                335))
+                410))
