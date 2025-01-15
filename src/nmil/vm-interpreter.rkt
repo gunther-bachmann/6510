@@ -150,6 +150,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         CELL_EQ
          CAAR
          CADR
          CDAR
@@ -1983,6 +1984,27 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
           (JMP VM_INTERPRETER_INC_PC)))
 
+(define CELL_EQ #x12)
+(define BC_CELL_EQ
+  (list
+   (label BC_CELL_EQ)
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA ZP_RT+1)
+          (CMP (ZP_CELL_STACK_HB_PTR),y)
+          (BNE NE__BC_CELL_EQ)
+          (LDA ZP_RT)
+          (CMP (ZP_CELL_STACK_LB_PTR),y)
+          (BNE NE__BC_CELL_EQ)
+
+          (DEC ZP_CELL_STACK_TOS)
+          (JSR VM_WRITE_INT0_TO_RT)
+          (JMP VM_INTERPRETER_INC_PC)
+
+   (label NE__BC_CELL_EQ)
+          (DEC ZP_CELL_STACK_TOS)
+          (JSR VM_WRITE_INT1_TO_RT)
+          (JMP VM_INTERPRETER_INC_PC)))
+
 (define INT_0_P #x22)
 (define BC_INT_0_P
   (list
@@ -2212,7 +2234,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_DUP)                      ;; 1e  <-  0f 
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref BC_POP)                      ;; 22  <-  11
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 24  <-  12 reserved
+           (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 26  <-  13 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 28  <-  14 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2a  <-  15 reserved
@@ -2391,6 +2413,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INT_P
           BC_INT_GREATER_P
           BC_TAIL_CALL
+          BC_CELL_EQ
           BC_SWAP
           BC_DUP
           BC_TRUE_P_RET

@@ -23,7 +23,7 @@ TODOS:
     DONE btree-add-value-before
     DONE btree->list
     DONE btree<-list
-    btree-remove-value-at
+    IMPLEMENT btree-remove-value-at
     btree-root-of-path
 |#
 
@@ -58,6 +58,7 @@ TODOS:
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  CELL_EQ
                   EXT
                   CAAR
                   CADR
@@ -2563,6 +2564,179 @@ TODOS:
   (check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
                 21202))
 
+
+;; (define (btree-remove-value-at path (result (list)) (old-next (list)))
+;;   (cond
+;;     [(and (empty? path)
+;;         (not (empty? old-next)))
+;;      (define node (btree-node-for-path result))
+;;      (define next-node-path (btree-next result))
+;;      (if (or (eq? node old-next)
+;;             (empty? next-node-path))
+;;          result
+;;          next-node-path)]
+;;     [(empty? path) result]
+;;     [(= 1 (caar path))
+;;      (define new-node (cons (cadar path) '()))
+;;      (btree-remove-value-at
+;;       (list)
+;;       (cons
+;;        (cons -1 new-node)
+;;        (recursive-rebuild-path-with (cdr path) new-node))
+;;       old-next)]
+;;     [(and (= -1 (caar path))
+;;         (not (empty? (cddar path))))
+;;      (define new-node (cons (cddar path) '()))
+;;      (btree-remove-value-at
+;;       (list)
+;;       (cons
+;;        (cons -1 new-node)
+;;        (recursive-rebuild-path-with (cdr path) new-node))
+;;       old-next)]
+;;     [(and (= -1 (caar path))
+;;         (empty? (cddar path))
+;;         (empty? (cdr path)))
+;;      '()]
+;;     [(and (= -1 (caar path))
+;;         (empty? (cddar path))
+;;         (not (empty? (cdr path))))
+;;      (define old-next-node (btree-node-for-path (btree-next path)))
+;;      (btree-remove-value-at (cdr path) (list) old-next-node)]
+;;     [else (raise-user-error "unknown case")]))
+(define BTREE_REMOVE_VALUE_AT ;; path :: result=nil :: old-next=nil
+  (bc-resolve
+   (flatten
+     (list
+      (label BTREE_REMOVE_VALUE_AT)
+             (byte 4)
+             (bc POP_TO_LOCAL_2)        ;; local_2= old-next
+             (bc POP_TO_LOCAL_0)        ;; local_0= result
+             (bc WRITE_TO_LOCAL_1)        ;; local_1= path
+
+             (bc NIL?)
+             (bc FALSE_P_BRANCH) (bc-rel-ref PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
+
+             (bc PUSH_LOCAL_0)
+             (bc NIL?_RET_LOCAL_0_POP_1)
+
+             (bc PUSH_LOCAL_0)
+             (bc CALL) (word-ref BTREE_NEXT)
+             (bc WRITE_TO_LOCAL_3)              ;; (btree-next result)
+             (bc NIL?_RET_LOCAL_0_POP_1)
+
+             (bc PUSH_LOCAL_0)
+             (bc CALL) (word-ref BTREE_NODE_FOR_PATH)
+             (bc PUSH_LOCAL_2)
+             (bc CELL_EQ)
+             (bc FALSE_P_BRANCH) (bc-rel-ref NEXT_RESULT__BTREE_REMOVE_VALUE_AT)
+             (bc PUSH_LOCAL_3)
+             (bc RET)
+
+      (label NEXT_RESULT__BTREE_REMOVE_VALUE_AT)
+             (bc PUSH_LOCAL_0)
+             (bc CALL) (word-ref BTREE_NEXT)
+             (bc RET)
+
+      (label PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
+             (bc PUSH_LOCAL_1_CAR)
+             (bc CAR)                           ;; (caar path)
+             (bc INT_0_P)
+             (bc FALSE_P_BRANCH) (bc-rel-ref CAAR_PATH_1__BTREE_REMOVE_VALUE_AT)
+
+             ;; from now on (caar path) = 0
+             (bc PUSH_LOCAL_1_CAR)
+             (bc CDDR)
+             (bc NIL?)
+             (bc FALSE_P_BRANCH) (bc-rel-ref CDDAR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
+
+             ;; from now on (empty? (cddar path))
+             (bc PUSH_LOCAL_1_CDR)
+             (bc NIL?)
+             (bc FALSE_P_BRANCH) (bc-rel-ref CDR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
+
+             ;; (and (= -1 (caar path)) (empty? (cddar path)) (empty? (cdr path)))
+             (bc PUSH_NIL)
+             (bc RET)
+
+      (label CDR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
+             ;; (and (= -1 (caar path)) (empty? (cddar path)) (not (empty? (cdr path))))
+             (bc PUSH_LOCAL_1)
+             (bc CALL) (word-ref BTREE_NEXT)
+             (bc CALL) (word-ref BTREE_NODE_FOR_PATH)   ;; param 3 for tail-call
+             (bc PUSH_NIL)                              ;; param 2 for tail-call
+             (bc PUSH_LOCAL_1_CDR)                      ;; param 1 for tail-call
+             (bc TAIL_CALL)
+
+      (label CDDAR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
+             ;; (and (= -1 (caar path)) (not (empty? (cddar path))))
+             (bc PUSH_LOCAL_2)                         ;; param3 for tail call
+
+             (bc PUSH_NIL)
+
+             (bc PUSH_NIL)
+             (bc PUSH_LOCAL_1_CAR)
+             (bc CDDR)
+             (bc CONS)
+             (bc WRITE_TO_LOCAL_3)      ;; new node
+
+             (bc PUSH_LOCAL_1_CDR)      ;; (cdr path)
+             (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
+
+             (bc PUSH_LOCAL_3)
+             (bc PUSH_INT_0)
+             (bc COONS)                         ;; ((0 . new-local) . rec-rebuild)
+                                                ;; param 2 for tail call
+             (bc PUSH_NIL)                      ;; param 1 for tail call
+
+             (bc TAIL_CALL)
+
+      (label CAAR_PATH_1__BTREE_REMOVE_VALUE_AT)
+             (bc PUSH_LOCAL_2)                  ;; parameter 3 for btree-remove-value-at
+
+             (bc PUSH_NIL)                      ;; parametere 3 for btree rec
+
+             (bc PUSH_NIL)
+             (bc PUSH_LOCAL_1_CAR)
+             (bc CADR)
+             (bc CONS)
+             (bc WRITE_TO_LOCAL_3)              ;; local3= ((cadar path) . NIL)
+             ;; parameter 2 for betree rec
+             (bc PUSH_LOCAL_1_CDR)              ;; (cdr path) parameter 1 for btree rec
+             (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
+
+             (bc PUSH_LOCAL_3)
+             (bc PUSH_INT_0)
+             (bc COONS)                         ;; ((0 . new-node) . rec-rebuild)
+             ;; param 2 for btree-remove-value-at
+             (bc PUSH_NIL)                       ;; param 1 for btree-remove-value-at
+             (bc TAIL_CALL)))))
+
+(module+ test #| remove value at |#
+  (define remove-value-at-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_NIL)
+       (bc PUSH_NIL)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      BTREE_REMOVE_VALUE_AT
+      BTREE_NODE_FOR_PATH
+      BTREE_NEXT
+      BTREE_REC_REBUILD_PATH_WITH
+      BTREE_PATH_TO_FIRST
+      BTREE_MAKE_ROOT
+      BTREE_PATH_TO_LAST
+      BTREE_VALUE_P
+      BTREE_NODE_P
+      APPEND
+      REVERSE)))
+
+  (check-equal? (cleanup-strings (vm-stack->strings remove-value-at-0-state 10 #t))
+                (list "stack holds 1 item"
+                      "NIL  (rt)")))
+
 (define vm-btree
   (flatten
    (append
@@ -2589,8 +2763,10 @@ TODOS:
     BTREE_ADD_VALUE_AFTER
 
     BTREE_TO_LIST
-    BTREE_FROM_LIST)))
+    BTREE_FROM_LIST
+
+    BTREE_REMOVE_VALUE_AT)))
 
 (module+ test #| vm-btree |#
   (check-equal? (bc-bytes (flatten vm-btree))
-                401))
+                489))
