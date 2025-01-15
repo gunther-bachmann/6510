@@ -22,7 +22,7 @@ TODOS:
     DONE btree-add-value-after
     DONE btree-add-value-before
     DONE btree->list
-    IMPLEMENT btree<-list
+    DONE btree<-list
     btree-remove-value-at
     btree-root-of-path
 |#
@@ -155,7 +155,7 @@ TODOS:
 
 ;; (define (btree-make-root value)
 ;;   (cons value null))
-(define BTREE_MAKE_ROOT
+(define BTREE_MAKE_ROOT ;; value -> node
   (list 
    (label BTREE_MAKE_ROOT)
           (byte 0)    ;; locals
@@ -199,7 +199,7 @@ TODOS:
 
 ;; (define (btree-value? node)
 ;;   (or (string? node) (integer? node)))
-(define BTREE_VALUE_P
+(define BTREE_VALUE_P ;; node -> bool
   (list
    (label BTREE_VALUE_P)
           (byte 0)   ;; local
@@ -249,7 +249,7 @@ TODOS:
 
 ;; (define (btree-node? node)
 ;;   (pair? node))
-(define BTREE_NODE_P
+(define BTREE_NODE_P ;; node -> bool
   (list
    (label BTREE_NODE_P)
           (byte 0) ;; locals
@@ -323,12 +323,12 @@ TODOS:
 ;;             right-is-valid)]
 ;;         [else
 ;;          (and is-pair-or-value)]))
-(define BTREE_VALIDATE
+(define BTREE_VALIDATE ;; node -> void
   (bc-resolve
    (flatten
      (list
       (label BTREE_VALIDATE)
-             (byte 2) ;; locals (0 = node, 1 = car/cdr
+             (byte 2) ;; locals (0 = node, 1 = car/cdr)
              (bc WRITE_TO_LOCAL_0)
              (bc CALL) (word-ref BTREE_NODE_P)
              (bc TRUE_P_BRANCH) (bc-rel-ref IS_PAIR__BTREE_VALIDATE);; (byte 7) ;; jump to is-pair
@@ -434,7 +434,7 @@ TODOS:
 ;;          (define l (car node))
 ;;          (define r (cdr node))
 ;;          (btree-depth l (cons (cons r (add1 depth)) right-list) (add1 depth) max-depth)]))
-(define BTREE_DEPTH
+(define BTREE_DEPTH ;; node :: right-list=nil :: depth=0 :: max-depth=0 -> int
   (bc-resolve
    (flatten
     (list
@@ -626,7 +626,7 @@ TODOS:
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
 ;;         [else (btree-path-to-first (car node) (cons (cons -1 node) path))]))
-(define BTREE_PATH_TO_FIRST
+(define BTREE_PATH_TO_FIRST ;; node :: result-path=nil -> path
   (list
    (label BTREE_PATH_TO_FIRST)
           (byte 1)
@@ -693,7 +693,7 @@ TODOS:
 ;;   (cond [(btree-value? node) path]
 ;;         [(empty? (cdr node)) (btree-path-to-last (car node) (cons (cons -1 node) path))]
 ;;         [else (btree-path-to-last (cdr node) (cons (cons 1 node) path))]))
-(define BTREE_PATH_TO_LAST
+(define BTREE_PATH_TO_LAST ;; node :: result-path=nil -> path
   (bc-resolve
    (flatten
     (list
@@ -807,7 +807,7 @@ TODOS:
 ;;         [(= -1 (caar path)) (car (cdar path))]
 ;;         [(= 1 (caar path)) (cdr (cdar path))]
 ;;         [else (raise-user-error (format "btree path may only contain 1 | -1:" path))]))
-(define BTREE_NODE_FOR_PATH
+(define BTREE_NODE_FOR_PATH ;; path -> node
   (bc-resolve
    (flatten
     (list
@@ -897,7 +897,7 @@ TODOS:
 ;;                        (cdr top-most-relevant)))]
 
 ;;         [else (raise-user-error "unknown case")]))
-(define BTREE_PREV
+(define BTREE_PREV ;; path -> path
   (bc-resolve
    (flatten
     (list
@@ -1098,14 +1098,14 @@ TODOS:
                 5158))
 
 ;; optimization idea: NIL?_RET instead of NIL?, TRUE_P_RET
-(define REVERSE
+(define REVERSE ;; list :: result=nil -> list
   (list
    (label REVERSE)
           (byte 1)
           (bc WRITE_TO_LOCAL_0)     ;; local0 = list
           (bc NIL?)
-          (bc TRUE_P_RET)          ;; return second parameter
-          (bc PUSH_LOCAL_0_CAR)
+          (bc TRUE_P_RET)           ;; return second parameter (result)
+          (bc PUSH_LOCAL_0_CAR) 
           (bc CONS)
           (bc PUSH_LOCAL_0_CDR)
           ;; (bc GOTO) (byte $fa)
@@ -1139,23 +1139,23 @@ TODOS:
   (check-equal? (cpu-state-clock-cycles reverse-0-state)
                 3423))
 
-(define APPEND
+(define APPEND ;; head-list :: tail-list -> list
   (bc-resolve
    (flatten
     (list
      (label APPEND)
             (byte 0)
             (bc PUSH_NIL)
-            (bc SWAP)
+            (bc SWAP)              ;; head-list :: NIL :: tail-list
             (bc CALL) (word-ref REVERSE)
   
-      (label LOOP__APPEND)
-            (bc WRITE_TO_LOCAL_0) ;; local0 = reversed list     <- loop
+      (label LOOP__APPEND)         ;; (reverse head-list) :: tail-list
+            (bc WRITE_TO_LOCAL_0)  ;; local0 = reversed list     <- loop
             (bc NIL?)
-            (bc TRUE_P_RET)      ;; return second
-            (bc PUSH_LOCAL_0_CAR)
-            (bc CONS)
-            (bc PUSH_LOCAL_0_CDR)
+            (bc TRUE_P_RET)        ;; return second (which is tail-list)
+            (bc PUSH_LOCAL_0_CAR)  ;; (car (reversed head-list)) :: tail-list
+            (bc CONS)              ;; ((car (reversed head-list)) . tail-list)
+            (bc PUSH_LOCAL_0_CDR)  ;;
             (bc GOTO) (bc-rel-ref LOOP__APPEND) ;; (-6) loop ->
    ))))
 
@@ -1219,7 +1219,7 @@ TODOS:
 ;;                            (cdr top-most-relevant))))]
 
 ;;         [else (raise-user-error "unknown case")]))
-(define BTREE_NEXT  
+(define BTREE_NEXT  ;; path -> path
   (bc-resolve
    (flatten
      (list
@@ -1450,13 +1450,13 @@ TODOS:
 ;;            (cons (caar path) new-node))
 ;;          (recursive-rebuild-path-with (cdr path) new-node (cons new-pe result))]
 ;;         [else (raise-user-error "unknown case")]))
-(define BTREE_REC_REBUILD_PATH_WITH
+(define BTREE_REC_REBUILD_PATH_WITH ;; (list path) :: repl-node :: result=nil -> (list path)
   (bc-resolve
    (flatten
     (list
      (label BTREE_REC_REBUILD_PATH_WITH)
             (byte 2)
-            (bc WRITE_TO_LOCAL_0)
+            (bc WRITE_TO_LOCAL_0)               ;; local0 = path
 
             ;; check cond
             (bc NIL?)
@@ -1471,7 +1471,7 @@ TODOS:
   
      (label CHECK_COND__BTREE_REC_REBUILD_PATH_WITH)
             ;; check cond
-            (bc PUSH_LOCAL_0_CAR)
+            (bc PUSH_LOCAL_0_CAR)       
             (bc CAR)
             (bc INT_0_P)                 ;; (== 0 (caar path)
             (bc FALSE_P_BRANCH) (bc-rel-ref ELSE__BTREE_REC_REBUILD_PATH_WITH) ;; check next cond expression
@@ -1619,7 +1619,7 @@ TODOS:
 ;;           (cons (cons 1 repl-node)
 ;;                 (recursive-rebuild-path-with (cdr path) repl-node)))]
 ;;         [else (raise-user-error "unknown case")]))
-(define BTREE_ADD_VALUE_AFTER
+(define BTREE_ADD_VALUE_AFTER ;; value :: path -> path
   (bc-resolve
    (flatten
     (list
@@ -1922,7 +1922,7 @@ TODOS:
 ;;           (cons (cons 1 repl-node)
 ;;                 (recursive-rebuild-path-with (cdr path) repl-node)))]
 ;;         [else (raise-user-error "unknown case")]))
-(define BTREE_ADD_VALUE_BEFORE
+(define BTREE_ADD_VALUE_BEFORE ;; value :: path -> path
   (bc-resolve
    (flatten
     (list
@@ -2323,7 +2323,7 @@ TODOS:
 ;;     [else
 ;;      (btree<-nodes (cddr nodes)
 ;;                   (cons (cons (car nodes) (cadr nodes)) result))]))
-(define BTREE_FROM_LIST
+(define BTREE_FROM_LIST ;; (list node) :: result=nil -> node
   (bc-resolve
    (flatten
     (list
@@ -2472,60 +2472,53 @@ TODOS:
                       "((1 . 2) . (3 . 4))  (rt)"
                       "(1 . (2 . (3 . (4 . NIL))))")))
 
-;; (define (btree->list node (result (list)) (btree-prefix (list)))
+;; (define (btree->list node (btree-prefix (list)) (result (list)) )
 ;;   (cond [(and (empty? node)
 ;;             (not (empty? btree-prefix)))
-;;          (btree->list (car btree-prefix) result (cdr btree-prefix))]
+;;          (btree->list (car btree-prefix) (cdr btree-prefix) result)]
 ;;         [(empty? node) result]
-;;         [(btree-value? node) (btree->list '() (cons node result) btree-prefix)]
+;;         [(btree-value? node) (btree->list '() btree-prefix (cons node result))]
 ;;         [(btree-node? node)
-;;          (btree->list (cdr node) result (cons (car node) btree-prefix))]
+;;          (btree->list (cdr node) (cons (car node) btree-prefix) result)]
 ;;         [else (raise-user-error "unknown case")]))
-(define BTREE_TO_LIST
+(define BTREE_TO_LIST ;; node :: btree-prefix=nil :: result=nil -> (list node)
   (bc-resolve
    (flatten
     (list
      (label BTREE_TO_LIST)
-            (byte 3)
-            (bc POP_TO_LOCAL_1) ;; local1 = node
-            (bc POP_TO_LOCAL_0) ;; local0 = result
-            (bc POP_TO_LOCAL_2) ;; local2 = btree-prefix
-            (bc PUSH_LOCAL_1)
+            (byte 2)
+            (bc WRITE_TO_LOCAL_1)       ;; local1 = node
             (bc NIL?)
             (bc FALSE_P_BRANCH) (bc-rel-ref NODE_NOT_NIL__BTREE_TO_LIST)
 
-            (bc PUSH_LOCAL_2)
+            (bc WRITE_TO_LOCAL_0)       ;; local_0 = btree-prefix
             (bc NIL?)
-            (bc TRUE_P_BRANCH) (bc-rel-ref PREFIX_NIL__BTREE_TO_LIST)
-
+            (bc TRUE_P_RET)             ;; return result
+                                        ;; result
             ;; Node Nil, Prefix Not Nil
-            (bc PUSH_LOCAL_2_CDR)
-            (bc PUSH_LOCAL_0)
-            (bc PUSH_LOCAL_2_CAR)
+            (bc PUSH_LOCAL_0_CDR)       ;; (cdr btree-prefix) :: result
+            (bc PUSH_LOCAL_0_CAR)       ;; (car btree-prefix) :: (cdr btree-prefix) :: result
             (bc TAIL_CALL)
 
-     (label PREFIX_NIL__BTREE_TO_LIST)
-            (bc PUSH_LOCAL_0)
-            (bc RET)
-
      (label NODE_NOT_NIL__BTREE_TO_LIST)
+
             (bc PUSH_LOCAL_1)
             (bc CALL) (word-ref BTREE_VALUE_P)
             (bc FALSE_P_BRANCH) (bc-rel-ref NO_BT_VALUE__BTREE_TO_LIST)
 
-            (bc PUSH_LOCAL_2)
-            (bc PUSH_LOCAL_0)
-            (bc PUSH_LOCAL_1)
-            (bc CONS)
-            (bc PUSH_NIL)
+            (bc POP_TO_LOCAL_0)         ;; local_0 = btree-prefix
+                                        ;; result 
+            (bc PUSH_LOCAL_1)           ;; node :: result
+            (bc CONS)                   ;; (cons node result) 
+            (bc PUSH_LOCAL_0)           ;; btree_prefix :: (cons node result)
+            (bc PUSH_NIL)               ;; NIL :: btree-prefix :: (cons node result)
             (bc TAIL_CALL)
 
      (label NO_BT_VALUE__BTREE_TO_LIST)
-            (bc PUSH_LOCAL_2)
-            (bc PUSH_LOCAL_1_CAR)
-            (bc CONS)
-            (bc PUSH_LOCAL_0)
-            (bc PUSH_LOCAL_1_CDR)
+                                        ;; btree-prefix :: result
+            (bc PUSH_LOCAL_1_CAR)       ;; (car node) :: btree-prefix :: result
+            (bc CONS)                   ;; (cons (car node) btree-prefix) :: result
+            (bc PUSH_LOCAL_1_CDR)       ;; (cdr node) :: (cons (car node) btree-prefix) :: result
             (bc TAIL_CALL)))))
 
 (module+ test #| btree to list |#
@@ -2568,7 +2561,7 @@ TODOS:
                       "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
 
   (check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                30490))
+                21202))
 
 (define vm-btree
   (flatten
@@ -2600,4 +2593,4 @@ TODOS:
 
 (module+ test #| vm-btree |#
   (check-equal? (bc-bytes (flatten vm-btree))
-                410))
+                401))
