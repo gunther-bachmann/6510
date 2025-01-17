@@ -3328,7 +3328,119 @@ TODOS:
                        " . ((1 . (4 . ((5 . NIL) . 7)))"
                        " . ((0 . ((4 . ((5 . NIL) . 7)) . 8))"
                        " . NIL))))"
-                       ))))
+                       )))
+
+  (define (remove-value-at-7-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0006)
+       (bc SWAP)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+ 
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0003)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+
+
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (4 . (6 . NIL)))"
+                       " . ((1 . (3 . (4 . (6 . NIL))))"
+                       " . ((0 . ((3 . (4 . (6 . NIL))) . 7))"
+                       " . NIL)))  (rt)")
+                      (string-append
+                       "((0 . (5 . NIL))"
+                       " . ((0 . ((5 . NIL) . NIL))"
+                       " . ((0 . (((5 . NIL) . NIL) . NIL))"
+                       " . ((0 . ((((5 . NIL) . NIL) . NIL) . 6))"
+                       " . ((1 . (4 . ((((5 . NIL) . NIL) . NIL) . 6)))"
+                       " . ((1 . (3 . (4 . ((((5 . NIL) . NIL) . NIL) . 6))))"
+                       " . ((0 . ((3 . (4 . ((((5 . NIL) . NIL) . NIL) . 6))) . 7))"
+                       " . NIL)))))))"))
+                "if the node deleted has a prev, return that one and recursively replace up to root"))
 
 (define vm-btree
   (flatten
