@@ -83,8 +83,9 @@ invariants:
 
 
  |#
-(module+ test #| btree add value|#
-  (require rackunit))
+(module+ test 
+  (require rackunit)
+  (require "../6510-test-utils.rkt"))
 
 (define (btree-make-root value)
   (cons value null))
@@ -545,16 +546,17 @@ invariants:
   (check-equal? (btree<-nodes '(1 2 3 4 5 6 7 8))
                 '(((1 . 2) . (3 . 4)) . ((5 . 6) . (7 . 8)))))
 
-(define (btree-remove-value-at path (result (list)) (old-next (list)))
+(define (btree-remove-value-at path (result (list)) (old-prev (list)))
+  ;; (displayln (format "path: ~a, result: ~a, old-pref:~a" path result old-prev))
   (cond
     [(and (empty? path)
-        (not (empty? old-next)))
+        (not (empty? old-prev)))
      (define node (btree-node-for-path result))
-     (define next-node-path (btree-next result))
-     (if (or (eq? node old-next)
-            (empty? next-node-path))
+     (define prev-node-path (btree-prev result))
+     (if (or (eq? node old-prev)
+            (empty? prev-node-path))
          result
-         next-node-path)]
+         prev-node-path)]
     [(empty? path) result]
     [(= 1 (caar path))
      (define new-node (cons (cadar path) '()))
@@ -563,7 +565,7 @@ invariants:
       (cons
        (cons -1 new-node)
        (recursive-rebuild-path-with (cdr path) new-node))
-      old-next)]
+      old-prev)]
     [(and (= -1 (caar path))
         (not (empty? (cddar path))))
      (define new-node (cons (cddar path) '()))
@@ -572,7 +574,7 @@ invariants:
       (cons
        (cons -1 new-node)
        (recursive-rebuild-path-with (cdr path) new-node))
-      old-next)]
+      old-prev)]
     [(and (= -1 (caar path))
         (empty? (cddar path))
         (empty? (cdr path)))
@@ -580,8 +582,8 @@ invariants:
     [(and (= -1 (caar path))
         (empty? (cddar path))
         (not (empty? (cdr path))))
-     (define old-next-node (btree-node-for-path (btree-next path)))
-     (btree-remove-value-at (cdr path) (list) old-next-node)]
+     (define old-prev-node (btree-node-for-path (btree-prev path)))
+     (btree-remove-value-at (cdr path) (list) old-prev-node)]
     [else (raise-user-error "unknown case")]))
 
 (module+ test #| remove-value |#
@@ -620,7 +622,8 @@ invariants:
                                          ( 1 . (4 . (5 . ())))
                                          (-1 . ((4 . (5 . ())) . 6))
                                          ( 1 . (3 . ((4 . (5 . ())) . 6)))))
-                '(( 1 . ((4 . ()) . 6))
+                '((-1 . (4 . ()))
+                  (-1 . ((4 . ()) . 6))
                   ( 1 . (3 . ((4 . ()) . 6))))
                 "make sure to select next node and resursively replace nodes up to the root")
 
@@ -647,14 +650,29 @@ invariants:
                 "if the node deleted has a next, return that one")
 
   (check-equal? (btree-remove-value-at '((-1 . (5 . ()))
+                                         (-1 . ((5 . ()) . 7))))
+                '((-1 . (7 . ()))))
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . ()))
+                                         (-1 . ((5 . ()) . 7))
+                                         ( 1 . (4 . ((5 . ()) . 7)))))
+                '((-1 . (4 . (7 . ())))))
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . ()))
+                                            (-1 . ((5 . ()) . 7))
+                                            ( 1 . (4 . ((5 . ()) . 7)))
+                                            (-1 . ((4 . ((5 . ()) . 7)) . 8))))
+                   '((-1 . (4 . (7 . ())))
+                     (-1 . ((4 . (7 . ())) . 8))))
+
+  (check-equal? (btree-remove-value-at '((-1 . (5 . ()))
                                          (-1 . ((5 . ()) . ()))
                                          (-1 . (((5 . ()) . ()) . ()))
                                          (-1 . ((((5 . ()) . ()) . ()) . 6))
                                          ( 1 . (4 . ((((5 . ()) . ()) . ()) . 6)))
                                          ( 1 . (3 . (4 . ((((5 . ()) . ()) . ()) . 6))))
                                          (-1 . ((3 . (4 . ((((5 . ()) . ()) . ()) . 6))) . 7))))
-                '((-1 . (6 . ()))
-                  ( 1 . (4 . (6 . ())))
+                '((-1 . (4 . (6 . ())))
                   ( 1 . (3 . (4 . (6 . ()))))
                   (-1 . ((3 . (4 . (6 . ()))) . 7)))
                 "if the node deleted has a next, return that one and recursively replace up to root"))

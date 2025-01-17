@@ -816,6 +816,7 @@ TODOS:
             (byte 1) ;; locals
             (bc WRITE_TO_LOCAL_0)
             (bc NIL?_RET_LOCAL_0_POP_1)
+            (bc POP)
 
       (label LEFT_NODE_COND__BTREE_NODE_FOR_PATH)
       ;; [(= 0 (caar path)) (car (cdar path))]
@@ -852,8 +853,9 @@ TODOS:
       BTREE_MAKE_ROOT
       BTREE_VALUE_P)))
 
-  (check-equal? (vm-regt->string node-for-path-0-state)
-                "int $0002")
+  (check-equal? (vm-stack->strings node-for-path-0-state)
+                (list "stack holds 1 item"
+                      "int $0002  (rt)"))
 
   (define node-for-path-1-state
     (run-bc-wrapped-in-test
@@ -872,8 +874,9 @@ TODOS:
       BTREE_MAKE_ROOT
       BTREE_VALUE_P)))
 
-  (check-equal? (vm-regt->string node-for-path-1-state)
-                "int $0000"))
+  (check-equal? (vm-stack->strings node-for-path-1-state)
+                (list "stack holds 1 item"
+                      "int $0000  (rt)")))
 
 ;; (define (btree-prev path)
 ;;   (cond [(empty? path)
@@ -2565,16 +2568,16 @@ TODOS:
                 21202))
 
 
-;; (define (btree-remove-value-at path (result (list)) (old-next (list)))
+;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
 ;;   (cond
 ;;     [(and (empty? path)
-;;         (not (empty? old-next)))
+;;         (not (empty? old-prev)))
 ;;      (define node (btree-node-for-path result))
-;;      (define next-node-path (btree-next result))
-;;      (if (or (eq? node old-next)
-;;             (empty? next-node-path))
+;;      (define prev-node-path (btree-prev result))
+;;      (if (or (eq? node old-prev)
+;;             (empty? prev-node-path))
 ;;          result
-;;          next-node-path)]
+;;          prev-node-path)]
 ;;     [(empty? path) result]
 ;;     [(= 1 (caar path))
 ;;      (define new-node (cons (cadar path) '()))
@@ -2583,7 +2586,7 @@ TODOS:
 ;;       (cons
 ;;        (cons -1 new-node)
 ;;        (recursive-rebuild-path-with (cdr path) new-node))
-;;       old-next)]
+;;       old-prev)]
 ;;     [(and (= -1 (caar path))
 ;;         (not (empty? (cddar path))))
 ;;      (define new-node (cons (cddar path) '()))
@@ -2592,7 +2595,7 @@ TODOS:
 ;;       (cons
 ;;        (cons -1 new-node)
 ;;        (recursive-rebuild-path-with (cdr path) new-node))
-;;       old-next)]
+;;       old-prev)]
 ;;     [(and (= -1 (caar path))
 ;;         (empty? (cddar path))
 ;;         (empty? (cdr path)))
@@ -2600,41 +2603,45 @@ TODOS:
 ;;     [(and (= -1 (caar path))
 ;;         (empty? (cddar path))
 ;;         (not (empty? (cdr path))))
-;;      (define old-next-node (btree-node-for-path (btree-next path)))
-;;      (btree-remove-value-at (cdr path) (list) old-next-node)]
+;;      (define old-prev-node (btree-node-for-path (btree-prev path)))
+;;      (btree-remove-value-at (cdr path) (list) old-prev-node)]
 ;;     [else (raise-user-error "unknown case")]))
-(define BTREE_REMOVE_VALUE_AT ;; path :: result=nil :: old-next=nil
+(define BTREE_REMOVE_VALUE_AT ;; path :: result=nil :: old-prev=nil
   (bc-resolve
    (flatten
      (list
       (label BTREE_REMOVE_VALUE_AT)
              (byte 4)
-             (bc POP_TO_LOCAL_2)        ;; local_2= old-next
+             (bc POP_TO_LOCAL_1)        ;; local_1= path
              (bc POP_TO_LOCAL_0)        ;; local_0= result
-             (bc WRITE_TO_LOCAL_1)        ;; local_1= path
+             (bc POP_TO_LOCAL_2)        ;; local_2= old-prev
 
+             (bc PUSH_LOCAL_1)
              (bc NIL?)
              (bc FALSE_P_BRANCH) (bc-rel-ref PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
 
-             (bc PUSH_LOCAL_0)
+             ;; path empty
+             (bc PUSH_LOCAL_2)          ;; old-prev
              (bc NIL?_RET_LOCAL_0_POP_1)
+             (bc POP)
 
-             (bc PUSH_LOCAL_0)
-             (bc CALL) (word-ref BTREE_NEXT)
-             (bc WRITE_TO_LOCAL_3)              ;; (btree-next result)
-             (bc NIL?_RET_LOCAL_0_POP_1)
+             ;; path empty and old-prev not empty
+             (bc PUSH_LOCAL_0)          ;; result
+             (bc CALL) (word-ref BTREE_PREV)
+             (bc WRITE_TO_LOCAL_3)              ;; (btree-prev result)
+             (bc NIL?_RET_LOCAL_0_POP_1)        ;; since prev-node-opath is nil return result
 
-             (bc PUSH_LOCAL_0)
-             (bc CALL) (word-ref BTREE_NODE_FOR_PATH)
-             (bc PUSH_LOCAL_2)
-             (bc CELL_EQ)
+             (bc POP)
+             (bc PUSH_LOCAL_0)          ;; result
+             (bc CALL) (word-ref BTREE_NODE_FOR_PATH)   ;; (btree-node-for-path result)
+             (bc PUSH_LOCAL_2)                          ;; old-prev
+             (bc CELL_EQ)                               
              (bc FALSE_P_BRANCH) (bc-rel-ref NEXT_RESULT__BTREE_REMOVE_VALUE_AT)
-             (bc PUSH_LOCAL_3)
+             (bc PUSH_LOCAL_0)
              (bc RET)
 
       (label NEXT_RESULT__BTREE_REMOVE_VALUE_AT)
-             (bc PUSH_LOCAL_0)
-             (bc CALL) (word-ref BTREE_NEXT)
+             (bc PUSH_LOCAL_3)
              (bc RET)
 
       (label PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
@@ -2661,7 +2668,7 @@ TODOS:
       (label CDR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
              ;; (and (= -1 (caar path)) (empty? (cddar path)) (not (empty? (cdr path))))
              (bc PUSH_LOCAL_1)
-             (bc CALL) (word-ref BTREE_NEXT)
+             (bc CALL) (word-ref BTREE_PREV)
              (bc CALL) (word-ref BTREE_NODE_FOR_PATH)   ;; param 3 for tail-call
              (bc PUSH_NIL)                              ;; param 2 for tail-call
              (bc PUSH_LOCAL_1_CDR)                      ;; param 1 for tail-call
@@ -2669,9 +2676,9 @@ TODOS:
 
       (label CDDAR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
              ;; (and (= -1 (caar path)) (not (empty? (cddar path))))
-             (bc PUSH_LOCAL_2)                         ;; param3 for tail call
+             (bc PUSH_LOCAL_2)                         ;; old-prev = param3 for tail call
 
-             (bc PUSH_NIL)
+             (bc PUSH_NIL)                             ;; param 3 form btree rec
 
              (bc PUSH_NIL)
              (bc PUSH_LOCAL_1_CAR)
@@ -2691,13 +2698,14 @@ TODOS:
              (bc TAIL_CALL)
 
       (label CAAR_PATH_1__BTREE_REMOVE_VALUE_AT)
-             (bc PUSH_LOCAL_2)                  ;; parameter 3 for btree-remove-value-at
+             (bc PUSH_LOCAL_2)                  ;; old-prev = parameter 3 for btree-remove-value-at
 
-             (bc PUSH_NIL)                      ;; parametere 3 for btree rec
+             (bc PUSH_NIL)                      ;; parameter 3 for btree rec
 
              (bc PUSH_NIL)
              (bc PUSH_LOCAL_1_CAR)
-             (bc CADR)
+             (bc CADR)                          ;; (cadar path)
+             ;; from here downwards same as previous cond! <- for (size) optimization
              (bc CONS)
              (bc WRITE_TO_LOCAL_3)              ;; local3= ((cadar path) . NIL)
              ;; parameter 2 for betree rec
@@ -2712,7 +2720,52 @@ TODOS:
              (bc TAIL_CALL)))))
 
 (module+ test #| remove value at |#
+  (define dependecies-remove-value-at
+    (append
+     BTREE_REMOVE_VALUE_AT
+     BTREE_NODE_FOR_PATH
+     BTREE_PREV
+     BTREE_REC_REBUILD_PATH_WITH
+     BTREE_PATH_TO_FIRST
+     BTREE_MAKE_ROOT
+     BTREE_PATH_TO_LAST
+     BTREE_VALUE_P
+     BTREE_NODE_P
+     APPEND
+     REVERSE))
+
+
   (define remove-value-at-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+
+       (bc PUSH_NIL)
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0008)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      dependecies-remove-value-at)))
+
+  (check-equal? (cleanup-strings (vm-stack->strings remove-value-at-0-state 10 #t))
+                (list "stack holds 2 items"
+                      "NIL  (rt)"
+                      "((0 . (8 . NIL)) . NIL)"))
+
+  (define remove-value-at-1-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -2721,21 +2774,561 @@ TODOS:
        (bc PUSH_NIL)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
        (bc BRK))
-      BTREE_REMOVE_VALUE_AT
-      BTREE_NODE_FOR_PATH
-      BTREE_NEXT
-      BTREE_REC_REBUILD_PATH_WITH
-      BTREE_PATH_TO_FIRST
-      BTREE_MAKE_ROOT
-      BTREE_PATH_TO_LAST
-      BTREE_VALUE_P
-      BTREE_NODE_P
-      APPEND
-      REVERSE)))
+      dependecies-remove-value-at)))
 
-  (check-equal? (cleanup-strings (vm-stack->strings remove-value-at-0-state 10 #t))
+  (check-equal? (cleanup-strings (vm-stack->strings remove-value-at-1-state 10 #t))
                 (list "stack holds 1 item"
-                      "NIL  (rt)")))
+                      "NIL  (rt)"))
+
+  (define (remove-value-at-2-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0009)
+       (bc PUSH_INT) (word $0008)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-2-state) 10 #t))
+                (list "stack holds 2 items"
+                      "((0 . (9 . NIL)) . NIL)  (rt)"
+                      "((0 . (8 . 9)) . NIL)"))
+
+  (define (remove-value-at-3-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0009)
+       (bc PUSH_INT) (word $0008)
+       (bc CONS)
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-3-state) 10 #t))
+                (list "stack holds 2 items"
+                      "((0 . (8 . NIL)) . NIL)  (rt)"
+                      "((1 . (8 . 9)) . NIL)"))
+
+  (define (remove-value-at-4-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc SWAP)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0008)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+
+
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+       
+       (bc DUP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-4-state) 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (5 . NIL))"
+                       " . ((0 . ((5 . NIL) . 7))"
+                       " . ((1 . (4 . ((5 . NIL) . 7)))"
+                       " . ((0 . ((4 . ((5 . NIL) . 7)) . 8))"
+                       " . NIL))))  (rt)")
+                      (string-append
+                       "((1 . (5 . 6))"
+                       " . ((0 . ((5 . 6) . 7))"
+                       " . ((1 . (4 . ((5 . 6) . 7)))"
+                       " . ((0 . ((4 . ((5 . 6) . 7)) . 8))"
+                       " . NIL))))"
+                       )))
+
+  (define (remove-value-at-5-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT) (word $0006)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc SWAP)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0008)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+
+
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-5-state) 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (6 . NIL))"
+                       " . ((0 . ((6 . NIL) . 7))"
+                       " . ((1 . (4 . ((6 . NIL) . 7)))"
+                       " . ((0 . ((4 . ((6 . NIL) . 7)) . 8))"
+                       " . NIL))))  (rt)")
+                      (string-append
+                       "((0 . (5 . 6))"
+                       " . ((0 . ((5 . 6) . 7))"
+                       " . ((1 . (4 . ((5 . 6) . 7)))"
+                       " . ((0 . ((4 . ((5 . 6) . 7)) . 8))"
+                       " . NIL))))"
+                       )))
+
+  (define (remove-value-at-6a-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc SWAP)
+       (bc CONS)
+       ;; (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       ;; (bc SWAP)
+
+       ;; (bc PUSH_INT) (word $0004)
+       ;; (bc CONS)
+       ;; (bc DUP)
+
+       ;; (bc PUSH_INT_1)
+       ;; (bc CONS)
+       ;; (bc SWAP)
+
+       ;; (bc PUSH_INT) (word $0008)
+       ;; (bc SWAP)
+       ;; (bc CONS)
+
+       ;; (bc PUSH_INT_0)
+       ;; (bc CONS)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+
+       ;; (bc SWAP)
+       ;; (bc CONS)
+       ;; (bc SWAP)
+       ;; (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6a-state) 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (7 . NIL))"
+                       " . NIL)  (rt)")
+                      (string-append
+                       "((0 . (5 . NIL))"
+                       " . ((0 . ((5 . NIL) . 7))"
+                       " . NIL))"
+                       )))
+
+  (define (remove-value-at-6b-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc SWAP)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       ;; (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+       ;; (bc SWAP)
+
+       ;; (bc PUSH_INT) (word $0008)
+       ;; (bc SWAP)
+       ;; (bc CONS)
+
+       ;; (bc PUSH_INT_0)
+       ;; (bc CONS)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc SWAP)
+       (bc CONS)
+       ;; (bc SWAP)
+       ;; (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6b-state) 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (4 . (7 . NIL)))"
+                       " . NIL)  (rt)")
+                      (string-append
+                       "((0 . (5 . NIL))"
+                       " . ((0 . ((5 . NIL) . 7))"
+                       " . ((1 . (4 . ((5 . NIL) . 7)))"
+                       " . NIL)))"
+                       )))
+
+  (define (remove-value-at-6c-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc SWAP)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       ;; (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+       ;; (bc SWAP)
+
+       ;; (bc PUSH_INT) (word $0008)
+       ;; (bc SWAP)
+       ;; (bc CONS)
+
+       ;; (bc PUSH_INT_0)
+       ;; (bc CONS)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc SWAP)
+       (bc CONS)
+       ;; (bc SWAP)
+       ;; (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_PREV)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6c-state) 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (4 . ((5 . NIL) . 7)))"
+                       " . NIL)  (rt)")
+                      (string-append
+                       "((0 . (5 . NIL))"
+                       " . ((0 . ((5 . NIL) . 7))"
+                       " . ((1 . (4 . ((5 . NIL) . 7)))"
+                       " . NIL)))"
+                       )))
+
+  (define (remove-value-at-6d-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0007)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       ;; (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc SWAP)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_PREV)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6d-state) 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (4 . (7 . NIL)))"
+                       " . NIL)  (rt)")
+                      (string-append
+                       "((0 . (7 . NIL))"
+                       " . ((1 . (4 . (7 . NIL)))"
+                       " . NIL))"
+                       )))
+
+  (define (remove-value-at-6-state)
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc SWAP)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0008)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+
+
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+       (bc BRK))
+      dependecies-remove-value-at)
+     ))
+
+  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6-state) 10 #t))
+                (list "stack holds 2 items"
+                      (string-append
+                       "((0 . (4 . (7 . NIL)))"
+                       " . ((0 . ((4 . (7 . NIL)) . 8))"
+                       " . NIL))  (rt)")
+                      (string-append
+                       "((0 . (5 . NIL))"
+                       " . ((0 . ((5 . NIL) . 7))"
+                       " . ((1 . (4 . ((5 . NIL) . 7)))"
+                       " . ((0 . ((4 . ((5 . NIL) . 7)) . 8))"
+                       " . NIL))))"
+                       ))))
 
 (define vm-btree
   (flatten
@@ -2769,4 +3362,4 @@ TODOS:
 
 (module+ test #| vm-btree |#
   (check-equal? (bc-bytes (flatten vm-btree))
-                489))
+                490))

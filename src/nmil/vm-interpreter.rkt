@@ -1997,12 +1997,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (BNE NE__BC_CELL_EQ)
 
           (DEC ZP_CELL_STACK_TOS)
-          (JSR VM_WRITE_INT0_TO_RT)
+          (JSR VM_WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
 
    (label NE__BC_CELL_EQ)
           (DEC ZP_CELL_STACK_TOS)
-          (JSR VM_WRITE_INT1_TO_RT)
+          (JSR VM_WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define INT_0_P #x22)
