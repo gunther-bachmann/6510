@@ -2611,28 +2611,24 @@ TODOS:
    (flatten
      (list
       (label BTREE_REMOVE_VALUE_AT)
-             (byte 4)
-             (bc POP_TO_LOCAL_1)        ;; local_1= path
-             (bc POP_TO_LOCAL_0)        ;; local_0= result
-             (bc POP_TO_LOCAL_2)        ;; local_2= old-prev
+             (byte 3)
+             (bc WRITE_TO_LOCAL_1)        ;; local_1= path
 
-             (bc PUSH_LOCAL_1)
              (bc NIL?)
              (bc FALSE_P_BRANCH) (bc-rel-ref PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
 
+             (bc POP_TO_LOCAL_0)
              ;; path empty
-             (bc PUSH_LOCAL_2)          ;; old-prev
+             (bc WRITE_TO_LOCAL_2)          ;; old-prev
              (bc NIL?_RET_LOCAL_0_POP_1)
-             (bc POP)
+             (bc WRITE_FROM_LOCAL_0)
 
              ;; path empty and old-prev not empty
-             (bc PUSH_LOCAL_0)          ;; result
              (bc CALL) (word-ref BTREE_PREV)
              (bc WRITE_TO_LOCAL_3)              ;; (btree-prev result)
              (bc NIL?_RET_LOCAL_0_POP_1)        ;; since prev-node-opath is nil return result
 
-             (bc POP)
-             (bc PUSH_LOCAL_0)          ;; result
+             (bc WRITE_FROM_LOCAL_0)                  ;; result
              (bc CALL) (word-ref BTREE_NODE_FOR_PATH)   ;; (btree-node-for-path result)
              (bc PUSH_LOCAL_2)                          ;; old-prev
              (bc CELL_EQ)                               
@@ -2645,6 +2641,9 @@ TODOS:
              (bc RET)
 
       (label PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
+             (bc POP)                   ;; result (is discarded)
+
+
              (bc PUSH_LOCAL_1_CAR)
              (bc CAR)                           ;; (caar path)
              (bc INT_0_P)
@@ -2655,6 +2654,8 @@ TODOS:
              (bc CDDR)
              (bc NIL?)
              (bc FALSE_P_BRANCH) (bc-rel-ref CDDAR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
+
+             (bc POP)                           ;; discard old-prev
 
              ;; from now on (empty? (cddar path))
              (bc PUSH_LOCAL_1_CDR)
@@ -2676,20 +2677,21 @@ TODOS:
 
       (label CDDAR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
              ;; (and (= -1 (caar path)) (not (empty? (cddar path))))
-             (bc PUSH_LOCAL_2)                         ;; old-prev = param3 for tail call
-
+                                                       ;; old-prev = param3 for tail call still on stack
              (bc PUSH_NIL)                             ;; param 3 form btree rec
 
              (bc PUSH_NIL)
              (bc PUSH_LOCAL_1_CAR)
              (bc CDDR)
+
+      (label COMMON_PREP_TC__BTREE_REMOVE_VALUE_AT)
              (bc CONS)
-             (bc WRITE_TO_LOCAL_3)      ;; new node
+             (bc WRITE_TO_LOCAL_0)      ;; new node
 
              (bc PUSH_LOCAL_1_CDR)      ;; (cdr path)
              (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
 
-             (bc PUSH_LOCAL_3)
+             (bc PUSH_LOCAL_0)
              (bc PUSH_INT_0)
              (bc COONS)                         ;; ((0 . new-local) . rec-rebuild)
                                                 ;; param 2 for tail call
@@ -2698,26 +2700,27 @@ TODOS:
              (bc TAIL_CALL)
 
       (label CAAR_PATH_1__BTREE_REMOVE_VALUE_AT)
-             (bc PUSH_LOCAL_2)                  ;; old-prev = parameter 3 for btree-remove-value-at
-
+                                                ;; old-prev = parameter 3 for btree-remove-value-at still on stack
              (bc PUSH_NIL)                      ;; parameter 3 for btree rec
 
              (bc PUSH_NIL)
              (bc PUSH_LOCAL_1_CAR)
              (bc CADR)                          ;; (cadar path)
              ;; from here downwards same as previous cond! <- for (size) optimization
-             (bc CONS)
-             (bc WRITE_TO_LOCAL_3)              ;; local3= ((cadar path) . NIL)
-             ;; parameter 2 for betree rec
-             (bc PUSH_LOCAL_1_CDR)              ;; (cdr path) parameter 1 for btree rec
-             (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
+             (bc GOTO) (bc-rel-ref COMMON_PREP_TC__BTREE_REMOVE_VALUE_AT)
+             ;; (bc CONS)
+             ;; (bc WRITE_TO_LOCAL_3)              ;; local3= ((cadar path) . NIL)
+             ;; ;; parameter 2 for betree rec
+             ;; (bc PUSH_LOCAL_1_CDR)              ;; (cdr path) parameter 1 for btree rec
+             ;; (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
 
-             (bc PUSH_LOCAL_3)
-             (bc PUSH_INT_0)
-             (bc COONS)                         ;; ((0 . new-node) . rec-rebuild)
-             ;; param 2 for btree-remove-value-at
-             (bc PUSH_NIL)                       ;; param 1 for btree-remove-value-at
-             (bc TAIL_CALL)))))
+             ;; (bc PUSH_LOCAL_3)
+             ;; (bc PUSH_INT_0)
+             ;; (bc COONS)                         ;; ((0 . new-node) . rec-rebuild)
+             ;; ;; param 2 for btree-remove-value-at
+             ;; (bc PUSH_NIL)                       ;; param 1 for btree-remove-value-at
+             ;; (bc TAIL_CALL)
+             ))))
 
 (module+ test #| remove value at |#
   (define dependecies-remove-value-at
@@ -3424,6 +3427,9 @@ TODOS:
       dependecies-remove-value-at)
      ))
 
+
+  (check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
+                46740)
   (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -3474,4 +3480,4 @@ TODOS:
 
 (module+ test #| vm-btree |#
   (check-equal? (bc-bytes (flatten vm-btree))
-                490))
+                477))
