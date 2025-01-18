@@ -23,8 +23,8 @@ TODOS:
     DONE btree-add-value-before
     DONE btree->list
     DONE btree<-list
-    IMPLEMENT btree-remove-value-at
-    btree-root-of-path
+    DONE btree-remove-value-at
+    IMPLEMENT btree-root-of-path
 |#
 
 (require (only-in racket/list flatten))
@@ -3448,6 +3448,41 @@ TODOS:
                        " . NIL)))))))"))
                 "if the node deleted has a prev, return that one and recursively replace up to root"))
 
+
+(define BTREE_ROOT_FOR_PATH ;; path -> node
+  (bc-resolve
+   (flatten
+    (list
+     (label BTREE_ROOT_FOR_PATH)
+            (byte 0)
+            (bc WRITE_TO_LOCAL_0)
+            (bc NIL?_RET_LOCAL_0_POP_1)
+
+            (bc PUSH_LOCAL_0_CDR)
+            (bc NIL?)
+            (bc TRUE_P_BRANCH) (bc-rel-ref CDR_IS_NIL__BTREE_ROOT_FOR_PATH)
+
+            (bc PUSH_LOCAL_0_CDR)
+            (bc TAIL_CALL)
+
+     (label CDR_IS_NIL__BTREE_ROOT_FOR_PATH)
+            (bc PUSH_LOCAL_0_CDR)
+            (bc RET)))))
+
+(module+ test #| btree root for path |#
+  (define root-for-path-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
+       (bc BRK))
+      BTREE_ROOT_FOR_PATH)))
+
+  (check-equal? (cleanup-strings (vm-stack->strings root-for-path-0-state 10 #t))
+                (list "stack holds 1 item"
+                      "NIL  (rt)")))
+
 (define vm-btree
   (flatten
    (append
@@ -3476,8 +3511,10 @@ TODOS:
     BTREE_TO_LIST
     BTREE_FROM_LIST
 
-    BTREE_REMOVE_VALUE_AT)))
+    BTREE_REMOVE_VALUE_AT
+
+    BTREE_ROOT_FOR_PATH)))
 
 (module+ test #| vm-btree |#
   (check-equal? (bc-bytes (flatten vm-btree))
-                477))
+                488))
