@@ -2,29 +2,90 @@
 
 #|
 
-implementation of a b-tree with values at leafs from pure bytecode
+implementation of a persistent b-tree with values at leafs in pure bytecode
 
 this implementation will be the testbed for all refcounting gc testing
+exported scheme list: vm-btree <- contains the complete bytecode implementation
+
+  data
+  ----
+    node = val|node . val|node|NIL    [car of node is never nil]
+    path = (list pa-element)          [list of path elements, first list element points to leaf, ... last to root]
+    pa-element = 0|1 . node           [path points to.. 0 = car element of node, 1 = cdr element of node]
+
+  public methods
+  --------------
+    REVERSE
+      list :: result=nil -> list
+      [return the given list reversed]
+    APPEND
+      head-list :: tail-list -> list
+      [return the concat of the two lists]
+
+    BTREE_MAKE_ROOT 
+      value -> node
+      [create a tree node (root) form the given value]
+
+    BTREE_VALUE_P 
+      node -> bool
+      [is this node actually a value?]
+    BTREE_NODE_P 
+      node -> bool
+      [is this node a node with children]
+    BTREE_DEPTH
+      node :: right-list=nil :: depth=0 :: max-depth=0 -> int
+      [give the max depth of this tree]
+
+    BTREE_PATH_TO_LAST
+      node :: result-path=nil -> path
+      [return the path to the last node of the given tree]
+    BTREE_PATH_TO_FIRST
+      node :: result-path=nil -> path
+      [return the path to the first node of the given tree]
+    BTREE_NEXT
+      path -> path
+      [give the path to the next element (or nil if it was last)]
+    BTREE_PREV
+      path -> path
+      [give the path to the prev element (or nil if it was first)]
+
+    BTREE_NODE_FOR_PATH
+      path -> node
+      [give the node referenced by the given path]
+
+    BTREE_VALIDATE
+      node -> void  :: run into break if node cannot be
+      validated
+
+    BTREE_ADD_VALUE_BEFORE
+      value :: path -> path
+      [add a value into the tree before the given path, returning the path to the inserted item]
+    BTREE_ADD_VALUE_AFTER
+      value :: path -> path
+      [add a value into the tree after the given path, returning the path to the inserted item]
+
+    BTREE_TO_LIST
+      node :: btree-prefix=nil :: result=nil -> (list node)
+      [create a list of values from the given tree]
+    BTREE_FROM_LIST
+      (list node) :: result=nil -> node
+      [create a balanced tree from the list of values/nodes]
+
+    BTREE_REMOVE_VALUE_AT
+      path :: result=nil :: old-prev=nil -> path
+      [remove the node referenced by path from the tree, returning the path to the previous value (if present else the next)]
+
+    BTREE_ROOT_FOR_PATH
+      path -> node
+      [return the root node of the given path]
 
 
-TODOS:
-    DONE btree-make-root
-    DONE btree-node?
-    DONE btree-value?
-    DONE btree-validate
-    DONE btree-depth
-    DONE btree-path-to-first
-    DONE btree-path-to-list
-    DONE btree-node-for-path
-    DONE btree-prev
-    DONE btree-next
-    DONE recursive-rebuild-path-at-with
-    DONE btree-add-value-after
-    DONE btree-add-value-before
-    DONE btree->list
-    DONE btree<-list
-    DONE btree-remove-value-at
-    IMPLEMENT btree-root-of-path
+  private methods
+  ---------------
+    BTREE_REC_REBUILD_PATH_WITH
+      (list path) :: repl-node :: result=nil -> (list path)
+      [method to replace the given node up the tree in the path]
+
 |#
 
 (require (only-in racket/list flatten))
@@ -3458,15 +3519,15 @@ TODOS:
             (bc WRITE_TO_LOCAL_0)
             (bc NIL?_RET_LOCAL_0_POP_1)
 
-            (bc PUSH_LOCAL_0_CDR)
+            (bc CDR)
             (bc NIL?)
             (bc TRUE_P_BRANCH) (bc-rel-ref CDR_IS_NIL__BTREE_ROOT_FOR_PATH)
-
             (bc PUSH_LOCAL_0_CDR)
             (bc TAIL_CALL)
 
      (label CDR_IS_NIL__BTREE_ROOT_FOR_PATH)
-            (bc PUSH_LOCAL_0_CDR)
+            (bc PUSH_LOCAL_0_CAR)
+            (bc CDR)
             (bc RET)))))
 
 (module+ test #| btree root for path |#
@@ -3481,7 +3542,93 @@ TODOS:
 
   (check-equal? (cleanup-strings (vm-stack->strings root-for-path-0-state 10 #t))
                 (list "stack holds 1 item"
-                      "NIL  (rt)")))
+                      "NIL  (rt)"))
+
+  (define root-for-path-1-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc CONS)
+       (bc DUP)
+       (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
+       (bc BRK))
+      BTREE_ROOT_FOR_PATH)))
+
+  (check-equal? (cleanup-strings (vm-stack->strings root-for-path-1-state 10 #t))
+                (list "stack holds 2 items"
+                      "(5 . NIL)  (rt)"
+                      "((0 . (5 . NIL)) . NIL)"))
+
+  (define root-for-path-2-state
+    (run-bc-wrapped-in-test
+     (append      
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0005)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0007)
+       (bc SWAP)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0004)
+       (bc CONS)
+       (bc DUP)
+
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc SWAP)
+
+       (bc PUSH_INT) (word $0008)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc PUSH_INT_0)
+       (bc CONS)
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CONS)
+
+
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+       (bc SWAP)
+       (bc CONS)
+
+       (bc DUP)
+
+       (bc BNOP)
+       (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
+       (bc BRK))
+      BTREE_ROOT_FOR_PATH)))
+
+  (check-equal? (cleanup-strings (vm-stack->strings root-for-path-2-state 10 #t))
+                (list "stack holds 2 items"
+                      "((4 . ((5 . NIL) . 7)) . 8)  (rt)"
+                      (string-append ""
+                       "((0 . (5 . NIL))"
+                       " . ((0 . ((5 . NIL) . 7))"
+                       " . ((1 . (4 . ((5 . NIL) . 7)))"
+                       " . ((0 . ((4 . ((5 . NIL) . 7)) . 8))"
+                       " . NIL))))"))))
 
 (define vm-btree
   (flatten
@@ -3517,4 +3664,4 @@ TODOS:
 
 (module+ test #| vm-btree |#
   (check-equal? (bc-bytes (flatten vm-btree))
-                488))
+                489))

@@ -3481,11 +3481,11 @@ this will include the implementation of
                           / \               
                          3   4    ---- Level_3
           maps to: (l_1 (l_2 "1" . "2") . (l_2 (l_3 "3" . "4") . "5"))
-  - [ ] translate scheme implementation to nmil byte code functions
+  - [X] translate scheme implementation to nmil byte code functions
   - [ ] tree algorithms + gc implementation (rc)
     - add/remove/cut/paste ... (as in editors)
   - [ ] reverse order of binary tree + implementation of refcounting
-  - [ ] depth of binary tree (travers full tree, tail-call-recursively, keeping max depth)
+  - [X] depth of binary tree (travers full tree, tail-call-recursively, keeping max depth)
 - [ ] implement concept of constants
   be aware of pointer tagging that should still work
   constants do not need reference counting and must never be put on the free-list (free-tree)
@@ -3564,6 +3564,12 @@ this will include the implementation of
   - [X] single step
   - [X] run to next call/return
   - [X] step over call
+**** memory information
+- get free pages
+- get empty pages <- listed to be reused
+- get used pages <- currently in use (1 or more slots in use or in free list)
+- get used cells, cell-pairs <- currently in use
+- get cells/cell-pairs in free list <- freed and ready for reuse
 **** IMPLEMENT optimize byte code
 - push_​local_​0, write_​to_​local_​0 :: make this a one byte command (not a short instruction) => speeds up decoding
 - [X] cadr cdar caar cddr :: could be put into a fast instruction
