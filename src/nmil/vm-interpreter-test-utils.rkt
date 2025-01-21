@@ -135,7 +135,7 @@
                             "pma adr        print cell at memory location (can be anything)"
                             "ppma adr       pretty print cell at memory location (can be anything)"
                             "pp <B?> <A?>   pretty print the next B (hex) commands starting at address A (hex)" 
-                            "rt             print cell register t"
+                            "pt             print cell register t"
                             "ruc            run until next call or return instruction"
                             "rur            run until returned from current call"
                             "run            run up to next breakpoint set"

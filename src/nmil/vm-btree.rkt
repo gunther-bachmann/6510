@@ -242,7 +242,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
   (check-equal? (vm-stack->strings btree-make-root-state)
                   (list "stack holds 1 item"
-                        (format "pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                        (format "pair-ptr[0] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
 
   (define btree-make-root-2-state
     (run-bc-wrapped-in-test
@@ -720,10 +720,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_PATH_TO_FIRST)
      ))
 
-  (check-equal? (regexp-replace*
-                 "pair-ptr (\\$[0-9A-Fa-f]*)?"
-                 (vm-regt->string path-to-first-0-state #t) "")
-                "((int $0000 . (int $0002 . NIL)) . NIL)"
+  (check-equal? (cleanup-string (vm-regt->string path-to-first-0-state #t))
+                "((0 . (2 . NIL)) . NIL)"
                 "result is a path to the node with value 2: ((0 . (2 . NIL)))")
 
   (define path-to-first-1-state
@@ -745,10 +743,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_PATH_TO_FIRST)                      ;;
      ))                                         ;;
 
-  (check-equal? (regexp-replace*
-                 "pair-ptr (\\$[0-9A-Fa-f]*)?"
-                 (vm-regt->string path-to-first-1-state #t) "")
-                "((int $0000 . (int $0000 . ((int $0002 . NIL) . int $0001))) . NIL)"
+  (check-equal? (cleanup-string (vm-regt->string path-to-first-1-state #t))
+                "((0 . (0 . ((2 . NIL) . 1))) . NIL)"
                 "result is a path to the node with value 1: ((0 . (1 . ((2 . nil) . 1))"))
 
 
@@ -801,11 +797,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_VALUE_P
       BTREE_MAKE_ROOT)))
 
-  (check-equal? (regexp-replace*
-                 "pair-ptr (\\$[0-9A-Fa-f]*)?"
-                 (vm-regt->string path-to-last-0-state #t)
-                 "")
-                "((int $0000 . (int $0002 . NIL)) . NIL)")
+  (check-equal? (cleanup-string (vm-regt->string path-to-last-0-state #t))
+                "((0 . (2 . NIL)) . NIL)")
 
   (define path-to-last-1-state
     (run-bc-wrapped-in-test
@@ -826,14 +819,11 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_PATH_TO_LAST)                       ;;
      ))
 
-  (check-equal? (regexp-replace*
-                   "pair-ptr (\\$[0-9A-Fa-f]*)?"
-                   (vm-regt->string path-to-last-1-state #t)
-                   "")
+  (check-equal? (cleanup-string (vm-regt->string path-to-last-1-state #t))
                 (string-append
-                 "((int $0000 . (int $0002 . NIL))"
-                 " . ((int $0000 . ((int $0002 . NIL) . NIL))"
-                 " . ((int $0001 . (int $0000 . ((int $0002 . NIL) . NIL)))"
+                 "((0 . (2 . NIL))"
+                 " . ((0 . ((2 . NIL) . NIL))"
+                 " . ((1 . (0 . ((2 . NIL) . NIL)))"
                  " . NIL)))"))
 
   (define path-to-last-2-state
@@ -855,13 +845,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_PATH_TO_LAST)                       ;;
      ))
 
-  (check-equal? (regexp-replace*
-                   "pair-ptr (\\$[0-9A-Fa-f]*)?"
-                   (vm-regt->string path-to-last-2-state #t)
-                   "")
+  (check-equal? (cleanup-string (vm-regt->string path-to-last-2-state #t))
                 (string-append
-                 "((int $0001 . ((int $0002 . NIL) . int $0001))"
-                 " . ((int $0001 . (int $0000 . ((int $0002 . NIL) . int $0001)))"
+                 "((1 . ((2 . NIL) . 1))"
+                 " . ((1 . (0 . ((2 . NIL) . 1)))"
                  " . NIL))"))
   )
 
@@ -1084,10 +1071,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (regexp-replace*
-                 "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                 (vm-regt->string prev-2-state #t)
-                 "")
+  (check-equal? (cleanup-string (vm-regt->string prev-2-state #t))
                 "((0 . (2 . 3)) . NIL)")
 
   (define prev-3-state
@@ -1114,10 +1098,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (regexp-replace*
-                    "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                    (vm-regt->string prev-3-state #t)
-                    "")
+  (check-equal? (cleanup-string (vm-regt->string prev-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
 
   
@@ -1252,11 +1233,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       APPEND
       REVERSE)))
 
-  (check-equal? (regexp-replace*
-                 "pair-ptr (\\$[0-9A-Fa-f]*)?"
-                 (vm-regt->string append-0-state #t)
-                 "")
-                "(int $0005 . (int $0004 . (int $0003 . (int $0002 . (int $0001 . (int $0000 . NIL))))))")
+  (check-equal? (cleanup-string (vm-regt->string append-0-state #t))
+                "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
   (check-equal? (cpu-state-clock-cycles append-0-state)
                 5986))
 
@@ -1393,10 +1371,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (regexp-replace*
-                 "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                 (vm-regt->string next-1-state #t)
-                 "")
+  (check-equal? (cleanup-string (vm-regt->string next-1-state #t))
                 "((1 . (2 . 3)) . NIL)")
 
 
@@ -1449,12 +1424,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (regexp-replace*
-                    "(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$000)"
-                    (vm-regt->string next-3-state #t)
-                    "")
+  (check-equal? (cleanup-string (vm-regt->string next-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
-
 
   (define next-4-state
     (run-bc-wrapped-in-test

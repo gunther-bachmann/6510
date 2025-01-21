@@ -3701,6 +3701,11 @@ both)
 - [X] pretty print the next x byte code instructions
 - [X] make inspection routines fail safe (ignore exceptions)
 - [X] switch from/to bc/assembler debugger
+- [ ] add watch on memory <- continuous output of this value after each step
+- [ ] add page view (continuous update) during execution
+- [ ] add breakpoint on memory change
+- [ ] add stack view (continuous update) 
+- [ ] add call-frame view (continuous update)
 - [ ] inspection of vm variables (zp_​vm_​pc, zp_...)
 - [ ] inspect/manipulate call frame
 - [ ] going back bc steps

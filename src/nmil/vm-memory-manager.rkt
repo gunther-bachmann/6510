@@ -280,7 +280,7 @@ call frame primitives etc.
 
 (define (cleanup-string str)
   (regexp-replace*
-   #px"(pair-ptr (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
+   #px"(pair-ptr(\\[[-0-9]*\\])? (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
    str
    ""))
 
@@ -340,17 +340,27 @@ call frame primitives etc.
 (define (vm-cell-w->string word (state '()) (follow #f))
   (vm-cell->string (low-byte word) (high-byte word) state follow))
 
+(define (refcount-of-cell-pair state low high)
+  (define rc-offset (arithmetic-shift low -2))
+  (peek state (bytes->int rc-offset high)))
+
+(define (refcount-of-cell state low high)
+  (define rc-offset (arithmetic-shift low -1))
+  (peek state (bytes->int rc-offset high)))
+
 ;; write decoded cell described by low high
 ;; the low 2 bits are used for pointer tagging
 (define (vm-cell->string low high (state '()) (follow #f))
   (cond
     [(= 0 low) "empty"]
-    [(= 0 (bitwise-and #x01 low)) (format "ptr $~a~a"
+    [(= 0 (bitwise-and #x01 low)) (format "ptr[~a] $~a~a"
+                                          (if state (refcount-of-cell state low high) "-")
                                           (format-hex-byte high)
                                           (format-hex-byte (bitwise-and #xfe low)))]
     [(and (= 1 (bitwise-and #x03 low)) (= high 0)) "pair-ptr NIL"]
     [(= 1 (bitwise-and #x03 low))
-     (string-append (format "pair-ptr $~a~a"
+     (string-append (format "pair-ptr[~a] $~a~a"
+                            (if state (refcount-of-cell-pair state low high) "-")
                             (format-hex-byte high)
                             (format-hex-byte (bitwise-and #xfd low)))
                     (if follow
