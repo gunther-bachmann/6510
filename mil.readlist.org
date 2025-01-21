@@ -3600,7 +3600,9 @@ this will include the implementation of
   - return local
 - TODO
    allocation of local stack should fill the lowbyte page with #xff to indicate bytes <- anything != ptr should work!
-   first complete all commands to increment the ref count, once this is complete, the decrement can be implemented (and checked)
+   DONE first complete all commands to increment the ref count,
+   once this is complete, watch the refcount numbers during commands <- need debugger info
+   the decrement can be implemented (and checked)
    WRITE​_TO​_LOCAL​_x  (BC​_PUSH​_LOCAL​_SHORT)
    - check whether local holds a ptr, if so dec ref (of pointed to), before overwriting it
    - check if rt holds ptr, if so inc ref (of pointed to)
@@ -3609,20 +3611,21 @@ this will include the implementation of
    NIL?​_RET​_LOCAL​_0​_POP​_x (BC​_NIL​_P​_RET​_LOCAL​_N​_POP) 
    - check whether x - stack elements are ptrs, if so dec respectively
    - overwrite local0 with 0 (no refcount change necessary then)
-   CDR
+   CDR (BC​_CDR)
    - check if rt holds ptr, if so dec ref (of pointed to)
    - check if CDR (rt) holds ptr, if so inc ref (of pointed to)
-   CAR
+   CAR (BC​_CAR)
    - check if rt holds ptr, if so dec ref (of pointed to)
    - check if CAR (rt) holds ptr, if so inc ref (of pointed to)
-   CDDR, CDAR, CADR, CAAR, likewise
-   PUSH​_LOCAL
+   CDDR, CDAR, CADR, CAAR, likewise (BC​_CxxR)
+   PUSH​_LOCAL (BC​_PUSH​_LOCAL​_SHORT)
    - check if local is a ptr, inc ref (of pointed to)
-   PUSH_​LOCAL​_x​_CAR
+   PUSH_​LOCAL​_x​_CAR (BC​_PUSH​_LOCAL​_CXR)
    - check if car of local is a ptr, inc ref (of pointed to)
-   PUSH​_LOCAL​_x​_CDR
+   PUSH​_LOCAL​_x​_CDR (BC​_PUSH​_LOCAL​_CXR)
    - check if cdr of local is a ptr, inc ref (of pointed to)
-   RET :: do nothing
+   RET (BC​_RET)
+   - cleanup locals
    FALSE​_P​_BRANCH :: do nothing <- only int should be on the stack
    TRUE​_P​_BRANCH :: do nothing <- only int should be on the stack
    PUSH​_NIL :: do nothing (nil is not ref counted)
@@ -3630,15 +3633,17 @@ this will include the implementation of
    CALL :: do nothing
    TAIL​_CALL :: do nothing
    GOTO :: do nothing
-   POP :: if rt is ptr, dec ref
-   POP​_TO​_LOCAL​_x :: if local_x is a ptr, dec ref of local x (before overwriting it)
-   CONS
-   - check top two elements on the stack and inc ref if ptr
+   POP (BC​_POP)
+   - if rt is ptr, dec ref
+   POP​_TO​_LOCAL​_x  (BC​_POP​_TO​_LOCAL​_SHORT)
+   - if local​_x is a ptr, dec ref of local x (before overwriting it)
+   CONS (BC​_CONS)
+   - no adjust of consed elements (since they are referenced by cons cell, no longer by stack)
    - set ref count to 1 on new allocated cell
-   COONS
-   - check top three elements on stack and inc ref if ptr
+   COONS (BC​_COONS)
+   - no adjust of consed elements (since they are referenced by cons cells, no longer by stack)
    - set ref count on both allocated cells to 1 each (last cons is on stack, previous cons is referenced by last cons)
-   DUP
+   DUP (BC​_DUP)
    - check if rt is ptr, inc ref (of pointed to)
    SWAP :: do nothing
    BNOP :: do nothing

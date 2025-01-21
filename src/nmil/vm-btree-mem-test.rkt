@@ -52,8 +52,6 @@
                     CDAR
                     CDDR
                     COONS
-                    CONDR
-                    CONAR
                     POP
                     DUP
                     BNOP
@@ -133,7 +131,7 @@
        (bc CALL) (word-ref BTREE_FROM_LIST)
        (bc BRK))
       vm-btree)
-     #t))
+     ))
 
   (check-equal? (cleanup-strings (vm-stack->strings create-tree-0-state 10 #t))
                 (list "stack holds 1 item"

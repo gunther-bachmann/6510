@@ -1913,6 +1913,7 @@ call frame primitives etc.
   (list
    (label VM_REFCOUNT_DECR_RT)
           (LDA ZP_RT)
+          (BEQ UNKNOWN__VM_REFCOUNT_DECR_RT)
           (TAY)
           (LSR)
           (BCC DECR_CELL_PTR__VM_REFCOUNT_DECR_RT)
@@ -1924,6 +1925,7 @@ call frame primitives etc.
           (CPY !TAG_BYTE_NATIVE_ARRAY)
           (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_RT)
 
+   (label UNKNOWN__VM_REFCOUNT_DECR_RT)
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RT)
           (RTS)
 
@@ -1951,6 +1953,7 @@ call frame primitives etc.
   (list
    (label VM_REFCOUNT_INCR_RT)
           (LDA ZP_RT)                                   ;; load tage byte
+          (BEQ UNKNOWN__VM_REFCOUNT_INCR_RT)
           (TAY)
           (LSR)
           (BCC INCR_CELL_PTR__VM_REFCOUNT_INCR_RT)      ;; lowest bit = 0 => cell-ptr
@@ -1962,6 +1965,7 @@ call frame primitives etc.
           (CPY !TAG_BYTE_NATIVE_ARRAY)
           (BEQ INCR_NATIVE_ARRAY__VM_REFCOUNT_INCR_RT)
 
+   (label UNKNOWN__VM_REFCOUNT_INCR_RT)
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RT)
           (RTS)
 

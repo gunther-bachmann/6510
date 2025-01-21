@@ -126,8 +126,6 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   CDAR
                   CDDR
                   COONS
-                  CONDR
-                  CONAR
                   POP
                   DUP
                   BNOP
@@ -686,7 +684,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
    (check-equal? (vm-regt->string btree-depth-6-state)
                    "int $0003")
    (check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 8427))
+                 9456))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -1163,7 +1161,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"))
 
   (check-equal? (cpu-state-clock-cycles prev-4-state)
-                5158))
+                5673))
 
 ;; optimization idea: NIL?_RET instead of NIL?, TRUE_P_RET
 (define REVERSE ;; list :: result=nil -> list
@@ -1205,7 +1203,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                  (vm-regt->string reverse-0-state #t))
                 "(0 . (1 . (2 . (1fff . NIL))))")
   (check-equal? (cpu-state-clock-cycles reverse-0-state)
-                3423))
+                3722))
 
 (define APPEND ;; head-list :: tail-list -> list
   (bc-resolve
@@ -1260,7 +1258,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                  "")
                 "(int $0005 . (int $0004 . (int $0003 . (int $0002 . (int $0001 . (int $0000 . NIL))))))")
   (check-equal? (cpu-state-clock-cycles append-0-state)
-                5548))
+                5986))
 
 
 ;; (define (btree-next path)
@@ -1501,7 +1499,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)"))
 
   (check-equal? (cpu-state-clock-cycles next-4-state)
-                1695))
+                1885))
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
@@ -2356,7 +2354,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      ))
 
   (check-equal? (cpu-state-clock-cycles add-before-5-state)
-                13553)
+                15432)
 
   (check-equal? (cleanup-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -2629,7 +2627,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
 
   (check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                21202))
+                23419))
 
 
 ;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
@@ -3493,7 +3491,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
 
   (check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                46740)
+                52913)
   (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append

@@ -92,6 +92,7 @@
     [(= byte-code-t2 #x82) "cdr"]
     [(= byte-code-t2 #x84) "cons"]
     [(= byte-code-t2 #x86) "car"]
+    [(= byte-code-t2 #x88) "coons"]
     [(= byte-code-t2 #xc2) "int -"]
     [(= byte-code-t2 #xc4) "int +"]
     [(= byte-code-t2 #xc6) "int > ?"]
