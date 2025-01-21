@@ -854,6 +854,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
            (LDA ZP_RT+1)
            (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+           (JSR VM_REFCOUNT_INCR_RT)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 
     (label RT_COPY__BC_POP_TO_LOCAL_SHORT)
@@ -1278,13 +1279,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_COONS)
           (JSR VM_CONS_R)
+          (JSR VM_REFCOUNT_INCR_RT)
           (JSR VM_CONS_R)
+          (JSR VM_REFCOUNT_INCR_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_CONS
   (list
    (label BC_CONS)          
           (JSR VM_CONS_R)
+          (JSR VM_REFCOUNT_INCR_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| bc-cons |#

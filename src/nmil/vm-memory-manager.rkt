@@ -354,13 +354,13 @@ call frame primitives etc.
   (cond
     [(= 0 low) "empty"]
     [(= 0 (bitwise-and #x01 low)) (format "ptr[~a] $~a~a"
-                                          (if state (refcount-of-cell state low high) "-")
+                                          (if (empty? state) "-" (refcount-of-cell state low high))
                                           (format-hex-byte high)
                                           (format-hex-byte (bitwise-and #xfe low)))]
     [(and (= 1 (bitwise-and #x03 low)) (= high 0)) "pair-ptr NIL"]
     [(= 1 (bitwise-and #x03 low))
      (string-append (format "pair-ptr[~a] $~a~a"
-                            (if state (refcount-of-cell-pair state low high) "-")
+                            (if (empty? state) "-" (refcount-of-cell-pair state low high))
                             (format-hex-byte high)
                             (format-hex-byte (bitwise-and #xfd low)))
                     (if follow

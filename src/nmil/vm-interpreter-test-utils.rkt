@@ -102,7 +102,8 @@
           (format-hex-byte num-i)
           (vm-cell->string
            (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_LB_PTR)))
-           (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_HB_PTR))))))
+           (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_HB_PTR)))
+           state)))
 
 (define (vm-list->strings state address (string-list '()) (follow #f))
   (cond [(= address #x0001) ;; this is the nil ptr
