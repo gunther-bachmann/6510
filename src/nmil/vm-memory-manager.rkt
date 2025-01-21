@@ -148,8 +148,8 @@ call frame primitives etc.
    ;; highest bit 0 and the lowest 2 bits are reserved for int, cell-ptr and cell-pair-ptr
    ;; => 32 values still available
    (byte-const TAG_BYTE_BYTE_CELL        $ff)
-   (byte-const TAG_BYTE_CELL_ARRAY       $80)
-   (byte-const TAG_BYTE_NATIVE_ARRAY     $84)
+   (byte-const TAG_BYTE_CELL_ARRAY       $83)
+   (byte-const TAG_BYTE_NATIVE_ARRAY     $87)
 
    (byte-const NEXT_FREE_PAGE_PAGE       $cf)   ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
    ;; (word-const VM_FIRST_FREE_SLOT_ON_PAGE     $cf00) ;; location: table of first free slot for each page
@@ -1925,7 +1925,7 @@ call frame primitives etc.
           (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_RT)
 
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RT)
-          (BRK)
+          (RTS)
 
    (label DECR_CELL_ARRAY__VM_REFCOUNT_DECR_RT)
    (label DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_RT)
@@ -1936,6 +1936,7 @@ call frame primitives etc.
           (JMP VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
 
    (label DECR_CELL_PTR__VM_REFCOUNT_DECR_RT)
+          ;; for now just stop, TODO: cell-ptr may point to more complex structures!
           (JMP VM_REFCOUNT_DECR_RT__CELL_PTR)))
 
 ;; find out what kind of cell zp_rt points to,
@@ -1949,12 +1950,12 @@ call frame primitives etc.
 (define VM_REFCOUNT_INCR_RT
   (list
    (label VM_REFCOUNT_INCR_RT)
-          (LDA ZP_RT)
+          (LDA ZP_RT)                                   ;; load tage byte
           (TAY)
           (LSR)
-          (BCC INCR_CELL_PTR__VM_REFCOUNT_INCR_RT)
+          (BCC INCR_CELL_PTR__VM_REFCOUNT_INCR_RT)      ;; lowest bit = 0 => cell-ptr
           (LSR)
-          (BCC INCR_CELL_PAIR__VM_REFCOUNT_INCR_RT)
+          (BCC INCR_CELL_PAIR__VM_REFCOUNT_INCR_RT)     ;; bit1 = 0 => cell-pair-ptr
           ;; check other types of cells
           (CPY !TAG_BYTE_CELL_ARRAY)
           (BEQ INCR_CELL_ARRAY__VM_REFCOUNT_INCR_RT)
@@ -1962,7 +1963,7 @@ call frame primitives etc.
           (BEQ INCR_NATIVE_ARRAY__VM_REFCOUNT_INCR_RT)
 
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RT)
-          (BRK)
+          (RTS)
 
    (label INCR_CELL_ARRAY__VM_REFCOUNT_INCR_RT)
    (label INCR_NATIVE_ARRAY__VM_REFCOUNT_INCR_RT)
@@ -1973,6 +1974,7 @@ call frame primitives etc.
           (JMP VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
 
    (label INCR_CELL_PTR__VM_REFCOUNT_INCR_RT)
+          ;; for now just stop, TODO: cell-ptr may point to more complex structures!
           (JMP VM_REFCOUNT_INCR_RT__CELL_PTR)))
 
 (module+ test #| vm-refcount-decr-rt |#
@@ -2007,6 +2009,10 @@ call frame primitives etc.
   (list
    (label VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
           (LDA ZP_RT+1)
+          (BNE NOT_NIL__REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+          (RTS)
+   (label NOT_NIL__REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+
           (STA PAGE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
           (LDA ZP_RT)
           (LSR)
@@ -2025,6 +2031,10 @@ call frame primitives etc.
   (list
    (label VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
           (LDA ZP_RT+1)
+          (BNE NOT_NIL__REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+          (RTS)
+   (label NOT_NIL__REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+
           (STA PAGE__VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
           (LDA ZP_RT)
           (LSR)

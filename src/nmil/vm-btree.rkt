@@ -215,6 +215,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
 
 
+(provide vm-btree)
+
+
 ;; (define (btree-make-root value)
 ;;   (cons value null))
 (define BTREE_MAKE_ROOT ;; value -> node

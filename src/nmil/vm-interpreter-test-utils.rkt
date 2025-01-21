@@ -70,7 +70,10 @@
 
 (provide run-bc-wrapped-in-test-
          vm-next-instruction-bytes
-         vm-list->strings)
+         vm-list->strings
+         vm-cell-pair-pages
+         vm-cell-pairs-free-in-page
+         vm-cell-pairs-used-num-in-page)
 
 
 (define (print-list-of-labels label-list label-offsets)
@@ -323,6 +326,55 @@
    `(dispatcher . ,(debugger--bc-dispatcher- interpreter-loop-adr))
    `(prompter . ,(lambda (d-state) (format "BC [~x] > " (length (debug-state-states d-state)))))
    `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble d-state))))))
+
+
+;; get the number of pages not in the free list nor allocated (totally untouched/free)
+(define (vm-free-pages-num state (page-map-start #xcf00))
+  (foldl (lambda (idx acc)
+           (define page-status (peek state (+ page-map-start idx)))
+           (+ acc (if (= #xff page-status) 1 0)))
+         0
+         (range 256)))
+
+(define (vm-cell-pair-pages- state page (result (list)))
+  (cond [(= 0 page) result]
+        [else
+         (define next-page (peek state (bitwise-ior (arithmetic-shift page 8) #xff)))
+         (vm-cell-pair-pages-
+          state next-page
+          (cons page result))]))
+
+;; get number of used cell pairs on the page
+(define (vm-cell-pairs-used-num-in-page state page)
+  (bitwise-and #x3f (peek state (arithmetic-shift page 8))))
+
+(define (vm-cell-pairs-free-in-page- state page free-cp-off (result (list)))
+  (cond [(= 0 free-cp-off) result]
+        [else
+         (define next-free-cp-off (peek state (bytes->int free-cp-off page)))
+         (vm-cell-pairs-free-in-page-
+          state
+          page
+          next-free-cp-off
+          (cons free-cp-off result))]))
+;; get a list of offsets in the current page of free cells
+(define (vm-cell-pairs-free-in-page state page)
+  (vm-cell-pairs-free-in-page- state page (peek state (bytes->int page #xcf))))
+
+;; get list of pages used for cell-pairs
+(define (vm-cell-pair-pages state)
+  (define page-w-free-cell-pairs (peek state #xcec3 #|VM_FREE_CELL_PAIR_PAGE|#))
+  (vm-cell-pair-pages- state page-w-free-cell-pairs))
+
+;; provide list of string describing the status of the memory
+(define (vm-memory-status state)
+   ;; - get free pages
+   ;; - get empty pages <- listed to be reused
+   ;; - get used pages <- currently in use (1 or more slots in use or in free list)
+   ;; - get used cells, cell-pairs <- currently in use
+   ;; - get cells/cell-pairs in free list <- freed and ready for reuse
+   ;; - for tests: get numbers globally (and per page)
+  "")
 
 (define (run-bc-wrapped-in-test- bc wrapped-code (debug #f))
   ;; (define wrapped-code (wrap-bytecode-for-test bc))

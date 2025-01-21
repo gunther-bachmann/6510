@@ -3564,12 +3564,114 @@ this will include the implementation of
   - [X] single step
   - [X] run to next call/return
   - [X] step over call
+**** refcount qualities
+- provide function w/ ref and w/o ref counting <- for optimization
+  - name-convention: function w/ ref counting: ...​_RC
+- optimize check for ref-count applicable | atomic value
+  cell-stack and RT may only hold
+  - xxxxxxx0 -> ptr to cell or more complex structure, could be pointer to a cell-page, or a m1-page
+  - xxxxxx01 -> cell pair ptr
+  - 0xxxxx11 -> atomic int
+  - 11111111 -> atomic byte
+  => ptr check here can be done by: and $03; cmp $03; bne is-a-ptr; rts;
+     alternatively: lsr; bcc is-ptr; lsr; bcc is-pair-ptr; rts; <- benefit, a is index to refcount byte
+     or a combination of the two
+  heap cells may also be:
+  - 10000111 -> cell array + more
+  - 10001111 -> native array + more
+  
+- provide additional info for ref counting (e.g. knowledge about the data)
+**** reference count (only pointers to cells and pointers to cell-pais)
+- increase on allocation
+- increase duplication
+  - write stack -> local
+  - write local -> stack
+- decrease
+  - return and tail call (all locals are discarded) <- detection might make init of locals necessary
+  - operations that operate on the stack
+    - cdr (decrease node, increase node pointed to by tail which is now tos)
+    - car (decrease node, increase node pointed to by head which is now tos)
+    - equal (decrease both operands, if they are pointers)
+    - nil? (decreases operand)
+- neither nor
+  - some operations on the stack
+    - cons (since head and tail are still in use), just increase pointer to new cell (through allocation)
+  - pop to local
+  - return local
+- TODO
+   allocation of local stack should fill the lowbyte page with #xff to indicate bytes <- anything != ptr should work!
+   first complete all commands to increment the ref count, once this is complete, the decrement can be implemented (and checked)
+   WRITE​_TO​_LOCAL​_x  (BC​_PUSH​_LOCAL​_SHORT)
+   - check whether local holds a ptr, if so dec ref (of pointed to), before overwriting it
+   - check if rt holds ptr, if so inc ref (of pointed to)
+   NIL? (BC​_NIL​_P)
+   - check if rt holds ptr, if so dec ref (of pointed to)
+   NIL?​_RET​_LOCAL​_0​_POP​_x (BC​_NIL​_P​_RET​_LOCAL​_N​_POP) 
+   - check whether x - stack elements are ptrs, if so dec respectively
+   - overwrite local0 with 0 (no refcount change necessary then)
+   CDR
+   - check if rt holds ptr, if so dec ref (of pointed to)
+   - check if CDR (rt) holds ptr, if so inc ref (of pointed to)
+   CAR
+   - check if rt holds ptr, if so dec ref (of pointed to)
+   - check if CAR (rt) holds ptr, if so inc ref (of pointed to)
+   CDDR, CDAR, CADR, CAAR, likewise
+   PUSH​_LOCAL
+   - check if local is a ptr, inc ref (of pointed to)
+   PUSH_​LOCAL​_x​_CAR
+   - check if car of local is a ptr, inc ref (of pointed to)
+   PUSH​_LOCAL​_x​_CDR
+   - check if cdr of local is a ptr, inc ref (of pointed to)
+   RET :: do nothing
+   FALSE​_P​_BRANCH :: do nothing <- only int should be on the stack
+   TRUE​_P​_BRANCH :: do nothing <- only int should be on the stack
+   PUSH​_NIL :: do nothing (nil is not ref counted)
+   PUSH​_INT​_x :: do nothing (int is not ref counted)
+   CALL :: do nothing
+   TAIL​_CALL :: do nothing
+   GOTO :: do nothing
+   POP :: if rt is ptr, dec ref
+   POP​_TO​_LOCAL​_x :: if local_x is a ptr, dec ref of local x (before overwriting it)
+   CONS
+   - check top two elements on the stack and inc ref if ptr
+   - set ref count to 1 on new allocated cell
+   COONS
+   - check top three elements on stack and inc ref if ptr
+   - set ref count on both allocated cells to 1 each (last cons is on stack, previous cons is referenced by last cons)
+   DUP
+   - check if rt is ptr, inc ref (of pointed to)
+   SWAP :: do nothing
+   BNOP :: do nothing
+
+ VM​_REFCOUNT​_DECR​_RT                                ;; generic decrement of refcount (dispatches depending on type)
+ VM​_REFCOUNT​_INCR​_RT                                ;; generic increment of refcount (dispatches depending on type)
+
+ VM​_REFCOUNT​_DECR​_RT​_​_CELL​_PAIR​_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+ VM​_REFCOUNT​_DECR​_RT​_​_CELL​_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+
+ VM​_REFCOUNT​_INCR​_RT​_​_CELL​_PAIR​_PTR                 ;; increment refcount of cell-pair
+ VM​_REFCOUNT​_INCR​_RT​_​_CELL​_PTR                      ;; increment refcount of the cell, rt is pointing to
+
 **** memory information
 - get free pages
 - get empty pages <- listed to be reused
 - get used pages <- currently in use (1 or more slots in use or in free list)
 - get used cells, cell-pairs <- currently in use
 - get cells/cell-pairs in free list <- freed and ready for reuse
+- for tests: get numbers globally (and per page)
+**** collect statistics for
+- common two byte combinations <- byte code combinations
+  - e.g. combine these into one byte commands
+- number of usages of single byte codes
+  - e.g. move less common to prefixed-commands, ...
+**** enable easy byte code modification
+the byte code and its usage should be implemented flexible enough to make adjustments that either provide space or speed benefits (or even
+both)
+- combine cmds :: create one byte code for two one byte commands
+- prefix :: make less common one byte command a two byte (prefixed) command
+- remove prefix :: make more common two byte (prefixed) command a single byte command
+- combine cmd op :: combine common byte operand combinations into a 'fast' single byte command
+- decombine :: undo a combined command
 **** IMPLEMENT optimize byte code
 - push_​local_​0, write_​to_​local_​0 :: make this a one byte command (not a short instruction) => speeds up decoding
 - [X] cadr cdar caar cddr :: could be put into a fast instruction

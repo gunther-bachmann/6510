@@ -245,19 +245,25 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
    (label LOCAL_0_POP__BC_NIL_P_RET_LOCAL_N_POP)     
           ;; local 0 is written into tos (which is one pop already)
-          (LDY !$00)
-          (LDA (ZP_LOCALS_LB_PTR),y)                    ;; load low byte from local
-          (STA ZP_RT)                                   ;; -> RT
-          (LDA (ZP_LOCALS_HB_PTR),y)                    ;; load high byte from local
-          (STA ZP_RT+1)                                 ;; -> RT
+          ;;(JSR VM_REFCOUNT_DECR_RT) ;; TODO: activate once the INCR is complete
 
           ;; now pop the rest (0..3 times additionally)
    (label NOW_POP__BC_NIL_P_RET_LOCAL_N_POP)
           (TXA)
           (BEQ DONE__BC_NIL_P_RET_LOCAL_N_POP)
-          (LDY ZP_CELL_STACK_TOS)
    (label LOOP_POP__BC_NIL_P_RET_LOCAL_N_POP)
-          (DEY)
+          (DEC ZP_CELL_STACK_TOS)
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA (ZP_CELL_STACK_LB_PTR),y)
+          (STA ZP_RT)
+          (LDA (ZP_CELL_STACK_HB_PTR),y)
+          (STA ZP_RT+1)
+          (TXA)
+          (PHA)
+          ;; (JSR VM_REFCOUNT_DECR_RT) ;; TODO: activate once the INCR is complete
+          (PLA)
+          (TAX)
+          (LDY ZP_CELL_STACK_TOS)
           (CPY !$01)
           (BEQ STACK_DEPLETED__BC_NIL_P_RET_LOCAL_N_POP)
           (DEX)
@@ -266,6 +272,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STY ZP_CELL_STACK_TOS)                       ;; store new tos marker
 
    (label DONE__BC_NIL_P_RET_LOCAL_N_POP)
+          (LDY !$00)
+          (LDA (ZP_LOCALS_LB_PTR),y)                    ;; load low byte from local
+          (STA ZP_RT)                                   ;; -> RT
+          (LDA (ZP_LOCALS_HB_PTR),y)                    ;; load high byte from local
+          (STA ZP_RT+1)                                 ;; -> RT
+
+          (LDA !$00)
+          (STA (ZP_LOCALS_LB_PTR),y)                    ;; clear low byte from local
+          (STA (ZP_LOCALS_HB_PTR),y)                    ;; clear high byte from local
           (JSR VM_POP_CALL_FRAME_N)                     ;; now pop the call frame
 
           (JMP VM_INTERPRETER)                          ;; and continue 
@@ -285,8 +300,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label SHORTCMD__BC_NIL_P_RET_LOCAL_N_POP)
           ;; open for other shortcut command
    (label ERROR_EMPTY_STACK__BC_NIL_P_RET_LOCAL_N_POP)
-          (BRK)
-          ))
+          (BRK)))
 
 (define NIL?_RET_LOCAL_0_POP_1 #x98)
 (define NIL?_RET_LOCAL_0_POP_2 #x9a)
@@ -340,7 +354,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc POP_TO_LOCAL_0)
              (bc PUSH_LOCAL_1)
              (bc NIL?_RET_LOCAL_0_POP_1)     ;; return local 0 (int 1) if nil
-             (bc BRK))))
+             (bc BRK))
+     ))
 
   (check-equal? (vm-stack->strings bc-nil-ret-local-state)
                    (list "stack holds 1 item"
@@ -737,21 +752,27 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (BCS WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
 
     ;; push local           
-           (STA ZP_RA)
+           (PHA)
            (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
-           (LDY ZP_RA) ;; index -> Y
+           (PLA)
+           (TAY) ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
            (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
+           (JSR VM_REFCOUNT_INCR_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
+           (PHA)
+           ;; (JSR VM_REFCOUNT_DECR_RT) ;; TODO: activate once the INCR is complete
+           (PLA)
            (TAY)                                ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
            (STA ZP_RT)                          ;; 
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index 
            (STA ZP_RT+1)                        ;; 
+           (JSR VM_REFCOUNT_INCR_RT)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
            )))
 
@@ -1173,6 +1194,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_NIL_P
   (list
    (label BC_NIL_P)
+          ;; (JSR VM_REFCOUNT_DECR_RT)
           (JSR VM_NIL_P_R)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
@@ -1461,10 +1483,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_INT_0)
-      (bc GOTO) (byte $70)
+      (bc GOTO) (byte $75)
       (bc BRK)
-      (org-align #x73)
-      (bc PUSH_INT_1))))
+      (org-align #x78)
+      (bc PUSH_INT_1))
+     ))
   (check-equal? (vm-stack->strings goto-1-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
@@ -1600,9 +1623,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_INT_0)
-      (bc FALSE_P_BRANCH) (byte $70)
+      (bc FALSE_P_BRANCH) (byte $75)
       (bc BRK)
-      (org-align #x73)
+      (org-align #x78)
       (bc PUSH_INT_2))))
   (check-equal? (vm-stack->strings branch-false-1-state)
                 (list "stack holds 1 item"
@@ -1749,9 +1772,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_INT_1)
-      (bc TRUE_P_BRANCH) (byte $70)
+      (bc TRUE_P_BRANCH) (byte $75)
       (bc BRK)
-      (org-align #x73)
+      (org-align #x78)
       (bc PUSH_INT_2))))
   (check-equal? (vm-stack->strings branch-true-1-state)
                 (list "stack holds 1 item"
@@ -2216,8 +2239,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
     (label VM_INTERPRETER_OPTABLE)
-           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 
-           (word-ref BC_BNOP)                      ;; 02  <-  01 
+           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 (RC)
+           (word-ref BC_BNOP)                     ;; 02  <-  01 
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
            (word-ref BC_SWAP)                     ;; 06  <-  03 
            (word-ref BC_EXT1_CMD)                 ;; 08  <-  04 
@@ -2249,7 +2272,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3c  <-  1e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
            (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 
-           (word-ref BC_NIL_P)                    ;; 42  <-  21
+           (word-ref BC_NIL_P)                    ;; 42  <-  21 (RC)
            (word-ref BC_INT_0_P)                  ;; 44  <-  22 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 48  <-  24 reserved
