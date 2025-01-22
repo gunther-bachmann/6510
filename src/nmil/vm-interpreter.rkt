@@ -242,9 +242,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (BCS SHORTCMD__BC_NIL_P_RET_LOCAL_N_POP)
 
    (label LOCAL_0_POP__BC_NIL_P_RET_LOCAL_N_POP)     
-          ;; local 0 is written into tos (which is one pop already)
-          ;;(JSR VM_REFCOUNT_DECR_RT) ;; TODO: activate once the INCR is complete
-
+          ;; local 0 is written into tos (which is one pop already)          
           ;; now pop the rest (0..3 times additionally)
    (label NOW_POP__BC_NIL_P_RET_LOCAL_N_POP)
           (TXA)
@@ -258,7 +256,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_RT+1)
           (TXA)
           (PHA)
-          ;; (JSR VM_REFCOUNT_DECR_RT) ;; TODO: activate once the INCR is complete
+          (JSR VM_REFCOUNT_DECR_RT) ;; TODO: activate once the INCR is complete
           (PLA)
           (TAX)
           (LDY ZP_CELL_STACK_TOS)
@@ -640,25 +638,17 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (DEY)
           (BMI DONE__BC_RET)
           ;; keep rt for later
-          (LDA ZP_RT)
-          (STA ZP_RT_BACKUP)
-          (LDA ZP_RT+1)
-          (STA ZP_RT_BACKUP+1)
    (label LOOP__BC_RET)
           (LDA (ZP_LOCALS_LB_PTR),y)
-          (STA ZP_RT)
+          (STA ZP_RA)
           (LDA (ZP_LOCALS_HB_PTR),y)
-          (STA ZP_RT+1)
+          (STA ZP_RA+1)
           (STY COUNTER__BC_RET)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_REFCOUNT_DECR_RA)
           (LDY COUNTER__BC_RET)
           (DEY)
           (BPL LOOP__BC_RET)
           ;; restore rt
-          (LDA ZP_RT_BACKUP)
-          (STA ZP_RT)
-          (LDA ZP_RT_BACKUP+1)
-          (STA ZP_RT+1)
    (label DONE__BC_RET)
           (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
           (JMP VM_INTERPRETER)
@@ -798,7 +788,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     (label WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
            (PHA)
-           ;; (JSR VM_REFCOUNT_DECR_RT) ;; TODO: activate once the INCR is complete
+           (JSR VM_REFCOUNT_DECR_RT) ;; TODO: activate once the INCR is complete
            (PLA)
            (TAY)                                ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
@@ -827,39 +817,49 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (BCS WRITE__POP_TO_LOCAL_SHORT)
        
            ;; pop to local           
-           (TAY)                                ;; index -> Y           
-           (LDA ZP_RT)
-           (STA RT_COPY__BC_POP_TO_LOCAL_SHORT)
-           (LDA ZP_RT+1)
-           (STA RT_COPY__BC_POP_TO_LOCAL_SHORT+1)
-
+           (PHA)
+           (TAY)                                ;; index -> Y
+           ;; decrement old local
            (LDA (ZP_LOCALS_LB_PTR),y)
-           (STA ZP_RT)
+           (STA ZP_RA)
            (LDA (ZP_LOCALS_HB_PTR),y)
-           (STA ZP_RT+1)
-           ;; (JSR VM_REFCOUNT_DECR_RT)
+           (STA ZP_RA+1)
+           (JSR VM_REFCOUNT_DECR_RA)
 
 
-           (LDA RT_COPY__BC_POP_TO_LOCAL_SHORT)
+           (PLA)
+           (TAY)                                ;; index -> Y
+           (LDA ZP_RT)
            (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index                      
-           (LDA RT_COPY__BC_POP_TO_LOCAL_SHORT+1)
+           (LDA ZP_RT+1)
            (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
            (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
+
+           ;; no increment, since pop removes it from stack
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 
     ;; write to local
    (label  WRITE__POP_TO_LOCAL_SHORT)
+           (PHA)
+           (TAY)                                ;; index -> Y
+
+           ;; decrement old local
+           (LDA (ZP_LOCALS_LB_PTR),y)
+           (STA ZP_RA)
+           (LDA (ZP_LOCALS_HB_PTR),y)
+           (STA ZP_RA+1)
+           (JSR VM_REFCOUNT_DECR_RA)
+
+           (PLA)
            (TAY)                                ;; index -> Y
            (LDA ZP_RT)
            (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
            (LDA ZP_RT+1)
            (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+           ;; increment, since it is no in locals and on stack
            (JSR VM_REFCOUNT_INCR_RT)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
-
-    (label RT_COPY__BC_POP_TO_LOCAL_SHORT)
-           (word 0)
-           )))
+)))
 
 (define POP_TO_LOCAL_0 #x90)
 (define POP_TO_LOCAL_1 #x92)
@@ -1243,8 +1243,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_NIL_P
   (list
    (label BC_NIL_P)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_CP_RT_TO_RA)
           (JSR VM_NIL_P_R)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
+          (JSR VM_REFCOUNT_DECR_RA)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (module+ test #| bc-nil-p |#
@@ -1306,13 +1307,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x05))
                     "(int $0000 . pair-ptr NIL)"))
 
+;; TODO: optimize by allowing VM_REFCOUNT_DECR_RA (copy to decrement into RA and decrement later)
 (define BC_CAR
   (list
    (label BC_CAR)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_CP_RT_TO_RA)
           (JSR VM_CAR_R)
           (JSR VM_REFCOUNT_INCR_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JSR VM_REFCOUNT_DECR_RA)
+          (JMP VM_INTERPRETER_INC_PC)
+
+   (label RT_CP__BC_CAR)
+          (word 0)))
 
 (module+ test #| bc-car |#
    (define bc-car-state
@@ -1331,9 +1337,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_CDR
   (list
    (label BC_CDR)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_CP_RT_TO_RA)
           (JSR VM_CDR_R)
           (JSR VM_REFCOUNT_INCR_RT)
+          (JSR VM_REFCOUNT_DECR_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| bc-cdr |#
@@ -1469,14 +1476,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_INT_P
   (list
    (label BC_INT_P)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
           (LDA ZP_RT)
           (LDX !$01)
           (AND !$83)
           (CMP !$03)
           (BEQ IS_INT__BC_INT_P)
+          (JSR VM_REFCOUNT_DECR_RT)
           (LDA !$03)
-          (DEX)
+          (LDX !$00)
    (label IS_INT__BC_INT_P)
           (STA ZP_RT)
           (STX ZP_RT+1)
@@ -1943,7 +1950,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_CONS_PAIR_P
   (list
    (label BC_CONS_PAIR_P)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_CP_RT_TO_RA)
           (LDA ZP_RT)
           (LDX !$03) ;; low byte of int (for bool)
           (STX ZP_RT)
@@ -1956,6 +1963,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA !$00)
    (label IS_PAIR__BC_CONS_PAIR_P)
           (STA ZP_RT+1)
+          (JSR VM_REFCOUNT_DECR_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_PUSH_CONST_NIL
@@ -2086,25 +2094,25 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (CMP (ZP_CELL_STACK_LB_PTR),y)
           (BNE NE__BC_CELL_EQ)
 
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_REFCOUNT_DECR_RT)
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (STA ZP_RT)
           (LDA (ZP_CELL_STACK_HB_PTR),y)
           (STA ZP_RT+1)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_REFCOUNT_DECR_RT)
           (DEC ZP_CELL_STACK_TOS)
           (JSR VM_WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
 
    (label NE__BC_CELL_EQ)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_REFCOUNT_DECR_RT)
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (STA ZP_RT)
           (LDA (ZP_CELL_STACK_HB_PTR),y)
           (STA ZP_RT+1)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_REFCOUNT_DECR_RT)
           (DEC ZP_CELL_STACK_TOS)
           (JSR VM_WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
@@ -2113,7 +2121,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_INT_0_P
   (list
    (label BC_INT_0_P)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
           (LDA ZP_RT+1)
           (BNE IS_NOT_ZERO__BC_INT_0_P)
           (LDA ZP_RT)
@@ -2209,7 +2216,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_POP
   (list
    (label BC_POP)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_REFCOUNT_DECR_RT)
           (JSR VM_CELL_STACK_POP_R)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -2254,9 +2261,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_CxxR
   (list
    (label BC_CxxR)
-          ;; (JSR VM_REFCOUNT_DECR_RT)
+          (JSR VM_CP_RT_TO_RA)
           (JSR VM_CxxR_R)
           (JSR VM_REFCOUNT_INCR_RT)
+          (JSR VM_REFCOUNT_DECR_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| cxxr |#
