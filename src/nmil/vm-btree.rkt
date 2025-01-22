@@ -502,7 +502,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
    (flatten
     (list
      (label BTREE_DEPTH)
-            (byte 3) ;;# of locals
+            (byte 3) ;;# of locals: local0 = node, local1 = right-list, local2 = temp(car right-list|depth+1)
             (bc WRITE_TO_LOCAL_0) ;; local0 <- node
             (bc CONS_PAIR_P)
             (bc TRUE_P_BRANCH) (bc-rel-ref ELSE_COND__BTREE_DEPTH) ;; jump to else
@@ -567,8 +567,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)
      ))
 
-  (check-equal? (vm-regt->string btree-depth-1-state)
-                "int $0001")
+  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-1-state 10 #t))
+                (list "stack holds 1 item"
+                      "1  (rt)"))
 
   (define btree-depth-2-state
     (run-bc-wrapped-in-test
@@ -587,8 +588,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)
     ))
 
-  (check-equal? (vm-regt->string btree-depth-2-state)
-                "int $0002")
+  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-2-state 10 #t))
+                (list "stack holds 1 item"
+                      "2  (rt)"))
 
   (define btree-depth-3-state
     (run-bc-wrapped-in-test
@@ -609,8 +611,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)
     ))
 
-  (check-equal? (vm-regt->string btree-depth-3-state)
-                "int $0003")
+  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-3-state 10 #t))
+                (list "stack holds 1 item"
+                      "3  (rt)"))
 
   (define btree-depth-5-state
     (run-bc-wrapped-in-test
@@ -630,8 +633,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)                              ;;          2  nil                   
     ))                                          ;;                    
                                                 ;;                    
-  (check-equal? (vm-regt->string btree-depth-5-state)
-                "int $0002")
+  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-5-state 10 #t))
+                (list "stack holds 1 item"
+                      "2  (rt)"))
 
   (define btree-depth-4-state
     (run-bc-wrapped-in-test
@@ -655,9 +659,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     ))                                          ;;                        / \
                                                 ;;                       2  nil
 
-  (check-equal? (vm-regt->string btree-depth-4-state)
-                "int $0003")
-
+  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-4-state 10 #t))
+                (list "stack holds 1 item"
+                      "3  (rt)"))
 
   (define btree-depth-6-state
     (run-bc-wrapped-in-test
@@ -681,8 +685,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)                              ;;                        / \      
     ))                                          ;;                       2  nil    
 
-   (check-equal? (vm-regt->string btree-depth-6-state)
-                   "int $0003")
+   (check-equal? (cleanup-strings (vm-stack->strings btree-depth-6-state 10 #t))
+                (list "stack holds 1 item"
+                      "3  (rt)"))
    (check-equal? (cpu-state-clock-cycles btree-depth-6-state)
                  10455))
 
