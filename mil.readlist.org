@@ -3702,6 +3702,7 @@ both)
 - [X] make inspection routines fail safe (ignore exceptions)
 - [X] switch from/to bc/assembler debugger
 - [ ] add watch on memory <- continuous output of this value after each step
+- [ ] add watch on variable <- implementation could be a trace point (like a breakpoint, but not stopping)
 - [ ] add page view (continuous update) during execution
 - [ ] add breakpoint on memory change
 - [ ] add stack view (continuous update) 
