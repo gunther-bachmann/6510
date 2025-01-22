@@ -66,6 +66,7 @@
 (provide 6510-load
          6510-load-multiple
          execute-cpu-step
+         (struct-out exn:fail:cpu-interpreter)
          initialize-cpu
          memory->string
          memory-list
@@ -2278,6 +2279,10 @@
   (struct-copy cpu-state state
                [clock-cycles 0]))
 
+(struct exn:fail:cpu-interpreter exn:fail (cpu-state)
+  #:extra-constructor-name make-exn:fail:cpu-interpreter
+  #:transparent)
+
 ;; execute one cpu opcode and return the next state (see http://www.oxyron.de/html/opcodes02.html)
 ;; imm = #$00
 ;; zp = $00
@@ -2582,7 +2587,7 @@
                 (interpret-calc-op (add-cycles state 4) fx- 0 peek-absx derive-carry-after-subtraction 3))]
     [(#xfe) (interpret-crement-mem (add-cycles state 7) fx+ peek-absx poke-absx 3)]
     ;; #xff -io ISC abx
-    [else (error "unknown opcode")]))
+    [else (raise (make-exn:fail:cpu-interpreter "" (current-continuation-marks) state))]))
 
 (module+ test #| fd SBC abs,x |#
   (define (at-2000_sbc-2000-x_with-x-3 accumulator at-2003-value)

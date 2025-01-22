@@ -17,6 +17,8 @@
                   cpu-state-clock-cycles
                   peek-word-at-address
                   6510-load-multiple
+                  exn:fail:cpu-interpreter?
+                  exn:fail:cpu-interpreter-cpu-state
                   initialize-cpu
                   peek
                   6510-load
@@ -398,5 +400,10 @@
                                     #f))
                        (debugger--bc-interactor interpreter-loop)
                        #t)
-      (parameterize ([current-output-port (open-output-nowhere)])
-        (run-interpreter-on state-before))))
+      (with-handlers ([exn:fail:cpu-interpreter?
+                       (lambda (e)
+                         (displayln "exception raised, continue in debugger")
+                         (run-debugger-on (exn:fail:cpu-interpreter-cpu-state e) "" #t)
+                         )])
+        (parameterize ([current-output-port (open-output-nowhere)])
+          (run-interpreter-on state-before)))))
