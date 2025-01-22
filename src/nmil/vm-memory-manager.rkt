@@ -1951,6 +1951,47 @@ call frame primitives etc.
           ;; for now just stop, TODO: cell-ptr may point to more complex structures!
           (JMP VM_REFCOUNT_DECR_RT__CELL_PTR)))
 
+
+;; find out what kind of cell zp_rt points to,
+;; then call the right decrement refcounts function
+;; input:  ZP_RT
+;; output: the right refcount is decremented
+;;         (in case of m1 pages, @ZP_RT-1)
+;;         (in case of cell pages @ZP_RT>>1)
+;;         (in case of cell-pair pages @ZP_RT>>2)
+;;         (in case of 8s pages @ZP_RT>>3)
+(define VM_REFCOUNT_DECR_RA
+  (list
+   (label VM_REFCOUNT_DECR_RA)
+          (LDA ZP_RA)
+          (BEQ UNKNOWN__VM_REFCOUNT_DECR_RA)
+          (TAY)
+          (LSR)
+          (BCC DECR_CELL_PTR__VM_REFCOUNT_DECR_RA)
+          (LSR)
+          (BCC DECR_CELL_PAIR__VM_REFCOUNT_DECR_RA)
+          ;; check other types of cells
+          (CPY !TAG_BYTE_CELL_ARRAY)
+          (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR_RA)
+          (CPY !TAG_BYTE_NATIVE_ARRAY)
+          (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_RA)
+
+   (label UNKNOWN__VM_REFCOUNT_DECR_RA)
+          ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RT)
+          (RTS)
+
+   (label DECR_CELL_ARRAY__VM_REFCOUNT_DECR_RA)
+   (label DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_RA)
+          ;; (JMP VM_REFCOUNT_DECR_RA__M1_SLOT_PTR)
+          (BRK)
+
+   (label DECR_CELL_PAIR__VM_REFCOUNT_DECR_RA)
+          (JMP VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+
+   (label DECR_CELL_PTR__VM_REFCOUNT_DECR_RA)
+          ;; for now just stop, TODO: cell-ptr may point to more complex structures!
+          (JMP VM_REFCOUNT_DECR_RA__CELL_PTR)))
+
 ;; find out what kind of cell zp_rt points to,
 ;; then call the right decrement refcounts function
 ;; input:  ZP_RT
@@ -2040,6 +2081,28 @@ call frame primitives etc.
           (RTS)))
 
 ;; input: cell-pair ptr in ZP_RT
+;; decrement ref count, if 0 deallocate
+(define VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR
+  (list
+   (label VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (LDA ZP_RA+1)
+          (BNE NOT_NIL__REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (RTS)
+   (label NOT_NIL__REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+
+          (STA PAGE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+          (LDA ZP_RA)
+          (LSR)
+          (LSR)
+          (TAX)
+   (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (DEC $c000,x) ;; c0 is overwritten by page (see above)
+          (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (JMP VM_FREE_CELL_PAIR_PTR_IN_RA) ;; free delayed
+   (label DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (RTS)))
+
+;; input: cell-pair ptr in ZP_RT
 ;; increment ref count
 (define VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR
   (list
@@ -2103,6 +2166,21 @@ call frame primitives etc.
           (BNE DONE__VM_REFCOUNT_DECR_RT__CELL_PTR)
           (JMP VM_FREE_CELL_PTR_IN_RT) ;; free delayed
    (label DONE__VM_REFCOUNT_DECR_RT__CELL_PTR)
+          (RTS)))
+
+(define VM_REFCOUNT_DECR_RA__CELL_PTR
+  (list
+   (label VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (LDA ZP_RA+1)
+          (STA PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+          (LDA ZP_RA)
+          (LSR)
+          (TAX)
+   (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (DEC $c000,x) ;; c0 is overwritten by page (see above)
+          (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (JMP VM_FREE_CELL_PTR_IN_RA) ;; free delayed
+   (label DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
           (RTS)))
 
 ;; input: cell ptr in ZP_RT
@@ -2748,6 +2826,52 @@ call frame primitives etc.
    (label DONE__VM_FREE_CELL_PTR_IN_RT)
           (RTS)))
 
+(define VM_FREE_CELL_PTR_IN_RA
+  (list
+   (label VM_FREE_CELL_PTR_IN_RA)
+          ;; check if previous content was a pointer
+          (LDY !$00)
+          (STY ZP_TEMP+1)
+
+          (LDA (ZP_RA),y)
+          (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RA)
+          (AND !$03)
+          (CMP !$03)
+          (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RA)
+
+          ;; cell is a pointer => save for tail call in temp
+          (LDA (ZP_RA),y)
+          (STA ZP_TEMP)
+          (INY)
+          (LDA (ZP_RA),y)
+          (STA ZP_TEMP+1)
+          (DEY)
+
+          ;; copy previous head of free cells into this cell
+   (label CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RA)
+          (LDA VM_LIST_OF_FREE_CELLS)
+          (STA (ZP_RA),y)
+          (LDA VM_LIST_OF_FREE_CELLS+1)
+          (INY)
+          (STA (ZP_RA),y)
+
+          ;; write this cell as new head into the list
+          (LDA ZP_RA)
+          (STA VM_LIST_OF_FREE_CELLS)
+          (LDA ZP_RA+1)
+          (STA VM_LIST_OF_FREE_CELLS+1)
+
+          (LDA ZP_TEMP+1)
+          (BEQ DONE__VM_FREE_CELL_PTR_IN_RA) ;; there wasn't any further pointer => done with free
+          ;; fill rt for tail calling
+          (STA ZP_RA+1)
+          (LDA ZP_TEMP)
+          (STA ZP_RA)
+          (JMP VM_REFCOUNT_DECR_RA) ;; tail call if cell did hold a reference
+
+   (label DONE__VM_FREE_CELL_PTR_IN_RA)
+          (RTS)))
+
 (module+ test #| vm-free-cell-ptr-in-rt |#
   (define vm-free-cell-ptr-in-rt-tailcall-code
     (list
@@ -2913,6 +3037,67 @@ call frame primitives etc.
           (JMP VM_REFCOUNT_DECR_RT) ;; chain call
 
    (label DONE__VM_FREE_CELL_PAIR_PTR_IN_RT)
+          (RTS)))
+
+;; input:  cell-pair ptr is in ZP_RA
+;; uses: ZP_TEMP, ZP_TEMP+1
+;; -----
+;; put the cell-pair itself as new root to the free-tree
+;; put the old free-tree into cell1
+;; tail call free on old cell1 in this cell-pair (if not atomic, if atomic no tail call)
+;; result: this cell-pair is the new root of the free-tree for cell-pairs with:
+;;              cell0 = old free tree root, cell1 = non-freed (yet) original cell
+(define VM_FREE_CELL_PAIR_PTR_IN_RA
+  (list
+   (label VM_FREE_CELL_PAIR_PTR_IN_RA)
+
+          (LDY !$00)
+          (STY ZP_TEMP+1) ;; indicator of a ptr to free is set to 0 => currently no additional ptr marked for free
+
+          ;; check cell0
+          (LDA (ZP_RA),y) ;; LOWBYTE OF FIRST cell0
+          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RA)
+          (AND !$03)
+          (CMP !$03)
+          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RA)
+          ;; make sure to call free on cell0 (could be any type of cell)
+          ;; remember ZP_PTR
+
+          ;; store cell0 into ZP_TEMP (for later tail call of free)
+          (LDA (ZP_RA),y)
+          (STA ZP_TEMP)
+          (INY)
+          (LDA (ZP_RA),y)
+          (STA ZP_TEMP+1)
+
+   (label CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RA)
+          ;; cell0 is no ptr and can thus be discarded (directly)
+
+          ;; simply add this cell-pair as head to free tree
+          ;; set cell0 to point to old root
+          (LDY !$01)
+          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (STA (ZP_RA),y)
+          (DEY)
+          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (STA (ZP_RA),y)
+          ;; set new root to point to cell-pair
+          (LDA ZP_RA+1)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (LDA ZP_RA)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+
+          ;; write original cell0 -> zp_rt
+          (LDA ZP_TEMP+1)
+          (BEQ DONE__VM_FREE_CELL_PAIR_PTR_IN_RA)
+          ;; otherwise zp_temp was used to store a pointer that needs to be decremented
+          (STA ZP_RA+1)
+          (LDA ZP_TEMP)
+          (STA ZP_RA)
+
+          (JMP VM_REFCOUNT_DECR_RA) ;; chain call
+
+   (label DONE__VM_FREE_CELL_PAIR_PTR_IN_RA)
           (RTS)))
 
 (module+ test #| vm-free-cell-pair-ptr-in-rt |#
@@ -4411,9 +4596,11 @@ call frame primitives etc.
 
           VM_ALLOC_CELL_PAIR_PTR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
+          VM_FREE_CELL_PAIR_PTR_IN_RA                        ;; free this cell-pair (adding it to the free tree)
 
           VM_ALLOC_CELL_PTR_TO_RT                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
           VM_FREE_CELL_PTR_IN_RT                             ;; free this cell pointed to by RT (adding it to the free list)
+          VM_FREE_CELL_PTR_IN_RA                             ;; free this cell pointed to by RT (adding it to the free list)
 
           ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
           ;; VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2                     ;; allocate an array of cells (also useful for structures)
@@ -4437,6 +4624,10 @@ call frame primitives etc.
           ;; VM_REFCOUNT_INCR_RT__M1_SLOT_PTR                   ;; increment refcount of m1-slot
           VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
 
+          VM_REFCOUNT_DECR_RA                                ;; generic decrement of refcount (dispatches depending on type)
+          VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+          VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
           ;; ---------------------------------------- call frame
 
           ;; ---------------------------------------- misc
