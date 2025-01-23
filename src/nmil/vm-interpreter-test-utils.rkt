@@ -404,7 +404,7 @@
 (define (vm-cell-pairs-used-info state page)
   (map (lambda (offset)
          (vm-cell->string offset page state #t))
-       (vm-cell-pairs-used-on-page state page)))
+       (sort (vm-cell-pairs-used-on-page state page) <)))
 
 ;; get list of pages used for cell-pairs
 (define (vm-cell-pair-pages state)

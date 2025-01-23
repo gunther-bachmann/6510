@@ -2546,12 +2546,16 @@ call frame primitives etc.
           (AND !$03)
           (CMP !$03)
           (BEQ CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; is no ptr
+          (INY)
+          (LDA (ZP_RA),y)
+          (BEQ CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; is nil
+          (DEY)
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue
-          (LDA (ZP_RT),y)
+          (LDA (ZP_RA),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
           (INY)
-          (LDA (ZP_RT),y)
+          (LDA (ZP_RA),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (BNE CHECK_CELL1__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; since must be !=0, it cannot be on page 0 always branch!
 
@@ -2565,11 +2569,14 @@ call frame primitives etc.
    (label CHECK_CELL1__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
           ;; now check cell1 on remaining ptrs
           (LDY !$02)
-          (LDA (ZP_RT),y) ;; get low byte
+          (LDA (ZP_RA),y) ;; get low byte
           (BEQ CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; = 0 means totally empty => no ptr
           (AND !$03)       ;; mask out all but low 2 bits
           (CMP !$03)
-          (BEQ CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; no need to do further deallocation                    
+          (BEQ CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; no need to do further deallocation
+          (INY)
+          (LDA (ZP_RA),y)
+          (BEQ CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; is nil 
 
           ;; write cell1 into zp_ptr and decrement          
           (LDA ZP_RA)
@@ -2585,7 +2592,8 @@ call frame primitives etc.
 
   (label CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
           ;; now add ra to its page as free cell-pair on that page
-          (TAX)                 ;; A = page -> x
+          (LDA ZP_RA+1)                 ;; A = page -> x
+          (TAX)
           (LDA $cf00,x)         ;; current first free cell offset
           (LDY !$00)
           (STA (ZP_RA),y)       ;; write into lowbyte of cell pointed to by RA
