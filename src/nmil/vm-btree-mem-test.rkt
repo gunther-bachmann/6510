@@ -141,9 +141,7 @@
                 (list #x97)) ;; corresponds to (define PAGE_AVAIL_0 #x97) in vm-interpreter
 
   (check-equal? (length (vm-cell-pairs-free-in-page create-tree-0-state #x97))
-                37) ;; after garbage collection, this should rise to (- 49 3)
+                43) ;; after garbage collection, this should rise to (- 49 3)
 
   (check-equal? (vm-cell-pairs-used-num-in-page create-tree-0-state #x97)
-                (- 49 37))) ;; should be 3 (since the resulting tree only needs 3 cells
-
-
+                (- 49 43))) ;; should be 3 (since the resulting tree only needs 3 cells

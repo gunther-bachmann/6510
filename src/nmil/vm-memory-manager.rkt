@@ -129,6 +129,8 @@ call frame primitives etc.
          cleanup-strings
 
          VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
+         VM_FREE_CELL_PAIR_PAGE
+         VM_LIST_OF_FREE_CELLS
 
          ZP_RT
          ZP_VM_PC
@@ -416,9 +418,9 @@ call frame primitives etc.
 
 (module+ test #| vm-cell->strings |#
   (check-equal? (vm-cell->string #xc4 #xc0)
-                "ptr $c0c4")
+                "ptr[-] $c0c4")
   (check-equal? (vm-cell->string #xc1 #xc0)
-                "pair-ptr $c0c1")
+                "pair-ptr[-] $c0c1")
   (check-equal? (vm-cell->string #x7b #x15)
                 "int $1e15")
   (check-equal? (vm-cell->string TAG_BYTE_BYTE_CELL #x15)
@@ -630,7 +632,7 @@ call frame primitives etc.
                 "int $0110")
 
   (check-equal? (vm-rega->string vm_write_rt_to_celly_ra_state)
-                (format "pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0)))
 
   (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_ra_state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"))
@@ -678,7 +680,7 @@ call frame primitives etc.
                 "int $0110")
 
   (check-equal? (vm-regt->string vm_write_ra_to_celly_rt_state)
-                (format "pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0)))
 
   (check-equal? (vm-deref-cell-pair-w->string vm_write_ra_to_celly_rt_state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"))
@@ -732,7 +734,7 @@ call frame primitives etc.
 
   (check-equal? (vm-stack->strings vm-pop-fstos-to-celly-rt-state)
                 (list "stack holds 1 item"
-                      (format  "pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                      (format  "pair-ptr[0] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1fff . int $0001)"))
 
@@ -1066,7 +1068,7 @@ call frame primitives etc.
     (run-code-in-test vm_cell_stack_push_r_cell_pair_ptr_code))
 
   (check-equal? (vm-regt->string vm_cell_stack_push_r_cell_pair_ptr_state)
-                "pair-ptr $ce05")
+                "pair-ptr[0] $ce05")
   (check-equal? (memory-list vm_cell_stack_push_r_cell_pair_ptr_state ZP_RT (add1 ZP_RT))
                 (list #x05 #xce)))
 
@@ -1890,7 +1892,7 @@ call frame primitives etc.
                       "slots used:     1"
                       "next free slot: $09"))
   (check-equal? (vm-regt->string vm-alloc-cell-pair-on-page-a-into-rt-state)
-                (format "pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0))))
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0))))
 
 (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt 2 times|#
   (define vm-alloc-cell-pair-on-page-a-into-rt-code2
@@ -1909,7 +1911,7 @@ call frame primitives etc.
                       "slots used:     2"
                       "next free slot: $41"))
   (check-equal? (vm-regt->string vm-alloc-cell-pair-on-page-a-into-rt-state2)
-                (format "pair-ptr $~a09" (format-hex-byte PAGE_AVAIL_0))))
+                (format "pair-ptr[0] $~a09" (format-hex-byte PAGE_AVAIL_0))))
 
 ;; find out what kind of cell zp_rt points to,
 ;; then call the right decrement refcounts function
@@ -2132,7 +2134,7 @@ call frame primitives etc.
     (run-code-in-test vm-refcount-mmcr-rt--cell-pair-ptr-code))
 
   (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-pair-ptr-state)
-                (format "pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
+                (format "pair-ptr[2] $~a05" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state (+ PAGE_AVAIL_0_W #x05))
                 2)
 
@@ -2147,7 +2149,7 @@ call frame primitives etc.
     (run-code-in-test vm-refcount-mmcr-rt--cell-pair-ptr-code2))
 
   (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-pair-ptr-state2)
-                (format "pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
+                (format "pair-ptr[1] $~a05" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state2 (+ PAGE_AVAIL_0_W #x05))
                 1))
 
@@ -2208,7 +2210,7 @@ call frame primitives etc.
     (run-code-in-test vm-refcount-mmcr-rt--cell-ptr-code))
 
   (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-ptr-state)
-                (format "ptr $~a02" (format-hex-byte PAGE_AVAIL_0)))
+                (format "ptr[2] $~a02" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state (+ PAGE_AVAIL_0_W #x02))
                 2)
 
@@ -2223,7 +2225,7 @@ call frame primitives etc.
     (run-code-in-test vm-refcount-mmcr-rt--cell-ptr-code2))
 
   (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-ptr-state2)
-                (format "ptr $~a02" (format-hex-byte PAGE_AVAIL_0)))
+                (format "ptr[1] $~a02" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state2 (+ PAGE_AVAIL_0_W #x02))
                 1))
 
@@ -2601,7 +2603,7 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-1-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-1-state)
-                (format "pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0)))
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0)))
 
   (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-1-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
                 (list PAGE_AVAIL_0))
@@ -2622,7 +2624,7 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-2-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-2-state)
-                (format "pair-ptr $~a09" (format-hex-byte PAGE_AVAIL_0)))
+                (format "pair-ptr[0] $~a09" (format-hex-byte PAGE_AVAIL_0)))
 
   (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-2-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
                 (list PAGE_AVAIL_0))
@@ -2650,7 +2652,7 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-3-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3-state)
-                (format "pair-ptr $~af9" (format-hex-byte PAGE_AVAIL_0)))
+                (format "pair-ptr[0] $~af9" (format-hex-byte PAGE_AVAIL_0)))
 
   (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
                 (list PAGE_AVAIL_0))
@@ -2678,7 +2680,7 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-3a-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3a-state)
-                (format "pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_1)))
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_1)))
 
   (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3a-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
                 (list PAGE_AVAIL_1))
@@ -2718,7 +2720,7 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-4-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-4-state)
-                (format "pair-ptr $~a05" (format-hex-byte PAGE_AVAIL_0))
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0))
                 "cell pair at cc05 is reused (was head of tree)")
   (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-4-state)
                 "root is initial")
@@ -2755,7 +2757,7 @@ call frame primitives etc.
     (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-5-code))
 
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-5-state)
-                (format "pair-ptr $~a09" (format-hex-byte PAGE_AVAIL_0))
+                (format "pair-ptr[0] $~a09" (format-hex-byte PAGE_AVAIL_0))
                 "cellp-pair at cc09 is reused (was at head of tree)")
   (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state (+ PAGE_AVAIL_0_W #x01) (+ PAGE_AVAIL_0_W #x01))
                 (list #x00)
@@ -3162,7 +3164,7 @@ call frame primitives etc.
                       "next free slot: $41")
                 "page has still 2 slot in use (it was freed, but is now in free list, not completely unallocated)")
   (check-equal? (vm-cell-pair-free-tree->string vm-free-cell-pair-ptr-in-rt-3-state)
-                (format "pair $~a05 -> [ pair-ptr $~a09 . int $0001 ]"
+                (format "pair $~a05 -> [ pair-ptr[-] $~a09 . int $0001 ]"
                         (format-hex-byte PAGE_AVAIL_0)
                         (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-deref-cell-pair-w->string vm-free-cell-pair-ptr-in-rt-3-state (+ PAGE_AVAIL_0_W #x09))
@@ -3205,7 +3207,7 @@ call frame primitives etc.
   (check-equal? (vm-cell-pair-free-tree->string vm-free-cell-pair-ptr-in-rt-4-state)
                 (format "pair $~a05 -> [ empty . int $0001 ]" (format-hex-byte PAGE_AVAIL_1)))
   (check-equal? (vm-deref-cell-w->string vm-free-cell-pair-ptr-in-rt-4-state VM_LIST_OF_FREE_CELLS)
-                (format "ptr $~a02" (format-hex-byte PAGE_AVAIL_0)))
+                (format "ptr[-] $~a02" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-deref-cell-w->string vm-free-cell-pair-ptr-in-rt-4-state (+ PAGE_AVAIL_0 #x02))
                 "empty"))
 
@@ -3289,11 +3291,11 @@ call frame primitives etc.
     (run-code-in-test use-case-2-a-code))
 
   (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after (+ PAGE_AVAIL_0_W #x09))
-                (format "(int $0000 . pair-ptr $~a05)" (format-hex-byte PAGE_AVAIL_0)))
+                (format "(int $0000 . pair-ptr[1] $~a05)" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after (+ PAGE_AVAIL_0_W #x05))
                 "(int $0001 . pair-ptr NIL)")
   (check-equal? (vm-regt->string use-case-2-a-state-after)
-                (format "pair-ptr $~a09" (format-hex-byte PAGE_AVAIL_0)))
+                (format "pair-ptr[1] $~a09" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-page->strings use-case-2-a-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
@@ -3312,7 +3314,7 @@ call frame primitives etc.
     (run-code-in-test use-case-2-b-code))
 
   (check-equal? (vm-cell-pair-free-tree->string use-case-2-b-state-after)
-                (format "pair $~a09 -> [ empty . pair-ptr $~a05 ]"
+                (format "pair $~a09 -> [ empty . pair-ptr[-] $~a05 ]"
                         (format-hex-byte PAGE_AVAIL_0)
                         (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-page->strings use-case-2-b-state-after PAGE_AVAIL_0)
@@ -3335,7 +3337,7 @@ call frame primitives etc.
     (run-code-in-test use-case-2-c-code))
 
   (check-equal? (vm-regt->string use-case-2-c-state-after)
-                (format "pair-ptr $~a09"
+                (format "pair-ptr[1] $~a09"
                         (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
                 (format "pair $~a05 -> [ empty . pair-ptr NIL ]" (format-hex-byte PAGE_AVAIL_0)))

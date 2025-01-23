@@ -454,14 +454,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
   (check-equal? (memory-list bc-tail-call-reverse-state VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE (add1 VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE))
-                   (list #x00 #x00))
+                   (list #x05 PAGE_AVAIL_0))
   (check-equal? (vm-page->strings bc-tail-call-reverse-state PAGE_AVAIL_0)
                    (list "page-type:      cell-pair page"
                          "previous page:  $00"
-                         "slots used:     6"
-                         "next free slot: $51"))
+                         "slots used:     4"
+                         "next free slot: $49"))
   (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                3380)
+                4739)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -469,7 +469,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    "list got reversed")
   (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
                    (list "stack holds 1 item"
-                         (format "pair-ptr $~a4d  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                         (format "pair-ptr[1] $~a09  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
                    (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $800c"
@@ -1270,7 +1270,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BRK))))
 
   (check-equal? (vm-deref-cell-pair-w->string bc-nil-p-2-state (+ PAGE_AVAIL_0_W #x05))
-                "(int $0002 . pair-ptr NIL)")
+                "(empty . pair-ptr NIL)")
   (check-equal? (vm-stack->strings bc-nil-p-2-state)
                 (list "stack holds 1 item"
                       "int $0000  (rt)")))
@@ -1303,7 +1303,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
    (check-equal? (vm-stack->strings bc-cons-state)
                    (list "stack holds 1 item"
-                         (format "pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                         (format "pair-ptr[1] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
    (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x05))
                     "(int $0000 . pair-ptr NIL)"))
 
@@ -2261,7 +2261,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_CxxR
   (list
    (label BC_CxxR)
+          (PHA)
           (JSR VM_CP_RT_TO_RA)
+          (PLA)
           (JSR VM_CxxR_R)
           (JSR VM_REFCOUNT_INCR_RT)
           (JSR VM_REFCOUNT_DECR_RA)

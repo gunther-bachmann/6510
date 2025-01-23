@@ -3321,6 +3321,89 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - simply count bytecode length
 **** DONE enable restting cpu cycle count (e.g. via extended byte codes)
 - done through magic jsr address (used by BNOP operation)
+**** DONE reference count (only pointers to cells and pointers to cell-pais)
+- increase on allocation
+- increase duplication
+  - write stack -> local
+  - write local -> stack
+- decrease
+  - return and tail call (all locals are discarded) <- detection might make init of locals necessary
+  - operations that operate on the stack
+    - cdr (decrease node, increase node pointed to by tail which is now tos)
+    - car (decrease node, increase node pointed to by head which is now tos)
+    - equal (decrease both operands, if they are pointers)
+    - nil? (decreases operand)
+- neither nor
+  - some operations on the stack
+    - cons (since head and tail are still in use), just increase pointer to new cell (through allocation)
+  - pop to local
+  - return local
+- TODO
+   allocation of local stack should fill the lowbyte page with #xff to indicate bytes <- anything != ptr should work!
+   DONE first complete all commands to increment the ref count,
+   once this is complete, watch the refcount numbers during commands <- need debugger info
+   the decrement can be implemented (and checked)
+   WRITE​_TO​_LOCAL​_x  (BC​_PUSH​_LOCAL​_SHORT)
+   - check whether local holds a ptr, if so dec ref (of pointed to), before overwriting it
+   - check if rt holds ptr, if so inc ref (of pointed to)
+   NIL? (BC​_NIL​_P)
+   - check if rt holds ptr, if so dec ref (of pointed to)
+   NIL?​_RET​_LOCAL​_0​_POP​_x (BC​_NIL​_P​_RET​_LOCAL​_N​_POP)
+   - check whether x - stack elements are ptrs, if so dec respectively
+   - overwrite local0 with 0 (no refcount change necessary then)
+   CDR (BC​_CDR)
+   - check if rt holds ptr, if so dec ref (of pointed to)
+   - check if CDR (rt) holds ptr, if so inc ref (of pointed to)
+   CAR (BC​_CAR)
+   - check if rt holds ptr, if so dec ref (of pointed to)
+   - check if CAR (rt) holds ptr, if so inc ref (of pointed to)
+   CDDR, CDAR, CADR, CAAR, likewise (BC​_CxxR)
+   PUSH​_LOCAL (BC​_PUSH​_LOCAL​_SHORT)
+   - check if local is a ptr, inc ref (of pointed to)
+   PUSH_​LOCAL​_x​_CAR (BC​_PUSH​_LOCAL​_CXR)
+   - check if car of local is a ptr, inc ref (of pointed to)
+   PUSH​_LOCAL​_x​_CDR (BC​_PUSH​_LOCAL​_CXR)
+   - check if cdr of local is a ptr, inc ref (of pointed to)
+   RET (BC​_RET)
+   - cleanup locals
+   FALSE​_P​_BRANCH :: do nothing <- only int should be on the stack
+   TRUE​_P​_BRANCH :: do nothing <- only int should be on the stack
+   PUSH​_NIL :: do nothing (nil is not ref counted)
+   PUSH​_INT​_x :: do nothing (int is not ref counted)
+   CALL :: do nothing
+   TAIL​_CALL :: do nothing
+   GOTO :: do nothing
+   POP (BC​_POP)
+   - if rt is ptr, dec ref
+   POP​_TO​_LOCAL​_x  (BC​_POP​_TO​_LOCAL​_SHORT)
+   - if local​_x is a ptr, dec ref of local x (before overwriting it)
+   CONS (BC​_CONS)
+   - no adjust of consed elements (since they are referenced by cons cell, no longer by stack)
+   - set ref count to 1 on new allocated cell
+   COONS (BC​_COONS)
+   - no adjust of consed elements (since they are referenced by cons cells, no longer by stack)
+   - set ref count on both allocated cells to 1 each (last cons is on stack, previous cons is referenced by last cons)
+   DUP (BC​_DUP)
+   - check if rt is ptr, inc ref (of pointed to)
+   SWAP :: do nothing
+   BNOP :: do nothing
+
+ VM​_REFCOUNT​_DECR​_RT                                ;; generic decrement of refcount (dispatches depending on type)
+ VM​_REFCOUNT​_INCR​_RT                                ;; generic increment of refcount (dispatches depending on type)
+
+ VM​_REFCOUNT​_DECR​_RT​_​_CELL​_PAIR​_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+ VM​_REFCOUNT​_DECR​_RT​_​_CELL​_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+
+ VM​_REFCOUNT​_INCR​_RT​_​_CELL​_PAIR​_PTR                 ;; increment refcount of cell-pair
+ VM​_REFCOUNT​_INCR​_RT​_​_CELL​_PTR                      ;; increment refcount of the cell, rt is pointing to
+
+**** DONE memory information
+- get free pages
+- get empty pages <- listed to be reused
+- get used pages <- currently in use (1 or more slots in use or in free list)
+- get used cells, cell-pairs <- currently in use
+- get cells/cell-pairs in free list <- freed and ready for reuse
+- for tests: get numbers globally (and per page)
 **** IMPLEMENT what part of the 6510 vm design should be implement w/ racket to validate design?
 implement all necessary to do a reverse function tail called implementation with space optimized byte code
 see [[file:src/nmil/svm-compiler.rkt::(m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*][test with reverse function]]
@@ -3581,89 +3664,7 @@ this will include the implementation of
   - 10001111 -> native array + more
   
 - provide additional info for ref counting (e.g. knowledge about the data)
-**** reference count (only pointers to cells and pointers to cell-pais)
-- increase on allocation
-- increase duplication
-  - write stack -> local
-  - write local -> stack
-- decrease
-  - return and tail call (all locals are discarded) <- detection might make init of locals necessary
-  - operations that operate on the stack
-    - cdr (decrease node, increase node pointed to by tail which is now tos)
-    - car (decrease node, increase node pointed to by head which is now tos)
-    - equal (decrease both operands, if they are pointers)
-    - nil? (decreases operand)
-- neither nor
-  - some operations on the stack
-    - cons (since head and tail are still in use), just increase pointer to new cell (through allocation)
-  - pop to local
-  - return local
-- TODO
-   allocation of local stack should fill the lowbyte page with #xff to indicate bytes <- anything != ptr should work!
-   DONE first complete all commands to increment the ref count,
-   once this is complete, watch the refcount numbers during commands <- need debugger info
-   the decrement can be implemented (and checked)
-   WRITE​_TO​_LOCAL​_x  (BC​_PUSH​_LOCAL​_SHORT)
-   - check whether local holds a ptr, if so dec ref (of pointed to), before overwriting it
-   - check if rt holds ptr, if so inc ref (of pointed to)
-   NIL? (BC​_NIL​_P)
-   - check if rt holds ptr, if so dec ref (of pointed to)
-   NIL?​_RET​_LOCAL​_0​_POP​_x (BC​_NIL​_P​_RET​_LOCAL​_N​_POP) 
-   - check whether x - stack elements are ptrs, if so dec respectively
-   - overwrite local0 with 0 (no refcount change necessary then)
-   CDR (BC​_CDR)
-   - check if rt holds ptr, if so dec ref (of pointed to)
-   - check if CDR (rt) holds ptr, if so inc ref (of pointed to)
-   CAR (BC​_CAR)
-   - check if rt holds ptr, if so dec ref (of pointed to)
-   - check if CAR (rt) holds ptr, if so inc ref (of pointed to)
-   CDDR, CDAR, CADR, CAAR, likewise (BC​_CxxR)
-   PUSH​_LOCAL (BC​_PUSH​_LOCAL​_SHORT)
-   - check if local is a ptr, inc ref (of pointed to)
-   PUSH_​LOCAL​_x​_CAR (BC​_PUSH​_LOCAL​_CXR)
-   - check if car of local is a ptr, inc ref (of pointed to)
-   PUSH​_LOCAL​_x​_CDR (BC​_PUSH​_LOCAL​_CXR)
-   - check if cdr of local is a ptr, inc ref (of pointed to)
-   RET (BC​_RET)
-   - cleanup locals
-   FALSE​_P​_BRANCH :: do nothing <- only int should be on the stack
-   TRUE​_P​_BRANCH :: do nothing <- only int should be on the stack
-   PUSH​_NIL :: do nothing (nil is not ref counted)
-   PUSH​_INT​_x :: do nothing (int is not ref counted)
-   CALL :: do nothing
-   TAIL​_CALL :: do nothing
-   GOTO :: do nothing
-   POP (BC​_POP)
-   - if rt is ptr, dec ref
-   POP​_TO​_LOCAL​_x  (BC​_POP​_TO​_LOCAL​_SHORT)
-   - if local​_x is a ptr, dec ref of local x (before overwriting it)
-   CONS (BC​_CONS)
-   - no adjust of consed elements (since they are referenced by cons cell, no longer by stack)
-   - set ref count to 1 on new allocated cell
-   COONS (BC​_COONS)
-   - no adjust of consed elements (since they are referenced by cons cells, no longer by stack)
-   - set ref count on both allocated cells to 1 each (last cons is on stack, previous cons is referenced by last cons)
-   DUP (BC​_DUP)
-   - check if rt is ptr, inc ref (of pointed to)
-   SWAP :: do nothing
-   BNOP :: do nothing
-
- VM​_REFCOUNT​_DECR​_RT                                ;; generic decrement of refcount (dispatches depending on type)
- VM​_REFCOUNT​_INCR​_RT                                ;; generic increment of refcount (dispatches depending on type)
-
- VM​_REFCOUNT​_DECR​_RT​_​_CELL​_PAIR​_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
- VM​_REFCOUNT​_DECR​_RT​_​_CELL​_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
-
- VM​_REFCOUNT​_INCR​_RT​_​_CELL​_PAIR​_PTR                 ;; increment refcount of cell-pair
- VM​_REFCOUNT​_INCR​_RT​_​_CELL​_PTR                      ;; increment refcount of the cell, rt is pointing to
-
-**** memory information
-- get free pages
-- get empty pages <- listed to be reused
-- get used pages <- currently in use (1 or more slots in use or in free list)
-- get used cells, cell-pairs <- currently in use
-- get cells/cell-pairs in free list <- freed and ready for reuse
-- for tests: get numbers globally (and per page)
+**** TODO implement function to reclaim elements of the free list (cel-pairs)
 **** collect statistics for
 - common two byte combinations <- byte code combinations
   - e.g. combine these into one byte commands
@@ -3677,6 +3678,9 @@ both)
 - remove prefix :: make more common two byte (prefixed) command a single byte command
 - combine cmd op :: combine common byte operand combinations into a 'fast' single byte command
 - decombine :: undo a combined command
+**** optimize reference counting
+- [ ] get rid of refcount​_decr​_rt (only use 'ra')
+- [ ] reduce impact/cpu cycles
 **** IMPLEMENT optimize byte code
 - push_​local_​0, write_​to_​local_​0 :: make this a one byte command (not a short instruction) => speeds up decoding
 - [X] cadr cdar caar cddr :: could be put into a fast instruction
@@ -3710,7 +3714,7 @@ both)
 - [ ] inspection of vm variables (zp_​vm_​pc, zp_...)
 - [ ] inspect/manipulate call frame
 - [ ] going back bc steps
-- [ ] use colors to separate prompt, output, disassembly
+- [X] use colors to separate prompt, output, disassembly
 - [ ] inspect/manipulate value stack
 - [-] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
   - [X] cells

@@ -210,7 +210,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
   (check-equal? (vm-stack->strings use-case-cons-state-after)
                 (list "stack holds 1 item"
-                      (format "pair-ptr $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                      (format "pair-ptr[0] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-page->strings use-case-cons-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"

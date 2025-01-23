@@ -1,5 +1,7 @@
 #lang racket/base
 
+(require racket/set)
+
 (require "../6510.rkt")
 (require "../6510-test-utils.rkt")
 
@@ -41,6 +43,8 @@
                   disassembler-byte-code--byte-count
                   disassemble-byte-code))
 (require (only-in "./vm-memory-manager.rkt"
+                  VM_FREE_CELL_PAIR_PAGE
+                  VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
                   cleanup-string
                   cleanup-strings
                   vm-cell-at-nil?
@@ -49,8 +53,7 @@
                   vm-regt->string
                   vm-cell-at->string
                   vm-cell->string
-                  vm-deref-cell-pair-w->string
-                  VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
+                  vm-deref-cell-pair-w->string                  
 
                   ast-const-get
                   ZP_RT
@@ -231,6 +234,7 @@
                                           d-state)])
           (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
                 [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
+                [(string=? command "fl") (color-displayln (vm-cell-pair-free-list-info c-state)) d-state]
                 [(regexp-match? pp-regex command)
                  (match-let (((list _ len address) (regexp-match pp-regex command)))
                    (begin
@@ -255,7 +259,8 @@
                 [(string=? command "pf") (begin (for-each color-displayln (vm-call-frame->strings c-state)) d-state)]
                 [(regexp-match? page-regex command)
                  (match-let (((list _ page) (regexp-match page-regex command)))
-                   (map color-displayln (vm-page->strings c-state (string->number page 16))))
+                   (map color-displayln (vm-page->strings c-state (string->number page 16)))
+                   (map color-displayln (vm-cell-pairs-used-info c-state (string->number page 16))))
                  d-state]
                 [(regexp-match? pl-regex command)
                  (match-let (((list _ num) (regexp-match pl-regex command)))
@@ -274,11 +279,11 @@
                    d-state)]
                 [(regexp-match? pml-regex command)
                  (match-let (((list _ num) (regexp-match pml-regex command)))
-                   (begin (color-displayln (vm-list->strings c-state (string->number num 16)))
+                   (begin (color-displayln (string-join (vm-list->strings c-state (string->number num 16)) " "))
                           d-state))]
                 [(regexp-match? ppml-regex command)
                  (match-let (((list _ num) (regexp-match ppml-regex command)))
-                   (begin (color-displayln (cleanup-strings (vm-list->strings c-state (string->number num 16) (list) #t)))
+                   (begin (color-displayln (string-join (cleanup-strings (vm-list->strings c-state (string->number num 16) (list) #t)) " "))
                           d-state))]
                 [(regexp-match? pma-regex command)
                  (match-let (((list _ num) (regexp-match pma-regex command)))
@@ -386,20 +391,43 @@
 (define (vm-cell-pairs-free-in-page state page)
   (vm-cell-pairs-free-in-page- state page (peek state (bytes->int page #xcf))))
 
+;; return a list of cell-pair offset that are on the page (used and free ones)
+(define (vm-cell-pairs-on-page-)
+  `(#x05 #x09 ,@(map (lambda (n) (+ (* 4 n) #x41)) (range 47))))
+
+(define (vm-cell-pairs-used-on-page state page)
+  (set->list
+   (set-subtract
+    (list->set (vm-cell-pairs-on-page-))
+    (list->set (vm-cell-pairs-free-in-page state page)))))
+
+(define (vm-cell-pairs-used-info state page)
+  (map (lambda (offset)
+         (vm-cell->string offset page state #t))
+       (vm-cell-pairs-used-on-page state page)))
+
 ;; get list of pages used for cell-pairs
 (define (vm-cell-pair-pages state)
-  (define page-w-free-cell-pairs (peek state #xcec3 #|VM_FREE_CELL_PAIR_PAGE|#))
+  (define page-w-free-cell-pairs (peek state VM_FREE_CELL_PAIR_PAGE))
   (vm-cell-pair-pages- state page-w-free-cell-pairs))
 
-;; provide list of string describing the status of the memory
-(define (vm-memory-status state)
-   ;; - get free pages
-   ;; - get empty pages <- listed to be reused
-   ;; - get used pages <- currently in use (1 or more slots in use or in free list)
-   ;; - get used cells, cell-pairs <- currently in use
-   ;; - get cells/cell-pairs in free list <- freed and ready for reuse
-   ;; - for tests: get numbers globally (and per page)
-  "")
+(define (vm-cell-pair-free-list- state free-cell-pair-adr (result (list)))
+  (cond [(= 0 (bitwise-and #xff free-cell-pair-adr)) result]
+        [else
+         (define next (peek-word-at-address state free-cell-pair-adr))
+         (vm-cell-pair-free-list- state next (cons free-cell-pair-adr result))]))
+;; give a list of pointers to free cell-pairs that are free for reallocation
+(define (vm-cell-pair-free-list-info state)
+  (define first-free (peek-word-at-address state VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE))
+  (define free-adr-list (vm-cell-pair-free-list- state first-free))
+  (cond [(empty? free-adr-list) "free-list: empty"]
+        [else
+         (string-append
+          "free-list: $"
+          (string-join
+           (map format-hex-word 
+                free-adr-list)
+           ", $"))]))
 
 (define (run-bc-wrapped-in-test- bc wrapped-code (debug #f))
   ;; (define wrapped-code (wrap-bytecode-for-test bc))
