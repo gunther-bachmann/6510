@@ -132,6 +132,8 @@ call frame primitives etc.
          VM_FREE_CELL_PAIR_PAGE
          VM_LIST_OF_FREE_CELLS
 
+         VM_GC_QUEUE_OF_FREE_CELL_PAIRS
+
          ZP_RT
          ZP_VM_PC
          ZP_VM_FUNC_PTR
@@ -856,6 +858,26 @@ call frame primitives etc.
           (INY)
           (LDA (ZP_RT),y)
           (STA ZP_RA+1)
+          (RTS)))
+
+(define VM_WRITE_RA_CELLy_TO_RA
+  (list
+   (label VM_WRITE_RA_CELL1_TO_RA)
+          (LDY !$02)
+          (BNE VM_WRITE_RA_CELLy_TO_RA)
+
+   (label VM_WRITE_RA_CELL0_TO_RA)
+          (LDY !$00)
+
+   ;; ----------------------------------------
+   (label VM_WRITE_RA_CELLy_TO_RA)
+          (LDA (ZP_RA),y)
+          (TAX)
+          (INY)
+          (LDA (ZP_RA),y)
+          (STA ZP_RA+1)
+          (TXA)
+          (STA ZP_RA)
           (RTS)))
 
 (module+ test #| vm-write-rt-celly-to-ra |#
@@ -2501,6 +2523,88 @@ call frame primitives etc.
 ;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
 ;;                 (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
 ;;                 "free cell list is initial again"))
+
+;; actively free all enqueued cell pairs of the free-list!
+;; can be useful to find out whether a whole page is not used at all. free cells are still marked as used on a page.
+(define VM_GC_QUEUE_OF_FREE_CELL_PAIRS
+  (list
+   (label VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; get highbyte (page) from ptr to cell-pair
+          (BNE CONTINUE__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)   ;; if = 0, queue is empty, i'm done
+          (RTS)
+
+   (label CONTINUE__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          ;; put ptr to cell-pair into RA, now RA->cell0,cell1 with cell0 = pointer to the next in queue, cell1 could still be something that needs gc
+          (STA ZP_RA+1)
+          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (STA ZP_RA)
+
+          ;; set new tree root for free tree to original cell0
+          (LDY !$00)
+          (LDA (ZP_RA),y)
+          (BEQ CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; is zero => completely empty
+          (AND !$03)
+          (CMP !$03)
+          (BEQ CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; is no ptr
+
+          ;; cell0 is a cell-pair-ptr => make new root of free queue
+          (LDA (ZP_RT),y)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (INY)
+          (LDA (ZP_RT),y)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (BNE CHECK_CELL1__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; since must be !=0, it cannot be on page 0 always branch!
+
+   (label CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          ;; queue is now empty, this was the last cell-pair
+          ;; clear queue
+          (LDA !$00)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+
+   (label CHECK_CELL1__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          ;; now check cell1 on remaining ptrs
+          (LDY !$02)
+          (LDA (ZP_RT),y) ;; get low byte
+          (BEQ CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; = 0 means totally empty => no ptr
+          (AND !$03)       ;; mask out all but low 2 bits
+          (CMP !$03)
+          (BEQ CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; no need to do further deallocation                    
+
+          ;; write cell1 into zp_ptr and decrement          
+          (LDA ZP_RA)
+          (STA RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (LDA ZP_RA+1)
+          (STA RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS+1)
+          (JSR VM_WRITE_RA_CELL1_TO_RA)
+          (JSR VM_REFCOUNT_DECR_RA) ;; this may change the queue again, which is alright, since RA was removed from queue          
+          (LDA RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (STA ZP_RA)
+          (LDA RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS+1)
+          (STA ZP_RA+1)
+
+  (label CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          ;; now add ra to its page as free cell-pair on that page
+          (TAX)                 ;; A = page -> x
+          (LDA $cf00,x)         ;; current first free cell offset
+          (LDY !$00)
+          (STA (ZP_RA),y)       ;; write into lowbyte of cell pointed to by RA
+          ;; (INY)
+          ;; (TXA)
+          ;; (STA (ZP_RA),y)       ;; write page into highbyte of cell pointed to by RA
+          (LDA ZP_RA)             ;; get offset into page of cell RA points to
+          (STA $cf00,x)           ;; new first free cell now points to RA
+          (LDA ZP_RA+1)
+          (STA DEC_COMMAND__VM_GC_QUEUE_OF_FREE_CELL_PAIRS+2)
+   (label DEC_COMMAND__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (DEC $c000)         ;; decrement number of used slots on cell-pair page (c0 is overwritten with page in zp_ra+1
+          (JMP VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; do this until queue is empty
+
+   (label RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (word 0)
+
+
+   ))
 
 ;; input:  none
 ;; output: zp_rt = free cell-pair
@@ -4604,6 +4708,8 @@ call frame primitives etc.
           VM_FREE_CELL_PTR_IN_RT                             ;; free this cell pointed to by RT (adding it to the free list)
           VM_FREE_CELL_PTR_IN_RA                             ;; free this cell pointed to by RT (adding it to the free list)
 
+          VM_GC_QUEUE_OF_FREE_CELL_PAIRS                     ;; reclaim all cell-pairs in the queue of free cells
+
           ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
           ;; VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2                     ;; allocate an array of cells (also useful for structures)
 
@@ -4681,6 +4787,9 @@ call frame primitives etc.
           ;; VM_WRITE_RT_CELL1_TO_RT
           ;; VM_WRITE_RT_CELL0_TO_RT
           VM_WRITE_RT_CELLy_TO_RT                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RT
+          ;; VM_WRITE_RA_CELL1_TO_RT
+          ;; VM_WRITE_RA_CELL0_TO_RT
+          VM_WRITE_RA_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RA into RA
 
           VM_WRITE_RA_TO_CELLy_RT                            ;; write RA cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RT
 

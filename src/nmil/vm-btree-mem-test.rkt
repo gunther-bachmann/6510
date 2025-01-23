@@ -45,6 +45,7 @@
   (require [only-in "./vm-interpreter.rkt"
                     vm-interpreter
                     bc
+                    GC_FL
                     CELL_EQ
                     EXT
                     CAAR
@@ -129,6 +130,7 @@
        (bc PUSH_NIL)
        (bc SWAP)
        (bc CALL) (word-ref BTREE_FROM_LIST)
+       (bc EXT) (bc GC_FL)
        (bc BRK))
       vm-btree)
      ))

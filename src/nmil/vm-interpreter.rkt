@@ -150,6 +150,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         GC_FL
          CELL_EQ
          CAAR
          CADR
@@ -2139,6 +2140,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_RT+1)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; garbage collect the freelist
+(define GC_FL #x03)  ;; extended
+(define BC_GC_FL
+  (list
+   (label BC_GC_FL)
+          (JSR VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (LDA !$02)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+
 (define VM_INTERPRETER_OPTABLE_EXT1_LB
   (flatten
    (list
@@ -2146,6 +2156,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
            (byte-ref <BC_MAX_INT)                ;; 01
            (byte-ref <BC_INC_INT)                ;; 02
+           (byte-ref <BC_GC_FL)                  ;; 03
            )))
 
 (define VM_INTERPRETER_OPTABLE_EXT1_HB
@@ -2155,6 +2166,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (byte-ref >VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
            (byte-ref >BC_MAX_INT)                ;; 01
            (byte-ref >BC_INC_INT)                ;; 02
+           (byte-ref >BC_GC_FL)                  ;; 03
            )))
 
 (define EXT #x04)
@@ -2542,6 +2554,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_EXT1_CMD
           BC_INC_INT
           BC_BNOP
+          BC_GC_FL
           VM_INTERPRETER
           (list (label END__INTERPRETER))
           VM_INTERPRETER_OPTABLE_EXT1_HB
