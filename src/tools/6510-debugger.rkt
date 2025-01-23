@@ -260,7 +260,16 @@ EOF
   (define run-regex #px"^r(un)?")
   (define incpc_regex #px"^i(nc)? *p(c)?")
   (define options-refex #px"^t(oggle)? o(ption)? (verbose-step)")
-  (cond [(or (string=? command "?") (string=? command "h")) (debugger--help d-state)]
+  (cond 
+    [(string-prefix? command "~")
+     (define iqueue (debug-state-interactor-queue d-state))
+     (cond [(not (empty? iqueue))
+            (define interactor (car iqueue))
+            (define dispatcher (dict-ref interactor 'dispatcher interactor))
+            (displayln "dispatching to previous interactor ...")
+            (apply dispatcher (list (substring command 1) d-state))]
+           [else (displayln "no previous interactor to dispatch to.") d-state])]
+    [(or (string=? command "?") (string=? command "h")) (debugger--help d-state)]
         ;; pop debugger interactor
         [(string=? command "surface")
          (cond [(empty? (debug-state-interactor-queue d-state))
