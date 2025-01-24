@@ -76,6 +76,7 @@
 
 (provide run-bc-wrapped-in-test-
          vm-next-instruction-bytes
+         vm-cell-pairs-used-info
          vm-list->strings
          vm-cell-pair-pages
          vm-cell-pairs-free-in-page
@@ -412,7 +413,7 @@
   (vm-cell-pair-pages- state page-w-free-cell-pairs))
 
 (define (vm-cell-pair-free-list- state free-cell-pair-adr (result (list)))
-  (cond [(= 0 (bitwise-and #xff free-cell-pair-adr)) result]
+  (cond [(= 0 (bitwise-and #xff free-cell-pair-adr)) (reverse result)]
         [else
          (define next (peek-word-at-address state free-cell-pair-adr))
          (vm-cell-pair-free-list- state next (cons free-cell-pair-adr result))]))

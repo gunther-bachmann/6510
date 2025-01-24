@@ -12,22 +12,6 @@ call frame primitives etc.
 |#
 
 
-;; TODO: rewrite local->RT/A, RT/A->local
-;; TODO: rewrite RT/A op TOS->RT/A
-;; TODO: write dup, swap
-
-;; REMOVE when done
-
-;; (define ZP_CELL_STACK_BASE_PTR #x14)
-(define ZP_PARAMS_PTR #x12)
-(define ZP_LOCALS_PTR #x10)
-(define OBSOLETE_DEFINITIONS
-  (list
-   (byte-const ZP_LOCALS_PTR          $10)
-   (byte-const ZP_PARAMS_PTR          $12)
-   ;; (byte-const ZP_CELL_STACK_BASE_PTR $14)
-   ))
-
 ;; naming: atomic cell
 ;;         cell                      :: 16 bit value (finest granular memory managed block)
 ;;         atomic cell               :: a cell that has no followup value and is complete in itself (currently int-cell, byte-cell, cell-ptr, cell-pair-ptr)
@@ -133,6 +117,130 @@ call frame primitives etc.
          VM_LIST_OF_FREE_CELLS
 
          VM_GC_QUEUE_OF_FREE_CELL_PAIRS
+
+          VM_MEMORY_MANAGEMENT_CONSTANTS
+          VM_INITIALIZE_MEMORY_MANAGER
+
+          ;; ---------------------------------------- alloc/free pages
+          VM_FREE_PAGE                                       ;; free a page (the type specific stuff, of any, must have finished)
+          VM_ALLOC_PAGE__PAGE_UNINIT                         ;; allocate new page (not initialized)
+
+          VM_ALLOC_PAGE_FOR_CELLS                            ;; allocate page and initialize for ref counted cells
+          VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for ref counted cell-pairs
+          VM_ALLOC_CELL_STACK_PAGES                          ;; allocate page pair and initialize with previous references to previous cell stack pages
+
+          ;; VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
+          ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether
+
+          ;; VM_ALLOC_PAGE_FOR_MODULE_CODE                      ;; allocate page and initialize to hold immutable byte code (not ref counted)
+
+          ;; ---------------------------------------- alloc/free cells, pairs, slots
+          VM_ALLOC_CELL_ON_PAGE                              ;; allocate a cell on the page in A (allocating a new one if page is full)
+          VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT               ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
+
+          VM_ALLOC_CELL_PAIR_PTR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
+          VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
+          VM_FREE_CELL_PAIR_PTR_IN_RA                        ;; free this cell-pair (adding it to the free tree)
+
+          VM_ALLOC_CELL_PTR_TO_RT                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
+          VM_FREE_CELL_PTR_IN_RT                             ;; free this cell pointed to by RT (adding it to the free list)
+          VM_FREE_CELL_PTR_IN_RA                             ;; free this cell pointed to by RT (adding it to the free list)
+
+          VM_GC_QUEUE_OF_FREE_CELL_PAIRS                     ;; reclaim all cell-pairs in the queue of free cells
+
+          ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
+          ;; VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2                     ;; allocate an array of cells (also useful for structures)
+
+          ;; VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
+          ;; VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
+
+          ;; VM_ALLOC_MODULE_CODE_SLOT_TO_ZP_PTR                ;; allocate a slot for module code
+          ;; VM_FREE_MODULE
+          ;; VM_RELOCATE_MODULE_X_TO_                           ;; relocate module identified by page x to ??
+
+          ;; ---------------------------------------- refcount
+          VM_REFCOUNT_DECR_RT                                ;; generic decrement of refcount (dispatches depending on type)
+          VM_REFCOUNT_INCR_RT                                ;; generic increment of refcount (dispatches depending on type)
+
+          VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+          VM_REFCOUNT_DECR_RT__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+
+          VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR                 ;; increment refcount of cell-pair
+          ;; VM_REFCOUNT_INCR_RT__M1_SLOT_PTR                   ;; increment refcount of m1-slot
+          VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
+
+          VM_REFCOUNT_DECR_RA                                ;; generic decrement of refcount (dispatches depending on type)
+          VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+          VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+          ;; ---------------------------------------- call frame
+
+          ;; ---------------------------------------- misc
+
+          ;; VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS                ;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
+          ;; VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
+
+          ;; VM_GC_ARRAY_SLOT_PTR                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
+
+          ;; VM_DEREF_PTR2_INTO_PTR                             ;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
+
+          VM_FREE_PTR_IN_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+
+          VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
+
+          ;; ---------------------------------------- CELL_STACK / RT / RA
+          VM_CELL_STACK_POP_R                                ;; pop cell-stack into RT (discarding RT)
+
+          VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
+          ;; vm_cell_stack_push_rt_if_nonempty
+          VM_CELL_STACK_JUST_PUSH_RT                         ;; push RT onto call frame cell stack
+
+          ;; VM_WRITE_INTm1_TO_RA                             ;; write cell-int -1 into RA
+          ;; VM_WRITE_INTm1_TO_RT                             
+          ;; VM_WRITE_INTm1_TO_Rx                             ;; x=0 -> RT, x=2 -> RA
+
+          ;; VM_WRITE_INT1_TO_RA                              ;; write cell-int +1 into RA
+          ;; VM_WRITE_INT1_TO_RT
+          ;; VM_WRITE_INT1_TO_Rx                              ;; x=0 -> RT, x=2 -> RA
+
+          ;; VM_WRITE_INT0_TO_RA                              ;; write cell-int 0 into RA
+          ;; VM_WRITE_INT0_TO_RT
+          ;; VM_WRITE_INT0_TO_Rx                              ;; x=0 -> RT, x=2 -> RA
+
+          ;; VM_WRITE_INT_A_TO_RA                             ;; write cell-int (only byte sized) A into RA
+          ;; VM_WRITE_INT_A_TO_RT
+          ;; VM_WRITE_INT_A_TO_Rx                             ;; x=0 -> RT, x=2 -> RA
+
+          ;; VM_WRITE_ENC_INT_AY_TO_Rx                        ;; encoded int in  A(lowbyte of int)/Y(encoded high byte), x=0 -> RT, x=2 -> RA
+
+          ;; VM_WRITE_INT_AY_TO_RA                            ;; int in A(lowbyte)/Y(highbyte) into RA
+          ;; VM_WRITE_INT_AY_TO_RT
+          VM_WRITE_INT_AY_TO_Rx                              ;; int in A(lowbyte)/Y(highbyte), x=0 -> RT, x=2 -> RA
+
+          ;; VM_WRITE_NIL_TO_RA
+          ;; VM_WRITE_NIL_TO_RT
+          VM_WRITE_NIL_TO_Rx
+
+          VM_WRITE_RT_CELL1_TO_RT
+          VM_WRITE_RT_CELL0_TO_RT
+          VM_WRITE_RT_CELLy_TO_RT                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RT
+          ;; VM_WRITE_RA_CELL1_TO_RT
+          ;; VM_WRITE_RA_CELL0_TO_RT
+          VM_WRITE_RA_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RA into RA
+
+          VM_WRITE_RA_TO_CELLy_RT                            ;; write RA cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RT
+
+          VM_WRITE_RT_CELL1_TO_RA       
+          VM_WRITE_RT_CELL0_TO_RA
+          VM_WRITE_RT_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RA
+
+          VM_WRITE_RT_TO_CELLy_RA                            ;; write RT cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RA
+
+          VM_CP_RT_TO_RA                                     ;; copy RT -> RA
+          VM_CP_RA_TO_RT                                     ;; copy RA -> RT
+
+          VM_POP_FSTOS_TO_CELLy_RT                           ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
          ZP_RT
          ZP_VM_PC
@@ -306,7 +414,7 @@ call frame primitives etc.
      (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair) state follow)) (map cons low-bytes high-bytes))))
      (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
            (if (regt-empty? state)
-               "stack is empty"
+               (list "stack is empty")
                (cons (format "~a  (rt)" (vm-regt->string state follow)) stack-strings)))]))
 
 ;; make a list of adjacent pairs
@@ -322,27 +430,27 @@ call frame primitives etc.
                 '((1 . 2) (3 . 4) (5 . 6))))
 
 ;; write the car, cdr cell of the cell-pair at word in memory
-(define (vm-deref-cell-pair-w->string state word (follow #f))
+(define (vm-deref-cell-pair-w->string state word (follow #f) (visited (list)))
   (define derefed-word-car (peek-word-at-address state word))
   (define derefed-word-cdr (peek-word-at-address state (+ 2 word)))
   (format "(~a . ~a)"
-          (vm-cell-w->string derefed-word-car state follow)
-          (vm-cell-w->string derefed-word-cdr state follow)))
+          (vm-cell-w->string derefed-word-car state follow visited)
+          (vm-cell-w->string derefed-word-cdr state follow visited)))
 
 (define (vm-deref-cell-w->string state word)
   (define derefed-word (peek-word-at-address state word))
   (format "~a" (vm-cell-w->string derefed-word)))
 
 ;; write the car, cdr cell of the cell-pair at low/high in memory
-(define (vm-deref-cell-pair->string state low high (follow #f))
-  (vm-deref-cell-pair-w->string state (bytes->int low high) follow))
+(define (vm-deref-cell-pair->string state low high (follow #f) (visited (list)))
+  (vm-deref-cell-pair-w->string state (bytes->int low high) follow visited))
 
 (define (vm-deref-cell->string state low high)
   (vm-deref-cell-w->string state (bytes->int low high)))
 
 ;; write decoded cell described by word
-(define (vm-cell-w->string word (state '()) (follow #f))
-  (vm-cell->string (low-byte word) (high-byte word) state follow))
+(define (vm-cell-w->string word (state '()) (follow #f) (visited (list)))
+  (vm-cell->string (low-byte word) (high-byte word) state follow visited))
 
 (define (refcount-of-cell-pair state low high)
   (define rc-offset (arithmetic-shift low -2))
@@ -354,8 +462,10 @@ call frame primitives etc.
 
 ;; write decoded cell described by low high
 ;; the low 2 bits are used for pointer tagging
-(define (vm-cell->string low high (state '()) (follow #f))
+(define (vm-cell->string low high (state '()) (follow #f) (visited (list)))
   (cond
+    [(memq (bytes->int low high) visited)
+     (format "RECURSION->$~a~a" (format-hex-byte high) (format-hex-byte low))]
     [(= 0 low) "empty"]
     [(= 0 (bitwise-and #x01 low)) (format "ptr[~a] $~a~a"
                                           (if (empty? state) "-" (refcount-of-cell state low high))
@@ -368,7 +478,7 @@ call frame primitives etc.
                             (format-hex-byte high)
                             (format-hex-byte (bitwise-and #xfd low)))
                     (if follow
-                        (vm-deref-cell-pair->string state low high #t)
+                        (vm-deref-cell-pair->string state low high #t (cons (bytes->int low high) visited))
                         ""))]
     [(= 3 (bitwise-and #x83 low)) (format "int $~a~a"
                                           (format-hex-byte (arithmetic-shift low -2))
@@ -795,6 +905,8 @@ call frame primitives etc.
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RT (must be cell-pair ptr)
 ;; output: RT
+(define VM_WRITE_RT_CELL1_TO_RT #t)
+(define VM_WRITE_RT_CELL0_TO_RT #t)
 (define VM_WRITE_RT_CELLy_TO_RT
   (list
    (label VM_WRITE_RT_CELL1_TO_RT)
@@ -842,6 +954,8 @@ call frame primitives etc.
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RT (must be cell-pair ptr)
 ;; output: RA
+(define VM_WRITE_RT_CELL1_TO_RA #t)
+(define VM_WRITE_RT_CELL0_TO_RA #t)
 (define VM_WRITE_RT_CELLy_TO_RA
   (list
    (label VM_WRITE_RT_CELL1_TO_RA)
@@ -2650,6 +2764,10 @@ call frame primitives etc.
           (AND !$03)
           (CMP !$03)
           (BEQ CELL0_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; is no ptr
+          (INY)
+          (LDA (ZP_RT),y)
+          (BEQ CELL0_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; it is nil which is handled same as no pointer
+          (DEY)
 
           ;; ;; cell0 is a cell-ptr or cell-pair-ptr
           ;; (LSR)
@@ -2687,6 +2805,9 @@ call frame primitives etc.
           (AND !$03)       ;; mask out all but low 2 bits
           (CMP !$03)
           (BEQ CELL1_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; no need to do further deallocation
+          (INY)
+          (LDA (ZP_RT),y) ;; get high byte (page)
+          (BEQ CELL1_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; this is nil, no need for deallocation
 
           ;; write cell1 into zp_ptr and decrement
           (JSR VM_WRITE_RT_CELL1_TO_RT)
@@ -2700,6 +2821,14 @@ call frame primitives etc.
           (STA ZP_RT)
 
    (label CELL1_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+          ;; cleanup cell-pair to ensure it is empty
+          (LDA !$00)
+          (LDY !$03)
+   (label LOOP_CLEAN_RT__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+          (STA (ZP_RT),y)
+          (DEY)
+          (BPL LOOP_CLEAN_RT__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+
           (RTS)
 
    (label TEMP_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
@@ -4812,7 +4941,7 @@ call frame primitives etc.
 
           VM_POP_FSTOS_TO_CELLy_RT                           ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
-          OBSOLETE_DEFINITIONS
+          ;; OBSOLETE_DEFINITIONS
 
           (list (label END__MEMORY_MANAGER))
           ;; ---------------------------------------- registers and maps

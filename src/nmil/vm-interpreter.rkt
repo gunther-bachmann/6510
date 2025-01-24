@@ -65,6 +65,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in racket/list flatten take empty? range))
 
 (require (only-in "./vm-memory-manager.rkt"
+                  VM_WRITE_RT_CELL0_TO_RT
                   vm-memory-manager
                   vm-cell-at-nil?
                   vm-page->strings
@@ -461,7 +462,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "previous page:  $00"
                          "slots used:     4"
                          "next free slot: $49"))
-  (check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
+  (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
                 4739)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"

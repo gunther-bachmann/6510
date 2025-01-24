@@ -3404,6 +3404,7 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - get used cells, cell-pairs <- currently in use
 - get cells/cell-pairs in free list <- freed and ready for reuse
 - for tests: get numbers globally (and per page)
+**** DONE implement function to reclaim elements of the free list (cel-pairs)
 **** IMPLEMENT what part of the 6510 vm design should be implement w/ racket to validate design?
 implement all necessary to do a reverse function tail called implementation with space optimized byte code
 see [[file:src/nmil/svm-compiler.rkt::(m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*][test with reverse function]]
@@ -3664,7 +3665,6 @@ this will include the implementation of
   - 10001111 -> native array + more
   
 - provide additional info for ref counting (e.g. knowledge about the data)
-**** TODO implement function to reclaim elements of the free list (cel-pairs)
 **** collect statistics for
 - common two byte combinations <- byte code combinations
   - e.g. combine these into one byte commands
@@ -3705,6 +3705,9 @@ both)
 - [X] pretty print the next x byte code instructions
 - [X] make inspection routines fail safe (ignore exceptions)
 - [X] switch from/to bc/assembler debugger
+- [X] send command to surface interactor
+- [X] use colors to separate prompt, output, disassembly
+- [X] allow setting breakpoints on bytecode (at a certain address)
 - [ ] add watch on memory <- continuous output of this value after each step
 - [ ] add watch on variable <- implementation could be a trace point (like a breakpoint, but not stopping)
 - [ ] add page view (continuous update) during execution
@@ -3714,7 +3717,6 @@ both)
 - [ ] inspection of vm variables (zp_​vm_​pc, zp_...)
 - [ ] inspect/manipulate call frame
 - [ ] going back bc steps
-- [X] use colors to separate prompt, output, disassembly
 - [ ] inspect/manipulate value stack
 - [-] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
   - [X] cells
@@ -3722,7 +3724,6 @@ both)
   - [ ] structures
   - [ ] strings/native arrays
   - [ ] arrays
-- [X] allow setting breakpoints on bytecode (at a certain address)
 - [ ] allow in place execution of bytecode
 **** how much of the 6510 code should be actually written and tested with the interpreter (and actually used to interpret byte code)?
 **** IDEA for native code implemenation of (parts of) functions

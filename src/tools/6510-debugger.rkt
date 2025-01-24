@@ -551,7 +551,8 @@ EOF
           [else
            (begin
              (set! previous-input input)
-             (set! d-state (apply (debug-state-dispatcher d-state) (list input d-state))))])))
+             (set! d-state (apply (debug-state-dispatcher d-state) (list input d-state))))]))
+  d-state)
 
 ;; dispatch the given debugger command n-times starting with the current debug-state
 (define/c (run-debugger--dispatch-debugger-command-n-times command d-state (n 1))

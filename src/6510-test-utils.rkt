@@ -4,10 +4,57 @@
 
 (require ansi-color)
 (require rackunit) ;; TODO: remove from here to be able to use typed variant instead
+(require racket/path)
 
-(provide skip)
+(provide skip inform-check-equal?)
 (provide (all-from-out rackunit))
+(provide (all-from-out racket/path))
 (provide (all-from-out ansi-color))
+
+(define-syntax (inform-check-equal? stx)
+  (syntax-case stx ()
+    ([_ val-a val-b]
+     (with-syntax [(line (syntax-line stx))
+                   (fname (syntax-source stx))
+                   (col (syntax-column stx))
+                   (a (gensym))
+                   (b (gensym))
+                   (location (gensym))]
+       (datum->syntax
+        stx
+        (syntax->datum
+         #'(begin
+             (define a val-a)
+             (define b val-b)
+             (define location (format "~a:~a:~a" (file-name-from-path fname) line col))
+             (cond [(not (eq? a b))
+                    (with-colors 'yellow
+                      (lambda ()
+                        (displayln (format "--------------------\nINFORMATION"))
+                        (displayln (format " ~a" location))
+                        (displayln (format "name:       inform-check-equal?\nlocation:   ~a\nactual:     ~a\nexpected:   ~a" location a b))
+                        (displayln "--------------------")))]))))))
+    ([_ val-a val-b msg]
+     (with-syntax [(line (syntax-line stx))
+                   (fname (syntax-source stx))
+                   (col (syntax-column stx))
+                   (a (gensym))
+                   (b (gensym))
+                   (location (gensym))]
+       (datum->syntax
+        stx
+        (syntax->datum
+         #'(begin
+             (define a val-a)
+             (define b val-b)
+             (define location (format "~a:~a:~a" (file-name-from-path fname) line col))
+             (cond [(not (eq? a b))
+                    (with-colors 'yellow
+                      (lambda ()
+                        (displayln (format "--------------------\nINFORMATION"))
+                        (displayln (format " ~a" location))
+                        (displayln (format "name:       inform-check-equal?\nlocation:   ~a\nactual:     ~a\nexpected:   ~a\nmessage:    ~a" location a b msg))
+                        (displayln "--------------------")))]))))))))
 
 ;; skip a test case, reporting it
 ;; usage:

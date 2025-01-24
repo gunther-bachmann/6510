@@ -662,7 +662,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDY ZP_LOCALS_HB_PTR+1)
           (JSR VM_ALLOC_CELL_STACK_PAGES)
           (STX ZP_LOCALS_LB_PTR+1)
-          (STY ZP_LOCALS_PTR+1)
+          (STY ZP_LOCALS_HB_PTR+1)
 
           ;; now set the locals pointers to local#0 and set the top mark
           (LDA !$03)
