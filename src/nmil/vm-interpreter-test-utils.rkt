@@ -37,7 +37,7 @@
                   debugger--assembler-interactor
                   debugger--push-breakpoint
                   debugger--remove-breakpoints))
-(require (only-in "../tools/6510-debugger-shared.rkt" debug-state-states breakpoint))
+(require (only-in "../tools/6510-debugger-shared.rkt" debug-state-states breakpoint debug-state))
 (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 (require (only-in "./vm-bc-disassembler.rkt"
                   disassembler-byte-code--byte-count
@@ -71,7 +71,7 @@
 (require (only-in racket/string string-prefix? string-join))
 (require (only-in racket/format ~a))
 (require (only-in racket/match match-let))
-(require (only-in racket/list flatten take empty? range))
+(require (only-in racket/list flatten take empty? range drop))
 (require (only-in racket/port open-output-nowhere))
 
 (provide run-bc-wrapped-in-test-
@@ -135,6 +135,7 @@
                             "? | h          print this help screen"
                             "q              quit debugger"
                             ""
+                            "bt n           goto back to persisted debugger state n"
                             "page n         print data to page n"
                             "ps             print the stack"
                             "pf             print the call frame"
@@ -216,6 +217,23 @@
    bc-debugger--instruction-breakpoint-name
    #f))
 
+
+(define (wrap-into-bc-states previous-d-state run-d-state bc-loop-address)
+  (define states-to-keep (debug-state-states previous-d-state))
+  (define old-count (length states-to-keep))
+  (define all-new-states (debug-state-states run-d-state))
+  (define new-count (length all-new-states))
+  (define new-states (take all-new-states (- new-count old-count)))
+  (define filtered-new-states
+    (filter (lambda (c-state)
+              (= (cpu-state-program-counter c-state)
+                 bc-loop-address))
+             new-states))
+  ;; (displayln (format "old-count ~a\nnew-count ~a\nfiltered-new-states ~a"
+  ;;                    old-count new-count (length filtered-new-states)))
+  (struct-copy debug-state run-d-state
+               [states (append filtered-new-states states-to-keep)]))
+
 (define (debugger--bc-dispatcher- interpreter-loop-adr)
   (lambda (command d-state)
     (define c-state (car (debug-state-states d-state)))
@@ -228,6 +246,7 @@
     (define ppma-regex #px"^ppma ([[:xdigit:]]*)$")
     (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4})?$")
     (define stop-pc-regex #px"^(clear *)?stop *pc *= *([[:xdigit:]]{1,4})$")
+    (define bt-regex #px"^bt *([[:xdigit:]]{1,4})$")
     (foreground-color 'yellow)
     (begin0
         (with-handlers ([exn:fail:user? (lambda (e)
@@ -247,6 +266,14 @@
                              (peek-word-at-address c-state ZP_VM_PC))
                           0))
                      d-state))]
+                [(regexp-match? bt-regex command)
+                 (match-let (((list _ num) (regexp-match bt-regex command)))
+                   (define drop-num (- (length (debug-state-states d-state)) (if num (string->number num 16) 1)))
+                   (cond [(>= drop-num (length (debug-state-states d-state)))  
+                          (begin (color-displayln "cannot go that far back") d-state)]
+                         [else
+                          (struct-copy debug-state d-state
+                                       [states (drop (debug-state-states d-state) drop-num)])]))]
                 [(string=? command "ps") (begin (for-each (lambda (str) (color-displayln str)) (vm-stack->strings c-state)) d-state)]
                 [(string=? command "pt") (begin (color-displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
                 [(string=? command "pfn") (begin
@@ -256,7 +283,8 @@
                                             (color-displayln (format "locals used : ~a" (number->string locals-num)))
                                             (for-each  color-displayln (map (lambda (n) (vm-local->string c-state n)) (range locals-num)))
                                             d-state)]
-                [(string=? command "s") (debugger--run d-state #t)]
+                [(string=? command "s")
+                 (wrap-into-bc-states d-state (debugger--run d-state #t) interpreter-loop-adr)]
                 [(string=? command "pf") (begin (for-each color-displayln (vm-call-frame->strings c-state)) d-state)]
                 [(regexp-match? page-regex command)
                  (match-let (((list _ page) (regexp-match page-regex command)))
@@ -301,15 +329,18 @@
                      (color-displayln (cleanup-string (vm-cell->string low high c-state #t)))
                      d-state))]
                 [(string=? command "ruc")
-                 (debugger--bc-run-until d-state interpreter-loop-adr
-                                         (lambda (bc-state)
-                                           (memq (peek bc-state (peek-word-at-address bc-state ZP_VM_PC))
-                                                 '(#x34 ;; call
-                                                   #x35 ;; tail call
-                                                   ))))]
+                 (wrap-into-bc-states
+                  d-state
+                  (debugger--bc-run-until d-state interpreter-loop-adr
+                                          (lambda (bc-state)
+                                            (memq (peek bc-state (peek-word-at-address bc-state ZP_VM_PC))
+                                                  '(#x34 ;; call
+                                                    #x35 ;; tail call
+                                                    ))))
+                  interpreter-loop-adr)]
                 [(or (string=? command "run")
                     (string=? command "r"))
-                 (debugger--bc-run d-state interpreter-loop-adr)]
+                 (wrap-into-bc-states d-state (debugger--bc-run d-state interpreter-loop-adr) interpreter-loop-adr)]
                 [(string=? command "so")
                  (cond [(= #x34 (peek c-state (peek-word-at-address c-state ZP_VM_PC)))
                         ;; step over, since it is a call!
@@ -317,9 +348,11 @@
                         (define nc-state (car (debug-state-states state-after-call)))
                         (define parent-pc (peek-word-at-address nc-state (peek-word-at-address nc-state ZP_CALL_FRAME)))
                         (color-display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
-                        (debugger--bc-run-until state-after-call interpreter-loop-adr
-                                                (lambda (bc-state)
-                                                  (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
+                        (wrap-into-bc-states d-state
+                                             (debugger--bc-run-until state-after-call interpreter-loop-adr
+                                                                     (lambda (bc-state)
+                                                                       (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))
+                                             interpreter-loop-adr)]
                        [else (debugger--run d-state #t)])]
                 [(regexp-match? stop-pc-regex command)
                  (match-let (((list _ cl value) (regexp-match stop-pc-regex command)))
@@ -342,9 +375,12 @@
                  ;; get previous (stored vm_pc, to which to return to)
                  (define parent-pc (peek-word-at-address c-state (peek-word-at-address c-state ZP_CALL_FRAME)))
                  (color-display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
-                 (debugger--bc-run-until d-state interpreter-loop-adr
-                                         (lambda (bc-state)
-                                           (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))]
+                 (wrap-into-bc-states
+                  d-state
+                  (debugger--bc-run-until d-state interpreter-loop-adr
+                                          (lambda (bc-state)
+                                            (= (peek-word-at-address bc-state ZP_VM_PC) parent-pc)))
+                  interpreter-loop-adr)]
                 [(string-prefix? command "^")
                  (dispatch-debugger-command (substring command 1) d-state) ]
                 [else
