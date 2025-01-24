@@ -117,9 +117,8 @@
     (define wrapped-code (wrap-bytecode-for-test bc))
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
 
-(module+ test #| memory pages |#
-
-  (define create-tree-0-state
+(module+ test #| btree from list |#
+  (define b-tree-0-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -140,17 +139,18 @@
       vm-btree)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings create-tree-0-state 10 #t))
+  (check-equal? (cleanup-strings (vm-stack->strings b-tree-0-state 10 #t))
                 (list "stack holds 1 item"
                       "((1 . 2) . (3 . 4))  (rt)"))
-  (check-equal? (vm-cell-pair-pages create-tree-0-state)
+  (check-equal? (vm-cell-pair-pages b-tree-0-state)
                 (list #x97)) ;; corresponds to (define PAGE_AVAIL_0 #x97) in vm-interpreter
-  (check-equal? (length (vm-cell-pairs-free-in-page create-tree-0-state #x97))
+  (check-equal? (length (vm-cell-pairs-free-in-page b-tree-0-state #x97))
                 46) ;; after garbage collection, this should rise to (- 49 3)
-  (check-equal? (vm-cell-pairs-used-num-in-page create-tree-0-state #x97)
-                3) ;; should be 3 (since the resulting tree only needs 3 cells
+  (check-equal? (vm-cell-pairs-used-num-in-page b-tree-0-state #x97)
+                3)) ;; should be 3 (since the resulting tree only needs 3 cells)
 
-  (define create-tree-1-state
+(module+ test #| btree from-list, to-list |#
+  (define b-tree-1-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -177,20 +177,21 @@
       vm-btree)
      ))
 
-  (cond [(void? create-tree-1-state)
-          (skip (check-equal? #t #f "left debug session"))]
+  (cond [(void? b-tree-1-state)
+         (skip (check-equal? #t #f "left debug session"))]
         [else
-         (check-equal? (cleanup-strings (vm-stack->strings create-tree-1-state 10 #t))
+         (check-equal? (cleanup-strings (vm-stack->strings b-tree-1-state 10 #t))
                        (list "stack holds 1 item"
                              "(1 . (2 . (3 . (4 . NIL))))  (rt)"))
-         (check-equal? (vm-cell-pair-pages create-tree-1-state)
+         (check-equal? (vm-cell-pair-pages b-tree-1-state)
                        (list #x97)) ;; corresponds to (define PAGE_AVAIL_0 #x97) in vm-interpreter
-         (check-equal? (length (vm-cell-pairs-free-in-page create-tree-1-state #x97))
+         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-1-state #x97))
                        45) ;; after garbage collection, this should rise to (- 49 3)
-         (check-equal? (vm-cell-pairs-used-num-in-page create-tree-1-state #x97)
-                       4)])
+         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-1-state #x97)
+                       4)]))
 
-(define create-tree-2-state
+(module+ test #| btree from-list, path-to-first, add-value-after, to-list |#
+  (define b-tree-2-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -231,20 +232,20 @@
       vm-btree)
      ))
 
-  (cond [(void? create-tree-2-state)
-          (skip (check-equal? #t #f "left debug session"))]
+  (cond [(void? b-tree-2-state)
+         (skip (check-equal? #t #f "left debug session"))]
         [else
-         (check-equal? (cleanup-strings (vm-stack->strings create-tree-2-state 10 #t))
+         (check-equal? (cleanup-strings (vm-stack->strings b-tree-2-state 10 #t))
                        (list "stack holds 1 item"
                              "(10 . (15 . (20 . (30 . (40 . (50 . (60 . NIL)))))))  (rt)"
                              ))
-         (check-equal? (vm-cell-pair-pages create-tree-2-state)
+         (check-equal? (vm-cell-pair-pages b-tree-2-state)
                        (list #x97)) ;; corresponds to (define PAGE_AVAIL_0 #x97) in vm-interpreter
-         (check-equal? (length (vm-cell-pairs-free-in-page create-tree-2-state #x97))
+         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-2-state #x97))
                        42) 
-         (check-equal? (vm-cell-pairs-used-num-in-page create-tree-2-state #x97)
+         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-2-state #x97)
                        7) ;; is actually the number of cons cells (which is the number of dots in the list above)
          (check-equal? (map (lambda (str) (regexp-replace #rx"^pair-ptr\\[1\\].*" str ""))
-                            (vm-cell-pairs-used-info  create-tree-2-state #x97))
+                            (vm-cell-pairs-used-info  b-tree-2-state #x97))
                        (make-list 7 "")
                        "all pair ptrs in use are referenced only once!")]))
