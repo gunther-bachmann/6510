@@ -78,7 +78,7 @@
        [(7) "unknown"])]
     [(= byte-code-t2 #x64) (format "goto $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x66) "return"]
-    [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (bytes->int (+ 1 bc_p1) bc_p2)))] ;; add 2 because byte code starts there
+    [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (add1 (bytes->int bc_p1 bc_p2))))] ;; add 1 because byte code starts there (after #locals)
     [(= byte-code-t2 #x6a) "tail call"]
     [(= byte-code-t2 #x70)
      (define n (bitwise-and bc #x03))

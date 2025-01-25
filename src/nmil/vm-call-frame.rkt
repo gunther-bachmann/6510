@@ -58,21 +58,54 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator))
 
-(provide vm-call-frame vm-call-frame->strings)
+(provide vm-call-frame
+         vm-call-frame->strings
+         vm-call-frames->string)
+
+(define (vm-call-frames->string state)
+  (define call-frame-page (peek state (add1 ZP_CALL_FRAME)))
+  (define call-frame-ptr (peek-word-at-address state ZP_CALL_FRAME))
+  (define return-address (peek-word-at-address state call-frame-ptr))
+  (define top-mark       (peek state ZP_CALL_FRAME_TOP_MARK))
+  (define slow-fast-ind  (peek state (bytes->int (sub1 top-mark) call-frame-page)))
+  (cond [(= 0 (bitwise-and #xfe slow-fast-ind))
+         ;; slow frame
+         (define locals-ptr-low (peek state (+ 3 call-frame-ptr)))
+         (define locals-lb-page (peek state (+ 4 call-frame-ptr)))
+         (define locals-hb-page (peek state (+ 5 call-frame-ptr)))
+         (define func-ptr-low   (peek state (+ 6 call-frame-ptr)))
+         (list (format "slow-frame ($~a..$~a)" (format-hex-word call-frame-ptr) (format-hex-word (+ 7 call-frame-ptr)))
+               (format "return-pc:           $~a" (format-hex-word return-address))
+               (format "return-function-ptr: $~a" (format-hex-word (bytes->int func-ptr-low (- (high-byte return-address) slow-fast-ind))))
+               (format "return-locals-ptr:   $~a, $~a (lb,hb)"
+                       (format-hex-word (bytes->int locals-ptr-low locals-lb-page))
+                       (format-hex-word (bytes->int locals-ptr-low locals-hb-page))))
+         ]
+        [else
+         ;; fast frame
+         (define func-ptr-low   (peek state (+ 2 call-frame-ptr)))
+         (define locals-ptr-low (peek state (+ 3 call-frame-ptr)))
+         (list (format "fast-frame ($~a..$~a)" (format-hex-word call-frame-ptr) (format-hex-word (+ 3 call-frame-ptr)))
+               (format "return-pc:           $~a" (format-hex-word return-address))
+               (format "return-function-ptr: $~a" (format-hex-word (bytes->int func-ptr-low (high-byte return-address))))
+               (format "return-locals-ptr:   $~a, $~a (lb,hb)"
+                       (format-hex-word (bytes->int locals-ptr-low (peek state (add1 ZP_LOCALS_LB_PTR))))
+                       (format-hex-word (bytes->int locals-ptr-low (peek state (add1 ZP_LOCALS_HB_PTR))))))
+         ]))
 
 ;; write call stack status
 (define (vm-call-frame->strings state)
-  (list (format "call-frame-ptr:   $~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME)))
-        (format "program-counter:  $~a" (format-hex-word (peek-word-at-address state ZP_VM_PC)))
-        (format "function-ptr:     $~a" (format-hex-word (peek-word-at-address state ZP_VM_FUNC_PTR)))
-        (format "locals-ptr:       $~a, $~a (lb, hb)"
-                (format-hex-word (bytes->int (peek state ZP_LOCALS_LB_PTR) (peek state (add1 ZP_LOCALS_LB_PTR))))
-                (format-hex-word (bytes->int (peek state ZP_LOCALS_HB_PTR) (peek state (add1 ZP_LOCALS_HB_PTR)))))
-        ;; (format "cell-stack start: $~a,$~a"
-        ;;         (format-hex-word (bytes->int (peek state ZP_CELL_STACK_LB_PTR) (peek state (add1 ZP_CELL_STACK_LB_PTR))))
-        ;;         (format-hex-word (bytes->int (peek state ZP_CELL_STACK_HB_PTR) (peek state (add1 ZP_CELL_STACK_HB_PTR)))))
-        ;; (format "tos index:        $~a" (format-hex-byte (peek state ZP_CELL_STACK_TOS)))
-        ))
+  (append
+   (list (format "call-frame-ptr:   $~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME)))
+         (format "program-counter:  $~a" (format-hex-word (peek-word-at-address state ZP_VM_PC)))
+         (format "function-ptr:     $~a" (format-hex-word (peek-word-at-address state ZP_VM_FUNC_PTR)))
+         (format "locals-ptr:       $~a, $~a (lb, hb)"
+                 (format-hex-word (bytes->int (peek state ZP_LOCALS_LB_PTR) (peek state (add1 ZP_LOCALS_LB_PTR))))
+                 (format-hex-word (bytes->int (peek state ZP_LOCALS_HB_PTR) (peek state (add1 ZP_LOCALS_HB_PTR)))))
+         )
+   (if (= #x03 (peek state ZP_CALL_FRAME_TOP_MARK))
+       (list)
+       (vm-call-frames->string state))))
 
 
 

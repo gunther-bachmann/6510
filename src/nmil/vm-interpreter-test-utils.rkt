@@ -309,8 +309,8 @@
                 [(regexp-match? bt-regex command)
                  (match-let (((list _ num) (regexp-match bt-regex command)))
                    (define drop-num (- (length (debug-state-states d-state)) (if num (string->number num 16) 1)))
-                   (cond [(>= drop-num (length (debug-state-states d-state)))  
-                          (begin (color-displayln "cannot go that far back") d-state)]
+                   (cond [(or (< drop-num 0) (>= drop-num (length (debug-state-states d-state))))  
+                          (begin (with-colors 'red (lambda () (displayln "cannot go to that point in time"))) d-state)]
                          [else
                           (struct-copy debug-state d-state
                                        [states (drop (debug-state-states d-state) drop-num)])]))]

@@ -249,3 +249,81 @@
                             (vm-cell-pairs-used-info  b-tree-2-state #x97))
                        (make-list 7 "")
                        "all pair ptrs in use are referenced only once!")]))
+
+
+(module+ test #| btree from-list, path-to-first, add-value-after, to-list |#
+  (define b-tree-3-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_NIL)
+       (bc PUSH_INT) (word $0060)
+       (bc CONS)
+       (bc PUSH_INT) (word $0050)
+       (bc CONS)
+       (bc PUSH_INT) (word $0040)
+       (bc CONS)
+       (bc PUSH_INT) (word $0030)
+       (bc CONS)
+       (bc PUSH_INT) (word $0020)
+       (bc CONS)
+       (bc PUSH_INT) (word $0010)
+       (bc CONS)
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CALL) (word-ref BTREE_FROM_LIST)
+
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
+
+       (bc PUSH_INT) (word $0015)
+       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+
+       (bc CALL) (word-ref BTREE_NEXT)
+
+       (bc PUSH_INT) (word $0025)
+       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+
+       (bc CALL) (word-ref BTREE_NEXT)
+       (bc CALL) (word-ref BTREE_NEXT)
+
+       (bc EXT) (bc GC_FL)
+
+       ;; make sure to have the two defaul parameter filled with nil on the stack before the function
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+
+       ;; (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
+
+       ;; ;; make sure to have the two defaul parameter filled with nil on the stack before the function
+       ;; (bc PUSH_NIL)
+       ;; (bc SWAP)
+       ;; (bc PUSH_NIL)
+       ;; (bc SWAP)
+       ;; (bc CALL) (word-ref BTREE_TO_LIST)
+       (bc EXT) (bc GC_FL)
+       (bc BRK))
+      vm-btree)
+     #t))
+
+  (cond [(void? b-tree-3-state)
+         (skip (check-equal? #t #f "left debug session"))]
+        [else
+         (check-equal? (cleanup-strings (vm-stack->strings b-tree-3-state 10 #t))
+                       (list "stack holds 1 item"
+                             "(10 . (15 . (20 . (25 . (30 . (50 . (60 . NIL)))))))  (rt)"
+                             ))
+         (check-equal? (vm-cell-pair-pages b-tree-3-state)
+                       (list #x97)) ;; corresponds to (define PAGE_AVAIL_0 #x97) in vm-interpreter
+         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-3-state #x97))
+                       42)
+         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-3-state #x97)
+                       7) ;; is actually the number of cons cells (which is the number of dots in the list above)
+         (check-equal? (map (lambda (str) (regexp-replace #rx"^pair-ptr\\[1\\].*" str "ok"))
+                            (vm-cell-pairs-used-info  b-tree-3-state #x97))
+                       (make-list 7 "ok")
+                       "all pair ptrs in use are referenced only once!")]))
