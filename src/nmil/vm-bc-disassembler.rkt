@@ -18,7 +18,7 @@
         [else 1]))                          ;; default is 1 byte (for regular byte code command)
 
 ;; return disassembled string for bc (and byte 1, byte 2 thereafter)
-(define (disassemble-byte-code bc bc_p1 bc_p2)
+(define (disassemble-byte-code bc (bc_p1 0) (bc_p2 0))
   (define byte-code-t2 (arithmetic-shift (if (> bc 127) (bitwise-and #x78 bc) (bitwise-and #x7f bc)) 1))
   (cond
     [(= byte-code-t2 #x00)

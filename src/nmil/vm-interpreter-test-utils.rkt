@@ -4,7 +4,7 @@
 
 (require "../6510.rkt")
 (require "../6510-test-utils.rkt")
-
+(require (only-in "../6510-utils.rkt" low-byte high-byte) )
 (require (only-in ansi-color with-colors foreground-color))
 (require racket/exn)
 (require (only-in "../6510-utils.rkt" absolute))
@@ -24,6 +24,7 @@
                   exn:fail:cpu-interpreter-cpu-state
                   initialize-cpu
                   peek
+                  poke
                   6510-load
                   run-interpreter
                   run-interpreter-on
@@ -130,34 +131,65 @@
                                     string-list)
                               follow))]))
 (define (debugger--bc-help d-state)
-  (for-each displayln (list "bc commands"
-                            ""
-                            "? | h          print this help screen"
-                            "q              quit debugger"
-                            ""
-                            "bt n           goto back to persisted debugger state n"
-                            "page n         print data to page n"
-                            "ps             print the stack"
-                            "pf             print the call frame"
-                            "pfn            print running function meta data"
-                            "pl <n?>        print the n-th local (of the call frame), or all of them"
-                            "pml adr        print cell at memory location as list (must be the address of a cell-pair!)"
-                            "ppml adr       pretty print cell at memory location as list (must be the address of a cell-pair!)"
-                            "pma adr        print cell at memory location (can be anything)"
-                            "ppma adr       pretty print cell at memory location (can be anything)"
-                            "pp <B?> <A?>   pretty print the next B (hex) commands starting at address A (hex)" 
-                            "pt             print cell register t"
-                            "ruc            run until next call or return instruction"
-                            "rur            run until returned from current call"
-                            "run            run up to next breakpoint set"
-                            "s              run one step"
-                            "so             step over the current bc (even calls)"
-                            "stop pc = <A>  stop byte code interpretation at address <A>"
-                            "clear stop pc = <A>  clear that breakpoint"
-                            "sab byte       stop at the given bytecode (not implemented)"
-                            "dive           push assembler interactor"
-                            "^              (prefix) pass the following commands to the assembly debugger"))
+  (with-colors
+    'green
+    (lambda ()
+      (for-each displayln (list "bc commands"
+                                ""
+                                "? | h                 print this help screen"
+                                "q                     quit debugger"
+                                ""
+                                "bt n                  go back to persisted debugger state n"
+                                "page | pg n           print data to page n"
+                                "ps                    print the stack"
+                                "pf                    print the call frame"
+                                "pfn                   print running function meta data"
+                                "pl <n?>               print the n-th local (of the call frame), or all of them"
+                                "pml adr               print cell at memory location as list (must be the address of a cell-pair!)"
+                                "ppml adr              pretty print cell at memory location as list (must be the address of a cell-pair!)"
+                                "pma adr               print cell at memory location (can be anything)"
+                                "ppma adr              pretty print cell at memory location (can be anything)"
+                                "pp <B?> <A?>          pretty print the next B (hex) commands starting at address A (hex)" 
+                                "pt                    print cell register t"
+                                "rbc <bc> <bc>? <bc>?  run a byte code command on current virtual machine"
+                                "ruc                   run until next call or return instruction"
+                                "rur                   run until returned from current call"
+                                "run                   run up to next breakpoint set"
+                                "s                     run one step"
+                                "so                    step over the current bc (even calls)"
+                                "stop pc = <A>         stop byte code interpretation at address <A>"
+                                "clear stop pc = <A>   clear that breakpoint"
+                                "sab byte              stop at the given bytecode (not implemented)"
+                                "dive                  push assembler interactor"
+                                "^                     (prefix) pass the following commands to the assembly debugger"))))
   d-state)
+
+;; run a byte command (made up of bc-code) on the current machine without changing the pc
+(define (run-bc-command bc-codes d-state interpreter-loop-adr)
+  (define c-state-num (length (debug-state-states d-state)))
+  (define c-state (car (debug-state-states d-state)))
+  (cond [(not (= interpreter-loop-adr (cpu-state-program-counter c-state)))
+         ;; if not on the interpreter loop, restoring won't be able to construct the right cpu state
+         (with-colors 'red (lambda () (displayln "rbc only available if currently in the bc interpreter loop!")))
+         d-state]
+        [else
+         (color-displayln (format "running bytecodes '~a' on current machine..." (apply disassemble-byte-code bc-codes)))
+         (define pc (peek-word-at-address c-state ZP_VM_PC))
+         (define old-bcs (map (lambda (n) (peek c-state (+ n pc))) (list 0 1 2)))
+         (define new-state (apply poke (cons c-state (cons pc bc-codes))))
+         (define new-d-state (struct-copy debug-state d-state
+                                          [states (cons new-state (debug-state-states d-state))]))
+         (define state-run (wrap-into-bc-states new-d-state (debugger--run new-d-state #t) interpreter-loop-adr))
+         (define c-state-run (car (debug-state-states state-run)))
+         ;; now restore old pc and byte code
+         (define old-pc-state (poke c-state-run ZP_VM_PC (low-byte pc) (high-byte pc)))
+         (define restored-state (apply poke (cons old-pc-state (cons pc old-bcs))))
+         (define final-d-state 
+           (struct-copy debug-state state-run
+                        [states (cons restored-state                               
+                                      (drop (debug-state-states state-run)
+                                            (- (length (debug-state-states state-run)) c-state-num)))]))
+         final-d-state]))
 
 (define (debugger--disassemble d-state (offset 0))
   (define c-state (car (debug-state-states d-state)))
@@ -237,7 +269,7 @@
 (define (debugger--bc-dispatcher- interpreter-loop-adr)
   (lambda (command d-state)
     (define c-state (car (debug-state-states d-state)))
-    (define page-regex #px"^page *([[:xdigit:]]{2})$")
+    (define page-regex #px"^(page|pg) *([[:xdigit:]]{2})$")
     (define pa-regex #px"^pa ([[:xdigit:]])$")
     (define pl-regex #px"^pl *([[:xdigit:]])?$")
     (define pml-regex #px"^pml ([[:xdigit:]]*)$")
@@ -247,6 +279,7 @@
     (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4})?$")
     (define stop-pc-regex #px"^(clear *)?stop *pc *= *([[:xdigit:]]{1,4})$")
     (define bt-regex #px"^bt *([[:xdigit:]]{1,4})$")
+    (define rbc-regex #px"^rbc *([[:xdigit:]]{2}) *(([[:xdigit:]]{2}) *([[:xdigit:]]{2})?)?")
     (foreground-color 'yellow)
     (begin0
         (with-handlers ([exn:fail:user? (lambda (e)
@@ -255,6 +288,13 @@
           (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
                 [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
                 [(string=? command "fl") (color-displayln (vm-cell-pair-free-list-info c-state)) d-state]
+                [(regexp-match? rbc-regex command)
+                 (match-let (((list _ bc0 _ bc1 bc2) (regexp-match rbc-regex command)))
+                   (run-bc-command (map (lambda (nstr)
+                                          (string->number nstr 16))
+                                        (filter (lambda (val) val) (list bc0 bc1 bc2)))
+                                   d-state
+                                   interpreter-loop-adr))]
                 [(regexp-match? pp-regex command)
                  (match-let (((list _ len address) (regexp-match pp-regex command)))
                    (begin
@@ -274,7 +314,7 @@
                          [else
                           (struct-copy debug-state d-state
                                        [states (drop (debug-state-states d-state) drop-num)])]))]
-                [(string=? command "ps") (begin (for-each (lambda (str) (color-displayln str)) (vm-stack->strings c-state)) d-state)]
+                [(string=? command "ps") (begin (color-displayln (string-join (vm-stack->strings c-state) "\n  ")) d-state)]
                 [(string=? command "pt") (begin (color-displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
                 [(string=? command "pfn") (begin
                                             (define func-ptr (peek-word-at-address c-state ZP_VM_FUNC_PTR))
@@ -287,7 +327,7 @@
                  (wrap-into-bc-states d-state (debugger--run d-state #t) interpreter-loop-adr)]
                 [(string=? command "pf") (begin (for-each color-displayln (vm-call-frame->strings c-state)) d-state)]
                 [(regexp-match? page-regex command)
-                 (match-let (((list _ page) (regexp-match page-regex command)))
+                 (match-let (((list _ _ page) (regexp-match page-regex command)))
                    (map color-displayln (vm-page->strings c-state (string->number page 16)))
                    (map color-displayln (vm-cell-pairs-used-info c-state (string->number page 16))))
                  d-state]

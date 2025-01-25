@@ -7,6 +7,7 @@
 
  |#
 
+(require (only-in ansi-color with-colors))
 (require (rename-in  racket/contract [define/contract define/c]))
 (require readline/readline)
 (require threading)
@@ -128,7 +129,7 @@
 (define/c (debugger--execute-command command force d-state)
   (-> string? boolean? debug-state? debug-state?)
   (with-handlers ([exn:fail? ;; catch parse error of the 6510 opcode
-                   (lambda (e) (displayln e) d-state)])
+                   (lambda (e) (with-colors 'red (lambda () (displayln e))) d-state)])
     (define c-state (car (debug-state-states d-state)))
     (let ([byteList (compile-opcodes (string-trim command))])
       (cond [(or force
@@ -166,7 +167,7 @@
   (define next-states (cons (execute-cpu-step (car c-states) #t (debug-state-output-function d-state)) c-states))
   (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state) 0 (debug-state-output-function d-state))))
     (when (and breakpoint display (breakpoint-verbose breakpoint))
-      (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))
+      (with-colors 'cyan (lambda () (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))))
     (struct-copy debug-state d-state [states new-states])))
 
 (define/c (print-latest-cpu-state d-state)
@@ -234,7 +235,7 @@ q                     quit
 .                     repeat last command (multiple dots repeat multiple times)
 EOF
     )
-  (displayln help)
+  (with-colors 'green (lambda () (displayln help)))
   d-state)
 
 ;; decode the given debugger command and dispatch to the debugger
@@ -397,7 +398,7 @@ EOF
         ;; r - run
         [(regexp-match? run-regex command) (debugger--run d-state)]
         [else (begin (unless (zero? (string-length command))
-                     (displayln "(unknown command, enter '?' to get help)") )
+                       (with-colors 'red (lambda () (displayln "(unknown command, enter '?' to get help)"))))
                    d-state)]))
 
 (define/c (create-disassemble-annotation-string c-state)
@@ -595,11 +596,14 @@ EOF
 (define/c (run-until-breakpoint states breakpoints (steps 0) (string-output-function debugger-output-function))
   (->* [(listof cpu-state?) list?] [nonnegative-integer? (-> string? any/c)] [values (or/c boolean? breakpoint?) (listof cpu-state?)])
   (let ([breakpoint (breakpoint-hits (car states) breakpoints)])
-    (cond [(or breakpoint
-           (-debugger-at-brk (car states))
-           (-debugger-at-root-rts (car states)))
+    (cond [(-debugger-at-root-rts (car states))
+           (with-colors 'red (lambda () (displayln "hit rts with empty stack.")))
+           (values breakpoint states)]
+          [(or breakpoint
+              (-debugger-at-brk (car states)))
            (values breakpoint states)]
           [(> steps debugger-max-uninterrupted-steps)
+           (with-colors 'red (lambda () (displayln (format "stopped exceeding ~a interpreter steps." debugger-max-uninterrupted-steps))))
            (values breakpoint states)]
           [else
            (run-until-breakpoint
