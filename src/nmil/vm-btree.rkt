@@ -2678,7 +2678,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
    (flatten
      (list
       (label BTREE_REMOVE_VALUE_AT)
-             (byte 3)
+             (byte 4)
              (bc WRITE_TO_LOCAL_1)        ;; local_1= path
 
              (bc NIL?)

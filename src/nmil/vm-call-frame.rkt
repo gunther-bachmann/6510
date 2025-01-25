@@ -507,7 +507,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (SEC)
           (SBC !$04)
-
+          (STA ZP_CALL_FRAME_TOP_MARK)
    (label LOCAL__IS_FAST_CALL_FRAME__VM_POP_CALL_FRAME_N)
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (SEC)

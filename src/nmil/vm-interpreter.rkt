@@ -508,6 +508,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA (ZP_RA),y)                       ;; A = #locals                    
           (TAX)
           (JSR VM_PUSH_CALL_FRAME_N)
+          (LDA ZP_LOCALS_TOP_MARK)
+          (STA ZP_LOCALS_LB_PTR)
+          (STA ZP_LOCALS_HB_PTR)
           (LDY !$00)                            ;; index to number of locals (0)
           (LDA (ZP_RA),y)                       ;; A = #locals
           (BEQ NO_LOCALS_NEEDED__BC_CALL)
@@ -636,10 +639,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDY !$00)
           (LDA (ZP_VM_FUNC_PTR),y)
           (TAY)
+          (LDA ZP_LOCALS_LB_PTR)
+          (STA ZP_LOCALS_TOP_MARK) ;; restore top mark
           ;; loop over locals -> rt, decr refcount
           (DEY)
           (BMI DONE__BC_RET)
-          ;; keep rt for later
    (label LOOP__BC_RET)
           (LDA (ZP_LOCALS_LB_PTR),y)
           (STA ZP_RA)
@@ -648,9 +652,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STY COUNTER__BC_RET)
           (JSR VM_REFCOUNT_DECR_RA)
           (LDY COUNTER__BC_RET)
+          (LDA !$00)
+          (STA (ZP_LOCALS_LB_PTR),y)
+          (STA (ZP_LOCALS_HB_PTR),y)
           (DEY)
           (BPL LOOP__BC_RET)
-          ;; restore rt
    (label DONE__BC_RET)
           (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
           (JMP VM_INTERPRETER)
@@ -827,7 +833,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RA+1)
            (JSR VM_REFCOUNT_DECR_RA)
-
 
            (PLA)
            (TAY)                                ;; index -> Y
