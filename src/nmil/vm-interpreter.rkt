@@ -508,9 +508,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA (ZP_RA),y)                       ;; A = #locals                    
           (TAX)
           (JSR VM_PUSH_CALL_FRAME_N)
-          (LDA ZP_LOCALS_TOP_MARK)
-          (STA ZP_LOCALS_LB_PTR)
-          (STA ZP_LOCALS_HB_PTR)
           (LDY !$00)                            ;; index to number of locals (0)
           (LDA (ZP_RA),y)                       ;; A = #locals
           (BEQ NO_LOCALS_NEEDED__BC_CALL)

@@ -297,18 +297,18 @@
        (bc SWAP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
 
-       ;; (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
+       (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
 
        ;; ;; make sure to have the two defaul parameter filled with nil on the stack before the function
-       ;; (bc PUSH_NIL)
-       ;; (bc SWAP)
-       ;; (bc PUSH_NIL)
-       ;; (bc SWAP)
-       ;; (bc CALL) (word-ref BTREE_TO_LIST)
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc PUSH_NIL)
+       (bc SWAP)
+       (bc CALL) (word-ref BTREE_TO_LIST)
        (bc EXT) (bc GC_FL)
        (bc BRK))
       vm-btree)
-     #t))
+     ))
 
   (cond [(void? b-tree-3-state)
          (skip (check-equal? #t #f "left debug session"))]

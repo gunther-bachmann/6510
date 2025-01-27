@@ -19,6 +19,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   ZP_VM_FUNC_PTR
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
+                  ZP_LOCALS_TOP_MARK
                   ZP_CALL_FRAME_TOP_MARK
                   vm-memory-manager
                   vm-stack->strings
@@ -96,12 +97,13 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 ;; write call stack status
 (define (vm-call-frame->strings state)
   (append
-   (list (format "call-frame-ptr:   $~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME)))
+   (list (format "call-frame-ptr:   $~a, topmark: ~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME)) (format-hex-byte (peek state ZP_CALL_FRAME_TOP_MARK)))
          (format "program-counter:  $~a" (format-hex-word (peek-word-at-address state ZP_VM_PC)))
          (format "function-ptr:     $~a" (format-hex-word (peek-word-at-address state ZP_VM_FUNC_PTR)))
-         (format "locals-ptr:       $~a, $~a (lb, hb)"
+         (format "locals-ptr:       $~a, $~a (lb, hb), topmark: ~a"
                  (format-hex-word (bytes->int (peek state ZP_LOCALS_LB_PTR) (peek state (add1 ZP_LOCALS_LB_PTR))))
-                 (format-hex-word (bytes->int (peek state ZP_LOCALS_HB_PTR) (peek state (add1 ZP_LOCALS_HB_PTR)))))
+                 (format-hex-word (bytes->int (peek state ZP_LOCALS_HB_PTR) (peek state (add1 ZP_LOCALS_HB_PTR))))
+                 (format-hex-byte (peek state ZP_LOCALS_TOP_MARK)))
          )
    (if (= #x03 (peek state ZP_CALL_FRAME_TOP_MARK))
        (list)
@@ -486,7 +488,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDA (ZP_CALL_FRAME),y)
           (STA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_HB_PTR)
-          (BCS RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; carry always set (because of SEC before)
+          (BNE RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; locals ptr never points in lowbyte to 0
 
    (label SLOW_FRAME__VM_POP_CALL_FRAME_N)
           (LDY !$06)                    ;; copy 7 bytes
@@ -510,15 +512,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (STA ZP_LOCALS_HB_PTR)
 
    (label RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)
-          (LDA ZP_CALL_FRAME)
-          (STA ZP_CALL_FRAME_TOP_MARK)
+          (LDA ZP_CALL_FRAME)                   ;; old low byte of call frame
+          (STA ZP_CALL_FRAME_TOP_MARK)          ;; set top mark 
           (CMP !$03) ;; alread at bottom => no sub
-          (BEQ NO_SUB__VM_POP_CALL_FRAME_N)
+          (BEQ NO_SUB__VM_POP_CALL_FRAME_N)     ;; 03 indicates page change of call frame
 
-          ;; one below top mark
           (LDA !$00)
-          (STA ZP_CALL_FRAME)
-          (LDY ZP_CALL_FRAME_TOP_MARK)                          ;; get index to top
+          (STA ZP_CALL_FRAME)                   ;; zero low byte to use topmark as index
+          (LDY ZP_CALL_FRAME_TOP_MARK)          ;; get index to top
           (JSR LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
 
    (label NO_SUB__VM_POP_CALL_FRAME_N)
@@ -539,8 +540,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (SEC)
-          (SBC !$04)
-          (STA ZP_CALL_FRAME_TOP_MARK)
+          (SBC !$08)
+          (RTS)
+
    (label LOCAL__IS_FAST_CALL_FRAME__VM_POP_CALL_FRAME_N)
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (SEC)
