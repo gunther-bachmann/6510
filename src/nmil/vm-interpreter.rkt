@@ -330,10 +330,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   (list "stack holds 1 item"
                         "int $0001  (rt)"))
  (check-equal? (vm-call-frame->strings bc-nil-ret-state)
-               (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+               (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                      "program-counter:  $8005"
                      "function-ptr:     $8000"
-                     (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                     (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 04"
                              (format-hex-byte PAGE_LOCALS_LB)
                              (format-hex-byte PAGE_LOCALS_HB))))
 
@@ -359,10 +359,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    (list "stack holds 1 item"
                          "int $0001  (rt)"))
   (check-equal? (vm-call-frame->strings bc-nil-ret-local-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8005"
                          "function-ptr:     $8000"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
@@ -402,10 +402,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    (list "stack holds 1 item"
                          "pair-ptr NIL  (rt)"))
    (check-equal? (vm-call-frame->strings bc-tail-call-state)
-                 (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                 (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                           "program-counter:  $8006"
                           "function-ptr:     $8000"
-                          (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 04"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
 
@@ -473,10 +473,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    (list "stack holds 1 item"
                          (format "pair-ptr[1] $~a09  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $800c"
                          "function-ptr:     $8000"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
@@ -510,9 +510,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_PUSH_CALL_FRAME_N)
           (LDY !$00)                            ;; index to number of locals (0)
           (LDA (ZP_RA),y)                       ;; A = #locals
-          (BEQ NO_LOCALS_NEEDED__BC_CALL)
-          (JSR VM_ALLOC_LOCALS)
-   (label NO_LOCALS_NEEDED__BC_CALL)
+          ;; (BEQ NO_LOCALS_NEEDED__BC_CALL)
+          (JSR VM_ALLOC_LOCALS)                 ;; even if A=0 will set the top_mark and the locals appropriately
+   ;; (label NO_LOCALS_NEEDED__BC_CALL)
 
           ;; load zp_vm_pc with address of function bytecode
           (LDA ZP_RA)
@@ -533,10 +533,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-before-call-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                       "program-counter:  $8001"
                       "function-ptr:     $8000"
-                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
    (check-equal? (vm-stack->strings test-bc-before-call-state)
@@ -559,10 +559,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
    (check-equal? (vm-call-frame->strings test-bc-call-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f02"
                           "function-ptr:     $8f00"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))
+                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         "return-pc:           $8004"
+                         "return-function-ptr: $8000"
+                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
    (check-equal? (vm-stack->strings test-bc-call-state)
@@ -587,10 +593,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f02"
                          "function-ptr:     $8f00"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))
+                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         "return-pc:           $8005"
+                         "return-function-ptr: $8000"
+                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-call-wp-state)
@@ -615,10 +627,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc BRK))))
 
   (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f02"
                          "function-ptr:     $8f00"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))
+                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         "return-pc:           $8005"
+                         "return-function-ptr: $8000"
+                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-call-wl-state)
@@ -678,10 +696,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc RET))))
   
   (check-equal? (vm-call-frame->strings test-bc-ret-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8004"
                          "function-ptr:     $8000"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-ret-state)
@@ -899,10 +917,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_HB_W #x03))
                 #x01)
   (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f03"
                          "function-ptr:     $8f00"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))
+                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME)(format-hex-byte PAGE_CALL_FRAME))
+                         "return-pc:           $8005"
+                         "return-function-ptr: $8000"
+                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
 
@@ -935,10 +959,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_HB_W #x04))
                 #x00 "local1 = int 0")
   (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f05"
                          "function-ptr:     $8f00"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))
+                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         "return-pc:           $8005"
+                         "return-function-ptr: $8000"
+                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
 
@@ -962,10 +992,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                         "int $0000")
                   "int 1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-l-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f05"
                          "function-ptr:     $8f00"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 04"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))
+                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         "return-pc:           $8003"
+                         "return-function-ptr: $8000"
+                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
 
@@ -991,10 +1027,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "int $0001")
                    "int -1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-p-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f05"
                          "function-ptr:     $8f00"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))
+                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         "return-pc:           $8005"
+                         "return-function-ptr: $8000"
+                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
 
@@ -1019,10 +1061,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    (list "stack holds 1 item"
                          "int $0001  (rt)"))
   (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
-                   (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8f06"
                          "function-ptr:     $8f00"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb)"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                                 (format-hex-byte PAGE_LOCALS_LB)
+                                 (format-hex-byte PAGE_LOCALS_HB))
+                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         "return-pc:           $8005"
+                         "return-function-ptr: $8000"
+                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 

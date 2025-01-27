@@ -525,6 +525,7 @@
                                       (eq? (cpu-state-program-counter lc-state)
                                            interpreter-loop))
                                     #f))
+                       (list)
                        (debugger--bc-interactor interpreter-loop)
                        #t)
       (with-handlers ([exn:fail:cpu-interpreter?

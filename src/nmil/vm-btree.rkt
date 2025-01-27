@@ -1175,7 +1175,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((1 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))"
                       "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"))
 
-  (check-equal? (cpu-state-clock-cycles prev-4-state)
+  (inform-check-equal? (cpu-state-clock-cycles prev-4-state)
                 6998))
 
 ;; optimization idea: NIL?_RET instead of NIL?, TRUE_P_RET
@@ -1503,7 +1503,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((0 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))"
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)"))
 
-  (check-equal? (cpu-state-clock-cycles next-4-state)
+  (inform-check-equal? (cpu-state-clock-cycles next-4-state)
                 2467))
 
 ;; replace new nodes up the tree, making the tree persistent

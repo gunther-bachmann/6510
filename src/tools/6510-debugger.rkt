@@ -165,7 +165,7 @@
   (->* [debug-state?] [boolean?] debug-state?)
   (define c-states (debug-state-states d-state))
   (define next-states (cons (execute-cpu-step (car c-states) #t (debug-state-output-function d-state)) c-states))
-  (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state) 0 (debug-state-output-function d-state))))
+  (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state) (debug-state-tracepoints d-state) 0 (debug-state-output-function d-state))))
     (when (and breakpoint display (breakpoint-verbose breakpoint))
       (with-colors 'cyan (lambda () (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))))
     (struct-copy debug-state d-state [states new-states])))
@@ -474,12 +474,14 @@ EOF
   (define new-interactor-queue
     (cons (list
            `(breakpoints . ,(debug-state-breakpoints d-state))
+           `(tracepoints . ,(debug-state-tracepoints d-state))
            `(prompter . ,(debug-state-prompter d-state))
            `(dispatcher . ,(debug-state-dispatcher d-state))
            `(pre-prompter . ,(debug-state-pre-prompter d-state)))
           (debug-state-interactor-queue d-state)))
   (struct-copy debug-state d-state
                [breakpoints      '()]
+               [tracepoints      '()]
                [prompter         (dict-ref interactor 'prompter interactor)]
                [dispatcher       (dict-ref interactor 'dispatcher interactor)]
                [pre-prompter     (dict-ref interactor 'pre-prompter interactor)]
@@ -491,19 +493,21 @@ EOF
   (define new-interactor-queue (cdr (debug-state-interactor-queue d-state)))
   (struct-copy debug-state d-state
                [breakpoints      (dict-ref interactor 'breakpoints interactor)]
+               [tracepoints      (dict-ref interactor 'tracepoints interactor)]
                [prompter         (dict-ref interactor 'prompter interactor)]
                [dispatcher       (dict-ref interactor 'dispatcher interactor)]
                [pre-prompter     (dict-ref interactor 'pre-prompter interactor)]
                [interactor-queue new-interactor-queue]))
 
 ;; run an read eval print loop debugger on the passed program
-(define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (interactor debugger--assembler-interactor) (run #f))
-  (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof any/c) boolean?] any/c)
+(define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (tracepoints '()) (interactor debugger--assembler-interactor) (run #f))
+  (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof tracepoint?) (listof any/c) boolean?] any/c)
   (define capabilities (collect-emacs-capabilities file-name))
   (define file-does-exist (and (non-empty-string? file-name) (file-exists? file-name)))
   (define d-state
     (debug-state (list state)
                  breakpoints
+                 tracepoints
                  (if file-does-exist
                      (load-source-map file-name)
                      (hash))
@@ -579,6 +583,18 @@ EOF
                (car breakpoints)
                (breakpoint-hits c-state (cdr breakpoints))))]))
 
+(define/c (tracepoint-hits c-state tracepoints)
+  (-> cpu-state? list? (or/c boolean? tracepoint?))
+  (cond [(empty? tracepoints)
+         #f]
+        [else
+         (begin
+           (if (apply
+                (tracepoint-fn (car tracepoints))
+                (list c-state))
+               (car tracepoints)
+               (tracepoint-hits c-state (cdr tracepoints))))]))
+
 ;; is the debugger at a rts command and the stack is at the bottom (#xff)?
 (define/c (-debugger-at-root-rts c-state)
   (-> cpu-state? boolean?)
@@ -593,9 +609,10 @@ EOF
   (display str))
 
 ;; run until a break point hits or the cpu is on a BRK statement
-(define/c (run-until-breakpoint states breakpoints (steps 0) (string-output-function debugger-output-function))
-  (->* [(listof cpu-state?) list?] [nonnegative-integer? (-> string? any/c)] [values (or/c boolean? breakpoint?) (listof cpu-state?)])
-  (let ([breakpoint (breakpoint-hits (car states) breakpoints)])
+(define/c (run-until-breakpoint states breakpoints tracepoints (steps 0) (string-output-function debugger-output-function))
+  (->* [(listof cpu-state?) list? list?] [nonnegative-integer? (-> string? any/c)] [values (or/c boolean? breakpoint?) (listof cpu-state?)])
+  (let ([breakpoint (breakpoint-hits (car states) breakpoints)]
+        [tracepoint (tracepoint-hits (car states) tracepoints)])
     (cond [(-debugger-at-root-rts (car states))
            (with-colors 'red (lambda () (displayln "hit rts with empty stack.")))
            (values breakpoint states)]
@@ -604,11 +621,14 @@ EOF
            (values breakpoint states)]
           [(> steps debugger-max-uninterrupted-steps)
            (with-colors 'red (lambda () (displayln (format "stopped exceeding ~a interpreter steps." debugger-max-uninterrupted-steps))))
-           (values breakpoint states)]
+           (values breakpoint states)]          
           [else
+           (when tracepoint
+             (apply (tracepoint-output-fn tracepoint) (list (car states))))
            (run-until-breakpoint
             (cons (execute-cpu-step (car states) #t string-output-function) states)
             breakpoints
+            tracepoints
             (fx+ 1 steps)
             string-output-function)])))
 

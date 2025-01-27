@@ -320,10 +320,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (run-code-in-test push-call-frame-n-fit-page-prep-code))
 
   (check-equal? (vm-call-frame->strings push-call-frame-n-fit-page-prep-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
-                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
                 "prepared call-frame is initial (and empty)")
   (check-equal? (peek push-call-frame-n-fit-page-prep-state ZP_CALL_FRAME_TOP_MARK)
                 #x03
@@ -343,10 +343,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                       #x03)
                 "the call frame is a fast frame (4 bytes) holding the full pc (2b), low byte of function-ptr and low byte of locals-ptr")
   (check-equal? (vm-call-frame->strings push-call-frame-n-fit-page-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
-                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))
+                      (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                      "return-pc:           $090b"
+                      "return-function-ptr: $090a"
+                      (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
                 "call-frame is pointing to the current one push ")
   (check-equal? (peek push-call-frame-n-fit-page-state ZP_CALL_FRAME_TOP_MARK)
                 #x07
@@ -366,10 +370,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (run-code-in-test push-call-frame-misfit-page-sl-frame-0-code))
 
   (check-equal? (vm-call-frame->strings push-call-frame-misfit-page-sl-frame-0-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
+                (list (format "call-frame-ptr:   $~a03, topmark: 0b" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $0a0b"
                       "function-ptr:     $090a"
-                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))
+                      (format "slow-frame ($~a03..$~a0a)" (format-hex-byte PAGE_AVAIL_0) (format-hex-byte PAGE_AVAIL_0))
+                      "return-pc:           $0a0b"
+                      "return-function-ptr: $090a"
+                      (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (peek push-call-frame-misfit-page-sl-frame-0-state ZP_CALL_FRAME_TOP_MARK)
                 #x0b
                 "top mark points to the first free byte on the call frame stack (past the one pushed)")
@@ -400,10 +408,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (run-code-in-test push-call-frame-misfit-page-sl-frame-1-code))
 
   (check-equal? (vm-call-frame->strings push-call-frame-misfit-page-sl-frame-1-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
+                (list (format "call-frame-ptr:   $~a03, topmark: 0b" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
-                      (format "locals-ptr:       $~afe, $~afe (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
+                      (format "locals-ptr:       $~afe, $~afe (lb, hb), topmark: 03" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))
+                      (format  "slow-frame ($~a03..$~a0a)" (format-hex-byte PAGE_AVAIL_0) (format-hex-byte PAGE_AVAIL_0))
+                      "return-pc:           $090b"
+                      "return-function-ptr: $090a"
+                      (format "return-locals-ptr:   $~afe, $~afe (lb,hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (peek push-call-frame-misfit-page-sl-frame-1-state ZP_CALL_FRAME_TOP_MARK)
                 #x0b
                 "top mark points to the first free byte on the call frame stack (past the one pushed)")
@@ -582,10 +594,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (check-equal? (peek pop-call-frame-n-fast-cf-state ZP_CALL_FRAME_TOP_MARK)
                 #x07)
   (check-equal? (vm-call-frame->strings pop-call-frame-n-fast-cf-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_CALL_FRAME))
+                (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
-                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))
+                      (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                      "return-pc:           $090b"
+                      "return-function-ptr: $090a"
+                      (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
                 "restore original call-frame-ptr,
                          program counter,
                          functions-ptr
@@ -623,10 +639,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (run-code-in-test pop-call-frame-n-slow-cf-code))
 
   (check-equal? (vm-call-frame->strings pop-call-frame-n-slow-cf-state)
-                (list (format "call-frame-ptr:   $~a03" (format-hex-byte PAGE_AVAIL_0))
+                (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_AVAIL_0))
                       "program-counter:  $0a0b"
                       "function-ptr:     $090a"
-                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
   (check-equal? (peek pop-call-frame-n-slow-cf-state ZP_CALL_FRAME_TOP_MARK)
                 #x03
                 "top mark points to the first free byte on the call frame stack")
@@ -647,10 +663,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (run-code-in-test pop-call-frame-n-slow-2-cf-code)) 
 
   (check-equal? (vm-call-frame->strings pop-call-frame-n-slow-2-cf-state)
-                (list (format "call-frame-ptr:   $~af7" (format-hex-byte PAGE_CALL_FRAME))
+                (list (format "call-frame-ptr:   $~af7, topmark: fb" (format-hex-byte PAGE_CALL_FRAME))
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
-                      (format "locals-ptr:       $~a03, $~a03 (lb, hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
+                      (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))
+                      (format "fast-frame ($~af7..$~afa)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                      "return-pc:           $0000"
+                      "return-function-ptr: $0000"
+                      (format "return-locals-ptr:   $~a02, $~a02 (lb,hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
                 "f7 = fb (top mark) - 4 (slow frame)")
   (check-equal? (peek pop-call-frame-n-slow-2-cf-state ZP_CALL_FRAME_TOP_MARK)
                 #xfb
