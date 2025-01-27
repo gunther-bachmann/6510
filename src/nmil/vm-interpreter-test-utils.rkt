@@ -38,7 +38,13 @@
                   debugger--assembler-interactor
                   debugger--push-breakpoint
                   debugger--remove-breakpoints))
-(require (only-in "../tools/6510-debugger-shared.rkt" debug-state-states breakpoint debug-state))
+(require (only-in "../tools/6510-debugger-shared.rkt"
+                  debug-state-states
+                  debug-state-tracepoints
+                  tracepoint-description
+                  breakpoint
+                  tracepoint
+                  debug-state))
 (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 (require (only-in "./vm-bc-disassembler.rkt"
                   disassembler-byte-code--byte-count
@@ -155,6 +161,7 @@
                                 "ruc                   run until next call or return instruction"
                                 "rur                   run until returned from current call"
                                 "run                   run up to next breakpoint set"
+                                "trace on | to         switch bc level tracing on"
                                 "s                     run one step"
                                 "so                    step over the current bc (even calls)"
                                 "stop pc = <A>         stop byte code interpretation at address <A>"
@@ -191,8 +198,7 @@
                                             (- (length (debug-state-states state-run)) c-state-num)))]))
          final-d-state]))
 
-(define (debugger--disassemble d-state (offset 0))
-  (define c-state (car (debug-state-states d-state)))
+(define (debugger--disassemble c-state (offset 0))
   (define pc (+ (peek-word-at-address c-state ZP_VM_PC) offset))
   (define bc (peek c-state pc))
   (define bc_p1 (peek c-state (add1 pc)))
@@ -208,7 +214,7 @@
 
 (define (debugger--disassemble-lines d-state (lines 10) (offset 0))
   (when (> lines 0)
-    (color-displayln (debugger--disassemble d-state offset))
+    (color-displayln (debugger--disassemble (car (debug-state-states d-state)) offset))
     (define c-state (car (debug-state-states d-state)))
     (debugger--disassemble-lines
      d-state
@@ -266,6 +272,30 @@
   (struct-copy debug-state run-d-state
                [states (append filtered-new-states states-to-keep)]))
 
+(define (createBcTracepoint interpreter-loop-adr)
+  (tracepoint
+   "bc step trace"
+   (lambda (c-state)
+     (= (cpu-state-program-counter c-state)
+        interpreter-loop-adr))
+   (lambda (c-state)
+     (define stack-len (sub1 (length (vm-stack->strings c-state 20))))
+     (define top (vm-regt->string c-state))
+     (color-displayln
+      (format "~a\t~a ~a" 
+              (~a (debugger--disassemble c-state)
+                  #:align 'left
+                  #:width 40
+                  #:pad-string " ")              
+              top
+              (if (> stack-len 1)
+                  (~a (format "(... ~a more)" (sub1 stack-len))
+                      #:align 'right
+                      #:width (max 0 (- 40 (string-length top)))
+                      #:pad-string " ")
+                  ""))))
+   #f))
+
 (define (debugger--bc-dispatcher- interpreter-loop-adr)
   (lambda (command d-state)
     (define c-state (car (debug-state-states d-state)))
@@ -288,6 +318,18 @@
           (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
                 [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
                 [(string=? command "fl") (color-displayln (vm-cell-pair-free-list-info c-state)) d-state]
+                [(or (string=? command "trace on")
+                    (string=? command "to"))
+                 (struct-copy debug-state d-state
+                              [tracepoints (cons (createBcTracepoint interpreter-loop-adr)
+                                                 (debug-state-tracepoints d-state))])]
+                [(or (string=? command "trace off")
+                    (string=? command "tf"))
+                 (struct-copy debug-state d-state
+                              [tracepoints (filter (lambda (tp)
+                                                     (not (string=? (tracepoint-description tp)
+                                                                  "bc step trace")))
+                                                 (debug-state-tracepoints d-state))])]
                 [(regexp-match? rbc-regex command)
                  (match-let (((list _ bc0 _ bc1 bc2) (regexp-match rbc-regex command)))
                    (run-bc-command (map (lambda (nstr)
@@ -432,7 +474,7 @@
   (list
    `(dispatcher . ,(debugger--bc-dispatcher- interpreter-loop-adr))
    `(prompter . ,(lambda (d-state) (format "BC [~x] > " (length (debug-state-states d-state)))))
-   `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble d-state))))))
+   `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble (car (debug-state-states d-state))))))))
 
 
 ;; get the number of pages not in the free list nor allocated (totally untouched/free)
