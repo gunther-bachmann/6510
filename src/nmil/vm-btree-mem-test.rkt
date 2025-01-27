@@ -288,8 +288,6 @@
        (bc CALL) (word-ref BTREE_NEXT)
        (bc CALL) (word-ref BTREE_NEXT)
 
-       (bc EXT) (bc GC_FL)
-
        ;; make sure to have the two defaul parameter filled with nil on the stack before the function
        (bc PUSH_NIL)
        (bc SWAP)

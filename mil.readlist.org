@@ -3566,7 +3566,7 @@ this will include the implementation of
                          3   4    ---- Level_3
           maps to: (l_1 (l_2 "1" . "2") . (l_2 (l_3 "3" . "4") . "5"))
   - [X] translate scheme implementation to nmil byte code functions
-  - [ ] tree algorithms + gc implementation (rc)
+  - [X] tree algorithms + gc implementation (rc)
     - add/remove/cut/paste ... (as in editors)
   - [ ] reverse order of binary tree + implementation of refcounting
   - [X] depth of binary tree (travers full tree, tail-call-recursively, keeping max depth)
@@ -3648,6 +3648,18 @@ this will include the implementation of
   - [X] single step
   - [X] run to next call/return
   - [X] step over call
+**** call with defaults
+- special call instruction
+  - call​_with​_1​_default ... n​_defaults
+  - defaults are cells before the byte defining the # of locals
+  - defaults are read only
+  - defaults (since cells) must be allocated on even addresses (bit 0=0)
+  - the call instruction pushes these defaults automatically in the stack before executing the function
+  - the defaults are organized reverse =>
+    if function accepts two defaults
+      and is called with the first default explicitly set by the caller
+      and call​_with​_1​_default is used
+    => only the second default is pushed on the stack
 **** refcount qualities
 - provide function w/ ref and w/o ref counting <- for optimization
   - name-convention: function w/ ref counting: ...​_RC
@@ -3662,9 +3674,11 @@ this will include the implementation of
      or a combination of the two
   heap cells may also be:
   - 10000111 -> cell array + more
-  - 10001111 -> native array + more
-  
+  - 10001111 -> native array + more  
 - provide additional info for ref counting (e.g. knowledge about the data)
+**** optimize reference counting
+- [ ] get rid of refcount​_decr​_rt (only use 'ra')
+- [ ] reduce impact/cpu cycles
 **** collect statistics for
 - common two byte combinations <- byte code combinations
   - e.g. combine these into one byte commands
@@ -3678,9 +3692,6 @@ both)
 - remove prefix :: make more common two byte (prefixed) command a single byte command
 - combine cmd op :: combine common byte operand combinations into a 'fast' single byte command
 - decombine :: undo a combined command
-**** optimize reference counting
-- [ ] get rid of refcount​_decr​_rt (only use 'ra')
-- [ ] reduce impact/cpu cycles
 **** IMPLEMENT optimize byte code
 - push_​local_​0, write_​to_​local_​0 :: make this a one byte command (not a short instruction) => speeds up decoding
 - [X] cadr cdar caar cddr :: could be put into a fast instruction
@@ -3708,6 +3719,8 @@ both)
 - [X] send command to surface interactor
 - [X] use colors to separate prompt, output, disassembly
 - [X] allow setting breakpoints on bytecode (at a certain address)
+- [X] allow in place execution of bytecode
+- [X] going back bc steps
 - [ ] add watch on memory <- continuous output of this value after each step
 - [ ] add watch on variable <- implementation could be a trace point (like a breakpoint, but not stopping)
 - [ ] add page view (continuous update) during execution
@@ -3716,7 +3729,6 @@ both)
 - [ ] add call-frame view (continuous update)
 - [ ] inspection of vm variables (zp_​vm_​pc, zp_...)
 - [ ] inspect/manipulate call frame
-- [ ] going back bc steps
 - [ ] inspect/manipulate value stack
 - [-] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
   - [X] cells
@@ -3724,7 +3736,6 @@ both)
   - [ ] structures
   - [ ] strings/native arrays
   - [ ] arrays
-- [ ] allow in place execution of bytecode
 **** how much of the 6510 code should be actually written and tested with the interpreter (and actually used to interpret byte code)?
 **** IDEA for native code implemenation of (parts of) functions
 (have a rough idea of how this could be done, don't actually implement)
