@@ -2625,4 +2625,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-interpreter)))
-                       2515))
+                       2516))

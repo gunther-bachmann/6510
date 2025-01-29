@@ -719,7 +719,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                 (list "stack holds 1 item"
                       "3  (rt)"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 13170))
+                 12951))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -1178,7 +1178,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"))
 
   (inform-check-equal? (cpu-state-clock-cycles prev-4-state)
-                6861))
+                6794))
 
 ;; optimization idea: NIL?_RET instead of NIL?, TRUE_P_RET
 (define REVERSE ;; list :: result=nil -> list
@@ -1506,7 +1506,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)"))
 
   (inform-check-equal? (cpu-state-clock-cycles next-4-state)
-                2346))
+                2289))
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
@@ -2361,7 +2361,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
-                19349)
+                19172)
 
   (check-equal? (cleanup-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -2634,7 +2634,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                29685))
+                29415))
 
 
 ;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
@@ -3498,7 +3498,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                66065)
+                65336)
   (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
