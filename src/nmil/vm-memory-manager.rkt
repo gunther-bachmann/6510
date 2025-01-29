@@ -81,7 +81,7 @@ call frame primitives etc.
                     ))
 
   (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
-    (append (list (org #xc000)
+    (append (list (org #xa000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER))
             bc
             (list (BRK))

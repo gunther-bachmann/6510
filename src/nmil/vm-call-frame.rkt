@@ -46,7 +46,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (require (only-in "./vm-memory-manager-test-utils.rkt" run-code-in-test-on-code remove-labels-for))
 
   (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
-    (append (list (org #xc000)
+    (append (list (org #xa000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_INITIALIZE_CALL_FRAME))
             bc

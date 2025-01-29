@@ -127,7 +127,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
             (list (org #x8000))
             bc-to-wrap
             (list (bc BRK))
-            (list (org #xc000))
+            (list (org #xa000))
             vm-interpreter))
 
 
@@ -2627,4 +2627,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-interpreter)))
-                       2576))
+                       2697))

@@ -205,7 +205,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   (JMP VM_INTERPRETER))
             (list (org #x8000))
             (flatten bc)
-            (list (org #xc000))
+            (list (org #xa000))
             vm-interpreter))
 
   (define (run-bc-wrapped-in-test bc (debug #f))

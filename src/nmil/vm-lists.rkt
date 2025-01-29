@@ -23,7 +23,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
 
   (define (wrap-code-for-test bc)
-    (append (list (org #xc000)
+    (append (list (org #xa000)
                   (JSR VM_INITIALIZE_MEMORY_MANAGER)
                   (JSR VM_INITIALIZE_CALL_FRAME))
             bc
