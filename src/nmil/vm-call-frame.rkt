@@ -10,9 +10,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (require "../6510.rkt")
 (require "../util.rkt")
+(require (only-in racket/list flatten))
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in "../tools/6510-interpreter.rkt" peek-word-at-address cpu-state-clock-cycles peek))
-
 (require (only-in "./vm-memory-manager.rkt"
                   ZP_CALL_FRAME
                   ZP_VM_PC
@@ -27,8 +27,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   vm-regt->string
                   vm-deref-cell-pair-w->string))
 
-
 (module+ test #| after mem init |#
+  (require (only-in "../ast/6510-relocator.rkt" command-len))
+
+
   (define PAGE_AVAIL_0 #x97)
   (define PAGE_AVAIL_0_W #x9700)
   (define PAGE_AVAIL_1 #x96)
@@ -800,3 +802,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           VM_FREE_LOCALS
           vm-memory-manager
           ))
+
+(module+ test #| vm-call-frame |#
+  (inform-check-equal? (foldl + 0 (map command-len (flatten vm-call-frame)))
+                       1443))

@@ -10,8 +10,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 
 ;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
-;; TODO: implement refcount gc for reverse list implementation/interpretation
-;; TODO: implement refcount gc for sorted binary tree functions
 ;; TODO: implement structure access, allocation, deallocation
 ;; TODO: implement array access, allocation, deallocation (native arrays, regular arrays)
 ;; TODO: implement constant pool
@@ -56,11 +54,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 |#
 
 (require "../6510.rkt")
+(require (only-in racket/list flatten))
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader org-for-code-seq))
 (require (only-in "../6510-utils.rkt" word->hex-string high-byte low-byte ))
 (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek-word-at-address))
-(require (only-in "../ast/6510-relocator.rkt" label-string-offsets))
+(require (only-in "../ast/6510-relocator.rkt" label-string-offsets command-len))
 
 (require (only-in racket/list flatten take empty? range))
 
@@ -2614,3 +2613,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           VM_INTERPRETER_OPTABLE
           (list (label END__INTERPRETER_DATA))
           vm-lists))
+
+
+(module+ test #| vm-interpreter |#
+  (inform-check-equal? (foldl + 0 (map command-len (flatten vm-interpreter)))
+                       2552))

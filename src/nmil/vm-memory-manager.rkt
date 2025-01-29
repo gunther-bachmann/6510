@@ -71,6 +71,7 @@ call frame primitives etc.
 (require (only-in "../ast/6510-calc-opcode-facades.rkt" LDA-immediate))
 (require (only-in "../util.rkt" bytes->int low-byte high-byte format-hex-byte format-hex-word))
 (require (only-in racket/list flatten take empty? drop make-list))
+(require (only-in "../ast/6510-relocator.rkt" command-len))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -4949,3 +4950,7 @@ call frame primitives etc.
           VM_INITIAL_MM_REGS
           (list (org #xcf00))
           VM_PAGE_SLOT_DATA))
+
+(module+ test #| vm-lists |#
+  (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
+                       1213))

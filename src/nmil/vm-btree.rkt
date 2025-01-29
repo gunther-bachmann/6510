@@ -241,7 +241,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
     BTREE_REMOVE_VALUE_AT
 
-    BTREE_ROOT_FOR_PATH)
+    BTREE_ROOT_FOR_PATH
+
+    BTREE_REVERSE)
 
 
 ;; (define (btree-make-root value)
@@ -3636,6 +3638,25 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                        " . ((0 . ((4 . ((5 . NIL) . 7)) . 8))"
                        " . NIL))))"))))
 
+(define BTREE_REVERSE  ;; node -> node
+  (list
+   (label BTREE_REVERSE)
+          (byte 0)
+
+          (bc PUSH_NIL)
+          (bc SWAP)
+          (bc PUSH_NIL)
+          (bc SWAP)
+          (bc CALL) (word-ref BTREE_TO_LIST)
+          (bc PUSH_NIL)
+          (bc SWAP)
+          (bc CALL) (word-ref REVERSE)
+          (bc PUSH_NIL)
+          (bc SWAP)
+          (bc CALL) (word-ref BTREE_FROM_LIST)
+
+          (bc RET)))
+
 (define vm-btree
   (flatten
    (append
@@ -3666,8 +3687,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
     BTREE_REMOVE_VALUE_AT
 
-    BTREE_ROOT_FOR_PATH)))
+    BTREE_ROOT_FOR_PATH
+
+    BTREE_REVERSE)))
 
 (module+ test #| vm-btree |#
-  (check-equal? (bc-bytes (flatten vm-btree))
-                489))
+  (inform-check-equal? (bc-bytes (flatten vm-btree))
+                508))

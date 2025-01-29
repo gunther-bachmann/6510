@@ -3537,7 +3537,7 @@ this will include the implementation of
     - there need to be two zero page pointers, one for lowbyte-stack, one for highbyte-stack
   - [X] allow fast call frames (less copying, less space consumption)
   - [X] fix call-frame functions in vm-interpreter
-- [-] implement simple tree algorithms
+- [X] implement simple tree algorithms
   - [X] ordered (not sorted) binary tree (of editor strings)
     see [[file:src/nmil/vm-validate-bt-naive.rkt][scheme implementation]]
     node: car = (ptr = level down | value) <- may not be nil
@@ -3568,7 +3568,7 @@ this will include the implementation of
   - [X] translate scheme implementation to nmil byte code functions
   - [X] tree algorithms + gc implementation (rc)
     - add/remove/cut/paste ... (as in editors)
-  - [ ] reverse order of binary tree + implementation of refcounting
+  - [X] reverse order of binary tree + implementation of refcounting
   - [X] depth of binary tree (travers full tree, tail-call-recursively, keeping max depth)
 - [ ] implement concept of constants
   be aware of pointer tagging that should still work
@@ -3589,9 +3589,9 @@ this will include the implementation of
   - [ ] structures
   - [ ]  strings/native arrays
   - [ ]  arrays
-- [-] get a notion on when to do ref-counting inc/dec and garbage collection
+- [X] get a notion on when to do ref-counting inc/dec and garbage collection
   - [X] refcount primitives (inc/dec/free)
-  - [ ] implement refcount gc for revers function
+  - [X] implement refcount gc for revers function
 
     cell2: [int2 . cell1: [int1 . cell0: [int0 . NIL]]]
     cell5: [int0 . cell4: [int1 . cell3: [int2 . NIL]]]
@@ -3643,12 +3643,50 @@ this will include the implementation of
     | POP​_TO​_LOCAL​_0         |          |        0 |       -1 |
     | WRITE​_TO​_LOCAL​_1       |       -1 |          |          |
     | NIL?​_RET​_LOCAL​_0​_POP​_1 |          |          |          |
-  - [ ] implement refcount gc for tree functions (having pointers in both cells)
+  - [X] implement refcount gc for tree functions (having pointers in both cells)
 - [X] implement basic byte code debugger on top of 6510 debugger
   - [X] single step
   - [X] run to next call/return
   - [X] step over call
-**** call with defaults
+**** IDEA reduce ref counting for locals
+- PULL​_FROM​_LOCAL​_n <- remove the value pulled from the local store => no ref needed counting!
+- sequences of getting a ptr from locals, incrementing ref count, the doing car/cdr, decrementing pointer + incrementing new one
+  can be compacted to only incrementing the final retrieved value
+- incrementing ref count and then doing a destructive NIL? etc. is not necessary either
+  example:
+  #+begin_src scheme
+    (bc WRITE_TO_LOCAL_1)   ;; increment ref count
+    (bc NIL?)               ;; replace tos with boolean result => decrement ref count
+  #+end_src
+- further analyse locals usage and how to reduce number of refcount changes in functions
+- ref counts are important if calling a sub routine <- do refcounting then (and keep that info)
+- leaving a function that has locals
+  - it has called a subfunction => locals were refcounted => upon leaving, decrement refcounts (without deallocation!)
+**** do tracing only on call and ret 
+- print function names, too
+- print stack on call and result on ret
+**** functions allow for metadata (could enhance tracing) and defaults
+(e.g. byte 0 includes flag for existence, absence of metadata, number of defaults and number of locals)
+MDDDLLLL  M : flag for metadata existence
+          DDD : 0..7 default values (or just 0..3)
+          LLLL: 0..15 locals        (or just 0..7)
+
+Metadata existence means: there is an additional cell, pointing to the function string (even aligned, readonly native array)
+offset   content
+----------------
+-2(n+1)  [cell-ptr -> native array with function string name]   <-- even aligend (so that cell-ptr is detected as such)
+-2n      [cell default n]
+         ...
+-2       [cell default 1]
+0        [MDDDLLLL] (byte)
+         [Function BC 0]
+         ...
+         [Function BC x]
+         ? possible one padding byte
+?        [native array function name]                           <-- even aligned ? (really, is there a need for that), or should this be alloced during loading and linking)
+?        [other default values, the default cells are pointing to (e.g. a structure)]
+
+**** call with defaults (related to concept of constants!)
 - special call instruction
   - call​_with​_1​_default ... n​_defaults
   - defaults are cells before the byte defining the # of locals
@@ -3721,6 +3759,7 @@ both)
 - [X] allow setting breakpoints on bytecode (at a certain address)
 - [X] allow in place execution of bytecode
 - [X] going back bc steps
+- [ ] print (shortened) call stack (w/ function names) [ function-name : pc : #locals ]
 - [ ] add watch on memory <- continuous output of this value after each step
 - [ ] add watch on variable <- implementation could be a trace point (like a breakpoint, but not stopping)
 - [ ] add page view (continuous update) during execution

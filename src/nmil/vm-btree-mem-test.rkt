@@ -23,7 +23,7 @@
                     cleanup-strings
                     cleanup-string
                     vm-stack->strings))
-  (require (only-in "../tools/6510-interpreter.rkt" initialize-cpu))
+  (require (only-in "../tools/6510-interpreter.rkt" initialize-cpu cpu-state-clock-cycles))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                     CONS
                     CAR
@@ -325,3 +325,29 @@
                             (vm-cell-pairs-used-info  b-tree-3-state #x97))
                        (make-list 7 "ok")
                        "all pair ptrs in use are referenced only once!")]))
+
+(module+ test #| btree reverse |#
+  (define btree-reverse-0-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0)
+       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc CALL) (word-ref BTREE_REVERSE)
+       (bc EXT) (bc GC_FL)
+       (bc BRK))
+      vm-btree)
+     ))
+
+  (inform-check-equal? (cpu-state-clock-cycles btree-reverse-0-state)
+                       20253)
+  (check-equal? (cleanup-strings (vm-stack->strings btree-reverse-0-state 10 #t))
+                (list "stack holds 1 item"
+                      "(0 . 1)  (rt)"))
+  (check-equal? (vm-cell-pairs-used-num-in-page btree-reverse-0-state #x97)
+                1) ;; is actually the number of cons cells (which is the number of dots in the list above)
+  (check-equal? (map (lambda (str) (regexp-replace #rx"^pair-ptr\\[1\\].*" str "ok"))
+                     (vm-cell-pairs-used-info  btree-reverse-0-state #x97))
+                (make-list 1 "ok")
+                "all pair ptrs in use are referenced only once!"))
