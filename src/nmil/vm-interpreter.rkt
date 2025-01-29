@@ -150,6 +150,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         CL_PUSH_LOCAL_0_CDR
+         NRC_WRITE_TO_LOCAL_0
+         NRC_NIL_P
+         PUSH_CONST_NIL_BEFORE_TOS
          GC_FL
          CELL_EQ
          CAAR
@@ -762,6 +766,28 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define PUSH_LOCAL_2_CDR #xa5)
 (define PUSH_LOCAL_3_CDR #xa7)
 
+(define CL_PUSH_LOCAL_0_CDR #x16)
+(define BC_CL_PUSH_LOCAL_0_CDR
+  (list
+   (label BC_CL_PUSH_LOCAL_0_CDR)
+          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+          (LDY !$00)
+          (LDA (ZP_LOCALS_LB_PTR),y) 
+          (STA ZP_RT)                
+          (STA ZP_RA)
+          (LDA (ZP_LOCALS_HB_PTR),y) 
+          (STA ZP_RT+1)
+          (STA ZP_RA+1)
+          (JSR VM_WRITE_RT_CELL1_TO_RT)
+          (JSR VM_REFCOUNT_INCR_RT)
+          (JSR VM_REFCOUNT_DECR_RA)
+          (LDY !$00)
+          (TYA)
+          (STA (ZP_LOCALS_LB_PTR),y)
+          (STA (ZP_LOCALS_HB_PTR),y)
+          (JMP VM_INTERPRETER_INC_PC)
+))
+
 (define BC_PUSH_LOCAL_CXR
   (flatten
    (list
@@ -835,6 +861,24 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define WRITE_FROM_LOCAL_1 #x83)
 (define WRITE_FROM_LOCAL_2 #x85)
 (define WRITE_FROM_LOCAL_3 #x87)
+
+(define NRC_WRITE_TO_LOCAL_0 #x14)
+(define BC_NRC_WRITE_TO_LOCAL_0
+  (list
+   (label BC_NRC_WRITE_TO_LOCAL_0)
+          (LDY !$00)
+          (LDA ZP_RT)
+          (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
+          (LDA ZP_RT+1)
+          (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(define NRC_NIL_P #x15)
+(define BC_NRC_NIL_P
+  (list
+   (label BC_NRC_NIL_P)
+          (JSR VM_NIL_P_R)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
+          (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_POP_TO_LOCAL_SHORT
   (flatten
@@ -1416,6 +1460,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_SWAP
   (list
    (label BC_SWAP)
+          (JSR VM_CELL_STACK_SWAP)
+          (JMP VM_INTERPRETER_INC_PC)
+
+   (label VM_CELL_STACK_SWAP)
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (TAX)
@@ -1427,7 +1475,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA ZP_RT+1)
           (STA (ZP_CELL_STACK_HB_PTR),y)
           (STX ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (RTS)))
 
 (module+ test #| swap |#
   (skip (check-equal? #t #f "implement")))
@@ -2029,11 +2077,30 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_REFCOUNT_DECR_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
+(define PUSH_CONST_NIL_BEFORE_TOS #x13)
+(define BC_PUSH_CONST_NIL_BEFORE_TOS
+  (list
+   (label BC_PUSH_CONST_NIL_BEFORE_TOS)
+          (LDY ZP_CELL_STACK_TOS)
+          (INY)
+          (BEQ SLOW_PUSH__PUSH_NIL_BEFORE_TOS)
+          (STY ZP_CELL_STACK_TOS)
+          (LDA !<TAGGED_NIL)
+          (STA (ZP_CELL_STACK_LB_PTR),y)
+          (LDA !>TAGGED_NIL)
+          (STA (ZP_CELL_STACK_HB_PTR),y)
+          (JMP VM_INTERPRETER_INC_PC)
+
+   (label SLOW_PUSH__PUSH_NIL_BEFORE_TOS)
+          (JSR VM_CELL_STACK_PUSH_NIL_R)
+          (JSR VM_CELL_STACK_SWAP)
+          (JMP VM_INTERPRETER_INC_PC)))
+
 (define BC_PUSH_CONST_NIL
   (list
    (label BC_PUSH_CONST_NIL)    
-   (JSR VM_CELL_STACK_PUSH_NIL_R)        ;; push NIL on the stack
-   (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
+          (JSR VM_CELL_STACK_PUSH_NIL_R)        ;; push NIL on the stack
+          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (module+ test #| bc-push-const-nil |#
   (define bc-push-const-nil-state
@@ -2399,8 +2466,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
-   (list
-    (label VM_INTERPRETER_OPTABLE)
+   (list                                          ;; calc
+    (label VM_INTERPRETER_OPTABLE)                ;; offset  byte-code
            (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 (RC)
            (word-ref BC_BNOP)                     ;; 02  <-  01 
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
@@ -2420,10 +2487,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref BC_POP)                      ;; 22  <-  11
            (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 26  <-  13 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 28  <-  14 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 2a  <-  15 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 2c  <-  16 reserved
+           (word-ref BC_PUSH_CONST_NIL_BEFORE_TOS);; 26  <-  13 
+           (word-ref BC_NRC_WRITE_TO_LOCAL_0)     ;; 28  <-  14 
+           (word-ref BC_NRC_NIL_P)                ;; 2a  <-  15 
+           (word-ref BC_CL_PUSH_LOCAL_0_CDR)      ;; 2c  <-  16 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2e  <-  17 reserved
            (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
@@ -2613,6 +2680,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INC_INT
           BC_BNOP
           BC_GC_FL
+          BC_PUSH_CONST_NIL_BEFORE_TOS
+          BC_NRC_WRITE_TO_LOCAL_0
+          BC_NRC_NIL_P
+          BC_CL_PUSH_LOCAL_0_CDR
           VM_INTERPRETER
           (list (label END__INTERPRETER))
           VM_INTERPRETER_OPTABLE_EXT1_HB

@@ -119,6 +119,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  CL_PUSH_LOCAL_0_CDR
+                  NRC_WRITE_TO_LOCAL_0
+                  NRC_NIL_P
+                  PUSH_CONST_NIL_BEFORE_TOS
                   CELL_EQ
                   EXT
                   CAAR
@@ -1185,12 +1189,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   (list
    (label REVERSE)
           (byte 1)
-          (bc WRITE_TO_LOCAL_0)     ;; local0 = list
-          (bc NIL?)
+          (bc NRC_WRITE_TO_LOCAL_0)     ;; local0 = list
+          (bc NRC_NIL_P)
           (bc TRUE_P_RET)           ;; return second parameter (result)
           (bc PUSH_LOCAL_0_CAR) 
           (bc CONS)
-          (bc PUSH_LOCAL_0_CDR)
+          (bc CL_PUSH_LOCAL_0_CDR)
           ;; (bc GOTO) (byte $fa)
           (bc TAIL_CALL)))
 
@@ -1228,17 +1232,16 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (list
      (label APPEND)
             (byte 0)
-            (bc PUSH_NIL)
-            (bc SWAP)              ;; head-list :: NIL :: tail-list
+            (bc PUSH_CONST_NIL_BEFORE_TOS)  ;; head-list :: NIL :: tail-list
             (bc CALL) (word-ref REVERSE)
   
       (label LOOP__APPEND)         ;; (reverse head-list) :: tail-list
-            (bc WRITE_TO_LOCAL_0)  ;; local0 = reversed list     <- loop
-            (bc NIL?)
+            (bc NRC_WRITE_TO_LOCAL_0)  ;; local0 = reversed list     <- loop
+            (bc NRC_NIL_P)
             (bc TRUE_P_RET)        ;; return second (which is tail-list)
             (bc PUSH_LOCAL_0_CAR)  ;; (car (reversed head-list)) :: tail-list
             (bc CONS)              ;; ((car (reversed head-list)) . tail-list)
-            (bc PUSH_LOCAL_0_CDR)  ;;
+            (bc CL_PUSH_LOCAL_0_CDR)  ;;
             (bc GOTO) (bc-rel-ref LOOP__APPEND) ;; (-6) loop ->
    ))))
 
