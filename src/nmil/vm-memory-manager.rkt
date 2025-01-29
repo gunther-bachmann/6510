@@ -341,7 +341,7 @@ call frame primitives etc.
 (define (vm-cell-pair-free-tree->string state)
   (define cell-pair-root (peek-word-at-address state #xcec5))
   (cond
-    [(= 0 cell-pair-root) "root is initial"]
+    [(= 0 (bitwise-and #xff00 cell-pair-root)) "root is initial"]
     [else
      (format "pair $~a -> [ ~a . ~a ]"
              (format-hex-word cell-pair-root)
@@ -2065,15 +2065,15 @@ call frame primitives etc.
    (label VM_REFCOUNT_DECR_RT)
           (LDA ZP_RT)
           (BEQ UNKNOWN__VM_REFCOUNT_DECR_RT)
-          (TAY)
           (LSR)
           (BCC VM_REFCOUNT_DECR_RT__CELL_PTR__LSR)
           (LSR)
           (BCC VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR__LSR)
           ;; check other types of cells
-          (CPY !TAG_BYTE_CELL_ARRAY)
+          (LDA ZP_RT)
+          (CMP !TAG_BYTE_CELL_ARRAY)
           (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR_RT)
-          (CPY !TAG_BYTE_NATIVE_ARRAY)
+          (CMP !TAG_BYTE_NATIVE_ARRAY)
           (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_RT)
 
    (label UNKNOWN__VM_REFCOUNT_DECR_RT)
@@ -2099,10 +2099,11 @@ call frame primitives etc.
           (STA PAGE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
    (label PAGE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-          (JMP VM_FREE_CELL_PAIR_PTR_IN_RT) ;; free delayed
+          (BEQ FREE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
    (label DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
           (RTS)
+   (label FREE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+          (JMP VM_FREE_CELL_PAIR_PTR_IN_RT) ;; free delayed
           
    ;; input: cell ptr in ZP_RT
    ;; decrement ref count, if 0 deallocate
@@ -2138,15 +2139,15 @@ call frame primitives etc.
    (label VM_REFCOUNT_DECR_RA)
           (LDA ZP_RA)
           (BEQ UNKNOWN__VM_REFCOUNT_DECR_RA)
-          (TAY)
           (LSR)
           (BCC VM_REFCOUNT_DECR_RA__CELL_PTR__LSR)
           (LSR)
           (BCC VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR__LSR)
           ;; check other types of cells
-          (CPY !TAG_BYTE_CELL_ARRAY)
+          (LDA ZP_RA)
+          (CMP !TAG_BYTE_CELL_ARRAY)
           (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR_RA)
-          (CPY !TAG_BYTE_NATIVE_ARRAY)
+          (CMP !TAG_BYTE_NATIVE_ARRAY)
           (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_RA)
 
    (label UNKNOWN__VM_REFCOUNT_DECR_RA)
@@ -2207,15 +2208,15 @@ call frame primitives etc.
    (label VM_REFCOUNT_INCR_RT)
           (LDA ZP_RT)                                   ;; load tage byte
           (BEQ UNKNOWN__VM_REFCOUNT_INCR_RT)
-          (TAY)
           (LSR)
           (BCC VM_REFCOUNT_INCR_RT__CELL_PTR__LSR)      ;; lowest bit = 0 => cell-ptr
           (LSR)
           (BCC VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR__LSR)     ;; bit1 = 0 => cell-pair-ptr
           ;; check other types of cells
-          (CPY !TAG_BYTE_CELL_ARRAY)
+          (LDA ZP_RT)                                   ;; load tage byte
+          (CMP !TAG_BYTE_CELL_ARRAY)
           (BEQ INCR_CELL_ARRAY__VM_REFCOUNT_INCR_RT)
-          (CPY !TAG_BYTE_NATIVE_ARRAY)
+          (CMP !TAG_BYTE_NATIVE_ARRAY)
           (BEQ INCR_NATIVE_ARRAY__VM_REFCOUNT_INCR_RT)
 
    (label UNKNOWN__VM_REFCOUNT_INCR_RT)
@@ -2643,19 +2644,17 @@ call frame primitives etc.
           (DEY)
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (LDA (ZP_RA),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
-          (INY)
-          (LDA (ZP_RA),y)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (BNE CHECK_CELL1__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; since must be !=0, it cannot be on page 0 always branch!
 
    (label CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
           ;; queue is now empty, this was the last cell-pair
           ;; clear queue
           (LDA !$00)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; just reset highbyte (checked at start of this function)
+          ;; (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
 
    (label CHECK_CELL1__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
           ;; now check cell1 on remaining ptrs
@@ -2683,8 +2682,7 @@ call frame primitives etc.
 
   (label CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
           ;; now add ra to its page as free cell-pair on that page
-          (LDA ZP_RA+1)                 ;; A = page -> x
-          (TAX)
+          (LDX ZP_RA+1)                 ;; A = page -> x
           (LDA $cf00,x)         ;; current first free cell offset
           (LDY !$00)
           (STA (ZP_RA),y)       ;; write into lowbyte of cell pointed to by RA
@@ -2751,11 +2749,10 @@ call frame primitives etc.
           ;; (BCC CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; <- this cannot happen! cell0 is freed before entering it into the tree
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue 
+          ;; (LDA (ZP_RT),y)
+          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (LDA (ZP_RT),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
-          (INY)
-          (LDA (ZP_RT),y)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (BNE CHECK_CELL1__VM_ALLOC_CELL_PAIR_PTR_TO_RT) ;; since must be !=0, it cannot be on page 0 always branch!
 
    ;; (label CELL0_IS_CELL_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
@@ -2772,7 +2769,7 @@ call frame primitives etc.
    (label CELL0_IS_NO_PTR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
           (LDA !$00)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          ;; (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
 
    (label CHECK_CELL1__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
           ;; check whether cell1 is non-ptr or ptr
@@ -2981,10 +2978,10 @@ call frame primitives etc.
                 (list #x00)
                 "refcount of cc05 (is at cc01) is zero again!")
   (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-5-state)
-                (format "pair $~a05 -> [ empty . int $0001 ]" (format-hex-byte PAGE_AVAIL_0)))
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state (+ PAGE_AVAIL_0_W #x05) (+ PAGE_AVAIL_0_W #x08))
-                (list #x00 #x00 #x03 #x01)
-                "pair at cc05 holds 00 in cell0 (no further elements in queue) and int 1 in cell1")
+                (format "pair $~a05 -> [ pair-ptr NIL . int $0001 ]" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state (+ PAGE_AVAIL_0_W #x06) (+ PAGE_AVAIL_0_W #x08))
+                (list #x00 #x03 #x01)
+                "pair at cc06 holds 00 in cell0-page (no further elements in queue) and int 1 in cell1")
   (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-5-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
@@ -3215,16 +3212,16 @@ call frame primitives etc.
 
           ;; check cell0
           (LDA (ZP_RT),y) ;; LOWBYTE OF FIRST cell0
-          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
+          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT) ;; empty
+          (STA ZP_TEMP)
           (AND !$03)
           (CMP !$03)
           (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
           ;; make sure to call free on cell0 (could be any type of cell)
           ;; remember ZP_PTR
 
+   (label CELL_0_IS_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
           ;; store cell0 into ZP_TEMP (for later tail call of free)
-          (LDA (ZP_RT),y)
-          (STA ZP_TEMP)
           (INY)
           (LDA (ZP_RT),y)
           (STA ZP_TEMP+1)
@@ -3240,6 +3237,7 @@ call frame primitives etc.
           (DEY)
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
           (STA (ZP_RT),y)
+
           ;; set new root to point to cell-pair
           (LDA ZP_RT+1)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
@@ -3277,6 +3275,7 @@ call frame primitives etc.
           ;; check cell0
           (LDA (ZP_RA),y) ;; LOWBYTE OF FIRST cell0
           (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RA)
+          (STA ZP_TEMP)
           (AND !$03)
           (CMP !$03)
           (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RA)
@@ -3284,8 +3283,6 @@ call frame primitives etc.
           ;; remember ZP_PTR
 
           ;; store cell0 into ZP_TEMP (for later tail call of free)
-          (LDA (ZP_RA),y)
-          (STA ZP_TEMP)
           (INY)
           (LDA (ZP_RA),y)
           (STA ZP_TEMP+1)
@@ -3558,7 +3555,7 @@ call frame primitives etc.
                 (format "pair-ptr[1] $~a09"
                         (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
-                (format "pair $~a05 -> [ empty . pair-ptr NIL ]" (format-hex-byte PAGE_AVAIL_0)))
+                (format "pair $~a05 -> [ pair-ptr NIL . pair-ptr NIL ]" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-page->strings use-case-2-c-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
@@ -4927,6 +4924,6 @@ call frame primitives etc.
           (list (org #xcf00))
           VM_PAGE_SLOT_DATA))
 
-(module+ test #| vm-lists |#
+(module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1213))
+                       1182))

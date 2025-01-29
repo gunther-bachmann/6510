@@ -334,6 +334,7 @@
        (bc PUSH_INT_0)
        (bc PUSH_INT_1)
        (bc CONS)
+       (bc BNOP)
        (bc CALL) (word-ref BTREE_REVERSE)
        (bc EXT) (bc GC_FL)
        (bc BRK))
@@ -341,7 +342,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-reverse-0-state)
-                       20253)
+                       16857)
   (check-equal? (cleanup-strings (vm-stack->strings btree-reverse-0-state 10 #t))
                 (list "stack holds 1 item"
                       "(0 . 1)  (rt)"))
