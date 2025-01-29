@@ -230,4 +230,4 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test #| vm-lists |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-call-frame)))
-                       1472))
+                       1593))

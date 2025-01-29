@@ -3802,243 +3802,242 @@ call frame primitives etc.
 
 ;; allocate a slot of min A size, allocating a new page if necessary
 ;; input:  A = size
-;; output: ZP_PTR2 = available slot of the given size (or a bit more)
+;; output: ZP_RA = available slot of the given size (or a bit more)
 ;;         Y = actual size
-;; (define VM_ALLOC_M1_SLOT_TO_ZP_PTR2
-;;   (list
-;;    (label VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
-;;           (LDX !$00)
-;;           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+0)
-;;           (BPL J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+(define VM_ALLOC_M1_SLOT_TO_RA
+  (list
+   (label VM_ALLOC_M1_SLOT_TO_RA)
+          (LDX !$00)
+          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+0)
+          (BPL J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
 
-;;    (label VM_ALLOC_SLOT__TYPE_X_STORE)
-;;           (STX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (JSR VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
+   (label VM_ALLOC_SLOT__TYPE_X_STORE)
+          (STX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (JSR VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
 
-;;    (label VM_ALLOC_SLOT_TYPE_X)
-;;           (LDA VM_FREE_M1_PAGE_P0,x) ;;
-;;           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; if the current free page is $00 (there is no page marked as having free slots) => allocate new page
+   (label VM_ALLOC_SLOT_TYPE_X)
+          (LDA VM_FREE_M1_PAGE_P0,x) ;;
+          (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; if the current free page is $00 (there is no page marked as having free slots) => allocate new page
 
-;;           ;; ensure zp_ptr2 points into the page
-;;           (STA ZP_PTR2+1)
-;;           (STA INC_CMD__VM_ALLOC_SLOT_TYPE_X+2)
-;;           (TAX)
-;;           (LDY VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
-;;           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)    ;; if =0 allocate new page (no more free slots on this page)
-;;           ;; ensure zp_ptr2 points to the slot!
+          ;; ensure zp_ptr2 points into the page
+          (STA ZP_RA+1)
+          (STA INC_CMD__VM_ALLOC_SLOT_TYPE_X+2)
+          (TAX)
+          (LDY VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
+          (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)    ;; if =0 allocate new page (no more free slots on this page)
+          ;; ensure zp_ptr2 points to the slot!
 
-;;    (label CONTINUE__VM_ALLOC_SLOT_TYPE_X)
-;;           (STY ZP_PTR2)
+   (label CONTINUE__VM_ALLOC_SLOT_TYPE_X)
+          (STY ZP_RA)
 
-;;           ;; now get the next free slot (from linked list in this page)
-;;           (LDY !$00)
-;;           (LDA (ZP_PTR2),y) ;; content of free slot points to the next free one (or 00)
-;;           (STA VM_PAGE_SLOT_DATA,x)           ;; set next free slot for this page (x is still page)
+          ;; now get the next free slot (from linked list in this page)
+          (LDY !$00)
+          (LDA (ZP_RA),y) ;; content of free slot points to the next free one (or 00)
+          (STA VM_PAGE_SLOT_DATA,x)           ;; set next free slot for this page (x is still page)
 
-;;           ;; ensure y holds the actual available slot size
-;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (LDY INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
-;;           (DEY)
+          ;; ensure y holds the actual available slot size
+          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (LDY INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
+          (DEY)
 
-;;    (label INC_CMD__VM_ALLOC_SLOT_TYPE_X)
-;;           (INC $c002) ;; $c0 is overwritten with current page (increases the number of slots actually used)
+   (label INC_CMD__VM_ALLOC_SLOT_TYPE_X)
+          (INC $c002) ;; $c0 is overwritten with current page (increases the number of slots actually used)
 
-;;           (RTS)
+          (RTS)
 
-;;    (label FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; current page is full, search first non full (or end of list)
-;;           ;; A = page, X = page, Y = 0
-;;           (STA NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X+2)
+   (label FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; current page is full, search first non full (or end of list)
+          ;; A = page, X = page, Y = 0
+          (STA NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X+2)
 
-;;    (label NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X)
-;;           (LDA $C001) ;; $c0 is overwritten
-;;           (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next page ptr = $00 => end reached, no more pages
-;;           ;; check whether this page is full
-;;           (TAX)
-;;           (LDY VM_PAGE_SLOT_DATA,x)
-;;           (BEQ FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next free slot for page is 00 => page is full, try to find next
-;;           ;; page is not full => this is the new head
-;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (STA VM_FREE_M1_PAGE_P0,x)
-;;           (STA ZP_PTR2+1)
-;;           (CLC)
-;;           (BCC CONTINUE__VM_ALLOC_SLOT_TYPE_X)
+   (label NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X)
+          (LDA $C001) ;; $c0 is overwritten
+          (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next page ptr = $00 => end reached, no more pages
+          ;; check whether this page is full
+          (TAX)
+          (LDY VM_PAGE_SLOT_DATA,x)
+          (BEQ FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next free slot for page is 00 => page is full, try to find next
+          ;; page is not full => this is the new head
+          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (STA VM_FREE_M1_PAGE_P0,x)
+          (STA ZP_RA+1)
+          (CLC)
+          (BCC CONTINUE__VM_ALLOC_SLOT_TYPE_X)
 
-;;    (label NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
-;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (CLC)
-;;           (BCC VM_ALLOC_SLOT_TYPE_X)
+   (label NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
+          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (CLC)
+          (BCC VM_ALLOC_SLOT_TYPE_X)
 
-;;    (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+1)
-;;           (BPL J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (LDX !$01)
-;;           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+   (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+1)
+          (BPL J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (LDX !$01)
+          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
-;;    (label J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+2)
-;;           (BPL J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (LDX !$02)
-;;           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+   (label J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+2)
+          (BPL J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (LDX !$02)
+          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
-;;    (label J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+3)
-;;           (BPL J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (LDX !$03)
-;;           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+   (label J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+3)
+          (BPL J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (LDX !$03)
+          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
-;;    (label J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-;;           ;; error, no slot this large can be allocated
-;;           (BRK)
+   (label J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          ;; error, no slot this large can be allocated
+          (BRK)
 
-;;    (label PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-;;           (byte $00) ;; local variable holding the selected page typ (0 = slots up to 17 bytes, 2 up to 29 bytes ...)
-;;           ))
+   (label PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (byte $00) ;; local variable holding the selected page typ (0 = slots up to 17 bytes, 2 up to 29 bytes ...)
+          ))
 
-;; (module+ test #| vm_alloc_bucket_slot, allocate one slot of size $0b |#
-;;   (define test-alloc-bucket-slot-code
-;;     (list
-;;      ;; fill page with $ff
-;;             (LDA !$FF)
-;;             (LDX !$00)
-;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-;;             (DEX)
-;;             (STA $cc00,x)
-;;             (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+(module+ test #| vm_alloc_bucket_slot, allocate one slot of size $0b |#
+  (define test-alloc-bucket-slot-code
+    (list
+     ;; fill page with $ff
+            (LDA !$FF)
+            (LDX !$00)
+     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+            (DEX)
+            (ast-opcode-cmd '() (list 157 0 PAGE_AVAIL_0)) ;; (STA $cc00,x)
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-;;             ;; now allocate the page
-;;             (LDA !$0b) ;; want slot of size 11
-;;             (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+            ;; now allocate the page
+            (LDA !$0b) ;; want slot of size 11
+            (JSR VM_ALLOC_M1_SLOT_TO_RA)
 
-;;             (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
-;;             (STA ZP_TEMP)))
+            (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
+            (STA ZP_TEMP)))
 
-;;   (define test-alloc-bucket-slot-state-after
-;;     (run-code-in-test test-alloc-bucket-slot-code))
+  (define test-alloc-bucket-slot-state-after
+    (run-code-in-test test-alloc-bucket-slot-code))
 
-;;   (check-equal? (memory-list test-alloc-bucket-slot-state-after #xcc03 #xcc04)
-;;                 (list #x00 #x16)
-;;                 "slot0: refcount 0, next free slot at offset $16")
-;;   (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_PTR2 (add1 ZP_PTR2))
-;;                 (list #x04 #xcc)
-;;                 "allocated slot is at cc04")
-;;   (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_TEMP ZP_TEMP)
-;;                 (list #xcc)
-;;                 "free page for slot type 0 is $cc")
-;;   (check-equal? (vm-page->strings test-alloc-bucket-slot-state-after #xcc)
-;;                 '("page-type:      m1 page p0"
-;;                   "previous page:  $00"
-;;                   "slots used:     1"
-;;                   "next free slot: $16")))
+  (check-equal? (memory-list test-alloc-bucket-slot-state-after (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x04))
+                (list #x00 #x16)
+                "slot0: refcount 0, next free slot at offset $16")
+  (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_RA (add1 ZP_RA))
+                (list #x04 PAGE_AVAIL_0)
+                "allocated slot is at xx04")
+  (check-equal? (memory-list test-alloc-bucket-slot-state-after ZP_TEMP ZP_TEMP)
+                (list PAGE_AVAIL_0)
+                "free page for slot type 0 is $cc")
+  (check-equal? (vm-page->strings test-alloc-bucket-slot-state-after PAGE_AVAIL_0)
+                '("page-type:      m1 page p0"
+                  "previous page:  $00"
+                  "slots used:     1"
+                  "next free slot: $16")))
 
-;; (module+ test #| vm_alloc_bucket_slot 2 times slot size $0b and $09 |#
-;;   (define test-alloc-bucket-slot-2x-code
-;;     (list
-;;      ;; fill page with $ff
-;;      (LDA !$FF)
-;;      (LDX !$00)
-;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-;;      (DEX)
-;;      (STA $cc00,x)
-;;      (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+(module+ test #| vm_alloc_bucket_slot 2 times slot size $0b and $09 |#
+  (define test-alloc-bucket-slot-2x-code
+    (list
+     ;; fill page with $ff
+     (LDA !$FF)
+     (LDX !$00)
+     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+     (DEX)
+     (STA $cc00,x)
+     (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-;;      ;; now allocate the page
-;;      (LDA !$0b) ;; want slot of size 11
-;;      (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
-;;      (LDA !$09) ;; want slot of size 9, should be on the same page
-;;      (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+     ;; now allocate the page
+     (LDA !$0b) ;; want slot of size 11
+     (JSR VM_ALLOC_M1_SLOT_TO_RA)
+     (LDA !$09) ;; want slot of size 9, should be on the same page
+     (JSR VM_ALLOC_M1_SLOT_TO_RA)
 
-;;      (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
-;;      (STA ZP_TEMP)))
+     (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
+     (STA ZP_TEMP)))
 
-;;   (define test-alloc-bucket-slot-2x-state-after
-;;     (run-code-in-test test-alloc-bucket-slot-2x-code))
+  (define test-alloc-bucket-slot-2x-state-after
+    (run-code-in-test test-alloc-bucket-slot-2x-code))
 
-;;   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after #xcc15 #xcc16)
-;;                 (list #x00 #x28)
-;;                 "slot1: refcount 0, next free slot at offset $28")
-;;   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_PTR2 (add1 ZP_PTR2))
-;;                 (list #x16 #xcc)
-;;                 "allocated slot is at cc16")
-;;   (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_TEMP ZP_TEMP)
-;;                 (list #xcc)
-;;                 "free page for slot type 0 is $cc")
-;;   (check-equal? (vm-page->strings test-alloc-bucket-slot-2x-state-after #xcc)
-;;                 '("page-type:      m1 page p0"
-;;                   "previous page:  $00"
-;;                   "slots used:     2"
-;;                   "next free slot: $28")))
+  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after (+ PAGE_AVAIL_0_W #x15) (+ PAGE_AVAIL_0_W #x16))
+                (list #x00 #x28)
+                "slot1: refcount 0, next free slot at offset $28")
+  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_RA (add1 ZP_RA))
+                (list #x16 PAGE_AVAIL_0)
+                "allocated slot is at xx16")
+  (check-equal? (memory-list test-alloc-bucket-slot-2x-state-after ZP_TEMP ZP_TEMP)
+                (list PAGE_AVAIL_0)
+                "free page for slot type 0 is $xx")
+  (check-equal? (vm-page->strings test-alloc-bucket-slot-2x-state-after PAGE_AVAIL_0)
+                '("page-type:      m1 page p0"
+                  "previous page:  $00"
+                  "slots used:     2"
+                  "next free slot: $28")))
 
-;; (module+ test #| vm_alloc_bucket_slot, alloc 10 x slot size $14 (actual $20)  |#
-;;   (define test-alloc-bucket-slot-xx-code
-;;     (list
-;;      ;; fill page with $ff
-;;      (LDA !$FF)
-;;      (LDY !$02) ;; 2 pages
-;;      (LDX !$00) ;; 256 bytes
-;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-;;      (DEX)
-;;      (STA $cb00,x)
-;;      (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-;;      (DEY)
-;;      (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+(module+ test #| vm_alloc_bucket_slot, alloc 10 x slot size $14 (actual $20)  |#
+  (define test-alloc-bucket-slot-xx-code
+    (list
+            ;; fill page with $ff
+            (LDA !$FF)
+            (LDY !$02) ;; 2 pages
+            (LDX !$00) ;; 256 bytes
+     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+            (DEX)
+            (ast-opcode-cmd '() (list 157 0 PAGE_AVAIL_1)) ;; (STA $cb00,x)
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+            (DEY)
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-;;      ;; loop over ...
-;;      (LDA !$0a)
-;;      (STA LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+            ;; loop over ...
+            (LDA !$0a)
+            (STA LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
 
-;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
-;;      (LDA !$14) ;; want slot of size 20
-;;      (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2) ;; ... slot allocation
-;;      (DEC LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
-;;      (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
+     (label LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
+            (LDA !$14) ;; want slot of size 20
+            (JSR VM_ALLOC_M1_SLOT_TO_RA) ;; ... slot allocation
+            (DEC LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
 
-;;      (JMP TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
+            (JMP TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
 
-;;      (label LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
-;;      (byte $20)
+     (label LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
+            (byte $20)
 
 
-;;      (label TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
-;;      (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
-;;      (STA ZP_TEMP)))
+     (label TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
+            (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
+            (STA ZP_TEMP)))
 
-;;   (define test-alloc-bucket-slot-xx-state-after
-;;     (run-code-in-test test-alloc-bucket-slot-xx-code))
+  (define test-alloc-bucket-slot-xx-state-after
+    (run-code-in-test test-alloc-bucket-slot-xx-code))
 
-;;   (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_PTR2 (add1 ZP_PTR2))
-;;                 (list #x2e #xcb)
-;;                 "allocated slot is at cb2e (slot1 on page 2)")
-;;   (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after #xcb4b #xcb4c)
-;;                 (list #x00 #x6a)
-;;                 "first free slot page2: refcount 0, next free slot at offset $6a")
-;;   (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_TEMP ZP_TEMP)
-;;                 (list #xcb)
-;;                 "free page for slot type 1 is $cb")
-;;   (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after #xcc)
-;;                 '("page-type:      m1 page p1"
-;;                   "previous page:  $00"
-;;                   "slots used:     8"
-;;                   "next free slot: $00"))
-;;   (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after #xcb)
-;;                 '("page-type:      m1 page p1"
-;;                   "previous page:  $00"
-;;                   "slots used:     2"
-;;                   "next free slot: $4c")))
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_RA (add1 ZP_RA))
+                (list #x2e PAGE_AVAIL_1)
+                "allocated slot is at cb2e (slot1 on page 2)")
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after (+ PAGE_AVAIL_1_W #x4b) (+ PAGE_AVAIL_1_W #x4c))
+                (list #x00 #x6a)
+                "first free slot page2: refcount 0, next free slot at offset $6a")
+  (check-equal? (memory-list test-alloc-bucket-slot-xx-state-after ZP_TEMP ZP_TEMP)
+                (list PAGE_AVAIL_1)
+                "free page for slot type 1 is $cb")
+  (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after PAGE_AVAIL_0)
+                '("page-type:      m1 page p1"
+                  "previous page:  $00"
+                  "slots used:     8"
+                  "next free slot: $00"))
+  (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after PAGE_AVAIL_1)
+                '("page-type:      m1 page p1"
+                  "previous page:  $00"
+                  "slots used:     2"
+                  "next free slot: $4c")))
+
   ;; free-page for slot type 0 = cc
 
 
 ;; inc ref count bucket slot
 ;; dec ref count bucket slot
 
-;; TODO: adjust to RT/RA usage!
-
-;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
-(define VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS
+;; remove full pages in the free list of pages of the same type as are currently in ZP_RA
+(define VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
   (list
-   (label VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
-          (LDA ZP_PTR2+1)
+   (label VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS)
+          (LDA ZP_RA+1)
           (STA READ_ENC_PAGE_TYPE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS+2)
    (label READ_ENC_PAGE_TYPE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
           (LDA $c000)
@@ -4068,180 +4067,180 @@ call frame primitives etc.
    (label DONE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
           (RTS)))
 
-;; put this page as head of the page free list for slots of type as in ZP_PTR2
-(define VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS
+;; put this page as head of the page free list for slots of type as in ZP_RA
+(define VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
   (list
-   (label VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS)
-          (LDA ZP_PTR2)
+   (label VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS)
+          (LDA ZP_RA)
           (STA ZP_TEMP) ;; keep for later
 
           (LDA !$00)    ;; set to zero
-          (STA ZP_PTR2)
+          (STA ZP_RA)
 
           (LDY !$01)
-          (LDA (ZP_PTR2),y) ;; get previous
-          (BNE CONTINUE_WITH_RESTORE__VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS)     ;; is != 0 => is still part of the list, don't change the list
+          (LDA (ZP_RA),y) ;; get previous
+          (BNE CONTINUE_WITH_RESTORE__VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS)     ;; is != 0 => is still part of the list, don't change the list
           ;; is no longer part of the free list of pages, add this page at the head of the page
 
           (DEY) ;; now 0
-          (LDA (ZP_PTR2),y) ;; get encoded page type
+          (LDA (ZP_RA),y) ;; get encoded page type
           (AND !$03)
           (TAX) ;; now x = page type
 
           (LDA VM_FREE_M1_PAGE_P0,x)
 
           (INY) ;; now 1
-          (STA (ZP_PTR2),y) ;; set previous
+          (STA (ZP_RA),y) ;; set previous
 
           ;; x = page type, a = page
-          (LDA ZP_PTR2+1)
+          (LDA ZP_RA+1)
           (STA VM_FREE_M1_PAGE_P0,x)
           (TAX)  ;; x = page
 
-   (label CONTINUE_WITH_RESTORE__VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS)
+   (label CONTINUE_WITH_RESTORE__VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS)
           (LDA ZP_TEMP)
-          (STA ZP_PTR2) ;; restore
+          (STA ZP_RA) ;; restore
           (LDA VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
 
           (RTS)
 ))
 
-;; input:  ZP_PTR2
-;; output: ZP_PTR2 is invalid
+;; input:  ZP_RA
+;; output: ZP_RA is invalid
 ;; currently once allocated pages are not garbage collected. this is bad and needs to be changed
 ;; (e.g. keep count of used slots)? used slots = 0 => free page
 ;; INFO: NO GC! (this must be done, freeing specific types (e.g. an array) <- knows the number of slots etc.
 ;;       REF COUNT IS SET TO ZERO
-(define VM_FREE_M1_SLOT_IN_ZP_PTR2
+(define VM_FREE_M1_SLOT_IN_RA
   (list
-   (label VM_FREE_M1_SLOT_IN_ZP_PTR2)   
-   ;;        ;; make sure to remove fulls from free page list first !!
-   ;;        (JSR VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
+   (label VM_FREE_M1_SLOT_IN_RA)   
+          ;; make sure to remove fulls from free page list first !!
+          (JSR VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS)
 
-   ;;        ;; now free the slot
-   ;; (label REGULAR_FREE__VM_FREE_M1_SLOT_IN_ZP_PTR2)
-   ;;        (LDX ZP_PTR2+1)
-   ;;        (STX DEC_CMD__VM_FREE_M1_SLOT_IN_ZP_PTR2+2)    ;; write page for later dec execution
-   ;;        (LDA VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
-   ;;        (BNE CONTINUE__VM_FREE_M1_SLOT_IN_ZP_PTR2)     ;; regular free
+          ;; now free the slot
+   (label REGULAR_FREE__VM_FREE_M1_SLOT_IN_RA)
+          (LDX ZP_RA+1)
+          (STX DEC_CMD__VM_FREE_M1_SLOT_IN_RA+2)    ;; write page for later dec execution
+          (LDA VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
+          (BNE CONTINUE__VM_FREE_M1_SLOT_IN_RA)     ;; regular free
 
-   ;;        ;; this page was full (since next free slot was 0) => register with the list of pages with free slots
-   ;;        (JSR VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS)
-   ;;        (LDX DEC_CMD__VM_FREE_M1_SLOT_IN_ZP_PTR2+2)    ;; restore x
-   ;;        (LDA !$00)                              ;; next free slot offset (=0)
+          ;; this page was full (since next free slot was 0) => register with the list of pages with free slots
+          (JSR VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS)
+          (LDX DEC_CMD__VM_FREE_M1_SLOT_IN_RA+2)    ;; restore x
+          (LDA !$00)                              ;; next free slot offset (=0)
 
-   ;; (label CONTINUE__VM_FREE_M1_SLOT_IN_ZP_PTR2)
-   ;;        (LDY !$00)
-   ;;        (STA (ZP_PTR2),y)                       ;; set (zp_ptr) = previous free
-   ;;        (LDA ZP_PTR2)                           ;; low byte of pointer = new free slot
-   ;;        (STA VM_PAGE_SLOT_DATA,x)           ;; set new first free slot offset
+   (label CONTINUE__VM_FREE_M1_SLOT_IN_RA)
+          (LDY !$00)
+          (STA (ZP_RA),y)                       ;; set (zp_ptr) = previous free
+          (LDA ZP_RA)                           ;; low byte of pointer = new free slot
+          (STA VM_PAGE_SLOT_DATA,x)           ;; set new first free slot offset
 
-   ;;        (DEC ZP_PTR2)                           ;; now points to ref count
-   ;;        (TYA)                                   ;; y is still 0 => a := 0
-   ;;        (STA (ZP_PTR2),y)                       ;; set refcount := 0
+          (DEC ZP_RA)                           ;; now points to ref count
+          (TYA)                                   ;; y is still 0 => a := 0
+          (STA (ZP_RA),y)                       ;; set refcount := 0
 
-   ;; (label DEC_CMD__VM_FREE_M1_SLOT_IN_ZP_PTR2)
-   ;;        (DEC $c002)                             ;; $c0 is overwritten
+   (label DEC_CMD__VM_FREE_M1_SLOT_IN_RA)
+          (DEC $c002)                             ;; $c0 is overwritten
 
           (RTS)
           ))
 
-;; (module+ test #| vm_free_bucket_slot  allocate two slots, free first slot |#
-;;   (define test-free-bucket-slot-code
-;;     (list
-;;      ;; fill page with $ff
-;;             (LDA !$FF)
-;;             (LDX !$00)
-;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-;;             (DEX)
-;;             (STA $cc00,x)
-;;             (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+(module+ test #| vm_free_bucket_slot  allocate two slots, free first slot |#
+  (define test-free-bucket-slot-code
+    (list
+     ;; fill page with $ff
+            (LDA !$FF)
+            (LDX !$00)
+     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+            (DEX)
+            (ast-opcode-cmd '() (list 157 0 PAGE_AVAIL_0)) ;; (STA $cc00,x)
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-;;             ;; now allocate the page
-;;             (LDA !$0b) ;; want slot of size 11
-;;             (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
-;;             (JSR VM_COPY_PTR2_TO_PTR)
+            ;; now allocate the page
+            (LDA !$0b) ;; want slot of size 11
+            (JSR VM_ALLOC_M1_SLOT_TO_RA)
+            (JSR VM_CP_RA_TO_RT)
 
-;;             (LDA !$09) ;; want slot of size 9, should be on the same page
-;;             (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+            (LDA !$09) ;; want slot of size 9, should be on the same page
+            (JSR VM_ALLOC_M1_SLOT_TO_RA)
 
-;;             (JSR VM_COPY_PTR_TO_PTR2)
-;;             (JSR VM_FREE_M1_SLOT_IN_ZP_PTR2)))
+            (JSR VM_CP_RT_TO_RA)
+            (JSR VM_FREE_M1_SLOT_IN_RA)))
 
-;;   (define test-free-bucket-slot-state-after
-;;     (run-code-in-test test-free-bucket-slot-code))
+  (define test-free-bucket-slot-state-after
+    (run-code-in-test test-free-bucket-slot-code))
 
-;;   (check-equal? (memory-list test-free-bucket-slot-state-after #xcc03 #xcc04)
-;;                 (list #x00 #x28)
-;;                 "slot0 (now free): refcount 0, next free slot at offset $28")
-;;   (check-equal? (vm-page->strings test-free-bucket-slot-state-after #xcc)
-;;                 '("page-type:      m1 page p0"
-;;                   "previous page:  $00"
-;;                   "slots used:     1"
-;;                   "next free slot: $04")))
+  (check-equal? (memory-list test-free-bucket-slot-state-after (+ PAGE_AVAIL_0_W #x03)(+ PAGE_AVAIL_0_W #x04))
+                (list #x00 #x28)
+                "slot0 (now free): refcount 0, next free slot at offset $28")
+  (check-equal? (vm-page->strings test-free-bucket-slot-state-after PAGE_AVAIL_0)
+                '("page-type:      m1 page p0"
+                  "previous page:  $00"
+                  "slots used:     1"
+                  "next free slot: $04")))
 
-;; (module+ test #| vm_free_bucket_slot  allocate 16 slots, free first slot |#
-;;   (define test-free-bucket-a20-slot-code
-;;     (list
-;;      ;; fill page with $ff
-;;             (LDY !$03) ;; fill two pages
-;;             (LDA !$FF) ;; with $ff
-;;             (LDX !$00) ;; each 256 bytes long
-;;      (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-;;             (DEX)
-;;             (STA $cb00,x) ;; starting at $cb00
-;;             (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
-;;             (DEY)
-;;             (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+(module+ test #| vm_free_bucket_slot  allocate 16 slots, free first slot |#
+  (define test-free-bucket-a20-slot-code
+    (list
+     ;; fill page with $ff
+            (LDY !$03) ;; fill two pages
+            (LDA !$FF) ;; with $ff
+            (LDX !$00) ;; each 256 bytes long
+     (label LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+            (DEX)
+            (ast-opcode-cmd '() (list 157 0 PAGE_AVAIL_1)) ;; (STA $cb00,x) ;; starting at $cb00
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
+            (DEY)
+            (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_CODE)
 
-;;             ;; now allocate the page
-;;             (LDA !$17)
-;;             (STA LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
-;;      (label LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
-;;             (LDA !$14) ;; want slot of size 14 (max size $1e)
-;;             (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
-;;             (DEC LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
-;;             (BPL LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
-;;             (JMP CONT__TEST_FREE_BUCKET_A20_SLOT_CODE )
-;;      (label LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
-;;             (byte $00)
+            ;; now allocate the page
+            (LDA !$17)
+            (STA LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
+     (label LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
+            (LDA !$14) ;; want slot of size 14 (max size $1e)
+            (JSR VM_ALLOC_M1_SLOT_TO_RA)
+            (DEC LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
+            (BPL LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
+            (JMP CONT__TEST_FREE_BUCKET_A20_SLOT_CODE )
+     (label LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
+            (byte $00)
 
-;;      (label CONT__TEST_FREE_BUCKET_A20_SLOT_CODE)
-;;             ;; select first pointer
-;;             (LDA !$cb)
-;;             (STA ZP_PTR2+1)
-;;             (LDA !$10)
-;;             (STA ZP_PTR2)
-;;             (JSR VM_FREE_M1_SLOT_IN_ZP_PTR2)
+     (label CONT__TEST_FREE_BUCKET_A20_SLOT_CODE)
+            ;; select first pointer
+            (ast-opcode-cmd '() (list 169 PAGE_AVAIL_1)) ;; (LDA !$cb)
+            (STA ZP_RA+1)
+            (LDA !$10)
+            (STA ZP_RA)
+            (JSR VM_FREE_M1_SLOT_IN_RA)
 
-;;             (LDA !$cc)
-;;             (STA ZP_PTR2+1)
-;;             (LDA !$10)
-;;             (STA ZP_PTR2)
-;;             (JSR VM_FREE_M1_SLOT_IN_ZP_PTR2)
-;;             ))
+            (ast-opcode-cmd '() (list 169 PAGE_AVAIL_0)) ;; (LDA !$cc)
+            (STA ZP_RA+1)
+            (LDA !$10)
+            (STA ZP_RA)
+            (JSR VM_FREE_M1_SLOT_IN_RA)
+            ))
 
-;;   (define test-free-bucket-a20-slot-state-after
-;;     (run-code-in-test test-free-bucket-a20-slot-code))
+  (define test-free-bucket-a20-slot-state-after
+    (run-code-in-test test-free-bucket-a20-slot-code))
 
-;;   (check-equal? (memory-list test-free-bucket-a20-slot-state-after #xcec7 #xceca)
-;;                 (list #x00 #xcc #x00 #x00)
-;;                 "first free page of profiles 0, 1, 2, 3 is $cc for page profile 1")
-;;   (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after #xca)
-;;                 '("page-type:      m1 page p1"
-;;                   "previous page:  $00" ;; is removed, since full
-;;                   "slots used:     8"
-;;                   "next free slot: $00"))
-;;   (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after #xcb)
-;;                 '("page-type:      m1 page p1"
-;;                   "previous page:  $00" ;; is the last in list
-;;                   "slots used:     7"
-;;                   "next free slot: $10"))
-;;   (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after #xcc)
-;;                 '("page-type:      m1 page p1"
-;;                   "previous page:  $cb" ;; next free
-;;                   "slots used:     7"
-;;                   "next free slot: $10")))
+  (check-equal? (memory-list test-free-bucket-a20-slot-state-after #xcec7 #xceca)
+                (list #x00 PAGE_AVAIL_0 #x00 #x00)
+                "first free page of profiles 0, 1, 2, 3 is $cc for page profile 1")
+  (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after (sub1 PAGE_AVAIL_1))
+                '("page-type:      m1 page p1"
+                  "previous page:  $00" ;; is removed, since full
+                  "slots used:     8"
+                  "next free slot: $00"))
+  (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after PAGE_AVAIL_1)
+                '("page-type:      m1 page p1"
+                  "previous page:  $00" ;; is the last in list
+                  "slots used:     7"
+                  "next free slot: $10"))
+  (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after PAGE_AVAIL_0)
+                (list "page-type:      m1 page p1"
+                      (format "previous page:  $~a" (format-hex-byte PAGE_AVAIL_1)) ;; next free
+                  "slots used:     7"
+                  "next free slot: $10")))
 
 ;; (define VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT
 ;;   (list
@@ -4828,8 +4827,10 @@ call frame primitives etc.
           ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
           ;; VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2                     ;; allocate an array of cells (also useful for structures)
 
-          ;; VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
-          ;; VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
+          VM_ALLOC_M1_SLOT_TO_RA                             ;; allocate a slot of min A size, allocating a new page if necessary
+          VM_FREE_M1_SLOT_IN_RA                              ;; free a slot (adding it to the free list)
+          VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
+          VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
 
           ;; VM_ALLOC_MODULE_CODE_SLOT_TO_ZP_PTR                ;; allocate a slot for module code
           ;; VM_FREE_MODULE
@@ -4930,4 +4931,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1242))
+                       1363))
