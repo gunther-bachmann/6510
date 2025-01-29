@@ -2058,6 +2058,8 @@ call frame primitives etc.
 ;;         (in case of cell pages @ZP_RT>>1)
 ;;         (in case of cell-pair pages @ZP_RT>>2)
 ;;         (in case of 8s pages @ZP_RT>>3)
+(define VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR #t)
+(define VM_REFCOUNT_DECR_RT__CELL_PTR #t)
 (define VM_REFCOUNT_DECR_RT
   (list
    (label VM_REFCOUNT_DECR_RT)
@@ -2065,9 +2067,9 @@ call frame primitives etc.
           (BEQ UNKNOWN__VM_REFCOUNT_DECR_RT)
           (TAY)
           (LSR)
-          (BCC DECR_CELL_PTR__VM_REFCOUNT_DECR_RT)
+          (BCC VM_REFCOUNT_DECR_RT__CELL_PTR__LSR)
           (LSR)
-          (BCC DECR_CELL_PAIR__VM_REFCOUNT_DECR_RT)
+          (BCC VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR__LSR)
           ;; check other types of cells
           (CPY !TAG_BYTE_CELL_ARRAY)
           (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR_RT)
@@ -2083,12 +2085,42 @@ call frame primitives etc.
           ;; (JMP VM_REFCOUNT_DECR_RT__M1_SLOT_PTR)
           (BRK)
 
-   (label DECR_CELL_PAIR__VM_REFCOUNT_DECR_RT)
-          (JMP VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-
-   (label DECR_CELL_PTR__VM_REFCOUNT_DECR_RT)
-          ;; for now just stop, TODO: cell-ptr may point to more complex structures!
-          (JMP VM_REFCOUNT_DECR_RT__CELL_PTR)))
+   ;; input: cell-pair ptr in ZP_RT
+   ;; decrement ref count, if 0 deallocate
+   (label VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+          (LDA ZP_RT)
+          (LSR)
+          (LSR)
+   (label VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR__LSR)
+          (TAX)
+          (LDA ZP_RT+1)
+          (BEQ DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+          ;; not nil!
+          (STA PAGE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+   (label PAGE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+          (DEC $c000,x) ;; c0 is overwritten by page (see above)
+          (BNE DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+          (JMP VM_FREE_CELL_PAIR_PTR_IN_RT) ;; free delayed
+   (label DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+          (RTS)
+          
+   ;; input: cell ptr in ZP_RT
+   ;; decrement ref count, if 0 deallocate
+   (label VM_REFCOUNT_DECR_RT__CELL_PTR)
+          (LDA ZP_RT)
+          (LSR)
+   (label VM_REFCOUNT_DECR_RT__CELL_PTR__LSR)
+          (TAX)
+          (LDA ZP_RT+1)
+          (BEQ DONE__VM_REFCOUNT_DECR_RT__CELL_PTR)
+          ;; not nil!
+          (STA PAGE__VM_REFCOUNT_DECR_RT__CELL_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+   (label PAGE__VM_REFCOUNT_DECR_RT__CELL_PTR)
+          (DEC $c000,x) ;; c0 is overwritten by page (see above)
+          (BNE DONE__VM_REFCOUNT_DECR_RT__CELL_PTR)
+          (JMP VM_FREE_CELL_PTR_IN_RT) ;; free delayed
+   (label DONE__VM_REFCOUNT_DECR_RT__CELL_PTR)
+          (RTS)))
 
 
 ;; find out what kind of cell zp_rt points to,
@@ -2099,6 +2131,8 @@ call frame primitives etc.
 ;;         (in case of cell pages @ZP_RT>>1)
 ;;         (in case of cell-pair pages @ZP_RT>>2)
 ;;         (in case of 8s pages @ZP_RT>>3)
+(define VM_REFCOUNT_DECR_RA__CELL_PTR #t)
+(define VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR #t)
 (define VM_REFCOUNT_DECR_RA
   (list
    (label VM_REFCOUNT_DECR_RA)
@@ -2106,9 +2140,9 @@ call frame primitives etc.
           (BEQ UNKNOWN__VM_REFCOUNT_DECR_RA)
           (TAY)
           (LSR)
-          (BCC DECR_CELL_PTR__VM_REFCOUNT_DECR_RA)
+          (BCC VM_REFCOUNT_DECR_RA__CELL_PTR__LSR)
           (LSR)
-          (BCC DECR_CELL_PAIR__VM_REFCOUNT_DECR_RA)
+          (BCC VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR__LSR)
           ;; check other types of cells
           (CPY !TAG_BYTE_CELL_ARRAY)
           (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR_RA)
@@ -2124,12 +2158,39 @@ call frame primitives etc.
           ;; (JMP VM_REFCOUNT_DECR_RA__M1_SLOT_PTR)
           (BRK)
 
-   (label DECR_CELL_PAIR__VM_REFCOUNT_DECR_RA)
-          (JMP VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+   ;; input: cell-pair ptr in ZP_RA
+   ;; decrement ref count, if 0 deallocate
+   (label VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (LDA ZP_RA)
+          (LSR)
+          (LSR)
+   (label VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR__LSR)
+          (TAX)
+          (LDA ZP_RA+1)
+          (BEQ DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          ;; not nil
+          (STA PAGE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+   (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (DEC $c000,x) ;; c0 is overwritten by page (see above)
+          (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (JMP VM_FREE_CELL_PAIR_PTR_IN_RA) ;; free delayed
+   (label DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (RTS)
 
-   (label DECR_CELL_PTR__VM_REFCOUNT_DECR_RA)
           ;; for now just stop, TODO: cell-ptr may point to more complex structures!
-          (JMP VM_REFCOUNT_DECR_RA__CELL_PTR)))
+   (label VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (LDA ZP_RA)
+          (LSR)
+   (label VM_REFCOUNT_DECR_RA__CELL_PTR__LSR)
+          (TAX)
+          (LDA ZP_RA+1)
+          (STA PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+   (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (DEC $c000,x) ;; c0 is overwritten by page (see above)
+          (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (JMP VM_FREE_CELL_PTR_IN_RA) ;; free delayed
+   (label DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (RTS)))
 
 ;; find out what kind of cell zp_rt points to,
 ;; then call the right decrement refcounts function
@@ -2139,6 +2200,8 @@ call frame primitives etc.
 ;;         (in case of cell pages @ZP_RT>>1)
 ;;         (in case of cell-pair pages @ZP_RT>>2)
 ;;         (in case of 8s pages @ZP_RT>>3)
+(define VM_REFCOUNT_INCR_RT__CELL_PTR #t)
+(define VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR #t)
 (define VM_REFCOUNT_INCR_RT
   (list
    (label VM_REFCOUNT_INCR_RT)
@@ -2146,9 +2209,9 @@ call frame primitives etc.
           (BEQ UNKNOWN__VM_REFCOUNT_INCR_RT)
           (TAY)
           (LSR)
-          (BCC INCR_CELL_PTR__VM_REFCOUNT_INCR_RT)      ;; lowest bit = 0 => cell-ptr
+          (BCC VM_REFCOUNT_INCR_RT__CELL_PTR__LSR)      ;; lowest bit = 0 => cell-ptr
           (LSR)
-          (BCC INCR_CELL_PAIR__VM_REFCOUNT_INCR_RT)     ;; bit1 = 0 => cell-pair-ptr
+          (BCC VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR__LSR)     ;; bit1 = 0 => cell-pair-ptr
           ;; check other types of cells
           (CPY !TAG_BYTE_CELL_ARRAY)
           (BEQ INCR_CELL_ARRAY__VM_REFCOUNT_INCR_RT)
@@ -2164,12 +2227,34 @@ call frame primitives etc.
           ;; (JMP VM_REFCOUNT_INCR_RT__M1_SLOT_PTR)
           (BRK)
 
-   (label INCR_CELL_PAIR__VM_REFCOUNT_INCR_RT)
-          (JMP VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+   (label VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+          (LDA ZP_RT)
+          (LSR)
+          (LSR)
+   (label VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR__LSR)
+          (TAX)
+          (LDA ZP_RT+1)
+          (BEQ DONE__VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+          ;; not nil
+          (STA PAGE__VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
+   (label PAGE__VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+          (INC $c000,x) ;; c0 is overwritten by page (see above)
+   (label DONE__VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
+          (RTS)
 
-   (label INCR_CELL_PTR__VM_REFCOUNT_INCR_RT)
-          ;; for now just stop, TODO: cell-ptr may point to more complex structures!
-          (JMP VM_REFCOUNT_INCR_RT__CELL_PTR)))
+   (label VM_REFCOUNT_INCR_RT__CELL_PTR)
+          (LDA ZP_RT)
+          (LSR)
+   (label VM_REFCOUNT_INCR_RT__CELL_PTR__LSR)
+          (TAX)
+          (LDA ZP_RT+1)
+          (BEQ DONE__VM_REFCOUNT_INCR_RT__CELL)
+          ;; not nil
+          (STA PAGE__VM_REFCOUNT_INCR_RT__CELL+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
+   (label PAGE__VM_REFCOUNT_INCR_RT__CELL)
+          (INC $c000,x) ;; c0 is overwritten by page (see above)
+   (label DONE__VM_REFCOUNT_INCR_RT__CELL)
+          (RTS)))
 
 (module+ test #| vm-refcount-decr-rt |#
   (define vm-refcount-decr-rt-code
@@ -2196,69 +2281,6 @@ call frame primitives etc.
 
   (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-decr-rt-state2 (+ PAGE_AVAIL_0_W #x05))
                 1))
-
-;; input: cell-pair ptr in ZP_RT
-;; decrement ref count, if 0 deallocate
-(define VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR
-  (list
-   (label VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-          (LDA ZP_RT+1)
-          (BNE NOT_NIL__REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-          (RTS)
-   (label NOT_NIL__REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-
-          (STA PAGE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
-          (LDA ZP_RT)
-          (LSR)
-          (LSR)
-          (TAX)
-   (label PAGE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-          (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-          (JMP VM_FREE_CELL_PAIR_PTR_IN_RT) ;; free delayed
-   (label DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-          (RTS)))
-
-;; input: cell-pair ptr in ZP_RT
-;; decrement ref count, if 0 deallocate
-(define VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR
-  (list
-   (label VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
-          (LDA ZP_RA+1)
-          (BNE NOT_NIL__REFCOUNT_DECR_RA__CELL_PAIR_PTR)
-          (RTS)
-   (label NOT_NIL__REFCOUNT_DECR_RA__CELL_PAIR_PTR)
-
-          (STA PAGE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
-          (LDA ZP_RA)
-          (LSR)
-          (LSR)
-          (TAX)
-   (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
-          (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
-          (JMP VM_FREE_CELL_PAIR_PTR_IN_RA) ;; free delayed
-   (label DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
-          (RTS)))
-
-;; input: cell-pair ptr in ZP_RT
-;; increment ref count
-(define VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR
-  (list
-   (label VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
-          (LDA ZP_RT+1)
-          (BNE NOT_NIL__REFCOUNT_INCR_RT__CELL_PAIR_PTR)
-          (RTS)
-   (label NOT_NIL__REFCOUNT_INCR_RT__CELL_PAIR_PTR)
-
-          (STA PAGE__VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
-          (LDA ZP_RT)
-          (LSR)
-          (LSR)
-          (TAX)
-   (label PAGE__VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
-          (INC $c000,x) ;; c0 is overwritten by page (see above)
-          (RTS)))
 
 (module+ test #| vm-refcount-mmcr-rt--cell-pair-ptr |#
   (define vm-refcount-mmcr-rt--cell-pair-ptr-code
@@ -2289,52 +2311,6 @@ call frame primitives etc.
                 (format "pair-ptr[1] $~a05" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state2 (+ PAGE_AVAIL_0_W #x05))
                 1))
-
-;; input: cell ptr in ZP_RT
-;; decrement ref count, if 0 deallocate
-(define VM_REFCOUNT_DECR_RT__CELL_PTR
-  (list
-   (label VM_REFCOUNT_DECR_RT__CELL_PTR)
-          (LDA ZP_RT+1)
-          (STA PAGE__VM_REFCOUNT_DECR_RT__CELL_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
-          (LDA ZP_RT)
-          (LSR)
-          (TAX)
-   (label PAGE__VM_REFCOUNT_DECR_RT__CELL_PTR)
-          (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_RT__CELL_PTR)
-          (JMP VM_FREE_CELL_PTR_IN_RT) ;; free delayed
-   (label DONE__VM_REFCOUNT_DECR_RT__CELL_PTR)
-          (RTS)))
-
-(define VM_REFCOUNT_DECR_RA__CELL_PTR
-  (list
-   (label VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (LDA ZP_RA+1)
-          (STA PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
-          (LDA ZP_RA)
-          (LSR)
-          (TAX)
-   (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (JMP VM_FREE_CELL_PTR_IN_RA) ;; free delayed
-   (label DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (RTS)))
-
-;; input: cell ptr in ZP_RT
-;; increment ref count
-(define VM_REFCOUNT_INCR_RT__CELL_PTR
-  (list
-   (label VM_REFCOUNT_INCR_RT__CELL_PTR)
-          (LDA ZP_RT+1)
-          (STA PAGE__VM_REFCOUNT_INCR_RT__CELL+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
-          (LDA ZP_RT) ;; get cell offset
-          (LSR)       ;; get offset to ref count of this cell
-          (TAX)       ;; -> index 
-   (label PAGE__VM_REFCOUNT_INCR_RT__CELL)
-          (INC $c000,x) ;; c0 is overwritten by page (see above)
-          (RTS)))
 
 (module+ test #| vm-refcount-mmcr-rt--cell-pair-ptr |#
   (define vm-refcount-mmcr-rt--cell-ptr-code
@@ -4862,18 +4838,18 @@ call frame primitives etc.
           VM_REFCOUNT_DECR_RT                                ;; generic decrement of refcount (dispatches depending on type)
           VM_REFCOUNT_INCR_RT                                ;; generic increment of refcount (dispatches depending on type)
 
-          VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
           ;; VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
-          VM_REFCOUNT_DECR_RT__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_RT__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
 
-          VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR                 ;; increment refcount of cell-pair
+          ;; VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR                 ;; increment refcount of cell-pair
           ;; VM_REFCOUNT_INCR_RT__M1_SLOT_PTR                   ;; increment refcount of m1-slot
-          VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
+          ;; VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
 
           VM_REFCOUNT_DECR_RA                                ;; generic decrement of refcount (dispatches depending on type)
-          VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
           ;; VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
-          VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+          ;; VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
           ;; ---------------------------------------- call frame
 
           ;; ---------------------------------------- misc
