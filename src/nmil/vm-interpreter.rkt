@@ -509,9 +509,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_PUSH_CALL_FRAME_N)
           (LDY !$00)                            ;; index to number of locals (0)
           (LDA (ZP_RA),y)                       ;; A = #locals
-          ;; (BEQ NO_LOCALS_NEEDED__BC_CALL)
           (JSR VM_ALLOC_LOCALS)                 ;; even if A=0 will set the top_mark and the locals appropriately
-   ;; (label NO_LOCALS_NEEDED__BC_CALL)
 
           ;; load zp_vm_pc with address of function bytecode
           (LDA ZP_RA)
@@ -660,13 +658,20 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (BMI DONE__BC_RET)
    (label LOOP__BC_RET)
           (LDA (ZP_LOCALS_LB_PTR),y)
+          (BEQ NEXT_ITER__BC_RET)
           (STA ZP_RA)
+          (AND !$03)
+          (CMP !$03)
+          (BEQ S0_NEXT_ITER__BC_RET)
           (LDA (ZP_LOCALS_HB_PTR),y)
+          (BEQ NEXT_ITER__BC_RET)
           (STA ZP_RA+1)
           (STY COUNTER__BC_RET)
           (JSR VM_REFCOUNT_DECR_RA)
           (LDY COUNTER__BC_RET)
+   (label S0_NEXT_ITER__BC_RET)
           (LDA !$00)
+   (label NEXT_ITER__BC_RET)
           (STA (ZP_LOCALS_LB_PTR),y)
           (STA (ZP_LOCALS_HB_PTR),y)
           (DEY)
@@ -1572,15 +1577,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_GOTO
   (list
    (label BC_GOTO)
+          (CLC)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
           (BMI JUMP_BACK__BC_GOTO)
-          (CLC)
+
           (ADC !$02)
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)
 
    (label JUMP_BACK__BC_GOTO)
-          (CLC)
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)
           (BCS NO_PAGE_CHANGE_ON_BACK__BC_GOTO)
@@ -1724,6 +1729,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_FALSE_P_BRANCH
   (list
    (label BC_FALSE_P_BRANCH)
+          (CLC)
           (LDA ZP_RT+1)
           (BEQ BRANCH__BC_TRUE_P_BRANCH)
           (LDA !$00)
@@ -1852,6 +1858,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_TRUE_P_BRANCH
   (list
    (label BC_TRUE_P_BRANCH)
+          (CLC)
           (LDA ZP_RT+1)
           (BEQ POP_AND_CONTINUE__BC_TRUE_P_BRANCH) ;; when false (A = 0), just continue, no branch
 
@@ -1860,16 +1867,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
           (BMI NEGATIVE_BRANCH__BC_TRUE_P_BRANCH)
+
    (label POP_AND_CONTINUE__BC_TRUE_P_BRANCH)
-          (CLC)
           (ADC !$02)
-          (PHA)
+          (ADC ZP_VM_PC)
+          (STA ZP_VM_PC)
+          (BCC NO_PAGE_CHANGE__BC_TRUE_P_BRANCH)
+          (INC ZP_VM_PC+1)
+   (label NO_PAGE_CHANGE__BC_TRUE_P_BRANCH)
           (JSR VM_CELL_STACK_POP_R)
-          (PLA)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)
+          (JMP VM_INTERPRETER)
 
    (label NEGATIVE_BRANCH__BC_TRUE_P_BRANCH)
-          (CLC)
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)
           (BCS NO_PAGE_CHANGE_ON_BACK__BC_TRUE_P_BRANCH)
@@ -2001,8 +2010,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_CONS_PAIR_P
   (list
    (label BC_CONS_PAIR_P)
-          (JSR VM_CP_RT_TO_RA)
+          (LDA ZP_RT+1)
+          (STA ZP_RA+1)
           (LDA ZP_RT)
+          (STA ZP_RA)
+
           (LDX !$03) ;; low byte of int (for bool)
           (STX ZP_RT)
           (CMP !$01)
@@ -2318,9 +2330,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_CxxR
   (list
    (label BC_CxxR)
-          (PHA)
-          (JSR VM_CP_RT_TO_RA)
-          (PLA)
+          (LDX ZP_RT)
+          (STX ZP_RA)
+          (LDX ZP_RT+1)
+          (STX ZP_RA+1)
           (JSR VM_CxxR_R)
           (JSR VM_REFCOUNT_INCR_RT)
           (JSR VM_REFCOUNT_DECR_RA)
