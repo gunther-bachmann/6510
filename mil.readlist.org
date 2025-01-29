@@ -3405,6 +3405,9 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - get cells/cell-pairs in free list <- freed and ready for reuse
 - for tests: get numbers globally (and per page)
 **** DONE implement function to reclaim elements of the free list (cel-pairs)
+**** DONE optimize reference counting
+- [X] (not completely possible) get rid of refcount​_decr​_rt (only use 'ra')
+- [X] reduce impact/cpu cycles
 **** IMPLEMENT what part of the 6510 vm design should be implement w/ racket to validate design?
 implement all necessary to do a reverse function tail called implementation with space optimized byte code
 see [[file:src/nmil/svm-compiler.rkt::(m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*][test with reverse function]]
@@ -3648,56 +3651,8 @@ this will include the implementation of
   - [X] single step
   - [X] run to next call/return
   - [X] step over call
-**** IDEA reduce ref counting for locals
-- PULL​_FROM​_LOCAL​_n <- remove the value pulled from the local store => no ref needed counting!
-- sequences of getting a ptr from locals, incrementing ref count, the doing car/cdr, decrementing pointer + incrementing new one
-  can be compacted to only incrementing the final retrieved value
-- incrementing ref count and then doing a destructive NIL? etc. is not necessary either
-  example:
-  #+begin_src scheme
-    (bc WRITE_TO_LOCAL_1)   ;; increment ref count
-    (bc NIL?)               ;; replace tos with boolean result => decrement ref count
-  #+end_src
-- further analyse locals usage and how to reduce number of refcount changes in functions
-- ref counts are important if calling a sub routine <- do refcounting then (and keep that info)
-- leaving a function that has locals
-  - it has called a subfunction => locals were refcounted => upon leaving, decrement refcounts (without deallocation!)
-**** do tracing only on call and ret 
-- print function names, too
-- print stack on call and result on ret
-**** functions allow for metadata (could enhance tracing) and defaults
-(e.g. byte 0 includes flag for existence, absence of metadata, number of defaults and number of locals)
-MDDDLLLL  M : flag for metadata existence
-          DDD : 0..7 default values (or just 0..3)
-          LLLL: 0..15 locals        (or just 0..7)
-
-Metadata existence means: there is an additional cell, pointing to the function string (even aligned, readonly native array)
-offset   content
-----------------
--2(n+1)  [cell-ptr -> native array with function string name]   <-- even aligend (so that cell-ptr is detected as such)
--2n      [cell default n]
-         ...
--2       [cell default 1]
-0        [MDDDLLLL] (byte)
-         [Function BC 0]
-         ...
-         [Function BC x]
-         ? possible one padding byte
-?        [native array function name]                           <-- even aligned ? (really, is there a need for that), or should this be alloced during loading and linking)
-?        [other default values, the default cells are pointing to (e.g. a structure)]
-
-**** call with defaults (related to concept of constants!)
-- special call instruction
-  - call​_with​_1​_default ... n​_defaults
-  - defaults are cells before the byte defining the # of locals
-  - defaults are read only
-  - defaults (since cells) must be allocated on even addresses (bit 0=0)
-  - the call instruction pushes these defaults automatically in the stack before executing the function
-  - the defaults are organized reverse =>
-    if function accepts two defaults
-      and is called with the first default explicitly set by the caller
-      and call​_with​_1​_default is used
-    => only the second default is pushed on the stack
+**** TODO implement some code for native arrays (strings, structures)
+**** TODO implement some code for arrays 
 **** refcount qualities
 - provide function w/ ref and w/o ref counting <- for optimization
   - name-convention: function w/ ref counting: ...​_RC
@@ -3714,14 +3669,6 @@ offset   content
   - 10000111 -> cell array + more
   - 10001111 -> native array + more  
 - provide additional info for ref counting (e.g. knowledge about the data)
-**** optimize reference counting
-- [ ] get rid of refcount​_decr​_rt (only use 'ra')
-- [ ] reduce impact/cpu cycles
-**** collect statistics for
-- common two byte combinations <- byte code combinations
-  - e.g. combine these into one byte commands
-- number of usages of single byte codes
-  - e.g. move less common to prefixed-commands, ...
 **** enable easy byte code modification
 the byte code and its usage should be implemented flexible enough to make adjustments that either provide space or speed benefits (or even
 both)
@@ -3776,14 +3723,6 @@ both)
   - [ ] strings/native arrays
   - [ ] arrays
 **** how much of the 6510 code should be actually written and tested with the interpreter (and actually used to interpret byte code)?
-**** IDEA for native code implemenation of (parts of) functions
-(have a rough idea of how this could be done, don't actually implement)
-- replace byte code sequence with byte-code indicating switchover to native code
-  then use sequences of JSR that circumvent the decoding steps
-  leaving native code and going back to byte code is done by calling the interpreter loop again
-- calling functions that have been replaced by native code (hot swap)
-  need indirection (no direct pointer for call, rather index)
-  need for data structure for mapping index to ptr
 **** design persisted byte code (constants, unlinked symbols, bytecode), linker/loader
 **** generate persisted byte code (single module, multi module in mind)
 **** implement loader/linker
@@ -3791,6 +3730,74 @@ both)
 - (m-def ...) -> vm, execute, debug?
 - see [[file:src/cisc-vm/mil-svm-generator.rkt]]
 **** glue together mil + 6510 vm
+**** IDEA: collect statistics for
+- common two byte combinations <- byte code combinations
+  - e.g. combine these into one byte commands
+- number of usages of single byte codes
+  - e.g. move less common to prefixed-commands, ...
+**** IDEA: for native code implementation of (parts of) functions
+(have a rough idea of how this could be done, don't actually implement)
+- replace byte code sequence with byte-code indicating switchover to native code
+  then use sequences of JSR that circumvent the decoding steps
+  leaving native code and going back to byte code is done by calling the interpreter loop again
+- calling functions that have been replaced by native code (hot swap)
+  need indirection (no direct pointer for call, rather index)
+  need for data structure for mapping index to ptr
+**** IDEA: reduce ref counting for locals
+did some experiments on branch ~optimize_rev_app_w_extra_bc~
+- PULL​_FROM​_LOCAL​_n <- remove the value pulled from the local store => no ref needed counting!
+- sequences of getting a ptr from locals, incrementing ref count, the doing car/cdr, decrementing pointer + incrementing new one
+  can be compacted to only incrementing the final retrieved value
+- incrementing ref count and then doing a destructive NIL? etc. is not necessary either
+  example:
+  #+begin_src scheme
+    (bc WRITE_TO_LOCAL_1)   ;; increment ref count
+    (bc NIL?)               ;; replace tos with boolean result => decrement ref count
+  #+end_src
+- further analyse locals usage and how to reduce number of refcount changes in functions
+- ref counts are important if calling a sub routine <- do refcounting then (and keep that info)
+- leaving a function that has locals
+  - it has called a subfunction => locals were refcounted => upon leaving, decrement refcounts (without deallocation!)
+**** IDEA: do tracing only on call and ret
+- print function names, too
+- print stack on call and result on ret
+**** IDEA: profiling (on jsr/rts) e.g. via tracing point
+- use information of labels to convert addresses -> labels
+- collect cycles spent
+- collect number of calls
+**** IDEA: functions allow for metadata (could enhance tracing) and defaults
+(e.g. byte 0 includes flag for existence, absence of metadata, number of defaults and number of locals)
+MDDDLLLL  M : flag for metadata existence
+          DDD : 0..7 default values (or just 0..3)
+          LLLL: 0..15 locals        (or just 0..7)
+
+Metadata existence means: there is an additional cell, pointing to the function string (even aligned, readonly native array)
+offset   content
+----------------
+-2(n+1)  [cell-ptr -> native array with function string name]   <-- even aligend (so that cell-ptr is detected as such)
+-2n      [cell default n]
+         ...
+-2       [cell default 1]
+0        [MDDDLLLL] (byte)
+         [Function BC 0]
+         ...
+         [Function BC x]
+         ? possible one padding byte
+?        [native array function name]                           <-- even aligned ? (really, is there a need for that), or should this be alloced during loading and linking)
+?        [other default values, the default cells are pointing to (e.g. a structure)]
+
+**** IDEA: call with defaults (related to concept of constants!)
+- special call instruction
+  - call​_with​_1​_default ... n​_defaults
+  - defaults are cells before the byte defining the # of locals
+  - defaults are read only
+  - defaults (since cells) must be allocated on even addresses (bit 0=0)
+  - the call instruction pushes these defaults automatically in the stack before executing the function
+  - the defaults are organized reverse =>
+    if function accepts two defaults
+      and is called with the first default explicitly set by the caller
+      and call​_with​_1​_default is used
+    => only the second default is pushed on the stack
 **** IDEA: instruction cache (see python caching) (see https://github.com/python/cpython/blob/main/InternalDocs/interpreter.md#Specialization and https://www.youtube.com/watch?v=PGZPSWZSkJI&t=1470s)
 - use specialized byte code instruction (with guard to fall back to more general byte code)
 - fallback/specialization rewrites bytecode

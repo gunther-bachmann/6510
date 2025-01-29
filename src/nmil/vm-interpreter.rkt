@@ -1198,6 +1198,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_INT_1)
       (bc PUSH_INT_2)
+      (bc BNOP)
       (bc INT+)                      ;; byte code for INT_PLUS = 3
       (bc PUSH_INT) (byte #xf0 #x04) ;; push int #x4f0 (1264)
       (bc PUSH_INT) (byte #x1f #x01) ;; push int #x11f (287)
@@ -1208,7 +1209,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BRK))))
 
   (check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                2157)
+                769)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                    (list "stack holds 3 items"
                          "int $0000  (rt)"
@@ -1268,18 +1269,19 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_INT_1)
       (bc PUSH_INT_2)
+      (bc BNOP)
       (bc INT-)                      ;; byte code for INT_MINUS = 2 - 1 = 1
       (bc PUSH_INT) (byte #xf0 #x04) ;; push int #x4f0 (1264)
       (bc PUSH_INT) (byte #x1f #x01) ;; push int #x11f (287)
       (bc INT-)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x1c2f)
       (bc PUSH_INT_1)
-      (bc PUSH_INT_0)
+      (bc PUSH_INT_0)      
       (bc INT-)                      ;; byte code for INT_MINUS => -1
       (bc BRK))))                    ;; brk
 
 
    (check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                   2157)
+                   769)
     (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                     (list "stack holds 3 items"
                           "int $1fff  (rt)"
@@ -2625,4 +2627,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-interpreter)))
-                       2516))
+                       2576))

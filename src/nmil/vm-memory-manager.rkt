@@ -1503,6 +1503,10 @@ call frame primitives etc.
            (JSR VM_ALLOC_CELL_STACK_PAGES)
            (STX ZP_CELL_STACK_LB_PTR+1)
            (STY ZP_CELL_STACK_HB_PTR+1)
+           (STA VM_FREE_M1_PAGE_P0)
+           (STA VM_FREE_M1_PAGE_P0+1)
+           (STA VM_FREE_M1_PAGE_P0+2)
+           (STA VM_FREE_M1_PAGE_P0+3)
            (LDA !$01)
            (STA ZP_CELL_STACK_TOS)
 
@@ -3569,232 +3573,232 @@ call frame primitives etc.
 ;; page type slot w/ different sizes (refcount @ ptr-1) x cells
 ;; math: first entry @FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS + 1, refcount @ -1, next slot += INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS, slot-size = INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS -1
 ;; input : X = profile offset (0, 2, 4 ...)
-;; uses  : ZP_PTR2
+;; uses  : ZP_RA
 ;; output:
-;; (define VM_ALLOC_PAGE_FOR_M1_SLOTS
-;;   (list
-;;    (label VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           (STX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)      ;; save profile index in local var
+(define VM_ALLOC_PAGE_FOR_M1_SLOTS
+  (list
+   (label VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (STX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)      ;; save profile index in local var
 
-;;           (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
-;;           (STA ZP_PTR2+1)
-;;           (LDA !$00)
-;;           (STA ZP_PTR2)
+          (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+          (STA ZP_RA+1)
+          (LDA !$00)
+          (STA ZP_RA)
 
-;;           (LDY !$00)
-;;           (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
-;;           (TXA)
-;;           (ORA !$10)
-;;           (STA (ZP_PTR2),y) ;; set page type in byte 0 to b0001 <profile>
+          (LDY !$00)
+          (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
+          (TXA)
+          (ORA !$10)
+          (STA (ZP_RA),y) ;; set page type in byte 0 to b0001 <profile>
 
-;;           (LDA VM_FREE_M1_PAGE_P0,x) ;; current free page
-;;           (INY)
-;;           (STA (ZP_PTR2),y)          ;; store previous page
+          (LDA VM_FREE_M1_PAGE_P0,x) ;; current free page
+          (INY)
+          (STA (ZP_RA),y)          ;; store previous page
 
-;;           (LDA ZP_PTR2+1)
-;;           (STA VM_FREE_M1_PAGE_P0,x) ;; set page with free slots to this allocated page
+          (LDA ZP_RA+1)
+          (STA VM_FREE_M1_PAGE_P0,x) ;; set page with free slots to this allocated page
 
-;;           (LDA !$00)
-;;           (INY)
-;;           (STA (ZP_PTR2),y)          ;; store number of slots used
+          (LDA !$00)
+          (INY)
+          (STA (ZP_RA),y)          ;; store number of slots used
 
-;;           (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; y = refcount field for first slot
-;;           (INY)
-;;           (TYA)
-;;           (LDX ZP_PTR2+1)
-;;           (STA VM_PAGE_SLOT_DATA,x)                    ;; set first free slot, here x = page
-;;           (DEY)
-;;           (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
-;;           (LDA !$00)
+          (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; y = refcount field for first slot
+          (INY)
+          (TYA)
+          (LDX ZP_RA+1)
+          (STA VM_PAGE_SLOT_DATA,x)                    ;; set first free slot, here x = page
+          (DEY)
+          (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
+          (LDA !$00)
 
-;;           ;; loop to initialize refcounts of each slot to 0-
-;;           (label REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           (STA (ZP_PTR2),y) ;; refcount = 0
-;;           (TYA)
-;;           (CLC)
-;;           (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; calc next refcount field offset
-;;           (BCS END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           (TAY)
-;;           (ADC !$01)
-;;           (LDA !$00)
-;;           (BCC REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; still on this page?
+          ;; loop to initialize refcounts of each slot to 0-
+   (label REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (STA (ZP_RA),y) ;; refcount = 0
+          (TYA)
+          (CLC)
+          (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; calc next refcount field offset
+          (BCS END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (TAY)
+          ;; (ADC !$01)
+          (LDA !$00)
+          (BCC REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; still on this page?
 
-;;    (label END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           ;; loop to write free slot list
-;;           (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
-;;           (INY)  ;; first slot  (refcount field offset + 1)
-;;           (TYA)
-;;    (label WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           (CLC)
-;;           (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
-;;           (BCS ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; no longer on the same page => almost done
-;;           (STA (ZP_PTR2),y) ;; offset of next free cell == y for next write
-;;           (TAY)
-;;           (BCC WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; carry must be clear => always jump
+   (label END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          ;; loop to write free slot list
+          (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
+          (INY)  ;; first slot  (refcount field offset + 1)
+          (TYA)
+   (label WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (CLC)
+          (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
+          (BCS ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; no longer on the same page => almost done
+          (STA (ZP_RA),y) ;; offset of next free cell == y for next write
+          (TAY)
+          (BCC WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; carry must be clear => always jump
 
-;;    (label ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           (LDA !$00)
-;;           (STA (ZP_PTR2),y) ;; last offset to next free slot is 00 = no next free slot!
+   (label ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (LDA !$00)
+          (STA (ZP_RA),y) ;; last offset to next free slot is 00 = no next free slot!
+          (LDA ZP_RA+1)   ;; a = page
+          (RTS)
 
-;;           (RTS)
+   (label SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (byte $00) ;; local var
 
-;;    (label SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           (byte $00) ;; local var
+   (label FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), contains 14 slots
+          (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), contains 8 slots
+          (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), contains 5 slots
+          (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), contains 3 slots
 
-;;    (label FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), contains 14 slots
-;;           (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), contains 8 slots
-;;           (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), contains 5 slots
-;;           (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), contains 3 slots
+   (label INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (byte $12) ;; add 12 to get to next slot, slot size $11 (17), contains 14 slots
+          (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), contains 8 slots
+          (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), contains 5 slots
+          (byte $54) ;; add 54 to get to next slot, slot-size $53 (83), contains 3 slots
 
-;;    (label INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS)
-;;           (byte $12) ;; add 12 to get to next slot, slot size $11 (17), contains 14 slots
-;;           (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), contains 8 slots
-;;           (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), contains 5 slots
-;;           (byte $54) ;; add 54 to get to next slot, slot-size $53 (83), contains 3 slots
+          ))
 
-;;           ))
+(module+ test #| vm_alloc_m1_page |#
+  (define test-alloc-m1-01-code
+    (list
+     ;; fill page with $ff
+            (LDA !$FF)
+            (LDX !$00)
+     (label LOOP__TEST_ALLOC_M1_01_CODE)
+            (DEX)            
+            (ast-opcode-cmd '() (list 157 0 PAGE_AVAIL_0)) ;; (STA $cc00,x)
+            (BNE LOOP__TEST_ALLOC_M1_01_CODE)
 
-;; (module+ test #| vm_alloc_m1_page |#
-;;   (define test-alloc-m1-01-code
-;;     (list
-;;      ;; fill page with $ff
-;;             (LDA !$FF)
-;;             (LDX !$00)
-;;      (label LOOP__TEST_ALLOC_M1_01_CODE)
-;;             (DEX)
-;;             (STA $cc00,x)
-;;             (BNE LOOP__TEST_ALLOC_M1_01_CODE)
+            ;; now allocate the page
+            (LDX !$00) ;; do it explicitly
+            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
-;;             ;; now allocate the page
-;;             (LDX !$00) ;; do it explicitly
-;;             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+  (define test-alloc-m1-01-state-after
+    (run-code-in-test test-alloc-m1-01-code))
 
-;;   (define test-alloc-m1-01-state-after
-;;     (run-code-in-test test-alloc-m1-01-code))
+  (check-equal? (vm-page->strings test-alloc-m1-01-state-after PAGE_AVAIL_0)
+                '("page-type:      m1 page p0"
+                  "previous page:  $00"
+                  "slots used:     0"
+                  "next free slot: $04"))
+  (check-equal? (memory-list test-alloc-m1-01-state-after (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x04))
+                (list #x00 #x16)
+                "slot0: refcount 0, next free slot at offset $16")
+  (check-equal? (memory-list test-alloc-m1-01-state-after (+ PAGE_AVAIL_0_W #x15) (+ PAGE_AVAIL_0_W #x16))
+                (list #x00 #x28)
+                "slot1: refcount 0, next free slot at offset $28")
+  (check-equal? (memory-list test-alloc-m1-01-state-after (+ PAGE_AVAIL_0_W #x27) (+ PAGE_AVAIL_0_W #x28))
+                (list #x00 #x3a)
+                "slot2: refcount 0, next free slot at offset $28")
+  (check-equal? (memory-list test-alloc-m1-01-state-after (+ PAGE_AVAIL_0_W #xed) (+ PAGE_AVAIL_0_W #xee))
+                (list #x00 #x00)
+                "slot13: refcount 0, next free slot at offset $00 = no next")
 
-;;   (check-equal? (vm-page->strings test-alloc-m1-01-state-after #xcc)
-;;                 '("page-type:      m1 page p0"
-;;                   "previous page:  $00"
-;;                   "slots used:     0"
-;;                   "next free slot: $04"))
-;;   (check-equal? (memory-list test-alloc-m1-01-state-after #xcc03 #xcc04)
-;;                 (list #x00 #x16)
-;;                 "slot0: refcount 0, next free slot at offset $16")
-;;   (check-equal? (memory-list test-alloc-m1-01-state-after #xcc15 #xcc16)
-;;                 (list #x00 #x28)
-;;                 "slot1: refcount 0, next free slot at offset $28")
-;;   (check-equal? (memory-list test-alloc-m1-01-state-after #xcc27 #xcc28)
-;;                 (list #x00 #x3a)
-;;                 "slot2: refcount 0, next free slot at offset $28")
-;;   (check-equal? (memory-list test-alloc-m1-01-state-after #xcced #xccee)
-;;                 (list #x00 #x00)
-;;                 "slot13: refcount 0, next free slot at offset $00 = no next")
+  (define test-alloc-m1-02-code
+    (list
+     ;; fill page with $ff
+            (LDA !$FF)
+            (LDX !$00)
+     (label LOOP__TEST_ALLOC_M1_02_CODE)
+            (DEX)
+            (STA $cc00,x)
+            (BNE LOOP__TEST_ALLOC_M1_02_CODE)
 
-;;   (define test-alloc-m1-02-code
-;;     (list
-;;      ;; fill page with $ff
-;;             (LDA !$FF)
-;;             (LDX !$00)
-;;      (label LOOP__TEST_ALLOC_M1_02_CODE)
-;;             (DEX)
-;;             (STA $cc00,x)
-;;             (BNE LOOP__TEST_ALLOC_M1_02_CODE)
+            ;; now allocate the page
+            (LDX !$01) ;; do it explicitly
+            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
-;;             ;; now allocate the page
-;;             (LDX !$01) ;; do it explicitly
-;;             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+  (define test-alloc-m1-02-state-after
+    (run-code-in-test test-alloc-m1-02-code))
 
-;;   (define test-alloc-m1-02-state-after
-;;     (run-code-in-test test-alloc-m1-02-code))
+  (check-equal? (vm-page->strings test-alloc-m1-02-state-after PAGE_AVAIL_0)
+                '("page-type:      m1 page p1"
+                  "previous page:  $00"
+                  "slots used:     0"
+                  "next free slot: $10"))
+  (check-equal? (memory-list test-alloc-m1-02-state-after (+ PAGE_AVAIL_0_W #x0f) (+ PAGE_AVAIL_0_W #x10))
+                (list #x00 #x2e)
+                "slot0: refcount 0, next free slot at offset $2c")
+  (check-equal? (memory-list test-alloc-m1-02-state-after (+ PAGE_AVAIL_0_W #x2d) (+ PAGE_AVAIL_0_W #x2e))
+                (list #x00 #x4c)
+                "slot1: refcount 0, next free slot at offset $4a")
+  (check-equal? (memory-list test-alloc-m1-02-state-after (+ PAGE_AVAIL_0_W #x4b) (+ PAGE_AVAIL_0_W #x4c))
+                (list #x00 #x6a)
+                "slot2: refcount 0, next free slot at offset $68")
+  (check-equal? (memory-list test-alloc-m1-02-state-after (+ PAGE_AVAIL_0_W #xe1) (+ PAGE_AVAIL_0_W #xe2))
+                (list #x00 #x00)
+                "slot7: refcount 0, next free slot at offset $00 = no next")
 
-;;   (check-equal? (vm-page->strings test-alloc-m1-02-state-after #xcc)
-;;                 '("page-type:      m1 page p1"
-;;                   "previous page:  $00"
-;;                   "slots used:     0"
-;;                   "next free slot: $10"))
-;;   (check-equal? (memory-list test-alloc-m1-02-state-after #xcc0f #xcc10)
-;;                 (list #x00 #x2e)
-;;                 "slot0: refcount 0, next free slot at offset $2c")
-;;   (check-equal? (memory-list test-alloc-m1-02-state-after #xcc2d #xcc2e)
-;;                 (list #x00 #x4c)
-;;                 "slot1: refcount 0, next free slot at offset $4a")
-;;   (check-equal? (memory-list test-alloc-m1-02-state-after #xcc4b #xcc4c)
-;;                 (list #x00 #x6a)
-;;                 "slot2: refcount 0, next free slot at offset $68")
-;;   (check-equal? (memory-list test-alloc-m1-02-state-after #xcce1 #xcce2)
-;;                 (list #x00 #x00)
-;;                 "slot7: refcount 0, next free slot at offset $00 = no next")
+  (define test-alloc-m1-03-code
+    (list
+     ;; fill page with $ff
+            (LDA !$FF)
+            (LDX !$00)
+     (label LOOP__TEST_ALLOC_M1_03_CODE)
+            (DEX)
+            (STA $cc00,x)
+            (BNE LOOP__TEST_ALLOC_M1_03_CODE)
 
-;;   (define test-alloc-m1-03-code
-;;     (list
-;;      ;; fill page with $ff
-;;             (LDA !$FF)
-;;             (LDX !$00)
-;;      (label LOOP__TEST_ALLOC_M1_03_CODE)
-;;             (DEX)
-;;             (STA $cc00,x)
-;;             (BNE LOOP__TEST_ALLOC_M1_03_CODE)
+            ;; now allocate the page
+            (LDX !$02) ;; do it explicitly
+            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
-;;             ;; now allocate the page
-;;             (LDX !$02) ;; do it explicitly
-;;             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+  (define test-alloc-m1-03-state-after
+    (run-code-in-test test-alloc-m1-03-code))
 
-;;   (define test-alloc-m1-03-state-after
-;;     (run-code-in-test test-alloc-m1-03-code))
+  (check-equal? (vm-page->strings test-alloc-m1-03-state-after PAGE_AVAIL_0)
+                '("page-type:      m1 page p2"
+                  "previous page:  $00"
+                  "slots used:     0"
+                  "next free slot: $06"))
+  (check-equal? (memory-list test-alloc-m1-03-state-after (+ PAGE_AVAIL_0_W #x05) (+ PAGE_AVAIL_0_W #x06))
+                (list #x00 #x38)
+                "slot0: refcount 0, next free slot at offset $38")
+  (check-equal? (memory-list test-alloc-m1-03-state-after (+ PAGE_AVAIL_0_W #x37) (+ PAGE_AVAIL_0_W #x38))
+                (list #x00 #x6a)
+                "slot1: refcount 0, next free slot at offset $6a")
+  (check-equal? (memory-list test-alloc-m1-03-state-after (+ PAGE_AVAIL_0_W #x69) (+ PAGE_AVAIL_0_W #x6a))
+                (list #x00 #x9c)
+                "slot2: refcount 0, next free slot at offset $9c")
+  (check-equal? (memory-list test-alloc-m1-03-state-after (+ PAGE_AVAIL_0_W #xcd) (+ PAGE_AVAIL_0_W #xce))
+                (list #x00 #x00)
+                "slot4: refcount 0, next free slot at offset $00 = no next")
 
-;;   (check-equal? (vm-page->strings test-alloc-m1-03-state-after #xcc)
-;;                 '("page-type:      m1 page p2"
-;;                   "previous page:  $00"
-;;                   "slots used:     0"
-;;                   "next free slot: $06"))
-;;   (check-equal? (memory-list test-alloc-m1-03-state-after #xcc05 #xcc06)
-;;                 (list #x00 #x38)
-;;                 "slot0: refcount 0, next free slot at offset $38")
-;;   (check-equal? (memory-list test-alloc-m1-03-state-after #xcc37 #xcc38)
-;;                 (list #x00 #x6a)
-;;                 "slot1: refcount 0, next free slot at offset $6a")
-;;   (check-equal? (memory-list test-alloc-m1-03-state-after #xcc69 #xcc6a)
-;;                 (list #x00 #x9c)
-;;                 "slot2: refcount 0, next free slot at offset $9c")
-;;   (check-equal? (memory-list test-alloc-m1-03-state-after #xcccd #xccce)
-;;                 (list #x00 #x00)
-;;                 "slot4: refcount 0, next free slot at offset $00 = no next")
+  (define test-alloc-m1-04-code
+    (list
+     ;; fill page with $ff
+            (LDA !$FF)
+            (LDX !$00)
+     (label LOOP__TEST_ALLOC_M1_04_CODE)
+            (DEX)
+            (STA $cc00,x)
+            (BNE LOOP__TEST_ALLOC_M1_04_CODE)
 
-;;   (define test-alloc-m1-04-code
-;;     (list
-;;      ;; fill page with $ff
-;;             (LDA !$FF)
-;;             (LDX !$00)
-;;      (label LOOP__TEST_ALLOC_M1_04_CODE)
-;;             (DEX)
-;;             (STA $cc00,x)
-;;             (BNE LOOP__TEST_ALLOC_M1_04_CODE)
+            ;; now allocate the page
+            (LDX !$03) ;; do it explicitly
+            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
-;;             ;; now allocate the page
-;;             (LDX !$03) ;; do it explicitly
-;;             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+  (define test-alloc-m1-04-state-after
+    (run-code-in-test test-alloc-m1-04-code))
 
-;;   (define test-alloc-m1-04-state-after
-;;     (run-code-in-test test-alloc-m1-04-code))
-
-;;   (check-equal? (memory-list test-alloc-m1-04-state-after #xcc00 #xcc02)
-;;                 (list #x13 #x00 #x00)
-;;                 "page type $13, previous page = $00, slot number used = $00")
-;;   (check-equal? (memory-list test-alloc-m1-04-state-after #xcc03 #xcc04)
-;;                 (list #x00 #x58)
-;;                 "slot0: refcount 0, next free slot at offset $56")
-;;   (check-equal? (memory-list test-alloc-m1-04-state-after #xcc57 #xcc58)
-;;                 (list #x00 #xac)
-;;                 "slot1: refcount 0, next free slot at offset $aa")
-;;   (check-equal? (memory-list test-alloc-m1-04-state-after #xccab #xccac)
-;;                 (list #x00 #x00)
-;;                 "slot2: refcount 0, next free slot at offset $00 = no next")
-;;   (check-equal? (vm-page->strings test-alloc-m1-04-state-after #xcc)
-;;                 '("page-type:      m1 page p3"
-;;                   "previous page:  $00"
-;;                   "slots used:     0"
-;;                   "next free slot: $04")))
+  (check-equal? (memory-list test-alloc-m1-04-state-after (+ PAGE_AVAIL_0_W #x00) (+ PAGE_AVAIL_0_W #x02))
+                (list #x13 #x00 #x00)
+                "page type $13, previous page = $00, slot number used = $00")
+  (check-equal? (memory-list test-alloc-m1-04-state-after (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x04))
+                (list #x00 #x58)
+                "slot0: refcount 0, next free slot at offset $56")
+  (check-equal? (memory-list test-alloc-m1-04-state-after (+ PAGE_AVAIL_0_W #x57) (+ PAGE_AVAIL_0_W #x58))
+                (list #x00 #xac)
+                "slot1: refcount 0, next free slot at offset $aa")
+  (check-equal? (memory-list test-alloc-m1-04-state-after (+ PAGE_AVAIL_0_W #xab) (+ PAGE_AVAIL_0_W #xac))
+                (list #x00 #x00)
+                "slot2: refcount 0, next free slot at offset $00 = no next")
+  (check-equal? (vm-page->strings test-alloc-m1-04-state-after PAGE_AVAIL_0)
+                '("page-type:      m1 page p3"
+                  "previous page:  $00"
+                  "slots used:     0"
+                  "next free slot: $04")))
 
 ;; allocate a slot of min A size, allocating a new page if necessary
 ;; input:  A = size
@@ -4802,7 +4806,7 @@ call frame primitives etc.
           VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for ref counted cell-pairs
           VM_ALLOC_CELL_STACK_PAGES                          ;; allocate page pair and initialize with previous references to previous cell stack pages
 
-          ;; VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
+          VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
           ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether
 
           ;; VM_ALLOC_PAGE_FOR_MODULE_CODE                      ;; allocate page and initialize to hold immutable byte code (not ref counted)
@@ -4926,4 +4930,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1182))
+                       1242))
