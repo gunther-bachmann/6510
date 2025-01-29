@@ -53,6 +53,7 @@
          (format "write to local #~a" n)
          (format "pop to local #~a" n))]
     [(= byte-code-t2 #x22) "pop"]
+    [(= byte-code-t2 #x24) "eq?"]
     [(= byte-code-t2 #x30)
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
