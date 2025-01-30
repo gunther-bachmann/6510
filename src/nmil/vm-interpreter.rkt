@@ -2574,9 +2574,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 ))
 
-(define vm-interpreter
+(define just-vm-interpreter
   (append VM_INTERPRETER_VARIABLES
-          VM_INTERPRETER_INIT          
+          VM_INTERPRETER_INIT
           BC_POP
           BC_POP_TO_LOCAL_SHORT
           BC_PUSH_LOCAL_SHORT
@@ -2615,7 +2615,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INC_INT
           BC_BNOP
           BC_GC_FL
-          VM_INTERPRETER
+          VM_INTERPRETER))
+
+(define vm-interpreter
+  (append just-vm-interpreter
           (list (label END__INTERPRETER))
           VM_INTERPRETER_OPTABLE_EXT1_HB
           VM_INTERPRETER_OPTABLE_EXT1_LB
@@ -2624,7 +2627,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (list (label END__INTERPRETER_DATA))
           vm-lists))
 
-
 (module+ test #| vm-interpreter |#
-  (inform-check-equal? (foldl + 0 (map command-len (flatten vm-interpreter)))
-                       2697))
+  (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
+                       740))

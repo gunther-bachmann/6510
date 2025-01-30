@@ -3651,8 +3651,15 @@ this will include the implementation of
   - [X] single step
   - [X] run to next call/return
   - [X] step over call
-**** TODO implement some code for native arrays (strings, structures)
-**** TODO implement some code for arrays 
+**** TODO implement some code for arrays (structures)
+- cell arrays are put into the appropriate m1 slot pages
+- => max size of a cell array is in profile 3 m1 page (slot size 83 bytes => 1 byte cell-type, 1 byte array len, 81 bytes for cells => 40 cells)
+- arrays may hold one cell at each index
+- each cell may be an atomic cell only (just: byte, int, cell-ptr, cell-pair-ptr)
+- a cell-ptr may point to one cell, but depending on this cell, more cells may follow (cell-header + ..)
+- a cell-pair-ptr points to a cell-pair
+**** TODO implement some code for native arrays (strings)
+**** TODO implement larger array by using a BST tree of arrays?
 **** refcount qualities
 - provide function w/ ref and w/o ref counting <- for optimization
   - name-convention: function w/ ref counting: ...​_RC

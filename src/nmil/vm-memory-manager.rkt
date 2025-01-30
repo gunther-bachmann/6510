@@ -150,7 +150,7 @@ call frame primitives etc.
           VM_GC_QUEUE_OF_FREE_CELL_PAIRS                     ;; reclaim all cell-pairs in the queue of free cells
 
           ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
-          ;; VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2                     ;; allocate an array of cells (also useful for structures)
+          VM_ALLOC_CELL_ARRAY_TO_RA                          ;; allocate an array of cells (also useful for structures)
 
           ;; VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
           ;; VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
@@ -4139,7 +4139,7 @@ call frame primitives etc.
           (TYA)                                   ;; y is still 0 => a := 0
           (STA (ZP_RA),y)                       ;; set refcount := 0
 
-   (label DEC_CMD__VM_FREE_M1_SLOT_IN_RA)
+   (label DEC_CMD__VM_FREE_M1_SLOT_IN_RA)       ;; decrement number of slots used on the page
           (DEC $c002)                             ;; $c0 is overwritten
 
           (RTS)
@@ -4242,96 +4242,96 @@ call frame primitives etc.
                   "slots used:     7"
                   "next free slot: $10")))
 
-;; (define VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT
-;;   (list
-;;    (label VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT)
-;;           (DEC ZP_PTR)
-;;           (LDY !$00)
-;;           (LDA (ZP_PTR),y)
-;;           (CLC)
-;;           (ADC !$01)
-;;           (STA (ZP_PTR),y)
-;;           (INC ZP_PTR)
-;;           (RTS)))
+(define VM_REFCOUNT_INCR_RA__M1_SLOT
+  (list
+   (label VM_REFCOUNT_INCR_RA__M1_SLOT)
+          (DEC ZP_RA)           ;; m1, now pointing to reference count field
+          (LDY !$00)
+          (LDA (ZP_RA),y)
+          (CLC)
+          (ADC !$01)            ;; add 1 (there is no increment command for indirect addresses)
+          (STA (ZP_RA),y)
+          (INC ZP_RA)           ;; restore pointer
+          (RTS)))
 
-;; (module+ test #| vm_inc_ref_bucket_slot |#
-;;   (define test-inc-ref-bucket-slot-1-code
-;;     (list
-;;      (LDA !$a0)
-;;      (STA $a003)
-;;      (STA ZP_PTR+1)
-;;      (LDA !$04)
-;;      (STA ZP_PTR)
+(module+ test #| vm_inc_ref_bucket_slot |#
+  (define test-inc-ref-bucket-slot-1-code
+    (list
+     (LDA !$f0)
+     (STA $f003)
+     (STA ZP_RA+1)
+     (LDA !$04)
+     (STA ZP_RA)
 
-;;      (JSR VM_REFCOUNT_INCR_ZP_PTR__M1_SLOT)))
+     (JSR VM_REFCOUNT_INCR_RA__M1_SLOT)))
 
-;;   (define test-inc-ref-bucket-slot-1-state-after
-;;     (run-code-in-test test-inc-ref-bucket-slot-1-code))
+  (define test-inc-ref-bucket-slot-1-state-after
+    (run-code-in-test test-inc-ref-bucket-slot-1-code))
 
-;;   (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after #xa003 #xa003)
-;;                 (list #xa1))
-;;   (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after ZP_PTR (add1 ZP_PTR))
-;;                 (list #x04 #xa0)))
+  (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after #xf003 #xf003)
+                (list #xf1))
+  (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after ZP_RA (add1 ZP_RA))
+                (list #x04 #xf0)))
 
-;; input: ZP_PTR  pointer to bucket slot (which can be anything, but most likely a cell-array or a native-array)
-;; (define VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT
-;;   (list
-;;    (label VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
-;;           (DEC ZP_PTR)
-;;           (LDY !$00)
-;;           (LDA (ZP_PTR),y)
-;;           (SEC)
-;;           (SBC !$01)            ;;  pointers are organized such that there is no page boundary crossed (=> no adjustment of highbyte necessary)
-;;           (STA (ZP_PTR),y)
-;;           (BNE NO_GC__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+;; input: ZP_RA  pointer to bucket slot (which can be anything, but most likely a cell-array or a native-array)
+(define VM_REFCOUNT_DECR_RA__M1_SLOT
+  (list
+   (label VM_REFCOUNT_DECR_RA__M1_SLOT)
+          (DEC ZP_RA)
+          (LDY !$00)
+          (LDA (ZP_RA),y)
+          (SEC)
+          (SBC !$01)            ;;  pointers are organized such that there is no page boundary crossed (=> no adjustment of highbyte necessary)
+          (STA (ZP_RA),y)
+          (BNE NO_GC__VM_REFCOUNT_DECR_RA__M1_SLOT)
 
-;;           ;; DO GC THIS SLOT and then FREE!!
-;;           ;; what kind of object is this (read header cell)
-;;           ;; then dispatch an header cell type
-;;           (INC ZP_PTR) ;; now pointing at the first (lowbyte) of the cell header
-;;           (LDA (ZP_PTR),y) ;; y still 0
-;;           (CMP !TAG_BYTE_CELL_ARRAY)       ;;
-;;           (BNE NEXT0__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+          ;; DO GC THIS SLOT and then FREE!!
+          ;; what kind of object is this (read header cell)
+          ;; then dispatch an header cell type
+          (INC ZP_RA) ;; now pointing at the first (lowbyte) of the cell header
+          (LDA (ZP_RA),y) ;; y still 0
+          (CMP !TAG_BYTE_CELL_ARRAY)       ;;
+          (BNE NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
 
-;;           ;; its a regular array slot, (gc each slot, beware recursion!!!!)
-;;           (JSR VM_GC_ARRAY_SLOT_PTR)
-;;           (JMP VM_FREE_M1_SLOT_IN_ZP_PTR2)
+          ;; its a regular array slot, (gc each slot, beware recursion!!!!)
+          ;; (JSR VM_GC_ARRAY_SLOT_PTR)
+          (JMP VM_FREE_M1_SLOT_IN_RA)
 
-;;    (label NEXT0__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
-;;           (CMP !TAG_BYTE_NATIVE_ARRAY)
-;;           (BNE NEXT1__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
+   (label NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
+          (CMP !TAG_BYTE_NATIVE_ARRAY)
+          (BNE NEXT1__VM_REFCOUNT_DECR_RA__M1_SLOT)
 
-;;           ;; it's a native array slot (no gc necessary)
-;;           (JMP VM_FREE_M1_SLOT_IN_ZP_PTR2)
+          ;; it's a native array slot (no gc necessary)
+          (JMP VM_FREE_M1_SLOT_IN_RA)
 
-;;    (label NEXT1__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
-;;           (BRK) ;; error, unknown complex slot type
+   (label NEXT1__VM_REFCOUNT_DECR_RA__M1_SLOT)
+          (BRK) ;; error, unknown complex slot type
 
-;;    (label NO_GC__VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)
-;;           (INC ZP_PTR)
-;;           (RTS)))
+   (label NO_GC__VM_REFCOUNT_DECR_RA__M1_SLOT)
+          (INC ZP_RA)
+          (RTS)))
 
 
-;; (module+ test #| vm_dec_ref_bucket_slot (no gc) |#
-;;   (define test-dec-ref-bucket-slot-1-code
-;;     (list
-;;      (LDA !$a0)
-;;      (STA $a003) ;; $a004 - 1 = location for ref counting (now set to $a0)
-;;      (STA ZP_PTR+1)
-;;      (LDA !$04)
-;;      (STA ZP_PTR) ;; ZP_PTR is set to $a004
+(module+ test #| vm_dec_ref_bucket_slot (no gc) |#
+  (define test-dec-ref-bucket-slot-1-code
+    (list
+     (LDA !$f0)
+     (STA $f003) ;; $f004 - 1 = location for ref counting (now set to $f0)
+     (STA ZP_RA+1)
+     (LDA !$04)
+     (STA ZP_RA) ;; RA is set to $f004
 
-;;      (JSR VM_REFCOUNT_DECR_ZP_PTR__M1_SLOT)))
+     (JSR VM_REFCOUNT_DECR_RA__M1_SLOT)))
 
-;;   (define test-dec-ref-bucket-slot-1-state-after
-;;     (run-code-in-test test-dec-ref-bucket-slot-1-code))
+  (define test-dec-ref-bucket-slot-1-state-after
+    (run-code-in-test test-dec-ref-bucket-slot-1-code))
 
-;;   (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after #xa003 #xa003)
-;;                 (list #x9f)
-;;                 "a0 - 1 = 9f")
-;;   (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after ZP_PTR (add1 ZP_PTR))
-;;                 (list #x04 #xa0)
-;;                 "points to $a004"))
+  (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after #xf003 #xf003)
+                (list #xef)
+                "f0 - 1 = ef")
+  (check-equal? (memory-list test-dec-ref-bucket-slot-1-state-after ZP_RA (add1 ZP_RA))
+                (list #x04 #xf0)
+                "points to $f004"))
 
 ;; (module+ test #| vm_dec_ref_bucket_slot (gc native array) |#
 
@@ -4542,68 +4542,68 @@ call frame primitives etc.
 ;;                       #x00 #x00
 ;;                       #x00 #x00)))
 
-;; ;; allocate an array of cells (also useful for structures)
-;; ;; input:  A = number of cells (1..)
-;; ;; output: ZP_PTR2 -> points to an allocated array
-;; (define VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2
-;;   (list
-;;    (label VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
-;;           ;; optional: optimization for arrays with 3 cells => s8 page!
-;;           (PHA)
-;;           (ASL A)
-;;           (CLC)
-;;           (ADC !$02) ;; add to total slot size
+;; allocate an array of cells (also useful for structures)
+;; input:  A = number of cells (1..)
+;; output: ZP_RA -> points to an allocated array
+(define VM_ALLOC_CELL_ARRAY_TO_RA
+  (list
+   (label VM_ALLOC_CELL_ARRAY_TO_RA)
+          ;; optional: optimization for arrays with 3 cells => s8 page!
+          (PHA)
+          (ASL A)       ;; *2
+          (CLC)
+          (ADC !$02)    ;; add (tag byte, length) to total slot size
 
-;;           (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+          (JSR VM_ALLOC_M1_SLOT_TO_RA)
 
-;;           ;; write header cell
-;;           (LDY !$00)
-;;           (LDA !TAG_BYTE_CELL_ARRAY)
-;;           (STA (ZP_PTR2),y) ;; store tag byte
+          ;; write header cell
+          (LDY !$00)
+          (LDA !TAG_BYTE_CELL_ARRAY)
+          (STA (ZP_RA),y) ;; store tag byte
 
-;;           (INY)
-;;           (PLA)
-;;           (STA (ZP_PTR2),y) ;; store number of array elements
+          (INY)
+          (PLA)
+          (STA (ZP_RA),y) ;; store number of array elements
 
-;;           (TAX) ;; use number of array elements as loop counter
+          (TAX) ;; use number of array elements as loop counter
 
-;;           ;; initialize slots/array with nil
-;;    (label LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
-;;           (INY)
-;;           (LDA !<TAGGED_NIL)
-;;           (STA (ZP_PTR2),y)
-;;           (INY)
-;;           (LDA !>TAGGED_NIL)
-;;           (STA (ZP_PTR2),y)
-;;           (DEX)
-;;           (BNE LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
+          ;; initialize slots/array with nil
+   (label LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_RA)
+          (INY)
+          (LDA !<TAGGED_NIL)
+          (STA (ZP_RA),y)
+          (INY)
+          (LDA !>TAGGED_NIL)
+          (STA (ZP_RA),y)
+          (DEX)
+          (BPL LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_RA)
 
-;;           (RTS)))
+          (RTS)))
 
-;; (module+ test #| vm_allocate_cell_array |#
-;;   (define test-alloc-cell-array-code
-;;     (list
-;;      (LDA !$04)
-;;      (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)))
+(module+ test #| vm_allocate_cell_array |#
+  (define test-alloc-cell-array-code
+    (list
+     (LDA !$04)
+     (JSR VM_ALLOC_CELL_ARRAY_TO_RA)))
 
-;;   (define test-alloc-cell-array-state-after
-;;     (run-code-in-test test-alloc-cell-array-code))
+  (define test-alloc-cell-array-state-after
+    (run-code-in-test test-alloc-cell-array-code))
 
-;;   (check-equal? (vm-page->strings test-alloc-cell-array-state-after #xcc)
-;;                 (list
-;;                  "page-type:      m1 page p0"
-;;                  "previous page:  $00"
-;;                  "slots used:     1"
-;;                  "next free slot: $16"))
-;;   (check-equal? (memory-list test-alloc-cell-array-state-after ZP_PTR2 (add1 ZP_PTR2))
-;;                 (list #x04 #xcc))
-;;   (check-equal? (memory-list test-alloc-cell-array-state-after #xcc04 #xcc0d)
-;;                 (list TAG_BYTE_CELL_ARRAY #x04
-;;                       #x02 #x00
-;;                       #x02 #x00
-;;                       #x02 #x00
-;;                       #x02 #x00))
-;; )
+  (check-equal? (vm-page->strings test-alloc-cell-array-state-after PAGE_AVAIL_0)
+                (list
+                 "page-type:      m1 page p0"
+                 "previous page:  $00"
+                 "slots used:     1"
+                 "next free slot: $16"))
+  (check-equal? (memory-list test-alloc-cell-array-state-after ZP_RA (add1 ZP_RA))
+                (list #x04 PAGE_AVAIL_0))
+  (check-equal? (memory-list test-alloc-cell-array-state-after (+ PAGE_AVAIL_0_W #x04)(+ PAGE_AVAIL_0_W #x0d))
+                (list TAG_BYTE_CELL_ARRAY #x04
+                      #x01 #x00
+                      #x01 #x00
+                      #x01 #x00
+                      #x01 #x00))
+)
 
 ;; TODO: rewrite to RT/RA usage
 
@@ -4825,12 +4825,14 @@ call frame primitives etc.
           VM_GC_QUEUE_OF_FREE_CELL_PAIRS                     ;; reclaim all cell-pairs in the queue of free cells
 
           ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
-          ;; VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2                     ;; allocate an array of cells (also useful for structures)
+          ;; VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2 
+          VM_ALLOC_CELL_ARRAY_TO_RA                          ;; allocate an array of cells (also useful for structures)
 
           VM_ALLOC_M1_SLOT_TO_RA                             ;; allocate a slot of min A size, allocating a new page if necessary
           VM_FREE_M1_SLOT_IN_RA                              ;; free a slot (adding it to the free list)
-          VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
-          VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
+          ;; VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS
+          VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS                  ;; remove full pages in the free list of pages of the same type as are currently in ZP_RA
+          VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS               ;; put this page as head of the page free list for slots of type as in ZP_RA
 
           ;; VM_ALLOC_MODULE_CODE_SLOT_TO_ZP_PTR                ;; allocate a slot for module code
           ;; VM_FREE_MODULE
@@ -4845,12 +4847,12 @@ call frame primitives etc.
           ;; VM_REFCOUNT_DECR_RT__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
 
           ;; VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR                 ;; increment refcount of cell-pair
-          ;; VM_REFCOUNT_INCR_RT__M1_SLOT_PTR                   ;; increment refcount of m1-slot
+          VM_REFCOUNT_INCR_RA__M1_SLOT                         ;; increment refcount of m1-slot
           ;; VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
 
           VM_REFCOUNT_DECR_RA                                ;; generic decrement of refcount (dispatches depending on type)
           ;; VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
-          ;; VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+          VM_REFCOUNT_DECR_RA__M1_SLOT                       ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
           ;; VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
           ;; ---------------------------------------- call frame
 
@@ -4931,4 +4933,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1363))
+                       1435))

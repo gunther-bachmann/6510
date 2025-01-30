@@ -220,14 +220,15 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (check-equal? (vm-deref-cell-pair-w->string use-case-cons-state-after (+ PAGE_AVAIL_0_W #x05))
                 "(int $0001 . pair-ptr NIL)"))
 
-(define vm-lists
+(define just-vm-list
   (append VM_CONS_R
           VM_CAR_R
           VM_CDR_R
           VM_NIL_P_R
-          VM_CxxR_R
-          vm-call-frame))
+          VM_CxxR_R))
+(define vm-lists
+  (append just-vm-list vm-call-frame))
 
 (module+ test #| vm-lists |#
-  (inform-check-equal? (foldl + 0 (map command-len (flatten vm-call-frame)))
-                       1593))
+  (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-list)))
+                       100))

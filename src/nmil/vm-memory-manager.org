@@ -213,7 +213,7 @@ offset content
 ab      refcount slot2
 ac..fe  slot2
 ff      unused
-*** s8 page layout
+*** s8 page layout ?? 
 page type slot size 8 (refcount @ ptr >> 3) 28 cells
 offset content
 --------------------
@@ -224,12 +224,12 @@ offset content
 20..27   -> 04 (cell 0)
 ...
 f8..ff  -> 1f (cell 27)
-*** call-frame stack page layout
+*** call-frame (stack organized) page layout
 memory layout of call frame page (organized in stack)
 offset  content
 00      #b0001 1000 page type call-frame
 01      previous page (just high byte), 00 for first stack page
-02      top mark (one past last allocated frame payload)
+02      top mark (one past last allocated frame payload) <- usually set once full)
 03      payload of first call frame
 ...ff
 *** fid->loc page layout
@@ -271,15 +271,15 @@ use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples
           BEQ IS_INT_CELL
 
   ;; check for byte-cell
-          CMP !$FF
+          CMP !$FF ;; CMP !TAG_BYTE_BYTE_CELL
           BEQ IS_BYTE_CELL
 
   ;; check for cell-array-header
-          CMP !$83
+          CMP !$83 ;; CMP !TAG_BYTE_CELL_ARRAY
           BEQ IS_CELL_ARRAY_HEADER
 
   ;; check for cell-native-array-header
-          CMP !$87
+          CMP !$87 ;; CMP !TAG_BYTE_NATIVE_ARRAY
           BEQ IS_CELL_NATIVE_ARRAY_HEADER
 #+end_src
 ** call frames
@@ -331,12 +331,6 @@ use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples
               str-len
               function name string
 
- obsolete byte codes:
-   any ...to_​param
-       ...from_​param
-
- new byte codes:
-   write_​to_​local#
 ** locals
  locals are organized as stack (page pair)
     00: page type           00: page type

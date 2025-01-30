@@ -793,16 +793,18 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (module+ test #| free locals |#
   (skip (check-equal? #t #f)))
 
-(define vm-call-frame
+(define just-vm-call-frame
   (append VM_INITIALIZE_CALL_FRAME
           VM_ALLOC_CALL_FRAME_N                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
           VM_PUSH_CALL_FRAME_N                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
           VM_POP_CALL_FRAME_N                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
           VM_ALLOC_LOCALS
-          VM_FREE_LOCALS
-          vm-memory-manager
-          ))
+          VM_FREE_LOCALS))
+
+(define vm-call-frame
+  (append just-vm-call-frame
+          vm-memory-manager))
 
 (module+ test #| vm-call-frame |#
-  (inform-check-equal? (foldl + 0 (map command-len (flatten vm-call-frame)))
-                       1593))
+  (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-call-frame)))
+                       230))
