@@ -4273,7 +4273,9 @@ call frame primitives etc.
   (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after ZP_RA (add1 ZP_RA))
                 (list #x04 #xf0)))
 
+;; TODO: check whether this should operate on RA or rather on RT
 ;; input: ZP_RA  pointer to bucket slot (which can be anything, but most likely a cell-array or a native-array)
+;; use: may use ZP_RT during GC? :: TODO: fix that, RT may not be overwritten
 (define VM_REFCOUNT_DECR_RA__M1_SLOT
   (list
    (label VM_REFCOUNT_DECR_RA__M1_SLOT)
@@ -4294,7 +4296,8 @@ call frame primitives etc.
           (BNE NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
 
           ;; its a regular array slot, (gc each slot, beware recursion!!!!)
-          ;; (JSR VM_GC_ARRAY_SLOT_PTR)
+          (JSR VM_CP_RA_TO_RT)
+          (JSR VM_GC_ARRAY_SLOT_RT)
           (JMP VM_FREE_M1_SLOT_IN_RA)
 
    (label NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
@@ -4398,88 +4401,89 @@ call frame primitives etc.
 ;;                       "next free slot: $04"))
 ;;   (check-equal? (memory-list test-dec-ref-bucket-slot-3-state-after #xa000 #xa000)
 ;;                 (list #x01)
-;;                 "VM_GC_ARRAY_SLOT_PTR should have been called exactly once"))
+;;                 "VM_GC_ARRAY_SLOT_RT should have been called exactly once"))
 
 ;; TODO: check necessity for this function, adjust to rt/ra usage
 ;; TODO: reactivate when encountered necessary
 
 ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
-;; input:  ZP_PTR(2) = pointer to array (slot)
-;; used:   ZP_PTR    = dreferenced array element (if array element is a ptr)
-;;         ZP_PTR2   = pointer to last element of array
+;; input:  ZP_RT = pointer to array (slot)
+;; used:   ZP_RA   = dreferenced array element (if array element is a ptr)
+;;         ZP_RT   = pointer to last element of array
 ;; ouput: -
-;; (define VM_GC_ARRAY_SLOT_PTR
-;;   (list
-;;    (label VM_GC_ARRAY_SLOT_PTR)
-;;           (JSR VM_COPY_PTR_TO_PTR2)
+(define VM_GC_ARRAY_SLOT_RT
+  (list
+   (label VM_GC_ARRAY_SLOT_RT)
+          ;; loop over slots and decrement their slots
+          (LDY !$01)
+          (LDA (ZP_RT),y)  ;; a = number of array elements
+          (STA LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR) ;;
 
-;;    (label VM_GC_ARRAY_SLOT_PTR2)
-;;           ;; loop over slots and decrement their slots
-;;           (LDY !$01)
-;;           (LDA (ZP_PTR2),y)  ;; a = number of array elements
-;;           (STA LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR) ;;
+          (LDY !$00)
 
-;;           (LDY !$00)
+   (label LOOP__VM_GC_ARRAY_SLOT_PTR)
+          (INC ZP_RT)
+          (INC ZP_RT)
+          ;; deref zp_ptr into zp_ptr2?
+          (LDA (ZP_RT),y) ;; load tagged low byte
+          (STA ZP_RA)
+          (AND !$03)
+          (CMP !$03)
+          (BEQ NEXT__VM_GC_ARRAY_SLOT_PTR)
+          (INY)
+          (LDA (ZP_RT),y) ;; load high byte
+          (STA ZP_RA+1)
+          (JSR VM_REFCOUNT_DECR_RA)
+          (LDY !$00)
+    (label NEXT__VM_GC_ARRAY_SLOT_PTR)
+          (DEC LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
+          (BNE LOOP__VM_GC_ARRAY_SLOT_PTR)
 
-;;    (label LOOP__VM_GC_ARRAY_SLOT_PTR)
-;;           (INC ZP_PTR2)
-;;           (INC ZP_PTR2)
-;;           ;; deref zp_ptr into zp_ptr2?
-;;           (LDA (ZP_PTR2),y) ;; load tagged low byte
-;;           (AND !$03)
-;;           (BEQ NEXT__VM_GC_ARRAY_SLOT_PTR)
-;;           (JSR VM_DEREF_PTR2_INTO_PTR)
-;;           (JSR VM_REFCOUNT_DECR_ZP_PTR)
-;;           (LDY !$00)
-;;     (label NEXT__VM_GC_ARRAY_SLOT_PTR)
-;;           (DEC LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
-;;           (BNE LOOP__VM_GC_ARRAY_SLOT_PTR)
+          (RTS)
 
-;;           (RTS)
+   (label LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
+          (byte $00)
+   ))
 
-;;    (label LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
-;;           (byte $00)
-;;    ))
+(module+ test #| vm_gc_array_slot_ptr |#
+  (define test-gc-array-slot-ptr-code
+    (list
+     (LDA !$04)
+     (JSR VM_ALLOC_CELL_ARRAY_TO_RA)                       ;; ZP_RA = pointer to the allocated array (with 4 cells)
 
-;; (module+ test #| vm_gc_array_slot_ptr |#
-;;   (define test-gc-array-slot-ptr-code
-;;     (list
-;;      (LDA !$04)
-;;      (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)                       ;; ZP_PTR2 = pointer to the allocated array (with 4 cells)
+     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)                    ;; ZP_RT = allocated cell-pair
+     (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
 
-;;      (JSR VM_ALLOC_CELL_PAIR_TO_ZP_PTR)                           ;; ZP_PTR = allocated cell-pair
-;;      (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
-;;      (JSR VM_CELL_STACK_PUSH_ZP_PTR)                    ;;cell-pair -> stack
+     ;; wrote a new cell-pair @2
+     (LDA !$02)
+     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)    ;; tos (cell-pair) -> @2
 
-;;      ;; wrote a new cell-pair @2
-;;      (LDA !$02)
-;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)    ;; tos (cell-pair) -> @2
+     (JSR VM_CELL_STACK_PUSH_INT_m1_R)                    ;; int -1 -> stack
+     (LDA !$01)
+     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)    ;; tos (int -1) -> 1
 
-;;      (JSR VM_CELL_STACK_PUSH_INT_m1)                    ;; int -1 -> stack
-;;      (LDA !$01)
-;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)    ;; tos (int -1) -> 1
+     (JSR VM_CP_RA_TO_RT)
+     (JSR VM_GC_ARRAY_SLOT_RT)
+     ))                      ;; gc array
 
-;;      (JSR VM_GC_ARRAY_SLOT_PTR2)
-;;      ))                      ;; gc array
+  (define test-gc-array-slot-ptr-state-after
+    (run-code-in-test test-gc-array-slot-ptr-code))
 
-;;   (define test-gc-array-slot-ptr-state-after
-;;     (run-code-in-test test-gc-array-slot-ptr-code))
-
-;;   (check-equal? (vm-stack->strings test-gc-array-slot-ptr-state-after)
-;;                 (list "stack holds 2 items"
-;;                       "int $1fff"
-;;                       "pair-ptr $cb04"))
-;;   (check-equal? (vm-page->strings test-gc-array-slot-ptr-state-after #xcb)
-;;                 (list "page-type:      cell-pair page"
-;;                       "previous page:  $00"
-;;                       "slots used:     1"
-;;                       "next free slot: $08"))
-;;   (check-equal? (memory-list test-gc-array-slot-ptr-state-after #xcb01 #xcb01)
-;;                 (list #x00)
-;;                 "refcount for cell-pair at cb04..cb07 is at cb01 = 0 (was freed)")
-;;   (check-equal? (vm-cell-pair-free-tree->string test-gc-array-slot-ptr-state-after)
-;;                 "pair $cb04 -> [ cell-int $0000 . cell-int $0000 ]"
-;;                 "...and added as free tree root (for reuse)"))
+  (check-equal? (vm-stack->strings test-gc-array-slot-ptr-state-after)
+                (list "stack holds 2 items"
+                      (format "ptr[1] $~a0c  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                      (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_1))))
+  (check-equal? (vm-page->strings test-gc-array-slot-ptr-state-after PAGE_AVAIL_1)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $09"))
+  (check-equal? (memory-list test-gc-array-slot-ptr-state-after (+ PAGE_AVAIL_1_W #x01) (+ PAGE_AVAIL_1_W #x01))
+                (list #x00)
+                "refcount for cell-pair at cb04..cb07 is at cb01 = 0 (was freed)")
+  (check-equal? (vm-cell-pair-free-tree->string test-gc-array-slot-ptr-state-after)
+                (format "pair $~a05 -> [ empty . empty ]" (format-hex-byte PAGE_AVAIL_1))
+                "...and added as free tree root (for reuse)"))
 
 ;; allocate an array of bytes (native) (also useful for strings)
 ;; input:  A = number of bytes (1..)
@@ -4605,66 +4609,52 @@ call frame primitives etc.
                       #x01 #x00))
 )
 
-;; TODO: rewrite to RT/RA usage
 
-;; ;; write the tos into array element a (0 indexed), array pointed to by zp_ptr2
-;; ;; input:  a = index (0 indexed)
-;; ;;         ZP_PTR2 = pointer to array
-;; ;; NO CHECKING (NO BOUNDS, NO TYPE ...)
-;; ;; DECREMENT ref of pointer if array element was a pointer
-;; (define VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2
-;;   (list
-;;    (label VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-;;           (ASL A)
-;;           (CLC)
-;;           (ADC !$02) ;; point to low byte
-;;           (STA ZP_TEMP) ;; keep for later
+;; write the tos into array element a (0 indexed), array pointed to by zp_ptr2
+;; input:  a = index (0 indexed)
+;;         ZP_PTR2 = pointer to array
+;; NO CHECKING (NO BOUNDS, NO TYPE ...)
+;; DECREMENT ref of pointer if array element was a pointer
+(define VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA
+  (list
+   (label VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (ASL A)
+          (CLC)
+          (ADC !$02) ;; point to low byte
+          (STA ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) ;; keep for later
 
-;;           ;; copy low byte
-;;           (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
-;;           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
-;;           (LDY ZP_TEMP)
-;;           (TAX)
-;;           (LDA (ZP_PTR2),y) ;; previous low byte in that slot
-;;           (AND !$03)
-;;           (BEQ NO_PTR_IN_SLOT__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
 
-;;           ;; GC the slot before actually writing to it <- can maybe optimized be ensuring that this cannot happen
-;;           (INY)
-;;           (LDA (ZP_PTR2),y) ;; if high byte is 0, it is nil, no gc there
-;;           (BEQ IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          ;; get previous content into rt and decr ref count (if applicable)
+          (TAY)
+          (LDA (ZP_RA),y) ;; if low byte (tagged)
+          (AND !$03)
+          (CMP !$03)
+          (BEQ IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          (INY)
+          (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
+          (BEQ IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+          (LDY ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
+          (STA ZP_RT)
+          (INY)
+          (LDA (ZP_RA),y) ;; previous low byte in that slot (load again)
+          (STA ZP_RT+1)
+          (JSR VM_REFCOUNT_DECR_RT) ;; decrement array slot
+          (JSR VM_CELL_STACK_POP_R) ;; restore RT
 
-;;           (DEY)
+   (label IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          (LDY ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) 
+          (LDA ZP_RT)
+          (STA (ZP_RA),y) ;;
+          (INY)
+          (LDA ZP_RT+1)
+          (STA (ZP_RA),y)
 
-;;           (LDA (ZP_PTR2),y) ;; previous low byte in that slot (load again)
-;;           (STA ZP_PTR_TAGGED)
-;;           (AND !$fc)
-;;           (STA ZP_PTR)
-;;           (INY)
-;;           (LDA (ZP_PTR2),y)
-;;           (STA ZP_PTR+1)
-;;           (JSR VM_REFCOUNT_DECR_ZP_PTR)
+          (RTS)
 
-;;           ;; ensure x = lowbyte (or a and jump even further)
-
-;;    (label IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-;;           (LDY ZP_CELL_STACK_TOS)          ;; points to tagged low byte of stack
-;;           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;;
-;;           (LDY ZP_TEMP)
-;;           (TAX)
-;;    (label NO_PTR_IN_SLOT__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-;;           (TXA)
-;;           (STA (ZP_PTR2),y)
-
-;;           ;; copy high byte
-;;           (LDY ZP_CELL_STACK_TOS)
-;;           (DEY)
-;;           (LDA (ZP_CELL_STACK_BASE_PTR),y) ;; high byte in stack
-;;           (LDY ZP_TEMP)
-;;           (INY)
-;;           (STA (ZP_PTR2),y) ;; write high byte into array
-
-;;           (RTS)))
+   (label ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (byte 0)))
 
 ;; (module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
 ;;   (define vm_cell_stack_write_tos_to_array_ata_ptr-code
@@ -4861,8 +4851,8 @@ call frame primitives etc.
           ;; VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS                ;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
           ;; VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
 
-          ;; VM_GC_ARRAY_SLOT_PTR                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
-
+          VM_GC_ARRAY_SLOT_RT                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
+          
           ;; VM_DEREF_PTR2_INTO_PTR                             ;; dereference pointer in zp_ptr2, writing dereferenced value into zp_ptr
 
           VM_FREE_PTR_IN_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
@@ -4922,6 +4912,8 @@ call frame primitives etc.
 
           VM_POP_FSTOS_TO_CELLy_RT                           ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
+          VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA             ;; write RT into array in RA at index A (GC previous slot entry, if applicable)
+
           ;; OBSOLETE_DEFINITIONS
 
           (list (label END__MEMORY_MANAGER))
@@ -4933,4 +4925,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1435))
+                       1506))
