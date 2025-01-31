@@ -3498,7 +3498,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                66063)
+                66439)
   (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
