@@ -2567,58 +2567,57 @@ call frame primitives etc.
                       "next free slot: $0a")
                 "page has 2 slots in use"))
 
-;; (module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page) |#
-;;   (define test-alloc-cell-to-zp-ptr-twicenfree-code
-;;     (list
-;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)
-;;      (JSR VM_COPY_PTR_TO_PTR2)
+(module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page) |#
+  (define test-alloc-cell-to-zp-ptr-twicenfree-code
+    (list
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_CP_RT_TO_RA)
 
-;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)
-;;      (JSR VM_COPY_PTR2_TO_PTR)
-;;      (JSR VM_FREE_CELL_IN_ZP_PTR)))
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_FREE_CELL_PTR_IN_RA)))
 
-;;   (define test-alloc-cell-to-zp-ptr-twicenfree-state-after
-;;     (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfree-code))
+  (define test-alloc-cell-to-zp-ptr-twicenfree-state-after
+    (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfree-code))
 
-;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
-;;                 (list #x02 #xcc)
-;;                 "free cell list has cc02 now as head of the list")
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+                (list #x02 PAGE_AVAIL_0)
+                "free cell list has xx02 now as head of the list")
 
-;;   (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcc)
-;;                 (list "page-type:      cell page"
-;;                       "previous page:  $00"
-;;                       "slots used:     2"
-;;                       "next free slot: $0a")
-;;                 "page has still 2 slots in use (even though $cc02 was freed)")
+  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfree-state-after PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "page has still 2 slots in use (even though $cc02 was freed)")
 
-;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after #xcc02 #xcc03 )
-;;                 (list #x00 #x00)
-;;                 "since cc02 is now part of the free cell list, it points to the next free cell which is $0000 (none)"))
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+                (list #x00 #x00)
+                "since xx02 is now part of the free cell list, it points to the next free cell which is $0000 (none)"))
 
-;; (module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page, then allocate again) |#
-;;   (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-code
-;;     (list
-;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)
-;;      (JSR VM_COPY_PTR_TO_PTR2)
+(module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page, then allocate again) |#
+  (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-code
+    (list
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_CP_RT_TO_RA)
 
-;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)
-;;      (JSR VM_COPY_PTR2_TO_PTR)
-;;      (JSR VM_FREE_CELL_IN_ZP_PTR)
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR VM_FREE_CELL_PTR_IN_RA)
 
-;;      (JSR VM_ALLOC_CELL_TO_ZP_PTR)))
+     (JSR VM_ALLOC_CELL_PTR_TO_RT)))
 
-;;   (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after
-;;     (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfreenalloc-code))
+  (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after
+    (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfreenalloc-code))
 
-;;   (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after #xcc)
-;;                 (list "page-type:      cell page"
-;;                       "previous page:  $00"
-;;                       "slots used:     2"
-;;                       "next free slot: $0a"))
+  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "still (only) two slots are used on the page, one from the free list was reused")
 
-;;   (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
-;;                 (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
-;;                 "free cell list is initial again"))
+  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+                (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
+                "free cell list is initial again"))
 
 ;; actively free all enqueued cell pairs of the free-list!
 ;; can be useful to find out whether a whole page is not used at all. free cells are still marked as used on a page.
@@ -3566,9 +3565,6 @@ call frame primitives etc.
                       "slots used:     2"
                       "next free slot: $41")))
 
-
-;; TODO: active m1 pages code and tests
-
 ;; ----------------------------------------
 ;; page type slot w/ different sizes (refcount @ ptr-1) x cells
 ;; math: first entry @FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS + 1, refcount @ -1, next slot += INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS, slot-size = INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS -1
@@ -4487,64 +4483,57 @@ call frame primitives etc.
 
 ;; allocate an array of bytes (native) (also useful for strings)
 ;; input:  A = number of bytes (1..)
-;; output: ZP_PTR2 -> points to an allocated array
-;; (define VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2
-;; (list
-;;    (label VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
-;;           (PHA)
-;;           (CLC)
-;;           (ADC !$02) ;; add to total slot size
+;; output: ZP_RA -> points to an allocated array (not initialized)
+(define VM_ALLOC_NATIVE_ARRAY_TO_RA
+(list
+   (label VM_ALLOC_NATIVE_ARRAY_TO_RA)
+          (PHA)
+          (CLC)
+          (ADC !$02) ;; add to total slot size
 
-;;           (JSR VM_ALLOC_M1_SLOT_TO_ZP_PTR2)
+          (JSR VM_ALLOC_M1_SLOT_TO_RA)
 
-;;           ;; write header cell
-;;           (LDY !$00)
-;;           (LDA !TAG_BYTE_NATIVE_ARRAY)
-;;           (STA (ZP_PTR2),y) ;; store tag byte
+          ;; write header cell
+          (LDY !$00)
+          (LDA !TAG_BYTE_NATIVE_ARRAY)
+          (STA (ZP_RA),y) ;; store tag byte
 
-;;           (INY)
-;;           (PLA)
-;;           (STA (ZP_PTR2),y) ;; store number of array elements
+          (INY)
+          (PLA)
+          (STA (ZP_RA),y) ;; store number of array elements
 
-;;           (TAX) ;; use number of array elements as loop counter
+   ;; no initializing with 0 (might be useful for debugging, though)
+   ;;        (TAX) ;; use number of array elements as loop counter
 
-;;           ;; initialize slots/array with 0
-;;           (LDA !$00)
-;;    (label LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
-;;           (INY)
-;;           (STA (ZP_PTR2),y)
-;;           (DEX)
-;;           (BNE LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
+   ;;        ;; initialize slots/array with 0
+   ;;        (LDA !$00)
+   ;; (label LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
+   ;;        (INY)
+   ;;        (STA (ZP_RA),y)
+   ;;        (DEX)
+   ;;        (BNE LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
 
-;;           (RTS)))
+          (RTS)))
 
-;; (module+ test #| vm_allocate_native_array |#
-;;   (define test-alloc-native-array-code
-;;     (list
-;;      (LDA !$10)
-;;      (JSR VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)))
+(module+ test #| vm_allocate_native_array |#
+  (define test-alloc-native-array-code
+    (list
+     (LDA !$10)
+     (JSR VM_ALLOC_NATIVE_ARRAY_TO_RA)))
 
-;;   (define test-alloc-native-array-state-after
-;;     (run-code-in-test test-alloc-native-array-code))
+  (define test-alloc-native-array-state-after
+    (run-code-in-test test-alloc-native-array-code))
 
-;;   (check-equal? (vm-page->strings test-alloc-native-array-state-after #xcc)
-;;                 (list
-;;                  "page-type:      m1 page p1"
-;;                  "previous page:  $00"
-;;                  "slots used:     1"
-;;                  "next free slot: $2e"))
-;;   (check-equal? (memory-list test-alloc-native-array-state-after ZP_PTR2 (add1 ZP_PTR2))
-;;                 (list #x10 #xcc))
-;;   (check-equal? (memory-list test-alloc-native-array-state-after #xcc10 #xcc21)
-;;                 (list TAG_BYTE_NATIVE_ARRAY #x10
-;;                       #x00 #x00
-;;                       #x00 #x00
-;;                       #x00 #x00
-;;                       #x00 #x00
-;;                       #x00 #x00
-;;                       #x00 #x00
-;;                       #x00 #x00
-;;                       #x00 #x00)))
+  (check-equal? (vm-page->strings test-alloc-native-array-state-after PAGE_AVAIL_0)
+                (list
+                 "page-type:      m1 page p1"
+                 "previous page:  $00"
+                 "slots used:     1"
+                 "next free slot: $2e"))
+  (check-equal? (memory-list test-alloc-native-array-state-after ZP_RA (add1 ZP_RA))
+                (list #x10 PAGE_AVAIL_0))
+  (check-equal? (memory-list test-alloc-native-array-state-after (+ PAGE_AVAIL_0_W #x10) (+ PAGE_AVAIL_0_W #x11))
+                (list TAG_BYTE_NATIVE_ARRAY #x10)))
 
 ;; allocate an array of cells (also useful for structures)
 ;; input:  A = number of cells (1..)
@@ -4612,15 +4601,34 @@ call frame primitives etc.
 
 ;; write the tos into array element a (0 indexed), array pointed to by zp_ptr2
 ;; input:  a = index (0 indexed)
-;;         ZP_PTR2 = pointer to array
+;;         ZP_RA = pointer to array
+;;         ZP_RT = cell to store
+;; usage: A, X, Y, RT, RA
 ;; NO CHECKING (NO BOUNDS, NO TYPE ...)
-;; DECREMENT ref of pointer if array element was a pointer
+;; DECREMENT ref of pointer if array element was a pointer (cell-ptr or cell-pair-ptr)
 (define VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA
   (list
+   (label VM_CELL_STACK_POP_TO_ARRAY_ATa_RA)
+          (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (JMP VM_CELL_STACK_POP_R)
+
+   (label VM_CELL_STACK_POP_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+          (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+          (JMP VM_CELL_STACK_POP_R)
+
+   (label VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+          (LDY !$01)
+          (CMP (ZP_RA),y)
+          (BPL BOUNDS_ERR__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (CMP !$00)
+          (BPL VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+   (label BOUNDS_ERR__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (BRK)
+
    (label VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
           (ASL A)
           (CLC)
-          (ADC !$02) ;; point to low byte
+          (ADC !$02) ;; point to first cell (index 0)
           (STA ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) ;; keep for later
 
 
@@ -4629,10 +4637,10 @@ call frame primitives etc.
           (LDA (ZP_RA),y) ;; if low byte (tagged)
           (AND !$03)
           (CMP !$03)
-          (BEQ IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          (BEQ NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
           (INY)
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
-          (BEQ IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          (BEQ NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
           (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
           (LDY ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
@@ -4643,7 +4651,7 @@ call frame primitives etc.
           (JSR VM_REFCOUNT_DECR_RT) ;; decrement array slot
           (JSR VM_CELL_STACK_POP_R) ;; restore RT
 
-   (label IS_NIL____VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+   (label NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
           (LDY ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) 
           (LDA ZP_RT)
           (STA (ZP_RA),y) ;;
@@ -4656,67 +4664,199 @@ call frame primitives etc.
    (label ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
           (byte 0)))
 
-;; (module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
-;;   (define vm_cell_stack_write_tos_to_array_ata_ptr-code
-;;     (list
-;;      (LDA !$04)
-;;      (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
+(module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
+  (define vm_cell_stack_write_tos_to_array_ata_ptr-code
+    (list
+     (LDA !$04)
+     (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
 
-;;      (LDA !$ff)
-;;      (LDX !$01)
-;;      (JSR VM_CELL_STACK_PUSH_INT)
+     (LDA !$ff)
+     (LDX !$01)
+     (JSR VM_CELL_STACK_PUSH_INT_R)
 
-;;      (LDA !$02)
-;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)))
+     (LDA !$02)
+     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)))
 
-;;   (define vm_cell_stack_write_tos_to_array_ata_ptr-state-after
-;;     (run-code-in-test vm_cell_stack_write_tos_to_array_ata_ptr-code))
+  (define vm_cell_stack_write_tos_to_array_ata_ptr-state-after
+    (run-code-in-test vm_cell_stack_write_tos_to_array_ata_ptr-code))
 
-;;   (check-equal? (vm-page->strings vm_cell_stack_write_tos_to_array_ata_ptr-state-after #xcc)
-;;                 (list
-;;                  "page-type:      m1 page p0"
-;;                  "previous page:  $00"
-;;                  "slots used:     1"
-;;                  "next free slot: $16"))
-;;   (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after ZP_PTR2 (add1 ZP_PTR2))
-;;                 (list #x04 #xcc))
-;;   (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after #xcc04 #xcc0d)
-;;                 (list TAG_BYTE_CELL_ARRAY #x04
-;;                       #x02 #x00
-;;                       #x02 #x00
-;;                       #x04 #xff
-;;                       #x02 #x00)))
+  (check-equal? (vm-page->strings vm_cell_stack_write_tos_to_array_ata_ptr-state-after PAGE_AVAIL_0)
+                (list
+                 "page-type:      m1 page p0"
+                 "previous page:  $00"
+                 "slots used:     1"
+                 "next free slot: $16"))
+  (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after ZP_RA (add1 ZP_RA))
+                (list #x04 PAGE_AVAIL_0)
+                "points to the cell-array in this m1 page")
+  (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after (+ PAGE_AVAIL_0_W #x04) (+ PAGE_AVAIL_0_W #x0d))
+                (list TAG_BYTE_CELL_ARRAY #x04
+                      #x01 #x00
+                      #x01 #x00
+                      #x07 #xff
+                      #x01 #x00)
+                (string-append "slot is a cell-array, with 4 elements"
+                               "slot 0 = nil"
+                               "slot 1 = nil"
+                               "slot 2 = int $1fff"
+                               "slot 3 = nil")))
 
-;; (module+ test #| vm_cell_stack_push_array_ata_ptr |#
-;;   (define test-cell-stack-push-array-ata-ptr-code
-;;     (list
-;;      (LDA !$04)
-;;      (JSR VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2)
+(module+ test #| write to array bounds checks |#
+  (define to-array-ata-ra-4-state
+    (run-code-in-test
+     (list
+      (LDA !$04)
+      (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
 
-;;      (LDA !$02)
-;;      (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2) ;; @2 = nil -> stack
+      (LDA !$ff)
+      (LDX !$01)
+      (JSR VM_CELL_STACK_PUSH_INT_R)
 
-;;      (LDA !$ff)
-;;      (LDX !$01)
-;;      (JSR VM_CELL_STACK_PUSH_INT)            ;; int $1ff -> stack
+      (LDA !$04) ;; out of bounds
+      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
 
-;;      (LDA !$02)
-;;      (JSR VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2) ;; tos (int $1ff) -> @2 (overwriting nil)
+      (JSR VM_CELL_STACK_PUSH_INT_0_R))
+    ))
 
-;;      (LDA !$02)
-;;      (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_PTR2)  ;; @2 (now int $1ff) -> stack
-;;      ))
+  (check-equal? (vm-stack->strings to-array-ata-ra-4-state)
+               (list "stack holds 1 item"
+                     "int $01ff  (rt)")
+               "never got to pushing 0 since access index 4 is out of bounds")
 
-;;   (define test-cell-stack-push-array-ata-ptr-state-after
-;;     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
+  (define to-array-ata-ra-ff-state
+    (run-code-in-test
+     (list
+      (LDA !$04)
+      (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
 
-;;   (check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-;;                 1371)
-;;   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
-;;                 (list "stack holds 3 items"
-;;                       "int $01ff"
-;;                       "int $01ff"
-;;                       "pair-ptr NIL")))
+      (LDA !$ff)
+      (LDX !$01)
+      (JSR VM_CELL_STACK_PUSH_INT_R)
+
+      (LDA !$ff) ;; out of bounds
+      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+
+      (JSR VM_CELL_STACK_PUSH_INT_0_R))
+    ))
+
+  (check-equal? (vm-stack->strings to-array-ata-ra-ff-state)
+               (list "stack holds 1 item"
+                     "int $01ff  (rt)")
+               "never got to pushing 0 since access index ff is out of bounds")
+
+  (define to-array-ata-ra-0-state
+    (run-code-in-test
+     (list
+      (LDA !$04)
+      (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
+
+      (LDA !$ff)
+      (LDX !$01)
+      (JSR VM_CELL_STACK_PUSH_INT_R)
+
+      (LDA !$00) ;; in bounds
+      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+
+      (JSR VM_CELL_STACK_PUSH_INT_0_R))
+    ))
+
+  (check-equal? (vm-stack->strings to-array-ata-ra-0-state)
+               (list "stack holds 2 items"
+                     "int $0000  (rt)"
+                     "int $01ff")
+               "got to pushing 0 since access index 0 is in bounds")
+
+  (define to-array-ata-ra-3-state
+    (run-code-in-test
+     (list
+      (LDA !$04)
+      (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
+
+      (LDA !$ff)
+      (LDX !$01)
+      (JSR VM_CELL_STACK_PUSH_INT_R)
+
+      (LDA !$03) ;; in bounds
+      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+
+      (JSR VM_CELL_STACK_PUSH_INT_0_R))
+    ))
+
+  (check-equal? (vm-stack->strings to-array-ata-ra-3-state)
+               (list "stack holds 2 items"
+                     "int $0000  (rt)"
+                     "int $01ff")
+               "got to pushing 0 since access index 0 is in bounds"))
+
+(define VM_CELL_STACK_PUSH_ARRAY_ATa_RA
+  (list
+   (label VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
+          (PHA)
+          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+          (PLA)
+          (BCC VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
+
+   (label VM_CELL_STACK_PUSH_ARRAY_ATa_RA__CHECK_BOUNDS)
+          (PHA)
+          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+          (PLA)
+
+   (label VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA__CHECK_BOUNDS)
+          (LDY !$01)
+          (CMP (ZP_RA),y)
+          (BPL BOUNDS_ERR__VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
+          (CMP !$00)
+          (BPL VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
+   (label BOUNDS_ERR__VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
+          (BRK)  ;; out of bounds error
+
+   (label VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
+          (ASL A)
+          (CLC)
+          (ADC !$03)                    ;; get y to point to high byte of cell at index
+          (TAY)
+          (LDA (ZP_RA),y)               ;; copy high byte
+          (STA ZP_RT+1)
+          (DEY)
+          (LDA (ZP_RA),y)               ;; copy low byte
+          (STA ZP_RT)
+          (AND !$03)
+          (CMP !$03)                    ;; is no pointer?
+          (BEQ DONE__VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
+          (JMP VM_REFCOUNT_INCR_RT)
+   (label DONE__VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
+          (RTS)))
+
+(module+ test #| vm_cell_stack_push_array_ata_ptr |#
+  (define test-cell-stack-push-array-ata-ptr-code
+    (list
+     (LDA !$04)
+     (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
+
+     (LDA !$02)
+     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_RA) ;; @2 = nil -> stack
+
+     (LDA !$ff)
+     (LDX !$01)
+     (JSR VM_CELL_STACK_PUSH_INT_R)            ;; int $1ff -> stack
+
+     (LDA !$02)
+     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) ;; tos (int $1ff) -> @2 (overwriting nil)
+
+     (LDA !$02)
+     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_RA)  ;; @2 (now int $1ff) -> stack
+     ))
+
+  (define test-cell-stack-push-array-ata-ptr-state-after
+    (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
+
+  (check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
+                2213)
+  (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
+                (list "stack holds 3 items"
+                      "int $01ff  (rt)"
+                      "int $01ff"
+                      "pair-ptr NIL")))
 
 ;; idea: have a list of code pages (adding new page as head if allocated)
 ;;       TODO: how does relocation work here?
@@ -4814,8 +4954,7 @@ call frame primitives etc.
 
           VM_GC_QUEUE_OF_FREE_CELL_PAIRS                     ;; reclaim all cell-pairs in the queue of free cells
 
-          ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
-          ;; VM_ALLOC_CELL_ARRAY_TO_ZP_PTR2 
+          VM_ALLOC_NATIVE_ARRAY_TO_RA                        ;; allocate an array of bytes (native) (also useful for strings)
           VM_ALLOC_CELL_ARRAY_TO_RA                          ;; allocate an array of cells (also useful for structures)
 
           VM_ALLOC_M1_SLOT_TO_RA                             ;; allocate a slot of min A size, allocating a new page if necessary
@@ -4866,6 +5005,13 @@ call frame primitives etc.
           ;; vm_cell_stack_push_rt_if_nonempty
           VM_CELL_STACK_JUST_PUSH_RT                         ;; push RT onto call frame cell stack
 
+          ;; VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA
+          VM_CELL_STACK_PUSH_ARRAY_ATa_RA
+          ;; VM_CELL_STACK_POP_TO_ARRAY_ATa_RA
+          ;; VM_CELL_STACK_POP_TO_ARRAY_ATa_RA__CHECK_BOUNDS
+          ;; VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS
+          VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA             ;; write RT into array in RA at index A (GC previous slot entry, if applicable)
+
           ;; VM_WRITE_INTm1_TO_RA                             ;; write cell-int -1 into RA
           ;; VM_WRITE_INTm1_TO_RT                             
           ;; VM_WRITE_INTm1_TO_Rx                             ;; x=0 -> RT, x=2 -> RA
@@ -4912,8 +5058,6 @@ call frame primitives etc.
 
           VM_POP_FSTOS_TO_CELLy_RT                           ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
-          VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA             ;; write RT into array in RA at index A (GC previous slot entry, if applicable)
-
           ;; OBSOLETE_DEFINITIONS
 
           (list (label END__MEMORY_MANAGER))
@@ -4925,4 +5069,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1506))
+                       1590))

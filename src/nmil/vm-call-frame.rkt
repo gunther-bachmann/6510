@@ -63,7 +63,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (provide vm-call-frame
          vm-call-frame->strings
-         vm-call-frames->string)
+         vm-call-frames->string
+
+         VM_POP_CALL_FRAME_N)
 
 (define (vm-call-frames->string state)
   (define call-frame-page (peek state (add1 ZP_CALL_FRAME)))
@@ -451,6 +453,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 ;;       it does no GC check on locals!
 (define VM_POP_CALL_FRAME_N
   (list
+   ;; TODO: check whether locals need to move to new page (free locals page)
+
    (label VM_POP_CALL_FRAME_N)
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (CMP !$03)                                     

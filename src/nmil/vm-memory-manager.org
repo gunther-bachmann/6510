@@ -242,6 +242,41 @@ offset  content
 01      previous page (of the stack)
 02..ff  payload (either lowbyte or highbyte of the cell)
 
+** cell types and references
+cell types fall into 3 categories
+*** cell pointer
+tag byte ends on bits 0 [cell-ptr], or 01 [cell-pair-ptr]
+points somewhere.
+- it points to another cell (points to either a cell pointer, a value cell or a header cell)
+- it points to a cell-pair
+*** value cell
+a value cell holds its (complete) value
+- int, tag byte  = 0... ..11 (& $83 = $03)
+- byte, tag byte = 1111 1111 ($FF)
+*** header cell
+is a cell that is used as a header of a number of cells. the following headers exist
+- header for an *array of cells* (useful for structures)
+  tag byte = 1000 0011 ($83)
+  offset  content        <- memory layout
+  ------------------
+  00      header-cell
+  01      length of array (n+1)
+  02..03  cell index 0 *)
+  04..05  cell index 1
+  ...
+  ..n*2+3 cell index n
+
+  *) cells in an array of cells may be either cell-ptr or value cells, never header cells!!
+
+- header fo a *native array of bytes* (useful for strings)
+  tag byte = 1000 0111 ($87)
+  offset  content        <- memory layout
+  ------------------
+  00      header-cell
+  01      length of byte array (n+1)
+  02      byte index 0
+  ...
+  n+2     byte index n
 ** pointer tagging
 RT = 00 (low byte) is equivalent to RT is empty!
 use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples (low, then high byte):
@@ -322,28 +357,35 @@ use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples
     pop: if (call-frame-ptr + 9) == $00(or $01)), its a a slow frame
          in a slow frame, high byte of func-ptr is high byte of vm_​pc - byte at 9 (either 00 or 01)
 ** function metadata (descriptors)
- function descriptor holds only # of locals needed (parameter number is meta data, that is not needed for interpretation)
  function descriptor:
-    00 : #of locals
+ ---- idea
+         function name
+         length of function name
+         default cell d-1       default cells can only be value cells or NIL ptr
+    ...
+         default cell 0
+ ---- implemented
+    00 : mddd llll  (#of locals in lower 4 bits, # of default values, m flag, indicating presence of function metadata)
     01 : start of byte code  (defaults offset?)
     ...
-    meta-data byte-code-len
-              str-len
-              function name string
 
 ** locals
- locals are organized as stack (page pair)
-    00: page type           00: page type
-    01: previous lb page    01: previous hb page
-    02: lowbyte cell 0      02: high byte cell 0
-    ...
-** cell stack (evaluation stack)
- cell-stack is organized as stack (page pair)
-    00: page type           00: page type
-    01: previous lb page    01: previous hb page
-    02: lowbyte cell 0      02: high byte cell 0
-    ...
+locals are organized as stack (page pair)
+   00: page type           00: page type
+   01: previous lb page    01: previous hb page
+   02: top mark (filled when leaving this page)
+   03: lowbyte cell 0      03: high byte cell 0
+   ...
 
+each cell can be either a cell pointer or a call value (never cell header)
+** cell stack (evaluation stack)
+cell-stack is organized as stack (page pair)
+   00: page type           00: page type
+   01: previous lb page    01: previous hb page
+   02: lowbyte cell 0      02: high byte cell 0
+   ...
+
+each cell can be either a cell pointer or a call value (never cell header)
 * log
 ** DONE call-frames
  ZP_​​VM_​PC                    *  ptr to the current byte code

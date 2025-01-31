@@ -86,7 +86,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
 (require (only-in "./vm-lists.rkt" vm-lists))
-(require (only-in "./vm-call-frame.rkt" vm-call-frame->strings))
+(require (only-in "./vm-call-frame.rkt"
+                  vm-call-frame->strings
+                  VM_POP_CALL_FRAME_N))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -278,6 +280,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA !$00)
           (STA (ZP_LOCALS_LB_PTR),y)                    ;; clear low byte from local
           (STA (ZP_LOCALS_HB_PTR),y)                    ;; clear high byte from local
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)                     ;; now pop the call frame
 
           (JMP VM_INTERPRETER)                          ;; and continue 
@@ -332,7 +335,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                      "program-counter:  $8005"
                      "function-ptr:     $8000"
-                     (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 04"
+                     (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                              (format-hex-byte PAGE_LOCALS_LB)
                              (format-hex-byte PAGE_LOCALS_HB))))
 
@@ -361,7 +364,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $8005"
                          "function-ptr:     $8000"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
@@ -404,7 +407,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                  (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                           "program-counter:  $8006"
                           "function-ptr:     $8000"
-                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 04"
+                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
 
@@ -462,7 +465,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     4"
                          "next free slot: $49"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4598)
+                4692)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -475,7 +478,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
                          "program-counter:  $800c"
                          "function-ptr:     $8000"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
@@ -509,6 +512,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_PUSH_CALL_FRAME_N)
           (LDY !$00)                            ;; index to number of locals (0)
           (LDA (ZP_RA),y)                       ;; A = #locals
+          (AND !$0f)                            ;; mask out the number of locals
           (JSR VM_ALLOC_LOCALS)                 ;; even if A=0 will set the top_mark and the locals appropriately
 
           ;; load zp_vm_pc with address of function bytecode
@@ -643,16 +647,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "int $0000")
                    "stack holds the pushed int, and all parameters"))
 
-(define BC_RET
+(define VM_REFCOUNT_DECR_CURRENT_LOCALS
   (list
-   (label BC_RET)
-          ;; restore from previous call frame, keep RT as result
-          ;; get number of locals
-          (LDY !$00)
-          (LDA (ZP_VM_FUNC_PTR),y)
-          (TAY)
+   (label VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (LDA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_TOP_MARK) ;; restore top mark
+          (LDY !$00)
+          (LDA (ZP_VM_FUNC_PTR),y)
+          (AND !$0f)
+          (TAY) ;; y = number of locals of current tunction
           ;; loop over locals -> rt, decr refcount
           (DEY)
           (BMI DONE__BC_RET)
@@ -677,13 +680,19 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (DEY)
           (BPL LOOP__BC_RET)
    (label DONE__BC_RET)
-          (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
-          (JMP VM_INTERPRETER)
+          (RTS)
 
    (label COUNTER__BC_RET)
           (byte 0)
    (label ZP_RT_BACKUP)
           (word 0)))
+
+(define BC_RET
+  (list
+   (label BC_RET)
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
+          (JMP VM_INTERPRETER)))
 
 (module+ test #| bc_ret |#
   (define test-bc-ret-state
@@ -1557,6 +1566,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA ZP_RT+1)
           (BNE IS_TRUE__BC_FALSE_P_RET)
           (JSR VM_CELL_STACK_POP_R)
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_TRUE__BC_FALSE_P_RET)
@@ -1570,6 +1580,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA ZP_RT+1)
           (BEQ IS_FALSE__BC_TRUE_P_RET)
           (JSR VM_CELL_STACK_POP_R)
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_FALSE__BC_TRUE_P_RET)
@@ -2615,6 +2626,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INC_INT
           BC_BNOP
           BC_GC_FL
+          VM_REFCOUNT_DECR_CURRENT_LOCALS
           VM_INTERPRETER))
 
 (define vm-interpreter
@@ -2629,4 +2641,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       740))
+                       757))
