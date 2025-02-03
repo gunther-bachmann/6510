@@ -485,6 +485,11 @@ call frame primitives etc.
                                           (format-hex-byte (arithmetic-shift low -2))
                                           (format-hex-byte high))]
     [(= TAG_BYTE_BYTE_CELL (bitwise-and #xff low)) (format "byte $~a" (format-hex-byte high))]
+    [(= TAG_BYTE_CELL_ARRAY (bitwise-and #xff low))
+     (define array-str (format "cell-array len=$~a" (format-hex-byte high)))
+     (if follow
+         (format "~a [...]" array-str)
+         array-str)]
     ;; TODO: a structure has a special value + follow bytes
     ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
     ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
@@ -5007,6 +5012,7 @@ call frame primitives etc.
 
           ;; VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA
           VM_CELL_STACK_PUSH_ARRAY_ATa_RA
+
           ;; VM_CELL_STACK_POP_TO_ARRAY_ATa_RA
           ;; VM_CELL_STACK_POP_TO_ARRAY_ATa_RA__CHECK_BOUNDS
           ;; VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS

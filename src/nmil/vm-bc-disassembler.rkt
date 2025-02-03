@@ -54,7 +54,9 @@
          (format "pop to local #~a" n))]
     [(= byte-code-t2 #x22) "pop"]
     [(= byte-code-t2 #x24) "eq?"]
-    [(= byte-code-t2 #x30)
+    [(= byte-code-t2 #x26) "false? -> ret false!"]
+    [(= byte-code-t2 #x28) "alloc array"]
+    [(= byte-code-t2 #x30) 
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))
          (format "nil? ret param #~a" n)
@@ -77,6 +79,17 @@
        [(5) "conar"]
        [(6) "cddr"]
        [(7) "unknown"])]
+    [(= byte-code-t2 #x60)
+     (define n (bitwise-and #x07 bc))
+     (case n
+       [(0) "get array field 0"]
+       [(1) "set array field 0"]
+       [(2) "get array field 1"]
+       [(3) "set array field 1"]
+       [(4) "get array field 2"]
+       [(5) "set array field 2"]
+       [(6) "get array field 3"]
+       [(7) "set array field 3"])]
     [(= byte-code-t2 #x64) (format "goto $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x66) "return"]
     [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (add1 (bytes->int bc_p1 bc_p2))))] ;; add 1 because byte code starts there (after #locals)

@@ -1569,6 +1569,8 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::15++0.00][architecture]] for efficient execution
 - hardware support
 - (vm) [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::21++0.00][instructions]], [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::33++0.00][instruction format]] 
+** the mu micro virtual machine :VM:
+https://microvm.github.io
 * collected notes and considerations
 ** general ideas
 - implement byte code interpreter in racket
@@ -3573,6 +3575,9 @@ this will include the implementation of
     - add/remove/cut/paste ... (as in editors)
   - [X] reverse order of binary tree + implementation of refcounting
   - [X] depth of binary tree (travers full tree, tail-call-recursively, keeping max depth)
+- [ ] implement debugger commands 
+- [ ] implement dereference?
+- [ ] implement concept of exception
 - [ ] implement concept of constants
   be aware of pointer tagging that should still work
   constants do not need reference counting and must never be put on the free-list (free-tree)
@@ -3582,16 +3587,15 @@ this will include the implementation of
   - lists
   - arrays, native-arrays (strings)
   - structures
-- [-] allocation/deallocation of lists, cells, structures, strings
+- [X] allocation/deallocation of lists, cells, structures, strings
   - [X] cells
   - [X] lists
+  - [X] arrays/structures
+  - [X] strings/native arrays
+- [-] field access to
   - [ ] structures
   - [ ] strings/native arrays
-  - [ ] arrays
-- [ ] field access to
-  - [ ] structures
-  - [ ]  strings/native arrays
-  - [ ]  arrays
+  - [X] arrays
 - [X] get a notion on when to do ref-counting inc/dec and garbage collection
   - [X] refcount primitives (inc/dec/free)
   - [X] implement refcount gc for revers function
@@ -3659,7 +3663,17 @@ this will include the implementation of
 - each cell may be an atomic cell only (just: byte, int, cell-ptr, cell-pair-ptr)
 - a cell-ptr may point to one cell, but depending on this cell, more cells may follow (cell-header + ..)
 - a cell-pair-ptr points to a cell-pair
+- functions
+  - write to @/read from @
+  - copy subarray
+  - concatenate arrays
+  - to-list/from-list
 **** IMPLEMENT implement some code for native arrays (strings)
+- native-array/string functions
+  - write to @/read from @
+  - copy subarray (substring)
+  - concatenate/append arrays
+  - to-list / from-list
 **** refcount qualities
 - provide function w/ ref and w/o ref counting <- for optimization
   - name-convention: function w/ ref counting: ...​_RC
@@ -3737,7 +3751,8 @@ both)
 - (m-def ...) -> vm, execute, debug?
 - see [[file:src/cisc-vm/mil-svm-generator.rkt]]
 **** glue together mil + 6510 vm
-**** IDEA implement larger array by using a BST tree of arrays?
+**** IDEA: implement larger array by using a BST tree of arrays?
+**** IDEA: change table with dispatch addresses (for certain programs? might optimize memory footprint)
 **** IDEA: collect statistics for
 - common two byte combinations <- byte code combinations
   - e.g. combine these into one byte commands

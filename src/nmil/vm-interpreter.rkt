@@ -152,6 +152,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         ALLOC_ARRAY
+         FALSE_P_RET_FALSE
+         GET_ARRAY_FIELD_0
+         GET_ARRAY_FIELD_1
+         GET_ARRAY_FIELD_2
+         GET_ARRAY_FIELD_3
+         SET_ARRAY_FIELD_0
+         SET_ARRAY_FIELD_1
+         SET_ARRAY_FIELD_2
+         SET_ARRAY_FIELD_3
          GC_FL
          CELL_EQ
          CAAR
@@ -1559,6 +1569,20 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| int? |#
   (skip (check-equal? #t #f "implement")))
 
+(define FALSE_P_RET_FALSE #x13)
+(define BC_FALSE_P_RET_FALSE
+  (list
+   (label BC_FALSE_P_RET_FALSE)
+          (LDA ZP_RT+1)
+          (BNE IS_TRUE__BC_FALSE_P_RET_FALSE)
+          ;; don't pop false value, return it!
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
+          (JMP VM_INTERPRETER)
+   (label IS_TRUE__BC_FALSE_P_RET_FALSE)
+          (JSR VM_CELL_STACK_POP_R)
+          (JMP VM_INTERPRETER_INC_PC)))
+
 (define FALSE_P_RET #x0e)
 (define BC_FALSE_P_RET
   (list
@@ -2409,6 +2433,51 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
+(define GET_ARRAY_FIELD_0 #xb0)
+(define GET_ARRAY_FIELD_1 #xb2)
+(define GET_ARRAY_FIELD_2 #xb4)
+(define GET_ARRAY_FIELD_3 #xb6)
+
+(define SET_ARRAY_FIELD_0 #xb1)
+(define SET_ARRAY_FIELD_1 #xb3)
+(define SET_ARRAY_FIELD_2 #xb5)
+(define SET_ARRAY_FIELD_3 #xb7)
+
+(define BC_XET_ARRAY_FIELD
+  (flatten
+   (list
+    (label BC_XET_ARRAY_FIELD)
+           (LSR)
+           (BCS BC_SET_ARRAY_FIELD)
+
+    (label BC_GET_ARRAY_FIELD) ;; replace RT with RT.@A
+           (PHA)
+           (JSR VM_CP_RT_TO_RA)
+           (PLA)
+           (JSR VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
+           (JSR VM_REFCOUNT_INCR_RT)
+           (JSR VM_REFCOUNT_DECR_RA)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping
+           (PHA)
+           (JSR VM_CP_RT_TO_RA)
+           (JSR VM_CELL_STACK_POP_R)
+           (PLA)
+           (JSR VM_CELL_STACK_POP_TO_ARRAY_ATa_RA)
+           (JSR VM_REFCOUNT_DECR_RA)
+           (JMP VM_INTERPRETER_INC_PC))))
+
+(define ALLOC_ARRAY #x14)
+(define BC_ALLOC_ARRAY
+  (list
+   (label BC_ALLOC_ARRAY)
+          (LDA ZP_RT+1)
+          (JSR VM_ALLOC_CELL_ARRAY_TO_RA)          
+          (JSR VM_REFCOUNT_INCR_RA__M1_SLOT)
+          (JSR VM_CP_RA_TO_RT) ;; overwrite byte on stack
+          (JMP VM_INTERPRETER_INC_PC)))
+
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
@@ -2433,8 +2502,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref BC_POP)                      ;; 22  <-  11
            (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 26  <-  13 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 28  <-  14 reserved
+           (word-ref BC_FALSE_P_RET_FALSE)        ;; 26  <-  13 
+           (word-ref BC_ALLOC_ARRAY)              ;; 28  <-  14 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2a  <-  15 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2c  <-  16 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 2e  <-  17 reserved
@@ -2454,7 +2523,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4c  <-  26 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4e  <-  27 reserved
-           (word-ref BC_CxxR)                     ;; 50  <-  a8..af reserved
+           (word-ref BC_CxxR)                     ;; 50  <-  a8..af 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 52  <-  29 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 54  <-  2a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 56  <-  2b reserved
@@ -2462,7 +2531,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 5a  <-  2d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 5c  <-  2e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 5e  <-  2f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 60  <-  b0..b7 reserved
+           (word-ref BC_XET_ARRAY_FIELD)          ;; 60  <-  b0..b7 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 62  <-  31 reserved
            (word-ref BC_GOTO)                     ;; 64  <-  32 
            (word-ref BC_RET)                      ;; 66  <-  33 
@@ -2494,7 +2563,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 9a  <-  4d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 9c  <-  4e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 9e  <-  4f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; a0  <-  d0..d7 eserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; a0  <-  d0..d7 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; a2  <-  51 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; a4  <-  52 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; a6  <-  53 reserved
@@ -2626,6 +2695,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INC_INT
           BC_BNOP
           BC_GC_FL
+          BC_ALLOC_ARRAY
+          BC_XET_ARRAY_FIELD
+          BC_FALSE_P_RET_FALSE
           VM_REFCOUNT_DECR_CURRENT_LOCALS
           VM_INTERPRETER))
 
@@ -2641,4 +2713,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       757))
+                       823))
