@@ -96,6 +96,22 @@
     (displayln (format "~a : ~a" str (number->string (hash-ref label-offsets str) 16)))
     (print-list-of-labels (cdr label-list) label-offsets)))
 
+;; is the given page (only the high byte of an address) a page of cell-pairs?
+(define (vm-cell-pair-page? state page)
+  (= #x40 (bitwise-and #xc0 (peek state (arithmetic-shift page 8)))))
+
+;; is the given page (only the high byte of an address) a page of cells?
+(define (vm-cell-page? state page)
+  (= #x80 (bitwise-and #x80 (peek state (arithmetic-shift page 8)))))
+
+;; is the given page (only the high byte of an address) a m1 page?
+(define (vm-m1-page? state page)
+  (= #x00 (bitwise-and #xe8 (peek state (arithmetic-shift page 8)))))
+
+;; given that this page is a m1 page, what profile is used
+(define (vm-profile-of-m1-page state page)
+  (bitwise-and #x07 (peek state (arithmetic-shift page 8))))
+
 (define (vm-pc state)
   (absolute (peek state (add1 ZP_VM_PC))
             (peek state ZP_VM_PC)))
@@ -370,8 +386,15 @@
                 [(string=? command "pf") (begin (for-each color-displayln (vm-call-frame->strings c-state)) d-state)]
                 [(regexp-match? page-regex command)
                  (match-let (((list _ _ page) (regexp-match page-regex command)))
-                   (map color-displayln (vm-page->strings c-state (string->number page 16)))
-                   (map color-displayln (vm-cell-pairs-used-info c-state (string->number page 16))))
+                   (define page-num (string->number page 16))
+                   (map color-displayln (vm-page->strings c-state page-num))
+                   (cond [(vm-cell-pair-page? c-state page-num)
+                          (map color-displayln (vm-cell-pairs-used-info c-state (string->number page 16)))]
+                          [(vm-cell-page? c-state page-num)
+                           (color-displayln "no more details for cell pages")]
+                          [(vm-m1-page? c-state page-num)
+                           (color-displayln (format "no more details for m1 pages (profile ~a)" (vm-profile-of-m1-page c-state page-num)))]
+                          [else (color-displayln "no more details for this page type")]))
                  d-state]
                 [(regexp-match? pl-regex command)
                  (match-let (((list _ num) (regexp-match pl-regex command)))

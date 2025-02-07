@@ -76,6 +76,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
                   VM_ALLOC_CELL_ARRAY_TO_RA
                   VM_REFCOUNT_DECR_RT
+                  VM_CELL_STACK_POP_R
 
                   ast-const-get
                   ZP_RT

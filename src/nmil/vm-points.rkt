@@ -206,12 +206,10 @@
      ))
 
   (check-equal? (vm-stack->strings point-create-n-pop-state)
-                (list "stack is empty"))
-  (check-equal? (vm-cell-at->string  point-create-n-pop-state (+ PAGE_AVAIL_0_W #x04))
-                "cell-array len=$03")
-  (skip (check-equal? (peek  point-create-n-pop-state (+ PAGE_AVAIL_0_W #x03))
-                      0
-                      "reference count dropped to 0")))
+                (list "stack is empty"))  
+  (check-equal? (memory-list  point-create-n-pop-state (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x04))
+                (list #x00 #x0e)
+                "reference count dropped to 0, next free is @0e"))
 
 (define POINT_XDIST ;; point1 :: point2 -> int
   (list

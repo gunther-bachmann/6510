@@ -113,6 +113,7 @@ call frame primitives etc.
          cleanup-string
          cleanup-strings
 
+         VM_CELL_STACK_POP_R
          VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
          VM_FREE_CELL_PAIR_PAGE
          VM_LIST_OF_FREE_CELLS
@@ -2132,7 +2133,7 @@ call frame primitives etc.
    (label LOAD_PAGE_TYPE__VM_REFCOUNT_DECR_CELL_PTR)
           (LDA $c000) ;; c0 is overwritten by page
           (BMI IS_CELL_PAGE__VM_REFCOUNT_DECR_CELL_PTR)
-          (AND !$ec)
+          (AND !$e8)
           (BEQ IS_M1_PAGE__VM_REFCOUNT_DECR_CELL_PTR)
 
           (BRK) ;; unhandled page type
@@ -4387,9 +4388,11 @@ call frame primitives etc.
           (CMP !TAG_BYTE_CELL_ARRAY)       ;;
           (BNE NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
 
+          ;; TODO: register array as free  (lazy)
           ;; its a regular array slot, (gc each slot, beware recursion!!!!)
-          (JSR VM_CP_RA_TO_RT)
-          (JSR VM_GC_ARRAY_SLOT_RT)
+          (JSR VM_CP_RA_TO_RT) ;; illegal use of rt here!
+          (JSR VM_GC_ARRAY_SLOT_RT) ;; illegal use of rt here!, uses RA, too!!
+          (JSR VM_CP_RT_TO_RA) ;; illegal use of rt here!
           (JMP VM_FREE_M1_SLOT_IN_RA)
 
    (label NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
@@ -4500,7 +4503,7 @@ call frame primitives etc.
 
 ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
 ;; input:  ZP_RT = pointer to array (slot)
-;; used:   ZP_RA   = dreferenced array element (if array element is a ptr)
+;; used:   ZP_RA   = dereferenced array element (if array element is a ptr)
 ;;         ZP_RT   = pointer to last element of array
 ;; ouput: -
 (define VM_GC_ARRAY_SLOT_RT
@@ -5165,4 +5168,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1653))
+                       1656))
