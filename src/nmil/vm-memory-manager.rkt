@@ -116,12 +116,12 @@ call frame primitives etc.
          VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
          VM_FREE_CELL_PAIR_PAGE
          VM_LIST_OF_FREE_CELLS
-
+         VM_ALLOC_CELL_ARRAY_TO_RA
          VM_GC_QUEUE_OF_FREE_CELL_PAIRS
 
-          VM_MEMORY_MANAGEMENT_CONSTANTS
-          VM_INITIALIZE_MEMORY_MANAGER
-
+         VM_MEMORY_MANAGEMENT_CONSTANTS
+         VM_INITIALIZE_MEMORY_MANAGER
+         VM_REFCOUNT_DECR_RT
           ;; ---------------------------------------- alloc/free pages
           VM_FREE_PAGE                                       ;; free a page (the type specific stuff, of any, must have finished)
           VM_ALLOC_PAGE__PAGE_UNINIT                         ;; allocate new page (not initialized)
@@ -355,7 +355,7 @@ call frame primitives etc.
   (define page-type
     (cond
       [(= #x10 (bitwise-and #xf8 page-type-enc))
-       (format "m1 page p~a" (bitwise-and #x03 page-type-enc))]
+       (format "m1 page p~a" (bitwise-and #x07 page-type-enc))]
       [(= #x80 (bitwise-and #x80 page-type-enc))
        "cell page"]
       [(= #x40 (bitwise-and #xc0 page-type-enc))
@@ -457,8 +457,14 @@ call frame primitives etc.
   (define rc-offset (arithmetic-shift low -2))
   (peek state (bytes->int rc-offset high)))
 
-(define (refcount-of-cell state low high)
-  (define rc-offset (arithmetic-shift low -1))
+(define (refcount-of-cell state low high)  
+  (define page-type (peek state (bytes->int 0 high)))
+  (define rc-offset
+    (cond [(= #x80 (bitwise-and page-type #x80)) ;; cell-ptr-page
+           (arithmetic-shift low -1)]
+          [(= #x00 (bitwise-and page-type #xec))
+           (sub1 low)]
+          [else (raise-user-error (format "unknown page type ~a" page-type))]))
   (peek state (bytes->int rc-offset high)))
 
 ;; write decoded cell described by low high
@@ -861,7 +867,7 @@ call frame primitives etc.
 (define VM_CP_RA_TO_RT
   (list
    (label VM_CP_RA_TO_RT)
-   (label VM_CP_RT_TO_RA__VALUE) ;;just value, no tagged byte
+   (label VM_CP_RA_TO_RT__VALUE) ;;just value, no tagged byte
           (LDA ZP_RA)
           (STA ZP_RT)
           (LDA ZP_RA+1)
@@ -887,7 +893,7 @@ call frame primitives etc.
 (define VM_CP_RT_TO_RA
   (list
    (label VM_CP_RT_TO_RA)
-   (label VM_CP_RA_TO_RT__VALUE) ;;just value, no tagged byte
+   (label VM_CP_RT_TO_RA__VALUE) ;;just value, no tagged byte
           (LDA ZP_RT)
           (STA ZP_RA)
           (LDA ZP_RT+1)
@@ -1431,15 +1437,16 @@ call frame primitives etc.
           (byte $00) ;; cell page with free slots for m1 page p1 pages
           (byte $00) ;; cell page with free slots for m1 page p2 pages
           (byte $00) ;; cell page with free slots for m1 page p3 pages
+          (byte $00) ;; cell page with free slots for m1 page p5 pages
 
-   ;; $cecb..cecc
+   ;; $cecc..cecd
    (label VM_LIST_OF_FREE_CELLS) ;; list of cells that are unused but still allocated (reusable)
           (word $0000)
 
-   ;; $cecd..$cecf (unused)
+   ;; $cece..$cecf (unused)
    ))
 
-(define VM_LIST_OF_FREE_CELLS               #xcecb)
+(define VM_LIST_OF_FREE_CELLS               #xcecc)
 (define VM_FREE_CELL_PAIR_PAGE              #xcec3)
 (define VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE #xcec5)
 
@@ -1512,6 +1519,7 @@ call frame primitives etc.
            (STA VM_FREE_M1_PAGE_P0+1)
            (STA VM_FREE_M1_PAGE_P0+2)
            (STA VM_FREE_M1_PAGE_P0+3)
+           (STA VM_FREE_M1_PAGE_P0+4)
            (LDA !$01)
            (STA ZP_CELL_STACK_TOS)
 
@@ -2075,7 +2083,7 @@ call frame primitives etc.
           (LDA ZP_RT)
           (BEQ UNKNOWN__VM_REFCOUNT_DECR_RT)
           (LSR)
-          (BCC VM_REFCOUNT_DECR_RT__CELL_PTR__LSR)
+          (BCC VM_REFCOUNT_DECR_RT__CELL_PTR)
           (LSR)
           (BCC VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR__LSR)
           ;; check other types of cells
@@ -2117,13 +2125,29 @@ call frame primitives etc.
    ;; input: cell ptr in ZP_RT
    ;; decrement ref count, if 0 deallocate
    (label VM_REFCOUNT_DECR_RT__CELL_PTR)
-          (LDA ZP_RT)
+          ;; find out which page type is used (cell-ptr-page, m1-page, slot-page)
+          (LDA ZP_RT+1) ;; highbyte (page)
+          (BEQ DONE__VM_REFCOUNT_DECR_RT__CELL_PTR) ;; page=0 => empty, nothing to be done
+          (STA LOAD_PAGE_TYPE__VM_REFCOUNT_DECR_CELL_PTR+2)
+   (label LOAD_PAGE_TYPE__VM_REFCOUNT_DECR_CELL_PTR)
+          (LDA $c000) ;; c0 is overwritten by page
+          (BMI IS_CELL_PAGE__VM_REFCOUNT_DECR_CELL_PTR)
+          (AND !$ec)
+          (BEQ IS_M1_PAGE__VM_REFCOUNT_DECR_CELL_PTR)
+
+          (BRK) ;; unhandled page type
+
+   (label IS_M1_PAGE__VM_REFCOUNT_DECR_CELL_PTR)
+          (JSR VM_CP_RT_TO_RA)
+          (JMP VM_REFCOUNT_DECR_RA__M1_SLOT)
+
+   (label IS_CELL_PAGE__VM_REFCOUNT_DECR_CELL_PTR)
+          (LDA ZP_RT) ;; lowbyte (offset)
           (LSR)
-   (label VM_REFCOUNT_DECR_RT__CELL_PTR__LSR)
           (TAX)
-          (LDA ZP_RT+1)
-          (BEQ DONE__VM_REFCOUNT_DECR_RT__CELL_PTR)
-          ;; not nil!
+
+   (label NOW_DECREMENT_RC__VM_REFCOUNT_DECR_CELL_PTR)
+          (LDA ZP_RT+1) ;; highbyte (page)
           (STA PAGE__VM_REFCOUNT_DECR_RT__CELL_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
    (label PAGE__VM_REFCOUNT_DECR_RT__CELL_PTR)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
@@ -2149,7 +2173,7 @@ call frame primitives etc.
           (LDA ZP_RA)
           (BEQ UNKNOWN__VM_REFCOUNT_DECR_RA)
           (LSR)
-          (BCC VM_REFCOUNT_DECR_RA__CELL_PTR__LSR)
+          (BCC VM_REFCOUNT_DECR_RA__CELL_PTR)
           (LSR)
           (BCC VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR__LSR)
           ;; check other types of cells
@@ -2187,12 +2211,30 @@ call frame primitives etc.
    (label DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
           (RTS)
 
-          ;; for now just stop, TODO: cell-ptr may point to more complex structures!
    (label VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (LDA ZP_RA)
+          ;; find out which page type is used (cell-ptr-page, m1-page, slot-page)
+          (LDA ZP_RA+1) ;; highbyte (page)
+          (BEQ DONE__VM_REFCOUNT_DECR_RA__CELL_PTR) ;; page=0 => empty, nothing to be done
+          (STA LOAD_PAGE_TYPE__VM_REFCOUNT_DECR_RA__CELL_PTR+2)
+   (label LOAD_PAGE_TYPE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (LDA $c000) ;; c0 is overwritten by page
+          (BMI IS_CELL_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (AND !$ec)
+          (BEQ IS_M1_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+
+          (BRK) ;; unhandled page type
+
+   (label IS_M1_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (LDX ZP_RA)
+          (DEX)
+          (BNE NOW_DECREMENT_RC__VM_REFCOUNT_DECR_RA__CELL_PTR) ;; is never 0! for m1 pages
+
+   (label IS_CELL_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (LDA ZP_RA) ;; lowbyte (offset)
           (LSR)
-   (label VM_REFCOUNT_DECR_RA__CELL_PTR__LSR)
           (TAX)
+
+   (label NOW_DECREMENT_RC__VM_REFCOUNT_DECR_RA__CELL_PTR)
           (LDA ZP_RA+1)
           (STA PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
    (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
@@ -2218,7 +2260,7 @@ call frame primitives etc.
           (LDA ZP_RT)                                   ;; load tage byte
           (BEQ UNKNOWN__VM_REFCOUNT_INCR_RT)
           (LSR)
-          (BCC VM_REFCOUNT_INCR_RT__CELL_PTR__LSR)      ;; lowest bit = 0 => cell-ptr
+          (BCC VM_REFCOUNT_INCR_RT__CELL_PTR)      ;; lowest bit = 0 => cell-ptr
           (LSR)
           (BCC VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR__LSR)     ;; bit1 = 0 => cell-pair-ptr
           ;; check other types of cells
@@ -2253,17 +2295,34 @@ call frame primitives etc.
           (RTS)
 
    (label VM_REFCOUNT_INCR_RT__CELL_PTR)
-          (LDA ZP_RT)
+          ;; find out which page type is used (cell-ptr-page, m1-page, slot-page)
+          (LDA ZP_RT+1) ;; highbyte (page)
+          (BEQ DONE__VM_REFCOUNT_INCR_RT__CELL_PTR) ;; page=0 => empty, nothing to be done
+          (STA LOAD_PAGE_TYPE__VM_REFCOUNT_INCR_RT__CELL_PTR+2)
+   (label LOAD_PAGE_TYPE__VM_REFCOUNT_INCR_RT__CELL_PTR)
+          (LDA $c000) ;; c0 is overwritten by page
+          (BMI IS_CELL_PAGE__VM_REFCOUNT_INCR_RT__CELL_PTR)
+          (AND !$ec)
+          (BEQ IS_M1_PAGE__VM_REFCOUNT_INCR_RT__CELL_PTR)
+
+          (BRK) ;; unhandled page type
+
+   (label IS_M1_PAGE__VM_REFCOUNT_INCR_RT__CELL_PTR)
+          (LDX ZP_RT)
+          (DEX)
+          (BNE NOW_INCREMENT_RC__VM_REFCOUNT_INCR_RT__CELL_PTR) ;; is never 0! for m1 pages
+
+   (label IS_CELL_PAGE__VM_REFCOUNT_INCR_RT__CELL_PTR)
+          (LDA ZP_RT) ;; lowbyte (offset)
           (LSR)
-   (label VM_REFCOUNT_INCR_RT__CELL_PTR__LSR)
           (TAX)
+
+   (label NOW_INCREMENT_RC__VM_REFCOUNT_INCR_RT__CELL_PTR)
           (LDA ZP_RT+1)
-          (BEQ DONE__VM_REFCOUNT_INCR_RT__CELL)
-          ;; not nil
-          (STA PAGE__VM_REFCOUNT_INCR_RT__CELL+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
-   (label PAGE__VM_REFCOUNT_INCR_RT__CELL)
+          (STA PAGE__VM_REFCOUNT_INCR_RT__CELL_PTR+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
+   (label PAGE__VM_REFCOUNT_INCR_RT__CELL_PTR)
           (INC $c000,x) ;; c0 is overwritten by page (see above)
-   (label DONE__VM_REFCOUNT_INCR_RT__CELL)
+   (label DONE__VM_REFCOUNT_INCR_RT__CELL_PTR)
           (RTS)))
 
 (module+ test #| vm-refcount-decr-rt |#
@@ -3010,7 +3069,7 @@ call frame primitives etc.
    (label VM_FREE_CELL_PTR_IN_RT)
           ;; check if previous content was a pointer
           (LDY !$00)
-          (STY ZP_TEMP+1)
+          (STY LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RT+1)
 
           (LDA (ZP_RT),y)
           (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RT)
@@ -3018,16 +3077,36 @@ call frame primitives etc.
           (CMP !$03)
           (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RT)
 
-          ;; cell is a pointer => save for tail call in temp
+          ;; cell is a pointer => save for tail call in temp (either cell-ptr or cell-pair-ptr)
+          ;; enqueue this rt in list to decrement refcount
+          ;; TODO: given arrays that may hold lists of references, this might make it necessary to keep them as list
           (LDA (ZP_RT),y)
-          (STA ZP_TEMP)
+          (STA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RT)
           (INY)
           (LDA (ZP_RT),y)
-          (STA ZP_TEMP+1)
+          (STA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RT+1)               ;; might be overwritten if cell-array is freed!
           (DEY)
+          (BNE CONT__VM_FREE_CELL_PTR_IN_RT)
 
-          ;; copy previous head of free cells into this cell
    (label CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RT)
+          ;; check cell-type 
+          (LDA (ZP_RT),y)
+          (CMP !TAG_BYTE_CELL_ARRAY)        
+          (BEQ FREE_CELL_ARRAY__VM_FREE_CELL_PTR_IN_RT)
+          (CMP !TAG_BYTE_NATIVE_ARRAY)
+          (BEQ FREE_NATIVE_ARRAY__VM_FREE_CELL_PTR_IN_RT)          
+
+          ;; seems to be a value that does not need to be freed
+          (BNE CONT__VM_FREE_CELL_PTR_IN_RT)
+
+   (label FREE_CELL_ARRAY__VM_FREE_CELL_PTR_IN_RT)
+   (label FREE_NATIVE_ARRAY__VM_FREE_CELL_PTR_IN_RT)
+          ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
+          (JMP VM_REFCOUNT_DECR_RA__M1_SLOT) ;; cell and native arrays are allocated on m1 pages
+          ;; this cell was a header field of a m1slot -> no further processing
+
+  (label CONT__VM_FREE_CELL_PTR_IN_RT)
+          ;; COPY previous head of free cells into this cell
           (LDA VM_LIST_OF_FREE_CELLS)
           (STA (ZP_RT),y)
           (LDA VM_LIST_OF_FREE_CELLS+1)
@@ -3040,16 +3119,19 @@ call frame primitives etc.
           (LDA ZP_RT+1)
           (STA VM_LIST_OF_FREE_CELLS+1)
 
-          (LDA ZP_TEMP+1)
+          (LDA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RT+1)
           (BEQ DONE__VM_FREE_CELL_PTR_IN_RT) ;; there wasn't any further pointer => done with free
           ;; fill rt for tail calling
           (STA ZP_RT+1)
-          (LDA ZP_TEMP)
+          (LDA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RT)
           (STA ZP_RT)
           (JMP VM_REFCOUNT_DECR_RT) ;; tail call if cell did hold a reference
 
    (label DONE__VM_FREE_CELL_PTR_IN_RT)
-          (RTS)))
+          (RTS)
+
+   (label LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RT) ;; TODO not yet a list, but needs to become one!
+          (word 0)))
 
 (define VM_FREE_CELL_PTR_IN_RA
   (list
@@ -3647,12 +3729,13 @@ call frame primitives etc.
           (byte $00) ;; local var
 
    (label FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (byte $03) ;; first ref count is 03, add 0a to get to next slot, slot-size $09 (09), contains 25 slots
           (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), contains 14 slots
           (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), contains 8 slots
           (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), contains 5 slots
           (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), contains 3 slots
-
    (label INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (byte $0a) ;; add 0a to get to next slot, slot-size $09 (09), contains 25 slots
           (byte $12) ;; add 12 to get to next slot, slot size $11 (17), contains 14 slots
           (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), contains 8 slots
           (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), contains 5 slots
@@ -3672,14 +3755,14 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_01_CODE)
 
             ;; now allocate the page
-            (LDX !$00) ;; do it explicitly
+            (LDX !$01) ;; do it explicitly
             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
   (define test-alloc-m1-01-state-after
     (run-code-in-test test-alloc-m1-01-code))
 
   (check-equal? (vm-page->strings test-alloc-m1-01-state-after PAGE_AVAIL_0)
-                '("page-type:      m1 page p0"
+                '("page-type:      m1 page p1"
                   "previous page:  $00"
                   "slots used:     0"
                   "next free slot: $04"))
@@ -3707,14 +3790,14 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_02_CODE)
 
             ;; now allocate the page
-            (LDX !$01) ;; do it explicitly
+            (LDX !$02) ;; do it explicitly
             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
   (define test-alloc-m1-02-state-after
     (run-code-in-test test-alloc-m1-02-code))
 
   (check-equal? (vm-page->strings test-alloc-m1-02-state-after PAGE_AVAIL_0)
-                '("page-type:      m1 page p1"
+                '("page-type:      m1 page p2"
                   "previous page:  $00"
                   "slots used:     0"
                   "next free slot: $10"))
@@ -3742,14 +3825,14 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_03_CODE)
 
             ;; now allocate the page
-            (LDX !$02) ;; do it explicitly
+            (LDX !$03) ;; do it explicitly
             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
   (define test-alloc-m1-03-state-after
     (run-code-in-test test-alloc-m1-03-code))
 
   (check-equal? (vm-page->strings test-alloc-m1-03-state-after PAGE_AVAIL_0)
-                '("page-type:      m1 page p2"
+                '("page-type:      m1 page p3"
                   "previous page:  $00"
                   "slots used:     0"
                   "next free slot: $06"))
@@ -3777,14 +3860,14 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_04_CODE)
 
             ;; now allocate the page
-            (LDX !$03) ;; do it explicitly
+            (LDX !$04) ;; do it explicitly
             (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
 
   (define test-alloc-m1-04-state-after
     (run-code-in-test test-alloc-m1-04-code))
 
   (check-equal? (memory-list test-alloc-m1-04-state-after (+ PAGE_AVAIL_0_W #x00) (+ PAGE_AVAIL_0_W #x02))
-                (list #x13 #x00 #x00)
+                (list #x14 #x00 #x00)
                 "page type $13, previous page = $00, slot number used = $00")
   (check-equal? (memory-list test-alloc-m1-04-state-after (+ PAGE_AVAIL_0_W #x03) (+ PAGE_AVAIL_0_W #x04))
                 (list #x00 #x58)
@@ -3796,7 +3879,7 @@ call frame primitives etc.
                 (list #x00 #x00)
                 "slot2: refcount 0, next free slot at offset $00 = no next")
   (check-equal? (vm-page->strings test-alloc-m1-04-state-after PAGE_AVAIL_0)
-                '("page-type:      m1 page p3"
+                '("page-type:      m1 page p4"
                   "previous page:  $00"
                   "slots used:     0"
                   "next free slot: $04")))
@@ -3810,7 +3893,7 @@ call frame primitives etc.
    (label VM_ALLOC_M1_SLOT_TO_RA)
           (LDX !$00)
           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+0)
-          (BPL J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (BPL J9PLUS__VM_ALLOC_SLOT_IN_BUCKET)
 
    (label VM_ALLOC_SLOT__TYPE_X_STORE)
           (STX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
@@ -3871,22 +3954,28 @@ call frame primitives etc.
           (CLC)
           (BCC VM_ALLOC_SLOT_TYPE_X)
 
-   (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+   (label J9PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+1)
-          (BPL J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (BPL J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$01)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
-   (label J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+   (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+2)
-          (BPL J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (BPL J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$02)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
-   (label J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+   (label J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+3)
-          (BPL J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (BPL J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$03)
+          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+
+   (label J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+4)
+          (BPL J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (LDX !$04)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
    (label J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
@@ -3912,7 +4001,7 @@ call frame primitives etc.
             (LDA !$0b) ;; want slot of size 11
             (JSR VM_ALLOC_M1_SLOT_TO_RA)
 
-            (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
+            (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
             (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-state-after
@@ -3928,7 +4017,7 @@ call frame primitives etc.
                 (list PAGE_AVAIL_0)
                 "free page for slot type 0 is $cc")
   (check-equal? (vm-page->strings test-alloc-bucket-slot-state-after PAGE_AVAIL_0)
-                '("page-type:      m1 page p0"
+                '("page-type:      m1 page p1"
                   "previous page:  $00"
                   "slots used:     1"
                   "next free slot: $16")))
@@ -3947,10 +4036,10 @@ call frame primitives etc.
      ;; now allocate the page
      (LDA !$0b) ;; want slot of size 11
      (JSR VM_ALLOC_M1_SLOT_TO_RA)
-     (LDA !$09) ;; want slot of size 9, should be on the same page
+     (LDA !$0a) ;; want slot of size 10, should be on the same page
      (JSR VM_ALLOC_M1_SLOT_TO_RA)
 
-     (LDA VM_FREE_M1_PAGE_P0+0) ;; type 0
+     (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
      (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-2x-state-after
@@ -3966,7 +4055,7 @@ call frame primitives etc.
                 (list PAGE_AVAIL_0)
                 "free page for slot type 0 is $xx")
   (check-equal? (vm-page->strings test-alloc-bucket-slot-2x-state-after PAGE_AVAIL_0)
-                '("page-type:      m1 page p0"
+                '("page-type:      m1 page p1"
                   "previous page:  $00"
                   "slots used:     2"
                   "next free slot: $28")))
@@ -4002,7 +4091,7 @@ call frame primitives etc.
 
 
      (label TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
-            (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
+            (LDA VM_FREE_M1_PAGE_P0+2) ;; type 2
             (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-xx-state-after
@@ -4018,12 +4107,12 @@ call frame primitives etc.
                 (list PAGE_AVAIL_1)
                 "free page for slot type 1 is $cb")
   (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after PAGE_AVAIL_0)
-                '("page-type:      m1 page p1"
+                '("page-type:      m1 page p2"
                   "previous page:  $00"
                   "slots used:     8"
                   "next free slot: $00"))
   (check-equal? (vm-page->strings test-alloc-bucket-slot-xx-state-after PAGE_AVAIL_1)
-                '("page-type:      m1 page p1"
+                '("page-type:      m1 page p2"
                   "previous page:  $00"
                   "slots used:     2"
                   "next free slot: $4c")))
@@ -4042,7 +4131,8 @@ call frame primitives etc.
           (STA READ_ENC_PAGE_TYPE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS+2)
    (label READ_ENC_PAGE_TYPE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
           (LDA $c000)
-          (AND !$03)
+          (AND !$07)
+
           (TAX) ;; now x = page type
 
    ;; input: x (unchanged)
@@ -4085,7 +4175,8 @@ call frame primitives etc.
 
           (DEY) ;; now 0
           (LDA (ZP_RA),y) ;; get encoded page type
-          (AND !$03)
+          (AND !$07)
+
           (TAX) ;; now x = page type
 
           (LDA VM_FREE_M1_PAGE_P0,x)
@@ -4162,7 +4253,7 @@ call frame primitives etc.
             (JSR VM_ALLOC_M1_SLOT_TO_RA)
             (JSR VM_CP_RA_TO_RT)
 
-            (LDA !$09) ;; want slot of size 9, should be on the same page
+            (LDA !$0a) ;; want slot of size 10, should be on the same page
             (JSR VM_ALLOC_M1_SLOT_TO_RA)
 
             (JSR VM_CP_RT_TO_RA)
@@ -4175,7 +4266,7 @@ call frame primitives etc.
                 (list #x00 #x28)
                 "slot0 (now free): refcount 0, next free slot at offset $28")
   (check-equal? (vm-page->strings test-free-bucket-slot-state-after PAGE_AVAIL_0)
-                '("page-type:      m1 page p0"
+                '("page-type:      m1 page p1"
                   "previous page:  $00"
                   "slots used:     1"
                   "next free slot: $04")))
@@ -4224,21 +4315,21 @@ call frame primitives etc.
   (define test-free-bucket-a20-slot-state-after
     (run-code-in-test test-free-bucket-a20-slot-code))
 
-  (check-equal? (memory-list test-free-bucket-a20-slot-state-after #xcec7 #xceca)
-                (list #x00 PAGE_AVAIL_0 #x00 #x00)
-                "first free page of profiles 0, 1, 2, 3 is $cc for page profile 1")
+  (check-equal? (memory-list test-free-bucket-a20-slot-state-after #xcec7 #xcecb)
+                (list #x00 #x00 PAGE_AVAIL_0 #x00 #x00)
+                "first free page of profiles 0, 1, 2, 3, 4 is $cc for page profile 1")
   (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after (sub1 PAGE_AVAIL_1))
-                '("page-type:      m1 page p1"
+                '("page-type:      m1 page p2"
                   "previous page:  $00" ;; is removed, since full
                   "slots used:     8"
                   "next free slot: $00"))
   (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after PAGE_AVAIL_1)
-                '("page-type:      m1 page p1"
+                '("page-type:      m1 page p2"
                   "previous page:  $00" ;; is the last in list
                   "slots used:     7"
                   "next free slot: $10"))
   (check-equal? (vm-page->strings test-free-bucket-a20-slot-state-after PAGE_AVAIL_0)
-                (list "page-type:      m1 page p1"
+                (list "page-type:      m1 page p2"
                       (format "previous page:  $~a" (format-hex-byte PAGE_AVAIL_1)) ;; next free
                   "slots used:     7"
                   "next free slot: $10")))
@@ -4423,10 +4514,11 @@ call frame primitives etc.
           (LDY !$00)
 
    (label LOOP__VM_GC_ARRAY_SLOT_PTR)
-          (INC ZP_RT)
-          (INC ZP_RT)
+          (INY)
+          (INY)
           ;; deref zp_ptr into zp_ptr2?
           (LDA (ZP_RT),y) ;; load tagged low byte
+          (BEQ NEXT__VM_GC_ARRAY_SLOT_PTR)
           (STA ZP_RA)
           (AND !$03)
           (CMP !$03)
@@ -4434,15 +4526,18 @@ call frame primitives etc.
           (INY)
           (LDA (ZP_RT),y) ;; load high byte
           (STA ZP_RA+1)
+          (STY LOOP_IDX__VM_GC_ARRAY_SLOT_PTR)
           (JSR VM_REFCOUNT_DECR_RA)
-          (LDY !$00)
+          (LDY LOOP_IDX__VM_GC_ARRAY_SLOT_PTR)
     (label NEXT__VM_GC_ARRAY_SLOT_PTR)
           (DEC LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
           (BNE LOOP__VM_GC_ARRAY_SLOT_PTR)
 
           (RTS)
 
-   (label LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
+   (label LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)   
+          (byte $00)
+   (label LOOP_IDX__VM_GC_ARRAY_SLOT_PTR)
           (byte $00)
    ))
 
@@ -4461,18 +4556,18 @@ call frame primitives etc.
 
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)                    ;; int -1 -> stack
      (LDA !$01)
-     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)    ;; tos (int -1) -> 1
+     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)    ;; tos (int -1) -> @1
 
-     (JSR VM_CP_RA_TO_RT)
-     (JSR VM_GC_ARRAY_SLOT_RT)
-     ))                      ;; gc array
+     (JSR VM_CP_RA_TO_RT)                            ;; overwrite tos (-1) with ptr to array
+     (JSR VM_GC_ARRAY_SLOT_RT)                       ;; run gc on slot elements -> cell-pair should be gc'd
+     ))
 
   (define test-gc-array-slot-ptr-state-after
     (run-code-in-test test-gc-array-slot-ptr-code))
 
   (check-equal? (vm-stack->strings test-gc-array-slot-ptr-state-after)
                 (list "stack holds 2 items"
-                      (format "ptr[1] $~a0c  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                      (format "ptr[0] $~a04  (rt)" (format-hex-byte PAGE_AVAIL_0))
                       (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_1))))
   (check-equal? (vm-page->strings test-gc-array-slot-ptr-state-after PAGE_AVAIL_1)
                 (list "page-type:      cell-pair page"
@@ -4531,7 +4626,7 @@ call frame primitives etc.
 
   (check-equal? (vm-page->strings test-alloc-native-array-state-after PAGE_AVAIL_0)
                 (list
-                 "page-type:      m1 page p1"
+                 "page-type:      m1 page p2"
                  "previous page:  $00"
                  "slots used:     1"
                  "next free slot: $2e"))
@@ -4554,27 +4649,26 @@ call frame primitives etc.
 
           (JSR VM_ALLOC_M1_SLOT_TO_RA)
 
+          (PLA)
+          (TAX) ;; save array len in x
+          (ASL A)
+          (TAY) ;; use number of array elements * 2 as loop counter          
+
+          ;; initialize slots/array with zeros (actually writes one byte more than needed)
+          (LDA 0)
+          (INY)
+   (label LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_RA)
+          (STA (ZP_RA),y)
+          (DEY)
+          (BNE LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_RA)
+
+          ;; y = 0 now
           ;; write header cell
-          (LDY !$00)
           (LDA !TAG_BYTE_CELL_ARRAY)
           (STA (ZP_RA),y) ;; store tag byte
-
           (INY)
-          (PLA)
+          (TXA)
           (STA (ZP_RA),y) ;; store number of array elements
-
-          (TAX) ;; use number of array elements as loop counter
-
-          ;; initialize slots/array with nil
-   (label LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_RA)
-          (INY)
-          (LDA !<TAGGED_NIL)
-          (STA (ZP_RA),y)
-          (INY)
-          (LDA !>TAGGED_NIL)
-          (STA (ZP_RA),y)
-          (DEX)
-          (BPL LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_RA)
 
           (RTS)))
 
@@ -4589,7 +4683,7 @@ call frame primitives etc.
 
   (check-equal? (vm-page->strings test-alloc-cell-array-state-after PAGE_AVAIL_0)
                 (list
-                 "page-type:      m1 page p0"
+                 "page-type:      m1 page p1"
                  "previous page:  $00"
                  "slots used:     1"
                  "next free slot: $16"))
@@ -4597,10 +4691,11 @@ call frame primitives etc.
                 (list #x04 PAGE_AVAIL_0))
   (check-equal? (memory-list test-alloc-cell-array-state-after (+ PAGE_AVAIL_0_W #x04)(+ PAGE_AVAIL_0_W #x0d))
                 (list TAG_BYTE_CELL_ARRAY #x04
-                      #x01 #x00
-                      #x01 #x00
-                      #x01 #x00
-                      #x01 #x00))
+                      #x00 #x00
+                      #x00 #x00
+                      #x00 #x00
+                      #x00 #x00)
+                "array is filled with zeros")
 )
 
 
@@ -4687,7 +4782,7 @@ call frame primitives etc.
 
   (check-equal? (vm-page->strings vm_cell_stack_write_tos_to_array_ata_ptr-state-after PAGE_AVAIL_0)
                 (list
-                 "page-type:      m1 page p0"
+                 "page-type:      m1 page p1"
                  "previous page:  $00"
                  "slots used:     1"
                  "next free slot: $16"))
@@ -4696,15 +4791,15 @@ call frame primitives etc.
                 "points to the cell-array in this m1 page")
   (check-equal? (memory-list vm_cell_stack_write_tos_to_array_ata_ptr-state-after (+ PAGE_AVAIL_0_W #x04) (+ PAGE_AVAIL_0_W #x0d))
                 (list TAG_BYTE_CELL_ARRAY #x04
-                      #x01 #x00
-                      #x01 #x00
+                      #x00 #x00
+                      #x00 #x00
                       #x07 #xff
-                      #x01 #x00)
+                      #x00 #x00)
                 (string-append "slot is a cell-array, with 4 elements"
-                               "slot 0 = nil"
-                               "slot 1 = nil"
+                               "slot 0 = empty"
+                               "slot 1 = empty"
                                "slot 2 = int $1fff"
-                               "slot 3 = nil")))
+                               "slot 3 = empty")))
 
 (module+ test #| write to array bounds checks |#
   (define to-array-ata-ra-4-state
@@ -4799,6 +4894,7 @@ call frame primitives etc.
           (PHA)
           (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
           (PLA)
+          (CLC)
           (BCC VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
 
    (label VM_CELL_STACK_PUSH_ARRAY_ATa_RA__CHECK_BOUNDS)
@@ -4825,11 +4921,6 @@ call frame primitives etc.
           (DEY)
           (LDA (ZP_RA),y)               ;; copy low byte
           (STA ZP_RT)
-          (AND !$03)
-          (CMP !$03)                    ;; is no pointer?
-          (BEQ DONE__VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
-          (JMP VM_REFCOUNT_INCR_RT)
-   (label DONE__VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
           (RTS)))
 
 (module+ test #| vm_cell_stack_push_array_ata_ptr |#
@@ -4839,14 +4930,14 @@ call frame primitives etc.
      (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
 
      (LDA !$02)
-     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_RA) ;; @2 = nil -> stack
+     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_RA) ;; @2 = empty -> stack => stack is still empty
 
      (LDA !$ff)
      (LDX !$01)
      (JSR VM_CELL_STACK_PUSH_INT_R)            ;; int $1ff -> stack
 
      (LDA !$02)
-     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) ;; tos (int $1ff) -> @2 (overwriting nil)
+     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) ;; tos (int $1ff) -> @2 (overwriting 0 (empty) in array)
 
      (LDA !$02)
      (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_RA)  ;; @2 (now int $1ff) -> stack
@@ -4856,12 +4947,11 @@ call frame primitives etc.
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
   (check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                2213)
+                2150)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
-                (list "stack holds 3 items"
+                (list "stack holds 2 items"
                       "int $01ff  (rt)"
-                      "int $01ff"
-                      "pair-ptr NIL")))
+                      "int $01ff")))
 
 ;; idea: have a list of code pages (adding new page as head if allocated)
 ;;       TODO: how does relocation work here?
@@ -5075,4 +5165,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1590))
+                       1653))

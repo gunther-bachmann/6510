@@ -117,7 +117,7 @@
 
   (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
-  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
+  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek))
 
   (require (only-in "./vm-memory-manager.rkt"
                     vm-cell-at-nil?
@@ -184,10 +184,34 @@
                       (format "ptr[1] $~a04  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-cell-at->string point-create-state (+ PAGE_AVAIL_0_W #x04) #f #t)
                 "cell-array len=$03 [...]")
+  (check-equal? (peek point-create-state(+ PAGE_AVAIL_0_W #x03))
+                1
+                "reference count is 1")
   (check-equal? (map (lambda (offset) (vm-cell-at->string point-create-state (+ PAGE_AVAIL_0_W offset) #f #t))
                      (list 06 08 10))
                 (list "int $01f4" "int $0064" "int $0000")
-                "the first three elements of the array are decimal 500, 100, 0"))
+                "the first three elements of the array are decimal 500, 100, 0")
+
+  (define point-create-n-pop-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+       (bc POP)
+       (bc BRK))
+      POINT_CREATE)
+     ))
+
+  (check-equal? (vm-stack->strings point-create-n-pop-state)
+                (list "stack is empty"))
+  (check-equal? (vm-cell-at->string  point-create-n-pop-state (+ PAGE_AVAIL_0_W #x04))
+                "cell-array len=$03")
+  (skip (check-equal? (peek  point-create-n-pop-state (+ PAGE_AVAIL_0_W #x03))
+                      0
+                      "reference count dropped to 0")))
 
 (define POINT_XDIST ;; point1 :: point2 -> int
   (list

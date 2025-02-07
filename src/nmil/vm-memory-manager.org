@@ -1,5 +1,4 @@
 #+title: vm-memory-manager
-
 * current (en)coding
 ** naming
  naming: atomic cell
@@ -86,10 +85,47 @@ ff: free
 0001 0001 = (m1 page p1) page with buckets type 1 (byte at offset 02: holds the number of used slots)
 0001 0010 = (m1 page p2) page with buckets type 2 (byte at offset 02: holds the number of used slots)
 0001 0011 = (m1 page p3) page with buckets type 3 (byte at offset 02: holds the number of used slots)
+0001 0100 = (m1 page p4) page with buckets type 4 (byte at offset 02: holds the number of used slots)
+0001 0101 = reserved
+0001 0110 = reserved
+0001 0111 = reserved
 0001 1000 = (call-frame page) (stack organized, full+free detection already implemented)
 0001 1001 = (fid->loc page) page with 16 bit values (starting at $02), filled without gaps, next slot = offset to free, no ref counting
 0001 1010 = (code page) page with byte code and function meta data <- filled without gaps, next slot = offset to free, no ref counting
 0001 1011 = cell stack page (come in pairs for low and high byte)
+0001 1100 = reserved
+0001 1101 = reserved
+0001 1110 = reserved
+0001 1111 = reserved
+
+- detection for cell pages (1bbb bbbb)
+  #+begin_src asm
+    ;; after load
+    BMI IS_CELL_PAGE
+
+    ;;
+    AND #$80
+    CMP #$80
+    BEQ IS_CELL_PAGE
+  #+end_src
+- detectin for cell-pair page (01bb bbbb)
+  #+begin_src asm
+    AND #$c0
+    CMP #$40
+    BEQ IS_CELL_PAIR_PAGE
+  #+end_src
+- detection for m1 pages (0001 0bbb)
+  #+begin_src asm
+    AND #$f8
+    CMP #$10
+    BEQ IS_M1_PAGE_HEADER
+  #+end_src
+- detect special page
+  #+begin_src asm
+    AND #$f8
+    CMP #$18
+    BEQ IS_SPECIAL_PAGE
+  #+end_src
 *** general page layout
 $00 = page type
 $01 = (code page, m1 page px, call-frame page, cell stack page) previous page (of same type) 
@@ -141,8 +177,26 @@ f9..fc  cell-pair 48
 fd..fe  unused (2)
 ff      previous page of this type
 
+*** m1p5 page layout
+provides space for structures with 1-3 fields
+page type slot size 9 (refcount @ ptr-1) 25 slots
+math: first entry $,,m refcount @ -1, next slot += $0a, slot-size = $09 (9)
+offset content
+--------------------
+00      #b0001 0100 page type bucket with slot size 9 (either use this or the one above)
+01      previous page
+02      number of slots used
+03      refcount slot0
+04..0c  slot0  <- lowest bit must be 0 (to qualify as a cell-ptr!)
+0d      refcount slot1
+0e..16  slot1
+...
+f3      refcount slot23
+f4..fc  slot23
+fd..ff  unused
 *** m1p0 page layout
-page type slot size 16!  (refcount @ ptr-1) 14 slots
+provides space for structures with 4-7 fields
+page type slot size 17  (refcount @ ptr-1) 14 slots
 math: first entry $04, refcount @ -1, next slot += $12, slot-size = $11 (17)
 offset content
 --------------------
@@ -150,7 +204,7 @@ offset content
 01      previous page
 02      number of slots used
 03      refcount slot0
-04..14  slot0
+04..14  slot0  <- lowest bit must be 0 (to qualify as a cell-ptr!)
 15      refcount slot1
 16..26  slot1
 27      refcount slot2
@@ -160,7 +214,8 @@ ed      refcount slot13
 ee..fe  slot13
 ff      unused
 *** m1p1 page layout
-page type slot size 29! (refcount @ ptr-1) 8 slots total
+provides space for structures with 8-13 fields
+page type slot size 29 (refcount @ ptr-1) 8 slots total
 math: first entry $10, refcount @ -1, next slot += $1e, slot-size = $1d (29)
 offset content
 --------------------
@@ -179,7 +234,7 @@ e1      refcount slot7
 e2..fe  slot7
 ff      unused
 *** m1p2 page layout
-page type slot size 49! (refcount @ ptr-1) 5 slots total
+page type slot size 49 (refcount @ ptr-1) 5 slots total
 math: first entry $06, refcount @ -1, next slot += $32, slot-size = $31
 offset content
 --------------------
@@ -199,7 +254,7 @@ cd      refcount slot4
 ce..fe  slot4
 ff      unused
 *** m1p3 page layout
-page type slot size 83! (refcount @ ptr-1) 3 slots total
+page type slot size 83 (refcount @ ptr-1) 3 slots total
 math: first entry $04, refcount @ -1, next slot += $54, slot-size = $53
 offset content
 --------------------
@@ -386,6 +441,130 @@ cell-stack is organized as stack (page pair)
    ...
 
 each cell can be either a cell pointer or a call value (never cell header)
+* memory allocation/deallocation
+** free-lists
+*** cell-array free list (for reusage)
+- one per m1 profile => free list holds arrays blocking a slot of a certain m1 profile page
+root -> [tag-byte : len n]
+        [cell0]
+        [cell1]
+        ...
+        [cell n-1]
+         \_...
+- the last cell points to the next cell-array
+- enqueueing this array to the free list, the last cell must be recount--
+- all but the last cell must be refcount-- before further reuse
+- once cell n-1 is recount--, n = n-1, making n-2 the next last cell
+- once all cells were refcount--, the whole array can be freed
+*** cell free list (for reusage)
+root -> [cell]
+         \_...
+*** cell-pair free list (for reusage)
+root -> [car][cdr]
+         \_ [car][cdr]
+             \_...
+- car cell is used to connect the cell-pairs
+- cdr cell needs to be refcount-- before reuse
+** allocation
+*** cell
+- if free-list nil
+     allocate new cell <- IDEA: try freeing slots in cell-array free-lists (there might be cells that can be reused)
+     reuse head of free list
+- reuse head of free list
+  - remember head
+  - set head of free list to cdr of free list
+  - return old head
+*** cell-pair
+- if free-list nil
+     allocate new cell-pair <- IDEA: try freeing slots in cell-array free-lists (there might be cell-pairs that can be reused)
+     reuse head of free list
+- reuse head of free list
+  - remember head
+  - refcount-- on cdr cell of head (single subroutine jump, no recursion)
+  - new head = old heads car cell
+  - return remembered head
+*** cell-array
+- if free-list nil
+     allocate new cell-array
+     free the array at the head of the list <- this might change due to the tail call
+- free the array at the head of the list
+  - reduce num (if num dropped to 0, the array can be reused)
+  - remember now last cell
+  - copy previous last cell into now last cell
+  - refcount-- remembered now last cell  <- tail call (just jump, no recursion)
+*** native-array
+** deallocation
+any refcount-- on a value cell will just return (and do nothing), ending a chain of refcount-- calls
+only if refcount drops to zero a free is done, else refcount returns
+*** refcount-- cell-ptr (drops to 0)
+- enqueue cell into free list
+  - put old root of free list into this
+  - set root of free list to this cell
+*** refcount-- cell-pair-ptr (drops to 0)
+- remember car cell (since it is overwritten in next step and used for refcount-- later on)
+- enqueue cell-pair into free list
+  - put old root of free list into car of this
+  - set root of free list to this cell-pair
+- refcount-- car cell <- tail-call (just jump, no recursion)
+*** refcount-- cell-array (drops to 0)
+- remember last cell of the array (since it is overwritten in next step and used for refcount-- later on)
+- enqueue cell-array into free list
+  - put old root into last cell of array
+  - set root of free list to this cell-array
+- refcount-- last cell of the array
+*** refcount-- native-array (drops to 0)
+- reclaim space (native array may not hold further references)
+** behavior
+- overarching idea: make deallocation cheap, delay work to the time, allocation is done
+- reuse of cell is of constant time, since the head of the free list can be used (directly) or a new cell is allocated, which is both O(1)
+- reuse of cell-pair can be O(n) in worst case, if the cdr cell of the head (which needs to be refcount--) points to a tree of n cell-pairs,
+  where each car points to another cell-pair that needs to be refcount-- before enqueued into the free-list.  it is more likely to be must
+  faster since this worst case is of rather hypothetical nature.
+  IDEA: this time can be reduced by incrementally refcount-- cdr cells of the free list (e.g. during allocation of cells or cell-pairs).
+- reuse of cell-arrays could be very expensive if the array contains pointers to cell-arrays up to the max memory allocated thus
+  IDEA: this time can be reduced by incrementally refcount-- cells of the array (e.g. during allocation of cells or cell-pairs).
+** musings
+*** bst with value implemented with structure/array or cell-pairs
+**** btree with array, fits into profile 5 (uses 9 bytes)
+[table-header, len=3]
+[left cell-ptr]
+[right cell-ptr]
+[value cell-ptr|cell]
+**** btree with cell-pairs (uses 8 bytes for the cell pairs)
+      o      cell-pair
+     / \
+   val  o    cell-pair
+       / \
+      L   R
+**** red-black tree needs additional flag (for color)
+- in arrays this could be put into higher bits of the length byte (since not all bits are used)
+  -or- use the 9th byte of the structure as an auxiliary byte that is always available
+- in cell-pair implementation L and R lower two bits can be used <- complicates a lot, don't!
+  (since they must be '01' to identify them as cell-pair-ptr)
+**** red/black btree with cell-pairs
+***** red/black detection needs more code, search l/r search needs more code, no more memory is needed
+(val may not be a cell-pair-ptr)
+red-node
+      o
+     / \
+   val  o
+       / \
+      L   R
+
+black-node
+      o
+     / \
+    o   val
+   / \
+  L   R
+***** red/black as additional cell-pair, code stays uniform, + 1 cell-pair for each node (total 12 bytes)
+    o
+   / \
+ R/B  o
+     / \
+   val  o
+       / \
+      L   R
 * log
 ** DONE call-frames
  ZP_​​VM_​PC                    *  ptr to the current byte code
