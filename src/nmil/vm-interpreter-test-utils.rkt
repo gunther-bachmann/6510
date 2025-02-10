@@ -5,7 +5,7 @@
 (require "../6510.rkt")
 (require "../6510-test-utils.rkt")
 (require (only-in "../6510-utils.rkt" low-byte high-byte) )
-(require (only-in ansi-color with-colors foreground-color))
+(require (only-in ansi-color with-colors foreground-color color-displayln))
 (require racket/exn)
 (require (only-in "../6510-utils.rkt" absolute))
 (require (only-in "../ast/6510-assembler.rkt"

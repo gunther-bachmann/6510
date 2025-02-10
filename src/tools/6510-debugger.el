@@ -32,8 +32,13 @@
 
 (defun 6510-debugger-execute-startup ()
   "execute debugger startup"
+  (interactive)  
+  (6510-debugger--execute-command-in-repl (format "(run-debugger 2064 raw-bytes \"%s\")" (buffer-name)) t))
+
+(defun 6510-debugger-step-over ()
+  "execute stop over"
   (interactive)
-  (6510-debugger--execute-command-in-repl "(run-debugger 2064 raw-bytes \"6510-example.rkt\")" t))
+  (6510-debugger--execute-command-in-repl "step over"))
 
 (defun 6510-debugger-step ()
   "execute one debugger step"
@@ -101,12 +106,14 @@
     "C-c d x" #'6510-debugger-execute-startup
     "C-c d r" #'6510-debugger-run
     "C-c d n" #'6510-debugger-step
+    "C-c d o" #'6510-debugger-step-over
     "C-c d p" #'6510-debugger-back
     "C-c d b" #'6510-debugger-toggle-break-point
     "C-c d q" #'6510-debugger-quit
     "x" #'6510-debugger-execute-startup
     "r" #'6510-debugger-run
     "n" #'6510-debugger-step
+    "o" #'6510-debugger-step-over
     "p" #'6510-debugger-back
     "b" #'6510-debugger-toggle-break-point
     "q" #'6510-debugger-quit

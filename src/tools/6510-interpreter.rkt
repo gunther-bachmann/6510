@@ -59,6 +59,7 @@
 (require data/collection)
 (require racket/fixnum)
 (require (rename-in  racket/contract [define/contract define/c]))
+(require (only-in ansi-color color-displayln))
 
 (module+ test #| include rackunit |#
   (require rackunit))
@@ -990,6 +991,7 @@
   (-> byte? byte? boolean?)
   (or (= (absolute high low) #xFFD2) ;; kernel output character
      (= (absolute high low) #xAB1E) ;; basic output string
+     (= (absolute high low) #xBDCD) ;; basic output integer
      ))
 
 ;; since the 6502/6510 has its cpu stack located 0100-01ff, it should be safe to use JSR to these locations
@@ -1011,7 +1013,13 @@
                 (cpu-state-accumulator state))
       state
       verbose
-      string-output-function)]))
+      string-output-function)]
+    [(#xBDCD)
+     (when verbose
+       (string-output-function
+        (number->string
+         (absolute (cpu-state-accumulator state) (cpu-state-x-index state)))))
+     state]))
 
 ;; interpret JSR absolute (jump to subroutine) command
 ;; mock kernel function FFD2 to print a string
@@ -2653,7 +2661,7 @@
       (run state verbose string-output-function)
     ;; (collect-garbage)
     ;; (displayln (format "\nmemory: ~a" (current-memory-use)))
-    (when verbose (displayln "program execution done."))))
+    (when verbose (color-displayln "\nprogram execution done."))))
 
 ;; put the raw bytes into memory (at org) and start running at org
 (define/c (run-interpreter org program (verbose #t) (string-output-function interpreter-output-function))

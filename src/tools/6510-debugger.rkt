@@ -77,12 +77,13 @@
          (if set (set-zero-flag c-state) (clear-zero-flag c-state))]
         [else c-state]))
 
-(define/c (debugger--pretty-print address len d-state)
-  (-> (or/c string? false?) (or/c string? false?) debug-state? debug-state?)
+(define/c (debugger--pretty-print address len d-state (lf #f))
+  (->* [(or/c string? false?) (or/c string? false?) debug-state?] [boolean?] debug-state?)
   (define c-state (car (debug-state-states d-state)))
   (display (disassemble c-state
                         (if address (string->number address 16)  (cpu-state-program-counter c-state))
                         (if len (string->number len 16) 1)))
+  (when lf (newline))
   d-state)
 
 (define/c (debugger--print-memory address len d-state)
@@ -297,8 +298,9 @@ EOF
          (match-let (((list _ _ _ len) (regexp-match so-regex command)))
            (~>> d-state
                (debugger--run-steps _ (if len (string->number len 16) 1) 0 #t)             
-               (debugger--pretty-print #f "1" _)
-               (print-latest-cpu-state _)))]
+               ;; (debugger--pretty-print #f "1" _ #t)
+               ;; (print-latest-cpu-state _)
+               ))]
         ;; p - print processor state
         [(string=? command "p") (print-state c-state) d-state]
         ;; pp - disassemble (pretty print)
