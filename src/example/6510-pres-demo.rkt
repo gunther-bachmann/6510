@@ -2,15 +2,11 @@
 #lang reader "../asm/6510-reader.rkt"
         ; testcode for presentation on persistent data structures
 
-        *=$0810        ; origin (basic start, to make loading and executing easier)
-
-INT_OUT  = $bdcd       ; rom routine to print an integer XA (with a = high byte)
-CHAR_OUT = $ffd2       ; rom routine to print character
-
+        *=$0810        ; origin (right behind basic loader "10 SYS 2064")
 
 ;; start of main routine
 ;;--------------------------------------------------------------------------------
-        lda #$82
+        lda #$82       ; lowbyte $82
         ldx #$01       ; 1 * 256 + 8 * 16 + 2 = 386
         jsr push
 
@@ -23,8 +19,8 @@ CHAR_OUT = $ffd2       ; rom routine to print character
 
 ;; data locations for the stack
 ;;--------------------------------------------------------------------------------
-tos:    .data 0   ;; top of stack index (*2)
-acc:    .data 0   ;; lower byte of 16-bit accu
+tos:    .data 0   ;; top of stack index (*2), always points to the next free
+acc:    .data 0   ;; low byte of 16-bit accu
 accp1:  .data 0   ;; high byte of 16-bit accu
 stack:  .data 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         .data 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -38,7 +34,6 @@ push:   ldy tos
         sta stack,y
         iny
         sty tos
-        ; and print the pushed value 
         rts
 
 ;; pop stack into a/x (low/high)
@@ -54,32 +49,34 @@ pop:    ldy tos
 
 ;; duplicate value on stack
 ;;----------------------------------------
-dup:    ldy tos
-        dey
-        lda stack,y
-        tax
+dup:    ldy tos         ; load top of stack index
+        dey             ; point to high byte
+        lda stack,y     ; load
+        tax             ; high byte -> x
         ;; dey ;; TODO uncomment
-        lda stack,y
-        jsr push
-        rts
+        lda stack,y     ; load 
+        jsr push        ; push A/X on stack
+        rts             ; done
 
 ;; int add top two values on the stack, pop them and push the result
 ;;----------------------------------------
-add:    jsr pop
-        sta acc
-        stx accp1
-        jsr pop
-        clc
-        adc acc
-        sta acc
-        txa
-        adc accp1
-        sta accp1
-        tax
-        lda acc
-        jsr push
-        rts
+add:    jsr pop         ; pop tos into a/x
+        sta acc         ; store low byte in acc
+        stx accp1       ; store high byte in acc+1
+        jsr pop         ; pop second value into a/x
+        clc             
+        adc acc         ; add two low-bytes
+        sta acc         ; store into acc 
+        txa             ; get high byte -> a
+        adc accp1       ; add two high bytes (heed carry)
+        sta accp1       ; store into acc+1
+        tax             ; high byte -> x
+        lda acc         ; low byte -> a
+        jsr push        ; push result (A/X)
+        rts             ; done
 
+
+INT_OUT  = $bdcd       ; rom routine to print an integer XA (with a = high byte)
 ;; print integer in a/x (low/high)
 ;;----------------------------------------
 pint:   ldy tos
