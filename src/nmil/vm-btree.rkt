@@ -1220,7 +1220,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                  (vm-regt->string reverse-0-state #t))
                 "(0 . (1 . (2 . (1fff . NIL))))")
   (inform-check-equal? (cpu-state-clock-cycles reverse-0-state)
-                5407))
+                5410))
 
 (define APPEND ;; head-list :: tail-list -> list
   (bc-resolve
@@ -1272,7 +1272,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   (check-equal? (cleanup-string (vm-regt->string append-0-state #t))
                 "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
   (inform-check-equal? (cpu-state-clock-cycles append-0-state)
-                8599))
+                8603))
 
 
 ;; (define (btree-next path)
@@ -2361,7 +2361,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
-                19261)
+                19264)
 
   (check-equal? (cleanup-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -2634,7 +2634,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                29635))
+                29645))
 
 
 ;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
@@ -3498,7 +3498,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                66439)
+                66453)
   (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append

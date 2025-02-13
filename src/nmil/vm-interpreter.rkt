@@ -478,7 +478,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     4"
                          "next free slot: $49"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4692)
+                4694)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -1317,8 +1317,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA (ZP_VM_PC),y)
           (LDX !$ff)
           (JSR VM_CELL_STACK_PUSH_R)
-          (LDA !$02)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define BC_NIL_P
   (list
@@ -2098,8 +2097,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (AND !$7f)
           (STA ZP_RT)
    (label DONE__BC_INC_INT)
-          (LDA !$02)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (module+ test #| inc int |#
   (define inc-int-0-state
@@ -2174,8 +2172,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (label KEEP_RT__BC_MAX_INT)
           (DEC ZP_CELL_STACK_TOS) ;; just pop but keep RT
     (label AND_RETURN__BC_MAX_INT)
-          (LDA !$02)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define DUP #x0f)
 (define BC_DUP
@@ -2717,4 +2714,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       823))
+                       817))

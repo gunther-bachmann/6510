@@ -342,7 +342,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-reverse-0-state)
-                       17164)
+                       17166)
   (check-equal? (cleanup-strings (vm-stack->strings btree-reverse-0-state 10 #t))
                 (list "stack holds 1 item"
                       "(0 . 1)  (rt)"))
