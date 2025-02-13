@@ -1402,7 +1402,7 @@ call frame primitives etc.
                   "int $1fff")))
 
 ;; initial data for the memory management registers
-;; put into memory @ #xced0 - len (currently 3)
+;; put into memory @ #xcec0 - len (currently 3)
 (define VM_INITIAL_MM_REGS
   (list
    (label VM_INITIAL_MM_REGS)
@@ -1444,7 +1444,23 @@ call frame primitives etc.
    (label VM_LIST_OF_FREE_CELLS) ;; list of cells that are unused but still allocated (reusable)
           (word $0000)
 
-   ;; $cece..$cecf (unused)
+   ;; cece,,cecf
+   (label VM_P0_QUEUE_ROOT_OF_ARRAYS_TO_FREE)
+          (word $0000)
+   ;; ced0,,ced1
+   (label VM_P1_QUEUE_ROOT_OF_ARRAYS_TO_FREE)
+          (word $0000)
+   ;; ced2,,ced3
+   (label VM_P2_QUEUE_ROOT_OF_ARRAYS_TO_FREE)
+          (word $0000)
+   ;; ced4,,ced5
+   (label VM_P3_QUEUE_ROOT_OF_ARRAYS_TO_FREE)
+          (word $0000)
+   ;; ced6,,ced7
+   (label VM_P4_QUEUE_ROOT_OF_ARRAYS_TO_FREE)
+          (word $0000)
+
+   ;; $ced8..$ceff (unused) (40 bytes)
    ))
 
 (define VM_LIST_OF_FREE_CELLS               #xcecc)
@@ -2117,11 +2133,10 @@ call frame primitives etc.
           (STA PAGE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
    (label PAGE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BEQ FREE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+          (BNE DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
+          (JMP VM_FREE_CELL_PAIR_PTR_IN_RT) ;; free delayed
    (label DONE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
           (RTS)
-   (label FREE__VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR)
-          (JMP VM_FREE_CELL_PAIR_PTR_IN_RT) ;; free delayed
           
    ;; input: cell ptr in ZP_RT
    ;; decrement ref count, if 0 deallocate
@@ -2172,11 +2187,11 @@ call frame primitives etc.
   (list
    (label VM_REFCOUNT_DECR_RA)
           (LDA ZP_RA)
-          (BEQ UNKNOWN__VM_REFCOUNT_DECR_RA)
+          (BEQ UNKNOWN__VM_REFCOUNT_DECR_RA) ;; low-byte of a pointer may never be 0!
           (LSR)
-          (BCC VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (BCC VM_REFCOUNT_DECR_RA__CELL_PTR) ;; lowest bit is 0 -> cell-ptr
           (LSR)
-          (BCC VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR__LSR)
+          (BCC VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR__LSR) ;; ends on b01 => cell-pair ptr
           ;; check other types of cells
           (LDA ZP_RA)
           (CMP !TAG_BYTE_CELL_ARRAY)
@@ -2212,6 +2227,8 @@ call frame primitives etc.
    (label DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
           (RTS)
 
+   ;; input: cell ptr in ZP_RA
+   ;; decrement ref count, if 0 deallocate
    (label VM_REFCOUNT_DECR_RA__CELL_PTR)
           ;; find out which page type is used (cell-ptr-page, m1-page, slot-page)
           (LDA ZP_RA+1) ;; highbyte (page)
@@ -2220,15 +2237,16 @@ call frame primitives etc.
    (label LOAD_PAGE_TYPE__VM_REFCOUNT_DECR_RA__CELL_PTR)
           (LDA $c000) ;; c0 is overwritten by page
           (BMI IS_CELL_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (AND !$ec)
+          (AND !$e8)
           (BEQ IS_M1_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
 
           (BRK) ;; unhandled page type
 
    (label IS_M1_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (LDX ZP_RA)
-          (DEX)
-          (BNE NOW_DECREMENT_RC__VM_REFCOUNT_DECR_RA__CELL_PTR) ;; is never 0! for m1 pages
+          (JMP VM_REFCOUNT_DECR_RA__M1_SLOT)
+          ;; (LDX ZP_RA)
+          ;; (DEX)
+          ;; (BNE NOW_DECREMENT_RC__VM_REFCOUNT_DECR_RA__CELL_PTR) ;; is never 0! for m1 pages
 
    (label IS_CELL_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
           (LDA ZP_RA) ;; lowbyte (offset)
@@ -3139,7 +3157,7 @@ call frame primitives etc.
    (label VM_FREE_CELL_PTR_IN_RA)
           ;; check if previous content was a pointer
           (LDY !$00)
-          (STY ZP_TEMP+1)
+          (STY LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA+1)
 
           (LDA (ZP_RA),y)
           (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RA)
@@ -3147,16 +3165,36 @@ call frame primitives etc.
           (CMP !$03)
           (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RA)
 
-          ;; cell is a pointer => save for tail call in temp
+          ;; cell is a pointer => save for tail call in temp (either cell-ptr or cell-pair-ptr)
+          ;; enqueue this rt in list to decrement refcount
+          ;; TODO: given arrays that may hold lists of references, this might make it necessary to keep them as list
           (LDA (ZP_RA),y)
-          (STA ZP_TEMP)
+          (STA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA)
           (INY)
           (LDA (ZP_RA),y)
-          (STA ZP_TEMP+1)
+          (STA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA+1)               ;; might be overwritten if cell-array is freed!
           (DEY)
+          (BNE CONT__VM_FREE_CELL_PTR_IN_RA)
 
-          ;; copy previous head of free cells into this cell
    (label CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RA)
+          ;; check cell-type
+          (LDA (ZP_RA),y)
+          (CMP !TAG_BYTE_CELL_ARRAY)
+          (BEQ FREE_CELL_ARRAY__VM_FREE_CELL_PTR_IN_RA)
+          (CMP !TAG_BYTE_NATIVE_ARRAY)
+          (BEQ FREE_NATIVE_ARRAY__VM_FREE_CELL_PTR_IN_RA)
+
+          ;; seems to be a value that does not need to be freed
+          (BNE CONT__VM_FREE_CELL_PTR_IN_RA)
+
+   (label FREE_CELL_ARRAY__VM_FREE_CELL_PTR_IN_RA)
+   (label FREE_NATIVE_ARRAY__VM_FREE_CELL_PTR_IN_RA)
+          ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
+          (JMP VM_REFCOUNT_DECR_RA__M1_SLOT) ;; cell and native arrays are allocated on m1 pages
+          ;; this cell was a header field of a m1slot -> no further processing
+
+  (label CONT__VM_FREE_CELL_PTR_IN_RA)
+          ;; COPY previous head of free cells into this cell
           (LDA VM_LIST_OF_FREE_CELLS)
           (STA (ZP_RA),y)
           (LDA VM_LIST_OF_FREE_CELLS+1)
@@ -3169,16 +3207,19 @@ call frame primitives etc.
           (LDA ZP_RA+1)
           (STA VM_LIST_OF_FREE_CELLS+1)
 
-          (LDA ZP_TEMP+1)
+          (LDA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA+1)
           (BEQ DONE__VM_FREE_CELL_PTR_IN_RA) ;; there wasn't any further pointer => done with free
           ;; fill rt for tail calling
           (STA ZP_RA+1)
-          (LDA ZP_TEMP)
+          (LDA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA)
           (STA ZP_RA)
           (JMP VM_REFCOUNT_DECR_RA) ;; tail call if cell did hold a reference
 
    (label DONE__VM_FREE_CELL_PTR_IN_RA)
-          (RTS)))
+          (RTS)
+
+   (label LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA) ;; TODO not yet a list, but needs to become one!
+          (word 0)))
 
 (module+ test #| vm-free-cell-ptr-in-rt |#
   (define vm-free-cell-ptr-in-rt-tailcall-code
@@ -4390,9 +4431,22 @@ call frame primitives etc.
 
           ;; TODO: register array as free  (lazy)
           ;; its a regular array slot, (gc each slot, beware recursion!!!!)
+          ;; save rt
+          ;; TODO: clean this ugly code up!
+          (LDA ZP_RT)
+          (STA SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT)
+          (LDA ZP_RT+1)
+          (STA SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT+1)
+
           (JSR VM_CP_RA_TO_RT) ;; illegal use of rt here!
           (JSR VM_GC_ARRAY_SLOT_RT) ;; illegal use of rt here!, uses RA, too!!
           (JSR VM_CP_RT_TO_RA) ;; illegal use of rt here!
+
+          (LDA SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT)
+          (STA ZP_RT)
+          (LDA SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT+1)
+          (STA ZP_RT+1)
+
           (JMP VM_FREE_M1_SLOT_IN_RA)
 
    (label NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
@@ -4407,7 +4461,10 @@ call frame primitives etc.
 
    (label NO_GC__VM_REFCOUNT_DECR_RA__M1_SLOT)
           (INC ZP_RA)
-          (RTS)))
+          (RTS)
+
+   (label SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT)
+          (word $0000)))
 
 
 (module+ test #| vm_dec_ref_bucket_slot (no gc) |#
@@ -5168,4 +5225,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1656))
+                       1666))

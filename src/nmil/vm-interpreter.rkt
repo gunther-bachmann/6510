@@ -678,9 +678,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_RA)
           (AND !$03)
           (CMP !$03)
-          (BEQ S0_NEXT_ITER__BC_RET)
+          (BEQ S0_NEXT_ITER__BC_RET) ;; definitely no pointer since lower 2 bits are set
           (LDA (ZP_LOCALS_HB_PTR),y)
-          (BEQ NEXT_ITER__BC_RET)
+          (BEQ NEXT_ITER__BC_RET)       ;; definitely no pointer, since page is 00
           (STA ZP_RA+1)
           (STY COUNTER__BC_RET)
           (JSR VM_REFCOUNT_DECR_RA)
@@ -2243,8 +2243,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_GC_FL)
           (JSR VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
-          (LDA !$02)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define VM_INTERPRETER_OPTABLE_EXT1_LB
   (flatten
@@ -2485,7 +2484,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
-    (label VM_INTERPRETER_OPTABLE)
+    (label VM_INTERPRETER_OPTABLE)                ;;         byte code
            (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 (RC)
            (word-ref BC_BNOP)                     ;; 02  <-  01 
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
@@ -2619,6 +2618,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (define VM_INTERPRETER
   (list
+   (label VM_INTERPRETER_INC_PC_2_TIMES)
+          (LDA !$02)
    (label VM_INTERPRETER_INC_PC_A_TIMES)
           (CLC)                                 ;; clear for add
           (ADC ZP_VM_PC)                        ;; PC = PC + A

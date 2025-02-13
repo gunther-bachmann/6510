@@ -45,6 +45,7 @@
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  GC_FL
                   ALLOC_ARRAY
                   FALSE_P_RET_FALSE
                   GET_ARRAY_FIELD_0
@@ -310,7 +311,7 @@
                       "int $0001  (rt)")
                 "1 -> FIFO, 2 -> FIFO, FIFO -> 1")
 
-    (define dequeue-state-2
+  (define dequeue-state-2
     (run-bc-wrapped-in-test
      (append
       (list
@@ -341,4 +342,91 @@
                 "1 -> FIFO, 2 -> FIFO, FIFO -> 1, FIFO ->2"))
 
 (module+ test #| memory fifo |#
-  (skip (check-equal? #t #f)))
+  (define mem-fifo-state-1
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc CALL) (word-ref FIFO_CREATE)
+       (bc DUP)
+       (bc DUP)
+       (bc PUSH_INT_1)
+       (bc SWAP)
+       (bc CALL) (word-ref FIFO_ENQUEUE)
+       (bc PUSH_INT_2)
+       (bc SWAP)
+       (bc CALL) (word-ref FIFO_ENQUEUE)
+       (bc DUP)
+       (bc CALL) (word-ref FIFO_DEQUEUE)
+       (bc SWAP)
+       (bc DUP)
+       (bc CALL) (word-ref FIFO_DEQUEUE)
+       (bc SWAP)
+       (bc POP)
+       (bc EXT) (bc GC_FL)
+       (bc BRK))
+      FIFO_CREATE
+      FIFO_ENQUEUE
+      FIFO_DEQUEUE
+      REVERSE)
+     ))
+
+  (check-equal? (vm-stack->strings mem-fifo-state-1)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "int $0001")
+                "1 -> FIFO, 2 -> FIFO, FIFO -> 1, FIFO ->2")
+  (check-equal? (vm-page->strings mem-fifo-state-1 PAGE_AVAIL_1)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     0"
+                      "next free slot: $05")
+                "cell pair page is completely freed after gc")
+  (check-equal? (vm-page->strings mem-fifo-state-1 PAGE_AVAIL_0)
+                (list "page-type:      m1 page p0"
+                      "previous page:  $00"
+                      "slots used:     0"
+                      "next free slot: $04")
+                "page with array is completely freed after gc")
+
+  (define mem-fifo-state-2
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc CALL) (word-ref FIFO_CREATE)
+       (bc DUP)
+       (bc DUP)
+       (bc PUSH_INT_1)
+       (bc SWAP)
+       (bc CALL) (word-ref FIFO_ENQUEUE)
+       (bc PUSH_INT_2)
+       (bc SWAP)
+       (bc CALL) (word-ref FIFO_ENQUEUE)
+       (bc DUP)
+       (bc CALL) (word-ref FIFO_DEQUEUE)
+       (bc SWAP)
+       (bc CALL) (word-ref FIFO_DEQUEUE)
+       (bc EXT) (bc GC_FL)
+       (bc BRK))
+      FIFO_CREATE
+      FIFO_ENQUEUE
+      FIFO_DEQUEUE
+      REVERSE)
+     ))
+
+  (check-equal? (vm-stack->strings mem-fifo-state-2)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "int $0001")
+                "1 -> FIFO, 2 -> FIFO, FIFO -> 1, FIFO ->2")
+  (check-equal? (vm-page->strings mem-fifo-state-2 PAGE_AVAIL_1)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     0"
+                      "next free slot: $05")
+                "cell pair page is completely freed after gc")
+  (check-equal? (vm-page->strings mem-fifo-state-2 PAGE_AVAIL_0)
+                (list "page-type:      m1 page p0"
+                      "previous page:  $00"
+                      "slots used:     0"
+                      "next free slot: $04")
+                "page with array is completely freed after gc (currently failing, return seems not to free locals as it should)"))

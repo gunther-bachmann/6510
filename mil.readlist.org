@@ -3593,7 +3593,9 @@ this will include the implementation of
   - [X] arrays/structures
   - [X] strings/native arrays
 - [-] field access to
-  - [ ] structures
+  - [-] structures
+    - [X] by index
+    - [ ] by name/id
   - [ ] strings/native arrays
   - [X] arrays
 - [X] get a notion on when to do ref-counting inc/dec and garbage collection
