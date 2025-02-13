@@ -8,18 +8,15 @@
   (color string))
 
 
- xdist between two points:
-   x2-x1
- ydist between two points:
-   y2-y1
- equal
+ xdist between two points:   x2-x1
+ ydist between two points:   y2-y1
+ equal (not comparing color)
 
 |#
 
 (require (only-in racket/list flatten))
 (require "./bc-ast.rkt")
 (require (only-in "./bc-resolver.rkt" bc-resolve bc-bytes))
-
 (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                   CONS
                   CAR
@@ -43,7 +40,6 @@
 
                   POP_TO_LOCAL
                   POP_TO_GLOBAL))
-
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
@@ -108,7 +104,6 @@
                   WRITE_FROM_LOCAL_2
                   WRITE_FROM_LOCAL_3])
 (require (only-in "./vm-memory-manager.rkt" ZP_VM_PC cleanup-strings cleanup-string))
-
 (require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
@@ -149,7 +144,6 @@
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
-
 
 (define POINT_CREATE ;; x :: y :: color -> point struct
   (list
@@ -218,7 +212,33 @@
           (bc GET_ARRAY_FIELD_0)
           (bc SWAP)
           (bc GET_ARRAY_FIELD_0)
-          (bc INT-)))
+          (bc INT-)
+          (bc RET)))
+
+(module+ test #| point xdist |#
+  (define point-xdist-1-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 250)
+       (bc PUSH_INT) (word 600)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc CALL) (word-ref POINT_XDIST)
+       (bc BRK))
+      POINT_CREATE
+      POINT_XDIST)
+     ))
+
+  (check-equal? (vm-stack->strings point-xdist-1-state)
+                (list "stack holds 1 item"
+                      "int $0064  (rt)")))
 
 (define POINT_YDIST ;; point1 :: point2 -> int
   (list
@@ -227,7 +247,33 @@
           (bc GET_ARRAY_FIELD_1)
           (bc SWAP)
           (bc GET_ARRAY_FIELD_1)
-          (bc INT-)))
+          (bc INT-)
+          (bc RET)))
+
+(module+ test #| point ydist |#
+  (define point-ydist-1-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 250)
+       (bc PUSH_INT) (word 600)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc CALL) (word-ref POINT_YDIST)
+       (bc BRK))
+      POINT_CREATE
+      POINT_YDIST)
+     ))
+
+  (check-equal? (vm-stack->strings point-ydist-1-state)
+                (list "stack holds 1 item"
+                      "int $0096  (rt)")))
 
 (define POINT_EQUAL ;; point1 :: point2 -> bool
   (list
@@ -246,3 +292,122 @@
           (bc GET_ARRAY_FIELD_1)
           (bc CELL_EQ)
           (bc RET)))
+
+(module+ test #| point equal |#
+  (define point-equal-1-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc CALL) (word-ref POINT_EQUAL)
+       (bc BRK))
+      POINT_CREATE
+      POINT_EQUAL)
+     ))
+
+  (check-equal? (vm-stack->strings point-equal-1-state)
+                (list "stack holds 1 item"
+                      "int $0001  (rt)"))
+
+  (define point-equal-2-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 499)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc CALL) (word-ref POINT_EQUAL)
+       (bc BRK))
+      POINT_CREATE
+      POINT_EQUAL)
+     ))
+
+  (check-equal? (vm-stack->strings point-equal-2-state)
+                (list "stack holds 1 item"
+                      "int $0000  (rt)"))
+
+  (define point-equal-3-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 199)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+
+       (bc CALL) (word-ref POINT_EQUAL)
+       (bc BRK))
+      POINT_CREATE
+      POINT_EQUAL)
+     ))
+
+  (check-equal? (vm-stack->strings point-equal-3-state)
+                (list "stack holds 1 item"
+                      "int $0000  (rt)")))
+
+(module+ test #| memory check points |#
+  (define mem-point-create-state-1
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+       (bc BRK))
+      POINT_CREATE)
+     ))
+
+  (check-equal? (vm-cell-at->string mem-point-create-state-1 (+ PAGE_AVAIL_0_W #x04) #f #t)
+                "cell-array len=$03 [...]")
+  (check-equal? (peek mem-point-create-state-1 (+ PAGE_AVAIL_0_W #x03))
+                1
+                "reference count is 1")
+  (check-equal? (map (lambda (offset) (vm-cell-at->string mem-point-create-state-1 (+ PAGE_AVAIL_0_W offset) #f #t))
+                     (list 06 08 10))
+                (list "int $01f4" "int $0064" "int $0000")
+                "the first three elements of the array are decimal 500, 100, 0")
+
+  (define mem-point-create-state-2
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_INT) (word 100)
+       (bc PUSH_INT) (word 500)
+       (bc CALL) (word-ref POINT_CREATE)
+       (bc POP)
+       (bc BRK))
+      POINT_CREATE)
+     ))
+
+  (check-equal? (peek mem-point-create-state-2 (+ PAGE_AVAIL_0_W #x04))
+                #x0e
+                "next free slot on this page starts at $0e (eager collection of array)")
+  (check-equal? (peek mem-point-create-state-2 (+ #xcf00 PAGE_AVAIL_0))
+                #x04
+                "first free slot on this page is at $04 (eager collection of array)")
+  (check-equal? (peek mem-point-create-state-2 (+ PAGE_AVAIL_0_W #x03))
+                0
+                "reference count is 0"))
