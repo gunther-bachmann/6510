@@ -287,6 +287,7 @@ call frame primitives etc.
    (byte-const ZP_CALL_FRAME_TOP_MARK    $ea) ;; ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
    (byte-const ZP_LOCALS_TOP_MARK        $eb) ;; eb byte pointing to the byte past the last local on the locals stack
    (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2 
+   (byte-const ZP_RC                     $f3) ;; f3..f4
 
    ;; implementation using registers
    ;; register T = top of stack, used as main register for operations, could be a pointer to a cell or an atomic cell. if it is a pointer to a cell, the low byte here is without tag bits => (zp_rt) points to the cell
@@ -312,6 +313,7 @@ call frame primitives etc.
 
 (define ZP_RT                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
 (define ZP_RA                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
+(define ZP_RC                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RC"))
 (define ZP_CALL_FRAME           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
 (define ZP_CALL_FRAME_TOP_MARK  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME_TOP_MARK"))
 (define ZP_CELL_STACK_LB_PTR    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_LB_PTR"))
@@ -4239,6 +4241,7 @@ call frame primitives etc.
           (RTS)
 ))
 
+;; free the m1 slot pointed to by ra, marking that slot free on the m1-page
 ;; input:  ZP_RA
 ;; output: ZP_RA is invalid
 ;; currently once allocated pages are not garbage collected. this is bad and needs to be changed
@@ -4558,6 +4561,90 @@ call frame primitives etc.
 ;; TODO: check necessity for this function, adjust to rt/ra usage
 ;; TODO: reactivate when encountered necessary
 
+;; mark array to be collected and process array entries (from the back) until first to actually gc
+;; gc array referenced by ra (after ref count dropped to 0)
+(define VM_GC_ARRAY_RA
+  (list
+   (label VM_GC_ARRAY_RA)
+          (LDY !$01)
+          (LDA (ZP_RA),y)  ;; a = number of array elements
+          (ASL A)
+          (TAY) ;; y holds index to lowbyte
+          (INY) ;; now highbyte (no page wrap possible)
+
+   (label LOOP_OVER_ENTRIES__)
+          (LDA (ZP_RA),y)
+          (BEQ ENTRY_HIGH_EMPTY_)
+          (STA ZP_TEMP+1)
+          (DEY)
+          (LDA (ZP_RA),y)
+          (BEQ ENTRY_LOW_EMPTY_)
+          (STA ZP_TEMP)
+          (AND !$03)
+          (CMP !$03)
+          (BNE ENTRY_IS_PTR_)
+
+   (label ENTRY_HIGH_EMPTY_)
+          (DEY)
+   (label ENTRY_LOW_EMPTY_)
+          (DEY)
+          (CPY !$01)
+          (BNE LOOP_OVER_ENTRIES__)
+
+          ;; all entries were collected
+          ;; array is completely collected => slot can be returned to m1 page as free!
+          (RTS)
+
+   (label ENTRY_IS_PTR_)
+          (STY ZP_TEMP+2) ;; currently on low byte of slot that's freed and can be used to store free page
+          (DEY)
+          (DEY)
+          (TYA)
+          (LSR)         ;; remaining size of array
+          (BNE KEEP_ARRAY_IN_TO_FREE_LIST__VM_GC_ARRAY_RA)
+
+          ;; count dropped to 0 => array can be put back as completely free into page
+          ;; TODO: put array back to free slot in page
+          ;; still the original cell ptr needs to be decremented
+          (JSR VM_FREE_M1_SLOT_IN_RA)
+          (JMP DECR_ORG_CELL_PTR__VM_GC_ARRAY_RA)
+
+   (label KEEP_ARRAY_IN_TO_FREE_LIST__VM_GC_ARRAY_RA)
+          (LDY !$01)
+          (STA (ZP_RA),y) ;; store array size (entry after size = reference to next free array)
+          ;; first call => put old free array of same size into slot
+          (LDA ZP_RA+1) ;; page this array is stored in
+          (STA LOAD_PAGETYPE__VM_GC_ARRAY_RA+2)
+   (label LOAD_PAGETYPE__VM_GC_ARRAY_RA)
+
+          ;; write old root of this page type into cell where ptr was located
+          (LDA $c000) ;; load byte 0 of the page (c0 is overwritten with actual page
+          (AND !$07) ;; mask out profile
+          (TAX)
+          (LDA VM_P0_QUEUE_ROOT_OF_ARRAYS_TO_FREE,x) ;; low byte of last free
+          (LDY ZP_TEMP+2)
+          (STA (ZP_RA),y)
+          (INX)
+          (INY)
+          (LDA VM_P0_QUEUE_ROOT_OF_ARRAYS_TO_FREE,x) ;; high byte of last free
+          (STA (ZP_RA),y)
+
+          ;; now write this array as root into the free list
+          (LDA ZP_RA+1)
+          (STA VM_P0_QUEUE_ROOT_OF_ARRAYS_TO_FREE,x) ;; high byte
+          (DEX)
+          (LDA ZP_RA)
+          (STA VM_P0_QUEUE_ROOT_OF_ARRAYS_TO_FREE,x) ;; low byte
+
+   (label DECR_ORG_CELL_PTR__VM_GC_ARRAY_RA)
+          ;; now reuse RA to store pointer originally in cell
+          (LDA ZP_TEMP)
+          (STA ZP_RA)
+          (LDA ZP_TEMP+1)
+          (STA ZP_RA+1)
+          (JMP VM_REFCOUNT_DECR_RA)
+))
+
 ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
 ;; input:  ZP_RT = pointer to array (slot)
 ;; used:   ZP_RA   = dereferenced array element (if array element is a ptr)
@@ -4600,6 +4687,57 @@ call frame primitives etc.
    (label LOOP_IDX__VM_GC_ARRAY_SLOT_PTR)
           (byte $00)
    ))
+
+
+;; input: RA
+;; usage: A, X, Y, RA, RC
+(define VM_GC_ARRAY_SLOTS_RA
+  (list
+   (label VM_GC_ARRAY_SLOTS_RA)
+          ;; loop over slots and decrement their slots
+          (LDY !$01)
+          (LDA (ZP_RA),y)  ;; a = number of array elements
+          (STA LOOP_COUNT__VM_GC_ARRAY_SLOTS_RA) ;;
+
+          (LDA ZP_RA)
+          (STA ZP_RC)
+          (LDA ZP_RA+1)
+          (STA ZP_RC)
+
+          (LDY !$00)
+
+   (label LOOP__VM_GC_ARRAY_SLOTS_RA)
+          (INY)
+          (INY)
+          ;; deref zp_ptr into zp_ptr2?
+          (LDA (ZP_RC),y) ;; load tagged low byte
+          (BEQ NEXT__VM_GC_ARRAY_SLOTS_RA)
+          (STA ZP_RA)
+          (AND !$03)
+          (CMP !$03)
+          (BEQ NEXT__VM_GC_ARRAY_SLOTS_RA)
+          (INY)
+          (LDA (ZP_RC),y) ;; load high byte
+          (STA ZP_RA+1)
+          (STY LOOP_IDX__VM_GC_ARRAY_SLOTS_PTR)
+
+          ;; TODO: possible recursion! save ZP_RC??
+          ;; better! do lazy
+          (JSR VM_REFCOUNT_DECR_RA)
+          ;; restore RC
+          (LDY LOOP_IDX__VM_GC_ARRAY_SLOTS_PTR)
+    (label NEXT__VM_GC_ARRAY_SLOTS_PTR)
+          (DEC LOOP_COUNT__VM_GC_ARRAY_SLOTS_PTR)
+          (BNE LOOP__VM_GC_ARRAY_SLOTS_PTR)
+
+          (RTS)
+
+   (label LOOP_COUNT__VM_GC_ARRAY_SLOTS_RA)
+          (byte $00)
+   (label LOOP_IDX__VM_GC_ARRAY_SLOTS_RA)
+          (byte $00)
+   ))
+
 
 (module+ test #| vm_gc_array_slot_ptr |#
   (define test-gc-array-slot-ptr-code
@@ -5220,4 +5358,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1687))
+                       1669))

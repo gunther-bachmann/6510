@@ -12,3 +12,4 @@ doc/
 /**/ltximg/*.png
 /src/example/*.map
 *.elc
+*.gen.png

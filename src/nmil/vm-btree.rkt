@@ -719,7 +719,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                 (list "stack holds 1 item"
                       "3  (rt)"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 12961))
+                 12873))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -2361,7 +2361,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
-                19264)
+                19253)
 
   (check-equal? (cleanup-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -2634,7 +2634,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                       "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                29645))
+                29557))
 
 
 ;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
@@ -3498,7 +3498,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                66453)
+                66387)
   (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append

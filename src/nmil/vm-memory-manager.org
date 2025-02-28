@@ -58,11 +58,37 @@
 - are passed as regular stack values
 - need to be copied to locals if multiple access is necessary and /dup/ does not suffice
 ** page
-*** page usage 
+#+begin_src dot :file memory-page-state.gen.png
+  digraph finite_state_machine {
+      node [shape=point]ENTRY; //,EXIT
+      node [shape=ellipse];
+
+      ENTRY->free;
+      ENTRY->blocked;
+      free -> allocated[label="ALLOC_PAGE__PAGE_UNINIT"]
+      allocated -> initialized
+      free -> initialized[label="ALLOC_PAGE_FOR..."];
+      initialized -> used;
+      used -> full[label="alloc slot"];
+      free -> used[label="alloc slot"];
+      used -> used[label="free slot"];
+      full -> used[label="free slot"];
+  }
+#+end_src
+
+#+RESULTS:
+[[file:memory-page-state.gen.png]]
+- free :: VM​_PAGE​_SLOT​_DATA holds at page idx $ff, indicating that this page is free
+- blocked :: VM​_PAGE​_SLOT​_DATA holds at page idx $01, indicating that this page is unavailable
+- allocated :: VM​_PAGE​_SLOT​_DATA holds at page idx $00, this status is temporary
+- initialized :: VM​_PAGE​_SLOT​_DATA holds at page idx $02..$fe, this status is temporary
+- used :: page is in use, VM​_PAGE​_SLOT​_DATA holds at page idx $02..$fe = next free slot, a page in use may still hold 0 slots
+- full :: page is in use, there are no free slots, VM​_PAGE​_SLOT​_DATA holds at page idx $00
+*** page usage
 pages can be allocated and freed
 the status of the 256 pages is held in VM​_PAGE​_SLOT​_DATA + pageidx (at cf00):
 content of this memory location is interpreted as
-00: ?
+00: allocated but not initialized
 01: unavailable
 x : used, holding first free slot of this page (for some kind of pages)
 ff: free
@@ -156,6 +182,38 @@ offset  content
 80..fd  cell 21..83
 fe      unused
 ff      previous page of this type
+*** cell allocation/free
+#+begin_src dot :file cell-page-state.gen.png
+  digraph finite_state_machine {
+      node [shape=point]ENTRY; //,EXIT
+      node [shape=ellipse];
+
+      ENTRY->free;
+      free -> used[label="ALLOC_CELL_PTR_TO_RT"]
+      used -> enqueued[label="FREE_CELL_PTR_IN_RT"]
+      enqueued -> used[label="ALLOC_CELL_PTR_TO_RT"]
+
+      labelloc="t";
+      label="cell state";
+  }
+#+end_src
+
+#+RESULTS:
+[[file:cell-page-state.gen.png]]
+- free :: cell is not counted as used on page
+          points to the next free cell on this page (low byte), 0 = no next free
+          it is reachable through the first free cell on this page (VM​_PAGE​_SLOT​_DATA)
+          refcount of this cell is 0 (no one keeps a reference to this cell)
+- used :: cell is counted as used on the page
+          it is NOT reachable through the first free cell on this page (VM​_PAGE​_SLOT​_DATA)
+          it is NOT reachable through the list of free cells VM​_LIST​_OF​_FREE​_CELLS
+          refcount of this cell is >0 (at least on reference to this cell exists)
+- enqueued :: cell is enqueued in list of free cells
+              it is NOT reachable through the first free cell on this page (VM​_PAGE​_SLOT​_DATA)
+              it is reachable through the list of free cells VM​_LIST​_OF​_FREE​_CELLS
+              refcount of this cell is 0 (no one keeps a reference to this cell)
+              it contains a word pointer to the next element of the list of free celss
+
 *** cell-pair page layout
 offset  content
 ---------------------
@@ -176,6 +234,39 @@ offset  content
 f9..fc  cell-pair 48
 fd..fe  unused (2)
 ff      previous page of this type
+
+*** cell-pair allocation/free
+#+begin_src dot :file cell-pair-page-state.gen.png
+  digraph finite_state_machine {
+      node [shape=point]ENTRY; //,EXIT
+      node [shape=ellipse];
+
+      ENTRY->free;
+      free -> used[label="ALLOC_CELL_PAIR_PTR_TO_RT"]
+      used -> enqueued[label="FREE_CELL_PAIR_PTR_IN_RT"]
+      enqueued -> used[label="ALLOC_CELL_PAIR_PTR_TO_RT"]
+
+      labelloc="t";
+      label="cell-pair state";
+  }
+#+end_src
+
+#+RESULTS:
+[[file:cell-pair-page-state.gen.png]]
+- free :: cell-pair is not counted as used on page
+          points to the next free cell-pair on this page (low byte), 0 = no next free
+          it is reachable through the first free cell-pair on this page (VM​_PAGE​_SLOT​_DATA)
+          refcount of this cell-pair is 0 (no one keeps a reference to this cell-pair)
+- used :: cell-pair is counted as used on the page
+          it is NOT reachable through the first free cell-pair on this page (VM​_PAGE​_SLOT​_DATA)
+          it is NOT reachable through the list of free cell-pairs VM​_QUEUE​_ROOT​_OF​_CELL​_PAIRS​_TO​_FREE
+          refcount of this cell-pair is >0 (at least on reference to this cell-pair exists)
+- enqueued :: cell-pair is enqueued in list of free cell-pairs
+              it is NOT reachable through the first free cell-pair on this page (VM​_PAGE​_SLOT​_DATA)
+              it is reachable through the list of free cell-pairs VM​_QUEUE​_ROOT​_OF​_CELL​_PAIRS​_TO​_FREE
+              refcount of this cell-pair is 0 (no one keeps a reference to this cell-pair)
+              car cell contains a word pointer to the next element of the list of free cell-pairs
+              cdr cell may still contain a value to be garbage collected, so the cell-pair cannot be reused right away
 
 *** m1p0 page layout
 provides space for structures with 1-3 fields
@@ -296,6 +387,42 @@ offset  content
 00      page type #b0001 1011
 01      previous page (of the stack)
 02..ff  payload (either lowbyte or highbyte of the cell)
+
+*** cell-array allocation-free
+#+begin_src dot :file cell-array-page-state.gen.png
+  digraph finite_state_machine {
+      node [shape=point]ENTRY; //,EXIT
+      node [shape=ellipse];
+
+      ENTRY->free;
+      free -> used[label="ALLOC_CELL_ARRAY_TO_RA"]
+      used -> enqueued[label="FREE_CELL_ARRAY_IN_RA"]
+      enqueued -> used[label="ALLOC_CELL_ARRAY_TO_RA"]
+      enqueued -> enqueued[label="gc"]
+
+      labelloc="t";
+      label="cell-array state";
+  }
+#+end_src
+
+#+RESULTS:
+[[file:cell-array-page-state.gen.png]]
+- free :: slot (cell-array) is NOT counted as used on m1-page
+          points to the next free slot on this page (low byte), 0 = no next free.
+          it is reachable through the first free slot on this page (VM​_PAGE​_SLOT​_DATA)
+          refcount of this slot (cell-array) is 0 (no one keeps a reference to this cell pair)
+- used :: cell-array is counted as used on m1-page
+          it is NOT reachable through the first free slot on this page (VM​_PAGE​_SLOT​_DATA)
+          it is NOT reachable through the queue root of arrays to free (VM​_Px​_QUEUE​_ROOT​_OF​_ARRAYS​_TO​_FREE)
+          refcount to this cell-array is >0 (at least on reference to this cell-pair exists)
+- enqueued :: cell-array is counted as used on m1-page
+              it is NOT reachable through the first free slot on this page (VM​_PAGE​_SLOT​_DATA)
+              it is reachable through the queue root of arrays to free (VM​_Px​_QUEUE​_ROOT​_OF​_ARRAYS​_TO​_FREE)
+              refcount of this cell-array is 0 (no one keeps a reference to this cell pair)
+              the array may still contain cells that are cell pointer that need to be garbage collected
+              each gc reduces the amount of cell pointer in the array by 1
+              the array keeps the amount of unchecked cells
+              the array keeps a pointer to the next enqueued cell-array in the slot right behind the unchecked cells
 
 ** cell types and references
 cell types fall into 3 categories
