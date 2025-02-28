@@ -565,7 +565,114 @@ black-node
    val  o
        / \
       L   R
+* modifications planned
+** TODO clarify RA RT usage during GC
+*** concept
+RT = cell-pair-pointer | cell-pointer | value-cell 
+     \_ cell-pair        \_ cell-pair-pointer | cell-pointer | value-cell | header-cell
+RA = cell-pair-pointer | cell-pointer | value-cell ?header-cell?
+     \_ cell-pair        \_ cell-pair-pointer | cell-pointer | value-cell | header-cell
+*** cleanup code
+idea REFCOUNT​_INCR is needed only on RT
+     REFCOUNT​_DECR is needed on RT and RA
+     GC OPERATIONS should run on RA, never on RT
+[[file:vm-memory-manager.rkt::4641]]
+[[file:vm-memory-manager.rkt::4434]]
+- [ ] separate REFCOUNT​_DECR from actual garbage collection
+  inspect the following methods and extract GC (running on RA) into separate methods
+  #+begin_src scheme
+    VM_REFCOUNT_DECR_RT                                ;; generic decrement of refcount (dispatches depending on type)
+    VM_REFCOUNT_INCR_RT                                ;; generic increment of refcount (dispatches depending on type)
+
+    VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+    VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+    VM_REFCOUNT_DECR_RT__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+
+    VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR                 ;; increment refcount of cell-pair
+    VM_REFCOUNT_INCR_RA__M1_SLOT                         ;; increment refcount of m1-slot
+    VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
+
+    VM_REFCOUNT_DECR_RA                                ;; generic decrement of refcount (dispatches depending on type)
+    VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+    VM_REFCOUNT_DECR_RA__M1_SLOT                       ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+    VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+
+    VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS                ;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
+    VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
+    
+    VM_GC_ARRAY_SLOT_RT                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
+
+    VM_FREE_PTR_IN_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+
+    VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
+
+  #+end_src
+  - VM​_REFCOUNT​_DECR​_RT
+  - VM​_REFCOUNT​_DECR​_RA
+- [ ] make garbage collection run on RA (and RC) only
 * log
+** GC usage of RA RT
+- RT may be used for regular dec/inc of refcount
+- RA may be used for regular dec/inc of refcount
+- RT may NOT be overwritten/written to during more complex GC
+- RA may be overwritten/written to during more complex GC
+=> GC: may leave RA in an undefined state
+   GC may not change RT (except for temporary stuff)
+=> more complex GC operations should copy RT->RA first and then operate on RA only
+   collecting complex structures (e.g. pair cells or arrays) may need RA and additional memory space/register
+   => do not use RT, use RC <- new register for special gc stuff?  
+** IDEA use locals as array registers (alternative to dedicated array registers)
+- instead of
+  #+begin_src scheme
+    (bc PUSH_LOCAL_x)           ;; extra push of array reference on stack
+    (bc GET_ARRAY_FIELD_y)      ;; removes array reference from stack, pushing the field value of the array
+  #+end_src
+- keep array in local (no special ref couting compared to regular locals)
+  #+begin_src scheme
+    (bc PUSH_ARRAY_LOCAL_0_FIELD_y)  ;; use local0 as array register to push field y onto stack
+  #+end_src
+- addition bytecode commands
+  - +pop from eval stack to array register+
+  - +clear array-register <- automatically done on return/call just as locals?+
+  - +push from array register to eval stack <- really necessary?+
+  - push field y from array in local x
+  - pop/write stack to field y of array in local x
+- combinations (have 2 arrays to select from, read local0, read/write local1, write local2)
+  #+begin_src scheme
+    ;; single (compact) byte code
+    PUSH_ARRAY_LOCAL_0-1_FIELD_0-3     ;; 8 byte codes
+    POP_TO_ARRAY_LOCAL_1-2_FIELD_0-3   ;; 8 byte codes
+    WRITE_TO_ARRAY_LOCAL_1-2_FIELD_0-3 ;; 8 byte codes
+
+    ;; byte code with 1 byte operand
+    PUSH_ARRAY_LOCAL_FIELD     LOCAL_FIELD_ID_BYTE  ;; lllfffff = locals 0-7, fields 0-31
+    POP_TO_ARRAY_LOCAL_FIELD   LOCAL_FIELD_ID_BYTE
+    WRITE_TO_ARRAY_LOCAL_FIELD LOCAL_FIELD_ID_BYTE
+  #+end_src
+** OBSOLETE IDEA more compact bytecode for array access (using array registers)
+- instead of
+  #+begin_src scheme
+    (bc PUSH_LOCAL_x)           ;; extra push of array reference on stack
+    (bc GET_ARRAY_FIELD_y)      ;; removes array reference from stack, pushing the field value of the array
+  #+end_src
+- keep array e.g. in R0 (arrays in registers are refcounted once, and discarded explicitly)
+  #+begin_src scheme
+    (bc PUSH_ARRAY_R0_FIELD_y)  ;; use array register r0 to push field y onto stack
+  #+end_src
+- addition bytecode commands
+  - pop from eval stack to array register
+  - clear array-register <- automatically done on return/call just as locals?
+  - push from array register to eval stack <- really necessary?
+  - push field y from array in register x
+  - pop/write stack to field y of array in register x
+** IDEA RT, RA and array registers
+- RT is part of the stack
+  => manipulation = stack manipulation
+     this can be done if actually doing evaluation (e.g. int+ ...)
+     can be done if finally thrown away (popped) (e.g. during gc on pop)
+- RA is a register to be used if RT cannot be modified?
+  how about using it for gc only (no longer use rt fo gc operations)?
+- keep registers for array operations (instead of constantly pushing it on the stack, for field access)
 ** DONE call-frames
  ZP_​​VM_​PC                    *  ptr to the current byte code
  ZP_​VM_​FUNC_​PTR              *  ptr to the current running function
@@ -634,7 +741,7 @@ black-node
     02: lowbyte cell 0      02: high byte cell 0
     ...
 
-** IDEA keep only parameters and the cell-eval-stack on the stack spread over two pages to make push and pop fast
+** DONE keep only parameters and the cell-eval-stack on the stack spread over two pages to make push and pop fast
        => zp_​cell_​stack_​lb_​ptr, zp_​cell_​stack_​hb_​ptr must be held (2 bytes each)
           the parameters may as well be on the cell-stack when entering the function and form the start of the stack for function execution
        all else (vm_​pc, func_​ptr, locals_​xb_​ptr, cell_​stack_​xb_​ptr) go into a separate stack to share page and make storing fast.
@@ -779,11 +886,12 @@ black-node
          |  local - n              |
          |-------------------------|
          |                         |  <-- cell stack base ptr
-** IDEA use fast locals on zero page (just as regular locals, but not allocated on the stack but on zero page)
+** IDEA *fast locals* on zero page (just as regular locals, but not allocated on the stack but on zero page)
        possible for functions that do not call subroutines, or do so but the local is no longer used
        use short bytecodes for params 0..3, locals 0..3, fast-locals 0..3
 
-** IDEA use the following idea in more situations:
+** IDEA low-byte high byte on different pages
+use the following idea in more situations:
        store high byte in one page
        and store low byte in another page (same index)
        32 bit values may as well be spread of 4 pages, storing all at one index!
@@ -1048,7 +1156,7 @@ black-node
  return from function does
    pop call frame (restoring saved exec state)
 
-** IDEA trace byte code execution
+** DONE trace byte code execution
 ** IDEA collect metrics of calls
 ** DONE naming
  naming: atomic cell

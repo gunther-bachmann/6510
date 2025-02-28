@@ -7,14 +7,14 @@
 ;; start of main routine
 ;;--------------------------------------------------------------------------------
         lda #$82       ; lowbyte $82
-        ldx #$01       ; 1 * 256 + 8 * 16 + 2 = 386
-        jsr push
+        ldx #$01       ; highbyte $01 * 256 + 8 * 16 + 2 = 386
+        jsr push       ; 1 * 256 + 8 * 16 + 2 = 386
 
         jsr dup        ; stack holds the integer 386 twice
 
         jsr add        ; sum of the top two integers
 
-        jsr pint       ; print number on top of the stack = 772
+        jsr pint       ; print integer number on top of the stack = 772
         rts
 
 ;; data locations for the stack
@@ -53,7 +53,6 @@ dup:    ldy tos         ; load top of stack index
         dey             ; point to high byte
         lda stack,y     ; load
         tax             ; high byte -> x
-        ;; dey ;; TODO uncomment
         lda stack,y     ; load 
         jsr push        ; push A/X on stack
         rts             ; done

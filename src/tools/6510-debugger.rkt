@@ -250,6 +250,7 @@ EOF
   (define s-regex #px"^s(tep)? *([[:xdigit:]]{1,2})?$")
   (define so-regex #px"^s(tep)? *o(ver)? *([[:xdigit:]]{1,2})?$")
   (define b-regex #px"^b(ack)? *([[:xdigit:]]{1,2})?$")
+  (define bt-regex #px"^bt *([[:xdigit:]]{1,4})$")
   (define sa-regex #px"^s(et)? *a *= *([[:xdigit:]]{1,2})$")
   (define spc-regex #px"^s(et)? *pc *= *([[:xdigit:]]{1,4})$")
   (define x-regex #px"^xf? *\\{(.*)\\}$")
@@ -288,6 +289,14 @@ EOF
          (match-let (((list _ _ value) (regexp-match b-regex command)))
            (define states (debug-state-states d-state))
            (struct-copy debug-state d-state [states (list-tail states (min (- (length states) 1) (if value (string->number value 16) 1)))]))]
+        [(regexp-match? bt-regex command)
+                 (match-let (((list _ num) (regexp-match bt-regex command)))
+                   (define drop-num (- (length (debug-state-states d-state)) (if num (string->number num 16) 1)))
+                   (cond [(or (< drop-num 0) (>= drop-num (length (debug-state-states d-state))))
+                          (begin (with-colors 'red (lambda () (displayln "cannot go to that point in time"))) d-state)]
+                         [else
+                          (struct-copy debug-state d-state
+                                       [states (drop (debug-state-states d-state) drop-num)])]))]
         ;; s - single step
         [(regexp-match? s-regex command)
          (match-let (((list _ _ len) (regexp-match s-regex command)))

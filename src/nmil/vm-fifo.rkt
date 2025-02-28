@@ -278,8 +278,7 @@
             (bc SET_ARRAY_FIELD_0)
   
      (label OUT_IS_NOT_EMPTY)
-            (bc PUSH_LOCAL_1)
-            (bc CDR)
+            (bc PUSH_LOCAL_1_CDR)
             (bc PUSH_LOCAL_0)
             (bc SET_ARRAY_FIELD_1)
             (bc PUSH_LOCAL_1_CAR)
