@@ -4,17 +4,21 @@
 
         *=$0810        ; origin (right behind basic loader "10 SYS 2064")
 
+;; implement a 16-bit integer stack machine (only add)
+
 ;; start of main routine
 ;;--------------------------------------------------------------------------------
-        lda #$82       ; lowbyte $82
-        ldx #$01       ; highbyte $01 * 256 + 8 * 16 + 2 = 386
+;;   push the integer 386, duplicate, add, print
+
+        lda #$82       ; lb $82
+        ldx #$01       ; hb 1 * 256 + 8 * 16 + 2 = 386
         jsr push       ; 1 * 256 + 8 * 16 + 2 = 386
 
-        jsr dup        ; stack holds the integer 386 twice
+        jsr dup        ; stack holds the int 386 twice
 
-        jsr add        ; sum of the top two integers
+        jsr add        ; sum of the top two ints
 
-        jsr pint       ; print integer number on top of the stack = 772
+        jsr pint       ; print int number on tos = 772
         rts
 
 ;; data locations for the stack
