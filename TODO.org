@@ -60,6 +60,144 @@ https://github.com/schemedoc/bibliography/blob/master/page8.md
 - free a page
 - allow introspection of pages
 - define layout and access to page types
+** naming conventions
+ZP_ <- on zero page
+functions have a verb (what they do, e.g. ALLOC​_PAGE​_TO​_A)
+functions define main return register
+register available are A, X, Y (as cpu registers), and vm registers RT RA
+parameters for functions are passed through registers A/X/Y or use vm resources like the registers, stack, call-frame stack etc.
+each function defines which cpu resources and/or vm resources are used during execution (including transitively called functions)
+=> only the most basic functions don't use all cpu resources
+
+e.g. INC​_REFCNT​_CEL​_RT
+
+- nouns
+  CEL :: cell
+  CELy :: cell at y of either cell-array or cell-pair (depending on context), y = 0, 2, 4 ... <- actual offset
+  CELPAR :: cell-pair
+  CELARR :: cell-array (is a vslot)
+  M1Px :: m1 page of profile x (can be register x)
+  PAGE :: page
+  REFCNT :: refcount
+  EVLSTK :: cell eval stack
+  RT :: top of cell eval stack
+  FRMSTK :: frame stack
+  TOSmr :: top of stack - r (can be a constant or a register)
+  SLOT :: allocation unit within a page (CEL, CELPAR, VSLOT is a SLOT)
+  VSLOT :: slot of (initially) variable size, allocated to one profile of m1-px pages
+  FL :: free list <- list of free elements (pages, cells, cell-pairs, cell-arrays)
+  GFL :: global freelist
+  PFL :: page freelist
+  LOCALy :: function local cell slot y-register (0,2,4,6 ...)
+  GLOBALy :: global cell slot y-register (0,2,4 ...)
+  INT :: integer (0..8191 | -4096..4095)
+  BOOL :: boolean (0/1)
+  BYTE :: byte (0..255 | -128..127)
+  NIL :: nil
+- verbs
+  ADD :: add
+  ALLOC :: allocate
+  FREE :: free
+  INIT :: initialize
+  EVICT :: remove (from within a stack)
+  REM :: remove
+  REUSE :: reuse
+  RET :: return
+  PUSH :: push
+  POP :: pop
+  GC :: garbage collect
+  READ :: read
+  WRITE :: write
+  DEC :: decrement
+  INC :: increment
+  COPY :: copy
+** memory management
+- free lists always use memory-sections of the element itself to provide the structure needed (no additional memory is used)
+*** atoms for memory management
+- {allocate|free} page
+  ALLOC​_PAGE​​_TO​_A, FREE​_PAGE​_A, FREE​_PAGE​_RT
+- {add|remove} page to {cell|cell-pair|m1-px} free-list
+  ADD​_CEL​_PAGE​_a​_TO​_FL
+- initialize page for type {cell|cell-pair|m1-px...}
+  INIT​_CEL​_PAGE​_a, INIT​_CELPAR​_PAGE​_a, INIT​_M1Px​_PAGE​_a (use x register as profile, a as page id)
+- {add|remove} {cell|cell-pair|vslot} to/from free-list of page
+  ADD​_CEL​_RT​_TO​_PAGE​_FL
+- {add|remove|reuse|return-to-page} cell to/from global free list
+  ADD​​_CEL​_RT​_TO​_FL
+- {add|remove|reuse|return-to-page|inc-gc} cell-pair to/from global free list
+  ADD​​_CELPAR​_RT​_TO​_FL
+- {add|remove|reuse|return-to-page|inc-gc} cell-array to/from global free list
+  ADD​​_CELARR​_RT​_TO​_FL
+- {push|pop|read|write} cell on/from/to stack
+  PUSH​_RT​_ON​_EVLSTK, POP​_FROM​_EVLSTK​, WRITE​_TOSmx​_TO​_RT
+- {dec|inc} refcount on {cell|cell-pair|vslot}
+  INC​_REFCNT​_RT, INC​_REFCNT​_CELL​_RT
+*** cells
+- allocate page for cells
+- allocate cells on page
+- free cells into free list
+- reuse cell from free-list
+- free cells on page
+- free cell page
+- inc/dec refcount
+- gc run
+*** cell-pairs
+- allocate page for cell-pairs
+- allocate cell-pairs on page
+- free cell-pairs into free list
+- reuse cell-pair from free list
+- free cell-pairs on page
+- free cell-pair page
+- inc/dec refcount
+- gc run
+*** cell-arrays
+- allocate page for cell-arrays
+- allocate cell-arrays on page
+- free cell-arrays into free list
+- reuse cell-array from free list
+- free cell-arrays on page
+- free cell-array (m1) page
+- inc/dec refcount
+- gc run
+*** define byte code operations w/ atoms for mm (and other atoms)
+**** complex mm atoms
+- ALLOC​_CELPAR​_TO​_RA
+  GFL​_CELPAR​​_EMPTY?
+    CELPAR​_PAGE​_LIST​_HEAD​_EMPTY?
+      ALLOC​_PAGE
+      INIT​_PAGE​_FOR​_CELPAR
+    REM​_CELPAR​_PFL​_TO​_RA
+  ELSE
+    REM​_CELPAR​_GFL​_TO​_RA
+- FREE​_CELPAR​_RT
+  WRITE​_CELy​_RT​_TO​_RA ;; y=0 = car-cell
+  ADD​_CELPAR​_RT​_TO​_GFL
+  tailcall FREE​_CEL​_RA
+- FREE​_CEL​_RT
+  ADD​_CEL​_RT​_TO​_GFL
+- FREE​_CELARR​_RT
+  GET​_LEN​_CELARR​_RT​_TO​_y
+  WRITE​_CELLy​_CELARR​_RT​_TO​_RA  <-- 1
+  IS​_RA​_PTR?
+    DEC​_y
+    WRITEy​_TO​_CELARR​_LEN
+    ADD​_CELARR​_RT​_TO​_GFL
+    DEC​_REFCNT​_RA    ;; might result in gc
+  ELSE
+    DEC​_y
+    >0 LOOP --> 1
+    WRITEy​_TO​_CELARR​_LEN
+    ADD​_CELARR​_RT​_TO​_GFL
+**** INT+
+ADD​_INT​_RT​_TOSm1​_TO​_RT
+EVICT​_TOSm1​_FROM​_EVLSTK
+**** CONS
+ALLOC​_CELPAR​_TO​_RA
+WRITE​_RT​_TO​_CELy​_RA
+WRITE TOSm1​_TO​_CELy​_RA
+EVICT​_TOSm1​_FROM​_EVLSTK
+WRITE​_RA​_TO​_RT
+INC​_REFCNT​_RT
 ** output a string
 e.g. ~(displayln "hello world")~
 *** stories

@@ -57,6 +57,7 @@ dup:    ldy tos         ; load top of stack index
         dey             ; point to high byte
         lda stack,y     ; load
         tax             ; high byte -> x
+        dey             ; point to low byte
         lda stack,y     ; load 
         jsr push        ; push A/X on stack
         rts             ; done
