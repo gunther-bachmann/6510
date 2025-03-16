@@ -69,48 +69,55 @@ parameters for functions are passed through registers A/X/Y or use vm resources 
 each function defines which cpu resources and/or vm resources are used during execution (including transitively called functions)
 => only the most basic functions don't use all cpu resources
 
-e.g. INC​_REFCNT​_CEL​_RT
+e.g. INC​_REFCNT​_CELL​_RT, WRITE​_EVLSTK​_TOS​_CELL​_TO​_RT, POP​_EVLSTK​_TOS​_CELL​_TO​_RT
+VERB - TYPE - OBJECT
 
-- nouns
-  CEL :: cell
-  CELy :: cell at y of either cell-array or cell-pair (depending on context), y = 0, 2, 4 ... <- actual offset
-  CELPAR :: cell-pair
-  CELARR :: cell-array (is a vslot)
-  M1Px :: m1 page of profile x (can be register x)
-  PAGE :: page
-  REFCNT :: refcount
-  EVLSTK :: cell eval stack
-  RT :: top of cell eval stack
-  FRMSTK :: frame stack
-  TOSmr :: top of stack - r (can be a constant or a register)
-  SLOT :: allocation unit within a page (CEL, CELPAR, VSLOT is a SLOT)
-  VSLOT :: slot of (initially) variable size, allocated to one profile of m1-px pages
-  FL :: free list <- list of free elements (pages, cells, cell-pairs, cell-arrays)
-  GFL :: global freelist
-  PFL :: page freelist
-  LOCALy :: function local cell slot y-register (0,2,4,6 ...)
-  GLOBALy :: global cell slot y-register (0,2,4 ...)
-  INT :: integer (0..8191 | -4096..4095)
-  BOOL :: boolean (0/1)
-  BYTE :: byte (0..255 | -128..127)
-  NIL :: nil
-- verbs
-  ADD :: add
-  ALLOC :: allocate
-  FREE :: free
-  INIT :: initialize
-  EVICT :: remove (from within a stack)
-  REM :: remove
-  REUSE :: reuse
-  RET :: return
-  PUSH :: push
-  POP :: pop
-  GC :: garbage collect
-  READ :: read
-  WRITE :: write
-  DEC :: decrement
-  INC :: increment
-  COPY :: copy
+- *nouns*
+  CELL      :: cell
+  CELLy     :: cell at y of either cell-array or cell-pair (depending on context), y = 0, 2, 4 ... <- actual offset
+  CELLPAIR  :: cell-pair
+  CELLARR   :: cell-array (is a vslot)
+  M1Px      :: m1 page of profile x (can be register x)
+  PAGE      :: page
+  REFCNT    :: refcount
+  EVLSTK    :: cell eval stack (without RT!)
+  RT        :: register extending cell eval stack, making it the real TOS
+  Rx        :: register (x = T | A | B ...)
+  FRMSTK    :: frame stack
+  TOSmr     :: top of stack - r (can be a constant or a register)
+  SLOT      :: allocation unit within a page (CELL, CELLPAIR, VSLOT is a SLOT)
+  VSLOT     :: slot of (initially) variable size, allocated to one profile of m1-px pages
+  FL        :: free list <- list of free elements (pages, cells, cell-pairs, cell-arrays)
+  GFL       :: global freelist
+  PFL       :: page freelist (local within page)
+  LOCALy    :: function local cell slot y-register (0,2,4,6 ...)
+  GLOBALy   :: global cell slot y-register (0,2,4 ...)
+  INT       :: integer (0..8191 | -4096..4095)
+  BOOL      :: boolean (0/1)
+  BYTE      :: byte (0..255 | -128..127)
+  NIL       :: nil
+  LIST      :: linked cell-pairs forming a  list (car element = value, cdr elment = ptr to next pair)
+  ARR       :: array
+  NARR      :: native (byte) array
+  CONST     :: constants
+
+- *verbs*
+  ADD       :: add
+  ALLOC     :: allocate
+  FREE      :: free
+  INIT      :: initialize
+  EVICT     :: remove (from within a stack)
+  REM       :: remove
+  REUSE     :: reuse
+  RET       :: return
+  PUSH      :: push
+  POP       :: pop
+  GC        :: garbage collect
+  READ      :: read
+  WRITE     :: write
+  DEC       :: decrement
+  INC       :: increment
+  COPY      :: copy
 ** memory management
 - free lists always use memory-sections of the element itself to provide the structure needed (no additional memory is used)
 *** atoms for memory management

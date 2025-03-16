@@ -4783,7 +4783,7 @@ call frame primitives etc.
 ;; input:  A = number of bytes (1..)
 ;; output: ZP_RA -> points to an allocated array (not initialized)
 (define VM_ALLOC_NATIVE_ARRAY_TO_RA
-(list
+  (list
    (label VM_ALLOC_NATIVE_ARRAY_TO_RA)
           (PHA)
           (CLC)
