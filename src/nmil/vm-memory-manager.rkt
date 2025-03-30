@@ -1900,6 +1900,8 @@ call frame primitives etc.
             (LDA !$00)
             (STA (ZP_TEMP),y) ;; last cell points to 0
 
+            (LDA ZP_TEMP+1) ;; return page initialized in a (TXA would currently actually work, too)
+
             (RTS)))
 
 (module+ test #| vm_alloc_page_for_cell_pairs |#
@@ -1909,7 +1911,7 @@ call frame primitives etc.
      (STA VM_FREE_CELL_PAIR_PAGE)
      (JSR ALLOC_PAGE_TO_A)
      (JSR INIT_CELLPAIR_PAGE_A)
-     (STX ZP_RT) ;; to test read out actual page
+     (STA ZP_RT) ;; to test read out actual page
      ))
 
   (define vm-alloc-page-for-cell-pairs-state
@@ -2026,7 +2028,6 @@ call frame primitives etc.
    (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
           (JSR ALLOC_PAGE_TO_A)
           (JSR INIT_CELLPAIR_PAGE_A)
-          (TXA)
 
    ;; ----------------------------------------
    (label VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT) ;; <-- real entry point of this function
@@ -5362,4 +5363,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1669))
+                       1668))
