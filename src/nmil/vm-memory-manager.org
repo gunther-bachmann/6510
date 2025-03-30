@@ -11,7 +11,8 @@
   | x    | VM_FREE_PAGE                                | FREE_PAGE_A                      | R    |                                                        |
   | x    | VM_ALLOC_PAGE__PAGE_UNINIT                  | ALLOC_PAGE_TO_A                  | R+   | make sure that allocated page is in A                  |
   | x    | VM_ALLOC_PAGE_FOR_CELLS                     | INIT_CELL_PAGE_A                 | D    | ALLOC_PAGE_TO_A + INIT_CELL_PAGE_A                     |
-  |      | VM_ALLOC_PAGE_FOR_CELL_PAIRS                | INIT_CELLPAIR_PAGE_A             | D    |                                                        |
+  | x    | VM_ALLOC_PAGE_FOR_CELL_PAIRS                | INIT_CELLPAIR_PAGE_A             | D    |                                                        |
+  |      | INIT_CELLPAIR_PAGE_A                        |                                  | C    | result is returned in X -> refactor to return in A     |
   |      | VM_ALLOC_CELL_STACK_PAGES                   | INIT_CELLSTACK_PAGE_A            | D    |                                                        |
   |      | ;; VM_ALLOC_PAGE_FOR_M1_SLOTS               | INIT_M1Px_PAGE_A                 |      |                                                        |
   |      | ;; VM_ALLOC_PAGE_FOR_S8_SLOTS               |                                  |      |                                                        |
