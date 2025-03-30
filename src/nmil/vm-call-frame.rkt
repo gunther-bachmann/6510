@@ -125,11 +125,16 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (JSR VM_ALLOC_CALL_FRAME_N)   ;; call-frame initialized (top mark set, too)
 
           ;; alloc locals
+          (JSR ALLOC_PAGE_TO_A)
+          (LDX !$00) ;; previous locals hb page (none => 0)
+          (JSR INIT_CELLSTACK_PAGE_A)
+          (STA ZP_LOCALS_HB_PTR+1)
+
+          (JSR ALLOC_PAGE_TO_A)
           (LDX !$00) ;; previous locals lb page (none => 0)
-          (LDY !$00) ;; previous locals hb page (none => 0)
-          (JSR VM_ALLOC_CELL_STACK_PAGES)
-          (STX ZP_LOCALS_LB_PTR+1)
-          (STY ZP_LOCALS_HB_PTR+1)
+          (JSR INIT_CELLSTACK_PAGE_A)
+          (STA ZP_LOCALS_LB_PTR+1)
+
           (LDA !$03) ;; payload start for locals
           (STA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_HB_PTR)
@@ -755,11 +760,16 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (STX ZP_LOCALS_TOP_MARK)      ;; remember X (number of parameters)
 
           ;; prepare call to new pages allocation
-          (LDX ZP_LOCALS_LB_PTR+1)
-          (LDY ZP_LOCALS_HB_PTR+1)
-          (JSR VM_ALLOC_CELL_STACK_PAGES)
-          (STX ZP_LOCALS_LB_PTR+1)
-          (STY ZP_LOCALS_HB_PTR+1)
+          (JSR ALLOC_PAGE_TO_A)
+          (LDX ZP_LOCALS_HB_PTR+1) ;; previous locals hb page
+          (JSR INIT_CELLSTACK_PAGE_A)
+          (STA ZP_LOCALS_HB_PTR+1)
+
+          (JSR ALLOC_PAGE_TO_A)
+          (LDX ZP_LOCALS_LB_PTR+1) ;; previous locals lb page
+          (JSR INIT_CELLSTACK_PAGE_A)
+          (STA ZP_LOCALS_LB_PTR+1)
+
 
           ;; now set the locals pointers to local#0 and set the top mark
           (LDA !$03)
@@ -847,4 +857,4 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test #| vm-call-frame |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-call-frame)))
-                       244))
+                       262))
