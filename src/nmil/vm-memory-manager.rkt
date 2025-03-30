@@ -124,10 +124,10 @@ call frame primitives etc.
          VM_INITIALIZE_MEMORY_MANAGER
          VM_REFCOUNT_DECR_RT
           ;; ---------------------------------------- alloc/free pages
-          VM_FREE_PAGE                                       ;; free a page (the type specific stuff, of any, must have finished)
-          VM_ALLOC_PAGE__PAGE_UNINIT                         ;; allocate new page (not initialized)
+          FREE_PAGE_A                                       ;; free a page (the type specific stuff, of any, must have finished)
+          ALLOC_PAGE_TO_A                         ;; allocate new page (not initialized)
 
-          VM_ALLOC_PAGE_FOR_CELLS                            ;; allocate page and initialize for ref counted cells
+          INIT_CELL_PAGE_A                            ;; allocate page and initialize for ref counted cells
           VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for ref counted cell-pairs
           VM_ALLOC_CELL_STACK_PAGES                          ;; allocate page pair and initialize with previous references to previous cell stack pages
 
@@ -1564,55 +1564,54 @@ call frame primitives etc.
   ;; fe    unused
   ;; ff    previous page of this type
   ;;
-  ;; input:  none
-  ;; output: A = allocated page (of type cell page)
+  ;; input:  A = allocated uninitialized page
+  ;; output: A = initialized page (of type cell page)
   ;;         vm_free_cell_page is new head of the list
   ;;         the page is initialized with each cell pointing to the next free cell on this page (0 marks the end)
   ;; uses: ZP_TEMP, ZP_TEMP2
-  (define VM_ALLOC_PAGE_FOR_CELLS
+  (define INIT_CELL_PAGE_A
     (list
-     (label VM_ALLOC_PAGE_FOR_CELLS)
-            (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A
-
+     (label INIT_CELL_PAGE_A)
+            ;; page is in A
             (STA ZP_TEMP+1)
             (TAY)
             (LDA !$02)
             (STA VM_PAGE_SLOT_DATA,y) ;; set slot @02 as the first free slot
 
             (LDA !$03)
-            (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3)
+            (STA BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A) ;; how many blocks do we have (3)
 
             (LDA !$00)
             (STA ZP_TEMP)
 
             (LDY !$01)
             (LDX !$01)
-            (STX LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (STX LOOP_COUNT__INIT_CELL_PAGE_A)
 
      ;; option: optimization: maybe clearing the whole page would be faster (and shorter) for setting all refcounts to 0?
-     (label LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (label LOOP_REF_COUNT__INIT_CELL_PAGE_A)
             (STA (ZP_TEMP),y) ;; refcount set to 0
             (INY)
             (DEX)
-            (BNE LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-            (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (BNE LOOP_REF_COUNT__INIT_CELL_PAGE_A)
+            (LDA LOOP_COUNT__INIT_CELL_PAGE_A)
             (ASL A)
             (ASL A) ;; times 4
-            (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (STA LOOP_COUNT__INIT_CELL_PAGE_A)
             (TAX)
             (TAY) ;;
             (LDA !$00)
-            (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-            (BPL LOOP_REF_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (DEC BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A)
+            (BPL LOOP_REF_COUNT__INIT_CELL_PAGE_A)
 
             ;; initialize the free list of the cells (first byte in a cell = offset to next free cell)
             (LDA !$02)
-            (STA BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS) ;; how many blocks do we have (3, but the first block is written separately)
+            (STA BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A) ;; how many blocks do we have (3, but the first block is written separately)
 
             ;; block 1
             (LDY !$02)
             (LDA !$08)
-            (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (STA LOOP_COUNT__INIT_CELL_PAGE_A)
             (STA (ZP_TEMP),y)
 
             ;; block 2
@@ -1628,28 +1627,28 @@ call frame primitives etc.
      ;; #10        20..3f <- 22.. last= 80
      ;; #40        80..7d <- 82.. last= 00
 
-     (label LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
+     (label LOOP_NEXT_FREE__INIT_CELL_PAGE_A)
             (STA (ZP_TEMP),y)
             (TAY)
             (CLC)
             (ADC !$02)
             (DEX)
-            (BNE LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
+            (BNE LOOP_NEXT_FREE__INIT_CELL_PAGE_A)
 
             ;; block n+1
             ;; write last entry
-            (LDA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (LDA LOOP_COUNT__INIT_CELL_PAGE_A)
             (ASL A)
             (TAX)
             (ASL A)
-            (STA LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+            (STA LOOP_COUNT__INIT_CELL_PAGE_A)
             (STA (ZP_TEMP),y)
             (TAY)
             (CLC)
             (ADC !$02)
             (DEX)
-            (DEC BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
-            (BPL LOOP_NEXT_FREE__VM_ALLOC_PAGE_FOR_CELLS)
+            (DEC BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A)
+            (BPL LOOP_NEXT_FREE__INIT_CELL_PAGE_A)
 
             ;; write last entry
             (LDA !$00)
@@ -1670,9 +1669,9 @@ call frame primitives etc.
 
             (RTS)
 
-     (label LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (label LOOP_COUNT__INIT_CELL_PAGE_A)
             (byte $00)
-     (label BLOCK_LOOP_COUNT__VM_ALLOC_PAGE_FOR_CELLS)
+     (label BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A)
             (byte $00)))
 
 (module+ test #| vm_alloc_page__cell |#
@@ -1688,7 +1687,8 @@ call frame primitives etc.
             (BNE FILL_PAGE__TEST_ALLOC_PAGE__CELL)
 
             ;; now do allocation and write structure data into the page
-            (JSR VM_ALLOC_PAGE_FOR_CELLS)))
+            (JSR ALLOC_PAGE_TO_A)
+            (JSR INIT_CELL_PAGE_A)))
 
   (define test-alloc-page--cell-state-after
     (run-code-in-test test-alloc-page--cell-code))
@@ -1757,7 +1757,7 @@ call frame primitives etc.
          (STY ZP_TEMP3)                    ;; keep y (old highbyte page) in temp3
       
          ;; allocate highbyte page
-         (JSR VM_ALLOC_PAGE__PAGE_UNINIT)  ;; uses A and Y
+         (JSR ALLOC_PAGE_TO_A)  ;; uses A and Y
          (STA ZP_TEMP+1)
          (LDA !$00)
          (STA ZP_TEMP)
@@ -1772,7 +1772,7 @@ call frame primitives etc.
          (STA ZP_TEMP3)
       
          ;; allocate lowbyte page
-         (JSR VM_ALLOC_PAGE__PAGE_UNINIT)  ;; uses A and Y
+         (JSR ALLOC_PAGE_TO_A)  ;; uses A and Y
          (STA ZP_TEMP+1)
          (LDY !$00)
          (LDA !$1b)                        ;; PAGE TYPE cell-stack
@@ -1841,7 +1841,7 @@ call frame primitives etc.
 (define VM_ALLOC_PAGE_FOR_CELL_PAIRS
     (list
      (label VM_ALLOC_PAGE_FOR_CELL_PAIRS)
-            (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+            (JSR ALLOC_PAGE_TO_A)
             ;; now initialize page in A
 
             (TAX)
@@ -1954,14 +1954,14 @@ call frame primitives etc.
 ;; VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH  (255..0) keeps the max idx to start looking for a page that is free
 ;; parameter: a = page
 ;; result: (none)
-(define VM_FREE_PAGE
+(define FREE_PAGE_A
   (list
-   (label VM_FREE_PAGE)
+   (label FREE_PAGE_A)
           (CMP VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
-          (BMI NO_CHANGE__VM_FREE_PAGE)
+          (BMI NO_CHANGE__FREE_PAGE_A)
           (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
 
-   (label NO_CHANGE__VM_FREE_PAGE)
+   (label NO_CHANGE__FREE_PAGE_A)
           (TAY)
           (LDA !$ff) ;; free/unallocated page
           (STA VM_PAGE_SLOT_DATA,y)
@@ -1972,17 +1972,17 @@ call frame primitives etc.
 ;; parameter: (none)
 ;; result: A = allocated free page (uninitialized)
 ;; uses: A, Y,
-(define VM_ALLOC_PAGE__PAGE_UNINIT
+(define ALLOC_PAGE_TO_A
   (list
-   (label VM_ALLOC_PAGE__PAGE_UNINIT)
+   (label ALLOC_PAGE_TO_A)
           (LDY VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
 
-   (label LOOP__VM_ALLOC_PAGE__PAGE_UNINIT)
+   (label LOOP__ALLOC_PAGE_TO_A)
           (LDA VM_PAGE_SLOT_DATA,y)
           (DEY)
-          (BEQ OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT) ;; cannot be lower then 1!!
+          (BEQ OUT_OF_MEMORY__ALLOC_PAGE_TO_A) ;; cannot be lower then 1!!
           (CMP !$ff)
-          (BNE LOOP__VM_ALLOC_PAGE__PAGE_UNINIT)
+          (BNE LOOP__ALLOC_PAGE_TO_A)
 
           ;; found page marked unallocated ($ff)
           (INY) ;; restore original index
@@ -1992,20 +1992,20 @@ call frame primitives etc.
           (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; set index for next search
           (RTS)
 
-   (label OUT_OF_MEMORY__VM_ALLOC_PAGE__PAGE_UNINIT)
+   (label OUT_OF_MEMORY__ALLOC_PAGE_TO_A)
           (BRK)
           ))
 
 (module+ test #| vm-free-page and vm-alloc-page--page-uninit |#
   (define vm-free-page-code
     (list
-     (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A ($cc)
+     (JSR ALLOC_PAGE_TO_A) ;; page is in A ($cc)
      (PHA)
-     (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; page is in A ($cb)
+     (JSR ALLOC_PAGE_TO_A) ;; page is in A ($cb)
      (JSR VM_WRITE_INT_A_TO_RT)
      (PLA)
-     (JSR VM_FREE_PAGE )
-     (JSR VM_ALLOC_PAGE__PAGE_UNINIT) ;; allocated page should be $cc again
+     (JSR FREE_PAGE_A )
+     (JSR ALLOC_PAGE_TO_A) ;; allocated page should be $cc again
      (JSR VM_WRITE_INT_A_TO_RA)))
 
   (define vm-free-page-state
@@ -2515,7 +2515,8 @@ call frame primitives etc.
 (define VM_ALLOC_CELL_ON_PAGE
   (list
    (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_ON_PAGE)
-          (JSR VM_ALLOC_PAGE_FOR_CELLS)
+          (JSR ALLOC_PAGE_TO_A)
+          (JSR INIT_CELL_PAGE_A)
 
    ;; ----------------------------------------
    (label VM_ALLOC_CELL_ON_PAGE) ;; <-- real entry point of this function
@@ -2558,8 +2559,10 @@ call frame primitives etc.
 (module+ test #| vm_alloc_cell_on_page (using previously allocated page) |#
   (define test-alloc-cell-on-papge-b-code
     (list
-     (JSR VM_ALLOC_PAGE_FOR_CELLS) ;; allocates cc00
-     (JSR VM_ALLOC_PAGE_FOR_CELLS) ;; allocates cb00
+     (JSR ALLOC_PAGE_TO_A)         ;; allocates cc00
+     (JSR INIT_CELL_PAGE_A)
+     (JSR ALLOC_PAGE_TO_A)         ;; allocates cb00
+     (JSR INIT_CELL_PAGE_A)
      (JSR VM_ALLOC_CELL_ON_PAGE)
      ))
 
@@ -3707,7 +3710,7 @@ call frame primitives etc.
    (label VM_ALLOC_PAGE_FOR_M1_SLOTS)
           (STX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)      ;; save profile index in local var
 
-          (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+          (JSR ALLOC_PAGE_TO_A)
           (STA ZP_RA+1)
           (LDA !$00)
           (STA ZP_RA)
@@ -5221,10 +5224,10 @@ call frame primitives etc.
           VM_INITIALIZE_MEMORY_MANAGER
 
           ;; ---------------------------------------- alloc/free pages
-          VM_FREE_PAGE                                       ;; free a page (the type specific stuff, of any, must have finished)
-          VM_ALLOC_PAGE__PAGE_UNINIT                         ;; allocate new page (not initialized)
+          FREE_PAGE_A                                       ;; free a page (the type specific stuff, of any, must have finished)
+          ALLOC_PAGE_TO_A                                   ;; allocate new page (not initialized)
 
-          VM_ALLOC_PAGE_FOR_CELLS                            ;; allocate page and initialize for ref counted cells
+          INIT_CELL_PAGE_A                                  ;; initialize page (in a) for cell usage
           VM_ALLOC_PAGE_FOR_CELL_PAIRS                       ;; allocate page and initialize for ref counted cell-pairs
           VM_ALLOC_CELL_STACK_PAGES                          ;; allocate page pair and initialize with previous references to previous cell stack pages
 

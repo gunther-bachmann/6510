@@ -1571,6 +1571,669 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - (vm) [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::21++0.00][instructions]], [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::33++0.00][instruction format]] 
 ** the mu micro virtual machine :VM:
 https://microvm.github.io
+* references (phind)
+- https://github.com/SvenMichaelKlose/tunix/blob/main/src/bin/lisp/doc/manual.md
+- https://dercuano.github.io/notes/tiny-interpreters-for-microcontrollers.html
+- https://dwheeler.com/6502/#plasma
+- https://www.lemon64.com/forum/viewtopic.php?t=55465&sid=4c129dfc21d6f951f7e046f42187beb0&start=15
+  #+begin_src asm
+    	; Stacker mk. 2
+    	; "The Fast Version"
+
+    	.org 1024		; or wherever
+
+    stack	.set 0			; stack is in zero page
+
+    ip	.set 0			; two bytes in zero page
+    ptr	.set 2			; two bytes in zero page
+    tmp	.set 4			; two bytes in zero page
+    tmp2	.set 6			; one byte in zero page
+    sp	.set 7			; one byte in zero page
+
+    	; Macros
+
+    bc_fetch	.macro		; 7 bytes
+    	lda (ip),y
+    	iny
+    	bne .noinc
+    	inc ip+1
+    .noinc:
+    	.endm
+
+    bc_pop	.macro			; 3 bytes
+    	lda <stack, x
+    	inx
+    	.endm
+
+    bc_push	.macro			; 3 bytes
+    	dex
+    	sta <stack, x
+    	.endm
+
+    bc_setptr	.macro		; 8 bytes
+    	lda <stack+2,x		; get LSB of pointer from stack
+    	sta <ptr
+    	lda <stack+3,x		; get MSB of pointer from stack
+    	sta <ptr+1
+    	.endm
+
+    	; General-purpose routines
+
+    bc_resume:			; resumes from the point after the last BREAK opcode
+    	ldx <sp
+    	ldy <ip
+    	lda #$00
+    	sta <ip
+    	beq bc_next
+
+    bc_enter:			; bytecode address in XY
+    	stx <ip+1
+    	lda #$00
+    	sta <ip
+    	ldx <sp
+    bc_next:
+    	bc_fetch
+    	stx tmp
+    	asl			; safe because we have nowhere near >128 opcodes
+    	tax
+    	lda jumptable+1, x
+    	pha
+    	lda jumptable, x
+    	pha
+    	ldx tmp
+    	rts
+
+    bc_branch:
+    	bc_fetch		; get branch offset from instruction stream
+    	sta <tmp
+    	ora #$7f		; makes $ff if negative
+    	bmi .ext
+    	lda #$00		; $00 if positive
+    .ext:
+    	pha
+    	tya			; Y is the low byte of the instruction pointer
+    	clc
+    	adc <tmp
+    	tay
+    	pla
+    	adc <ip+1
+    	sta <ip+1
+    	rts
+
+    	; Opcode routines
+
+    op_break:
+    	sty <ip			; save the LSB of the instruction pointer
+    	stx <sp			; save the stack pointer
+    	rts
+
+    op_jump:
+    	bc_fetch		; fetch MSB of new location from instruction stream
+    	pha
+    	bc_fetch		; fetch LSB of new location from instruction stram
+    	tay			; Y is the low byte of the instruction pointer
+    	pla
+    	sta <ip+1
+    	jmp bc_next
+
+    op_jumps:
+    	bc_pop			; fetch LSB of new location from stack
+    	tay			; Y is the low byte of the instruction pointer
+    	bc_pop			; fetch MSB of new location from stack
+    	sta <ip+1
+    	jmp bc_next
+
+    op_call:
+    	lda <ip+1		; get the MSB of the current instruction pointer
+    	pha			; save it
+    	tya			; get the LSB of the current instruction pointer
+    	pha			; save it
+    	bc_pop			; get the LSB of the new instruction pointer
+    	tay
+    	bc_pop			; get the MSB of the new instruction pointer
+    	sta <ip+1
+    	jmp bc_next
+
+    op_ret:
+    	pla			; get the LSB of the saved instruction pointer
+    	tay			; restore it
+    	pla			; get the MSB of the saved instruction pointer
+    	sta <ip+1		; restore it
+    	jmp bc_next
+
+    op_bn:
+    	lda <stack+1,x		; get MSB of value from stack
+    	bpl .drop
+    	jsr bc_branch
+    .drop:
+    	inx
+    	inx
+    	jmp bc_next
+
+    op_bp:
+    	lda <stack+1,x		; get MSB of value from stack
+    	bmi .drop		; if negative, don't branch
+    	ora <stack,x		; OR with LSB to see if there are any 1s
+    	beq .drop
+    	jsr bc_branch
+    .drop
+    	inx
+    	inx
+    	jmp bc_next
+
+    op_bnz:
+    	lda <stack,x		; get LSB of value from stack
+    	ora <stack+1,x		; OR with MSB to see if there are any 1s
+    	beq .drop
+    	jsr bc_branch
+    .drop:
+    	inx
+    	inx
+    	jmp bc_next
+
+    op_push1:
+    	lda #$00		; MSB is 0
+    	bc_push
+    	lda #$01		; LSB is 1
+    	bc_push
+    	jmp bc_next
+
+    op_pushb:
+    	lda #$00		; MSB is 0
+    	bc_push
+    	bc_fetch		; get LSB from instruction stream
+    	bc_push
+    	jmp bc_next
+
+    op_pushw:
+    	bc_fetch		; get MSB from instruction stream
+    	bc_push
+    	bc_fetch		; get LSB from instruction stream
+    	bc_push
+    	jmp bc_next
+
+    op_pushib:
+    	lda #$00		; pre-push word with an MSB of 0
+    	bc_push
+    	dex
+    	bc_setptr		; set up pointer from stack
+    	sty tmp			; save Y
+    	ldy #$00
+    	lda (ptr),y		; get LSB from pointer
+    	sta <stack,x		; save LSB to new stack word
+    	ldy tmp
+    	jmp bc_next
+
+    op_pushiw:
+    	dex			; pre-push word with undefined value
+    	dex
+    	bc_setptr		; set up pointer from stack
+    	sty tmp			; save Y
+    	ldy #$00
+    	lda (ptr),y		; get LSB from pointer
+    	sta <stack,x		; save LSB to new stack word
+    	iny
+    	lda (ptr),y		; get MSB from pointer
+    	sta <stack+1,x		; save MSB to new stack word
+    	ldy tmp
+    	jmp bc_next
+
+    op_popib:
+    	bc_setptr		; set up pointer from stack
+    	sty tmp
+    	ldy #$00
+    	bc_pop			; get LSB from stack
+    	sta (ptr),y		; store LSB to pointer
+    	inx			; drop MSB from stack
+    	ldy tmp
+    	jmp bc_next
+
+    op_popiw:
+    	bc_setptr		; set up pointer from stack
+    	sty tmp
+    	ldy #$00
+    	bc_pop			; get LSB from stack
+    	sta (ptr),y		; store LSB to pointer
+    	iny
+    	bc_pop			; get MSB from stack
+    	sta (ptr),y		; store LSB to pointer
+    	ldy tmp
+    	jmp bc_next
+
+    op_drop:
+    	inx
+    	inx
+    	jmp bc_next
+
+    op_dup:
+    	lda <stack+1,x		; get MSB from stack
+    	bc_push			; push MSB on stack
+    	lda <stack+1,x		; get LSB from stack
+    	bc_push			; push LSB on stack
+    	jmp bc_next
+
+    op_swap:
+    	lda <stack+3,x
+    	pha
+    	lda <stack+2,x
+    	pha
+    	lda <stack+1,x
+    	sta <stack+3,x
+    	lda <stack,x
+    	sta <stack+2,x
+    	pla
+    	sta <stack,x
+    	pla
+    	sta <stack+1,x
+    	jmp bc_next
+
+    op_roll:
+    	lda <stack+5,x		; get word #2
+    	pha			; save it
+    	lda <stack+4,x
+    	pha
+    	lda <stack+3,x
+    	sta <stack+5,x
+    	lda <stack+2,x
+    	sta <stack+4,x
+    	lda <stack+1,x
+    	sta <stack+3,x
+    	lda <stack,x
+    	sta <stack+2,x
+    	pla
+    	sta <stack,x
+    	pla
+    	sta <stack+1,x
+    	jmp bc_next
+
+    op_pick:
+    	bc_pop			; get word number from stack
+    	inx			; discard MSB
+    	asl			; turn the word number into an index
+    	stx <tmp
+    	clc
+    	adc <tmp		; stack pointer + index = source index
+    	sty <tmp		; save Y
+    	tay
+    	lda <stack+1,y		; get MSB of source word
+    	bc_push			; save it to the stack
+    	lda <stack,y		; get LSB of source word
+    	bc_push			; save it to the stack
+    	ldy <tmp		; restore Y
+    	jmp bc_next
+
+    op_dupb:
+    	lda <stack,x		; get LSB from stack
+    	sta <stack+1,x		; duplicate LSB to MSB
+    	jmp bc_next
+
+    op_sext:
+    	lda <stack,x		; get LSB from stack
+    	ora #$7f		; makes $FF if negative
+    	bmi .store
+    	lda #$00		; replace with $00 if positive
+    .store:
+    	sta <stack+1,x		; save value to MSB
+    	jmp bc_next
+
+    op_neg:
+    	lda <stack,x		; get LSB from stack
+    	eor #$ff		; flip all the bits
+    	clc
+    	adc #$01		; add 1
+    	sta <stack,x		; save LSB to stack
+    	lda <stack+1,x		; get MSB from stack
+    	eor #$ff		; flip all the bits
+    	adc #$00		; handle any carry
+    	sta <stack+1,x		; save MSB to stack
+    	jmp bc_next
+
+    op_abs:
+    	lda <stack+1,x		; check MSB from stack
+    	bmi op_neg		; negate if negative
+    	jmp bc_next
+
+    op_add:
+    	clc
+    	lda <stack+2,x		; get LSB of addend 1
+    	adc <stack,x		; add LSB of addend 0
+    	sta <stack+2,x
+    	lda <stack+3,x		; get MSB of addend 1
+    	adc <stack+1,x		; add MSB of addend 0
+    	sta <stack+1,x
+    	inx			; drop addend 0
+    	inx
+    	jmp bc_next
+
+    op_sub:
+    	sec
+    	lda <stack+2,x		; get LSB of subtrahend
+    	sbc <stack,x		; subtract LSB of minuend
+    	sta <stack+2,x
+    	lda <stack+3,x		; get MSB of subtrahend
+    	sbc <stack+1,x		; subtract MSB of minuend
+    	sta <stack+3,x
+    	inx			; drop minuend
+    	inx
+    	jmp bc_next
+
+    op_not:
+    	lda <stack,x		; get LSB of operand 0
+    	eor #$ff		; flip all the bits
+    	sta <stack,x
+    	lda <stack+1,x		; get MSB of operand 0
+    	eor #$ff		; flip all the bits
+    	sta <stack+1,x
+    	jmp bc_next
+
+    op_and:
+    	lda <stack+2,x		; get LSB of operand 1
+    	and <stack,x		; AND with LSB of operand 0
+    	sta <stack+2,x
+    	lda <stack+3,x		; get MSB of operand 1
+    	and <stack+1,x		; AND with MSB of operand 0
+    	sta <stack+3,x
+    	inx			; drop operand 0
+    	inx
+    	jmp bc_next
+
+    op_or:
+    	lda <stack+2,x		; get LSB of operand 1
+    	ora <stack,x		; AND with LSB of operand 0
+    	sta <stack+2,x
+    	lda <stack+3,x		; get MSB of operand 1
+    	ora <stack+1,x		; AND with MSB of operand 0
+    	sta <stack+3,x
+    	inx			; drop operand 0
+    	inx
+    	jmp bc_next
+
+    op_xor:
+    	lda <stack+2,x		; get LSB of operand 1
+    	eor <stack,x		; AND with LSB of operand 0
+    	sta <stack+2,x
+    	lda <stack+3,x		; get MSB of operand 1
+    	eor <stack+1,x		; AND with MSB of operand 0
+    	sta <stack+3,x
+    	inx			; drop operand 0
+    	inx
+    	jmp bc_next
+
+    op_shl:
+    	bc_pop			; get shift count
+    	sta <tmp		; save it
+    	inx			; discard the MSB
+    .loop:
+    	asl <stack,x		; shift LSB left
+    	rol <stack+1,x		; shift MSB left with carry
+    	dec tmp
+    	bne .loop
+    	jmp bc_next
+
+    op_shr:
+    	bc_pop			; get shift count
+    	sta <tmp		; save it
+    	inx			; discard the MSB
+    .loop:
+    	lsr <stack+1,x		; shift MSB right
+    	ror <stack,x		; shift LSB right with carry
+    	dec tmp
+    	bne .loop
+    	jmp bc_next
+
+    op_ashr:
+    	bc_pop			; get shift count
+    	sta <tmp		; save it
+    	inx			; discard the MSB
+    .loop:
+    	lda <stack+1,x		; get MSB
+    	asl			; put high bit into carry
+    	ror <stack+1,x		; shift MSB right
+    	ror <stack,x		; shift LSB right with carry
+    	dec tmp
+    	bne .loop
+    	jmp bc_next
+
+    op_rotl:
+    	bc_pop			; get shift count
+    	sta <tmp		; save it
+    	inx			; discard the MSB
+    .loop:
+    	lda <stack+1,x		; get MSB
+    	asl			; put high bit into carry
+    	rol <stack+1,x		; shift MSB right
+    	rol <stack,x		; shift LSB right with carry
+    	dec tmp
+    	bne .loop
+    	jmp bc_next
+
+    op_rotr:
+    	bc_pop			; get shift count
+    	sta <tmp		; save it
+    	inx			; discard the MSB
+    .loop:
+    	lda <stack,x		; get LSB
+    	lsr			; put low bit into carry
+    	ror <stack+1,x		; shift MSB right
+    	ror <stack,x		; shift LSB right with carry
+    	dec tmp
+    	bne .loop
+    	jmp bc_next
+
+
+    jumptable:			; Jump table - ordering here affects opcode number!
+    	.dw op_break
+
+    	.dw op_jump
+    	.dw op_jumps
+
+    	.dw op_call
+    	.dw op_ret
+
+    	.dw op_bn
+    	.dw op_bp
+    	.dw op_bnz
+
+    	.dw op_push1
+    	.dw op_pushb
+    	.dw op_pushw
+
+    	.dw op_pushib
+    	.dw op_pushiw
+    	.dw op_popib
+    	.dw op_popiw
+
+    	.dw op_drop
+    	.dw op_dup
+    	.dw op_swap
+    	.dw op_roll
+    	.dw op_pick
+
+    	.dw op_dupb
+
+    	.dw op_sext
+    	.dw op_neg
+    	.dw op_abs
+
+    	.dw op_add
+    	.dw op_sub
+
+    	.dw op_not
+    	.dw op_and
+    	.dw op_or
+    	.dw op_xor
+
+    	.dw op_shl
+    	.dw op_shr
+    	.dw op_ashr
+    	.dw op_rotl
+    	.dw op_rotr
+
+
+    opcodes:
+    	; Opcode/mnemonic table and instruction reference - for reference purposes
+    	; and development of an assembler, not actually used by the interpreter.
+    	; Format: mnemonic + null-terminator + opcode
+
+    	; Stack terminology: current top item on stack is #0. Subsequent items are
+    	; #1, #2, etc. up to #127 if the stack is completely full.
+
+    	; BREAK - ends bytecode execution
+    	; ( -- )
+    	.db "BREAK",0
+    	.db $00
+
+    	; JUMP - changes the instruction pointer to a new location
+    	; ( -- )
+    	.db "JUMP",0
+    	.db $01
+    	; JUMPS - changes the instruction pointer to the value of #0
+    	; (a-addr -- )
+    	.db "JUMPS",0
+    	.db $02
+
+    	; CALL - saves the current location to the call stack and calls a subroutine
+    	; ( -- )
+    	.db "CALL",0
+    	.db $03
+    	; RET - restores a saved location from the call stack
+    	; ( -- )
+    	.db "RET",0
+    	.db $04
+
+    	; BN - branches if #0 is negative
+    	; (n -- )
+    	.db "BN",0
+    	.db $05
+    	; BP - branches if #0 is positive (greater than 0)
+    	; (n -- )
+    	.db "BP",0
+    	.db $06
+    	; BNZ - branches if #0 is not zero
+    	; (n -- )
+    	.db "BNZ",0
+    	.db $07
+
+    	; PUSH1	- push a 1 on the stack
+    	; ( -- 1)
+    	.db "PUSH1",0
+    	.db $08
+    	; PUSHB - push a byte constant on the stack, zero-extended
+    	; ( -- c)
+    	.db "PUSHB",0
+    	.db $09
+    	; PUSHW - push a word constant on the stack
+    	; ( -- w)
+    	.db "PUSHW",0
+    	.db $0A
+
+    	; Pointer operations leave the pointer on the stack, you will need to drop
+    	; it manually when you're done! This is to make block operations simpler.
+    	; They also do not manipulate the pointer on the stack directly, but a copy.
+
+    	; PUSHIB - fetch a byte from the pointer in #0, zero-extend, and push
+    	; (c-addr -- c c-addr)
+    	.db "PUSHIB",0
+    	.db $0B
+    	; PUSHIW - fetch a word from the pointer in #0 and push
+    	; (a-addr -- w a-addr)
+    	.db "PUSHIW",0
+    	.db $0C
+    	; POPIB - store the LSB of #0 to the pointer in #1 and drop #0
+    	; (c c-addr -- c-addr)
+    	.db "POPIB",0
+    	.db $0D
+    	; POPIW - store #0 to the pointer in #1 and drop #0
+    	; (a a-addr -- a-addr)
+    	.db "POPIW",0
+    	.db $0E
+
+    	; DROP - discard #0
+    	; (w -- )
+    	.db "DROP",0
+    	.db $0F
+    	; DUP - duplicate #0
+    	; (w -- w w)
+    	.db "DUP",0
+    	.db $10
+    	; SWAP - exchange #0 and #1
+    	; (w w -- w w)
+    	.db "SWAP",0
+    	.db $11
+    	; ROLL - cycle #0-#2 (#2 -> #0 -> #1 -> #2)
+    	; (w w w -- w w w)
+    	.db "ROLL",0
+    	.db $12
+    	; PICK - use #0 as an index into the stack, fetch that word, and replace #0
+    	; (n -- w)
+    	.db "PICK",0
+    	.db $13
+
+    	; DUPB - duplicate the low byte of a word to the high byte
+    	; (c -- w)
+    	.db "DUPB",0
+    	.db $14
+
+    	; SEXT - sign-extend #0 from its byte value
+    	; (c -- n)
+    	.db "SEXT",0
+    	.db $15
+    	; NEG - negate #0
+    	; (n -- n)
+    	.db "NEG",0
+    	.db $16
+    	; ABS - replace #0
+    	; (n -- n)
+    	.db "ABS",0
+    	.db $17
+
+    	; ADD - add #0 and #1
+    	; (n n -- n)
+    	.db "ADD",0
+    	.db $18
+    	; SUB - subtract #1 from #0
+    	; (n n -- n)
+    	.db "SUB",0
+    	.db $19
+
+    	; NOT - logically-invert #0
+    	; (w -- w)
+    	.db "NOT",0
+    	.db $1A
+    	; AND - logically-AND #0 and #1
+    	; (w w -- w)
+    	.db "AND",0
+    	.db $1B
+    	; OR - logically-OR #0 and #1
+    	; (w w -- w)
+    	.db "OR",0
+    	.db $1C
+    	; XOR - exclusive-OR #0 and #1
+    	; (w w -- w)
+    	.db "XOR",0
+    	.db $1D
+
+    	; SHL - shifts #1 left by #0 places
+    	; (n w -- w)
+    	.db "SHL",0
+    	.db $1E
+    	; SHR - shifts #1 right by #0 places
+    	; (n w -- w)
+    	.db "SHR",0
+    	.db $1F
+    	; ASHR - shifts #1 right by #0 places with sign-extend
+    	; (n w -- w)
+    	.db "ASHR",0
+    	.db $20
+    	; ROTL - rotates #1 left by #0 places
+    	; (n w -- w)
+    	.db "ROTL",0
+    	.db $21
+    	; ROTR - rotates #1 right by #0 places
+    	; (n w -- w)
+    	.db "ROTR",0
+    	.db $22
+  #+end_src
 * collected notes and considerations
 ** general ideas
 - implement byte code interpreter in racket
@@ -3410,6 +4073,13 @@ https://microvm.github.io
 **** DONE optimize reference counting
 - [X] (not completely possible) get rid of refcount​_decr​_rt (only use 'ra')
 - [X] reduce impact/cpu cycles
+**** IMPLEMENT redesign vm-memory-manager
+- identify things that still make the redesign diffficult
+- goal should be to allow for incremental improvements that should not take any longer than e.g. 30m
+- make improvement measurable (% done/list)
+- divide renaming from restructuring
+- make composition obvious
+- see [[file:src/nmil/vm-memory-manager.org::*modularize functions using naming convention][modularize functions using naming convention]]
 **** IMPLEMENT what part of the 6510 vm design should be implement w/ racket to validate design?
 implement all necessary to do a reverse function tail called implementation with space optimized byte code
 see [[file:src/nmil/svm-compiler.rkt::(m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*][test with reverse function]]

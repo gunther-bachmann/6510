@@ -160,7 +160,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
    (label NO_SAVE_OF_OLD_FRAME_DATA__VM_ALLOC_CALL_FRAME_N)
           ;; allocate completely new page
-          (JSR VM_ALLOC_PAGE__PAGE_UNINIT)
+          (JSR ALLOC_PAGE_TO_A)
 
           ;; init page as new call frame page (00 = page type, 01 = previous call frame page, 02 = top mark [uninitialized until full], rest uninitialized)
           (LDX ZP_CALL_FRAME+1)         ;; keep old page in X
@@ -492,7 +492,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
           ;; free old call frame page!
           (TXA)
-          (JSR VM_FREE_PAGE)
+          (JSR FREE_PAGE_A)
 
           (LDA ZP_CALL_FRAME_TOP_MARK)
    (label NO_PAGE_CHANGE__VM_POP_CALL_FRAME_N)
@@ -540,9 +540,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
           ;; free the old locals page (lb and hb) and set the top mark accordingly
           (LDA ZP_TEMP)
-          (JSR VM_FREE_PAGE)
+          (JSR FREE_PAGE_A)
           (LDA ZP_TEMP2)
-          (JSR VM_FREE_PAGE)
+          (JSR FREE_PAGE_A)
 
           ;; restore topmark of new and current locals page
           (LDA !$00)
@@ -805,9 +805,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
           ;; free the pages
           (LDA ZP_LOCALS_LB_PTR+1)
-          (JSR VM_FREE_PAGE)
+          (JSR FREE_PAGE_A)
           (LDA ZP_LOCALS_HB_PTR+1)
-          (JSR VM_FREE_PAGE)
+          (JSR FREE_PAGE_A)
 
           ;; get previous page (using data from the just freed pages, so make sure no one interferes!)
           (LDY !$01)

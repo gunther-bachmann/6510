@@ -4,115 +4,115 @@
 - use naming conventions in [[file:~/repo/+1/6510/TODO.org]]
 - make functions composable to provide conceptual functions
 - translation table
-  | done | name                                        | new                              | note                                                   |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | alloc/free pages                            |                                  |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | VM_FREE_PAGE                                | FREE_PAGE_A                      |                                                        |
-  |      | VM_ALLOC_PAGE__PAGE_UNINIT                  | ALLOC_PAGE_TO_A                  |                                                        |
-  |      | VM_ALLOC_PAGE_FOR_CELLS                     | INIT_CELL_PAGE_A                 | ALLOC_PAGE_TO_A + INIT_CELL_PAGE_A                     |
-  |      | VM_ALLOC_PAGE_FOR_CELL_PAIRS                | INIT_CELLPAIR_PAGE_A             |                                                        |
-  |      | VM_ALLOC_CELL_STACK_PAGES                   | INIT_CELLSTACK_PAGE_A            |                                                        |
-  |      | ;; VM_ALLOC_PAGE_FOR_M1_SLOTS               | INIT_M1Px_PAGE_A                 |                                                        |
-  |      | ;; VM_ALLOC_PAGE_FOR_S8_SLOTS               |                                  |                                                        |
-  |      | ;; VM_ALLOC_PAGE_FOR_MODULE_CODE            |                                  |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | alloc/free cells, pairs, slots              |                                  |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      |                                             | GET_PAGE_FOR_ALLOC_CELL_TO_A     |                                                        |
-  |      |                                             | GET_PAGE_FOR_ALLOC_CELLPAIR_TO_A |                                                        |
-  |      |                                             | GET_PAGE_FOR_ALLOC_CELLARR_TO_A  |                                                        |
-  |      | VM_ALLOC_CELL_ON_PAGE                       | ALLOC_CELL_ON_PAGE_A_TO_RT       |                                                        |
-  |      | VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT        | ALLOC_CELLPAIR_ON_PAGE_A_TO_RT   |                                                        |
-  |      | VM_ALLOC_CELL_PAIR_PTR_TO_RT                | ALLOC_CELLPAIR_TO_RT             | ensure that RT holds ptr to new cell-pair              |
-  |      |                                             | ALLOC_CELLPAIR_PFL_A_TO_RT       | get cell-pair from page (A) free list, C=1/0 succ/fail |
-  |      |                                             | ALLOC_CELLPAIR_GFL_TO_RT         | get cell-pair from global free list, C=1/0 succ/fail   |
-  |      | VM_FREE_CELL_PAIR_PTR_IN_RT                 | FREE_CELLPAIR_RT                 |                                                        |
-  |      |                                             | ADD_CELLPAIR_RT_TO_GFL           | add freed cell-pair to global free list                |
-  |      |                                             | ADD_CELLPAIR_RT_TO_PFL_A         | add freed cell-pair it to the page (A) free list       |
-  |      | VM_FREE_CELL_PAIR_PTR_IN_RA                 | ?                                |                                                        |
-  |      | VM_ALLOC_CELL_PTR_TO_RT                     | ALLOC_CELL_TO_RT                 |                                                        |
-  |      |                                             | ALLOC_CELL_PFL_TO_RT             |                                                        |
-  |      |                                             | ALLOC_CELL_GFL_TO_RT             |                                                        |
-  |      | VM_FREE_CELL_PTR_IN_RT                      | FREE_CELL_RT                     |                                                        |
-  |      |                                             | ADD_CELL_RT_TO_GFL               | add freed cell to global free list                     |
-  |      |                                             | ADD_CELL_RT_TO_PFL_A             | add freed cell it to the page (A) free list            |
-  |      | VM_FREE_CELL_PTR_IN_RA                      | ?                                |                                                        |
-  |      | VM_GC_QUEUE_OF_FREE_CELL_PAIRS              | GC_CELLPAIR_FREE_LIST            |                                                        |
-  |      | ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2         |                                  |                                                        |
-  |      | VM_ALLOC_CELL_ARRAY_TO_RA                   | ALLOC_CELLARR_TO_RA              |                                                        |
-  |      | ;; VM_ALLOC_M1_SLOT_TO_ZP_PTR2              | ?                                |                                                        |
-  |      | ;; VM_FREE_M1_SLOT_IN_ZP_PTR2               | ?                                |                                                        |
-  |      | ;; VM_ALLOC_MODULE_CODE_SLOT_TO_ZP_PTR      | ?                                |                                                        |
-  |      | ;; VM_FREE_MODULE                           | ?                                |                                                        |
-  |      | ;; VM_RELOCATE_MODULE_X_TO_                 | ?                                |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | refcount                                    |                                  |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | VM_REFCOUNT_DECR_RT                         | DEC_REFCNT_RT                    |                                                        |
-  |      | VM_REFCOUNT_INCR_RT                         | INC_REFCNT_RT                    |                                                        |
-  |      | VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR          | DEC_REFCNT_CELLPAIR_RT           |                                                        |
-  |      | VM_REFCOUNT_DECR_RT__CELL_PTR               | DEC_REFCNT_CELL_RT               |                                                        |
-  |      | VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR          | INC_REFCNT_CELLPAIR_RT           |                                                        |
-  |      | VM_REFCOUNT_INCR_RT__CELL_PTR               | INC_REFCNT_CELL_RT               |                                                        |
-  |      | VM_REFCOUNT_DECR_RA                         | ?                                |                                                        |
-  |      | VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR          | ?                                |                                                        |
-  |      | VM_REFCOUNT_DECR_RA__CELL_PTR               | ?                                |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | misc                                        |                                  |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | ;; VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS      |                                  |                                                        |
-  |      | ;; VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS   |                                  |                                                        |
-  |      | ;; VM_GC_ARRAY_SLOT_PTR                     |                                  |                                                        |
-  |      | VM_FREE_PTR_IN_RT                           |                                  |                                                        |
-  |      | VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST |                                  |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | CELL_STACK / RT / RA                        |                                  |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | VM_CELL_STACK_POP_R                         | POP_CELL_EVLSTK_TO_RT            |                                                        |
-  |      | VM_CELL_STACK_PUSH_R                        | PUSH_CELL_RT_TO_EVLSTK           |                                                        |
-  |      | ;; vm_cell_stack_push_rt_if_nonempty        | ?                                |                                                        |
-  |      | VM_CELL_STACK_JUST_PUSH_RT                  | ?                                |                                                        |
-  |      | ;; VM_WRITE_INTm1_TO_RA                     | WRITE_INTm1_TO_RA                |                                                        |
-  |      | ;; VM_WRITE_INTm1_TO_RT                     | .                                |                                                        |
-  |      | ;; VM_WRITE_INTm1_TO_Rx                     | .                                |                                                        |
-  |      | ;; VM_WRITE_INT1_TO_RA                      | .                                |                                                        |
-  |      | ;; VM_WRITE_INT1_TO_RT                      | .                                |                                                        |
-  |      | ;; VM_WRITE_INT1_TO_Rx                      | .                                |                                                        |
-  |      | ;; VM_WRITE_INT0_TO_RA                      | .                                |                                                        |
-  |      | ;; VM_WRITE_INT0_TO_RT                      | .                                |                                                        |
-  |      | ;; VM_WRITE_INT0_TO_Rx                      | .                                |                                                        |
-  |      | ;; VM_WRITE_INT_A_TO_RA                     | .                                |                                                        |
-  |      | ;; VM_WRITE_INT_A_TO_RT                     | .                                |                                                        |
-  |      | ;; VM_WRITE_INT_A_TO_Rx                     | .                                |                                                        |
-  |      | ;; VM_WRITE_ENC_INT_AY_TO_Rx                | .                                |                                                        |
-  |      | ;; VM_WRITE_INT_AY_TO_RA                    | .                                |                                                        |
-  |      | ;; VM_WRITE_INT_AY_TO_RT                    | .                                |                                                        |
-  |      | VM_WRITE_INT_AY_TO_Rx                       | .                                |                                                        |
-  |      | ;; VM_WRITE_NIL_TO_RA                       | .                                |                                                        |
-  |      | ;; VM_WRITE_NIL_TO_RT                       | .                                |                                                        |
-  |      | VM_WRITE_NIL_TO_Rx                          | .                                |                                                        |
-  |      | VM_WRITE_RT_CELL1_TO_RT                     | WRITE_RT_CELL1_TO_RT             |                                                        |
-  |      | VM_WRITE_RT_CELL0_TO_RT                     | .                                |                                                        |
-  |      | VM_WRITE_RT_CELLy_TO_RT                     | .                                |                                                        |
-  |      | ;; VM_WRITE_RA_CELL1_TO_RT                  | .                                |                                                        |
-  |      | ;; VM_WRITE_RA_CELL0_TO_RT                  | .                                |                                                        |
-  |      | VM_WRITE_RA_CELLy_TO_RA                     | .                                |                                                        |
-  |      | VM_WRITE_RA_TO_CELLy_RT                     | .                                |                                                        |
-  |      | VM_WRITE_RT_CELL1_TO_RA                     | .                                |                                                        |
-  |      | VM_WRITE_RT_CELL0_TO_RA                     | .                                |                                                        |
-  |      | VM_WRITE_RT_CELLy_TO_RA                     | .                                |                                                        |
-  |      | VM_WRITE_RT_TO_CELLy_RA                     | .                                |                                                        |
-  |      | VM_CP_RT_TO_RA                              | COPY_RT_TO_RA                    |                                                        |
-  |      | VM_CP_RA_TO_RT                              | COPY_RA_TO_RT                    |                                                        |
-  |      | VM_POP_FSTOS_TO_CELLy_RT                    | ?                                |                                                        |
-  |      | VM_CELL_STACK_POP_R                         | POP_CELL_EVLSTK_TO_RT            |                                                        |
-  |------+---------------------------------------------+----------------------------------+--------------------------------------------------------|
-  |      | VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE         | GLOBAL_CELLPAIR_FREE_LIST        |                                                        |
-  |      | VM_FREE_CELL_PAIR_PAGE                      | GLOBAL_CELL_PAGE_FOR_ALLOC       |                                                        |
-  |      | VM_LIST_OF_FREE_CELLS                       | GLOBAL_CELL_FREE_LIST            |                                                        |
-  |      | VM_MEMORY_MANAGEMENT_CONSTANTS              | CONST_MEMORY_MANAGER             |                                                        |
-  |      | VM_INITIALIZE_MEMORY_MANAGER                | INIT_MEMORY_MANAGER              |                                                        |
+  | done | name                                        | new                              | type | note                                                   |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      | alloc/free pages                            |                                  |      | R=rename, D=decomposition, C=complex refactoring       |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  | x    | VM_FREE_PAGE                                | FREE_PAGE_A                      | R    |                                                        |
+  | x    | VM_ALLOC_PAGE__PAGE_UNINIT                  | ALLOC_PAGE_TO_A                  | R+   | make sure that allocated page is in A                  |
+  | x    | VM_ALLOC_PAGE_FOR_CELLS                     | INIT_CELL_PAGE_A                 | D    | ALLOC_PAGE_TO_A + INIT_CELL_PAGE_A                     |
+  |      | VM_ALLOC_PAGE_FOR_CELL_PAIRS                | INIT_CELLPAIR_PAGE_A             | D    |                                                        |
+  |      | VM_ALLOC_CELL_STACK_PAGES                   | INIT_CELLSTACK_PAGE_A            | D    |                                                        |
+  |      | ;; VM_ALLOC_PAGE_FOR_M1_SLOTS               | INIT_M1Px_PAGE_A                 |      |                                                        |
+  |      | ;; VM_ALLOC_PAGE_FOR_S8_SLOTS               |                                  |      |                                                        |
+  |      | ;; VM_ALLOC_PAGE_FOR_MODULE_CODE            |                                  |      |                                                        |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      | alloc/free cells, pairs, slots              |                                  |      |                                                        |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      |                                             | GET_PAGE_FOR_ALLOC_CELL_TO_A     |      |                                                        |
+  |      |                                             | GET_PAGE_FOR_ALLOC_CELLPAIR_TO_A |      |                                                        |
+  |      |                                             | GET_PAGE_FOR_ALLOC_CELLARR_TO_A  |      |                                                        |
+  |      | VM_ALLOC_CELL_ON_PAGE                       | ALLOC_CELL_ON_PAGE_A_TO_RT       |      |                                                        |
+  |      | VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT        | ALLOC_CELLPAIR_ON_PAGE_A_TO_RT   |      |                                                        |
+  |      | VM_ALLOC_CELL_PAIR_PTR_TO_RT                | ALLOC_CELLPAIR_TO_RT             |      | ensure that RT holds ptr to new cell-pair              |
+  |      |                                             | ALLOC_CELLPAIR_PFL_A_TO_RT       |      | get cell-pair from page (A) free list, C=1/0 succ/fail |
+  |      |                                             | ALLOC_CELLPAIR_GFL_TO_RT         |      | get cell-pair from global free list, C=1/0 succ/fail   |
+  |      | VM_FREE_CELL_PAIR_PTR_IN_RT                 | FREE_CELLPAIR_RT                 |      |                                                        |
+  |      |                                             | ADD_CELLPAIR_RT_TO_GFL           |      | add freed cell-pair to global free list                |
+  |      |                                             | ADD_CELLPAIR_RT_TO_PFL_A         |      | add freed cell-pair it to the page (A) free list       |
+  |      | VM_FREE_CELL_PAIR_PTR_IN_RA                 | ?                                |      |                                                        |
+  |      | VM_ALLOC_CELL_PTR_TO_RT                     | ALLOC_CELL_TO_RT                 |      |                                                        |
+  |      |                                             | ALLOC_CELL_PFL_TO_RT             |      |                                                        |
+  |      |                                             | ALLOC_CELL_GFL_TO_RT             |      |                                                        |
+  |      | VM_FREE_CELL_PTR_IN_RT                      | FREE_CELL_RT                     |      |                                                        |
+  |      |                                             | ADD_CELL_RT_TO_GFL               |      | add freed cell to global free list                     |
+  |      |                                             | ADD_CELL_RT_TO_PFL_A             |      | add freed cell it to the page (A) free list            |
+  |      | VM_FREE_CELL_PTR_IN_RA                      | ?                                |      |                                                        |
+  |      | VM_GC_QUEUE_OF_FREE_CELL_PAIRS              | GC_CELLPAIR_FREE_LIST            |      |                                                        |
+  |      | ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2         |                                  |      |                                                        |
+  |      | VM_ALLOC_CELL_ARRAY_TO_RA                   | ALLOC_CELLARR_TO_RA              |      |                                                        |
+  |      | ;; VM_ALLOC_M1_SLOT_TO_ZP_PTR2              | ?                                |      |                                                        |
+  |      | ;; VM_FREE_M1_SLOT_IN_ZP_PTR2               | ?                                |      |                                                        |
+  |      | ;; VM_ALLOC_MODULE_CODE_SLOT_TO_ZP_PTR      | ?                                |      |                                                        |
+  |      | ;; VM_FREE_MODULE                           | ?                                |      |                                                        |
+  |      | ;; VM_RELOCATE_MODULE_X_TO_                 | ?                                |      |                                                        |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      | refcount                                    |                                  |      |                                                        |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      | VM_REFCOUNT_DECR_RT                         | DEC_REFCNT_RT                    |      |                                                        |
+  |      | VM_REFCOUNT_INCR_RT                         | INC_REFCNT_RT                    |      |                                                        |
+  |      | VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR          | DEC_REFCNT_CELLPAIR_RT           |      |                                                        |
+  |      | VM_REFCOUNT_DECR_RT__CELL_PTR               | DEC_REFCNT_CELL_RT               |      |                                                        |
+  |      | VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR          | INC_REFCNT_CELLPAIR_RT           |      |                                                        |
+  |      | VM_REFCOUNT_INCR_RT__CELL_PTR               | INC_REFCNT_CELL_RT               |      |                                                        |
+  |      | VM_REFCOUNT_DECR_RA                         | ?                                |      |                                                        |
+  |      | VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR          | ?                                |      |                                                        |
+  |      | VM_REFCOUNT_DECR_RA__CELL_PTR               | ?                                |      |                                                        |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      | misc                                        |                                  |      |                                                        |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      | ;; VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS      |                                  |      |                                                        |
+  |      | ;; VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS   |                                  |      |                                                        |
+  |      | ;; VM_GC_ARRAY_SLOT_PTR                     |                                  |      |                                                        |
+  |      | VM_FREE_PTR_IN_RT                           |                                  |      |                                                        |
+  |      | VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST |                                  |      |                                                        |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      | CELL_STACK / RT / RA                        |                                  |      |                                                        |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      | VM_CELL_STACK_POP_R                         | POP_CELL_EVLSTK_TO_RT            |      |                                                        |
+  |      | VM_CELL_STACK_PUSH_R                        | PUSH_CELL_RT_TO_EVLSTK           |      |                                                        |
+  |      | ;; vm_cell_stack_push_rt_if_nonempty        | ?                                |      |                                                        |
+  |      | VM_CELL_STACK_JUST_PUSH_RT                  | ?                                |      |                                                        |
+  |      | ;; VM_WRITE_INTm1_TO_RA                     | WRITE_INTm1_TO_RA                |      |                                                        |
+  |      | ;; VM_WRITE_INTm1_TO_RT                     | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INTm1_TO_Rx                     | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT1_TO_RA                      | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT1_TO_RT                      | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT1_TO_Rx                      | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT0_TO_RA                      | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT0_TO_RT                      | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT0_TO_Rx                      | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT_A_TO_RA                     | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT_A_TO_RT                     | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT_A_TO_Rx                     | .                                |      |                                                        |
+  |      | ;; VM_WRITE_ENC_INT_AY_TO_Rx                | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT_AY_TO_RA                    | .                                |      |                                                        |
+  |      | ;; VM_WRITE_INT_AY_TO_RT                    | .                                |      |                                                        |
+  |      | VM_WRITE_INT_AY_TO_Rx                       | .                                |      |                                                        |
+  |      | ;; VM_WRITE_NIL_TO_RA                       | .                                |      |                                                        |
+  |      | ;; VM_WRITE_NIL_TO_RT                       | .                                |      |                                                        |
+  |      | VM_WRITE_NIL_TO_Rx                          | .                                |      |                                                        |
+  |      | VM_WRITE_RT_CELL1_TO_RT                     | WRITE_RT_CELL1_TO_RT             |      |                                                        |
+  |      | VM_WRITE_RT_CELL0_TO_RT                     | .                                |      |                                                        |
+  |      | VM_WRITE_RT_CELLy_TO_RT                     | .                                |      |                                                        |
+  |      | ;; VM_WRITE_RA_CELL1_TO_RT                  | .                                |      |                                                        |
+  |      | ;; VM_WRITE_RA_CELL0_TO_RT                  | .                                |      |                                                        |
+  |      | VM_WRITE_RA_CELLy_TO_RA                     | .                                |      |                                                        |
+  |      | VM_WRITE_RA_TO_CELLy_RT                     | .                                |      |                                                        |
+  |      | VM_WRITE_RT_CELL1_TO_RA                     | .                                |      |                                                        |
+  |      | VM_WRITE_RT_CELL0_TO_RA                     | .                                |      |                                                        |
+  |      | VM_WRITE_RT_CELLy_TO_RA                     | .                                |      |                                                        |
+  |      | VM_WRITE_RT_TO_CELLy_RA                     | .                                |      |                                                        |
+  |      | VM_CP_RT_TO_RA                              | COPY_RT_TO_RA                    |      |                                                        |
+  |      | VM_CP_RA_TO_RT                              | COPY_RA_TO_RT                    |      |                                                        |
+  |      | VM_POP_FSTOS_TO_CELLy_RT                    | ?                                |      |                                                        |
+  |      | VM_CELL_STACK_POP_R                         | POP_CELL_EVLSTK_TO_RT            |      |                                                        |
+  |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
+  |      | VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE         | GLOBAL_CELLPAIR_FREE_LIST        |      |                                                        |
+  |      | VM_FREE_CELL_PAIR_PAGE                      | GLOBAL_CELL_PAGE_FOR_ALLOC       |      |                                                        |
+  |      | VM_LIST_OF_FREE_CELLS                       | GLOBAL_CELL_FREE_LIST            |      |                                                        |
+  |      | VM_MEMORY_MANAGEMENT_CONSTANTS              | CONST_MEMORY_MANAGER             |      |                                                        |
+  |      | VM_INITIALIZE_MEMORY_MANAGER                | INIT_MEMORY_MANAGER              |      |                                                        |
 - conceptual levels
   - page :: os allocation unit
     - alloc, free, bitmap of available pages
