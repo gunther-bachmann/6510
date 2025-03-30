@@ -125,11 +125,11 @@ call frame primitives etc.
          VM_REFCOUNT_DECR_RT
           ;; ---------------------------------------- alloc/free pages
           FREE_PAGE_A                                       ;; free a page (the type specific stuff, of any, must have finished)
-          ALLOC_PAGE_TO_A                         ;; allocate new page (not initialized)
+          ALLOC_PAGE_TO_A                                   ;; allocate new page (not initialized)
 
-          INIT_CELL_PAGE_A                            ;;  initialize for ref counted cells
-          INIT_CELLPAIR_PAGE_A                       ;;  initialize for ref counted cell-pairs
-          INIT_CELLSTACK_PAGE_A                          ;;  initialize with previous references to previous cell stack pages
+          INIT_CELL_PAGE_A                                  ;; initialize page A for ref counted cells
+          INIT_CELLPAIR_PAGE_A                              ;; initialize page A for ref counted cell-pairs
+          INIT_CELLSTACK_PAGE_A                             ;; initialize page A to previous cell stack page (X)
 
           ;; VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
           ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether
@@ -3700,25 +3700,21 @@ call frame primitives etc.
 
 ;; ----------------------------------------
 ;; page type slot w/ different sizes (refcount @ ptr-1) x cells
-;; math: first entry @FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS + 1, refcount @ -1, next slot += INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS, slot-size = INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS -1
+;; math: first entry @FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A + 1, refcount @ -1, next slot += INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A, slot-size = INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A -1
 ;; input : X = profile offset (0, 2, 4 ...)
 ;; uses  : ZP_RA
 ;; output:
-(define VM_ALLOC_PAGE_FOR_M1_SLOTS
+(define INIT_M1Px_PAGE_A
   (list
-   (label VM_ALLOC_PAGE_FOR_M1_SLOTS)
-          (STX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)      ;; save profile index in local var
-
-          (JSR ALLOC_PAGE_TO_A)
+   (label INIT_M1Px_PAGE_A)
+          (STX SEL_PROFILE__INIT_M1Px_PAGE_A)      ;; save profile index in local var
           (STA ZP_RA+1)
-          (LDA !$00)
-          (STA ZP_RA)
-
           (LDY !$00)
-          (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
-          (TXA)
+          (STY ZP_RA)
+
+          (TXA)                 ;; provile 0..4 -> a
           (ORA !$10)
-          (STA (ZP_RA),y) ;; set page type in byte 0 to b0001 <profile>
+          (STA (ZP_RA),y)       ;; set page type in byte 0 to b0001 <profile>
 
           (LDA VM_FREE_M1_PAGE_P0,x) ;; current free page
           (INY)
@@ -3731,56 +3727,56 @@ call frame primitives etc.
           (INY)
           (STA (ZP_RA),y)          ;; store number of slots used
 
-          (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; y = refcount field for first slot
+          (LDY FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A,x) ;; y = refcount field for first slot
           (INY)
           (TYA)
           (LDX ZP_RA+1)
           (STA VM_PAGE_SLOT_DATA,x)                    ;; set first free slot, here x = page
           (DEY)
-          (LDX SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; profile = 0..3
+          (LDX SEL_PROFILE__INIT_M1Px_PAGE_A) ;; profile = 0..3
           (LDA !$00)
 
           ;; loop to initialize refcounts of each slot to 0-
-   (label REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+   (label REF_COUNT_LOOP__INIT_M1Px_PAGE_A)
           (STA (ZP_RA),y) ;; refcount = 0
           (TYA)
           (CLC)
-          (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x) ;; calc next refcount field offset
-          (BCS END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (ADC INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A,x) ;; calc next refcount field offset
+          (BCS END_REF_COUNT_LOOP__INIT_M1Px_PAGE_A)
           (TAY)
           ;; (ADC !$01)
           (LDA !$00)
-          (BCC REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; still on this page?
+          (BCC REF_COUNT_LOOP__INIT_M1Px_PAGE_A) ;; still on this page?
 
-   (label END_REF_COUNT_LOOP__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+   (label END_REF_COUNT_LOOP__INIT_M1Px_PAGE_A)
           ;; loop to write free slot list
-          (LDY FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
+          (LDY FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A,x)
           (INY)  ;; first slot  (refcount field offset + 1)
           (TYA)
-   (label WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+   (label WRITE_FREE_LIST__INIT_M1Px_PAGE_A)
           (CLC)
-          (ADC INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
-          (BCS ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; no longer on the same page => almost done
+          (ADC INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A,x)
+          (BCS ALMOST_DONE__INIT_M1Px_PAGE_A) ;; no longer on the same page => almost done
           (STA (ZP_RA),y) ;; offset of next free cell == y for next write
           (TAY)
-          (BCC WRITE_FREE_LIST__VM_ALLOC_PAGE_FOR_M1_SLOTS) ;; carry must be clear => always jump
+          (BCC WRITE_FREE_LIST__INIT_M1Px_PAGE_A) ;; carry must be clear => always jump
 
-   (label ALMOST_DONE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+   (label ALMOST_DONE__INIT_M1Px_PAGE_A)
           (LDA !$00)
           (STA (ZP_RA),y) ;; last offset to next free slot is 00 = no next free slot!
           (LDA ZP_RA+1)   ;; a = page
           (RTS)
 
-   (label SEL_PROFILE__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+   (label SEL_PROFILE__INIT_M1Px_PAGE_A)
           (byte $00) ;; local var
 
-   (label FIRST_REF_COUNT_OFFSET__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+   (label FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A)
           (byte $03) ;; first ref count is 03, add 0a to get to next slot, slot-size $09 (09), contains 25 slots
           (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), contains 14 slots
           (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), contains 8 slots
           (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), contains 5 slots
           (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), contains 3 slots
-   (label INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS)
+   (label INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A)
           (byte $0a) ;; add 0a to get to next slot, slot-size $09 (09), contains 25 slots
           (byte $12) ;; add 12 to get to next slot, slot size $11 (17), contains 14 slots
           (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), contains 8 slots
@@ -3801,8 +3797,9 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_01_CODE)
 
             ;; now allocate the page
+            (JSR ALLOC_PAGE_TO_A)
             (LDX !$01) ;; do it explicitly
-            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+            (JSR INIT_M1Px_PAGE_A)))
 
   (define test-alloc-m1-01-state-after
     (run-code-in-test test-alloc-m1-01-code))
@@ -3836,8 +3833,9 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_02_CODE)
 
             ;; now allocate the page
+            (JSR ALLOC_PAGE_TO_A)
             (LDX !$02) ;; do it explicitly
-            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+            (JSR INIT_M1Px_PAGE_A)))
 
   (define test-alloc-m1-02-state-after
     (run-code-in-test test-alloc-m1-02-code))
@@ -3871,8 +3869,9 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_03_CODE)
 
             ;; now allocate the page
+            (JSR ALLOC_PAGE_TO_A)
             (LDX !$03) ;; do it explicitly
-            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+            (JSR INIT_M1Px_PAGE_A)))
 
   (define test-alloc-m1-03-state-after
     (run-code-in-test test-alloc-m1-03-code))
@@ -3906,8 +3905,9 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_04_CODE)
 
             ;; now allocate the page
+            (JSR ALLOC_PAGE_TO_A)
             (LDX !$04) ;; do it explicitly
-            (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)))
+            (JSR INIT_M1Px_PAGE_A)))
 
   (define test-alloc-m1-04-state-after
     (run-code-in-test test-alloc-m1-04-code))
@@ -3938,7 +3938,7 @@ call frame primitives etc.
   (list
    (label VM_ALLOC_M1_SLOT_TO_RA)
           (LDX !$00)
-          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+0)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+0)
           (BPL J9PLUS__VM_ALLOC_SLOT_IN_BUCKET)
 
    (label VM_ALLOC_SLOT__TYPE_X_STORE)
@@ -3967,7 +3967,7 @@ call frame primitives etc.
 
           ;; ensure y holds the actual available slot size
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (LDY INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS,x)
+          (LDY INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A,x)
           (DEY)
 
    (label INC_CMD__VM_ALLOC_SLOT_TYPE_X)
@@ -3994,32 +3994,33 @@ call frame primitives etc.
           (BCC CONTINUE__VM_ALLOC_SLOT_TYPE_X)
 
    (label NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
+          (JSR ALLOC_PAGE_TO_A)
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (JSR VM_ALLOC_PAGE_FOR_M1_SLOTS)
+          (JSR INIT_M1Px_PAGE_A)
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
           (CLC)
           (BCC VM_ALLOC_SLOT_TYPE_X)
 
    (label J9PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+1)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+1)
           (BPL J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$01)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
    (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+2)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+2)
           (BPL J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$02)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
    (label J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+3)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+3)
           (BPL J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$03)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
    (label J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__VM_ALLOC_PAGE_FOR_M1_SLOTS+4)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+4)
           (BPL J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$04)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
@@ -5147,7 +5148,7 @@ call frame primitives etc.
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
   (inform-check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                2153)
+                2147)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 2 items"
                       "int $01ff  (rt)"
@@ -5230,7 +5231,7 @@ call frame primitives etc.
           INIT_CELLPAIR_PAGE_A                              ;; initialize page (in a) for ref counted cell-pairs
           INIT_CELLSTACK_PAGE_A                             ;; initialize page with previous references to previous cell stack pages
 
-          VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
+          INIT_M1Px_PAGE_A                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
           ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether
 
           ;; VM_ALLOC_PAGE_FOR_MODULE_CODE                      ;; allocate page and initialize to hold immutable byte code (not ref counted)
@@ -5360,4 +5361,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1672))
+                       1670))
