@@ -114,6 +114,24 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
        (vm-call-frames->string state))))
 
 
+(define ALLOC_LOCALS_STACK
+  (list
+   (label ALLOC_FIRST_LOCALS_STACK)
+          (LDX !$00)
+          (STX ZP_LOCALS_LB_PTR+1)
+          (STX ZP_LOCALS_HB_PTR+1)
+
+   (label ALLOC_LOCALS_STACK)
+          (JSR ALLOC_PAGE_TO_A)
+          (LDX ZP_LOCALS_HB_PTR+1) ;; previous locals hb page
+          (JSR INIT_CELLSTACK_PAGE_A)
+          (STA ZP_LOCALS_HB_PTR+1)
+
+          (JSR ALLOC_PAGE_TO_A)
+          (LDX ZP_LOCALS_LB_PTR+1) ;; previous locals lb page
+          (JSR INIT_CELLSTACK_PAGE_A)
+          (STA ZP_LOCALS_LB_PTR+1)
+          (RTS)))
 
 (define VM_INITIALIZE_CALL_FRAME
   (list
@@ -125,15 +143,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (JSR VM_ALLOC_CALL_FRAME_N)   ;; call-frame initialized (top mark set, too)
 
           ;; alloc locals
-          (JSR ALLOC_PAGE_TO_A)
-          (LDX !$00) ;; previous locals hb page (none => 0)
-          (JSR INIT_CELLSTACK_PAGE_A)
-          (STA ZP_LOCALS_HB_PTR+1)
-
-          (JSR ALLOC_PAGE_TO_A)
-          (LDX !$00) ;; previous locals lb page (none => 0)
-          (JSR INIT_CELLSTACK_PAGE_A)
-          (STA ZP_LOCALS_LB_PTR+1)
+          (JSR ALLOC_FIRST_LOCALS_STACK)
 
           (LDA !$03) ;; payload start for locals
           (STA ZP_LOCALS_LB_PTR)
@@ -760,16 +770,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (STX ZP_LOCALS_TOP_MARK)      ;; remember X (number of parameters)
 
           ;; prepare call to new pages allocation
-          (JSR ALLOC_PAGE_TO_A)
-          (LDX ZP_LOCALS_HB_PTR+1) ;; previous locals hb page
-          (JSR INIT_CELLSTACK_PAGE_A)
-          (STA ZP_LOCALS_HB_PTR+1)
-
-          (JSR ALLOC_PAGE_TO_A)
-          (LDX ZP_LOCALS_LB_PTR+1) ;; previous locals lb page
-          (JSR INIT_CELLSTACK_PAGE_A)
-          (STA ZP_LOCALS_LB_PTR+1)
-
+          (JSR ALLOC_LOCALS_STACK)
 
           ;; now set the locals pointers to local#0 and set the top mark
           (LDA !$03)
@@ -845,6 +846,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (define just-vm-call-frame
   (append VM_INITIALIZE_CALL_FRAME
+          ALLOC_LOCALS_STACK
           VM_ALLOC_CALL_FRAME_N                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
           VM_PUSH_CALL_FRAME_N                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
           VM_POP_CALL_FRAME_N                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
@@ -857,4 +859,4 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test #| vm-call-frame |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-call-frame)))
-                       262))
+                       255))
