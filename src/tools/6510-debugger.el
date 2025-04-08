@@ -1,23 +1,30 @@
 ;; elisp code to execute debugger functions in the current source window,
 ;; sending these commands to a running racket debugger process
 
-(defun 6510-debugger--execute-command-in-repl (command-str &optional submit)
+(defun 6510-debugger--execute-command-in-repl (command-str)
   (with-current-buffer (racket-repl-buffer-name-shared)
     (let ((quoted-command (replace-regexp-in-string "\"" "\\\\\"" command-str)))
-      (when submit
-        (racket--repl-add-to-input-history command-str))
       (insert command-str)
       (insert "\n")
       (racket--repl-delete-prompt-mark nil)
       (set-marker racket--repl-output-mark (point))
-      (let ((send-type (if submit "repl-submit" "repl-input")))
-        (process-send-string
-         (get-process (racket--back-end-process-name))
-         (format "(%s %s %s \"%s\n\")"
-                 racket--cmd-nonce
-                 (racket--repl-session-id)
-                 send-type
-                 quoted-command))))))
+      (process-send-string
+       (get-process (racket--back-end-process-name))
+       (format "(%s %s %s \"%s\n\")"
+               racket--cmd-nonce
+               (racket--repl-session-id)
+               "repl-input"
+               quoted-command)))))
+
+(defun 6510-debugger--execute-command-in-repl--submit (command-str)
+  (racket--repl-forget-errors)
+  (with-racket-repl-buffer
+    (racket--repl-delete-prompt-mark nil))
+  (racket--cmd/await (racket--repl-session-id)
+                     `(repl-submit ,command-str
+                                   ,racket-repl-echo-sent-expressions))
+  (with-current-buffer racket-repl-buffer-name
+    (goto-char (point-max))))
 
 ;; (6510-debugger--execute-command-in-repl "(run-debugger 2064 raw-bytes \"6510-example.rkt\")" t)
 ;; (6510-debugger--execute-command-in-repl "s")
@@ -33,7 +40,7 @@
 (defun 6510-debugger-execute-startup ()
   "execute debugger startup"
   (interactive)  
-  (6510-debugger--execute-command-in-repl (format "(run-debugger 2064 raw-bytes \"%s\")" (buffer-name)) t))
+  (6510-debugger--execute-command-in-repl--submit (format "(run-debugger 2064 raw-bytes \"%s\")" (buffer-name))))
 
 (defun 6510-debugger-step-over ()
   "execute stop over"
