@@ -1,12 +1,12 @@
 #+title: vm-memory-manager
 * open tasks
-** TODO modularize functions using naming convention
+** IMPLEMENT modularize functions using naming convention
 - use naming conventions in [[file:~/repo/+1/6510/TODO.org]]
 - make functions composable to provide conceptual functions
 - translation table
   | done | name                                        | new                              | type | note                                                   |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
-  |      | alloc/free pages                            |                                  |      | R=rename, D=decomposition, C=complex refactoring       |
+  | x    | alloc/free pages                            |                                  |      | R=rename, D=decomposition, C=complex refactoring       |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
   | x    | VM_FREE_PAGE                                | FREE_PAGE_A                      | R    |                                                        |
   | x    | VM_ALLOC_PAGE__PAGE_UNINIT                  | ALLOC_PAGE_TO_A                  | R+   | make sure that allocated page is in A                  |
@@ -15,15 +15,16 @@
   | x    | INIT_CELLPAIR_PAGE_A                        |                                  | C    | result is returned in X -> refactor to return in A     |
   | x    | VM_ALLOC_CELL_STACK_PAGES                   | INIT_CELLSTACK_PAGE_A            | D    |                                                        |
   | x    | VM_ALLOC_PAGE_FOR_M1_SLOTS                  | INIT_M1Px_PAGE_A                 | D    |                                                        |
-  |      | ;; VM_ALLOC_PAGE_FOR_S8_SLOTS               |                                  |      |                                                        |
-  |      | ;; VM_ALLOC_PAGE_FOR_MODULE_CODE            |                                  |      |                                                        |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
   |      | alloc/free cells, pairs, slots              |                                  |      |                                                        |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
-  |      |                                             | GET_PAGE_FOR_ALLOC_CELL_TO_A     |      |                                                        |
+  | x    |                                             | GET_PAGE_FOR_ALLOC_CELL_TO_A     |      |                                                        |
   |      |                                             | GET_PAGE_FOR_ALLOC_CELLPAIR_TO_A |      |                                                        |
   |      |                                             | GET_PAGE_FOR_ALLOC_CELLARR_TO_A  |      |                                                        |
-  |      | VM_ALLOC_CELL_ON_PAGE                       | ALLOC_CELL_ON_PAGE_A_TO_RT       | D    |                                                        |
+  | x    | VM_ALLOC_CELL_ON_PAGE                       | ALLOC_CELL_ON_PAGE_A_TO_RT       | D    |                                                        |
+  | x    | VM_ALLOC_CELL_PTR_TO_RT                     | ALLOC_CELL_TO_RT                 |      |                                                        |
+  | x    |                                             | ALLOC_CELL_PFL_TO_RT             |      | from local free list of the page                       |
+  | x    |                                             | ALLOC_CELL_GFL_TO_RT             |      | from global free list of the page                      |
   |      | VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT        | ALLOC_CELLPAIR_ON_PAGE_A_TO_RT   | D    |                                                        |
   |      | VM_ALLOC_CELL_PAIR_PTR_TO_RT                | ALLOC_CELLPAIR_TO_RT             | D    | ensure that RT holds ptr to new cell-pair              |
   |      |                                             | ALLOC_CELLPAIR_PFL_A_TO_RT       |      | get cell-pair from page (A) free list, C=1/0 succ/fail |
@@ -32,9 +33,6 @@
   |      |                                             | ADD_CELLPAIR_RT_TO_GFL           |      | add freed cell-pair to global free list                |
   |      |                                             | ADD_CELLPAIR_RT_TO_PFL_A         |      | add freed cell-pair it to the page (A) free list       |
   |      | VM_FREE_CELL_PAIR_PTR_IN_RA                 | ?                                |      |                                                        |
-  |      | VM_ALLOC_CELL_PTR_TO_RT                     | ALLOC_CELL_TO_RT                 |      |                                                        |
-  |      |                                             | ALLOC_CELL_PFL_TO_RT             |      |                                                        |
-  |      |                                             | ALLOC_CELL_GFL_TO_RT             |      |                                                        |
   |      | VM_FREE_CELL_PTR_IN_RT                      | FREE_CELL_RT                     |      |                                                        |
   |      |                                             | ADD_CELL_RT_TO_GFL               |      | add freed cell to global free list                     |
   |      |                                             | ADD_CELL_RT_TO_PFL_A             |      | add freed cell it to the page (A) free list            |

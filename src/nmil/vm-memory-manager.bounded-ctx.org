@@ -1,0 +1,57 @@
+* pages
+** Description
+The first (and lowest level) of abstractions for memory management is the management of memory *pages*.
+** Domain Roles
+manage the life cycle of pages
+prevent fragmentation
+** Inbound Communication
+initial list of available pages for memory management
+** Outbound Communication
+alloc page :: errors(no page available)
+free page :: errors()
+initialize page (of certain type) :: errors()
+** Ubiqutous Language
+*** nouns
+- page :: 256 byte continuous memory
+- page-type :: identifying the usage (and data layout) of a page
+  - cell :: 16 bit, storing cell data
+  - cellpair :: cell pairs, pair of two cells (32 bit), storing car cell and cdr cell
+  - cellstack :: stack organized cells (usually made up of two pages, one for the high byte of the cell, one for the low byte of the cell)
+  - m1slots :: slots of fixed size stored on this page with ref count byte at -1 position
+*** adjectives
+- lifecycle :: a page may go through the following states
+  - reserved :: page is not available for this memory manager
+  - allocated :: page is allocated by a process
+  - initialized :: page is allocated to initialized to some page type
+  - unallocated :: page is free for allocation
+*** verbs
+- free
+- allocate
+- init
+** Decisions
+- pages are not relocatable
+- pages are of 256 byte size
+- each pages has status byte identifying its lifecycle and leaves bits for high order functions to store information (e.g. first free slot
+  etc.)
+* cell
+** Description
+a cell is the minimal lisp atom used in the virtual machine.
+it can be an atomic value (e.g. int, bool, char).
+it can also be a reference (e.g. to another cell, a cell-pair, an array or a structure).
+** Domain Roles
+it is the basic building block of the computing functionality of the virtual machein
+** Inbound Communication
+cells need to be heap-allocated, stack allocated, transferred from/to cell-registers, dereferenced etc.
+** Outbound Communication
+Cells can be used for computing values, accessing/modifying structures, arrays and such
+** Ubiqutous Language
+- cell
+- int
+- byte
+- char
+- heap-allocated
+- stack-allocated
+- register
+*incomplete*
+** Decisions
+*incomplete*

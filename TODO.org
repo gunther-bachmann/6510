@@ -119,6 +119,9 @@ VERB - TYPE - OBJECT
   REUSE     :: reuse
   WRITE     :: write
 
+- *attributes*
+  FIRST     :: first
+
 ** memory management
 - free lists always use memory-sections of the element itself to provide the structure needed (no additional memory is used)
 *** atoms for memory management

@@ -131,20 +131,15 @@ call frame primitives etc.
           INIT_CELLPAIR_PAGE_A                              ;; initialize page A for ref counted cell-pairs
           INIT_CELLSTACK_PAGE_A                             ;; initialize page A to previous cell stack page (X)
 
-          ;; VM_ALLOC_PAGE_FOR_M1_SLOTS                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
-          ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether
-
-          ;; VM_ALLOC_PAGE_FOR_MODULE_CODE                      ;; allocate page and initialize to hold immutable byte code (not ref counted)
-
           ;; ---------------------------------------- alloc/free cells, pairs, slots
-          VM_ALLOC_CELL_ON_PAGE                              ;; allocate a cell on the page in A (allocating a new one if page is full)
+          ALLOC_CELL_TO_RT
+
           VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT               ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 
           VM_ALLOC_CELL_PAIR_PTR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
           VM_FREE_CELL_PAIR_PTR_IN_RA                        ;; free this cell-pair (adding it to the free tree)
 
-          VM_ALLOC_CELL_PTR_TO_RT                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
           VM_FREE_CELL_PTR_IN_RT                             ;; free this cell pointed to by RT (adding it to the free list)
           VM_FREE_CELL_PTR_IN_RA                             ;; free this cell pointed to by RT (adding it to the free list)
 
@@ -2404,7 +2399,7 @@ call frame primitives etc.
 (module+ test #| vm-refcount-mmcr-rt--cell-pair-ptr |#
   (define vm-refcount-mmcr-rt--cell-ptr-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)
      (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)))
 
@@ -2418,7 +2413,7 @@ call frame primitives etc.
 
   (define vm-refcount-mmcr-rt--cell-ptr-code2
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)
      (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)
      (JSR VM_REFCOUNT_DECR_RT__CELL_PTR)))
@@ -2474,7 +2469,7 @@ call frame primitives etc.
             (RTS)
 
      (label TEST_START__VM_FREE_PTR_IN_RT )
-            (JSR VM_ALLOC_CELL_PTR_TO_RT)
+            (JSR ALLOC_CELL_TO_RT)
             (JSR VM_FREE_PTR_IN_RT)))
 
   (define vm-free-ptr-in-rt-state
@@ -2505,96 +2500,168 @@ call frame primitives etc.
                 (list #x01)
                 "dispatches call to free-cell-pair-ptr routine"))
 
-;; allocate a cell on the page in A (allocating a new one if page is full)
-;; this does not check for any free cells on the free list!
-;; input:  A - page to use (if full allocate new page)
-;; output: A - actual page used
-;;         # cells used on page is incremented
-;;         adjust page local list of free cell on this page
-(define VM_ALLOC_CELL_ON_PAGE
+;; get the page and free cell for allocation
+;;
+;; just get the data, allocate a new page if necessary
+;; input:  VM_FREE_CELL_PAGE
+;;         VM_PAGE_SLOT_DATA+PAGE
+;; output: A = lowbyte
+;;         X = highbyte (page)
+;;         Y = ?
+(define GET_PAGE_FOR_ALLOC_CELL_TO_AX
   (list
-   (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_ON_PAGE)
+   (label GET_PAGE_FOR_ALLOC_CELL_TO_AX)
+          (LDX VM_FREE_CELL_PAGE)
+          (BEQ _NEW_PAGE__GET_PAGE_FOR_ALLOC_CELL_TO_AX)
+          (LDA VM_PAGE_SLOT_DATA,x)
+          (BNE DONE__GET_PAGE_FOR_ALLOC_CELL_TO_AX) ;; allocate new page first
+
+   (label _NEW_PAGE__GET_PAGE_FOR_ALLOC_CELL_TO_AX)
           (JSR ALLOC_PAGE_TO_A)
           (JSR INIT_CELL_PAGE_A)
-
-   ;; ----------------------------------------
-   (label VM_ALLOC_CELL_ON_PAGE) ;; <-- real entry point of this function
-          (STA ZP_RT+1) ;; safe as highbyte of ptr
           (TAX)
-          (LDA VM_PAGE_SLOT_DATA,x)
-          (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_ON_PAGE) ;; allocate new page first
+          (LDA !$02)                               ;; first free slot on cell page
+   (label DONE__GET_PAGE_FOR_ALLOC_CELL_TO_AX)
+          (RTS)))
 
-   (label CELL_ON_THIS_PAGE__VM_ALLOC_CELL_ON_PAGE)
-          (STA ZP_RT)
+(module+ test #| get-page-for-alloc-cell-to-ax |#
+  (define get-page-for-alloc-cell-to-ax-state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_PAGE_TO_A)
+      (TAX)
+      (STX VM_FREE_CELL_PAGE)
+      (LDA !$08)                           ;; make first free slot on page to be 08
+      (STA VM_PAGE_SLOT_DATA,x)
+
+      (JSR GET_PAGE_FOR_ALLOC_CELL_TO_AX)  ;; no new allocate should take place => stay on page_0
+
+      (STA ZP_RT)
+      (STX ZP_RT+1))))
+
+  (check-equal? (memory-list get-page-for-alloc-cell-to-ax-state ZP_RT (add1 ZP_RT))
+                (list #x08 PAGE_AVAIL_0)
+                "cell 08 is allocated on page_0"))
+
+(module+ test #| get-page-for-alloc-cell-to-ax |#
+  (define get-page-for-alloc-cell-to-ax-2-state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_PAGE_TO_A)
+      (TAX)
+      (STX VM_FREE_CELL_PAGE)
+      (LDA !$00)                          ;; mark page to have no free cells
+      (STA VM_PAGE_SLOT_DATA,x)
+
+      (JSR GET_PAGE_FOR_ALLOC_CELL_TO_AX) ;; should allocate a new page
+
+      (STA ZP_RT)
+      (STX ZP_RT+1))))
+
+  (check-equal? (memory-list get-page-for-alloc-cell-to-ax-2-state ZP_RT (add1 ZP_RT))
+                (list #x02 PAGE_AVAIL_1)
+                "since first page (page_0) is marked as full, first slot (02) of page_1 is allocated"))
+
+;; allocate the cell at A on page X
+;;
+;; update next free cell in vm_page_slot_data
+;; update number of allocated cells on page X
+;; input:  A = lowbyte
+;;         X = highbyte (page)
+;;         # cells allocated on PAGE
+;; output: A = next free cell
+;;         X = PAGE
+;;         Y = 0
+;;         VM_PAGE_SLOT_DATA + PAGE = next free cell
+;;         # cells allocated on PAGE ++
+(define ALLOC_CELL_A_ON_PAGE_X_TO_RT
+  (list
+   (label ALLOC_CELL_PFL_X_TO_RT)
+          (STX LDA_CMD__ALLOC_CELL_PFL_X_TO_RT+2) ;; overwrite $c0 with page
+          (LDY VM_PAGE_SLOT_DATA,x)               ;; get first free slot on page
+          ;; (BEQ ERROR_ALLOC_CELL_PFL_X_TO_RT)   ;; if page free list is empty
+   (label LDA_CMD__ALLOC_CELL_PFL_X_TO_RT)
+          (LDA $c000,y)
+
+   ;;     ----------------------------
+   (label ALLOC_CELL_A_ON_PAGE_X_TO_RT)
+          (STX ZP_RT+1)                           ;; safe as highbyte of ptr
+          (STA ZP_RT)                             ;; safe as lowbyte of ptr
+
           (LDY !$00)
-          (LDA (ZP_RT),y) ;; next free cell
+          (LDA (ZP_RT),y)                         ;; next free cell
           (STA VM_PAGE_SLOT_DATA,x)
 
           ;; increase the slot number on this page
-          (STX INC_CMD__VM_ALLOC_CELL_ON_PAGE+2) ;; overwrite $c0
-   (label INC_CMD__VM_ALLOC_CELL_ON_PAGE)
+          (STX INC_CMD__ALLOC_CELL_A_ON_PAGE_X_TO_RT+2) ;; overwrite $c0
+   (label INC_CMD__ALLOC_CELL_A_ON_PAGE_X_TO_RT)
           (INC $c000)
-          (TXA)
           (RTS)))
 
-(module+ test #| vm_alloc_cell_on_page (allocating new page) |#
-  (define test-alloc-cell-on-papge-a-code
-    (list
-     (LDX !$cd)
-     (LDA !$00) ;; no free slot on this page, allocate new page
-     (STA VM_PAGE_SLOT_DATA,x)
-     (TXA)
-     (JSR VM_ALLOC_CELL_ON_PAGE)
-     ))
+(module+ test #| alloc-cell-a-on-page-x-to-rt |#
+  (define test-alloc-cell-a-on-page-x-to-rt-state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_PAGE_TO_A)
+      (JSR INIT_CELL_PAGE_A)
+      (TAX)
+      (LDA !$02)
+      (JSR ALLOC_CELL_A_ON_PAGE_X_TO_RT))))
 
-  (define test-alloc-cell-on-papge-a-state-after
-    (run-code-in-test test-alloc-cell-on-papge-a-code))
-
-  (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after ZP_RT (add1 ZP_RT))
+  (check-equal? (memory-list test-alloc-cell-a-on-page-x-to-rt-state ZP_RT (add1 ZP_RT))
                 (list #x02 PAGE_AVAIL_0))
-  (check-equal? (memory-list test-alloc-cell-on-papge-a-state-after (+ #xcf00 PAGE_AVAIL_0) (+ #xcf00 PAGE_AVAIL_0))
-                (list #x08)))
 
-(module+ test #| vm_alloc_cell_on_page (using previously allocated page) |#
-  (define test-alloc-cell-on-papge-b-code
-    (list
-     (JSR ALLOC_PAGE_TO_A)         ;; allocates cc00
-     (JSR INIT_CELL_PAGE_A)
-     (JSR ALLOC_PAGE_TO_A)         ;; allocates cb00
-     (JSR INIT_CELL_PAGE_A)
-     (JSR VM_ALLOC_CELL_ON_PAGE)
-     ))
+  (check-equal? (vm-page->strings test-alloc-cell-a-on-page-x-to-rt-state PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $08")
+                "page has 1 slot in use"))
 
-  (define test-alloc-cell-on-papge-b-state-after
-    (run-code-in-test test-alloc-cell-on-papge-b-code))
+(module+ test
+  (define test-alloc-cell-a-on-page-x-to-rt-twice-state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_PAGE_TO_A)
+      (JSR INIT_CELL_PAGE_A)
+      (TAX)
+      (LDA !$02)
+      (JSR ALLOC_CELL_A_ON_PAGE_X_TO_RT)
+      (LDA !$08)
+      (LDX ZP_RT+1)
+      (JSR ALLOC_CELL_A_ON_PAGE_X_TO_RT))))
 
-  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after ZP_RT (add1 ZP_RT))
-                (list #x02 PAGE_AVAIL_1))
-  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after (+ #xcf00 PAGE_AVAIL_0) (+ #xcf00 PAGE_AVAIL_0))
-                (list #x02)
-                "..00 has all cells left => first free is 02")
-  (check-equal? (memory-list test-alloc-cell-on-papge-b-state-after (+ #xcf00 PAGE_AVAIL_1) (+ #xcf00 PAGE_AVAIL_1))
-                (list #x08)
-                "..00 has one cell allocated => first free is 08"))
+  (check-equal? (memory-list test-alloc-cell-a-on-page-x-to-rt-twice-state ZP_RT (add1 ZP_RT))
+                (list #x08 PAGE_AVAIL_0))
 
-;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
-;; input:  none
-;; output: zp_ptr = pointer to free cell
-(define VM_ALLOC_CELL_PTR_TO_RT
+  (check-equal? (vm-page->strings test-alloc-cell-a-on-page-x-to-rt-twice-state PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "page has 2 slot in use"))
+
+;; allocate (or reuse from free-list) cell into rt
+;;
+;; input:  VM_LIST_OF_FREE_CELLS
+;;         VM_FREE_CELL_PAGE
+;;         VM_PAGE_SLOT_DATA
+;;         # cells allocated on PAGE
+;; output: ZP_RT: ptr to heap allocated cell (cell itself is not initialized!)
+;;         VM_LIST_OF_FREE_CELLS
+;;         A, X, Y: ?
+(define ALLOC_CELL_TO_RT
   (list
-   (label VM_ALLOC_CELL_PTR_TO_RT)
+   (label ALLOC_CELL_TO_RT)
           (LDA VM_LIST_OF_FREE_CELLS+1)
-          (BNE REUSE__VM_ALLOC_CELL_PTR_TO_RT)
+          (BNE _ALLOC_CELL_GFL_PAGE_A_TO_RT)
+          (JSR GET_PAGE_FOR_ALLOC_CELL_TO_AX)
+          (JMP ALLOC_CELL_A_ON_PAGE_X_TO_RT)
 
-          ;; get a cell on the given page (or allocate a new page)
-          (LDA VM_FREE_CELL_PAGE)        ;; get the page that has cell available (can be 0)
-          (BEQ ALLOCATE_NEW_PAGE__VM_ALLOC_CELL)
-          (JMP VM_ALLOC_CELL_ON_PAGE)                        ;; allocate a new cell on that page
-   (label ALLOCATE_NEW_PAGE__VM_ALLOC_CELL)
-          (JMP ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_ON_PAGE) ;; allocate new page and then a new cell on that page
-
-   (label REUSE__VM_ALLOC_CELL_PTR_TO_RT)
-          ;; reuse old cell (and write the head into zp_ptr)
+   (label ALLOC_CELL_GFL_TO_RT)
+          (LDA VM_LIST_OF_FREE_CELLS+1)
+          ;; (BEQ ERROR_ALLOC_CELL_GFL_TO_RT)
+   (label _ALLOC_CELL_GFL_PAGE_A_TO_RT)
           (STA ZP_RT+1)
           (LDA VM_LIST_OF_FREE_CELLS)
           (STA ZP_RT)
@@ -2605,26 +2672,25 @@ call frame primitives etc.
           (STA VM_LIST_OF_FREE_CELLS)
           (INY)
           (LDA (ZP_RT),y)
-          (STA VM_LIST_OF_FREE_CELLS)
-
+          (STA VM_LIST_OF_FREE_CELLS+1)
           (RTS)))
 
 (module+ test #| vm_alloc_cell_ptr_to_rt (once on a new page) |#
-  (define test-alloc-cell-to-zp-ptr-code
+  (define test-alloc-cell-to-rt-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)))
+     (JSR ALLOC_CELL_TO_RT)))
 
-  (define test-alloc-cell-to-zp-ptr-state-after
-    (run-code-in-test test-alloc-cell-to-zp-ptr-code))
+  (define test-alloc-cell-to-rt-state-after
+    (run-code-in-test test-alloc-cell-to-rt-code))
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+  (check-equal? (memory-list test-alloc-cell-to-rt-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
                 (list #x00)
                 "list of free cells is empty")
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-state-after ZP_RT (add1 ZP_RT))
+  (check-equal? (memory-list test-alloc-cell-to-rt-state-after ZP_RT (add1 ZP_RT))
                 (list #x02 PAGE_AVAIL_0))
 
-  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-state-after PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings test-alloc-cell-to-rt-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     1"
@@ -2632,22 +2698,22 @@ call frame primitives etc.
                 "page has 1 slot in use"))
 
 (module+ test #| vm_alloc_cell_ptr_to_rt (twice on a new page) |#
-  (define test-alloc-cell-to-zp-ptr-twice-code
+  (define test-alloc-cell-to-rt-twice-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)))
+     (JSR ALLOC_CELL_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)))
 
-  (define test-alloc-cell-to-zp-ptr-twice-state-after
-    (run-code-in-test test-alloc-cell-to-zp-ptr-twice-code))
+  (define test-alloc-cell-to-rt-twice-state-after
+    (run-code-in-test test-alloc-cell-to-rt-twice-code))
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twice-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+  (check-equal? (memory-list test-alloc-cell-to-rt-twice-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
                 (list #x00)
                 "list of free cells is empty")
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twice-state-after ZP_RT (add1 ZP_RT))
+  (check-equal? (memory-list test-alloc-cell-to-rt-twice-state-after ZP_RT (add1 ZP_RT))
                 (list #x08 PAGE_AVAIL_0))
 
-  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twice-state-after PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings test-alloc-cell-to-rt-twice-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     2"
@@ -2655,54 +2721,54 @@ call frame primitives etc.
                 "page has 2 slots in use"))
 
 (module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page) |#
-  (define test-alloc-cell-to-zp-ptr-twicenfree-code
+  (define test-alloc-cell-to-rt-twicenfree-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_CP_RT_TO_RA)
 
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_FREE_CELL_PTR_IN_RA)))
 
-  (define test-alloc-cell-to-zp-ptr-twicenfree-state-after
-    (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfree-code))
+  (define test-alloc-cell-to-rt-twicenfree-state-after
+    (run-code-in-test test-alloc-cell-to-rt-twicenfree-code))
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfree-state-after VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
                 (list #x02 PAGE_AVAIL_0)
                 "free cell list has xx02 now as head of the list")
 
-  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfree-state-after PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings test-alloc-cell-to-rt-twicenfree-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     2"
                       "next free slot: $0a")
                 "page has still 2 slots in use (even though $cc02 was freed)")
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfree-state-after (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfree-state-after (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
                 (list #x00 #x00)
                 "since xx02 is now part of the free cell list, it points to the next free cell which is $0000 (none)"))
 
 (module+ test #| vm_alloc_cell_to_zp_ptr (twice, then free first on a new page, then allocate again) |#
-  (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-code
+  (define test-alloc-cell-to-rt-twicenfreenalloc-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_CP_RT_TO_RA)
 
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_FREE_CELL_PTR_IN_RA)
 
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)))
+     (JSR ALLOC_CELL_TO_RT)))
 
-  (define test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after
-    (run-code-in-test test-alloc-cell-to-zp-ptr-twicenfreenalloc-code))
+  (define test-alloc-cell-to-rt-twicenfreenalloc-state-after
+    (run-code-in-test test-alloc-cell-to-rt-twicenfreenalloc-code))
 
-  (check-equal? (vm-page->strings test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings test-alloc-cell-to-rt-twicenfreenalloc-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell page"
                       "previous page:  $00"
                       "slots used:     2"
                       "next free slot: $0a")
                 "still (only) two slots are used on the page, one from the free list was reused")
 
-  (check-equal? (memory-list test-alloc-cell-to-zp-ptr-twicenfreenalloc-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfreenalloc-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
                 (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
                 "free cell list is initial again"))
 
@@ -3228,10 +3294,10 @@ call frame primitives etc.
 (module+ test #| vm-free-cell-ptr-in-rt |#
   (define vm-free-cell-ptr-in-rt-tailcall-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_REFCOUNT_INCR_RT__CELL_PTR)
      (JSR VM_CP_RT_TO_RA)
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_WRITE_RA_TO_CELL0_RT)
      (JSR VM_FREE_CELL_PTR_IN_RT)))
 
@@ -3256,7 +3322,7 @@ call frame primitives etc.
 
   (define vm-free-cell-ptr-in-rt-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_FREE_CELL_PTR_IN_RT)))
 
   (define vm-free-cell-ptr-in-rt-state
@@ -3279,9 +3345,9 @@ call frame primitives etc.
 
   (define vm-free-cell-ptr-in-rt-realloc-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_FREE_CELL_PTR_IN_RT)
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)))
+     (JSR ALLOC_CELL_TO_RT)))
 
   (define vm-free-cell-ptr-in-rt-realloc-state
     (run-code-in-test vm-free-cell-ptr-in-rt-realloc-code))
@@ -3302,9 +3368,9 @@ call frame primitives etc.
 
   (define vm-free-cell-ptr-in-rt-2xfree-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_CP_RT_TO_RA)
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_FREE_CELL_PTR_IN_RT)       ;; free cc08
      (JSR VM_CP_RA_TO_RT)
      (JSR VM_FREE_CELL_PTR_IN_RT)))     ;; then free cc02
@@ -3523,7 +3589,7 @@ call frame primitives etc.
 
   (define vm-free-cell-pair-ptr-in-rt-4-code
     (list
-     (JSR VM_ALLOC_CELL_PTR_TO_RT)
+     (JSR ALLOC_CELL_TO_RT)
      (JSR VM_REFCOUNT_INCR_RT)
      (JSR VM_WRITE_INTm1_TO_RA)
      (JSR VM_WRITE_RA_TO_CELL0_RT)
@@ -5237,14 +5303,18 @@ call frame primitives etc.
           ;; VM_ALLOC_PAGE_FOR_MODULE_CODE                      ;; allocate page and initialize to hold immutable byte code (not ref counted)
 
           ;; ---------------------------------------- alloc/free cells, pairs, slots
-          VM_ALLOC_CELL_ON_PAGE                              ;; allocate a cell on the page in A (allocating a new one if page is full)
+          GET_PAGE_FOR_ALLOC_CELL_TO_AX
+          ALLOC_CELL_A_ON_PAGE_X_TO_RT
+          ;; ALLOC_CELL_PFL_X_TO_RT
+          ALLOC_CELL_TO_RT
+
           VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT               ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 
           VM_ALLOC_CELL_PAIR_PTR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
           VM_FREE_CELL_PAIR_PTR_IN_RA                        ;; free this cell-pair (adding it to the free tree)
 
-          VM_ALLOC_CELL_PTR_TO_RT                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
+          ;; VM_ALLOC_CELL_PTR_TO_RT                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
           VM_FREE_CELL_PTR_IN_RT                             ;; free this cell pointed to by RT (adding it to the free list)
           VM_FREE_CELL_PTR_IN_RA                             ;; free this cell pointed to by RT (adding it to the free list)
 
@@ -5361,4 +5431,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1670))
+                       1675))
