@@ -128,13 +128,13 @@ call frame primitives etc.
           ALLOC_PAGE_TO_A                                   ;; allocate new page (not initialized)
 
           INIT_CELL_PAGE_A                                  ;; initialize page A for ref counted cells
-          INIT_CELLPAIR_PAGE_A                              ;; initialize page A for ref counted cell-pairs
+          INIT_CELLPAIR_PAGE_AX                              ;; initialize page A for ref counted cell-pairs
           INIT_CELLSTACK_PAGE_A                             ;; initialize page A to previous cell stack page (X)
 
           ;; ---------------------------------------- alloc/free cells, pairs, slots
           ALLOC_CELL_TO_RT
 
-          VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT               ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
+          VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT               ;; allocate a cell-pair a from page x (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 
           VM_ALLOC_CELL_PAIR_PTR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
@@ -1575,9 +1575,9 @@ call frame primitives etc.
   ;;         vm_free_cell_page is new head of the list
   ;;         the page is initialized with each cell pointing to the next free cell on this page (0 marks the end)
   ;; uses: ZP_TEMP, ZP_TEMP2
-  (define INIT_CELL_PAGE_A
+  (define INIT_CELL_PAGE_AX
     (list
-     (label INIT_CELL_PAGE_A)
+     (label INIT_CELL_PAGE_AX)
             ;; page is in A
             (STA ZP_TEMP+1)
             (TAY)
@@ -1829,10 +1829,11 @@ call frame primitives etc.
   ;;
   ;; input:  A = page allocated but uninitialized
   ;; output: X = page allocated and initialized for cell-pairs usage
-  ;; usage:  A, X, Y, ZP_TEMP, ZP_TEMP2
-(define INIT_CELLPAIR_PAGE_A
+  ;;         A = first free slot ($05)
+  ;; usage:  X, Y, ZP_TEMP, ZP_TEMP2
+(define INIT_CELLPAIR_PAGE_AX
     (list
-     (label INIT_CELLPAIR_PAGE_A)
+     (label INIT_CELLPAIR_PAGE_AX)
             ;; page is in A
 
             (TAX)
@@ -1865,10 +1866,10 @@ call frame primitives etc.
             (STY ZP_TEMP)
             (LDY !$2F)
 
-     (label SECOND_RC_BLOCK__INIT_CELLPAIR_PAGE_A)
+     (label SECOND_RC_BLOCK__INIT_CELLPAIR_PAGE_AX)
             (STA (ZP_TEMP),y)
             (DEY)
-            (BPL SECOND_RC_BLOCK__INIT_CELLPAIR_PAGE_A)
+            (BPL SECOND_RC_BLOCK__INIT_CELLPAIR_PAGE_AX)
 
             (STA ZP_TEMP) ;; clear lowbyte of ptr
 
@@ -1880,19 +1881,20 @@ call frame primitives etc.
             (LDA !$41)
             (STA (ZP_TEMP),y) ;; @09 <- 41
 
-     (label SECOND_CELL_PAIR_BLOCK__INIT_CELLPAIR_PAGE_A)
+     (label SECOND_CELL_PAIR_BLOCK__INIT_CELLPAIR_PAGE_AX)
             (TAY)
             (CLC)
             (ADC !$04)
             (STA (ZP_TEMP),y)
             (CMP !$F9)
-            (BNE SECOND_CELL_PAIR_BLOCK__INIT_CELLPAIR_PAGE_A)
+            (BNE SECOND_CELL_PAIR_BLOCK__INIT_CELLPAIR_PAGE_AX)
 
             (TAY)
             (LDA !$00)
             (STA (ZP_TEMP),y) ;; last cell points to 0
 
-            (LDA ZP_TEMP+1) ;; return page initialized in a (TXA would currently actually work, too)
+            (LDX ZP_TEMP+1) ;; return page initialized in X (high byte)
+            (LDA !$05)      ;; return first free slot in A (low byte)
 
             (RTS)))
 
@@ -1902,16 +1904,17 @@ call frame primitives etc.
      (LDA !$a0)
      (STA VM_FREE_CELL_PAIR_PAGE)
      (JSR ALLOC_PAGE_TO_A)
-     (JSR INIT_CELLPAIR_PAGE_A)
-     (STA ZP_RT) ;; to test read out actual page
+     (JSR INIT_CELLPAIR_PAGE_AX)
+     (STX ZP_RT+1) ;; to test read out actual page
+     (STA ZP_RT)
      ))
 
   (define vm-alloc-page-for-cell-pairs-state
     (run-code-in-test vm-alloc-page-for-cell-pairs-code))
 
-  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state ZP_RT ZP_RT)
-                (list PAGE_AVAIL_0)
-                "page .. was allocated")
+  (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state ZP_RT (+ 1 ZP_RT))
+                (list #x05 PAGE_AVAIL_0)
+                "page and slot .. was allocated")
   (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state PAGE_AVAIL_0_W (+ PAGE_AVAIL_0_W #x02))
                 (list #b01000000 #x00 #x00)
                 "page type is #b01000000 and refcounts cell0 and cell1 are both 0")
@@ -2015,35 +2018,33 @@ call frame primitives etc.
 ;; input:  A : page to allocate cell-pair on (a new page is allocated, if this page does not have any free cell-pairs)
 ;; output: ZP_RT
 ;; WARNING: ZP_RT IS OVERWRITTEN !! NO PUSH INTO THE CELL-STACK IS DONE!
-(define VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT
+(define VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT
   (list
-   (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
+   (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT)
           (JSR ALLOC_PAGE_TO_A)
-          (JSR INIT_CELLPAIR_PAGE_A)
+          (JSR INIT_CELLPAIR_PAGE_AX)
 
    ;; ----------------------------------------
-   (label VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT) ;; <-- real entry point of this function
-          (STA ZP_RT+1) ;; safe as highbyte of ptr
-          (TAX)
+   (label VM_ALLOC_CELL_PAIR_ON_PAGE_X_INTO_RT) ;; <-- real entry point of this function
           (LDA VM_PAGE_SLOT_DATA,x)
-          (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT) ;; allocate new page first
-
-   (label CELL_ON_THIS_PAGE__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
+          (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT) ;; allocate new page first
+   (label VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT) ;; <-- real entry point of this function
+          (STX ZP_RT+1) ;; safe as highbyte of ptr
           (STA ZP_RT)
           (LDY !$00)
           (LDA (ZP_RT),y) ;; next free cell
           (STA VM_PAGE_SLOT_DATA,x)
 
           ;; increase the slot number used on this page
-          (STX INC_CMD__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT+2) ;; overwrite $c0 (page in following INC command)
-   (label INC_CMD__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
+          (STX INC_CMD__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT+2) ;; overwrite $c0 (page in following INC command)
+   (label INC_CMD__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT)
           (INC $c000)
           (RTS)))
 
 (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt |#
   (define vm-alloc-cell-pair-on-page-a-into-rt-code
     (list
-     (JSR ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)))
+     (JSR ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT)))
 
   (define vm-alloc-cell-pair-on-page-a-into-rt-state
     (run-code-in-test vm-alloc-cell-pair-on-page-a-into-rt-code))
@@ -2059,10 +2060,10 @@ call frame primitives etc.
 (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt 2 times|#
   (define vm-alloc-cell-pair-on-page-a-into-rt-code2
     (list
-     (JSR ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)
-     ;; (LDA !$cc)
-     (ast-opcode-cmd '() (list 169 PAGE_AVAIL_0))
-     (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)))
+     (JSR ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT)
+     ;; (LDX !$cc)
+     (ast-opcode-cmd '() (list 162 PAGE_AVAIL_0))
+     (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_X_INTO_RT)))
 
   (define vm-alloc-cell-pair-on-page-a-into-rt-state2
     (run-code-in-test vm-alloc-cell-pair-on-page-a-into-rt-code2))
@@ -2500,6 +2501,28 @@ call frame primitives etc.
                 (list #x01)
                 "dispatches call to free-cell-pair-ptr routine"))
 
+;; get the page and free cellpair for allocation
+;;
+;; just get the data, allocate a new page if necessary
+;; input:  VM_FREE_CELL__PAIR_PAGE
+;;         VM_PAGE_SLOT_DATA+PAGE
+;; output: A = lowbyte
+;;         X = highbyte (page)
+;;         Y = ?
+(define GET_PAGE_FOR_ALLOC_CELLPAIR_TO_A
+  (list
+   (label GET_PAGE_FOR_ALLOC_CELLPAIR_TO_A)
+          (LDX VM_FREE_CELL_PAIR_PAGE)
+          (BEQ _NEW_PAGE__GET_PAGE_FOR_ALLOC_CELLPAIR_TO_AX)
+          (LDA VM_PAGE_SLOT_DATA,x)
+          (BNE DONE__GET_PAGE_FOR_ALLOC_CELLPAIR_TO_AX) ;; allocate new page first
+
+   (label _NEW_PAGE__GET_PAGE_FOR_ALLOC_CELLPAIR_TO_AX)
+          (JSR ALLOC_PAGE_TO_A)
+          (JMP INIT_CELLPAIR_PAGE_AX)
+   (label DONE__GET_PAGE_FOR_ALLOC_CELLPAIR_TO_AX)
+          (RTS)))
+
 ;; get the page and free cell for allocation
 ;;
 ;; just get the data, allocate a new page if necessary
@@ -2874,11 +2897,11 @@ call frame primitives etc.
           ;; no cell-pair to reuse available => need to allocate a new one
 
           ;; get a cell-pair on the given page (or allocate a new page)
-          (LDA VM_FREE_CELL_PAIR_PAGE)        ;; get the page that has cell-pairs available (can be 0)
+          (LDX VM_FREE_CELL_PAIR_PAGE)        ;; get the page that has cell-pairs available (can be 0)
           (BEQ ALLOCATE_NEW_PAGE__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
-          (JMP VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT)                        ;; allocate a new cell on that page
+          (JMP VM_ALLOC_CELL_PAIR_ON_PAGE_X_INTO_RT)                        ;; allocate a new cell on that page
    (label ALLOCATE_NEW_PAGE__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
-          (JMP ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT) ;; allocate new page and then a new cell on that page
+          (JMP ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT) ;; allocate new page and then a new cell on that page
 
    (label REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
           ;; put root of free tree into zp_rt (and copy in TEMP_PTR of this function)
@@ -5294,7 +5317,7 @@ call frame primitives etc.
           ALLOC_PAGE_TO_A                                   ;; allocate new page (not initialized)
 
           INIT_CELL_PAGE_A                                  ;; initialize page (in a) for cell usage
-          INIT_CELLPAIR_PAGE_A                              ;; initialize page (in a) for ref counted cell-pairs
+          INIT_CELLPAIR_PAGE_AX                             ;; initialize page (in x, free slot in a) for ref counted cell-pairs
           INIT_CELLSTACK_PAGE_A                             ;; initialize page with previous references to previous cell stack pages
 
           INIT_M1Px_PAGE_A                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
@@ -5308,7 +5331,8 @@ call frame primitives etc.
           ;; ALLOC_CELL_PFL_X_TO_RT
           ALLOC_CELL_TO_RT
 
-          VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT               ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
+          VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT               ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
+          ;; VM_ALLOC_CELL_PAIR_ON_PAGE_X_INTO_RT
 
           VM_ALLOC_CELL_PAIR_PTR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
