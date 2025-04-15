@@ -127,7 +127,7 @@ call frame primitives etc.
           FREE_PAGE_A                                       ;; free a page (the type specific stuff, of any, must have finished)
           ALLOC_PAGE_TO_A                                   ;; allocate new page (not initialized)
 
-          INIT_CELL_PAGE_A                                  ;; initialize page A for ref counted cells
+          INIT_CELL_PAGE_AX                                  ;; initialize page A for ref counted cells
           INIT_CELLPAIR_PAGE_AX                              ;; initialize page A for ref counted cell-pairs
           INIT_CELLSTACK_PAGE_A                             ;; initialize page A to previous cell stack page (X)
 
@@ -1585,39 +1585,39 @@ call frame primitives etc.
             (STA VM_PAGE_SLOT_DATA,y) ;; set slot @02 as the first free slot
 
             (LDA !$03)
-            (STA BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A) ;; how many blocks do we have (3)
+            (STA BLOCK_LOOP_COUNT__INIT_CELL_PAGE_AX) ;; how many blocks do we have (3)
 
             (LDA !$00)
             (STA ZP_TEMP)
 
             (LDY !$01)
             (LDX !$01)
-            (STX LOOP_COUNT__INIT_CELL_PAGE_A)
+            (STX LOOP_COUNT__INIT_CELL_PAGE_AX)
 
      ;; option: optimization: maybe clearing the whole page would be faster (and shorter) for setting all refcounts to 0?
-     (label LOOP_REF_COUNT__INIT_CELL_PAGE_A)
+     (label LOOP_REF_COUNT__INIT_CELL_PAGE_AX)
             (STA (ZP_TEMP),y) ;; refcount set to 0
             (INY)
             (DEX)
-            (BNE LOOP_REF_COUNT__INIT_CELL_PAGE_A)
-            (LDA LOOP_COUNT__INIT_CELL_PAGE_A)
+            (BNE LOOP_REF_COUNT__INIT_CELL_PAGE_AX)
+            (LDA LOOP_COUNT__INIT_CELL_PAGE_AX)
             (ASL A)
             (ASL A) ;; times 4
-            (STA LOOP_COUNT__INIT_CELL_PAGE_A)
+            (STA LOOP_COUNT__INIT_CELL_PAGE_AX)
             (TAX)
             (TAY) ;;
             (LDA !$00)
-            (DEC BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A)
-            (BPL LOOP_REF_COUNT__INIT_CELL_PAGE_A)
+            (DEC BLOCK_LOOP_COUNT__INIT_CELL_PAGE_AX)
+            (BPL LOOP_REF_COUNT__INIT_CELL_PAGE_AX)
 
             ;; initialize the free list of the cells (first byte in a cell = offset to next free cell)
             (LDA !$02)
-            (STA BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A) ;; how many blocks do we have (3, but the first block is written separately)
+            (STA BLOCK_LOOP_COUNT__INIT_CELL_PAGE_AX) ;; how many blocks do we have (3, but the first block is written separately)
 
             ;; block 1
             (LDY !$02)
             (LDA !$08)
-            (STA LOOP_COUNT__INIT_CELL_PAGE_A)
+            (STA LOOP_COUNT__INIT_CELL_PAGE_AX)
             (STA (ZP_TEMP),y)
 
             ;; block 2
@@ -1633,28 +1633,28 @@ call frame primitives etc.
      ;; #10        20..3f <- 22.. last= 80
      ;; #40        80..7d <- 82.. last= 00
 
-     (label LOOP_NEXT_FREE__INIT_CELL_PAGE_A)
+     (label LOOP_NEXT_FREE__INIT_CELL_PAGE_AX)
             (STA (ZP_TEMP),y)
             (TAY)
             (CLC)
             (ADC !$02)
             (DEX)
-            (BNE LOOP_NEXT_FREE__INIT_CELL_PAGE_A)
+            (BNE LOOP_NEXT_FREE__INIT_CELL_PAGE_AX)
 
             ;; block n+1
             ;; write last entry
-            (LDA LOOP_COUNT__INIT_CELL_PAGE_A)
+            (LDA LOOP_COUNT__INIT_CELL_PAGE_AX)
             (ASL A)
             (TAX)
             (ASL A)
-            (STA LOOP_COUNT__INIT_CELL_PAGE_A)
+            (STA LOOP_COUNT__INIT_CELL_PAGE_AX)
             (STA (ZP_TEMP),y)
             (TAY)
             (CLC)
             (ADC !$02)
             (DEX)
-            (DEC BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A)
-            (BPL LOOP_NEXT_FREE__INIT_CELL_PAGE_A)
+            (DEC BLOCK_LOOP_COUNT__INIT_CELL_PAGE_AX)
+            (BPL LOOP_NEXT_FREE__INIT_CELL_PAGE_AX)
 
             ;; write last entry
             (LDA !$00)
@@ -1670,14 +1670,15 @@ call frame primitives etc.
             (LDA !$80)
             (STA (ZP_TEMP),y)
 
-            (LDA ZP_TEMP+1) ;; page
-            (STA VM_FREE_CELL_PAGE) ;; store allocated page as new free cell page
+            (LDX ZP_TEMP+1) ;; page
+            (STX VM_FREE_CELL_PAGE) ;; store allocated page as new free cell page
+            (LDA !$02)
 
             (RTS)
 
-     (label LOOP_COUNT__INIT_CELL_PAGE_A)
+     (label LOOP_COUNT__INIT_CELL_PAGE_AX)
             (byte $00)
-     (label BLOCK_LOOP_COUNT__INIT_CELL_PAGE_A)
+     (label BLOCK_LOOP_COUNT__INIT_CELL_PAGE_AX)
             (byte $00)))
 
 (module+ test #| vm_alloc_page__cell |#
@@ -1694,7 +1695,7 @@ call frame primitives etc.
 
             ;; now do allocation and write structure data into the page
             (JSR ALLOC_PAGE_TO_A)
-            (JSR INIT_CELL_PAGE_A)))
+            (JSR INIT_CELL_PAGE_AX)))
 
   (define test-alloc-page--cell-state-after
     (run-code-in-test test-alloc-page--cell-code))
@@ -2541,9 +2542,8 @@ call frame primitives etc.
 
    (label _NEW_PAGE__GET_PAGE_FOR_ALLOC_CELL_TO_AX)
           (JSR ALLOC_PAGE_TO_A)
-          (JSR INIT_CELL_PAGE_A)
-          (TAX)
-          (LDA !$02)                               ;; first free slot on cell page
+          (JMP INIT_CELL_PAGE_AX)
+
    (label DONE__GET_PAGE_FOR_ALLOC_CELL_TO_AX)
           (RTS)))
 
@@ -2626,9 +2626,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (JSR ALLOC_PAGE_TO_A)
-      (JSR INIT_CELL_PAGE_A)
-      (TAX)
-      (LDA !$02)
+      (JSR INIT_CELL_PAGE_AX)
       (JSR ALLOC_CELL_A_ON_PAGE_X_TO_RT))))
 
   (check-equal? (memory-list test-alloc-cell-a-on-page-x-to-rt-state ZP_RT (add1 ZP_RT))
@@ -2646,9 +2644,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (JSR ALLOC_PAGE_TO_A)
-      (JSR INIT_CELL_PAGE_A)
-      (TAX)
-      (LDA !$02)
+      (JSR INIT_CELL_PAGE_AX)
       (JSR ALLOC_CELL_A_ON_PAGE_X_TO_RT)
       (LDA !$08)
       (LDX ZP_RT+1)
@@ -5316,7 +5312,7 @@ call frame primitives etc.
           FREE_PAGE_A                                       ;; free a page (the type specific stuff, of any, must have finished)
           ALLOC_PAGE_TO_A                                   ;; allocate new page (not initialized)
 
-          INIT_CELL_PAGE_A                                  ;; initialize page (in a) for cell usage
+          INIT_CELL_PAGE_AX                                  ;; initialize page (in a) for cell usage
           INIT_CELLPAIR_PAGE_AX                             ;; initialize page (in x, free slot in a) for ref counted cell-pairs
           INIT_CELLSTACK_PAGE_A                             ;; initialize page with previous references to previous cell stack pages
 
