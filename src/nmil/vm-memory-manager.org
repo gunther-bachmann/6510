@@ -27,11 +27,11 @@
   | x    |                                             | ALLOC_CELL_GFL_TO_RT             |      | from global free list of the page                           |
   | x    | VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT        | ALLOC_CELLPAIR_AX_TO_RT          | D    |                                                             |
   | x    | VM_ALLOC_CELL_PAIR_PTR_TO_RT                | ALLOC_CELLPAIR_TO_RT             | D    | ensure that RT holds ptr to new cell-pair                   |
-  |      |                                             | ALLOC_CELLPAIR_PFL_X_TO_RT       |      | get cell-pair from page (A) free list, (?C=1/0 succ/fail)   |
-  |      |                                             | ALLOC_CELLPAIR_GFL_TO_RT         |      | get cell-pair from global free list, (?C=1/0 succ/fail)     |
+  | x    |                                             | ALLOC_CELLPAIR_PFL_X_TO_RT       |      | get cell-pair from page (X) free list,                      |
+  | x    |                                             | ALLOC_CELLPAIR_GFL_TO_RT         |      | get cell-pair from global free list                         |
   |      | VM_FREE_CELL_PAIR_PTR_IN_RT                 | FREE_CELLPAIR_RT                 | D    |                                                             |
   |      |                                             | ADD_CELLPAIR_RT_TO_GFL           |      | add freed cell-pair to global free list                     |
-  |      |                                             | ADD_CELLPAIR_RT_TO_PFL_X         |      | add freed cell-pair it to the page (A) free list            |
+  |      |                                             | ADD_CELLPAIR_RT_TO_PFL_X         |      | add freed cell-pair it to the page (X) free list            |
   |      | VM_FREE_CELL_PAIR_PTR_IN_RA                 | ?                                |      |                                                             |
   |      | VM_FREE_CELL_PTR_IN_RT                      | FREE_CELL_RT                     |      |                                                             |
   |      |                                             | ADD_CELL_RT_TO_GFL               |      | add freed cell to global free list                          |
