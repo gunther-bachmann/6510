@@ -137,7 +137,7 @@ call frame primitives etc.
           ALLOC_CELLPAIR_AX_TO_RT               ;; allocate a cell-pair a from page x (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 
           ALLOC_CELLPAIR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
-          VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
+          FREE_CELLPAIR_RT                        ;; free this cell-pair (adding it to the free tree)
           VM_FREE_CELL_PAIR_PTR_IN_RA                        ;; free this cell-pair (adding it to the free tree)
 
           VM_FREE_CELL_PTR_IN_RT                             ;; free this cell pointed to by RT (adding it to the free list)
@@ -2111,7 +2111,7 @@ call frame primitives etc.
           ;; (STA ZP_RA)
           ;; (JMP VM_FREE_CELL_PAIR_PTR_IN_RA)
           ;;
-          (JMP VM_FREE_CELL_PAIR_PTR_IN_RT) ;; free delayed
+          (JMP FREE_CELLPAIR_RT) ;; free delayed
           
    ;; input: cell ptr in ZP_RT
    ;; decrement ref count, if 0 deallocate
@@ -2429,7 +2429,7 @@ call frame primitives etc.
           (JMP VM_FREE_CELL_PTR_IN_RT)
 
    (label FREE_CELL_PAIR__VM_FREE_PTR_IN_RT)
-          (JMP VM_FREE_CELL_PAIR_PTR_IN_RT)
+          (JMP FREE_CELLPAIR_RT)
 
    (label FREE_CELL_ARRAY__VM_FREE_PTR_IN_RT)
    (label FREE_NATIVE_ARRAY__VM_FREE_PTR_IN_RT)
@@ -2464,7 +2464,7 @@ call frame primitives etc.
             (STA $ff)
             (JMP TEST_START__VM_FREE_PTR_IN_RT)
 
-     (label VM_FREE_CELL_PAIR_PTR_IN_RT)
+     (label FREE_CELLPAIR_RT)
             (INC $ff)
             (RTS)
 
@@ -2473,7 +2473,7 @@ call frame primitives etc.
             (JSR VM_FREE_PTR_IN_RT)))
 
   (define vm-free-ptr-in-rt-2-state
-    (run-code-in-test vm-free-ptr-in-rt-2-code #:mock (list (label VM_FREE_CELL_PAIR_PTR_IN_RT))))
+    (run-code-in-test vm-free-ptr-in-rt-2-code #:mock (list (label FREE_CELLPAIR_RT))))
 
   (check-equal? (memory-list vm-free-ptr-in-rt-2-state #xff #xff)
                 (list #x01)
@@ -3444,20 +3444,20 @@ call frame primitives etc.
 ;; tail call free on old cell1 in this cell-pair (if not atomic, if atomic no tail call)
 ;; result: this cell-pair is the new root of the free-tree for cell-pairs with:
 ;;              cell0 = old free tree root, cell1 = non-freed (yet) original cell
-(define VM_FREE_CELL_PAIR_PTR_IN_RT
+(define FREE_CELLPAIR_RT
   (list
-   (label VM_FREE_CELL_PAIR_PTR_IN_RT)
+   (label FREE_CELLPAIR_RT)
 
           (LDY !$00)
           (STY ZP_TEMP+1) ;; indicator of a ptr to free is set to 0 => currently no additional ptr marked for free
 
           ;; check cell0
           (LDA (ZP_RT),y) ;; LOWBYTE OF FIRST cell0
-          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT) ;; empty
+          (BEQ CELL_0_NO_PTR__FREE_CELLPAIR_RT) ;; empty
           (STA ZP_TEMP)
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
+          (BEQ CELL_0_NO_PTR__FREE_CELLPAIR_RT)
           ;; make sure to call free on cell0 (could be any type of cell)
           ;; remember ZP_PTR
           
@@ -3466,7 +3466,7 @@ call frame primitives etc.
           (LDA (ZP_RT),y)
           (STA ZP_TEMP+1)
 
-   (label CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RT)
+   (label CELL_0_NO_PTR__FREE_CELLPAIR_RT)
           ;; cell0 is no ptr and can thus be discarded (directly)
 
           ;; simply add this cell-pair as head to free tree
@@ -3486,7 +3486,7 @@ call frame primitives etc.
 
           ;; write original cell0 -> zp_rt
           (LDA ZP_TEMP+1)
-          (BEQ DONE__VM_FREE_CELL_PAIR_PTR_IN_RT)
+          (BEQ DONE__FREE_CELLPAIR_RT)
           ;; otherwise zp_temp was used to store a pointer that needs to be decremented
           (STA ZP_RT+1)
           (LDA ZP_TEMP)
@@ -3494,7 +3494,7 @@ call frame primitives etc.
 
           (JMP VM_REFCOUNT_DECR_RT) ;; chain call
 
-   (label DONE__VM_FREE_CELL_PAIR_PTR_IN_RT)
+   (label DONE__FREE_CELLPAIR_RT)
           (RTS)))
 
 ;; input:  cell-pair ptr is in ZP_RA
@@ -3564,7 +3564,7 @@ call frame primitives etc.
      (LDA !$00)
      (STA ZP_RT)
      (STA ZP_RT+1)
-     (JSR VM_FREE_CELL_PAIR_PTR_IN_RT)))
+     (JSR FREE_CELLPAIR_RT)))
 
   (define vm-free-cell-pair-ptr-in-rt-state
     (run-code-in-test vm-free-cell-pair-ptr-in-rt-code))
@@ -3575,7 +3575,7 @@ call frame primitives etc.
   (define vm-free-cell-pair-ptr-in-rt-2-code
     (list
      (JSR ALLOC_CELLPAIR_TO_RT)
-     (JSR VM_FREE_CELL_PAIR_PTR_IN_RT)))
+     (JSR FREE_CELLPAIR_RT)))
 
   (define vm-free-cell-pair-ptr-in-rt-2-state
     (run-code-in-test vm-free-cell-pair-ptr-in-rt-2-code))
@@ -3608,7 +3608,7 @@ call frame primitives etc.
      ;;         |
      ;;         +--> ( int0 . int1 )     cell-pair @ cc05
 
-     (JSR VM_FREE_CELL_PAIR_PTR_IN_RT)))
+     (JSR FREE_CELLPAIR_RT)))
 
   (define vm-free-cell-pair-ptr-in-rt-3-state
     (run-code-in-test vm-free-cell-pair-ptr-in-rt-3-code))
@@ -3643,7 +3643,7 @@ call frame primitives etc.
      ;;         |
      ;;         +--> ( int-1 )           cell      @ cc02
 
-     (JSR VM_FREE_CELL_PAIR_PTR_IN_RT)))
+     (JSR FREE_CELLPAIR_RT)))
 
   (define vm-free-cell-pair-ptr-in-rt-4-state
     (run-code-in-test vm-free-cell-pair-ptr-in-rt-4-code))
@@ -3698,7 +3698,7 @@ call frame primitives etc.
   (define vm-add-cell-pair-in-rt-to-on-page-free-list-code
     (list
      (JSR ALLOC_CELLPAIR_TO_RT)
-     (JSR VM_FREE_CELL_PAIR_PTR_IN_RT)
+     (JSR FREE_CELLPAIR_RT)
      (JSR VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST)))
 
   (define vm-add-cell-pair-in-rt-to-on-page-free-list-state
@@ -5358,7 +5358,7 @@ call frame primitives etc.
           ;; ALLOC_CELLPAIR_ON_PAGE_X_TO_RT
 
           ALLOC_CELLPAIR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
-          VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
+          FREE_CELLPAIR_RT                        ;; free this cell-pair (adding it to the free tree)
           VM_FREE_CELL_PAIR_PTR_IN_RA                        ;; free this cell-pair (adding it to the free tree)
 
           ;; VM_ALLOC_CELL_PTR_TO_RT                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first

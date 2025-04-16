@@ -29,7 +29,7 @@
   | x    | VM_ALLOC_CELL_PAIR_PTR_TO_RT                | ALLOC_CELLPAIR_TO_RT             | D    | ensure that RT holds ptr to new cell-pair                   |
   | x    |                                             | ALLOC_CELLPAIR_PFL_X_TO_RT       |      | get cell-pair from page (X) free list,                      |
   | x    |                                             | ALLOC_CELLPAIR_GFL_TO_RT         |      | get cell-pair from global free list                         |
-  |      | VM_FREE_CELL_PAIR_PTR_IN_RT                 | FREE_CELLPAIR_RT                 | D    |                                                             |
+  | -    | VM_FREE_CELL_PAIR_PTR_IN_RT                 | FREE_CELLPAIR_RT                 | D    |                                                             |
   |      |                                             | ADD_CELLPAIR_RT_TO_GFL           |      | add freed cell-pair to global free list                     |
   |      |                                             | ADD_CELLPAIR_RT_TO_PFL_X         |      | add freed cell-pair it to the page (X) free list            |
   |      | VM_FREE_CELL_PAIR_PTR_IN_RA                 | ?                                |      |                                                             |
