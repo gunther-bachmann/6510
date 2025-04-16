@@ -9,16 +9,16 @@
   | x    | alloc/free pages                            |                                  |      | R=rename, D=decomposition, C=complex refactoring       |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
   | x    | VM_FREE_PAGE                                | FREE_PAGE_A                      | R    |                                                        |
-  | x    | VM_ALLOC_PAGE__PAGE_UNINIT                  | ALLOC_PAGE_TO_A                  | R+   | make sure that allocated page is in A                  |
-  | x    | VM_ALLOC_PAGE_FOR_CELLS                     | INIT_CELL_PAGE_AX                | D    | ALLOC_PAGE_TO_A + INIT_CELL_PAGE_A                     |
-  | x    | VM_ALLOC_PAGE_FOR_CELL_PAIRS                | INIT_CELLPAIR_PAGE_AX            | D    |                                                        |
+  | x    | VM_ALLOC_PAGE__PAGE_UNINIT                  | ALLOC_PAGE_TO_X                  | R+   | make sure that allocated page is in A                  |
+  | x    | VM_ALLOC_PAGE_FOR_CELLS                     | INIT_CELL_PAGE_X_TO_AX           | D    |                                                        |
+  | -    | VM_ALLOC_PAGE_FOR_CELL_PAIRS                | INIT_CELLPAIR_PAGE_AX            | D    | INIT_CELLPAIR_PAGE_X_TO_AX                             |
   | x    | INIT_CELLPAIR_PAGE_A                        |                                  | C    | result is returned in X -> refactor to return in A     |
-  |      | VM_ALLOC_CELL_STACK_PAGES                   | INIT_CELLSTACK_PAGE_A            | D    |                                                        |
-  | x    | VM_ALLOC_PAGE_FOR_M1_SLOTS                  | INIT_M1Px_PAGE_A                 | D    |                                                        |
+  |      | VM_ALLOC_CELL_STACK_PAGES                   | INIT_CELLSTACK_PAGE_A            | D    | INIT_CELLSTACK_PAGE_X_TO_AX                            |
+  | -    | VM_ALLOC_PAGE_FOR_M1_SLOTS                  | INIT_M1Px_PAGE_A                 | D    | INIT_M1Px_PAGE_X_TO_AX                                 |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
   |      | alloc/free cells, pairs, slots              |                                  |      |                                                        |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
-  | x    |                                             | GET_PAGE_FOR_ALLOC_CELL_TO_A     |      |                                                        |
+  | -    |                                             | GET_PAGE_FOR_ALLOC_CELL_TO_A     |      | GET_PAGE_FOR_ALLOC_CELL_TO_X?                          |
   |      |                                             | GET_PAGE_FOR_ALLOC_CELLPAIR_TO_A |      |                                                        |
   |      |                                             | GET_PAGE_FOR_ALLOC_CELLARR_TO_A  |      |                                                        |
   | x    | VM_ALLOC_CELL_ON_PAGE                       | ALLOC_CELL_A_ON_PAGE_X_TO_RT     | D    |                                                        |
