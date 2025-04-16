@@ -134,7 +134,7 @@ call frame primitives etc.
           ;; ---------------------------------------- alloc/free cells, pairs, slots
           ALLOC_CELL_TO_RT
 
-          VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT               ;; allocate a cell-pair a from page x (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
+          ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT               ;; allocate a cell-pair a from page x (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 
           VM_ALLOC_CELL_PAIR_PTR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)
@@ -2023,17 +2023,17 @@ call frame primitives etc.
 ;; input:  X : page to allocate cell-pair on (a new page is allocated, if this page does not have any free cell-pairs)
 ;; output: ZP_RT
 ;; WARNING: ZP_RT IS OVERWRITTEN !! NO PUSH INTO THE CELL-STACK IS DONE!
-(define VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT
+(define ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT
   (list
-   (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT)
+   (label ALLOC_NEW_PAGE_PREFIX__ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT)
           (JSR ALLOC_PAGE_TO_X)
           (JSR INIT_CELLPAIR_PAGE_X_TO_AX)
 
    ;; ----------------------------------------
-   (label VM_ALLOC_CELL_PAIR_ON_PAGE_X_INTO_RT) ;; <-- real entry point of this function
+   (label ALLOC_CELLPAIR_ON_PAGE_X_TO_RT) ;; <-- real entry point of this function
           (LDA VM_PAGE_SLOT_DATA,x)
-          (BEQ ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT) ;; allocate new page first
-   (label VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT) ;; <-- real entry point of this function
+          (BEQ ALLOC_NEW_PAGE_PREFIX__ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT) ;; allocate new page first
+   (label ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT) ;; <-- real entry point of this function
           (STX ZP_RT+1) ;; safe as highbyte of ptr
           (STA ZP_RT)
           (LDY !$00)
@@ -2041,15 +2041,15 @@ call frame primitives etc.
           (STA VM_PAGE_SLOT_DATA,x)
 
           ;; increase the slot number used on this page
-          (STX INC_CMD__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT+2) ;; overwrite $c0 (page in following INC command)
-   (label INC_CMD__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT)
+          (STX INC_CMD__ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT+2) ;; overwrite $c0 (page in following INC command)
+   (label INC_CMD__ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT)
           (INC $c000)
           (RTS)))
 
 (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt |#
   (define vm-alloc-cell-pair-on-page-a-into-rt-code
     (list
-     (JSR ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT)))
+     (JSR ALLOC_NEW_PAGE_PREFIX__ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT)))
 
   (define vm-alloc-cell-pair-on-page-a-into-rt-state
     (run-code-in-test vm-alloc-cell-pair-on-page-a-into-rt-code))
@@ -2065,10 +2065,10 @@ call frame primitives etc.
 (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt 2 times|#
   (define vm-alloc-cell-pair-on-page-a-into-rt-code2
     (list
-     (JSR ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT)
+     (JSR ALLOC_NEW_PAGE_PREFIX__ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT)
      ;; (LDX !$cc)
      (ast-opcode-cmd '() (list 162 PAGE_AVAIL_0))
-     (JSR VM_ALLOC_CELL_PAIR_ON_PAGE_X_INTO_RT)))
+     (JSR ALLOC_CELLPAIR_ON_PAGE_X_TO_RT)))
 
   (define vm-alloc-cell-pair-on-page-a-into-rt-state2
     (run-code-in-test vm-alloc-cell-pair-on-page-a-into-rt-code2))
@@ -2898,9 +2898,9 @@ call frame primitives etc.
           ;; get a cell-pair on the given page (or allocate a new page)
           (LDX VM_FREE_CELL_PAIR_PAGE)        ;; get the page that has cell-pairs available (can be 0)
           (BEQ ALLOCATE_NEW_PAGE__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
-          (JMP VM_ALLOC_CELL_PAIR_ON_PAGE_X_INTO_RT)                        ;; allocate a new cell on that page
+          (JMP ALLOC_CELLPAIR_ON_PAGE_X_TO_RT)                        ;; allocate a new cell on that page
    (label ALLOCATE_NEW_PAGE__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
-          (JMP ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT) ;; allocate new page and then a new cell on that page
+          (JMP ALLOC_NEW_PAGE_PREFIX__ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT) ;; allocate new page and then a new cell on that page
 
    (label REUSE_CELL_PAIR__VM_ALLOC_CELL_PAIR_PTR_TO_RT)
           ;; put root of free tree into zp_rt (and copy in TEMP_PTR of this function)
@@ -3789,18 +3789,22 @@ call frame primitives etc.
 ;; ----------------------------------------
 ;; page type slot w/ different sizes (refcount @ ptr-1) x cells
 ;; math: first entry @FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A + 1, refcount @ -1, next slot += INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A, slot-size = INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A -1
-;; input : X = profile offset (0, 2, 4 ...)
+;; input : Y = profile offset (0, 2, 4 ...)
+;;         X = page
 ;; uses  : ZP_RA
-;; output:
-(define INIT_M1Px_PAGE_A
+;; output: X = page
+;;         A = first fre slot
+(define INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
   (list
-   (label INIT_M1Px_PAGE_A)
-          (STX SEL_PROFILE__INIT_M1Px_PAGE_A)      ;; save profile index in local var
-          (STA ZP_RA+1)
+   (label INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
+          (STY SEL_PROFILE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)      ;; save profile index in local var
+          (TYA)                 ;; profile 0..4 -> a
+          (STX ZP_RA+1)
+
           (LDY !$00)
           (STY ZP_RA)
 
-          (TXA)                 ;; provile 0..4 -> a
+          (TAX)
           (ORA !$10)
           (STA (ZP_RA),y)       ;; set page type in byte 0 to b0001 <profile>
 
@@ -3815,56 +3819,58 @@ call frame primitives etc.
           (INY)
           (STA (ZP_RA),y)          ;; store number of slots used
 
-          (LDY FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A,x) ;; y = refcount field for first slot
+          (LDY FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x) ;; y = refcount field for first slot
           (INY)
           (TYA)
+          (PHA)
           (LDX ZP_RA+1)
           (STA VM_PAGE_SLOT_DATA,x)                    ;; set first free slot, here x = page
           (DEY)
-          (LDX SEL_PROFILE__INIT_M1Px_PAGE_A) ;; profile = 0..3
+          (LDX SEL_PROFILE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX) ;; profile = 0..3
           (LDA !$00)
 
           ;; loop to initialize refcounts of each slot to 0-
-   (label REF_COUNT_LOOP__INIT_M1Px_PAGE_A)
+   (label REF_COUNT_LOOP__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           (STA (ZP_RA),y) ;; refcount = 0
           (TYA)
           (CLC)
-          (ADC INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A,x) ;; calc next refcount field offset
-          (BCS END_REF_COUNT_LOOP__INIT_M1Px_PAGE_A)
+          (ADC INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x) ;; calc next refcount field offset
+          (BCS END_REF_COUNT_LOOP__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           (TAY)
           ;; (ADC !$01)
           (LDA !$00)
-          (BCC REF_COUNT_LOOP__INIT_M1Px_PAGE_A) ;; still on this page?
+          (BCC REF_COUNT_LOOP__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX) ;; still on this page?
 
-   (label END_REF_COUNT_LOOP__INIT_M1Px_PAGE_A)
+   (label END_REF_COUNT_LOOP__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           ;; loop to write free slot list
-          (LDY FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A,x)
+          (LDY FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x)
           (INY)  ;; first slot  (refcount field offset + 1)
           (TYA)
-   (label WRITE_FREE_LIST__INIT_M1Px_PAGE_A)
+   (label WRITE_FREE_LIST__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           (CLC)
-          (ADC INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A,x)
-          (BCS ALMOST_DONE__INIT_M1Px_PAGE_A) ;; no longer on the same page => almost done
+          (ADC INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x)
+          (BCS ALMOST_DONE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX) ;; no longer on the same page => almost done
           (STA (ZP_RA),y) ;; offset of next free cell == y for next write
           (TAY)
-          (BCC WRITE_FREE_LIST__INIT_M1Px_PAGE_A) ;; carry must be clear => always jump
+          (BCC WRITE_FREE_LIST__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX) ;; carry must be clear => always jump
 
-   (label ALMOST_DONE__INIT_M1Px_PAGE_A)
+   (label ALMOST_DONE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           (LDA !$00)
           (STA (ZP_RA),y) ;; last offset to next free slot is 00 = no next free slot!
-          (LDA ZP_RA+1)   ;; a = page
+          (LDX ZP_RA+1)   ;; x = page
+          (PLA)           ;; A = first free slot
           (RTS)
 
-   (label SEL_PROFILE__INIT_M1Px_PAGE_A)
+   (label SEL_PROFILE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           (byte $00) ;; local var
 
-   (label FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A)
+   (label FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           (byte $03) ;; first ref count is 03, add 0a to get to next slot, slot-size $09 (09), contains 25 slots
           (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), contains 14 slots
           (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), contains 8 slots
           (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), contains 5 slots
           (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), contains 3 slots
-   (label INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A)
+   (label INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           (byte $0a) ;; add 0a to get to next slot, slot-size $09 (09), contains 25 slots
           (byte $12) ;; add 12 to get to next slot, slot size $11 (17), contains 14 slots
           (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), contains 8 slots
@@ -3886,9 +3892,8 @@ call frame primitives etc.
 
             ;; now allocate the page
             (JSR ALLOC_PAGE_TO_X)
-            (TXA)
-            (LDX !$01) ;; do it explicitly
-            (JSR INIT_M1Px_PAGE_A)))
+            (LDY !$01) ;; do it explicitly: profile 1
+            (JSR INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)))
 
   (define test-alloc-m1-01-state-after
     (run-code-in-test test-alloc-m1-01-code))
@@ -3923,9 +3928,8 @@ call frame primitives etc.
 
             ;; now allocate the page
             (JSR ALLOC_PAGE_TO_X)
-            (TXA)
-            (LDX !$02) ;; do it explicitly
-            (JSR INIT_M1Px_PAGE_A)))
+            (LDY !$02) ;; do it explicitly
+            (JSR INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)))
 
   (define test-alloc-m1-02-state-after
     (run-code-in-test test-alloc-m1-02-code))
@@ -3960,9 +3964,8 @@ call frame primitives etc.
 
             ;; now allocate the page
             (JSR ALLOC_PAGE_TO_X)
-            (TXA)
-            (LDX !$03) ;; do it explicitly
-            (JSR INIT_M1Px_PAGE_A)))
+            (LDY !$03) ;; do it explicitly
+            (JSR INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)))
 
   (define test-alloc-m1-03-state-after
     (run-code-in-test test-alloc-m1-03-code))
@@ -3997,9 +4000,8 @@ call frame primitives etc.
 
             ;; now allocate the page
             (JSR ALLOC_PAGE_TO_X)
-            (TXA)
-            (LDX !$04) ;; do it explicitly
-            (JSR INIT_M1Px_PAGE_A)))
+            (LDY !$04) ;; do it explicitly
+            (JSR INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)))
 
   (define test-alloc-m1-04-state-after
     (run-code-in-test test-alloc-m1-04-code))
@@ -4030,7 +4032,7 @@ call frame primitives etc.
   (list
    (label VM_ALLOC_M1_SLOT_TO_RA)
           (LDX !$00)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+0)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+0)
           (BPL J9PLUS__VM_ALLOC_SLOT_IN_BUCKET)
 
    (label VM_ALLOC_SLOT__TYPE_X_STORE)
@@ -4059,7 +4061,7 @@ call frame primitives etc.
 
           ;; ensure y holds the actual available slot size
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (LDY INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A,x)
+          (LDY INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x)
           (DEY)
 
    (label INC_CMD__VM_ALLOC_SLOT_TYPE_X)
@@ -4087,33 +4089,32 @@ call frame primitives etc.
 
    (label NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
           (JSR ALLOC_PAGE_TO_X)
-          (TXA)
-          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (JSR INIT_M1Px_PAGE_A)
+          (LDY PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (JSR INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
           (CLC)
           (BCC VM_ALLOC_SLOT_TYPE_X)
 
    (label J9PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+1)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+1)
           (BPL J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$01)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
    (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+2)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+2)
           (BPL J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$02)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
    (label J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+3)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+3)
           (BPL J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$03)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
 
    (label J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A+4)
+          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+4)
           (BPL J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
           (LDX !$04)
           (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
@@ -5324,7 +5325,7 @@ call frame primitives etc.
           INIT_CELLPAIR_PAGE_X_TO_AX                             ;; initialize page (in x, free slot in a) for ref counted cell-pairs
           INIT_CELLSTACK_PAGE_A                             ;; initialize page with previous references to previous cell stack pages
 
-          INIT_M1Px_PAGE_A                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
+          INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
           ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether
 
           ;; VM_ALLOC_PAGE_FOR_MODULE_CODE                      ;; allocate page and initialize to hold immutable byte code (not ref counted)
@@ -5335,8 +5336,8 @@ call frame primitives etc.
           ;; ALLOC_CELL_PFL_X_TO_RT
           ALLOC_CELL_TO_RT
 
-          VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT               ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
-          ;; VM_ALLOC_CELL_PAIR_ON_PAGE_X_INTO_RT
+          ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT               ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
+          ;; ALLOC_CELLPAIR_ON_PAGE_X_TO_RT
 
           VM_ALLOC_CELL_PAIR_PTR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           VM_FREE_CELL_PAIR_PTR_IN_RT                        ;; free this cell-pair (adding it to the free tree)

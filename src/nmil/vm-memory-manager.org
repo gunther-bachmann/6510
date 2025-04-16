@@ -11,21 +11,21 @@
   | x    | VM_FREE_PAGE                                | FREE_PAGE_A                      | R    |                                                        |
   | x    | VM_ALLOC_PAGE__PAGE_UNINIT                  | ALLOC_PAGE_TO_X                  | R+   | make sure that allocated page is in A                  |
   | x    | VM_ALLOC_PAGE_FOR_CELLS                     | INIT_CELL_PAGE_X_TO_AX           | D    |                                                        |
-  | -    | VM_ALLOC_PAGE_FOR_CELL_PAIRS                | INIT_CELLPAIR_PAGE_AX            | D    | INIT_CELLPAIR_PAGE_X_TO_AX                             |
+  | x    | VM_ALLOC_PAGE_FOR_CELL_PAIRS                | INIT_CELLPAIR_PAGE_AX            | D    | INIT_CELLPAIR_PAGE_X_TO_AX                             |
   | x    | INIT_CELLPAIR_PAGE_A                        |                                  | C    | result is returned in X -> refactor to return in A     |
   |      | VM_ALLOC_CELL_STACK_PAGES                   | INIT_CELLSTACK_PAGE_A            | D    | INIT_CELLSTACK_PAGE_X_TO_AX                            |
-  | -    | VM_ALLOC_PAGE_FOR_M1_SLOTS                  | INIT_M1Px_PAGE_A                 | D    | INIT_M1Px_PAGE_X_TO_AX                                 |
+  | x    | VM_ALLOC_PAGE_FOR_M1_SLOTS                  | INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX | D    |                                                        |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
   |      | alloc/free cells, pairs, slots              |                                  |      |                                                        |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------|
-  | -    |                                             | GET_PAGE_FOR_ALLOC_CELL_TO_A     |      | GET_PAGE_FOR_ALLOC_CELL_TO_X?                          |
+  | x    |                                             | GET_PAGE_FOR_ALLOC_CELL_TO_AX    |      | GET_PAGE_FOR_ALLOC_CELL_TO_AX                          |
   |      |                                             | GET_PAGE_FOR_ALLOC_CELLPAIR_TO_A |      |                                                        |
   |      |                                             | GET_PAGE_FOR_ALLOC_CELLARR_TO_A  |      |                                                        |
   | x    | VM_ALLOC_CELL_ON_PAGE                       | ALLOC_CELL_A_ON_PAGE_X_TO_RT     | D    |                                                        |
   | x    | VM_ALLOC_CELL_PTR_TO_RT                     | ALLOC_CELL_TO_RT                 |      |                                                        |
   | x    |                                             | ALLOC_CELL_PFL_X_TO_RT           |      | from local free list of the page                       |
   | x    |                                             | ALLOC_CELL_GFL_TO_RT             |      | from global free list of the page                      |
-  | -    | VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT        | ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT | D    |                                                        |
+  | x    | VM_ALLOC_CELL_PAIR_ON_PAGE_A_INTO_RT        | ALLOC_CELLPAIR_A_ON_PAGE_X_TO_RT | D    |                                                        |
   |      | VM_ALLOC_CELL_PAIR_PTR_TO_RT                | ALLOC_CELLPAIR_TO_RT             | D    | ensure that RT holds ptr to new cell-pair              |
   |      |                                             | ALLOC_CELLPAIR_PFL_A_TO_RT       |      | get cell-pair from page (A) free list, C=1/0 succ/fail |
   |      |                                             | ALLOC_CELLPAIR_GFL_TO_RT         |      | get cell-pair from global free list, C=1/0 succ/fail   |
