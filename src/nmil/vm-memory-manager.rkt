@@ -129,8 +129,8 @@ call frame primitives etc.
 
           INIT_CELL_PAGE_X_TO_AX                                  ;; initialize page A for ref counted cells
           INIT_CELLPAIR_PAGE_X_TO_AX                              ;; initialize page A for ref counted cell-pairs
-          INIT_CELLSTACK_PAGE_A                             ;; initialize page A to previous cell stack page (X)
-
+          ;; INIT_CELLSTACK_PAGE_A                             ;; initialize page A to previous cell stack page (X)
+          INIT_CELLSTACK_PAGE_X
           ;; ---------------------------------------- alloc/free cells, pairs, slots
           ALLOC_CELL_TO_RT
 
@@ -1042,16 +1042,14 @@ call frame primitives etc.
 
    (label ALLOCATE_NEW_STACK_PAGE__VM_CELL_STACK_JUST_PUSH_RT)
           (JSR ALLOC_PAGE_TO_X)
-          (TXA)
-          (LDX ZP_CELL_STACK_LB_PTR+1)
-          (JSR INIT_CELLSTACK_PAGE_A)
-          (STA ZP_CELL_STACK_LB_PTR+1)
+          (LDA ZP_CELL_STACK_LB_PTR+1)
+          (JSR INIT_CELLSTACK_PAGE_X)
+          (STX ZP_CELL_STACK_LB_PTR+1)
 
           (JSR ALLOC_PAGE_TO_X)
-          (TXA)
-          (LDX ZP_CELL_STACK_HB_PTR+1)
-          (JSR INIT_CELLSTACK_PAGE_A)
-          (STA ZP_CELL_STACK_HB_PTR+1)
+          (LDA ZP_CELL_STACK_HB_PTR+1)
+          (JSR INIT_CELLSTACK_PAGE_X)
+          (STX ZP_CELL_STACK_HB_PTR+1)
 
           (LDY !$02)                          ;; new tos starts 
 
@@ -1525,18 +1523,16 @@ call frame primitives etc.
 
            ;; alloc cell stack
            (JSR ALLOC_PAGE_TO_X)
-           (TXA)
-           (LDX !$00)
-           (STX ZP_CELL_STACK_LB_PTR)
-           (JSR INIT_CELLSTACK_PAGE_A)
-           (STA ZP_CELL_STACK_LB_PTR+1)
+           (LDA !$00)
+           (STA ZP_CELL_STACK_LB_PTR)
+           (JSR INIT_CELLSTACK_PAGE_X)
+           (STX ZP_CELL_STACK_LB_PTR+1)
 
            (JSR ALLOC_PAGE_TO_X)
-           (TXA)
-           (LDX !$00)
-           (STX ZP_CELL_STACK_HB_PTR)
-           (JSR INIT_CELLSTACK_PAGE_A)
-           (STA ZP_CELL_STACK_HB_PTR+1)
+           (LDA !$00)
+           (STA ZP_CELL_STACK_HB_PTR)
+           (JSR INIT_CELLSTACK_PAGE_X)
+           (STX ZP_CELL_STACK_HB_PTR+1)
 
            (LDA !$00)
            (STA VM_FREE_M1_PAGE_P0)
@@ -1751,47 +1747,47 @@ call frame primitives etc.
 
 
 
-  ;; cell stack page(s)
-  ;; offset  content
-  ;; ---------------
-  ;; 00      #b0001 1011
-  ;; 01      previous page (of the stack)
-  ;; 02..ff  payload (either lowbyte or highbyte of the cell)
-  ;;
-  ;; input:  A new stack page
-  ;;         X old stack page
-  ;; output: A new stack page
-  ;; uses:   A, X, Y
-  ;;         ZP_TEMP, ZP_TEMP+1
-(define INIT_CELLSTACK_PAGE_A
+;; cell stack page(s)
+;; offset  content
+;; ---------------
+;; 00      #b0001 1011
+;; 01      previous page (of the stack)
+;; 02..ff  payload (either lowbyte or highbyte of the cell)
+;;
+;; input:  A old stack page
+;;         X new stack page
+;; output: X new stack page
+;; uses:   A, X, Y
+;;         ZP_TEMP, ZP_TEMP+1
+(define INIT_CELLSTACK_PAGE_X
   (list
-   (label INIT_CELLSTACK_PAGE_A)
-          (STA ZP_TEMP+1)         ;; write page into hightbyte of ZP_TEMP ptr
+   (label INIT_CELLSTACK_PAGE_X)
+          (STX ZP_TEMP+1)         ;; write page into hightbyte of ZP_TEMP ptr
+          (TAX)                   ;; old page in a -> x
           (LDA !$00)
           (STA ZP_TEMP)           ;; write 0 into lowbyte of ZP_TEMP ptr
           (TAY)                   ;; init y with 0
           (LDA !$1b)              ;; id for page type: cellstack
           (STA (ZP_TEMP),y)       ;; first byte on page: page type: cellstack
           (INY)
-          (TXA)                   ;; param x (old stack page) -> a
+          (TXA)                   ;; x (old stack page) -> a
           (STA (ZP_TEMP),y)       ;; second byte on page: previous stack page
-          (LDA ZP_TEMP+1)         ;; restore A with new page
+          (LDX ZP_TEMP+1)         ;; restore A with new page
           (RTS)))
 
 (module+ test #| alloc cell stack pages |#
   (define alloc-cell-stack-pages-code
     (list
      (JSR ALLOC_PAGE_TO_X)
-     (TXA)
-     (LDX !$05)
-     (JSR INIT_CELLSTACK_PAGE_A)
-     (STA ZP_RT+1)
+     (LDA !$05)
+     (JSR INIT_CELLSTACK_PAGE_X)
+     (STX ZP_RT+1)
 
      (JSR ALLOC_PAGE_TO_X)
-     (TXA)
-     (LDX !$03)
-     (JSR INIT_CELLSTACK_PAGE_A)
-     (STA ZP_RT)))
+     (LDA !$03)
+     (JSR INIT_CELLSTACK_PAGE_X)
+     (STX ZP_RT)))
+
   (define alloc-cell-stack-pages-state
     (run-code-in-test alloc-cell-stack-pages-code))
 
@@ -1804,7 +1800,6 @@ call frame primitives etc.
   (check-equal? (memory-list alloc-cell-stack-pages-state PAGE_AVAIL_0_W (add1 PAGE_AVAIL_0_W))
                 (list #x1b #x05)
                 "new low byte page is initialized with cell-stack page type and 05"))
-
 
   ;; cell-pair page layout  (new layout with cell-pair-ptr having bit0 always set and bit1 always unset!)
   ;; offset  content
@@ -5364,7 +5359,8 @@ call frame primitives etc.
 
           INIT_CELL_PAGE_X_TO_AX                                  ;; initialize page (in a) for cell usage
           INIT_CELLPAIR_PAGE_X_TO_AX                             ;; initialize page (in x, free slot in a) for ref counted cell-pairs
-          INIT_CELLSTACK_PAGE_A                             ;; initialize page with previous references to previous cell stack pages
+          ;; INIT_CELLSTACK_PAGE_A
+          INIT_CELLSTACK_PAGE_X                              ;; initialize page with previous references to previous cell stack pages
 
           INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX                         ;; allocate page and initialize for ref counted m1 slots of a specific profile (and thus size)
           ;; VM_ALLOC_PAGE_FOR_S8_SLOTS                         ;; allocate page and initialize to hold ref counted 8 byte slots <- really, maybe s8 slots can be removed alltogether

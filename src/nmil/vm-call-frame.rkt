@@ -123,17 +123,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
    (label ALLOC_LOCALS_STACK)
           (JSR ALLOC_PAGE_TO_X)
-          (TXA)
-          (LDX ZP_LOCALS_HB_PTR+1) ;; previous locals hb page
-          (JSR INIT_CELLSTACK_PAGE_A)
-          (STA ZP_LOCALS_HB_PTR+1)
+          (LDA ZP_LOCALS_HB_PTR+1) ;; previous locals hb page
+          (STX ZP_LOCALS_HB_PTR+1)
+          (JSR INIT_CELLSTACK_PAGE_X)
 
           (JSR ALLOC_PAGE_TO_X)
-          (TXA)
-          (LDX ZP_LOCALS_LB_PTR+1) ;; previous locals lb page
-          (JSR INIT_CELLSTACK_PAGE_A)
-          (STA ZP_LOCALS_LB_PTR+1)
-          (RTS)))
+          (LDA ZP_LOCALS_LB_PTR+1) ;; previous locals lb page
+          (STX ZP_LOCALS_LB_PTR+1)
+          (JMP INIT_CELLSTACK_PAGE_X)))
 
 (define VM_INITIALIZE_CALL_FRAME
   (list

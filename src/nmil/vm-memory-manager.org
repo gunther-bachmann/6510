@@ -13,7 +13,7 @@
   | x    | VM_ALLOC_PAGE_FOR_CELLS                     | INIT_CELL_PAGE_X_TO_AX           | D    |                                                             |
   | x    | VM_ALLOC_PAGE_FOR_CELL_PAIRS                | INIT_CELLPAIR_PAGE_AX            | D    | INIT_CELLPAIR_PAGE_X_TO_AX                                  |
   | x    | INIT_CELLPAIR_PAGE_A                        |                                  | C    | result is returned in X -> refactor to return in A          |
-  |      | VM_ALLOC_CELL_STACK_PAGES                   | INIT_CELLSTACK_PAGE_A            | D    | INIT_CELLSTACK_PAGE_X_TO_AX                                 |
+  | x    | VM_ALLOC_CELL_STACK_PAGES                   | INIT_CELLSTACK_PAGE_X            | D    |                                                             |
   | x    | VM_ALLOC_PAGE_FOR_M1_SLOTS                  | INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX | D    |                                                             |
   |------+---------------------------------------------+----------------------------------+------+-------------------------------------------------------------|
   |      | alloc/free cells, pairs, slots              |                                  |      |                                                             |
