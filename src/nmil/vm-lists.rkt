@@ -96,7 +96,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
   (define use-case-nil_p-b-code
     (list
-     (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+     (JSR ALLOC_CELLPAIR_TO_RT)
      (JSR VM_NIL_P_R)))
 
   (define use-case-nil_p-b-state-after
@@ -194,7 +194,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (STA ZP_RA)
           (LDA ZP_RT+1)
           (STA ZP_RA+1)
-          (JSR VM_ALLOC_CELL_PAIR_PTR_TO_RT)
+          (JSR ALLOC_CELLPAIR_TO_RT)
           (JSR VM_WRITE_RA_TO_CELL0_RT)
           (JMP VM_POP_FSTOS_TO_CELL1_RT)))
 
