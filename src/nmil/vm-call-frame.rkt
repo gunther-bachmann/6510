@@ -122,12 +122,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (STX ZP_LOCALS_HB_PTR+1)
 
    (label ALLOC_LOCALS_STACK)
-          (JSR ALLOC_PAGE_TO_A)
+          (JSR ALLOC_PAGE_TO_X)
+          (TXA)
           (LDX ZP_LOCALS_HB_PTR+1) ;; previous locals hb page
           (JSR INIT_CELLSTACK_PAGE_A)
           (STA ZP_LOCALS_HB_PTR+1)
 
-          (JSR ALLOC_PAGE_TO_A)
+          (JSR ALLOC_PAGE_TO_X)
+          (TXA)
           (LDX ZP_LOCALS_LB_PTR+1) ;; previous locals lb page
           (JSR INIT_CELLSTACK_PAGE_A)
           (STA ZP_LOCALS_LB_PTR+1)
@@ -175,7 +177,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
    (label NO_SAVE_OF_OLD_FRAME_DATA__VM_ALLOC_CALL_FRAME_N)
           ;; allocate completely new page
-          (JSR ALLOC_PAGE_TO_A)
+          (JSR ALLOC_PAGE_TO_X)
+          (TXA)
 
           ;; init page as new call frame page (00 = page type, 01 = previous call frame page, 02 = top mark [uninitialized until full], rest uninitialized)
           (LDX ZP_CALL_FRAME+1)         ;; keep old page in X

@@ -125,7 +125,7 @@ call frame primitives etc.
          VM_REFCOUNT_DECR_RT
           ;; ---------------------------------------- alloc/free pages
           FREE_PAGE_A                                       ;; free a page (the type specific stuff, of any, must have finished)
-          ALLOC_PAGE_TO_A                                   ;; allocate new page (not initialized)
+          ALLOC_PAGE_TO_X                                   ;; allocate new page (not initialized)
 
           INIT_CELL_PAGE_AX                                  ;; initialize page A for ref counted cells
           INIT_CELLPAIR_PAGE_AX                              ;; initialize page A for ref counted cell-pairs
@@ -1041,12 +1041,14 @@ call frame primitives etc.
           [BNE NO_ERROR__VM_CELL_STACK_JUST_PUSH_RT]
 
    (label ALLOCATE_NEW_STACK_PAGE__VM_CELL_STACK_JUST_PUSH_RT)
-          (JSR ALLOC_PAGE_TO_A)
+          (JSR ALLOC_PAGE_TO_X)
+          (TXA)
           (LDX ZP_CELL_STACK_LB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_A)
           (STA ZP_CELL_STACK_LB_PTR+1)
 
-          (JSR ALLOC_PAGE_TO_A)
+          (JSR ALLOC_PAGE_TO_X)
+          (TXA)
           (LDX ZP_CELL_STACK_HB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_A)
           (STA ZP_CELL_STACK_HB_PTR+1)
@@ -1522,13 +1524,15 @@ call frame primitives etc.
            (BNE VM_INITIALIZE_MEMORY_MANAGER__LOOP)
 
            ;; alloc cell stack
-           (JSR ALLOC_PAGE_TO_A)
+           (JSR ALLOC_PAGE_TO_X)
+           (TXA)
            (LDX !$00)
            (STX ZP_CELL_STACK_LB_PTR)
            (JSR INIT_CELLSTACK_PAGE_A)
            (STA ZP_CELL_STACK_LB_PTR+1)
 
-           (JSR ALLOC_PAGE_TO_A)
+           (JSR ALLOC_PAGE_TO_X)
+           (TXA)
            (LDX !$00)
            (STX ZP_CELL_STACK_HB_PTR)
            (JSR INIT_CELLSTACK_PAGE_A)
@@ -1694,7 +1698,8 @@ call frame primitives etc.
             (BNE FILL_PAGE__TEST_ALLOC_PAGE__CELL)
 
             ;; now do allocation and write structure data into the page
-            (JSR ALLOC_PAGE_TO_A)
+            (JSR ALLOC_PAGE_TO_X)
+            (TXA)
             (JSR INIT_CELL_PAGE_AX)))
 
   (define test-alloc-page--cell-state-after
@@ -1777,12 +1782,14 @@ call frame primitives etc.
 (module+ test #| alloc cell stack pages |#
   (define alloc-cell-stack-pages-code
     (list
-     (JSR ALLOC_PAGE_TO_A)
+     (JSR ALLOC_PAGE_TO_X)
+     (TXA)
      (LDX !$05)
      (JSR INIT_CELLSTACK_PAGE_A)
      (STA ZP_RT+1)
 
-     (JSR ALLOC_PAGE_TO_A)
+     (JSR ALLOC_PAGE_TO_X)
+     (TXA)
      (LDX !$03)
      (JSR INIT_CELLSTACK_PAGE_A)
      (STA ZP_RT)))
@@ -1904,7 +1911,8 @@ call frame primitives etc.
     (list
      (LDA !$a0)
      (STA VM_FREE_CELL_PAIR_PAGE)
-     (JSR ALLOC_PAGE_TO_A)
+     (JSR ALLOC_PAGE_TO_X)
+     (TXA)
      (JSR INIT_CELLPAIR_PAGE_AX)
      (STX ZP_RT+1) ;; to test read out actual page
      (STA ZP_RT)
@@ -1970,40 +1978,43 @@ call frame primitives etc.
 ;; parameter: (none)
 ;; result: A = allocated free page (uninitialized)
 ;; uses: A, Y,
-(define ALLOC_PAGE_TO_A
+(define ALLOC_PAGE_TO_X
   (list
-   (label ALLOC_PAGE_TO_A)
-          (LDY VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
+   (label ALLOC_PAGE_TO_X)
+          (LDX VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH)
 
-   (label LOOP__ALLOC_PAGE_TO_A)
-          (LDA VM_PAGE_SLOT_DATA,y)
-          (DEY)
-          (BEQ OUT_OF_MEMORY__ALLOC_PAGE_TO_A) ;; cannot be lower then 1!!
+   (label LOOP__ALLOC_PAGE_TO_X)
+          (LDA VM_PAGE_SLOT_DATA,x)
+          (DEX)
+          (BEQ OUT_OF_MEMORY__ALLOC_PAGE_TO_X) ;; cannot be lower then 1!!
           (CMP !$ff)
-          (BNE LOOP__ALLOC_PAGE_TO_A)
+          (BNE LOOP__ALLOC_PAGE_TO_X)
 
           ;; found page marked unallocated ($ff)
-          (INY) ;; restore original index
+          (INX) ;; restore original index
           (LDA !$00) ;; mark as initially full but allocated
-          (STA VM_PAGE_SLOT_DATA,y)
-          (TYA)
-          (STA VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; set index for next search
+          (STA VM_PAGE_SLOT_DATA,x)
+          (STX VM_HIGHEST_PAGE_IDX_FOR_ALLOC_SEARCH) ;; set index for next search
+
           (RTS)
 
-   (label OUT_OF_MEMORY__ALLOC_PAGE_TO_A)
+   (label OUT_OF_MEMORY__ALLOC_PAGE_TO_X)
           (BRK)
           ))
 
 (module+ test #| vm-free-page and vm-alloc-page--page-uninit |#
   (define vm-free-page-code
     (list
-     (JSR ALLOC_PAGE_TO_A) ;; page is in A ($cc)
+     (JSR ALLOC_PAGE_TO_X) ;; page is in A ($cc)
+     (TXA)
      (PHA)
-     (JSR ALLOC_PAGE_TO_A) ;; page is in A ($cb)
+     (JSR ALLOC_PAGE_TO_X) ;; page is in A ($cb)
+     (TXA)
      (JSR VM_WRITE_INT_A_TO_RT)
      (PLA)
      (JSR FREE_PAGE_A )
-     (JSR ALLOC_PAGE_TO_A) ;; allocated page should be $cc again
+     (JSR ALLOC_PAGE_TO_X) ;; allocated page should be $cc again
+     (TXA)
      (JSR VM_WRITE_INT_A_TO_RA)))
 
   (define vm-free-page-state
@@ -2022,7 +2033,8 @@ call frame primitives etc.
 (define VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT
   (list
    (label ALLOC_NEW_PAGE_PREFIX__VM_ALLOC_CELL_PAIR_A_ON_PAGE_X_INTO_RT)
-          (JSR ALLOC_PAGE_TO_A)
+          (JSR ALLOC_PAGE_TO_X)
+          (TXA)
           (JSR INIT_CELLPAIR_PAGE_AX)
 
    ;; ----------------------------------------
@@ -2519,7 +2531,8 @@ call frame primitives etc.
           (BNE DONE__GET_PAGE_FOR_ALLOC_CELLPAIR_TO_AX) ;; allocate new page first
 
    (label _NEW_PAGE__GET_PAGE_FOR_ALLOC_CELLPAIR_TO_AX)
-          (JSR ALLOC_PAGE_TO_A)
+          (JSR ALLOC_PAGE_TO_X)
+          (TXA)
           (JMP INIT_CELLPAIR_PAGE_AX)
    (label DONE__GET_PAGE_FOR_ALLOC_CELLPAIR_TO_AX)
           (RTS)))
@@ -2541,7 +2554,8 @@ call frame primitives etc.
           (BNE DONE__GET_PAGE_FOR_ALLOC_CELL_TO_AX) ;; allocate new page first
 
    (label _NEW_PAGE__GET_PAGE_FOR_ALLOC_CELL_TO_AX)
-          (JSR ALLOC_PAGE_TO_A)
+          (JSR ALLOC_PAGE_TO_X)
+          (TXA)
           (JMP INIT_CELL_PAGE_AX)
 
    (label DONE__GET_PAGE_FOR_ALLOC_CELL_TO_AX)
@@ -2551,8 +2565,7 @@ call frame primitives etc.
   (define get-page-for-alloc-cell-to-ax-state
     (run-code-in-test
      (list
-      (JSR ALLOC_PAGE_TO_A)
-      (TAX)
+      (JSR ALLOC_PAGE_TO_X)
       (STX VM_FREE_CELL_PAGE)
       (LDA !$08)                           ;; make first free slot on page to be 08
       (STA VM_PAGE_SLOT_DATA,x)
@@ -2570,8 +2583,7 @@ call frame primitives etc.
   (define get-page-for-alloc-cell-to-ax-2-state
     (run-code-in-test
      (list
-      (JSR ALLOC_PAGE_TO_A)
-      (TAX)
+      (JSR ALLOC_PAGE_TO_X)
       (STX VM_FREE_CELL_PAGE)
       (LDA !$00)                          ;; mark page to have no free cells
       (STA VM_PAGE_SLOT_DATA,x)
@@ -2625,7 +2637,8 @@ call frame primitives etc.
   (define test-alloc-cell-a-on-page-x-to-rt-state
     (run-code-in-test
      (list
-      (JSR ALLOC_PAGE_TO_A)
+      (JSR ALLOC_PAGE_TO_X)
+      (TXA)
       (JSR INIT_CELL_PAGE_AX)
       (JSR ALLOC_CELL_A_ON_PAGE_X_TO_RT))))
 
@@ -2643,7 +2656,8 @@ call frame primitives etc.
   (define test-alloc-cell-a-on-page-x-to-rt-twice-state
     (run-code-in-test
      (list
-      (JSR ALLOC_PAGE_TO_A)
+      (JSR ALLOC_PAGE_TO_X)
+      (TXA)
       (JSR INIT_CELL_PAGE_AX)
       (JSR ALLOC_CELL_A_ON_PAGE_X_TO_RT)
       (LDA !$08)
@@ -3882,7 +3896,8 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_01_CODE)
 
             ;; now allocate the page
-            (JSR ALLOC_PAGE_TO_A)
+            (JSR ALLOC_PAGE_TO_X)
+            (TXA)
             (LDX !$01) ;; do it explicitly
             (JSR INIT_M1Px_PAGE_A)))
 
@@ -3918,7 +3933,8 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_02_CODE)
 
             ;; now allocate the page
-            (JSR ALLOC_PAGE_TO_A)
+            (JSR ALLOC_PAGE_TO_X)
+            (TXA)
             (LDX !$02) ;; do it explicitly
             (JSR INIT_M1Px_PAGE_A)))
 
@@ -3954,7 +3970,8 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_03_CODE)
 
             ;; now allocate the page
-            (JSR ALLOC_PAGE_TO_A)
+            (JSR ALLOC_PAGE_TO_X)
+            (TXA)
             (LDX !$03) ;; do it explicitly
             (JSR INIT_M1Px_PAGE_A)))
 
@@ -3990,7 +4007,8 @@ call frame primitives etc.
             (BNE LOOP__TEST_ALLOC_M1_04_CODE)
 
             ;; now allocate the page
-            (JSR ALLOC_PAGE_TO_A)
+            (JSR ALLOC_PAGE_TO_X)
+            (TXA)
             (LDX !$04) ;; do it explicitly
             (JSR INIT_M1Px_PAGE_A)))
 
@@ -4079,7 +4097,8 @@ call frame primitives etc.
           (BCC CONTINUE__VM_ALLOC_SLOT_TYPE_X)
 
    (label NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
-          (JSR ALLOC_PAGE_TO_A)
+          (JSR ALLOC_PAGE_TO_X)
+          (TXA)
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
           (JSR INIT_M1Px_PAGE_A)
           (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
@@ -5310,7 +5329,7 @@ call frame primitives etc.
 
           ;; ---------------------------------------- alloc/free pages
           FREE_PAGE_A                                       ;; free a page (the type specific stuff, of any, must have finished)
-          ALLOC_PAGE_TO_A                                   ;; allocate new page (not initialized)
+          ALLOC_PAGE_TO_X                                   ;; allocate new page (not initialized)
 
           INIT_CELL_PAGE_AX                                  ;; initialize page (in a) for cell usage
           INIT_CELLPAIR_PAGE_AX                             ;; initialize page (in x, free slot in a) for ref counted cell-pairs
