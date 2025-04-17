@@ -32,14 +32,14 @@
   | x    | VM_FREE_CELL_PAIR_PTR_IN_RT                 | FREE_CELLPAIR_RT                 | D    |                                                                    |
   | ?    |                                             | ADD_CELLPAIR_RT_TO_GFL           |      | add freed cell-pair to global free list (is integral part of free) |
   | x    |                                             | ADD_CELLPAIR_RT_TO_PFL_X         |      | add freed cell-pair it to the page (X) free list                   |
-  |      | VM_FREE_CELL_PAIR_PTR_IN_RA                 | ?                                |      |                                                                    |
+  | x    | VM_FREE_CELL_PAIR_PTR_IN_RA                 | FREE_CELLPAIR_RA                 |      |                                                                    |
   | x    | VM_FREE_CELL_PTR_IN_RT                      | FREE_CELL_RT                     |      |                                                                    |
   | ?    |                                             | ADD_CELL_RT_TO_GFL               |      | add freed cell to global free list                                 |
   | ?    |                                             | ADD_CELL_RT_TO_PFL_X             |      | add freed cell it to the page (A) free list                        |
-  |      | VM_FREE_CELL_PTR_IN_RA                      | ?                                |      |                                                                    |
-  |      | VM_GC_QUEUE_OF_FREE_CELL_PAIRS              | GC_CELLPAIR_FREE_LIST            |      |                                                                    |
+  | x    | VM_FREE_CELL_PTR_IN_RA                      | FREE_CELL_RA                     |      |                                                                    |
+  | x    | VM_GC_QUEUE_OF_FREE_CELL_PAIRS              | GC_CELLPAIR_FREE_LIST            |      |                                                                    |
   |      | ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2         |                                  |      |                                                                    |
-  |      | VM_ALLOC_CELL_ARRAY_TO_RA                   | ALLOC_CELLARR_TO_RA              |      |                                                                    |
+  | x    | VM_ALLOC_CELL_ARRAY_TO_RA                   | ALLOC_CELLARR_TO_RA              |      |                                                                    |
   |      | ;; VM_ALLOC_M1_SLOT_TO_ZP_PTR2              | ?                                |      |                                                                    |
   |      | ;; VM_FREE_M1_SLOT_IN_ZP_PTR2               | ?                                |      |                                                                    |
   |      | ;; VM_ALLOC_MODULE_CODE_SLOT_TO_ZP_PTR      | ?                                |      |                                                                    |

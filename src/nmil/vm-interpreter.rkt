@@ -74,7 +74,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   vm-cell->string
                   vm-deref-cell-pair-w->string
                   VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
-                  VM_ALLOC_CELL_ARRAY_TO_RA
+                  ALLOC_CELLARR_TO_RA
                   VM_REFCOUNT_DECR_RT
                   VM_CELL_STACK_POP_R
 
@@ -2239,7 +2239,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_GC_FL
   (list
    (label BC_GC_FL)
-          (JSR VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (JSR GC_CELLPAIR_FREE_LIST)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define VM_INTERPRETER_OPTABLE_EXT1_LB
@@ -2472,7 +2472,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_ALLOC_ARRAY)
           (LDA ZP_RT+1)
-          (JSR VM_ALLOC_CELL_ARRAY_TO_RA)          
+          (JSR ALLOC_CELLARR_TO_RA)
           (JSR VM_REFCOUNT_INCR_RA__M1_SLOT)
           (JSR VM_CP_RA_TO_RT) ;; overwrite byte on stack
           (JMP VM_INTERPRETER_INC_PC)))

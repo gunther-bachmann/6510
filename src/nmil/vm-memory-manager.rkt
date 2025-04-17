@@ -117,8 +117,8 @@ call frame primitives etc.
          VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
          VM_FREE_CELL_PAIR_PAGE
          VM_LIST_OF_FREE_CELLS
-         VM_ALLOC_CELL_ARRAY_TO_RA
-         VM_GC_QUEUE_OF_FREE_CELL_PAIRS
+         ALLOC_CELLARR_TO_RA
+         GC_CELLPAIR_FREE_LIST
 
          VM_MEMORY_MANAGEMENT_CONSTANTS
          VM_INITIALIZE_MEMORY_MANAGER
@@ -138,15 +138,15 @@ call frame primitives etc.
 
           ALLOC_CELLPAIR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           FREE_CELLPAIR_RT                        ;; free this cell-pair (adding it to the free tree)
-          ;; VM_FREE_CELL_PAIR_PTR_IN_RA                        ;; free this cell-pair (adding it to the free tree)
+          ;; FREE_CELLPAIR_RA                        ;; free this cell-pair (adding it to the free tree)
 
           FREE_CELL_RT                             ;; free this cell pointed to by RT (adding it to the free list)
-          VM_FREE_CELL_PTR_IN_RA                             ;; free this cell pointed to by RT (adding it to the free list)
+          FREE_CELL_RA                             ;; free this cell pointed to by RT (adding it to the free list)
 
-          VM_GC_QUEUE_OF_FREE_CELL_PAIRS                     ;; reclaim all cell-pairs in the queue of free cells
+          GC_CELLPAIR_FREE_LIST                     ;; reclaim all cell-pairs in the queue of free cells
 
           ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
-          VM_ALLOC_CELL_ARRAY_TO_RA                          ;; allocate an array of cells (also useful for structures)
+          ALLOC_CELLARR_TO_RA                          ;; allocate an array of cells (also useful for structures)
 
           ;; VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
           ;; VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
@@ -281,14 +281,16 @@ call frame primitives etc.
    (byte-const ZP_CELL_STACK_HB_PTR      $e8) ;; e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
    (byte-const ZP_CALL_FRAME_TOP_MARK    $ea) ;; ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
    (byte-const ZP_LOCALS_TOP_MARK        $eb) ;; eb byte pointing to the byte past the last local on the locals stack
-   (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2 
+   (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2
+
+   ;; register C
    (byte-const ZP_RC                     $f3) ;; f3..f4
 
    ;; implementation using registers
    ;; register T = top of stack, used as main register for operations, could be a pointer to a cell or an atomic cell. if it is a pointer to a cell, the low byte here is without tag bits => (zp_rt) points to the cell
-   (byte-const ZP_RT                     $fb) ;; fb = low byte (without tag bits), fc = high byte,   tagged low byte is held in ZP_RT_TAGGED_LB
+   (byte-const ZP_RT                     $fb) ;; fb = low byte, fc = high byte,
    ;; register A
-   (byte-const ZP_RA                     $fd) ;; fd = low byte (without tag bits), fe = high byte,   tagged low byte is held in ZP_RA_TAGGED_LB
+   (byte-const ZP_RA                     $fd) ;; fd = low byte, fe = high byte,
    ;; currently no need to register B (maybe someday)
    ))
 
@@ -2109,7 +2111,7 @@ call frame primitives etc.
           ;; (STA ZP_RA+1)
           ;; (LDA ZP_RT)
           ;; (STA ZP_RA)
-          ;; (JMP VM_FREE_CELL_PAIR_PTR_IN_RA)
+          ;; (JMP FREE_CELLPAIR_RA)
           ;;
           (JMP FREE_CELLPAIR_RT) ;; free delayed
           
@@ -2200,7 +2202,7 @@ call frame primitives etc.
    (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
           (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
-          (JMP VM_FREE_CELL_PAIR_PTR_IN_RA) ;; free delayed
+          (JMP FREE_CELLPAIR_RA) ;; free delayed
 
    ;; input: cell ptr in ZP_RA
    ;; decrement ref count, if 0 deallocate
@@ -2234,7 +2236,7 @@ call frame primitives etc.
    (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
           (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (JMP VM_FREE_CELL_PTR_IN_RA) ;; free delayed
+          (JMP FREE_CELL_RA) ;; free delayed
    (label DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
           (RTS)))
 
@@ -2757,7 +2759,7 @@ call frame primitives etc.
      (JSR VM_CP_RT_TO_RA)
 
      (JSR ALLOC_CELL_TO_RT)
-     (JSR VM_FREE_CELL_PTR_IN_RA)))
+     (JSR FREE_CELL_RA)))
 
   (define test-alloc-cell-to-rt-twicenfree-state-after
     (run-code-in-test test-alloc-cell-to-rt-twicenfree-code))
@@ -2784,7 +2786,7 @@ call frame primitives etc.
      (JSR VM_CP_RT_TO_RA)
 
      (JSR ALLOC_CELL_TO_RT)
-     (JSR VM_FREE_CELL_PTR_IN_RA)
+     (JSR FREE_CELL_RA)
 
      (JSR ALLOC_CELL_TO_RT)))
 
@@ -2804,14 +2806,14 @@ call frame primitives etc.
 
 ;; actively free all enqueued cell pairs of the free-list!
 ;; can be useful to find out whether a whole page is not used at all. free cells are still marked as used on a page.
-(define VM_GC_QUEUE_OF_FREE_CELL_PAIRS
+(define GC_CELLPAIR_FREE_LIST
   (list
-   (label VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+   (label GC_CELLPAIR_FREE_LIST)
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; get highbyte (page) from ptr to cell-pair
-          (BNE CONTINUE__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)   ;; if = 0, queue is empty, i'm done
+          (BNE CONTINUE__GC_CELLPAIR_FREE_LIST)   ;; if = 0, queue is empty, i'm done
           (RTS)
 
-   (label CONTINUE__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+   (label CONTINUE__GC_CELLPAIR_FREE_LIST)
           ;; put ptr to cell-pair into RA, now RA->cell0,cell1 with cell0 = pointer to the next in queue, cell1 could still be something that needs gc
           (STA ZP_RA+1)
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
@@ -2820,53 +2822,53 @@ call frame primitives etc.
           ;; set new tree root for free tree to original cell0
           (LDY !$00)
           (LDA (ZP_RA),y)
-          (BEQ CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; is zero => completely empty
+          (BEQ CELL0_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; is zero => completely empty
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; is no ptr
+          (BEQ CELL0_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; is no ptr
           (INY)
           (LDA (ZP_RA),y)
-          (BEQ CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; is nil
+          (BEQ CELL0_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; is nil
           (DEY)
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (LDA (ZP_RA),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
-          (BNE CHECK_CELL1__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; since must be !=0, it cannot be on page 0 always branch!
+          (BNE CHECK_CELL1__GC_CELLPAIR_FREE_LIST) ;; since must be !=0, it cannot be on page 0 always branch!
 
-   (label CELL0_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+   (label CELL0_IS_NO_PTR__GC_CELLPAIR_FREE_LIST)
           ;; queue is now empty, this was the last cell-pair
           ;; clear queue
           (LDA !$00)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; just reset highbyte (checked at start of this function)
           ;; (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
 
-   (label CHECK_CELL1__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+   (label CHECK_CELL1__GC_CELLPAIR_FREE_LIST)
           ;; now check cell1 on remaining ptrs
           (LDY !$02)
           (LDA (ZP_RA),y) ;; get low byte
-          (BEQ CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; = 0 means totally empty => no ptr
+          (BEQ CELL1_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; = 0 means totally empty => no ptr
           (AND !$03)       ;; mask out all but low 2 bits
           (CMP !$03)
-          (BEQ CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; no need to do further deallocation
+          (BEQ CELL1_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; no need to do further deallocation
           (INY)
           (LDA (ZP_RA),y)
-          (BEQ CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; is nil 
+          (BEQ CELL1_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; is nil
 
           ;; write cell1 into zp_ptr and decrement          
           (LDA ZP_RA)
-          (STA RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (STA RA_COPY__GC_CELLPAIR_FREE_LIST)
           (LDA ZP_RA+1)
-          (STA RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS+1)
+          (STA RA_COPY__GC_CELLPAIR_FREE_LIST+1)
           (JSR VM_WRITE_RA_CELL1_TO_RA)
           (JSR VM_REFCOUNT_DECR_RA) ;; this may change the queue again, which is alright, since RA was removed from queue          
-          (LDA RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (LDA RA_COPY__GC_CELLPAIR_FREE_LIST)
           (STA ZP_RA)
-          (LDA RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS+1)
+          (LDA RA_COPY__GC_CELLPAIR_FREE_LIST+1)
           (STA ZP_RA+1)
 
-  (label CELL1_IS_NO_PTR__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+  (label CELL1_IS_NO_PTR__GC_CELLPAIR_FREE_LIST)
           ;; now add ra to its page as free cell-pair on that page
           (LDX ZP_RA+1)                 ;; A = page -> x
           (LDA $cf00,x)         ;; current first free cell offset
@@ -2878,12 +2880,12 @@ call frame primitives etc.
           (LDA ZP_RA)             ;; get offset into page of cell RA points to
           (STA $cf00,x)           ;; new first free cell now points to RA
           (LDA ZP_RA+1)
-          (STA DEC_COMMAND__VM_GC_QUEUE_OF_FREE_CELL_PAIRS+2)
-   (label DEC_COMMAND__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+          (STA DEC_COMMAND__GC_CELLPAIR_FREE_LIST+2)
+   (label DEC_COMMAND__GC_CELLPAIR_FREE_LIST)
           (DEC $c000)         ;; decrement number of used slots on cell-pair page (c0 is overwritten with page in zp_ra+1
-          (JMP VM_GC_QUEUE_OF_FREE_CELL_PAIRS) ;; do this until queue is empty
+          (JMP GC_CELLPAIR_FREE_LIST) ;; do this until queue is empty
 
-   (label RA_COPY__VM_GC_QUEUE_OF_FREE_CELL_PAIRS)
+   (label RA_COPY__GC_CELLPAIR_FREE_LIST)
           (word 0)
 
 
@@ -3259,48 +3261,48 @@ call frame primitives etc.
    (label LIST_TO_FREE__FREE_CELL_RT) ;; TODO not yet a list, but needs to become one!
           (word 0)))
 
-(define VM_FREE_CELL_PTR_IN_RA
+(define FREE_CELL_RA
   (list
-   (label VM_FREE_CELL_PTR_IN_RA)
+   (label FREE_CELL_RA)
           ;; check if previous content was a pointer
           (LDY !$00)
-          (STY LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA+1)
+          (STY LIST_TO_FREE__FREE_CELL_RA+1)
 
           (LDA (ZP_RA),y)
-          (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RA)
+          (BEQ CELL_IS_NO_PTR__FREE_CELL_RA)
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RA)
+          (BEQ CELL_IS_NO_PTR__FREE_CELL_RA)
 
           ;; cell is a pointer => save for tail call in temp (either cell-ptr or cell-pair-ptr)
           ;; enqueue this rt in list to decrement refcount
           ;; TODO: given arrays that may hold lists of references, this might make it necessary to keep them as list
           (LDA (ZP_RA),y)
-          (STA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA)
+          (STA LIST_TO_FREE__FREE_CELL_RA)
           (INY)
           (LDA (ZP_RA),y)
-          (STA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA+1)               ;; might be overwritten if cell-array is freed!
+          (STA LIST_TO_FREE__FREE_CELL_RA+1)               ;; might be overwritten if cell-array is freed!
           (DEY)
-          (BNE CONT__VM_FREE_CELL_PTR_IN_RA)
+          (BNE CONT__FREE_CELL_RA)
 
-   (label CELL_IS_NO_PTR__VM_FREE_CELL_PTR_IN_RA)
+   (label CELL_IS_NO_PTR__FREE_CELL_RA)
           ;; check cell-type
           (LDA (ZP_RA),y)
           (CMP !TAG_BYTE_CELL_ARRAY)
-          (BEQ FREE_CELL_ARRAY__VM_FREE_CELL_PTR_IN_RA)
+          (BEQ FREE_CELL_ARRAY__FREE_CELL_RA)
           (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ FREE_NATIVE_ARRAY__VM_FREE_CELL_PTR_IN_RA)
+          (BEQ FREE_NATIVE_ARRAY__FREE_CELL_RA)
 
           ;; seems to be a value that does not need to be freed
-          (BNE CONT__VM_FREE_CELL_PTR_IN_RA)
+          (BNE CONT__FREE_CELL_RA)
 
-   (label FREE_CELL_ARRAY__VM_FREE_CELL_PTR_IN_RA)
-   (label FREE_NATIVE_ARRAY__VM_FREE_CELL_PTR_IN_RA)
+   (label FREE_CELL_ARRAY__FREE_CELL_RA)
+   (label FREE_NATIVE_ARRAY__FREE_CELL_RA)
           ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
           (JMP VM_REFCOUNT_DECR_RA__M1_SLOT) ;; cell and native arrays are allocated on m1 pages
           ;; this cell was a header field of a m1slot -> no further processing
 
-  (label CONT__VM_FREE_CELL_PTR_IN_RA)
+  (label CONT__FREE_CELL_RA)
           ;; COPY previous head of free cells into this cell
           (LDA VM_LIST_OF_FREE_CELLS)
           (STA (ZP_RA),y)
@@ -3314,18 +3316,18 @@ call frame primitives etc.
           (LDA ZP_RA+1)
           (STA VM_LIST_OF_FREE_CELLS+1)
 
-          (LDA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA+1)
-          (BEQ DONE__VM_FREE_CELL_PTR_IN_RA) ;; there wasn't any further pointer => done with free
+          (LDA LIST_TO_FREE__FREE_CELL_RA+1)
+          (BEQ DONE__FREE_CELL_RA) ;; there wasn't any further pointer => done with free
           ;; fill rt for tail calling
           (STA ZP_RA+1)
-          (LDA LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA)
+          (LDA LIST_TO_FREE__FREE_CELL_RA)
           (STA ZP_RA)
           (JMP VM_REFCOUNT_DECR_RA) ;; tail call if cell did hold a reference
 
-   (label DONE__VM_FREE_CELL_PTR_IN_RA)
+   (label DONE__FREE_CELL_RA)
           (RTS)
 
-   (label LIST_TO_FREE__VM_FREE_CELL_PTR_IN_RA) ;; TODO not yet a list, but needs to become one!
+   (label LIST_TO_FREE__FREE_CELL_RA) ;; TODO not yet a list, but needs to become one!
           (word 0)))
 
 (module+ test #| vm-free-cell-ptr-in-rt |#
@@ -3505,20 +3507,20 @@ call frame primitives etc.
 ;; tail call free on old cell1 in this cell-pair (if not atomic, if atomic no tail call)
 ;; result: this cell-pair is the new root of the free-tree for cell-pairs with:
 ;;              cell0 = old free tree root, cell1 = non-freed (yet) original cell
-(define VM_FREE_CELL_PAIR_PTR_IN_RA
+(define FREE_CELLPAIR_RA
   (list
-   (label VM_FREE_CELL_PAIR_PTR_IN_RA)
+   (label FREE_CELLPAIR_RA)
 
           (LDY !$00)
           (STY ZP_TEMP+1) ;; indicator of a ptr to free is set to 0 => currently no additional ptr marked for free
 
           ;; check cell0
           (LDA (ZP_RA),y) ;; LOWBYTE OF FIRST cell0
-          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RA)
+          (BEQ CELL_0_NO_PTR__FREE_CELLPAIR_RA)
           (STA ZP_TEMP)
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RA)
+          (BEQ CELL_0_NO_PTR__FREE_CELLPAIR_RA)
           ;; make sure to call free on cell0 (could be any type of cell)
           ;; remember ZP_PTR
 
@@ -3527,7 +3529,7 @@ call frame primitives etc.
           (LDA (ZP_RA),y)
           (STA ZP_TEMP+1)
 
-   (label CELL_0_NO_PTR__VM_FREE_CELL_PAIR_PTR_IN_RA)
+   (label CELL_0_NO_PTR__FREE_CELLPAIR_RA)
           ;; cell0 is no ptr and can thus be discarded (directly)
 
           ;; simply add this cell-pair as head to free tree
@@ -3547,7 +3549,7 @@ call frame primitives etc.
 
           ;; write original cell0 -> zp_ra
           (LDA ZP_TEMP+1)
-          (BEQ DONE__VM_FREE_CELL_PAIR_PTR_IN_RA)
+          (BEQ DONE__FREE_CELLPAIR_RA)
           ;; otherwise zp_temp was used to store a pointer that needs to be decremented
           (STA ZP_RA+1)
           (LDA ZP_TEMP)
@@ -3555,7 +3557,7 @@ call frame primitives etc.
 
           (JMP VM_REFCOUNT_DECR_RA) ;; chain call
 
-   (label DONE__VM_FREE_CELL_PAIR_PTR_IN_RA)
+   (label DONE__FREE_CELLPAIR_RA)
           (RTS)))
 
 (module+ test #| vm-free-cell-pair-ptr-in-rt |#
@@ -4816,7 +4818,7 @@ call frame primitives etc.
           (LDA ZP_RA)
           (STA ZP_RC)
           (LDA ZP_RA+1)
-          (STA ZP_RC)
+          (STA ZP_RC+1)
 
           (LDY !$00)
 
@@ -4857,7 +4859,7 @@ call frame primitives etc.
   (define test-gc-array-slot-ptr-code
     (list
      (LDA !$04)
-     (JSR VM_ALLOC_CELL_ARRAY_TO_RA)                       ;; ZP_RA = pointer to the allocated array (with 4 cells)
+     (JSR ALLOC_CELLARR_TO_RA)                       ;; ZP_RA = pointer to the allocated array (with 4 cells)
 
      (JSR ALLOC_CELLPAIR_TO_RT)                    ;; ZP_RT = allocated cell-pair
      (JSR VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR)
@@ -4950,9 +4952,9 @@ call frame primitives etc.
 ;; allocate an array of cells (also useful for structures)
 ;; input:  A = number of cells (1..)
 ;; output: ZP_RA -> points to an allocated array
-(define VM_ALLOC_CELL_ARRAY_TO_RA
+(define ALLOC_CELLARR_TO_RA
   (list
-   (label VM_ALLOC_CELL_ARRAY_TO_RA)
+   (label ALLOC_CELLARR_TO_RA)
           ;; optional: optimization for arrays with 3 cells => s8 page!
           (PHA)
           (ASL A)       ;; *2
@@ -4969,10 +4971,10 @@ call frame primitives etc.
           ;; initialize slots/array with zeros (actually writes one byte more than needed)
           (LDA 0)
           (INY)
-   (label LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_RA)
+   (label LOOP_INIT__ALLOC_CELLARR_TO_RA)
           (STA (ZP_RA),y)
           (DEY)
-          (BNE LOOP_INIT__VM_ALLOC_CELL_ARRAY_TO_RA)
+          (BNE LOOP_INIT__ALLOC_CELLARR_TO_RA)
 
           ;; y = 0 now
           ;; write header cell
@@ -4988,7 +4990,7 @@ call frame primitives etc.
   (define test-alloc-cell-array-code
     (list
      (LDA !$04)
-     (JSR VM_ALLOC_CELL_ARRAY_TO_RA)))
+     (JSR ALLOC_CELLARR_TO_RA)))
 
   (define test-alloc-cell-array-state-after
     (run-code-in-test test-alloc-cell-array-code))
@@ -5080,7 +5082,7 @@ call frame primitives etc.
   (define vm_cell_stack_write_tos_to_array_ata_ptr-code
     (list
      (LDA !$04)
-     (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
+     (JSR ALLOC_CELLARR_TO_RA)
 
      (LDA !$ff)
      (LDX !$01)
@@ -5118,7 +5120,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (LDA !$04)
-      (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
+      (JSR ALLOC_CELLARR_TO_RA)
 
       (LDA !$ff)
       (LDX !$01)
@@ -5139,7 +5141,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (LDA !$04)
-      (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
+      (JSR ALLOC_CELLARR_TO_RA)
 
       (LDA !$ff)
       (LDX !$01)
@@ -5160,7 +5162,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (LDA !$04)
-      (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
+      (JSR ALLOC_CELLARR_TO_RA)
 
       (LDA !$ff)
       (LDX !$01)
@@ -5182,7 +5184,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (LDA !$04)
-      (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
+      (JSR ALLOC_CELLARR_TO_RA)
 
       (LDA !$ff)
       (LDX !$01)
@@ -5239,7 +5241,7 @@ call frame primitives etc.
   (define test-cell-stack-push-array-ata-ptr-code
     (list
      (LDA !$04)
-     (JSR VM_ALLOC_CELL_ARRAY_TO_RA)
+     (JSR ALLOC_CELLARR_TO_RA)
 
      (LDA !$02)
      (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_RA) ;; @2 = empty -> stack => stack is still empty
@@ -5359,16 +5361,15 @@ call frame primitives etc.
 
           ALLOC_CELLPAIR_TO_RT                       ;; allocate a cell-pair from the current page (or from a new page if full)
           FREE_CELLPAIR_RT                        ;; free this cell-pair (adding it to the free tree)
-          VM_FREE_CELL_PAIR_PTR_IN_RA                        ;; free this cell-pair (adding it to the free tree)
+          FREE_CELLPAIR_RA                        ;; free this cell-pair (adding it to the free tree)
 
-          ;; VM_ALLOC_CELL_PTR_TO_RT                            ;; allocate a cell, allocating a new page if necessary, reusing cells from the free list first
           FREE_CELL_RT                             ;; free this cell pointed to by RT (adding it to the free list)
-          VM_FREE_CELL_PTR_IN_RA                             ;; free this cell pointed to by RT (adding it to the free list)
+          FREE_CELL_RA                             ;; free this cell pointed to by RT (adding it to the free list)
 
-          VM_GC_QUEUE_OF_FREE_CELL_PAIRS                     ;; reclaim all cell-pairs in the queue of free cells
+          GC_CELLPAIR_FREE_LIST                     ;; reclaim all cell-pairs in the queue of free cells
 
           VM_ALLOC_NATIVE_ARRAY_TO_RA                        ;; allocate an array of bytes (native) (also useful for strings)
-          VM_ALLOC_CELL_ARRAY_TO_RA                          ;; allocate an array of cells (also useful for structures)
+          ALLOC_CELLARR_TO_RA                          ;; allocate an array of cells (also useful for structures)
 
           VM_ALLOC_M1_SLOT_TO_RA                             ;; allocate a slot of min A size, allocating a new page if necessary
           VM_FREE_M1_SLOT_IN_RA                              ;; free a slot (adding it to the free list)
