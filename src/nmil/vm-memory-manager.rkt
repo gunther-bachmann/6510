@@ -4047,9 +4047,9 @@ call frame primitives etc.
 ;; input:  A = size
 ;; output: ZP_RA = available slot of the given size (or a bit more)
 ;;         Y = actual size
-(define VM_ALLOC_M1_SLOT_TO_RA
+(define ALLOC_M1_SLOT_TO_RA
   (list
-   (label VM_ALLOC_M1_SLOT_TO_RA)
+   (label ALLOC_M1_SLOT_TO_RA)
           (LDX !$00)
           (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+0)
           (BPL J9PLUS__VM_ALLOC_SLOT_IN_BUCKET)
@@ -4159,7 +4159,7 @@ call frame primitives etc.
 
             ;; now allocate the page
             (LDA !$0b) ;; want slot of size 11
-            (JSR VM_ALLOC_M1_SLOT_TO_RA)
+            (JSR ALLOC_M1_SLOT_TO_RA)
 
             (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
             (STA ZP_TEMP)))
@@ -4195,9 +4195,9 @@ call frame primitives etc.
 
      ;; now allocate the page
      (LDA !$0b) ;; want slot of size 11
-     (JSR VM_ALLOC_M1_SLOT_TO_RA)
+     (JSR ALLOC_M1_SLOT_TO_RA)
      (LDA !$0a) ;; want slot of size 10, should be on the same page
-     (JSR VM_ALLOC_M1_SLOT_TO_RA)
+     (JSR ALLOC_M1_SLOT_TO_RA)
 
      (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
      (STA ZP_TEMP)))
@@ -4240,7 +4240,7 @@ call frame primitives etc.
 
      (label LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
             (LDA !$14) ;; want slot of size 20
-            (JSR VM_ALLOC_M1_SLOT_TO_RA) ;; ... slot allocation
+            (JSR ALLOC_M1_SLOT_TO_RA) ;; ... slot allocation
             (DEC LOOP_NUM__TEST_ALLOC_BUCKET_SLOT_XX)
             (BNE LOOP__TEST_ALLOC_BUCKET_SLOT_XX)
 
@@ -4364,25 +4364,25 @@ call frame primitives etc.
 ;; (e.g. keep count of used slots)? used slots = 0 => free page
 ;; INFO: NO GC! (this must be done, freeing specific types (e.g. an array) <- knows the number of slots etc.
 ;;       REF COUNT IS SET TO ZERO
-(define VM_FREE_M1_SLOT_IN_RA
+(define FREE_M1_SLOT_RA
   (list
-   (label VM_FREE_M1_SLOT_IN_RA)   
+   (label FREE_M1_SLOT_RA)
           ;; make sure to remove fulls from free page list first !!
           (JSR VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS)
 
           ;; now free the slot
-   (label REGULAR_FREE__VM_FREE_M1_SLOT_IN_RA)
+   (label REGULAR_FREE__FREE_M1_SLOT_RA)
           (LDX ZP_RA+1)
-          (STX DEC_CMD__VM_FREE_M1_SLOT_IN_RA+2)    ;; write page for later dec execution
+          (STX DEC_CMD__FREE_M1_SLOT_RA+2)    ;; write page for later dec execution
           (LDA VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
-          (BNE CONTINUE__VM_FREE_M1_SLOT_IN_RA)     ;; regular free
+          (BNE CONTINUE__FREE_M1_SLOT_RA)     ;; regular free
 
           ;; this page was full (since next free slot was 0) => register with the list of pages with free slots
           (JSR VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS)
-          (LDX DEC_CMD__VM_FREE_M1_SLOT_IN_RA+2)    ;; restore x
+          (LDX DEC_CMD__FREE_M1_SLOT_RA+2)    ;; restore x
           (LDA !$00)                              ;; next free slot offset (=0)
 
-   (label CONTINUE__VM_FREE_M1_SLOT_IN_RA)
+   (label CONTINUE__FREE_M1_SLOT_RA)
           (LDY !$00)
           (STA (ZP_RA),y)                       ;; set (zp_ptr) = previous free
           (LDA ZP_RA)                           ;; low byte of pointer = new free slot
@@ -4392,7 +4392,7 @@ call frame primitives etc.
           (TYA)                                   ;; y is still 0 => a := 0
           (STA (ZP_RA),y)                       ;; set refcount := 0
 
-   (label DEC_CMD__VM_FREE_M1_SLOT_IN_RA)       ;; decrement number of slots used on the page
+   (label DEC_CMD__FREE_M1_SLOT_RA)       ;; decrement number of slots used on the page
           (DEC $c002)                             ;; $c0 is overwritten
 
           (RTS)
@@ -4411,14 +4411,14 @@ call frame primitives etc.
 
             ;; now allocate the page
             (LDA !$0b) ;; want slot of size 11
-            (JSR VM_ALLOC_M1_SLOT_TO_RA)
+            (JSR ALLOC_M1_SLOT_TO_RA)
             (JSR VM_CP_RA_TO_RT)
 
             (LDA !$0a) ;; want slot of size 10, should be on the same page
-            (JSR VM_ALLOC_M1_SLOT_TO_RA)
+            (JSR ALLOC_M1_SLOT_TO_RA)
 
             (JSR VM_CP_RT_TO_RA)
-            (JSR VM_FREE_M1_SLOT_IN_RA)))
+            (JSR FREE_M1_SLOT_RA)))
 
   (define test-free-bucket-slot-state-after
     (run-code-in-test test-free-bucket-slot-code))
@@ -4451,7 +4451,7 @@ call frame primitives etc.
             (STA LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
      (label LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
             (LDA !$14) ;; want slot of size 14 (max size $1e)
-            (JSR VM_ALLOC_M1_SLOT_TO_RA)
+            (JSR ALLOC_M1_SLOT_TO_RA)
             (DEC LOOP_VAR__TEST_FREE_BUCKET_A20_SLOT_CODE)
             (BPL LOOP__TEST_FREE_BUCKET_A20_SLOT_CODE)
             (JMP CONT__TEST_FREE_BUCKET_A20_SLOT_CODE )
@@ -4464,13 +4464,13 @@ call frame primitives etc.
             (STA ZP_RA+1)
             (LDA !$10)
             (STA ZP_RA)
-            (JSR VM_FREE_M1_SLOT_IN_RA)
+            (JSR FREE_M1_SLOT_RA)
 
             (ast-opcode-cmd '() (list 169 PAGE_AVAIL_0)) ;; (LDA !$cc)
             (STA ZP_RA+1)
             (LDA !$10)
             (STA ZP_RA)
-            (JSR VM_FREE_M1_SLOT_IN_RA)
+            (JSR FREE_M1_SLOT_RA)
             ))
 
   (define test-free-bucket-a20-slot-state-after
@@ -4566,14 +4566,14 @@ call frame primitives etc.
           (LDA SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT+1)
           (STA ZP_RT+1)
 
-          (JMP VM_FREE_M1_SLOT_IN_RA)
+          (JMP FREE_M1_SLOT_RA)
 
    (label NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
           (CMP !TAG_BYTE_NATIVE_ARRAY)
           (BNE NEXT1__VM_REFCOUNT_DECR_RA__M1_SLOT)
 
           ;; it's a native array slot (no gc necessary)
-          (JMP VM_FREE_M1_SLOT_IN_RA)
+          (JMP FREE_M1_SLOT_RA)
 
    (label NEXT1__VM_REFCOUNT_DECR_RA__M1_SLOT)
           (BRK) ;; error, unknown complex slot type
@@ -4722,7 +4722,7 @@ call frame primitives etc.
           ;; count dropped to 0 => array can be put back as completely free into page
           ;; TODO: put array back to free slot in page
           ;; still the original cell ptr needs to be decremented
-          (JSR VM_FREE_M1_SLOT_IN_RA)
+          (JSR FREE_M1_SLOT_RA)
           (JMP DECR_ORG_CELL_PTR__VM_GC_ARRAY_RA)
 
    (label KEEP_ARRAY_IN_TO_FREE_LIST__VM_GC_ARRAY_RA)
@@ -4898,14 +4898,14 @@ call frame primitives etc.
 ;; allocate an array of bytes (native) (also useful for strings)
 ;; input:  A = number of bytes (1..)
 ;; output: ZP_RA -> points to an allocated array (not initialized)
-(define VM_ALLOC_NATIVE_ARRAY_TO_RA
+(define ALLOC_NATARR_TO_RA
   (list
-   (label VM_ALLOC_NATIVE_ARRAY_TO_RA)
+   (label ALLOC_NATARR_TO_RA)
           (PHA)
           (CLC)
           (ADC !$02) ;; add to total slot size
 
-          (JSR VM_ALLOC_M1_SLOT_TO_RA)
+          (JSR ALLOC_M1_SLOT_TO_RA)
 
           ;; write header cell
           (LDY !$00)
@@ -4933,7 +4933,7 @@ call frame primitives etc.
   (define test-alloc-native-array-code
     (list
      (LDA !$10)
-     (JSR VM_ALLOC_NATIVE_ARRAY_TO_RA)))
+     (JSR ALLOC_NATARR_TO_RA)))
 
   (define test-alloc-native-array-state-after
     (run-code-in-test test-alloc-native-array-code))
@@ -4961,7 +4961,7 @@ call frame primitives etc.
           (CLC)
           (ADC !$02)    ;; add (tag byte, length) to total slot size
 
-          (JSR VM_ALLOC_M1_SLOT_TO_RA)
+          (JSR ALLOC_M1_SLOT_TO_RA)
 
           (PLA)
           (TAX) ;; save array len in x
@@ -5368,11 +5368,11 @@ call frame primitives etc.
 
           GC_CELLPAIR_FREE_LIST                     ;; reclaim all cell-pairs in the queue of free cells
 
-          VM_ALLOC_NATIVE_ARRAY_TO_RA                        ;; allocate an array of bytes (native) (also useful for strings)
+          ALLOC_NATARR_TO_RA                        ;; allocate an array of bytes (native) (also useful for strings)
           ALLOC_CELLARR_TO_RA                          ;; allocate an array of cells (also useful for structures)
 
-          VM_ALLOC_M1_SLOT_TO_RA                             ;; allocate a slot of min A size, allocating a new page if necessary
-          VM_FREE_M1_SLOT_IN_RA                              ;; free a slot (adding it to the free list)
+          ALLOC_M1_SLOT_TO_RA                             ;; allocate a slot of min A size, allocating a new page if necessary
+          FREE_M1_SLOT_RA                              ;; free a slot (adding it to the free list)
           ;; VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS
           VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS                  ;; remove full pages in the free list of pages of the same type as are currently in ZP_RA
           VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS               ;; put this page as head of the page free list for slots of type as in ZP_RA
