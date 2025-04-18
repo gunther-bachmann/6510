@@ -75,7 +75,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   vm-deref-cell-pair-w->string
                   VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
                   ALLOC_CELLARR_TO_RA
-                  VM_REFCOUNT_DECR_RT
+                  DEC_REFCNT_RT
                   VM_CELL_STACK_POP_R
 
                   ast-const-get
@@ -837,7 +837,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     (label WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
            (PHA)
-           (JSR VM_REFCOUNT_DECR_RT)
+           (JSR DEC_REFCNT_RT)
            (PLA)
            (TAY)                                ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
@@ -1560,7 +1560,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (AND !$83)
           (CMP !$03)
           (BEQ IS_INT__BC_INT_P)
-          (JSR VM_REFCOUNT_DECR_RT)
+          (JSR DEC_REFCNT_RT)
           (LDA !$03)
           (LDX !$00)
    (label IS_INT__BC_INT_P)
@@ -2196,7 +2196,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (CMP ZP_RT)
           (BNE NE__BC_CELL_EQ)
 
-          (JSR VM_REFCOUNT_DECR_RT)
+          (JSR DEC_REFCNT_RT)
           (JSR VM_REFCOUNT_DECR_RA)
           (DEC ZP_CELL_STACK_TOS)
           (JSR VM_WRITE_INT1_TO_RT)
@@ -2206,7 +2206,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (STA ZP_RA)
    (label NE__BC_CELL_EQ)
-          (JSR VM_REFCOUNT_DECR_RT)
+          (JSR DEC_REFCNT_RT)
           (JSR VM_REFCOUNT_DECR_RA)
           (DEC ZP_CELL_STACK_TOS)
           (JSR VM_WRITE_INT0_TO_RT)
@@ -2321,7 +2321,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_POP
   (list
    (label BC_POP)
-          (JSR VM_REFCOUNT_DECR_RT)
+          (JSR DEC_REFCNT_RT)
           (JSR VM_CELL_STACK_POP_R)
           (JMP VM_INTERPRETER_INC_PC)))
 
