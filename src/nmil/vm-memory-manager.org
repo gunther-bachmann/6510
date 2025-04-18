@@ -1,5 +1,35 @@
 #+title: vm-memory-manager
 * open tasks
+** DONE implement util function to provide labels with local suffix
+- State "DONE"       from "TODO"       [2025-04-18 Fri 14:12]
+- example: replace all labels and jumps to labels that end with ~__~ with ~__some_funcion~
+ #+begin_src scheme
+   (define some_function
+     (add-label-suffix
+      "__" "__some_function"
+      (list
+       (label "some_function")
+              (ADC !$20)
+              (BCC "local_label__")
+              (RTS)
+       (label "local_label__")
+              (SBC !$20)
+              (RTS))))
+ #+end_src
+ ... is then transformed to ...
+ #+begin_src scheme
+   (define some_function
+     (list
+      (label "some_function")
+             (ADC !$20)
+             (BCC "local_label__some_function")
+             (RTS)
+      (label "local_label__some_function")
+             (SBC !$20)
+             (RTS)))
+ #+end_src
+** TODO idea
+instead of implementing free for RT and RA, implement one function, copying RT/RA to (e.g. RC) and work on RC only!
 ** IMPLEMENT modularize functions using naming convention
 - use naming conventions in [[file:~/repo/+1/6510/TODO.org]]
 - make functions composable to provide conceptual functions

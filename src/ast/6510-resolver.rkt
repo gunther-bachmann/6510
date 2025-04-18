@@ -21,7 +21,8 @@
          resolved-program->bytes
          commands->bytes
          label-label
-         label-offset)
+         label-offset
+         add-label-suffix)
 
 ;; is this instruction introducing a label referencing a byte value (e.g. constant def)?
 (define/c (byte-label-cmd? instruction)
@@ -537,3 +538,174 @@
   (check-equal? (commands->bytes #xa000 (list (ast-label-def-cmd '() "before")
                                              (ast-unresolved-rel-opcode-cmd '() '(#xd0) (ast-resolve-byte-scmd "before" 'low-byte))))
                 '(#xd0 #xfe)))
+
+(define/c (string-suffix-w-offset? str suffix)
+  (-> string? string? boolean?)
+  (regexp-match? (regexp (string-join (list (regexp-quote suffix) "([+-][0-9a-f]+)?$") "")) str))
+
+(module+ test #| string-suffix-w-offset? |#
+  (check-true (string-suffix-w-offset? "some__+1" "__"))
+  (check-true (string-suffix-w-offset? "some__+15" "__"))
+  (check-true (string-suffix-w-offset? "some__+1a" "__"))
+  (check-true (string-suffix-w-offset? "some__-1" "__"))
+  (check-true (string-suffix-w-offset? "some__-15" "__"))
+  (check-true (string-suffix-w-offset? "some__-1a" "__"))
+  (check-true (string-suffix-w-offset? "some__" "__"))
+  (check-false (string-suffix-w-offset? "some__+" "__"))
+  (check-false (string-suffix-w-offset? "some__+1a_" "__"))
+  (check-false (string-suffix-w-offset? "some__-" "__"))
+  (check-false (string-suffix-w-offset? "some__-1a_" "__"))
+  (check-false (string-suffix-w-offset? "some__a" "__"))
+  (check-false (string-suffix-w-offset? "some" "__")))
+
+;; replace the given suffix in str (if present)
+(define/c (string-replace-suffix str suffix with)
+  (-> string? string? string? string?)
+  (regexp-replace (regexp (string-join (list (regexp-quote suffix) "([+-][0-9a-f]+)?$") ""))
+                  str
+                  (string-join (list with "\\1") "")))
+
+(module+ test #| string-replace-suffix |#
+  (check-equal? (string-replace-suffix "some_function__" "__" "__suffix")
+                "some_function__suffix")
+  (check-equal? (string-replace-suffix "some__+1" "__" "__suffix")
+                "some__suffix+1")
+  (check-equal? (string-replace-suffix "some__+15" "__" "__suffix")
+                "some__suffix+15")
+  (check-equal? (string-replace-suffix "some__+1a" "__" "__suffix")
+                "some__suffix+1a")
+  (check-equal? (string-replace-suffix "some__-1" "__" "__suffix")
+                "some__suffix-1")
+  (check-equal? (string-replace-suffix "some__-15" "__" "__suffix")
+                "some__suffix-15")
+  (check-equal? (string-replace-suffix "some__-1a" "__" "__suffix")
+                "some__suffix-1a")
+  (check-equal? (string-replace-suffix "some__" "__" "__suffix")
+                "some__suffix")
+
+  (check-equal? (string-replace-suffix "some_function__o" "__" "__suffix")
+                "some_function__o"))
+
+;; replace suffix in label of ast-resolve-sub-cmd
+(define/c (string-replace-suffix-in-sub-cmd cmd suffix with)
+  (-> (or/c ast-resolve-sub-cmd? ast-resolve-byte-scmd? ast-resolve-word-scmd?) string? string? ast-resolve-sub-cmd?)
+  (cond [(ast-resolve-byte-scmd? cmd)
+         (struct-copy ast-resolve-byte-scmd cmd
+                      [label #:parent ast-resolve-sub-cmd
+                       (string-replace-suffix (ast-resolve-sub-cmd-label cmd) suffix with)])]
+        [(ast-resolve-word-scmd? cmd)
+         (struct-copy ast-resolve-word-scmd cmd
+                      [label #:parent ast-resolve-sub-cmd
+                       (string-replace-suffix (ast-resolve-sub-cmd-label cmd) suffix with)])]
+        [(ast-resolve-sub-cmd? cmd)
+         (struct-copy ast-resolve-sub-cmd cmd
+                      [label
+                       (string-replace-suffix (ast-resolve-sub-cmd-label cmd) suffix with)])]
+        [else (raise-user-error (format "subcommand ~a unexpected here"))]))
+
+(module+ test #| string-replace-suffix-in-sub-cmd |#
+  (check-equal? (string-replace-suffix-in-sub-cmd (ast-resolve-sub-cmd "label__")
+                                                  "__"
+                                                  "__suffix")
+                (ast-resolve-sub-cmd "label__suffix"))
+  (check-equal? (string-replace-suffix-in-sub-cmd (ast-resolve-byte-scmd "label__" 'relative)
+                                                  "__"
+                                                  "__suffix")
+                (ast-resolve-byte-scmd "label__suffix" 'relative))
+  (check-equal? (string-replace-suffix-in-sub-cmd (ast-resolve-word-scmd "label__")
+                                                  "__"
+                                                  "__suffix")
+                (ast-resolve-word-scmd "label__suffix")))
+
+;; replace this suffix in label of unresolved command
+(define/c (replace-label-suffix cmd suffix new-suffix)
+  (-> ast-command? string? string? ast-command?)
+  (cond [(ast-label-def-cmd? cmd)
+         (struct-copy ast-label-def-cmd cmd
+                      [label (string-replace-suffix
+                              (ast-label-def-cmd-label cmd)
+                              suffix
+                              new-suffix)])]
+        [(ast-unresolved-rel-opcode-cmd? cmd)
+         (struct-copy ast-unresolved-rel-opcode-cmd cmd
+                      [resolve-sub-command (string-replace-suffix-in-sub-cmd
+                                            (ast-unresolved-rel-opcode-cmd-resolve-sub-command cmd)
+                                            suffix
+                                            new-suffix)])]
+        [(ast-unresolved-opcode-cmd? cmd)
+         (struct-copy ast-unresolved-opcode-cmd cmd
+                      [resolve-sub-command (string-replace-suffix-in-sub-cmd
+                                            (ast-unresolved-opcode-cmd-resolve-sub-command cmd)
+                                            suffix
+                                            new-suffix)])]
+        [(ast-unresolved-bytes-cmd? cmd)
+         (struct-copy ast-unresolved-bytes-cmd cmd
+                      [resolve-sub-command (string-replace-suffix-in-sub-cmd
+                                            (ast-unresolved-bytes-cmd-resolve-sub-command cmd)
+                                            suffix
+                                            new-suffix)])]
+        [(ast-decide-cmd? cmd)
+         (define new-options (map (lambda (option) (replace-label-suffix option suffix new-suffix))
+                                  (ast-decide-cmd-options cmd)))
+         (struct-copy ast-decide-cmd cmd
+                      [options new-options])]
+        [else cmd]))
+
+(module+ test #| |#
+  (check-equal? (replace-label-suffix
+                 (ast-label-def-cmd '() "some__")
+                 "__" "__suffix")
+                (ast-label-def-cmd '() "some__suffix"))
+  (check-equal? (replace-label-suffix
+                 (ast-unresolved-bytes-cmd '() '() (ast-resolve-sub-cmd "some__"))
+                 "__" "__suffix")
+                (ast-unresolved-bytes-cmd '() '() (ast-resolve-sub-cmd "some__suffix")))
+  (check-equal? (replace-label-suffix
+                 (ast-unresolved-rel-opcode-cmd '() '() (ast-resolve-byte-scmd "some__" 'relative ))
+                 "__" "__suffix")
+                (ast-unresolved-rel-opcode-cmd '() '() (ast-resolve-byte-scmd "some__suffix" 'relative )))
+  (check-equal? (replace-label-suffix
+                 (ast-unresolved-opcode-cmd '() '() (ast-resolve-sub-cmd "some__"))
+                 "__" "__suffix")
+                (ast-unresolved-opcode-cmd '() '() (ast-resolve-sub-cmd "some__suffix")))
+  (check-equal? (replace-label-suffix
+                 (ast-decide-cmd
+                  '()
+                  (list
+                   (ast-unresolved-opcode-cmd '() '(133) (ast-resolve-byte-scmd "some__" 'low-byte))
+                   (ast-unresolved-opcode-cmd '() '(141) (ast-resolve-word-scmd "some__"))))
+                 "__" "__suffix")
+                (ast-decide-cmd
+                  '()
+                  (list
+                   (ast-unresolved-opcode-cmd '() '(133) (ast-resolve-byte-scmd "some__suffix" 'low-byte))
+                   (ast-unresolved-opcode-cmd '() '(141) (ast-resolve-word-scmd "some__suffix"))))))
+
+;; replace suffix in label of all unresolved commands
+(define/c (add-label-suffix suffix-to-replace new-suffix commands (transformed-commands '()))
+  (->* [string? string? (listof ast-command?)] [(listof ast-command?)] (listof ast-command?))
+  (cond
+    [(empty? commands) (reverse transformed-commands)]
+    [else
+     (define cmd (car commands))
+     (add-label-suffix
+      suffix-to-replace
+      new-suffix
+      (cdr commands)
+      (cons (replace-label-suffix cmd suffix-to-replace new-suffix)
+            transformed-commands))]))
+
+(module+ test #| add-label-suffix |#
+  (check-equal? (add-label-suffix "__" "__suffix"
+                                  (list (ast-label-def-cmd '() "some")
+                                        (ast-unresolved-rel-opcode-cmd '() '() (ast-resolve-byte-scmd "some__" 'relative))
+                                        (ast-label-def-cmd '() "some__")
+                                        (ast-unresolved-bytes-cmd '() '() (ast-resolve-sub-cmd "some__+1"))
+                                        (ast-unresolved-opcode-cmd '() '() (ast-resolve-sub-cmd "some__"))
+                                        (ast-bytes-cmd '() '())))
+                (list (ast-label-def-cmd '() "some")
+                      (ast-unresolved-rel-opcode-cmd '() '() (ast-resolve-byte-scmd "some__suffix" 'relative))
+                      (ast-label-def-cmd '() "some__suffix")
+                      (ast-unresolved-bytes-cmd '() '() (ast-resolve-sub-cmd "some__suffix+1"))
+                      (ast-unresolved-opcode-cmd '() '() (ast-resolve-sub-cmd "some__suffix"))
+                      (ast-bytes-cmd '() '()))))

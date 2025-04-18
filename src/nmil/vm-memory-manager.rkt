@@ -72,6 +72,7 @@ call frame primitives etc.
 (require (only-in "../util.rkt" bytes->int low-byte high-byte format-hex-byte format-hex-word))
 (require (only-in racket/list flatten take empty? drop make-list))
 (require (only-in "../ast/6510-relocator.rkt" command-len))
+(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -4530,61 +4531,62 @@ call frame primitives etc.
 ;; input: ZP_RA  pointer to bucket slot (which can be anything, but most likely a cell-array or a native-array)
 ;; use: may use ZP_RT during GC? :: TODO: fix that, RT may not be overwritten
 (define VM_REFCOUNT_DECR_RA__M1_SLOT
-  (list
-   (label VM_REFCOUNT_DECR_RA__M1_SLOT)
-          (DEC ZP_RA)
-          (LDY !$00)
-          (LDA (ZP_RA),y)
-          (SEC)
-          (SBC !$01)            ;;  pointers are organized such that there is no page boundary crossed (=> no adjustment of highbyte necessary)
-          (STA (ZP_RA),y)
-          (BNE NO_GC__VM_REFCOUNT_DECR_RA__M1_SLOT)
+  (add-label-suffix
+   "__" "__VM_REFCOUNT_DECR_RA__M1_SLOT"
+   (list
+    (label VM_REFCOUNT_DECR_RA__M1_SLOT)
+           (DEC ZP_RA)
+           (LDY !$00)
+           (LDA (ZP_RA),y)
+           (SEC)
+           (SBC !$01)            ;;  pointers are organized such that there is no page boundary crossed (=> no adjustment of highbyte necessary)
+           (STA (ZP_RA),y)
+           (BNE NO_GC__)
 
-          ;; DO GC THIS SLOT and then FREE!!
-          ;; what kind of object is this (read header cell)
-          ;; then dispatch an header cell type
-          (INC ZP_RA) ;; now pointing at the first (lowbyte) of the cell header
-          (LDA (ZP_RA),y) ;; y still 0
-          (CMP !TAG_BYTE_CELL_ARRAY)       ;;
-          (BNE NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
+           ;; DO GC THIS SLOT and then FREE!!
+           ;; what kind of object is this (read header cell)
+           ;; then dispatch an header cell type
+           (INC ZP_RA) ;; now pointing at the first (lowbyte) of the cell header
+           (LDA (ZP_RA),y) ;; y still 0
+           (CMP !TAG_BYTE_CELL_ARRAY)       ;;
+           (BNE NEXT0__)
 
-          ;; TODO: register array as free  (lazy)
-          ;; its a regular array slot, (gc each slot, beware recursion!!!!)
-          ;; save rt
-          ;; TODO: clean this ugly code up!
-          (LDA ZP_RT)
-          (STA SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT)
-          (LDA ZP_RT+1)
-          (STA SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT+1)
+           ;; TODO: register array as free  (lazy)
+           ;; its a regular array slot, (gc each slot, beware recursion!!!!)
+           ;; save rt
+           ;; TODO: clean this ugly code up!
+           (LDA ZP_RT)
+           (STA SAVE_RT__)
+           (LDA ZP_RT+1)
+           (STA SAVE_RT__+1)
 
-          (JSR VM_CP_RA_TO_RT) ;; illegal use of rt here!
-          (JSR VM_GC_ARRAY_SLOT_RT) ;; illegal use of rt here!, uses RA, too!!
-          (JSR VM_CP_RT_TO_RA) ;; illegal use of rt here!
+           (JSR VM_CP_RA_TO_RT) ;; illegal use of rt here!
+           (JSR VM_GC_ARRAY_SLOT_RT) ;; illegal use of rt here!, uses RA, too!!
+           (JSR VM_CP_RT_TO_RA) ;; illegal use of rt here!
 
-          (LDA SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT)
-          (STA ZP_RT)
-          (LDA SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT+1)
-          (STA ZP_RT+1)
+           (LDA SAVE_RT__)
+           (STA ZP_RT)
+           (LDA SAVE_RT__+1)
+           (STA ZP_RT+1)
 
-          (JMP FREE_M1_SLOT_RA)
+           (JMP FREE_M1_SLOT_RA)
 
-   (label NEXT0__VM_REFCOUNT_DECR_RA__M1_SLOT)
-          (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BNE NEXT1__VM_REFCOUNT_DECR_RA__M1_SLOT)
+    (label NEXT0__)
+           (CMP !TAG_BYTE_NATIVE_ARRAY)
+           (BNE NEXT1__)
 
-          ;; it's a native array slot (no gc necessary)
-          (JMP FREE_M1_SLOT_RA)
+           ;; it's a native array slot (no gc necessary)
+           (JMP FREE_M1_SLOT_RA)
 
-   (label NEXT1__VM_REFCOUNT_DECR_RA__M1_SLOT)
-          (BRK) ;; error, unknown complex slot type
+    (label NEXT1__)
+           (BRK) ;; error, unknown complex slot type
 
-   (label NO_GC__VM_REFCOUNT_DECR_RA__M1_SLOT)
-          (INC ZP_RA)
-          (RTS)
+    (label NO_GC__)
+           (INC ZP_RA)
+           (RTS)
 
-   (label SAVE_RT__VM_REFCOUNT_DECR_RA__M1_SLOT)
-          (word $0000)))
-
+    (label SAVE_RT__)
+           (word $0000))))
 
 (module+ test #| vm_dec_ref_bucket_slot (no gc) |#
   (define test-dec-ref-bucket-slot-1-code
