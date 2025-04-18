@@ -76,7 +76,7 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
   |      | ;; VM_FREE_MODULE                           | ?                                |      |                                                                    |
   |      | ;; VM_RELOCATE_MODULE_X_TO_                 | ?                                |      |                                                                    |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------------------|
-  |      | refcount                                    |                                  |      |                                                                    |
+  | x    | refcount                                    |                                  |      |                                                                    |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------------------|
   | x    | VM_REFCOUNT_DECR_RT                         | DEC_REFCNT_RT                    |      |                                                                    |
   | x    | VM_REFCOUNT_INCR_RT                         | INC_REFCNT_RT                    |      |                                                                    |
@@ -84,9 +84,9 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
   | x    | VM_REFCOUNT_DECR_RT__CELL_PTR               | DEC_REFCNT_CELL_RT               |      |                                                                    |
   | x    | VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR          | INC_REFCNT_CELLPAIR_RT           |      |                                                                    |
   | x    | VM_REFCOUNT_INCR_RT__CELL_PTR               | INC_REFCNT_CELL_RT               |      |                                                                    |
-  |      | VM_REFCOUNT_DECR_RA                         | ?                                |      |                                                                    |
-  |      | VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR          | ?                                |      |                                                                    |
-  |      | VM_REFCOUNT_DECR_RA__CELL_PTR               | ?                                |      |                                                                    |
+  | x    | VM_REFCOUNT_DECR_RA                         | ?                                |      |                                                                    |
+  | x    | VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR          | ?                                |      |                                                                    |
+  | x    | VM_REFCOUNT_DECR_RA__CELL_PTR               | ?                                |      |                                                                    |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------------------|
   |      | misc                                        |                                  |      |                                                                    |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------------------|

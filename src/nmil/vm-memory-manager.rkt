@@ -165,9 +165,9 @@ call frame primitives etc.
           INC_REFCNT_CELLPAIR_RT                 ;; increment refcount of cell-pair
           INC_REFCNT_CELL_RT                      ;; increment refcount of the cell, rt is pointing to
 
-          VM_REFCOUNT_DECR_RA                                ;; generic decrement of refcount (dispatches depending on type)
-          VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
-          VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+          DEC_REFCNT_RA                                ;; generic decrement of refcount (dispatches depending on type)
+          DEC_REFCNT_CELLPAIR_RA                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+          DEC_REFCNT_CELL_RA                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
           ;; ---------------------------------------- call frame
 
           ;; ---------------------------------------- misc
@@ -2134,7 +2134,7 @@ call frame primitives etc.
 
    (label IS_M1_PAGE__)
           (JSR VM_CP_RT_TO_RA)
-          (JMP VM_REFCOUNT_DECR_RA__M1_SLOT)
+          (JMP DEC_REFCNT_M1_SLOT_RA)
 
    (label IS_CELL_PAGE__CELL__)
           (LDA ZP_RT) ;; lowbyte (offset)
@@ -2158,87 +2158,88 @@ call frame primitives etc.
 ;;         (in case of cell pages @ZP_RT>>1)
 ;;         (in case of cell-pair pages @ZP_RT>>2)
 ;;         (in case of 8s pages @ZP_RT>>3)
-(define VM_REFCOUNT_DECR_RA__CELL_PTR #t)
-(define VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR #t)
-(define VM_REFCOUNT_DECR_RA
+(define DEC_REFCNT_CELL_RA #t)
+(define DEC_REFCNT_CELLPAIR_RA #t)
+(define DEC_REFCNT_RA
+  (add-label-suffix
+   "__" "__DEC_REFCNT_RA"
   (list
-   (label VM_REFCOUNT_DECR_RA)
+   (label DEC_REFCNT_RA)
           (LDA ZP_RA)
-          (BEQ UNKNOWN__VM_REFCOUNT_DECR_RA) ;; low-byte of a pointer may never be 0!
+          (BEQ UNKNOWN__) ;; low-byte of a pointer may never be 0!
           (LSR)
-          (BCC VM_REFCOUNT_DECR_RA__CELL_PTR) ;; lowest bit is 0 -> cell-ptr
+          (BCC DEC_REFCNT_CELL_RA) ;; lowest bit is 0 -> cell-ptr
           (LSR)
-          (BCC VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR__LSR) ;; ends on b01 => cell-pair ptr
+          (BCC LSR_CELLPAIR__) ;; ends on b01 => cell-pair ptr
 
           ;; check other types of cells
           ;; (LDA ZP_RA)
           ;; (CMP !TAG_BYTE_CELL_ARRAY)
-          ;; (BEQ DECR_CELL_ARRAY__VM_REFCOUNT_DECR_RA)
+          ;; (BEQ DECR_CELL_ARRAY__)
           ;; (CMP !TAG_BYTE_NATIVE_ARRAY)
-          ;; (BEQ DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_RA)
+          ;; (BEQ DECR_NATIVE_ARRAY__)
 
-   (label UNKNOWN__VM_REFCOUNT_DECR_RA)
+   (label UNKNOWN__)
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RT)
-   (label DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+   (label DONE__)
           (RTS)
 
-   (label DECR_CELL_ARRAY__VM_REFCOUNT_DECR_RA)
-   (label DECR_NATIVE_ARRAY__VM_REFCOUNT_DECR_RA)
-          ;; (JMP VM_REFCOUNT_DECR_RA__M1_SLOT_PTR)
+   (label DECR_CELL_ARRAY__)
+   (label DECR_NATIVE_ARRAY__)
+          ;; (JMP DEC_REFCNT_M1_SLOT_RA)
           (BRK)
 
    ;; input: cell-pair ptr in ZP_RA
    ;; decrement ref count, if 0 deallocate
-   (label VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+   (label DEC_REFCNT_CELLPAIR_RA)
           (LDA ZP_RA)
           (LSR)
           (LSR)
-   (label VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR__LSR)
+   (label LSR_CELLPAIR__)
           (TAX)
           (LDA ZP_RA+1)
-          (BEQ DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (BEQ DONE__)
           ;; not nil
-          (STA PAGE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
-   (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (STA DEC_PAGE_CELLPAIR_CNT__+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+   (label DEC_PAGE_CELLPAIR_CNT__)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR)
+          (BNE DONE__)
           (JMP FREE_CELLPAIR_RA) ;; free delayed
 
    ;; input: cell ptr in ZP_RA
    ;; decrement ref count, if 0 deallocate
-   (label VM_REFCOUNT_DECR_RA__CELL_PTR)
+   (label DEC_REFCNT_CELL_RA)
           ;; find out which page type is used (cell-ptr-page, m1-page, slot-page)
           (LDA ZP_RA+1) ;; highbyte (page)
-          (BEQ DONE__VM_REFCOUNT_DECR_RA__CELL_PTR) ;; page=0 => empty, nothing to be done
-          (STA LOAD_PAGE_TYPE__VM_REFCOUNT_DECR_RA__CELL_PTR+2)
-   (label LOAD_PAGE_TYPE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (BEQ DONE__) ;; page=0 => empty, nothing to be done
+          (STA LOAD_CELL_PAGE_TYPE__+2)
+   (label LOAD_CELL_PAGE_TYPE__)
           (LDA $c000) ;; c0 is overwritten by page
-          (BMI IS_CELL_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (BMI IS_CELL_PAGE__)
           (AND !$e8)
-          (BEQ IS_M1_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (BEQ IS_M1_PAGE__)
 
           (BRK) ;; unhandled page type
 
-   (label IS_M1_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (JMP VM_REFCOUNT_DECR_RA__M1_SLOT)
+   (label IS_M1_PAGE__)
+          (JMP DEC_REFCNT_M1_SLOT_RA)
           ;; (LDX ZP_RA)
           ;; (DEX)
-          ;; (BNE NOW_DECREMENT_RC__VM_REFCOUNT_DECR_RA__CELL_PTR) ;; is never 0! for m1 pages
+          ;; (BNE NOW_DECREMENT_CELL_CNT__) ;; is never 0! for m1 pages
 
-   (label IS_CELL_PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+   (label IS_CELL_PAGE__)
           (LDA ZP_RA) ;; lowbyte (offset)
           (LSR)
           (TAX)
 
-   (label NOW_DECREMENT_RC__VM_REFCOUNT_DECR_RA__CELL_PTR)
+   (label NOW_DECREMENT_CELL_CNT__)
           (LDA ZP_RA+1)
-          (STA PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
-   (label PAGE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (STA DEC_PAGE_CELL_CNT__+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+   (label DEC_PAGE_CELL_CNT__)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
-          (BNE DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
+          (BNE DONE__)
           (JMP FREE_CELL_RA) ;; free delayed
-   (label DONE__VM_REFCOUNT_DECR_RA__CELL_PTR)
-          (RTS)))
+)))
 
 ;; find out what kind of cell zp_rt points to,
 ;; then call the right decrement refcounts function
@@ -2863,7 +2864,7 @@ call frame primitives etc.
           (LDA ZP_RA+1)
           (STA RA_COPY__GC_CELLPAIR_FREE_LIST+1)
           (JSR VM_WRITE_RA_CELL1_TO_RA)
-          (JSR VM_REFCOUNT_DECR_RA) ;; this may change the queue again, which is alright, since RA was removed from queue          
+          (JSR DEC_REFCNT_RA) ;; this may change the queue again, which is alright, since RA was removed from queue
           (LDA RA_COPY__GC_CELLPAIR_FREE_LIST)
           (STA ZP_RA)
           (LDA RA_COPY__GC_CELLPAIR_FREE_LIST+1)
@@ -3231,7 +3232,7 @@ call frame primitives etc.
    (label FREE_CELL_ARRAY__FREE_CELL_RT)
    (label FREE_NATIVE_ARRAY__FREE_CELL_RT)
           ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
-          (JMP VM_REFCOUNT_DECR_RA__M1_SLOT) ;; cell and native arrays are allocated on m1 pages
+          (JMP DEC_REFCNT_M1_SLOT_RA) ;; cell and native arrays are allocated on m1 pages
           ;; this cell was a header field of a m1slot -> no further processing
 
   (label CONT__FREE_CELL_RT)
@@ -3300,7 +3301,7 @@ call frame primitives etc.
    (label FREE_CELL_ARRAY__FREE_CELL_RA)
    (label FREE_NATIVE_ARRAY__FREE_CELL_RA)
           ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
-          (JMP VM_REFCOUNT_DECR_RA__M1_SLOT) ;; cell and native arrays are allocated on m1 pages
+          (JMP DEC_REFCNT_M1_SLOT_RA) ;; cell and native arrays are allocated on m1 pages
           ;; this cell was a header field of a m1slot -> no further processing
 
   (label CONT__FREE_CELL_RA)
@@ -3323,7 +3324,7 @@ call frame primitives etc.
           (STA ZP_RA+1)
           (LDA LIST_TO_FREE__FREE_CELL_RA)
           (STA ZP_RA)
-          (JMP VM_REFCOUNT_DECR_RA) ;; tail call if cell did hold a reference
+          (JMP DEC_REFCNT_RA) ;; tail call if cell did hold a reference
 
    (label DONE__FREE_CELL_RA)
           (RTS)
@@ -3556,7 +3557,7 @@ call frame primitives etc.
           (LDA ZP_TEMP)
           (STA ZP_RA)
 
-          (JMP VM_REFCOUNT_DECR_RA) ;; chain call
+          (JMP DEC_REFCNT_RA) ;; chain call
 
    (label DONE__FREE_CELLPAIR_RA)
           (RTS)))
@@ -4530,11 +4531,11 @@ call frame primitives etc.
 ;; TODO: check whether this should operate on RA or rather on RT
 ;; input: ZP_RA  pointer to bucket slot (which can be anything, but most likely a cell-array or a native-array)
 ;; use: may use ZP_RT during GC? :: TODO: fix that, RT may not be overwritten
-(define VM_REFCOUNT_DECR_RA__M1_SLOT
+(define DEC_REFCNT_M1_SLOT_RA
   (add-label-suffix
-   "__" "__VM_REFCOUNT_DECR_RA__M1_SLOT"
+   "__" "__DEC_REFCNT_M1_SLOT_RA"
    (list
-    (label VM_REFCOUNT_DECR_RA__M1_SLOT)
+    (label DEC_REFCNT_M1_SLOT_RA)
            (DEC ZP_RA)
            (LDY !$00)
            (LDA (ZP_RA),y)
@@ -4597,7 +4598,7 @@ call frame primitives etc.
      (LDA !$04)
      (STA ZP_RA) ;; RA is set to $f004
 
-     (JSR VM_REFCOUNT_DECR_RA__M1_SLOT)))
+     (JSR DEC_REFCNT_M1_SLOT_RA)))
 
   (define test-dec-ref-bucket-slot-1-state-after
     (run-code-in-test test-dec-ref-bucket-slot-1-code))
@@ -4760,7 +4761,7 @@ call frame primitives etc.
           (STA ZP_RA)
           (LDA ZP_TEMP+1)
           (STA ZP_RA+1)
-          (JMP VM_REFCOUNT_DECR_RA)
+          (JMP DEC_REFCNT_RA)
 ))
 
 ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
@@ -4792,7 +4793,7 @@ call frame primitives etc.
           (LDA (ZP_RT),y) ;; load high byte
           (STA ZP_RA+1)
           (STY LOOP_IDX__VM_GC_ARRAY_SLOT_PTR)
-          (JSR VM_REFCOUNT_DECR_RA)
+          (JSR DEC_REFCNT_RA)
           (LDY LOOP_IDX__VM_GC_ARRAY_SLOT_PTR)
     (label NEXT__VM_GC_ARRAY_SLOT_PTR)
           (DEC LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
@@ -4841,7 +4842,7 @@ call frame primitives etc.
 
           ;; TODO: possible recursion! save ZP_RC??
           ;; better! do lazy
-          (JSR VM_REFCOUNT_DECR_RA)
+          (JSR DEC_REFCNT_RA)
           ;; restore RC
           (LDY LOOP_IDX__VM_GC_ARRAY_SLOTS_PTR)
     (label NEXT__VM_GC_ARRAY_SLOTS_PTR)
@@ -5394,10 +5395,10 @@ call frame primitives etc.
           VM_REFCOUNT_INCR_RA__M1_SLOT                         ;; increment refcount of m1-slot
           ;; INC_REFCNT_CELL_RT                      ;; increment refcount of the cell, rt is pointing to
 
-          VM_REFCOUNT_DECR_RA                                ;; generic decrement of refcount (dispatches depending on type)
-          ;; VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
-          VM_REFCOUNT_DECR_RA__M1_SLOT                       ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
-          ;; VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+          DEC_REFCNT_RA                                ;; generic decrement of refcount (dispatches depending on type)
+          ;; DEC_REFCNT_CELLPAIR_RA                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+          DEC_REFCNT_M1_SLOT_RA                       ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+          ;; DEC_REFCNT_CELL_RA                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
           ;; ---------------------------------------- call frame
 
           ;; ---------------------------------------- misc
