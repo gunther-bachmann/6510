@@ -800,7 +800,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
            (JSR VM_WRITE_RT_CELL0_TO_RT)
-           (JSR VM_REFCOUNT_INCR_RT)
+           (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label CDR__BC_PUSH_LOCAL_SHORT)
@@ -812,7 +812,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
            (JSR VM_WRITE_RT_CELL1_TO_RT)
-           (JSR VM_REFCOUNT_INCR_RT)
+           (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 )))
 
@@ -832,7 +832,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
-           (JSR VM_REFCOUNT_INCR_RT)
+           (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
@@ -844,7 +844,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT)                          ;; 
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index 
            (STA ZP_RT+1)                        ;; 
-           (JSR VM_REFCOUNT_INCR_RT)
+           (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
            )))
 
@@ -905,7 +905,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LDA ZP_RT+1)
            (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
            ;; increment, since it is no in locals and on stack
-           (JSR VM_REFCOUNT_INCR_RT)
+           (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 )))
 
@@ -1359,16 +1359,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_COONS)
           (JSR VM_CONS_R)
-          (JSR VM_REFCOUNT_INCR_RT)
+          (JSR INC_REFCNT_RT)
           (JSR VM_CONS_R)
-          (JSR VM_REFCOUNT_INCR_RT)
+          (JSR INC_REFCNT_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_CONS
   (list
    (label BC_CONS)          
           (JSR VM_CONS_R)
-          (JSR VM_REFCOUNT_INCR_RT)
+          (JSR INC_REFCNT_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| bc-cons |#
@@ -1392,7 +1392,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_CAR)
           (JSR VM_CP_RT_TO_RA)
           (JSR VM_CAR_R)
-          (JSR VM_REFCOUNT_INCR_RT)
+          (JSR INC_REFCNT_RT)
           (JSR VM_REFCOUNT_DECR_RA)
           (JMP VM_INTERPRETER_INC_PC)
 
@@ -1418,7 +1418,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_CDR)
           (JSR VM_CP_RT_TO_RA)
           (JSR VM_CDR_R)
-          (JSR VM_REFCOUNT_INCR_RT)
+          (JSR INC_REFCNT_RT)
           (JSR VM_REFCOUNT_DECR_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -2178,7 +2178,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_DUP
   (list
    (label BC_DUP)
-          (JSR VM_REFCOUNT_INCR_RT)
+          (JSR INC_REFCNT_RT)
           (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -2371,7 +2371,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDX ZP_RT+1)
           (STX ZP_RA+1)
           (JSR VM_CxxR_R)
-          (JSR VM_REFCOUNT_INCR_RT)
+          (JSR INC_REFCNT_RT)
           (JSR VM_REFCOUNT_DECR_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -2454,7 +2454,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR VM_CP_RT_TO_RA)
            (PLA)
            (JSR VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
-           (JSR VM_REFCOUNT_INCR_RT)
+           (JSR INC_REFCNT_RT)
            (JSR VM_REFCOUNT_DECR_RA)
            (JMP VM_INTERPRETER_INC_PC)
 
