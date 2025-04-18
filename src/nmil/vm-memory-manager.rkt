@@ -1030,19 +1030,21 @@ call frame primitives etc.
 ;; uses:   A Y
 ;; CHECK STACK PAGE OVERFLOW
 (define VM_CELL_STACK_JUST_PUSH_RT
+  (add-label-suffix
+   "__" "__VM_CELL_STACK_JUST_PUSH_RT"
   (list
    (label VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
           (LDY ZP_RT)
           ;; if RT empty?  = $00 
-          (BEQ DONE__VM_CELL_STACK_JUST_PUSH_RT)        ;; then no push
+          (BEQ DONE__)        ;; then no push
 
    ;; ----------------------------------------
    (label VM_CELL_STACK_JUST_PUSH_RT)
           (LDY ZP_CELL_STACK_TOS)
           (INY)
-          [BNE NO_ERROR__VM_CELL_STACK_JUST_PUSH_RT]
+          [BNE NO_ERROR__]
 
-   (label ALLOCATE_NEW_STACK_PAGE__VM_CELL_STACK_JUST_PUSH_RT)
+   (label ALLOCATE_NEW_STACK_PAGE__)
           (JSR ALLOC_PAGE_TO_X)
           (LDA ZP_CELL_STACK_LB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_X)
@@ -1055,15 +1057,15 @@ call frame primitives etc.
 
           (LDY !$02)                          ;; new tos starts 
 
-   (label NO_ERROR__VM_CELL_STACK_JUST_PUSH_RT)
+   (label NO_ERROR__)
           (LDA ZP_RT+1)
           (STA (ZP_CELL_STACK_HB_PTR),y)      ;; write high byte! 
           (LDA ZP_RT)
           (STA (ZP_CELL_STACK_LB_PTR),y)      ;; write low byte 
           (STY ZP_CELL_STACK_TOS)             ;; set new tos
 
-   (label DONE__VM_CELL_STACK_JUST_PUSH_RT)
-          (RTS)))
+   (label DONE__)
+          (RTS))))
 
 (module+ test #| vm-cell-stack-just-push-rt |#
   (define vm-cell-stack-just-push-rt-code
@@ -1579,6 +1581,8 @@ call frame primitives etc.
   ;;         the page is initialized with each cell pointing to the next free cell on this page (0 marks the end)
   ;; uses: ZP_TEMP, ZP_TEMP2
   (define INIT_CELL_PAGE_X_TO_AX
+    (add-label-suffix
+     "__" "__INIT_CELL_PAGE_X_TO_AX"
     (list
      (label INIT_CELL_PAGE_X_TO_AX)
             ;; page is in A
@@ -1587,39 +1591,39 @@ call frame primitives etc.
             (STA VM_PAGE_SLOT_DATA,x) ;; set slot @02 as the first free slot
 
             (LDA !$03)
-            (STA BLOCK_LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX) ;; how many blocks do we have (3)
+            (STA BLOCK_LOOP_COUNT__) ;; how many blocks do we have (3)
 
             (LDA !$00)
             (STA ZP_TEMP)
 
             (LDY !$01)
             (LDX !$01)
-            (STX LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
+            (STX LOOP_COUNT__)
 
      ;; option: optimization: maybe clearing the whole page would be faster (and shorter) for setting all refcounts to 0?
-     (label LOOP_REF_COUNT__INIT_CELL_PAGE_X_TO_AX)
+     (label LOOP_REF_COUNT__)
             (STA (ZP_TEMP),y) ;; refcount set to 0
             (INY)
             (DEX)
-            (BNE LOOP_REF_COUNT__INIT_CELL_PAGE_X_TO_AX)
-            (LDA LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
+            (BNE LOOP_REF_COUNT__)
+            (LDA LOOP_COUNT__)
             (ASL A)
             (ASL A) ;; times 4
-            (STA LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
+            (STA LOOP_COUNT__)
             (TAX)
             (TAY) ;;
             (LDA !$00)
-            (DEC BLOCK_LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
-            (BPL LOOP_REF_COUNT__INIT_CELL_PAGE_X_TO_AX)
+            (DEC BLOCK_LOOP_COUNT__)
+            (BPL LOOP_REF_COUNT__)
 
             ;; initialize the free list of the cells (first byte in a cell = offset to next free cell)
             (LDA !$02)
-            (STA BLOCK_LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX) ;; how many blocks do we have (3, but the first block is written separately)
+            (STA BLOCK_LOOP_COUNT__) ;; how many blocks do we have (3, but the first block is written separately)
 
             ;; block 1
             (LDY !$02)
             (LDA !$08)
-            (STA LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
+            (STA LOOP_COUNT__)
             (STA (ZP_TEMP),y)
 
             ;; block 2
@@ -1635,28 +1639,28 @@ call frame primitives etc.
      ;; #10        20..3f <- 22.. last= 80
      ;; #40        80..7d <- 82.. last= 00
 
-     (label LOOP_NEXT_FREE__INIT_CELL_PAGE_X_TO_AX)
+     (label LOOP_NEXT_FREE__)
             (STA (ZP_TEMP),y)
             (TAY)
             (CLC)
             (ADC !$02)
             (DEX)
-            (BNE LOOP_NEXT_FREE__INIT_CELL_PAGE_X_TO_AX)
+            (BNE LOOP_NEXT_FREE__)
 
             ;; block n+1
             ;; write last entry
-            (LDA LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
+            (LDA LOOP_COUNT__)
             (ASL A)
             (TAX)
             (ASL A)
-            (STA LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
+            (STA LOOP_COUNT__)
             (STA (ZP_TEMP),y)
             (TAY)
             (CLC)
             (ADC !$02)
             (DEX)
-            (DEC BLOCK_LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
-            (BPL LOOP_NEXT_FREE__INIT_CELL_PAGE_X_TO_AX)
+            (DEC BLOCK_LOOP_COUNT__)
+            (BPL LOOP_NEXT_FREE__)
 
             ;; write last entry
             (LDA !$00)
@@ -1678,10 +1682,10 @@ call frame primitives etc.
 
             (RTS)
 
-     (label LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
+     (label LOOP_COUNT__)
             (byte $00)
-     (label BLOCK_LOOP_COUNT__INIT_CELL_PAGE_X_TO_AX)
-            (byte $00)))
+     (label BLOCK_LOOP_COUNT__)
+            (byte $00))))
 
 (module+ test #| vm_alloc_page__cell |#
   (define test-alloc-page--cell-code
@@ -1745,8 +1749,6 @@ call frame primitives etc.
                       #x00       ;; unused
                       #x00       ;; pointer to previous page
                       )))
-
-
 
 
 ;; cell stack page(s)
@@ -1836,6 +1838,8 @@ call frame primitives etc.
   ;;         A = first free slot ($05)
   ;; usage:  X, Y, ZP_TEMP, ZP_TEMP2
 (define INIT_CELLPAIR_PAGE_X_TO_AX
+  (add-label-suffix
+   "__" "__INIT_CELLPAIR_PAGE_X_TO_AX"
     (list
      (label INIT_CELLPAIR_PAGE_X_TO_AX)
             ;; page is in X
@@ -1865,10 +1869,10 @@ call frame primitives etc.
             (STY ZP_TEMP)
             (LDY !$2F)
 
-     (label SECOND_RC_BLOCK__INIT_CELLPAIR_PAGE_X_TO_AX)
+     (label SECOND_RC_BLOCK__)
             (STA (ZP_TEMP),y)
             (DEY)
-            (BPL SECOND_RC_BLOCK__INIT_CELLPAIR_PAGE_X_TO_AX)
+            (BPL SECOND_RC_BLOCK__)
 
             (STA ZP_TEMP) ;; clear lowbyte of ptr
 
@@ -1880,13 +1884,13 @@ call frame primitives etc.
             (LDA !$41)
             (STA (ZP_TEMP),y) ;; @09 <- 41
 
-     (label SECOND_CELL_PAIR_BLOCK__INIT_CELLPAIR_PAGE_X_TO_AX)
+     (label SECOND_CELL_PAIR_BLOCK__)
             (TAY)
             (CLC)
             (ADC !$04)
             (STA (ZP_TEMP),y)
             (CMP !$F9)
-            (BNE SECOND_CELL_PAIR_BLOCK__INIT_CELLPAIR_PAGE_X_TO_AX)
+            (BNE SECOND_CELL_PAIR_BLOCK__)
 
             (TAY)
             (LDA !$00)
@@ -1896,7 +1900,7 @@ call frame primitives etc.
             (LDA !$05)      ;; return first free slot in A (low byte)
             (STA VM_PAGE_SLOT_DATA,x)
 
-            (RTS)))
+            (RTS))))
 
 (module+ test #| vm_alloc_page_for_cell_pairs |#
   (define vm-alloc-page-for-cell-pairs-code
@@ -2021,6 +2025,8 @@ call frame primitives etc.
 ;; output: ZP_RT
 ;; WARNING: ZP_RT IS OVERWRITTEN !! NO PUSH INTO THE CELL-STACK IS DONE!
 (define ALLOC_CELLPAIR_AX_TO_RT
+  (add-label-suffix
+   "__" "__ALLOC_CELLPAIR_AX_TO_RT"
   (list
    (label ALLOC_CELLPAIR_PFL_X_TO_RT)
           (LDA VM_PAGE_SLOT_DATA,x)
@@ -2033,10 +2039,10 @@ call frame primitives etc.
           (STA VM_PAGE_SLOT_DATA,x)
 
           ;; increase the slot number used on this page
-          (STX INC_CMD__ALLOC_CELLPAIR_AX_TO_RT+2) ;; overwrite $c0 (page in following INC command)
-   (label INC_CMD__ALLOC_CELLPAIR_AX_TO_RT)
+          (STX INC_CMD__+2) ;; overwrite $c0 (page in following INC command)
+   (label INC_CMD__)
           (INC $c000)
-          (RTS)))
+          (RTS))))
 
 (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt |#
   (define vm-alloc-cell-pair-on-page-a-into-rt-code
