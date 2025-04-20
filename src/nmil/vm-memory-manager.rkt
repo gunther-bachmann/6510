@@ -5031,11 +5031,11 @@ call frame primitives etc.
 ;; DECREMENT ref of pointer if array element was a pointer (cell-ptr or cell-pair-ptr)
 (define WRITE_RT_TO_ARR_ATa_RA
   (list
-   (label VM_CELL_STACK_POP_TO_ARRAY_ATa_RA)
+   (label POP_EVLSTK_TO_ARR_ATa_RA)
           (JSR WRITE_RT_TO_ARR_ATa_RA)
           (JMP POP_CELL_EVLSTK_TO_RT)
 
-   (label VM_CELL_STACK_POP_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+   (label POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS)
           (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
           (JMP POP_CELL_EVLSTK_TO_RT)
 
@@ -5430,8 +5430,8 @@ call frame primitives etc.
           ;; WRITE_ARR_ATa_RA_TO_RT
           PUSH_ARR_ATa_RA_TO_EVLSTK
 
-          ;; VM_CELL_STACK_POP_TO_ARRAY_ATa_RA
-          ;; VM_CELL_STACK_POP_TO_ARRAY_ATa_RA__CHECK_BOUNDS
+          ;; POP_EVLSTK_TO_ARR_ATa_RA
+          ;; POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS
           ;; WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS
           WRITE_RT_TO_ARR_ATa_RA             ;; write RT into array in RA at index A (GC previous slot entry, if applicable)
 

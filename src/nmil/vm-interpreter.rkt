@@ -2463,7 +2463,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR CP_RT_TO_RA)
            (JSR POP_CELL_EVLSTK_TO_RT)
            (PLA)
-           (JSR VM_CELL_STACK_POP_TO_ARRAY_ATa_RA)
+           (JSR POP_EVLSTK_TO_ARR_ATa_RA)
            (JSR DEC_REFCNT_RA)
            (JMP VM_INTERPRETER_INC_PC))))
 
