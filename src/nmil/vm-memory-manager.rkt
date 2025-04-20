@@ -3516,6 +3516,8 @@ call frame primitives etc.
 ;; result: this cell-pair is the new root of the free-tree for cell-pairs with:
 ;;              cell0 = old free tree root, cell1 = non-freed (yet) original cell
 (define FREE_CELLPAIR_RA
+  (add-label-suffix
+   "__" "FREE_CELL_PAIR_RA"
   (list
    (label FREE_CELLPAIR_RA)
 
@@ -3524,11 +3526,11 @@ call frame primitives etc.
 
           ;; check cell0
           (LDA (ZP_RA),y) ;; LOWBYTE OF FIRST cell0
-          (BEQ CELL_0_NO_PTR__FREE_CELLPAIR_RA)
+          (BEQ CELL_0_NO_PTR__)
           (STA ZP_TEMP)
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL_0_NO_PTR__FREE_CELLPAIR_RA)
+          (BEQ CELL_0_NO_PTR__)
           ;; make sure to call free on cell0 (could be any type of cell)
           ;; remember ZP_PTR
 
@@ -3537,7 +3539,7 @@ call frame primitives etc.
           (LDA (ZP_RA),y)
           (STA ZP_TEMP+1)
 
-   (label CELL_0_NO_PTR__FREE_CELLPAIR_RA)
+   (label CELL_0_NO_PTR__)
           ;; cell0 is no ptr and can thus be discarded (directly)
 
           ;; simply add this cell-pair as head to free tree
@@ -3557,7 +3559,7 @@ call frame primitives etc.
 
           ;; write original cell0 -> zp_ra
           (LDA ZP_TEMP+1)
-          (BEQ DONE__FREE_CELLPAIR_RA)
+          (BEQ DONE__)
           ;; otherwise zp_temp was used to store a pointer that needs to be decremented
           (STA ZP_RA+1)
           (LDA ZP_TEMP)
@@ -3565,8 +3567,8 @@ call frame primitives etc.
 
           (JMP DEC_REFCNT_RA) ;; chain call
 
-   (label DONE__FREE_CELLPAIR_RA)
-          (RTS)))
+   (label DONE__)
+          (RTS))))
 
 (module+ test #| vm-free-cell-pair-ptr-in-rt |#
   (define vm-free-cell-pair-ptr-in-rt-code
@@ -3682,10 +3684,12 @@ call frame primitives etc.
 ;; output: reduces the number of used slots in byte 0
 ;;         next free slot of this page is the given cell-pair
 (define VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST
+  (add-label-suffix
+   "__" "VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST"
   (list
    (label VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST)
           (LDX ZP_RT+1)
-          (STX DEC_CMD__VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST+2) ;; set page for dec command
+          (STX DEC_CMD__+2) ;; set page for dec command
           (LDA VM_PAGE_SLOT_DATA,x) ;; old first free on page
           (LDY !$00)
           (STA (ZP_RT),y) ;; set old free to next free on this very cell
@@ -3695,14 +3699,14 @@ call frame primitives etc.
           ;; clear refcount, too (should have been done already)
           (LSR)
           (LSR)
-          (TAY);; y now pointer to refcount byte
+          (TAY);; y now pointer to refcount byte (of cellpair)
           (LDA !$00)
           (STA ZP_RT) ;; modify pointer such that zp_ptr points to beginning of page
           (STA (ZP_RT),y) ;; clear refcount byte, too
 
-   (label DEC_CMD__VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST)
+   (label DEC_CMD__)
           (DEC $c000) ;; $c0 is overwritten by actual page
-          (RTS)))
+          (RTS))))
 
 (module+ test #| vm-add-cell-pair-in-rt-to-on-page-free-list |#
   (define vm-add-cell-pair-in-rt-to-on-page-free-list-code
@@ -3822,9 +3826,11 @@ call frame primitives etc.
 ;; output: X = page
 ;;         A = first fre slot
 (define INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
+  (add-label-suffix
+   "__" "INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX"
   (list
    (label INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
-          (STY SEL_PROFILE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)      ;; save profile index in local var
+          (STY SEL_PROFILE__)      ;; save profile index in local var
           (TYA)                 ;; profile 0..4 -> a
           (STX ZP_RA+1)
 
@@ -3846,65 +3852,64 @@ call frame primitives etc.
           (INY)
           (STA (ZP_RA),y)          ;; store number of slots used
 
-          (LDY FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x) ;; y = refcount field for first slot
+          (LDY TABLE__FIRST_REF_COUNT_OFFSET__,x) ;; y = refcount field for first slot
           (INY)
           (TYA)
           (PHA)
           (LDX ZP_RA+1)
           (STA VM_PAGE_SLOT_DATA,x)                    ;; set first free slot, here x = page
           (DEY)
-          (LDX SEL_PROFILE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX) ;; profile = 0..3
+          (LDX SEL_PROFILE__) ;; profile = 0..3
           (LDA !$00)
 
           ;; loop to initialize refcounts of each slot to 0-
-   (label REF_COUNT_LOOP__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
+   (label REF_COUNT_LOOP__)
           (STA (ZP_RA),y) ;; refcount = 0
           (TYA)
           (CLC)
-          (ADC INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x) ;; calc next refcount field offset
-          (BCS END_REF_COUNT_LOOP__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
+          (ADC TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE,x) ;; calc next refcount field offset
+          (BCS END_REF_COUNT_LOOP__)
           (TAY)
           ;; (ADC !$01)
           (LDA !$00)
-          (BCC REF_COUNT_LOOP__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX) ;; still on this page?
+          (BCC REF_COUNT_LOOP__) ;; still on this page?
 
-   (label END_REF_COUNT_LOOP__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
+   (label END_REF_COUNT_LOOP__)
           ;; loop to write free slot list
-          (LDY FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x)
+          (LDY TABLE__FIRST_REF_COUNT_OFFSET__,x)
           (INY)  ;; first slot  (refcount field offset + 1)
           (TYA)
-   (label WRITE_FREE_LIST__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
+   (label WRITE_FREE_LIST__)
           (CLC)
-          (ADC INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x)
-          (BCS ALMOST_DONE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX) ;; no longer on the same page => almost done
+          (ADC TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE,x)
+          (BCS ALMOST_DONE__) ;; no longer on the same page => almost done
           (STA (ZP_RA),y) ;; offset of next free cell == y for next write
           (TAY)
-          (BCC WRITE_FREE_LIST__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX) ;; carry must be clear => always jump
+          (BCC WRITE_FREE_LIST__) ;; carry must be clear => always jump
 
-   (label ALMOST_DONE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
+   (label ALMOST_DONE__)
           (LDA !$00)
           (STA (ZP_RA),y) ;; last offset to next free slot is 00 = no next free slot!
           (LDX ZP_RA+1)   ;; x = page
           (PLA)           ;; A = first free slot
           (RTS)
 
-   (label SEL_PROFILE__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
+   (label SEL_PROFILE__)
           (byte $00) ;; local var
 
-   (label FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
+   (label TABLE__FIRST_REF_COUNT_OFFSET__)
           (byte $03) ;; first ref count is 03, add 0a to get to next slot, slot-size $09 (09), contains 25 slots
           (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), contains 14 slots
           (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), contains 8 slots
           (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), contains 5 slots
           (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), contains 3 slots
-   (label INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
+   (label TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE)
           (byte $0a) ;; add 0a to get to next slot, slot-size $09 (09), contains 25 slots
           (byte $12) ;; add 12 to get to next slot, slot size $11 (17), contains 14 slots
           (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), contains 8 slots
           (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), contains 5 slots
           (byte $54) ;; add 54 to get to next slot, slot-size $53 (83), contains 3 slots
-
-          ))
+          )))
 
 (module+ test #| vm_alloc_m1_page |#
   (define test-alloc-m1-01-code
@@ -4056,29 +4061,31 @@ call frame primitives etc.
 ;; output: ZP_RA = available slot of the given size (or a bit more)
 ;;         Y = actual size
 (define ALLOC_M1_SLOT_TO_RA
+  (add-label-suffix
+   "__" "ALLOC_M1_SLOT_TO_RA"
   (list
    (label ALLOC_M1_SLOT_TO_RA)
           (LDX !$00)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+0)
-          (BPL J9PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+          (CMP TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE+0)
+          (BPL J9PLUS__)
 
-   (label VM_ALLOC_SLOT__TYPE_X_STORE)
-          (STX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+   (label TYPE_X_STORE__)
+          (STX PAGE_TYPE_IDX__)
           (JSR VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
 
-   (label VM_ALLOC_SLOT_TYPE_X)
+   (label ALLOC_M1_SLOT_TYPE_X_TO_RA)
           (LDA VM_FREE_M1_PAGE_P0,x) ;;
-          (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; if the current free page is $00 (there is no page marked as having free slots) => allocate new page
+          (BEQ NEW_PAGE__)     ;; if the current free page is $00 (there is no page marked as having free slots) => allocate new page
 
           ;; ensure zp_ptr2 points into the page
           (STA ZP_RA+1)
-          (STA INC_CMD__VM_ALLOC_SLOT_TYPE_X+2)
+          (STA INC_CMD__+2)
           (TAX)
           (LDY VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
-          (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)    ;; if =0 allocate new page (no more free slots on this page)
+          (BEQ NEW_PAGE__)    ;; if =0 allocate new page (no more free slots on this page)
           ;; ensure zp_ptr2 points to the slot!
 
-   (label CONTINUE__VM_ALLOC_SLOT_TYPE_X)
+   (label CONTINUE__)
           (STY ZP_RA)
 
           ;; now get the next free slot (from linked list in this page)
@@ -4087,72 +4094,72 @@ call frame primitives etc.
           (STA VM_PAGE_SLOT_DATA,x)           ;; set next free slot for this page (x is still page)
 
           ;; ensure y holds the actual available slot size
-          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
-          (LDY INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX,x)
+          (LDX PAGE_TYPE_IDX__)
+          (LDY TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE,x)
           (DEY)
 
-   (label INC_CMD__VM_ALLOC_SLOT_TYPE_X)
+   (label INC_CMD__)
           (INC $c002) ;; $c0 is overwritten with current page (increases the number of slots actually used)
 
           (RTS)
 
-   (label FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X)     ;; current page is full, search first non full (or end of list)
+   (label FIND_NEXT_FREE_PAGE__)     ;; current page is full, search first non full (or end of list)
           ;; A = page, X = page, Y = 0
-          (STA NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X+2)
+          (STA NEXT_PAGE_CMD__+2)
 
-   (label NEXT_PAGE_CMD__VM_ALLOC_SLOT_TYPE_X)
+   (label NEXT_PAGE_CMD__)
           (LDA $C001) ;; $c0 is overwritten
-          (BEQ NEW_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next page ptr = $00 => end reached, no more pages
+          (BEQ NEW_PAGE__) ;; next page ptr = $00 => end reached, no more pages
           ;; check whether this page is full
           (TAX)
           (LDY VM_PAGE_SLOT_DATA,x)
-          (BEQ FIND_NEXT_FREE_PAGE__VM_ALLOC_SLOT_TYPE_X) ;; next free slot for page is 00 => page is full, try to find next
+          (BEQ FIND_NEXT_FREE_PAGE__) ;; next free slot for page is 00 => page is full, try to find next
           ;; page is not full => this is the new head
-          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (LDX PAGE_TYPE_IDX__)
           (STA VM_FREE_M1_PAGE_P0,x)
           (STA ZP_RA+1)
           (CLC)
-          (BCC CONTINUE__VM_ALLOC_SLOT_TYPE_X)
+          (BCC CONTINUE__)
 
-   (label NEW_PAGE__VM_ALLOC_SLOT_TYPE_X)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
+   (label NEW_PAGE__)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
           (JSR ALLOC_PAGE_TO_X)
-          (LDY PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (LDY PAGE_TYPE_IDX__)
           (JSR INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
-          (LDX PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+          (LDX PAGE_TYPE_IDX__)
           (CLC)
-          (BCC VM_ALLOC_SLOT_TYPE_X)
+          (BCC ALLOC_M1_SLOT_TYPE_X_TO_RA)
 
-   (label J9PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+1)
-          (BPL J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+   (label J9PLUS__)
+          (CMP TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE+1)
+          (BPL J17PLUS__)
           (LDX !$01)
-          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+          (BNE TYPE_X_STORE__)
 
-   (label J17PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+2)
-          (BPL J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+   (label J17PLUS__)
+          (CMP TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE+2)
+          (BPL J29PLUS__)
           (LDX !$02)
-          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+          (BNE TYPE_X_STORE__)
 
-   (label J29PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+3)
-          (BPL J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+   (label J29PLUS__)
+          (CMP TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE+3)
+          (BPL J49PLUS__)
           (LDX !$03)
-          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+          (BNE TYPE_X_STORE__)
 
-   (label J49PLUS__VM_ALLOC_SLOT_IN_BUCKET)
-          (CMP INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX+4)
-          (BPL J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+   (label J49PLUS__)
+          (CMP TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE+4)
+          (BPL J83PLUS__)
           (LDX !$04)
-          (BNE VM_ALLOC_SLOT__TYPE_X_STORE)
+          (BNE TYPE_X_STORE__)
 
-   (label J83PLUS__VM_ALLOC_SLOT_IN_BUCKET)
+   (label J83PLUS__)
           ;; error, no slot this large can be allocated
           (BRK)
 
-   (label PAGE_TYPE_IDX__VM_ALLOC_SLOT_IN_BUCKET)
+   (label PAGE_TYPE_IDX__)
           (byte $00) ;; local variable holding the selected page typ (0 = slots up to 17 bytes, 2 up to 29 bytes ...)
-          ))
+          )))
 
 (module+ test #| vm_alloc_bucket_slot, allocate one slot of size $0b |#
   (define test-alloc-bucket-slot-code
@@ -4506,7 +4513,7 @@ call frame primitives etc.
 (define INC_REFCNT_M1_SLOT_RA
   (list
    (label INC_REFCNT_M1_SLOT_RA)
-          (DEC ZP_RA)           ;; m1, now pointing to reference count field
+          (DEC ZP_RA)           ;; m1, now pointing to reference count field, no page mod needed, since lowbyte always > 0
           (LDY !$00)
           (LDA (ZP_RA),y)
           (CLC)
