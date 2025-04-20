@@ -4503,9 +4503,9 @@ call frame primitives etc.
                   "slots used:     7"
                   "next free slot: $10")))
 
-(define VM_REFCOUNT_INCR_RA__M1_SLOT
+(define INC_REFCNT_M1_SLOT_RA
   (list
-   (label VM_REFCOUNT_INCR_RA__M1_SLOT)
+   (label INC_REFCNT_M1_SLOT_RA)
           (DEC ZP_RA)           ;; m1, now pointing to reference count field
           (LDY !$00)
           (LDA (ZP_RA),y)
@@ -4524,7 +4524,7 @@ call frame primitives etc.
      (LDA !$04)
      (STA ZP_RA)
 
-     (JSR VM_REFCOUNT_INCR_RA__M1_SLOT)))
+     (JSR INC_REFCNT_M1_SLOT_RA)))
 
   (define test-inc-ref-bucket-slot-1-state-after
     (run-code-in-test test-inc-ref-bucket-slot-1-code))
@@ -4568,7 +4568,7 @@ call frame primitives etc.
            (STA SAVE_RT__+1)
 
            (JSR CP_RA_TO_RT) ;; illegal use of rt here!
-           (JSR VM_GC_ARRAY_SLOT_RT) ;; illegal use of rt here!, uses RA, too!!
+           (JSR GC_ARRAY_SLOT_RT) ;; illegal use of rt here!, uses RA, too!!
            (JSR CP_RT_TO_RA) ;; illegal use of rt here!
 
            (LDA SAVE_RT__)
@@ -4681,7 +4681,7 @@ call frame primitives etc.
 ;;                       "next free slot: $04"))
 ;;   (check-equal? (memory-list test-dec-ref-bucket-slot-3-state-after #xa000 #xa000)
 ;;                 (list #x01)
-;;                 "VM_GC_ARRAY_SLOT_RT should have been called exactly once"))
+;;                 "GC_ARRAY_SLOT_RT should have been called exactly once"))
 
 ;; TODO: check necessity for this function, adjust to rt/ra usage
 ;; TODO: reactivate when encountered necessary
@@ -4775,9 +4775,9 @@ call frame primitives etc.
 ;; used:   ZP_RA   = dereferenced array element (if array element is a ptr)
 ;;         ZP_RT   = pointer to last element of array
 ;; ouput: -
-(define VM_GC_ARRAY_SLOT_RT
+(define GC_ARRAY_SLOT_RT
   (list
-   (label VM_GC_ARRAY_SLOT_RT)
+   (label GC_ARRAY_SLOT_RT)
           ;; loop over slots and decrement their slots
           (LDY !$01)
           (LDA (ZP_RT),y)  ;; a = number of array elements
@@ -4882,7 +4882,7 @@ call frame primitives etc.
      (JSR WRITE_RT_TO_ARR_ATa_RA)    ;; tos (int -1) -> @1
 
      (JSR CP_RA_TO_RT)                            ;; overwrite tos (-1) with ptr to array
-     (JSR VM_GC_ARRAY_SLOT_RT)                       ;; run gc on slot elements -> cell-pair should be gc'd
+     (JSR GC_ARRAY_SLOT_RT)                       ;; run gc on slot elements -> cell-pair should be gc'd
      ))
 
   (define test-gc-array-slot-ptr-state-after
@@ -5400,7 +5400,7 @@ call frame primitives etc.
           ;; DEC_REFCNT_CELL_RT                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
 
           ;; INC_REFCNT_CELLPAIR_RT                 ;; increment refcount of cell-pair
-          VM_REFCOUNT_INCR_RA__M1_SLOT                         ;; increment refcount of m1-slot
+          INC_REFCNT_M1_SLOT_RA                         ;; increment refcount of m1-slot
           ;; INC_REFCNT_CELL_RT                      ;; increment refcount of the cell, rt is pointing to
 
           DEC_REFCNT_RA                                ;; generic decrement of refcount (dispatches depending on type)
@@ -5414,7 +5414,7 @@ call frame primitives etc.
           ;; VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS                ;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
           ;; VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
 
-          VM_GC_ARRAY_SLOT_RT                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
+          GC_ARRAY_SLOT_RT                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
           
           FREE_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 

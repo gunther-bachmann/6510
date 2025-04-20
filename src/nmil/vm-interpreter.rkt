@@ -2473,7 +2473,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_ALLOC_ARRAY)
           (LDA ZP_RT+1)
           (JSR ALLOC_CELLARR_TO_RA)
-          (JSR VM_REFCOUNT_INCR_RA__M1_SLOT)
+          (JSR INC_REFCNT_M1_SLOT_RA)
           (JSR CP_RA_TO_RT) ;; overwrite byte on stack
           (JMP VM_INTERPRETER_INC_PC)))
 
