@@ -1116,18 +1116,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LDA VM_PUSH_CONST_NUM_SHORT__JUMP_REFS+1,y)   ;; load highbyte of jumpref
            (STA VM_PUSH_CONST_NUM_SHORT__JSR_TARGET+2)    ;; store into highbyte of jsr command
     (label VM_PUSH_CONST_NUM_SHORT__JSR_TARGET)
-           (JSR VM_CELL_STACK_PUSH_INT_0_R)               ;; execute (modified) jsr 
+           (JSR PUSH_INT_0_TO_EVLSTK)               ;; execute (modified) jsr 
            (JMP VM_INTERPRETER_INC_PC)                    ;; interpreter loop
 
     (label VM_PUSH_CONST_NUM_SHORT__JUMP_REFS)
-           (word-ref VM_CELL_STACK_PUSH_INT_0_R)
-           (word-ref VM_CELL_STACK_PUSH_INT_1_R)
-           (word-ref VM_CELL_STACK_PUSH_INT_2_R)
-           (word-ref VM_CELL_STACK_PUSH_INT_m1_R)
-           ;; (word-ref VM_CELL_STACK_PUSH_BYTE_0)
-           ;; (word-ref VM_CELL_STACK_PUSH_BYTE_1)
-           ;; (word-ref VM_CELL_STACK_PUSH_BYTE_2)
-           ;; (word-ref VM_CELL_STACK_PUSH_BYTE_m1)
+           (word-ref PUSH_INT_0_TO_EVLSTK)
+           (word-ref PUSH_INT_1_TO_EVLSTK)
+           (word-ref PUSH_INT_2_TO_EVLSTK)
+           (word-ref PUSH_INT_m1_TO_EVLSTK)
+           ;; (word-ref PUSH_BYTE_0)
+           ;; (word-ref PUSH_BYTE_1)
+           ;; (word-ref PUSH_BYTE_2)
+           ;; (word-ref PUSH_BYTE_m1)
            )))
 
 (module+ test #| push const num |#
@@ -1155,7 +1155,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (TAX)                                  ;; -> X
           (DEY)                                  ;; index 2 past the byte code
           (LDA (ZP_VM_PC),y)                     ;; load low byte of int  -> A
-          (JSR VM_CELL_STACK_PUSH_INT_R)         ;; push A/X as int onto stack
+          (JSR PUSH_INT_TO_EVLSTK)         ;; push A/X as int onto stack
           (LDA !$03)                             ;; increment program counter by 3 (bytecode + int)
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)))  ;; interpreter loop
 
@@ -1316,7 +1316,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
           (LDX !$ff)
-          (JSR VM_CELL_STACK_PUSH_R)
+          (JSR PUSH_TO_EVLSTK)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define BC_NIL_P
@@ -2071,7 +2071,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_PUSH_CONST_NIL
   (list
    (label BC_PUSH_CONST_NIL)    
-   (JSR VM_CELL_STACK_PUSH_NIL_R)        ;; push NIL on the stack
+   (JSR PUSH_NIL_TO_EVLSTK)        ;; push NIL on the stack
    (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (module+ test #| bc-push-const-nil |#

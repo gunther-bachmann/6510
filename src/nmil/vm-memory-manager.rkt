@@ -184,7 +184,7 @@ call frame primitives etc.
           ;; ---------------------------------------- CELL_STACK / RT / RA
           POP_CELL_EVLSTK_TO_RT                                ;; pop cell-stack into RT (discarding RT)
 
-          VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
+          PUSH_TO_EVLSTK                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
           PUSH_CELL_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 
@@ -558,12 +558,12 @@ call frame primitives etc.
 
 (module+ test #| vm-stack->strings |#
   (define test-vm_stack_to_string-a-code
-    (list (JSR VM_CELL_STACK_PUSH_NIL_R)
-          (JSR VM_CELL_STACK_PUSH_NIL_R)
+    (list (JSR PUSH_NIL_TO_EVLSTK)
+          (JSR PUSH_NIL_TO_EVLSTK)
           (LDA !$01)
           (LDX !$03)
-          (JSR VM_CELL_STACK_PUSH_INT_R)
-          (JSR VM_CELL_STACK_PUSH_NIL_R)))
+          (JSR PUSH_INT_TO_EVLSTK)
+          (JSR PUSH_NIL_TO_EVLSTK)))
   (define test-vm_stack_to_string-a-state-after
     (run-code-in-test test-vm_stack_to_string-a-code))
 
@@ -836,9 +836,9 @@ call frame primitives etc.
 (module+ test #| vm-pop-fstos-to-celly-rt |#
   (define vm-pop-fstos-to-celly-rt-code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR PUSH_INT_1_TO_EVLSTK)
+     (JSR PUSH_INT_m1_TO_EVLSTK)
+     (JSR PUSH_INT_1_TO_EVLSTK)
      (JSR ALLOC_CELLPAIR_TO_RT)
      (LDY !$00)
      (JSR POP_CELL_EVLSTK_TO_CELLy_RT)
@@ -1084,13 +1084,13 @@ call frame primitives etc.
 ;;        A = high byte,
 ;;        X = tagged low
 ;; output: call-frame stack, RT
-(define VM_CELL_STACK_PUSH_R
+(define PUSH_TO_EVLSTK
   (list
 
    ;; ints are saved high byte first, then low byte !!!!
    ;; X = high byte of int (max 31 = $1f) (stored in low byte (tagged) position)
    ;; A = low byte of int (0..255) (stored in high byte (untagged) position)
-   (label VM_CELL_STACK_PUSH_INT_R)         ;; idea: can be optimized since it is known that this is an atomic value
+   (label PUSH_INT_TO_EVLSTK)         ;; idea: can be optimized since it is known that this is an atomic value
           (TAY)
           (TXA)
           (SEC)
@@ -1101,37 +1101,37 @@ call frame primitives etc.
           (TAX)
           (TYA)
           (CLC)
-          (BCC VM_CELL_STACK_PUSH_R)
+          (BCC PUSH_TO_EVLSTK)
 
-   (label VM_CELL_STACK_PUSH_INT_m1_R)
+   (label PUSH_INT_m1_TO_EVLSTK)
           (LDA !$ff) ;; 1f << 2
           (LDX !$7f)
-          (BNE VM_CELL_STACK_PUSH_R)
+          (BNE PUSH_TO_EVLSTK)
 
-   (label VM_CELL_STACK_PUSH_INT_2_R)
+   (label PUSH_INT_2_TO_EVLSTK)
           (LDA !$02)
           (LDX !$03)
-          (BNE VM_CELL_STACK_PUSH_R)
+          (BNE PUSH_TO_EVLSTK)
 
-   (label VM_CELL_STACK_PUSH_INT_1_R)
+   (label PUSH_INT_1_TO_EVLSTK)
           (LDA !$01)
           (LDX !$03)
-          (BNE VM_CELL_STACK_PUSH_R)
+          (BNE PUSH_TO_EVLSTK)
 
-   (label VM_CELL_STACK_PUSH_INT_0_R)
+   (label PUSH_INT_0_TO_EVLSTK)
           (LDA !$00)
           (LDX !$03)
-          (BNE VM_CELL_STACK_PUSH_R)
+          (BNE PUSH_TO_EVLSTK)
 
    ;; push NIL (cell-pair-ptr)           ;; idea: can be optimized since it is known that this is cell-pair-ptr
-   (label VM_CELL_STACK_PUSH_NIL_R)
+   (label PUSH_NIL_TO_EVLSTK)
           (LDX !<TAGGED_NIL)
           (LDA !>TAGGED_NIL)
 
    ;; push a cell
    ;; A = high byte
    ;; X = tagged low byte
-   (label VM_CELL_STACK_PUSH_R)
+   (label PUSH_TO_EVLSTK)
           (PHA)
           (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY) ;; uses A and Y
           (PLA)
@@ -1145,7 +1145,7 @@ call frame primitives etc.
 
   (define vm_cell_stack_push_r_int0_code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_0_R)))
+     (JSR PUSH_INT_0_TO_EVLSTK)))
 
   (define vm_cell_stack_push_r_int0_state
     (run-code-in-test vm_cell_stack_push_r_int0_code))
@@ -1157,7 +1157,7 @@ call frame primitives etc.
 
   (define vm_cell_stack_push_r_int1_code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)))
+     (JSR PUSH_INT_1_TO_EVLSTK)))
 
   (define vm_cell_stack_push_r_int1_state
     (run-code-in-test vm_cell_stack_push_r_int1_code))
@@ -1169,7 +1169,7 @@ call frame primitives etc.
 
   (define vm_cell_stack_push_r_intm1_code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_m1_R)))
+     (JSR PUSH_INT_m1_TO_EVLSTK)))
 
   (define vm_cell_stack_push_r_intm1_state
     (run-code-in-test vm_cell_stack_push_r_intm1_code))
@@ -1181,7 +1181,7 @@ call frame primitives etc.
 
   (define vm_cell_stack_push_r_nil_code
     (list
-     (JSR VM_CELL_STACK_PUSH_NIL_R)))
+     (JSR PUSH_NIL_TO_EVLSTK)))
 
   (define vm_cell_stack_push_r_nil_state
     (run-code-in-test vm_cell_stack_push_r_nil_code))
@@ -1196,7 +1196,7 @@ call frame primitives etc.
     (list
      (LDX !$03)
      (LDA !$ce)
-     (JSR VM_CELL_STACK_PUSH_R)))
+     (JSR PUSH_TO_EVLSTK)))
 
   (define vm_cell_stack_push_r_cell_ptr_state
     (run-code-in-test vm_cell_stack_push_r_cell_ptr_code))
@@ -1210,7 +1210,7 @@ call frame primitives etc.
     (list
      (LDX !$05)
      (LDA !$ce)
-     (JSR VM_CELL_STACK_PUSH_R)))
+     (JSR PUSH_TO_EVLSTK)))
 
   (define vm_cell_stack_push_r_cell_pair_ptr_state
     (run-code-in-test vm_cell_stack_push_r_cell_pair_ptr_code))
@@ -1223,8 +1223,8 @@ call frame primitives etc.
 (module+ test #| vm_cell_stack_push_r (push rt, and write rt) |#
   (define vm_cell_stack_push_r_push1_code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR PUSH_INT_m1_TO_EVLSTK)
+     (JSR PUSH_INT_1_TO_EVLSTK)
      ))
 
   (define vm_cell_stack_push_r_push1_state
@@ -1240,9 +1240,9 @@ call frame primitives etc.
 
   (define vm_cell_stack_push_r_push2_code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
-     (JSR VM_CELL_STACK_PUSH_NIL_R)
+     (JSR PUSH_INT_m1_TO_EVLSTK)
+     (JSR PUSH_INT_1_TO_EVLSTK)
+     (JSR PUSH_NIL_TO_EVLSTK)
      ))
 
   (define vm_cell_stack_push_r_push2_state
@@ -1297,9 +1297,9 @@ call frame primitives etc.
 (module+ test #| vm_cell_stack_pop_r (just one value) |#
   (define vm_cell_stack_pop3_r_code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_0_R)
+     (JSR PUSH_INT_1_TO_EVLSTK)
+     (JSR PUSH_INT_m1_TO_EVLSTK)
+     (JSR PUSH_INT_0_TO_EVLSTK)
      (JSR POP_CELL_EVLSTK_TO_RT)
      ))
 
@@ -1316,9 +1316,9 @@ call frame primitives etc.
 
   (define vm_cell_stack_pop2_r_code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_0_R)
+     (JSR PUSH_INT_1_TO_EVLSTK)
+     (JSR PUSH_INT_m1_TO_EVLSTK)
+     (JSR PUSH_INT_0_TO_EVLSTK)
      (JSR POP_CELL_EVLSTK_TO_RT)
      (JSR POP_CELL_EVLSTK_TO_RT)))
 
@@ -1331,9 +1331,9 @@ call frame primitives etc.
 
   (define vm_cell_stack_pop1_r_code
     (list
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_m1_R)
-     (JSR VM_CELL_STACK_PUSH_INT_0_R)
+     (JSR PUSH_INT_1_TO_EVLSTK)
+     (JSR PUSH_INT_m1_TO_EVLSTK)
+     (JSR PUSH_INT_0_TO_EVLSTK)
      (JSR POP_CELL_EVLSTK_TO_RT)
      (JSR POP_CELL_EVLSTK_TO_RT)
      (JSR POP_CELL_EVLSTK_TO_RT)))
@@ -1350,21 +1350,21 @@ call frame primitives etc.
 (module+ test #| vm_cell_stack_push_nil_r |#
   (define test-vm_cell_stack_push_nil-a-state-after
     (run-code-in-test
-     (list (JSR VM_CELL_STACK_PUSH_NIL_R))))
+     (list (JSR PUSH_NIL_TO_EVLSTK))))
 
   (check-equal? (vm-regt->string test-vm_cell_stack_push_nil-a-state-after)
                 "pair-ptr NIL")
 
   (define test-vm_cell_stack_push_nil-b-state-after
     (run-code-in-test
-     (list (JSR VM_CELL_STACK_PUSH_NIL_R) ;; 1
-           (JSR VM_CELL_STACK_PUSH_NIL_R) ;;
-           (JSR VM_CELL_STACK_PUSH_NIL_R) ;; 3
-           (JSR VM_CELL_STACK_PUSH_NIL_R) ;;
-           (JSR VM_CELL_STACK_PUSH_NIL_R) ;; 5
-           (JSR VM_CELL_STACK_PUSH_NIL_R) ;;
-           (JSR VM_CELL_STACK_PUSH_NIL_R) ;; 7
-           (JSR VM_CELL_STACK_PUSH_NIL_R)))) ;; 8
+     (list (JSR PUSH_NIL_TO_EVLSTK) ;; 1
+           (JSR PUSH_NIL_TO_EVLSTK) ;;
+           (JSR PUSH_NIL_TO_EVLSTK) ;; 3
+           (JSR PUSH_NIL_TO_EVLSTK) ;;
+           (JSR PUSH_NIL_TO_EVLSTK) ;; 5
+           (JSR PUSH_NIL_TO_EVLSTK) ;;
+           (JSR PUSH_NIL_TO_EVLSTK) ;; 7
+           (JSR PUSH_NIL_TO_EVLSTK)))) ;; 8
 
   (check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-b-state-after)
                 '("stack holds 8 items"
@@ -1380,15 +1380,15 @@ call frame primitives etc.
 (module+ test #| vm_cell_push_int_r |#
   (define test-vm_cell_stack_push_int-a-state-after
     (run-code-in-test
-     (list (JSR VM_CELL_STACK_PUSH_INT_m1_R)
+     (list (JSR PUSH_INT_m1_TO_EVLSTK)
            (LDA !$00) ;; -4096
            (LDX !$10)
-           (JSR VM_CELL_STACK_PUSH_INT_R)
-           (JSR VM_CELL_STACK_PUSH_INT_1_R)
-           (JSR VM_CELL_STACK_PUSH_INT_0_R)
+           (JSR PUSH_INT_TO_EVLSTK)
+           (JSR PUSH_INT_1_TO_EVLSTK)
+           (JSR PUSH_INT_0_TO_EVLSTK)
            (LDA !$ff) ;; 4095
            (LDX !$0f)
-           (JSR VM_CELL_STACK_PUSH_INT_R))))
+           (JSR PUSH_INT_TO_EVLSTK))))
 
   (check-equal? (vm-regt->string test-vm_cell_stack_push_int-a-state-after)
                 "int $0fff")
@@ -4875,7 +4875,7 @@ call frame primitives etc.
      (LDA !$02)
      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)    ;; tos (cell-pair) -> @2
 
-     (JSR VM_CELL_STACK_PUSH_INT_m1_R)                    ;; int -1 -> stack
+     (JSR PUSH_INT_m1_TO_EVLSTK)                    ;; int -1 -> stack
      (LDA !$01)
      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)    ;; tos (int -1) -> @1
 
@@ -5093,7 +5093,7 @@ call frame primitives etc.
 
      (LDA !$ff)
      (LDX !$01)
-     (JSR VM_CELL_STACK_PUSH_INT_R)
+     (JSR PUSH_INT_TO_EVLSTK)
 
      (LDA !$02)
      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)))
@@ -5131,12 +5131,12 @@ call frame primitives etc.
 
       (LDA !$ff)
       (LDX !$01)
-      (JSR VM_CELL_STACK_PUSH_INT_R)
+      (JSR PUSH_INT_TO_EVLSTK)
 
       (LDA !$04) ;; out of bounds
       (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
 
-      (JSR VM_CELL_STACK_PUSH_INT_0_R))
+      (JSR PUSH_INT_0_TO_EVLSTK))
     ))
 
   (check-equal? (vm-stack->strings to-array-ata-ra-4-state)
@@ -5152,12 +5152,12 @@ call frame primitives etc.
 
       (LDA !$ff)
       (LDX !$01)
-      (JSR VM_CELL_STACK_PUSH_INT_R)
+      (JSR PUSH_INT_TO_EVLSTK)
 
       (LDA !$ff) ;; out of bounds
       (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
 
-      (JSR VM_CELL_STACK_PUSH_INT_0_R))
+      (JSR PUSH_INT_0_TO_EVLSTK))
     ))
 
   (check-equal? (vm-stack->strings to-array-ata-ra-ff-state)
@@ -5173,12 +5173,12 @@ call frame primitives etc.
 
       (LDA !$ff)
       (LDX !$01)
-      (JSR VM_CELL_STACK_PUSH_INT_R)
+      (JSR PUSH_INT_TO_EVLSTK)
 
       (LDA !$00) ;; in bounds
       (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
 
-      (JSR VM_CELL_STACK_PUSH_INT_0_R))
+      (JSR PUSH_INT_0_TO_EVLSTK))
     ))
 
   (check-equal? (vm-stack->strings to-array-ata-ra-0-state)
@@ -5195,12 +5195,12 @@ call frame primitives etc.
 
       (LDA !$ff)
       (LDX !$01)
-      (JSR VM_CELL_STACK_PUSH_INT_R)
+      (JSR PUSH_INT_TO_EVLSTK)
 
       (LDA !$03) ;; in bounds
       (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
 
-      (JSR VM_CELL_STACK_PUSH_INT_0_R))
+      (JSR PUSH_INT_0_TO_EVLSTK))
     ))
 
   (check-equal? (vm-stack->strings to-array-ata-ra-3-state)
@@ -5255,7 +5255,7 @@ call frame primitives etc.
 
      (LDA !$ff)
      (LDX !$01)
-     (JSR VM_CELL_STACK_PUSH_INT_R)            ;; int $1ff -> stack
+     (JSR PUSH_INT_TO_EVLSTK)            ;; int $1ff -> stack
 
      (LDA !$02)
      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) ;; tos (int $1ff) -> @2 (overwriting 0 (empty) in array)
@@ -5419,7 +5419,7 @@ call frame primitives etc.
           ;; ---------------------------------------- CELL_STACK / RT / RA
           POP_CELL_EVLSTK_TO_RT                                ;; pop cell-stack into RT (discarding RT)
 
-          VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
+          PUSH_TO_EVLSTK                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
           PUSH_CELL_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 

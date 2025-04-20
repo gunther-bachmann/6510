@@ -201,8 +201,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (module+ test #| VM_CONS |#
   (define use-case-cons-code
     (list
-     (JSR VM_CELL_STACK_PUSH_NIL_R)
-     (JSR VM_CELL_STACK_PUSH_INT_1_R)
+     (JSR PUSH_NIL_TO_EVLSTK)
+     (JSR PUSH_INT_1_TO_EVLSTK)
      (JSR VM_CONS_R)
      ))
 
