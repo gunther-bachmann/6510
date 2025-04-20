@@ -186,7 +186,7 @@ call frame primitives etc.
 
           VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
-          VM_CELL_STACK_JUST_PUSH_RT                         ;; push RT onto call frame cell stack
+          PUSH_CELL_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 
           ;; VM_WRITE_INTm1_TO_RA                             ;; write cell-int -1 into RA
           ;; VM_WRITE_INTm1_TO_RT                             
@@ -1029,17 +1029,17 @@ call frame primitives etc.
 ;; output: call-frame stack << RT
 ;; uses:   A Y
 ;; CHECK STACK PAGE OVERFLOW
-(define VM_CELL_STACK_JUST_PUSH_RT
+(define PUSH_CELL_RT_TO_EVLSTK
   (add-label-suffix
-   "__" "__VM_CELL_STACK_JUST_PUSH_RT"
+   "__" "__PUSH_CELL_RT_TO_EVLSTK"
   (list
-   (label VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+   (label PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
           (LDY ZP_RT)
           ;; if RT empty?  = $00 
           (BEQ DONE__)        ;; then no push
 
    ;; ----------------------------------------
-   (label VM_CELL_STACK_JUST_PUSH_RT)
+   (label PUSH_CELL_RT_TO_EVLSTK)
           (LDY ZP_CELL_STACK_TOS)
           (INY)
           [BNE NO_ERROR__]
@@ -1071,7 +1071,7 @@ call frame primitives etc.
   (define vm-cell-stack-just-push-rt-code
     (list     
      (JSR VM_WRITE_INTm1_TO_RT)
-     (JSR VM_CELL_STACK_JUST_PUSH_RT)))
+     (JSR PUSH_CELL_RT_TO_EVLSTK)))
 
   (define vm-cell-stack-just-push-rt-state
     (run-code-in-test vm-cell-stack-just-push-rt-code))
@@ -1135,7 +1135,7 @@ call frame primitives etc.
    ;; X = tagged low byte
    (label VM_CELL_STACK_PUSH_R)
           (PHA)
-          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY) ;; uses A and Y
+          (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY) ;; uses A and Y
           (PLA)
 
    (label VM_WRITE_AX_TO_RT)
@@ -5064,7 +5064,7 @@ call frame primitives etc.
           (INY)
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
           (BEQ NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+          (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
           (LDY ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
           (STA ZP_RT)
@@ -5215,14 +5215,14 @@ call frame primitives etc.
   (list
    (label VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
           (PHA)
-          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+          (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
           (PLA)
           (CLC)
           (BCC VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
 
    (label VM_CELL_STACK_PUSH_ARRAY_ATa_RA__CHECK_BOUNDS)
           (PHA)
-          (JSR VM_CELL_STACK_PUSH_RT_IF_NONEMPTY)
+          (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
           (PLA)
 
    (label VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA__CHECK_BOUNDS)
@@ -5423,7 +5423,7 @@ call frame primitives etc.
 
           VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
-          VM_CELL_STACK_JUST_PUSH_RT                         ;; push RT onto call frame cell stack
+          PUSH_CELL_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 
           ;; VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA
           VM_CELL_STACK_PUSH_ARRAY_ATa_RA
