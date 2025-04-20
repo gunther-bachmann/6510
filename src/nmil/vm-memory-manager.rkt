@@ -4873,11 +4873,11 @@ call frame primitives etc.
 
      ;; wrote a new cell-pair @2
      (LDA !$02)
-     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)    ;; tos (cell-pair) -> @2
+     (JSR WRITE_RT_TO_ARR_ATa_RA)    ;; tos (cell-pair) -> @2
 
      (JSR PUSH_INT_m1_TO_EVLSTK)                    ;; int -1 -> stack
      (LDA !$01)
-     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)    ;; tos (int -1) -> @1
+     (JSR WRITE_RT_TO_ARR_ATa_RA)    ;; tos (int -1) -> @1
 
      (JSR CP_RA_TO_RT)                            ;; overwrite tos (-1) with ptr to array
      (JSR VM_GC_ARRAY_SLOT_RT)                       ;; run gc on slot elements -> cell-pair should be gc'd
@@ -5027,30 +5027,30 @@ call frame primitives etc.
 ;; usage: A, X, Y, RT, RA
 ;; NO CHECKING (NO BOUNDS, NO TYPE ...)
 ;; DECREMENT ref of pointer if array element was a pointer (cell-ptr or cell-pair-ptr)
-(define VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA
+(define WRITE_RT_TO_ARR_ATa_RA
   (list
    (label VM_CELL_STACK_POP_TO_ARRAY_ATa_RA)
-          (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (JSR WRITE_RT_TO_ARR_ATa_RA)
           (JMP POP_CELL_EVLSTK_TO_RT)
 
    (label VM_CELL_STACK_POP_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
-          (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+          (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
           (JMP POP_CELL_EVLSTK_TO_RT)
 
-   (label VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+   (label WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
           (LDY !$01)
           (CMP (ZP_RA),y)
-          (BPL BOUNDS_ERR__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (BPL BOUNDS_ERR__WRITE_RT_TO_ARR_ATa_RA)
           (CMP !$00)
-          (BPL VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
-   (label BOUNDS_ERR__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (BPL WRITE_RT_TO_ARR_ATa_RA)
+   (label BOUNDS_ERR__WRITE_RT_TO_ARR_ATa_RA)
           (BRK)
 
-   (label VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+   (label WRITE_RT_TO_ARR_ATa_RA)
           (ASL A)
           (CLC)
           (ADC !$02) ;; point to first cell (index 0)
-          (STA ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) ;; keep for later
+          (STA ARRAY_INDEX__WRITE_RT_TO_ARR_ATa_RA) ;; keep for later
 
 
           ;; get previous content into rt and decr ref count (if applicable)
@@ -5063,7 +5063,7 @@ call frame primitives etc.
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
           (BEQ NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
           (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
-          (LDY ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+          (LDY ARRAY_INDEX__WRITE_RT_TO_ARR_ATa_RA)
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
           (STA ZP_RT)
           (INY)
@@ -5073,7 +5073,7 @@ call frame primitives etc.
           (JSR POP_CELL_EVLSTK_TO_RT) ;; restore RT
 
    (label NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-          (LDY ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) 
+          (LDY ARRAY_INDEX__WRITE_RT_TO_ARR_ATa_RA) 
           (LDA ZP_RT)
           (STA (ZP_RA),y) ;;
           (INY)
@@ -5082,7 +5082,7 @@ call frame primitives etc.
 
           (RTS)
 
-   (label ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
+   (label ARRAY_INDEX__WRITE_RT_TO_ARR_ATa_RA)
           (byte 0)))
 
 (module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
@@ -5096,7 +5096,7 @@ call frame primitives etc.
      (JSR PUSH_INT_TO_EVLSTK)
 
      (LDA !$02)
-     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)))
+     (JSR WRITE_RT_TO_ARR_ATa_RA)))
 
   (define vm_cell_stack_write_tos_to_array_ata_ptr-state-after
     (run-code-in-test vm_cell_stack_write_tos_to_array_ata_ptr-code))
@@ -5134,7 +5134,7 @@ call frame primitives etc.
       (JSR PUSH_INT_TO_EVLSTK)
 
       (LDA !$04) ;; out of bounds
-      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+      (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
 
       (JSR PUSH_INT_0_TO_EVLSTK))
     ))
@@ -5155,7 +5155,7 @@ call frame primitives etc.
       (JSR PUSH_INT_TO_EVLSTK)
 
       (LDA !$ff) ;; out of bounds
-      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+      (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
 
       (JSR PUSH_INT_0_TO_EVLSTK))
     ))
@@ -5176,7 +5176,7 @@ call frame primitives etc.
       (JSR PUSH_INT_TO_EVLSTK)
 
       (LDA !$00) ;; in bounds
-      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+      (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
 
       (JSR PUSH_INT_0_TO_EVLSTK))
     ))
@@ -5198,7 +5198,7 @@ call frame primitives etc.
       (JSR PUSH_INT_TO_EVLSTK)
 
       (LDA !$03) ;; in bounds
-      (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
+      (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
 
       (JSR PUSH_INT_0_TO_EVLSTK))
     ))
@@ -5209,30 +5209,32 @@ call frame primitives etc.
                      "int $01ff")
                "got to pushing 0 since access index 0 is in bounds"))
 
-(define VM_CELL_STACK_PUSH_ARRAY_ATa_RA
+(define PUSH_ARR_ATa_RA_TO_EVLSTK
+  (add-label-suffix
+   "__" "PUSH_ARR_ATa_RA_TO_EVLSTK"
   (list
-   (label VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
+   (label PUSH_ARR_ATa_RA_TO_EVLSTK)
           (PHA)
           (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
           (PLA)
           (CLC)
-          (BCC VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
+          (BCC WRITE_ARR_ATa_RA_TO_RT)
 
-   (label VM_CELL_STACK_PUSH_ARRAY_ATa_RA__CHECK_BOUNDS)
+   (label CHECK_BOUNDS__)
           (PHA)
           (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
           (PLA)
 
-   (label VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA__CHECK_BOUNDS)
+   (label CHECK_BOUNDS__)
           (LDY !$01)
           (CMP (ZP_RA),y)
-          (BPL BOUNDS_ERR__VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
+          (BPL BOUNDS_ERR__)
           (CMP !$00)
-          (BPL VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
-   (label BOUNDS_ERR__VM_CELL_STACK_PUSH_ARRAY_ATa_RA)
+          (BPL WRITE_ARR_ATa_RA_TO_RT)
+   (label BOUNDS_ERR__)
           (BRK)  ;; out of bounds error
 
-   (label VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
+   (label WRITE_ARR_ATa_RA_TO_RT)
           (ASL A)
           (CLC)
           (ADC !$03)                    ;; get y to point to high byte of cell at index
@@ -5242,7 +5244,7 @@ call frame primitives etc.
           (DEY)
           (LDA (ZP_RA),y)               ;; copy low byte
           (STA ZP_RT)
-          (RTS)))
+          (RTS))))
 
 (module+ test #| vm_cell_stack_push_array_ata_ptr |#
   (define test-cell-stack-push-array-ata-ptr-code
@@ -5251,17 +5253,17 @@ call frame primitives etc.
      (JSR ALLOC_CELLARR_TO_RA)
 
      (LDA !$02)
-     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_RA) ;; @2 = empty -> stack => stack is still empty
+     (JSR PUSH_ARR_ATa_RA_TO_EVLSTK) ;; @2 = empty -> stack => stack is still empty
 
      (LDA !$ff)
      (LDX !$01)
      (JSR PUSH_INT_TO_EVLSTK)            ;; int $1ff -> stack
 
      (LDA !$02)
-     (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) ;; tos (int $1ff) -> @2 (overwriting 0 (empty) in array)
+     (JSR WRITE_RT_TO_ARR_ATa_RA) ;; tos (int $1ff) -> @2 (overwriting 0 (empty) in array)
 
      (LDA !$02)
-     (JSR VM_CELL_STACK_PUSH_ARRAY_ATa_RA)  ;; @2 (now int $1ff) -> stack
+     (JSR PUSH_ARR_ATa_RA_TO_EVLSTK)  ;; @2 (now int $1ff) -> stack
      ))
 
   (define test-cell-stack-push-array-ata-ptr-state-after
@@ -5423,13 +5425,13 @@ call frame primitives etc.
           ;; vm_cell_stack_push_rt_if_nonempty
           PUSH_CELL_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 
-          ;; VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA
-          VM_CELL_STACK_PUSH_ARRAY_ATa_RA
+          ;; WRITE_ARR_ATa_RA_TO_RT
+          PUSH_ARR_ATa_RA_TO_EVLSTK
 
           ;; VM_CELL_STACK_POP_TO_ARRAY_ATa_RA
           ;; VM_CELL_STACK_POP_TO_ARRAY_ATa_RA__CHECK_BOUNDS
-          ;; VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS
-          VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA             ;; write RT into array in RA at index A (GC previous slot entry, if applicable)
+          ;; WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS
+          WRITE_RT_TO_ARR_ATa_RA             ;; write RT into array in RA at index A (GC previous slot entry, if applicable)
 
           ;; WRITE_INTm1_TO_RA                             ;; write cell-int -1 into RA
           ;; WRITE_INTm1_TO_RT                             

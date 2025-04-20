@@ -2453,7 +2453,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (PHA)
            (JSR CP_RT_TO_RA)
            (PLA)
-           (JSR VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
+           (JSR WRITE_ARR_ATa_RA_TO_RT)
            (JSR INC_REFCNT_RT)
            (JSR DEC_REFCNT_RA)
            (JMP VM_INTERPRETER_INC_PC)

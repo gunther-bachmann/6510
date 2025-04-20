@@ -140,6 +140,10 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
   |      | VM_LIST_OF_FREE_CELLS                       | GLOBAL_CELL_FREE_LIST              |      |                                                                    |
   |      | VM_MEMORY_MANAGEMENT_CONSTANTS              | CONST_MEMORY_MANAGER               |      |                                                                    |
   |      | VM_INITIALIZE_MEMORY_MANAGER                | INIT_MEMORY_MANAGER                |      |                                                                    |
+  |------+---------------------------------------------+------------------------------------+------+--------------------------------------------------------------------|
+  | x    | VM_CELL_STACK_PUSH_ARRAY_ATa_RA             | PUSH_ARR_ATa_RA_TO_EVLSTK          |      |                                                                    |
+  | x    | VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA      | WRITE_ARR_ATa_RA_TO_RT             |      |                                                                    |
+  | x    | VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA      | WRITE_RT_TO_ARR_ATa_RA             |      |                                                                    |
 - conceptual levels
   - page :: os allocation unit
     - alloc, free, bitmap of available pages
