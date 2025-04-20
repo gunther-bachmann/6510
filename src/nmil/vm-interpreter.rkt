@@ -64,7 +64,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in racket/list flatten take empty? range))
 
 (require (only-in "./vm-memory-manager.rkt"
-                  WRITE_RT_CELL0_TO_RT
+                  WRITE_CELLPAIR_RT_CELL0_TO_RT
                   vm-memory-manager
                   vm-cell-at-nil?
                   vm-page->strings
@@ -799,7 +799,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
-           (JSR WRITE_RT_CELL0_TO_RT)
+           (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
@@ -811,7 +811,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
-           (JSR WRITE_RT_CELL1_TO_RT)
+           (JSR WRITE_CELLPAIR_RT_CELL1_TO_RT)
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 )))

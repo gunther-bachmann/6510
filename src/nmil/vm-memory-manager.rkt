@@ -212,20 +212,20 @@ call frame primitives etc.
           ;; WRITE_NIL_TO_RT
           WRITE_NIL_TO_Rx
 
-          WRITE_RT_CELL1_TO_RT
-          WRITE_RT_CELL0_TO_RT
-          WRITE_RT_CELLy_TO_RT                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RT
-          ;; WRITE_RA_CELL1_TO_RT
-          ;; WRITE_RA_CELL0_TO_RT
-          WRITE_RA_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RA into RA
+          WRITE_CELLPAIR_RT_CELL1_TO_RT
+          WRITE_CELLPAIR_RT_CELL0_TO_RT
+          WRITE_CELLPAIR_RT_CELLy_TO_RT                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RT
+          ;; WRITE_CELLPAIR_RA_CELL1_TO_RT
+          ;; WRITE_CELLPAIR_RA_CELL0_TO_RT
+          WRITE_CELLPAIR_RA_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RA into RA
 
-          WRITE_RA_TO_CELLy_RT                            ;; write RA cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RT
+          WRITE_RA_TO_CELLy_CELLPAIR_RT                            ;; write RA cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RT
 
-          WRITE_RT_CELL1_TO_RA       
-          WRITE_RT_CELL0_TO_RA
-          WRITE_RT_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RA
+          WRITE_CELLPAIR_RT_CELL1_TO_RA       
+          WRITE_CELLPAIR_RT_CELL0_TO_RA
+          WRITE_CELLPAIR_RT_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RA
 
-          WRITE_RT_TO_CELLy_RA                            ;; write RT cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RA
+          WRITE_RT_TO_CELLy_CELLPAIR_RA                            ;; write RT cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RA
 
           CP_RT_TO_RA                                     ;; copy RT -> RA
           CP_RA_TO_RT                                     ;; copy RA -> RT
@@ -326,9 +326,6 @@ call frame primitives etc.
 (define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
 (define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
 (define TAGGED_NIL              (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_NIL"))
-
-
-
 
 ;; write out the cells that are marked as reallocatable
 (define (vm-cell-pair-free-tree->string state)
@@ -708,17 +705,17 @@ call frame primitives etc.
 ;; input:  RT
 ;;         RA must be cell-pair-ptr
 ;; output: cell1 of cell-pair pointed to be RA is set to RT
-(define WRITE_RT_TO_CELLy_RA
+(define WRITE_RT_TO_CELLy_CELLPAIR_RA
   (list
-   (label WRITE_RT_TO_CELL1_RA)
+   (label WRITE_RT_TO_CELL1_CELLPAIR_RA)
           (LDY !$02) ;; offset 2 for cell1
-          (BNE WRITE_RT_TO_CELLy_RA)
+          (BNE WRITE_RT_TO_CELLy_CELLPAIR_RA)
 
-   (label WRITE_RT_TO_CELL0_RA)
+   (label WRITE_RT_TO_CELL0_CELLPAIR_RA)
           (LDY !$00) ;; offset 0 for cell0
 
    ;; ----------------------------------------
-   (label WRITE_RT_TO_CELLy_RA)
+   (label WRITE_RT_TO_CELLy_CELLPAIR_RA)
           (LDA ZP_RT)
           (STA (ZP_RA),y)
           (INY)
@@ -735,12 +732,12 @@ call frame primitives etc.
      (LDY !$10)
      (JSR WRITE_INT_AY_TO_RT)
      (LDY !$00)
-     (JSR WRITE_RT_TO_CELLy_RA)
+     (JSR WRITE_RT_TO_CELLy_CELLPAIR_RA)
      (LDA !$10)
      (LDY !$01)
      (JSR WRITE_INT_AY_TO_RT)
      (LDY !$02)
-     (JSR WRITE_RT_TO_CELLy_RA)))
+     (JSR WRITE_RT_TO_CELLy_CELLPAIR_RA)))
 
   (define vm_write_rt_to_celly_ra_state
     (run-code-in-test vm_write_rt_to_celly_ra_code))
@@ -757,17 +754,17 @@ call frame primitives etc.
 ;; input:  RT
 ;;         RA must be cell-pair-ptr
 ;; output: cell1 of cell-pair pointed to be RA is set to RT
-(define WRITE_RA_TO_CELLy_RT
+(define WRITE_RA_TO_CELLy_CELLPAIR_RT
   (list
-   (label WRITE_RA_TO_CELL1_RT)
+   (label WRITE_RA_TO_CELL1_CELLPAIR_RT)
           (LDY !$02)
-          (BNE WRITE_RA_TO_CELLy_RT)
+          (BNE WRITE_RA_TO_CELLy_CELLPAIR_RT)
 
-   (label WRITE_RA_TO_CELL0_RT)
+   (label WRITE_RA_TO_CELL0_CELLPAIR_RT)
           (LDY !$00)
 
    ;; ----------------------------------------
-   (label WRITE_RA_TO_CELLy_RT)
+   (label WRITE_RA_TO_CELLy_CELLPAIR_RT)
           (LDA ZP_RA)
           (STA (ZP_RT),y)
           (INY)
@@ -783,12 +780,12 @@ call frame primitives etc.
      (LDY !$10)
      (JSR WRITE_INT_AY_TO_RA)
      (LDY !$00)
-     (JSR WRITE_RA_TO_CELLy_RT)
+     (JSR WRITE_RA_TO_CELLy_CELLPAIR_RT)
      (LDA !$10)
      (LDY !$01)
      (JSR WRITE_INT_AY_TO_RA)
      (LDY !$02)
-     (JSR WRITE_RA_TO_CELLy_RT)))
+     (JSR WRITE_RA_TO_CELLy_CELLPAIR_RT)))
 
   (define vm_write_ra_to_celly_rt_state
     (run-code-in-test vm_write_ra_to_celly_rt_code))
@@ -808,10 +805,12 @@ call frame primitives etc.
 ;; output: cell-stack (one value less)
 ;;         cell0 of RA is set
 (define POP_CELL_EVLSTK_TO_CELLy_RT
+  (add-label-suffix
+   "__" "__POP_CELL_EVLSTK_TO_CELLy_RT"
   (list
    (label POP_CELL_EVLSTK_TO_CELL1_RT)
           (LDY !$03)
-          (BNE POP_CELL_EVLSTK_TO_CELLy_RT__UCY)
+          (BNE Y_ON_HIGHBYTE__)
 
    (label POP_CELL_EVLSTK_TO_CELL0_RT)
           (LDY !$00)
@@ -819,7 +818,7 @@ call frame primitives etc.
    ;; ----------------------------------------
    (label POP_CELL_EVLSTK_TO_CELLy_RT)
           (INY)
-   (label POP_CELL_EVLSTK_TO_CELLy_RT__UCY)
+   (label Y_ON_HIGHBYTE__)
           (STY ZP_TEMP)
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
@@ -831,7 +830,7 @@ call frame primitives etc.
           (TXA)
           (STA (ZP_RT),y)
           (DEC ZP_CELL_STACK_TOS)
-          (RTS)))
+          (RTS))))
 
 (module+ test #| vm-pop-fstos-to-celly-rt |#
   (define vm-pop-fstos-to-celly-rt-code
@@ -865,6 +864,28 @@ call frame primitives etc.
           (STA ZP_RT)
           (LDA ZP_RA+1)
           (STA ZP_RT+1)
+          (RTS)))
+
+;; input:  RA
+;; output: RC (copy of RA)
+(define CP_RA_TO_RC
+  (list
+   (label CP_RA_TO_RC)
+          (LDA ZP_RA)
+          (STA ZP_RC)
+          (LDA ZP_RA+1)
+          (STA ZP_RC+1)
+          (RTS)))
+
+;; input:  RT
+;; output: RC (copy of RT)
+(define CP_RT_TO_RC
+  (list
+   (label CP_RT_TO_RC)
+          (LDA ZP_RT)
+          (STA ZP_RC)
+          (LDA ZP_RT+1)
+          (STA ZP_RC+1)
           (RTS)))
 
 (module+ test #| vm-cp-rt-to-ra |#
@@ -910,19 +931,19 @@ call frame primitives etc.
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RT (must be cell-pair ptr)
 ;; output: RT
-(define WRITE_RT_CELL1_TO_RT #t)
-(define WRITE_RT_CELL0_TO_RT #t)
-(define WRITE_RT_CELLy_TO_RT
+(define WRITE_CELLPAIR_RT_CELL1_TO_RT #t)
+(define WRITE_CELLPAIR_RT_CELL0_TO_RT #t)
+(define WRITE_CELLPAIR_RT_CELLy_TO_RT
   (list
-   (label WRITE_RT_CELL1_TO_RT)
+   (label WRITE_CELLPAIR_RT_CELL1_TO_RT)
           (LDY !$02)
-          (BNE WRITE_RT_CELLy_TO_RT)
+          (BNE WRITE_CELLPAIR_RT_CELLy_TO_RT)
 
-   (label WRITE_RT_CELL0_TO_RT)
+   (label WRITE_CELLPAIR_RT_CELL0_TO_RT)
           (LDY !$00)
 
    ;; ----------------------------------------
-   (label WRITE_RT_CELLy_TO_RT)
+   (label WRITE_CELLPAIR_RT_CELLy_TO_RT)
           (LDA (ZP_RT),y)
           (TAX)
           (INY)
@@ -939,13 +960,13 @@ call frame primitives etc.
      (LDY !$10)
      (JSR WRITE_INT_AY_TO_RA)
      (LDY !$00)
-     (JSR WRITE_RA_TO_CELLy_RT)
+     (JSR WRITE_RA_TO_CELLy_CELLPAIR_RT)
      (LDA !$10)
      (LDY !$01)
      (JSR WRITE_INT_AY_TO_RA)
      (LDY !$02)
-     (JSR WRITE_RA_TO_CELLy_RT)
-     (JSR WRITE_RT_CELL0_TO_RT)))
+     (JSR WRITE_RA_TO_CELLy_CELLPAIR_RT)
+     (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)))
 
   (define vm-write-rt-celly-to-rt-state
     (run-code-in-test vm-write-rt-celly-to-rt-code))
@@ -959,19 +980,19 @@ call frame primitives etc.
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RT (must be cell-pair ptr)
 ;; output: RA
-(define WRITE_RT_CELL1_TO_RA #t)
-(define WRITE_RT_CELL0_TO_RA #t)
-(define WRITE_RT_CELLy_TO_RA
+(define WRITE_CELLPAIR_RT_CELL1_TO_RA #t)
+(define WRITE_CELLPAIR_RT_CELL0_TO_RA #t)
+(define WRITE_CELLPAIR_RT_CELLy_TO_RA
   (list
-   (label WRITE_RT_CELL1_TO_RA)
+   (label WRITE_CELLPAIR_RT_CELL1_TO_RA)
           (LDY !$02)
-          (BNE WRITE_RT_CELLy_TO_RA)
+          (BNE WRITE_CELLPAIR_RT_CELLy_TO_RA)
 
-   (label WRITE_RT_CELL0_TO_RA)
+   (label WRITE_CELLPAIR_RT_CELL0_TO_RA)
           (LDY !$00)
 
    ;; ----------------------------------------
-   (label WRITE_RT_CELLy_TO_RA)
+   (label WRITE_CELLPAIR_RT_CELLy_TO_RA)
           (LDA (ZP_RT),y)
           (STA ZP_RA)
           (INY)
@@ -979,17 +1000,17 @@ call frame primitives etc.
           (STA ZP_RA+1)
           (RTS)))
 
-(define WRITE_RA_CELLy_TO_RA
+(define WRITE_CELLPAIR_RA_CELLy_TO_RA
   (list
-   (label WRITE_RA_CELL1_TO_RA)
+   (label WRITE_CELLPAIR_RA_CELL1_TO_RA)
           (LDY !$02)
-          (BNE WRITE_RA_CELLy_TO_RA)
+          (BNE WRITE_CELLPAIR_RA_CELLy_TO_RA)
 
-   (label WRITE_RA_CELL0_TO_RA)
+   (label WRITE_CELLPAIR_RA_CELL0_TO_RA)
           (LDY !$00)
 
    ;; ----------------------------------------
-   (label WRITE_RA_CELLy_TO_RA)
+   (label WRITE_CELLPAIR_RA_CELLy_TO_RA)
           (LDA (ZP_RA),y)
           (TAX)
           (INY)
@@ -1006,13 +1027,13 @@ call frame primitives etc.
      (LDA !$01)
      (LDY !$10)
      (JSR WRITE_INT_AY_TO_RA)
-     (JSR WRITE_RA_TO_CELL0_RT)
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
      (LDA !$10)
      (LDY !$01)
      (JSR WRITE_INT_AY_TO_RA)
-     (JSR WRITE_RA_TO_CELL1_RT)
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
      (JSR WRITE_INT0_TO_RA) ;; clear ra
-     (JSR WRITE_RT_CELL0_TO_RA)))
+     (JSR WRITE_CELLPAIR_RT_CELL0_TO_RA)))
 
   (define vm-write-rt-celly-to-ra-state
     (run-code-in-test vm-write-rt-celly-to-ra-code))
@@ -2413,7 +2434,7 @@ call frame primitives etc.
   (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state2 (+ PAGE_AVAIL_0_W #x02))
                 1))
 
-;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+;; free nonatomic (is cell-ptr, cell-pair-ptr, cell-array-ptr, native-array-ptr)
 ;; parameter: zp_rt
 (define FREE_RT
   (add-label-suffix
@@ -2425,7 +2446,7 @@ call frame primitives etc.
           (LSR)
           (BCC FREE_CELL__)
           (LSR)
-          (BCC FREE_CELL_PAIR__)
+          (BCC FREE_CELLPAIR__)
           ;; check other types of cells
           (CPY !TAG_BYTE_CELL_ARRAY)
           (BEQ FREE_CELL_ARRAY__)
@@ -2438,7 +2459,7 @@ call frame primitives etc.
    (label FREE_CELL__)
           (JMP FREE_CELL_RT)
 
-   (label FREE_CELL_PAIR__)
+   (label FREE_CELLPAIR__)
           (JMP FREE_CELLPAIR_RT)
 
    (label FREE_CELL_ARRAY__)
@@ -2560,19 +2581,21 @@ call frame primitives etc.
 ;;         X = highbyte (page)
 ;;         Y = ?
 (define GET_FRESH_CELL_TO_AX
+  (add-label-suffix
+   "__" "__GET_FRESH_CELL_TO_AX"
   (list
    (label GET_FRESH_CELL_TO_AX)
           (LDX VM_FREE_CELL_PAGE)
-          (BEQ NEW_PAGE__GET_FRESH_CELL_TO_AX)
+          (BEQ NEW_PAGE__)
           (LDA VM_PAGE_SLOT_DATA,x)
-          (BNE DONE__GET_FRESH_CELL_TO_AX) ;; allocate new page first
+          (BNE DONE__) ;; allocate new page first
 
-   (label NEW_PAGE__GET_FRESH_CELL_TO_AX)
+   (label NEW_PAGE__)
           (JSR ALLOC_PAGE_TO_X)
           (JMP INIT_CELL_PAGE_X_TO_AX)
 
-   (label DONE__GET_FRESH_CELL_TO_AX)
-          (RTS)))
+   (label DONE__)
+          (RTS))))
 
 (module+ test #| get-page-for-alloc-cell-to-ax |#
   (define get-page-for-alloc-cell-to-ax-state
@@ -2623,6 +2646,8 @@ call frame primitives etc.
 ;;         VM_PAGE_SLOT_DATA + PAGE = next free cell
 ;;         # cells allocated on PAGE ++
 (define ALLOC_CELL_AX_TO_RT
+  (add-label-suffix
+   "__" "__ALLOC_CELL_AX_TO_RT"
   (list
    (label ALLOC_CELL_PFL_X_TO_RT)
           (LDA VM_PAGE_SLOT_DATA,x)               ;; get first free slot on page
@@ -2637,10 +2662,10 @@ call frame primitives etc.
           (STA VM_PAGE_SLOT_DATA,x)
 
           ;; increase the slot number on this page
-          (STX INC_CMD__ALLOC_CELL_AX_TO_RT+2) ;; overwrite $c0
-   (label INC_CMD__ALLOC_CELL_AX_TO_RT)
+          (STX INC_CMD__+2) ;; overwrite $c0
+   (label INC_CMD__)
           (INC $c000)
-          (RTS)))
+          (RTS))))
 
 (module+ test #| alloc-cell-a-on-page-x-to-rt |#
   (define test-alloc-cell-a-on-page-x-to-rt-state
@@ -2691,17 +2716,19 @@ call frame primitives etc.
 ;;         VM_LIST_OF_FREE_CELLS
 ;;         A, X, Y: ?
 (define ALLOC_CELL_TO_RT
+  (add-label-suffix
+   "__" "__ALLOC_CELL_TO_RT"
   (list
    (label ALLOC_CELL_TO_RT)
           (LDA VM_LIST_OF_FREE_CELLS+1)
-          (BNE _ALLOC_CELL_GFL_PAGE_A_TO_RT)
+          (BNE ALLOC_CELL_GFL_PAGE_A_TO_RT)
           (JSR GET_FRESH_CELL_TO_AX)
           (JMP ALLOC_CELL_AX_TO_RT)
 
    (label ALLOC_CELL_GFL_TO_RT)
           (LDA VM_LIST_OF_FREE_CELLS+1)
           ;; (BEQ ERROR_ALLOC_CELL_GFL_TO_RT)
-   (label _ALLOC_CELL_GFL_PAGE_A_TO_RT)
+   (label ALLOC_CELL_GFL_PAGE_A_TO_RT)
           (STA ZP_RT+1)
           (LDA VM_LIST_OF_FREE_CELLS)
           (STA ZP_RT)
@@ -2713,7 +2740,7 @@ call frame primitives etc.
           (INY)
           (LDA (ZP_RT),y)
           (STA VM_LIST_OF_FREE_CELLS+1)
-          (RTS)))
+          (RTS))))
 
 (module+ test #| vm_alloc_cell_ptr_to_rt (once on a new page) |#
   (define test-alloc-cell-to-rt-code
@@ -2871,7 +2898,7 @@ call frame primitives etc.
           (STA RA_COPY__)
           (LDA ZP_RA+1)
           (STA RA_COPY__+1)
-          (JSR WRITE_RA_CELL1_TO_RA)
+          (JSR WRITE_CELLPAIR_RA_CELL1_TO_RA)
           (JSR DEC_REFCNT_RA) ;; this may change the queue again, which is alright, since RA was removed from queue
           (LDA RA_COPY__)
           (STA ZP_RA)
@@ -2959,7 +2986,7 @@ call frame primitives etc.
 
    ;; (label CELL0_IS_CELL_PTR__)
    ;;        ;; cell0 is a cell-ptr => decrement cell0
-   ;;        (JSR WRITE_RT_CELL0_TO_RT)
+   ;;        (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)
    ;;        (JSR DEC_REFCNT_RT)
    ;;        ;; restore original cell-pair-ptr
    ;;        (LDA TEMP_PTR__+1)
@@ -2986,7 +3013,7 @@ call frame primitives etc.
           (BEQ CELL1_IS_NO_PTR__) ;; this is nil, no need for deallocation
 
           ;; write cell1 into zp_ptr and decrement
-          (JSR WRITE_RT_CELL1_TO_RT)
+          (JSR WRITE_CELLPAIR_RT_CELL1_TO_RT)
           (JSR DEC_REFCNT_RT)
           ;; continue as if cell1 is atomic, since it was already handled
 
@@ -3127,9 +3154,9 @@ call frame primitives etc.
      (LDA !$00)
      (STA ZP_RA)
      (STA ZP_RA+1)
-     (JSR WRITE_RA_TO_CELL0_RT)
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
      (JSR WRITE_INT1_TO_RA)
-     (JSR WRITE_RA_TO_CELL1_RT)
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
 
      (JSR ALLOC_CELLPAIR_TO_RT)))
 
@@ -3147,8 +3174,8 @@ call frame primitives etc.
     (list
      (JSR ALLOC_CELLPAIR_TO_RT)
      (JSR WRITE_INT1_TO_RA)
-     (JSR WRITE_RA_TO_CELL0_RT)
-     (JSR WRITE_RA_TO_CELL1_RT)                      ;; cc05: 03 01 03 01
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)                      ;; cc05: 03 01 03 01
      (JSR INC_REFCNT_CELLPAIR_RT)           ;; cc01 = 1
      (JSR CP_RT_TO_RA)                               ;; RA = cc05
 
@@ -3161,12 +3188,12 @@ call frame primitives etc.
      (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
 
      ;; fill cell0 with zeros, cell1 cell-pair-ptr (with refcount = 1)
-     (JSR WRITE_RA_TO_CELL1_RT)                     ;; cc09: 05 cc 00 00
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)                     ;; cc09: 05 cc 00 00
 
      (LDA !$00)
      (STA ZP_RA)
      (STA ZP_RA+1)
-     (JSR WRITE_RA_TO_CELL0_RT)
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
 
      (JSR ALLOC_CELLPAIR_TO_RT)))
 
@@ -3199,6 +3226,9 @@ call frame primitives etc.
 ;; allocating cells will first reuse this free-list
 ;; option: keep count (length) of this list to decide when to really free a cell
 ;;         and add it to the free list on its respective page!
+;;
+;; input:  RT
+;; output:
 (define FREE_CELL_RT
   (add-label-suffix
    "__" "__FREE_CELL_RT"
@@ -3350,7 +3380,7 @@ call frame primitives etc.
      (JSR INC_REFCNT_CELL_RT)
      (JSR CP_RT_TO_RA)
      (JSR ALLOC_CELL_TO_RT)
-     (JSR WRITE_RA_TO_CELL0_RT)
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
      (JSR FREE_CELL_RT)))
 
   (define vm-free-cell-ptr-in-rt-tailcall-state
@@ -3612,16 +3642,16 @@ call frame primitives etc.
     (list
      (JSR ALLOC_CELLPAIR_TO_RT)
      (JSR WRITE_INT1_TO_RA)
-     (JSR WRITE_RA_TO_CELL1_RT)
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
      (JSR WRITE_INT0_TO_RA)
-     (JSR WRITE_RA_TO_CELL0_RT)
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
      (JSR INC_REFCNT_RT)
      (JSR CP_RT_TO_RA)
 
      (JSR ALLOC_CELLPAIR_TO_RT)
-     (JSR WRITE_RA_TO_CELL0_RT)
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
      (JSR WRITE_NIL_TO_RA)
-     (JSR WRITE_RA_TO_CELL1_RT)
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
 
      ;; rt = ( -+ . NIL )                cell-pair @ cc09
      ;;         |
@@ -3650,13 +3680,13 @@ call frame primitives etc.
      (JSR ALLOC_CELL_TO_RT)
      (JSR INC_REFCNT_RT)
      (JSR WRITE_INTm1_TO_RA)
-     (JSR WRITE_RA_TO_CELL0_RT)
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
      (JSR CP_RT_TO_RA)
 
      (JSR ALLOC_CELLPAIR_TO_RT)
-     (JSR WRITE_RA_TO_CELL0_RT)
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
      (JSR WRITE_INT1_TO_RA)
-     (JSR WRITE_RA_TO_CELL1_RT)
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
 
      ;; rt = ( -+ . int1 )               cell-pair @ cb05
      ;;         |
@@ -3739,10 +3769,10 @@ call frame primitives etc.
      (JSR INC_REFCNT_CELLPAIR_RT)               ;; ref(rt) ++ (=1)
      ;; set cdr to nil     
      (JSR WRITE_NIL_TO_RA)
-     (JSR WRITE_RA_TO_CELL1_RT)                          ;; (cdr rt) := nil
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)                          ;; (cdr rt) := nil
      ;; set car to int 0
      (JSR WRITE_INT1_TO_RA)
-     (JSR WRITE_RA_TO_CELL0_RT)                          ;; (car rt) := int0
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)                          ;; (car rt) := int0
 
      (JSR CP_RT_TO_RA)                                   ;; ra := rt
 
@@ -3750,10 +3780,10 @@ call frame primitives etc.
      (JSR INC_REFCNT_CELLPAIR_RT)               ;; ref(rt) ++ (=1)
 
      ;; set cdr 
-     (JSR WRITE_RA_TO_CELL1_RT)                          ;; (cdr rt) := ra 
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)                          ;; (cdr rt) := ra
      ;; set car to int0
      (JSR WRITE_INT0_TO_RA)
-     (JSR WRITE_RA_TO_CELL0_RT)                          ;; (car rt) := int0
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)                          ;; (car rt) := int0
 
      ;; now:
      ;;   rt[cc09|1] (int0 . ->[cc05|1](int0 . nil))
@@ -4707,6 +4737,8 @@ call frame primitives etc.
 ;; mark array to be collected and process array entries (from the back) until first to actually gc
 ;; gc array referenced by ra (after ref count dropped to 0)
 (define VM_GC_ARRAY_RA
+  (add-label-suffix
+   "__" "__VM_GC_ARRAY_RA"
   (list
    (label VM_GC_ARRAY_RA)
           (LDY !$01)
@@ -4717,19 +4749,19 @@ call frame primitives etc.
 
    (label LOOP_OVER_ENTRIES__)
           (LDA (ZP_RA),y)
-          (BEQ ENTRY_HIGH_EMPTY_)
+          (BEQ ENTRY_HIGH_EMPTY__)
           (STA ZP_TEMP+1)
           (DEY)
           (LDA (ZP_RA),y)
-          (BEQ ENTRY_LOW_EMPTY_)
+          (BEQ ENTRY_LOW_EMPTY__)
           (STA ZP_TEMP)
           (AND !$03)
           (CMP !$03)
-          (BNE ENTRY_IS_PTR_)
+          (BNE ENTRY_IS_PTR__)
 
-   (label ENTRY_HIGH_EMPTY_)
+   (label ENTRY_HIGH_EMPTY__)
           (DEY)
-   (label ENTRY_LOW_EMPTY_)
+   (label ENTRY_LOW_EMPTY__)
           (DEY)
           (CPY !$01)
           (BNE LOOP_OVER_ENTRIES__)
@@ -4738,27 +4770,27 @@ call frame primitives etc.
           ;; array is completely collected => slot can be returned to m1 page as free!
           (RTS)
 
-   (label ENTRY_IS_PTR_)
+   (label ENTRY_IS_PTR__)
           (STY ZP_TEMP+2) ;; currently on low byte of slot that's freed and can be used to store free page
           (DEY)
           (DEY)
           (TYA)
           (LSR)         ;; remaining size of array
-          (BNE KEEP_ARRAY_IN_TO_FREE_LIST__VM_GC_ARRAY_RA)
+          (BNE KEEP_ARRAY_IN_TO_FREE_LIST__)
 
           ;; count dropped to 0 => array can be put back as completely free into page
           ;; TODO: put array back to free slot in page
           ;; still the original cell ptr needs to be decremented
           (JSR FREE_M1_SLOT_RA)
-          (JMP DECR_ORG_CELL_PTR__VM_GC_ARRAY_RA)
+          (JMP DECR_ORG_CELL_PTR__)
 
-   (label KEEP_ARRAY_IN_TO_FREE_LIST__VM_GC_ARRAY_RA)
+   (label KEEP_ARRAY_IN_TO_FREE_LIST__)
           (LDY !$01)
           (STA (ZP_RA),y) ;; store array size (entry after size = reference to next free array)
           ;; first call => put old free array of same size into slot
           (LDA ZP_RA+1) ;; page this array is stored in
-          (STA LOAD_PAGETYPE__VM_GC_ARRAY_RA+2)
-   (label LOAD_PAGETYPE__VM_GC_ARRAY_RA)
+          (STA LOAD_PAGETYPE__+2)
+   (label LOAD_PAGETYPE__)
 
           ;; write old root of this page type into cell where ptr was located
           (LDA $c000) ;; load byte 0 of the page (c0 is overwritten with actual page
@@ -4779,14 +4811,14 @@ call frame primitives etc.
           (LDA ZP_RA)
           (STA VM_P0_QUEUE_ROOT_OF_ARRAYS_TO_FREE,x) ;; low byte
 
-   (label DECR_ORG_CELL_PTR__VM_GC_ARRAY_RA)
+   (label DECR_ORG_CELL_PTR__)
           ;; now reuse RA to store pointer originally in cell
           (LDA ZP_TEMP)
           (STA ZP_RA)
           (LDA ZP_TEMP+1)
           (STA ZP_RA+1)
           (JMP DEC_REFCNT_RA)
-))
+)))
 
 ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
 ;; input:  ZP_RT = pointer to array (slot)
@@ -5298,7 +5330,7 @@ call frame primitives etc.
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
   (inform-check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                2147)
+                2154)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 2 items"
                       "int $01ff  (rt)"
@@ -5485,23 +5517,25 @@ call frame primitives etc.
           ;; WRITE_NIL_TO_RT
           WRITE_NIL_TO_Rx
 
-          ;; WRITE_RT_CELL1_TO_RT
-          ;; WRITE_RT_CELL0_TO_RT
-          WRITE_RT_CELLy_TO_RT                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RT
-          ;; WRITE_RA_CELL1_TO_RT
-          ;; WRITE_RA_CELL0_TO_RT
-          WRITE_RA_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RA into RA
+          ;; WRITE_CELLPAIR_RT_CELL1_TO_RT
+          ;; WRITE_CELLPAIR_RT_CELL0_TO_RT
+          WRITE_CELLPAIR_RT_CELLy_TO_RT                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RT
+          ;; WRITE_CELLPAIR_RA_CELL1_TO_RT
+          ;; WRITE_CELLPAIR_RA_CELL0_TO_RT
+          WRITE_CELLPAIR_RA_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RA into RA
 
-          WRITE_RA_TO_CELLy_RT                            ;; write RA cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RT
+          WRITE_RA_TO_CELLy_CELLPAIR_RT                            ;; write RA cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RT
 
-          ;; WRITE_RT_CELL1_TO_RA
-          ;; WRITE_RT_CELL0_TO_RA
-          WRITE_RT_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RA
+          ;; WRITE_CELLPAIR_RT_CELL1_TO_RA
+          ;; WRITE_CELLPAIR_RT_CELL0_TO_RA
+          WRITE_CELLPAIR_RT_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RA
 
-          WRITE_RT_TO_CELLy_RA                            ;; write RT cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RA
+          WRITE_RT_TO_CELLy_CELLPAIR_RA                            ;; write RT cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RA
 
           CP_RT_TO_RA                                     ;; copy RT -> RA
           CP_RA_TO_RT                                     ;; copy RA -> RT
+          CP_RA_TO_RC                                     ;; copy RA -> RC
+          CP_RT_TO_RC                                     ;; copy RT -> RC
 
           POP_CELL_EVLSTK_TO_CELLy_RT                           ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
@@ -5514,4 +5548,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1675))
+                       1662))

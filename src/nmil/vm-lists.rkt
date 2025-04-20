@@ -127,7 +127,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (CMP !$01)
           (BNE NO_CELL_PAIR_PTR__VM_CAR_R)
 
-          (JMP WRITE_RT_CELL0_TO_RT)))
+          (JMP WRITE_CELLPAIR_RT_CELL0_TO_RT)))
 
 (define VM_CDR_R
   (list
@@ -149,7 +149,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (CMP !$01)
           (BNE NO_CELL_PAIR_PTR__VM_CDR_R)
 
-          (JMP WRITE_RT_CELL1_TO_RT)))
+          (JMP WRITE_CELLPAIR_RT_CELL1_TO_RT)))
 
 ;; short command for doing caar, cadr, cdar, cddr
 ;; caar =  (car (car x))
@@ -195,7 +195,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDA ZP_RT+1)
           (STA ZP_RA+1)
           (JSR ALLOC_CELLPAIR_TO_RT)
-          (JSR WRITE_RA_TO_CELL0_RT)
+          (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
           (JMP POP_CELL_EVLSTK_TO_CELL1_RT)))
 
 (module+ test #| VM_CONS |#
