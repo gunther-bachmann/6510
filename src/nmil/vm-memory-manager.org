@@ -96,45 +96,43 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
   |      | VM_FREE_PTR_IN_RT                           |                                    |      |                                                                    |
   |      | VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST |                                    |      |                                                                    |
   |------+---------------------------------------------+------------------------------------+------+--------------------------------------------------------------------|
-  |      | CELL_STACK / RT / RA                        |                                    |      |                                                                    |
+  | x    | CELL_STACK / RT / RA                        |                                    |      |                                                                    |
   |------+---------------------------------------------+------------------------------------+------+--------------------------------------------------------------------|
   | x    | VM_CELL_STACK_POP_R                         | POP_CELL_EVLSTK_TO_RT              |      |                                                                    |
   | x    | VM_CELL_STACK_PUSH_R                        | PUSH_CELL_RT_TO_EVLSTK             |      |                                                                    |
   | x    | ;; vm_cell_stack_push_rt_if_nonempty        | PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY |      |                                                                    |
-  |      | VM_CELL_STACK_JUST_PUSH_RT                  | ?                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INTm1_TO_RA                     | WRITE_INTm1_TO_RA                  |      |                                                                    |
-  |      | ;; VM_WRITE_INTm1_TO_RT                     | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INTm1_TO_Rx                     | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT1_TO_RA                      | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT1_TO_RT                      | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT1_TO_Rx                      | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT0_TO_RA                      | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT0_TO_RT                      | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT0_TO_Rx                      | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT_A_TO_RA                     | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT_A_TO_RT                     | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT_A_TO_Rx                     | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_ENC_INT_AY_TO_Rx                | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT_AY_TO_RA                    | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_INT_AY_TO_RT                    | .                                  |      |                                                                    |
-  |      | VM_WRITE_INT_AY_TO_Rx                       | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_NIL_TO_RA                       | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_NIL_TO_RT                       | .                                  |      |                                                                    |
-  |      | VM_WRITE_NIL_TO_Rx                          | .                                  |      |                                                                    |
-  |      | VM_WRITE_RT_CELL1_TO_RT                     | WRITE_RT_CELL1_TO_RT               |      |                                                                    |
-  |      | VM_WRITE_RT_CELL0_TO_RT                     | .                                  |      |                                                                    |
-  |      | VM_WRITE_RT_CELLy_TO_RT                     | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_RA_CELL1_TO_RT                  | .                                  |      |                                                                    |
-  |      | ;; VM_WRITE_RA_CELL0_TO_RT                  | .                                  |      |                                                                    |
-  |      | VM_WRITE_RA_CELLy_TO_RA                     | .                                  |      |                                                                    |
-  |      | VM_WRITE_RA_TO_CELLy_RT                     | .                                  |      |                                                                    |
-  |      | VM_WRITE_RT_CELL1_TO_RA                     | .                                  |      |                                                                    |
-  |      | VM_WRITE_RT_CELL0_TO_RA                     | .                                  |      |                                                                    |
-  |      | VM_WRITE_RT_CELLy_TO_RA                     | .                                  |      |                                                                    |
-  |      | VM_WRITE_RT_TO_CELLy_RA                     | .                                  |      |                                                                    |
-  |      | VM_CP_RT_TO_RA                              | COPY_RT_TO_RA                      |      |                                                                    |
-  |      | VM_CP_RA_TO_RT                              | COPY_RA_TO_RT                      |      |                                                                    |
-  |      | VM_POP_FSTOS_TO_CELLy_RT                    | ?                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INTm1_TO_RA                     | WRITE_INTm1_TO_RA                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INTm1_TO_RT                     | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INTm1_TO_Rx                     | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT1_TO_RA                      | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT1_TO_RT                      | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT1_TO_Rx                      | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT0_TO_RA                      | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT0_TO_RT                      | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT0_TO_Rx                      | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT_A_TO_RA                     | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT_A_TO_RT                     | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT_A_TO_Rx                     | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT_AY_TO_RA                    | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_INT_AY_TO_RT                    | .                                  |      |                                                                    |
+  | x    | VM_WRITE_INT_AY_TO_Rx                       | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_NIL_TO_RA                       | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_NIL_TO_RT                       | .                                  |      |                                                                    |
+  | x    | VM_WRITE_NIL_TO_Rx                          | .                                  |      |                                                                    |
+  | x    | VM_WRITE_RT_CELL1_TO_RT                     | WRITE_RT_CELL1_TO_RT               |      |                                                                    |
+  | x    | VM_WRITE_RT_CELL0_TO_RT                     | .                                  |      |                                                                    |
+  | x    | VM_WRITE_RT_CELLy_TO_RT                     | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_RA_CELL1_TO_RT                  | .                                  |      |                                                                    |
+  | x    | ;; VM_WRITE_RA_CELL0_TO_RT                  | .                                  |      |                                                                    |
+  | x    | VM_WRITE_RA_CELLy_TO_RA                     | .                                  |      |                                                                    |
+  | x    | VM_WRITE_RA_TO_CELLy_RT                     | .                                  |      |                                                                    |
+  | x    | VM_WRITE_RT_CELL1_TO_RA                     | .                                  |      |                                                                    |
+  | x    | VM_WRITE_RT_CELL0_TO_RA                     | .                                  |      |                                                                    |
+  | x    | VM_WRITE_RT_CELLy_TO_RA                     | .                                  |      |                                                                    |
+  | x    | VM_WRITE_RT_TO_CELLy_RA                     | .                                  |      |                                                                    |
+  | x    | VM_CP_RT_TO_RA                              | COPY_RT_TO_RA                      |      |                                                                    |
+  | x    | VM_CP_RA_TO_RT                              | COPY_RA_TO_RT                      |      |                                                                    |
+  | x    | VM_POP_FSTOS_TO_CELLy_RT                    | POP_CELL_EVLSTK_TO_CELLy_RT        |      |                                                                    |
   |------+---------------------------------------------+------------------------------------+------+--------------------------------------------------------------------|
   |      | VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE         | GLOBAL_CELLPAIR_FREE_LIST          |      |                                                                    |
   |      | VM_FREE_CELL_PAIR_PAGE                      | GLOBAL_CELL_PAGE_FOR_ALLOC         |      |                                                                    |

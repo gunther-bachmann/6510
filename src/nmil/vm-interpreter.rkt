@@ -64,7 +64,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in racket/list flatten take empty? range))
 
 (require (only-in "./vm-memory-manager.rkt"
-                  VM_WRITE_RT_CELL0_TO_RT
+                  WRITE_RT_CELL0_TO_RT
                   vm-memory-manager
                   vm-cell-at-nil?
                   vm-page->strings
@@ -799,7 +799,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
-           (JSR VM_WRITE_RT_CELL0_TO_RT)
+           (JSR WRITE_RT_CELL0_TO_RT)
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
@@ -811,7 +811,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
-           (JSR VM_WRITE_RT_CELL1_TO_RT)
+           (JSR WRITE_RT_CELL1_TO_RT)
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 )))
@@ -1322,7 +1322,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_NIL_P
   (list
    (label BC_NIL_P)
-          (JSR VM_CP_RT_TO_RA)
+          (JSR CP_RT_TO_RA)
           (JSR VM_NIL_P_R)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
           (JSR DEC_REFCNT_RA)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
@@ -1390,7 +1390,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_CAR
   (list
    (label BC_CAR)
-          (JSR VM_CP_RT_TO_RA)
+          (JSR CP_RT_TO_RA)
           (JSR VM_CAR_R)
           (JSR INC_REFCNT_RT)
           (JSR DEC_REFCNT_RA)
@@ -1416,7 +1416,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_CDR
   (list
    (label BC_CDR)
-          (JSR VM_CP_RT_TO_RA)
+          (JSR CP_RT_TO_RA)
           (JSR VM_CDR_R)
           (JSR INC_REFCNT_RT)
           (JSR DEC_REFCNT_RA)
@@ -1472,10 +1472,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (CMP ZP_TEMP+1)
           (BMI GREATER__BC_INT_GREATER_P)
    (label LESS_OR_EQUAL__BC_INT_GREATER_P)
-          (JSR VM_WRITE_INT0_TO_RT)
+          (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
     (label GREATER__BC_INT_GREATER_P)
-          (JSR VM_WRITE_INT1_TO_RT)
+          (JSR WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| INT GREATER? |#
@@ -2199,7 +2199,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR DEC_REFCNT_RT)
           (JSR DEC_REFCNT_RA)
           (DEC ZP_CELL_STACK_TOS)
-          (JSR VM_WRITE_INT1_TO_RT)
+          (JSR WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
 
    (label NE_LB__BC_CELL_EQ)
@@ -2209,7 +2209,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR DEC_REFCNT_RT)
           (JSR DEC_REFCNT_RA)
           (DEC ZP_CELL_STACK_TOS)
-          (JSR VM_WRITE_INT0_TO_RT)
+          (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define INT_0_P #x22)
@@ -2451,7 +2451,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     (label BC_GET_ARRAY_FIELD) ;; replace RT with RT.@A
            (PHA)
-           (JSR VM_CP_RT_TO_RA)
+           (JSR CP_RT_TO_RA)
            (PLA)
            (JSR VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA)
            (JSR INC_REFCNT_RT)
@@ -2460,7 +2460,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping
            (PHA)
-           (JSR VM_CP_RT_TO_RA)
+           (JSR CP_RT_TO_RA)
            (JSR POP_CELL_EVLSTK_TO_RT)
            (PLA)
            (JSR VM_CELL_STACK_POP_TO_ARRAY_ATa_RA)
@@ -2474,7 +2474,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA ZP_RT+1)
           (JSR ALLOC_CELLARR_TO_RA)
           (JSR VM_REFCOUNT_INCR_RA__M1_SLOT)
-          (JSR VM_CP_RA_TO_RT) ;; overwrite byte on stack
+          (JSR CP_RA_TO_RT) ;; overwrite byte on stack
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; must be page aligned!

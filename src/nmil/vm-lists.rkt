@@ -75,15 +75,15 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           ;; this additional check should not be necessary, since tagged low byte of a non-nil cell-pair-ptr may never be #x02
           ;; (LDA ZP_RT+1) ;; get high byte
           ;; (BNE NOT_NIL__VM_NIL_P_R) ;; high byte of nil is 0! => branch if != 0
-          (JMP VM_WRITE_INT1_TO_RT) ;; true
+          (JMP WRITE_INT1_TO_RT) ;; true
    (label NOT_NIL__VM_NIL_P_R)
-          (JMP VM_WRITE_INT0_TO_RT) ;; false
+          (JMP WRITE_INT0_TO_RT) ;; false
           ))
 
 (module+ test #| VM_NIL_P_R |#
   (define use-case-nil_p-a-code
     (list
-     (JSR VM_WRITE_NIL_TO_RT)
+     (JSR WRITE_NIL_TO_RT)
      (JSR VM_NIL_P_R)
      ))
 
@@ -127,7 +127,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (CMP !$01)
           (BNE NO_CELL_PAIR_PTR__VM_CAR_R)
 
-          (JMP VM_WRITE_RT_CELL0_TO_RT)))
+          (JMP WRITE_RT_CELL0_TO_RT)))
 
 (define VM_CDR_R
   (list
@@ -149,7 +149,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (CMP !$01)
           (BNE NO_CELL_PAIR_PTR__VM_CDR_R)
 
-          (JMP VM_WRITE_RT_CELL1_TO_RT)))
+          (JMP WRITE_RT_CELL1_TO_RT)))
 
 ;; short command for doing caar, cadr, cdar, cddr
 ;; caar =  (car (car x))
@@ -195,8 +195,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDA ZP_RT+1)
           (STA ZP_RA+1)
           (JSR ALLOC_CELLPAIR_TO_RT)
-          (JSR VM_WRITE_RA_TO_CELL0_RT)
-          (JMP VM_POP_FSTOS_TO_CELL1_RT)))
+          (JSR WRITE_RA_TO_CELL0_RT)
+          (JMP POP_CELL_EVLSTK_TO_CELL1_RT)))
 
 (module+ test #| VM_CONS |#
   (define use-case-cons-code
