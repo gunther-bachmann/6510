@@ -1,7 +1,41 @@
 #+title: vm-memory-manager
 * open tasks
-** TODO idea
-instead of implementing free for RT and RA, implement one function, copying RT/RA to (e.g. RC) and work on RC only!
+** TODO cell deallocation
+instead of implementing free for RT and RA, implement one function, copying RT/RA to (e.g. RC) and work on RC
+(todo: copy algorithms from notebook into here!)
+- plan to do deallocation of different cell types (free is done if refcnt drops to 0)
+  - free rt
+    find pointer type of rt and call
+    either free cell, free cell-pair, free cell-array of free native-array
+  - free cell (ptr)
+    [RT] -> [cell X]  ->?
+    if cell X is a pointer, mark cell X for further free
+    add cell X to free list of cells
+    if cell X is a pointer, marked for further free: rt = cell x, (tail) call free rt
+  - free cell-pair
+    [RT] -> [cell A][cell B]
+    if cell A is a pointer, mark cell A for further free
+    add cell-pair to freeable list of cell-pairs
+    if call A is a pointer, marked for further free: rt = cell A, (tail) call free rt
+  - free cell-array
+    [RT] -> [cell 0]...[cell n-1]
+    find first cell pointer going from cell n-1 downwards and mark it for further free
+    mark cell-array to be free up to the marked cell
+    add cell-array to list of freeable cell-arrays
+    if marked cell was a pointer: rt = cell m, (tail) call free rt
+  - free native-array
+    [RT] -> native array
+    simply add this slot to the free list and return
+- plan to further free (incrementally) freeable elements
+  - freeable cell-pair list (? necessary ? can be done during allocation) [e.g. during alloc of cell-pairs]
+    [cell A][cell B] = head of freeable list, cell A points to next in list
+    pop from freeable list and push to free list
+    if cell B is a pointer, RC=cell B, call free RC
+  - freeable cell-array list [e.g. during alloc of cells of type of this array]
+    cell-array = head of freeable cell-array list
+    find first cell pointer going from cell n-1 downwards and mark it for further free
+    mark cell-array to be free up to the marked cell
+    if marked cell was a pointer: rc = cell m, (tail) call free rc
 ** TODO check: do pointers on cells exist that are on the locals/eval-stack?
 - currently the answer is *NO*, does that restrict the programming model?
 * current (en)coding
@@ -12,11 +46,13 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
          cell-ptr                  :: an atomic cell, lowest bit of low byte is set, points to a cell (of any type)
                                      lowbyte: #bxxxx xxx0
                                      highbyte = page
+                                     functions that allocated/free a cell in a register, are always considered cell-ptr (in the register)
          cell-pair                 :: a pair of two cells, cell0 and cell1 (in memory: 00 lowbyte-cell0, 01 highbyte-cell0, 02 lowbyte-cell1, 03 highbyte-cell1),
                                      each cell can be of any atomic cell
          cell-pair-ptr             :: an atomic cell, second lowest bit is set, lowest bit is unset, points to a cell-pair
                                      lowbyte: #bxxxx xx01
                                      highbyte = page
+                                     functions that allocated/free a cell-pair in a register, are always considered cell-pair-ptr (in the register)
          int-cell                  :: an atomic cell having 13 bit as payload
                                      lowbyte mask: #b0xxx xx11, xxxxx = high bits of int
                                      highbyte = lowbyte of int
