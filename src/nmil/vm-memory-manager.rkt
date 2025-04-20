@@ -177,7 +177,7 @@ call frame primitives etc.
 
           ;; VM_GC_ARRAY_SLOT_PTR                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
 
-          VM_FREE_PTR_IN_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+          FREE_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 
           VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
 
@@ -186,7 +186,7 @@ call frame primitives etc.
 
           PUSH_TO_EVLSTK                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
-          PUSH_CELL_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
+          PUSH_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 
           ;; WRITE_INTm1_TO_RA                             ;; write cell-int -1 into RA
           ;; WRITE_INTm1_TO_RT                             
@@ -1027,17 +1027,17 @@ call frame primitives etc.
 ;; output: call-frame stack << RT
 ;; uses:   A Y
 ;; CHECK STACK PAGE OVERFLOW
-(define PUSH_CELL_RT_TO_EVLSTK
+(define PUSH_RT_TO_EVLSTK
   (add-label-suffix
-   "__" "__PUSH_CELL_RT_TO_EVLSTK"
+   "__" "__PUSH_RT_TO_EVLSTK"
   (list
-   (label PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
+   (label PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
           (LDY ZP_RT)
           ;; if RT empty?  = $00 
           (BEQ DONE__)        ;; then no push
 
    ;; ----------------------------------------
-   (label PUSH_CELL_RT_TO_EVLSTK)
+   (label PUSH_RT_TO_EVLSTK)
           (LDY ZP_CELL_STACK_TOS)
           (INY)
           [BNE NO_ERROR__]
@@ -1069,7 +1069,7 @@ call frame primitives etc.
   (define vm-cell-stack-just-push-rt-code
     (list     
      (JSR WRITE_INTm1_TO_RT)
-     (JSR PUSH_CELL_RT_TO_EVLSTK)))
+     (JSR PUSH_RT_TO_EVLSTK)))
 
   (define vm-cell-stack-just-push-rt-state
     (run-code-in-test vm-cell-stack-just-push-rt-code))
@@ -1133,7 +1133,7 @@ call frame primitives etc.
    ;; X = tagged low byte
    (label PUSH_TO_EVLSTK)
           (PHA)
-          (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY) ;; uses A and Y
+          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY) ;; uses A and Y
           (PLA)
 
    (label VM_WRITE_AX_TO_RT)
@@ -2415,49 +2415,51 @@ call frame primitives etc.
 
 ;; free nonatomic (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 ;; parameter: zp_rt
-(define VM_FREE_PTR_IN_RT
+(define FREE_RT
+  (add-label-suffix
+   "__" "FREE_RT"
   (list
-   (label VM_FREE_PTR_IN_RT)
+   (label FREE_RT)
           (LDA ZP_RT)
           (TAY)
           (LSR)
-          (BCC FREE_CELL__VM_FREE_PTR_IN_RT)
+          (BCC FREE_CELL__)
           (LSR)
-          (BCC FREE_CELL_PAIR__VM_FREE_PTR_IN_RT)
+          (BCC FREE_CELL_PAIR__)
           ;; check other types of cells
           (CPY !TAG_BYTE_CELL_ARRAY)
-          (BEQ FREE_CELL_ARRAY__VM_FREE_PTR_IN_RT)
+          (BEQ FREE_CELL_ARRAY__)
           (CPY !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ FREE_NATIVE_ARRAY__VM_FREE_PTR_IN_RT)
+          (BEQ FREE_NATIVE_ARRAY__)
 
-          ;; unknown pointer type in zp_ptr
+          ;; unknown pointer type in zp_rt
           (BRK)
 
-   (label FREE_CELL__VM_FREE_PTR_IN_RT)
+   (label FREE_CELL__)
           (JMP FREE_CELL_RT)
 
-   (label FREE_CELL_PAIR__VM_FREE_PTR_IN_RT)
+   (label FREE_CELL_PAIR__)
           (JMP FREE_CELLPAIR_RT)
 
-   (label FREE_CELL_ARRAY__VM_FREE_PTR_IN_RT)
-   (label FREE_NATIVE_ARRAY__VM_FREE_PTR_IN_RT)
+   (label FREE_CELL_ARRAY__)
+   (label FREE_NATIVE_ARRAY__)
           ;; VM_FREE_M1_SLOT_IN_RT
-          (BRK)))
+          (BRK))))
 
 (module+ test #| vm-free-ptr-in-rt |#
   (define vm-free-ptr-in-rt-code
     (list
             (LDA !$00)
             (STA $ff)
-            (JMP TEST_START__VM_FREE_PTR_IN_RT)
+            (JMP TEST_START__FREE_RT)
 
      (label FREE_CELL_RT)
             (INC $ff)
             (RTS)
 
-     (label TEST_START__VM_FREE_PTR_IN_RT )
+     (label TEST_START__FREE_RT )
             (JSR ALLOC_CELL_TO_RT)
-            (JSR VM_FREE_PTR_IN_RT)))
+            (JSR FREE_RT)))
 
   (define vm-free-ptr-in-rt-state
     (run-code-in-test vm-free-ptr-in-rt-code #:mock (list (label FREE_CELL_RT))))
@@ -2470,15 +2472,15 @@ call frame primitives etc.
     (list
             (LDA !$00)
             (STA $ff)
-            (JMP TEST_START__VM_FREE_PTR_IN_RT)
+            (JMP TEST_START__FREE_RT)
 
      (label FREE_CELLPAIR_RT)
             (INC $ff)
             (RTS)
 
-     (label TEST_START__VM_FREE_PTR_IN_RT )
+     (label TEST_START__FREE_RT )
             (JSR ALLOC_CELLPAIR_TO_RT)
-            (JSR VM_FREE_PTR_IN_RT)))
+            (JSR FREE_RT)))
 
   (define vm-free-ptr-in-rt-2-state
     (run-code-in-test vm-free-ptr-in-rt-2-code #:mock (list (label FREE_CELLPAIR_RT))))
@@ -5062,7 +5064,7 @@ call frame primitives etc.
           (INY)
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
           (BEQ NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-          (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
+          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
           (LDY ARRAY_INDEX__WRITE_RT_TO_ARR_ATa_RA)
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
           (STA ZP_RT)
@@ -5215,14 +5217,14 @@ call frame primitives etc.
   (list
    (label PUSH_ARR_ATa_RA_TO_EVLSTK)
           (PHA)
-          (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
+          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
           (PLA)
           (CLC)
           (BCC WRITE_ARR_ATa_RA_TO_RT)
 
    (label CHECK_BOUNDS__)
           (PHA)
-          (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
+          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
           (PLA)
 
    (label CHECK_BOUNDS__)
@@ -5414,7 +5416,7 @@ call frame primitives etc.
 
           VM_GC_ARRAY_SLOT_RT                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
           
-          VM_FREE_PTR_IN_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+          FREE_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 
           VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
 
@@ -5423,7 +5425,7 @@ call frame primitives etc.
 
           PUSH_TO_EVLSTK                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
-          PUSH_CELL_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
+          PUSH_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 
           ;; WRITE_ARR_ATa_RA_TO_RT
           PUSH_ARR_ATa_RA_TO_EVLSTK

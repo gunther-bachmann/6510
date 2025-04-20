@@ -793,7 +793,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     ;; CAR
            (STA ZP_RA)
-           (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
+           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
            (LDY ZP_RA) ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
            (STA ZP_RT)                                ;; low byte -> X
@@ -805,7 +805,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     (label CDR__BC_PUSH_LOCAL_SHORT)
            (STA ZP_RA)
-           (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
+           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
            (LDY ZP_RA) ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
            (STA ZP_RT)                                ;; low byte -> X
@@ -825,7 +825,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     ;; push local           
            (PHA)
-           (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
+           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
            (PLA)
            (TAY) ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
@@ -2179,7 +2179,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_DUP)
           (JSR INC_REFCNT_RT)
-          (JSR PUSH_CELL_RT_TO_EVLSTK_IF_NONEMPTY)
+          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define CELL_EQ #x12)
