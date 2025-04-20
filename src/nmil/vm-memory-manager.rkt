@@ -2815,13 +2815,15 @@ call frame primitives etc.
 ;; actively free all enqueued cell pairs of the free-list!
 ;; can be useful to find out whether a whole page is not used at all. free cells are still marked as used on a page.
 (define GC_CELLPAIR_FREE_LIST
+  (add-label-suffix
+   "__" "__GC_CELLPAIR_FREE_LIST"
   (list
    (label GC_CELLPAIR_FREE_LIST)
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; get highbyte (page) from ptr to cell-pair
-          (BNE CONTINUE__GC_CELLPAIR_FREE_LIST)   ;; if = 0, queue is empty, i'm done
+          (BNE CONTINUE__)   ;; if = 0, queue is empty, i'm done
           (RTS)
 
-   (label CONTINUE__GC_CELLPAIR_FREE_LIST)
+   (label CONTINUE__)
           ;; put ptr to cell-pair into RA, now RA->cell0,cell1 with cell0 = pointer to the next in queue, cell1 could still be something that needs gc
           (STA ZP_RA+1)
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
@@ -2830,53 +2832,53 @@ call frame primitives etc.
           ;; set new tree root for free tree to original cell0
           (LDY !$00)
           (LDA (ZP_RA),y)
-          (BEQ CELL0_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; is zero => completely empty
+          (BEQ CELL0_IS_NO_PTR__) ;; is zero => completely empty
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL0_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; is no ptr
+          (BEQ CELL0_IS_NO_PTR__) ;; is no ptr
           (INY)
           (LDA (ZP_RA),y)
-          (BEQ CELL0_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; is nil
+          (BEQ CELL0_IS_NO_PTR__) ;; is nil
           (DEY)
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (LDA (ZP_RA),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
-          (BNE CHECK_CELL1__GC_CELLPAIR_FREE_LIST) ;; since must be !=0, it cannot be on page 0 always branch!
+          (BNE CHECK_CELL1__) ;; since must be !=0, it cannot be on page 0 always branch!
 
-   (label CELL0_IS_NO_PTR__GC_CELLPAIR_FREE_LIST)
+   (label CELL0_IS_NO_PTR__)
           ;; queue is now empty, this was the last cell-pair
           ;; clear queue
           (LDA !$00)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; just reset highbyte (checked at start of this function)
           ;; (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
 
-   (label CHECK_CELL1__GC_CELLPAIR_FREE_LIST)
+   (label CHECK_CELL1__)
           ;; now check cell1 on remaining ptrs
           (LDY !$02)
           (LDA (ZP_RA),y) ;; get low byte
-          (BEQ CELL1_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; = 0 means totally empty => no ptr
+          (BEQ CELL1_IS_NO_PTR__) ;; = 0 means totally empty => no ptr
           (AND !$03)       ;; mask out all but low 2 bits
           (CMP !$03)
-          (BEQ CELL1_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; no need to do further deallocation
+          (BEQ CELL1_IS_NO_PTR__) ;; no need to do further deallocation
           (INY)
           (LDA (ZP_RA),y)
-          (BEQ CELL1_IS_NO_PTR__GC_CELLPAIR_FREE_LIST) ;; is nil
+          (BEQ CELL1_IS_NO_PTR__) ;; is nil
 
           ;; write cell1 into zp_ptr and decrement          
           (LDA ZP_RA)
-          (STA RA_COPY__GC_CELLPAIR_FREE_LIST)
+          (STA RA_COPY__)
           (LDA ZP_RA+1)
-          (STA RA_COPY__GC_CELLPAIR_FREE_LIST+1)
+          (STA RA_COPY__+1)
           (JSR WRITE_RA_CELL1_TO_RA)
           (JSR DEC_REFCNT_RA) ;; this may change the queue again, which is alright, since RA was removed from queue
-          (LDA RA_COPY__GC_CELLPAIR_FREE_LIST)
+          (LDA RA_COPY__)
           (STA ZP_RA)
-          (LDA RA_COPY__GC_CELLPAIR_FREE_LIST+1)
+          (LDA RA_COPY__+1)
           (STA ZP_RA+1)
 
-  (label CELL1_IS_NO_PTR__GC_CELLPAIR_FREE_LIST)
+  (label CELL1_IS_NO_PTR__)
           ;; now add ra to its page as free cell-pair on that page
           (LDX ZP_RA+1)                 ;; A = page -> x
           (LDA $cf00,x)         ;; current first free cell offset
@@ -2888,16 +2890,13 @@ call frame primitives etc.
           (LDA ZP_RA)             ;; get offset into page of cell RA points to
           (STA $cf00,x)           ;; new first free cell now points to RA
           (LDA ZP_RA+1)
-          (STA DEC_COMMAND__GC_CELLPAIR_FREE_LIST+2)
-   (label DEC_COMMAND__GC_CELLPAIR_FREE_LIST)
+          (STA DEC_COMMAND__+2)
+   (label DEC_COMMAND__)
           (DEC $c000)         ;; decrement number of used slots on cell-pair page (c0 is overwritten with page in zp_ra+1
           (JMP GC_CELLPAIR_FREE_LIST) ;; do this until queue is empty
 
-   (label RA_COPY__GC_CELLPAIR_FREE_LIST)
-          (word 0)
-
-
-   ))
+   (label RA_COPY__)
+          (word 0))))
 
 ;; input:  none
 ;; output: zp_rt = free cell-pair
@@ -2907,6 +2906,8 @@ call frame primitives etc.
 ;; if no free cell page is available, allocate a new page and used the first free slot there
 ;; NOTE: the cell-pair is not initialized (cell0 and/or cell1 may contain old data that needs to be overwritten!)
 (define ALLOC_CELLPAIR_TO_RT
+  (add-label-suffix
+   "__" "__ALLOC_CELLPAIR_TO_RT"
   (list
    (label ERROR__ALLOC_CELLPAIR_GFL_TO_RT)
           (BRK)
@@ -2914,7 +2915,7 @@ call frame primitives etc.
    ;; ----------------------------------------
    (label ALLOC_CELLPAIR_TO_RT)
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; get highbyte (page) from ptr to cell-pair
-          (BNE REUSE_CELL_PAIR__ALLOC_CELLPAIR_TO_RT)   ;; if != 0, cell-pair can be reused
+          (BNE REUSE_CELL_PAIR__)   ;; if != 0, cell-pair can be reused
           ;; no cell-pair to reuse available => need to allocate a new one
 
           ;; get a cell-pair on the given page (or allocate a new page)
@@ -2925,64 +2926,64 @@ call frame primitives etc.
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (BEQ ERROR__ALLOC_CELLPAIR_GFL_TO_RT) ;; no free cell in global free list
 
-   (label REUSE_CELL_PAIR__ALLOC_CELLPAIR_TO_RT)
+   (label REUSE_CELL_PAIR__)
           ;; put root of free tree into zp_rt (and copy in TEMP_PTR of this function)
           (STA ZP_RT+1)
-          (STA TEMP_PTR__ALLOC_CELLPAIR_TO_RT+1)
+          (STA TEMP_PTR__+1)
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
           (STA ZP_RT)
-          (STA TEMP_PTR__ALLOC_CELLPAIR_TO_RT)
+          (STA TEMP_PTR__)
 
           ;; set new tree root for free tree to original cell0
           (LDY !$00)
           (LDA (ZP_RT),y)
-          (BEQ CELL0_IS_NO_PTR__ALLOC_CELLPAIR_TO_RT) ;; is zero => completely empty
+          (BEQ CELL0_IS_NO_PTR__) ;; is zero => completely empty
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL0_IS_NO_PTR__ALLOC_CELLPAIR_TO_RT) ;; is no ptr
+          (BEQ CELL0_IS_NO_PTR__) ;; is no ptr
           (INY)
           (LDA (ZP_RT),y)
-          (BEQ CELL0_IS_NO_PTR__ALLOC_CELLPAIR_TO_RT) ;; it is nil which is handled same as no pointer
+          (BEQ CELL0_IS_NO_PTR__) ;; it is nil which is handled same as no pointer
           (DEY)
 
           ;; ;; cell0 is a cell-ptr or cell-pair-ptr
           ;; (LSR)
-          ;; (BCC CELL0_IS_CELL_PTR__ALLOC_CELLPAIR_TO_RT) ;; <- this cannot happen! cell0 is freed before entering it into the tree
+          ;; (BCC CELL0_IS_CELL_PTR__) ;; <- this cannot happen! cell0 is freed before entering it into the tree
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue 
           ;; (LDA (ZP_RT),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           (LDA (ZP_RT),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
-          (BNE CHECK_CELL1__ALLOC_CELLPAIR_TO_RT) ;; since must be !=0, it cannot be on page 0 always branch!
+          (BNE CHECK_CELL1__) ;; since must be !=0, it cannot be on page 0 always branch!
 
-   ;; (label CELL0_IS_CELL_PTR__ALLOC_CELLPAIR_TO_RT)
+   ;; (label CELL0_IS_CELL_PTR__)
    ;;        ;; cell0 is a cell-ptr => decrement cell0
    ;;        (JSR WRITE_RT_CELL0_TO_RT)
    ;;        (JSR DEC_REFCNT_RT)
    ;;        ;; restore original cell-pair-ptr
-   ;;        (LDA TEMP_PTR__ALLOC_CELLPAIR_TO_RT+1)
+   ;;        (LDA TEMP_PTR__+1)
    ;;        (STA ZP_RT+1)
-   ;;        (LDA TEMP_PTR__ALLOC_CELLPAIR_TO_RT)
+   ;;        (LDA TEMP_PTR__)
    ;;        (STA ZP_RT)
    ;;        ;; continue as if cell0 was no ptr, since cell-ptr was handled already
 
-   (label CELL0_IS_NO_PTR__ALLOC_CELLPAIR_TO_RT)
+   (label CELL0_IS_NO_PTR__)
           (LDA !$00)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
           ;; (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
 
-   (label CHECK_CELL1__ALLOC_CELLPAIR_TO_RT)
+   (label CHECK_CELL1__)
           ;; check whether cell1 is non-ptr or ptr
           (LDY !$02)
           (LDA (ZP_RT),y) ;; get low byte
-          (BEQ CELL1_IS_NO_PTR__ALLOC_CELLPAIR_TO_RT) ;; = 0 means totally empty => no ptr
+          (BEQ CELL1_IS_NO_PTR__) ;; = 0 means totally empty => no ptr
           (AND !$03)       ;; mask out all but low 2 bits
           (CMP !$03)
-          (BEQ CELL1_IS_NO_PTR__ALLOC_CELLPAIR_TO_RT) ;; no need to do further deallocation
+          (BEQ CELL1_IS_NO_PTR__) ;; no need to do further deallocation
           (INY)
           (LDA (ZP_RT),y) ;; get high byte (page)
-          (BEQ CELL1_IS_NO_PTR__ALLOC_CELLPAIR_TO_RT) ;; this is nil, no need for deallocation
+          (BEQ CELL1_IS_NO_PTR__) ;; this is nil, no need for deallocation
 
           ;; write cell1 into zp_ptr and decrement
           (JSR WRITE_RT_CELL1_TO_RT)
@@ -2990,24 +2991,24 @@ call frame primitives etc.
           ;; continue as if cell1 is atomic, since it was already handled
 
           ;; restore zp_ptr to the cell-pair to be reused
-          (LDA TEMP_PTR__ALLOC_CELLPAIR_TO_RT+1)
+          (LDA TEMP_PTR__+1)
           (STA ZP_RT+1)
-          (LDA TEMP_PTR__ALLOC_CELLPAIR_TO_RT)
+          (LDA TEMP_PTR__)
           (STA ZP_RT)
 
-   (label CELL1_IS_NO_PTR__ALLOC_CELLPAIR_TO_RT)
+   (label CELL1_IS_NO_PTR__)
           ;; cleanup cell-pair to ensure it is empty
           (LDA !$00)
           (LDY !$03)
-   (label LOOP_CLEAN_RT__ALLOC_CELLPAIR_TO_RT)
+   (label LOOP_CLEAN_RT__)
           (STA (ZP_RT),y)
           (DEY)
-          (BPL LOOP_CLEAN_RT__ALLOC_CELLPAIR_TO_RT)
+          (BPL LOOP_CLEAN_RT__)
 
           (RTS)
 
-   (label TEMP_PTR__ALLOC_CELLPAIR_TO_RT)
-          (word $0000)))
+   (label TEMP_PTR__)
+          (word $0000))))
 
 (module+ test #| vm-allocate-cell-pair-ptr-to-rt |#
   ;; test case 1: allocate new page, allocate first cell-pair on new page, no existing (reusable) pair available
@@ -3199,49 +3200,51 @@ call frame primitives etc.
 ;; option: keep count (length) of this list to decide when to really free a cell
 ;;         and add it to the free list on its respective page!
 (define FREE_CELL_RT
+  (add-label-suffix
+   "__" "__FREE_CELL_RT"
   (list
    (label FREE_CELL_RT)
           ;; check if previous content was a pointer
           (LDY !$00)
-          (STY LIST_TO_FREE__FREE_CELL_RT+1)
+          (STY LIST_TO_FREE__+1)
           ;; cell-ptr      xxxxx0 but in total != 0
           ;; cell-pair-ptr xxxx01
           ;; => 10 00 01 == pointer, only 11 is no pointer, header cells may have other patterns
           (LDA (ZP_RT),y)
-          (BEQ CELL_IS_NO_PTR__FREE_CELL_RT)
+          (BEQ CELL_IS_NO_PTR__)
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL_IS_NO_PTR__FREE_CELL_RT)
+          (BEQ CELL_IS_NO_PTR__)
 
           ;; cell is a pointer => save pointed to for tail call in temp (either cell-ptr or cell-pair-ptr)
           ;; enqueue this rt in list to decrement refcount
           ;; TODO: given arrays that may hold lists of references, this might make it necessary to keep them as list
           (LDA (ZP_RT),y)
-          (STA LIST_TO_FREE__FREE_CELL_RT)
+          (STA LIST_TO_FREE__)
           (INY)
           (LDA (ZP_RT),y)
-          (STA LIST_TO_FREE__FREE_CELL_RT+1)               ;; might be overwritten if cell-array is freed!
+          (STA LIST_TO_FREE__+1)               ;; might be overwritten if cell-array is freed!
           (DEY)
-          (BNE CONT__FREE_CELL_RT)
+          (BNE CONT__)
 
-   (label CELL_IS_NO_PTR__FREE_CELL_RT)
+   (label CELL_IS_NO_PTR__)
           ;; check cell-type 
           (LDA (ZP_RT),y)
           (CMP !TAG_BYTE_CELL_ARRAY)        
-          (BEQ FREE_CELL_ARRAY__FREE_CELL_RT)
+          (BEQ FREE_CELL_ARRAY__)
           (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ FREE_NATIVE_ARRAY__FREE_CELL_RT)
+          (BEQ FREE_NATIVE_ARRAY__)
 
           ;; seems to be a value that does not need to be freed
-          (BNE CONT__FREE_CELL_RT)
+          (BNE CONT__)
 
-   (label FREE_CELL_ARRAY__FREE_CELL_RT)
-   (label FREE_NATIVE_ARRAY__FREE_CELL_RT)
+   (label FREE_CELL_ARRAY__)
+   (label FREE_NATIVE_ARRAY__)
           ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
           (JMP DEC_REFCNT_M1_SLOT_RA) ;; cell and native arrays are allocated on m1 pages
           ;; this cell was a header field of a m1slot -> no further processing
 
-  (label CONT__FREE_CELL_RT)
+  (label CONT__)
           ;; COPY previous head of free cells into this cell
           (LDA VM_LIST_OF_FREE_CELLS)
           (STA (ZP_RT),y)
@@ -3255,62 +3258,64 @@ call frame primitives etc.
           (LDA ZP_RT+1)
           (STA VM_LIST_OF_FREE_CELLS+1)
 
-          (LDA LIST_TO_FREE__FREE_CELL_RT+1)
-          (BEQ DONE__FREE_CELL_RT) ;; there wasn't any further pointer => done with free
+          (LDA LIST_TO_FREE__+1)
+          (BEQ DONE__) ;; there wasn't any further pointer => done with free
           ;; fill rt for tail calling
           (STA ZP_RT+1)
-          (LDA LIST_TO_FREE__FREE_CELL_RT)
+          (LDA LIST_TO_FREE__)
           (STA ZP_RT)
           (JMP DEC_REFCNT_RT) ;; tail call if cell did hold a reference
 
-   (label DONE__FREE_CELL_RT)
+   (label DONE__)
           (RTS)
 
-   (label LIST_TO_FREE__FREE_CELL_RT) ;; TODO not yet a list, but needs to become one!
-          (word 0)))
+   (label LIST_TO_FREE__) ;; TODO not yet a list, but needs to become one!
+          (word 0))))
 
 (define FREE_CELL_RA
+  (add-label-suffix
+   "__" "__FREE_CELL_RA"
   (list
    (label FREE_CELL_RA)
           ;; check if previous content was a pointer
           (LDY !$00)
-          (STY LIST_TO_FREE__FREE_CELL_RA+1)
+          (STY LIST_TO_FREE__+1)
 
           (LDA (ZP_RA),y)
-          (BEQ CELL_IS_NO_PTR__FREE_CELL_RA)
+          (BEQ CELL_IS_NO_PTR__)
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL_IS_NO_PTR__FREE_CELL_RA)
+          (BEQ CELL_IS_NO_PTR__)
 
           ;; cell is a pointer => save for tail call in temp (either cell-ptr or cell-pair-ptr)
           ;; enqueue this rt in list to decrement refcount
           ;; TODO: given arrays that may hold lists of references, this might make it necessary to keep them as list
           (LDA (ZP_RA),y)
-          (STA LIST_TO_FREE__FREE_CELL_RA)
+          (STA LIST_TO_FREE__)
           (INY)
           (LDA (ZP_RA),y)
-          (STA LIST_TO_FREE__FREE_CELL_RA+1)               ;; might be overwritten if cell-array is freed!
+          (STA LIST_TO_FREE__+1)               ;; might be overwritten if cell-array is freed!
           (DEY)
-          (BNE CONT__FREE_CELL_RA)
+          (BNE CONT__)
 
-   (label CELL_IS_NO_PTR__FREE_CELL_RA)
+   (label CELL_IS_NO_PTR__)
           ;; check cell-type
           (LDA (ZP_RA),y)
           (CMP !TAG_BYTE_CELL_ARRAY)
-          (BEQ FREE_CELL_ARRAY__FREE_CELL_RA)
+          (BEQ FREE_CELL_ARRAY__)
           (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ FREE_NATIVE_ARRAY__FREE_CELL_RA)
+          (BEQ FREE_NATIVE_ARRAY__)
 
           ;; seems to be a value that does not need to be freed
-          (BNE CONT__FREE_CELL_RA)
+          (BNE CONT__)
 
-   (label FREE_CELL_ARRAY__FREE_CELL_RA)
-   (label FREE_NATIVE_ARRAY__FREE_CELL_RA)
+   (label FREE_CELL_ARRAY__)
+   (label FREE_NATIVE_ARRAY__)
           ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
           (JMP DEC_REFCNT_M1_SLOT_RA) ;; cell and native arrays are allocated on m1 pages
           ;; this cell was a header field of a m1slot -> no further processing
 
-  (label CONT__FREE_CELL_RA)
+  (label CONT__)
           ;; COPY previous head of free cells into this cell
           (LDA VM_LIST_OF_FREE_CELLS)
           (STA (ZP_RA),y)
@@ -3324,19 +3329,19 @@ call frame primitives etc.
           (LDA ZP_RA+1)
           (STA VM_LIST_OF_FREE_CELLS+1)
 
-          (LDA LIST_TO_FREE__FREE_CELL_RA+1)
-          (BEQ DONE__FREE_CELL_RA) ;; there wasn't any further pointer => done with free
+          (LDA LIST_TO_FREE__+1)
+          (BEQ DONE__) ;; there wasn't any further pointer => done with free
           ;; fill rt for tail calling
           (STA ZP_RA+1)
-          (LDA LIST_TO_FREE__FREE_CELL_RA)
+          (LDA LIST_TO_FREE__)
           (STA ZP_RA)
           (JMP DEC_REFCNT_RA) ;; tail call if cell did hold a reference
 
-   (label DONE__FREE_CELL_RA)
+   (label DONE__)
           (RTS)
 
-   (label LIST_TO_FREE__FREE_CELL_RA) ;; TODO not yet a list, but needs to become one!
-          (word 0)))
+   (label LIST_TO_FREE__) ;; TODO not yet a list, but needs to become one!
+          (word 0))))
 
 (module+ test #| vm-free-cell-ptr-in-rt |#
   (define vm-free-cell-ptr-in-rt-tailcall-code
@@ -3453,6 +3458,8 @@ call frame primitives etc.
 ;; result: this cell-pair is the new root of the free-tree for cell-pairs with:
 ;;              cell0 = old free tree root, cell1 = non-freed (yet) original cell
 (define FREE_CELLPAIR_RT
+  (add-label-suffix
+   "__" "__FREE_CELLPAIR_RT"
   (list
    (label FREE_CELLPAIR_RT)
 
@@ -3461,11 +3468,11 @@ call frame primitives etc.
 
           ;; check cell0
           (LDA (ZP_RT),y) ;; LOWBYTE OF FIRST cell0
-          (BEQ CELL_0_NO_PTR__FREE_CELLPAIR_RT) ;; empty
+          (BEQ CELL_0_NO_PTR__) ;; empty
           (STA ZP_TEMP)
           (AND !$03)
           (CMP !$03)
-          (BEQ CELL_0_NO_PTR__FREE_CELLPAIR_RT)
+          (BEQ CELL_0_NO_PTR__)
           ;; make sure to call free on cell0 (could be any type of cell)
           ;; remember ZP_PTR
           
@@ -3474,7 +3481,7 @@ call frame primitives etc.
           (LDA (ZP_RT),y)
           (STA ZP_TEMP+1)
 
-   (label CELL_0_NO_PTR__FREE_CELLPAIR_RT)
+   (label CELL_0_NO_PTR__)
           ;; cell0 is no ptr and can thus be discarded (directly)
 
           ;; enqueue rt as new root of free cellpairs
@@ -3496,7 +3503,7 @@ call frame primitives etc.
 
           ;; write original cell0 -> zp_rt
           (LDA ZP_TEMP+1)
-          (BEQ DONE__FREE_CELLPAIR_RT)
+          (BEQ DONE__)
           ;; otherwise zp_temp was used to store a pointer that needs to be decremented
           (STA ZP_RT+1)
           (LDA ZP_TEMP)
@@ -3504,8 +3511,8 @@ call frame primitives etc.
 
           (JMP DEC_REFCNT_RT) ;; chain call
 
-   (label DONE__FREE_CELLPAIR_RT)
-          (RTS)))
+   (label DONE__)
+          (RTS))))
 
 ;; input:  cell-pair ptr is in ZP_RA
 ;; uses: ZP_TEMP, ZP_TEMP+1
@@ -4077,7 +4084,7 @@ call frame primitives etc.
           (LDA VM_FREE_M1_PAGE_P0,x) ;;
           (BEQ NEW_PAGE__)     ;; if the current free page is $00 (there is no page marked as having free slots) => allocate new page
 
-          ;; ensure zp_ptr2 points into the page
+          ;; ensure zp_ra points into the page
           (STA ZP_RA+1)
           (STA INC_CMD__+2)
           (TAX)
@@ -4300,11 +4307,13 @@ call frame primitives etc.
 
 ;; remove full pages in the free list of pages of the same type as are currently in ZP_RA
 (define VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
+  (add-label-suffix
+   "__" "VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS"
   (list
    (label VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS)
           (LDA ZP_RA+1)
-          (STA READ_ENC_PAGE_TYPE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS+2)
-   (label READ_ENC_PAGE_TYPE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
+          (STA READ_ENC_PAGE_TYPE__+2)
+   (label READ_ENC_PAGE_TYPE__)
           (LDA $c000)
           (AND !$07)
 
@@ -4314,27 +4323,29 @@ call frame primitives etc.
    (label VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
           (LDA VM_FREE_M1_PAGE_P0,x)
 
-   (label LOOP_REMOVE_FULL_PAGES__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
+   (label LOOP_REMOVE_FULL_PAGES__)
           (TAY) ;; y = page now
           (LDA VM_PAGE_SLOT_DATA,y)
-          (BNE DONE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
+          (BNE DONE__)
 
           ;; remove this page (in y) from list
-          (STY LOAD_PREV_PAGE_CMD__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS+2)
-          (STY STORE_PREV_PAGE_CMD__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS+2)
+          (STY LOAD_PREV_PAGE_CMD__+2)
+          (STY STORE_PREV_PAGE_CMD__+2)
           (LDY !$00)
-   (label LOAD_PREV_PAGE_CMD__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
+   (label LOAD_PREV_PAGE_CMD__)
           (LDA $c001) ;; $c0 is overwritten with page
           (STA VM_FREE_M1_PAGE_P0,x) ;; optional optimization: needs only be done once! (is here done in a loop)
-   (label STORE_PREV_PAGE_CMD__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
+   (label STORE_PREV_PAGE_CMD__)
           (STY $c001) ;; $c0 is overwritten
-          (BNE LOOP_REMOVE_FULL_PAGES__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
+          (BNE LOOP_REMOVE_FULL_PAGES__)
 
-   (label DONE__VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS)
-          (RTS)))
+   (label DONE__)
+          (RTS))))
 
 ;; put this page as head of the page free list for slots of type as in ZP_RA
 (define VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
+  (add-label-suffix
+   "__" "__VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS"
   (list
    (label VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS)
           (LDA ZP_RA)
@@ -4345,7 +4356,7 @@ call frame primitives etc.
 
           (LDY !$01)
           (LDA (ZP_RA),y) ;; get previous
-          (BNE CONTINUE_WITH_RESTORE__VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS)     ;; is != 0 => is still part of the list, don't change the list
+          (BNE CONTINUE_WITH_RESTORE__)     ;; is != 0 => is still part of the list, don't change the list
           ;; is no longer part of the free list of pages, add this page at the head of the page
 
           (DEY) ;; now 0
@@ -4364,13 +4375,12 @@ call frame primitives etc.
           (STA VM_FREE_M1_PAGE_P0,x)
           (TAX)  ;; x = page
 
-   (label CONTINUE_WITH_RESTORE__VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS)
+   (label CONTINUE_WITH_RESTORE__)
           (LDA ZP_TEMP)
           (STA ZP_RA) ;; restore
           (LDA VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
 
-          (RTS)
-))
+          (RTS))))
 
 ;; free the m1 slot pointed to by ra, marking that slot free on the m1-page
 ;; input:  ZP_RA
@@ -4380,24 +4390,26 @@ call frame primitives etc.
 ;; INFO: NO GC! (this must be done, freeing specific types (e.g. an array) <- knows the number of slots etc.
 ;;       REF COUNT IS SET TO ZERO
 (define FREE_M1_SLOT_RA
+  (add-label-suffix
+   "__" "__FREE_M1_SLOT_RA"
   (list
    (label FREE_M1_SLOT_RA)
           ;; make sure to remove fulls from free page list first !!
           (JSR VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS)
 
           ;; now free the slot
-   (label REGULAR_FREE__FREE_M1_SLOT_RA)
+   (label REGULAR_FREE__)
           (LDX ZP_RA+1)
-          (STX DEC_CMD__FREE_M1_SLOT_RA+2)    ;; write page for later dec execution
+          (STX DEC_CMD__+2)    ;; write page for later dec execution
           (LDA VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
-          (BNE CONTINUE__FREE_M1_SLOT_RA)     ;; regular free
+          (BNE CONTINUE__)     ;; regular free
 
           ;; this page was full (since next free slot was 0) => register with the list of pages with free slots
           (JSR VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS)
-          (LDX DEC_CMD__FREE_M1_SLOT_RA+2)    ;; restore x
+          (LDX DEC_CMD__+2)    ;; restore x
           (LDA !$00)                              ;; next free slot offset (=0)
 
-   (label CONTINUE__FREE_M1_SLOT_RA)
+   (label CONTINUE__)
           (LDY !$00)
           (STA (ZP_RA),y)                       ;; set (zp_ptr) = previous free
           (LDA ZP_RA)                           ;; low byte of pointer = new free slot
@@ -4407,11 +4419,10 @@ call frame primitives etc.
           (TYA)                                   ;; y is still 0 => a := 0
           (STA (ZP_RA),y)                       ;; set refcount := 0
 
-   (label DEC_CMD__FREE_M1_SLOT_RA)       ;; decrement number of slots used on the page
+   (label DEC_CMD__)       ;; decrement number of slots used on the page
           (DEC $c002)                             ;; $c0 is overwritten
 
-          (RTS)
-          ))
+          (RTS))))
 
 (module+ test #| vm_free_bucket_slot  allocate two slots, free first slot |#
   (define test-free-bucket-slot-code
@@ -4783,53 +4794,57 @@ call frame primitives etc.
 ;;         ZP_RT   = pointer to last element of array
 ;; ouput: -
 (define GC_ARRAY_SLOT_RT
+  (add-label-suffix
+   "__" "__GC_ARRAY_SLOT_RT"
   (list
    (label GC_ARRAY_SLOT_RT)
           ;; loop over slots and decrement their slots
           (LDY !$01)
           (LDA (ZP_RT),y)  ;; a = number of array elements
-          (STA LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR) ;;
+          (STA LOOP_COUNT__) ;;
 
           (LDY !$00)
 
-   (label LOOP__VM_GC_ARRAY_SLOT_PTR)
+   (label LOOP__)
           (INY)
           (INY)
           ;; deref zp_ptr into zp_ptr2?
           (LDA (ZP_RT),y) ;; load tagged low byte
-          (BEQ NEXT__VM_GC_ARRAY_SLOT_PTR)
+          (BEQ NEXT__)
           (STA ZP_RA)
           (AND !$03)
           (CMP !$03)
-          (BEQ NEXT__VM_GC_ARRAY_SLOT_PTR)
+          (BEQ NEXT__)
           (INY)
           (LDA (ZP_RT),y) ;; load high byte
           (STA ZP_RA+1)
-          (STY LOOP_IDX__VM_GC_ARRAY_SLOT_PTR)
+          (STY LOOP_IDX__)
           (JSR DEC_REFCNT_RA)
-          (LDY LOOP_IDX__VM_GC_ARRAY_SLOT_PTR)
-    (label NEXT__VM_GC_ARRAY_SLOT_PTR)
-          (DEC LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)
-          (BNE LOOP__VM_GC_ARRAY_SLOT_PTR)
+          (LDY LOOP_IDX__)
+    (label NEXT__)
+          (DEC LOOP_COUNT__)
+          (BNE LOOP__)
 
           (RTS)
 
-   (label LOOP_COUNT__VM_GC_ARRAY_SLOT_PTR)   
+   (label LOOP_COUNT__)
           (byte $00)
-   (label LOOP_IDX__VM_GC_ARRAY_SLOT_PTR)
+   (label LOOP_IDX__)
           (byte $00)
-   ))
+   )))
 
 
 ;; input: RA
 ;; usage: A, X, Y, RA, RC
 (define VM_GC_ARRAY_SLOTS_RA
+  (add-label-suffix
+   "__" "__VM_GC_ARRAY_SLOTS_RA"
   (list
    (label VM_GC_ARRAY_SLOTS_RA)
           ;; loop over slots and decrement their slots
           (LDY !$01)
           (LDA (ZP_RA),y)  ;; a = number of array elements
-          (STA LOOP_COUNT__VM_GC_ARRAY_SLOTS_RA) ;;
+          (STA LOOP_COUNT__) ;;
 
           (LDA ZP_RA)
           (STA ZP_RC)
@@ -4838,37 +4853,37 @@ call frame primitives etc.
 
           (LDY !$00)
 
-   (label LOOP__VM_GC_ARRAY_SLOTS_RA)
+   (label LOOP__)
           (INY)
           (INY)
           ;; deref zp_ptr into zp_ptr2?
           (LDA (ZP_RC),y) ;; load tagged low byte
-          (BEQ NEXT__VM_GC_ARRAY_SLOTS_RA)
+          (BEQ NEXT__)
           (STA ZP_RA)
           (AND !$03)
           (CMP !$03)
-          (BEQ NEXT__VM_GC_ARRAY_SLOTS_RA)
+          (BEQ NEXT__)
           (INY)
           (LDA (ZP_RC),y) ;; load high byte
           (STA ZP_RA+1)
-          (STY LOOP_IDX__VM_GC_ARRAY_SLOTS_PTR)
+          (STY LOOP_IDX__)
 
           ;; TODO: possible recursion! save ZP_RC??
           ;; better! do lazy
           (JSR DEC_REFCNT_RA)
           ;; restore RC
-          (LDY LOOP_IDX__VM_GC_ARRAY_SLOTS_PTR)
-    (label NEXT__VM_GC_ARRAY_SLOTS_PTR)
-          (DEC LOOP_COUNT__VM_GC_ARRAY_SLOTS_PTR)
-          (BNE LOOP__VM_GC_ARRAY_SLOTS_PTR)
+          (LDY LOOP_IDX__)
+    (label NEXT__)
+          (DEC LOOP_COUNT__)
+          (BNE LOOP__)
 
           (RTS)
 
-   (label LOOP_COUNT__VM_GC_ARRAY_SLOTS_RA)
+   (label LOOP_COUNT__)
           (byte $00)
-   (label LOOP_IDX__VM_GC_ARRAY_SLOTS_RA)
+   (label LOOP_IDX__)
           (byte $00)
-   ))
+   )))
 
 
 (module+ test #| vm_gc_array_slot_ptr |#
@@ -4969,6 +4984,8 @@ call frame primitives etc.
 ;; input:  A = number of cells (1..)
 ;; output: ZP_RA -> points to an allocated array
 (define ALLOC_CELLARR_TO_RA
+  (add-label-suffix
+   "__" "__ALLOC_CELLARR_TO_RA"
   (list
    (label ALLOC_CELLARR_TO_RA)
           ;; optional: optimization for arrays with 3 cells => s8 page!
@@ -4987,10 +5004,10 @@ call frame primitives etc.
           ;; initialize slots/array with zeros (actually writes one byte more than needed)
           (LDA 0)
           (INY)
-   (label LOOP_INIT__ALLOC_CELLARR_TO_RA)
+   (label LOOP_INIT__)
           (STA (ZP_RA),y)
           (DEY)
-          (BNE LOOP_INIT__ALLOC_CELLARR_TO_RA)
+          (BNE LOOP_INIT__)
 
           ;; y = 0 now
           ;; write header cell
@@ -5000,7 +5017,7 @@ call frame primitives etc.
           (TXA)
           (STA (ZP_RA),y) ;; store number of array elements
 
-          (RTS)))
+          (RTS))))
 
 (module+ test #| vm_allocate_cell_array |#
   (define test-alloc-cell-array-code
@@ -5037,6 +5054,8 @@ call frame primitives etc.
 ;; NO CHECKING (NO BOUNDS, NO TYPE ...)
 ;; DECREMENT ref of pointer if array element was a pointer (cell-ptr or cell-pair-ptr)
 (define WRITE_RT_TO_ARR_ATa_RA
+  (add-label-suffix
+   "__" "__WRITE_RT_TO_ARR_ATa_RA"
   (list
    (label POP_EVLSTK_TO_ARR_ATa_RA)
           (JSR WRITE_RT_TO_ARR_ATa_RA)
@@ -5049,17 +5068,17 @@ call frame primitives etc.
    (label WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
           (LDY !$01)
           (CMP (ZP_RA),y)
-          (BPL BOUNDS_ERR__WRITE_RT_TO_ARR_ATa_RA)
+          (BPL BOUNDS_ERR__)
           (CMP !$00)
           (BPL WRITE_RT_TO_ARR_ATa_RA)
-   (label BOUNDS_ERR__WRITE_RT_TO_ARR_ATa_RA)
+   (label BOUNDS_ERR__)
           (BRK)
 
    (label WRITE_RT_TO_ARR_ATa_RA)
           (ASL A)
           (CLC)
           (ADC !$02) ;; point to first cell (index 0)
-          (STA ARRAY_INDEX__WRITE_RT_TO_ARR_ATa_RA) ;; keep for later
+          (STA ARRAY_INDEX__) ;; keep for later
 
 
           ;; get previous content into rt and decr ref count (if applicable)
@@ -5067,12 +5086,12 @@ call frame primitives etc.
           (LDA (ZP_RA),y) ;; if low byte (tagged)
           (AND !$03)
           (CMP !$03)
-          (BEQ NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          (BEQ NO_GC__)
           (INY)
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
-          (BEQ NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
+          (BEQ NO_GC__)
           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-          (LDY ARRAY_INDEX__WRITE_RT_TO_ARR_ATa_RA)
+          (LDY ARRAY_INDEX__)
           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
           (STA ZP_RT)
           (INY)
@@ -5081,8 +5100,8 @@ call frame primitives etc.
           (JSR DEC_REFCNT_RT) ;; decrement array slot
           (JSR POP_CELL_EVLSTK_TO_RT) ;; restore RT
 
-   (label NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
-          (LDY ARRAY_INDEX__WRITE_RT_TO_ARR_ATa_RA) 
+   (label NO_GC__)
+          (LDY ARRAY_INDEX__)
           (LDA ZP_RT)
           (STA (ZP_RA),y) ;;
           (INY)
@@ -5091,8 +5110,8 @@ call frame primitives etc.
 
           (RTS)
 
-   (label ARRAY_INDEX__WRITE_RT_TO_ARR_ATa_RA)
-          (byte 0)))
+   (label ARRAY_INDEX__)
+          (byte 0))))
 
 (module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
   (define vm_cell_stack_write_tos_to_array_ata_ptr-code
