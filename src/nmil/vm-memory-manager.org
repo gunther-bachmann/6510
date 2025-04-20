@@ -98,7 +98,7 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------------------|
   |      | CELL_STACK / RT / RA                        |                                  |      |                                                                    |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------------------|
-  |      | VM_CELL_STACK_POP_R                         | POP_CELL_EVLSTK_TO_RT            |      |                                                                    |
+  | x    | VM_CELL_STACK_POP_R                         | POP_CELL_EVLSTK_TO_RT            |      |                                                                    |
   |      | VM_CELL_STACK_PUSH_R                        | PUSH_CELL_RT_TO_EVLSTK           |      |                                                                    |
   |      | ;; vm_cell_stack_push_rt_if_nonempty        | ?                                |      |                                                                    |
   |      | VM_CELL_STACK_JUST_PUSH_RT                  | ?                                |      |                                                                    |
@@ -135,7 +135,6 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
   |      | VM_CP_RT_TO_RA                              | COPY_RT_TO_RA                    |      |                                                                    |
   |      | VM_CP_RA_TO_RT                              | COPY_RA_TO_RT                    |      |                                                                    |
   |      | VM_POP_FSTOS_TO_CELLy_RT                    | ?                                |      |                                                                    |
-  |      | VM_CELL_STACK_POP_R                         | POP_CELL_EVLSTK_TO_RT            |      |                                                                    |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------------------|
   |      | VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE         | GLOBAL_CELLPAIR_FREE_LIST        |      |                                                                    |
   |      | VM_FREE_CELL_PAIR_PAGE                      | GLOBAL_CELL_PAGE_FOR_ALLOC       |      |                                                                    |

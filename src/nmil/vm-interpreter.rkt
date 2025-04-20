@@ -76,7 +76,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
                   ALLOC_CELLARR_TO_RA
                   DEC_REFCNT_RT
-                  VM_CELL_STACK_POP_R
+                  POP_CELL_EVLSTK_TO_RT
 
                   ast-const-get
                   ZP_RT
@@ -881,7 +881,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index                      
            (LDA ZP_RT+1)
            (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
-           (JSR VM_CELL_STACK_POP_R)            ;; fill RT with next tos
+           (JSR POP_CELL_EVLSTK_TO_RT)            ;; fill RT with next tos
 
            ;; no increment, since pop removes it from stack
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
@@ -1463,7 +1463,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_TEMP)
           (LDA ZP_RT+1)
           (STA ZP_TEMP2)
-          (JSR VM_CELL_STACK_POP_R)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (LDA ZP_RT)
           (CMP ZP_TEMP)
           (BMI GREATER__BC_INT_GREATER_P)
@@ -1582,7 +1582,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_TRUE__BC_FALSE_P_RET_FALSE)
-          (JSR VM_CELL_STACK_POP_R)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define FALSE_P_RET #x0e)
@@ -1591,12 +1591,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_FALSE_P_RET)
           (LDA ZP_RT+1)
           (BNE IS_TRUE__BC_FALSE_P_RET)
-          (JSR VM_CELL_STACK_POP_R)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_TRUE__BC_FALSE_P_RET)
-          (JSR VM_CELL_STACK_POP_R)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define TRUE_P_RET #x0b)
@@ -1605,12 +1605,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_TRUE_P_RET)
           (LDA ZP_RT+1)
           (BEQ IS_FALSE__BC_TRUE_P_RET)
-          (JSR VM_CELL_STACK_POP_R)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_FALSE__BC_TRUE_P_RET)
-          (JSR VM_CELL_STACK_POP_R)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_GOTO
@@ -1914,7 +1914,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (BCC NO_PAGE_CHANGE__BC_TRUE_P_BRANCH)
           (INC ZP_VM_PC+1)
    (label NO_PAGE_CHANGE__BC_TRUE_P_BRANCH)
-          (JSR VM_CELL_STACK_POP_R)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER)
 
    (label NEGATIVE_BRANCH__BC_TRUE_P_BRANCH)
@@ -1923,7 +1923,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (BCS NO_PAGE_CHANGE_ON_BACK__BC_TRUE_P_BRANCH)
           (DEC ZP_VM_PC+1)
    (label NO_PAGE_CHANGE_ON_BACK__BC_TRUE_P_BRANCH)
-          (JSR VM_CELL_STACK_POP_R)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER)))
 
 (module+ test #| branch true |#
@@ -2165,7 +2165,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label NO_OTHER_COMPARE__BC_MAX_INT)
           (BMI KEEP_RT__BC_MAX_INT)
 
-          (JSR VM_CELL_STACK_POP_R)     ;; pop RT and move TOS into RT
+          (JSR POP_CELL_EVLSTK_TO_RT)     ;; pop RT and move TOS into RT
           (CLC)
           (BCC AND_RETURN__BC_MAX_INT)
 
@@ -2322,7 +2322,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_POP)
           (JSR DEC_REFCNT_RT)
-          (JSR VM_CELL_STACK_POP_R)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| pop |#
@@ -2461,7 +2461,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping
            (PHA)
            (JSR VM_CP_RT_TO_RA)
-           (JSR VM_CELL_STACK_POP_R)
+           (JSR POP_CELL_EVLSTK_TO_RT)
            (PLA)
            (JSR VM_CELL_STACK_POP_TO_ARRAY_ATa_RA)
            (JSR DEC_REFCNT_RA)

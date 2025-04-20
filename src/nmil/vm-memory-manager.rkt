@@ -114,7 +114,7 @@ call frame primitives etc.
          cleanup-string
          cleanup-strings
 
-         VM_CELL_STACK_POP_R
+         POP_CELL_EVLSTK_TO_RT
          VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
          VM_FREE_CELL_PAIR_PAGE
          VM_LIST_OF_FREE_CELLS
@@ -182,7 +182,7 @@ call frame primitives etc.
           VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
 
           ;; ---------------------------------------- CELL_STACK / RT / RA
-          VM_CELL_STACK_POP_R                                ;; pop cell-stack into RT (discarding RT)
+          POP_CELL_EVLSTK_TO_RT                                ;; pop cell-stack into RT (discarding RT)
 
           VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
@@ -1263,9 +1263,9 @@ call frame primitives etc.
 ;; input: call-frame stack, RT
 ;; output: call-frame stack reduced by`1, RT <- popped value
 ;; NO GC CHECKS!
-(define VM_CELL_STACK_POP_R
+(define POP_CELL_EVLSTK_TO_RT
   (list
-   (label VM_CELL_STACK_POP_R)
+   (label POP_CELL_EVLSTK_TO_RT)
           ;; optional: stack marked empty? => error: cannot pop from empty stack!
           ;; (LDY !$00)
           ;; (BEQ ERROR_NO_VALUE_ON_STACK)
@@ -1281,7 +1281,7 @@ call frame primitives etc.
 
           ;; (optional) quick check for atomic cells [speeds up popping atomic cells, slows popping cell-ptr, slight slows popping cell-pair-ptr
           ;; (AND !$03)
-          ;; (BEQ WRITE_TOS_TO_RT__VM_CELL_STACK_POP_R)
+          ;; (BEQ WRITE_TOS_TO_RT__POP_CELL_EVLSTK_TO_RT)
           ;; (TXA)
 
           (LDA (ZP_CELL_STACK_HB_PTR),y) ;; high byte
@@ -1302,7 +1302,7 @@ call frame primitives etc.
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_0_R)
-     (JSR VM_CELL_STACK_POP_R)
+     (JSR POP_CELL_EVLSTK_TO_RT)
      ))
 
   (define vm_cell_stack_pop3_r_state
@@ -1321,8 +1321,8 @@ call frame primitives etc.
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_0_R)
-     (JSR VM_CELL_STACK_POP_R)
-     (JSR VM_CELL_STACK_POP_R)))
+     (JSR POP_CELL_EVLSTK_TO_RT)
+     (JSR POP_CELL_EVLSTK_TO_RT)))
 
   (define vm_cell_stack_pop2_r_state
     (run-code-in-test vm_cell_stack_pop2_r_code))
@@ -1336,9 +1336,9 @@ call frame primitives etc.
      (JSR VM_CELL_STACK_PUSH_INT_1_R)
      (JSR VM_CELL_STACK_PUSH_INT_m1_R)
      (JSR VM_CELL_STACK_PUSH_INT_0_R)
-     (JSR VM_CELL_STACK_POP_R)
-     (JSR VM_CELL_STACK_POP_R)
-     (JSR VM_CELL_STACK_POP_R)))
+     (JSR POP_CELL_EVLSTK_TO_RT)
+     (JSR POP_CELL_EVLSTK_TO_RT)
+     (JSR POP_CELL_EVLSTK_TO_RT)))
 
   (define vm_cell_stack_pop1_r_state
     (run-code-in-test vm_cell_stack_pop1_r_code))
@@ -5033,11 +5033,11 @@ call frame primitives etc.
   (list
    (label VM_CELL_STACK_POP_TO_ARRAY_ATa_RA)
           (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA)
-          (JMP VM_CELL_STACK_POP_R)
+          (JMP POP_CELL_EVLSTK_TO_RT)
 
    (label VM_CELL_STACK_POP_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
           (JSR VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
-          (JMP VM_CELL_STACK_POP_R)
+          (JMP POP_CELL_EVLSTK_TO_RT)
 
    (label VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA__CHECK_BOUNDS)
           (LDY !$01)
@@ -5072,7 +5072,7 @@ call frame primitives etc.
           (LDA (ZP_RA),y) ;; previous low byte in that slot (load again)
           (STA ZP_RT+1)
           (JSR DEC_REFCNT_RT) ;; decrement array slot
-          (JSR VM_CELL_STACK_POP_R) ;; restore RT
+          (JSR POP_CELL_EVLSTK_TO_RT) ;; restore RT
 
    (label NO_GC__VM_CELL_STACK_WRITE_TOS_TO_ARRAY_ATa_PTR2)
           (LDY ARRAY_INDEX__VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA) 
@@ -5419,7 +5419,7 @@ call frame primitives etc.
           VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
 
           ;; ---------------------------------------- CELL_STACK / RT / RA
-          VM_CELL_STACK_POP_R                                ;; pop cell-stack into RT (discarding RT)
+          POP_CELL_EVLSTK_TO_RT                                ;; pop cell-stack into RT (discarding RT)
 
           VM_CELL_STACK_PUSH_R                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
