@@ -23,7 +23,12 @@
                   ast-opcode-cmd))
 (require (only-in "../6510-utils.rkt" word/c byte/c low-byte high-byte))
 
-(provide assemble assemble-to-code-list translate-code-list-for-basic-loader org-for-code-seq)
+(provide assemble
+         assemble-to-code-list
+         translate-code-list-for-basic-loader
+         org-for-code-seq
+         new-assemble-to-code-list
+         (struct-out assembly-code-list))
 
 (module+ test
   (require "../6510.rkt")
@@ -188,8 +193,30 @@
           initial-jump
           (flatten payloads)))
 
-(define/contract (assemble-to-code-list program)
-  (-> (listof ast-command?) pair?)
+(struct assembly-code-list
+  (org-code-sequences
+   labels)
+  #:guard (struct-guard/c (listof pair?) hash?))
+
+;; get all constants from the command list and return a hash label->value (byte or word)
+(define/contract (hash-constants program)
+  (-> (listof ast-command?) (hash/c string? word/c))
+  (apply hash
+           (flatten
+            (map (lambda (c-instr)
+                   (cond [(ast-const-byte-cmd? c-instr)
+                          (list (ast-const-byte-cmd-label c-instr)
+                                (ast-const-byte-cmd-byte c-instr))]
+                         [(ast-const-word-cmd? c-instr)
+                          (list (ast-const-word-cmd-label c-instr)
+                                (ast-const-word-cmd-word c-instr))]
+                         [else '()]))
+                 (constant-instructions program)))))
+
+(define/contract (new-assemble-to-code-list program)
+  (-> (listof ast-command?) assembly-code-list?)
+  (hash)
+  (define constants (hash-constants program))
   (define program-p1 (->resolved-decisions (label-instructions program) program))
   (define lsoffsets (label-string-offsets (org-for-code-seq program-p1) program-p1))
   (define program-p2 (->resolve-labels (org-for-code-seq program-p1) lsoffsets program-p1 '()))
@@ -203,7 +230,14 @@
      (car result-wo-align)
      (cdr code-list)
      '()))
-  (cons (car result-wo-align) cdr-result-w-align))
+  (assembly-code-list
+   (cons (car result-wo-align) cdr-result-w-align)
+   (hash-union lsoffsets constants)))
+
+;; deprecated, use new-assemble-to-code-list
+(define/contract (assemble-to-code-list program)
+  (-> (listof ast-command?) pair?)
+  (assembly-code-list-org-code-sequences (new-assemble-to-code-list program)))
 
 (define/contract (assemble-to-code-list--resolve-org-aligns result-wo-align prev-result code-list collected-result)
   (-> list? list? list? list? list?)

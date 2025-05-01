@@ -54,16 +54,16 @@
                 (list "LDA #$00" "TAY")))
 
 ;; disassemble lines instructions
-(define/c (disassemble state [address (cpu-state-program-counter state)] [lines 1] [max-address #xffff] [short #f])
-  (->* (cpu-state?) (word/c word/c word/c boolean?) string?)
-  (let-values (((str len) (disassemble-single state address short)))
+(define/c (disassemble state [address (cpu-state-program-counter state)] [lines 1] [max-address #xffff] [short #f] #:labels (labels (hash)))
+  (->* [cpu-state?] [word/c word/c word/c boolean? #:labels (hash/c string? word/c)] string?)
+  (let-values (((str len) (disassemble-single state address short #:labels labels)))
     (define code-byte-str (code-bytes state address len))
     (define formatted-str
       (if short
           str
           (format "~a ~a\t~a" (word->hex-string address) (~a code-byte-str #:width 8) str)))
     (if (and (> lines 1) (< address max-address))
-        (string-join (list formatted-str (disassemble state (+ address len) (sub1 lines) max-address short)) "\n")
+        (string-join (list formatted-str (disassemble state (+ address len) (sub1 lines) max-address short #:labels labels)) "\n")
         formatted-str)))
 
 ;; hex string of byte at memory address pc points to
@@ -92,9 +92,20 @@
                                   (decimal-from-two-complement
                                    (peek-pc+1 state)))))))
 
+(define/c (info-for-label address labels)
+  (-> string? (hash/c string? word/c) string?)
+  (define address-num (string->number address 16))
+  (define label
+    (hash-ref
+     (apply hash (flatten (map (lambda (pair)
+                                 `(,(cdr pair) . ,(car pair)))
+                               (hash->list labels))))
+     address-num #f))
+  (if label (format "(~a)" label) ""))
+
 ;; disassemble a single instruction at pc (default), returning disassembled string and byte length of command
-(define/c (disassemble-single state [address (cpu-state-program-counter state)] [short #f])
-  (->* (cpu-state?) (word/c boolean?) (values string? byte/c))
+(define/c (disassemble-single state [address (cpu-state-program-counter state)] [short #f] #:labels [labels (hash)])
+  (->* (cpu-state?) (word/c boolean? #:labels (hash/c string? word/c)) (values string? byte/c))
   (define use-state (with-program-counter state address))
   (case (peek-pc use-state)
     [(#x00) (values "BRK" 1)]
@@ -129,7 +140,7 @@
     [(#x1d) (values (format "ORA $~a,x" (word-at-pc+1 use-state)) 3)]
     [(#x1e) (values (format "ASL $~a,x" (word-at-pc+1 use-state)) 3)]
     ;; #x1f -io SLO abx
-    [(#x20) (values (format "JSR $~a" (word-at-pc+1 use-state)) 3)]
+    [(#x20) (values (format "JSR $~a  ~a" (word-at-pc+1 use-state) (info-for-label (word-at-pc+1 use-state) labels)) 3)]
     [(#x21) (values (format "AND ($~a,x)" (byte-at-pc+1 use-state)) 2)]
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
@@ -173,7 +184,7 @@
     [(#x49) (values (format "EOR #$~a" (byte-at-pc+1 use-state)) 2)]
     [(#x4a) (values "LSR" 1)]
     ;; #x4b -io ALR imm
-    [(#x4c) (values (format "JMP $~a" (word-at-pc+1 use-state)) 3)]
+    [(#x4c) (values (format "JMP $~a  ~a" (word-at-pc+1 use-state) (info-for-label (word-at-pc+1 use-state) labels)) 3)]
     [(#x4d) (values (format "EOR $~a" (word-at-pc+1 use-state)) 3)]
     [(#x4e) (values (format "LSR $~a" (word-at-pc+1 use-state)) 3)]
     ;; #x4f -io SRE abs
@@ -357,7 +368,7 @@
 
 (module+ test #| translate-code-list-for-basic-loader |#
   (check-equal?
-   (disassemble-bytes 2064 (translate-code-list-for-basic-loader '((#xc000 . (#x00)) (#xc100 . (#x00)))))
+   (map string-trim (disassemble-bytes 2064 (translate-code-list-for-basic-loader '((#xc000 . (#x00)) (#xc100 . (#x00))))))
    '("JMP $0831"
      "BRK"
      "BRK"

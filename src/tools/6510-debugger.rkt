@@ -77,19 +77,26 @@
          (if set (set-zero-flag c-state) (clear-zero-flag c-state))]
         [else c-state]))
 
-(define/c (debugger--pretty-print address len d-state (lf #f))
+;; produce a numeric value from string that might be a label or a hex value string
+(define/c (debugger--resolve-value value-str d-state)
+  (-> string? debug-state? word/c)
+  (hash-ref (debug-state-labels d-state) value-str
+            (string->number value-str 16)))
+
+(define/c (debugger--pretty-print address len d-state (lf #f) )
   (->* [(or/c string? false?) (or/c string? false?) debug-state?] [boolean?] debug-state?)
   (define c-state (car (debug-state-states d-state)))
   (display (disassemble c-state
-                        (if address (string->number address 16)  (cpu-state-program-counter c-state))
-                        (if len (string->number len 16) 1)))
+                        (if address (debugger--resolve-value address d-state) (cpu-state-program-counter c-state))
+                        (if len (string->number len 16) 1)
+                        #:labels (debug-state-labels d-state)))
   (when lf (newline))
   d-state)
 
 (define/c (debugger--print-memory address len d-state)
   (-> (or/c string? false?) (or/c string? false?) debug-state? debug-state?)
   (define c-state (car (debug-state-states d-state)))
-  (define adr (if address (string->number address 16)  (cpu-state-program-counter c-state)))
+  (define adr (if address (debugger--resolve-value address d-state)  (cpu-state-program-counter c-state)))
   (displayln (memory->string adr
                             (+ -1 adr (if len (string->number len 16) 1))
                             c-state))
@@ -99,7 +106,7 @@
   (-> (or/c string? false?) (or/c string? false?) debug-state? debug-state?)
   (define c-state (car (debug-state-states d-state)))
   (struct-copy debug-state d-state 
-               [states (cons (poke c-state (string->number address 16) (string->number value 16))
+               [states (cons (poke c-state (debugger--resolve-value address d-state) (string->number value 16))
                              (debug-state-states d-state))]) )
 
 (define/c (debugger--set-accumulator value d-state)
@@ -211,29 +218,30 @@
 (define/c (debugger--help d-state)
   (-> debug-state? debug-state?)
   (define help #<<EOF
-pp <B?> <A?>          pretty print the next B (hex) commands starting at address A (hex)
-pm <A?> <B?>          print memory starting @A (hex) for B bytes (hex)
-set mem <A> = <B>     set memory @A (hex) to byte B (hex)
-step <N?>             step forward (single or N times)
-step over <N?>        step over the next N commands, without following sub routine jumps (jsr)
-back <N?>             backward step (single or N times)
-set a = <B>           set accumulator to byte B (hex)
-set pc = <A>          set program counter to address A (hex)
-xf? { <command> }     eXecute Force? the given 6510 command (force if byte len differs)
-stop pc = <A>         set break point to stop at pc = address A (hex)
-stop a = <B>          stop when accumulator is set to (hex) B
-stop sp = <B>         stop when stack pointer is set to (hex) B
-list stops            list active breakpoints
-commit <B>?           keep only the last 10 | B (hex) states
-clear flag [cbnvzi]   clear flag (Carry,Break,Negative,Overflow,Zero,Interrupt)
-set flag [cbnvzi]     set flag (Carry,Break,Negative,Overflow,Zero,Interrupt)
-run                   run until a break point is hit
-inc pc                increment program counter (e.g. to step over a BRK instruction)
-p                     print cpu state
-clear stops           clear all breakpoints
-surface               pop interactor
-q                     quit
-.                     repeat last command (multiple dots repeat multiple times)
+pp <B?> <A?>            pretty print the next B (hex) commands starting at address A (hex)
+pm <A?> <B?>            print memory starting @A (hex) for B bytes (hex)
+set mem <A> = <B>       set memory @A (hex) to byte B (hex)
+step <N?>               step forward (single or N times)
+step over <N?>          step over the next N commands, without following sub routine jumps (jsr)
+back <N?>               backward step (single or N times)
+set a = <B>             set accumulator to byte B (hex)
+set pc = <A>            set program counter to address A (hex)
+xf? { <command> }       eXecute Force? the given 6510 command (force if byte len differs)
+(clear) stop pc = <A>   set break point to stop at pc = address A (hex)
+(clear) stop a = <B>    stop when accumulator is set to (hex) B
+(clear) stop sp = <B>   stop when stack pointer is set to (hex) B
+list stops              list active breakpoints
+commit <B>?             keep only the last 10 | B (hex) states
+clear flag [cbnvzi]     clear flag (Carry,Break,Negative,Overflow,Zero,Interrupt)
+set flag [cbnvzi]       set flag (Carry,Break,Negative,Overflow,Zero,Interrupt)
+run                     run until a break point is hit
+inc pc                  increment program counter (e.g. to step over a BRK instruction)
+p                       print cpu state
+clear stops             clear all breakpoints
+surface                 pop interactor
+list labels \"<regex>\" list labels matching the given regex
+q                       quit
+.                       repeat last command (multiple dots repeat multiple times)
 EOF
     )
   (with-colors 'green (lambda () (displayln help)))
@@ -244,17 +252,17 @@ EOF
   (-> string? debug-state? debug-state?)
   (define c-states (debug-state-states d-state))
   (define c-state (car c-states))
-  (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4})?$")
-  (define pm-regex #px"^pm *([[:xdigit:]]{1,4})? *([[:xdigit:]]{1,2})?$")
-  (define sm-regex #px"^s(et)? *m(em)? *([[:xdigit:]]{1,4}) *= *([[:xdigit:]]{1,2})$")
+  (define pp-regex #px"^pp *([[:xdigit:]]{1,2})? *([[:xdigit:]]{1,4}|[A-Z_]+)?$")
+  (define pm-regex #px"^pm *([[:xdigit:]]{1,4}|[A-Z_]+)? *([[:xdigit:]]{1,2})?$")
+  (define sm-regex #px"^s(et)? *m(em)? *([[:xdigit:]]{1,4}|[A-Z_]+) *= *([[:xdigit:]]{1,2})$")
   (define s-regex #px"^s(tep)? *([[:xdigit:]]{1,2})?$")
   (define so-regex #px"^s(tep)? *o(ver)? *([[:xdigit:]]{1,2})?$")
   (define b-regex #px"^b(ack)? *([[:xdigit:]]{1,2})?$")
   (define bt-regex #px"^bt *([[:xdigit:]]{1,4})$")
   (define sa-regex #px"^s(et)? *a *= *([[:xdigit:]]{1,2})$")
-  (define spc-regex #px"^s(et)? *pc *= *([[:xdigit:]]{1,4})$")
+  (define spc-regex #px"^s(et)? *pc *= *([[:xdigit:]]{1,4}|[A-Z_]+)$")
   (define x-regex #px"^xf? *\\{(.*)\\}$")
-  (define stop-pc-regex #px"^(clear *)?stop *pc *= *([[:xdigit:]]{1,4})$")
+  (define stop-pc-regex #px"^(clear *)?stop *pc *= *([[:xdigit:]]{1,4}|[A-Z_]+)$")
   (define stop-a-regex #px"^(clear *)?stop *a *= *([[:xdigit:]]{1,2})$")
   (define stop-sp-regex #px"^(clear *)?stop *sp *= *([[:xdigit:]]{1,2})$")
   (define list-bp-regex #px"^l(ist)? *s(tops)?$")
@@ -262,7 +270,8 @@ EOF
   (define flags-regex #px"^(s(et)?|c(lear)?) *f(lag)? *([cbnvzi])$")
   (define run-regex #px"^r(un)?")
   (define incpc_regex #px"^i(nc)? *p(c)?")
-  (define options-refex #px"^t(oggle)? o(ption)? (verbose-step)")
+  (define options-regex #px"^t(oggle)? o(ption)? (verbose-step)")
+  (define list-labels-regex #px"^l(ist)? *l(abels)? +\"(.*)\"")
   (cond 
     [(string-prefix? command "~")
      (define iqueue (debug-state-interactor-queue d-state))
@@ -273,144 +282,153 @@ EOF
             (apply dispatcher (list (substring command 1) d-state))]
            [else (displayln "no previous interactor to dispatch to.") d-state])]
     [(or (string=? command "?") (string=? command "h")) (debugger--help d-state)]
-        ;; pop debugger interactor
-        [(string=? command "surface")
-         (cond [(empty? (debug-state-interactor-queue d-state))
-                (displayln "no interactor left to pop")
-                d-state]
-               [else
-                (pop-debugger-interactor d-state)])]
-        ;; increment pc (to step over brk for example)
-        [(regexp-match? incpc_regex command)
-         (struct-copy debug-state d-state
-                      [states (cons (with-program-counter c-state (fx+ 1 (cpu-state-program-counter c-state))) c-states)])]
-        ;; b - go back in history
-        [(regexp-match? b-regex command)
-         (match-let (((list _ _ value) (regexp-match b-regex command)))
-           (define states (debug-state-states d-state))
-           (struct-copy debug-state d-state [states (list-tail states (min (- (length states) 1) (if value (string->number value 16) 1)))]))]
-        [(regexp-match? bt-regex command)
-                 (match-let (((list _ num) (regexp-match bt-regex command)))
-                   (define drop-num (- (length (debug-state-states d-state)) (if num (string->number num 16) 1)))
-                   (cond [(or (< drop-num 0) (>= drop-num (length (debug-state-states d-state))))
-                          (begin (with-colors 'red (lambda () (displayln "cannot go to that point in time"))) d-state)]
-                         [else
-                          (struct-copy debug-state d-state
-                                       [states (drop (debug-state-states d-state) drop-num)])]))]
-        ;; s - single step
-        [(regexp-match? s-regex command)
-         (match-let (((list _ _ len) (regexp-match s-regex command)))
-           (~>> d-state
-               (debugger--run-steps _ (if len (string->number len 16) 1))))]
-        ;; so - step over
-        [(regexp-match? so-regex command)
-         (match-let (((list _ _ _ len) (regexp-match so-regex command)))
-           (~>> d-state
-               (debugger--run-steps _ (if len (string->number len 16) 1) 0 #t)             
-               ;; (debugger--pretty-print #f "1" _ #t)
-               ;; (print-latest-cpu-state _)
-               ))]
-        ;; p - print processor state
-        [(string=? command "p") (print-state c-state) d-state]
-        ;; pp - disassemble (pretty print)
-        [(regexp-match? pp-regex command)
-         (match-let (((list _ len address) (regexp-match pp-regex command)))
-           (begin0
-               (debugger--pretty-print address len d-state)
-             (displayln "")))]
-        ;; pm - print memory
-        [(regexp-match? pm-regex command)
-         (match-let (((list _ address len) (regexp-match pm-regex command)))
-           (debugger--print-memory address len d-state))]
-        ;; sm - set memory
-        [(regexp-match? sm-regex command)
-         (match-let (((list _ _ _ address value) (regexp-match sm-regex command)))
-           (debugger--set-memory address value d-state))]
-        ;; sa - set accumulator
-        [(regexp-match? sa-regex command)
-         (match-let (((list _ _ value) (regexp-match sa-regex command)))
-           (debugger--set-accumulator value d-state))]
-        ;; spc - set program counter
-        [(regexp-match? spc-regex command)
-         (match-let (((list _ _ value) (regexp-match spc-regex command)))
-           (debugger--set-program-counter value d-state))]
-        ;; [cs]f[nvibcz] - clear / set flag
-        [(regexp-match? flags-regex command)
-         (match-let (((list _ set-or-clear _ _ _ flag) (regexp-match flags-regex command)))
-           (debugger--set-or-clear-flag set-or-clear flag d-state))]
-        ;; x - execute / compile 6510 opcode
-        [(regexp-match? x-regex command)
-         (match-let (((list _ value) (regexp-match x-regex command)))
-           (debugger--execute-command value (string-prefix? command "xf") d-state))]
-        ;; stop - stop at program counter (breakpoint)
-        [(regexp-match? stop-pc-regex command)
-         (match-let (((list _ cl value) (regexp-match stop-pc-regex command)))
-           (cond [cl
-                  (begin
-                    (displayln (format "clear breakpoint at pc = $~a" value))
-                    (debugger--remove-breakpoints d-state (format "stop at pc = $~a" value)))]
-                 [else
-                  (begin
-                    (displayln (format "set breakpoint at pc = $~a" value))
-                    (debugger--push-breakpoint d-state
-                                               (lambda (lc-state)
-                                                 (eq? (cpu-state-program-counter lc-state)
-                                                      (string->number value 16)))
-                                               (format "stop at pc = $~a" value)))]))]
-        ;; stop a=ff - stop at accumulator = ff
-        [(regexp-match? stop-a-regex command)
-         (match-let (((list _ cl value) (regexp-match stop-a-regex command)))
-           (cond [cl
-                  (begin
-                    (displayln (format "clear breakpoint at accumluator = $~a" value))
-                    (debugger--remove-breakpoints d-state (format "stop when register A = $~a" value)))]
-                 [else
-                  (begin
-                    (displayln (format "set breakpoint at accumluator = $~a" value))
-                    (debugger--push-breakpoint d-state
-                                               (lambda (lc-state)
-                                                 (eq? (cpu-state-accumulator lc-state)
-                                                      (string->number value 16)))
-                                               (format "stop when register A = $~a" value)))]))]
-        ;; stop sp=ff - stop at stack pointer = fff
-        [(regexp-match? stop-sp-regex command)
-         (match-let (((list _ cl value) (regexp-match stop-sp-regex command)))
-           (cond [cl
-                  (begin
-                    (displayln (format "clear breakpoint at sp = $(1)~a" value))
-                    (debugger--remove-breakpoints d-state (format "stop when sp = $~a" value)))]
-                 [else
-                  (begin
-                    (displayln (format "set breakpoint at sp = $(1)~a" value))
-                    (debugger--push-breakpoint d-state
-                                               (lambda (lc-state)
-                                                 (eq? (cpu-state-stack-pointer lc-state)
-                                                      (string->number value 16)))
-                                               (format "stop when sp = $~a" value)))]))]
-        ;; list stop
-        [(regexp-match? list-bp-regex command)
-         (begin
-           (for ([description (map breakpoint-description (debug-state-breakpoints d-state))])
-             (displayln description))
-           d-state)]
-        ;; stop cf = 0 - stop when carry is cleared
-        ;; stop zf = 1 - stop when zero is set
-        ;; stop x = 20 - stop if x (turns) 20
-        ;; stop y = 21 - stop if y (turns) 21
-        ;; clear - clear breakpoints
-        [(string=? command "clear stops")
-         (struct-copy debug-state d-state [breakpoints '()])]
-        ;; commit - commit change states
-        [(regexp-match? commit-regex command)
-         (match-let (((list _ value) (regexp-match commit-regex command)))
-           (define states (debug-state-states d-state))
-           (struct-copy debug-state d-state
-                        [states (take states (min (length states) (string->number (or value "0a") 16)))]))]
-        ;; r - run
-        [(regexp-match? run-regex command) (debugger--run d-state)]
-        [else (begin (unless (zero? (string-length command))
-                       (with-colors 'red (lambda () (displayln "(unknown command, enter '?' to get help)"))))
-                   d-state)]))
+    [(regexp-match? list-labels-regex command)
+     (match-let (((list _ _ _ regex-str) (regexp-match list-labels-regex command)))
+       (displayln (format "labels for ~a" regex-str))
+       (for-each
+        (lambda (key)
+          (displayln (format "$~a:\t~a" (number->string (hash-ref (debug-state-labels d-state) key) 16) key)))
+        (filter (lambda (str) (regexp-match regex-str str)) (hash-keys (debug-state-labels d-state))))
+       d-state)]
+    ;; pop debugger interactor
+    [(string=? command "surface")
+     (cond [(empty? (debug-state-interactor-queue d-state))
+            (displayln "no interactor left to pop")
+            d-state]
+           [else
+            (pop-debugger-interactor d-state)])]
+    ;; increment pc (to step over brk for example)
+    [(regexp-match? incpc_regex command)
+     (struct-copy debug-state d-state
+                  [states (cons (with-program-counter c-state (fx+ 1 (cpu-state-program-counter c-state))) c-states)])]
+    ;; b - go back in history
+    [(regexp-match? b-regex command)
+     (match-let (((list _ _ value) (regexp-match b-regex command)))
+       (define states (debug-state-states d-state))
+       (struct-copy debug-state d-state [states (list-tail states (min (- (length states) 1) (if value (string->number value 16) 1)))]))]
+    [(regexp-match? bt-regex command)
+     (match-let (((list _ num) (regexp-match bt-regex command)))
+       (define drop-num (- (length (debug-state-states d-state)) (if num (string->number num 16) 1)))
+       (cond [(or (< drop-num 0) (>= drop-num (length (debug-state-states d-state))))
+              (begin (with-colors 'red (lambda () (displayln "cannot go to that point in time"))) d-state)]
+             [else
+              (struct-copy debug-state d-state
+                           [states (drop (debug-state-states d-state) drop-num)])]))]
+    ;; s - single step
+    [(regexp-match? s-regex command)
+     (match-let (((list _ _ len) (regexp-match s-regex command)))
+       (~>> d-state
+           (debugger--run-steps _ (if len (string->number len 16) 1))))]
+    ;; so - step over
+    [(regexp-match? so-regex command)
+     (match-let (((list _ _ _ len) (regexp-match so-regex command)))
+       (~>> d-state
+           (debugger--run-steps _ (if len (string->number len 16) 1) 0 #t)
+           ;; (debugger--pretty-print #f "1" _ #t)
+           ;; (print-latest-cpu-state _)
+           ))]
+    ;; p - print processor state
+    [(string=? command "p") (print-state c-state) d-state]
+    ;; pp - disassemble (pretty print)
+    [(regexp-match? pp-regex command)
+     (match-let (((list _ len address) (regexp-match pp-regex command)))
+       (begin0
+           (debugger--pretty-print address len d-state #t)
+         (displayln "")))]
+    ;; pm - print memory
+    [(regexp-match? pm-regex command)
+     (match-let (((list _ address len) (regexp-match pm-regex command)))
+       (debugger--print-memory address len d-state))]
+    ;; sm - set memory
+    [(regexp-match? sm-regex command)
+     (match-let (((list _ _ _ address value) (regexp-match sm-regex command)))
+       (debugger--set-memory address value d-state))]
+    ;; sa - set accumulator
+    [(regexp-match? sa-regex command)
+     (match-let (((list _ _ value) (regexp-match sa-regex command)))
+       (debugger--set-accumulator value d-state))]
+    ;; spc - set program counter
+    [(regexp-match? spc-regex command)
+     (match-let (((list _ _ value-str) (regexp-match spc-regex command)))
+       (debugger--set-program-counter (debugger--resolve-value value-str d-state) d-state))]
+    ;; [cs]f[nvibcz] - clear / set flag
+    [(regexp-match? flags-regex command)
+     (match-let (((list _ set-or-clear _ _ _ flag) (regexp-match flags-regex command)))
+       (debugger--set-or-clear-flag set-or-clear flag d-state))]
+    ;; x - execute / compile 6510 opcode
+    [(regexp-match? x-regex command)
+     (match-let (((list _ value) (regexp-match x-regex command)))
+       (debugger--execute-command value (string-prefix? command "xf") d-state))]
+    ;; stop - stop at program counter (breakpoint)
+    [(regexp-match? stop-pc-regex command)
+     (match-let* (((list _ cl value-str) (regexp-match stop-pc-regex command))
+                  (value (debugger--resolve-value value-str d-state)))
+       (cond [cl
+              (begin
+                (displayln (format "clear breakpoint at pc = ~a" value-str))
+                (debugger--remove-breakpoints d-state (format "stop at pc = ~a ($~a)" value-str (number->string value 16))))]
+             [else
+              (begin
+                (displayln (format "set breakpoint at pc = ~a ($~a)" value-str (number->string value 16)))
+                (debugger--push-breakpoint d-state
+                                           (lambda (lc-state)
+                                             (eq? (cpu-state-program-counter lc-state)
+                                                  value))
+                                           (format "stop at pc = ~a ($~a)" value-str (number->string value 16))))]))]
+    ;; stop a=ff - stop at accumulator = ff
+    [(regexp-match? stop-a-regex command)
+     (match-let (((list _ cl value) (regexp-match stop-a-regex command)))
+       (cond [cl
+              (begin
+                (displayln (format "clear breakpoint at accumluator = $~a" value))
+                (debugger--remove-breakpoints d-state (format "stop when register A = $~a" value)))]
+             [else
+              (begin
+                (displayln (format "set breakpoint at accumluator = $~a" value))
+                (debugger--push-breakpoint d-state
+                                           (lambda (lc-state)
+                                             (eq? (cpu-state-accumulator lc-state)
+                                                  (string->number value 16)))
+                                           (format "stop when register A = $~a" value)))]))]
+    ;; stop sp=ff - stop at stack pointer = fff
+    [(regexp-match? stop-sp-regex command)
+     (match-let (((list _ cl value) (regexp-match stop-sp-regex command)))
+       (cond [cl
+              (begin
+                (displayln (format "clear breakpoint at sp = $(1)~a" value))
+                (debugger--remove-breakpoints d-state (format "stop when sp = $~a" value)))]
+             [else
+              (begin
+                (displayln (format "set breakpoint at sp = $(1)~a" value))
+                (debugger--push-breakpoint d-state
+                                           (lambda (lc-state)
+                                             (eq? (cpu-state-stack-pointer lc-state)
+                                                  (string->number value 16)))
+                                           (format "stop when sp = $~a" value)))]))]
+    ;; list stop
+    [(regexp-match? list-bp-regex command)
+     (begin
+       (for ([description (map breakpoint-description (debug-state-breakpoints d-state))])
+         (displayln description))
+       d-state)]
+    ;; stop cf = 0 - stop when carry is cleared
+    ;; stop zf = 1 - stop when zero is set
+    ;; stop x = 20 - stop if x (turns) 20
+    ;; stop y = 21 - stop if y (turns) 21
+    ;; clear - clear breakpoints
+    [(string=? command "clear stops")
+     (struct-copy debug-state d-state [breakpoints '()])]
+    ;; commit - commit change states
+    [(regexp-match? commit-regex command)
+     (match-let (((list _ value) (regexp-match commit-regex command)))
+       (define states (debug-state-states d-state))
+       (struct-copy debug-state d-state
+                    [states (take states (min (length states) (string->number (or value "0a") 16)))]))]
+    ;; r - run
+    [(regexp-match? run-regex command) (debugger--run d-state)]
+    [else (begin (unless (zero? (string-length command))
+                   (with-colors 'red (lambda () (displayln "(unknown command, enter '?' to get help)"))))
+                 d-state)]))
 
 (define/c (create-disassemble-annotation-string c-state)
   (-> cpu-state? string?)
@@ -471,7 +489,7 @@ EOF
 
 (define (debugger--assembler-pre-prompter d-state)
   (define c-state (car (debug-state-states d-state)))
-  (disassemble c-state (cpu-state-program-counter c-state) 1))
+  (disassemble c-state (cpu-state-program-counter c-state) 1 #:labels (debug-state-labels d-state)))
 
 ;; definition of an repl interactor for regular assembly level debug repl sessions
 (define debugger--assembler-interactor
@@ -511,8 +529,8 @@ EOF
                [interactor-queue new-interactor-queue]))
 
 ;; run an read eval print loop debugger on the passed program
-(define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (tracepoints '()) (interactor debugger--assembler-interactor) (run #f))
-  (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof tracepoint?) (listof any/c) boolean?] any/c)
+(define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (tracepoints '()) (interactor debugger--assembler-interactor) (run #f) #:labels (labels (hash)))
+  (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof tracepoint?) (listof any/c) boolean? #:labels (hash/c string? word/c)]  any/c)
   (define capabilities (collect-emacs-capabilities file-name))
   (define file-does-exist (and (non-empty-string? file-name) (file-exists? file-name)))
   (define d-state
@@ -528,7 +546,8 @@ EOF
                  (dict-ref interactor 'prompter debugger--assembler-prompter)
                  (dict-ref interactor 'dispatcher dispatch-debugger-command)
                  (dict-ref interactor 'pre-prompter debugger--assembler-pre-prompter)
-                 (list)))
+                 (list)
+                 labels))
 
   (when file-does-exist
     (run-debugger--prepare-emacs-integration capabilities file-name d-state))

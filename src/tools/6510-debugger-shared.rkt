@@ -5,6 +5,7 @@
 
  |#
 
+(require (only-in "../6510-utils.rkt" word/c))
 (require (only-in "./6510-interpreter.rkt" cpu-state?))
 (require (only-in "./6510-debugger-sync-source.rkt" pc-source-map-entry?))
 
@@ -20,7 +21,17 @@
   #:transparent
   #:guard (struct-guard/c string? any/c any/c boolean?))
 
-(struct debug-state (states breakpoints tracepoints pc-source-map output-function prompter dispatcher pre-prompter interactor-queue)
+(struct debug-state
+  (states
+   breakpoints
+   tracepoints
+   pc-source-map
+   output-function
+   prompter
+   dispatcher
+   pre-prompter
+   interactor-queue
+   labels)
   #:guard (struct-guard/c (listof cpu-state?)
                           (listof breakpoint?)
                           (listof tracepoint?)
@@ -30,4 +41,5 @@
                           (-> string? any/c any/c)  ;; any/c is actually debug-state?
                           (-> any/c string?)        ;; any/c is actually debug-state?
                           (listof any/c)            ;; interactors
+                          (hash/c string? word/c)    ;; resolved labels
                           ))

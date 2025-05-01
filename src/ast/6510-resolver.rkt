@@ -17,6 +17,7 @@
 (provide resolved-instruction->bytes
          ->resolved-decisions
          label-instructions
+         constant-instructions
          ->resolve-labels
          resolved-program->bytes
          commands->bytes
@@ -119,6 +120,12 @@
 (define/c (label-instructions program)
   (-> (listof ast-command?) (listof label-instruction?))
   (filter label-instruction? program))
+
+(define/c (constant-instructions program)
+  (-> (listof ast-command?) (listof label-instruction?))
+  (filter (lambda (instruction) (or (ast-const-word-cmd? instruction)
+                              (ast-const-byte-cmd? instruction)))
+          program))
 
 ;; find first unresolved command that contains an option to decide on that may be resolved by the first matching label
 (define/c (matching-decide-option labels decide-options)
@@ -328,6 +335,7 @@
          (label  (ast-resolve-sub-cmd-label subcmd))
          (ex-offset (label-offset label))
          (value  (hash-ref labels (label-label label) #f)))
+    ;; (println label)
     (cond [value
            (let ([rel-value (two-complement-of (+ ex-offset (- value (+ offset 2))))])
              (unless (byte? rel-value)
