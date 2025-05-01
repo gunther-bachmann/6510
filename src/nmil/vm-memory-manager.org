@@ -1,6 +1,6 @@
 #+title: vm-memory-manager
 * open tasks
-** TODO cell deallocation
+** IMPLEMENT cell deallocation
 instead of implementing free for RT and RA, implement one function, copying RT/RA to (e.g. RC) and work on RC
 (todo: copy algorithms from notebook into here!)
 - plan to do deallocation of different cell types (free is done if refcnt drops to 0)
@@ -94,12 +94,6 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
 | NEW_GC_CELL_ARRAYS                               | i               | free cell-arrays until the global (partially gc'd) free list is empty                                                                                                        |
 ** TODO check: do pointers on cells exist that are on the locals/eval-stack?
 - currently the answer is *NO*, does that restrict the programming model?
-** IMPLEMENT labels in debugger
-- [X] add all labels to the debugger
-- [X] list labels (with addresses) matching regex
-- [X] get address for (one) label
-- [ ] use labels in place of addresses in all debug commands
-  - [ ] set break point at label
 * current (en)coding
 ** naming
  naming: atomic cell
@@ -1917,6 +1911,13 @@ use the following idea in more situations:
   | x    | VM_CELL_STACK_PUSH_ARRAY_ATa_RA             | PUSH_ARR_ATa_RA_TO_EVLSTK        |      |                                                                    |
   | x    | VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA      | WRITE_ARR_ATa_RA_TO_RT           |      |                                                                    |
   | x    | VM_CELL_STACK_WRITE_RT_TO_ARRAY_ATa_RA      | WRITE_RT_TO_ARR_ATa_RA           |      |                                                                    |
+** DONE labels in debugger
+- State "DONE"       from "IMPLEMENT"  [2025-05-01 Thu 11:56]
+- [X] add all labels to the debugger
+- [X] list labels (with addresses) matching regex
+- [X] get address for (one) label
+- [X] use labels in place of addresses in all debug commands
+  - [X] set break point at label
 * - :noexport:
 #+begin_src emacs-lisp
   ;; Local Variables:

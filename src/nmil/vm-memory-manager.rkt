@@ -85,6 +85,8 @@ call frame primitives etc.
   (require (only-in racket/list range))
 
   (define TEST_COUNTERS #xa003)
+  (define (calls-to-mock state (mock-idx 0))
+    (car (memory-list state (+ TEST_COUNTERS mock-idx) (+ TEST_COUNTERS mock-idx))))
   (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
     (append (list
       (org #xa000)
@@ -3389,12 +3391,9 @@ call frame primitives etc.
 )))
 
 (module+ test #| NEW_DEC_REFCNT_RC |#
-  (define (calls-to-mock state (mock-idx 0))
-    (car (memory-list state (+ TEST_COUNTERS mock-idx) (+ TEST_COUNTERS mock-idx))))
-
-  (define short-new-dec-refcnt-rc--dec-ref--cell
+  (define dec-refcnt-rc--dec-ref--cell
     (compact-run-code-in-test
-     #:debug #t
+     ;; #:debug #t
      #:mock (list (label NEW_FREE_CELL_RC))
 
      (JSR ALLOC_CELL_TO_RT)    ;; new cell in RT (with refcount = 0)
@@ -3402,17 +3401,17 @@ call frame primitives etc.
      (JSR INC_REFCNT_CELL_RT) ;; now should be 2
      (JSR CP_RT_TO_RC)
 
-      ;; unit under test
+     ;; unit under test
      (JSR NEW_DEC_REFCNT_RC)))
 
-  (check-equal? (calls-to-mock short-new-dec-refcnt-rc--dec-ref--cell)
+  (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref--cell)
                 #x00
-               "no free cell has taken place!")
-  (check-equal? (peek short-new-dec-refcnt-rc--dec-ref--cell (+ PAGE_AVAIL_0_W 01))
+                "no free cell has taken place!")
+  (check-equal? (peek dec-refcnt-rc--dec-ref--cell (+ PAGE_AVAIL_0_W 01))
                 #x01
-               "remaining refcount on cell0 is 1")
+                "remaining refcount on cell0 is 1")
 
-  (define short-new-dec-refcnt-rc--dec-ref-to-0--cell
+  (define dec-refcnt-rc--dec-ref-to-0--cell
     (compact-run-code-in-test
      #:mock (list (label NEW_FREE_CELL_RC))
 
@@ -3423,12 +3422,50 @@ call frame primitives etc.
      ;; unit under test
      (JSR NEW_DEC_REFCNT_RC)))
 
-  (check-equal? (calls-to-mock short-new-dec-refcnt-rc--dec-ref-to-0--cell)
+  (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref-to-0--cell)
                 #x01
-               "free cell has taken place!")
-  (check-equal? (peek short-new-dec-refcnt-rc--dec-ref-to-0--cell (+ PAGE_AVAIL_0_W 01))
+                "free cell has taken place!")
+  (check-equal? (peek dec-refcnt-rc--dec-ref-to-0--cell (+ PAGE_AVAIL_0_W 01))
                 #x00
-               "remaining refcount on cell0 is 0"))
+                "remaining refcount on cell0 is 0")
+
+
+  (define dec-refcnt-rc--dec-ref-to-0--cellpair
+    (compact-run-code-in-test
+     #:mock (list (label NEW_FREE_CELLPAIR_RC))
+
+     (JSR ALLOC_CELLPAIR_TO_RT)     ;; new cellpair in RT (with refcount = 0)
+     (JSR INC_REFCNT_CELLPAIR_RT)   ;; now should be 1
+     (JSR CP_RT_TO_RC)
+
+     ;; unit under test
+     (JSR NEW_DEC_REFCNT_RC)))
+
+  (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref-to-0--cellpair)
+                #x01
+                "free cellpair has taken place!")
+  (check-equal? (peek dec-refcnt-rc--dec-ref-to-0--cellpair (+ PAGE_AVAIL_0_W 01))
+                #x00
+                "remaining refcount on cellpair0 is 0")
+
+  (define dec-refcnt-rc--dec-ref--cellpair
+    (compact-run-code-in-test
+     #:mock (list (label NEW_FREE_CELLPAIR_RC))
+
+     (JSR ALLOC_CELLPAIR_TO_RT)     ;; new cellpair in RT (with refcount = 0)
+     (JSR INC_REFCNT_CELLPAIR_RT)   ;; now should be 1
+     (JSR INC_REFCNT_CELLPAIR_RT)   ;; now should be 2
+     (JSR CP_RT_TO_RC)
+
+     ;; unit under test
+     (JSR NEW_DEC_REFCNT_RC)))
+
+  (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref--cellpair)
+                #x00
+                "no free cellpair has taken place!")
+  (check-equal? (peek dec-refcnt-rc--dec-ref--cellpair (+ PAGE_AVAIL_0_W 01))
+                #x01
+                "remaining refcount on cellpair0 is 1"))
 
 ;; impl complete, test missing
 (define NEW_FREE_M1_SLOT_RC
@@ -3462,8 +3499,9 @@ call frame primitives etc.
    (list
     (label NEW_FREE_CELLPAIR_RA)
            (JSR CP_RA_TO_RC)
-           (CLC)
-           (BCC NEW_FREE_CELLPAIR_RC)
+           ;; (CLC)
+           ;; (BCC NEW_FREE_CELLPAIR_RC)
+           (JMP NEW_FREE_CELLPAIR_RC)
 
     (label NEW_FREE_CELLPAIR_RT)
            (JSR CP_RT_TO_RC)
