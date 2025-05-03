@@ -302,9 +302,11 @@ call frame primitives etc.
   (list
    ;; highest bit 0 and the lowest 2 bits are reserved for int, cell-ptr and cell-pair-ptr
    ;; => 32 values still available
-   (byte-const TAG_BYTE_BYTE_CELL        $ff)
-   (byte-const TAG_BYTE_CELL_ARRAY       $83)
-   (byte-const TAG_BYTE_NATIVE_ARRAY     $87)
+   (byte-const TAG_BYTE_BYTE_CELL         $ff)
+   (byte-const TAG_BYTE_CELL_ARRAY        $83) ;; LSR -> 41, LSR -> 20
+   (byte-const TAG_BYTE_CELL_ARRAY_LSR2   $30)
+   (byte-const TAG_BYTE_NATIVE_ARRAY      $87) ;; LSR -> 43, LSR -> 21
+   (byte-const TAG_BYTE_NATIVE_ARRAY_LSR2 $21)
 
    (byte-const NEXT_FREE_PAGE_PAGE       $cf)   ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
    ;; (word-const VM_FIRST_FREE_SLOT_ON_PAGE     $cf00) ;; location: table of first free slot for each page
@@ -3306,11 +3308,9 @@ call frame primitives etc.
           (LSR)
           (BCC CELLPAIR_ALREADY_LSRED__) ;; ends on b01 => cell-pair ptr
 
-          ;; check other types of cells
-          (LDA ZP_RC)                   ;; content of A could be reused if tags were right shifted!
-          (CMP !TAG_BYTE_CELL_ARRAY)
+          (CMP !TAG_BYTE_CELL_ARRAY_LSR2)
           (BEQ NEW_DEC_REFCNT_CELLARR_RC)
-          (CMP !TAG_BYTE_NATIVE_ARRAY)
+          (CMP !TAG_BYTE_NATIVE_ARRAY_LSR2)
           (BEQ NEW_DEC_REFCNT_NATIVEARR_RC)
 
    (label UNKNOWN__)
@@ -3375,20 +3375,39 @@ call frame primitives etc.
 
    ;; input: cell ptr in ZP_RA
    ;; decrement ref count, if 0 deallocate
-   (label NEW_DEC_REFCNT_CELL_RC)
+   (label NEW_DEC_REFCNT_CELL_RC)  ;; RC -> [cell] | [cell-array] | [native-array]
           (LDA ZP_RC) ;; lowbyte (offset)
           (LSR)
    (label CELL_ALREADY_LSRED__)
-          (TAX)
-          ;; now decrement cell count
-          (LDA ZP_RC+1)
+          ;; check what cell kind the target is: cell, cell-ptr, cell-pair-ptr, native-array, cell-array
+          (LDY ZP_RC+1)
           (BEQ DONE__) ;; nil -> done
-          (STA DEC_PAGE_CELL_CNT__+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
+          (STY LDA_PAGE_TYPE__+2)
+          (TAX)
+   (label LDA_PAGE_TYPE__)
+          (LDA $c000)
+          (ASL A)
+          (BCS NEW_DEC_REFCNT_CELL_RC_TO_CELL__)
+          ;; can't really be cellpair type page (was checked before)
+          ;; (LSL)
+          ;; (BCS NEW_DEC_REFCNT_CELL_RC_TO_CELLPAIR)
+          ;; else must be a m1 slot
+   (label NEW_DEC_REFCNT_CELL_RC_TO_M1_SLOT__)
+          (LDX ZP_RC)
+          (DEX)
+          (STY DEC_PAGE_M1_SLOT_CNT__+2)
+   (label DEC_PAGE_M1_SLOT_CNT__)
+          (DEC $C000,x)
+          (BNE DONE__)
+          (JMP NEW_FREE_M1_SLOT_RC)
+
+   (label NEW_DEC_REFCNT_CELL_RC_TO_CELL__)
+          (STY DEC_PAGE_CELL_CNT__+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
    (label DEC_PAGE_CELL_CNT__)
           (DEC $c000,x)               ;; c0 is overwritten by page (see above)
           (BNE DONE__)
           (JMP NEW_FREE_CELL_RC)      ;; free (since refcnt dropped to 0)
-)))
+          )))
 
 (module+ test #| NEW_DEC_REFCNT_RC |#
   (define dec-refcnt-rc--dec-ref--cell
@@ -3465,7 +3484,49 @@ call frame primitives etc.
                 "no free cellpair has taken place!")
   (check-equal? (peek dec-refcnt-rc--dec-ref--cellpair (+ PAGE_AVAIL_0_W 01))
                 #x01
-                "remaining refcount on cellpair0 is 1"))
+                "remaining refcount on cellpair0 is 1")
+
+  (define dec-refcnt-rc--dec-ref-to-0--m1_slot
+    (compact-run-code-in-test
+     #:mock (list (label NEW_FREE_M1_SLOT_RC))
+
+     (LDA !$10)
+     (JSR ALLOC_M1_SLOT_TO_RA)     ;; new m1_slot in RA (with refcount = 0)
+     (JSR INC_REFCNT_M1_SLOT_RA)   ;; now should be 1
+     (JSR CP_RA_TO_RC)
+
+     ;; unit under test
+     (JSR NEW_DEC_REFCNT_RC)))
+
+  (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref-to-0--m1_slot)
+                #x01
+                "free m1_slot has taken place!")
+  (check-equal? (peek dec-refcnt-rc--dec-ref-to-0--m1_slot (+ PAGE_AVAIL_0_W 03))
+                #x00
+                "remaining refcount on m1_slot0 is 0")
+
+  (define dec-refcnt-rc--dec-ref--m1_slot
+    (compact-run-code-in-test
+     #:mock (list (label NEW_FREE_M1_SLOT_RC))
+
+     (LDA !$10)
+     (JSR ALLOC_M1_SLOT_TO_RA)     ;; new m1_slot in RT (with refcount = 0)
+     (JSR INC_REFCNT_M1_SLOT_RA)   ;; now should be 1
+     (JSR INC_REFCNT_M1_SLOT_RA)   ;; now should be 2
+     (JSR CP_RA_TO_RC)
+
+     ;; unit under test
+     (JSR NEW_DEC_REFCNT_RC)))
+
+  (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref--m1_slot)
+                #x00
+                "no free m1_slot has taken place!")
+  (check-equal? (peek dec-refcnt-rc--dec-ref--m1_slot (+ PAGE_AVAIL_0_W 03))
+                #x01
+                "remaining refcount on m1_slot 0 is 1")
+
+
+  )
 
 ;; impl complete, test missing
 (define NEW_FREE_M1_SLOT_RC
@@ -6304,4 +6365,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       2023))
+                       2038))
