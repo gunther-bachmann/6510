@@ -4080,6 +4080,41 @@ call frame primitives etc.
           (word 0) ;; holds (any) ptr for tail call (if necessary), use highbyte != 0 to detect whether pointer is set
 )))
 
+(module+ test #| new_free_cell_rc |#
+  (define vm-free-cell-ptr-in-rc-tailcall-code
+    (list                                       ;; VM_LIST_OF_FREE_CELLS = 0000
+     (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 0 @ ..02]
+     (JSR INC_REFCNT_CELL_RT)
+     (JSR CP_RT_TO_RA)                          ;; RA -> [cell 0]
+     (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 1 @ ..08]
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)        ;; RT -> [cell 1] -> [cell 0]
+     (JSR CP_RT_TO_RC)                          ;; RC -> [cell 1] -> [cell 0]
+
+     (JSR NEW_FREE_CELL_RC)))                   ;; VM_LIST_OF_FREE_CELLS -> [cell 0] -> [cell 1] -> 0000
+                                                ;; PFL -> [cell 2 @ ..0a]
+
+  (define vm-free-cell-ptr-in-rc-tailcall-state
+    (run-code-in-test vm-free-cell-ptr-in-rc-tailcall-code))
+
+  (check-equal? (memory-list vm-free-cell-ptr-in-rc-tailcall-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+                (list #x02 PAGE_AVAIL_0)
+                (format "~a02 is new head of the free list" (number->string PAGE_AVAIL_0 16)))
+  (check-equal? (memory-list vm-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+                (list #x08 PAGE_AVAIL_0)
+                (format "~a02, which was freed, is referencing ~a08 as next in the free list"
+                        (number->string PAGE_AVAIL_0 16)
+                        (number->string PAGE_AVAIL_0 16)))
+  (check-equal? (memory-list vm-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x09))
+                (list #x00 #x00)
+                (format "~a08, which was freed, is the tail of the free list"
+                        (number->string PAGE_AVAIL_0 16)))
+  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rc-tailcall-state PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "two slots still allocated on page, they are however on the free list to be reused"))
+
 ;; input cell ptr is in ZP_RT
 ;; ---
 ;; put this cell into the free-list (as head)
@@ -6424,4 +6459,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       2038))
+                       2057))
