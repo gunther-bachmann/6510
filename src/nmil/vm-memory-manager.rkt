@@ -72,7 +72,9 @@ call frame primitives etc.
 (require (only-in "../util.rkt" bytes->int low-byte high-byte format-hex-byte format-hex-word))
 (require (only-in racket/list flatten take empty? drop make-list))
 (require (only-in "../ast/6510-relocator.rkt" command-len))
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix
+                  replace-labels))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -2342,53 +2344,33 @@ call frame primitives etc.
          label-cellarr
          label-nativearr
          label-m1)
-  (list
-          (ast-decide-cmd
-           '()
-           (list
-            (ast-unresolved-opcode-cmd '() (list (car (ast-opcode-cmd-bytes (LDA $10)))) (ast-resolve-byte-scmd register 'low-byte))
-            (ast-unresolved-opcode-cmd '() (list (car (ast-opcode-cmd-bytes (LDA $1000)))) (ast-resolve-word-scmd register))))
-          (ast-unresolved-rel-opcode-cmd
-           '()
-           (ast-rel-opcode-cmd-bytes (BEQ UNKNOWN))
-           (ast-resolve-byte-scmd label-unknown 'relative))
+  (replace-labels
+   (hash "REGISTER"   register
+         "UNKNOWN"    label-unknown
+         "CELL"       label-cell
+         "CELLPAIR"   label-cellpair
+         "CELLARR"    label-cellarr
+         "NATIVEARR"  label-nativearr
+         "M1"         label-m1)
+   (list
+    (LDA REGISTER)                      ;; load zero page register tagged low byte
+    (BEQ UNKNOWN)                       ;; tagged low byte 0 => illegal or nil => jump to unknown
+    (LSR)                               ;;
+    (BCC CELL)                          ;; lowbyte ends on '0' => is a cell pointer
+    (LSR)
+    (BCC CELLPAIR)                      ;; lowbyte ends on '01' => is a cell-pair pointer
 
-          ;; lowest bit = 0 => cell-ptr
-          (LSR)
-          (ast-unresolved-rel-opcode-cmd
-           '()
-           (ast-rel-opcode-cmd-bytes (BCC CELL))
-           (ast-resolve-byte-scmd label-cell 'relative))
+    (CMP !TAG_BYTE_CELL_ARRAY_LSR2)
+    (BEQ CELLARR)                       ;; tagged low byte = cell-array tag => is cell-array
+    (CMP !TAG_BYTE_NATIVE_ARRAY_LSR2)
+    (BEQ NATIVEARR)                     ;; tagged low byte = native-array tag => is native-array
 
-          ;; lowest bits = 01 => cellpair-ptr
-          (LSR)
-          (ast-unresolved-rel-opcode-cmd
-           '()
-           (ast-rel-opcode-cmd-bytes (BCC CELLPAIR))
-           (ast-resolve-byte-scmd label-cellpair 'relative))
-
-          ;; check other types of cells
-          (CMP !TAG_BYTE_CELL_ARRAY_LSR2)
-          (ast-unresolved-rel-opcode-cmd
-           '()
-           (ast-rel-opcode-cmd-bytes (BEQ CELLARR))
-           (ast-resolve-byte-scmd label-cellarr 'relative))
-
-          (CMP !TAG_BYTE_NATIVE_ARRAY_LSR2)
-          (ast-unresolved-rel-opcode-cmd
-           '()
-           (ast-rel-opcode-cmd-bytes (BEQ NATIVEARR))
-           (ast-resolve-byte-scmd label-nativearr 'relative))
-
-          ;; fall back for m1 page
-          (LDY  !$00)
-          (ast-unresolved-opcode-cmd '() (ast-opcode-cmd-bytes (LDA (REG),y)) (ast-resolve-byte-scmd register 'low-byte))
-          (AND !$f8)
-          (CMP !$10)
-          (ast-unresolved-rel-opcode-cmd
-           '()
-           (ast-rel-opcode-cmd-bytes (BEQ M1_PAGE))
-           (ast-resolve-byte-scmd label-m1 'relative))))
+    ;; fall-back
+    (LDY  !$00)
+    (LDA (REGISTER),y)                  ;; get first byte of page
+    (AND !$f8)                          ;; mask out low 3 bits
+    (CMP !$10)                          ;;
+    (BEQ M1))))                         ;; jump if page tag b00010xxx => m1-slots page
 
 (define (PTR_DETECTION_MACRO_RC
          label-unknown

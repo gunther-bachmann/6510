@@ -23,7 +23,8 @@
          commands->bytes
          label-label
          label-offset
-         add-label-suffix)
+         add-label-suffix
+         replace-labels)
 
 ;; is this instruction introducing a label referencing a byte value (e.g. constant def)?
 (define/c (byte-label-cmd? instruction)
@@ -594,6 +595,62 @@
   (check-equal? (string-replace-suffix "some_function__o" "__" "__suffix")
                 "some_function__o"))
 
+(define/c (hash-replace replacement-map str)
+  (-> (hash/c string? string?) string? string?)
+  (define expr-tail "([^+-]*)([+-][0-9a-f]+)$")
+  (cond [(regexp-match expr-tail str)
+         (match-let (((list _ pure-label expr-suffix) (regexp-match expr-tail str)))
+           (format "~a~a" (hash-ref replacement-map pure-label pure-label) expr-suffix))]
+        [else (hash-ref replacement-map str str)]))
+
+(module+ test #| hash-replace |#
+  (check-equal? (hash-replace (hash "label" "label_new") "label")
+                "label_new")
+  (check-equal? (hash-replace (hash "label" "label_new") "label+0")
+                "label_new+0")
+  (check-equal? (hash-replace (hash "label" "label_new") "label-15")
+                "label_new-15")
+  (check-equal? (hash-replace (hash "label" "label_new") "xlabel-15")
+                "xlabel-15")
+  (check-equal? (hash-replace (hash "label" "label_new") "xlabel")
+                "xlabel"))
+
+(define/c (string-replace-in-sub-cmd cmd replacement-map)
+  (-> (or/c ast-resolve-sub-cmd? ast-resolve-byte-scmd? ast-resolve-word-scmd?) (hash/c string? string?) ast-resolve-sub-cmd?)
+  (cond [(ast-resolve-byte-scmd? cmd)
+         (struct-copy ast-resolve-byte-scmd cmd
+                      [label #:parent ast-resolve-sub-cmd
+                             (hash-replace replacement-map (ast-resolve-sub-cmd-label cmd))])]
+        [(ast-resolve-word-scmd? cmd)
+         (struct-copy ast-resolve-word-scmd cmd
+                      [label #:parent ast-resolve-sub-cmd
+                             (hash-replace replacement-map (ast-resolve-sub-cmd-label cmd))])]
+        [(ast-resolve-sub-cmd? cmd)
+         (struct-copy ast-resolve-sub-cmd cmd
+                      [label
+                       (hash-replace replacement-map (ast-resolve-sub-cmd-label cmd))])]
+        [else (raise-user-error (format "subcommand ~a unexpected here"))]))
+
+(module+ test #| string-replace-in-sub-cmd |#
+  (check-equal? (string-replace-in-sub-cmd (ast-resolve-sub-cmd "label")
+                                                  (hash "label" "label_new"))
+                (ast-resolve-sub-cmd "label_new"))
+  (check-equal? (string-replace-in-sub-cmd (ast-resolve-byte-scmd "label" 'relative)
+                                                  (hash "label" "label_new"))
+                (ast-resolve-byte-scmd "label_new" 'relative))
+  (check-equal? (string-replace-in-sub-cmd (ast-resolve-word-scmd "label")
+                                                  (hash "label" "label_new"))
+                (ast-resolve-word-scmd "label_new"))
+  (check-equal? (string-replace-in-sub-cmd (ast-resolve-sub-cmd "xlabel")
+                                                  (hash "label" "label_new"))
+                (ast-resolve-sub-cmd "xlabel"))
+  (check-equal? (string-replace-in-sub-cmd (ast-resolve-byte-scmd "xlabel" 'relative)
+                                                  (hash "label" "label_new"))
+                (ast-resolve-byte-scmd "xlabel" 'relative))
+  (check-equal? (string-replace-in-sub-cmd (ast-resolve-word-scmd "xlabel")
+                                                  (hash "label" "label_new"))
+                (ast-resolve-word-scmd "xlabel")))
+
 ;; replace suffix in label of ast-resolve-sub-cmd
 (define/c (string-replace-suffix-in-sub-cmd cmd suffix with)
   (-> (or/c ast-resolve-sub-cmd? ast-resolve-byte-scmd? ast-resolve-word-scmd?) string? string? ast-resolve-sub-cmd?)
@@ -624,6 +681,63 @@
                                                   "__"
                                                   "__suffix")
                 (ast-resolve-word-scmd "label__suffix")))
+
+(define/c (replace-label cmd replacement-map)
+  (-> ast-command? (hash/c string? string?) ast-command?)
+  (cond [(ast-label-def-cmd? cmd)
+         (struct-copy ast-label-def-cmd cmd
+                      [label (hash-replace replacement-map (ast-label-def-cmd-label cmd))])]
+        [(ast-unresolved-rel-opcode-cmd? cmd)
+         (struct-copy ast-unresolved-rel-opcode-cmd cmd
+                      [resolve-sub-command (string-replace-in-sub-cmd
+                                            (ast-unresolved-rel-opcode-cmd-resolve-sub-command cmd)
+                                            replacement-map)])]
+        [(ast-unresolved-opcode-cmd? cmd)
+         (struct-copy ast-unresolved-opcode-cmd cmd
+                      [resolve-sub-command (string-replace-in-sub-cmd
+                                            (ast-unresolved-opcode-cmd-resolve-sub-command cmd)
+                                            replacement-map)])]
+        [(ast-unresolved-bytes-cmd? cmd)
+         (struct-copy ast-unresolved-bytes-cmd cmd
+                      [resolve-sub-command (string-replace-in-sub-cmd
+                                            (ast-unresolved-bytes-cmd-resolve-sub-command cmd)
+                                            replacement-map)])]
+        [(ast-decide-cmd? cmd)
+         (define new-options (map (lambda (option) (replace-label option replacement-map))
+                                  (ast-decide-cmd-options cmd)))
+         (struct-copy ast-decide-cmd cmd
+                      [options new-options])]
+        [else cmd]))
+
+(module+ test #| |#
+  (check-equal? (replace-label
+                 (ast-label-def-cmd '() "label")
+                 (hash "label" "label_new"))
+                (ast-label-def-cmd '() "label_new"))
+  (check-equal? (replace-label
+                 (ast-unresolved-bytes-cmd '() '() (ast-resolve-sub-cmd "label"))
+                 (hash "label" "label_new"))
+                (ast-unresolved-bytes-cmd '() '() (ast-resolve-sub-cmd "label_new")))
+  (check-equal? (replace-label
+                 (ast-unresolved-rel-opcode-cmd '() '() (ast-resolve-byte-scmd "label" 'relative ))
+                 (hash "label" "label_new"))
+                (ast-unresolved-rel-opcode-cmd '() '() (ast-resolve-byte-scmd "label_new" 'relative )))
+  (check-equal? (replace-label
+                 (ast-unresolved-opcode-cmd '() '() (ast-resolve-sub-cmd "label"))
+                 (hash "label" "label_new"))
+                (ast-unresolved-opcode-cmd '() '() (ast-resolve-sub-cmd "label_new")))
+  (check-equal? (replace-label
+                 (ast-decide-cmd
+                  '()
+                  (list
+                   (ast-unresolved-opcode-cmd '() '(133) (ast-resolve-byte-scmd "label" 'low-byte))
+                   (ast-unresolved-opcode-cmd '() '(141) (ast-resolve-word-scmd "label"))))
+                 (hash "label" "label_new"))
+                (ast-decide-cmd
+                  '()
+                  (list
+                   (ast-unresolved-opcode-cmd '() '(133) (ast-resolve-byte-scmd "label_new" 'low-byte))
+                   (ast-unresolved-opcode-cmd '() '(141) (ast-resolve-word-scmd "label_new"))))))
 
 ;; replace this suffix in label of unresolved command
 (define/c (replace-label-suffix cmd suffix new-suffix)
@@ -716,4 +830,32 @@
                       (ast-label-def-cmd '() "some__suffix")
                       (ast-unresolved-bytes-cmd '() '() (ast-resolve-sub-cmd "some__suffix+1"))
                       (ast-unresolved-opcode-cmd '() '() (ast-resolve-sub-cmd "some__suffix"))
+                      (ast-bytes-cmd '() '()))))
+
+;; replace suffix in label of all unresolved commands
+(define/c (replace-labels replacement-map commands (transformed-commands '()))
+  (->* [(hash/c string? string?) (listof ast-command?)] [(listof ast-command?)] (listof ast-command?))
+  (cond
+    [(empty? commands) (reverse transformed-commands)]
+    [else
+     (define cmd (car commands))
+     (replace-labels
+      replacement-map
+      (cdr commands)
+      (cons (replace-label cmd replacement-map)
+            transformed-commands))]))
+
+(module+ test #| replace-labels |#
+  (check-equal? (replace-labels (hash "label" "label_new")
+                                  (list (ast-label-def-cmd '() "some")
+                                        (ast-unresolved-rel-opcode-cmd '() '() (ast-resolve-byte-scmd "label" 'relative))
+                                        (ast-label-def-cmd '() "label")
+                                        (ast-unresolved-bytes-cmd '() '() (ast-resolve-sub-cmd "label+1"))
+                                        (ast-unresolved-opcode-cmd '() '() (ast-resolve-sub-cmd "label"))
+                                        (ast-bytes-cmd '() '())))
+                (list (ast-label-def-cmd '() "some")
+                      (ast-unresolved-rel-opcode-cmd '() '() (ast-resolve-byte-scmd "label_new" 'relative))
+                      (ast-label-def-cmd '() "label_new")
+                      (ast-unresolved-bytes-cmd '() '() (ast-resolve-sub-cmd "label_new+1"))
+                      (ast-unresolved-opcode-cmd '() '() (ast-resolve-sub-cmd "label_new"))
                       (ast-bytes-cmd '() '()))))
