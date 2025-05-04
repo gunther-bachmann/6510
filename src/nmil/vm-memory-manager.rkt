@@ -2333,6 +2333,95 @@ call frame primitives etc.
           (JMP FREE_CELL_RA) ;; free delayed
 )))
 
+;; macro that does pointer detection and jumping to certain labels for the respective pointer type
+(define (PTR_DETECTION_MACRO_Rx
+         register
+         label-unknown
+         label-cell
+         label-cellpair
+         label-cellarr
+         label-nativearr
+         label-m1)
+  (list
+          (ast-decide-cmd
+           '()
+           (list
+            (ast-unresolved-opcode-cmd '() (list (car (ast-opcode-cmd-bytes (LDA $10)))) (ast-resolve-byte-scmd register 'low-byte))
+            (ast-unresolved-opcode-cmd '() (list (car (ast-opcode-cmd-bytes (LDA $1000)))) (ast-resolve-word-scmd register))))
+          (ast-unresolved-rel-opcode-cmd
+           '()
+           (ast-rel-opcode-cmd-bytes (BEQ UNKNOWN))
+           (ast-resolve-byte-scmd label-unknown 'relative))
+
+          ;; lowest bit = 0 => cell-ptr
+          (LSR)
+          (ast-unresolved-rel-opcode-cmd
+           '()
+           (ast-rel-opcode-cmd-bytes (BCC CELL))
+           (ast-resolve-byte-scmd label-cell 'relative))
+
+          ;; lowest bits = 01 => cellpair-ptr
+          (LSR)
+          (ast-unresolved-rel-opcode-cmd
+           '()
+           (ast-rel-opcode-cmd-bytes (BCC CELLPAIR))
+           (ast-resolve-byte-scmd label-cellpair 'relative))
+
+          ;; check other types of cells
+          (CMP !TAG_BYTE_CELL_ARRAY_LSR2)
+          (ast-unresolved-rel-opcode-cmd
+           '()
+           (ast-rel-opcode-cmd-bytes (BEQ CELLARR))
+           (ast-resolve-byte-scmd label-cellarr 'relative))
+
+          (CMP !TAG_BYTE_NATIVE_ARRAY_LSR2)
+          (ast-unresolved-rel-opcode-cmd
+           '()
+           (ast-rel-opcode-cmd-bytes (BEQ NATIVEARR))
+           (ast-resolve-byte-scmd label-nativearr 'relative))
+
+          ;; fall back for m1 page
+          (LDY  !$00)
+          (ast-unresolved-opcode-cmd '() (ast-opcode-cmd-bytes (LDA (REG),y)) (ast-resolve-byte-scmd register 'low-byte))
+          (AND !$f8)
+          (CMP !$10)
+          (ast-unresolved-rel-opcode-cmd
+           '()
+           (ast-rel-opcode-cmd-bytes (BEQ M1_PAGE))
+           (ast-resolve-byte-scmd label-m1 'relative))))
+
+(define (PTR_DETECTION_MACRO_RC
+         label-unknown
+         label-cell
+         label-cellpair
+         label-cellarr
+         label-nativearr
+         label-m1)
+  (PTR_DETECTION_MACRO_Rx
+   "ZP_RC"
+   label-unknown
+   label-cell
+   label-cellpair
+   label-cellarr
+   label-nativearr
+   label-m1))
+
+(define (PTR_DETECTION_MACRO_RT
+         label-unknown
+         label-cell
+         label-cellpair
+         label-cellarr
+         label-nativearr
+         label-m1)
+  (PTR_DETECTION_MACRO_Rx
+   "ZP_RT"
+   label-unknown
+   label-cell
+   label-cellpair
+   label-cellarr
+   label-nativearr
+   label-m1))
+
 ;; find out what kind of cell zp_rt points to,
 ;; then call the right decrement refcounts function
 ;; input:  ZP_RT
@@ -2340,36 +2429,28 @@ call frame primitives etc.
 ;;         (in case of m1 pages, @ZP_RT-1)
 ;;         (in case of cell pages @ZP_RT>>1)
 ;;         (in case of cell-pair pages @ZP_RT>>2)
-;;         (in case of 8s pages @ZP_RT>>3)
+(define INC_REFCNT_CELLARR_RT #t)
+(define INC_REFCNT_NATIVEARR_RT #t)
 (define INC_REFCNT_CELL_RT #t)
 (define INC_REFCNT_CELLPAIR_RT #t)
 (define INC_REFCNT_RT
   (add-label-suffix
    "__" "__INC_REFCNT_RT"
+   (flatten
   (list
    (label INC_REFCNT_RT)
-          (LDA ZP_RT)                                   ;; load tage byte
-          (BEQ UNKNOWN__)
-          (LSR)
-          (BCC INC_REFCNT_CELL_RT)      ;; lowest bit = 0 => cell-ptr
-          (LSR)
-          (BCC LSR__INC_RFCNT_CELLPAIR__)     ;; bit1 = 0 => cell-pair-ptr
-          ;; check other types of cells
-          (LDA ZP_RT)                                   ;; load tage byte
-          (CMP !TAG_BYTE_CELL_ARRAY)
-          (BEQ INCR_CELL_ARRAY__)
-          (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ INCR_NATIVE_ARRAY__)
+          (PTR_DETECTION_MACRO_RT
+           "UNKNOWN__"
+           "INC_REFCNT_CELL_RT"
+           "LSR__INC_RFCNT_CELLPAIR__"
+           "IS_M1_PAGE__"
+           "IS_M1_PAGE__"
+           "IS_M1_PAGE__")
 
    (label UNKNOWN__)
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RT)
    (label DONE__)
           (RTS)
-
-   (label INCR_CELL_ARRAY__)
-   (label INCR_NATIVE_ARRAY__)
-          ;; (JMP INC_REFCNT_M1_SLOT_RT)
-          (BRK)
 
    (label INC_REFCNT_CELLPAIR_RT)
           (LDA ZP_RT)
@@ -2398,6 +2479,8 @@ call frame primitives etc.
 
           (BRK) ;; unhandled page type
 
+   (label INC_REFCNT_CELLARR_RT)
+   (label INC_REFCNT_NATIVEARR_RT)
    (label IS_M1_PAGE__)
           (LDX ZP_RT)
           (DEX)
@@ -2413,7 +2496,7 @@ call frame primitives etc.
           (STA INC_PAGE_REFCNT_CELL__+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
    (label INC_PAGE_REFCNT_CELL__)
           (INC $c000,x) ;; c0 is overwritten by page (see above)
-          (RTS))))
+          (RTS)))))
 
 (module+ test #| vm-refcount-decr-rt |#
   (define vm-refcount-decr-rt-code
@@ -3299,19 +3382,16 @@ call frame primitives etc.
 (define NEW_DEC_REFCNT_RC
   (add-label-suffix
    "__" "__NEW_DEC_REFCNT_RC"
+   (flatten
    (list
    (label NEW_DEC_REFCNT_RC)    ;; RC -> [cell] || [cellA][cellB] || [cell-natarr-header][byte0][byte1] ...[byten] || [cell-arr-header][cell0][cell1]...[celln]
-          (LDA ZP_RC)
-          (BEQ UNKNOWN__) ;; low-byte of a pointer may never be 0!
-          (LSR)
-          (BCC CELL_ALREADY_LSRED__) ;; lowest bit is 0 -> cell-ptr
-          (LSR)
-          (BCC CELLPAIR_ALREADY_LSRED__) ;; ends on b01 => cell-pair ptr
-
-          (CMP !TAG_BYTE_CELL_ARRAY_LSR2)
-          (BEQ NEW_DEC_REFCNT_CELLARR_RC)
-          (CMP !TAG_BYTE_NATIVE_ARRAY_LSR2)
-          (BEQ NEW_DEC_REFCNT_NATIVEARR_RC)
+          (PTR_DETECTION_MACRO_RC
+           "UNKNOWN__"
+           "CELL_ALREADY_LSRED__"
+           "CELLPAIR_ALREADY_LSRED__"
+           "NEW_DEC_REFCNT_CELLARR_RC"
+           "NEW_DEC_REFCNT_NATIVEARR_RC"
+           "NEW_DEC_REFCNT_M1_SLOT_RC")
 
    (label UNKNOWN__)
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RC)
@@ -3407,7 +3487,7 @@ call frame primitives etc.
           (DEC $c000,x)               ;; c0 is overwritten by page (see above)
           (BNE DONE__)
           (JMP NEW_FREE_CELL_RC)      ;; free (since refcnt dropped to 0)
-          )))
+          ))))
 
 (module+ test #| NEW_DEC_REFCNT_RC |#
   (define dec-refcnt-rc--dec-ref--cell
@@ -3523,10 +3603,7 @@ call frame primitives etc.
                 "no free m1_slot has taken place!")
   (check-equal? (peek dec-refcnt-rc--dec-ref--m1_slot (+ PAGE_AVAIL_0_W 03))
                 #x01
-                "remaining refcount on m1_slot 0 is 1")
-
-
-  )
+                "remaining refcount on m1_slot 0 is 1"))
 
 ;; impl complete, test missing
 (define NEW_FREE_M1_SLOT_RC

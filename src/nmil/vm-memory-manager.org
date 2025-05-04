@@ -231,7 +231,7 @@ ff: free
     CMP #$80
     BEQ IS_CELL_PAGE
   #+end_src
-- detectin for cell-pair page (01bb bbbb)
+- detection for cell-pair page (01bb bbbb)
   #+begin_src asm
     AND #$c0
     CMP #$40
