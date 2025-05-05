@@ -176,7 +176,7 @@
   (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state) (debug-state-tracepoints d-state) 0 (debug-state-output-function d-state))))
     (when (and breakpoint display (breakpoint-verbose breakpoint))
       (with-colors 'cyan (lambda () (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))))
-    (when (-debugger-at-brk d-state)
+    (when (-debugger-at-brk (car c-states))
       (with-colors 'cyan (lambda () (displayln (format "hit BRK instruction")))))
     (struct-copy debug-state d-state [states new-states])))
 
@@ -648,8 +648,11 @@ EOF
     (cond [(-debugger-at-root-rts (car states))
            (with-colors 'red (lambda () (displayln "hit rts with empty stack.")))
            (values breakpoint states)]
-          [(or breakpoint
-              (-debugger-at-brk (car states)))
+          [(-debugger-at-brk (car states))
+           (with-colors 'red (lambda () (displayln "hit BRK.")))
+           (values breakpoint states)]
+          [breakpoint
+           (with-colors 'red (lambda () (displayln "hit breakpoint.")))
            (values breakpoint states)]
           [(> steps debugger-max-uninterrupted-steps)
            (with-colors 'red (lambda () (displayln (format "stopped exceeding ~a interpreter steps." debugger-max-uninterrupted-steps))))
