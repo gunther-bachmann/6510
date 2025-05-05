@@ -227,7 +227,7 @@ call frame primitives etc.
 
           ;; VM_GC_ARRAY_SLOT_PTR                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
 
-          FREE_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+          FREE_RT                                 ;; (includes FREE_RC and _RA) free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, native-array, cell-array)
 
           VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
 
@@ -2566,75 +2566,63 @@ call frame primitives etc.
 (define FREE_RT
   (add-label-suffix
    "__" "FREE_RT"
+   (flatten
   (list
+   (label FREE_RA)
+          (JSR CP_RA_TO_RC)
+          (JMP FREE_RC)
+
    (label FREE_RT)
-          (LDA ZP_RT)
-          (TAY)
-          (LSR)
-          (BCC FREE_CELL__)
-          (LSR)
-          (BCC FREE_CELLPAIR__)
-          ;; check other types of cells
-          (CPY !TAG_BYTE_CELL_ARRAY)
-          (BEQ FREE_CELL_ARRAY__)
-          (CPY !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ FREE_NATIVE_ARRAY__)
+          (JSR CP_RT_TO_RC)
+
+   (label FREE_RC)
+          (PTR_DETECTION_MACRO_RC
+           "UNKNOWN__"
+           "FREE_CELL__"
+           "FREE_CELLPAIR__"
+           "FREE_CELL_ARRAY__"
+           "FREE_NATIVE_ARRAY__"
+           "FREE_M1__")
 
           ;; unknown pointer type in zp_rt
+   (label UNKNOWN__)
           (BRK)
 
    (label FREE_CELL__)
-          (JMP NEW_FREE_CELL_RT)
+          (JMP NEW_FREE_CELL_RC)
 
    (label FREE_CELLPAIR__)
-          (JMP NEW_FREE_CELLPAIR_RT)
+          (JMP NEW_FREE_CELLPAIR_RC)
 
    (label FREE_CELL_ARRAY__)
+          (JMP NEW_FREE_CELLARR_RC)
+
    (label FREE_NATIVE_ARRAY__)
+          (JMP GC_INCR_CELLARR_GFL)
+
+   (label FREE_M1__)
           ;; VM_FREE_M1_SLOT_IN_RT
-          (BRK))))
+          (JMP NEW_FREE_M1_SLOT_RC)))))
 
 (module+ test #| vm-free-ptr-in-rt |#
-  (define vm-free-ptr-in-rt-code
-    (list
-            (LDA !$00)
-            (STA $ff)
-            (JMP TEST_START__FREE_RT)
+  (define free-ptr-in-rt-state
+    (compact-run-code-in-test
+     #:mock (list (label NEW_FREE_CELL_RC))
+     (JSR ALLOC_CELL_TO_RT)
+     (JSR FREE_RT)))
 
-     (label NEW_FREE_CELL_RT)
-            (INC $ff)
-            (RTS)
-
-     (label TEST_START__FREE_RT )
-            (JSR ALLOC_CELL_TO_RT)
-            (JSR FREE_RT)))
-
-  (define vm-free-ptr-in-rt-state
-    (run-code-in-test vm-free-ptr-in-rt-code #:mock (list (label NEW_FREE_CELL_RT))))
-
-  (check-equal? (memory-list vm-free-ptr-in-rt-state #xff #xff)
-                (list #x01)
+  (check-equal? (calls-to-mock free-ptr-in-rt-state)
+                #x01
                 "dispatches call to free-cell-ptr routine")
 
-  (define vm-free-ptr-in-rt-2-code
-    (list
-            (LDA !$00)
-            (STA $ff)
-            (JMP TEST_START__FREE_RT)
+  (define free-ptr-in-rt-2-state
+    (compact-run-code-in-test
+     #:mock (list (label NEW_FREE_CELLPAIR_RC))
+     (JSR ALLOC_CELLPAIR_TO_RT)
+     (JSR FREE_RT)))
 
-     (label NEW_FREE_CELLPAIR_RT)
-            (INC $ff)
-            (RTS)
-
-     (label TEST_START__FREE_RT )
-            (JSR ALLOC_CELLPAIR_TO_RT)
-            (JSR FREE_RT)))
-
-  (define vm-free-ptr-in-rt-2-state
-    (run-code-in-test vm-free-ptr-in-rt-2-code #:mock (list (label NEW_FREE_CELLPAIR_RT))))
-
-  (check-equal? (memory-list vm-free-ptr-in-rt-2-state #xff #xff)
-                (list #x01)
+  (check-equal? (calls-to-mock free-ptr-in-rt-2-state)
+                #x01
                 "dispatches call to free-cell-pair-ptr routine"))
 
 ;; get the page and unused cellpair for allocation
@@ -6118,4 +6106,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1905))
+                       1933))
