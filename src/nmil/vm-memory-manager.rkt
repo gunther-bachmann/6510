@@ -195,8 +195,8 @@ call frame primitives etc.
           FREE_CELLPAIR_RT                        ;; free this cell-pair (adding it to the free tree)
           ;; FREE_CELLPAIR_RA                        ;; free this cell-pair (adding it to the free tree)
 
-          FREE_CELL_RT                             ;; free this cell pointed to by RT (adding it to the free list)
-          FREE_CELL_RA                             ;; free this cell pointed to by RT (adding it to the free list)
+          ;; FREE_CELL_RT                             ;; free this cell pointed to by RT (adding it to the free list)
+          ;; FREE_CELL_RA                             ;; free this cell pointed to by RT (adding it to the free list)
 
           GC_CELLPAIR_FREE_LIST                     ;; reclaim all cell-pairs in the queue of free cells
 
@@ -2240,7 +2240,7 @@ call frame primitives etc.
    (label DEC_PAGE__CELL__)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
           (BNE DONE__)
-          (JMP FREE_CELL_RT) ;; free delayed
+          (JMP NEW_FREE_CELL_RT) ;; free delayed
 )))
 
 
@@ -2332,7 +2332,7 @@ call frame primitives etc.
    (label DEC_PAGE_CELL_CNT__)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
           (BNE DONE__)
-          (JMP FREE_CELL_RA) ;; free delayed
+          (JMP NEW_FREE_CELL_RA) ;; free delayed
 )))
 
 ;; macro that does pointer detection and jumping to certain labels for the respective pointer type
@@ -2589,7 +2589,7 @@ call frame primitives etc.
           (BRK)
 
    (label FREE_CELL__)
-          (JMP FREE_CELL_RT)
+          (JMP NEW_FREE_CELL_RT)
 
    (label FREE_CELLPAIR__)
           (JMP FREE_CELLPAIR_RT)
@@ -2606,7 +2606,7 @@ call frame primitives etc.
             (STA $ff)
             (JMP TEST_START__FREE_RT)
 
-     (label FREE_CELL_RT)
+     (label NEW_FREE_CELL_RT)
             (INC $ff)
             (RTS)
 
@@ -2615,7 +2615,7 @@ call frame primitives etc.
             (JSR FREE_RT)))
 
   (define vm-free-ptr-in-rt-state
-    (run-code-in-test vm-free-ptr-in-rt-code #:mock (list (label FREE_CELL_RT))))
+    (run-code-in-test vm-free-ptr-in-rt-code #:mock (list (label NEW_FREE_CELL_RT))))
 
   (check-equal? (memory-list vm-free-ptr-in-rt-state #xff #xff)
                 (list #x01)
@@ -2926,7 +2926,7 @@ call frame primitives etc.
      (JSR CP_RT_TO_RA)
 
      (JSR ALLOC_CELL_TO_RT)
-     (JSR FREE_CELL_RA)))
+     (JSR NEW_FREE_CELL_RA)))
 
   (define test-alloc-cell-to-rt-twicenfree-state-after
     (run-code-in-test test-alloc-cell-to-rt-twicenfree-code))
@@ -2953,7 +2953,7 @@ call frame primitives etc.
      (JSR CP_RT_TO_RA)
 
      (JSR ALLOC_CELL_TO_RT)
-     (JSR FREE_CELL_RA)
+     (JSR NEW_FREE_CELL_RA)
 
      (JSR ALLOC_CELL_TO_RT)))
 
@@ -4115,7 +4115,7 @@ call frame primitives etc.
   (define new-free-cell-ptr-in-rt-state
     (compact-run-code-in-test
      (JSR ALLOC_CELL_TO_RT)
-     (JSR FREE_CELL_RT)))
+     (JSR NEW_FREE_CELL_RT)))
 
   (check-equal? (memory-list new-free-cell-ptr-in-rt-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
                 (list #x02 PAGE_AVAIL_0)
@@ -4190,255 +4190,255 @@ call frame primitives etc.
 ;;
 ;; input:  RT
 ;; output:
-(define FREE_CELL_RT
-  (add-label-suffix
-   "__" "__FREE_CELL_RT"
-  (list
-   (label FREE_CELL_RT)
-          ;; check if previous content was a pointer
-          (LDY !$00)
-          (STY LIST_TO_FREE__+1)
-          ;; cell-ptr      xxxxx0 but in total != 0
-          ;; cell-pair-ptr xxxx01
-          ;; => 10 00 01 == pointer, only 11 is no pointer, header cells may have other patterns
-          (LDA (ZP_RT),y)
-          (BEQ CELL_IS_NO_PTR__)
-          (AND !$03)
-          (CMP !$03)
-          (BEQ CELL_IS_NO_PTR__)
+;; (define FREE_CELL_RT
+;;   (add-label-suffix
+;;    "__" "__FREE_CELL_RT"
+;;   (list
+;;    (label FREE_CELL_RT)
+;;           ;; check if previous content was a pointer
+;;           (LDY !$00)
+;;           (STY LIST_TO_FREE__+1)
+;;           ;; cell-ptr      xxxxx0 but in total != 0
+;;           ;; cell-pair-ptr xxxx01
+;;           ;; => 10 00 01 == pointer, only 11 is no pointer, header cells may have other patterns
+;;           (LDA (ZP_RT),y)
+;;           (BEQ CELL_IS_NO_PTR__)
+;;           (AND !$03)
+;;           (CMP !$03)
+;;           (BEQ CELL_IS_NO_PTR__)
 
-          ;; cell is a pointer => save pointed to for tail call in temp (either cell-ptr or cell-pair-ptr)
-          ;; enqueue this rt in list to decrement refcount
-          ;; TODO: given arrays that may hold lists of references, this might make it necessary to keep them as list
-          (LDA (ZP_RT),y)
-          (STA LIST_TO_FREE__)
-          (INY)
-          (LDA (ZP_RT),y)
-          (STA LIST_TO_FREE__+1)               ;; might be overwritten if cell-array is freed!
-          (DEY)
-          (BNE CONT__)
+;;           ;; cell is a pointer => save pointed to for tail call in temp (either cell-ptr or cell-pair-ptr)
+;;           ;; enqueue this rt in list to decrement refcount
+;;           ;; TODO: given arrays that may hold lists of references, this might make it necessary to keep them as list
+;;           (LDA (ZP_RT),y)
+;;           (STA LIST_TO_FREE__)
+;;           (INY)
+;;           (LDA (ZP_RT),y)
+;;           (STA LIST_TO_FREE__+1)               ;; might be overwritten if cell-array is freed!
+;;           (DEY)
+;;           (BNE CONT__)
 
-   (label CELL_IS_NO_PTR__)
-          ;; check cell-type 
-          (LDA (ZP_RT),y)
-          (CMP !TAG_BYTE_CELL_ARRAY)        
-          (BEQ FREE_CELL_ARRAY__)
-          (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ FREE_NATIVE_ARRAY__)
+;;    (label CELL_IS_NO_PTR__)
+;;           ;; check cell-type
+;;           (LDA (ZP_RT),y)
+;;           (CMP !TAG_BYTE_CELL_ARRAY)
+;;           (BEQ FREE_CELL_ARRAY__)
+;;           (CMP !TAG_BYTE_NATIVE_ARRAY)
+;;           (BEQ FREE_NATIVE_ARRAY__)
 
-          ;; seems to be a value that does not need to be freed
-          (BNE CONT__)
+;;           ;; seems to be a value that does not need to be freed
+;;           (BNE CONT__)
 
-   (label FREE_CELL_ARRAY__)
-   (label FREE_NATIVE_ARRAY__)
-          ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
-          (JMP DEC_REFCNT_M1_SLOT_RA) ;; cell and native arrays are allocated on m1 pages
-          ;; this cell was a header field of a m1slot -> no further processing
+;;    (label FREE_CELL_ARRAY__)
+;;    (label FREE_NATIVE_ARRAY__)
+;;           ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
+;;           (JMP DEC_REFCNT_M1_SLOT_RA) ;; cell and native arrays are allocated on m1 pages
+;;           ;; this cell was a header field of a m1slot -> no further processing
 
-  (label CONT__)
-          ;; COPY previous head of free cells into this cell
-          (LDA VM_LIST_OF_FREE_CELLS)
-          (STA (ZP_RT),y)
-          (LDA VM_LIST_OF_FREE_CELLS+1)
-          (INY)
-          (STA (ZP_RT),y)
+;;   (label CONT__)
+;;           ;; COPY previous head of free cells into this cell
+;;           (LDA VM_LIST_OF_FREE_CELLS)
+;;           (STA (ZP_RT),y)
+;;           (LDA VM_LIST_OF_FREE_CELLS+1)
+;;           (INY)
+;;           (STA (ZP_RT),y)
 
-          ;; write this cell as new head into the list
-          (LDA ZP_RT)
-          (STA VM_LIST_OF_FREE_CELLS)
-          (LDA ZP_RT+1)
-          (STA VM_LIST_OF_FREE_CELLS+1)
+;;           ;; write this cell as new head into the list
+;;           (LDA ZP_RT)
+;;           (STA VM_LIST_OF_FREE_CELLS)
+;;           (LDA ZP_RT+1)
+;;           (STA VM_LIST_OF_FREE_CELLS+1)
 
-          (LDA LIST_TO_FREE__+1)
-          (BEQ DONE__) ;; there wasn't any further pointer => done with free
-          ;; fill rt for tail calling
-          (STA ZP_RT+1)
-          (LDA LIST_TO_FREE__)
-          (STA ZP_RT)
-          (JMP DEC_REFCNT_RT) ;; tail call if cell did hold a reference
+;;           (LDA LIST_TO_FREE__+1)
+;;           (BEQ DONE__) ;; there wasn't any further pointer => done with free
+;;           ;; fill rt for tail calling
+;;           (STA ZP_RT+1)
+;;           (LDA LIST_TO_FREE__)
+;;           (STA ZP_RT)
+;;           (JMP DEC_REFCNT_RT) ;; tail call if cell did hold a reference
 
-   (label DONE__)
-          (RTS)
+;;    (label DONE__)
+;;           (RTS)
 
-   (label LIST_TO_FREE__) ;; TODO not yet a list, but needs to become one!
-          (word 0))))
+;;    (label LIST_TO_FREE__) ;; TODO not yet a list, but needs to become one!
+;;           (word 0))))
 
-(define FREE_CELL_RA
-  (add-label-suffix
-   "__" "__FREE_CELL_RA"
-  (list
-   (label FREE_CELL_RA)
-          ;; check if previous content was a pointer
-          (LDY !$00)
-          (STY LIST_TO_FREE__+1)
+;; (define FREE_CELL_RA
+;;   (add-label-suffix
+;;    "__" "__FREE_CELL_RA"
+;;   (list
+;;    (label FREE_CELL_RA)
+;;           ;; check if previous content was a pointer
+;;           (LDY !$00)
+;;           (STY LIST_TO_FREE__+1)
 
-          (LDA (ZP_RA),y)
-          (BEQ CELL_IS_NO_PTR__)
-          (AND !$03)
-          (CMP !$03)
-          (BEQ CELL_IS_NO_PTR__)
+;;           (LDA (ZP_RA),y)
+;;           (BEQ CELL_IS_NO_PTR__)
+;;           (AND !$03)
+;;           (CMP !$03)
+;;           (BEQ CELL_IS_NO_PTR__)
 
-          ;; cell is a pointer => save for tail call in temp (either cell-ptr or cell-pair-ptr)
-          ;; enqueue this rt in list to decrement refcount
-          ;; TODO: given arrays that may hold lists of references, this might make it necessary to keep them as list
-          (LDA (ZP_RA),y)
-          (STA LIST_TO_FREE__)
-          (INY)
-          (LDA (ZP_RA),y)
-          (STA LIST_TO_FREE__+1)               ;; might be overwritten if cell-array is freed!
-          (DEY)
-          (BNE CONT__)
+;;           ;; cell is a pointer => save for tail call in temp (either cell-ptr or cell-pair-ptr)
+;;           ;; enqueue this rt in list to decrement refcount
+;;           ;; TODO: given arrays that may hold lists of references, this might make it necessary to keep them as list
+;;           (LDA (ZP_RA),y)
+;;           (STA LIST_TO_FREE__)
+;;           (INY)
+;;           (LDA (ZP_RA),y)
+;;           (STA LIST_TO_FREE__+1)               ;; might be overwritten if cell-array is freed!
+;;           (DEY)
+;;           (BNE CONT__)
 
-   (label CELL_IS_NO_PTR__)
-          ;; check cell-type
-          (LDA (ZP_RA),y)
-          (CMP !TAG_BYTE_CELL_ARRAY)
-          (BEQ FREE_CELL_ARRAY__)
-          (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ FREE_NATIVE_ARRAY__)
+;;    (label CELL_IS_NO_PTR__)
+;;           ;; check cell-type
+;;           (LDA (ZP_RA),y)
+;;           (CMP !TAG_BYTE_CELL_ARRAY)
+;;           (BEQ FREE_CELL_ARRAY__)
+;;           (CMP !TAG_BYTE_NATIVE_ARRAY)
+;;           (BEQ FREE_NATIVE_ARRAY__)
 
-          ;; seems to be a value that does not need to be freed
-          (BNE CONT__)
+;;           ;; seems to be a value that does not need to be freed
+;;           (BNE CONT__)
 
-   (label FREE_CELL_ARRAY__)
-   (label FREE_NATIVE_ARRAY__)
-          ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
-          (JMP DEC_REFCNT_M1_SLOT_RA) ;; cell and native arrays are allocated on m1 pages
-          ;; this cell was a header field of a m1slot -> no further processing
+;;    (label FREE_CELL_ARRAY__)
+;;    (label FREE_NATIVE_ARRAY__)
+;;           ;; this might end in some recursion depth, if arrays keep pointing to arrays and they are garbage collected
+;;           (JMP DEC_REFCNT_M1_SLOT_RA) ;; cell and native arrays are allocated on m1 pages
+;;           ;; this cell was a header field of a m1slot -> no further processing
 
-  (label CONT__)
-          ;; COPY previous head of free cells into this cell
-          (LDA VM_LIST_OF_FREE_CELLS)
-          (STA (ZP_RA),y)
-          (LDA VM_LIST_OF_FREE_CELLS+1)
-          (INY)
-          (STA (ZP_RA),y)
+;;   (label CONT__)
+;;           ;; COPY previous head of free cells into this cell
+;;           (LDA VM_LIST_OF_FREE_CELLS)
+;;           (STA (ZP_RA),y)
+;;           (LDA VM_LIST_OF_FREE_CELLS+1)
+;;           (INY)
+;;           (STA (ZP_RA),y)
 
-          ;; write this cell as new head into the list
-          (LDA ZP_RA)
-          (STA VM_LIST_OF_FREE_CELLS)
-          (LDA ZP_RA+1)
-          (STA VM_LIST_OF_FREE_CELLS+1)
+;;           ;; write this cell as new head into the list
+;;           (LDA ZP_RA)
+;;           (STA VM_LIST_OF_FREE_CELLS)
+;;           (LDA ZP_RA+1)
+;;           (STA VM_LIST_OF_FREE_CELLS+1)
 
-          (LDA LIST_TO_FREE__+1)
-          (BEQ DONE__) ;; there wasn't any further pointer => done with free
-          ;; fill rt for tail calling
-          (STA ZP_RA+1)
-          (LDA LIST_TO_FREE__)
-          (STA ZP_RA)
-          (JMP DEC_REFCNT_RA) ;; tail call if cell did hold a reference
+;;           (LDA LIST_TO_FREE__+1)
+;;           (BEQ DONE__) ;; there wasn't any further pointer => done with free
+;;           ;; fill rt for tail calling
+;;           (STA ZP_RA+1)
+;;           (LDA LIST_TO_FREE__)
+;;           (STA ZP_RA)
+;;           (JMP DEC_REFCNT_RA) ;; tail call if cell did hold a reference
 
-   (label DONE__)
-          (RTS)
+;;    (label DONE__)
+;;           (RTS)
 
-   (label LIST_TO_FREE__) ;; TODO not yet a list, but needs to become one!
-          (word 0))))
+;;    (label LIST_TO_FREE__) ;; TODO not yet a list, but needs to become one!
+;;           (word 0))))
 
-(module+ test #| vm-free-cell-ptr-in-rt |#
-  (define vm-free-cell-ptr-in-rt-tailcall-code
-    (list
-     (JSR ALLOC_CELL_TO_RT)
-     (JSR INC_REFCNT_CELL_RT)
-     (JSR CP_RT_TO_RA)
-     (JSR ALLOC_CELL_TO_RT)
-     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
-     (JSR FREE_CELL_RT)))
+;; (module+ test #| vm-free-cell-ptr-in-rt |#
+;;   (define vm-free-cell-ptr-in-rt-tailcall-code
+;;     (list
+;;      (JSR ALLOC_CELL_TO_RT)
+;;      (JSR INC_REFCNT_CELL_RT)
+;;      (JSR CP_RT_TO_RA)
+;;      (JSR ALLOC_CELL_TO_RT)
+;;      (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
+;;      (JSR FREE_CELL_RT)))
 
-  (define vm-free-cell-ptr-in-rt-tailcall-state
-    (run-code-in-test vm-free-cell-ptr-in-rt-tailcall-code))
+;;   (define vm-free-cell-ptr-in-rt-tailcall-state
+;;     (run-code-in-test vm-free-cell-ptr-in-rt-tailcall-code))
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
-                (list #x02 PAGE_AVAIL_0)
-                "cc02 is new head of the free list")
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
-                (list #x08 PAGE_AVAIL_0)
-                "cc02, which was freed, is referencing cc08 as next in the free list")
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x09))
-                (list #x00 #x00)
-                "cc08, which was freed, is the tail of the free list")
-  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-tailcall-state PAGE_AVAIL_0)
-                (list "page-type:      cell page"
-                      "previous page:  $00"
-                      "slots used:     2"
-                      "next free slot: $0a")
-                "two slots still allocated on page, they are however on the free list to be reused")
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+;;                 (list #x02 PAGE_AVAIL_0)
+;;                 "cc02 is new head of the free list")
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+;;                 (list #x08 PAGE_AVAIL_0)
+;;                 "cc02, which was freed, is referencing cc08 as next in the free list")
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-tailcall-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x09))
+;;                 (list #x00 #x00)
+;;                 "cc08, which was freed, is the tail of the free list")
+;;   (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-tailcall-state PAGE_AVAIL_0)
+;;                 (list "page-type:      cell page"
+;;                       "previous page:  $00"
+;;                       "slots used:     2"
+;;                       "next free slot: $0a")
+;;                 "two slots still allocated on page, they are however on the free list to be reused")
 
-  (define vm-free-cell-ptr-in-rt-code
-    (list
-     (JSR ALLOC_CELL_TO_RT)
-     (JSR FREE_CELL_RT)))
+;;   (define vm-free-cell-ptr-in-rt-code
+;;     (list
+;;      (JSR ALLOC_CELL_TO_RT)
+;;      (JSR FREE_CELL_RT)))
 
-  (define vm-free-cell-ptr-in-rt-state
-    (run-code-in-test vm-free-cell-ptr-in-rt-code))
+;;   (define vm-free-cell-ptr-in-rt-state
+;;     (run-code-in-test vm-free-cell-ptr-in-rt-code))
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
-                (list #x02 PAGE_AVAIL_0)
-                "allocated cell is freed by adding it as head to the list of free cells")
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+;;                 (list #x02 PAGE_AVAIL_0)
+;;                 "allocated cell is freed by adding it as head to the list of free cells")
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
-                (list #x00 #x00)
-                "the cell is set to 00 00, marking the end of the list of free cells")
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+;;                 (list #x00 #x00)
+;;                 "the cell is set to 00 00, marking the end of the list of free cells")
 
-  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-state PAGE_AVAIL_0)
-                (list "page-type:      cell page"
-                      "previous page:  $00"
-                      "slots used:     1"
-                      "next free slot: $08")
-                "page has still 1 slot in use (it was freed, but is no in free list, not completely unallocated)")
+;;   (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-state PAGE_AVAIL_0)
+;;                 (list "page-type:      cell page"
+;;                       "previous page:  $00"
+;;                       "slots used:     1"
+;;                       "next free slot: $08")
+;;                 "page has still 1 slot in use (it was freed, but is no in free list, not completely unallocated)")
 
-  (define vm-free-cell-ptr-in-rt-realloc-code
-    (list
-     (JSR ALLOC_CELL_TO_RT)
-     (JSR FREE_CELL_RT)
-     (JSR ALLOC_CELL_TO_RT)))
+;;   (define vm-free-cell-ptr-in-rt-realloc-code
+;;     (list
+;;      (JSR ALLOC_CELL_TO_RT)
+;;      (JSR FREE_CELL_RT)
+;;      (JSR ALLOC_CELL_TO_RT)))
 
-  (define vm-free-cell-ptr-in-rt-realloc-state
-    (run-code-in-test vm-free-cell-ptr-in-rt-realloc-code))
+;;   (define vm-free-cell-ptr-in-rt-realloc-state
+;;     (run-code-in-test vm-free-cell-ptr-in-rt-realloc-code))
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-realloc-state VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
-                (list #x00)
-                "list of free cells is empty again")
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-realloc-state VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+;;                 (list #x00)
+;;                 "list of free cells is empty again")
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-realloc-state ZP_RT (add1 ZP_RT))
-                (list #x02 PAGE_AVAIL_0))
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-realloc-state ZP_RT (add1 ZP_RT))
+;;                 (list #x02 PAGE_AVAIL_0))
 
-  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-realloc-state PAGE_AVAIL_0)
-                (list "page-type:      cell page"
-                      "previous page:  $00"
-                      "slots used:     1"
-                      "next free slot: $08")
-                "page has 1 slot in use")
+;;   (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-realloc-state PAGE_AVAIL_0)
+;;                 (list "page-type:      cell page"
+;;                       "previous page:  $00"
+;;                       "slots used:     1"
+;;                       "next free slot: $08")
+;;                 "page has 1 slot in use")
 
-  (define vm-free-cell-ptr-in-rt-2xfree-code
-    (list
-     (JSR ALLOC_CELL_TO_RT)
-     (JSR CP_RT_TO_RA)
-     (JSR ALLOC_CELL_TO_RT)
-     (JSR FREE_CELL_RT)       ;; free cc08
-     (JSR CP_RA_TO_RT)
-     (JSR FREE_CELL_RT)))     ;; then free cc02
+;;   (define vm-free-cell-ptr-in-rt-2xfree-code
+;;     (list
+;;      (JSR ALLOC_CELL_TO_RT)
+;;      (JSR CP_RT_TO_RA)
+;;      (JSR ALLOC_CELL_TO_RT)
+;;      (JSR FREE_CELL_RT)       ;; free cc08
+;;      (JSR CP_RA_TO_RT)
+;;      (JSR FREE_CELL_RT)))     ;; then free cc02
 
-  (define vm-free-cell-ptr-in-rt-2xfree-state
-    (run-code-in-test vm-free-cell-ptr-in-rt-2xfree-code))
+;;   (define vm-free-cell-ptr-in-rt-2xfree-state
+;;     (run-code-in-test vm-free-cell-ptr-in-rt-2xfree-code))
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
-                (list #x02 PAGE_AVAIL_0)
-                "last allocated cell is freed by adding it as head to the list of free cells")
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+;;                 (list #x02 PAGE_AVAIL_0)
+;;                 "last allocated cell is freed by adding it as head to the list of free cells")
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
-                (list #x08 PAGE_AVAIL_0)
-                "the cell is set to $cc08, the next element in the free list")
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+;;                 (list #x08 PAGE_AVAIL_0)
+;;                 "the cell is set to $cc08, the next element in the free list")
 
-  (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x08))
-                (list #x00)
-                "the cell is set to 00, marking the end of the list of free cells")
+;;   (check-equal? (memory-list vm-free-cell-ptr-in-rt-2xfree-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x08))
+;;                 (list #x00)
+;;                 "the cell is set to 00, marking the end of the list of free cells")
 
-  (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-2xfree-state PAGE_AVAIL_0)
-                (list "page-type:      cell page"
-                      "previous page:  $00"
-                      "slots used:     2"
-                      "next free slot: $0a")
-                "page has still 2 slot in use (it was freed, but is no in free list, not completely unallocated)"))
+;;   (check-equal? (vm-page->strings vm-free-cell-ptr-in-rt-2xfree-state PAGE_AVAIL_0)
+;;                 (list "page-type:      cell page"
+;;                       "previous page:  $00"
+;;                       "slots used:     2"
+;;                       "next free slot: $0a")
+;;                 "page has still 2 slot in use (it was freed, but is no in free list, not completely unallocated)"))
 
 ;; input:  cell-pair ptr is in ZP_RT
 ;; uses: ZP_TEMP, ZP_TEMP+1
@@ -6393,8 +6393,8 @@ call frame primitives etc.
           FREE_CELLPAIR_RT                        ;; free this cell-pair (adding it to the free tree)
           FREE_CELLPAIR_RA                        ;; free this cell-pair (adding it to the free tree)
 
-          FREE_CELL_RT                             ;; free this cell pointed to by RT (adding it to the free list)
-          FREE_CELL_RA                             ;; free this cell pointed to by RT (adding it to the free list)
+          ;; FREE_CELL_RT                             ;; free this cell pointed to by RT (adding it to the free list)
+          ;; FREE_CELL_RA                             ;; free this cell pointed to by RT (adding it to the free list)
 
           GC_CELLPAIR_FREE_LIST                     ;; reclaim all cell-pairs in the queue of free cells
 
@@ -6502,7 +6502,7 @@ call frame primitives etc.
 
 
           NEW_DEC_REFCNT_RC
-          NEW_FREE_CELL_RC
+          NEW_FREE_CELL_RC ;; includes NEW_FREE_CELL_RT and _RA
           NEW_GC_INCR_ARRAY_SLOT_RC
           NEW_GC_CELL_ARRAYS
           NEW_GC_CELLS
@@ -6511,7 +6511,7 @@ call frame primitives etc.
           NEW_PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC
           NEW_ADD_M1_SLOT_RC_TO_PFL
           NEW_FREE_CELLARR_RC
-          NEW_FREE_CELLPAIR_RC
+          NEW_FREE_CELLPAIR_RC ;; includes NEW_FREE_CELLPAIR_RT and _RA
           NEW_FREE_M1_SLOT_RC
 
 
@@ -6524,4 +6524,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       2057))
+                       1961))
