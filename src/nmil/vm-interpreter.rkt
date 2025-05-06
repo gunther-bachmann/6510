@@ -75,7 +75,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   vm-deref-cell-pair-w->string
                   VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
                   ALLOC_CELLARR_TO_RA
-                  DEC_REFCNT_RT
                   POP_CELL_EVLSTK_TO_RT
 
                   ast-const-get
@@ -272,7 +271,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_RA+1)
           (TXA)
           (PHA)
-          (JSR DEC_REFCNT_RA)
+          (JSR NEW_DEC_REFCNT_RA)
           (PLA)
           (TAX)
           (LDY ZP_CELL_STACK_TOS)
@@ -478,7 +477,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     4"
                          "next free slot: $49"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4792)
+                4996)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -683,7 +682,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (BEQ NEXT_ITER__BC_RET)       ;; definitely no pointer, since page is 00
           (STA ZP_RA+1)
           (STY COUNTER__BC_RET)
-          (JSR DEC_REFCNT_RA)
+          (JSR NEW_DEC_REFCNT_RA)
           (LDY COUNTER__BC_RET)
    (label S0_NEXT_ITER__BC_RET)
           (LDA !$00)
@@ -837,7 +836,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     (label WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
            (PHA)
-           (JSR DEC_REFCNT_RT)
+           (JSR NEW_DEC_REFCNT_RT)
            (PLA)
            (TAY)                                ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
@@ -873,7 +872,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RA)
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RA+1)
-           (JSR DEC_REFCNT_RA)
+           (JSR NEW_DEC_REFCNT_RA)
 
            (PLA)
            (TAY)                                ;; index -> Y
@@ -896,7 +895,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RA)
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RA+1)
-           (JSR DEC_REFCNT_RA)
+           (JSR NEW_DEC_REFCNT_RA)
 
            (PLA)
            (TAY)                                ;; index -> Y
@@ -1324,7 +1323,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_NIL_P)
           (JSR CP_RT_TO_RA)
           (JSR VM_NIL_P_R)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
-          (JSR DEC_REFCNT_RA)
+          (JSR NEW_DEC_REFCNT_RA)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (module+ test #| bc-nil-p |#
@@ -1386,14 +1385,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x05))
                     "(int $0000 . pair-ptr NIL)"))
 
-;; TODO: optimize by allowing DEC_REFCNT_RA (copy to decrement into RA and decrement later)
+;; TODO: optimize by allowing NEW_DEC_REFCNT_RA (copy to decrement into RA and decrement later)
 (define BC_CAR
   (list
    (label BC_CAR)
           (JSR CP_RT_TO_RA)
           (JSR VM_CAR_R)
           (JSR INC_REFCNT_RT)
-          (JSR DEC_REFCNT_RA)
+          (JSR NEW_DEC_REFCNT_RA)
           (JMP VM_INTERPRETER_INC_PC)
 
    (label RT_CP__BC_CAR)
@@ -1419,7 +1418,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR CP_RT_TO_RA)
           (JSR VM_CDR_R)
           (JSR INC_REFCNT_RT)
-          (JSR DEC_REFCNT_RA)
+          (JSR NEW_DEC_REFCNT_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| bc-cdr |#
@@ -1560,7 +1559,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (AND !$83)
           (CMP !$03)
           (BEQ IS_INT__BC_INT_P)
-          (JSR DEC_REFCNT_RT)
+          (JSR NEW_DEC_REFCNT_RT)
           (LDA !$03)
           (LDX !$00)
    (label IS_INT__BC_INT_P)
@@ -2065,7 +2064,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA !$00)
    (label IS_PAIR__BC_CONS_PAIR_P)
           (STA ZP_RT+1)
-          (JSR DEC_REFCNT_RA)
+          (JSR NEW_DEC_REFCNT_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_PUSH_CONST_NIL
@@ -2196,8 +2195,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (CMP ZP_RT)
           (BNE NE__BC_CELL_EQ)
 
-          (JSR DEC_REFCNT_RT)
-          (JSR DEC_REFCNT_RA)
+          (JSR NEW_DEC_REFCNT_RT)
+          (JSR NEW_DEC_REFCNT_RA)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
@@ -2206,8 +2205,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (STA ZP_RA)
    (label NE__BC_CELL_EQ)
-          (JSR DEC_REFCNT_RT)
-          (JSR DEC_REFCNT_RA)
+          (JSR NEW_DEC_REFCNT_RT)
+          (JSR NEW_DEC_REFCNT_RA)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
@@ -2239,7 +2238,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_GC_FL
   (list
    (label BC_GC_FL)
-          (JSR GC_CELLPAIR_FREE_LIST)
+          (JSR NEW_GC_ALL)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define VM_INTERPRETER_OPTABLE_EXT1_LB
@@ -2321,7 +2320,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_POP
   (list
    (label BC_POP)
-          (JSR DEC_REFCNT_RT)
+          (JSR NEW_DEC_REFCNT_RT)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -2372,7 +2371,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STX ZP_RA+1)
           (JSR VM_CxxR_R)
           (JSR INC_REFCNT_RT)
-          (JSR DEC_REFCNT_RA)
+          (JSR NEW_DEC_REFCNT_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| cxxr |#
@@ -2455,7 +2454,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (PLA)
            (JSR WRITE_ARR_ATa_RA_TO_RT)
            (JSR INC_REFCNT_RT)
-           (JSR DEC_REFCNT_RA)
+           (JSR NEW_DEC_REFCNT_RA)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping
@@ -2464,7 +2463,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR POP_CELL_EVLSTK_TO_RT)
            (PLA)
            (JSR POP_EVLSTK_TO_ARR_ATa_RA)
-           (JSR DEC_REFCNT_RA)
+           (JSR NEW_DEC_REFCNT_RA)
            (JMP VM_INTERPRETER_INC_PC))))
 
 (define ALLOC_ARRAY #x14)

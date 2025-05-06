@@ -367,6 +367,7 @@
       FIFO_ENQUEUE
       FIFO_DEQUEUE
       REVERSE)
+     ;; #t
      ))
 
   (check-equal? (vm-stack->strings mem-fifo-state-1)
