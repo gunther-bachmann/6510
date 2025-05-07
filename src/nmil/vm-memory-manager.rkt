@@ -2862,26 +2862,26 @@ call frame primitives etc.
           (RTS)
 
    (label CONTINUE__)
-          ;; put ptr to cell-pair into RA, now RA->cell0,cell1 with cell0 = pointer to the next in queue, cell1 could still be something that needs gc
-          (STA ZP_RA+1)
+          ;; put ptr to cell-pair into RC, now RC->cell0,cell1 with cell0 = pointer to the next in queue, cell1 could still be something that needs gc
+          (STA ZP_RC+1)
           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
-          (STA ZP_RA)
+          (STA ZP_RC)
 
           ;; set new tree root for free tree to original cell0
           (LDY !$00)
-          (LDA (ZP_RA),y)
+          (LDA (ZP_RC),y)
           (BEQ CELL0_IS_NO_PTR__) ;; is zero => completely empty
           (AND !$03)
           (CMP !$03)
           (BEQ CELL0_IS_NO_PTR__) ;; is no ptr
           (INY)
-          (LDA (ZP_RA),y)
+          (LDA (ZP_RC),y)
           (BEQ CELL0_IS_NO_PTR__) ;; is nil
           (DEY)
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
-          (LDA (ZP_RA),y)
+          (LDA (ZP_RC),y)
           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
           (BNE CHECK_CELL1__) ;; since must be !=0, it cannot be on page 0 always branch!
 
@@ -2895,45 +2895,52 @@ call frame primitives etc.
    (label CHECK_CELL1__)
           ;; now check cell1 on remaining ptrs
           (LDY !$02)
-          (LDA (ZP_RA),y) ;; get low byte
+          (LDA (ZP_RC),y) ;; get low byte
+          (TAX) ;; remember low byte
           (BEQ CELL1_IS_NO_PTR__) ;; = 0 means totally empty => no ptr
           (AND !$03)       ;; mask out all but low 2 bits
           (CMP !$03)
           (BEQ CELL1_IS_NO_PTR__) ;; no need to do further deallocation
           (INY)
-          (LDA (ZP_RA),y)
+          (LDA (ZP_RC),y)
           (BEQ CELL1_IS_NO_PTR__) ;; is nil
 
-          ;; write cell1 into zp_ptr and decrement
-          (LDA ZP_RA)
-          (STA RA_COPY__)
-          (LDA ZP_RA+1)
-          (STA RA_COPY__+1)
-          (JSR WRITE_CELLPAIR_RA_CELL1_TO_RA)
-          (JSR NEW_DEC_REFCNT_RA) ;; this may change the queue again, which is alright, since RA was removed from queue
-          (LDA RA_COPY__)
-          (STA ZP_RA)
-          (LDA RA_COPY__+1)
-          (STA ZP_RA+1)
+          ;; write cell1 into zp_rc and decrement
+          (TAY)
+
+          (LDA ZP_RC)
+          (STA RC_COPY__)
+          (LDA ZP_RC+1)
+          (STA RC_COPY__+1)
+
+          (STX ZP_RC)
+          (STY ZP_RC+1)
+
+          (JSR NEW_DEC_REFCNT_RC) ;; this may change the queue again, which is alright, since RC was removed from queue
+
+          (LDA RC_COPY__)
+          (STA ZP_RC)
+          (LDA RC_COPY__+1)
+          (STA ZP_RC+1)
 
   (label CELL1_IS_NO_PTR__)
           ;; now add ra to its page as free cell-pair on that page
-          (LDX ZP_RA+1)                 ;; A = page -> x
+          (LDX ZP_RC+1)                 ;; A = page -> x
           (LDA $cf00,x)         ;; current first free cell offset
           (LDY !$00)
-          (STA (ZP_RA),y)       ;; write into lowbyte of cell pointed to by RA
+          (STA (ZP_RC),y)       ;; write into lowbyte of cell pointed to by RC
           ;; (INY)
           ;; (TXA)
-          ;; (STA (ZP_RA),y)       ;; write page into highbyte of cell pointed to by RA
-          (LDA ZP_RA)             ;; get offset into page of cell RA points to
-          (STA $cf00,x)           ;; new first free cell now points to RA
-          (LDA ZP_RA+1)
+          ;; (STA (ZP_RC),y)       ;; write page into highbyte of cell pointed to by RC
+          (LDA ZP_RC)             ;; get offset into page of cell RC points to
+          (STA $cf00,x)           ;; new first free cell now points to RC
+          (LDA ZP_RC+1)
           (STA DEC_COMMAND__+2)
    (label DEC_COMMAND__)
           (DEC $c000)         ;; decrement number of used slots on cell-pair page (c0 is overwritten with page in zp_ra+1
           (JMP GC_CELLPAIR_FREE_LIST) ;; do this until queue is empty
 
-   (label RA_COPY__)
+   (label RC_COPY__)
           (word 0))))
 
 ;; input:  none
@@ -5741,4 +5748,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1800))
+                       1799))

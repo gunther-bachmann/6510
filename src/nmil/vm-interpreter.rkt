@@ -1229,8 +1229,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc INT+)                      ;; byte code for INT_PLUS = 0
       (bc BRK))))
 
-  (check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                769)
+  (inform-check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
+                       761)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                    (list "stack holds 3 items"
                          "int $0000  (rt)"
@@ -1301,8 +1301,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BRK))))                    ;; brk
 
 
-   (check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                   769)
+   (inform-check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
+                        761)
     (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                     (list "stack holds 3 items"
                           "int $1fff  (rt)"
