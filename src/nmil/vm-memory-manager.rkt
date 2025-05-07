@@ -1095,26 +1095,6 @@ call frame primitives etc.
           (STA ZP_RA+1)
           (RTS)))
 
-(define WRITE_CELLPAIR_RA_CELLy_TO_RA
-  (list
-   (label WRITE_CELLPAIR_RA_CELL1_TO_RA)
-          (LDY !$02)
-          (BNE WRITE_CELLPAIR_RA_CELLy_TO_RA)
-
-   (label WRITE_CELLPAIR_RA_CELL0_TO_RA)
-          (LDY !$00)
-
-   ;; ----------------------------------------
-   (label WRITE_CELLPAIR_RA_CELLy_TO_RA)
-          (LDA (ZP_RA),y)
-          (TAX)
-          (INY)
-          (LDA (ZP_RA),y)
-          (STA ZP_RA+1)
-          (TXA)
-          (STA ZP_RA)
-          (RTS)))
-
 (module+ test #| vm-write-rt-celly-to-ra |#
   (define vm-write-rt-celly-to-ra-code
     (list
@@ -1137,6 +1117,54 @@ call frame primitives etc.
                 "int $1001")
 
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-ra-state (+ PAGE_AVAIL_0_W #x05))
+                "(int $1001 . int $0110)"))
+
+;; input:  Y - 0 (cell0), 2 (cell1)
+;;         RA (must be cell-pair ptr)
+;; output: RA
+(define WRITE_CELLPAIR_RA_CELLy_TO_RA
+  (list
+   (label WRITE_CELLPAIR_RA_CELL1_TO_RA)
+          (LDY !$02)
+          (BNE WRITE_CELLPAIR_RA_CELLy_TO_RA)
+
+   (label WRITE_CELLPAIR_RA_CELL0_TO_RA)
+          (LDY !$00)
+
+   ;; ----------------------------------------
+   (label WRITE_CELLPAIR_RA_CELLy_TO_RA)
+          (LDA (ZP_RA),y)
+          (TAX)
+          (INY)
+          (LDA (ZP_RA),y)
+          (STA ZP_RA+1)
+          (TXA)
+          (STA ZP_RA)
+          (RTS)))
+
+(module+ test #| vm-write-ra-celly-to-ra |#
+  (define vm-write-ra-celly-to-ra-code
+    (list
+     (JSR ALLOC_CELLPAIR_TO_RT)
+     (LDA !$01)
+     (LDY !$10)
+     (JSR WRITE_INT_AY_TO_RA)
+     (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
+     (LDA !$10)
+     (LDY !$01)
+     (JSR WRITE_INT_AY_TO_RA)
+     (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
+     (JSR WRITE_INT0_TO_RA) ;; clear ra
+     (JSR CP_RT_TO_RA)
+     (JSR WRITE_CELLPAIR_RA_CELL0_TO_RA)))
+
+  (define vm-write-ra-celly-to-ra-state
+    (run-code-in-test vm-write-ra-celly-to-ra-code))
+
+  (check-equal? (vm-rega->string vm-write-ra-celly-to-ra-state)
+                "int $1001")
+
+  (check-equal? (vm-deref-cell-pair-w->string vm-write-ra-celly-to-ra-state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"))
 
 ;; input:  call-frame stack, RT
@@ -1209,15 +1237,13 @@ call frame primitives etc.
    (label PUSH_INT_TO_EVLSTK)         ;; idea: can be optimized since it is known that this is an atomic value
           (TAY)
           (TXA)
-          (SEC)
-          (ROL)
-          (SEC)
-          (ROL)
+          (ASL A)
+          (ASL A)
+          (ORA !$03)           ;; mask in lower two bits
           (AND !$7f)           ;; mask out top bit
           (TAX)
           (TYA)
-          (CLC)
-          (BCC PUSH_TO_EVLSTK)
+          (JMP PUSH_TO_EVLSTK)
 
    (label PUSH_INT_m1_TO_EVLSTK)
           (LDA !$ff) ;; 1f << 2
@@ -1578,10 +1604,25 @@ call frame primitives etc.
    ;; $ced8..$ceff (unused) (40 bytes)
    ))
 
+;; keep a list of cells (16-bit), this is the head (at cecc)
+;; a cell in the free list is allocated on a page and initialized to be used as cell
+;; it contains the ptr to the next free list or 0000 (only high byte is actually checked)
 (define VM_LIST_OF_FREE_CELLS               #xcecc)
+
+;; page that has free cells (must be a cell page)
+;; it may be full in which case allocation will allocate a new page and link the new page to this full page, and put it here
+;; otherwise a cell on this page is allocated
 (define VM_FREE_CELL_PAIR_PAGE              #xcec3)
+
+;; keep list of cell-pairs that are (partially) free, cell0 is used to build the list,
+;; cell1 is untouched and may have to be dec refcnt'd if it is a pointer, before reusing it
 (define VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE #xcec5)
 
+;; each page is described by one byte, page 00 at 0, page 01 at 1 ...
+;; 01 = reserved
+;; ff = unused (free)
+;; nn = first free slot of this page is located at nn
+;; 00 = allocated for use, but not initialized/full
 (define VM_PAGE_SLOT_DATA
   (list
    (label VM_PAGE_SLOT_DATA)
@@ -1874,7 +1915,6 @@ call frame primitives etc.
                       #x00       ;; pointer to previous page
                       )))
 
-
 ;; cell stack page(s)
 ;; offset  content
 ;; ---------------
@@ -1929,38 +1969,38 @@ call frame primitives etc.
                 (list #x1b #x05)
                 "new low byte page is initialized with cell-stack page type and 05"))
 
-  ;; cell-pair page layout  (new layout with cell-pair-ptr having bit0 always set and bit1 always unset!)
-  ;; offset  content
-  ;; ---------------
-  ;; 00      #b01xx xxxx page type + number of used slots
-  ;; 01      ref-count cell-pair at 05 (cell-pair 0)
-  ;; 02      ref-count cell-pair at 09 (cell-pair 1)
-  ;; 03..04   unused (2)
-  ;; 05..08   cell-pair 0     (#b0000 01[01] >> 2 = #b0000 0001)
-  ;; 09..0c   cell-pair 1     (#b0000 10[01] >> 2 = #b0000 0010)
-  ;; 0d..0f   unused (3)
-  ;; 10      ref-count for cell-pair at 40 (cell-pair 2)
-  ;; 11      ref-count for cell-pair at 44 (cell-pair 3)
-  ;; ..3e     ref-count for cell-pair at f9 (cell-pair 48)
-  ;; 3f..40   unused (2)
-  ;; 41..44   cell-pair 2     (#b0100 00[01] >> 2 = #b0001 0000)
-  ;; 45..48   cell-pair 3     (#b0100 01[01] >> 2 = #b0001 0001)
-  ;; ...
-  ;; f9..fc   cell-pair 48    (#b1111 10[01] >> 2 = #b0011 1110)
-  ;; fd..fe   unused (2)
-  ;; ff      previous page of this type
-  ;;
-  ;; VM_PAGE_SLOT_DATA + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
-  ;; the free cell-pair holds in byte 0 of the cell-pair the offset of the next free cell-pair (0 = no other free cell-pair)
-  ;;
-  ;; allocate a complete new page and initialize it to hold reference counted cell-pairs
-  ;; connect all cell-pairs in a free-list
-  ;; also set the first free slot of this allocated page (in VM_PAGE_SLOT_DATA + pageidx)
-  ;;
-  ;; input:  X = page allocated but uninitialized
-  ;; output: X = page allocated and initialized for cell-pairs usage
-  ;;         A = first free slot ($05)
-  ;; usage:  X, Y, ZP_TEMP, ZP_TEMP2
+;; cell-pair page layout  (new layout with cell-pair-ptr having bit0 always set and bit1 always unset!)
+;; offset  content
+;; ---------------
+;; 00      #b01xx xxxx page type + number of used slots
+;; 01      ref-count cell-pair at 05 (cell-pair 0)
+;; 02      ref-count cell-pair at 09 (cell-pair 1)
+;; 03..04   unused (2)
+;; 05..08   cell-pair 0     (#b0000 01[01] >> 2 = #b0000 0001)
+;; 09..0c   cell-pair 1     (#b0000 10[01] >> 2 = #b0000 0010)
+;; 0d..0f   unused (3)
+;; 10      ref-count for cell-pair at 40 (cell-pair 2)
+;; 11      ref-count for cell-pair at 44 (cell-pair 3)
+;; ..3e     ref-count for cell-pair at f9 (cell-pair 48)
+;; 3f..40   unused (2)
+;; 41..44   cell-pair 2     (#b0100 00[01] >> 2 = #b0001 0000)
+;; 45..48   cell-pair 3     (#b0100 01[01] >> 2 = #b0001 0001)
+;; ...
+;; f9..fc   cell-pair 48    (#b1111 10[01] >> 2 = #b0011 1110)
+;; fd..fe   unused (2)
+;; ff      previous page of this type
+;;
+;; VM_PAGE_SLOT_DATA + pageidx: holds the index within the page of the first free cell-pair on that page (0 = no free cell-pair on this page)
+;; the free cell-pair holds in byte 0 of the cell-pair the offset of the next free cell-pair (0 = no other free cell-pair)
+;;
+;; allocate a complete new page and initialize it to hold reference counted cell-pairs
+;; connect all cell-pairs in a free-list
+;; also set the first free slot of this allocated page (in VM_PAGE_SLOT_DATA + pageidx)
+;;
+;; input:  X = page allocated but uninitialized
+;; output: X = page allocated and initialized for cell-pairs usage
+;;         A = first free slot ($05)
+;; usage:  X, Y, ZP_TEMP, ZP_TEMP2
 (define INIT_CELLPAIR_PAGE_X_TO_AX
   (add-label-suffix
    "__" "__INIT_CELLPAIR_PAGE_X_TO_AX"
@@ -2091,6 +2131,29 @@ call frame primitives etc.
           (STA VM_PAGE_SLOT_DATA,y)
           (RTS)))
 
+(module+ test #| vm-free-page and vm-alloc-page--page-uninit |#
+  (define vm-free-page-code
+    (list
+     (JSR ALLOC_PAGE_TO_X) ;; page is in A ($cc)
+     (TXA)
+     (PHA)
+     (JSR ALLOC_PAGE_TO_X) ;; page is in A ($cb)
+     (TXA)
+     (JSR WRITE_INT_A_TO_RT)
+     (PLA)
+     (JSR FREE_PAGE_A )
+     (JSR ALLOC_PAGE_TO_X) ;; allocated page should be $cc again
+     (TXA)
+     (JSR WRITE_INT_A_TO_RA)))
+
+  (define vm-free-page-state
+    (run-code-in-test vm-free-page-code))
+
+  (check-equal? (vm-rega->string vm-free-page-state)
+                (format "int $00~a" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-regt->string vm-free-page-state)
+                (format "int $00~a" (format-hex-byte PAGE_AVAIL_1))))
+
 ;; does a linear search for the next free page
 ;; allocate a page (completely uninitialized), just the page, update the memory page status in VM_PAGE_SLOT_DATA
 ;; parameter: (none)
@@ -2120,32 +2183,10 @@ call frame primitives etc.
           (BRK)
           ))
 
-(module+ test #| vm-free-page and vm-alloc-page--page-uninit |#
-  (define vm-free-page-code
-    (list
-     (JSR ALLOC_PAGE_TO_X) ;; page is in A ($cc)
-     (TXA)
-     (PHA)
-     (JSR ALLOC_PAGE_TO_X) ;; page is in A ($cb)
-     (TXA)
-     (JSR WRITE_INT_A_TO_RT)
-     (PLA)
-     (JSR FREE_PAGE_A )
-     (JSR ALLOC_PAGE_TO_X) ;; allocated page should be $cc again
-     (TXA)
-     (JSR WRITE_INT_A_TO_RA)))
-
-  (define vm-free-page-state
-    (run-code-in-test vm-free-page-code))
-
-  (check-equal? (vm-rega->string vm-free-page-state)
-                (format "int $00~a" (format-hex-byte PAGE_AVAIL_0)))
-  (check-equal? (vm-regt->string vm-free-page-state)
-                (format "int $00~a" (format-hex-byte PAGE_AVAIL_1))))
-
 ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 ;; this will not check the free cell-pair tree!
 ;; input:  X : page to allocate cell-pair on (a new page is allocated, if this page does not have any free cell-pairs)
+;;         A : slot to allocated (must be the first free slot of this page)
 ;; output: ZP_RT
 ;; WARNING: ZP_RT IS OVERWRITTEN !! NO PUSH INTO THE CELL-STACK IS DONE!
 (define ALLOC_CELLPAIR_AX_TO_RT
@@ -5472,7 +5513,7 @@ call frame primitives etc.
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
   (inform-check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                1289)
+                1285)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 2 items"
                       "int $01ff  (rt)"
