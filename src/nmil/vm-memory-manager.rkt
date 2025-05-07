@@ -233,8 +233,6 @@ call frame primitives etc.
 
           FREE_RT                                 ;; (includes FREE_RC and _RA) free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, native-array, cell-array)
 
-          VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
-
           ;; ---------------------------------------- CELL_STACK / RT / RA
           POP_CELL_EVLSTK_TO_RT                                ;; pop cell-stack into RT (discarding RT)
 
@@ -3524,7 +3522,6 @@ call frame primitives etc.
            (JMP NEW_ADD_M1_SLOT_RC_TO_PFL) ;; just add this slot to the free list of the respective page (and do some housekeeping)
 )))
 
-;; impl complete, test missing
 (define NEW_FREE_CELLPAIR_RT #t)
 (define NEW_FREE_CELLPAIR_RA #t)
 (define NEW_FREE_CELLPAIR_RC
@@ -4059,7 +4056,7 @@ call frame primitives etc.
    (label TEMP__)
           (byte 0))))
 
-;; impl complete, test missing
+
 (define NEW_FREE_CELL_RT #t)
 (define NEW_FREE_CELL_RA #t)
 (define NEW_FREE_CELL_RC
@@ -4240,52 +4237,6 @@ call frame primitives etc.
                       "slots used:     2"
                       "next free slot: $0a")
                 "page has still 2 slot in use (it was freed, but is no in free list, not completely unallocated)"))
-
-;; add the given cell-pair (in zp_ptr) to the free list of cell-pairs on its page
-;; input:  zp_ptr = pointer to cell-pair that is added to the free list on its page
-;; output: reduces the number of used slots in byte 0
-;;         next free slot of this page is the given cell-pair
-(define VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST
-  (add-label-suffix
-   "__" "VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST"
-  (list
-   (label VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST)
-          (LDX ZP_RT+1)
-          (STX DEC_CMD__+2) ;; set page for dec command
-          (LDA VM_PAGE_SLOT_DATA,x) ;; old first free on page
-          (LDY !$00)
-          (STA (ZP_RT),y) ;; set old free to next free on this very cell
-          (LDA ZP_RT) ;; load idx within page
-          (STA VM_PAGE_SLOT_DATA,x) ;; set this cell as new first free cell on page
-
-          ;; clear refcount, too (should have been done already)
-          (LSR)
-          (LSR)
-          (TAY);; y now pointer to refcount byte (of cellpair)
-          (LDA !$00)
-          (STA ZP_RT) ;; modify pointer such that zp_ptr points to beginning of page
-          (STA (ZP_RT),y) ;; clear refcount byte, too
-
-   (label DEC_CMD__)
-          (DEC $c000) ;; $c0 is overwritten by actual page
-          (RTS))))
-
-(module+ test #| vm-add-cell-pair-in-rt-to-on-page-free-list |#
-  (define vm-add-cell-pair-in-rt-to-on-page-free-list-code
-    (list
-     (JSR ALLOC_CELLPAIR_TO_RT)
-     (JSR NEW_FREE_CELLPAIR_RT)
-     (JSR VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST)))
-
-  (define vm-add-cell-pair-in-rt-to-on-page-free-list-state
-    (run-code-in-test vm-add-cell-pair-in-rt-to-on-page-free-list-code))
-
-  (check-equal? (vm-page->strings vm-add-cell-pair-in-rt-to-on-page-free-list-state PAGE_AVAIL_0)
-                (list "page-type:      cell-pair page"
-                      "previous page:  $00"
-                      "slots used:     0"
-                      "next free slot: $05")
-                "again all slots are available on that page"))
 
 (module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
   (define use-case-2-a-code
@@ -4855,7 +4806,6 @@ call frame primitives etc.
                   "next free slot: $4c")))
 
   ;; free-page for slot type 0 = cc
-
 
 ;; inc ref count bucket slot
 ;; dec ref count bucket slot
@@ -5661,8 +5611,6 @@ call frame primitives etc.
           
           FREE_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 
-          VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
-
           ;; ---------------------------------------- CELL_STACK / RT / RA
           POP_CELL_EVLSTK_TO_RT                                ;; pop cell-stack into RT (discarding RT)
 
@@ -5748,4 +5696,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1799))
+                       1784))
