@@ -86,23 +86,27 @@ call frame primitives etc.
   (require (only-in racket/string string-replace))
   (require (only-in racket/list range))
 
+  ;; test counters are kept at this address
+  ;; each time a mocked call is done (no relative branches to it allowed!), the byte is incremented
+  ;; mocks are numbered (index) as they are passed (at a003 = counter for first mock, a004 = counter for second mock ...)
   (define TEST_COUNTERS #xa003)
   (define (calls-to-mock state (mock-idx 0))
     (car (memory-list state (+ TEST_COUNTERS mock-idx) (+ TEST_COUNTERS mock-idx))))
   (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
     (append (list
       (org #xa000)
-             (JMP TEST_START__)
+             (JMP TEST_START__) ;; takes three bytes => test counters start at a003
       (label TEST_COUNTERS)
-             (byte 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
+             (byte 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)     ;; total 32 mock counters (probably never need that much)
              (byte 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
       (label TEST_START__)
              (JSR VM_INITIALIZE_MEMORY_MANAGER)
              (JSR $0100)) ;; reset clock cycles
-             bc
-             (list (BRK))
+             bc           ;; paste in test code
+             (list (BRK)) ;; stop
              (remove-labels-for complete-code (filter (lambda (ast-cmd) (ast-label-def-cmd? ast-cmd)) mocked-code-list))))
 
+  ;; run the given code in test, wrapping it with mocks and counters, entering interactive debugger, if requested
   (define (run-code-in-test bc (debug #f) #:mock (mocked-code-list (list)))
     (run-code-in-test-on-code (wrap-code-for-test bc vm-memory-manager mocked-code-list) debug))
 
@@ -138,11 +142,11 @@ call frame primitives etc.
      debug
      #:mock mocked-labels)))
 
-(module+ test #| after mem init |#
-  (define PAGE_AVAIL_0 #x9a)
-  (define PAGE_AVAIL_0_W #x9a00)
-  (define PAGE_AVAIL_1 #x99)
-  (define PAGE_AVAIL_1_W #x9900))
+(module+ test
+  (define PAGE_AVAIL_0 #x9a)      ;; high byte of first page available for allocation
+  (define PAGE_AVAIL_0_W #x9a00)  ;; word (absolute address) of first page available
+  (define PAGE_AVAIL_1 #x99)      ;; high byte of second page available for allocation
+  (define PAGE_AVAIL_1_W #x9900)) ;; word (absolute address) of second page available
 
 (require (only-in "../tools/6510-interpreter.rkt"
                   6510-load
@@ -166,8 +170,8 @@ call frame primitives etc.
          vm-rega->string
          vm-deref-cell-pair-w->string
          vm-deref-cell-pair->string
-         cleanup-string
-         cleanup-strings
+         shorten-cell-string
+         shorten-cell-strings
 
          POP_CELL_EVLSTK_TO_RT
          VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
@@ -359,6 +363,7 @@ call frame primitives etc.
      (ast-const-word-cmd-word ast-command)]
     [else (ast-const-get (cdr ast-commands) key)]))
 
+;; make constants available in racket (to allow for usage e.g. in test code)
 (define ZP_RT                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
 (define ZP_RA                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
 (define ZP_RC                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RC"))
@@ -435,14 +440,15 @@ call frame primitives etc.
                (format "slots used:     ~a" slots-used)
                (format "next free slot: $~a" (format-hex-byte next-free-slot)))]))
 
-(define (cleanup-string str)
+;; shorten verbose strings (e.g. pair-ptr cells or int cells)
+(define (shorten-cell-string str)
   (regexp-replace*
    #px"(pair-ptr(\\[[-0-9]*\\])? (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
    str
    ""))
 
-(define (cleanup-strings strings)
-  (map cleanup-string strings))
+(define (shorten-cell-strings strings)
+  (map shorten-cell-string strings))
 
 ;; produce strings describing the current cell-stack status
 (define (vm-stack->strings state (max-count 10) (follow #f))
@@ -482,6 +488,7 @@ call frame primitives etc.
           (vm-cell-w->string derefed-word-car state follow visited)
           (vm-cell-w->string derefed-word-cdr state follow visited)))
 
+;; derefence word to cell and write cell as string
 (define (vm-deref-cell-w->string state word)
   (define derefed-word (peek-word-at-address state word))
   (format "~a" (vm-cell-w->string derefed-word)))
@@ -490,6 +497,7 @@ call frame primitives etc.
 (define (vm-deref-cell-pair->string state low high (follow #f) (visited (list)))
   (vm-deref-cell-pair-w->string state (bytes->int low high) follow visited))
 
+;; dereference low high pointing to cell and write it as string
 (define (vm-deref-cell->string state low high)
   (vm-deref-cell-w->string state (bytes->int low high)))
 
@@ -497,10 +505,12 @@ call frame primitives etc.
 (define (vm-cell-w->string word (state '()) (follow #f) (visited (list)))
   (vm-cell->string (low-byte word) (high-byte word) state follow visited))
 
+;; get the refcount of a cell pair
 (define (refcount-of-cell-pair state low high)
   (define rc-offset (arithmetic-shift low -2))
   (peek state (bytes->int rc-offset high)))
 
+;; get the refcount of a cell (either on cell page, or on m1 page)
 (define (refcount-of-cell state low high)  
   (define page-type (peek state (bytes->int 0 high)))
   (define rc-offset
@@ -546,12 +556,15 @@ call frame primitives etc.
     [else "?"]))
 
 
+;; is RT empty?
 (define (regt-empty? state)
   (= 0 (peek state ZP_RT)))
 
+;; is cell at the given location = NIL?
 (define (vm-cell-at-nil? state loc)
   (= TAGGED_NIL (peek-word-at-address state loc)))
 
+;; print the cell at the given location (reverse endianess)
 (define (vm-cell-at->string state loc (rev-endian #f) (follow #f))
   (vm-cell-w->string (peek-word-at-address state loc rev-endian) state follow))
 
@@ -594,6 +607,7 @@ call frame primitives etc.
   (check-equal? (vm-cell->string TAG_BYTE_BYTE_CELL #x15)
                 "byte $15"))
 
+;; transform cells (given by their byte-list) into a list of cells
 (define (vm-cells->strings byte-list (result (list)))
   (if (empty? byte-list)
       (reverse result)
@@ -641,6 +655,33 @@ call frame primitives etc.
           (LDA !>TAGGED_NIL)
           (STA ZP_RT+1,x)
           (RTS)))
+
+(module+ test #| WRITE_NIL_TO_Rx|#
+  (define write-nil-to-ra
+    (compact-run-code-in-test
+     (LDX !$02)
+     (JSR WRITE_NIL_TO_Rx)))
+
+  (check-true (vm-cell-at-nil? write-nil-to-ra ZP_RA))
+
+  (define write-nil-to-ra2
+    (compact-run-code-in-test
+     (JSR WRITE_NIL_TO_RA)))
+
+  (check-true (vm-cell-at-nil? write-nil-to-ra2 ZP_RA))
+
+  (define write-nil-to-rt
+    (compact-run-code-in-test
+     (LDX !$00)
+     (JSR WRITE_NIL_TO_Rx)))
+
+  (check-true (vm-cell-at-nil? write-nil-to-rt ZP_RT))
+
+  (define write-nil-to-rt2
+    (compact-run-code-in-test
+     (JSR WRITE_NIL_TO_RT)))
+
+  (check-true (vm-cell-at-nil? write-nil-to-rt2 ZP_RT)))
 
 ;; input: A = lowbyte of int (0..255), written into high byte of cell register RT
 ;;        Y = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register

@@ -103,7 +103,7 @@
                   WRITE_FROM_LOCAL_1
                   WRITE_FROM_LOCAL_2
                   WRITE_FROM_LOCAL_3])
-(require (only-in "./vm-memory-manager.rkt" ZP_VM_PC cleanup-strings cleanup-string))
+(require (only-in "./vm-memory-manager.rkt" ZP_VM_PC shorten-cell-strings shorten-cell-string))
 (require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt" memory-list))
 

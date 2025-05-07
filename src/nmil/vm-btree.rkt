@@ -169,7 +169,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   WRITE_FROM_LOCAL_1
                   WRITE_FROM_LOCAL_2
                   WRITE_FROM_LOCAL_3])
-(require (only-in "./vm-memory-manager.rkt" ZP_VM_PC cleanup-strings cleanup-string))
+(require (only-in "./vm-memory-manager.rkt" ZP_VM_PC shorten-cell-strings shorten-cell-string))
 
 (require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt" memory-list))
@@ -597,7 +597,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-1-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-1-state 10 #t))
                 (list "stack holds 1 item"
                       "1  (rt)"))
 
@@ -618,7 +618,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)
     ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-2-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-2-state 10 #t))
                 (list "stack holds 1 item"
                       "2  (rt)"))
 
@@ -641,7 +641,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)
     ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-3-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-3-state 10 #t))
                 (list "stack holds 1 item"
                       "3  (rt)"))
 
@@ -663,7 +663,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)                              ;;          2  nil                   
     ))                                          ;;                    
                                                 ;;                    
-  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-5-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-5-state 10 #t))
                 (list "stack holds 1 item"
                       "2  (rt)"))
 
@@ -689,7 +689,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     ))                                          ;;                        / \
                                                 ;;                       2  nil
 
-  (check-equal? (cleanup-strings (vm-stack->strings btree-depth-4-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-4-state 10 #t))
                 (list "stack holds 1 item"
                       "3  (rt)"))
 
@@ -715,7 +715,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_DEPTH)                              ;;                        / \      
     ))                                          ;;                       2  nil    
 
-   (check-equal? (cleanup-strings (vm-stack->strings btree-depth-6-state 10 #t))
+   (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-6-state 10 #t))
                 (list "stack holds 1 item"
                       "3  (rt)"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
@@ -755,7 +755,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_PATH_TO_FIRST)
      ))
 
-  (check-equal? (cleanup-string (vm-regt->string path-to-first-0-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string path-to-first-0-state #t))
                 "((0 . (2 . NIL)) . NIL)"
                 "result is a path to the node with value 2: ((0 . (2 . NIL)))")
 
@@ -778,7 +778,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_PATH_TO_FIRST)                      ;;
      ))                                         ;;
 
-  (check-equal? (cleanup-string (vm-regt->string path-to-first-1-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string path-to-first-1-state #t))
                 "((0 . (0 . ((2 . NIL) . 1))) . NIL)"
                 "result is a path to the node with value 1: ((0 . (1 . ((2 . nil) . 1))"))
 
@@ -832,7 +832,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_VALUE_P
       BTREE_MAKE_ROOT)))
 
-  (check-equal? (cleanup-string (vm-regt->string path-to-last-0-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string path-to-last-0-state #t))
                 "((0 . (2 . NIL)) . NIL)")
 
   (define path-to-last-1-state
@@ -854,7 +854,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_PATH_TO_LAST)                       ;;
      ))
 
-  (check-equal? (cleanup-string (vm-regt->string path-to-last-1-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string path-to-last-1-state #t))
                 (string-append
                  "((0 . (2 . NIL))"
                  " . ((0 . ((2 . NIL) . NIL))"
@@ -880,7 +880,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_PATH_TO_LAST)                       ;;
      ))
 
-  (check-equal? (cleanup-string (vm-regt->string path-to-last-2-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string path-to-last-2-state #t))
                 (string-append
                  "((1 . ((2 . NIL) . 1))"
                  " . ((1 . (0 . ((2 . NIL) . 1)))"
@@ -1107,7 +1107,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-string (vm-regt->string prev-2-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string prev-2-state #t))
                 "((0 . (2 . 3)) . NIL)")
 
   (define prev-3-state
@@ -1134,7 +1134,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-string (vm-regt->string prev-3-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string prev-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
 
   
@@ -1169,7 +1169,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings prev-4-state 10 #t))
                 (list "stack holds 4 items"
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)  (rt)"                      
@@ -1216,7 +1216,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      )) ;; TODO remove #t
 
-  (check-equal? (cleanup-string
+  (check-equal? (shorten-cell-string
                  (vm-regt->string reverse-0-state #t))
                 "(0 . (1 . (2 . (1fff . NIL))))")
   (inform-check-equal? (cpu-state-clock-cycles reverse-0-state)
@@ -1269,7 +1269,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       APPEND
       REVERSE)))
 
-  (check-equal? (cleanup-string (vm-regt->string append-0-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string append-0-state #t))
                 "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
   (inform-check-equal? (cpu-state-clock-cycles append-0-state)
                 9076))
@@ -1407,7 +1407,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-string (vm-regt->string next-1-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string next-1-state #t))
                 "((1 . (2 . 3)) . NIL)")
 
 
@@ -1460,7 +1460,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-string (vm-regt->string next-3-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string next-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
 
   (define next-4-state
@@ -1496,7 +1496,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings next-4-state 10 #t))
                 (list "stack holds 5 items"
                       "NIL  (rt)"
@@ -1647,7 +1647,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
     ))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings rec-rebuild-path-with-0-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -1808,7 +1808,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-after-0-state 10 #t))
                 (list "stack holds 2 items"
                       "((1 . (4 . 5)) . NIL)  (rt)"
@@ -1840,7 +1840,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-after-1-state 10 #t))
                 (list "stack holds 2 items"
                       "((0 . (5 . 6)) . ((1 . (4 . (5 . 6))) . NIL))  (rt)"
@@ -1874,7 +1874,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-after-2-state 10 #t))
                 (list "stack holds 2 items"
                       "((0 . (5 . (6 . 7))) . ((1 . (4 . (5 . (6 . 7)))) . NIL))  (rt)"
@@ -1906,7 +1906,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-after-3-state 10 #t))
                 (list "stack holds 2 items"
                       "((1 . (6 . 7)) . ((1 . (5 . (6 . 7))) . NIL))  (rt)"
@@ -1960,7 +1960,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-after-4-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -2106,7 +2106,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_VALUE_P
       REVERSE)))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-0-state 10 #t))
                 (list "stack holds 2 items"
                       "((0 . (5 . 6)) . NIL)  (rt)"
@@ -2160,7 +2160,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_VALUE_P
       REVERSE)))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-1-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -2198,7 +2198,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_VALUE_P
       REVERSE)))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-2-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -2252,7 +2252,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_VALUE_P
       REVERSE)))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-3-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -2291,7 +2291,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       REVERSE)
      ))
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-4-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append
@@ -2363,7 +2363,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
                 20383)
 
-  (check-equal? (cleanup-strings
+  (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-5-state 10 #t))
                 (list "stack holds 2 items"
                       (string-append 
@@ -2470,7 +2470,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_FROM_LIST
       REVERSE)
      ))
-  (check-equal? (cleanup-strings (vm-stack->strings btree-from-list-1-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-from-list-1-state 10 #t))
                 (list "stack holds 2 items"
                       "(1 . NIL)  (rt)"
                       "(1 . NIL)"))
@@ -2510,7 +2510,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_FROM_LIST
       REVERSE)))
 
-  (check-equal? (cleanup-strings (vm-stack->strings btree-from-list-0-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-from-list-0-state 10 #t))
                 (list "stack holds 2 items"                                            
                       "((((1 . 2) . (3 . 4)) . ((5 . 6) . (7 . 8))) . (((9 . NIL) . NIL) . NIL))  (rt)"
                       "(1 . (2 . (3 . (4 . (5 . (6 . (7 . (8 . (9 . NIL)))))))))"))
@@ -2540,7 +2540,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_FROM_LIST
       REVERSE)))
 
-  (check-equal? (cleanup-strings (vm-stack->strings btree-from-list-2-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-from-list-2-state 10 #t))
                 (list "stack holds 2 items"
                       "((1 . 2) . (3 . 4))  (rt)"
                       "(1 . (2 . (3 . (4 . NIL))))")))
@@ -2628,7 +2628,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_VALUE_P)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings btree-to-list-0-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-to-list-0-state 10 #t))
                 (list "stack holds 2 items"
                       "(1 . (2 . (3 . (4 . NIL))))  (rt)"
                       "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
@@ -2832,7 +2832,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BRK))
       dependecies-remove-value-at)))
 
-  (check-equal? (cleanup-strings (vm-stack->strings remove-value-at-0-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-0-state 10 #t))
                 (list "stack holds 2 items"
                       "NIL  (rt)"
                       "((0 . (8 . NIL)) . NIL)"))
@@ -2848,7 +2848,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BRK))
       dependecies-remove-value-at)))
 
-  (check-equal? (cleanup-strings (vm-stack->strings remove-value-at-1-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-1-state 10 #t))
                 (list "stack holds 1 item"
                       "NIL  (rt)"))
 
@@ -2878,7 +2878,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-2-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-2-state) 10 #t))
                 (list "stack holds 2 items"
                       "((0 . (9 . NIL)) . NIL)  (rt)"
                       "((0 . (8 . 9)) . NIL)"))
@@ -2909,7 +2909,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-3-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-3-state) 10 #t))
                 (list "stack holds 2 items"
                       "((0 . (8 . NIL)) . NIL)  (rt)"
                       "((1 . (8 . 9)) . NIL)"))
@@ -2975,7 +2975,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-4-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-4-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
                        "((0 . (5 . NIL))"
@@ -3052,7 +3052,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-5-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-5-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
                        "((0 . (6 . NIL))"
@@ -3129,7 +3129,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6a-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6a-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
                        "((0 . (7 . NIL))"
@@ -3201,7 +3201,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6b-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6b-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
@@ -3269,7 +3269,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6c-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6c-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
                        "((0 . (4 . ((5 . NIL) . 7)))"
@@ -3316,7 +3316,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6d-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6d-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
@@ -3388,7 +3388,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-6-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
@@ -3499,7 +3499,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
                 70533)
-  (check-equal? (cleanup-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append
                        "((0 . (4 . (6 . NIL)))"
@@ -3548,7 +3548,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BRK))
       BTREE_ROOT_FOR_PATH)))
 
-  (check-equal? (cleanup-strings (vm-stack->strings root-for-path-0-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings root-for-path-0-state 10 #t))
                 (list "stack holds 1 item"
                       "NIL  (rt)"))
 
@@ -3568,7 +3568,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BRK))
       BTREE_ROOT_FOR_PATH)))
 
-  (check-equal? (cleanup-strings (vm-stack->strings root-for-path-1-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings root-for-path-1-state 10 #t))
                 (list "stack holds 2 items"
                       "(5 . NIL)  (rt)"
                       "((0 . (5 . NIL)) . NIL)"))
@@ -3628,7 +3628,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BRK))
       BTREE_ROOT_FOR_PATH)))
 
-  (check-equal? (cleanup-strings (vm-stack->strings root-for-path-2-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings root-for-path-2-state 10 #t))
                 (list "stack holds 2 items"
                       "((4 . ((5 . NIL) . 7)) . 8)  (rt)"
                       (string-append ""

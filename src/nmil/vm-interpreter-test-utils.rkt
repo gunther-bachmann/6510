@@ -52,8 +52,8 @@
 (require (only-in "./vm-memory-manager.rkt"
                   VM_FREE_CELL_PAIR_PAGE
                   VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
-                  cleanup-string
-                  cleanup-strings
+                  shorten-cell-string
+                  shorten-cell-strings
                   vm-cell-at-nil?
                   vm-page->strings
                   vm-stack->strings
@@ -417,7 +417,7 @@
                           d-state))]
                 [(regexp-match? ppml-regex command)
                  (match-let (((list _ num) (regexp-match ppml-regex command)))
-                   (begin (color-displayln (string-join (cleanup-strings (vm-list->strings c-state (string->number num 16) (list) #t)) " "))
+                   (begin (color-displayln (string-join (shorten-cell-strings (vm-list->strings c-state (string->number num 16) (list) #t)) " "))
                           d-state))]
                 [(regexp-match? pma-regex command)
                  (match-let (((list _ num) (regexp-match pma-regex command)))
@@ -431,7 +431,7 @@
                    (begin
                      (define low (peek c-state (string->number num 16)))
                      (define high (peek c-state (add1 (string->number num 16))))
-                     (color-displayln (cleanup-string (vm-cell->string low high c-state #t)))
+                     (color-displayln (shorten-cell-string (vm-cell->string low high c-state #t)))
                      d-state))]
                 [(string=? command "ruc")
                  (wrap-into-bc-states

@@ -20,8 +20,8 @@
   (require (only-in "./vm-memory-manager.rkt"
                     ZP_VM_PC
                     vm-page->strings
-                    cleanup-strings
-                    cleanup-string
+                    shorten-cell-strings
+                    shorten-cell-string
                     vm-stack->strings))
   (require (only-in "../tools/6510-interpreter.rkt" initialize-cpu cpu-state-clock-cycles))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
@@ -139,7 +139,7 @@
       vm-btree)
      ))
 
-  (check-equal? (cleanup-strings (vm-stack->strings b-tree-0-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings b-tree-0-state 10 #t))
                 (list "stack holds 1 item"
                       "((1 . 2) . (3 . 4))  (rt)"))
   (check-equal? (vm-cell-pair-pages b-tree-0-state)
@@ -180,7 +180,7 @@
   (cond [(void? b-tree-1-state)
          (skip (check-equal? #t #f "left debug session"))]
         [else
-         (check-equal? (cleanup-strings (vm-stack->strings b-tree-1-state 10 #t))
+         (check-equal? (shorten-cell-strings (vm-stack->strings b-tree-1-state 10 #t))
                        (list "stack holds 1 item"
                              "(1 . (2 . (3 . (4 . NIL))))  (rt)"))
          (check-equal? (vm-cell-pair-pages b-tree-1-state)
@@ -235,7 +235,7 @@
   (cond [(void? b-tree-2-state)
          (skip (check-equal? #t #f "left debug session"))]
         [else
-         (check-equal? (cleanup-strings (vm-stack->strings b-tree-2-state 10 #t))
+         (check-equal? (shorten-cell-strings (vm-stack->strings b-tree-2-state 10 #t))
                        (list "stack holds 1 item"
                              "(10 . (15 . (20 . (30 . (40 . (50 . (60 . NIL)))))))  (rt)"
                              ))
@@ -311,7 +311,7 @@
   (cond [(void? b-tree-3-state)
          (skip (check-equal? #t #f "left debug session"))]
         [else
-         (check-equal? (cleanup-strings (vm-stack->strings b-tree-3-state 10 #t))
+         (check-equal? (shorten-cell-strings (vm-stack->strings b-tree-3-state 10 #t))
                        (list "stack holds 1 item"
                              "(10 . (15 . (20 . (25 . (30 . (50 . (60 . NIL)))))))  (rt)"
                              ))
@@ -343,7 +343,7 @@
 
   (inform-check-equal? (cpu-state-clock-cycles btree-reverse-0-state)
                        18158)
-  (check-equal? (cleanup-strings (vm-stack->strings btree-reverse-0-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-reverse-0-state 10 #t))
                 (list "stack holds 1 item"
                       "(0 . 1)  (rt)"))
   (check-equal? (vm-cell-pairs-used-num-in-page btree-reverse-0-state #x97)
