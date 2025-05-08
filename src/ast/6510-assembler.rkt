@@ -28,6 +28,7 @@
          translate-code-list-for-basic-loader
          org-for-code-seq
          new-assemble-to-code-list
+         hash-constants
          (struct-out assembly-code-list))
 
 (module+ test

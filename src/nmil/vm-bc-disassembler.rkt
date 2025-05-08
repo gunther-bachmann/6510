@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
+(require (only-in "../tools/6510-disassembler.rkt" info-for-label))
 
 (provide disassembler-byte-code--byte-count
          disassemble-byte-code)
@@ -18,7 +19,7 @@
         [else 1]))                          ;; default is 1 byte (for regular byte code command)
 
 ;; return disassembled string for bc (and byte 1, byte 2 thereafter)
-(define (disassemble-byte-code bc (bc_p1 0) (bc_p2 0))
+(define (disassemble-byte-code bc (bc_p1 0) (bc_p2 0) #:labels (labels (hash)))
   (define byte-code-t2 (arithmetic-shift (if (> bc 127) (bitwise-and #x78 bc) (bitwise-and #x7f bc)) 1))
   (cond
     [(= byte-code-t2 #x00)
@@ -35,8 +36,8 @@
        [(= bc_p1 #x02) "x inc int"]
        [(= bc_p1 #x03) "x gc free-list"]
        [else "x unknown"])]
-    [(= byte-code-t2 #x0a) (format "push byte $~a" (format-hex-byte bc_p1))]
-    [(= byte-code-t2 #x0c) (format "push int $~a" (format-hex-word (bytes->int bc_p1 bc_p2)))]
+    [(= byte-code-t2 #x0a) (format "push byte ~a" (format-hex-byte bc_p1))]
+    [(= byte-code-t2 #x0c) (format "push int ~a" (format-hex-word (bytes->int bc_p1 bc_p2)))]
     [(= byte-code-t2 #x0e) "int?"]
     [(= byte-code-t2 #x12) "push nil"]
     [(= byte-code-t2 #x14) "pair?"]
@@ -90,9 +91,9 @@
        [(5) "set array field 2"]
        [(6) "get array field 3"]
        [(7) "set array field 3"])]
-    [(= byte-code-t2 #x64) (format "goto $~a" (format-hex-byte bc_p1))]
+    [(= byte-code-t2 #x64) (format "goto ~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x66) "return"]
-    [(= byte-code-t2 #x68) (format "call $~a" (format-hex-word (add1 (bytes->int bc_p1 bc_p2))))] ;; add 1 because byte code starts there (after #locals)
+    [(= byte-code-t2 #x68) (format "call ~a  ~a" (format-hex-word (add1 (bytes->int bc_p1 bc_p2))) (info-for-label (number->string (bytes->int bc_p1 bc_p2) 16) labels))] ;; add 1 because byte code starts there (after #locals)
     [(= byte-code-t2 #x6a) "tail call"]
     [(= byte-code-t2 #x70)
      (define n (bitwise-and bc #x03))

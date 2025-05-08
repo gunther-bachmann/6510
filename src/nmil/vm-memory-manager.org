@@ -1,9 +1,7 @@
 #+title: vm-memory-manager
 * open tasks
-** TODO replace NEW_ with regular naming              -> clean code
-** TODO rename free-lists (use more expressive names) ->
-** TODO provide labels for byte code debugger         -> increase debugger usability (allow label usage in byte-code debugger and during dive!)
-** TODO provide labels for interactive 6510 debugger  -> increase debugger usability (allow label usage in byte-code debugger and during dive!)
+** TODO make sure disassembler works for labels with any number of relevant digits
+currently in interactive mode, debugger starts at $8xx, which seems not to resolve the labels correctly
 ** TODO harmonize function description                -> ease the usage of functions as building blocks
 - do this in an incremental fashion
 - describe what is useful
@@ -1979,6 +1977,14 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
 | NEW_GC_CELLS                                     | i               | repeat freeing cells (returning them to the page) until no free cells are kept in gfl                                                                                        |
 | NEW_GC_ALL                                       | i               | free cell-arrays, cell-pairs and cells until all free lists are empty!                                                                                                       |
 | NEW_GC_CELL_ARRAYS                               | i               | free cell-arrays until the global (partially gc'd) free list is empty                                                                                                        |
+** DONE replace NEW_ with regular naming              -> clean code
+- State "DONE"       from "TODO"       [2025-05-08 Thu 09:08]
+** DONE rename free-lists (use more expressive names) ->
+- State "DONE"       from "TODO"       [2025-05-08 Thu 11:31]
+** DONE provide labels for byte code debugger         -> increase debugger usability (allow label usage in byte-code debugger and during dive!)
+- State "DONE"       from "TODO"       [2025-05-08 Thu 16:41]
+** DONE provide labels for interactive 6510 debugger  -> increase debugger usability (allow label usage in byte-code debugger and during dive!)
+- State "DONE"       from "TODO"       [2025-05-08 Thu 18:01]
 * - :noexport:
 #+begin_src emacs-lisp
   ;; Local Variables:

@@ -111,7 +111,7 @@ call frame primitives etc.
     (run-code-in-test-on-code (wrap-code-for-test bc vm-memory-manager mocked-code-list) debug))
 
   ;; add unique random suffix to labels ending on "__"
-  ;; mock away labales in the mock list
+  ;; mock away labels in the mock list
   ;; add subroutine that counts calls to mocks incresing TEST_COUNTERS+<idx of mock>
   ;; where idx is the list position number of the mock passed
   (define (list-with-label-suffix #:mock (mocked-code-list (list)) . list-elements )
@@ -174,9 +174,9 @@ call frame primitives etc.
          shorten-cell-strings
 
          POP_CELL_EVLSTK_TO_RT
-         VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
-         VM_FREE_CELL_PAIR_PAGE
-         VM_LIST_OF_FREE_CELLS
+         GLOBAL_CELLPAIR_FREE_LIST
+         GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
+         GLOBAL_CELL_FREE_LIST
          ALLOC_CELLARR_TO_RA
          GC_CELLPAIR_FREE_LIST
 
@@ -1547,7 +1547,7 @@ call frame primitives etc.
    (label VM_INITIAL_MM_REGS)
 
    ;; $cec0
-   (label VM_FREE_CELL_PAGE) ;; page with free cells
+   (label GLOBAL_CELL_PAGE_FOR_ALLOC) ;; page with free cells
           (byte $00)
    ;; $cec1
    (label VM_FREE_CALL_STACK_PAGE) ;; call stack page with free space
@@ -1557,7 +1557,7 @@ call frame primitives etc.
           (byte $00)
 
    ;; $cec3
-   (label VM_FREE_CELL_PAIR_PAGE) ;; page with free cell-pairs
+   (label GLOBAL_CELLPAIR_PAGE_FOR_ALLOC) ;; page with free cell-pairs
           (byte $00) ;; none
 
    ;; $cec4
@@ -1565,14 +1565,14 @@ call frame primitives etc.
           (byte $cd) ;; safe to start with $cd is index
 
    ;; $cec5
-   (label VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE) ;; list of cell-pairs that are unused but only potentially partially freed (second cell may still hold references to heap objects)
+   (label GLOBAL_CELLPAIR_FREE_LIST) ;; list of cell-pairs that are unused but only potentially partially freed (second cell may still hold references to heap objects)
           (word $0000) ;; if high byte is 0, the tree is empty!
           ;; this queue holds only cell-pairs, cell0 is always the pointer to the next in queue of this free cells
           ;; cell1 is left untouched => may still hold live references => to reuse a cell-pair of this queue,
           ;; cell1 must be checked (if ptr, decr ref count and possibly free, else ignore)
 
    ;; $cec7
-   (label VM_FREE_M1_PAGE_P0)
+   (label GLOBAL_M1_PX_PAGE_FOR_ALLOC)
           (byte $00) ;; cell page with free slots for m1 page p0 pages
           (byte $00) ;; cell page with free slots for m1 page p1 pages
           (byte $00) ;; cell page with free slots for m1 page p2 pages
@@ -1580,7 +1580,7 @@ call frame primitives etc.
           (byte $00) ;; cell page with free slots for m1 page p5 pages
 
    ;; $cecc..cecd
-   (label VM_LIST_OF_FREE_CELLS) ;; list of cells that are unused but still allocated (reusable)
+   (label GLOBAL_CELL_FREE_LIST) ;; list of cells that are unused but still allocated (reusable)
           (word $0000)
 
    ;; cece,,cecf
@@ -1605,16 +1605,16 @@ call frame primitives etc.
 ;; keep a list of cells (16-bit), this is the head (at cecc)
 ;; a cell in the free list is allocated on a page and initialized to be used as cell
 ;; it contains the ptr to the next free list or 0000 (only high byte is actually checked)
-(define VM_LIST_OF_FREE_CELLS               #xcecc)
+(define GLOBAL_CELL_FREE_LIST               #xcecc)
 
 ;; page that has free cells (must be a cell page)
 ;; it may be full in which case allocation will allocate a new page and link the new page to this full page, and put it here
 ;; otherwise a cell on this page is allocated
-(define VM_FREE_CELL_PAIR_PAGE              #xcec3)
+(define GLOBAL_CELLPAIR_PAGE_FOR_ALLOC              #xcec3)
 
 ;; keep list of cell-pairs that are (partially) free, cell0 is used to build the list,
 ;; cell1 is untouched and may have to be dec refcnt'd if it is a pointer, before reusing it
-(define VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE #xcec5)
+(define GLOBAL_CELLPAIR_FREE_LIST #xcec5)
 
 ;; each page is described by one byte, page 00 at 0, page 01 at 1 ...
 ;; 01 = reserved
@@ -1692,11 +1692,11 @@ call frame primitives etc.
            (STX ZP_CELL_STACK_HB_PTR+1)
 
            (LDA !$00)
-           (STA VM_FREE_M1_PAGE_P0)
-           (STA VM_FREE_M1_PAGE_P0+1)
-           (STA VM_FREE_M1_PAGE_P0+2)
-           (STA VM_FREE_M1_PAGE_P0+3)
-           (STA VM_FREE_M1_PAGE_P0+4)
+           (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC)
+           (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC+1)
+           (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC+2)
+           (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC+3)
+           (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC+4)
 
            ;; make sure the list of partially gc'd cell arrays is empty!
            (STA ZP_PART_GCD_CELL_ARRAYS)
@@ -1831,7 +1831,7 @@ call frame primitives etc.
             (STA (ZP_TEMP),y)
 
             (LDY !$ff)
-            (LDA VM_FREE_CELL_PAGE) ;; store last free cell page in $ff
+            (LDA GLOBAL_CELL_PAGE_FOR_ALLOC) ;; store last free cell page in $ff
             (STA (ZP_TEMP),y)
 
             ;; store page type in byte 0
@@ -1840,7 +1840,7 @@ call frame primitives etc.
             (STA (ZP_TEMP),y)
 
             (LDX ZP_TEMP+1) ;; page
-            (STX VM_FREE_CELL_PAGE) ;; store allocated page as new free cell page
+            (STX GLOBAL_CELL_PAGE_FOR_ALLOC) ;; store allocated page as new free cell page
             (LDA !$02)
 
             (RTS)
@@ -2014,10 +2014,10 @@ call frame primitives etc.
             (STA (ZP_TEMP),y)
 
             (LDY !$ff)
-            (LDA VM_FREE_CELL_PAIR_PAGE)
+            (LDA GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
             (STA (ZP_TEMP),y) ;; previous page of this type is (@$ff = )
 
-            (STX VM_FREE_CELL_PAIR_PAGE)
+            (STX GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
             
             ;; first write all reference count fields (zero)
             ;; block0 (two ref counts)
@@ -2068,7 +2068,7 @@ call frame primitives etc.
   (define vm-alloc-page-for-cell-pairs-code
     (list
      (LDA !$a0)
-     (STA VM_FREE_CELL_PAIR_PAGE)
+     (STA GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
      (JSR ALLOC_PAGE_TO_X)
      (JSR INIT_CELLPAIR_PAGE_X_TO_AX)
      (STX ZP_RT+1) ;; to test read out actual page
@@ -2388,7 +2388,7 @@ call frame primitives etc.
      (JSR ALLOC_CELLPAIR_TO_RT)
      (JSR INC_REFCNT_RT)
      (JSR INC_REFCNT_RT)
-     (JSR NEW_DEC_REFCNT_RT)))
+     (JSR DEC_REFCNT_RT)))
 
   (define vm-refcount-decr-rt-state2
     (run-code-in-test vm-refcount-decr-rt-code2))
@@ -2416,7 +2416,7 @@ call frame primitives etc.
      (JSR ALLOC_CELLPAIR_TO_RT)
      (JSR INC_REFCNT_CELLPAIR_RT)
      (JSR INC_REFCNT_CELLPAIR_RT)
-     (JSR NEW_DEC_REFCNT_CELLPAIR_RT)))
+     (JSR DEC_REFCNT_CELLPAIR_RT)))
 
   (define vm-refcount-mmcr-rt--cell-pair-ptr-state2
     (run-code-in-test vm-refcount-mmcr-rt--cell-pair-ptr-code2))
@@ -2446,7 +2446,7 @@ call frame primitives etc.
      (JSR ALLOC_CELL_TO_RT)
      (JSR INC_REFCNT_CELL_RT)
      (JSR INC_REFCNT_CELL_RT)
-     (JSR NEW_DEC_REFCNT_CELL_RT)))
+     (JSR DEC_REFCNT_CELL_RT)))
 
   (define vm-refcount-mmcr-rt--cell-ptr-state2
     (run-code-in-test vm-refcount-mmcr-rt--cell-ptr-code2))
@@ -2484,24 +2484,24 @@ call frame primitives etc.
           (BRK)
 
    (label FREE_CELL__)
-          (JMP NEW_FREE_CELL_RC)
+          (JMP FREE_CELL_RC)
 
    (label FREE_CELLPAIR__)
-          (JMP NEW_FREE_CELLPAIR_RC)
+          (JMP FREE_CELLPAIR_RC)
 
    (label FREE_CELL_ARRAY__)
-          (JMP NEW_GC_INCR_ARRAY_SLOT_RC)
+          (JMP GC_INCR_ARRAY_SLOT_RC)
 
    (label FREE_NATIVE_ARRAY__)
-          (JMP NEW_ADD_M1_SLOT_RC_TO_PFL)
+          (JMP ADD_M1_SLOT_RC_TO_PFL)
 
    (label FREE_M1__)
-          (JMP NEW_FREE_M1_SLOT_RC)))))
+          (JMP FREE_M1_SLOT_RC)))))
 
 (module+ test #| vm-free-ptr-in-rt |#
   (define free-ptr-in-rt-state
     (compact-run-code-in-test
-     #:mock (list (label NEW_FREE_CELL_RC))
+     #:mock (list (label FREE_CELL_RC))
      (JSR ALLOC_CELL_TO_RT)
      (JSR FREE_RT)))
 
@@ -2511,7 +2511,7 @@ call frame primitives etc.
 
   (define free-ptr-in-rt-2-state
     (compact-run-code-in-test
-     #:mock (list (label NEW_FREE_CELLPAIR_RC))
+     #:mock (list (label FREE_CELLPAIR_RC))
      (JSR ALLOC_CELLPAIR_TO_RT)
      (JSR FREE_RT)))
 
@@ -2532,12 +2532,12 @@ call frame primitives etc.
 (define GET_FRESH_CELLPAIR_TO_AX
   (list
    (label GET_FRESH_CELLPAIR_TO_AX)
-          (LDX VM_FREE_CELL_PAIR_PAGE)
-          (BEQ NEW_PAGE__GET_FRESH_CELLPAIR_TO_AX)
+          (LDX GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
+          (BEQ PAGE__GET_FRESH_CELLPAIR_TO_AX)
           (LDA VM_PAGE_SLOT_DATA,x)
           (BNE DONE__GET_FRESH_CELLPAIR_TO_AX) ;; allocate new page first
 
-   (label NEW_PAGE__GET_FRESH_CELLPAIR_TO_AX)
+   (label PAGE__GET_FRESH_CELLPAIR_TO_AX)
           (JSR ALLOC_PAGE_TO_X)
           (JMP INIT_CELLPAIR_PAGE_X_TO_AX)
 
@@ -2549,7 +2549,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (JSR ALLOC_PAGE_TO_X)
-      (STX VM_FREE_CELL_PAIR_PAGE)
+      (STX GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
       (LDA !$09)                           ;; make first free slot on page to be 08
       (STA VM_PAGE_SLOT_DATA,x)
 
@@ -2567,7 +2567,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (JSR ALLOC_PAGE_TO_X)
-      (STX VM_FREE_CELL_PAIR_PAGE)
+      (STX GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
       (LDA !$00)                          ;; mark page to have no free cells
       (STA VM_PAGE_SLOT_DATA,x)
 
@@ -2584,7 +2584,7 @@ call frame primitives etc.
 ;; get the complete ptr, do not allocate this cell yet
 ;; allocate a new page if necessary
 ;; do not use any cell free list
-;; input:  VM_FREE_CELL_PAGE
+;; input:  GLOBAL_CELL_PAGE_FOR_ALLOC
 ;;         VM_PAGE_SLOT_DATA+PAGE
 ;; output: A = lowbyte
 ;;         X = highbyte (page)
@@ -2594,12 +2594,12 @@ call frame primitives etc.
    "__" "__GET_FRESH_CELL_TO_AX"
   (list
    (label GET_FRESH_CELL_TO_AX)
-          (LDX VM_FREE_CELL_PAGE)
-          (BEQ NEW_PAGE__)
+          (LDX GLOBAL_CELL_PAGE_FOR_ALLOC)
+          (BEQ PAGE__)
           (LDA VM_PAGE_SLOT_DATA,x)
           (BNE DONE__) ;; allocate new page first
 
-   (label NEW_PAGE__)
+   (label PAGE__)
           (JSR ALLOC_PAGE_TO_X)
           (JMP INIT_CELL_PAGE_X_TO_AX)
 
@@ -2611,7 +2611,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (JSR ALLOC_PAGE_TO_X)
-      (STX VM_FREE_CELL_PAGE)
+      (STX GLOBAL_CELL_PAGE_FOR_ALLOC)
       (LDA !$08)                           ;; make first free slot on page to be 08
       (STA VM_PAGE_SLOT_DATA,x)
 
@@ -2629,7 +2629,7 @@ call frame primitives etc.
     (run-code-in-test
      (list
       (JSR ALLOC_PAGE_TO_X)
-      (STX VM_FREE_CELL_PAGE)
+      (STX GLOBAL_CELL_PAGE_FOR_ALLOC)
       (LDA !$00)                          ;; mark page to have no free cells
       (STA VM_PAGE_SLOT_DATA,x)
 
@@ -2717,38 +2717,38 @@ call frame primitives etc.
 
 ;; allocate (or reuse from free-list) cell into rt
 ;;
-;; input:  VM_LIST_OF_FREE_CELLS
-;;         VM_FREE_CELL_PAGE
+;; input:  GLOBAL_CELL_FREE_LIST
+;;         GLOBAL_CELL_PAGE_FOR_ALLOC
 ;;         VM_PAGE_SLOT_DATA
 ;;         # cells allocated on PAGE
 ;; output: ZP_RT: ptr to heap allocated cell (cell itself is not initialized!)
-;;         VM_LIST_OF_FREE_CELLS
+;;         GLOBAL_CELL_FREE_LIST
 ;;         A, X, Y: ?
 (define ALLOC_CELL_TO_RT
   (add-label-suffix
    "__" "__ALLOC_CELL_TO_RT"
   (list
    (label ALLOC_CELL_TO_RT)
-          (LDA VM_LIST_OF_FREE_CELLS+1)
+          (LDA GLOBAL_CELL_FREE_LIST+1)
           (BNE ALLOC_CELL_GFL_PAGE_A_TO_RT)
           (JSR GET_FRESH_CELL_TO_AX)
           (JMP ALLOC_CELL_AX_TO_RT)
 
    (label ALLOC_CELL_GFL_TO_RT)
-          (LDA VM_LIST_OF_FREE_CELLS+1)
+          (LDA GLOBAL_CELL_FREE_LIST+1)
           ;; (BEQ ERROR_ALLOC_CELL_GFL_TO_RT)
    (label ALLOC_CELL_GFL_PAGE_A_TO_RT)
           (STA ZP_RT+1)
-          (LDA VM_LIST_OF_FREE_CELLS)
+          (LDA GLOBAL_CELL_FREE_LIST)
           (STA ZP_RT)
 
           ;; read output this old cell and store its content as new head of the free list
           (LDY !$00)
           (LDA (ZP_RT),y)
-          (STA VM_LIST_OF_FREE_CELLS)
+          (STA GLOBAL_CELL_FREE_LIST)
           (INY)
           (LDA (ZP_RT),y)
-          (STA VM_LIST_OF_FREE_CELLS+1)
+          (STA GLOBAL_CELL_FREE_LIST+1)
           (RTS))))
 
 (module+ test #| vm_alloc_cell_ptr_to_rt (once on a new page) |#
@@ -2759,7 +2759,7 @@ call frame primitives etc.
   (define test-alloc-cell-to-rt-state-after
     (run-code-in-test test-alloc-cell-to-rt-code))
 
-  (check-equal? (memory-list test-alloc-cell-to-rt-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+  (check-equal? (memory-list test-alloc-cell-to-rt-state-after GLOBAL_CELL_FREE_LIST GLOBAL_CELL_FREE_LIST)
                 (list #x00)
                 "list of free cells is empty")
 
@@ -2782,7 +2782,7 @@ call frame primitives etc.
   (define test-alloc-cell-to-rt-twice-state-after
     (run-code-in-test test-alloc-cell-to-rt-twice-code))
 
-  (check-equal? (memory-list test-alloc-cell-to-rt-twice-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+  (check-equal? (memory-list test-alloc-cell-to-rt-twice-state-after GLOBAL_CELL_FREE_LIST GLOBAL_CELL_FREE_LIST)
                 (list #x00)
                 "list of free cells is empty")
 
@@ -2803,12 +2803,12 @@ call frame primitives etc.
      (JSR CP_RT_TO_RA)
 
      (JSR ALLOC_CELL_TO_RT)
-     (JSR NEW_FREE_CELL_RA)))
+     (JSR FREE_CELL_RA)))
 
   (define test-alloc-cell-to-rt-twicenfree-state-after
     (run-code-in-test test-alloc-cell-to-rt-twicenfree-code))
 
-  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfree-state-after VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfree-state-after GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
                 (list #x02 PAGE_AVAIL_0)
                 "free cell list has xx02 now as head of the list")
 
@@ -2830,7 +2830,7 @@ call frame primitives etc.
      (JSR CP_RT_TO_RA)
 
      (JSR ALLOC_CELL_TO_RT)
-     (JSR NEW_FREE_CELL_RA)
+     (JSR FREE_CELL_RA)
 
      (JSR ALLOC_CELL_TO_RT)))
 
@@ -2844,7 +2844,7 @@ call frame primitives etc.
                       "next free slot: $0a")
                 "still (only) two slots are used on the page, one from the free list was reused")
 
-  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfreenalloc-state-after VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfreenalloc-state-after GLOBAL_CELL_FREE_LIST GLOBAL_CELL_FREE_LIST)
                 (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
                 "free cell list is initial again"))
 
@@ -2855,14 +2855,14 @@ call frame primitives etc.
    "__" "__GC_CELLPAIR_FREE_LIST"
   (list
    (label GC_CELLPAIR_FREE_LIST)
-          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; get highbyte (page) from ptr to cell-pair
+          (LDA GLOBAL_CELLPAIR_FREE_LIST+1) ;; get highbyte (page) from ptr to cell-pair
           (BNE CONTINUE__)   ;; if = 0, queue is empty, i'm done
           (RTS)
 
    (label CONTINUE__)
           ;; put ptr to cell-pair into RC, now RC->cell0,cell1 with cell0 = pointer to the next in queue, cell1 could still be something that needs gc
           (STA ZP_RC+1)
-          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (LDA GLOBAL_CELLPAIR_FREE_LIST)
           (STA ZP_RC)
 
           ;; set new tree root for free tree to original cell0
@@ -2878,17 +2878,17 @@ call frame primitives etc.
           (DEY)
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (STA GLOBAL_CELLPAIR_FREE_LIST+1)
           (LDA (ZP_RC),y)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (STA GLOBAL_CELLPAIR_FREE_LIST)
           (BNE CHECK_CELL1__) ;; since must be !=0, it cannot be on page 0 always branch!
 
    (label CELL0_IS_NO_PTR__)
           ;; queue is now empty, this was the last cell-pair
           ;; clear queue
           (LDA !$00)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; just reset highbyte (checked at start of this function)
-          ;; (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (STA GLOBAL_CELLPAIR_FREE_LIST+1) ;; just reset highbyte (checked at start of this function)
+          ;; (STA GLOBAL_CELLPAIR_FREE_LIST)
 
    (label CHECK_CELL1__)
           ;; now check cell1 on remaining ptrs
@@ -2914,7 +2914,7 @@ call frame primitives etc.
           (STX ZP_RC)
           (STY ZP_RC+1)
 
-          (JSR NEW_DEC_REFCNT_RC) ;; this may change the queue again, which is alright, since RC was removed from queue
+          (JSR DEC_REFCNT_RC) ;; this may change the queue again, which is alright, since RC was removed from queue
 
           (LDA RC_COPY__)
           (STA ZP_RC)
@@ -2945,7 +2945,7 @@ call frame primitives etc.
 ;; output: zp_rt = free cell-pair
 ;;
 ;; try to reuse root of free tree: use root but make sure to deallocate cell1 of the root (since this might still point to some data)
-;; if no free tree available, find page with free cells (VM_FREE_CELL_PAIR_PAGE)
+;; if no free tree available, find page with free cells (GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
 ;; if no free cell page is available, allocate a new page and used the first free slot there
 ;; NOTE: the cell-pair is not initialized (cell0 and/or cell1 may contain old data that needs to be overwritten!)
 (define ALLOC_CELLPAIR_TO_RT
@@ -2957,7 +2957,7 @@ call frame primitives etc.
 
    ;; ----------------------------------------
    (label ALLOC_CELLPAIR_TO_RT)
-          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1) ;; get highbyte (page) from ptr to cell-pair
+          (LDA GLOBAL_CELLPAIR_FREE_LIST+1) ;; get highbyte (page) from ptr to cell-pair
           (BNE REUSE_CELL_PAIR__)   ;; if != 0, cell-pair can be reused
           ;; no cell-pair to reuse available => need to allocate a new one
 
@@ -2966,14 +2966,14 @@ call frame primitives etc.
           (JMP ALLOC_CELLPAIR_AX_TO_RT)
 
    (label ALLOC_CELLPAIR_GFL_TO_RT)
-          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (LDA GLOBAL_CELLPAIR_FREE_LIST+1)
           (BEQ ERROR__ALLOC_CELLPAIR_GFL_TO_RT) ;; no free cell in global free list
 
    (label REUSE_CELL_PAIR__)
           ;; put root of free tree into zp_rt (and copy in TEMP_PTR of this function)
           (STA ZP_RT+1)
           (STA TEMP_PTR__+1)
-          (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (LDA GLOBAL_CELLPAIR_FREE_LIST)
           (STA ZP_RT)
           (STA TEMP_PTR__)
 
@@ -2995,9 +2995,9 @@ call frame primitives etc.
 
           ;; cell0 is a cell-pair-ptr => make new root of free queue 
           ;; (LDA (ZP_RT),y)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+          (STA GLOBAL_CELLPAIR_FREE_LIST+1)
           (LDA (ZP_RT),y)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (STA GLOBAL_CELLPAIR_FREE_LIST)
           (BNE CHECK_CELL1__) ;; since must be !=0, it cannot be on page 0 always branch!
 
    ;; (label CELL0_IS_CELL_PTR__)
@@ -3013,8 +3013,8 @@ call frame primitives etc.
 
    (label CELL0_IS_NO_PTR__)
           (LDA !$00)
-          (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
-          ;; (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+          (STA GLOBAL_CELLPAIR_FREE_LIST+1)
+          ;; (STA GLOBAL_CELLPAIR_FREE_LIST)
 
    (label CHECK_CELL1__)
           ;; check whether cell1 is non-ptr or ptr
@@ -3030,7 +3030,7 @@ call frame primitives etc.
 
           ;; write cell1 into zp_ptr and decrement
           (JSR WRITE_CELLPAIR_RT_CELL1_TO_RT)
-          (JSR NEW_DEC_REFCNT_RT)
+          (JSR DEC_REFCNT_RT)
           ;; continue as if cell1 is atomic, since it was already handled
 
           ;; restore zp_ptr to the cell-pair to be reused
@@ -3065,7 +3065,7 @@ call frame primitives etc.
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-1-state)
                 (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0)))
 
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-1-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-1-state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
                 (list PAGE_AVAIL_0))
 
   (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-1-state PAGE_AVAIL_0)
@@ -3086,7 +3086,7 @@ call frame primitives etc.
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-2-state)
                 (format "pair-ptr[0] $~a09" (format-hex-byte PAGE_AVAIL_0)))
 
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-2-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-2-state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
                 (list PAGE_AVAIL_0))
 
   (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-2-state PAGE_AVAIL_0)
@@ -3114,7 +3114,7 @@ call frame primitives etc.
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3-state)
                 (format "pair-ptr[0] $~af9" (format-hex-byte PAGE_AVAIL_0)))
 
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3-state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
                 (list PAGE_AVAIL_0))
 
   (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3-state PAGE_AVAIL_0)
@@ -3142,7 +3142,7 @@ call frame primitives etc.
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3a-state)
                 (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_1)))
 
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3a-state VM_FREE_CELL_PAIR_PAGE VM_FREE_CELL_PAIR_PAGE)
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3a-state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
                 (list PAGE_AVAIL_1))
 
   (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3a-state PAGE_AVAIL_0)
@@ -3162,9 +3162,9 @@ call frame primitives etc.
      (JSR ALLOC_CELLPAIR_TO_RT)
      ;; copy allocated cell-pair ptr to the tree
      (LDA ZP_RT)
-     (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+     (STA GLOBAL_CELLPAIR_FREE_LIST)
      (LDA ZP_RT+1)
-     (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+     (STA GLOBAL_CELLPAIR_FREE_LIST+1)
 
      ;; fill cell0 with zeros, cell1 within int1
      (LDA !$00)
@@ -3199,9 +3199,9 @@ call frame primitives etc.
 
      ;; copy allocated cell-pair ptr to the tree
      (LDA ZP_RT)
-     (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+     (STA GLOBAL_CELLPAIR_FREE_LIST)
      (LDA ZP_RT+1)
-     (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+     (STA GLOBAL_CELLPAIR_FREE_LIST+1)
 
      ;; fill cell0 with zeros, cell1 cell-pair-ptr (with refcount = 1)
      (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)                     ;; cc09: 05 cc 00 00
@@ -3235,44 +3235,44 @@ call frame primitives etc.
                 "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree"))
 
 ;; impl complete, test missing
-(define NEW_DEC_REFCNT_CELL_RC #t)
-(define NEW_DEC_REFCNT_CELL_RT #t)
-(define NEW_DEC_REFCNT_CELL_RA #t)
-(define NEW_DEC_REFCNT_CELLPAIR_RT #t)
-(define NEW_DEC_REFCNT_CELLPAIR_RA #t)
-(define NEW_DEC_REFCNT_CELLPAIR_RC #t)
+(define DEC_REFCNT_CELL_RC #t)
+(define DEC_REFCNT_CELL_RT #t)
+(define DEC_REFCNT_CELL_RA #t)
+(define DEC_REFCNT_CELLPAIR_RT #t)
+(define DEC_REFCNT_CELLPAIR_RA #t)
+(define DEC_REFCNT_CELLPAIR_RC #t)
 (define FREE_M1_SLOT_RCm1 #t)
-(define NEW_DEC_REFCNT_M1_SLOT_RC #t)
-(define NEW_DEC_REFCNT_CELLARR_RC #t)
-(define NEW_DEC_REFCNT_NATIVEARR_RC #t)
-(define NEW_DEC_REFCNT_M1_SLOT_RT #t)
-(define NEW_DEC_REFCNT_CELLARR_RT #t)
-(define NEW_DEC_REFCNT_NATIVEARR_RT #t)
-(define NEW_DEC_REFCNT_M1_SLOT_RA #t)
-(define NEW_DEC_REFCNT_CELLARR_RA #t)
-(define NEW_DEC_REFCNT_NATIVEARR_RA #t)
-(define NEW_DEC_REFCNT_RT #t)
-(define NEW_DEC_REFCNT_RA #t)
-(define NEW_DEC_REFCNT_RC
+(define DEC_REFCNT_M1_SLOT_RC #t)
+(define DEC_REFCNT_CELLARR_RC #t)
+(define DEC_REFCNT_NATIVEARR_RC #t)
+(define DEC_REFCNT_M1_SLOT_RT #t)
+(define DEC_REFCNT_CELLARR_RT #t)
+(define DEC_REFCNT_NATIVEARR_RT #t)
+(define DEC_REFCNT_M1_SLOT_RA #t)
+(define DEC_REFCNT_CELLARR_RA #t)
+(define DEC_REFCNT_NATIVEARR_RA #t)
+(define DEC_REFCNT_RT #t)
+(define DEC_REFCNT_RA #t)
+(define DEC_REFCNT_RC
   (add-label-suffix
-   "__" "__NEW_DEC_REFCNT_RC"
+   "__" "__DEC_REFCNT_RC"
    (flatten
    (list
-    (label NEW_DEC_REFCNT_RA)
+    (label DEC_REFCNT_RA)
            (JSR CP_RA_TO_RC)
-           (JMP NEW_DEC_REFCNT_RC)
+           (JMP DEC_REFCNT_RC)
 
-    (label NEW_DEC_REFCNT_RT)
+    (label DEC_REFCNT_RT)
            (JSR CP_RT_TO_RC)
 
-   (label NEW_DEC_REFCNT_RC)    ;; RC -> [cell] || [cellA][cellB] || [cell-natarr-header][byte0][byte1] ...[byten] || [cell-arr-header][cell0][cell1]...[celln]
+   (label DEC_REFCNT_RC)    ;; RC -> [cell] || [cellA][cellB] || [cell-natarr-header][byte0][byte1] ...[byten] || [cell-arr-header][cell0][cell1]...[celln]
           (PTR_DETECTION_MACRO_RC
            "UNKNOWN__"
            "CELL_ALREADY_LSRED__"
            "CELLPAIR_ALREADY_LSRED__"
-           "NEW_DEC_REFCNT_CELLARR_RC"
-           "NEW_DEC_REFCNT_NATIVEARR_RC"
-           "NEW_DEC_REFCNT_M1_SLOT_RC")
+           "DEC_REFCNT_CELLARR_RC"
+           "DEC_REFCNT_NATIVEARR_RC"
+           "DEC_REFCNT_M1_SLOT_RC")
 
    (label UNKNOWN__)
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RC)
@@ -3280,20 +3280,20 @@ call frame primitives etc.
           (RTS)
 
 
-   (label NEW_DEC_REFCNT_M1_SLOT_RA)
-   (label NEW_DEC_REFCNT_CELLARR_RA)
-   (label NEW_DEC_REFCNT_NATIVEARR_RA)
+   (label DEC_REFCNT_M1_SLOT_RA)
+   (label DEC_REFCNT_CELLARR_RA)
+   (label DEC_REFCNT_NATIVEARR_RA)
           (JSR CP_RT_TO_RA)
-          (JMP NEW_DEC_REFCNT_M1_SLOT_RC)
+          (JMP DEC_REFCNT_M1_SLOT_RC)
 
-   (label NEW_DEC_REFCNT_M1_SLOT_RT)
-   (label NEW_DEC_REFCNT_CELLARR_RT)
-   (label NEW_DEC_REFCNT_NATIVEARR_RT)
+   (label DEC_REFCNT_M1_SLOT_RT)
+   (label DEC_REFCNT_CELLARR_RT)
+   (label DEC_REFCNT_NATIVEARR_RT)
           (JSR CP_RT_TO_RC)
 
-   (label NEW_DEC_REFCNT_M1_SLOT_RC)
-   (label NEW_DEC_REFCNT_CELLARR_RC)
-   (label NEW_DEC_REFCNT_NATIVEARR_RC)
+   (label DEC_REFCNT_M1_SLOT_RC)
+   (label DEC_REFCNT_CELLARR_RC)
+   (label DEC_REFCNT_NATIVEARR_RC)
           ;; TODO decrement count (both are on m1 pages, but native arrays can be freed without looking at its contents!)
           (DEC ZP_RC) ;; no page boundary will be crossed, since lowbyte always > 0
           (LDY !$00)
@@ -3309,20 +3309,20 @@ call frame primitives etc.
           ;; if native array, simply add this m1slot to the free list of this m1 page profile
           ;; if cell array, follow the algorithm
           (INC ZP_RC)
-          (JMP NEW_FREE_M1_SLOT_RC)
+          (JMP FREE_M1_SLOT_RC)
 
 
-   (label NEW_DEC_REFCNT_CELLPAIR_RA)
+   (label DEC_REFCNT_CELLPAIR_RA)
           (JSR CP_RA_TO_RC)
           (CLC)
-          (BCC NEW_DEC_REFCNT_CELLPAIR_RC)
+          (BCC DEC_REFCNT_CELLPAIR_RC)
 
-   (label NEW_DEC_REFCNT_CELLPAIR_RT)
+   (label DEC_REFCNT_CELLPAIR_RT)
           (JSR CP_RT_TO_RC)
 
    ;; input: cell-pair ptr in ZP_RA
    ;; decrement ref count, if 0 deallocate
-   (label NEW_DEC_REFCNT_CELLPAIR_RC)
+   (label DEC_REFCNT_CELLPAIR_RC)
           (LDA ZP_RC)
           (LSR)
           (LSR)
@@ -3335,20 +3335,20 @@ call frame primitives etc.
    (label DEC_PAGE_CELLPAIR_CNT__)
           (DEC $c000,x) ;; c0 is overwritten by page (see above)
           (BNE DONE__)
-          (JMP NEW_FREE_CELLPAIR_RC) ;; free (since refcnt dropped to 0)
+          (JMP FREE_CELLPAIR_RC) ;; free (since refcnt dropped to 0)
 
 
-   (label NEW_DEC_REFCNT_CELL_RA)
+   (label DEC_REFCNT_CELL_RA)
           (JSR CP_RA_TO_RC)
           (CLC)
-          (BCC NEW_DEC_REFCNT_CELL_RC)
+          (BCC DEC_REFCNT_CELL_RC)
 
-   (label NEW_DEC_REFCNT_CELL_RT)
+   (label DEC_REFCNT_CELL_RT)
           (JSR CP_RT_TO_RC)
 
    ;; input: cell ptr in ZP_RA
    ;; decrement ref count, if 0 deallocate
-   (label NEW_DEC_REFCNT_CELL_RC)  ;; RC -> [cell] | [cell-array] | [native-array]
+   (label DEC_REFCNT_CELL_RC)  ;; RC -> [cell] | [cell-array] | [native-array]
           (LDA ZP_RC) ;; lowbyte (offset)
           (LSR)
    (label CELL_ALREADY_LSRED__)
@@ -3360,33 +3360,33 @@ call frame primitives etc.
    (label LDA_PAGE_TYPE__)
           (LDA $c000)
           (ASL A)
-          (BCS NEW_DEC_REFCNT_CELL_RC_TO_CELL__)
+          (BCS DEC_REFCNT_CELL_RC_TO_CELL__)
           ;; can't really be cellpair type page (was checked before)
           ;; (LSL)
-          ;; (BCS NEW_DEC_REFCNT_CELL_RC_TO_CELLPAIR)
+          ;; (BCS DEC_REFCNT_CELL_RC_TO_CELLPAIR)
           ;; else must be a m1 slot
-   (label NEW_DEC_REFCNT_CELL_RC_TO_M1_SLOT__)
+   (label DEC_REFCNT_CELL_RC_TO_M1_SLOT__)
           (LDX ZP_RC)
           (DEX)
           (STY DEC_PAGE_M1_SLOT_CNT__+2)
    (label DEC_PAGE_M1_SLOT_CNT__)
           (DEC $C000,x)
           (BNE DONE__)
-          (JMP NEW_FREE_M1_SLOT_RC)
+          (JMP FREE_M1_SLOT_RC)
 
-   (label NEW_DEC_REFCNT_CELL_RC_TO_CELL__)
+   (label DEC_REFCNT_CELL_RC_TO_CELL__)
           (STY DEC_PAGE_CELL_CNT__+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
    (label DEC_PAGE_CELL_CNT__)
           (DEC $c000,x)               ;; c0 is overwritten by page (see above)
           (BNE DONE__)
-          (JMP NEW_FREE_CELL_RC)      ;; free (since refcnt dropped to 0)
+          (JMP FREE_CELL_RC)      ;; free (since refcnt dropped to 0)
           ))))
 
-(module+ test #| NEW_DEC_REFCNT_RC |#
+(module+ test #| DEC_REFCNT_RC |#
   (define dec-refcnt-rc--dec-ref--cell
     (compact-run-code-in-test
      ;; #:debug #t
-     #:mock (list (label NEW_FREE_CELL_RC))
+     #:mock (list (label FREE_CELL_RC))
 
      (JSR ALLOC_CELL_TO_RT)    ;; new cell in RT (with refcount = 0)
      (JSR INC_REFCNT_CELL_RT) ;; now should be 1
@@ -3394,7 +3394,7 @@ call frame primitives etc.
      (JSR CP_RT_TO_RC)
 
      ;; unit under test
-     (JSR NEW_DEC_REFCNT_RC)))
+     (JSR DEC_REFCNT_RC)))
 
   (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref--cell)
                 #x00
@@ -3405,14 +3405,14 @@ call frame primitives etc.
 
   (define dec-refcnt-rc--dec-ref-to-0--cell
     (compact-run-code-in-test
-     #:mock (list (label NEW_FREE_CELL_RC))
+     #:mock (list (label FREE_CELL_RC))
 
      (JSR ALLOC_CELL_TO_RT)    ;; new cell in RT (with refcount = 0)
      (JSR INC_REFCNT_CELL_RT) ;; now should be 1
      (JSR CP_RT_TO_RC)
 
      ;; unit under test
-     (JSR NEW_DEC_REFCNT_RC)))
+     (JSR DEC_REFCNT_RC)))
 
   (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref-to-0--cell)
                 #x01
@@ -3424,14 +3424,14 @@ call frame primitives etc.
 
   (define dec-refcnt-rc--dec-ref-to-0--cellpair
     (compact-run-code-in-test
-     #:mock (list (label NEW_FREE_CELLPAIR_RC))
+     #:mock (list (label FREE_CELLPAIR_RC))
 
      (JSR ALLOC_CELLPAIR_TO_RT)     ;; new cellpair in RT (with refcount = 0)
      (JSR INC_REFCNT_CELLPAIR_RT)   ;; now should be 1
      (JSR CP_RT_TO_RC)
 
      ;; unit under test
-     (JSR NEW_DEC_REFCNT_RC)))
+     (JSR DEC_REFCNT_RC)))
 
   (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref-to-0--cellpair)
                 #x01
@@ -3442,7 +3442,7 @@ call frame primitives etc.
 
   (define dec-refcnt-rc--dec-ref--cellpair
     (compact-run-code-in-test
-     #:mock (list (label NEW_FREE_CELLPAIR_RC))
+     #:mock (list (label FREE_CELLPAIR_RC))
 
      (JSR ALLOC_CELLPAIR_TO_RT)     ;; new cellpair in RT (with refcount = 0)
      (JSR INC_REFCNT_CELLPAIR_RT)   ;; now should be 1
@@ -3450,7 +3450,7 @@ call frame primitives etc.
      (JSR CP_RT_TO_RC)
 
      ;; unit under test
-     (JSR NEW_DEC_REFCNT_RC)))
+     (JSR DEC_REFCNT_RC)))
 
   (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref--cellpair)
                 #x00
@@ -3461,7 +3461,7 @@ call frame primitives etc.
 
   (define dec-refcnt-rc--dec-ref-to-0--m1_slot
     (compact-run-code-in-test
-     #:mock (list (label NEW_FREE_M1_SLOT_RC))
+     #:mock (list (label FREE_M1_SLOT_RC))
 
      (LDA !$10)
      (JSR ALLOC_M1_SLOT_TO_RA)     ;; new m1_slot in RA (with refcount = 0)
@@ -3469,7 +3469,7 @@ call frame primitives etc.
      (JSR CP_RA_TO_RC)
 
      ;; unit under test
-     (JSR NEW_DEC_REFCNT_RC)))
+     (JSR DEC_REFCNT_RC)))
 
   (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref-to-0--m1_slot)
                 #x01
@@ -3480,7 +3480,7 @@ call frame primitives etc.
 
   (define dec-refcnt-rc--dec-ref--m1_slot
     (compact-run-code-in-test
-     #:mock (list (label NEW_FREE_M1_SLOT_RC))
+     #:mock (list (label FREE_M1_SLOT_RC))
 
      (LDA !$10)
      (JSR ALLOC_M1_SLOT_TO_RA)     ;; new m1_slot in RT (with refcount = 0)
@@ -3489,7 +3489,7 @@ call frame primitives etc.
      (JSR CP_RA_TO_RC)
 
      ;; unit under test
-     (JSR NEW_DEC_REFCNT_RC)))
+     (JSR DEC_REFCNT_RC)))
 
   (check-equal? (calls-to-mock dec-refcnt-rc--dec-ref--m1_slot)
                 #x00
@@ -3499,45 +3499,45 @@ call frame primitives etc.
                 "remaining refcount on m1_slot 0 is 1"))
 
 ;; impl complete, test missing
-(define NEW_FREE_M1_SLOT_RC
+(define FREE_M1_SLOT_RC
   (add-label-suffix
    "__" "__NEW_FREE_M1_SLOT_RC"
    (list
-    (label NEW_FREE_M1_SLOT_RC)
+    (label FREE_M1_SLOT_RC)
            (LDY !$00)
            (LDA (ZP_RC),y)
            (CMP !TAG_BYTE_CELL_ARRAY)
-           (BEQ NEW_FREE_CELLARR__)
+           (BEQ FREE_CELLARR__)
            (CMP !TAG_BYTE_NATIVE_ARRAY)
-           (BEQ NEW_FREE_NATIVEARR__)
+           (BEQ FREE_NATIVEARR__)
 
     (label UNKNOWN__)
           ;; unknown object type (or atomic value that cannot be ref counted and MUST NOT END UP in ZP_RC)
            (RTS)
 
-    (label NEW_FREE_CELLARR__)
-           (JMP NEW_GC_INCR_ARRAY_SLOT_RC)
+    (label FREE_CELLARR__)
+           (JMP GC_INCR_ARRAY_SLOT_RC)
 
-    (label NEW_FREE_NATIVEARR__)
-           (JMP NEW_ADD_M1_SLOT_RC_TO_PFL) ;; just add this slot to the free list of the respective page (and do some housekeeping)
+    (label FREE_NATIVEARR__)
+           (JMP ADD_M1_SLOT_RC_TO_PFL) ;; just add this slot to the free list of the respective page (and do some housekeeping)
 )))
 
-(define NEW_FREE_CELLPAIR_RT #t)
-(define NEW_FREE_CELLPAIR_RA #t)
-(define NEW_FREE_CELLPAIR_RC
+(define FREE_CELLPAIR_RT #t)
+(define FREE_CELLPAIR_RA #t)
+(define FREE_CELLPAIR_RC
   (add-label-suffix
    "__" "__NEW_FREE_CELLPAIR_RC"
    (list
-    (label NEW_FREE_CELLPAIR_RA)
+    (label FREE_CELLPAIR_RA)
            (JSR CP_RA_TO_RC)
            ;; (CLC)
-           ;; (BCC NEW_FREE_CELLPAIR_RC)
-           (JMP NEW_FREE_CELLPAIR_RC)
+           ;; (BCC FREE_CELLPAIR_RC)
+           (JMP FREE_CELLPAIR_RC)
 
-    (label NEW_FREE_CELLPAIR_RT)
+    (label FREE_CELLPAIR_RT)
            (JSR CP_RT_TO_RC)
 
-    (label NEW_FREE_CELLPAIR_RC)
+    (label FREE_CELLPAIR_RC)
            (LDY !$00)
            (STY ZP_TEMP+1) ;; indicator of a ptr to free is set to 0 => currently no additional ptr marked for free
 
@@ -3564,17 +3564,17 @@ call frame primitives etc.
            ;; simply add this cell-pair as head to free tree
            ;; set cell0 to point to old root
            (LDY !$01)
-           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+           (LDA GLOBAL_CELLPAIR_FREE_LIST+1)
            (STA (ZP_RC),y)
            (DEY)
-           (LDA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+           (LDA GLOBAL_CELLPAIR_FREE_LIST)
            (STA (ZP_RC),y)
 
            ;; set new root to point to cell-pair
            (LDA ZP_RC+1)
-           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE+1)
+           (STA GLOBAL_CELLPAIR_FREE_LIST+1)
            (LDA ZP_RC)
-           (STA VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE)
+           (STA GLOBAL_CELLPAIR_FREE_LIST)
 
            ;; write original cell0 -> zp_rc
            (LDA ZP_TEMP+1)
@@ -3584,7 +3584,7 @@ call frame primitives etc.
            (LDA ZP_TEMP)
            (STA ZP_RC)
 
-           (JMP NEW_DEC_REFCNT_RC) ;; chain call
+           (JMP DEC_REFCNT_RC) ;; chain call
 
     (label DONE__)
            (RTS))))
@@ -3597,7 +3597,7 @@ call frame primitives etc.
      (STA ZP_RT)
      (STA ZP_RT+1)
 
-     (JSR NEW_FREE_CELLPAIR_RT)))
+     (JSR FREE_CELLPAIR_RT)))
 
   (check-equal? (vm-regt->string new-free-cell-pair-ptr-in-rt-state)
                 "empty")
@@ -3606,7 +3606,7 @@ call frame primitives etc.
     (compact-run-code-in-test
      (JSR ALLOC_CELLPAIR_TO_RT)
 
-     (JSR NEW_FREE_CELLPAIR_RT)))
+     (JSR FREE_CELLPAIR_RT)))
 
   (check-equal? (vm-page->strings new-free-cell-pair-ptr-in-rt-2-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
@@ -3636,7 +3636,7 @@ call frame primitives etc.
      ;;         |
      ;;         +--> ( int0 . int1 )     cell-pair @ cc05
 
-     (JSR NEW_FREE_CELLPAIR_RT)))
+     (JSR FREE_CELLPAIR_RT)))
 
   (check-equal? (vm-page->strings new-free-cell-pair-ptr-in-rt-3-state PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
@@ -3668,7 +3668,7 @@ call frame primitives etc.
      ;;         |
      ;;         +--> ( int-1 )           cell      @ cc02
 
-     (JSR NEW_FREE_CELLPAIR_RT)))
+     (JSR FREE_CELLPAIR_RT)))
 
   (check-equal? (vm-page->strings new-free-cell-pair-ptr-in-rt-4-state PAGE_AVAIL_0)
                 (list "page-type:      cell page"
@@ -3684,27 +3684,27 @@ call frame primitives etc.
                 "page has still 1 slot in use (it was freed, but is now in free list, not completely unallocated)")
   (check-equal? (vm-cell-pair-free-tree->string new-free-cell-pair-ptr-in-rt-4-state)
                 (format "pair $~a05 -> [ empty . int $0001 ]" (format-hex-byte PAGE_AVAIL_1)))
-  (check-equal? (vm-deref-cell-w->string new-free-cell-pair-ptr-in-rt-4-state VM_LIST_OF_FREE_CELLS)
+  (check-equal? (vm-deref-cell-w->string new-free-cell-pair-ptr-in-rt-4-state GLOBAL_CELL_FREE_LIST)
                 (format "ptr[-] $~a02" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-deref-cell-w->string new-free-cell-pair-ptr-in-rt-4-state (+ PAGE_AVAIL_0 #x02))
                 "empty"))
 
 
 ;; impl missing, test missing
-(define NEW_FREE_CELLARR_RC
+(define FREE_CELLARR_RC
   (add-label-suffix
    "__" "__NEW_FREE_CELLARR_RC"
    (list
-    (label NEW_FREE_CELLARR_RC)
+    (label FREE_CELLARR_RC)
            (RTS))))
 
 ;; impl complete, test missing
-(define NEW_ADD_M1_SLOT_RC_TO_PFL
+(define ADD_M1_SLOT_RC_TO_PFL
   (add-label-suffix
    "__" "__NEW_ADD_M1_SLOT_RC_TO_PFL"
    (list
-    (label NEW_ADD_M1_SLOT_RC_TO_PFL)
-           (JSR NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_RC)
+    (label ADD_M1_SLOT_RC_TO_PFL)
+           (JSR DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_RC)
 
           ;; now free the slot
    (label REGULAR_FREE__)
@@ -3714,7 +3714,7 @@ call frame primitives etc.
           (BNE CONTINUE__)           ;; regular free
 
           ;; this page was full (since next free slot was 0) => register with the list of pages with free slots
-          (JSR NEW_PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC)
+          (JSR PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC)
           (LDX DEC_CMD__+2)          ;; restore x
           (LDA !$00)                 ;; next free slot offset (=0)
 
@@ -3733,11 +3733,11 @@ call frame primitives etc.
 
           (RTS))))
 
-(define NEW_PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC
+(define PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC
   (add-label-suffix
    "__" "__NEW_PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC"
   (list
-   (label NEW_PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC)
+   (label PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC)
           (LDA ZP_RC)
           (STA ZP_TEMP) ;; keep for later
 
@@ -3755,14 +3755,14 @@ call frame primitives etc.
 
           (TAX) ;; now x = page type
 
-          (LDA VM_FREE_M1_PAGE_P0,x)
+          (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x)
 
           (INY) ;; now 1
           (STA (ZP_RC),y) ;; set previous
 
           ;; x = page type, a = page
           (LDA ZP_RC+1)
-          (STA VM_FREE_M1_PAGE_P0,x)
+          (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x)
           (TAX)  ;; x = page
 
    (label CONTINUE_WITH_RESTORE__)
@@ -3772,13 +3772,13 @@ call frame primitives etc.
 
           (RTS))))
 
-(define NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
+(define DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
   (add-label-suffix
    "__" "NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A"
   (list
-   (label NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_RC)
+   (label DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_RC)
           (LDA ZP_RC+1)
-   (label NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A)
+   (label DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A)
           (STA READ_ENC_PAGE_TYPE__+2)
    (label READ_ENC_PAGE_TYPE__)
           (LDA $c000)
@@ -3787,8 +3787,8 @@ call frame primitives etc.
           (TAX) ;; now x = page profile
 
    ;; input: x (unchanged)
-   (label NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_PROFILE_X)
-          (LDA VM_FREE_M1_PAGE_P0,x)
+   (label DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_PROFILE_X)
+          (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x)
 
    (label LOOP__)
           (TAY) ;; y = page now
@@ -3801,7 +3801,7 @@ call frame primitives etc.
           (LDY !$00)
    (label LOAD_PREV_PAGE_CMD__)
           (LDA $c001) ;; $c0 is overwritten with page
-          (STA VM_FREE_M1_PAGE_P0,x) ;; optional optimization: needs only be done once! (is here done in a loop)
+          (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x) ;; optional optimization: needs only be done once! (is here done in a loop)
    (label STORE_PREV_PAGE_CMD__)
           (STY $c001) ;; $c0 is overwritten
           (BNE LOOP__) ;; if the current page (in a) is 0 (we are at the end of the list), we are done and can return, else loop
@@ -3809,37 +3809,37 @@ call frame primitives etc.
    (label DONE__)
           (RTS))))
 
-(define NEW_GC_ALL
+(define GC_ALL
   (add-label-suffix
    "__" "__NEW_GC_ALL"
    (list
-    (label NEW_GC_ALL)
-          (JSR NEW_GC_CELL_ARRAYS)    ;; until no more cell arrays are available
+    (label GC_ALL)
+          (JSR GC_CELL_ARRAYS)    ;; until no more cell arrays are available
           (JSR GC_CELLPAIR_FREE_LIST) ;; until no more cell pairs are available
-          (JMP NEW_GC_CELLS)          ;; until no more cells are available
+          (JMP GC_CELLS)          ;; until no more cells are available
           )))
 
-(define NEW_GC_CELLS
+(define GC_CELLS
   (add-label-suffix
    "__" "NEW_GC_CELLS"
    (list
-    (label NEW_GC_CELLS)
-           (LDX VM_LIST_OF_FREE_CELLS+1)
+    (label GC_CELLS)
+           (LDX GLOBAL_CELL_FREE_LIST+1)
            (BNE CONTINUE__)
            (RTS)
     (label CONTINUE__)
            (STX ZP_RC+1)
-           (LDA VM_LIST_OF_FREE_CELLS)
+           (LDA GLOBAL_CELL_FREE_LIST)
            (STA ZP_RC)
 
            ;; remove this cell from the list of free cells
            ;; put next of rc into vm_list_of_free
            (LDY !$00)
            (LDA (ZP_RC),y)
-           (STA VM_LIST_OF_FREE_CELLS)
+           (STA GLOBAL_CELL_FREE_LIST)
            (INY)
            (LDA (ZP_RC),y)
-           (STA VM_LIST_OF_FREE_CELLS+1)
+           (STA GLOBAL_CELL_FREE_LIST+1)
 
 
            ;; return RC to its page free list
@@ -3863,15 +3863,15 @@ call frame primitives etc.
            (DEC $c000) ;; c0 is overwritten by page, cell-page holds # of slots in first byte
            (LDA $c000) ;; c0 is overwritten
            (AND !$3f)
-           (BNE NEW_GC_CELLS) ;; loop
+           (BNE GC_CELLS) ;; loop
 
            ;; no more cells allocated on that page
            ;; return page to (completely) free pages? <- not implemented yet
-           (BEQ NEW_GC_CELLS) ;; loop
+           (BEQ GC_CELLS) ;; loop
            )))
 
 ;; do incremental collections until all cell arrays (and their slots) were garbage collected
-(define NEW_GC_CELL_ARRAYS
+(define GC_CELL_ARRAYS
   (add-label-suffix
    "__" "__NEW_GC_CELL_ARRAYS"
    (list
@@ -3879,9 +3879,9 @@ call frame primitives etc.
           (STA ZP_RC+1)
           (LDA ZP_PART_GCD_CELL_ARRAYS)
           (STA ZP_RC)
-          (JSR NEW_GC_INCR_ARRAY_SLOT_RC)
+          (JSR GC_INCR_ARRAY_SLOT_RC)
 
-   (label NEW_GC_CELL_ARRAYS)           ;; -------------------- function entry
+   (label GC_CELL_ARRAYS)           ;; -------------------- function entry
           (LDA ZP_PART_GCD_CELL_ARRAYS+1)
           (BNE GC_CONT__) ;; only if high byte (page) != 0, there seems to be a cell array to be worked on
 
@@ -3889,11 +3889,11 @@ call frame primitives etc.
           (RTS))))
 
 ;; keep collecting until the whole (single) array was collected but stop then!
-(define NEW_GC_CELL_ARRAY
+(define GC_CELL_ARRAY
   (add-label-suffix
    "__" "__NEW_GC_ARRAY"
    (list
-    (label NEW_GC_CELL_ARRAY)
+    (label GC_CELL_ARRAY)
            (LDA ZP_PART_GCD_CELL_ARRAYS+1)
            (BEQ DONE__)
 
@@ -3905,7 +3905,7 @@ call frame primitives etc.
     (label LOOP__)
            (STA ZP_RC+1)
            (STX ZP_RC)
-           (JSR NEW_GC_INCR_ARRAY_SLOT_RC)
+           (JSR GC_INCR_ARRAY_SLOT_RC)
            (LDA ZP_PART_GCD_CELL_ARRAYS+1)
            (BEQ DONE__)
            (CMP PREV_ARRAY_+1)
@@ -3923,18 +3923,18 @@ call frame primitives etc.
 ;; may destroy RC (on dec refcnt of a cell in the array)
 ;; will free this cell-array, if no refcnts need to be dec (anymore)
 ;; will add this cell array to ZP_PART_GCD_CELL_ARRAYS if not completely gc'd
-(define NEW_GC_INCR_ARRAY_SLOT_RC
+(define GC_INCR_ARRAY_SLOT_RC
   (add-label-suffix
    "__" "__NEW_GC_INCR_ARRAY_SLOT_RC"
   (list
 
-   (label NEW_GC_INCR_ARRAY_SLOT_RA)
+   (label GC_INCR_ARRAY_SLOT_RA)
           (JSR CP_RA_TO_RC)
-          (JMP NEW_GC_INCR_ARRAY_SLOT_RC)
+          (JMP GC_INCR_ARRAY_SLOT_RC)
 
-   (label NEW_GC_INCR_ARRAY_SLOT_RT)
+   (label GC_INCR_ARRAY_SLOT_RT)
           (JSR CP_RT_TO_RC)
-          (JMP NEW_GC_INCR_ARRAY_SLOT_RC)
+          (JMP GC_INCR_ARRAY_SLOT_RC)
 
    (label GC_INCR_CELLARR_GFL)
           (LDA ZP_PART_GCD_CELL_ARRAYS+1)
@@ -3948,7 +3948,7 @@ call frame primitives etc.
           (LDA ZP_PART_GCD_CELL_ARRAYS)
           (STA ZP_RC)
 
-   (label NEW_GC_INCR_ARRAY_SLOT_RC) ;; cellarr layout: 00 = type, 01 = #of cells, 02/03 = cell0, 04/05 = cell1 ...
+   (label GC_INCR_ARRAY_SLOT_RC) ;; cellarr layout: 00 = type, 01 = #of cells, 02/03 = cell0, 04/05 = cell1 ...
           ;; loop over slots and decrement their slots
           (LDY !$01)
           (LDA (ZP_RC),y)  ;; a = number of array elements
@@ -4014,7 +4014,7 @@ call frame primitives etc.
           (STA ZP_RC+1)
           (STX ZP_RC)
 
-          (JMP NEW_DEC_REFCNT_RC) ;; do tailcall (decrement refcount of this cell-ptr)
+          (JMP DEC_REFCNT_RC) ;; do tailcall (decrement refcount of this cell-ptr)
 
    (label NEXT__)
           (DEY)
@@ -4049,7 +4049,7 @@ call frame primitives etc.
           (STA ZP_PART_GCD_CELL_ARRAYS+1)
 
    (label NO_MORE_DEQUEUE__)
-          (JMP NEW_ADD_M1_SLOT_RC_TO_PFL)
+          (JMP ADD_M1_SLOT_RC_TO_PFL)
 
    (label PREV_LAST_ENTRY__)
           (byte 0)
@@ -4057,22 +4057,22 @@ call frame primitives etc.
           (byte 0))))
 
 
-(define NEW_FREE_CELL_RT #t)
-(define NEW_FREE_CELL_RA #t)
-(define NEW_FREE_CELL_RC
+(define FREE_CELL_RT #t)
+(define FREE_CELL_RA #t)
+(define FREE_CELL_RC
   (add-label-suffix
    "__" "__NEW_FREE_CELL_RC"
    (list
-    (label NEW_FREE_CELL_RA)
+    (label FREE_CELL_RA)
            (JSR CP_RA_TO_RC)
            ;; (CLC)
-           ;; (BCC NEW_FREE_CELL_RC)
-           (JMP NEW_FREE_CELL_RC)
+           ;; (BCC FREE_CELL_RC)
+           (JMP FREE_CELL_RC)
 
-    (label NEW_FREE_CELL_RT)
+    (label FREE_CELL_RT)
            (JSR CP_RT_TO_RC)
 
-    (label NEW_FREE_CELL_RC)
+    (label FREE_CELL_RC)
            ;; clear
            (LDY !$00)
            (STY LIST_TO_FREE__+1)
@@ -4098,17 +4098,17 @@ call frame primitives etc.
 
    (label JUST_FREE_THIS_CELL__)
           ;; COPY previous head of free cells into this cell
-          (LDA VM_LIST_OF_FREE_CELLS+1)
+          (LDA GLOBAL_CELL_FREE_LIST+1)
           (STA (ZP_RC),y)
-          (LDA VM_LIST_OF_FREE_CELLS)
+          (LDA GLOBAL_CELL_FREE_LIST)
           (DEY)
           (STA (ZP_RC),y)                       ;; RC -> [cell] -> (old) FREE_CELL_LIST
 
           ;; write this cell as new head into the list
           (LDA ZP_RC)
-          (STA VM_LIST_OF_FREE_CELLS)
+          (STA GLOBAL_CELL_FREE_LIST)
           (LDA ZP_RC+1)
-          (STA VM_LIST_OF_FREE_CELLS+1)         ;; (new) FREE_CELL_LIST -> [cell] -> ...
+          (STA GLOBAL_CELL_FREE_LIST+1)         ;; (new) FREE_CELL_LIST -> [cell] -> ...
 
           (LDA LIST_TO_FREE__+1)
           (BNE PREP_TAILCALL__)                          ;; there wasn't any further pointer => done with free
@@ -4120,7 +4120,7 @@ call frame primitives etc.
           (STA ZP_RC+1)
           (LDA LIST_TO_FREE__)
           (STA ZP_RC)                           ;; RC -> [cellA][cellB]  || [cell] || [cell-arr-header][cell0][cell1]...[celln] || [cell-natarr-header][byte0][byte1] ...[byten]
-          (JMP NEW_DEC_REFCNT_RC)               ;; tail call since cell did hold a reference ;; the type of the cell was alread checked so optimization could directly call the right decr function
+          (JMP DEC_REFCNT_RC)               ;; tail call since cell did hold a reference ;; the type of the cell was alread checked so optimization could directly call the right decr function
 
    (label IS_NEITHER_CELL_NOR_CELLPAIR_PTR__)
           ;; could still be something pointer to (like cellarr or nativearr
@@ -4140,18 +4140,18 @@ call frame primitives etc.
 
 (module+ test #| new_free_cell_rc |#
   (define new-free-cell-ptr-in-rc-tailcall-state
-    (compact-run-code-in-test                   ;; VM_LIST_OF_FREE_CELLS = 0000
+    (compact-run-code-in-test                   ;; GLOBAL_CELL_FREE_LIST = 0000
      (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 0 @ ..02]
      (JSR INC_REFCNT_CELL_RT)
      (JSR CP_RT_TO_RA)                          ;; RA -> [cell 0]
      (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 1 @ ..08]
      (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)        ;; RT -> [cell 1] -> [cell 0]
 
-     (JSR NEW_FREE_CELL_RT)                     ;; VM_LIST_OF_FREE_CELLS -> [cell 0] -> [cell 1] -> 0000
+     (JSR FREE_CELL_RT)                     ;; GLOBAL_CELL_FREE_LIST -> [cell 0] -> [cell 1] -> 0000
      ;; #:debug #t
      ))                                         ;; PFL -> [cell 2 @ ..0a]
 
-  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
                 (list #x02 PAGE_AVAIL_0)
                 (format "~a02 is new head of the free list" (number->string PAGE_AVAIL_0 16)))
   (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
@@ -4173,9 +4173,9 @@ call frame primitives etc.
   (define new-free-cell-ptr-in-rt-state
     (compact-run-code-in-test
      (JSR ALLOC_CELL_TO_RT)
-     (JSR NEW_FREE_CELL_RT)))
+     (JSR FREE_CELL_RT)))
 
-  (check-equal? (memory-list new-free-cell-ptr-in-rt-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
                 (list #x02 PAGE_AVAIL_0)
                 "allocated cell is freed by adding it as head to the list of free cells")
 
@@ -4193,10 +4193,10 @@ call frame primitives etc.
   (define new-free-cell-ptr-in-rt-realloc-state
     (compact-run-code-in-test
      (JSR ALLOC_CELL_TO_RT)
-     (JSR NEW_FREE_CELL_RT)
+     (JSR FREE_CELL_RT)
      (JSR ALLOC_CELL_TO_RT)))
 
-  (check-equal? (memory-list new-free-cell-ptr-in-rt-realloc-state VM_LIST_OF_FREE_CELLS VM_LIST_OF_FREE_CELLS)
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-realloc-state GLOBAL_CELL_FREE_LIST GLOBAL_CELL_FREE_LIST)
                 (list #x00)
                 "list of free cells is empty again")
 
@@ -4215,11 +4215,11 @@ call frame primitives etc.
      (JSR ALLOC_CELL_TO_RT)
      (JSR CP_RT_TO_RA)
      (JSR ALLOC_CELL_TO_RT)
-     (JSR NEW_FREE_CELL_RT)        ;; free cc08
+     (JSR FREE_CELL_RT)        ;; free cc08
      (JSR CP_RA_TO_RT)
-     (JSR NEW_FREE_CELL_RT)))      ;; then free cc02
+     (JSR FREE_CELL_RT)))      ;; then free cc02
 
-  (check-equal? (memory-list new-free-cell-ptr-in-rt-2xfree-state VM_LIST_OF_FREE_CELLS (add1 VM_LIST_OF_FREE_CELLS))
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-2xfree-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
                 (list #x02 PAGE_AVAIL_0)
                 "last allocated cell is freed by adding it as head to the list of free cells")
 
@@ -4288,7 +4288,7 @@ call frame primitives etc.
   (define use-case-2-b-code
     (append use-case-2-a-code ;; zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
             (list
-             (JSR NEW_DEC_REFCNT_CELLPAIR_RT)
+             (JSR DEC_REFCNT_CELLPAIR_RT)
              ;; now:
              ;;   free_tree -> [cc08|0] (int0 . ->[cc04|1] (int0 . nil))
              )))
@@ -4354,12 +4354,12 @@ call frame primitives etc.
           (ORA !$10)
           (STA (ZP_RA),y)       ;; set page type in byte 0 to b0001 <profile>
 
-          (LDA VM_FREE_M1_PAGE_P0,x) ;; current free page
+          (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x) ;; current free page
           (INY)
           (STA (ZP_RA),y)          ;; store previous page
 
           (LDA ZP_RA+1)
-          (STA VM_FREE_M1_PAGE_P0,x) ;; set page with free slots to this allocated page
+          (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x) ;; set page with free slots to this allocated page
 
           (LDA !$00)
           (INY)
@@ -4587,15 +4587,15 @@ call frame primitives etc.
           (JSR VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
 
    (label ALLOC_M1_SLOT_TYPE_X_TO_RA)
-          (LDA VM_FREE_M1_PAGE_P0,x) ;;
-          (BEQ NEW_PAGE__)     ;; if the current free page is $00 (there is no page marked as having free slots) => allocate new page
+          (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x) ;;
+          (BEQ PAGE__)     ;; if the current free page is $00 (there is no page marked as having free slots) => allocate new page
 
           ;; ensure zp_ra points into the page
           (STA ZP_RA+1)
           (STA INC_CMD__+2)
           (TAX)
           (LDY VM_PAGE_SLOT_DATA,x)           ;; first free slot offset
-          (BEQ NEW_PAGE__)    ;; if =0 allocate new page (no more free slots on this page)
+          (BEQ PAGE__)    ;; if =0 allocate new page (no more free slots on this page)
           ;; ensure zp_ptr2 points to the slot!
 
    (label CONTINUE__)
@@ -4622,19 +4622,19 @@ call frame primitives etc.
 
    (label NEXT_PAGE_CMD__)
           (LDA $C001) ;; $c0 is overwritten
-          (BEQ NEW_PAGE__) ;; next page ptr = $00 => end reached, no more pages
+          (BEQ PAGE__) ;; next page ptr = $00 => end reached, no more pages
           ;; check whether this page is full
           (TAX)
           (LDY VM_PAGE_SLOT_DATA,x)
           (BEQ FIND_NEXT_FREE_PAGE__) ;; next free slot for page is 00 => page is full, try to find next
           ;; page is not full => this is the new head
           (LDX PAGE_TYPE_IDX__)
-          (STA VM_FREE_M1_PAGE_P0,x)
+          (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x)
           (STA ZP_RA+1)
           (CLC)
           (BCC CONTINUE__)
 
-   (label NEW_PAGE__)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
+   (label PAGE__)               ;; allocate a complete new page for page type x or find a page in the list that has free slots
           (JSR ALLOC_PAGE_TO_X)
           (LDY PAGE_TYPE_IDX__)
           (JSR INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
@@ -4689,7 +4689,7 @@ call frame primitives etc.
             (LDA !$0b) ;; want slot of size 11
             (JSR ALLOC_M1_SLOT_TO_RA)
 
-            (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
+            (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC+1) ;; type 1
             (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-state-after
@@ -4727,7 +4727,7 @@ call frame primitives etc.
      (LDA !$0a) ;; want slot of size 10, should be on the same page
      (JSR ALLOC_M1_SLOT_TO_RA)
 
-     (LDA VM_FREE_M1_PAGE_P0+1) ;; type 1
+     (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC+1) ;; type 1
      (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-2x-state-after
@@ -4779,7 +4779,7 @@ call frame primitives etc.
 
 
      (label TAIL__TEST_ALLOC_BUCKET_SLOT_XX)
-            (LDA VM_FREE_M1_PAGE_P0+2) ;; type 2
+            (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC+2) ;; type 2
             (STA ZP_TEMP)))
 
   (define test-alloc-bucket-slot-xx-state-after
@@ -4826,7 +4826,7 @@ call frame primitives etc.
 
    ;; input: x (unchanged)
    (label VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
-          (LDA VM_FREE_M1_PAGE_P0,x)
+          (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x)
 
    (label LOOP_REMOVE_FULL_PAGES__)
           (TAY) ;; y = page now
@@ -4839,7 +4839,7 @@ call frame primitives etc.
           (LDY !$00)
    (label LOAD_PREV_PAGE_CMD__)
           (LDA $c001) ;; $c0 is overwritten with page
-          (STA VM_FREE_M1_PAGE_P0,x) ;; optional optimization: needs only be done once! (is here done in a loop)
+          (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x) ;; optional optimization: needs only be done once! (is here done in a loop)
    (label STORE_PREV_PAGE_CMD__)
           (STY $c001) ;; $c0 is overwritten
           (BNE LOOP_REMOVE_FULL_PAGES__) ;; if the current page (in a) is 0 (we are at the end of the list), we are done and can return, else loop
@@ -4870,14 +4870,14 @@ call frame primitives etc.
 
           (TAX) ;; now x = page type
 
-          (LDA VM_FREE_M1_PAGE_P0,x)
+          (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x)
 
           (INY) ;; now 1
           (STA (ZP_RA),y) ;; set previous
 
           ;; x = page type, a = page
           (LDA ZP_RA+1)
-          (STA VM_FREE_M1_PAGE_P0,x)
+          (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x)
           (TAX)  ;; x = page
 
    (label CONTINUE_WITH_RESTORE__)
@@ -5075,8 +5075,8 @@ call frame primitives etc.
      (JSR WRITE_RT_TO_ARR_ATa_RA)      ;; tos (int -1) -> @1
 
      (JSR CP_RA_TO_RT)                 ;; overwrite tos (-1) with ptr to array
-     (JSR NEW_GC_INCR_ARRAY_SLOT_RT)
-     (JSR NEW_GC_CELL_ARRAYS)          ;; run gc on slot elements -> cell-pair should be gc'd
+     (JSR GC_INCR_ARRAY_SLOT_RT)
+     (JSR GC_CELL_ARRAYS)          ;; run gc on slot elements -> cell-pair should be gc'd
      ))
 
   (define test-gc-array-slot-ptr-state-after
@@ -5269,7 +5269,7 @@ call frame primitives etc.
           (INY)
           (LDA (ZP_RA),y) ;; previous low byte in that slot (load again)
           (STA ZP_RT+1)
-          (JSR NEW_DEC_REFCNT_RT) ;; decrement array slot
+          (JSR DEC_REFCNT_RT) ;; decrement array slot
           (JSR POP_CELL_EVLSTK_TO_RT) ;; restore RT
 
    (label NO_GC__)
@@ -5673,18 +5673,18 @@ call frame primitives etc.
           POP_CELL_EVLSTK_TO_CELLy_RT                           ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
 
-          NEW_DEC_REFCNT_RC
-          NEW_FREE_CELL_RC ;; includes NEW_FREE_CELL_RT and _RA
-          NEW_GC_INCR_ARRAY_SLOT_RC
-          NEW_GC_CELL_ARRAYS
-          NEW_GC_CELLS
-          NEW_GC_ALL
-          NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
-          NEW_PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC
-          NEW_ADD_M1_SLOT_RC_TO_PFL
-          NEW_FREE_CELLARR_RC
-          NEW_FREE_CELLPAIR_RC ;; includes NEW_FREE_CELLPAIR_RT and _RA
-          NEW_FREE_M1_SLOT_RC
+          DEC_REFCNT_RC
+          FREE_CELL_RC ;; includes FREE_CELL_RT and _RA
+          GC_INCR_ARRAY_SLOT_RC
+          GC_CELL_ARRAYS
+          GC_CELLS
+          GC_ALL
+          DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
+          PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC
+          ADD_M1_SLOT_RC_TO_PFL
+          FREE_CELLARR_RC
+          FREE_CELLPAIR_RC ;; includes FREE_CELLPAIR_RT and _RA
+          FREE_M1_SLOT_RC
 
 
     (list (label END__MEMORY_MANAGER))

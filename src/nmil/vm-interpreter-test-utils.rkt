@@ -11,6 +11,9 @@
 (require (only-in "../ast/6510-assembler.rkt"
                   assemble
                   assemble-to-code-list
+                  new-assemble-to-code-list
+                  assembly-code-list-org-code-sequences
+                  assembly-code-list-labels
                   translate-code-list-for-basic-loader
                   org-for-code-seq))
 (require (only-in "../ast/6510-resolver.rkt" ->resolved-decisions label-instructions))
@@ -41,6 +44,7 @@
 (require (only-in "../tools/6510-debugger-shared.rkt"
                   debug-state-states
                   debug-state-tracepoints
+                  debug-state-labels
                   tracepoint-description
                   breakpoint
                   tracepoint
@@ -50,8 +54,8 @@
                   disassembler-byte-code--byte-count
                   disassemble-byte-code))
 (require (only-in "./vm-memory-manager.rkt"
-                  VM_FREE_CELL_PAIR_PAGE
-                  VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE
+                  GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
+                  GLOBAL_CELLPAIR_FREE_LIST
                   shorten-cell-string
                   shorten-cell-strings
                   vm-cell-at-nil?
@@ -214,23 +218,23 @@
                                             (- (length (debug-state-states state-run)) c-state-num)))]))
          final-d-state]))
 
-(define (debugger--disassemble c-state (offset 0))
+(define (debugger--disassemble c-state (offset 0) #:labels (labels (hash)))
   (define pc (+ (peek-word-at-address c-state ZP_VM_PC) offset))
   (define bc (peek c-state pc))
   (define bc_p1 (peek c-state (add1 pc)))
   (define bc_p2 (peek c-state (+ 2 pc)))
-  (format "$~a: $~a ~a"
+  (format "~a: ~a ~a"
           (format-hex-word pc)
           (~a (string-join (take (map format-hex-byte
                                       (list bc bc_p1 bc_p2))
                                  (disassembler-byte-code--byte-count bc))
-                           " $")
+                           " ")
               #:min-width 10)
-          (disassemble-byte-code bc bc_p1 bc_p2)))
+          (disassemble-byte-code bc bc_p1 bc_p2 #:labels labels)))
 
 (define (debugger--disassemble-lines d-state (lines 10) (offset 0))
   (when (> lines 0)
-    (color-displayln (debugger--disassemble (car (debug-state-states d-state)) offset))
+    (color-displayln (debugger--disassemble (car (debug-state-states d-state)) offset #:labels (debug-state-labels d-state)))
     (define c-state (car (debug-state-states d-state)))
     (debugger--disassemble-lines
      d-state
@@ -497,7 +501,7 @@
   (list
    `(dispatcher . ,(debugger--bc-dispatcher- interpreter-loop-adr))
    `(prompter . ,(lambda (d-state) (format "BC [~x] > " (length (debug-state-states d-state)))))
-   `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble (car (debug-state-states d-state))))))))
+   `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble (car (debug-state-states d-state)) #:labels (debug-state-labels d-state)))))))
 
 
 ;; get the number of pages not in the free list nor allocated (totally untouched/free)
@@ -550,7 +554,7 @@
 
 ;; get list of pages used for cell-pairs
 (define (vm-cell-pair-pages state)
-  (define page-w-free-cell-pairs (peek state VM_FREE_CELL_PAIR_PAGE))
+  (define page-w-free-cell-pairs (peek state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC))
   (vm-cell-pair-pages- state page-w-free-cell-pairs))
 
 (define (vm-cell-pair-free-list- state free-cell-pair-adr (result (list)))
@@ -560,7 +564,7 @@
          (vm-cell-pair-free-list- state next (cons free-cell-pair-adr result))]))
 ;; give a list of pointers to free cell-pairs that are free for reallocation
 (define (vm-cell-pair-free-list-info state)
-  (define first-free (peek-word-at-address state VM_QUEUE_ROOT_OF_CELL_PAIRS_TO_FREE))
+  (define first-free (peek-word-at-address state GLOBAL_CELLPAIR_FREE_LIST))
   (define free-adr-list (vm-cell-pair-free-list- state first-free))
   (cond [(empty? free-adr-list) "free-list: empty"]
         [else
@@ -577,9 +581,10 @@
   (define resolved-dec (->resolved-decisions (label-instructions wrapped-code) wrapped-code))
   (define label->offset (label-string-offsets org-code-start resolved-dec))
   (define interpreter-loop (hash-ref label->offset "VM_INTERPRETER"))
+  (define assembly (new-assemble-to-code-list wrapped-code))
   (define state-before
     (6510-load-multiple (initialize-cpu)
-                        (assemble-to-code-list wrapped-code)))
+                        (assembly-code-list-org-code-sequences assembly)))
   (if debug
       (run-debugger-on state-before
                        ""
@@ -592,7 +597,8 @@
                                     #f))
                        (list)
                        (debugger--bc-interactor interpreter-loop)
-                       #t)
+                       #t
+                       #:labels (assembly-code-list-labels assembly))
       (with-handlers ([exn:fail:cpu-interpreter?
                        (lambda (e)
                          (displayln "exception raised, continue in debugger")

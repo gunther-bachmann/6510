@@ -559,15 +559,15 @@ EOF
   (when file-does-exist
     (run-debugger--cleanup-emacs-integration capabilities file-name)))
 
-(define/c (run-debugger org program (file-name "") (verbose #t))
-  (->* [word/c (listof (or/c byte/c ast-command?))] [string? boolean?] any/c)
+(define/c (run-debugger org program (file-name "") (verbose #t) #:labels (labels (hash)))
+  (->* [word/c (listof (or/c byte/c ast-command?))] [string? boolean? #:labels (hash/c string? word/c)] any/c)
   (define raw-bytes (if (ast-command? (car program))
                         (assemble org program)
                         program))
   (when verbose
     (displayln (format "loading program into debugger at ~a" org))
     (displayln "enter '?' to get help, enter 'q' to quit"))
-  (run-debugger-on (6510-load (initialize-cpu) org raw-bytes) file-name verbose))
+  (run-debugger-on (6510-load (initialize-cpu) org raw-bytes) file-name verbose #:labels labels))
 
 ;; execute the debugger repl
 (define/c (run-debugger--repl initial-d-state capabilities)

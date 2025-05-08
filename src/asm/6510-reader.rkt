@@ -64,6 +64,7 @@
                 [(6510-prg-generator-folder) (string-append folder-prefix "/src/tools/6510-prg-generator.rkt")]
                 [(6510-debugger-folder) (string-append folder-prefix "/src/tools/6510-debugger.rkt")]
                 [(6510-constants-folder) (string-append folder-prefix "/src/ast/6510-constants.rkt")]
+                [(6510-assembler-folder) (string-append folder-prefix "/src/ast/6510-assembler.rkt")]
                 [(6510-source-map-folder) (string-append folder-prefix "/src/tools/6510-source-map.rkt")])
     (with-syntax ([(str ...) parsed-opcodes]
                   [(sy-str ...) unenc-prg]
@@ -78,6 +79,7 @@
                   [6510-prg-generator-folder 6510-prg-generator-folder]
                   [6510-debugger-folder 6510-debugger-folder]
                   [6510-constants-folder 6510-constants-folder]
+                  [6510-assembler-folder 6510-assembler-folder]
                   [6510-source-map-folder 6510-source-map-folder])
       (strip-context
        #`(module compiled6510 racket
@@ -88,7 +90,9 @@
            (require 6510-prg-generator-folder)
            (require 6510-debugger-folder)
            (require 6510-constants-folder)
+           (require 6510-assembler-folder)
            (require 6510-source-map-folder)
+           (require (only-in racket/hash hash-union))
            (provide program
                     program-p1
                     program-p2
@@ -100,20 +104,23 @@
            (define org-program '(sy-str ...))
            (define raw-program '(str ...))
            (define program `(,str ...))
+           (define constants (hash-constants program))
            (define program-p1 (->resolved-decisions (label-instructions program) program))
            (define program-p2 (->resolve-labels org (label-string-offsets org program-p1) program-p1 '()))
            (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
            (define raw-bytes (resolved-program->bytes program-p3))
+           (define lsoffsets (label-string-offsets org program-p1))
+           (define labels (hash-union lsoffsets constants))
            (create-source-map raw-bytes org (path->string f-name) program-p3 )
            (create-prg raw-bytes org prg-name)
            (create-image-with-program raw-bytes org prg-name d64-name (path->string (path-replace-extension f-name "")))
 
            ;; run when called from racket (C-c C-c)
            (unless (getenv "INSIDE_EMACS")
-             (displayln "(have a look at raw-program, program, program-p1, program-p2, program-p3 or raw-bytes)")
+             (displayln "(have a look at raw-program, program, program-p1, program-p2, program-p3, raw-bytes or labels)")
              (displayln (format "execute the program in vice via (run-emulator \"~a\")" d64-name))
              (displayln (format "execute interpreter via (run-interpreter ~a raw-bytes)" org))
-             (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes \"~a\")" org (path->string f-name))))
+             (displayln (format "execute debugger on the program via (run-debugger ~a raw-bytes \"~a\" \u0023:labels labels)" org (path->string f-name))))
 
            ;; run when called from cli
            (module+ main

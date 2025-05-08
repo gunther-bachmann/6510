@@ -40,7 +40,7 @@
 (defun 6510-debugger-execute-startup ()
   "execute debugger startup"
   (interactive)  
-  (6510-debugger--execute-command-in-repl--submit (format "(run-debugger 2064 raw-bytes \"%s\")" (buffer-name))))
+  (6510-debugger--execute-command-in-repl--submit (format "(run-debugger 2064 raw-bytes \"%s\" #:labels labels)" (buffer-name))))
 
 (defun 6510-debugger-step-over ()
   "execute stop over"
