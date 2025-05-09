@@ -4073,7 +4073,8 @@ https://microvm.github.io
 **** DONE optimize reference counting
 - [X] (not completely possible) get rid of refcount​_decr​_rt (only use 'ra')
 - [X] reduce impact/cpu cycles
-**** IMPLEMENT redesign vm-memory-manager
+**** DONE redesign vm-memory-manager
+- State "DONE"       from "IMPLEMENT"  [2025-05-09 Fri 11:59]
 - identify things that still make the redesign difficult
 - goal should be to allow for incremental improvements that should not take any longer than e.g. 30m
 - make improvement measurable (% done/list)
@@ -4348,6 +4349,7 @@ this will include the implementation of
   - copy subarray
   - concatenate arrays
   - to-list/from-list
+**** IMPLEMENT implement prime sieve (using native array)
 **** IMPLEMENT implement some code for native arrays (strings)
 - native-array/string functions
   - write to @/read from @
@@ -4414,7 +4416,7 @@ both)
 - [ ] add breakpoint on memory change
 - [ ] add stack view (continuous update) 
 - [ ] add call-frame view (continuous update)
-- [ ] inspection of vm variables (zp_​vm_​pc, zp_...)
+- [X] inspection of vm variables (zp_​vm_​pc, zp_...)
 - [ ] inspect/manipulate call frame
 - [ ] inspect/manipulate value stack
 - [-] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
@@ -4431,14 +4433,44 @@ both)
 - (m-def ...) -> vm, execute, debug?
 - see [[file:src/cisc-vm/mil-svm-generator.rkt]]
 **** glue together mil + 6510 vm
-**** IDEA: implement larger array by using a BST tree of arrays?
-**** IDEA: change table with dispatch addresses (for certain programs? might optimize memory footprint)
-**** IDEA: collect statistics for
+**** IDEA runtime profiling                    -> evaluate optimizations
+- build byte code profiling from assembly profiling building blocks?
+- assembly code
+  - run
+    - number/duration of calls of a method/label
+    - number of accesses on zp_ variables
+    - number of indirect accesses through zp_ variables
+    - number of accesses on vm_ variables (e.g. memory map etc)
+    - number of accesses on absolute variables (e.g. local function variables)
+- byte code
+  - static
+    - usage number of byte codes for programs
+  - run
+    - number/duration of executions of certain byte code
+    - number/duration of function calls
+    - number/duration of tail calls
+    - number/duration of locals accesses
+    - number/duration of stack push/pop operations
+    - number/duration of stack page allocations/deallocations
+    - number/duration of locals stack page allocations/deallocations
+    - stack sizes over time
+  - gc
+    - number of cell/cell-pair/cell-array/native-array alloc, free, reclaim, etc.
+    - pages (type, #free cells ...) over time
+
+**** IDEA inline native code
+- enter: byte code that will simply run the following natively (jmp there)
+- exit:  JSR interpreter reentrance:
+  - pop next byte code address from stack into bc program counter
+  - run bc interpreter from there
+**** IDEA implement larger array by using a BST tree of arrays?
+**** IDEA change table with dispatch addresses (for certain programs? might optimize memory footprint)
+**** IDEA collect statistics for
 - common two byte combinations <- byte code combinations
   - e.g. combine these into one byte commands
 - number of usages of single byte codes
   - e.g. move less common to prefixed-commands, ...
-**** IDEA: for native code implementation of (parts of) functions
+**** IDEA for native code implementation of (parts of) functions
 (have a rough idea of how this could be done, don't actually implement)
 - replace byte code sequence with byte-code indicating switchover to native code
   then use sequences of JSR that circumvent the decoding steps
@@ -4446,7 +4478,7 @@ both)
 - calling functions that have been replaced by native code (hot swap)
   need indirection (no direct pointer for call, rather index)
   need for data structure for mapping index to ptr
-**** IDEA: reduce ref counting for locals
+**** IDEA reduce ref counting for locals
 did some experiments on branch ~optimize_rev_app_w_extra_bc~
 - PULL​_FROM​_LOCAL​_n <- remove the value pulled from the local store => no ref needed counting!
 - sequences of getting a ptr from locals, incrementing ref count, the doing car/cdr, decrementing pointer + incrementing new one
@@ -4461,14 +4493,14 @@ did some experiments on branch ~optimize_rev_app_w_extra_bc~
 - ref counts are important if calling a sub routine <- do refcounting then (and keep that info)
 - leaving a function that has locals
   - it has called a subfunction => locals were refcounted => upon leaving, decrement refcounts (without deallocation!)
-**** IDEA: do tracing only on call and ret
+**** IDEA do tracing only on call and ret
 - print function names, too
 - print stack on call and result on ret
-**** IDEA: profiling (on jsr/rts) e.g. via tracing point
+**** IDEA profiling (on jsr/rts) e.g. via tracing point
 - use information of labels to convert addresses -> labels
 - collect cycles spent
 - collect number of calls
-**** IDEA: functions allow for metadata (could enhance tracing) and defaults
+**** IDEA functions allow for metadata (could enhance tracing) and defaults
 (e.g. byte 0 includes flag for existence, absence of metadata, number of defaults and number of locals)
 MDDDLLLL  M : flag for metadata existence
           DDD : 0..7 default values (or just 0..3)
@@ -4489,7 +4521,7 @@ offset   content
 ?        [native array function name]                           <-- even aligned ? (really, is there a need for that), or should this be alloced during loading and linking)
 ?        [other default values, the default cells are pointing to (e.g. a structure)]
 
-**** IDEA: call with defaults (related to concept of constants!)
+**** IDEA call with defaults (related to concept of constants!)
 - special call instruction
   - call​_with​_1​_default ... n​_defaults
   - defaults are cells before the byte defining the # of locals
@@ -4501,7 +4533,7 @@ offset   content
       and is called with the first default explicitly set by the caller
       and call​_with​_1​_default is used
     => only the second default is pushed on the stack
-**** IDEA: instruction cache (see python caching) (see https://github.com/python/cpython/blob/main/InternalDocs/interpreter.md#Specialization and https://www.youtube.com/watch?v=PGZPSWZSkJI&t=1470s)
+**** IDEA instruction cache (see python caching) (see https://github.com/python/cpython/blob/main/InternalDocs/interpreter.md#Specialization and https://www.youtube.com/watch?v=PGZPSWZSkJI&t=1470s)
 - use specialized byte code instruction (with guard to fall back to more general byte code)
 - fallback/specialization rewrites bytecode
 - right behind bytecode some information is 'cached'
@@ -4509,19 +4541,19 @@ offset   content
 - byte code that can be specialized is organized in 'families' that define how much extra bytes are needed
 - special byte code execution should be much faster than general byte code execution
   (e.g. int-add vs. finding the right add and then use conversions + float-add?)
-**** IDEA: restrict function names to one case and only some special chars => function meta data as name is compact
+**** IDEA restrict function names to one case and only some special chars => function meta data as name is compact
 - store 3 characters in 2 bytes (each 5 bit)
 - A-Z (26) or a-z
 - _-?>< and byte 0 to mark end?
 - drawbacks: no numbers, no lower/upper case characters <- worth it?
   probably not! get rid of metadata if possible (e.g. through static linking?)
-**** IDEA: make compilation phases more explicit
+**** IDEA make compilation phases more explicit
 - macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
 - transformation from ast/stack orientation -> register oriented atomic commands
 - vm-register allocation + reordering sub expressions (optimization)
   - function parameters can be evaluated in any order (strict eval scheme)
 - optional: others like constant folding
-**** IDEA: information collected/used during compilation phases
+**** IDEA information collected/used during compilation phases
 Maybe add this information as a hashmap, allowing for arbitrary information to be added any time
 What information is needed for the different phases? => check the different optimization problems, collect necessary information
 - precode :: used to store atomic expressions that need to run before the code for the current node can be executed

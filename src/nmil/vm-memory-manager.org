@@ -1,7 +1,5 @@
 #+title: vm-memory-manager
 * open tasks
-** TODO make sure disassembler works for labels with any number of relevant digits
-currently in interactive mode, debugger starts at $8xx, which seems not to resolve the labels correctly
 ** TODO harmonize function description                -> ease the usage of functions as building blocks
 - do this in an incremental fashion
 - describe what is useful
@@ -35,30 +33,6 @@ funcs:  list of sub routines / functions used
 ** TODO split vm-memory-manager in several submodules -> compile/test faster, racket integration better
 ** TODO check: do pointers on cells exist that are on the locals/eval-stack?
 - currently the answer is *NO*, does that restrict the programming model?
-** TODO idea for runtime profiling                    -> evaluate optimizations
-- build byte code profiling from assembly profiling building blocks?
-- assembly code
-  - run
-    - number/duration of calls of a method/label
-    - number of accesses on zp_ variables
-    - number of indirect accesses through zp_ variables
-    - number of accesses on vm_ variables (e.g. memory map etc)
-    - number of accesses on absolute variables (e.g. local function variables)
-- byte code
-  - static
-    - usage number of byte codes for programs
-  - run
-    - number/duration of executions of certain byte code
-    - number/duration of function calls
-    - number/duration of tail calls
-    - number/duration of locals accesses
-    - number/duration of stack push/pop operations
-    - number/duration of stack page allocations/deallocations
-    - number/duration of locals stack page allocations/deallocations
-    - stack sizes over time
-  - gc
-    - number of cell/cell-pair/cell-array/native-array alloc, free, reclaim, etc.
-    - pages (type, #free cells ...) over time
 ** TODO tweak configuration parameters                -> increase speed/reduce memory consumption
 use profiling data
 * current (en)coding
@@ -1985,6 +1959,7 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
 - State "DONE"       from "TODO"       [2025-05-08 Thu 16:41]
 ** DONE provide labels for interactive 6510 debugger  -> increase debugger usability (allow label usage in byte-code debugger and during dive!)
 - State "DONE"       from "TODO"       [2025-05-08 Thu 18:01]
+** DONE make sure disassembler works for labels with lower case
 * - :noexport:
 #+begin_src emacs-lisp
   ;; Local Variables:

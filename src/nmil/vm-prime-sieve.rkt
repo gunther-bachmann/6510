@@ -1,0 +1,191 @@
+#lang racket/base
+
+#|
+
+implementation of the sieve of Eratosthenes
+
+create an array of boolean values (native array)
+1st implementation: use cell array with byte values (as booleans)
+2nd implementation: native array, 1 byte =  boolean value
+3rd implementation: native array, 1 byte = 8 boolean values
+
+functions to implement access and usage of native array
+
+
+- create native array with 0s
+- 0 = is (possibly) prime
+- set # = 2
+- mark all multiples (not including itself) of # up to max as 1 (non-prime)
+- scan array for next (possibly) prime number
+- set # = number found (next is 3, then 5 (since 4 is marked), then 7 ...)
+- if # > max end the loop
+- else loop
+
+test: check the content of the array
+primes (ignore 0,1) up to 30
+
+
+- - 2 3 . 5 . 7 . . . 11 . 13 . . . 17 . 19 . . . 23 . . . . . 29 .
+0 0 0 0 1 0 1 0 1 1 1 0  1 0  1 1 1 0  1 0  1 1 1 0  1 1 1 1 1 0  1  <--  array/memory content to check!
+
+
+
+- cell array operations: index = byte, read/write cells
+  PUSH_CELLARR_FIELD    tos = index(byte) :: cell-array-ptr                 -> tos = value (cell)
+  POP_TO_CELLARR_FIELD  tos = index(byte) :: value (cell) :: cell-array-ptr -> []
+  ALLOC_CELLARR         tos = size != 0                                    -> tos = cell-array-ptr
+
+- native array operations: index = byte, read/write byte
+  PUSH_NATARR_FIELD     tos = index(byte) :: array-ptr                      -> tos = value (byte)
+  POP_TO_NATARR_FIELD   tos = index(byte) :: value(byte) :: array-ptr       -> []
+  ALLOC_NATARR          tos = size != 0                                    -> tos = array-ptr
+
+  write native array ra @ index rt -> local (byte)?
+  write local byte -> native array ra @ index rt?
+
+
+|#
+
+
+(require (only-in racket/list flatten))
+(require "./bc-ast.rkt")
+(require (only-in "./bc-resolver.rkt" bc-resolve bc-bytes))
+
+(require (only-in "../cisc-vm/stack-virtual-machine.rkt"
+                  CONS
+                  CAR
+                  CDR
+                  GOTO
+                  RET
+                  BYTE+
+                  INT+
+                  INT-
+                  BRA
+                  CALL
+                  NIL?
+                  TAIL_CALL
+
+                  PUSH_INT
+                  PUSH_BYTE
+                  PUSH_NIL
+                  PUSH_LOCAL
+                  PUSH_GLOBAL
+                  PUSH_STRUCT_FIELD
+
+                  POP_TO_LOCAL
+                  POP_TO_GLOBAL))
+
+(require [only-in "./vm-interpreter.rkt"
+                  vm-interpreter
+                  bc
+                  CELL_EQ
+                  EXT
+                  CAAR
+                  CADR
+                  CDAR
+                  CDDR
+                  COONS
+                  POP
+                  DUP
+                  BNOP
+                  INT_0_P
+                  INC_INT
+                  MAX_INT
+                  FALSE_P_BRANCH
+                  TRUE_P_BRANCH
+                  INT_GREATER_P
+                  CONS_PAIR_P
+                  TRUE_P_RET
+                  FALSE_P_RET
+                  NIL?_RET_LOCAL_0_POP_1
+                  INT_P
+                  SWAP
+                  POP_TO_LOCAL_0
+                  POP_TO_LOCAL_1
+                  POP_TO_LOCAL_2
+                  POP_TO_LOCAL_3
+                  WRITE_TO_LOCAL_0
+                  WRITE_TO_LOCAL_1
+                  WRITE_TO_LOCAL_2
+                  WRITE_TO_LOCAL_3
+                  PUSH_LOCAL_0
+                  PUSH_LOCAL_1
+                  PUSH_LOCAL_2
+                  PUSH_LOCAL_3
+                  PUSH_LOCAL_0_CAR
+                  PUSH_LOCAL_1_CAR
+                  PUSH_LOCAL_2_CAR
+                  PUSH_LOCAL_3_CAR
+                  PUSH_LOCAL_0_CDR
+                  PUSH_LOCAL_1_CDR
+                  PUSH_LOCAL_2_CDR
+                  PUSH_LOCAL_3_CDR
+                  PUSH_INT_0
+                  PUSH_INT_1
+                  PUSH_INT_2
+                  PUSH_INT_m1
+                  WRITE_FROM_LOCAL_0
+                  WRITE_FROM_LOCAL_1
+                  WRITE_FROM_LOCAL_2
+                  WRITE_FROM_LOCAL_3])
+(require (only-in "./vm-memory-manager.rkt" ZP_VM_PC shorten-cell-strings shorten-cell-string))
+
+(require "../6510.rkt")
+(require (only-in "../tools/6510-interpreter.rkt" memory-list))
+
+(module+ test #|  |#
+  (require "../6510-test-utils.rkt")
+
+  (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
+  (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
+  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
+
+  (require (only-in "./vm-memory-manager.rkt"
+                    vm-cell-at-nil?
+                    vm-page->strings
+                    vm-stack->strings
+                    vm-regt->string
+                    vm-cell-at->string
+                    vm-cell->string
+                    vm-deref-cell-pair-w->string))
+  (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
+
+
+  (define PAGE_AVAIL_0 #x97)
+  (define PAGE_AVAIL_0_W #x9700)
+  (define PAGE_AVAIL_1 #x96)
+  (define PAGE_AVAIL_1_W #x9600)
+
+  (define (wrap-bytecode-for-test bc)
+    (append (list (org #x7000)
+                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
+                  (JSR VM_INITIALIZE_CALL_FRAME)
+                  (JSR VM_INTERPRETER_INIT)
+                  (JMP VM_INTERPRETER))
+            (list (org #x8000))
+            (flatten bc)
+            (list (org #xa000))
+            vm-interpreter))
+
+  (define (run-bc-wrapped-in-test bc (debug #f))
+    (define wrapped-code (wrap-bytecode-for-test bc))
+    (run-bc-wrapped-in-test- bc wrapped-code debug)))
+
+
+(define PRIME_SIEVE
+  (list
+   (label PRIME_SIEVE)
+          (byte 0) ;; locals
+          (bc RET)))
+
+(module+ test #| primve-sieve |#
+  (define prime-sieve-state
+    (run-bc-wrapped-in-test
+     (append
+      (list
+       (bc PUSH_INT) (word 100)
+       (bc CALL) (word-ref PRIME_SIEVE)
+       (bc BRK))
+      (list (org #x8F00))
+      PRIME_SIEVE)
+      )))

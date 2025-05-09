@@ -57,6 +57,9 @@
     [(= byte-code-t2 #x24) "eq?"]
     [(= byte-code-t2 #x26) "false? -> ret false!"]
     [(= byte-code-t2 #x28) "alloc array"]
+    [(= byte-code-t2 #x2a) "push array field"]
+    [(= byte-code-t2 #x2c) "pop to array field"]
+    [(= byte-code-t2 #x2e) (format "push byte $~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x30) 
      (define n (arithmetic-shift (bitwise-and #x6 bc) -1))
      (if (= 1 (bitwise-and bc #x01))

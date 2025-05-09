@@ -174,6 +174,8 @@ call frame primitives etc.
          shorten-cell-strings
 
          POP_CELL_EVLSTK_TO_RT
+         POP_CELL_EVLSTK_TO_RA
+
          GLOBAL_CELLPAIR_FREE_LIST
          GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
          GLOBAL_CELL_FREE_LIST
@@ -1401,6 +1403,43 @@ call frame primitives etc.
 ;; input: call-frame stack, RT
 ;; output: call-frame stack reduced by`1, RT <- popped value
 ;; NO GC CHECKS!
+;; pop cell from stack (that is, discard RegT, move tos of call-frame stack into RegT (if available))
+;; input: call-frame stack, RT
+;; output: call-frame stack reduced by`1, RT <- popped value
+;; NO GC CHECKS!
+(define POP_CELL_EVLSTK_TO_RA
+  (list
+   (label POP_CELL_EVLSTK_TO_RA)
+          ;; optional: stack marked empty? => error: cannot pop from empty stack!
+          ;; (LDY !$00)
+          ;; (BEQ ERROR_NO_VALUE_ON_STACK)
+
+          ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
+          (LDY ZP_CELL_STACK_TOS)
+          (CPY !$01) ;; stack empty?
+          (BEQ WRITE_00_TO_RA) ;; which effectively clears the RT
+          ;; pop value from call-frame stack into RT!
+          (LDA (ZP_CELL_STACK_LB_PTR),y) ;; tagged low byte
+          (STA ZP_RA)
+
+
+          ;; (optional) quick check for atomic cells [speeds up popping atomic cells, slows popping cell-ptr, slight slows popping cell-pair-ptr
+          ;; (AND !$03)
+          ;; (BEQ WRITE_TOS_TO_RA__POP_CELL_EVLSTK_TO_RA)
+          ;; (TXA)
+
+          (LDA (ZP_CELL_STACK_HB_PTR),y) ;; high byte
+          (STA ZP_RA+1)
+          (DEC ZP_CELL_STACK_TOS)
+          (RTS)
+
+   (label WRITE_00_TO_RA)
+          ;; mark RA as empty
+          (LDA !$00)
+          (STA ZP_RA)
+          (STA ZP_RA+1)
+          (RTS)))
+
 (define POP_CELL_EVLSTK_TO_RT
   (list
    (label POP_CELL_EVLSTK_TO_RT)
@@ -5256,6 +5295,7 @@ call frame primitives etc.
           ;; get previous content into rt and decr ref count (if applicable)
           (TAY)
           (LDA (ZP_RA),y) ;; if low byte (tagged)
+          (BEQ NO_GC__)
           (AND !$03)
           (CMP !$03)
           (BEQ NO_GC__)
@@ -5470,7 +5510,7 @@ call frame primitives etc.
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
   (inform-check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                1285)
+                1272)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 2 items"
                       "int $01ff  (rt)"
@@ -5613,6 +5653,7 @@ call frame primitives etc.
 
           ;; ---------------------------------------- CELL_STACK / RT / RA
           POP_CELL_EVLSTK_TO_RT                                ;; pop cell-stack into RT (discarding RT)
+          POP_CELL_EVLSTK_TO_RA
 
           PUSH_TO_EVLSTK                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
@@ -5696,4 +5737,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1784))
+                       1798))

@@ -26,6 +26,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   Byte code command list and description
   opcode                 len       options                   description
   -----------------------------------------------------------------------------------
+  ALLOC_ARRAY              1  14                             allocate cell-ptr to cell-array onto stack
   BRK                      1  01                             break (stop)
   CALL                     3  34                             statically call function pointed to be following two bytes
   CAR                      1  43                             replace tos with car
@@ -35,15 +36,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   INT_PLUS                 1  62                             pop two integers and push the sum of them
   NIL?                     1  21                             replace tos with 0 (false) or 1 (true) if tos was nil
   NIL?_RET_LOCAL_0_POP_n   1  98+  n=1..4                     if tos is nil, pop n from eval-stack and return local0 as result (on tos)
-  POP_TO_LOCAL_n           1  90+  n=0..4                     pop tos into local#n
-  PUSH_INT int             3       int=0..8191, -4096..4095   push integer constant onto eval-stack
+  POP_TO_ARRAY_FIELD       1  16                             pop the cell at tos-2 into array (tos-1) at index (tos)
+  POP_TO_LOCAL_n           1  90+  n=0..3                     pop tos into local#n
+  PUSH_ARRAY_FIELD         1  15                             push field of the array (tos-1) at index (tos) onto eval-stack
+  PUSH_BYTE byte           2  17   byte=0..255 -128..+127     push a byte constant onto the eval-stack
+  PUSH_CONST_INT int       3  06   int=0..8191, -4096..4095   push integer constant onto eval-stack
   PUSH_INT_i               1  b8+  i=0,1,2,-1(m1)            push constant 0,1,2,-1 onto eval-stack
-  PUSH_LOCAL_n             1  80+  n=0..4                     push local#n onto eval-stack
+  PUSH_LOCAL_n             1  80+  n=0..3                     push local#n onto eval-stack
   PUSH_NIL                 1  09                             push nil onto eval-stack
   RET                      1  33                             return from function
   TAIL_CALL                1  35                             tail call same function
-  WRITE_FROM_LOCAL_n       1  81+  n=0..4                     write local#n into tos (overwriting old tos)
-  WRITE_TO_LOCAL_n         1  91+  n=0..4                     write tos into local#n (without popping)
+  WRITE_FROM_LOCAL_n       1  81+  n=0..3                     write local#n into tos (overwriting old tos)
+  WRITE_TO_LOCAL_n         1  91+  n=0..3                     write tos into local#n (without popping)
 
 
   (not implemented yet)
@@ -102,7 +106,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                     CDR
                     GOTO
                     RET
-                    BYTE+
+                    ;; BYTE+
                     INT+
                     INT-
                     BRA
@@ -113,11 +117,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
                     PUSH_INT
                     PUSH_ARRAY_FIELD
-                    PUSH_BYTE
+                    ;; PUSH_BYTE
                     PUSH_NIL
-                    PUSH_LOCAL
-                    PUSH_GLOBAL
-                    PUSH_STRUCT_FIELD
+                    ;; PUSH_LOCAL
+                    ;; PUSH_GLOBAL
+                    ;; PUSH_STRUCT_FIELD
+                    POP_TO_ARRAY_FIELD
+
                     
                     sPUSH_PARAMc
                     sNIL?-RET-PARAMc))
@@ -2427,6 +2433,139 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
+(define PUSH_BYTE #x17)
+(define BC_PUSH_BYTE
+  (flatten
+   (list
+    (label BC_PUSH_BYTE)
+           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+           (LDY !$01)
+           (LDA (ZP_VM_PC),y)
+           (STA ZP_RT+1)
+           (LDA !TAG_BYTE_BYTE_CELL)
+           (STA ZP_RT)
+           (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
+
+(module+ test #| push byte |#
+  (define push-byte-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_BYTE) (byte 0)
+       (bc PUSH_BYTE) (byte 1)
+       (bc PUSH_BYTE) (byte 10)))))
+
+  (check-equal? (vm-stack->strings push-byte-state)
+                (list "stack holds 3 items"
+                      "byte $0a  (rt)"
+                      "byte $01"
+                      "byte $00")))
+
+;; stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
+;; ->     []
+;;        cell-array @ index = value
+(define BC_POP_TO_ARRAY_FIELD
+  (flatten
+   (list
+    (label BC_POP_TO_ARRAY_FIELD)
+           (LDA ZP_RT+1)                  ;; index                               (stack: index ::cell-ptr ::value )
+           (PHA)
+           (JSR POP_CELL_EVLSTK_TO_RA)    ;; ra = cell-ptr -> cell-array         (stack: index ::value )
+           (JSR POP_CELL_EVLSTK_TO_RT)    ;; rt = value                          (stack: value)
+           (PLA)                          ;; a = index
+           (JSR POP_EVLSTK_TO_ARR_ATa_RA) ;; array@a <- rt (TODO: check that old value is dec-refcnt'd)
+           (JSR DEC_REFCNT_RA)            ;; since array is no longer on stack dec refcnt (value moved => no change)
+           (JMP VM_INTERPRETER_INC_PC))))
+
+(module+ test #| pop to array field |#
+  (define pop-to-array-field-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_BYTE) (byte 20)
+      (bc ALLOC_ARRAY)
+      (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
+      (bc PUSH_INT_1)
+      (bc SWAP)
+      (bc PUSH_BYTE) (byte 1)
+      (bc POP_TO_ARRAY_FIELD))
+     ))
+
+  (check-equal? (vm-stack->strings pop-to-array-field-state)
+                (list "stack holds 1 item"
+                      (format "ptr[1] $~a06  (rt)" (number->string PAGE_AVAIL_0 16))))
+  (check-equal? (memory-list pop-to-array-field-state (+ PAGE_AVAIL_0_W 05) (+ PAGE_AVAIL_0_W 11))
+                (list 1      ;; refcnt = 1 (one reference on the stack)
+                      #x83   ;; page type = m1p3 (slot size 49, used 20*2)
+                      20     ;; number of elements
+                      0 0    ;; element 0
+                      3 1))) ;; element 1 = int 1
+
+;; stack: index (byte) :: cell-ptr -> cell-array
+;; ->     value (cell)
+(define BC_PUSH_ARRAY_FIELD
+  (flatten
+   (list
+    (label BC_PUSH_ARRAY_FIELD)
+           (JSR POP_CELL_EVLSTK_TO_RA)    ;; ra = cell-ptr -> cell-array         (stack: index)
+           (LDA ZP_RT+1)                  ;; index                               (stack: index)
+           (JSR WRITE_ARR_ATa_RA_TO_RT)   ;; rt <- array@a                       (stack: value)
+           (JSR INC_REFCNT_RT)            ;; now on stack and in array => inc refcnt'd
+           (JSR DEC_REFCNT_RA)            ;; removed from stack => dec refcnt'd
+           (JMP VM_INTERPRETER_INC_PC))))
+
+(module+ test #| push array field |#
+  (define push-array-field-state
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_BYTE) (byte 20)
+       (bc ALLOC_ARRAY)
+
+       (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
+       (bc PUSH_INT_1)
+       (bc SWAP)
+       (bc PUSH_BYTE) (byte 1)
+       (bc POP_TO_ARRAY_FIELD)
+
+       (bc DUP)
+       (bc PUSH_INT_2)
+       (bc SWAP)
+       (bc PUSH_BYTE) (byte 10)
+       (bc POP_TO_ARRAY_FIELD)
+
+       (bc DUP)
+       (bc DUP)
+       (bc PUSH_BYTE) (byte 1)
+       (bc PUSH_ARRAY_FIELD)
+
+       (bc SWAP)
+       (bc PUSH_BYTE) (byte 10)
+       (bc PUSH_ARRAY_FIELD)))
+     ))
+
+(check-equal? (memory-list push-array-field-state (+ PAGE_AVAIL_0_W 05) (+ PAGE_AVAIL_0_W 29))
+                (list 1      ;; refcnt = 1 (one reference on the stack)
+                      #x83   ;; page type = m1p3 (slot size 49, used 20*2)
+                      20     ;; number of elements
+                      0 0    ;; element 0
+                      3 1
+                      0 0
+                      0 0
+                      0 0
+                      0 0
+                      0 0
+                      0 0
+                      0 0
+                      0 0
+                      3 2   ;; element 10
+                      ))
+
+  (check-equal? (vm-stack->strings push-array-field-state)
+                (list "stack holds 3 items"
+                      "int $0002  (rt)"
+                      "int $0001"
+                      "ptr[1] $9706")))
+
 (define GET_ARRAY_FIELD_0 #xb0)
 (define GET_ARRAY_FIELD_1 #xb2)
 (define GET_ARRAY_FIELD_2 #xb4)
@@ -2462,14 +2601,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR DEC_REFCNT_RA)
            (JMP VM_INTERPRETER_INC_PC))))
 
+;; stack: size (byte)
+;; ->      cell-ptr -> cell-array
 (define ALLOC_ARRAY #x14)
 (define BC_ALLOC_ARRAY
   (list
    (label BC_ALLOC_ARRAY)
-          (LDA ZP_RT+1)
-          (JSR ALLOC_CELLARR_TO_RA)
-          (JSR INC_REFCNT_M1_SLOT_RA)
-          (JSR CP_RA_TO_RT) ;; overwrite byte on stack
+          (LDA ZP_RT+1)                 ;; byte size
+          (JSR ALLOC_CELLARR_TO_RA)     ;;
+          (JSR INC_REFCNT_M1_SLOT_RA)   ;; only cell-array needs to be inc-refcnt'd
+          (JSR CP_RA_TO_RT)             ;; overwrite byte on stack
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; must be page aligned!
@@ -2497,10 +2638,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_POP)                      ;; 22  <-  11
            (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
            (word-ref BC_FALSE_P_RET_FALSE)        ;; 26  <-  13 
-           (word-ref BC_ALLOC_ARRAY)              ;; 28  <-  14 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 2a  <-  15 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 2c  <-  16 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 2e  <-  17 reserved
+           (word-ref BC_ALLOC_ARRAY)              ;; 28  <-  14
+           (word-ref BC_PUSH_ARRAY_FIELD)         ;; 2a  <-  15
+           (word-ref BC_POP_TO_ARRAY_FIELD)       ;; 2c  <-  16
+           (word-ref BC_PUSH_BYTE)                ;; 2e  <-  17
            (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
@@ -2695,6 +2836,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_XET_ARRAY_FIELD
           BC_FALSE_P_RET_FALSE
           VM_REFCOUNT_DECR_CURRENT_LOCALS
+          BC_PUSH_ARRAY_FIELD
+          BC_POP_TO_ARRAY_FIELD
+          BC_PUSH_BYTE
           VM_INTERPRETER))
 
 (define vm-interpreter
@@ -2709,4 +2853,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       817))
+                       859))
