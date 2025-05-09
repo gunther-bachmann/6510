@@ -332,9 +332,9 @@
     (define rbc-regex #px"^rbc *([[:xdigit:]]{2}) *(([[:xdigit:]]{2}) *([[:xdigit:]]{2})?)?")
     (foreground-color 'yellow)
     (begin0
-        (with-handlers ([exn:fail:user? (lambda (e)
-                                          (color-displayln (format "ignored exception (~a)" (exn->string e)))
-                                          d-state)])
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (color-displayln (format "ignored exception (~a)" (exn->string e)))
+                                     d-state)])
           (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
                 [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
                 [(string=? command "fl") (color-displayln (vm-cell-pair-free-list-info c-state)) d-state]
