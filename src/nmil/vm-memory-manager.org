@@ -26,7 +26,7 @@ funcs:  list of sub routines / functions used
   - all tests should be resilient to memory location changes of registers etc.
 - use most recent test utils
 ** TODO define register usage convention for commands -> prevent accidental overlapping use
-- e.g. gc only on ZP_RC
+- e.g. gc only on ZP_RZ
 - one argument function on ZP_RT
 - array access on ZP_RA
 - second argument function on ZP_RS
@@ -809,7 +809,7 @@ idea REFCOUNT​_INCR is needed only on RT
   #+end_src
   - VM​_REFCOUNT​_DECR​_RT
   - VM​_REFCOUNT​_DECR​_RA
-- [ ] make garbage collection run on RA (and RC) only
+- [ ] make garbage collection run on RA (and RZ) only
 * log
 ** GC usage of RA RT
 - RT may be used for regular dec/inc of refcount
@@ -820,7 +820,7 @@ idea REFCOUNT​_INCR is needed only on RT
    GC may not change RT (except for temporary stuff)
 => more complex GC operations should copy RT->RA first and then operate on RA only
    collecting complex structures (e.g. pair cells or arrays) may need RA and additional memory space/register
-   => do not use RT, use RC <- new register for special gc stuff?  
+   => do not use RT, use RZ <- new register for special gc stuff?  
 ** IDEA use locals as array registers (alternative to dedicated array registers)
 - instead of
   #+begin_src scheme
@@ -1860,7 +1860,7 @@ use the following idea in more situations:
 - [X] use labels in place of addresses in all debug commands
   - [X] set break point at label
 ** DONE cell deallocation
-instead of implementing free for RT and RA, implement one function, copying RT/RA to (e.g. RC) and work on RC
+instead of implementing free for RT and RA, implement one function, copying RT/RA to (e.g. RZ) and work on RZ
 (todo: copy algorithms from notebook into here!)
 - plan to do deallocation of different cell types (free is done if refcnt drops to 0)
   - free rt
@@ -1889,7 +1889,7 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
   - freeable cell-pair list (? necessary ? can be done during allocation) [e.g. during alloc of cell-pairs]
     [cell A][cell B] = head of freeable list, cell A points to next in list
     pop from freeable list and push to free list
-    if cell B is a pointer, RC=cell B, call free RC
+    if cell B is a pointer, RZ=cell B, call free RZ
   - freeable cell-array list [e.g. during alloc of cells of type of this array]
     cell-array = head of freeable cell-array list
     find first cell pointer going from cell n-1 downwards and mark it for further free
@@ -1901,53 +1901,53 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
 |                                                  | -=impl. incomp. |                                                                                                                                                                              |
 | fname                                            | status          | description                                                                                                                                                                  |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| NEW_DEC_REFCNT_CELL_RC                           | i               | specific dec refcnt cell, possible free if refcnt drops to 0                                                                                                                 |
+| NEW_DEC_REFCNT_CELL_RZ                           | i               | specific dec refcnt cell, possible free if refcnt drops to 0                                                                                                                 |
 | NEW_DEC_REFCNT_CELL_RT                           | i               | prefix new_dec_refcnt_cellpair_rc with cp rt->rc                                                                                                                             |
 | NEW_DEC_REFCNT_CELL_RA                           | i               | prefix new_dec_refcnt_cellpair_rc with cp ra->rc                                                                                                                             |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | NEW_DEC_REFCNT_CELLPAIR_RT                       | i               | prefix new_dec_refcnt_cellpair_rc with cp rt->rc                                                                                                                             |
 | NEW_DEC_REFCNT_CELLPAIR_RA                       | i               | prefix new_dec_refcnt_cellpair_rc with cp ra->rc                                                                                                                             |
-| NEW_DEC_REFCNT_CELLPAIR_RC                       | i               | specific dec refcount of cellpair, possible free if refcnt drops to 0                                                                                                        |
+| NEW_DEC_REFCNT_CELLPAIR_RZ                       | i               | specific dec refcount of cellpair, possible free if refcnt drops to 0                                                                                                        |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| NEW_DEC_REFCNT_M1_SLOT_RC                        | i               | specific dec refcnt of m1 slot, possible free if refcnt drops to 0                                                                                                           |
-| NEW_DEC_REFCNT_CELLARR_RC                        | i               | specific dec refcnt of cellar, possible free if refcnt drops to 0                                                                                                            |
-| NEW_DEC_REFCNT_NATIVEARR_RC                      | i               | specific dec refcnt of nativearr, possible free if refcnt drops to 0                                                                                                         |
-| NEW_DEC_REFCNT_RC                                | t               | generic dec refcnt rc, calls more specific routines once the ptr type was detected                                                                                           |
+| NEW_DEC_REFCNT_M1_SLOT_RZ                        | i               | specific dec refcnt of m1 slot, possible free if refcnt drops to 0                                                                                                           |
+| NEW_DEC_REFCNT_CELLARR_RZ                        | i               | specific dec refcnt of cellar, possible free if refcnt drops to 0                                                                                                            |
+| NEW_DEC_REFCNT_NATIVEARR_RZ                      | i               | specific dec refcnt of nativearr, possible free if refcnt drops to 0                                                                                                         |
+| NEW_DEC_REFCNT_RZ                                | t               | generic dec refcnt rc, calls more specific routines once the ptr type was detected                                                                                           |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| FREE_M1_SLOT_RCm1                                | i               | generic free m1 slot (currently pointing to the ref count field)                                                                                                             |
+| FREE_M1_SLOT_RZm1                                | i               | generic free m1 slot (currently pointing to the ref count field)                                                                                                             |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| NEW_FREE_M1_SLOT_RC                              | i               | generic free for m1 slots, calls more specific routines once slot type was detected (currently either cellarr or nativearr)                                                  |
+| NEW_FREE_M1_SLOT_RZ                              | i               | generic free for m1 slots, calls more specific routines once slot type was detected (currently either cellarr or nativearr)                                                  |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | NEW_FREE_CELLPAIR_RT                             | t               | prefix new_free_cellpair_rc with copy rt->rc                                                                                                                                 |
 | NEW_FREE_CELLPAIR_RA                             | t               | prefix new_free_cellpair_rc with copy ra->rc                                                                                                                                 |
-| NEW_FREE_CELLPAIR_RC                             | t               | specific free for cellpair ptr                                                                                                                                               |
+| NEW_FREE_CELLPAIR_RZ                             | t               | specific free for cellpair ptr                                                                                                                                               |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| NEW_FREE_CELLARR_RC                              | -               | specific free cellarr, free non ptr cells in array (starting at end), decref ptrs until first ptr is encountered that must be freed                                          |
-| NEW_FREE_NATIVEARR_RC                            | /               | simply use NEW_ADD_M1_SLOT_RC_TO_PFL (no further actions necessary for deallocation)                                                                                         |
+| NEW_FREE_CELLARR_RZ                              | -               | specific free cellarr, free non ptr cells in array (starting at end), decref ptrs until first ptr is encountered that must be freed                                          |
+| NEW_FREE_NATIVEARR_RZ                            | /               | simply use NEW_ADD_M1_SLOT_RZ_TO_PFL (no further actions necessary for deallocation)                                                                                         |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | NEW_FREE_CELL_RT                                 | t               | prefix new_free_cell_rc with copy rt->rc                                                                                                                                     |
 | NEW_FREE_CELL_RA                                 | t               | prefix new_free_cell_rc with copy ra->rc                                                                                                                                     |
-| NEW_FREE_CELL_RC                                 | t               | generic, call specific routines once cell type is detected                                                                                                                   |
+| NEW_FREE_CELL_RZ                                 | t               | generic, call specific routines once cell type is detected                                                                                                                   |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | NEW_INC_REFCNT_RA                                | planned         | prefix new_inc_refcnt_rc with copy ra->rc                                                                                                                                    |
 | NEW_INC_REFCNT_RT                                | planned         | prefix new_inc_refcnt_rc with copy rt->rc                                                                                                                                    |
-| NEW_INC_REFCNT_RC                                | planned         | generic, call specific routines once cell type is detected                                                                                                                   |
+| NEW_INC_REFCNT_RZ                                | planned         | generic, call specific routines once cell type is detected                                                                                                                   |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| NEW_INC_REFCNT_CELL_RC                           | planned         | specific increment refcount of cell ptr                                                                                                                                      |
-| NEW_INC_REFCNT_CELLPAIR_RC                       | planned         | specific increment refcount of cellpair ptr                                                                                                                                  |
-| NEW_INC_REFCNT_CELLARR_RC                        | planned         | specific increment refcount of cell array ptr                                                                                                                                |
-| NEW_INC_REFCNT_NATIVEARR_RC                      | planned         | specific increment refcount of native array ptr                                                                                                                              |
-| NEW_INC_REFCNT_M1_SLOT_RC                        | planned         | generic increment refcount of m1 slot (no need for calling more specific routines)                                                                                           |
+| NEW_INC_REFCNT_CELL_RZ                           | planned         | specific increment refcount of cell ptr                                                                                                                                      |
+| NEW_INC_REFCNT_CELLPAIR_RZ                       | planned         | specific increment refcount of cellpair ptr                                                                                                                                  |
+| NEW_INC_REFCNT_CELLARR_RZ                        | planned         | specific increment refcount of cell array ptr                                                                                                                                |
+| NEW_INC_REFCNT_NATIVEARR_RZ                      | planned         | specific increment refcount of native array ptr                                                                                                                              |
+| NEW_INC_REFCNT_M1_SLOT_RZ                        | planned         | generic increment refcount of m1 slot (no need for calling more specific routines)                                                                                           |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| NEW_ADD_M1_SLOT_RC_TO_PFL                        | i               | put the m1 slot pointed to by rc into the page free list (and do some housekeeping, concerning the list of pages with free slots)                                            |
-| NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_RC        | i               | put page used in rc+1 to a, then NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A                                                                                                    |
+| NEW_ADD_M1_SLOT_RZ_TO_PFL                        | i               | put the m1 slot pointed to by rc into the page free list (and do some housekeeping, concerning the list of pages with free slots)                                            |
+| NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_RZ        | i               | put page used in rc+1 to a, then NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A                                                                                                    |
 | NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A         | i               | put page profile by page A, then NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_PROFILE_X                                                                                            |
 | NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_PROFILE_X | i               | remove full pages from the list of pages with free slots stored in VM_FREE_M1_PAGE_Px                                                                                        |
-| NEW_PUT_PAGE_AS_HEAD_OF_M1_PAGE_RC               | i               | put the page in rc (which must have free slots) as new head of VM_FREE_M1_PAGE_Px                                                                                            |
+| NEW_PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ               | i               | put the page in rc (which must have free slots) as new head of VM_FREE_M1_PAGE_Px                                                                                            |
 |--------------------------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | GC_INCR_CELLPAIR_GFL                             | planned         | incremental gc cellpairs in global free list                                                                                                                                 |
-| GC_INCR_CELLARR_GFL                              | i               | incremental gc cell arrays in global free list (does prefix copy gfl of cell-arrays into rc, then continue with NEW_GC_INCR_ARRAY_SLOT_RC, immediate return if gfl is empty) |
-| NEW_GC_INCR_ARRAY_SLOT_RC                        | i               | incremental dec refcnt cells in this cell array (max 1 in this call) and adjust the number of elements to the # not checked yet, add slot tp pfl if 0 left                   |
+| GC_INCR_CELLARR_GFL                              | i               | incremental gc cell arrays in global free list (does prefix copy gfl of cell-arrays into rc, then continue with NEW_GC_INCR_ARRAY_SLOT_RZ, immediate return if gfl is empty) |
+| NEW_GC_INCR_ARRAY_SLOT_RZ                        | i               | incremental dec refcnt cells in this cell array (max 1 in this call) and adjust the number of elements to the # not checked yet, add slot tp pfl if 0 left                   |
 | NEW_GC_CELLS                                     | i               | repeat freeing cells (returning them to the page) until no free cells are kept in gfl                                                                                        |
 | NEW_GC_ALL                                       | i               | free cell-arrays, cell-pairs and cells until all free lists are empty!                                                                                                       |
 | NEW_GC_CELL_ARRAYS                               | i               | free cell-arrays until the global (partially gc'd) free list is empty                                                                                                        |

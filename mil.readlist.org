@@ -3813,7 +3813,7 @@ https://microvm.github.io
       0100 0000 => 0001 0000 : $10 rc for cell $40
       1111 1100 => 0011 1111 : $3F rc for cell $FC
 
-    - memory layout (8 bytes slots) 28 (max 32 without RC)
+    - memory layout (8 bytes slots) 28 (max 32 without RZ)
       00 : reserved
       ...
       04 : rc cell 1
@@ -3823,7 +3823,7 @@ https://microvm.github.io
       ...
       F8 : cell 28
 
-    - memory layout (16 bytes slots) 15 (max 16 without RC)
+    - memory layout (16 bytes slots) 15 (max 16 without RZ)
       00: reserved
       01: rc cell 1
       0F: rc cell 15
@@ -3831,7 +3831,7 @@ https://microvm.github.io
       ...
       F0: cell 15
 
-    - memory layout (32 bytes slots) 7 (max 8 without RC)
+    - memory layout (32 bytes slots) 7 (max 8 without RZ)
       00: reserved
       ...
       02: rc cell 1
@@ -3865,7 +3865,7 @@ https://microvm.github.io
       00: slot
       FF: rc for slot
 
-    - memory layout (cells-page) 85 cells (max 128 without RC)
+    - memory layout (cells-page) 85 cells (max 128 without RZ)
       00 : reserved
       01 : rc for cell 1
       02 : cell1
@@ -4358,7 +4358,7 @@ this will include the implementation of
   - to-list / from-list
 **** refcount qualities
 - provide function w/ ref and w/o ref counting <- for optimization
-  - name-convention: function w/ ref counting: ...​_RC
+  - name-convention: function w/ ref counting: ...​_RZ
 - optimize check for ref-count applicable | atomic value
   cell-stack and RT may only hold
   - xxxxxxx0 -> ptr to cell or more complex structure, could be pointer to a cell-page, or a m1-page

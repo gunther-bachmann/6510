@@ -2618,7 +2618,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
     (label VM_INTERPRETER_OPTABLE)                ;;         byte code
-           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 (RC)
+           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 (RZ)
            (word-ref BC_BNOP)                     ;; 02  <-  01 
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
            (word-ref BC_SWAP)                     ;; 06  <-  03 
@@ -2651,7 +2651,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3c  <-  1e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
            (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 
-           (word-ref BC_NIL_P)                    ;; 42  <-  21 (RC)
+           (word-ref BC_NIL_P)                    ;; 42  <-  21 (RZ)
            (word-ref BC_INT_0_P)                  ;; 44  <-  22 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 48  <-  24 reserved
