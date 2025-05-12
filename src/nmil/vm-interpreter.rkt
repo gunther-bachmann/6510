@@ -223,7 +223,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          WRITE_FROM_LOCAL_0
          WRITE_FROM_LOCAL_1
          WRITE_FROM_LOCAL_2
-         WRITE_FROM_LOCAL_3)
+         WRITE_FROM_LOCAL_3
+         NATIVE)
 
 (define (bc code)
     (ast-bytes-cmd '()  (list code)))
@@ -2613,6 +2614,27 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR CP_RA_TO_RT)             ;; overwrite byte on stack
           (JMP VM_INTERPRETER_INC_PC)))
 
+
+(define NATIVE #x29)
+(define BC_NATIVE
+  (list
+   (label BC_NATIVE)
+          (INC ZP_VM_PC)
+          (BNE CONT__BC_NATIVE)
+          (INC ZP_VM_PC+1)
+   (label CONT__BC_NATIVE)
+          (JMP (ZP_VM_PC))))
+
+(define RETURN_TO_BC
+  (list
+   (label RETURN_TO_BC)
+          (PLA)
+          (STA ZP_VM_PC)
+          (PLA)
+          (STA ZP_VM_PC+1)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
@@ -2659,7 +2681,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4c  <-  26 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4e  <-  27 reserved
            (word-ref BC_CxxR)                     ;; 50  <-  a8..af 
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 52  <-  29 reserved
+           (word-ref BC_NATIVE)                   ;; 52  <-  29
            (word-ref VM_INTERPRETER_INC_PC)       ;; 54  <-  2a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 56  <-  2b reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 58  <-  2c reserved
@@ -2839,6 +2861,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_ARRAY_FIELD
           BC_POP_TO_ARRAY_FIELD
           BC_PUSH_BYTE
+          BC_NATIVE
+          RETURN_TO_BC
           VM_INTERPRETER))
 
 (define vm-interpreter
@@ -2853,4 +2877,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       859))
+                       869))
