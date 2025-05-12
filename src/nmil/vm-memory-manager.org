@@ -1,5 +1,30 @@
 #+title: vm-memory-manager
 * open tasks
+** TODO implement RTM as TOS-1 register on demand
+- do this for operations in need of 2+ operands (which then discard the operands and just leave the result on the stack)
+- implement INT*, INT+, INT-, INT/ with this mechanism
+- e.g. POP_TOSM1_TO_RTM, WRITE_TOSM1_TO_RTM?, or WRITE_LOCAL_N_TO_RTM
+- then execute binary operation and discard RTM (and ensure that reference counting for RTM can be ignored)
+=> if both operands are on the stack, then POP_TOSM1_TO_RTM before executing the operation
+   if one operand is on the stack, the other can be written directly to RTM
+   if the result keeps references to cells referenced through RTM, it might be necessary to inc-refcnt them <- who does that
+- identify all binary operations that may benefit from this mechanism
+  operand operation operand -> result : most benefit if operands and result don't need refcnt'ing
+  - mult, add, sub, div, mod, shift-right, shift-left, ... (byte/int)
+** TODO implement RA, RB, RC as array access registers and indexes for each
+- RA is default and should be accessible with short commands
+- RB, RC can be accessed with longer byte code commands
+- provide functions to:
+  - WRITE/POP TOS -> RA, RB. RC
+  - WRITE/POP TOS -> RAi, RBi, RCi <- byte index registers
+  - INC RAi, ADD RAi, SUB RAi, DEC RAi (and RB/RC)
+  - WRITE/PUSH RA, RB, RC -> TOS
+  - WRITE/PUSH RAi, RBi, RCi -> TOS
+  - WRITE/PUSH (RA + RAi) -> TOS       ;; retrieve field at RAi in array (pointed to by) RA into TOS
+  - WRITE/POP TOS -> (RA + RAi)        ;; (over)write field at RAi in array (pointer to by) RA with TOS
+  - WRITE (RA + RAi) -> RB/RC/RBi/RBi  ;; and vice versa?
+  - ALLOC INTO RA/RB/RC (initialize indices RAi,RBi,RCi)
+- implement matrix multiplication of 4x4 matrices (with ints) <- just as an expample (scale/move...)
 ** TODO harmonize function description                -> ease the usage of functions as building blocks
 - do this in an incremental fashion
 - describe what is useful
