@@ -39,7 +39,6 @@
                     TAIL_CALL
 
                     PUSH_INT
-                    PUSH_BYTE
                     PUSH_NIL
                     PUSH_LOCAL
                     PUSH_GLOBAL
@@ -50,6 +49,7 @@
   (require [only-in "./vm-interpreter.rkt"
                     vm-interpreter
                     bc
+                    PUSH_B
                     GC_FL
                     CELL_EQ
                     EXT

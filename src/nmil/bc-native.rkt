@@ -19,7 +19,6 @@
                   TAIL_CALL
 
                   PUSH_INT
-                  PUSH_BYTE
                   PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
@@ -31,6 +30,7 @@
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  PUSH_B
                   CELL_EQ
                   EXT
                   CAAR
@@ -148,8 +148,8 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_BYTE) (byte 4)
-       (bc PUSH_BYTE) (byte 6)
+       (bc PUSH_B) (byte 4)
+       (bc PUSH_B) (byte 6)
        (bc CALL) (word-ref BC_ADD_NATIVE)
        (bc PUSH_INT_1)
        (bc BRK))
@@ -183,8 +183,8 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_BYTE) (byte 4)
-       (bc PUSH_BYTE) (byte 6)
+       (bc PUSH_B) (byte 4)
+       (bc PUSH_B) (byte 6)
        (bc CALL) (word-ref BC_ADD_NATIVE_2)
        (bc PUSH_INT_2)
        (bc BRK))

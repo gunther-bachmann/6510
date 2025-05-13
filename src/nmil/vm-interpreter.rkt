@@ -39,10 +39,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   POP_TO_ARRAY_FIELD       1  16                             pop the cell at tos-2 into array (tos-1) at index (tos)
   POP_TO_LOCAL_n           1  90+  n=0..3                     pop tos into local#n
   PUSH_ARRAY_FIELD         1  15                             push field of the array (tos-1) at index (tos) onto eval-stack
-  PUSH_BYTE byte           2  17   byte=0..255 -128..+127     push a byte constant onto the eval-stack
-  PUSH_CONST_INT int       3  06   int=0..8191, -4096..4095   push integer constant onto eval-stack
-  PUSH_INT_i               1  b8+  i=0,1,2,-1(m1)            push constant 0,1,2,-1 onto eval-stack
-  PUSH_LOCAL_n             1  80+  n=0..3                     push local#n onto eval-stack
+  PUSH_B byte              2  17   byte=0..255 -128..+127     push a byte constant onto the eval-stack
+  PUSH_I int               3  06   int=0..8191, -4096..4095   push integer constant onto eval-stack
+  PUSH_Ii                  1  b8+  i=0,1,2,-1(m1)            push constant 0,1,2,-1 onto eval-stack
+  PUSH_Ln                  1  80+  n=0..3                     push local#n onto eval-stack
   PUSH_NIL                 1  09                             push nil onto eval-stack
   RET                      1  33                             return from function
   TAIL_CALL                1  35                             tail call same function
@@ -51,7 +51,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 
   (not implemented yet)
-  PUSH_BYTE byte           2  05   byte=0..255, -128..127      push byte constant onto eval-stack
+  PUSH_B byte           2  05   byte=0..255, -128..127      push byte constant onto eval-stack
   POP_n                    1       n=1..4                     pop top n values
   SET_CAR                  1                                 set car element to tos (of car-cdr-pair-ptr behind tos) and pop 2 values
   SET_CDR                  1                                 set cdr element to tos (of car-cdr-pair-ptr behind tos) and pop 2 values
@@ -117,7 +117,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
                     PUSH_INT
                     PUSH_ARRAY_FIELD
-                    ;; PUSH_BYTE
+                    ;; PUSH_B
                     PUSH_NIL
                     ;; PUSH_LOCAL
                     ;; PUSH_GLOBAL
@@ -160,6 +160,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         PUSH_B
          ALLOC_ARRAY
          FALSE_P_RET_FALSE
          GET_ARRAY_FIELD_0
@@ -1130,10 +1131,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref PUSH_INT_1_TO_EVLSTK)
            (word-ref PUSH_INT_2_TO_EVLSTK)
            (word-ref PUSH_INT_m1_TO_EVLSTK)
-           ;; (word-ref PUSH_BYTE_0)
-           ;; (word-ref PUSH_BYTE_1)
-           ;; (word-ref PUSH_BYTE_2)
-           ;; (word-ref PUSH_BYTE_m1)
+           ;; (word-ref PUSH_B0)
+           ;; (word-ref PUSH_B1)
+           ;; (word-ref PUSH_B2)
+           ;; (word-ref PUSH_Bm1)
            )))
 
 (module+ test #| push const num |#
@@ -2434,11 +2435,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
-(define PUSH_BYTE #x17)
-(define BC_PUSH_BYTE
+(define PUSH_B #x17)
+(define BC_PUSH_B
+
   (flatten
    (list
-    (label BC_PUSH_BYTE)
+    (label BC_PUSH_B)
            (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
            (LDY !$01)
            (LDA (ZP_VM_PC),y)
@@ -2452,9 +2454,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_BYTE) (byte 0)
-       (bc PUSH_BYTE) (byte 1)
-       (bc PUSH_BYTE) (byte 10)))))
+       (bc PUSH_B) (byte 0)
+       (bc PUSH_B) (byte 1)
+       (bc PUSH_B) (byte 10)))))
 
   (check-equal? (vm-stack->strings push-byte-state)
                 (list "stack holds 3 items"
@@ -2482,12 +2484,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define pop-to-array-field-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_BYTE) (byte 20)
+      (bc PUSH_B) (byte 20)
       (bc ALLOC_ARRAY)
       (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
       (bc PUSH_INT_1)
       (bc SWAP)
-      (bc PUSH_BYTE) (byte 1)
+      (bc PUSH_B) (byte 1)
       (bc POP_TO_ARRAY_FIELD))
      ))
 
@@ -2519,28 +2521,28 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_BYTE) (byte 20)
+       (bc PUSH_B) (byte 20)
        (bc ALLOC_ARRAY)
 
        (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
        (bc PUSH_INT_1)
        (bc SWAP)
-       (bc PUSH_BYTE) (byte 1)
+       (bc PUSH_B) (byte 1)
        (bc POP_TO_ARRAY_FIELD)
 
        (bc DUP)
        (bc PUSH_INT_2)
        (bc SWAP)
-       (bc PUSH_BYTE) (byte 10)
+       (bc PUSH_B) (byte 10)
        (bc POP_TO_ARRAY_FIELD)
 
        (bc DUP)
        (bc DUP)
-       (bc PUSH_BYTE) (byte 1)
+       (bc PUSH_B) (byte 1)
        (bc PUSH_ARRAY_FIELD)
 
        (bc SWAP)
-       (bc PUSH_BYTE) (byte 10)
+       (bc PUSH_B) (byte 10)
        (bc PUSH_ARRAY_FIELD)))
      ))
 
@@ -2663,7 +2665,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_ALLOC_ARRAY)              ;; 28  <-  14
            (word-ref BC_PUSH_ARRAY_FIELD)         ;; 2a  <-  15
            (word-ref BC_POP_TO_ARRAY_FIELD)       ;; 2c  <-  16
-           (word-ref BC_PUSH_BYTE)                ;; 2e  <-  17
+           (word-ref BC_PUSH_B)                ;; 2e  <-  17
            (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
@@ -2860,7 +2862,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           VM_REFCOUNT_DECR_CURRENT_LOCALS
           BC_PUSH_ARRAY_FIELD
           BC_POP_TO_ARRAY_FIELD
-          BC_PUSH_BYTE
+          BC_PUSH_B
           BC_NATIVE
           RETURN_TO_BC
           VM_INTERPRETER))

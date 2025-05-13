@@ -107,7 +107,6 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   TAIL_CALL
 
                   PUSH_INT
-                  PUSH_BYTE
                   PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
@@ -141,6 +140,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   NIL?_RET_LOCAL_0_POP_1
                   INT_P
                   SWAP
+                  PUSH_B
                   POP_TO_LOCAL_0
                   POP_TO_LOCAL_1
                   POP_TO_LOCAL_2
@@ -502,7 +502,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_BYTE) (byte 15)
+       (bc PUSH_B) (byte 15)
        (bc CONS)
        (bc CALL) (word-ref BTREE_VALIDATE)
        (bc BRK))

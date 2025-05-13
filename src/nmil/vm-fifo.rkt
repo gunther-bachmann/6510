@@ -34,7 +34,6 @@
                   TAIL_CALL
 
                   PUSH_INT
-                  PUSH_BYTE
                   PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
@@ -45,6 +44,7 @@
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  PUSH_B
                   GC_FL
                   ALLOC_ARRAY
                   FALSE_P_RET_FALSE
@@ -156,7 +156,7 @@
           (byte 1)
           (bc PUSH_NIL)
           (bc PUSH_NIL)
-          (bc PUSH_BYTE) (byte 2)
+          (bc PUSH_B) (byte 2)
           (bc ALLOC_ARRAY)
           (bc WRITE_TO_LOCAL_0)
           (bc SET_ARRAY_FIELD_0)

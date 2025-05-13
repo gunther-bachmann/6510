@@ -22,6 +22,8 @@
 (require "./ast.rkt")
 (require "./parse.rkt")
 
+(require/typed "./vm-interpreter.rkt"
+  [PUSH_B Byte])
 (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                   disassemble-byte-code
                   make-vm
@@ -38,7 +40,6 @@
 
                   PUSH_INT
                   PUSH_ARRAY_FIELD
-                  PUSH_BYTE
                   PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
@@ -132,7 +133,7 @@
      (define value (ast-at-int--value atom))
      (vector-immutable PUSH_INT (low-byte value) (high-byte value))]
     [(ast-at-bool-? atom)
-     (vector-immutable PUSH_BYTE (if (ast-at-bool--bool atom) (cell-byte--value TRUE) (cell-byte--value FALSE)))]
+     (vector-immutable PUSH_B (if (ast-at-bool--bool atom) (cell-byte--value TRUE) (cell-byte--value FALSE)))]
     [(ast-at-id-? atom)
      (define reg-ref (hash-ref (ast-info--id-map (ast-node--info atom)) (ast-at-id--id atom)))
      (generate-push reg-ref)]
@@ -153,7 +154,7 @@
                 (vector-immutable PUSH_INT #xfe #x02))
 
   (check-equal? (gen-atom (ast-at-bool- (make-ast-info) #t))
-                (vector-immutable PUSH_BYTE (cell-byte--value TRUE))))
+                (vector-immutable PUSH_B (cell-byte--value TRUE))))
 
 (define-type Id-Reg-Map (Immutable-HashTable Symbol register-ref-))
 

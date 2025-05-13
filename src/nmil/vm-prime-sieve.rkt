@@ -66,7 +66,6 @@ primes (ignore 0,1) up to 30
                   TAIL_CALL
 
                   PUSH_INT
-                  PUSH_BYTE
                   PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
@@ -78,6 +77,7 @@ primes (ignore 0,1) up to 30
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  PUSH_B
                   CELL_EQ
                   EXT
                   CAAR
