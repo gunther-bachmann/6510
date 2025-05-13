@@ -2708,7 +2708,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_CDR)                      ;; 82  <-  41 
            (word-ref BC_CONS)                     ;; 84  <-  42 
            (word-ref BC_CAR)                      ;; 86  <-  43 
-           (word-ref BC_COONS)                    ;; 88  <-  44 reserved
+           (word-ref BC_COONS)                    ;; 88  <-  44
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8a  <-  45 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8e  <-  47 reserved
