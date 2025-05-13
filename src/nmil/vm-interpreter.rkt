@@ -115,7 +115,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                     NIL?
                     TAIL_CALL
 
-                    PUSH_INT
                     PUSH_ARRAY_FIELD
                     ;; PUSH_B
                     PUSH_NIL
@@ -160,6 +159,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         PUSH_I
          PUSH_B
          ALLOC_ARRAY
          FALSE_P_RET_FALSE
@@ -188,10 +188,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          TRUE_P_BRANCH
          FALSE_P_BRANCH
          INT_GREATER_P
-         PUSH_INT_0
-         PUSH_INT_1
-         PUSH_INT_2
-         PUSH_INT_m1
+         PUSH_I0
+         PUSH_I1
+         PUSH_I2
+         PUSH_IM1
          CONS_PAIR_P
          TRUE_P_RET
          FALSE_P_RET
@@ -336,7 +336,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
              (bc PUSH_NIL)
-             (bc PUSH_INT_1)
+             (bc PUSH_I1)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
 
@@ -362,7 +362,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define bc-nil-ret-local-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_1)
+             (bc PUSH_I1)
              (bc PUSH_NIL)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
@@ -404,7 +404,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
              (bc PUSH_NIL)
-             (bc PUSH_INT_0)
+             (bc PUSH_I0)
              (bc CONS)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
@@ -452,11 +452,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
              (bc PUSH_NIL)
-             (bc PUSH_INT_0)
+             (bc PUSH_I0)
              (bc CONS)                  ;; (add ref to this cell) does allocate a cell
-             (bc PUSH_INT_1)
+             (bc PUSH_I1)
              (bc CONS)                  ;; (add ref to this cell) does allocate a cell (removes a cell-ref from stack and adds a ref in the pair cell)
-             (bc PUSH_INT_2)
+             (bc PUSH_I2)
              (bc CONS)                  ;; (add ref to this cell) does allocate a cell (removes a cell-ref from stack and adds a ref in the pair cell)
              (bc PUSH_NIL)
              (bc BNOP)
@@ -549,7 +549,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-before-call-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
+             (bc PUSH_I0)
              (bc BRK))
      ))
 
@@ -568,14 +568,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-call-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
+             (bc PUSH_I0)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
 
              (org #x8F00)
       (label TEST_FUN)     
              (byte 0)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
+             (bc PUSH_I1)     ;; value to return
              (bc BRK))
      ))
 
@@ -601,15 +601,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-call-wp-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
-             (bc PUSH_INT_m1)
+             (bc PUSH_I0)
+             (bc PUSH_IM1)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK) 
 
              (org #x8F00)
       (label TEST_FUN)      
              (byte 0)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
+             (bc PUSH_I1)     ;; value to return
              (bc BRK))
      ))
 
@@ -636,15 +636,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-call-wl-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
-             (bc PUSH_INT_m1)
+             (bc PUSH_I0)
+             (bc PUSH_IM1)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
 
              (org #x8F00)
       (label TEST_FUN)    
              (byte 2)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
+             (bc PUSH_I1)     ;; value to return
              (bc BRK))))
 
   (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
@@ -718,14 +718,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-ret-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
+             (bc PUSH_I0)
              (bc CALL) (byte 00) (byte $8f)
              (bc BRK)
 
              (org #x8F00)
       (label TEST_FUN)      
              (byte 0)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
+             (bc PUSH_I1)     ;; value to return
              (bc RET))))
   
   (check-equal? (vm-call-frame->strings test-bc-ret-state)
@@ -930,14 +930,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-pop-to-l-state
     (run-bc-wrapped-in-test
      (list
-             (bc PUSH_INT_0)
-             (bc PUSH_INT_m1)
+             (bc PUSH_I0)
+             (bc PUSH_IM1)
              (bc CALL) (byte 00) (byte $8f)
 
              (org #x8F00)
       (label TEST_FUN)
              (byte 2)            ;; number of locals
-             (bc PUSH_INT_1)     ;; value to return
+             (bc PUSH_I1)     ;; value to return
              (bc POP_TO_LOCAL_0) ;;
              (bc BRK))))
 
@@ -966,8 +966,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-pop-to-p-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
-      (bc PUSH_INT_m1)
+      (bc PUSH_I0)
+      (bc PUSH_IM1)
       (bc CALL) (byte 00) (byte $8f)
 
       (org #x8F00)
@@ -975,7 +975,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (byte 2)            ;; number of locals
       (bc POP_TO_LOCAL_0)
       (bc POP_TO_LOCAL_1)
-      (bc PUSH_INT_1)     ;; value to return
+      (bc PUSH_I1)     ;; value to return
       (bc POP_TO_LOCAL_0) ;; overwrites -1
       (bc BRK))
      ))
@@ -1013,9 +1013,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (org #x8F00)
       (label TEST_FUN)
       (byte 1)            ;; number of locals
-      (bc PUSH_INT_1)     ;; value to return
+      (bc PUSH_I1)     ;; value to return
       (bc POP_TO_LOCAL_0) ;;
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
       (bc PUSH_LOCAL_0)
       (bc BRK))))
 
@@ -1041,8 +1041,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-push-p-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
-      (bc PUSH_INT_m1)
+      (bc PUSH_I0)
+      (bc PUSH_IM1)
       (bc CALL) (byte 00) (byte $8f)
 
       (org #x8F00)
@@ -1050,7 +1050,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (byte 2)            ;; number of locals
       (bc POP_TO_LOCAL_0)
       (bc POP_TO_LOCAL_1)
-      (bc PUSH_INT_1)   
+      (bc PUSH_I1)   
       (bc PUSH_LOCAL_0)
       (bc BRK))))
 
@@ -1076,8 +1076,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-pop-push-to-p-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
-      (bc PUSH_INT_m1)
+      (bc PUSH_I0)
+      (bc PUSH_IM1)
       (bc CALL) (byte 00) (byte $8f)
 
       (org #x8F00)
@@ -1085,7 +1085,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (byte 2)            ;; number of locals
       (bc POP_TO_LOCAL_0)
       (bc POP_TO_LOCAL_1)
-      (bc PUSH_INT_1)     ;; value to return
+      (bc PUSH_I1)     ;; value to return
       (bc POP_TO_LOCAL_0) ;; overwrites -1
       (bc PUSH_LOCAL_0)
       (bc BRK))))
@@ -1107,10 +1107,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
-(define PUSH_INT_0 #xb8)
-(define PUSH_INT_1 #xb9)
-(define PUSH_INT_2 #xba)
-(define PUSH_INT_m1 #xbb)
+(define PUSH_I  #x06) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
+(define PUSH_I0 #xb8)
+(define PUSH_I1 #xb9)
+(define PUSH_I2 #xba)
+(define PUSH_IM1 #xbb)
 
 (define BC_PUSH_CONST_NUM_SHORT
   (flatten
@@ -1141,10 +1142,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define use-case-push-num-s-state-after
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_2)
-      (bc PUSH_INT_m1)
+      (bc PUSH_I0)
+      (bc PUSH_I1)
+      (bc PUSH_I2)
+      (bc PUSH_IM1)
       (bc BRK))))
 
   (check-equal? (vm-stack->strings use-case-push-num-s-state-after)
@@ -1154,9 +1155,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0001"
                       "int $0000")))
 
-(define BC_PUSH_CONST_INT
+(define BC_PUSH_I
   (list
-   (label BC_PUSH_CONST_INT)
+   (label BC_PUSH_I)
           (LDY !$02)                             ;; index 1 past the byte code itself
           (LDA (ZP_VM_PC),y)                     ;; load high byte of int (not encoded)
           (TAX)                                  ;; -> X
@@ -1170,7 +1171,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define use-case-push-int-state-after
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT) (byte #xf0 #x04)
+      (bc PUSH_I) (byte #xf0 #x04)
       (bc BRK))))
 
   (check-equal? (vm-stack->strings use-case-push-int-state-after)
@@ -1206,8 +1207,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (define rb (if (< b 0) (+ #x2000 b) b))
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
-      (bc PUSH_INT) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
+      (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
+      (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
       (bc INT+)                     
       (bc BRK))))
 
@@ -1225,15 +1226,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define use-case-int-plus-state-after
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_2)
+      (bc PUSH_I1)
+      (bc PUSH_I2)
       (bc BNOP)
       (bc INT+)                      ;; byte code for INT_PLUS = 3
-      (bc PUSH_INT) (byte #xf0 #x04) ;; push int #x4f0 (1264)
-      (bc PUSH_INT) (byte #x1f #x01) ;; push int #x11f (287)
+      (bc PUSH_I) (byte #xf0 #x04) ;; push int #x4f0 (1264)
+      (bc PUSH_I) (byte #x1f #x01) ;; push int #x11f (287)
       (bc INT+)                      ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_m1)
+      (bc PUSH_I1)
+      (bc PUSH_IM1)
       (bc INT+)                      ;; byte code for INT_PLUS = 0
       (bc BRK))))
 
@@ -1276,8 +1277,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (define rb (if (< b 0) (+ #x2000 b) b))
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
-      (bc PUSH_INT) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
+      (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
+      (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
       (bc INT-)
       (bc BRK))))
 
@@ -1296,15 +1297,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define use-case-int-minus-state-after
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_2)
+      (bc PUSH_I1)
+      (bc PUSH_I2)
       (bc BNOP)
       (bc INT-)                      ;; byte code for INT_MINUS = 2 - 1 = 1
-      (bc PUSH_INT) (byte #xf0 #x04) ;; push int #x4f0 (1264)
-      (bc PUSH_INT) (byte #x1f #x01) ;; push int #x11f (287)
+      (bc PUSH_I) (byte #xf0 #x04) ;; push int #x4f0 (1264)
+      (bc PUSH_I) (byte #x1f #x01) ;; push int #x11f (287)
       (bc INT-)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x1c2f)
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_0)      
+      (bc PUSH_I1)
+      (bc PUSH_I0)      
       (bc INT-)                      ;; byte code for INT_MINUS => -1
       (bc BRK))))                    ;; brk
 
@@ -1350,7 +1351,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_NIL)
-      (bc PUSH_INT_2)
+      (bc PUSH_I2)
       (bc CONS)
       (bc NIL?)
       (bc BRK))))
@@ -1383,7 +1384,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_NIL)
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
       (bc CONS)
       (bc BRK))))
 
@@ -1407,7 +1408,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_NIL)
-      (bc PUSH_INT_2)
+      (bc PUSH_I2)
       (bc CONS)
       (bc CAR)
       (bc BRK))))
@@ -1430,7 +1431,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_NIL)
-      (bc PUSH_INT_2)
+      (bc PUSH_I2)
       (bc CONS)
       (bc CDR)
       (bc BRK))))
@@ -1485,8 +1486,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define int-greater-0>-1-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_m1)
-      (bc PUSH_INT_0)
+      (bc PUSH_IM1)
+      (bc PUSH_I0)
       (bc INT_GREATER_P))
      ))
 
@@ -1497,8 +1498,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define int-greater-0>0-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
+      (bc PUSH_I0)
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-0>0-state)
@@ -1507,8 +1508,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define int-greater-1>1-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_1)
+      (bc PUSH_I1)
+      (bc PUSH_I1)
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-1>1-state)
@@ -1517,8 +1518,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define int-greater-2>2-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_2)
-      (bc PUSH_INT_2)
+      (bc PUSH_I2)
+      (bc PUSH_I2)
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-2>2-state)
@@ -1527,8 +1528,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define int-greater-2>1-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_2)
+      (bc PUSH_I1)
+      (bc PUSH_I2)
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-2>1-state)
@@ -1537,8 +1538,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define int-greater-1>0-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
-      (bc PUSH_INT_1)
+      (bc PUSH_I0)
+      (bc PUSH_I1)
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-1>0-state)
@@ -1547,8 +1548,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (define int-greater-0>1-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_0)
+      (bc PUSH_I1)
+      (bc PUSH_I0)
       (bc INT_GREATER_P))))
 
   (check-equal? (vm-regt->string int-greater-0>1-state)
@@ -1639,11 +1640,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define goto-0-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
       (bc GOTO) (byte 2)
-      (bc PUSH_INT_m1)
+      (bc PUSH_IM1)
       (bc BRK)
-      (bc PUSH_INT_1))))
+      (bc PUSH_I1))))
   (check-equal? (vm-stack->strings goto-0-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
@@ -1652,11 +1653,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define goto-1-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
       (bc GOTO) (byte $75)
       (bc BRK)
       (org-align #x78)
-      (bc PUSH_INT_1))
+      (bc PUSH_I1))
      ))
   (check-equal? (vm-stack->strings goto-1-state)
                 (list "stack holds 2 items"
@@ -1667,20 +1668,20 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc GOTO) (byte $7d)
        (bc BRK)
        (org-align #x80)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc GOTO) (byte $6d)
        (bc BRK)
        (org-align #xf0)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        ;; 80f1
        (bc GOTO) (byte $0d)
        (build-list 13 (lambda (_i) (bc BRK)))
        ;; now at 8100
-       (bc PUSH_INT_m1)))
+       (bc PUSH_IM1)))
    ))
   (check-equal? (vm-stack->strings goto-2-state)
                 (list "stack holds 4 items"
@@ -1693,22 +1694,22 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten 
       (list
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc GOTO) (byte $7d)
        (bc BRK)
        (org-align #x80)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        ;; now at 8081
        (bc GOTO) (byte $6d)
        ;; 8083
        (bc BRK)
        (org-align #xf0)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        ;; now at 80f1
        (bc GOTO) (byte $0e)
        (build-list 14 (lambda (_i) (bc BRK)))
        ;; now at 8102
-       (bc PUSH_INT_m1)))
+       (bc PUSH_IM1)))
    ))
   (check-equal? (vm-stack->strings goto-3-state)
                 (list "stack holds 4 items"
@@ -1721,10 +1722,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc GOTO) (byte 3)
        (bc BRK)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc BRK)
        (bc GOTO) (byte $fe)))
      ))
@@ -1737,26 +1738,26 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc GOTO) (byte $7d)
        (bc BRK)
        (org-align #x80)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        ;; now at 8081
        (bc GOTO) (byte $6d)
        ;; 8083
        (bc BRK)
        (org-align #xf0)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        ;; now at 80f1
        (bc GOTO) (byte $0e)
        (build-list 12 (lambda (_i) (bc BRK)))
        ;; 80ff
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        ;; 8100
        (bc BRK)
        ;; now at 8101
-       (bc PUSH_INT_m1)
+       (bc PUSH_IM1)
        (bc GOTO) (byte $fd)))
      ))
   (check-equal? (vm-stack->strings goto-5-state)
@@ -1781,11 +1782,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define branch-false-0-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
       (bc FALSE_P_BRANCH) (byte 2)
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
       (bc BRK)
-      (bc PUSH_INT_2))))
+      (bc PUSH_I2))))
   (check-equal? (vm-stack->strings branch-false-0-state)
                 (list "stack holds 1 item"
                       "int $0002  (rt)"))
@@ -1793,11 +1794,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define branch-false-1-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
       (bc FALSE_P_BRANCH) (byte $75)
       (bc BRK)
       (org-align #x78)
-      (bc PUSH_INT_2))))
+      (bc PUSH_I2))))
   (check-equal? (vm-stack->strings branch-false-1-state)
                 (list "stack holds 1 item"
                       "int $0002  (rt)"))
@@ -1806,20 +1807,20 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc FALSE_P_BRANCH) (byte $7d)
        (bc BRK)
        (org-align #x80)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc FALSE_P_BRANCH) (byte $6d)
        (bc BRK)
        (org-align #xf0)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        ;; 80f1
        (bc FALSE_P_BRANCH) (byte $0d)
        (build-list 13 (lambda (_i) (bc BRK)))
        ;; now at 8100
-       (bc PUSH_INT_2)))
+       (bc PUSH_I2)))
    ))
   (check-equal? (vm-stack->strings branch-false-2-state)
                 (list "stack holds 1 item"
@@ -1829,22 +1830,22 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc FALSE_P_BRANCH) (byte $7d)
        (bc BRK)
        (org-align #x80)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        ;; now at 8081
        (bc FALSE_P_BRANCH) (byte $6d)
        ;; 8083
        (bc BRK)
        (org-align #xf0)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        ;; now at 80f1
        (bc FALSE_P_BRANCH) (byte $0e)
        (build-list 14 (lambda (_i) (bc BRK)))
        ;; now at 8102
-       (bc PUSH_INT_2)))
+       (bc PUSH_I2)))
    ))
   (check-equal? (vm-stack->strings branch-false-3-state)
                 (list "stack holds 1 item"
@@ -1854,12 +1855,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc FALSE_P_BRANCH) (byte 3)
        (bc BRK)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc BRK)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc FALSE_P_BRANCH) (byte $fd)))
      ))
   (check-equal? (vm-stack->strings branch-false-4-state)
@@ -1870,26 +1871,26 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc FALSE_P_BRANCH) (byte $7d)
        (bc BRK)
        (org-align #x80)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        ;; now at 8081
        (bc FALSE_P_BRANCH) (byte $6d)
        ;; 8083
        (bc BRK)
        (org-align #xf0)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        ;; now at 80f1
        (bc FALSE_P_BRANCH) (byte $0e)
        (build-list 12 (lambda (_i) (bc BRK)))
        ;; 80ff
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        ;; 8100
        (bc BRK)
        ;; now at 8101
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc FALSE_P_BRANCH) (byte $fd)))
      ))
   (check-equal? (vm-stack->strings branch-false-5-state)
@@ -1933,11 +1934,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define branch-true-0-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_1)
+      (bc PUSH_I1)
       (bc TRUE_P_BRANCH) (byte 2)
-      (bc PUSH_INT_1)
+      (bc PUSH_I1)
       (bc BRK)
-      (bc PUSH_INT_2))))
+      (bc PUSH_I2))))
   (check-equal? (vm-stack->strings branch-true-0-state)
                 (list "stack holds 1 item"
                       "int $0002  (rt)"))
@@ -1945,11 +1946,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define branch-true-1-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_1)
+      (bc PUSH_I1)
       (bc TRUE_P_BRANCH) (byte $75)
       (bc BRK)
       (org-align #x78)
-      (bc PUSH_INT_2))))
+      (bc PUSH_I2))))
   (check-equal? (vm-stack->strings branch-true-1-state)
                 (list "stack holds 1 item"
                       "int $0002  (rt)"))
@@ -1958,20 +1959,20 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc TRUE_P_BRANCH) (byte $7d)
        (bc BRK)
        (org-align #x80)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc TRUE_P_BRANCH) (byte $6d)
        (bc BRK)
        (org-align #xf0)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        ;; 80f1
        (bc TRUE_P_BRANCH) (byte $0d)
        (build-list 13 (lambda (_i) (bc BRK)))
        ;; now at 8100
-       (bc PUSH_INT_2)))
+       (bc PUSH_I2)))
    ))
   (check-equal? (vm-stack->strings branch-true-2-state)
                 (list "stack holds 1 item"
@@ -1981,22 +1982,22 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc TRUE_P_BRANCH) (byte $7d)
        (bc BRK)
        (org-align #x80)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        ;; now at 8081
        (bc TRUE_P_BRANCH) (byte $6d)
        ;; 8083
        (bc BRK)
        (org-align #xf0)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        ;; now at 80f1
        (bc TRUE_P_BRANCH) (byte $0e)
        (build-list 14 (lambda (_i) (bc BRK)))
        ;; now at 8102
-       (bc PUSH_INT_2)))
+       (bc PUSH_I2)))
    ))
   (check-equal? (vm-stack->strings branch-true-3-state)
                 (list "stack holds 1 item"
@@ -2006,12 +2007,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc TRUE_P_BRANCH) (byte 3)
        (bc BRK)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc BRK)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc TRUE_P_BRANCH) (byte $fd)))
      ))
   (check-equal? (vm-stack->strings branch-true-4-state)
@@ -2022,26 +2023,26 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (flatten
       (list
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc TRUE_P_BRANCH) (byte $7d)
        (bc BRK)
        (org-align #x80)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        ;; now at 8081
        (bc TRUE_P_BRANCH) (byte $6d)
        ;; 8083
        (bc BRK)
        (org-align #xf0)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        ;; now at 80f1
        (bc TRUE_P_BRANCH) (byte $0e)
        (build-list 12 (lambda (_i) (bc BRK)))
        ;; 80ff
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        ;; 8100
        (bc BRK)
        ;; now at 8101
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc TRUE_P_BRANCH) (byte $fd)))
      ))
   (check-equal? (vm-stack->strings branch-true-5-state)
@@ -2106,7 +2107,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define inc-int-0-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
       (bc EXT)
       (bc INC_INT))))
 
@@ -2117,7 +2118,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define inc-int-1-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT) (byte 255) (byte 0)
+      (bc PUSH_I) (byte 255) (byte 0)
       (bc EXT)
       (bc INC_INT))
      ))
@@ -2129,7 +2130,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define inc-int-2-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_m1)
+      (bc PUSH_IM1)
       (bc EXT)
       (bc INC_INT))
      ))
@@ -2141,7 +2142,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define inc-int-3-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT) (byte 255) (byte 05)
+      (bc PUSH_I) (byte 255) (byte 05)
       (bc EXT)
       (bc INC_INT))
      ))
@@ -2284,8 +2285,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define max-int-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_2)
-      (bc PUSH_INT_1)
+      (bc PUSH_I2)
+      (bc PUSH_I1)
       (bc EXT)
       (bc MAX_INT))))
 
@@ -2296,8 +2297,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define max-int-2-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_2)
+      (bc PUSH_I1)
+      (bc PUSH_I2)
       (bc EXT)
       (bc MAX_INT))))
 
@@ -2332,7 +2333,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define pop-0-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
+      (bc PUSH_I0)
       (bc POP))))
 
   (check-equal? (vm-stack->strings pop-0-state)
@@ -2341,8 +2342,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define pop-1-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
-      (bc PUSH_INT_1)
+      (bc PUSH_I0)
+      (bc PUSH_I1)
       (bc POP))))
 
   (check-equal? (vm-stack->strings pop-1-state)
@@ -2351,9 +2352,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define pop-2-state
     (run-bc-wrapped-in-test
      (list
-      (bc PUSH_INT_0)
-      (bc PUSH_INT_1)
-      (bc PUSH_INT_2)
+      (bc PUSH_I0)
+      (bc PUSH_I1)
+      (bc PUSH_I2)
       (bc POP))))
 
   (check-equal? (vm-stack->strings pop-2-state)
@@ -2383,8 +2384,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
       (list
          (bc PUSH_NIL)
-         (bc PUSH_INT_2)
-         (bc PUSH_INT_1)
+         (bc PUSH_I2)
+         (bc PUSH_I1)
          (bc CONS)
          (bc CONS)
          (bc CAAR))
@@ -2397,8 +2398,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
       (list
          (bc PUSH_NIL)
-         (bc PUSH_INT_2)
-         (bc PUSH_INT_1)
+         (bc PUSH_I2)
+         (bc PUSH_I1)
          (bc CONS)
          (bc CONS)
          (bc CDAR))
@@ -2410,8 +2411,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define cxxr-2-state
     (run-bc-wrapped-in-test
       (list
-         (bc PUSH_INT_2)
-         (bc PUSH_INT_1)
+         (bc PUSH_I2)
+         (bc PUSH_I1)
          (bc CONS)
          (bc PUSH_NIL)
          (bc CONS)
@@ -2424,8 +2425,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define cxxr-3-state
     (run-bc-wrapped-in-test
       (list
-         (bc PUSH_INT_2)
-         (bc PUSH_INT_1)
+         (bc PUSH_I2)
+         (bc PUSH_I1)
          (bc CONS)
          (bc PUSH_NIL)
          (bc CONS)
@@ -2487,7 +2488,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_B) (byte 20)
       (bc ALLOC_ARRAY)
       (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
-      (bc PUSH_INT_1)
+      (bc PUSH_I1)
       (bc SWAP)
       (bc PUSH_B) (byte 1)
       (bc POP_TO_ARRAY_FIELD))
@@ -2525,13 +2526,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
        (bc ALLOC_ARRAY)
 
        (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc SWAP)
        (bc PUSH_B) (byte 1)
        (bc POP_TO_ARRAY_FIELD)
 
        (bc DUP)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc SWAP)
        (bc PUSH_B) (byte 10)
        (bc POP_TO_ARRAY_FIELD)
@@ -2648,7 +2649,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_SWAP)                     ;; 06  <-  03 
            (word-ref BC_EXT1_CMD)                 ;; 08  <-  04 
            (word-ref BC_PUSH_CONST_BYTE)          ;; 0a  <-  05 
-           (word-ref BC_PUSH_CONST_INT)           ;; 0c  <-  06
+           (word-ref BC_PUSH_I)           ;; 0c  <-  06
            (word-ref BC_INT_P)                    ;; 0e  <-  07 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  88..8F reserved
            (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 
@@ -2823,7 +2824,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_LOCAL_SHORT
           BC_PUSH_LOCAL_CXR
           BC_PUSH_CONST_NUM_SHORT
-          BC_PUSH_CONST_INT
+          BC_PUSH_I
           BC_PUSH_CONST_BYTE
           BC_PUSH_CONST_NIL
           BC_NIL_P

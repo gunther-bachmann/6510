@@ -38,7 +38,6 @@
                     NIL?
                     TAIL_CALL
 
-                    PUSH_INT
                     PUSH_NIL
                     PUSH_LOCAL
                     PUSH_GLOBAL
@@ -49,6 +48,7 @@
   (require [only-in "./vm-interpreter.rkt"
                     vm-interpreter
                     bc
+                    PUSH_I
                     PUSH_B
                     GC_FL
                     CELL_EQ
@@ -93,10 +93,10 @@
                     PUSH_LOCAL_1_CDR
                     PUSH_LOCAL_2_CDR
                     PUSH_LOCAL_3_CDR
-                    PUSH_INT_0
-                    PUSH_INT_1
-                    PUSH_INT_2
-                    PUSH_INT_m1
+                    PUSH_I0
+                    PUSH_I1
+                    PUSH_I2
+                    PUSH_IM1
                     WRITE_FROM_LOCAL_0
                     WRITE_FROM_LOCAL_1
                     WRITE_FROM_LOCAL_2
@@ -123,13 +123,13 @@
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)
-       (bc PUSH_INT) (word $0002)
+       (bc PUSH_I) (word $0002)
        (bc CONS)
-       (bc PUSH_INT) (word $0001)
+       (bc PUSH_I) (word $0001)
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)
@@ -155,13 +155,13 @@
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)
-       (bc PUSH_INT) (word $0002)
+       (bc PUSH_I) (word $0002)
        (bc CONS)
-       (bc PUSH_INT) (word $0001)
+       (bc PUSH_I) (word $0001)
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)
@@ -196,17 +196,17 @@
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0060)
+       (bc PUSH_I) (word $0060)
        (bc CONS)
-       (bc PUSH_INT) (word $0050)
+       (bc PUSH_I) (word $0050)
        (bc CONS)
-       (bc PUSH_INT) (word $0040)
+       (bc PUSH_I) (word $0040)
        (bc CONS)
-       (bc PUSH_INT) (word $0030)
+       (bc PUSH_I) (word $0030)
        (bc CONS)
-       (bc PUSH_INT) (word $0020)
+       (bc PUSH_I) (word $0020)
        (bc CONS)
-       (bc PUSH_INT) (word $0010)
+       (bc PUSH_I) (word $0010)
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)
@@ -216,7 +216,7 @@
        (bc SWAP)
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
 
-       (bc PUSH_INT) (word $0015)
+       (bc PUSH_I) (word $0015)
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
 
        (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
@@ -257,17 +257,17 @@
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0060)
+       (bc PUSH_I) (word $0060)
        (bc CONS)
-       (bc PUSH_INT) (word $0050)
+       (bc PUSH_I) (word $0050)
        (bc CONS)
-       (bc PUSH_INT) (word $0040)
+       (bc PUSH_I) (word $0040)
        (bc CONS)
-       (bc PUSH_INT) (word $0030)
+       (bc PUSH_I) (word $0030)
        (bc CONS)
-       (bc PUSH_INT) (word $0020)
+       (bc PUSH_I) (word $0020)
        (bc CONS)
-       (bc PUSH_INT) (word $0010)
+       (bc PUSH_I) (word $0010)
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)
@@ -277,12 +277,12 @@
        (bc SWAP)
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
 
-       (bc PUSH_INT) (word $0015)
+       (bc PUSH_I) (word $0015)
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
 
        (bc CALL) (word-ref BTREE_NEXT)
 
-       (bc PUSH_INT) (word $0025)
+       (bc PUSH_I) (word $0025)
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
 
        (bc CALL) (word-ref BTREE_NEXT)
@@ -331,8 +331,8 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0)
-       (bc PUSH_INT_1)
+       (bc PUSH_I0)
+       (bc PUSH_I1)
        (bc CONS)
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REVERSE)

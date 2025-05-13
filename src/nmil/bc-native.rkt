@@ -18,7 +18,6 @@
                   NIL?
                   TAIL_CALL
 
-                  PUSH_INT
                   PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
@@ -30,6 +29,7 @@
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  PUSH_I
                   PUSH_B
                   CELL_EQ
                   EXT
@@ -73,10 +73,10 @@
                   PUSH_LOCAL_1_CDR
                   PUSH_LOCAL_2_CDR
                   PUSH_LOCAL_3_CDR
-                  PUSH_INT_0
-                  PUSH_INT_1
-                  PUSH_INT_2
-                  PUSH_INT_m1
+                  PUSH_I0
+                  PUSH_I1
+                  PUSH_I2
+                  PUSH_IM1
                   WRITE_FROM_LOCAL_0
                   WRITE_FROM_LOCAL_1
                   WRITE_FROM_LOCAL_2
@@ -151,7 +151,7 @@
        (bc PUSH_B) (byte 4)
        (bc PUSH_B) (byte 6)
        (bc CALL) (word-ref BC_ADD_NATIVE)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc BRK))
       (list (org #x8F00))
       BC_ADD_NATIVE)
@@ -186,7 +186,7 @@
        (bc PUSH_B) (byte 4)
        (bc PUSH_B) (byte 6)
        (bc CALL) (word-ref BC_ADD_NATIVE_2)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc BRK))
       (list (org #x8F00))
       BC_ADD_NATIVE_2)

@@ -106,7 +106,6 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   NIL?
                   TAIL_CALL
 
-                  PUSH_INT
                   PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
@@ -118,6 +117,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  PUSH_I
                   CELL_EQ
                   EXT
                   CAAR
@@ -161,10 +161,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   PUSH_LOCAL_1_CDR
                   PUSH_LOCAL_2_CDR
                   PUSH_LOCAL_3_CDR
-                  PUSH_INT_0
-                  PUSH_INT_1
-                  PUSH_INT_2
-                  PUSH_INT_m1
+                  PUSH_I0
+                  PUSH_I1
+                  PUSH_I2
+                  PUSH_IM1
                   WRITE_FROM_LOCAL_0
                   WRITE_FROM_LOCAL_1
                   WRITE_FROM_LOCAL_2
@@ -262,7 +262,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append      
       (list
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc BRK))
 
@@ -278,7 +278,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CAR)
        (bc BRK))
@@ -304,7 +304,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CAR)
        (bc CALL) (word-ref BTREE_VALUE_P)
@@ -324,7 +324,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CDR)
        (bc CALL) (word-ref BTREE_VALUE_P)
@@ -354,7 +354,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CAR)
        (bc CALL) (word-ref BTREE_NODE_P)
@@ -374,7 +374,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CDR)
        (bc CALL) (word-ref BTREE_NODE_P)
@@ -458,7 +458,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CALL) (word-ref BTREE_VALIDATE)
        (bc BRK))
@@ -481,7 +481,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc PUSH_NIL)
        (bc CONS)
        (bc CALL) (word-ref BTREE_VALIDATE)
@@ -586,10 +586,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
+       (bc PUSH_I0)
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CALL) (word-ref BTREE_DEPTH)
        (bc BRK))
@@ -605,12 +605,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
+       (bc PUSH_I0)
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc CALL) (word-ref BTREE_DEPTH)
        (bc BRK))
@@ -626,14 +626,14 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
+       (bc PUSH_I0)
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CALL) (word-ref BTREE_DEPTH)
        (bc BRK))
@@ -649,12 +649,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
+       (bc PUSH_I0)
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;-> o
-       (bc PUSH_INT_1)                          ;;  / \
+       (bc PUSH_I1)                          ;;  / \
        (bc SWAP)                                ;; 2  nil
        (bc CONS)                                ;;            ->o
        (bc CALL) (word-ref BTREE_DEPTH)         ;;            /   \    
@@ -671,15 +671,15 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
+       (bc PUSH_I0)
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;-> o
-       (bc PUSH_INT_1)                          ;;  / \
+       (bc PUSH_I1)                          ;;  / \
        (bc SWAP)                                ;; 2  nil
        (bc CONS)                                ;;             ->o
-       (bc PUSH_INT_0)                          ;;             /   \
+       (bc PUSH_I0)                          ;;             /   \
        (bc SWAP)                                ;;            o     1
        (bc CONS)                                ;;           / \                 o
        (bc CALL) (word-ref BTREE_DEPTH)         ;;          2  nil             /   \
@@ -697,15 +697,15 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
+       (bc PUSH_I0)
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;-> o
-       (bc PUSH_INT_1)                          ;;  / \
+       (bc PUSH_I1)                          ;;  / \
        (bc SWAP)                                ;; 2  nil
        (bc CONS)                                ;;             ->o
-       (bc PUSH_INT_0)                          ;;             /   \
+       (bc PUSH_I0)                          ;;             /   \
        ;; (bc SWAP)                             ;;            o     1
        (bc CONS)                                ;;           / \        -> o
        (bc BNOP)                                ;;          2  nil       /   \
@@ -734,7 +734,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
    ;; [else (btree-path-to-first (car node) (cons (cons -1 node) path))]))
           (bc PUSH_LOCAL_0)                     ;; node :: path
-          (bc PUSH_INT_0)                       ;; 0 :: node :: path
+          (bc PUSH_I0)                       ;; 0 :: node :: path
                                                 ;; (0 . node) :: path
           (bc COONS)                            ;; ((0 . node) . path)
           (bc PUSH_LOCAL_0_CAR)                 ;; (car node) :: ((0 . node) . path)
@@ -746,7 +746,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
        (bc BRK))
@@ -764,12 +764,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;
-       (bc PUSH_INT_1)                          ;;         o        
+       (bc PUSH_I1)                          ;;         o        
        (bc SWAP)                                ;;       /   \      
        (bc CONS)                                ;;    ->0     o      
-       (bc PUSH_INT_0)                          ;;          /   \   
+       (bc PUSH_I0)                          ;;          /   \   
        (bc CONS)                                ;;         o     1  
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST) ;;        / \       
        (bc BRK))                                ;;       2  nil     
@@ -803,7 +803,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc FALSE_P_BRANCH) (bc-rel-ref ELSE_COND__BTREE_PATH_TO_LAST)
   
             (bc PUSH_LOCAL_0)
-            (bc PUSH_INT_0)
+            (bc PUSH_I0)
             (bc COONS)
             (bc PUSH_LOCAL_0_CAR)
             (bc TAIL_CALL)
@@ -811,7 +811,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (label ELSE_COND__BTREE_PATH_TO_LAST)
       ;;    [else (btree-path-to-last (cdr node) (cons (cons 1 node) path))]))
             (bc PUSH_LOCAL_0)
-            (bc PUSH_INT_1)
+            (bc PUSH_I1)
             (bc COONS)
             (bc PUSH_LOCAL_0_CDR)
             (bc TAIL_CALL)))))
@@ -823,7 +823,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
 
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
 
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)
@@ -840,12 +840,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;
        (bc PUSH_NIL)                            ;;         o
        (bc SWAP)                                ;;       /   \
        (bc CONS)                                ;;    ->0     o
-       (bc PUSH_INT_0)                          ;;          /   \
+       (bc PUSH_I0)                          ;;          /   \
        (bc CONS)                                ;;         o     nil
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;;        / \       
        (bc BRK))                                ;;    -> 2  nil
@@ -866,12 +866,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;
-       (bc PUSH_INT_1)                          ;;         o
+       (bc PUSH_I1)                          ;;         o
        (bc SWAP)                                ;;       /   \
        (bc CONS)                                ;;      0     o
-       (bc PUSH_INT_0)                          ;;          /   \
+       (bc PUSH_I0)                          ;;          /   \
        (bc CONS)                                ;;         o  -> 1
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;;        / \       
        (bc BRK))                                ;;       2  nil
@@ -926,9 +926,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
        (bc CALL) (word-ref BTREE_NODE_FOR_PATH)
@@ -946,10 +946,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT_0)  ;; right
-       (bc PUSH_INT_2)  ;; left
+       (bc PUSH_I0)  ;; right
+       (bc PUSH_I2)  ;; left
        (bc CONS)        ;; node
-       (bc PUSH_INT_1)  ;; path selector
+       (bc PUSH_I1)  ;; path selector
        (bc CONS)
        (bc CONS)
        (bc CALL) (word-ref BTREE_NODE_FOR_PATH)
@@ -1019,7 +1019,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc PUSH_LOCAL_0_CAR)         ;; top-most-relevant
             (bc CDR)
             (bc WRITE_TO_LOCAL_1)         ;; local1 = (cdar top-most-relevant)
-            (bc PUSH_INT_0)
+            (bc PUSH_I0)
             (bc COONS)
   
             (bc PUSH_NIL)
@@ -1041,7 +1041,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;; got the tree, now construct a path
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
        (bc BNOP)
@@ -1065,8 +1065,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT_2)                          ;;    o
-       (bc PUSH_INT) (word $0003)               ;;   / \
+       (bc PUSH_I2)                          ;;    o
+       (bc PUSH_I) (word $0003)               ;;   / \
        (bc CONS)                                ;;  2   3
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST) ;; ((0 . (2 . 3)) . NIL)
        (bc BNOP)
@@ -1090,8 +1090,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT)  (word $0003)              ;;    o
-       (bc PUSH_INT_2)                          ;;   / \
+       (bc PUSH_I)  (word $0003)              ;;    o
+       (bc PUSH_I2)                          ;;   / \
        (bc CONS)                                ;;  2   3
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;; ((1 . (2 . 3)) . NIL)
        (bc BNOP)
@@ -1115,10 +1115,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT)  (word $0003)              ;;    o
-       (bc PUSH_INT_2)                          ;;   / \
+       (bc PUSH_I)  (word $0003)              ;;    o
+       (bc PUSH_I2)                          ;;   / \
        (bc CONS)                                ;;  1   o  
-       (bc PUSH_INT_1)                          ;;     / \ 
+       (bc PUSH_I1)                          ;;     / \ 
        (bc CONS)                                ;;    2   3
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;; ((1 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))
        (bc BNOP)
@@ -1143,12 +1143,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT) (word $0004)               ;;     o
-       (bc PUSH_INT) (word $0003)               ;;    / \
-       (bc PUSH_INT_2)                          ;;   1   o
+       (bc PUSH_I) (word $0004)               ;;     o
+       (bc PUSH_I) (word $0003)               ;;    / \
+       (bc PUSH_I2)                          ;;   1   o
        (bc CONS)                                ;;      / \
        (bc CONS)                                ;;     o   4
-       (bc PUSH_INT_1)                          ;;    / \
+       (bc PUSH_I1)                          ;;    / \
        (bc CONS)                                ;;   2   3
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;; ((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))
        (bc DUP)
@@ -1200,13 +1200,13 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CONS)
-       (bc PUSH_INT_m1)
+       (bc PUSH_IM1)
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)
@@ -1248,19 +1248,19 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CONS)
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
 
        (bc BNOP)
@@ -1350,7 +1350,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (bc PUSH_LOCAL_0_CAR)         
              (bc CDR)                      ;; (cdar top-most-relevant
              (bc WRITE_TO_LOCAL_1)         ;; local1 = (cdar top-most-relevant)
-             (bc PUSH_INT_1)
+             (bc PUSH_I1)
              (bc COONS)
    
              (bc PUSH_NIL)
@@ -1366,7 +1366,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;; got the tree, now construct a path
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST) ;; ((0 . (2 . NIL)) . NIL)
        (bc BNOP)
@@ -1390,8 +1390,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT)  (word $0003)              ;;    o
-       (bc PUSH_INT_2)                          ;;   / \
+       (bc PUSH_I)  (word $0003)              ;;    o
+       (bc PUSH_I2)                          ;;   / \
        (bc CONS)                                ;;  2   3
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST) ;; ((0 . (2 . 3)) . NIL)
        (bc BNOP)
@@ -1416,8 +1416,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT)  (word $0003)              ;;    o
-       (bc PUSH_INT_2)                          ;;   / \
+       (bc PUSH_I)  (word $0003)              ;;    o
+       (bc PUSH_I2)                          ;;   / \
        (bc CONS)                                ;;  2   3
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;; ((1 . (2 . 3)) . NIL)
        (bc BNOP)
@@ -1441,10 +1441,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT)  (word $0003)              ;;    o
-       (bc PUSH_INT_2)                          ;;   / \
+       (bc PUSH_I)  (word $0003)              ;;    o
+       (bc PUSH_I2)                          ;;   / \
        (bc CONS)                                ;;  1   o
-       (bc PUSH_INT_1)                          ;;     / \
+       (bc PUSH_I1)                          ;;     / \
        (bc CONS)                                ;;    2   3
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)  ;; ((1 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))
        (bc BNOP)
@@ -1468,12 +1468,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)                            ;; for call to path_to_first
-       (bc PUSH_INT) (word $0004)               ;;     o
-       (bc PUSH_INT) (word $0003)               ;;    / \
-       (bc PUSH_INT_2)                          ;;   1   o
+       (bc PUSH_I) (word $0004)               ;;     o
+       (bc PUSH_I) (word $0003)               ;;    / \
+       (bc PUSH_I2)                          ;;   1   o
        (bc CONS)                                ;;      / \
        (bc CONS)                                ;;     o   4
-       (bc PUSH_INT_1)                          ;;    / \
+       (bc PUSH_I1)                          ;;    / \
        (bc CONS)                                ;;   2   3
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)  ;;((0 . (1 . ((2 . 3) . 4))) . NIL)
        (bc DUP)
@@ -1581,46 +1581,46 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        ;; build path
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0008)
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0008)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0005)
        (bc CONS)                           ;; (5 . 6)
        (bc CONS)                           ;; ((5 . 6) . 7)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)                           ;; (3 . ((5 . 6) . 7))
        (bc CONS)                           ;; ((3 . ((5 . 6) . 7)) . 8)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)                           ;; (0 . ((3 . ((5 . 6) . 7)) . 8))
        (bc CONS)                           ;; list
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0005)
        (bc CONS)                           ;; (5 . 6)
        (bc CONS)                           ;; ((5 . 6) . 7)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)                           ;; (3 . ((5 . 6) . 7))
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)                           ;; (1 . (3 . ((5 . 6) . 7)))
        (bc CONS)                           ;; list
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0005)
        (bc CONS)                           ;; (5 . 6)
        (bc CONS)                           ;; ((5 . 6) . 7)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)                           ;; (0 . ((5 . 6) . 7))
        (bc CONS)                           ;; list
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0005)
        (bc CONS)                           ;; (5 . 6)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)                           ;; (0 . (5 . 6))
        (bc CONS)                           ;; list
 
@@ -1633,8 +1633,8 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_NIL) ;; result
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0005)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0005)
+       (bc PUSH_I) (word $0004)
        (bc CONS)     ;; repl-node
        (bc SWAP)
 
@@ -1724,7 +1724,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
   
             (bc PUSH_LOCAL_1)
-            (bc PUSH_INT_1)
+            (bc PUSH_I1)
                                          ;; (1 . new-node) :: rec-rebuild
             (bc COONS)                   ;; ((1 . new-node) . rec-rebuild)
             (bc RET)
@@ -1740,7 +1740,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc CONS)                    ;; (value . (cddar path)) :: (list)
             (bc WRITE_TO_LOCAL_1)        ;; local1 = new-right-node (no longer value)!
   
-            (bc PUSH_INT_0)
+            (bc PUSH_I0)
      (label COMMON_RET__BTREE_ADD_VALUE_AFTER)
             (bc CONS)
             (bc POP_TO_LOCAL_3)          ;; local3 = (0 . new-right-node)
@@ -1757,7 +1757,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
   
             (bc PUSH_LOCAL_2)
-            (bc PUSH_INT_1)
+            (bc PUSH_I1)
                                          ;; (1 . repl-node) :: rec-rebuild
             (bc COONS)                   ;; ((1 . repl-node) . rec-rebuild)
   
@@ -1776,7 +1776,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc CONS)                    ;; ((cddar path) . value) :: (list)
             (bc WRITE_TO_LOCAL_1)        ;; local1 = new-right-node (no longer value)!
   
-            (bc PUSH_INT_1)
+            (bc PUSH_I1)
  
             (bc GOTO) (bc-rel-ref COMMON_RET__BTREE_ADD_VALUE_AFTER)         ;; -24 -->
             ))))
@@ -1789,15 +1789,15 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_NIL)
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
 
        (bc DUP)
 
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
@@ -1820,16 +1820,16 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
 
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
 
        (bc DUP)
 
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
@@ -1852,18 +1852,18 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
 
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
        (bc CONS)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
 
        (bc DUP)
 
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
@@ -1886,16 +1886,16 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
 
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc CONS)
 
        (bc DUP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
@@ -1918,19 +1918,19 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
 
-       (bc PUSH_INT) (word $0006)       ;; 6
-       (bc PUSH_INT) (word $0005)       ;; 5 :: 6
+       (bc PUSH_I) (word $0006)       ;; 6
+       (bc PUSH_I) (word $0005)       ;; 5 :: 6
        (bc CONS)                        ;; (5 . 6)
        (bc DUP)                         ;; (5 . 6) :: (5 . 6)
 
-       (bc PUSH_INT) (word $0004)       ;; 4 :: (5 . 6) :: (5 . 6)
+       (bc PUSH_I) (word $0004)       ;; 4 :: (5 . 6) :: (5 . 6)
        (bc CONS)                        ;; (4 . (5 . 6)) :: (5 . 6)
        (bc DUP)                         ;; (4 . (5 . 6)) :: (4 . (5 . 6)) :: (5 . 6)
 
-       (bc PUSH_INT) (word $0003)       ;; 3 :: (4 . (5 . 6)) :: (4 . (5 . 6)) :: (5 . 6)
+       (bc PUSH_I) (word $0003)       ;; 3 :: (4 . (5 . 6)) :: (4 . (5 . 6)) :: (5 . 6)
        (bc CONS)                        ;; (3 . (4 . (5 . 6))) :: (4 . (5 . 6)) :: (5 . 6)
 
-       (bc PUSH_INT_1)                  ;; 1 :: (3 . (4 . (5 . 6))) :: (4 . (5 . 6)) :: (5 . 6)
+       (bc PUSH_I1)                  ;; 1 :: (3 . (4 . (5 . 6))) :: (4 . (5 . 6)) :: (5 . 6)
        (bc CONS)                        ;; (1 . (3 . (4 . (5 . 6)))) :: (4 . (5 . 6)) :: (5 . 6)
 
        (bc PUSH_NIL)                    ;; NIL :: (1 . (3 . (4 . (5 . 6)))) :: (4 . (5 . 6)) :: (5 . 6)
@@ -1938,18 +1938,18 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CONS)                        ;; ((1 . (3 . (4 . (5 . 6)))) . NIL) :: (4 . (5 . 6)) :: (5 . 6)
 
        (bc SWAP)                        ;; (4 . (5 . 6)) :: ((1 . (3 . (4 . (5 . 6)))) . NIL) :: (5 . 6)
-       (bc PUSH_INT_1)                  ;; 1 :: (4 . (5 . 6)) :: ((1 . (3 . (4 . (5 . 6)))) . NIL) :: (5 . 6)
+       (bc PUSH_I1)                  ;; 1 :: (4 . (5 . 6)) :: ((1 . (3 . (4 . (5 . 6)))) . NIL) :: (5 . 6)
        (bc CONS)                        ;; (1 . (4 . (5 . 6))) :: ((1 . (3 . (4 . (5 . 6)))) . NIL) :: (5 . 6)
        (bc CONS)                        ;; ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL)) :: (5 . 6)
 
        (bc SWAP)                        ;; (5 . 6) :: ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL))
-       (bc PUSH_INT_1)                  ;; 1 :: (5 . 6) :: ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL))
+       (bc PUSH_I1)                  ;; 1 :: (5 . 6) :: ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL))
        (bc CONS)                        ;; (1 . (5 . 6)) :: ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL))
        (bc CONS)                        ;; ((1 . (5 . 6)) . ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL)))
 
        (bc DUP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
@@ -2031,7 +2031,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
   
             (bc PUSH_LOCAL_1)
-            (bc PUSH_INT_0)
+            (bc PUSH_I0)
                                          ;; (0 . new-node)
             (bc COONS)                   ;; ((0 . new-node) . rec-build)
             (bc RET)
@@ -2043,7 +2043,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc CDDR)
             (bc SWAP)
 
-            (bc PUSH_INT_0)
+            (bc PUSH_I0)
 
      (label COMMON_RETURN__BTREE_ADD_VALUE_BEFORE)
             (bc POP_TO_LOCAL_3)
@@ -2060,7 +2060,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc COONS)
 
             (bc PUSH_LOCAL_1)
-            (bc PUSH_INT_0)
+            (bc PUSH_I0)
             (bc COONS)
             (bc RET)
   
@@ -2077,7 +2077,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc PUSH_LOCAL_0_CAR)
             (bc CADR)
 
-            (bc PUSH_INT_1)
+            (bc PUSH_I1)
             (bc GOTO) (bc-rel-ref COMMON_RETURN__BTREE_ADD_VALUE_BEFORE)
           ))))
 
@@ -2089,15 +2089,15 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_NIL)
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0006)
+       (bc PUSH_I) (word $0006)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
 
        (bc DUP)
 
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
        (bc BRK))
@@ -2118,19 +2118,19 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0006)
+       (bc PUSH_I) (word $0006)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc SWAP)
        (bc CONS)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
 
        (bc PUSH_NIL)
@@ -2138,18 +2138,18 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CONS)
 
        (bc SWAP)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc CONS)
 
        (bc SWAP)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
 
        (bc DUP)
 
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
@@ -2181,16 +2181,16 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
 
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
 
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
        (bc BRK))
       BTREE_ADD_VALUE_BEFORE
@@ -2214,35 +2214,35 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0008)
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
+       (bc PUSH_I) (word $0008)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
        (bc CONS)                        ;; (6 . 7)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)                        ;; (3 . (6 . 7))
        (bc CONS)                        ;; ((3 . (6 . 7)) . 8)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)                        ;; (0 . ((3 . (6 . 7)) . 8))
        (bc CONS)                        ;; ((0 . ((3 . (6 . 7)) . 8)) . NIL)
 
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
        (bc CONS)                        ;; (6 . 7)
-       (bc PUSH_INT) (word $0003)       
+       (bc PUSH_I) (word $0003)       
        (bc CONS)                        ;; (3 . (6 . 7))
-       (bc PUSH_INT_1)                 
+       (bc PUSH_I1)                 
        (bc CONS)                        ;; (1 . (3 . (6 . 7)))
        (bc CONS)                        ;; ((1 . (3 . (6 . 7))) . ((0 . ((3 . (6 . 7)) . 8)) . NIL))
 
-       (bc PUSH_INT) (word $0007)       
-       (bc PUSH_INT) (word $0006)
+       (bc PUSH_I) (word $0007)       
+       (bc PUSH_I) (word $0006)
        (bc CONS)                        ;; (6 . 7)
-       (bc PUSH_INT_0)                  
+       (bc PUSH_I0)                  
        (bc CONS)                        ;; (0 . (6 . 7))
        (bc CONS)                        ;; ((0 . (6 . 7)) . ((1 . (3 . (6 . 7))) . ((0 . ((3 . (6 . 7)) . 8)) . NIL)))
 
        (bc DUP)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
        
@@ -2274,15 +2274,15 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
 
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc CONS)
 
        (bc DUP)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
        (bc BRK))
       BTREE_ADD_VALUE_BEFORE
@@ -2308,48 +2308,48 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
 
-       (bc PUSH_INT) (word $0008)
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0008)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        (bc CONS)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)
        (bc CONS)
-       (bc PUSH_INT_0)
-       (bc CONS)
-       (bc CONS)
-
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0004)
-       (bc CONS)
-       (bc CONS)
-       (bc PUSH_INT) (word $0003)
-       (bc CONS)
-       (bc PUSH_INT_1)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
 
-       (bc PUSH_INT) (word $0007)
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I) (word $0003)
+       (bc CONS)
+       (bc PUSH_I1)
        (bc CONS)
        (bc CONS)
 
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0007)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT_1)
+       (bc CONS)
+       (bc PUSH_I0)
+       (bc CONS)
+       (bc CONS)
+
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0004)
+       (bc CONS)
+       (bc PUSH_I1)
        (bc CONS)
        (bc CONS)
 
        (bc DUP)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
@@ -2457,7 +2457,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list       
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0001)
+       (bc PUSH_I) (word $0001)
        (bc CONS)
 
        (bc DUP)
@@ -2481,23 +2481,23 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0009)
+       (bc PUSH_I) (word $0009)
        (bc CONS)
-       (bc PUSH_INT) (word $0008)
+       (bc PUSH_I) (word $0008)
        (bc CONS)
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc CONS)
-       (bc PUSH_INT) (word $0006)
+       (bc PUSH_I) (word $0006)
        (bc CONS)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)
-       (bc PUSH_INT) (word $0002)
+       (bc PUSH_I) (word $0002)
        (bc CONS)
-       (bc PUSH_INT) (word $0001)
+       (bc PUSH_I) (word $0001)
        (bc CONS)
 
        (bc DUP)
@@ -2521,13 +2521,13 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)
-       (bc PUSH_INT) (word $0002)
+       (bc PUSH_I) (word $0002)
        (bc CONS)
-       (bc PUSH_INT) (word $0001)
+       (bc PUSH_I) (word $0001)
        (bc CONS)
 
        (bc DUP)
@@ -2601,15 +2601,15 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)
        (bc CONS)
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0002)
-       (bc PUSH_INT) (word $0001)
+       (bc PUSH_I) (word $0002)
+       (bc PUSH_I) (word $0001)
        (bc CONS)
        (bc CONS)
        (bc CONS)
@@ -2761,7 +2761,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
 
              (bc PUSH_LOCAL_0)
-             (bc PUSH_INT_0)
+             (bc PUSH_I0)
              (bc COONS)                         ;; ((0 . new-local) . rec-rebuild)
                                                 ;; param 2 for tail call
              (bc PUSH_NIL)                      ;; param 1 for tail call
@@ -2784,7 +2784,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              ;; (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
 
              ;; (bc PUSH_LOCAL_3)
-             ;; (bc PUSH_INT_0)
+             ;; (bc PUSH_I0)
              ;; (bc COONS)                         ;; ((0 . new-node) . rec-rebuild)
              ;; ;; param 2 for btree-remove-value-at
              ;; (bc PUSH_NIL)                       ;; param 1 for btree-remove-value-at
@@ -2814,9 +2814,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc PUSH_NIL)
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0008)
+       (bc PUSH_I) (word $0008)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
 
@@ -2858,10 +2858,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0009)
-       (bc PUSH_INT) (word $0008)
+       (bc PUSH_I) (word $0009)
+       (bc PUSH_I) (word $0008)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
 
@@ -2889,10 +2889,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
 
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0009)
-       (bc PUSH_INT) (word $0008)
+       (bc PUSH_I) (word $0009)
+       (bc PUSH_I) (word $0008)
        (bc CONS)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc CONS)
 
@@ -2918,37 +2918,37 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc SWAP)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0008)
+       (bc PUSH_I) (word $0008)
        (bc SWAP)
        (bc CONS)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)
@@ -2995,37 +2995,37 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT) (word $0006)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0006)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc SWAP)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0008)
+       (bc PUSH_I) (word $0008)
        (bc SWAP)
        (bc CONS)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)
@@ -3073,36 +3073,36 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc SWAP)
        (bc CONS)
        ;; (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        ;; (bc SWAP)
 
-       ;; (bc PUSH_INT) (word $0004)
+       ;; (bc PUSH_I) (word $0004)
        ;; (bc CONS)
        ;; (bc DUP)
 
-       ;; (bc PUSH_INT_1)
+       ;; (bc PUSH_I1)
        ;; (bc CONS)
        ;; (bc SWAP)
 
-       ;; (bc PUSH_INT) (word $0008)
+       ;; (bc PUSH_I) (word $0008)
        ;; (bc SWAP)
        ;; (bc CONS)
 
-       ;; (bc PUSH_INT_0)
+       ;; (bc PUSH_I0)
        ;; (bc CONS)
 
        (bc PUSH_NIL)
@@ -3145,36 +3145,36 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc SWAP)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        ;; (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        ;; (bc SWAP)
 
-       ;; (bc PUSH_INT) (word $0008)
+       ;; (bc PUSH_I) (word $0008)
        ;; (bc SWAP)
        ;; (bc CONS)
 
-       ;; (bc PUSH_INT_0)
+       ;; (bc PUSH_I0)
        ;; (bc CONS)
 
        (bc PUSH_NIL)
@@ -3218,36 +3218,36 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc SWAP)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        ;; (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        ;; (bc SWAP)
 
-       ;; (bc PUSH_INT) (word $0008)
+       ;; (bc PUSH_I) (word $0008)
        ;; (bc SWAP)
        ;; (bc CONS)
 
-       ;; (bc PUSH_INT_0)
+       ;; (bc PUSH_I0)
        ;; (bc CONS)
 
        (bc PUSH_NIL)
@@ -3286,19 +3286,19 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        ;; (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
 
        (bc PUSH_NIL)
@@ -3332,36 +3332,36 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc SWAP)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0008)
+       (bc PUSH_I) (word $0008)
        (bc SWAP)
        (bc CONS)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)
@@ -3407,11 +3407,11 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
@@ -3420,7 +3420,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
@@ -3429,40 +3429,40 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0006)
+       (bc PUSH_I) (word $0006)
        (bc SWAP)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
  
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0003)
+       (bc PUSH_I) (word $0003)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc SWAP)
        (bc CONS)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
 
        (bc PUSH_NIL)
@@ -3558,9 +3558,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc CONS)
        (bc DUP)
@@ -3578,36 +3578,36 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (append      
       (list
        (bc PUSH_NIL)
-       (bc PUSH_INT) (word $0005)
+       (bc PUSH_I) (word $0005)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0007)
+       (bc PUSH_I) (word $0007)
        (bc SWAP)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0004)
+       (bc PUSH_I) (word $0004)
        (bc CONS)
        (bc DUP)
 
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc CONS)
        (bc SWAP)
 
-       (bc PUSH_INT) (word $0008)
+       (bc PUSH_I) (word $0008)
        (bc SWAP)
        (bc CONS)
 
-       (bc PUSH_INT_0)
+       (bc PUSH_I0)
        (bc CONS)
        (bc PUSH_NIL)
        (bc SWAP)

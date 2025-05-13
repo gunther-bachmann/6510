@@ -33,7 +33,6 @@
                   NIL?
                   TAIL_CALL
 
-                  PUSH_INT
                   PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
@@ -44,6 +43,7 @@
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  PUSH_I
                   PUSH_B
                   GC_FL
                   ALLOC_ARRAY
@@ -98,10 +98,10 @@
                   PUSH_LOCAL_1_CDR
                   PUSH_LOCAL_2_CDR
                   PUSH_LOCAL_3_CDR
-                  PUSH_INT_0
-                  PUSH_INT_1
-                  PUSH_INT_2
-                  PUSH_INT_m1
+                  PUSH_I0
+                  PUSH_I1
+                  PUSH_I2
+                  PUSH_IM1
                   WRITE_FROM_LOCAL_0
                   WRITE_FROM_LOCAL_1
                   WRITE_FROM_LOCAL_2
@@ -207,7 +207,7 @@
       (list
        (bc CALL) (word-ref FIFO_CREATE)
        (bc DUP)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
        (bc BRK))
@@ -232,10 +232,10 @@
        (bc CALL) (word-ref FIFO_CREATE)
        (bc DUP)
        (bc DUP)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
        (bc BRK))
@@ -292,10 +292,10 @@
        (bc CALL) (word-ref FIFO_CREATE)
        (bc DUP)
        (bc DUP)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
        (bc CALL) (word-ref FIFO_DEQUEUE)
@@ -317,10 +317,10 @@
        (bc CALL) (word-ref FIFO_CREATE)
        (bc DUP)
        (bc DUP)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
        (bc DUP)
@@ -348,10 +348,10 @@
        (bc CALL) (word-ref FIFO_CREATE)
        (bc DUP)
        (bc DUP)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
        (bc DUP)
@@ -395,10 +395,10 @@
        (bc CALL) (word-ref FIFO_CREATE)
        (bc DUP)
        (bc DUP)
-       (bc PUSH_INT_1)
+       (bc PUSH_I1)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc PUSH_INT_2)
+       (bc PUSH_I2)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
        (bc DUP)

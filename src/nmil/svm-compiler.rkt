@@ -23,7 +23,8 @@
 (require "./parse.rkt")
 
 (require/typed "./vm-interpreter.rkt"
-  [PUSH_B Byte])
+  [PUSH_B Byte]
+  [PUSH_I Byte])
 (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                   disassemble-byte-code
                   make-vm
@@ -38,7 +39,6 @@
                   NIL?
                   TAIL_CALL
 
-                  PUSH_INT
                   PUSH_ARRAY_FIELD
                   PUSH_NIL
                   PUSH_LOCAL
@@ -131,7 +131,7 @@
   (cond
     [(ast-at-int-? atom)
      (define value (ast-at-int--value atom))
-     (vector-immutable PUSH_INT (low-byte value) (high-byte value))]
+     (vector-immutable PUSH_I (low-byte value) (high-byte value))]
     [(ast-at-bool-? atom)
      (vector-immutable PUSH_B (if (ast-at-bool--bool atom) (cell-byte--value TRUE) (cell-byte--value FALSE)))]
     [(ast-at-id-? atom)
@@ -151,7 +151,7 @@
   (check-exn exn:fail? (lambda () (gen-atom (ast-at-id- (make-ast-info #:id-map (hash 'some (register-ref- 'Param 10))) 'unknown))))
 
   (check-equal? (gen-atom (ast-at-int- (make-ast-info) #x02fe))
-                (vector-immutable PUSH_INT #xfe #x02))
+                (vector-immutable PUSH_I #xfe #x02))
 
   (check-equal? (gen-atom (ast-at-bool- (make-ast-info) #t))
                 (vector-immutable PUSH_B (cell-byte--value TRUE))))
@@ -684,19 +684,19 @@
     (svm-generate--fun-call
      (ast-ex-fun-call- (make-ast-info) 'nil? (list (ast-at-int- (make-ast-info) 10) (ast-at-int- (make-ast-info) 20)))
      (make-generation-artifact)))
-   (vector-immutable PUSH_INT (low-byte 20) (high-byte 20)
-                     PUSH_INT (low-byte 10) (high-byte 10)
+   (vector-immutable PUSH_I (low-byte 20) (high-byte 20)
+                     PUSH_I (low-byte 10) (high-byte 10)
                      NIL?)))
 
 ;; push integer
 (define (svm-generate--int (a : ast-at-int-) (artifact : generation-artifact-)) : generation-artifact-
   (define val (ast-at-int--value a))
-  (append-bytes artifact (vector-immutable PUSH_INT (low-byte val) (high-byte val))))
+  (append-bytes artifact (vector-immutable PUSH_I (low-byte val) (high-byte val))))
 
 (module+ test #| svm-generate--int |#
   (check-equal? (generation-artifact--bytes
                  (svm-generate--int (ast-at-int- (make-ast-info) 300) (make-generation-artifact)))
-                (vector-immutable PUSH_INT 44 1)))
+                (vector-immutable PUSH_I 44 1)))
 
 ;; generate an if expression
 (define (svm-generate--if (node : ast-ex-if-) (artifact : generation-artifact-)) : generation-artifact-
@@ -760,13 +760,13 @@
                                   #f)
                       (make-generation-artifact)))
 
-   (vector-immutable PUSH_INT (low-byte 20) (high-byte 20)
-                     PUSH_INT (low-byte 10) (high-byte 10)
+   (vector-immutable PUSH_I (low-byte 20) (high-byte 20)
+                     PUSH_I (low-byte 10) (high-byte 10)
                      NIL?
                      BRA 6
-                     PUSH_INT (low-byte 200) (high-byte 200)
+                     PUSH_I (low-byte 200) (high-byte 200)
                      GOTO 4
-                     PUSH_INT (low-byte 100) (high-byte 100))))
+                     PUSH_I (low-byte 100) (high-byte 100))))
 
 ;; generate a node (dispatch to specific generator)
 (define (svm-generate (node : ast-node-) (artifact : generation-artifact-)) : generation-artifact-

@@ -31,7 +31,7 @@
          NIL?
          TAIL_CALL
 
-         PUSH_INT
+         PUSH_I
          PUSH_ARRAY_FIELD
          PUSH_BYTE
          PUSH_NIL
@@ -317,7 +317,7 @@
 (define pLONG               #x03) ;; NOT SYNCED double operand size
 
 (define PUSH_BYTE           #x05) ;; op = byte value, stack [] -> [cell-byte]
-(define PUSH_INT            #x06) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
+(define PUSH_I            #x06) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
 ;; also used for struct-index or function-index
 
 (define PUSH_NIL            #x09) ;; stack: [] -> [NIL]
@@ -1143,7 +1143,7 @@
     [(= byte-code PUSH_ARRAY_FIELD) (format "push array[~a]" (peek-pc-byte vm 1))]
     [(= byte-code PUSH_BYTE) (format "push #~a" (peek-pc-byte vm 1))]
     [(= byte-code PUSH_GLOBAL) (format "push g-~a" (peek-pc-int vm 1))]
-    [(= byte-code PUSH_INT) (format "push #~a" (peek-pc-int vm 1))]
+    [(= byte-code PUSH_I) (format "push #~a" (peek-pc-int vm 1))]
     [(= byte-code PUSH_LOCAL) (format "push l-~a" (peek-pc-byte vm 1))]
     [(= byte-code PUSH_NIL) (format "push nil")]
     [(= byte-code PUSH_PARAM) (format "push p-~a" (peek-pc-byte vm 1))]
@@ -1201,7 +1201,7 @@
     [(= byte-code PUSH_STRUCT_FIELD) (interpret-push-array-field vm)]
     [(= byte-code PUSH_ARRAY_FIELD) (interpret-push-array-field vm)]
     [(= byte-code PUSH_GLOBAL) (interpret-push-global vm)]
-    [(= byte-code PUSH_INT) (interpret-push-int vm)]
+    [(= byte-code PUSH_I) (interpret-push-int vm)]
     [(= byte-code PUSH_LOCAL) (interpret-push-local vm)]
     [(= byte-code PUSH_NIL) (interpret-push-nil vm)]
     [(= byte-code PUSH_PARAM) (interpret-push-param vm)]
@@ -1304,7 +1304,7 @@
        (make-function-def
         #:byte-code (vector-immutable PUSH_BYTE 10
                                       PUSH_BYTE 20
-                                      PUSH_INT   1 0 ;; function index 1
+                                      PUSH_I   1 0 ;; function index 1
                                       CALL
                                       BRK))
        (make-function-def
@@ -1345,7 +1345,7 @@
       #:functions
       (vector-immutable
        (make-function-def
-        #:byte-code (vector-immutable PUSH_INT   1 0 ;; function index 1
+        #:byte-code (vector-immutable PUSH_I   1 0 ;; function index 1
                                       CALL
                                       BRK))
        (make-function-def
@@ -1384,7 +1384,7 @@
       #:functions
       (vector-immutable
        (make-function-def
-        #:byte-code (vector-immutable PUSH_INT   1 0 ;; function index 1
+        #:byte-code (vector-immutable PUSH_I   1 0 ;; function index 1
                                       CALL
                                       BRK))
        (make-function-def
@@ -1411,7 +1411,7 @@
       #:functions
       (vector-immutable
        (make-function-def
-        #:byte-code (vector-immutable PUSH_INT   1 0 ;; function index 1
+        #:byte-code (vector-immutable PUSH_I   1 0 ;; function index 1
                                       CALL
                                       BRK))
        (make-function-def
@@ -1482,8 +1482,8 @@
                                              PUSH_BYTE 2
                                              PUSH_BYTE 3
                                              CREATE_LIST 3 ;; '(1 2 3)
-                                             PUSH_INT 2 0  ;; higher function passed (inc)
-                                             PUSH_INT 1 0  ;; function to call (mapr)
+                                             PUSH_I 2 0  ;; higher function passed (inc)
+                                             PUSH_I 1 0  ;; function to call (mapr)
                                              CALL
                                              BRK))
               (make-function-def ;; mapr

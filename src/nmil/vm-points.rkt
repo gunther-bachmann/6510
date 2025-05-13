@@ -31,7 +31,6 @@
                   NIL?
                   TAIL_CALL
 
-                  PUSH_INT
                   PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
@@ -43,6 +42,7 @@
                   vm-interpreter
                   bc
                   PUSH_B
+                  PUSH_I
                   ALLOC_ARRAY
                   FALSE_P_RET_FALSE
                   GET_ARRAY_FIELD_0
@@ -95,10 +95,10 @@
                   PUSH_LOCAL_1_CDR
                   PUSH_LOCAL_2_CDR
                   PUSH_LOCAL_3_CDR
-                  PUSH_INT_0
-                  PUSH_INT_1
-                  PUSH_INT_2
-                  PUSH_INT_m1
+                  PUSH_I0
+                  PUSH_I1
+                  PUSH_I2
+                  PUSH_IM1
                   WRITE_FROM_LOCAL_0
                   WRITE_FROM_LOCAL_1
                   WRITE_FROM_LOCAL_2
@@ -165,9 +165,9 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
        (bc BRK))
       POINT_CREATE)
@@ -190,9 +190,9 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
        (bc POP)
        (bc BRK))
@@ -220,14 +220,14 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 250)
-       (bc PUSH_INT) (word 600)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 250)
+       (bc PUSH_I) (word 600)
        (bc CALL) (word-ref POINT_CREATE)
 
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_XDIST)
@@ -255,14 +255,14 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 250)
-       (bc PUSH_INT) (word 600)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 250)
+       (bc PUSH_I) (word 600)
        (bc CALL) (word-ref POINT_CREATE)
 
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_YDIST)
@@ -298,14 +298,14 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
 
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_EQUAL)
@@ -322,14 +322,14 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
 
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 499)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 499)
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_EQUAL)
@@ -346,14 +346,14 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 199)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 199)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
 
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_EQUAL)
@@ -371,9 +371,9 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
        (bc BRK))
       POINT_CREATE)
@@ -393,9 +393,9 @@
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_INT_0) ;; color is int0 (string will be implemented later)
-       (bc PUSH_INT) (word 100)
-       (bc PUSH_INT) (word 500)
+       (bc PUSH_I0) ;; color is int0 (string will be implemented later)
+       (bc PUSH_I) (word 100)
+       (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
        (bc POP)
        (bc BRK))

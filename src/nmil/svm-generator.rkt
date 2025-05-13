@@ -9,7 +9,7 @@ Generator translating a mil module to a stack-virtual-machine
 
 |#
 
-(require (only-in "../cisc-vm/stack-virtual-machine.rkt" make-vm make-function-def run-until-break list->cell-list-ptr cell-byte- PUSH_INT CALL BRK NIL_CELL vm--value-stack))
+(require (only-in "../cisc-vm/stack-virtual-machine.rkt" make-vm make-function-def run-until-break list->cell-list-ptr cell-byte- PUSH_I CALL BRK NIL_CELL vm--value-stack))
 (require (only-in "./svm-compiler.rkt" svm-compile svm-generate generation-artifact--bytes make-generation-artifact))
 (require (only-in "./parse.rkt" m-fun-def m-val-def))
 
@@ -52,7 +52,7 @@ Generator translating a mil module to a stack-virtual-machine
       #:functions
       (vector-immutable
        (make-function-def
-        #:byte-code (vector-immutable PUSH_INT   1 0 ;; function index 1
+        #:byte-code (vector-immutable PUSH_I   1 0 ;; function index 1
                                       CALL
                                       BRK))
        (make-function-def
