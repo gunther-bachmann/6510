@@ -19,30 +19,14 @@
 (require (only-in racket/list flatten))
 (require "./bc-ast.rkt")
 (require (only-in "./bc-resolver.rkt" bc-resolve bc-bytes))
-(require (only-in "../cisc-vm/stack-virtual-machine.rkt"
-                  CONS
-                  CAR
-                  CDR
-                  GOTO
-                  RET
-                  BYTE+
-                  INT+
-                  INT-
-                  BRA
-                  CALL
-                  NIL?
-                  TAIL_CALL
-
-                  PUSH_NIL
-                  PUSH_LOCAL
-                  PUSH_GLOBAL
-                  PUSH_STRUCT_FIELD
-
-                  POP_TO_LOCAL
-                  POP_TO_GLOBAL))
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  CONS
+                  CALL
+                  RET
+                  NIL_P
+                  PUSH_NIL
                   PUSH_I
                   PUSH_B
                   GC_FL
@@ -262,7 +246,7 @@
             (bc WRITE_TO_LOCAL_0)
             (bc GET_ARRAY_FIELD_1)
             (bc WRITE_TO_LOCAL_1)
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref OUT_IS_NOT_EMPTY)
   
             (bc PUSH_NIL)                   ;; result for reverse

@@ -92,31 +92,19 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 (require "./bc-ast.rkt")
 (require (only-in "./bc-resolver.rkt" bc-resolve bc-bytes))
 
-(require (only-in "../cisc-vm/stack-virtual-machine.rkt"
-                  CONS
-                  CAR
-                  CDR
-                  GOTO
-                  RET
-                  BYTE+
-                  INT+
-                  INT-
-                  BRA
-                  CALL
-                  NIL?
-                  TAIL_CALL
-
-                  PUSH_NIL
-                  PUSH_LOCAL
-                  PUSH_GLOBAL
-                  PUSH_STRUCT_FIELD
-
-                  POP_TO_LOCAL
-                  POP_TO_GLOBAL))
 
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  NIL_P
+                  CDR
+                  TAIL_CALL
+                  CAR
+                  GOTO
+                  PUSH_NIL
+                  CONS
+                  RET
+                  CALL
                   PUSH_I
                   CELL_EQ
                   EXT
@@ -433,7 +421,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (label IS_PAIR__BTREE_VALIDATE)
              (bc PUSH_LOCAL_0_CAR)
              (bc WRITE_TO_LOCAL_1) ;; local 1 now car of node
-             (bc NIL?)
+             (bc NIL_P)
              (bc F_P_BRA) (bc-rel-ref IS_NOT_NIL__BTREE_VALIDATE)
              (byte 2)               ;; BRK error, car of pair must not be nil!
    
@@ -443,7 +431,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
    
              (bc PUSH_LOCAL_0_CDR)
              (bc WRITE_TO_LOCAL_1) ;; local 1 now cdr of node
-             (bc NIL?)
+             (bc NIL_P)
              (bc T_P_BRA) (bc-rel-ref DONE__BTREE_VALIDATE)
    
              (bc PUSH_LOCAL_1) ;; cdr of node
@@ -537,7 +525,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc CONS_PAIR_P)
             (bc T_P_BRA) (bc-rel-ref ELSE_COND__BTREE_DEPTH) ;; jump to else
             (bc WRITE_TO_LOCAL_1)        ;; local1 <- right list
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref NOT_PAIR_COND__BTREE_DEPTH);; jump to (not (pair? node)) case
 
       ;;   [(and (not (pair? node))
@@ -799,7 +787,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   
       ;;     [(empty? (cdr node)) (btree-path-to-last (car node) (cons (cons -1 node) path))]
             (bc PUSH_LOCAL_0_CDR)
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_PATH_TO_LAST)
   
             (bc PUSH_LOCAL_0)
@@ -1186,7 +1174,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
    (label REVERSE)
           (byte 1)
           (bc WRITE_TO_LOCAL_0)     ;; local0 = list
-          (bc NIL?)
+          (bc NIL_P)
           (bc T_P_RET)           ;; return second parameter (result)
           (bc PUSH_LOCAL_0_CAR) 
           (bc CONS)
@@ -1234,7 +1222,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   
       (label LOOP__APPEND)         ;; (reverse head-list) :: tail-list
             (bc WRITE_TO_LOCAL_0)  ;; local0 = reversed list     <- loop
-            (bc NIL?)
+            (bc NIL_P)
             (bc T_P_RET)        ;; return second (which is tail-list)
             (bc PUSH_LOCAL_0_CAR)  ;; (car (reversed head-list)) :: tail-list
             (bc CONS)              ;; ((car (reversed head-list)) . tail-list)
@@ -1315,13 +1303,13 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
    
              (bc PUSH_LOCAL_0_CAR)
              (bc CDDR)
-             (bc NIL?)
+             (bc NIL_P)
              (bc F_P_BRA) (bc-rel-ref LEFT_NODE__BTREE_NEXT)   ;; not nil? => goto (and ...) branch
    
        (label ELSE_COND__BTREE_NEXT)
        ;; [else
              (bc PUSH_LOCAL_0_CDR)         ;; (cdr path)
-             (bc NIL?)                      
+             (bc NIL_P)
              (bc F_P_BRA) (bc-rel-ref LOOP_FN__BTREE_NEXT) 
 
              (bc PUSH_NIL)
@@ -1336,7 +1324,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (bc F_P_BRA) (bc-rel-ref LOOP_FN__BTREE_NEXT) ;; next --> loop
              (bc PUSH_LOCAL_0_CAR)         ;; pe
              (bc CDDR)                      ;; (cddr pe)
-             (bc NIL?)
+             (bc NIL_P)
              (bc T_P_BRA) (bc-rel-ref LOOP_FN__BTREE_NEXT) ;; next --> loop
    
              ;; inner loop done
@@ -1532,7 +1520,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc WRITE_TO_LOCAL_0)               ;; local0 = path
 
             ;; check cond
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref CHECK_COND__BTREE_REC_REBUILD_PATH_WITH) ;; check next cond expression
   
      (label DONE__BTREE_REC_REBUILD_PATH_WITH)
@@ -1710,7 +1698,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_ADD_VALUE_AFTER) ;; -> else cond
             (bc PUSH_LOCAL_0_CAR)
             (bc CDDR)
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref NEXT_COND__BTREE_ADD_VALUE_AFTER) ;; -> next cond
   
             (bc PUSH_NIL)                ;; (list)
@@ -2023,7 +2011,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             
             (bc PUSH_LOCAL_0_CAR)
             (bc CDDR)
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref NEXT_COND__BTREE_ADD_VALUE_BEFORE) ;; -> next option
 
 
@@ -2404,7 +2392,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (byte 2)
   
             (bc WRITE_TO_LOCAL_1)
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref NODES_NOT_EMPTY__BTREE_FROM_LIST)
   
             ;; nodes empty
@@ -2414,7 +2402,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   
      (label NODES_EMPTY_RESULT_NOT_EMPTY__BTREE_FROM_LIST)
             (bc CDR)
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref NODES_EMPTY_RESULT_CDR_NOT_EMPTY__BTREE_FROM_LIST)
   
             (bc PUSH_LOCAL_0_CAR)
@@ -2431,7 +2419,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (label NODES_NOT_EMPTY__BTREE_FROM_LIST)
             (bc POP_TO_LOCAL_0)
             (bc PUSH_LOCAL_1_CDR)
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref ELSE__BTREE_FROM_LIST)
   
             (bc PUSH_LOCAL_0)
@@ -2561,11 +2549,11 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (label BTREE_TO_LIST)
             (byte 2)
             (bc WRITE_TO_LOCAL_1)       ;; local1 = node
-            (bc NIL?)
+            (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref NODE_NOT_NIL__BTREE_TO_LIST)
 
             (bc WRITE_TO_LOCAL_0)       ;; local_0 = btree-prefix
-            (bc NIL?)
+            (bc NIL_P)
             (bc T_P_RET)             ;; return result
                                         ;; result
             ;; Node Nil, Prefix Not Nil
@@ -2683,7 +2671,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (byte 4)
              (bc WRITE_TO_LOCAL_1)        ;; local_1= path
 
-             (bc NIL?)
+             (bc NIL_P)
              (bc F_P_BRA) (bc-rel-ref PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
 
              (bc POP_TO_LOCAL_0)
@@ -2721,14 +2709,14 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              ;; from now on (caar path) = 0
              (bc PUSH_LOCAL_1_CAR)
              (bc CDDR)
-             (bc NIL?)
+             (bc NIL_P)
              (bc F_P_BRA) (bc-rel-ref CDDAR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
 
              (bc POP)                           ;; discard old-prev
 
              ;; from now on (empty? (cddar path))
              (bc PUSH_LOCAL_1_CDR)
-             (bc NIL?)
+             (bc NIL_P)
              (bc F_P_BRA) (bc-rel-ref CDR_PATH_NOT_NIL__BTREE_REMOVE_VALUE_AT)
 
              ;; (and (= -1 (caar path)) (empty? (cddar path)) (empty? (cdr path)))
@@ -3528,7 +3516,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc NIL?_RET_LOCAL_0_POP_1)
 
             (bc CDR)
-            (bc NIL?)
+            (bc NIL_P)
             (bc T_P_BRA) (bc-rel-ref CDR_IS_NIL__BTREE_ROOT_FOR_PATH)
             (bc PUSH_LOCAL_0_CDR)
             (bc TAIL_CALL)

@@ -9,9 +9,26 @@ Generator translating a mil module to a stack-virtual-machine
 
 |#
 
-(require (only-in "../cisc-vm/stack-virtual-machine.rkt" make-vm make-function-def run-until-break list->cell-list-ptr cell-byte- PUSH_I CALL BRK NIL_CELL vm--value-stack))
-(require (only-in "./svm-compiler.rkt" svm-compile svm-generate generation-artifact--bytes make-generation-artifact))
-(require (only-in "./parse.rkt" m-fun-def m-val-def))
+(require/typed "../cisc-vm/stack-virtual-machine.rkt"
+  [PUSH_I Byte]
+  [CALL Byte]  )
+(require (only-in "../cisc-vm/stack-virtual-machine.rkt"
+                  make-vm
+                  make-function-def
+                  run-until-break
+                  list->cell-list-ptr
+                  cell-byte-
+                  BRK
+                  NIL_CELL
+                  vm--value-stack))
+(require (only-in "./svm-compiler.rkt"
+                  svm-compile
+                  svm-generate
+                  generation-artifact--bytes
+                  make-generation-artifact))
+(require (only-in "./parse.rkt"
+                  m-fun-def
+                  m-val-def))
 
 (module+ test #| require test utils |#
   (require typed/rackunit))

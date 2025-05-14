@@ -17,30 +17,13 @@
 (require (only-in racket/list flatten))
 (require "./bc-ast.rkt")
 (require (only-in "./bc-resolver.rkt" bc-resolve bc-bytes))
-(require (only-in "../cisc-vm/stack-virtual-machine.rkt"
-                  CONS
-                  CAR
-                  CDR
-                  GOTO
-                  RET
-                  BYTE+
-                  INT+
-                  INT-
-                  BRA
-                  CALL
-                  NIL?
-                  TAIL_CALL
 
-                  PUSH_NIL
-                  PUSH_LOCAL
-                  PUSH_GLOBAL
-                  PUSH_STRUCT_FIELD
-
-                  POP_TO_LOCAL
-                  POP_TO_GLOBAL))
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  CALL
+                  RET
+                  ISUB
                   PUSH_B
                   PUSH_I
                   ALLOC_ARRAY
@@ -212,7 +195,7 @@
           (bc GET_ARRAY_FIELD_0)
           (bc SWAP)
           (bc GET_ARRAY_FIELD_0)
-          (bc INT-)
+          (bc ISUB)
           (bc RET)))
 
 (module+ test #| point xdist |#
@@ -247,7 +230,7 @@
           (bc GET_ARRAY_FIELD_1)
           (bc SWAP)
           (bc GET_ARRAY_FIELD_1)
-          (bc INT-)
+          (bc ISUB)
           (bc RET)))
 
 (module+ test #| point ydist |#

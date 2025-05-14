@@ -24,30 +24,12 @@
                     shorten-cell-string
                     vm-stack->strings))
   (require (only-in "../tools/6510-interpreter.rkt" initialize-cpu cpu-state-clock-cycles))
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
-                    CONS
-                    CAR
-                    CDR
-                    GOTO
-                    RET
-                    BYTE+
-                    INT+
-                    INT-
-                    BRA
-                    CALL
-                    NIL?
-                    TAIL_CALL
-
-                    PUSH_NIL
-                    PUSH_LOCAL
-                    PUSH_GLOBAL
-                    PUSH_STRUCT_FIELD
-
-                    POP_TO_LOCAL
-                    POP_TO_GLOBAL))
   (require [only-in "./vm-interpreter.rkt"
                     vm-interpreter
                     bc
+                    CONS
+                    CALL
+                    PUSH_NIL
                     PUSH_I
                     PUSH_B
                     GC_FL

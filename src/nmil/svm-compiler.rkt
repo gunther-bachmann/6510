@@ -24,23 +24,24 @@
 
 (require/typed "./vm-interpreter.rkt"
   [PUSH_B Byte]
-  [PUSH_I Byte])
+  [PUSH_I Byte]
+  [PUSH_NIL Byte]
+  [CONS Byte]
+  [CALL Byte]
+  [RET Byte]
+  [NIL_P Byte]
+  )
 (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                   disassemble-byte-code
                   make-vm
-                  CONS
                   CAR
                   CDR
                   GOTO
-                  RET
                   BYTE+
                   BRA
-                  CALL
-                  NIL?
                   TAIL_CALL
 
                   PUSH_ARRAY_FIELD
-                  PUSH_NIL
                   PUSH_LOCAL
                   PUSH_GLOBAL
                   PUSH_STRUCT_FIELD
@@ -639,7 +640,7 @@
   ;; open: tail call, user function call, runtime function call, complete list of vm internal function calls
   (define call-symbol (ast-ex-fun-call--fun call))
   (define call-byte (case call-symbol
-                      [(nil?) NIL?]
+                      [(nil?) NIL_P]
                       [(car)  CAR]
                       [(cdr)  CDR]
                       [(cons) CONS]
@@ -686,7 +687,7 @@
      (make-generation-artifact)))
    (vector-immutable PUSH_I (low-byte 20) (high-byte 20)
                      PUSH_I (low-byte 10) (high-byte 10)
-                     NIL?)))
+                     NIL_P)))
 
 ;; push integer
 (define (svm-generate--int (a : ast-at-int-) (artifact : generation-artifact-)) : generation-artifact-
@@ -710,7 +711,7 @@
   (define cond-matches-param-push-nil?
     (and (= 2 (vector-length cond-code))
        (is-push-param-short (vector-ref cond-code 0))
-       (= NIL? (vector-ref cond-code 1))))
+       (= NIL_P (vector-ref cond-code 1))))
   (define second-block-matches-param-push
     (and (= 1 (vector-length second-block))
        (is-push-param-short (vector-ref second-block 0))))
@@ -762,7 +763,7 @@
 
    (vector-immutable PUSH_I (low-byte 20) (high-byte 20)
                      PUSH_I (low-byte 10) (high-byte 10)
-                     NIL?
+                     NIL_P
                      BRA 6
                      PUSH_I (low-byte 200) (high-byte 200)
                      GOTO 4

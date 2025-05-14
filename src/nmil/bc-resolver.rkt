@@ -31,8 +31,14 @@ resolve unresolved reference in byte code ast
 (module+ test
   (require rackunit)
   (require "../6510.rkt")
-  (require (only-in "./vm-interpreter.rkt" bc BNOP WRITE_TO_LOCAL_0 T_P_BRA PUSH_LOCAL_0))
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt" GOTO CALL)))
+  (require (only-in "./vm-interpreter.rkt"
+                    bc
+                    BNOP
+                    WRITE_TO_LOCAL_0
+                    T_P_BRA
+                    PUSH_LOCAL_0
+                    CALL
+                    GOTO)))
 
 
 (define/c (bc-collect-labels bc-ast-cmds (offset 0) (label-hash (hash)))

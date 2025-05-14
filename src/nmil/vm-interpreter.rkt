@@ -101,31 +101,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-next-instruction-bytes))
 
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
-                    CONS
-                    CAR
-                    CDR
-                    GOTO
-                    RET
-                    ;; BYTE+
-                    INT+
-                    INT-
-                    BRA
-                    CALL
-                    BRK
-                    NIL?
-                    TAIL_CALL
-
-                    PUSH_ARRAY_FIELD
-                    ;; PUSH_B
-                    PUSH_NIL
-                    ;; PUSH_LOCAL
-                    ;; PUSH_GLOBAL
-                    ;; PUSH_STRUCT_FIELD
-                    POP_TO_ARRAY_FIELD
-
-                    
-                    sPUSH_PARAMc
-                    sNIL?-RET-PARAMc))
+                    BRK))
 
   (define (wrap-bytecode-for-test bc-to-wrap)
     (append (list (org #x7000)
@@ -159,8 +135,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         TAIL_CALL
+         CAR
+         CDR
+         GOTO
+         RET
+         CONS
+         NIL_P
+         CALL
+         ISUB
          PUSH_I
          PUSH_B
+         PUSH_NIL
          ALLOC_ARRAY
          F_P_RET_FALSE
          GET_ARRAY_FIELD_0
@@ -388,6 +374,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
+(define TAIL_CALL           #x35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
 (define BC_TAIL_CALL
   (list
    (label BC_TAIL_CALL)
@@ -502,6 +489,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
+(define CALL                #x34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
 (define BC_CALL
   (list
    (label BC_CALL)
@@ -707,6 +695,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label ZP_RT_BACKUP)
           (word 0)))
 
+(define RET                 #x33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
 (define BC_RET
   (list
    (label BC_RET)
@@ -1178,6 +1167,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $04f0  (rt)")))
 
+(define IADD                #x62) ;; stack [cell-int a, cell-int b] -> [sum]
 (define BC_INT_PLUS
   (list
    (label BC_INT_PLUS)
@@ -1209,7 +1199,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
       (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
-      (bc INT+)                     
+      (bc IADD)
       (bc BRK))))
 
   (define (bc-int-plus-expectation state c)
@@ -1229,13 +1219,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_I1)
       (bc PUSH_I2)
       (bc BNOP)
-      (bc INT+)                      ;; byte code for INT_PLUS = 3
+      (bc IADD)                      ;; byte code for INT_PLUS = 3
       (bc PUSH_I) (byte #xf0 #x04) ;; push int #x4f0 (1264)
       (bc PUSH_I) (byte #x1f #x01) ;; push int #x11f (287)
-      (bc INT+)                      ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
+      (bc IADD)                      ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
       (bc PUSH_I1)
       (bc PUSH_IM1)
-      (bc INT+)                      ;; byte code for INT_PLUS = 0
+      (bc IADD)                      ;; byte code for INT_PLUS = 0
       (bc BRK))))
 
   (inform-check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
@@ -1247,6 +1237,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "int $0003"
                          )))
 
+(define ISUB                #x61) ;; stack [cell-int a, cell-int b] -> [difference]
 (define BC_INT_MINUS
   (list
    (label BC_INT_MINUS)
@@ -1279,7 +1270,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
       (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
-      (bc INT-)
+      (bc ISUB)
       (bc BRK))))
 
   (define (bc-int-minus-expectation state c)
@@ -1300,13 +1291,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_I1)
       (bc PUSH_I2)
       (bc BNOP)
-      (bc INT-)                      ;; byte code for INT_MINUS = 2 - 1 = 1
+      (bc ISUB)                      ;; byte code for INT_MINUS = 2 - 1 = 1
       (bc PUSH_I) (byte #xf0 #x04) ;; push int #x4f0 (1264)
       (bc PUSH_I) (byte #x1f #x01) ;; push int #x11f (287)
-      (bc INT-)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x1c2f)
+      (bc ISUB)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x1c2f)
       (bc PUSH_I1)
       (bc PUSH_I0)      
-      (bc INT-)                      ;; byte code for INT_MINUS => -1
+      (bc ISUB)                      ;; byte code for INT_MINUS => -1
       (bc BRK))))                    ;; brk
 
 
@@ -1327,6 +1318,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR PUSH_TO_EVLSTK)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
+(define NIL_P                #x21) ;; stack [cell-list-ptr] -> [cell-boolean]
 (define BC_NIL_P
   (list
    (label BC_NIL_P)
@@ -1340,7 +1332,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_NIL)
-      (bc NIL?)
+      (bc NIL_P)
       (bc BRK))))
 
   (check-equal? (vm-stack->strings bc-nil-p-state)
@@ -1353,7 +1345,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_NIL)
       (bc PUSH_I2)
       (bc CONS)
-      (bc NIL?)
+      (bc NIL_P)
       (bc BRK))))
 
   (check-equal? (vm-deref-cell-pair-w->string bc-nil-p-2-state (+ PAGE_AVAIL_0_W #x05))
@@ -1372,6 +1364,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR INC_REFCNT_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
+(define CONS                #x42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
 (define BC_CONS
   (list
    (label BC_CONS)          
@@ -1394,6 +1387,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x05))
                     "(int $0000 . pair-ptr NIL)"))
 
+(define CAR                 #x43) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
 (define BC_CAR
   (list
    (label BC_CAR)
@@ -1417,6 +1411,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                  (list "stack holds 1 item"
                        "int $0002  (rt)")))
 
+(define CDR                 #x41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
 (define BC_CDR
   (list
    (label BC_CDR)
@@ -1617,6 +1612,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
+(define GOTO                #x32) ;; op = relative offset
 (define BC_GOTO
   (list
    (label BC_GOTO)
@@ -2072,9 +2068,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR DEC_REFCNT_RA)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define BC_PUSH_CONST_NIL
+(define PUSH_NIL            #x09) ;; stack: [] -> [NIL]
+(define BC_PUSH_NIL
   (list
-   (label BC_PUSH_CONST_NIL)    
+   (label BC_PUSH_NIL)    
    (JSR PUSH_NIL_TO_EVLSTK)        ;; push NIL on the stack
    (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
@@ -2468,6 +2465,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 ;; stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
 ;; ->     []
 ;;        cell-array @ index = value
+(define POP_TO_ARRAY_FIELD  #x16) ;; op = array-idx, stack [cell- array-ptr-] -> []
 (define BC_POP_TO_ARRAY_FIELD
   (flatten
    (list
@@ -2506,6 +2504,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 ;; stack: index (byte) :: cell-ptr -> cell-array
 ;; ->     value (cell)
+(define PUSH_ARRAY_FIELD    #x15) ;; op = field-idx, stack [array-ref] -> [cell-]
 (define BC_PUSH_ARRAY_FIELD
   (flatten
    (list
@@ -2653,7 +2652,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_I)           ;; 0c  <-  06
            (word-ref BC_INT_P)                    ;; 0e  <-  07 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  88..8F reserved
-           (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 
+           (word-ref BC_PUSH_NIL)           ;; 12  <-  09 
            (word-ref BC_CONS_PAIR_P)              ;; 14  <-  0a 
            (word-ref BC_T_P_RET)               ;; 16  <-  0b 
            (word-ref BC_T_P_BRA)            ;; 18  <-  0c
@@ -2827,7 +2826,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_CONST_NUM_SHORT
           BC_PUSH_I
           BC_PUSH_CONST_BYTE
-          BC_PUSH_CONST_NIL
+          BC_PUSH_NIL
           BC_NIL_P
           BC_INT_0_P
           BC_NIL_P_RET_LOCAL_N_POP
