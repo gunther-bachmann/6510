@@ -65,7 +65,7 @@
                     INC_INT
                     MAX_INT
                     FALSE_P_BRANCH
-                    TRUE_P_BRANCH
+                    T_P_BRA
                     INT_GREATER_P
                     CONS_PAIR_P
                     T_P_RET

@@ -132,7 +132,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   INC_INT
                   MAX_INT
                   FALSE_P_BRANCH
-                  TRUE_P_BRANCH
+                  T_P_BRA
                   INT_GREATER_P
                   CONS_PAIR_P
                   T_P_RET
@@ -424,10 +424,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (byte 2) ;; locals (0 = node, 1 = car/cdr)
              (bc WRITE_TO_LOCAL_0)
              (bc CALL) (word-ref BTREE_NODE_P)
-             (bc TRUE_P_BRANCH) (bc-rel-ref IS_PAIR__BTREE_VALIDATE);; (byte 7) ;; jump to is-pair
+             (bc T_P_BRA) (bc-rel-ref IS_PAIR__BTREE_VALIDATE);; (byte 7) ;; jump to is-pair
              (bc PUSH_LOCAL_0)
              (bc CALL) (word-ref BTREE_VALUE_P)
-             (bc TRUE_P_BRANCH) (bc-rel-ref DONE__BTREE_VALIDATE) ;; done since is-value
+             (bc T_P_BRA) (bc-rel-ref DONE__BTREE_VALIDATE) ;; done since is-value
              (byte 2)               ;; BRK error, passed parameter is neither value nor node!
    
       (label IS_PAIR__BTREE_VALIDATE)
@@ -444,7 +444,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (bc PUSH_LOCAL_0_CDR)
              (bc WRITE_TO_LOCAL_1) ;; local 1 now cdr of node
              (bc NIL?)
-             (bc TRUE_P_BRANCH) (bc-rel-ref DONE__BTREE_VALIDATE)
+             (bc T_P_BRA) (bc-rel-ref DONE__BTREE_VALIDATE)
    
              (bc PUSH_LOCAL_1) ;; cdr of node
              (bc CALL) (word-ref BTREE_VALIDATE) ;; recursive call (not tail recursive)
@@ -535,7 +535,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (byte 3) ;;# of locals: local0 = node, local1 = right-list, local2 = temp(car right-list|depth+1)
             (bc WRITE_TO_LOCAL_0) ;; local0 <- node
             (bc CONS_PAIR_P)
-            (bc TRUE_P_BRANCH) (bc-rel-ref ELSE_COND__BTREE_DEPTH) ;; jump to else
+            (bc T_P_BRA) (bc-rel-ref ELSE_COND__BTREE_DEPTH) ;; jump to else
             (bc WRITE_TO_LOCAL_1)        ;; local1 <- right list
             (bc NIL?)
             (bc FALSE_P_BRANCH) (bc-rel-ref NOT_PAIR_COND__BTREE_DEPTH);; jump to (not (pair? node)) case
@@ -1008,7 +1008,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc NIL?_RET_LOCAL_0_POP_1)
             (bc CAAR)
             (bc INT_0_P)
-            (bc TRUE_P_BRANCH) (bc-rel-ref LOOP_FN__BTREE_PREV) 
+            (bc T_P_BRA) (bc-rel-ref LOOP_FN__BTREE_PREV) 
   
      (label END_LOOP__BTREE_PREV)
             (bc PUSH_LOCAL_0)             ;; top-most-relevant
@@ -1337,7 +1337,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (bc PUSH_LOCAL_0_CAR)         ;; pe
              (bc CDDR)                      ;; (cddr pe)
              (bc NIL?)
-             (bc TRUE_P_BRANCH) (bc-rel-ref LOOP_FN__BTREE_NEXT) ;; next --> loop
+             (bc T_P_BRA) (bc-rel-ref LOOP_FN__BTREE_NEXT) ;; next --> loop
    
              ;; inner loop done
              ;; local2 = top most relevant
@@ -3529,7 +3529,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
             (bc CDR)
             (bc NIL?)
-            (bc TRUE_P_BRANCH) (bc-rel-ref CDR_IS_NIL__BTREE_ROOT_FOR_PATH)
+            (bc T_P_BRA) (bc-rel-ref CDR_IS_NIL__BTREE_ROOT_FOR_PATH)
             (bc PUSH_LOCAL_0_CDR)
             (bc TAIL_CALL)
 

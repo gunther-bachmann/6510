@@ -185,7 +185,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          EXT
          MAX_INT
          INC_INT
-         TRUE_P_BRANCH
+         T_P_BRA
          FALSE_P_BRANCH
          INT_GREATER_P
          PUSH_I0
@@ -1774,9 +1774,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_FALSE_P_BRANCH)
           (CLC)
           (LDA ZP_RT+1)
-          (BEQ BRANCH__BC_TRUE_P_BRANCH)
+          (BEQ BRANCH__BC_T_P_BRA)
           (LDA !$00)
-          (BEQ POP_AND_CONTINUE__BC_TRUE_P_BRANCH)))
+          (BEQ POP_AND_CONTINUE__BC_T_P_BRA)))
 
 (module+ test #| branch true |#
   (define branch-false-0-state
@@ -1897,36 +1897,36 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
-(define TRUE_P_BRANCH #x0c)
-(define BC_TRUE_P_BRANCH
+(define T_P_BRA #x0c)
+(define BC_T_P_BRA
   (list
-   (label BC_TRUE_P_BRANCH)
+   (label BC_T_P_BRA)
           (CLC)
           (LDA ZP_RT+1)
-          (BEQ POP_AND_CONTINUE__BC_TRUE_P_BRANCH) ;; when false (A = 0), just continue, no branch
+          (BEQ POP_AND_CONTINUE__BC_T_P_BRA) ;; when false (A = 0), just continue, no branch
 
-   (label BRANCH__BC_TRUE_P_BRANCH)
+   (label BRANCH__BC_T_P_BRA)
    ;; branch by adding second byte code
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
-          (BMI NEGATIVE_BRANCH__BC_TRUE_P_BRANCH)
+          (BMI NEGATIVE_BRANCH__BC_T_P_BRA)
 
-   (label POP_AND_CONTINUE__BC_TRUE_P_BRANCH)
+   (label POP_AND_CONTINUE__BC_T_P_BRA)
           (ADC !$02)
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)
-          (BCC NO_PAGE_CHANGE__BC_TRUE_P_BRANCH)
+          (BCC NO_PAGE_CHANGE__BC_T_P_BRA)
           (INC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE__BC_TRUE_P_BRANCH)
+   (label NO_PAGE_CHANGE__BC_T_P_BRA)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER)
 
-   (label NEGATIVE_BRANCH__BC_TRUE_P_BRANCH)
+   (label NEGATIVE_BRANCH__BC_T_P_BRA)
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)
-          (BCS NO_PAGE_CHANGE_ON_BACK__BC_TRUE_P_BRANCH)
+          (BCS NO_PAGE_CHANGE_ON_BACK__BC_T_P_BRA)
           (DEC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE_ON_BACK__BC_TRUE_P_BRANCH)
+   (label NO_PAGE_CHANGE_ON_BACK__BC_T_P_BRA)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER)))
 
@@ -1935,7 +1935,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_I1)
-      (bc TRUE_P_BRANCH) (byte 2)
+      (bc T_P_BRA) (byte 2)
       (bc PUSH_I1)
       (bc BRK)
       (bc PUSH_I2))))
@@ -1947,7 +1947,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_I1)
-      (bc TRUE_P_BRANCH) (byte $75)
+      (bc T_P_BRA) (byte $75)
       (bc BRK)
       (org-align #x78)
       (bc PUSH_I2))))
@@ -1960,16 +1960,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (flatten
       (list
        (bc PUSH_I1)
-       (bc TRUE_P_BRANCH) (byte $7d)
+       (bc T_P_BRA) (byte $7d)
        (bc BRK)
        (org-align #x80)
        (bc PUSH_I1)
-       (bc TRUE_P_BRANCH) (byte $6d)
+       (bc T_P_BRA) (byte $6d)
        (bc BRK)
        (org-align #xf0)
        (bc PUSH_I1)
        ;; 80f1
-       (bc TRUE_P_BRANCH) (byte $0d)
+       (bc T_P_BRA) (byte $0d)
        (build-list 13 (lambda (_i) (bc BRK)))
        ;; now at 8100
        (bc PUSH_I2)))
@@ -1983,18 +1983,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (flatten
       (list
        (bc PUSH_I1)
-       (bc TRUE_P_BRANCH) (byte $7d)
+       (bc T_P_BRA) (byte $7d)
        (bc BRK)
        (org-align #x80)
        (bc PUSH_I1)
        ;; now at 8081
-       (bc TRUE_P_BRANCH) (byte $6d)
+       (bc T_P_BRA) (byte $6d)
        ;; 8083
        (bc BRK)
        (org-align #xf0)
        (bc PUSH_I1)
        ;; now at 80f1
-       (bc TRUE_P_BRANCH) (byte $0e)
+       (bc T_P_BRA) (byte $0e)
        (build-list 14 (lambda (_i) (bc BRK)))
        ;; now at 8102
        (bc PUSH_I2)))
@@ -2008,12 +2008,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (flatten
       (list
        (bc PUSH_I1)
-       (bc TRUE_P_BRANCH) (byte 3)
+       (bc T_P_BRA) (byte 3)
        (bc BRK)
        (bc PUSH_I2)
        (bc BRK)
        (bc PUSH_I1)
-       (bc TRUE_P_BRANCH) (byte $fd)))
+       (bc T_P_BRA) (byte $fd)))
      ))
   (check-equal? (vm-stack->strings branch-true-4-state)
                 (list "stack holds 1 item"
@@ -2024,18 +2024,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (flatten
       (list
        (bc PUSH_I1)
-       (bc TRUE_P_BRANCH) (byte $7d)
+       (bc T_P_BRA) (byte $7d)
        (bc BRK)
        (org-align #x80)
        (bc PUSH_I1)
        ;; now at 8081
-       (bc TRUE_P_BRANCH) (byte $6d)
+       (bc T_P_BRA) (byte $6d)
        ;; 8083
        (bc BRK)
        (org-align #xf0)
        (bc PUSH_I1)
        ;; now at 80f1
-       (bc TRUE_P_BRANCH) (byte $0e)
+       (bc T_P_BRA) (byte $0e)
        (build-list 12 (lambda (_i) (bc BRK)))
        ;; 80ff
        (bc PUSH_I2)
@@ -2043,7 +2043,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
        (bc BRK)
        ;; now at 8101
        (bc PUSH_I1)
-       (bc TRUE_P_BRANCH) (byte $fd)))
+       (bc T_P_BRA) (byte $fd)))
      ))
   (check-equal? (vm-stack->strings branch-true-5-state)
                 (list "stack holds 1 item"
@@ -2656,7 +2656,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 
            (word-ref BC_CONS_PAIR_P)              ;; 14  <-  0a 
            (word-ref BC_T_P_RET)               ;; 16  <-  0b 
-           (word-ref BC_TRUE_P_BRANCH)            ;; 18  <-  0c
+           (word-ref BC_T_P_BRA)            ;; 18  <-  0c
            (word-ref BC_FALSE_P_BRANCH)           ;; 1a  <-  0d 
            (word-ref BC_FALSE_P_RET)              ;; 1c  <-  0e 
            (word-ref BC_DUP)                      ;; 1e  <-  0f 
@@ -2850,7 +2850,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_T_P_RET
           BC_FALSE_P_RET
           BC_CONS_PAIR_P
-          BC_TRUE_P_BRANCH
+          BC_T_P_BRA
           BC_FALSE_P_BRANCH
           BC_MAX_INT
           BC_GOTO

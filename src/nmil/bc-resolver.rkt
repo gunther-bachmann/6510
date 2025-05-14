@@ -31,7 +31,7 @@ resolve unresolved reference in byte code ast
 (module+ test
   (require rackunit)
   (require "../6510.rkt")
-  (require (only-in "./vm-interpreter.rkt" bc BNOP WRITE_TO_LOCAL_0 TRUE_P_BRANCH PUSH_LOCAL_0))
+  (require (only-in "./vm-interpreter.rkt" bc BNOP WRITE_TO_LOCAL_0 T_P_BRA PUSH_LOCAL_0))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" GOTO CALL)))
 
 
@@ -146,10 +146,10 @@ resolve unresolved reference in byte code ast
              (byte 2) ;; locals (0 = node, 1 = car/cdr
              (bc WRITE_TO_LOCAL_0)
              (bc CALL) (word-ref BTREE_NODE_P)
-             (bc TRUE_P_BRANCH) (bc-rel-ref IS_PAIR__BTREE_VALIDATE);; (byte 7) ;; jump to is-pair
+             (bc T_P_BRA) (bc-rel-ref IS_PAIR__BTREE_VALIDATE);; (byte 7) ;; jump to is-pair
              (bc PUSH_LOCAL_0)
              (bc CALL) (word-ref BTREE_VALUE_P)
-             (bc TRUE_P_BRANCH) (byte 20) ;; jump to is-value
+             (bc T_P_BRA) (byte 20) ;; jump to is-value
              (byte 2)               ;; BRK error, passed parameter is neither value nor node!
 
       (label IS_PAIR__BTREE_VALIDATE))))
