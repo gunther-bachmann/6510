@@ -69,7 +69,7 @@
                   INT_0_P
                   INC_INT
                   MAX_INT
-                  FALSE_P_BRANCH
+                  F_P_BRA
                   T_P_BRA
                   INT_GREATER_P
                   CONS_PAIR_P
@@ -263,7 +263,7 @@
             (bc GET_ARRAY_FIELD_1)
             (bc WRITE_TO_LOCAL_1)
             (bc NIL?)
-            (bc FALSE_P_BRANCH) (bc-rel-ref OUT_IS_NOT_EMPTY)
+            (bc F_P_BRA) (bc-rel-ref OUT_IS_NOT_EMPTY)
   
             (bc PUSH_NIL)                   ;; result for reverse
             (bc PUSH_LOCAL_0)
