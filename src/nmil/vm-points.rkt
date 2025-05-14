@@ -26,7 +26,7 @@
                   ISUB
                   PUSH_B
                   PUSH_I
-                  ALLOC_ARRAY
+                  ALLOC_A
                   F_P_RET_F
                   GET_ARRAY_FIELD_0
                   GET_ARRAY_FIELD_1
@@ -133,7 +133,7 @@
    (label POINT_CREATE)
           (byte 1)
           (bc PUSH_B) (byte 3)
-          (bc ALLOC_ARRAY)
+          (bc ALLOC_A)
           (bc WRITE_TO_LOCAL_0)
           (bc SET_ARRAY_FIELD_0)
           (bc PUSH_LOCAL_0)

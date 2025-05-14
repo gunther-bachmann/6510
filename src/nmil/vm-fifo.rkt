@@ -30,7 +30,7 @@
                   PUSH_I
                   PUSH_B
                   GC_FL
-                  ALLOC_ARRAY
+                  ALLOC_A
                   F_P_RET_F
                   GET_ARRAY_FIELD_0
                   GET_ARRAY_FIELD_1
@@ -141,7 +141,7 @@
           (bc PUSH_NIL)
           (bc PUSH_NIL)
           (bc PUSH_B) (byte 2)
-          (bc ALLOC_ARRAY)
+          (bc ALLOC_A)
           (bc WRITE_TO_LOCAL_0)
           (bc SET_ARRAY_FIELD_0)
           (bc PUSH_LOCAL_0)

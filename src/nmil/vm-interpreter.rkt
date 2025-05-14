@@ -26,7 +26,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   Byte code command list and description
   opcode                 len       options                   description
   -----------------------------------------------------------------------------------
-  ALLOC_ARRAY              1  14                             allocate cell-ptr to cell-array onto stack
+  ALLOC_A              1  14                             allocate cell-ptr to cell-array onto stack
   BRK                      1  01                             break (stop)
   CALL                     3  34                             statically call function pointed to be following two bytes
   CAR                      1  43                             replace tos with car
@@ -147,7 +147,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_I
          PUSH_B
          PUSH_NIL
-         ALLOC_ARRAY
+         ALLOC_A
          F_P_RET_F
          GET_ARRAY_FIELD_0
          GET_ARRAY_FIELD_1
@@ -2484,7 +2484,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_B) (byte 20)
-      (bc ALLOC_ARRAY)
+      (bc ALLOC_A)
       (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
       (bc PUSH_I1)
       (bc SWAP)
@@ -2522,7 +2522,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (flatten
       (list
        (bc PUSH_B) (byte 20)
-       (bc ALLOC_ARRAY)
+       (bc ALLOC_A)
 
        (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
        (bc PUSH_I1)
@@ -2606,10 +2606,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 ;; stack: size (byte)
 ;; ->      cell-ptr -> cell-array
-(define ALLOC_ARRAY #x14)
-(define BC_ALLOC_ARRAY
+(define ALLOC_A #x14)
+(define BC_ALLOC_A
   (list
-   (label BC_ALLOC_ARRAY)
+   (label BC_ALLOC_A)
           (LDA ZP_RT+1)                 ;; byte size
           (JSR ALLOC_CELLARR_TO_RA)     ;;
           (JSR INC_REFCNT_M1_SLOT_RA)   ;; only cell-array needs to be inc-refcnt'd
@@ -2663,7 +2663,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_POP)                      ;; 22  <-  11
            (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
            (word-ref BC_F_P_RET_F)        ;; 26  <-  13 
-           (word-ref BC_ALLOC_ARRAY)              ;; 28  <-  14
+           (word-ref BC_ALLOC_A)              ;; 28  <-  14
            (word-ref BC_PUSH_ARRAY_FIELD)         ;; 2a  <-  15
            (word-ref BC_POP_TO_ARRAY_FIELD)       ;; 2c  <-  16
            (word-ref BC_PUSH_B)                   ;; 2e  <-  17
@@ -2857,7 +2857,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INC_INT
           BC_BNOP
           BC_GC_FL
-          BC_ALLOC_ARRAY
+          BC_ALLOC_A
           BC_XET_ARRAY_FIELD
           BC_F_P_RET_F
           VM_REFCOUNT_DECR_CURRENT_LOCALS
