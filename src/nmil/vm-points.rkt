@@ -27,7 +27,7 @@
                   PUSH_B
                   PUSH_I
                   ALLOC_ARRAY
-                  F_P_RET_FALSE
+                  F_P_RET_F
                   GET_ARRAY_FIELD_0
                   GET_ARRAY_FIELD_1
                   GET_ARRAY_FIELD_2
@@ -268,7 +268,7 @@
           (bc WRITE_TO_LOCAL_1)
           (bc GET_ARRAY_FIELD_0)
           (bc CELL_EQ)
-          (bc F_P_RET_FALSE)
+          (bc F_P_RET_F)
           (bc PUSH_LOCAL_0)
           (bc GET_ARRAY_FIELD_1)
           (bc PUSH_LOCAL_1)

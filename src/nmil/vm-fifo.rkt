@@ -31,7 +31,7 @@
                   PUSH_B
                   GC_FL
                   ALLOC_ARRAY
-                  F_P_RET_FALSE
+                  F_P_RET_F
                   GET_ARRAY_FIELD_0
                   GET_ARRAY_FIELD_1
                   GET_ARRAY_FIELD_2

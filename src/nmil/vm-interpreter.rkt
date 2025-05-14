@@ -148,7 +148,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_B
          PUSH_NIL
          ALLOC_ARRAY
-         F_P_RET_FALSE
+         F_P_RET_F
          GET_ARRAY_FIELD_0
          GET_ARRAY_FIELD_1
          GET_ARRAY_FIELD_2
@@ -1570,17 +1570,17 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| int? |#
   (skip (check-equal? #t #f "implement")))
 
-(define F_P_RET_FALSE #x13)
-(define BC_F_P_RET_FALSE
+(define F_P_RET_F #x13)
+(define BC_F_P_RET_F
   (list
-   (label BC_F_P_RET_FALSE)
+   (label BC_F_P_RET_F)
           (LDA ZP_RT+1)
-          (BNE IS_TRUE__BC_F_P_RET_FALSE)
+          (BNE IS_TRUE__BC_F_P_RET_F)
           ;; don't pop false value, return it!
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
-   (label IS_TRUE__BC_F_P_RET_FALSE)
+   (label IS_TRUE__BC_F_P_RET_F)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -2662,7 +2662,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref BC_POP)                      ;; 22  <-  11
            (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
-           (word-ref BC_F_P_RET_FALSE)        ;; 26  <-  13 
+           (word-ref BC_F_P_RET_F)        ;; 26  <-  13 
            (word-ref BC_ALLOC_ARRAY)              ;; 28  <-  14
            (word-ref BC_PUSH_ARRAY_FIELD)         ;; 2a  <-  15
            (word-ref BC_POP_TO_ARRAY_FIELD)       ;; 2c  <-  16
@@ -2859,7 +2859,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_GC_FL
           BC_ALLOC_ARRAY
           BC_XET_ARRAY_FIELD
-          BC_F_P_RET_FALSE
+          BC_F_P_RET_F
           VM_REFCOUNT_DECR_CURRENT_LOCALS
           BC_PUSH_ARRAY_FIELD
           BC_POP_TO_ARRAY_FIELD
