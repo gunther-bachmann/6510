@@ -36,9 +36,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   INT_PLUS                 1  62                             pop two integers and push the sum of them
   NIL?                     1  21                             replace tos with 0 (false) or 1 (true) if tos was nil
   NIL?_RET_LOCAL_0_POP_n   1  98+  n=1..4                     if tos is nil, pop n from eval-stack and return local0 as result (on tos)
-  POP_TO_ARRAY_FIELD       1  16                             pop the cell at tos-2 into array (tos-1) at index (tos)
+  POP_TO_AF       1  16                             pop the cell at tos-2 into array (tos-1) at index (tos)
   POP_TO_LOCAL_n           1  90+  n=0..3                     pop tos into local#n
-  PUSH_ARRAY_FIELD         1  15                             push field of the array (tos-1) at index (tos) onto eval-stack
+  PUSH_AF         1  15                             push field of the array (tos-1) at index (tos) onto eval-stack
   PUSH_B byte              2  17   byte=0..255 -128..+127     push a byte constant onto the eval-stack
   PUSH_I int               3  06   int=0..8191, -4096..4095   push integer constant onto eval-stack
   PUSH_Ii                  1  b8+  i=0,1,2,-1(m1)            push constant 0,1,2,-1 onto eval-stack
@@ -2465,11 +2465,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 ;; stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
 ;; ->     []
 ;;        cell-array @ index = value
-(define POP_TO_ARRAY_FIELD  #x16) ;; op = array-idx, stack [cell- array-ptr-] -> []
-(define BC_POP_TO_ARRAY_FIELD
+(define POP_TO_AF  #x16) ;; op = array-idx, stack [cell- array-ptr-] -> []
+(define BC_POP_TO_AF
   (flatten
    (list
-    (label BC_POP_TO_ARRAY_FIELD)
+    (label BC_POP_TO_AF)
            (LDA ZP_RT+1)                  ;; index                               (stack: index ::cell-ptr ::value )
            (PHA)
            (JSR POP_CELL_EVLSTK_TO_RA)    ;; ra = cell-ptr -> cell-array         (stack: index ::value )
@@ -2489,7 +2489,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_I1)
       (bc SWAP)
       (bc PUSH_B) (byte 1)
-      (bc POP_TO_ARRAY_FIELD))
+      (bc POP_TO_AF))
      ))
 
   (check-equal? (vm-stack->strings pop-to-array-field-state)
@@ -2504,11 +2504,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 ;; stack: index (byte) :: cell-ptr -> cell-array
 ;; ->     value (cell)
-(define PUSH_ARRAY_FIELD    #x15) ;; op = field-idx, stack [array-ref] -> [cell-]
-(define BC_PUSH_ARRAY_FIELD
+(define PUSH_AF    #x15) ;; op = field-idx, stack [array-ref] -> [cell-]
+(define BC_PUSH_AF
   (flatten
    (list
-    (label BC_PUSH_ARRAY_FIELD)
+    (label BC_PUSH_AF)
            (JSR POP_CELL_EVLSTK_TO_RA)    ;; ra = cell-ptr -> cell-array         (stack: index)
            (LDA ZP_RT+1)                  ;; index                               (stack: index)
            (JSR WRITE_ARR_ATa_RA_TO_RT)   ;; rt <- array@a                       (stack: value)
@@ -2528,22 +2528,22 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
        (bc PUSH_I1)
        (bc SWAP)
        (bc PUSH_B) (byte 1)
-       (bc POP_TO_ARRAY_FIELD)
+       (bc POP_TO_AF)
 
        (bc DUP)
        (bc PUSH_I2)
        (bc SWAP)
        (bc PUSH_B) (byte 10)
-       (bc POP_TO_ARRAY_FIELD)
+       (bc POP_TO_AF)
 
        (bc DUP)
        (bc DUP)
        (bc PUSH_B) (byte 1)
-       (bc PUSH_ARRAY_FIELD)
+       (bc PUSH_AF)
 
        (bc SWAP)
        (bc PUSH_B) (byte 10)
-       (bc PUSH_ARRAY_FIELD)))
+       (bc PUSH_AF)))
      ))
 
 (check-equal? (memory-list push-array-field-state (+ PAGE_AVAIL_0_W 05) (+ PAGE_AVAIL_0_W 29))
@@ -2664,8 +2664,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
            (word-ref BC_F_P_RET_F)        ;; 26  <-  13 
            (word-ref BC_ALLOC_A)              ;; 28  <-  14
-           (word-ref BC_PUSH_ARRAY_FIELD)         ;; 2a  <-  15
-           (word-ref BC_POP_TO_ARRAY_FIELD)       ;; 2c  <-  16
+           (word-ref BC_PUSH_AF)         ;; 2a  <-  15
+           (word-ref BC_POP_TO_AF)       ;; 2c  <-  16
            (word-ref BC_PUSH_B)                   ;; 2e  <-  17
            (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
@@ -2861,8 +2861,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_XET_ARRAY_FIELD
           BC_F_P_RET_F
           VM_REFCOUNT_DECR_CURRENT_LOCALS
-          BC_PUSH_ARRAY_FIELD
-          BC_POP_TO_ARRAY_FIELD
+          BC_PUSH_AF
+          BC_POP_TO_AF
           BC_PUSH_B
           BC_NATIVE
           RETURN_TO_BC
