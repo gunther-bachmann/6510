@@ -44,7 +44,7 @@
                   PUSH_B
                   PUSH_I
                   ALLOC_ARRAY
-                  FALSE_P_RET_FALSE
+                  F_P_RET_FALSE
                   GET_ARRAY_FIELD_0
                   GET_ARRAY_FIELD_1
                   GET_ARRAY_FIELD_2
@@ -71,7 +71,7 @@
                   INT_GREATER_P
                   CONS_PAIR_P
                   T_P_RET
-                  FALSE_P_RET
+                  F_P_RET
                   NIL?_RET_LOCAL_0_POP_1
                   INT_P
                   SWAP
@@ -285,7 +285,7 @@
           (bc WRITE_TO_LOCAL_1)
           (bc GET_ARRAY_FIELD_0)
           (bc CELL_EQ)
-          (bc FALSE_P_RET_FALSE)
+          (bc F_P_RET_FALSE)
           (bc PUSH_LOCAL_0)
           (bc GET_ARRAY_FIELD_1)
           (bc PUSH_LOCAL_1)

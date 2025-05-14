@@ -47,7 +47,7 @@
                   PUSH_B
                   GC_FL
                   ALLOC_ARRAY
-                  FALSE_P_RET_FALSE
+                  F_P_RET_FALSE
                   GET_ARRAY_FIELD_0
                   GET_ARRAY_FIELD_1
                   GET_ARRAY_FIELD_2
@@ -74,7 +74,7 @@
                   INT_GREATER_P
                   CONS_PAIR_P
                   T_P_RET
-                  FALSE_P_RET
+                  F_P_RET
                   NIL?_RET_LOCAL_0_POP_1
                   INT_P
                   SWAP

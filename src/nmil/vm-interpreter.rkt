@@ -162,7 +162,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_I
          PUSH_B
          ALLOC_ARRAY
-         FALSE_P_RET_FALSE
+         F_P_RET_FALSE
          GET_ARRAY_FIELD_0
          GET_ARRAY_FIELD_1
          GET_ARRAY_FIELD_2
@@ -194,7 +194,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_IM1
          CONS_PAIR_P
          T_P_RET
-         FALSE_P_RET
+         F_P_RET
          NIL?_RET_LOCAL_0_POP_1
          NIL?_RET_LOCAL_0_POP_2
          NIL?_RET_LOCAL_0_POP_3
@@ -1575,31 +1575,31 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| int? |#
   (skip (check-equal? #t #f "implement")))
 
-(define FALSE_P_RET_FALSE #x13)
-(define BC_FALSE_P_RET_FALSE
+(define F_P_RET_FALSE #x13)
+(define BC_F_P_RET_FALSE
   (list
-   (label BC_FALSE_P_RET_FALSE)
+   (label BC_F_P_RET_FALSE)
           (LDA ZP_RT+1)
-          (BNE IS_TRUE__BC_FALSE_P_RET_FALSE)
+          (BNE IS_TRUE__BC_F_P_RET_FALSE)
           ;; don't pop false value, return it!
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
-   (label IS_TRUE__BC_FALSE_P_RET_FALSE)
+   (label IS_TRUE__BC_F_P_RET_FALSE)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define FALSE_P_RET #x0e)
-(define BC_FALSE_P_RET
+(define F_P_RET #x0e)
+(define BC_F_P_RET
   (list
-   (label BC_FALSE_P_RET)
+   (label BC_F_P_RET)
           (LDA ZP_RT+1)
-          (BNE IS_TRUE__BC_FALSE_P_RET)
+          (BNE IS_TRUE__BC_F_P_RET)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
-   (label IS_TRUE__BC_FALSE_P_RET)
+   (label IS_TRUE__BC_F_P_RET)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -2658,12 +2658,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_T_P_RET)               ;; 16  <-  0b 
            (word-ref BC_T_P_BRA)            ;; 18  <-  0c
            (word-ref BC_F_P_BRA)           ;; 1a  <-  0d 
-           (word-ref BC_FALSE_P_RET)              ;; 1c  <-  0e 
+           (word-ref BC_F_P_RET)              ;; 1c  <-  0e 
            (word-ref BC_DUP)                      ;; 1e  <-  0f 
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref BC_POP)                      ;; 22  <-  11
            (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
-           (word-ref BC_FALSE_P_RET_FALSE)        ;; 26  <-  13 
+           (word-ref BC_F_P_RET_FALSE)        ;; 26  <-  13 
            (word-ref BC_ALLOC_ARRAY)              ;; 28  <-  14
            (word-ref BC_PUSH_ARRAY_FIELD)         ;; 2a  <-  15
            (word-ref BC_POP_TO_ARRAY_FIELD)       ;; 2c  <-  16
@@ -2848,7 +2848,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_SWAP
           BC_DUP
           BC_T_P_RET
-          BC_FALSE_P_RET
+          BC_F_P_RET
           BC_CONS_PAIR_P
           BC_T_P_BRA
           BC_F_P_BRA
@@ -2860,7 +2860,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_GC_FL
           BC_ALLOC_ARRAY
           BC_XET_ARRAY_FIELD
-          BC_FALSE_P_RET_FALSE
+          BC_F_P_RET_FALSE
           VM_REFCOUNT_DECR_CURRENT_LOCALS
           BC_PUSH_ARRAY_FIELD
           BC_POP_TO_ARRAY_FIELD

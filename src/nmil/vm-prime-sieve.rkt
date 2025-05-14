@@ -96,7 +96,7 @@ primes (ignore 0,1) up to 30
                   INT_GREATER_P
                   CONS_PAIR_P
                   T_P_RET
-                  FALSE_P_RET
+                  F_P_RET
                   NIL?_RET_LOCAL_0_POP_1
                   INT_P
                   SWAP
