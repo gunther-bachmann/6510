@@ -2618,15 +2618,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JMP VM_INTERPRETER_INC_PC)))
 
 
-(define NATIVE #x29)
+(define NATIVE #x4a)
 (define BC_NATIVE
   (list
    (label BC_NATIVE)
-          (INC ZP_VM_PC)
-          (BNE CONT__BC_NATIVE)
-          (INC ZP_VM_PC+1)
+          ;; (INC ZP_VM_PC)
+          ;; (BNE CONT__BC_NATIVE)
+          ;; (INC ZP_VM_PC+1)
    (label CONT__BC_NATIVE)
-          (JMP (ZP_VM_PC))))
+          (JMP (ZP_VM_PC)))) ;; this jump actually jumps onto the current bytecode command,
+                             ;; but since NATIVE is 4a (which is 6510 LSR), this can be done without the incr.
 
 (define RETURN_TO_BC
   (list
@@ -2666,7 +2667,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_ALLOC_ARRAY)              ;; 28  <-  14
            (word-ref BC_PUSH_ARRAY_FIELD)         ;; 2a  <-  15
            (word-ref BC_POP_TO_ARRAY_FIELD)       ;; 2c  <-  16
-           (word-ref BC_PUSH_B)                ;; 2e  <-  17
+           (word-ref BC_PUSH_B)                   ;; 2e  <-  17
            (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
@@ -2684,7 +2685,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4c  <-  26 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4e  <-  27 reserved
            (word-ref BC_CxxR)                     ;; 50  <-  a8..af 
-           (word-ref BC_NATIVE)                   ;; 52  <-  29
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 52  <-  29 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 54  <-  2a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 56  <-  2b reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 58  <-  2c reserved
@@ -2717,7 +2718,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8e  <-  47 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 90  <-  c8..af reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 92  <-  49 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 94  <-  4a reserved
+           (word-ref BC_NATIVE)                   ;; 94  <-  4a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 96  <-  4b reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 98  <-  4c reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 9a  <-  4d reserved
