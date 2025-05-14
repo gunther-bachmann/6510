@@ -193,7 +193,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_I2
          PUSH_IM1
          CONS_PAIR_P
-         TRUE_P_RET
+         T_P_RET
          FALSE_P_RET
          NIL?_RET_LOCAL_0_POP_1
          NIL?_RET_LOCAL_0_POP_2
@@ -1603,17 +1603,17 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define TRUE_P_RET #x0b)
-(define BC_TRUE_P_RET
+(define T_P_RET #x0b)
+(define BC_T_P_RET
   (list
-   (label BC_TRUE_P_RET)
+   (label BC_T_P_RET)
           (LDA ZP_RT+1)
-          (BEQ IS_FALSE__BC_TRUE_P_RET)
+          (BEQ IS_FALSE__BC_T_P_RET)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
-   (label IS_FALSE__BC_TRUE_P_RET)
+   (label IS_FALSE__BC_T_P_RET)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -2655,7 +2655,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  88..8F reserved
            (word-ref BC_PUSH_CONST_NIL)           ;; 12  <-  09 
            (word-ref BC_CONS_PAIR_P)              ;; 14  <-  0a 
-           (word-ref BC_TRUE_P_RET)               ;; 16  <-  0b 
+           (word-ref BC_T_P_RET)               ;; 16  <-  0b 
            (word-ref BC_TRUE_P_BRANCH)            ;; 18  <-  0c
            (word-ref BC_FALSE_P_BRANCH)           ;; 1a  <-  0d 
            (word-ref BC_FALSE_P_RET)              ;; 1c  <-  0e 
@@ -2847,7 +2847,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_CELL_EQ
           BC_SWAP
           BC_DUP
-          BC_TRUE_P_RET
+          BC_T_P_RET
           BC_FALSE_P_RET
           BC_CONS_PAIR_P
           BC_TRUE_P_BRANCH
@@ -2881,4 +2881,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       869))
+                       867))

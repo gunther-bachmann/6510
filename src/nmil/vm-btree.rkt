@@ -135,7 +135,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   TRUE_P_BRANCH
                   INT_GREATER_P
                   CONS_PAIR_P
-                  TRUE_P_RET
+                  T_P_RET
                   FALSE_P_RET
                   NIL?_RET_LOCAL_0_POP_1
                   INT_P
@@ -730,7 +730,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
           (byte 1)
           (bc WRITE_TO_LOCAL_0)                 ;; local0 = node
           (bc CALL) (word-ref BTREE_VALUE_P)
-          (bc TRUE_P_RET)  ;; [(btree-value? node) path]
+          (bc T_P_RET)  ;; [(btree-value? node) path]
 
    ;; [else (btree-path-to-first (car node) (cons (cons -1 node) path))]))
           (bc PUSH_LOCAL_0)                     ;; node :: path
@@ -795,7 +795,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (byte 1)
             (bc WRITE_TO_LOCAL_0)             ;; local0 = node
             (bc CALL) (word-ref BTREE_VALUE_P) ;; 
-            (bc TRUE_P_RET)                   ;;     [(btree-value? node) path]
+            (bc T_P_RET)                   ;;     [(btree-value? node) path]
   
       ;;     [(empty? (cdr node)) (btree-path-to-last (car node) (cons (cons -1 node) path))]
             (bc PUSH_LOCAL_0_CDR)
@@ -1180,14 +1180,14 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   (inform-check-equal? (cpu-state-clock-cycles prev-4-state)
                 7339))
 
-;; optimization idea: NIL?_RET instead of NIL?, TRUE_P_RET
+;; optimization idea: NIL?_RET instead of NIL?, T_P_RET
 (define REVERSE ;; list :: result=nil -> list
   (list
    (label REVERSE)
           (byte 1)
           (bc WRITE_TO_LOCAL_0)     ;; local0 = list
           (bc NIL?)
-          (bc TRUE_P_RET)           ;; return second parameter (result)
+          (bc T_P_RET)           ;; return second parameter (result)
           (bc PUSH_LOCAL_0_CAR) 
           (bc CONS)
           (bc PUSH_LOCAL_0_CDR)
@@ -1235,7 +1235,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (label LOOP__APPEND)         ;; (reverse head-list) :: tail-list
             (bc WRITE_TO_LOCAL_0)  ;; local0 = reversed list     <- loop
             (bc NIL?)
-            (bc TRUE_P_RET)        ;; return second (which is tail-list)
+            (bc T_P_RET)        ;; return second (which is tail-list)
             (bc PUSH_LOCAL_0_CAR)  ;; (car (reversed head-list)) :: tail-list
             (bc CONS)              ;; ((car (reversed head-list)) . tail-list)
             (bc PUSH_LOCAL_0_CDR)  ;;
@@ -2566,7 +2566,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
             (bc WRITE_TO_LOCAL_0)       ;; local_0 = btree-prefix
             (bc NIL?)
-            (bc TRUE_P_RET)             ;; return result
+            (bc T_P_RET)             ;; return result
                                         ;; result
             ;; Node Nil, Prefix Not Nil
             (bc PUSH_LOCAL_0_CDR)       ;; (cdr btree-prefix) :: result

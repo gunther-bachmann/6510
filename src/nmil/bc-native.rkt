@@ -48,7 +48,7 @@
                   TRUE_P_BRANCH
                   INT_GREATER_P
                   CONS_PAIR_P
-                  TRUE_P_RET
+                  T_P_RET
                   FALSE_P_RET
                   NIL?_RET_LOCAL_0_POP_1
                   INT_P
