@@ -167,13 +167,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          DUP
          POP
          BNOP
-         INT_0_P
+         I0_P
          EXT
          MAX_INT
          INC_INT
          T_P_BRA
          F_P_BRA
-         INT_GREATER_P
+         I_GT_P
          PUSH_I0
          PUSH_I1
          PUSH_I2
@@ -1168,9 +1168,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $04f0  (rt)")))
 
 (define IADD                #x62) ;; stack [cell-int a, cell-int b] -> [sum]
-(define BC_INT_PLUS
+(define BC_IADD
   (list
-   (label BC_INT_PLUS)
+   (label BC_IADD)
           (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte          
           (LDA (ZP_CELL_STACK_HB_PTR),y)        ;; A = untagged lowbyte of int (stored in high byte)
           (CLC)                                 ;; for addition the carry flags needs to be clear
@@ -1238,9 +1238,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          )))
 
 (define ISUB                #x61) ;; stack [cell-int a, cell-int b] -> [difference]
-(define BC_INT_MINUS
+(define BC_ISUB
   (list
-   (label BC_INT_MINUS)
+   (label BC_ISUB)
           (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte          
           (SEC)                                 ;; for subtraction carry needs to be set
           (LDA ZP_RT+1)                         ;; A = untagged lowbyte of int (stored in high byte)
@@ -1454,10 +1454,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| swap |#
   (skip (check-equal? #t #f "implement")))
 
-(define INT_GREATER_P #x63)
-(define BC_INT_GREATER_P
+(define I_GT_P #x63)
+(define BC_I_GT_P
   (list
-   (label BC_INT_GREATER_P)
+   (label BC_I_GT_P)
           (LDA ZP_RT)
           (STA ZP_TEMP)
           (LDA ZP_RT+1)
@@ -1465,15 +1465,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR POP_CELL_EVLSTK_TO_RT)
           (LDA ZP_RT)
           (CMP ZP_TEMP)
-          (BMI GREATER__BC_INT_GREATER_P)
-          (BNE LESS_OR_EQUAL__BC_INT_GREATER_P)
+          (BMI GREATER__BC_I_GT_P)
+          (BNE LESS_OR_EQUAL__BC_I_GT_P)
           (LDA ZP_RT+1)
           (CMP ZP_TEMP+1)
-          (BMI GREATER__BC_INT_GREATER_P)
-   (label LESS_OR_EQUAL__BC_INT_GREATER_P)
+          (BMI GREATER__BC_I_GT_P)
+   (label LESS_OR_EQUAL__BC_I_GT_P)
           (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER__BC_INT_GREATER_P)
+    (label GREATER__BC_I_GT_P)
           (JSR WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -1483,7 +1483,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_IM1)
       (bc PUSH_I0)
-      (bc INT_GREATER_P))
+      (bc I_GT_P))
      ))
 
   (skip (check-equal? (vm-regt->string int-greater-0>-1-state)
@@ -1495,7 +1495,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I0)
       (bc PUSH_I0)
-      (bc INT_GREATER_P))))
+      (bc I_GT_P))))
 
   (check-equal? (vm-regt->string int-greater-0>0-state)
                 "int $0000")
@@ -1505,7 +1505,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I1)
       (bc PUSH_I1)
-      (bc INT_GREATER_P))))
+      (bc I_GT_P))))
 
   (check-equal? (vm-regt->string int-greater-1>1-state)
                 "int $0000")
@@ -1515,7 +1515,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I2)
       (bc PUSH_I2)
-      (bc INT_GREATER_P))))
+      (bc I_GT_P))))
 
   (check-equal? (vm-regt->string int-greater-2>2-state)
                 "int $0000")
@@ -1525,7 +1525,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I1)
       (bc PUSH_I2)
-      (bc INT_GREATER_P))))
+      (bc I_GT_P))))
 
   (check-equal? (vm-regt->string int-greater-2>1-state)
                 "int $0001")
@@ -1535,7 +1535,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I0)
       (bc PUSH_I1)
-      (bc INT_GREATER_P))))
+      (bc I_GT_P))))
 
   (check-equal? (vm-regt->string int-greater-1>0-state)
                 "int $0001")
@@ -1545,7 +1545,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I1)
       (bc PUSH_I0)
-      (bc INT_GREATER_P))))
+      (bc I_GT_P))))
 
   (check-equal? (vm-regt->string int-greater-0>1-state)
                 "int $0000"))
@@ -2213,24 +2213,24 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define INT_0_P #x22)
-(define BC_INT_0_P
+(define I0_P #x22)
+(define BC_I0_P
   (list
-   (label BC_INT_0_P)
+   (label BC_I0_P)
           (LDA ZP_RT+1)
-          (BNE IS_NOT_ZERO__BC_INT_0_P)
+          (BNE IS_NOT_ZERO__BC_I0_P)
           (LDA ZP_RT)
           (CMP !$03)
-          (BEQ IS_ZERO__BC_INT_0_P)
+          (BEQ IS_ZERO__BC_I0_P)
 
-   (label IS_NOT_ZERO__BC_INT_0_P)
+   (label IS_NOT_ZERO__BC_I0_P)
           (LDA !$00)
           (STA ZP_RT+1)
           (LDA !$03)
           (STA ZP_RT)
           (JMP VM_INTERPRETER_INC_PC)
 
-   (label IS_ZERO__BC_INT_0_P)
+   (label IS_ZERO__BC_I0_P)
           (LDA !$01)    
           (STA ZP_RT+1)
           (JMP VM_INTERPRETER_INC_PC)))
@@ -2677,7 +2677,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
            (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 
            (word-ref BC_NIL_P)                    ;; 42  <-  21 (RZ)
-           (word-ref BC_INT_0_P)                  ;; 44  <-  22 
+           (word-ref BC_I0_P)                  ;; 44  <-  22 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 48  <-  24 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
@@ -2740,9 +2740,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; bc  <-  5e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; be  <-  5f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; c0  <-  e0..e7 reserved
-           (word-ref BC_INT_MINUS)                ;; c2  <-  61
-           (word-ref BC_INT_PLUS)                 ;; c4  <-  62
-           (word-ref BC_INT_GREATER_P)            ;; c6  <-  63 
+           (word-ref BC_ISUB)                ;; c2  <-  61
+           (word-ref BC_IADD)                 ;; c4  <-  62
+           (word-ref BC_I_GT_P)            ;; c6  <-  63 
            (word-ref VM_INTERPRETER_INC_PC)       ;; c8  <-  64 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ca  <-  65 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; cc  <-  66 reserved
@@ -2828,7 +2828,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_CONST_BYTE
           BC_PUSH_NIL
           BC_NIL_P
-          BC_INT_0_P
+          BC_I0_P
           BC_NIL_P_RET_LOCAL_N_POP
           BC_CONS
           BC_CAR
@@ -2838,10 +2838,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_CALL
           BC_RET
           BC_BRK
-          BC_INT_PLUS
-          BC_INT_MINUS
+          BC_IADD
+          BC_ISUB
           BC_INT_P
-          BC_INT_GREATER_P
+          BC_I_GT_P
           BC_TAIL_CALL
           BC_CELL_EQ
           BC_SWAP

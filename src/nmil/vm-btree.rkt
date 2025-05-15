@@ -116,12 +116,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   POP
                   DUP
                   BNOP
-                  INT_0_P
+                  I0_P
                   INC_INT
                   MAX_INT
                   F_P_BRA
                   T_P_BRA
-                  INT_GREATER_P
+                  I_GT_P
                   CONS_PAIR_P
                   T_P_RET
                   F_P_RET
@@ -895,7 +895,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc PUSH_LOCAL_0_CAR)
   
             (bc CAR)
-            (bc INT_0_P)
+            (bc I0_P)
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_NODE_FOR_PATH) 
   
             (bc PUSH_LOCAL_0_CAR)
@@ -987,7 +987,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (label LEFT_NODE_COND__BTREE_PREV) 
       ;; [(= 0 (caar path))
             (bc CAAR)
-            (bc INT_0_P)
+            (bc I0_P)
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_PREV) 
   
      (label LOOP_FN__BTREE_PREV)
@@ -995,7 +995,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc WRITE_TO_LOCAL_0)         ;; top-most-relevant = local0 = (cdr path) <- looping cdr
             (bc NIL?_RET_LOCAL_0_POP_1)
             (bc CAAR)
-            (bc INT_0_P)
+            (bc I0_P)
             (bc T_P_BRA) (bc-rel-ref LOOP_FN__BTREE_PREV) 
   
      (label END_LOOP__BTREE_PREV)
@@ -1298,7 +1298,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
       (label COND__BTREE_NEXT)
              (bc CAAR)
-             (bc INT_0_P)
+             (bc I0_P)
              (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_NEXT)  ;; !=0 => goto to else branch
    
              (bc PUSH_LOCAL_0_CAR)
@@ -1320,7 +1320,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (bc PUSH_LOCAL_0_CDR)         ;; (cdr path) <-- loop entry
              (bc WRITE_TO_LOCAL_0)         ;; local2= (list pe ...) 
              (bc CAAR)                      ;; (car pe)
-             (bc INT_0_P)
+             (bc I0_P)
              (bc F_P_BRA) (bc-rel-ref LOOP_FN__BTREE_NEXT) ;; next --> loop
              (bc PUSH_LOCAL_0_CAR)         ;; pe
              (bc CDDR)                      ;; (cddr pe)
@@ -1534,7 +1534,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             ;; check cond
             (bc PUSH_LOCAL_0_CAR)       
             (bc CAR)
-            (bc INT_0_P)                 ;; (== 0 (caar path)
+            (bc I0_P)                 ;; (== 0 (caar path)
             (bc F_P_BRA) (bc-rel-ref ELSE__BTREE_REC_REBUILD_PATH_WITH) ;; check next cond expression
   
             (bc PUSH_LOCAL_0_CAR)        
@@ -1694,7 +1694,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   
             ;; cond (and (= -1 (caar path)) (empty? (cddar path)))
             (bc CAAR)
-            (bc INT_0_P)
+            (bc I0_P)
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_ADD_VALUE_AFTER) ;; -> else cond
             (bc PUSH_LOCAL_0_CAR)
             (bc CDDR)
@@ -1996,7 +1996,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc NIL?_RET_LOCAL_0_POP_1)
   
             (bc CAAR)
-            (bc INT_0_P)
+            (bc I0_P)
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_ADD_VALUE_BEFORE) ;; -> else cond
 
             ;; cond (and (= -1 (caar path)) (empty? (cddar path)))
@@ -2703,7 +2703,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
              (bc PUSH_LOCAL_1_CAR)
              (bc CAR)                           ;; (caar path)
-             (bc INT_0_P)
+             (bc I0_P)
              (bc F_P_BRA) (bc-rel-ref CAAR_PATH_1__BTREE_REMOVE_VALUE_AT)
 
              ;; from now on (caar path) = 0

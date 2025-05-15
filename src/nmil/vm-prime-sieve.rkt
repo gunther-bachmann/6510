@@ -90,12 +90,12 @@ primes (ignore 0,1) up to 30
                   POP
                   DUP
                   BNOP
-                  INT_0_P
+                  I0_P
                   INC_INT
                   MAX_INT
                   F_P_BRA
                   T_P_BRA
-                  INT_GREATER_P
+                  I_GT_P
                   CONS_PAIR_P
                   T_P_RET
                   F_P_RET
