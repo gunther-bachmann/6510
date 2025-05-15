@@ -456,7 +456,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       BTREE_NODE_P
       BTREE_VALUE_P
       BTREE_VALIDATE)
-    ))
+     ))
 
   (check-equal? (vm-stack->strings btree-validate-state)
                 (list "stack is empty")

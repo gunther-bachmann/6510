@@ -316,18 +316,22 @@ call frame primitives etc.
    (word-const TAGGED_BYTE0              $00ff)
    (word-const TAGGED_NIL                $0001) ;; tag indicates cell-pair-ptr
 
-   ;; d9..da free to use
-
+   (byte-const ZP_TEMP3                  $d9)
+   ;; (byte-const ZP_TEMP4                $da)
    (byte-const ZP_CELL_STACK_TOS         $db) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
 
    ;; ZP_TEMP may be used as pointer (in combination with ZP_TEMP2)
    (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
    (byte-const ZP_TEMP2                  $dd) ;; may not be used after sub calls (just within a routine without jsr)
-   (byte-const ZP_TEMP3                  $d9)
-   ;; (byte-const ZP_TEMP4                $da)
 
    ;; the following twelve bytes need to be continuous, since they are saved into the call frame!
    (byte-const ZP_VM_PC                  $de) ;; de..df program counter (ptr to currently executing byte code)
+
+   (byte-const ZP_RB                     $c0) ;; c0..c1 array register b
+   (byte-const ZP_RC                     $c2) ;; c2..c3 array register c
+   (byte-const ZP_RBI                    $c4)
+   (byte-const ZP_RCI                    $c5)
+
    (byte-const ZP_VM_FUNC_PTR            $e0) ;; e0..e1 pointer to the currently running function
    (byte-const ZP_LOCALS_LB_PTR          $e2) ;; e2..e3 pointer to low byte of first local in call-frame
    (byte-const ZP_LOCALS_HB_PTR          $e4) ;; e4..e5 pointer to high byte of first local in call-frame
@@ -337,8 +341,7 @@ call frame primitives etc.
    (byte-const ZP_LOCALS_TOP_MARK        $eb) ;; eb byte pointing to the byte past the last local on the locals stack
    (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2
 
-   ;; register C
-   (byte-const ZP_RZ                     $f3) ;; f3..f4
+   (byte-const ZP_RZ                     $f3) ;; f3..f4   for garbage collection (and temp use outside of gc) only
    (byte-const ZP_PART_GCD_CELL_ARRAYS   $f5) ;; f5..f6   this is the cell-arrays global partially collected list (gpcl)
 
    ;; implementation using registers
@@ -346,6 +349,7 @@ call frame primitives etc.
    (byte-const ZP_RT                     $fb) ;; fb = low byte, fc = high byte,
    ;; register A
    (byte-const ZP_RA                     $fd) ;; fd = low byte, fe = high byte,
+   (byte-const ZP_RAI                    $ff) ;; ff = byte index into RA
    ;; currently no need to register B (maybe someday)
    ))
 
@@ -366,6 +370,11 @@ call frame primitives etc.
 ;; make constants available in racket (to allow for usage e.g. in test code)
 (define ZP_RT                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
 (define ZP_RA                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
+(define ZP_RB                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RB"))
+(define ZP_RC                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RC"))
+(define ZP_RAI                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RAI"))
+(define ZP_RBI                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RBI"))
+(define ZP_RCI                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RCI"))
 (define ZP_RZ                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RZ"))
 (define ZP_PART_GCD_CELL_ARRAYS (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PART_GCD_CELL_ARRAYS"))
 (define ZP_CALL_FRAME           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
@@ -955,10 +964,10 @@ call frame primitives etc.
   (list
    (label CP_RA_TO_RT)
    (label CP_RA_TO_RT__VALUE) ;;just value, no tagged byte
-          (LDA ZP_RA)
-          (STA ZP_RT)
           (LDA ZP_RA+1)
           (STA ZP_RT+1)
+          (LDA ZP_RA)
+          (STA ZP_RT)
           (RTS)))
 
 ;; input:  RA
@@ -966,10 +975,10 @@ call frame primitives etc.
 (define CP_RA_TO_RZ
   (list
    (label CP_RA_TO_RZ)
-          (LDA ZP_RA)
-          (STA ZP_RZ)
           (LDA ZP_RA+1)
           (STA ZP_RZ+1)
+          (LDA ZP_RA)
+          (STA ZP_RZ)
           (RTS)))
 
 ;; input:  RT
@@ -977,10 +986,10 @@ call frame primitives etc.
 (define CP_RT_TO_RZ
   (list
    (label CP_RT_TO_RZ)
-          (LDA ZP_RT)
-          (STA ZP_RZ)
           (LDA ZP_RT+1)
           (STA ZP_RZ+1)
+          (LDA ZP_RT)
+          (STA ZP_RZ)
           (RTS)))
 
 (module+ test #| vm-cp-rt-to-ra |#
@@ -1003,10 +1012,10 @@ call frame primitives etc.
   (list
    (label CP_RT_TO_RA)
    (label CP_RT_TO_RA__VALUE) ;;just value, no tagged byte
-          (LDA ZP_RT)
-          (STA ZP_RA)
           (LDA ZP_RT+1)
           (STA ZP_RA+1)
+          (LDA ZP_RT)
+          (STA ZP_RA)
           (RTS)))
 
 (module+ test #| vm-cp-rt-to-ra |#
