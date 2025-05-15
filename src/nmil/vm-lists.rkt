@@ -191,11 +191,11 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
    (label VM_CONS_R__UC) ;; no checks
           (LDA ZP_RT)
-          (STA ZP_RA)
+          (STA ZP_RP)
           (LDA ZP_RT+1)
-          (STA ZP_RA+1)
+          (STA ZP_RP+1)
           (JSR ALLOC_CELLPAIR_TO_RT)
-          (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
+          (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
           (JMP POP_CELL_EVLSTK_TO_CELL1_RT)))
 
 (module+ test #| VM_CONS |#
