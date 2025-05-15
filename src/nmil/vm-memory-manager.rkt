@@ -242,26 +242,6 @@ call frame primitives etc.
           ;; vm_cell_stack_push_rt_if_nonempty
           PUSH_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 
-          ;; WRITE_INTm1_TO_RA                             ;; write cell-int -1 into RA
-          ;; WRITE_INTm1_TO_RT                             
-          ;; WRITE_INTm1_TO_Rx                             ;; x=0 -> RT, x=2 -> RA
-
-          ;; WRITE_INT1_TO_RA                              ;; write cell-int +1 into RA
-          ;; WRITE_INT1_TO_RT
-          ;; WRITE_INT1_TO_Rx                              ;; x=0 -> RT, x=2 -> RA
-
-          ;; WRITE_INT0_TO_RA                              ;; write cell-int 0 into RA
-          ;; WRITE_INT0_TO_RT
-          ;; WRITE_INT0_TO_Rx                              ;; x=0 -> RT, x=2 -> RA
-
-          ;; WRITE_INT_A_TO_RA                             ;; write cell-int (only byte sized) A into RA
-          ;; WRITE_INT_A_TO_RT
-          ;; WRITE_INT_A_TO_Rx                             ;; x=0 -> RT, x=2 -> RA
-
-          ;; WRITE_INT_AY_TO_RA                            ;; int in A(lowbyte)/Y(highbyte) into RA
-          ;; WRITE_INT_AY_TO_RT
-          WRITE_INT_AY_TO_Rx                              ;; int in A(lowbyte)/Y(highbyte), x=0 -> RT, x=2 -> RA
-
           ;; WRITE_NIL_TO_RA
           ;; WRITE_NIL_TO_RT
           WRITE_NIL_TO_Rx
@@ -705,63 +685,63 @@ call frame primitives etc.
 ;;        Y = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register
 ;;        X = (0 = RT, 2 = RA)
 ;; output: Rx = cell-int
-(define WRITE_INT_AY_TO_Rx
+(define WRITE_INT_AY_TO_RT
   (list
    ;; (label WRITE_INTm1_TO_RA)
    ;;        (LDX !$02) ;; index 2 => RA
    ;;        (BNE WRITE_INTm1_TO_Rx)
    (label WRITE_INTm1_TO_RT)
-          (LDX !$00) ;; index 0 => RT
-   (label WRITE_INTm1_TO_Rx)
+          ;; (LDX !$00) ;; index 0 => RT
+   ;; (label WRITE_INTm1_TO_Rx)
           (LDA !$ff) ;; int lowbyte = ff
           (LDY !$7f) ;; #b[0]111 11[11] = $1f for int high byte
-          (BNE VM_WRITE_AY_TO_Rx)
+          (BNE ENC_WRITE_AY_TO_RT)
 
 
    ;; (label WRITE_INT1_TO_RA)
    ;;        (LDX !$02) ;; index 2 => RA
    ;;        (BNE WRITE_INT1_TO_Rx)
    (label WRITE_INT1_TO_RT)
-          (LDX !$00) ;; index 0 => RT
-   (label WRITE_INT1_TO_Rx)
+          ;; (LDX !$00) ;; index 0 => RT
+   ;; (label WRITE_INT1_TO_Rx)
           (LDA !$01)
-          (BNE WRITE_INT_A_TO_Rx)
+          (BNE WRITE_INT_A_TO_RT)
 
    ;; (label WRITE_INT0_TO_RA)
    ;;        (LDX !$02) ;; index 2 => RA
    ;;        (BNE WRITE_INT0_TO_Rx)
    (label WRITE_INT0_TO_RT)
-          (LDX !$00) ;; index 0 => RT
-   (label WRITE_INT0_TO_Rx)
+          ;; (LDX !$00) ;; index 0 => RT
+   ;; (label WRITE_INT0_TO_Rx)
           (LDA !$00)
-          (BEQ WRITE_INT_A_TO_Rx)
+          ;; (BEQ WRITE_INT_A_TO_Rx)
 
    ;; (label WRITE_INT_A_TO_RA)
    ;;        (LDX !$02) ;; index 2 => RA
    ;;        (BNE WRITE_INT_A_TO_Rx)
    (label WRITE_INT_A_TO_RT)
-          (LDX !$00) ;; index 0 => RT
-   (label WRITE_INT_A_TO_Rx)
+          ;; (LDX !$00) ;; index 0 => RT
+   ;; (label WRITE_INT_A_TO_Rx)
           (LDY !$03) ;; #b[0]000 00[11] = high byte of int  0
-   (label VM_WRITE_AY_TO_Rx)
-          (STY ZP_RT,x)
-          (STA ZP_RT+1,x)
+   (label ENC_WRITE_AY_TO_RT)
+          (STY ZP_RT)
+          (STA ZP_RT+1)
           (RTS)
 
    ;; (label WRITE_INT_AY_TO_RA)
    ;;        (LDX !$02) ;; index 2 => RA
    ;;        (BNE WRITE_INT_AY_TO_Rx)
    (label WRITE_INT_AY_TO_RT)
-          (LDX !$00) ;; index 0 => RT
-   (label WRITE_INT_AY_TO_Rx)
-          (STA ZP_RT+1,x)
+          ;; (LDX !$00) ;; index 0 => RT
+   ;; (label WRITE_INT_AY_TO_Rx)
+          (STA ZP_RT+1)
           (TYA)      ;; #b???x xxxx
           (SEC)
           (ROL)      ;; #b??xx xxx1
           (SEC)
           (ROL)      ;; #b?xxx xx11
           (AND !$7f) ;; #xb0xxx xx11 (mask out top bit!)
-          (STA ZP_RT,x) ;; encoded tagged byte of int goes into first memory cell, even though it is the high-byte part of int
+          (STA ZP_RT) ;; encoded tagged byte of int goes into first memory cell, even though it is the high-byte part of int
           (RTS)))
 
 (module+ test #| vm_write_int_ay_to_rx |#
@@ -769,8 +749,7 @@ call frame primitives etc.
     (list
      (LDA !$01)
      (LDY !$02)
-     (LDX !$00)
-     (JSR WRITE_INT_AY_TO_Rx)))
+     (JSR WRITE_INT_AY_TO_RT)))
 
   (define vm-write-int-ay-to-rx-state
     (run-code-in-test vm-write-int-ay-to-rx-code))
@@ -778,18 +757,18 @@ call frame primitives etc.
   (check-equal? (vm-regt->string vm-write-int-ay-to-rx-state)
                 "int $0201")
 
-  (define vm-write-int-ay-to-rx2-code
-    (list
-     (LDA !$01)
-     (LDY !$02)
-     (LDX !$02)
-     (JSR WRITE_INT_AY_TO_Rx)))
+  ;; (define vm-write-int-ay-to-rx2-code
+  ;;   (list
+  ;;    (LDA !$01)
+  ;;    (LDY !$02)
+  ;;    (LDX !$02)
+  ;;    (JSR WRITE_INT_AY_TO_Rx)))
 
-  (define vm-write-int-ay-to-rx2-state
-    (run-code-in-test vm-write-int-ay-to-rx2-code))
+  ;; (define vm-write-int-ay-to-rx2-state
+  ;;   (run-code-in-test vm-write-int-ay-to-rx2-code))
 
-  (check-equal? (vm-rega->string vm-write-int-ay-to-rx2-state)
-                "int $0201")
+  ;; (check-equal? (vm-rega->string vm-write-int-ay-to-rx2-state)
+  ;;               "int $0201")
 
   (define vm-write-int-ay-to-rt-code
     (list
@@ -5769,25 +5748,11 @@ call frame primitives etc.
           ;; WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS
           WRITE_RT_TO_ARR_ATa_RA             ;; write RT into array in RA at index A (GC previous slot entry, if applicable)
 
-          ;; WRITE_INTm1_TO_RA                             ;; write cell-int -1 into RA
-          ;; WRITE_INTm1_TO_RT                             
-          ;; WRITE_INTm1_TO_Rx                             ;; x=0 -> RT, x=2 -> RA
-
-          ;; WRITE_INT1_TO_RA                              ;; write cell-int +1 into RA
+          ;; WRITE_INTm1_TO_RT
           ;; WRITE_INT1_TO_RT
-          ;; WRITE_INT1_TO_Rx                              ;; x=0 -> RT, x=2 -> RA
-
-          ;; WRITE_INT0_TO_RA                              ;; write cell-int 0 into RA
           ;; WRITE_INT0_TO_RT
-          ;; WRITE_INT0_TO_Rx                              ;; x=0 -> RT, x=2 -> RA
-
-          ;; WRITE_INT_A_TO_RA                             ;; write cell-int (only byte sized) A into RA
           ;; WRITE_INT_A_TO_RT
-          ;; WRITE_INT_A_TO_Rx                             ;; x=0 -> RT, x=2 -> RA
-
-          ;; WRITE_INT_AY_TO_RA                            ;; int in A(lowbyte)/Y(highbyte) into RA
-          ;; WRITE_INT_AY_TO_RT
-          WRITE_INT_AY_TO_Rx                              ;; int in A(lowbyte)/Y(highbyte), x=0 -> RT, x=2 -> RA
+          WRITE_INT_AY_TO_RT                             ;; int in A(lowbyte)/Y(highbyte), x=0 -> RT, x=2 -> RA
 
           ;; WRITE_NIL_TO_RA
           ;; WRITE_NIL_TO_RT
@@ -5843,4 +5808,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1798))
+                       1764))
