@@ -246,26 +246,26 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 ;; (define ZERO?_RET_LOCAL0_POP_3 #x9d)
 ;; (define ZERO?_RET_LOCAL0_POP_4 #x9f)
 
-(define BC_NIL_P_RET_LOCAL_N_POP
+(define BC_NIL_P_RET_LN_POP
   (list
-   (label BC_NIL_P_RET_LOCAL_N_POP)
+   (label BC_NIL_P_RET_LN_POP)
           (LDX ZP_RT)
           (CPX !<TAGGED_NIL)                            ;; lowbyte = tagged_nil lowbyte
-          (BEQ RETURN__BC_NIL_P_RET_LOCAL_N_POP)        ;; is nil => return param or local
+          (BEQ RETURN__BC_NIL_P_RET_LN_POP)        ;; is nil => return param or local
           (JMP VM_INTERPRETER_INC_PC)                   ;; next instruction
 
-   (label RETURN__BC_NIL_P_RET_LOCAL_N_POP)
+   (label RETURN__BC_NIL_P_RET_LN_POP)
           (LSR)                                         ;; lowest bit decides 0 = LOCAL_0, 1 = some other short command
           (TAX)
-          (BCS SHORTCMD__BC_NIL_P_RET_LOCAL_N_POP)
+          (BCS SHORTCMD__BC_NIL_P_RET_LN_POP)
 
-   (label LOCAL_0_POP__BC_NIL_P_RET_LOCAL_N_POP)     
+   (label LOCAL_0_POP__BC_NIL_P_RET_LN_POP)     
           ;; local 0 is written into tos (which is one pop already)          
           ;; now pop the rest (0..3 times additionally)
-   (label NOW_POP__BC_NIL_P_RET_LOCAL_N_POP)
+   (label NOW_POP__BC_NIL_P_RET_LN_POP)
           (TXA)
-          (BEQ DONE__BC_NIL_P_RET_LOCAL_N_POP)
-   (label LOOP_POP__BC_NIL_P_RET_LOCAL_N_POP)
+          (BEQ DONE__BC_NIL_P_RET_LN_POP)
+   (label LOOP_POP__BC_NIL_P_RET_LN_POP)
           (DEC ZP_CELL_STACK_TOS)
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
@@ -279,13 +279,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (TAX)
           (LDY ZP_CELL_STACK_TOS)
           (CPY !$01)
-          (BEQ STACK_DEPLETED__BC_NIL_P_RET_LOCAL_N_POP)
+          (BEQ STACK_DEPLETED__BC_NIL_P_RET_LN_POP)
           (DEX)
-          (BNE LOOP_POP__BC_NIL_P_RET_LOCAL_N_POP)
+          (BNE LOOP_POP__BC_NIL_P_RET_LN_POP)
 
           (STY ZP_CELL_STACK_TOS)                       ;; store new tos marker
 
-   (label DONE__BC_NIL_P_RET_LOCAL_N_POP)
+   (label DONE__BC_NIL_P_RET_LN_POP)
           (LDY !$00)
           (LDA (ZP_LOCALS_LB_PTR),y)                    ;; load low byte from local
           (STA ZP_RT)                                   ;; -> RT
@@ -300,21 +300,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
           (JMP VM_INTERPRETER)                          ;; and continue 
 
-   (label STACK_DEPLETED__BC_NIL_P_RET_LOCAL_N_POP)
+   (label STACK_DEPLETED__BC_NIL_P_RET_LN_POP)
           ;; (LDY !$01)                                 ;; Y already is 01 when entering here
           (LDA (ZP_CELL_STACK_LB_PTR),y)               ;; get previous lb page
-          (BEQ ERROR_EMPTY_STACK__BC_NIL_P_RET_LOCAL_N_POP) ;; = 0 => stack ran empty
+          (BEQ ERROR_EMPTY_STACK__BC_NIL_P_RET_LN_POP) ;; = 0 => stack ran empty
 
           (STA ZP_CELL_STACK_LB_PTR+1)                 ;; store previous lb page to lb ptr
           (LDA (ZP_CELL_STACK_HB_PTR),y)               ;; get previous hb page  
           (STA ZP_CELL_STACK_HB_PTR+1)                 ;; store previous hb page into hb ptr
           (LDY !$ff)                                   ;; assume $ff as new cell_stack_tos
-          (BNE LOOP_POP__BC_NIL_P_RET_LOCAL_N_POP)     ;; always jump
+          (BNE LOOP_POP__BC_NIL_P_RET_LN_POP)     ;; always jump
 
 
-   (label SHORTCMD__BC_NIL_P_RET_LOCAL_N_POP)
+   (label SHORTCMD__BC_NIL_P_RET_LN_POP)
           ;; open for other shortcut command
-   (label ERROR_EMPTY_STACK__BC_NIL_P_RET_LOCAL_N_POP)
+   (label ERROR_EMPTY_STACK__BC_NIL_P_RET_LN_POP)
           (BRK)))
 
 (module+ test #| bc-nil-ret |#
@@ -1308,15 +1308,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                           "int $1fff  (rt)"
                           "int $1c2f"
                           "int $0001")))
-
-(define BC_PUSH_CONST_BYTE
-  (list
-   (label BC_PUSH_CONST_BYTE)
-          (LDY !$01)
-          (LDA (ZP_VM_PC),y)
-          (LDX !$ff)
-          (JSR PUSH_TO_EVLSTK)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define NIL_P                #x21) ;; stack [cell-list-ptr] -> [cell-boolean]
 (define BC_NIL_P
@@ -2434,18 +2425,26 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0002  (rt)")))
 
 (define PUSH_B #x17)
-(define BC_PUSH_B
+;; (define BC_PUSH_B
 
-  (flatten
-   (list
-    (label BC_PUSH_B)
-           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-           (LDY !$01)
-           (LDA (ZP_VM_PC),y)
-           (STA ZP_RT+1)
-           (LDA !TAG_BYTE_BYTE_CELL)
-           (STA ZP_RT)
-           (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
+;;   (flatten
+;;    (list
+;;     (label BC_PUSH_B)
+;;            (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+;;            (LDY !$01)
+;;            (LDA (ZP_VM_PC),y)
+;;            (STA ZP_RT+1)
+;;            (LDA !TAG_BYTE_BYTE_CELL)
+;;            (STA ZP_RT)
+;;            (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
+(define BC_PUSH_B
+  (list
+   (label BC_PUSH_B)
+          (LDY !$01)
+          (LDA (ZP_VM_PC),y)
+          (LDX !$ff)
+          (JSR PUSH_TO_EVLSTK)
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (module+ test #| push byte |#
   (define push-byte-state
@@ -2648,7 +2647,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
            (word-ref BC_SWAP)                     ;; 06  <-  03 
            (word-ref BC_EXT1_CMD)                 ;; 08  <-  04 
-           (word-ref BC_PUSH_CONST_BYTE)          ;; 0a  <-  05 
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 0a  <-  05 reserved
            (word-ref BC_PUSH_I)                   ;; 0c  <-  06
            (word-ref BC_INT_P)                    ;; 0e  <-  07 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  88..8F reserved
@@ -2667,7 +2666,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_AF)                  ;; 2a  <-  15
            (word-ref BC_POP_TO_AF)                ;; 2c  <-  16
            (word-ref BC_PUSH_B)                   ;; 2e  <-  17
-           (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f
+           (word-ref BC_NIL_P_RET_LN_POP)         ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 36  <-  1b reserved
@@ -2677,7 +2676,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
            (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 
            (word-ref BC_NIL_P)                    ;; 42  <-  21 (RZ)
-           (word-ref BC_I0_P)                  ;; 44  <-  22 
+           (word-ref BC_I0_P)                     ;; 44  <-  22
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 48  <-  24 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
@@ -2740,9 +2739,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; bc  <-  5e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; be  <-  5f reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; c0  <-  e0..e7 reserved
-           (word-ref BC_ISUB)                ;; c2  <-  61
-           (word-ref BC_IADD)                 ;; c4  <-  62
-           (word-ref BC_I_GT_P)            ;; c6  <-  63 
+           (word-ref BC_ISUB)                     ;; c2  <-  61
+           (word-ref BC_IADD)                     ;; c4  <-  62
+           (word-ref BC_I_GT_P)                   ;; c6  <-  63
            (word-ref VM_INTERPRETER_INC_PC)       ;; c8  <-  64 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ca  <-  65 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; cc  <-  66 reserved
@@ -2825,11 +2824,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_LOCAL_CXR
           BC_PUSH_CONST_NUM_SHORT
           BC_PUSH_I
-          BC_PUSH_CONST_BYTE
           BC_PUSH_NIL
           BC_NIL_P
           BC_I0_P
-          BC_NIL_P_RET_LOCAL_N_POP
+          BC_NIL_P_RET_LN_POP
           BC_CONS
           BC_CAR
           BC_CDR
@@ -2880,4 +2878,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       867))
+                       855))
