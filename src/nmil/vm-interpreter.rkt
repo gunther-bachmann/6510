@@ -195,18 +195,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          WRITE_TO_LOCAL_1
          WRITE_TO_LOCAL_2
          WRITE_TO_LOCAL_3
-         PUSH_LOCAL_0
-         PUSH_LOCAL_1
-         PUSH_LOCAL_2
-         PUSH_LOCAL_3
-         PUSH_LOCAL_0_CAR
-         PUSH_LOCAL_1_CAR
-         PUSH_LOCAL_2_CAR
-         PUSH_LOCAL_3_CAR
-         PUSH_LOCAL_0_CDR
-         PUSH_LOCAL_1_CDR
-         PUSH_LOCAL_2_CDR
-         PUSH_LOCAL_3_CDR
+         PUSH_L0
+         PUSH_L1
+         PUSH_L2
+         PUSH_L3
+         PUSH_L0_CAR
+         PUSH_L1_CAR
+         PUSH_L2_CAR
+         PUSH_L3_CAR
+         PUSH_L0_CDR
+         PUSH_L1_CDR
+         PUSH_L2_CDR
+         PUSH_L3_CDR
          WRITE_FROM_LOCAL_0
          WRITE_FROM_LOCAL_1
          WRITE_FROM_LOCAL_2
@@ -358,7 +358,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (byte 2)            ;; number of locals
              (bc POP_TO_LOCAL_1)
              (bc POP_TO_LOCAL_0)
-             (bc PUSH_LOCAL_1)
+             (bc PUSH_L1)
              (bc NIL?_RET_LOCAL_0_POP_1)     ;; return local 0 (int 1) if nil
              (bc BRK))
      ))
@@ -400,7 +400,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (label TEST_FUN)
              (byte 1)            ;; number of locals
              (bc POP_TO_LOCAL_0)
-             (bc PUSH_LOCAL_0)
+             (bc PUSH_L0)
              (bc NIL?_RET_LOCAL_0_POP_1)    ;; return param0 if nil
              (bc POP_TO_LOCAL_0)
              (bc PUSH_NIL)       ;; value to use with tail call
@@ -457,8 +457,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc WRITE_TO_LOCAL_1)      ;; a-list (#refs increase)
              (bc NIL?_RET_LOCAL_0_POP_1);; return b-list if a-list is nil (if popping, #refs decrease)
              (bc CDR)                   ;; shrinking original list (ref to cdr cell increases, ref of original cell decreases, order!)
-             (bc PUSH_LOCAL_0)          ;; (ref to local0 cell increases)
-             (bc PUSH_LOCAL_1_CAR)      ;; (ref to local1 cell increases)
+             (bc PUSH_L0)          ;; (ref to local0 cell increases)
+             (bc PUSH_L1_CAR)      ;; (ref to local1 cell increases)
              (bc CONS)                  ;; growing reverse list (ref to this cell set to 1), refs to cells consed, stay the same)
              (bc TAIL_CALL)
              (bc BRK))                  ;; just in case to make debugger stop/exit
@@ -770,15 +770,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 
 
-(define PUSH_LOCAL_0_CAR #xa0)
-(define PUSH_LOCAL_1_CAR #xa2)
-(define PUSH_LOCAL_2_CAR #xa4)
-(define PUSH_LOCAL_3_CAR #xa6)
+(define PUSH_L0_CAR #xa0)
+(define PUSH_L1_CAR #xa2)
+(define PUSH_L2_CAR #xa4)
+(define PUSH_L3_CAR #xa6)
 
-(define PUSH_LOCAL_0_CDR #xa1)
-(define PUSH_LOCAL_1_CDR #xa3)
-(define PUSH_LOCAL_2_CDR #xa5)
-(define PUSH_LOCAL_3_CDR #xa7)
+(define PUSH_L0_CDR #xa1)
+(define PUSH_L1_CDR #xa3)
+(define PUSH_L2_CDR #xa5)
+(define PUSH_L3_CDR #xa7)
 
 (define BC_PUSH_LOCAL_CXR
   (flatten
@@ -812,6 +812,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)
 )))
 
+(define PUSH_L0 #x80)
+(define PUSH_L1 #x82)
+(define PUSH_L2 #x84)
+(define PUSH_L3 #x86)
+
+(define WRITE_FROM_LOCAL_0 #x81)
+(define WRITE_FROM_LOCAL_1 #x83)
+(define WRITE_FROM_LOCAL_2 #x85)
+(define WRITE_FROM_LOCAL_3 #x87)
+
 (define BC_PUSH_LOCAL_SHORT
   (flatten
    (list
@@ -843,16 +853,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
            )))
-
-(define PUSH_LOCAL_0 #x80)
-(define PUSH_LOCAL_1 #x82)
-(define PUSH_LOCAL_2 #x84)
-(define PUSH_LOCAL_3 #x86)
-
-(define WRITE_FROM_LOCAL_0 #x81)
-(define WRITE_FROM_LOCAL_1 #x83)
-(define WRITE_FROM_LOCAL_2 #x85)
-(define WRITE_FROM_LOCAL_3 #x87)
 
 (define BC_POP_TO_LOCAL_SHORT
   (flatten
@@ -1005,7 +1005,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_I1)     ;; value to return
       (bc POP_TO_LOCAL_0) ;;
       (bc PUSH_I0)
-      (bc PUSH_LOCAL_0)
+      (bc PUSH_L0)
       (bc BRK))))
 
   (check-equal? (vm-stack->strings test-bc-push-l-state)
@@ -1040,7 +1040,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc POP_TO_LOCAL_0)
       (bc POP_TO_LOCAL_1)
       (bc PUSH_I1)   
-      (bc PUSH_LOCAL_0)
+      (bc PUSH_L0)
       (bc BRK))))
 
   (check-equal? (vm-stack->strings test-bc-push-p-state)
@@ -1076,7 +1076,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc POP_TO_LOCAL_1)
       (bc PUSH_I1)     ;; value to return
       (bc POP_TO_LOCAL_0) ;; overwrites -1
-      (bc PUSH_LOCAL_0)
+      (bc PUSH_L0)
       (bc BRK))))
 
   (check-equal? (vm-stack->strings test-bc-pop-push-to-p-state)

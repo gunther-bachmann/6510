@@ -70,18 +70,18 @@
                   WRITE_TO_LOCAL_1
                   WRITE_TO_LOCAL_2
                   WRITE_TO_LOCAL_3
-                  PUSH_LOCAL_0
-                  PUSH_LOCAL_1
-                  PUSH_LOCAL_2
-                  PUSH_LOCAL_3
-                  PUSH_LOCAL_0_CAR
-                  PUSH_LOCAL_1_CAR
-                  PUSH_LOCAL_2_CAR
-                  PUSH_LOCAL_3_CAR
-                  PUSH_LOCAL_0_CDR
-                  PUSH_LOCAL_1_CDR
-                  PUSH_LOCAL_2_CDR
-                  PUSH_LOCAL_3_CDR
+                  PUSH_L0
+                  PUSH_L1
+                  PUSH_L2
+                  PUSH_L3
+                  PUSH_L0_CAR
+                  PUSH_L1_CAR
+                  PUSH_L2_CAR
+                  PUSH_L3_CAR
+                  PUSH_L0_CDR
+                  PUSH_L1_CDR
+                  PUSH_L2_CDR
+                  PUSH_L3_CDR
                   PUSH_I0
                   PUSH_I1
                   PUSH_I2
@@ -144,9 +144,9 @@
           (bc ALLOC_A)
           (bc WRITE_TO_LOCAL_0)
           (bc SET_ARRAY_FIELD_0)
-          (bc PUSH_LOCAL_0)
+          (bc PUSH_L0)
           (bc SET_ARRAY_FIELD_1)
-          (bc PUSH_LOCAL_0)
+          (bc PUSH_L0)
           (bc RET)))
 
 (module+ test #| fifo create |#
@@ -180,7 +180,7 @@
           (bc GET_ARRAY_FIELD_0)
           (bc SWAP)
           (bc CONS)
-          (bc PUSH_LOCAL_0)
+          (bc PUSH_L0)
           (bc SET_ARRAY_FIELD_0)          
           (bc RET)))
 
@@ -250,7 +250,7 @@
             (bc F_P_BRA) (bc-rel-ref OUT_IS_NOT_EMPTY)
   
             (bc PUSH_NIL)                   ;; result for reverse
-            (bc PUSH_LOCAL_0)
+            (bc PUSH_L0)
             (bc GET_ARRAY_FIELD_0)
             ;; exception if result is NIL!
   
@@ -258,14 +258,14 @@
             (bc POP_TO_LOCAL_1) 
             ;; set 'in' to be empty
             (bc PUSH_NIL)
-            (bc PUSH_LOCAL_0)
+            (bc PUSH_L0)
             (bc SET_ARRAY_FIELD_0)
   
      (label OUT_IS_NOT_EMPTY)
-            (bc PUSH_LOCAL_1_CDR)
-            (bc PUSH_LOCAL_0)
+            (bc PUSH_L1_CDR)
+            (bc PUSH_L0)
             (bc SET_ARRAY_FIELD_1)
-            (bc PUSH_LOCAL_1_CAR)
+            (bc PUSH_L1_CAR)
             (bc RET)))))
 
 (module+ test #| dequeue |#

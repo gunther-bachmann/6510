@@ -36,7 +36,7 @@ resolve unresolved reference in byte code ast
                     BNOP
                     WRITE_TO_LOCAL_0
                     T_P_BRA
-                    PUSH_LOCAL_0
+                    PUSH_L0
                     CALL
                     GOTO)))
 
@@ -153,7 +153,7 @@ resolve unresolved reference in byte code ast
              (bc WRITE_TO_LOCAL_0)
              (bc CALL) (word-ref BTREE_NODE_P)
              (bc T_P_BRA) (bc-rel-ref IS_PAIR__BTREE_VALIDATE);; (byte 7) ;; jump to is-pair
-             (bc PUSH_LOCAL_0)
+             (bc PUSH_L0)
              (bc CALL) (word-ref BTREE_VALUE_P)
              (bc T_P_BRA) (byte 20) ;; jump to is-value
              (byte 2)               ;; BRK error, passed parameter is neither value nor node!

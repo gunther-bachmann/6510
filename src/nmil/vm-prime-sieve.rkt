@@ -110,18 +110,18 @@ primes (ignore 0,1) up to 30
                   WRITE_TO_LOCAL_1
                   WRITE_TO_LOCAL_2
                   WRITE_TO_LOCAL_3
-                  PUSH_LOCAL_0
-                  PUSH_LOCAL_1
-                  PUSH_LOCAL_2
-                  PUSH_LOCAL_3
-                  PUSH_LOCAL_0_CAR
-                  PUSH_LOCAL_1_CAR
-                  PUSH_LOCAL_2_CAR
-                  PUSH_LOCAL_3_CAR
-                  PUSH_LOCAL_0_CDR
-                  PUSH_LOCAL_1_CDR
-                  PUSH_LOCAL_2_CDR
-                  PUSH_LOCAL_3_CDR
+                  PUSH_L0
+                  PUSH_L1
+                  PUSH_L2
+                  PUSH_L3
+                  PUSH_L0_CAR
+                  PUSH_L1_CAR
+                  PUSH_L2_CAR
+                  PUSH_L3_CAR
+                  PUSH_L0_CDR
+                  PUSH_L1_CDR
+                  PUSH_L2_CDR
+                  PUSH_L3_CDR
                   PUSH_I0
                   PUSH_I1
                   PUSH_I2

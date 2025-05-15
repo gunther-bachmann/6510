@@ -849,7 +849,7 @@ idea REFCOUNT​_INCR is needed only on RT
 ** IDEA use locals as array registers (alternative to dedicated array registers)
 - instead of
   #+begin_src scheme
-    (bc PUSH_LOCAL_x)           ;; extra push of array reference on stack
+    (bc PUSH_Lx)           ;; extra push of array reference on stack
     (bc GET_ARRAY_FIELD_y)      ;; removes array reference from stack, pushing the field value of the array
   #+end_src
 - keep array in local (no special ref couting compared to regular locals)
@@ -877,7 +877,7 @@ idea REFCOUNT​_INCR is needed only on RT
 ** OBSOLETE IDEA more compact bytecode for array access (using array registers)
 - instead of
   #+begin_src scheme
-    (bc PUSH_LOCAL_x)           ;; extra push of array reference on stack
+    (bc PUSH_Lx)           ;; extra push of array reference on stack
     (bc GET_ARRAY_FIELD_y)      ;; removes array reference from stack, pushing the field value of the array
   #+end_src
 - keep array e.g. in R0 (arrays in registers are refcounted once, and discarded explicitly)
