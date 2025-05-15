@@ -46,8 +46,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   PUSH_NIL                 1  09                             push nil onto eval-stack
   RET                      1  33                             return from function
   TAIL_CALL                1  35                             tail call same function
-  WRITE_FROM_LOCAL_n       1  81+  n=0..3                     write local#n into tos (overwriting old tos)
-  WRITE_TO_LOCAL_n         1  91+  n=0..3                     write tos into local#n (without popping)
+  WRITE_Ln       1  81+  n=0..3                     write local#n into tos (overwriting old tos)
+  WRITE_TO_Ln         1  91+  n=0..3                     write tos into local#n (without popping)
 
 
   (not implemented yet)
@@ -191,10 +191,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          POP_TO_LOCAL_1
          POP_TO_LOCAL_2
          POP_TO_LOCAL_3
-         WRITE_TO_LOCAL_0
-         WRITE_TO_LOCAL_1
-         WRITE_TO_LOCAL_2
-         WRITE_TO_LOCAL_3
+         WRITE_TO_L0
+         WRITE_TO_L1
+         WRITE_TO_L2
+         WRITE_TO_L3
          PUSH_L0
          PUSH_L1
          PUSH_L2
@@ -207,10 +207,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_L1_CDR
          PUSH_L2_CDR
          PUSH_L3_CDR
-         WRITE_FROM_LOCAL_0
-         WRITE_FROM_LOCAL_1
-         WRITE_FROM_LOCAL_2
-         WRITE_FROM_LOCAL_3
+         WRITE_L0
+         WRITE_L1
+         WRITE_L2
+         WRITE_L3
          NATIVE)
 
 (define (bc code)
@@ -454,7 +454,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (label TEST_FUN)
              (byte 2)                   ;; number of locals
              (bc POP_TO_LOCAL_0)        ;; b-list (#refs stay)
-             (bc WRITE_TO_LOCAL_1)      ;; a-list (#refs increase)
+             (bc WRITE_TO_L1)      ;; a-list (#refs increase)
              (bc NIL?_RET_LOCAL_0_POP_1);; return b-list if a-list is nil (if popping, #refs decrease)
              (bc CDR)                   ;; shrinking original list (ref to cdr cell increases, ref of original cell decreases, order!)
              (bc PUSH_L0)          ;; (ref to local0 cell increases)
@@ -817,10 +817,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define PUSH_L2 #x84)
 (define PUSH_L3 #x86)
 
-(define WRITE_FROM_LOCAL_0 #x81)
-(define WRITE_FROM_LOCAL_1 #x83)
-(define WRITE_FROM_LOCAL_2 #x85)
-(define WRITE_FROM_LOCAL_3 #x87)
+(define WRITE_L0 #x81)
+(define WRITE_L1 #x83)
+(define WRITE_L2 #x85)
+(define WRITE_L3 #x87)
 
 (define BC_PUSH_LOCAL_SHORT
   (flatten
@@ -910,10 +910,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define POP_TO_LOCAL_2 #x94)
 (define POP_TO_LOCAL_3 #x96)
 
-(define WRITE_TO_LOCAL_0 #x91)
-(define WRITE_TO_LOCAL_1 #x93)
-(define WRITE_TO_LOCAL_2 #x95)
-(define WRITE_TO_LOCAL_3 #x97)
+(define WRITE_TO_L0 #x91)
+(define WRITE_TO_L1 #x93)
+(define WRITE_TO_L2 #x95)
+(define WRITE_TO_L3 #x97)
 
 (module+ test #| BC_PUSH_LOCAL_SHORT |#
   (define test-bc-pop-to-l-state

@@ -4486,7 +4486,7 @@ did some experiments on branch ~optimize_rev_app_w_extra_bc~
 - incrementing ref count and then doing a destructive NIL? etc. is not necessary either
   example:
   #+begin_src scheme
-    (bc WRITE_TO_LOCAL_1)   ;; increment ref count
+    (bc WRITE_TO_L1)   ;; increment ref count
     (bc NIL?)               ;; replace tos with boolean result => decrement ref count
   #+end_src
 - further analyse locals usage and how to reduce number of refcount changes in functions

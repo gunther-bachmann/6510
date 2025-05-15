@@ -106,10 +106,10 @@ primes (ignore 0,1) up to 30
                   POP_TO_LOCAL_1
                   POP_TO_LOCAL_2
                   POP_TO_LOCAL_3
-                  WRITE_TO_LOCAL_0
-                  WRITE_TO_LOCAL_1
-                  WRITE_TO_LOCAL_2
-                  WRITE_TO_LOCAL_3
+                  WRITE_TO_L0
+                  WRITE_TO_L1
+                  WRITE_TO_L2
+                  WRITE_TO_L3
                   PUSH_L0
                   PUSH_L1
                   PUSH_L2
@@ -126,10 +126,10 @@ primes (ignore 0,1) up to 30
                   PUSH_I1
                   PUSH_I2
                   PUSH_IM1
-                  WRITE_FROM_LOCAL_0
-                  WRITE_FROM_LOCAL_1
-                  WRITE_FROM_LOCAL_2
-                  WRITE_FROM_LOCAL_3])
+                  WRITE_L0
+                  WRITE_L1
+                  WRITE_L2
+                  WRITE_L3])
 (require (only-in "./vm-memory-manager.rkt" ZP_VM_PC shorten-cell-strings shorten-cell-string))
 
 (require "../6510.rkt")

@@ -34,7 +34,7 @@ resolve unresolved reference in byte code ast
   (require (only-in "./vm-interpreter.rkt"
                     bc
                     BNOP
-                    WRITE_TO_LOCAL_0
+                    WRITE_TO_L0
                     T_P_BRA
                     PUSH_L0
                     CALL
@@ -150,7 +150,7 @@ resolve unresolved reference in byte code ast
      (list
       (label BTREE_VALIDATE)
              (byte 2) ;; locals (0 = node, 1 = car/cdr
-             (bc WRITE_TO_LOCAL_0)
+             (bc WRITE_TO_L0)
              (bc CALL) (word-ref BTREE_NODE_P)
              (bc T_P_BRA) (bc-rel-ref IS_PAIR__BTREE_VALIDATE);; (byte 7) ;; jump to is-pair
              (bc PUSH_L0)
