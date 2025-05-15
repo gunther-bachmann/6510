@@ -474,7 +474,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     4"
                          "next free slot: $49"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4996)
+                4765)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -2978,4 +2978,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       855))
+                       901))

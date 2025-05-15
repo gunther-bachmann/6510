@@ -561,9 +561,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
           ;; restore topmark of new and current locals page
           (LDA !$00)
-          (STA ZP_RA)
+          (STA ZP_TEMP)
           (LDA ZP_LOCALS_LB_PTR+1)
-          (STA ZP_RA+1)
+          (STA ZP_TEMP+1)
           (LDY !$02)
           (LDA (ZP_TEMP),y) ;; old top mark of this page,
           (STA ZP_LOCALS_TOP_MARK)
