@@ -31,13 +31,13 @@
                   CONS_PAIR_P
                   T_P_RET
                   F_P_RET
-                  NIL?_RET_LOCAL_0_POP_1
+                  NIL_P_RET_L0_POP_1
                   INT_P
                   SWAP
-                  POP_TO_LOCAL_0
-                  POP_TO_LOCAL_1
-                  POP_TO_LOCAL_2
-                  POP_TO_LOCAL_3
+                  POP_TO_L0
+                  POP_TO_L1
+                  POP_TO_L2
+                  POP_TO_L3
                   WRITE_TO_L0
                   WRITE_TO_L1
                   WRITE_TO_L2
@@ -111,7 +111,7 @@
   (list
    (label BC_ADD_NATIVE)
           (byte 1) ;; locals
-          (bc POP_TO_LOCAL_0)
+          (bc POP_TO_L0)
           (bc NATIVE)
 
           (CLC)
@@ -147,7 +147,7 @@
   (list
    (label BC_ADD_NATIVE_2)
           (byte 1) ;; locals
-          (bc POP_TO_LOCAL_0)
+          (bc POP_TO_L0)
           (bc NATIVE) ;; jump off to native code
 
           (CLC)

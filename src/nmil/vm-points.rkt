@@ -55,13 +55,13 @@
                   CONS_PAIR_P
                   T_P_RET
                   F_P_RET
-                  NIL?_RET_LOCAL_0_POP_1
+                  NIL_P_RET_L0_POP_1
                   INT_P
                   SWAP
-                  POP_TO_LOCAL_0
-                  POP_TO_LOCAL_1
-                  POP_TO_LOCAL_2
-                  POP_TO_LOCAL_3
+                  POP_TO_L0
+                  POP_TO_L1
+                  POP_TO_L2
+                  POP_TO_L3
                   WRITE_TO_L0
                   WRITE_TO_L1
                   WRITE_TO_L2

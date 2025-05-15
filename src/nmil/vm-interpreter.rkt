@@ -35,9 +35,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   INT_MINUS                1  61                             pop two integers and push the subtraction of them
   INT_PLUS                 1  62                             pop two integers and push the sum of them
   NIL?                     1  21                             replace tos with 0 (false) or 1 (true) if tos was nil
-  NIL?_RET_LOCAL_0_POP_n   1  98+  n=1..4                     if tos is nil, pop n from eval-stack and return local0 as result (on tos)
+  NIL_P_RET_L0_POP_n   1  98+  n=1..4                     if tos is nil, pop n from eval-stack and return local0 as result (on tos)
   POP_TO_AF       1  16                             pop the cell at tos-2 into array (tos-1) at index (tos)
-  POP_TO_LOCAL_n           1  90+  n=0..3                     pop tos into local#n
+  POP_TO_Ln           1  90+  n=0..3                     pop tos into local#n
   PUSH_AF         1  15                             push field of the array (tos-1) at index (tos) onto eval-stack
   PUSH_B byte              2  17   byte=0..255 -128..+127     push a byte constant onto the eval-stack
   PUSH_I int               3  06   int=0..8191, -4096..4095   push integer constant onto eval-stack
@@ -181,16 +181,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          CONS_PAIR_P
          T_P_RET
          F_P_RET
-         NIL?_RET_LOCAL_0_POP_1
-         NIL?_RET_LOCAL_0_POP_2
-         NIL?_RET_LOCAL_0_POP_3
-         NIL?_RET_LOCAL_0_POP_4
+         NIL_P_RET_L0_POP_1
+         NIL_P_RET_L0_POP_2
+         NIL_P_RET_L0_POP_3
+         NIL_P_RET_L0_POP_4
          INT_P
          SWAP
-         POP_TO_LOCAL_0
-         POP_TO_LOCAL_1
-         POP_TO_LOCAL_2
-         POP_TO_LOCAL_3
+         POP_TO_L0
+         POP_TO_L1
+         POP_TO_L2
+         POP_TO_L3
          WRITE_TO_L0
          WRITE_TO_L1
          WRITE_TO_L2
@@ -236,6 +236,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_VM_PC+1)          
           (STA ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $8000 
           (RTS)))
+
+(define NIL_P_RET_L0_POP_1 #x98)
+(define NIL_P_RET_L0_POP_2 #x9a)
+(define NIL_P_RET_L0_POP_3 #x9c)
+(define NIL_P_RET_L0_POP_4 #x9e)
+;; (define ZERO?_RET_LOCAL0_POP_1 #x99)
+;; (define ZERO?_RET_LOCAL0_POP_2 #x9b)
+;; (define ZERO?_RET_LOCAL0_POP_3 #x9d)
+;; (define ZERO?_RET_LOCAL0_POP_4 #x9f)
 
 (define BC_NIL_P_RET_LOCAL_N_POP
   (list
@@ -308,15 +317,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label ERROR_EMPTY_STACK__BC_NIL_P_RET_LOCAL_N_POP)
           (BRK)))
 
-(define NIL?_RET_LOCAL_0_POP_1 #x98)
-(define NIL?_RET_LOCAL_0_POP_2 #x9a)
-(define NIL?_RET_LOCAL_0_POP_3 #x9c)
-(define NIL?_RET_LOCAL_0_POP_4 #x9e)
-;; (define ZERO?_RET_LOCAL0_POP_1 #x99)
-;; (define ZERO?_RET_LOCAL0_POP_2 #x9b)
-;; (define ZERO?_RET_LOCAL0_POP_3 #x9d)
-;; (define ZERO?_RET_LOCAL0_POP_4 #x9f)
-
 (module+ test #| bc-nil-ret |#
   (define bc-nil-ret-state
     (run-bc-wrapped-in-test
@@ -329,8 +329,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (org #x8F00)
       (label TEST_FUN)
              (byte 1)                     ;; number of locals
-             (bc POP_TO_LOCAL_0)          ;; pop tos into local 0 (now int 1)
-             (bc NIL?_RET_LOCAL_0_POP_1)  ;; return local 0  if tos = nil (which it is)
+             (bc POP_TO_L0)          ;; pop tos into local 0 (now int 1)
+             (bc NIL_P_RET_L0_POP_1)  ;; return local 0  if tos = nil (which it is)
              (bc BRK))
      ))
 
@@ -356,10 +356,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (org #x8F00)
       (label TEST_FUN)    
              (byte 2)            ;; number of locals
-             (bc POP_TO_LOCAL_1)
-             (bc POP_TO_LOCAL_0)
+             (bc POP_TO_L1)
+             (bc POP_TO_L0)
              (bc PUSH_L1)
-             (bc NIL?_RET_LOCAL_0_POP_1)     ;; return local 0 (int 1) if nil
+             (bc NIL_P_RET_L0_POP_1)     ;; return local 0 (int 1) if nil
              (bc BRK))
      ))
 
@@ -399,10 +399,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (org #x8F00)
       (label TEST_FUN)
              (byte 1)            ;; number of locals
-             (bc POP_TO_LOCAL_0)
+             (bc POP_TO_L0)
              (bc PUSH_L0)
-             (bc NIL?_RET_LOCAL_0_POP_1)    ;; return param0 if nil
-             (bc POP_TO_LOCAL_0)
+             (bc NIL_P_RET_L0_POP_1)    ;; return param0 if nil
+             (bc POP_TO_L0)
              (bc PUSH_NIL)       ;; value to use with tail call
              (bc TAIL_CALL)
              (bc BRK))))
@@ -453,9 +453,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (org #x8F00)
       (label TEST_FUN)
              (byte 2)                   ;; number of locals
-             (bc POP_TO_LOCAL_0)        ;; b-list (#refs stay)
+             (bc POP_TO_L0)        ;; b-list (#refs stay)
              (bc WRITE_TO_L1)      ;; a-list (#refs increase)
-             (bc NIL?_RET_LOCAL_0_POP_1);; return b-list if a-list is nil (if popping, #refs decrease)
+             (bc NIL_P_RET_L0_POP_1);; return b-list if a-list is nil (if popping, #refs decrease)
              (bc CDR)                   ;; shrinking original list (ref to cdr cell increases, ref of original cell decreases, order!)
              (bc PUSH_L0)          ;; (ref to local0 cell increases)
              (bc PUSH_L1_CAR)      ;; (ref to local1 cell increases)
@@ -854,6 +854,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
            )))
 
+(define POP_TO_L0 #x90)
+(define POP_TO_L1 #x92)
+(define POP_TO_L2 #x94)
+(define POP_TO_L3 #x96)
+
+(define WRITE_TO_L0 #x91)
+(define WRITE_TO_L1 #x93)
+(define WRITE_TO_L2 #x95)
+(define WRITE_TO_L3 #x97)
+
 (define BC_POP_TO_LOCAL_SHORT
   (flatten
    (list
@@ -905,16 +915,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 )))
 
-(define POP_TO_LOCAL_0 #x90)
-(define POP_TO_LOCAL_1 #x92)
-(define POP_TO_LOCAL_2 #x94)
-(define POP_TO_LOCAL_3 #x96)
-
-(define WRITE_TO_L0 #x91)
-(define WRITE_TO_L1 #x93)
-(define WRITE_TO_L2 #x95)
-(define WRITE_TO_L3 #x97)
-
 (module+ test #| BC_PUSH_LOCAL_SHORT |#
   (define test-bc-pop-to-l-state
     (run-bc-wrapped-in-test
@@ -927,7 +927,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (label TEST_FUN)
              (byte 2)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
-             (bc POP_TO_LOCAL_0) ;;
+             (bc POP_TO_L0) ;;
              (bc BRK))))
 
   (check-equal? (vm-stack->strings test-bc-pop-to-l-state)
@@ -962,10 +962,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (org #x8F00)
       (label TEST_FUN)      
       (byte 2)            ;; number of locals
-      (bc POP_TO_LOCAL_0)
-      (bc POP_TO_LOCAL_1)
+      (bc POP_TO_L0)
+      (bc POP_TO_L1)
       (bc PUSH_I1)     ;; value to return
-      (bc POP_TO_LOCAL_0) ;; overwrites -1
+      (bc POP_TO_L0) ;; overwrites -1
       (bc BRK))
      ))
 
@@ -1003,7 +1003,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (label TEST_FUN)
       (byte 1)            ;; number of locals
       (bc PUSH_I1)     ;; value to return
-      (bc POP_TO_LOCAL_0) ;;
+      (bc POP_TO_L0) ;;
       (bc PUSH_I0)
       (bc PUSH_L0)
       (bc BRK))))
@@ -1037,8 +1037,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (org #x8F00)
       (label TEST_FUN)      
       (byte 2)            ;; number of locals
-      (bc POP_TO_LOCAL_0)
-      (bc POP_TO_LOCAL_1)
+      (bc POP_TO_L0)
+      (bc POP_TO_L1)
       (bc PUSH_I1)   
       (bc PUSH_L0)
       (bc BRK))))
@@ -1072,10 +1072,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (org #x8F00)
       (label TEST_FUN)      
       (byte 2)            ;; number of locals
-      (bc POP_TO_LOCAL_0)
-      (bc POP_TO_LOCAL_1)
+      (bc POP_TO_L0)
+      (bc POP_TO_L1)
       (bc PUSH_I1)     ;; value to return
-      (bc POP_TO_LOCAL_0) ;; overwrites -1
+      (bc POP_TO_L0) ;; overwrites -1
       (bc PUSH_L0)
       (bc BRK))))
 
@@ -2649,23 +2649,23 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_SWAP)                     ;; 06  <-  03 
            (word-ref BC_EXT1_CMD)                 ;; 08  <-  04 
            (word-ref BC_PUSH_CONST_BYTE)          ;; 0a  <-  05 
-           (word-ref BC_PUSH_I)           ;; 0c  <-  06
+           (word-ref BC_PUSH_I)                   ;; 0c  <-  06
            (word-ref BC_INT_P)                    ;; 0e  <-  07 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 10  <-  88..8F reserved
-           (word-ref BC_PUSH_NIL)           ;; 12  <-  09 
+           (word-ref BC_PUSH_NIL)                 ;; 12  <-  09
            (word-ref BC_CONS_PAIR_P)              ;; 14  <-  0a 
-           (word-ref BC_T_P_RET)               ;; 16  <-  0b 
-           (word-ref BC_T_P_BRA)            ;; 18  <-  0c
-           (word-ref BC_F_P_BRA)           ;; 1a  <-  0d 
-           (word-ref BC_F_P_RET)              ;; 1c  <-  0e 
+           (word-ref BC_T_P_RET)                  ;; 16  <-  0b
+           (word-ref BC_T_P_BRA)                  ;; 18  <-  0c
+           (word-ref BC_F_P_BRA)                  ;; 1a  <-  0d
+           (word-ref BC_F_P_RET)                  ;; 1c  <-  0e
            (word-ref BC_DUP)                      ;; 1e  <-  0f 
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref BC_POP)                      ;; 22  <-  11
            (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
-           (word-ref BC_F_P_RET_F)        ;; 26  <-  13 
-           (word-ref BC_ALLOC_A)              ;; 28  <-  14
-           (word-ref BC_PUSH_AF)         ;; 2a  <-  15
-           (word-ref BC_POP_TO_AF)       ;; 2c  <-  16
+           (word-ref BC_F_P_RET_F)                ;; 26  <-  13
+           (word-ref BC_ALLOC_A)                  ;; 28  <-  14
+           (word-ref BC_PUSH_AF)                  ;; 2a  <-  15
+           (word-ref BC_POP_TO_AF)                ;; 2c  <-  16
            (word-ref BC_PUSH_B)                   ;; 2e  <-  17
            (word-ref BC_NIL_P_RET_LOCAL_N_POP)    ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
