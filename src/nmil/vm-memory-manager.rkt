@@ -377,6 +377,7 @@ call frame primitives etc.
 
 ;; make constants available in racket (to allow for usage e.g. in test code)
 (define ZP_RT                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
+(define ZP_RP                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RP"))
 (define ZP_RA                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
 (define ZP_RB                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RB"))
 (define ZP_RC                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RC"))
@@ -706,9 +707,9 @@ call frame primitives etc.
 ;; output: Rx = cell-int
 (define WRITE_INT_AY_TO_Rx
   (list
-   (label WRITE_INTm1_TO_RA)
-          (LDX !$02) ;; index 2 => RA
-          (BNE WRITE_INTm1_TO_Rx)
+   ;; (label WRITE_INTm1_TO_RA)
+   ;;        (LDX !$02) ;; index 2 => RA
+   ;;        (BNE WRITE_INTm1_TO_Rx)
    (label WRITE_INTm1_TO_RT)
           (LDX !$00) ;; index 0 => RT
    (label WRITE_INTm1_TO_Rx)
@@ -717,27 +718,27 @@ call frame primitives etc.
           (BNE VM_WRITE_AY_TO_Rx)
 
 
-   (label WRITE_INT1_TO_RA)
-          (LDX !$02) ;; index 2 => RA
-          (BNE WRITE_INT1_TO_Rx)
+   ;; (label WRITE_INT1_TO_RA)
+   ;;        (LDX !$02) ;; index 2 => RA
+   ;;        (BNE WRITE_INT1_TO_Rx)
    (label WRITE_INT1_TO_RT)
           (LDX !$00) ;; index 0 => RT
    (label WRITE_INT1_TO_Rx)
           (LDA !$01)
           (BNE WRITE_INT_A_TO_Rx)
 
-   (label WRITE_INT0_TO_RA)
-          (LDX !$02) ;; index 2 => RA
-          (BNE WRITE_INT0_TO_Rx)
+   ;; (label WRITE_INT0_TO_RA)
+   ;;        (LDX !$02) ;; index 2 => RA
+   ;;        (BNE WRITE_INT0_TO_Rx)
    (label WRITE_INT0_TO_RT)
           (LDX !$00) ;; index 0 => RT
    (label WRITE_INT0_TO_Rx)
           (LDA !$00)
           (BEQ WRITE_INT_A_TO_Rx)
 
-   (label WRITE_INT_A_TO_RA)
-          (LDX !$02) ;; index 2 => RA
-          (BNE WRITE_INT_A_TO_Rx)
+   ;; (label WRITE_INT_A_TO_RA)
+   ;;        (LDX !$02) ;; index 2 => RA
+   ;;        (BNE WRITE_INT_A_TO_Rx)
    (label WRITE_INT_A_TO_RT)
           (LDX !$00) ;; index 0 => RT
    (label WRITE_INT_A_TO_Rx)
@@ -747,9 +748,9 @@ call frame primitives etc.
           (STA ZP_RT+1,x)
           (RTS)
 
-   (label WRITE_INT_AY_TO_RA)
-          (LDX !$02) ;; index 2 => RA
-          (BNE WRITE_INT_AY_TO_Rx)
+   ;; (label WRITE_INT_AY_TO_RA)
+   ;;        (LDX !$02) ;; index 2 => RA
+   ;;        (BNE WRITE_INT_AY_TO_Rx)
    (label WRITE_INT_AY_TO_RT)
           (LDX !$00) ;; index 0 => RT
    (label WRITE_INT_AY_TO_Rx)
@@ -802,17 +803,18 @@ call frame primitives etc.
   (check-equal? (vm-regt->string vm-write-int-ay-to-rt-state)
                 "int $0201")
 
-  (define vm-write-int-ay-to-ra-code
-    (list
-     (LDA !$01)
-     (LDY !$02)
-     (JSR WRITE_INT_AY_TO_RA)))
+  ;; (define vm-write-int-ay-to-ra-code
+  ;;   (list
+  ;;    (LDA !$01)
+  ;;    (LDY !$02)
+  ;;    (JSR WRITE_INT_AY_TO_RA)))
 
-  (define vm-write-int-ay-to-ra-state
-    (run-code-in-test vm-write-int-ay-to-ra-code))
+  ;; (define vm-write-int-ay-to-ra-state
+  ;;   (run-code-in-test vm-write-int-ay-to-ra-code))
 
-  (check-equal? (vm-rega->string vm-write-int-ay-to-ra-state)
-                "int $0201"))
+  ;; (check-equal? (vm-rega->string vm-write-int-ay-to-ra-state)
+  ;;               "int $0201")
+  )
 
 ;; input:  RT
 ;;         RA must be cell-pair-ptr
@@ -1038,19 +1040,19 @@ call frame primitives etc.
           (STA ZP_RZ)
           (RTS)))
 
-(module+ test #| vm-cp-rt-to-ra |#
-  (define vm-cp-ra-to-rt-code
-    (list
-     (JSR WRITE_INT1_TO_RA)
-     (JSR CP_RA_TO_RT)))
+;; (module+ test #| vm-cp-rt-to-ra |#
+;;   (define vm-cp-ra-to-rt-code
+;;     (list
+;;      (JSR WRITE_INT1_TO_RA)
+;;      (JSR CP_RA_TO_RT)))
 
-  (define vm-cp-ra-to-rt-state
-    (run-code-in-test vm-cp-ra-to-rt-code))
+;;   (define vm-cp-ra-to-rt-state
+;;     (run-code-in-test vm-cp-ra-to-rt-code))
 
-  (check-equal? (vm-rega->string vm-cp-ra-to-rt-state)
-                "int $0001")
-  (check-equal? (vm-regt->string vm-cp-ra-to-rt-state)
-                "int $0001"))
+;;   (check-equal? (vm-rega->string vm-cp-ra-to-rt-state)
+;;                 "int $0001")
+;;   (check-equal? (vm-regt->string vm-cp-ra-to-rt-state)
+;;                 "int $0001"))
 
 ;; input:  RT
 ;; output: RA (copy of RT)
@@ -2278,13 +2280,13 @@ call frame primitives etc.
      (JSR FREE_PAGE_A )
      (JSR ALLOC_PAGE_TO_X) ;; allocated page should be $cc again
      (TXA)
-     (JSR WRITE_INT_A_TO_RA)))
+     (STA ZP_RP)))
 
   (define vm-free-page-state
     (run-code-in-test vm-free-page-code))
 
-  (check-equal? (vm-rega->string vm-free-page-state)
-                (format "int $00~a" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (peek vm-free-page-state ZP_RP)
+                 PAGE_AVAIL_0)
   (check-equal? (vm-regt->string vm-free-page-state)
                 (format "int $00~a" (format-hex-byte PAGE_AVAIL_1))))
 
