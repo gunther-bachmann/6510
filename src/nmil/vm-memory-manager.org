@@ -1,9 +1,9 @@
 #+title: vm-memory-manager
 * open tasks
-** IMPLEMENT reactivate tests involving RA functions now deactivated
 ** IMPLEMENT implement RP as (secondary) register for cell pairs
 - IDEA: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
-** TODO implement RTM as TOS-1 register on demand
+  not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
+** TODO implement RTM (or maybe RP) as TOS-1 register on demand
 - do this for operations in need of 2+ operands (which then discard the operands and just leave the result on the stack)
 - implement INT*, INT+, INT-, INT/ with this mechanism
 - e.g. POP_TOSM1_TO_RTM, WRITE_TOSM1_TO_RTM?, or WRITE_LOCAL_N_TO_RTM
@@ -1989,6 +1989,8 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
 ** DONE provide labels for interactive 6510 debugger  -> increase debugger usability (allow label usage in byte-code debugger and during dive!)
 - State "DONE"       from "TODO"       [2025-05-08 Thu 18:01]
 ** DONE make sure disassembler works for labels with lower case
+** DONE reactivate tests involving RA functions now deactivated
+- State "DONE"       from "IMPLEMENT"  [2025-05-16 Fri 17:20]
 * - :noexport:
 #+begin_src emacs-lisp
   ;; Local Variables:

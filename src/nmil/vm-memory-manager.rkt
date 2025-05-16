@@ -234,10 +234,8 @@ call frame primitives etc.
           ;; vm_cell_stack_push_rt_if_nonempty
           PUSH_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 
-          ;; WRITE_NIL_TO_RA
+          ;; WRITE_NIL_TO_RP
           ;; WRITE_NIL_TO_RT
-          WRITE_NIL_TO_Rx
-
           WRITE_CELLPAIR_RT_CELL1_TO_RT
           WRITE_CELLPAIR_RT_CELL0_TO_RT
           WRITE_CELLPAIR_RT_CELLy_TO_RT                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RT
@@ -638,46 +636,36 @@ call frame primitives etc.
 ;; input:  x  (00 = RT, 02 = RA)
 ;; output: Rx
 ;; NO PUSH IS DONE, Rx IS SIMPLY OVERWRITTEN!
-(define WRITE_NIL_TO_Rx
+(define WRITE_NIL_TO_RT
   (list
-   (label WRITE_NIL_TO_RA)
-          (LDX !$02) ;; index 2 => RA
-          (BNE WRITE_NIL_TO_Rx)
    (label WRITE_NIL_TO_RT)
-          (LDX !$00) ;; index 0 => RT
-   (label WRITE_NIL_TO_Rx)
           (LDA !<TAGGED_NIL)
-          (STA ZP_RT,x)
+          (STA ZP_RT)
           (LDA !>TAGGED_NIL)
-          (STA ZP_RT+1,x)
+          (STA ZP_RT+1)
+          (RTS)))
+
+(define WRITE_NIL_TO_RP
+  (list
+   (label WRITE_NIL_TO_RP)
+          (LDA !<TAGGED_NIL)
+          (STA ZP_RP)
+          (LDA !>TAGGED_NIL)
+          (STA ZP_RP+1)
           (RTS)))
 
 (module+ test #| WRITE_NIL_TO_Rx|#
-  (define write-nil-to-ra
+  (define write-nil-to-rp
     (compact-run-code-in-test
-     (LDX !$02)
-     (JSR WRITE_NIL_TO_Rx)))
+     (JSR WRITE_NIL_TO_RP)))
 
-  (check-true (vm-cell-at-nil? write-nil-to-ra ZP_RA))
-
-  (define write-nil-to-ra2
-    (compact-run-code-in-test
-     (JSR WRITE_NIL_TO_RA)))
-
-  (check-true (vm-cell-at-nil? write-nil-to-ra2 ZP_RA))
+  (check-true (vm-cell-at-nil? write-nil-to-rp ZP_RP))
 
   (define write-nil-to-rt
     (compact-run-code-in-test
-     (LDX !$00)
-     (JSR WRITE_NIL_TO_Rx)))
-
-  (check-true (vm-cell-at-nil? write-nil-to-rt ZP_RT))
-
-  (define write-nil-to-rt2
-    (compact-run-code-in-test
      (JSR WRITE_NIL_TO_RT)))
 
-  (check-true (vm-cell-at-nil? write-nil-to-rt2 ZP_RT)))
+  (check-true (vm-cell-at-nil? write-nil-to-rt ZP_RT)))
 
 ;; input: A = lowbyte of int (0..255), written into high byte of cell register RT
 ;;        Y = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register
@@ -3605,79 +3593,89 @@ call frame primitives etc.
   (check-equal? (vm-cell-pair-free-tree->string new-free-cell-pair-ptr-in-rt-2-state)
                 (format "pair $~a05 -> [ empty . empty ]" (format-hex-byte PAGE_AVAIL_0)))
 
-  ;; (define new-free-cell-pair-ptr-in-rt-3-state
-  ;;   (compact-run-code-in-test
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)
-  ;;    (JSR WRITE_INT1_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
-  ;;    (JSR WRITE_INT0_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
-  ;;    (JSR INC_REFCNT_RT)
-  ;;    (JSR CP_RT_TO_RA)
+  (define new-free-cell-pair-ptr-in-rt-3-state
+    (compact-run-code-in-test
+     (JSR ALLOC_CELLPAIR_TO_RT)
+     (JSR CP_RT_TO_RZ)
+     (JSR WRITE_INT1_TO_RT)
+     (JSR CP_RT_TO_RP)
+     (JSR CP_RZ_TO_RT)
+     (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)
+     (JSR WRITE_INT0_TO_RT)
+     (JSR CP_RT_TO_RP)
+     (JSR CP_RZ_TO_RT)
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
+     (JSR INC_REFCNT_RT)
+     (JSR CP_RT_TO_RP)
 
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
-  ;;    (JSR WRITE_NIL_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
+     (JSR ALLOC_CELLPAIR_TO_RT)
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
+     (JSR WRITE_NIL_TO_RP)
+     (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)
 
-  ;;    ;; rt = ( -+ . NIL )                cell-pair @ cc09
-  ;;    ;;         |
-  ;;    ;;         +--> ( int0 . int1 )     cell-pair @ cc05
+     ;; rt = ( -+ . NIL )                cell-pair @ cc09
+     ;;         |
+     ;;         +--> ( int0 . int1 )     cell-pair @ cc05
 
-  ;;    (JSR FREE_CELLPAIR_RT)))
+     (JSR FREE_CELLPAIR_RT)))
 
-  ;; (check-equal? (vm-page->strings new-free-cell-pair-ptr-in-rt-3-state PAGE_AVAIL_0)
-  ;;               (list "page-type:      cell-pair page"
-  ;;                     "previous page:  $00"
-  ;;                     "slots used:     2"
-  ;;                     "next free slot: $41")
-  ;;               "page has still 2 slot in use (it was freed, but is now in free list, not completely unallocated)")
-  ;; (check-equal? (vm-cell-pair-free-tree->string new-free-cell-pair-ptr-in-rt-3-state)
-  ;;               (format "pair $~a05 -> [ pair-ptr[-] $~a09 . int $0001 ]"
-  ;;                       (format-hex-byte PAGE_AVAIL_0)
-  ;;                       (format-hex-byte PAGE_AVAIL_0)))
-  ;; (check-equal? (vm-deref-cell-pair-w->string new-free-cell-pair-ptr-in-rt-3-state (+ PAGE_AVAIL_0_W #x09))
-  ;;               "(empty . pair-ptr NIL)")
+  (check-equal? (vm-page->strings new-free-cell-pair-ptr-in-rt-3-state PAGE_AVAIL_0)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41")
+                "page has still 2 slot in use (it was freed, but is now in free list, not completely unallocated)")
+  (check-equal? (vm-cell-pair-free-tree->string new-free-cell-pair-ptr-in-rt-3-state)
+                (format "pair $~a05 -> [ pair-ptr[-] $~a09 . int $0001 ]"
+                        (format-hex-byte PAGE_AVAIL_0)
+                        (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-deref-cell-pair-w->string new-free-cell-pair-ptr-in-rt-3-state (+ PAGE_AVAIL_0_W #x09))
+                "(empty . pair-ptr NIL)")
 
-  ;; (define new-free-cell-pair-ptr-in-rt-4-state
-  ;;   (compact-run-code-in-test
-  ;;    (JSR ALLOC_CELL_TO_RT)
-  ;;    (JSR INC_REFCNT_RT)
-  ;;    (JSR WRITE_INTm1_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
-  ;;    (JSR CP_RT_TO_RA)
+  (define new-free-cell-pair-ptr-in-rt-4-state
+    (compact-run-code-in-test
+     (JSR ALLOC_CELL_TO_RT)
+     (JSR INC_REFCNT_RT)
+     (JSR CP_RT_TO_RZ)
 
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
-  ;;    (JSR WRITE_INT1_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
+     (JSR WRITE_INTm1_TO_RT)
+     (JSR CP_RT_TO_RP)
+     (JSR CP_RZ_TO_RT)
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
+     (JSR CP_RT_TO_RP)
 
-  ;;    ;; rt = ( -+ . int1 )               cell-pair @ cb05
-  ;;    ;;         |
-  ;;    ;;         +--> ( int-1 )           cell      @ cc02
+     (JSR ALLOC_CELLPAIR_TO_RT)
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
+     (JSR CP_RT_TO_RZ)
+     (JSR WRITE_INT1_TO_RT)
+     (JSR CP_RT_TO_RP)
+     (JSR CP_RZ_TO_RT)
+     (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)
 
-  ;;    (JSR FREE_CELLPAIR_RT)))
+     ;; rt = ( -+ . int1 )               cell-pair @ cb05
+     ;;         |
+     ;;         +--> ( int-1 )           cell      @ cc02
 
-  ;; (check-equal? (vm-page->strings new-free-cell-pair-ptr-in-rt-4-state PAGE_AVAIL_0)
-  ;;               (list "page-type:      cell page"
-  ;;                     "previous page:  $00"
-  ;;                     "slots used:     1"
-  ;;                     "next free slot: $08")
-  ;;               "page has still 1 slot in use (it was freed, but is now in free list, not completely unallocated)")
-  ;; (check-equal? (vm-page->strings new-free-cell-pair-ptr-in-rt-4-state PAGE_AVAIL_1)
-  ;;               (list "page-type:      cell-pair page"
-  ;;                     "previous page:  $00"
-  ;;                     "slots used:     1"
-  ;;                     "next free slot: $09")
-  ;;               "page has still 1 slot in use (it was freed, but is now in free list, not completely unallocated)")
-  ;; (check-equal? (vm-cell-pair-free-tree->string new-free-cell-pair-ptr-in-rt-4-state)
-  ;;               (format "pair $~a05 -> [ empty . int $0001 ]" (format-hex-byte PAGE_AVAIL_1)))
-  ;; (check-equal? (vm-deref-cell-w->string new-free-cell-pair-ptr-in-rt-4-state GLOBAL_CELL_FREE_LIST)
-  ;;               (format "ptr[-] $~a02" (format-hex-byte PAGE_AVAIL_0)))
-  ;; (check-equal? (vm-deref-cell-w->string new-free-cell-pair-ptr-in-rt-4-state (+ PAGE_AVAIL_0 #x02))
-  ;;               "empty")
-  )
+     (JSR FREE_CELLPAIR_RT)))
 
+  (check-equal? (vm-page->strings new-free-cell-pair-ptr-in-rt-4-state PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $08")
+                "page has still 1 slot in use (it was freed, but is now in free list, not completely unallocated)")
+  (check-equal? (vm-page->strings new-free-cell-pair-ptr-in-rt-4-state PAGE_AVAIL_1)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $09")
+                "page has still 1 slot in use (it was freed, but is now in free list, not completely unallocated)")
+  (check-equal? (vm-cell-pair-free-tree->string new-free-cell-pair-ptr-in-rt-4-state)
+                (format "pair $~a05 -> [ empty . int $0001 ]" (format-hex-byte PAGE_AVAIL_1)))
+  (check-equal? (vm-deref-cell-w->string new-free-cell-pair-ptr-in-rt-4-state GLOBAL_CELL_FREE_LIST)
+                (format "ptr[-] $~a02" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-deref-cell-w->string new-free-cell-pair-ptr-in-rt-4-state (+ PAGE_AVAIL_0 #x02))
+                "empty"))
 
 ;; impl missing, test missing
 (define FREE_CELLARR_RZ
@@ -4128,36 +4126,36 @@ call frame primitives etc.
 )))
 
 (module+ test #| new_free_cell_rc |#
-  ;; (define new-free-cell-ptr-in-rc-tailcall-state
-  ;;   (compact-run-code-in-test                   ;; GLOBAL_CELL_FREE_LIST = 0000
-  ;;    (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 0 @ ..02]
-  ;;    (JSR INC_REFCNT_CELL_RT)
-  ;;    (JSR CP_RT_TO_RA)                          ;; RA -> [cell 0]
-  ;;    (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 1 @ ..08]
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)        ;; RT -> [cell 1] -> [cell 0]
+  (define new-free-cell-ptr-in-rc-tailcall-state
+    (compact-run-code-in-test                   ;; GLOBAL_CELL_FREE_LIST = 0000
+     (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 0 @ ..02]
+     (JSR INC_REFCNT_CELL_RT)
+     (JSR CP_RT_TO_RP)                          ;; RA -> [cell 0]
+     (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 1 @ ..08]
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)        ;; RT -> [cell 1] -> [cell 0]
 
-  ;;    (JSR FREE_CELL_RT)                     ;; GLOBAL_CELL_FREE_LIST -> [cell 0] -> [cell 1] -> 0000
-  ;;    ;; #:debug #t
-  ;;    ))                                         ;; PFL -> [cell 2 @ ..0a]
+     (JSR FREE_CELL_RT)                     ;; GLOBAL_CELL_FREE_LIST -> [cell 0] -> [cell 1] -> 0000
+     ;; #:debug #t
+     ))                                         ;; PFL -> [cell 2 @ ..0a]
 
-  ;; (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
-  ;;               (list #x02 PAGE_AVAIL_0)
-  ;;               (format "~a02 is new head of the free list" (number->string PAGE_AVAIL_0 16)))
-  ;; (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
-  ;;               (list #x08 PAGE_AVAIL_0)
-  ;;               (format "~a02, which was freed, is referencing ~a08 as next in the free list"
-  ;;                       (number->string PAGE_AVAIL_0 16)
-  ;;                       (number->string PAGE_AVAIL_0 16)))
-  ;; (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x09))
-  ;;               (list #x00 #x00)
-  ;;               (format "~a08, which was freed, is the tail of the free list"
-  ;;                       (number->string PAGE_AVAIL_0 16)))
-  ;; (check-equal? (vm-page->strings new-free-cell-ptr-in-rc-tailcall-state PAGE_AVAIL_0)
-  ;;               (list "page-type:      cell page"
-  ;;                     "previous page:  $00"
-  ;;                     "slots used:     2"
-  ;;                     "next free slot: $0a")
-  ;;               "two slots still allocated on page, they are however on the free list to be reused")
+  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
+                (list #x02 PAGE_AVAIL_0)
+                (format "~a02 is new head of the free list" (number->string PAGE_AVAIL_0 16)))
+  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+                (list #x08 PAGE_AVAIL_0)
+                (format "~a02, which was freed, is referencing ~a08 as next in the free list"
+                        (number->string PAGE_AVAIL_0 16)
+                        (number->string PAGE_AVAIL_0 16)))
+  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x09))
+                (list #x00 #x00)
+                (format "~a08, which was freed, is the tail of the free list"
+                        (number->string PAGE_AVAIL_0 16)))
+  (check-equal? (vm-page->strings new-free-cell-ptr-in-rc-tailcall-state PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "two slots still allocated on page, they are however on the free list to be reused")
 
   (define new-free-cell-ptr-in-rt-state
     (compact-run-code-in-test
@@ -4228,97 +4226,102 @@ call frame primitives etc.
                 "page has still 2 slot in use (it was freed, but is no in free list, not completely unallocated)"))
 
 (module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
-  ;; (define use-case-2-a-code
-  ;;   (list
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)                     ;; rt = freshly allocated cell (cc05)
-  ;;    (JSR INC_REFCNT_CELLPAIR_RT)               ;; ref(rt) ++ (=1)
-  ;;    ;; set cdr to nil
-  ;;    (JSR WRITE_NIL_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)                          ;; (cdr rt) := nil
-  ;;    ;; set car to int 0
-  ;;    (JSR WRITE_INT1_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)                          ;; (car rt) := int0
+  (define use-case-2-a-code
+    (list
+     (JSR ALLOC_CELLPAIR_TO_RT)                     ;; rt = freshly allocated cell (cc05)
+     (JSR INC_REFCNT_CELLPAIR_RT)               ;; ref(rt) ++ (=1)
+     ;; set cdr to nil
+     (JSR WRITE_NIL_TO_RP)
+     (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)                          ;; (cdr rt) := nil
+     ;; set car to int 0
+     (JSR CP_RT_TO_RZ)
+     (JSR WRITE_INT1_TO_RT)
+     (JSR CP_RT_TO_RP)
+     (JSR CP_RZ_TO_RT)
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)                          ;; (car rt) := int0
 
-  ;;    (JSR CP_RT_TO_RA)                                   ;; ra := rt
+     (JSR CP_RT_TO_RP)                                   ;; ra := rt
 
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)                     ;; rt = freshly allocated cell (cc09)
-  ;;    (JSR INC_REFCNT_CELLPAIR_RT)               ;; ref(rt) ++ (=1)
+     (JSR ALLOC_CELLPAIR_TO_RT)                     ;; rt = freshly allocated cell (cc09)
+     (JSR INC_REFCNT_CELLPAIR_RT)               ;; ref(rt) ++ (=1)
 
-  ;;    ;; set cdr
-  ;;    (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)                          ;; (cdr rt) := ra
-  ;;    ;; set car to int0
-  ;;    (JSR WRITE_INT0_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)                          ;; (car rt) := int0
+     ;; set cdr
+     (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)                          ;; (cdr rt) := ra
+     (JSR CP_RT_TO_RZ)
+     ;; set car to int0
+     (JSR WRITE_INT0_TO_RT)
+     (JSR CP_RT_TO_RP)
+     (JSR CP_RZ_TO_RT)
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)                          ;; (car rt) := int0
 
-  ;;    ;; now:
-  ;;    ;;   rt[cc09|1] (int0 . ->[cc05|1](int0 . nil))
-  ;;    ;; notation:
-  ;;    ;;   [<mem-location>|<ref-count>]
-  ;;    ;;   (<car-cell> . <cdr-cell>)
-  ;;    ;;   intX, nil :: atomic value cells
-  ;;    ;;   -> :: cell-ptr
-  ;;    ))
+     ;; now:
+     ;;   rt[cc09|1] (int0 . ->[cc05|1](int0 . nil))
+     ;; notation:
+     ;;   [<mem-location>|<ref-count>]
+     ;;   (<car-cell> . <cdr-cell>)
+     ;;   intX, nil :: atomic value cells
+     ;;   -> :: cell-ptr
+     ))
 
-  ;; (define use-case-2-a-state-after
-  ;;   (run-code-in-test use-case-2-a-code))
+  (define use-case-2-a-state-after
+    (run-code-in-test use-case-2-a-code))
 
-  ;; (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after (+ PAGE_AVAIL_0_W #x09))
-  ;;               (format "(int $0000 . pair-ptr[1] $~a05)" (format-hex-byte PAGE_AVAIL_0)))
-  ;; (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after (+ PAGE_AVAIL_0_W #x05))
-  ;;               "(int $0001 . pair-ptr NIL)")
-  ;; (check-equal? (vm-regt->string use-case-2-a-state-after)
-  ;;               (format "pair-ptr[1] $~a09" (format-hex-byte PAGE_AVAIL_0)))
-  ;; (check-equal? (vm-page->strings use-case-2-a-state-after PAGE_AVAIL_0)
-  ;;               (list "page-type:      cell-pair page"
-  ;;                     "previous page:  $00"
-  ;;                     "slots used:     2"
-  ;;                     "next free slot: $41"))
+  (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after (+ PAGE_AVAIL_0_W #x09))
+                (format "(int $0000 . pair-ptr[1] $~a05)" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-deref-cell-pair-w->string use-case-2-a-state-after (+ PAGE_AVAIL_0_W #x05))
+                "(int $0001 . pair-ptr NIL)")
+  (check-equal? (vm-regt->string use-case-2-a-state-after)
+                (format "pair-ptr[1] $~a09" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-page->strings use-case-2-a-state-after PAGE_AVAIL_0)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41"))
 
-  ;; (define use-case-2-b-code
-  ;;   (append use-case-2-a-code ;; zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
-  ;;           (list
-  ;;            (JSR DEC_REFCNT_CELLPAIR_RT)
-  ;;            ;; now:
-  ;;            ;;   free_tree -> [cc08|0] (int0 . ->[cc04|1] (int0 . nil))
-  ;;            )))
+  (define use-case-2-b-code
+    (append use-case-2-a-code ;; zp_ptr[cc08|1] (int0 . ->[cc04|1](int0 . nil))
+            (list
+             (JSR DEC_REFCNT_CELLPAIR_RT)
+             ;; now:
+             ;;   free_tree -> [cc08|0] (int0 . ->[cc04|1] (int0 . nil))
+             )))
 
-  ;; (define use-case-2-b-state-after
-  ;;   (run-code-in-test use-case-2-b-code))
+  (define use-case-2-b-state-after
+    (run-code-in-test use-case-2-b-code))
 
-  ;; (check-equal? (vm-cell-pair-free-tree->string use-case-2-b-state-after)
-  ;;               (format "pair $~a09 -> [ empty . pair-ptr[-] $~a05 ]"
-  ;;                       (format-hex-byte PAGE_AVAIL_0)
-  ;;                       (format-hex-byte PAGE_AVAIL_0)))
-  ;; (check-equal? (vm-page->strings use-case-2-b-state-after PAGE_AVAIL_0)
-  ;;               (list "page-type:      cell-pair page"
-  ;;                     "previous page:  $00"
-  ;;                     "slots used:     2"
-  ;;                     "next free slot: $41"))
+  (check-equal? (vm-cell-pair-free-tree->string use-case-2-b-state-after)
+                (format "pair $~a09 -> [ empty . pair-ptr[-] $~a05 ]"
+                        (format-hex-byte PAGE_AVAIL_0)
+                        (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-page->strings use-case-2-b-state-after PAGE_AVAIL_0)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41"))
 
-  ;; (define use-case-2-c-code
-  ;;   (append use-case-2-b-code ;; free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
-  ;;           (list (LDA !$FF) ;; marker for debug, remove when done
-  ;;                 (JSR ALLOC_CELLPAIR_TO_RT)
-  ;;                 (JSR INC_REFCNT_CELLPAIR_RT)
-  ;;                 ;; now:
-  ;;                 ;;   zp_rt = [cd08|1] not initialized
-  ;;                 ;;   free_tree -> [cd04|0] (int0 . nil)
-  ;;                 )))
+  (define use-case-2-c-code
+    (append use-case-2-b-code ;; free_tree -> [cd08|0] (int0 . ->[cd04|1] (int0 . nil))
+            (list (LDA !$FF) ;; marker for debug, remove when done
+                  (JSR ALLOC_CELLPAIR_TO_RT)
+                  (JSR INC_REFCNT_CELLPAIR_RT)
+                  ;; now:
+                  ;;   zp_rt = [cd08|1] not initialized
+                  ;;   free_tree -> [cd04|0] (int0 . nil)
+                  )))
 
-  ;; (define use-case-2-c-state-after
-  ;;   (run-code-in-test use-case-2-c-code))
+  (define use-case-2-c-state-after
+    (run-code-in-test use-case-2-c-code))
 
-  ;; (check-equal? (vm-regt->string use-case-2-c-state-after)
-  ;;               (format "pair-ptr[1] $~a09"
-  ;;                       (format-hex-byte PAGE_AVAIL_0)))
-  ;; (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
-  ;;               (format "pair $~a05 -> [ pair-ptr NIL . pair-ptr NIL ]" (format-hex-byte PAGE_AVAIL_0)))
-  ;; (check-equal? (vm-page->strings use-case-2-c-state-after PAGE_AVAIL_0)
-  ;;               (list "page-type:      cell-pair page"
-  ;;                     "previous page:  $00"
-  ;;                     "slots used:     2"
-  ;;                     "next free slot: $41"))
-  )
+  (check-equal? (vm-regt->string use-case-2-c-state-after)
+                (format "pair-ptr[1] $~a09"
+                        (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-cell-pair-free-tree->string use-case-2-c-state-after)
+                (format "pair $~a05 -> [ pair-ptr NIL . pair-ptr NIL ]" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-page->strings use-case-2-c-state-after PAGE_AVAIL_0)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41")))
 
 ;; ----------------------------------------
 ;; page type slot w/ different sizes (refcount @ ptr-1) x cells
@@ -5624,9 +5627,8 @@ call frame primitives etc.
           ;; WRITE_INT_A_TO_RT
           WRITE_INT_AY_TO_RT                             ;; int in A(lowbyte)/Y(highbyte), x=0 -> RT, x=2 -> RA
 
-          ;; WRITE_NIL_TO_RA
-          ;; WRITE_NIL_TO_RT
-          WRITE_NIL_TO_Rx
+          WRITE_NIL_TO_RP
+          WRITE_NIL_TO_RT
 
           ;; WRITE_CELLPAIR_RT_CELL1_TO_RT
           ;; WRITE_CELLPAIR_RT_CELL0_TO_RT
@@ -5670,4 +5672,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1766))
+                       1765))
