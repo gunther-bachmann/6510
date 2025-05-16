@@ -201,15 +201,7 @@ call frame primitives etc.
 
           ;; GC_CELLPAIR_FREE_LIST                     ;; reclaim all cell-pairs in the queue of free cells
 
-          ;; VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2                   ;; allocate an array of bytes (native) (also useful for strings)
           ALLOC_CELLARR_TO_RA                          ;; allocate an array of cells (also useful for structures)
-
-          ;; VM_ALLOC_M1_SLOT_TO_ZP_PTR2                        ;; allocate a slot of min A size, allocating a new page if necessary
-          ;; VM_FREE_M1_SLOT_IN_ZP_PTR2                         ;; free a slot (adding it to the free list)
-
-          ;; VM_ALLOC_MODULE_CODE_SLOT_TO_ZP_PTR                ;; allocate a slot for module code
-          ;; VM_FREE_MODULE
-          ;; VM_RELOCATE_MODULE_X_TO_                           ;; relocate module identified by page x to ??
 
           ;; ---------------------------------------- refcount
           ;; DEC_REFCNT_RT                                ;; generic decrement of refcount (dispatches depending on type)
@@ -595,6 +587,12 @@ call frame primitives etc.
    (peek state (add1 ZP_RA))
    state))
 
+(define (vm-regp->string state)
+  (vm-cell->string
+   (peek state ZP_RP)
+   (peek state (add1 ZP_RP))
+   state))
+
 (module+ test #| vm-cell->strings |#
   (check-equal? (vm-cell->string #xc4 #xc0)
                 "ptr[-] $c0c4")
@@ -687,53 +685,26 @@ call frame primitives etc.
 ;; output: Rx = cell-int
 (define WRITE_INT_AY_TO_RT
   (list
-   ;; (label WRITE_INTm1_TO_RA)
-   ;;        (LDX !$02) ;; index 2 => RA
-   ;;        (BNE WRITE_INTm1_TO_Rx)
    (label WRITE_INTm1_TO_RT)
-          ;; (LDX !$00) ;; index 0 => RT
-   ;; (label WRITE_INTm1_TO_Rx)
           (LDA !$ff) ;; int lowbyte = ff
           (LDY !$7f) ;; #b[0]111 11[11] = $1f for int high byte
           (BNE ENC_WRITE_AY_TO_RT)
 
-
-   ;; (label WRITE_INT1_TO_RA)
-   ;;        (LDX !$02) ;; index 2 => RA
-   ;;        (BNE WRITE_INT1_TO_Rx)
    (label WRITE_INT1_TO_RT)
-          ;; (LDX !$00) ;; index 0 => RT
-   ;; (label WRITE_INT1_TO_Rx)
           (LDA !$01)
           (BNE WRITE_INT_A_TO_RT)
 
-   ;; (label WRITE_INT0_TO_RA)
-   ;;        (LDX !$02) ;; index 2 => RA
-   ;;        (BNE WRITE_INT0_TO_Rx)
    (label WRITE_INT0_TO_RT)
-          ;; (LDX !$00) ;; index 0 => RT
-   ;; (label WRITE_INT0_TO_Rx)
           (LDA !$00)
-          ;; (BEQ WRITE_INT_A_TO_Rx)
 
-   ;; (label WRITE_INT_A_TO_RA)
-   ;;        (LDX !$02) ;; index 2 => RA
-   ;;        (BNE WRITE_INT_A_TO_Rx)
    (label WRITE_INT_A_TO_RT)
-          ;; (LDX !$00) ;; index 0 => RT
-   ;; (label WRITE_INT_A_TO_Rx)
           (LDY !$03) ;; #b[0]000 00[11] = high byte of int  0
    (label ENC_WRITE_AY_TO_RT)
           (STY ZP_RT)
           (STA ZP_RT+1)
           (RTS)
 
-   ;; (label WRITE_INT_AY_TO_RA)
-   ;;        (LDX !$02) ;; index 2 => RA
-   ;;        (BNE WRITE_INT_AY_TO_Rx)
    (label WRITE_INT_AY_TO_RT)
-          ;; (LDX !$00) ;; index 0 => RT
-   ;; (label WRITE_INT_AY_TO_Rx)
           (STA ZP_RT+1)
           (TYA)      ;; #b???x xxxx
           (SEC)
@@ -744,78 +715,16 @@ call frame primitives etc.
           (STA ZP_RT) ;; encoded tagged byte of int goes into first memory cell, even though it is the high-byte part of int
           (RTS)))
 
-(module+ test #| vm_write_int_ay_to_rx |#
-  (define vm-write-int-ay-to-rx-code
-    (list
-     (LDA !$01)
-     (LDY !$02)
-     (JSR WRITE_INT_AY_TO_RT)))
-
-  (define vm-write-int-ay-to-rx-state
-    (run-code-in-test vm-write-int-ay-to-rx-code))
-
-  (check-equal? (vm-regt->string vm-write-int-ay-to-rx-state)
-                "int $0201")
-
-  ;; (define vm-write-int-ay-to-rx2-code
-  ;;   (list
-  ;;    (LDA !$01)
-  ;;    (LDY !$02)
-  ;;    (LDX !$02)
-  ;;    (JSR WRITE_INT_AY_TO_Rx)))
-
-  ;; (define vm-write-int-ay-to-rx2-state
-  ;;   (run-code-in-test vm-write-int-ay-to-rx2-code))
-
-  ;; (check-equal? (vm-rega->string vm-write-int-ay-to-rx2-state)
-  ;;               "int $0201")
-
-  (define vm-write-int-ay-to-rt-code
-    (list
-     (LDA !$01)
-     (LDY !$02)
-     (JSR WRITE_INT_AY_TO_RT)))
-
-  (define vm-write-int-ay-to-rt-state
-    (run-code-in-test vm-write-int-ay-to-rt-code))
+(module+ test #| vm_write_int_ay_to_rt |#
+    (define vm-write-int-ay-to-rt-state
+    (run-code-in-test
+     (list
+      (LDA !$01)
+      (LDY !$02)
+      (JSR WRITE_INT_AY_TO_RT))))
 
   (check-equal? (vm-regt->string vm-write-int-ay-to-rt-state)
-                "int $0201")
-
-  ;; (define vm-write-int-ay-to-ra-code
-  ;;   (list
-  ;;    (LDA !$01)
-  ;;    (LDY !$02)
-  ;;    (JSR WRITE_INT_AY_TO_RA)))
-
-  ;; (define vm-write-int-ay-to-ra-state
-  ;;   (run-code-in-test vm-write-int-ay-to-ra-code))
-
-  ;; (check-equal? (vm-rega->string vm-write-int-ay-to-ra-state)
-  ;;               "int $0201")
-  )
-
-;; input:  RT
-;;         RA must be cell-pair-ptr
-;; output: cell1 of cell-pair pointed to be RA is set to RT
-;; OBSOLETE use WRITE_RT_TO_CELLy_CELLPAIR_RP instead
-;; (define WRITE_RT_TO_CELLy_CELLPAIR_RA
-;;   (list
-;;    (label WRITE_RT_TO_CELL1_CELLPAIR_RA)
-;;           (LDY !$02) ;; offset 2 for cell1
-;;           (BNE WRITE_RT_TO_CELLy_CELLPAIR_RA)
-
-;;    (label WRITE_RT_TO_CELL0_CELLPAIR_RA)
-;;           (LDY !$00) ;; offset 0 for cell0
-
-;;    ;; ----------------------------------------
-;;    (label WRITE_RT_TO_CELLy_CELLPAIR_RA)
-;;           (LDA ZP_RT)
-;;           (STA (ZP_RA),y)
-;;           (INY)
-;;           (LDA ZP_RT+1)
-;;           (STA (ZP_RA),y)
-;;           (RTS)))
+                "int $0201"))
 
 (define WRITE_RT_TO_CELLy_CELLPAIR_RP
   (list
@@ -835,55 +744,34 @@ call frame primitives etc.
           (STA (ZP_RP),y)
           (RTS)))
 
-;; (module+ test #| vm-write-rt-to-celly-ra |#
-;;   (define vm_write_rt_to_celly_ra_code
-;;     (list
-;;      (JSR ALLOC_CELLPAIR_TO_RT)
-;;      (JSR CP_RT_TO_RA)
-;;      (LDA !$01)
-;;      (LDY !$10)
-;;      (JSR WRITE_INT_AY_TO_RT)
-;;      (LDY !$00)
-;;      (JSR WRITE_RT_TO_CELLy_CELLPAIR_RA)
-;;      (LDA !$10)
-;;      (LDY !$01)
-;;      (JSR WRITE_INT_AY_TO_RT)
-;;      (LDY !$02)
-;;      (JSR WRITE_RT_TO_CELLy_CELLPAIR_RA)))
+(module+ test #| vm-write-rt-to-celly-ra |#
+  (define vm_write_rt_to_celly_rp_state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_CELLPAIR_TO_RT)                ;; rt <- [empty][empty]
+      (JSR CP_RT_TO_RP)                         ;; rp <- [empty][empty]
+      (LDA !$01)
+      (LDY !$10)
+      (JSR WRITE_INT_AY_TO_RT)                  ;; rt <- [int 1001]
+      (LDY !$00)
+      (JSR WRITE_RT_TO_CELLy_CELLPAIR_RP)       ;; rp <- [int 1001][empty]
+      (LDA !$10)
+      (LDY !$01)
+      (JSR WRITE_INT_AY_TO_RT)                  ;; rt <- [int 0110]
+      (LDY !$02)
+      (JSR WRITE_RT_TO_CELLy_CELLPAIR_RP))))    ;; rp <- [int 1001][int 0110]
 
-;;   (define vm_write_rt_to_celly_ra_state
-;;     (run-code-in-test vm_write_rt_to_celly_ra_code))
+  (check-equal? (vm-regt->string vm_write_rt_to_celly_rp_state)
+                "int $0110"
+                "rt is filled with last written int 0110")
 
-;;   (check-equal? (vm-regt->string vm_write_rt_to_celly_ra_state)
-;;                 "int $0110")
+  (check-equal? (vm-regp->string vm_write_rt_to_celly_rp_state)
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0))
+                "rp is a cell-pair ptr to the first cell (05) of the first page available")
 
-;;   (check-equal? (vm-rega->string vm_write_rt_to_celly_ra_state)
-;;                 (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0)))
-
-;;   (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_ra_state (+ PAGE_AVAIL_0_W #x05))
-;;                 "(int $1001 . int $0110)"))
-
-;; input:  RT
-;;         RA must be cell-pair-ptr
-;; output: cell1 of cell-pair pointed to be RA is set to RT
-;; obsolete: use WRITE_RP_TO_CELLy_CELLPAIR_RT
-;; (define WRITE_RA_TO_CELLy_CELLPAIR_RT
-;;   (list
-;;    (label WRITE_RA_TO_CELL1_CELLPAIR_RT)
-;;           (LDY !$02)
-;;           (BNE WRITE_RA_TO_CELLy_CELLPAIR_RT)
-
-;;    (label WRITE_RA_TO_CELL0_CELLPAIR_RT)
-;;           (LDY !$00)
-
-;;    ;; ----------------------------------------
-;;    (label WRITE_RA_TO_CELLy_CELLPAIR_RT)
-;;           (LDA ZP_RA)
-;;           (STA (ZP_RT),y)
-;;           (INY)
-;;           (LDA ZP_RA+1)
-;;           (STA (ZP_RT),y)
-;;           (RTS)))
+  (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_rp_state (+ PAGE_AVAIL_0_W #x05))
+                "(int $1001 . int $0110)"
+                "dereferencing the cell pair in rp, yields the int pairs 1001 and 0110"))
 
 (define WRITE_RP_TO_CELLy_CELLPAIR_RT
   (list
@@ -903,32 +791,39 @@ call frame primitives etc.
           (STA (ZP_RT),y)
           (RTS)))
 
-;; (module+ test #| vm-write-ra-to-celly-rt |#
-;;   (define vm_write_ra_to_celly_rt_code
-;;     (list
-;;      (JSR ALLOC_CELLPAIR_TO_RT)
-;;      (LDA !$01)
-;;      (LDY !$10)
-;;      (JSR WRITE_INT_AY_TO_RA)
-;;      (LDY !$00)
-;;      (JSR WRITE_RA_TO_CELLy_CELLPAIR_RT)
-;;      (LDA !$10)
-;;      (LDY !$01)
-;;      (JSR WRITE_INT_AY_TO_RA)
-;;      (LDY !$02)
-;;      (JSR WRITE_RA_TO_CELLy_CELLPAIR_RT)))
+(module+ test #| vm-write-rp-to-celly-rt |#
+  (define vm_write_rp_to_celly_rt_state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_CELLPAIR_TO_RT)                ;; rt <- [emtpy][empty]
+      (JSR CP_RT_TO_RZ)
+      (LDA !$01)
+      (LDY !$10)
+      (JSR WRITE_INT_AY_TO_RT)
+      (JSR CP_RT_TO_RP)                         ;; rp <- int 1001
+      (JSR CP_RZ_TO_RT)
+      (LDY !$00)
+      (JSR WRITE_RP_TO_CELLy_CELLPAIR_RT)       ;; rt <- [int 1001][empty]
+      (JSR CP_RT_TO_RZ)
+      (LDA !$10)
+      (LDY !$01)
+      (JSR WRITE_INT_AY_TO_RT)
+      (JSR CP_RT_TO_RP)                         ;; rp <- int 0110
+      (JSR CP_RZ_TO_RT)
+      (LDY !$02)
+      (JSR WRITE_RP_TO_CELLy_CELLPAIR_RT))))    ;; rt <- [int 1001][0110]
 
-;;   (define vm_write_ra_to_celly_rt_state
-;;     (run-code-in-test vm_write_ra_to_celly_rt_code))
+  (check-equal? (vm-regp->string vm_write_rp_to_celly_rt_state)
+                "int $0110"
+                "rp is filled with last written int 0110")
 
-;;   (check-equal? (vm-rega->string vm_write_ra_to_celly_rt_state)
-;;                 "int $0110")
+  (check-equal? (vm-regt->string vm_write_rp_to_celly_rt_state)
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0))
+                "rt is a cell-pair ptr to the first cell (05) of the first page available")
 
-;;   (check-equal? (vm-regt->string vm_write_ra_to_celly_rt_state)
-;;                 (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0)))
-
-;;   (check-equal? (vm-deref-cell-pair-w->string vm_write_ra_to_celly_rt_state (+ PAGE_AVAIL_0_W #x05))
-;;                 "(int $1001 . int $0110)"))
+  (check-equal? (vm-deref-cell-pair-w->string vm_write_rp_to_celly_rt_state (+ PAGE_AVAIL_0_W #x05))
+                "(int $1001 . int $0110)"
+                "dereferencing the cell pair in rt, yields the int pairs 1001 and 0110"))
 
 ;; input:  cell-stack (TOS)
 ;;         RT (must be a cell-pair ptr
@@ -1019,19 +914,27 @@ call frame primitives etc.
           (STA ZP_RZ)
           (RTS)))
 
-;; (module+ test #| vm-cp-rt-to-ra |#
-;;   (define vm-cp-ra-to-rt-code
-;;     (list
-;;      (JSR WRITE_INT1_TO_RA)
-;;      (JSR CP_RA_TO_RT)))
+;; input:  RZ
+;; output: RT (copy of RZ)
+(define CP_RZ_TO_RT
+  (list
+   (label CP_RZ_TO_RT)
+          (LDA ZP_RZ+1)
+          (STA ZP_RT+1)
+          (LDA ZP_RZ)
+          (STA ZP_RT)
+          (RTS)))
 
-;;   (define vm-cp-ra-to-rt-state
-;;     (run-code-in-test vm-cp-ra-to-rt-code))
-
-;;   (check-equal? (vm-rega->string vm-cp-ra-to-rt-state)
-;;                 "int $0001")
-;;   (check-equal? (vm-regt->string vm-cp-ra-to-rt-state)
-;;                 "int $0001"))
+;; input:  RT
+;; output: RP (copy of RT)
+(define CP_RT_TO_RP
+  (list
+   (label CP_RT_TO_RP)
+          (LDA ZP_RT+1)
+          (STA ZP_RP+1)
+          (LDA ZP_RT)
+          (STA ZP_RP)
+          (RTS)))
 
 ;; input:  RT
 ;; output: RA (copy of RT)
@@ -1083,54 +986,34 @@ call frame primitives etc.
           (STX ZP_RT)
           (RTS)))
 
-;; (module+ test #| vm-write-rt-celly-to-rt |#
-;;   (define vm-write-rt-celly-to-rt-code
-;;     (list
-;;      (JSR ALLOC_CELLPAIR_TO_RT)
-;;      (LDA !$01)
-;;      (LDY !$10)
-;;      (JSR WRITE_INT_AY_TO_RA)
-;;      (LDY !$00)
-;;      (JSR WRITE_RA_TO_CELLy_CELLPAIR_RT)
-;;      (LDA !$10)
-;;      (LDY !$01)
-;;      (JSR WRITE_INT_AY_TO_RA)
-;;      (LDY !$02)
-;;      (JSR WRITE_RA_TO_CELLy_CELLPAIR_RT)
-;;      (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)))
+(module+ test #| vm-write-rt-celly-to-rt |#
+  (define vm-write-rt-celly-to-rt-state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_CELLPAIR_TO_RT)                 ;; rt <- [empty][empty]
+      (JSR CP_RT_TO_RZ)
+      (LDA !$01)
+      (LDY !$10)
+      (JSR WRITE_INT_AY_TO_RT)
+      (JSR CP_RT_TO_RP)                          ;; rp <- int 1001
+      (JSR CP_RZ_TO_RT)
+      (LDY !$00)
+      (JSR WRITE_RP_TO_CELLy_CELLPAIR_RT)        ;; rt <- [int 1001][empty]
+      (JSR CP_RT_TO_RZ)
+      (LDA !$10)
+      (LDY !$01)
+      (JSR WRITE_INT_AY_TO_RT)
+      (JSR CP_RT_TO_RP)                          ;; rp <- 0110
+      (JSR CP_RZ_TO_RT)
+      (LDY !$02)
+      (JSR WRITE_RP_TO_CELLy_CELLPAIR_RT)        ;; rt <- [int 1001][int 0110]
+      (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT))))     ;; rt <- int 1001
 
-;;   (define vm-write-rt-celly-to-rt-state
-;;     (run-code-in-test vm-write-rt-celly-to-rt-code))
+  (check-equal? (vm-regt->string vm-write-rt-celly-to-rt-state)
+                "int $1001")
 
-;;   (check-equal? (vm-regt->string vm-write-rt-celly-to-rt-state)
-;;                 "int $1001")
-
-;;   (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rt-state (+ PAGE_AVAIL_0_W #x05))
-;;                 "(int $1001 . int $0110)"))
-
-;; input:  Y - 0 (cell0), 2 (cell1)
-;;         RT (must be cell-pair ptr)
-;; output: RA
-;; OBSOLETE use WRITE_CELLPAIR_RT_CELLy_TO_RP instead
-;; (define WRITE_CELLPAIR_RT_CELL1_TO_RA #t)
-;; (define WRITE_CELLPAIR_RT_CELL0_TO_RA #t)
-;; (define WRITE_CELLPAIR_RT_CELLy_TO_RA
-;;   (list
-;;    (label WRITE_CELLPAIR_RT_CELL1_TO_RA)
-;;           (LDY !$02)
-;;           (BNE WRITE_CELLPAIR_RT_CELLy_TO_RA)
-
-;;    (label WRITE_CELLPAIR_RT_CELL0_TO_RA)
-;;           (LDY !$00)
-
-;;    ;; ----------------------------------------
-;;    (label WRITE_CELLPAIR_RT_CELLy_TO_RA)
-;;           (LDA (ZP_RT),y)
-;;           (STA ZP_RA)
-;;           (INY)
-;;           (LDA (ZP_RT),y)
-;;           (STA ZP_RA+1)
-;;           (RTS)))
+  (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rt-state (+ PAGE_AVAIL_0_W #x05))
+                "(int $1001 . int $0110)"))
 
 (define WRITE_CELLPAIR_RT_CELL1_TO_RP #t)
 (define WRITE_CELLPAIR_RT_CELL0_TO_RP #t)
@@ -1152,53 +1035,34 @@ call frame primitives etc.
           (STA ZP_RP+1)
           (RTS)))
 
-;; (module+ test #| vm-write-rt-celly-to-ra |#
-;;   (define vm-write-rt-celly-to-ra-code
-;;     (list
-;;      (JSR ALLOC_CELLPAIR_TO_RT)
-;;      (LDA !$01)
-;;      (LDY !$10)
-;;      (JSR WRITE_INT_AY_TO_RA)
-;;      (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
-;;      (LDA !$10)
-;;      (LDY !$01)
-;;      (JSR WRITE_INT_AY_TO_RA)
-;;      (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
-;;      (JSR WRITE_INT0_TO_RA) ;; clear ra
-;;      (JSR WRITE_CELLPAIR_RT_CELL0_TO_RA)))
+(module+ test #| vm-write-rt-celly-to-ra |#
+  (define vm-write-rt-celly-to-rp-state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_CELLPAIR_TO_RT)                ;; rt <- [empty][empty]
+      (JSR CP_RT_TO_RZ)
+      (LDA !$01)
+      (LDY !$10)
+      (JSR WRITE_INT_AY_TO_RT)
+      (JSR CP_RT_TO_RP)                         ;; rp <- int 1001
+      (JSR CP_RZ_TO_RT)
+      (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)       ;; rt <- [int 1001][empty]
+      (LDA !$10)
+      (LDY !$01)
+      (JSR WRITE_INT_AY_TO_RT)
+      (JSR CP_RT_TO_RP)                         ;; rp <- int 0110
+      (JSR CP_RZ_TO_RT)
+      (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)       ;; rt <- [int 1001][int 0110]
+      (JSR WRITE_INT0_TO_RT)
+      (JSR CP_RT_TO_RP)                         ;; rp <- int 0000
+      (JSR CP_RZ_TO_RT)
+      (JSR WRITE_CELLPAIR_RT_CELL0_TO_RP))))    ;; rp <- int 1001
 
-;;   (define vm-write-rt-celly-to-ra-state
-;;     (run-code-in-test vm-write-rt-celly-to-ra-code))
+  (check-equal? (vm-regp->string vm-write-rt-celly-to-rp-state)
+                "int $1001")
 
-;;   (check-equal? (vm-rega->string vm-write-rt-celly-to-ra-state)
-;;                 "int $1001")
-
-;;   (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-ra-state (+ PAGE_AVAIL_0_W #x05))
-;;                 "(int $1001 . int $0110)"))
-
-;; input:  Y - 0 (cell0), 2 (cell1)
-;;         RA (must be cell-pair ptr)
-;; output: RA
-;; obsolete: use WRITE_CELLPAIR_RA_CELLy_TO_RP instead
-;; (define WRITE_CELLPAIR_RA_CELLy_TO_RA
-;;   (list
-;;    (label WRITE_CELLPAIR_RA_CELL1_TO_RA)
-;;           (LDY !$02)
-;;           (BNE WRITE_CELLPAIR_RA_CELLy_TO_RA)
-
-;;    (label WRITE_CELLPAIR_RA_CELL0_TO_RA)
-;;           (LDY !$00)
-
-;;    ;; ----------------------------------------
-;;    (label WRITE_CELLPAIR_RA_CELLy_TO_RA)
-;;           (LDA (ZP_RA),y)
-;;           (TAX)
-;;           (INY)
-;;           (LDA (ZP_RA),y)
-;;           (STA ZP_RA+1)
-;;           (TXA)
-;;           (STA ZP_RA)
-;;           (RTS)))
+  (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rp-state (+ PAGE_AVAIL_0_W #x05))
+                "(int $1001 . int $0110)"))
 
 (define WRITE_CELLPAIR_RP_CELLy_TO_RP
   (list
@@ -1220,30 +1084,33 @@ call frame primitives etc.
           (STA ZP_RP)
           (RTS)))
 
-;; (module+ test #| vm-write-ra-celly-to-ra |#
-;;   (define vm-write-ra-celly-to-ra-code
-;;     (list
-;;      (JSR ALLOC_CELLPAIR_TO_RT)
-;;      (LDA !$01)
-;;      (LDY !$10)
-;;      (JSR WRITE_INT_AY_TO_RA)
-;;      (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
-;;      (LDA !$10)
-;;      (LDY !$01)
-;;      (JSR WRITE_INT_AY_TO_RA)
-;;      (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
-;;      (JSR WRITE_INT0_TO_RA) ;; clear ra
-;;      (JSR CP_RT_TO_RA)
-;;      (JSR WRITE_CELLPAIR_RA_CELL0_TO_RA)))
+(module+ test #| vm-write-ra-celly-to-ra |#
+    (define vm-write-rp-celly-to-rp-state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_CELLPAIR_TO_RT)                ;; rt <- [empty][empty]
+      (JSR CP_RT_TO_RZ)
+      (LDA !$01)
+      (LDY !$10)
+      (JSR WRITE_INT_AY_TO_RT)
+      (JSR CP_RT_TO_RP)                         ;; rp <- int 1001
+      (JSR CP_RZ_TO_RT)
+      (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)       ;; rt <- [int 1001][empty]
+      (LDA !$10)
+      (LDY !$01)
+      (JSR WRITE_INT_AY_TO_RT)
+      (JSR CP_RT_TO_RP)                         ;; rp <- int 0110
+      (JSR CP_RZ_TO_RT)
+      (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)       ;; rt <- [int 1001][int 0110]
+      (JSR CP_RZ_TO_RT)
+      (JSR CP_RT_TO_RP)                         ;; rp <- [int 1001][int 0110]
+      (JSR WRITE_CELLPAIR_RP_CELL0_TO_RP))))    ;; rp <- int 1001
 
-;;   (define vm-write-ra-celly-to-ra-state
-;;     (run-code-in-test vm-write-ra-celly-to-ra-code))
+  (check-equal? (vm-regp->string vm-write-rp-celly-to-rp-state)
+                "int $1001")
 
-;;   (check-equal? (vm-rega->string vm-write-ra-celly-to-ra-state)
-;;                 "int $1001")
-
-;;   (check-equal? (vm-deref-cell-pair-w->string vm-write-ra-celly-to-ra-state (+ PAGE_AVAIL_0_W #x05))
-;;                 "(int $1001 . int $0110)"))
+  (check-equal? (vm-deref-cell-pair-w->string vm-write-rp-celly-to-rp-state (+ PAGE_AVAIL_0_W #x05))
+                "(int $1001 . int $0110)"))
 
 ;; input:  call-frame stack, RT
 ;; output: call-frame stack << RT
@@ -3274,83 +3141,86 @@ call frame primitives etc.
                       "next free slot: $09"))
 
   ;; test case 4: allocate first of pairs stored in the free tree, which is filled with just non ptr atomic cells => no gc
-  ;; (define vm-allocate-cell-pair-ptr-to-rt-4-code
-  ;;   (list
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)
-  ;;    ;; copy allocated cell-pair ptr to the tree
-  ;;    (LDA ZP_RT)
-  ;;    (STA GLOBAL_CELLPAIR_FREE_LIST)
-  ;;    (LDA ZP_RT+1)
-  ;;    (STA GLOBAL_CELLPAIR_FREE_LIST+1)
+  (define vm-allocate-cell-pair-ptr-to-rt-4-state
+    (run-code-in-test
+     (list
+      (JSR ALLOC_CELLPAIR_TO_RT)
+      ;; copy allocated cell-pair ptr to the tree
+      (LDA ZP_RT)
+      (STA GLOBAL_CELLPAIR_FREE_LIST)
+      (LDA ZP_RT+1)
+      (STA GLOBAL_CELLPAIR_FREE_LIST+1)
 
-  ;;    ;; fill cell0 with zeros, cell1 within int1
-  ;;    (LDA !$00)
-  ;;    (STA ZP_RA)
-  ;;    (STA ZP_RA+1)
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
-  ;;    (JSR WRITE_INT1_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)
+      ;; fill cell0 with zeros, cell1 within int1
+      (LDA !$00)
+      (STA ZP_RP)
+      (STA ZP_RP+1)
+      (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
+      (JSR CP_RT_TO_RZ)
+      (JSR WRITE_INT1_TO_RT)
+      (JSR CP_RT_TO_RP)
+      (JSR CP_RZ_TO_RT)
+      (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)
 
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)))
+      (JSR ALLOC_CELLPAIR_TO_RT))))
 
-  ;; (define vm-allocate-cell-pair-ptr-to-rt-4-state
-  ;;   (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-4-code))
-
-  ;; (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-4-state)
-  ;;               (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0))
-  ;;               "cell pair at cc05 is reused (was head of tree)")
-  ;; (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-4-state)
-  ;;               "root is initial")
+  (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-4-state)
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0))
+                "cell pair at cc05 is reused (was head of tree)")
+  (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-4-state)
+                "root is initial")
 
   ;; test case 4: allocate first of pairs stored in the free tree, which has its slot1 filled with ptr that needs to be gc'ed
-  ;; (define vm-allocate-cell-pair-ptr-to-rt-5-code
-  ;;   (list
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)
-  ;;    (JSR WRITE_INT1_TO_RA)
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
-  ;;    (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)                      ;; cc05: 03 01 03 01
-  ;;    (JSR INC_REFCNT_CELLPAIR_RT)           ;; cc01 = 1
-  ;;    (JSR CP_RT_TO_RA)                               ;; RA = cc05
+  (define vm-allocate-cell-pair-ptr-to-rt-5-code
+    (list
+     (JSR ALLOC_CELLPAIR_TO_RT)
+     (JSR CP_RT_TO_RZ)
+     (JSR WRITE_INT1_TO_RT)
+     (JSR CP_RT_TO_RP)
+     (JSR CP_RZ_TO_RT)
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
+     (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)                      ;; cc05: 03 01 03 01
+     (JSR INC_REFCNT_CELLPAIR_RT)           ;; cc01 = 1
+     (JSR CP_RT_TO_RP)                               ;; RA = cc05
 
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)                 ;; RT = cc09
+     (JSR ALLOC_CELLPAIR_TO_RT)                 ;; RT = cc09
 
-  ;;    ;; copy allocated cell-pair ptr to the tree
-  ;;    (LDA ZP_RT)
-  ;;    (STA GLOBAL_CELLPAIR_FREE_LIST)
-  ;;    (LDA ZP_RT+1)
-  ;;    (STA GLOBAL_CELLPAIR_FREE_LIST+1)
+     ;; copy allocated cell-pair ptr to the tree
+     (LDA ZP_RT)
+     (STA GLOBAL_CELLPAIR_FREE_LIST)
+     (LDA ZP_RT+1)
+     (STA GLOBAL_CELLPAIR_FREE_LIST+1)
 
-  ;;    ;; fill cell0 with zeros, cell1 cell-pair-ptr (with refcount = 1)
-  ;;    (JSR WRITE_RA_TO_CELL1_CELLPAIR_RT)                     ;; cc09: 05 cc 00 00
+     ;; fill cell0 with zeros, cell1 cell-pair-ptr (with refcount = 1)
+     (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)                     ;; cc09: 05 cc 00 00
 
-  ;;    (LDA !$00)
-  ;;    (STA ZP_RA)
-  ;;    (STA ZP_RA+1)
-  ;;    (JSR WRITE_RA_TO_CELL0_CELLPAIR_RT)
+     (LDA !$00)
+     (STA ZP_RP)
+     (STA ZP_RP+1)
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
 
-  ;;    (JSR ALLOC_CELLPAIR_TO_RT)))
+     (JSR ALLOC_CELLPAIR_TO_RT)))
 
-  ;; (define vm-allocate-cell-pair-ptr-to-rt-5-state
-  ;;   (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-5-code))
+  (define vm-allocate-cell-pair-ptr-to-rt-5-state
+    (run-code-in-test vm-allocate-cell-pair-ptr-to-rt-5-code))
 
-  ;; (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-5-state)
-  ;;               (format "pair-ptr[0] $~a09" (format-hex-byte PAGE_AVAIL_0))
-  ;;               "cellp-pair at cc09 is reused (was at head of tree)")
-  ;; (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state (+ PAGE_AVAIL_0_W #x01) (+ PAGE_AVAIL_0_W #x01))
-  ;;               (list #x00)
-  ;;               "refcount of cc05 (is at cc01) is zero again!")
-  ;; (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-5-state)
-  ;;               (format "pair $~a05 -> [ pair-ptr NIL . int $0001 ]" (format-hex-byte PAGE_AVAIL_0)))
-  ;; (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state (+ PAGE_AVAIL_0_W #x06) (+ PAGE_AVAIL_0_W #x08))
-  ;;               (list #x00 #x03 #x01)
-  ;;               "pair at cc06 holds 00 in cell0-page (no further elements in queue) and int 1 in cell1")
-  ;; (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-5-state PAGE_AVAIL_0)
-  ;;               (list "page-type:      cell-pair page"
-  ;;                     "previous page:  $00"
-  ;;                     "slots used:     2"
-  ;;                     "next free slot: $41")
-  ;;               "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree")
-  )
+  (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-5-state)
+                (format "pair-ptr[0] $~a09" (format-hex-byte PAGE_AVAIL_0))
+                "cellp-pair at cc09 is reused (was at head of tree)")
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state (+ PAGE_AVAIL_0_W #x01) (+ PAGE_AVAIL_0_W #x01))
+                (list #x00)
+                "refcount of cc05 (is at cc01) is zero again!")
+  (check-equal? (vm-cell-pair-free-tree->string vm-allocate-cell-pair-ptr-to-rt-5-state)
+                (format "pair $~a05 -> [ pair-ptr NIL . int $0001 ]" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-5-state (+ PAGE_AVAIL_0_W #x06) (+ PAGE_AVAIL_0_W #x08))
+                (list #x00 #x03 #x01)
+                "pair at cc06 holds 00 in cell0-page (no further elements in queue) and int 1 in cell1")
+  (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-5-state PAGE_AVAIL_0)
+                (list "page-type:      cell-pair page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $41")
+                "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree"))
 
 ;; impl complete, test missing
 (define DEC_REFCNT_CELL_RZ #t)
@@ -5761,29 +5631,21 @@ call frame primitives etc.
           ;; WRITE_CELLPAIR_RT_CELL1_TO_RT
           ;; WRITE_CELLPAIR_RT_CELL0_TO_RT
           WRITE_CELLPAIR_RT_CELLy_TO_RT                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RT
-          ;; WRITE_CELLPAIR_RA_CELL1_TO_RT
-          ;; WRITE_CELLPAIR_RA_CELL0_TO_RT
-          ;; WRITE_CELLPAIR_RA_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RA into RA
           WRITE_CELLPAIR_RP_CELLy_TO_RP
 
-          ;; WRITE_RA_TO_CELLy_CELLPAIR_RT                            ;; write RA cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RT
           WRITE_RP_TO_CELLy_CELLPAIR_RT
 
-          ;; WRITE_CELLPAIR_RT_CELL1_TO_RA
-          ;; WRITE_CELLPAIR_RT_CELL0_TO_RA
-          ;; WRITE_CELLPAIR_RT_CELLy_TO_RA                            ;; write CELLy (y=0 cell0, y=2 cell1) pointed to by RT into RA
           WRITE_CELLPAIR_RT_CELLy_TO_RP
-
-          ;; WRITE_RT_TO_CELLy_CELLPAIR_RA                            ;; write RT cell into CELLy (y=0 cell0, y=2 cell1) pointer to by RA
           WRITE_RT_TO_CELLy_CELLPAIR_RP
 
           CP_RT_TO_RA                                     ;; copy RT -> RA
           CP_RA_TO_RT                                     ;; copy RA -> RT
           CP_RA_TO_RZ                                     ;; copy RA -> RZ
           CP_RT_TO_RZ                                     ;; copy RT -> RZ
+          CP_RT_TO_RP
+          CP_RZ_TO_RT
 
           POP_CELL_EVLSTK_TO_CELLy_RT                           ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
-
 
           DEC_REFCNT_RZ
           FREE_CELL_RZ ;; includes FREE_CELL_RT and _RA
@@ -5808,4 +5670,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1764))
+                       1766))

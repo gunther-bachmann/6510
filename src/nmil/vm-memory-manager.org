@@ -1,5 +1,8 @@
 #+title: vm-memory-manager
 * open tasks
+** IMPLEMENT reactivate tests involving RA functions now deactivated
+** IMPLEMENT implement RP as (secondary) register for cell pairs
+- IDEA: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
 ** TODO implement RTM as TOS-1 register on demand
 - do this for operations in need of 2+ operands (which then discard the operands and just leave the result on the stack)
 - implement INT*, INT+, INT-, INT/ with this mechanism
@@ -11,7 +14,8 @@
 - identify all binary operations that may benefit from this mechanism
   operand operation operand -> result : most benefit if operands and result don't need refcnt'ing
   - mult, add, sub, div, mod, shift-right, shift-left, ... (byte/int)
-** TODO implement RA, RB, RC as array access registers and indexes for each
+** IMPLEMENT implement RA, RB, RC as array access registers and indexes for each
+- IDEA: RA dec-refcnt and inc-refcnt can safely assume that ra holds either 0, nil or a reference to an array!
 - RA is default and should be accessible with short commands
 - RB, RC can be accessed with longer byte code commands
 - provide functions to:
