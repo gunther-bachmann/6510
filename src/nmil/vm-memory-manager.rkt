@@ -3910,12 +3910,19 @@ call frame primitives etc.
     (label PREV_ARRAY__)
            (word 0))))
 
+;; incrementally garbage collect an array by slots
 ;; may destroy RZ (on dec refcnt of a cell in the array)
 ;; will free this cell-array, if no refcnts need to be dec (anymore)
 ;; will add this cell array to ZP_PART_GCD_CELL_ARRAYS if not completely gc'd
+;; input: RZ (RA, RT)
+;; usage: A, X, Y, RZ
+;; output: -
+;; funcs:
+;;   DEC_REFCNT_RZ
+;;   ADD_M1_SLOT_RZ_TO_PLF
 (define GC_INCR_ARRAY_SLOT_RZ
   (add-label-suffix
-   "__" "__NEW_GC_INCR_ARRAY_SLOT_RZ"
+   "__" "__GC_INCR_ARRAY_SLOT_RZ"
   (list
 
    (label GC_INCR_ARRAY_SLOT_RA)
@@ -4047,6 +4054,16 @@ call frame primitives etc.
           (byte 0))))
 
 
+;; free the given cell in RZ (RA, RT). it can be of any cell type.
+;; if it is a cell-ptr, the target is dec-refcnt'd
+;; it must not be a header cell of an array or something
+;; input: RZ
+;; usage: A, X, Y, RZ
+;; output: -
+;; funcs:
+;;   DEC_REFCNT_RZ
+;;   (CP_RA_TO_RZ)
+;;   (CP_RT_TO_RZ)
 (define FREE_CELL_RT #t)
 (define FREE_CELL_RA #t)
 (define FREE_CELL_RZ
@@ -4073,9 +4090,8 @@ call frame primitives etc.
           (CMP !$03)
           (BEQ IS_NEITHER_CELL_NOR_CELLPAIR_PTR__) ;; cell points to something != cell ptr and != cellpair ptr
 
-
-          ;;  case 1: rc points to a cell pair: RZ -> [cell]-> [cellA][cellB]
-          ;;  case 2: rc points to a cell:      RZ -> [cell]-> [cell]
+          ;;  case 1: rz points to a cell pair ptr: RZ -> [cell-pair-ptr] -> [cellA][cellB]
+          ;;  case 2: rz points to a cell ptr:      RZ -> [cell-ptr]      -> [cell]
 
    (label IS_A_PTR__)
           ;; cell is a pointer => save pointed to for tail call in temp
@@ -4113,12 +4129,12 @@ call frame primitives etc.
           (JMP DEC_REFCNT_RZ)               ;; tail call since cell did hold a reference ;; the type of the cell was alread checked so optimization could directly call the right decr function
 
    (label IS_NEITHER_CELL_NOR_CELLPAIR_PTR__)
-          ;; could still be something pointer to (like cellarr or nativearr
+          ;; could still be something pointer to (like cellarr or nativearr)
           (LDA (ZP_RZ),y)
           (CMP !TAG_BYTE_CELL_ARRAY)
-          (BEQ IS_A_PTR__)                ;; RZ -> [cell] -> [cell-arr-header][cell0][cell1]...[celln]
+          (BEQ IS_A_PTR__)                ;; RZ -> [cell-arr-header][cell0][cell1]...[celln]
           (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ IS_A_PTR__)                ;; RZ -> [cell] -> [cell-natarr-header][byte0][byte1] ...[byten]
+          (BEQ IS_A_PTR__)                ;; RZ -> [cell-natarr-header][byte0][byte1] ...[byten]
 
           ;; seems to be a value that does not need to be freed
           (BNE JUST_FREE_THIS_CELL__)
@@ -4331,9 +4347,10 @@ call frame primitives etc.
 ;; math: first entry @FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A + 1, refcount @ -1, next slot += INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A, slot-size = INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A -1
 ;; input : Y = profile offset (0, 2, 4 ...)
 ;;         X = page
-;; uses  : ZP_RA
+;; uses  : A, X, Y, RZ
 ;; output: X = page
-;;         A = first fre slot
+;;         A = first free slot
+;; funcs:  -
 (define INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
   (add-label-suffix
    "__" "INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX"
@@ -4341,31 +4358,31 @@ call frame primitives etc.
    (label INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX)
           (STY SEL_PROFILE__)      ;; save profile index in local var
           (TYA)                 ;; profile 0..4 -> a
-          (STX ZP_RA+1)
+          (STX ZP_RZ+1)
 
           (LDY !$00)
-          (STY ZP_RA)
+          (STY ZP_RZ)
 
           (TAX)
           (ORA !$10)
-          (STA (ZP_RA),y)       ;; set page type in byte 0 to b0001 <profile>
+          (STA (ZP_RZ),y)       ;; set page type in byte 0 to b0001 <profile>
 
           (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x) ;; current free page
           (INY)
-          (STA (ZP_RA),y)          ;; store previous page
+          (STA (ZP_RZ),y)          ;; store previous page
 
-          (LDA ZP_RA+1)
+          (LDA ZP_RZ+1)
           (STA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x) ;; set page with free slots to this allocated page
 
           (LDA !$00)
           (INY)
-          (STA (ZP_RA),y)          ;; store number of slots used
+          (STA (ZP_RZ),y)          ;; store number of slots used
 
           (LDY TABLE__FIRST_REF_COUNT_OFFSET__,x) ;; y = refcount field for first slot
           (INY)
           (TYA)
           (PHA)
-          (LDX ZP_RA+1)
+          (LDX ZP_RZ+1)
           (STA VM_PAGE_SLOT_DATA,x)                    ;; set first free slot, here x = page
           (DEY)
           (LDX SEL_PROFILE__) ;; profile = 0..3
@@ -4373,7 +4390,7 @@ call frame primitives etc.
 
           ;; loop to initialize refcounts of each slot to 0-
    (label REF_COUNT_LOOP__)
-          (STA (ZP_RA),y) ;; refcount = 0
+          (STA (ZP_RZ),y) ;; refcount = 0
           (TYA)
           (CLC)
           (ADC TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE,x) ;; calc next refcount field offset
@@ -4392,14 +4409,14 @@ call frame primitives etc.
           (CLC)
           (ADC TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE,x)
           (BCS ALMOST_DONE__) ;; no longer on the same page => almost done
-          (STA (ZP_RA),y) ;; offset of next free cell == y for next write
+          (STA (ZP_RZ),y) ;; offset of next free cell == y for next write
           (TAY)
           (BCC WRITE_FREE_LIST__) ;; carry must be clear => always jump
 
    (label ALMOST_DONE__)
           (LDA !$00)
-          (STA (ZP_RA),y) ;; last offset to next free slot is 00 = no next free slot!
-          (LDX ZP_RA+1)   ;; x = page
+          (STA (ZP_RZ),y) ;; last offset to next free slot is 00 = no next free slot!
+          (LDX ZP_RZ+1)   ;; x = page
           (PLA)           ;; A = first free slot
           (RTS)
 
@@ -4567,8 +4584,14 @@ call frame primitives etc.
 
 ;; allocate a slot of min A size, allocating a new page if necessary
 ;; input:  A = size
-;; output: ZP_RA = available slot of the given size (or a bit more)
+;; usage:  A, X, Y, RA, GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;; output: RA = available slot of the given size (or a bit more)
 ;;         Y = actual size
+;;         GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;; funcs:
+;;   VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS
+;;   ALLOC_PAGE_TO_X
+;;   INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
 (define ALLOC_M1_SLOT_TO_RA
   (add-label-suffix
    "__" "ALLOC_M1_SLOT_TO_RA"
@@ -4807,6 +4830,10 @@ call frame primitives etc.
 ;; dec ref count bucket slot
 
 ;; remove full pages in the free list of pages of the same type as are currently in ZP_RA
+;; input: RA
+;; usage: A, X, Y, RA, GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;; output: GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;; funcs: -
 (define VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
   (add-label-suffix
    "__" "VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS"
