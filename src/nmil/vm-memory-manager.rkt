@@ -1100,9 +1100,12 @@ call frame primitives etc.
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rp-celly-to-rp-state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"))
 
-;; input:  call-frame stack, RT
-;; output: call-frame stack << RT
-;; uses:   A Y
+;; input:  RT+EVLSTK
+;; usage:  A, X, Y
+;; output: RT +(EVLSTK << RT)
+;; funcs:
+;;   ALLOC_PAGE_TO_X
+;;   INIT_CELLSTACK_PAGE_X
 ;; CHECK STACK PAGE OVERFLOW
 (define PUSH_RT_TO_EVLSTK
   (add-label-suffix
@@ -4841,6 +4844,10 @@ call frame primitives etc.
           (RTS))))
 
 ;; put this page as head of the page free list for slots of type as in ZP_RA
+;; input:  RA
+;; usage:  A, X, Y, RA, TEMP
+;; output: GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;; funcs: -
 (define VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
   (add-label-suffix
    "__" "__VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS"
@@ -4881,8 +4888,12 @@ call frame primitives etc.
           (RTS))))
 
 ;; free the m1 slot pointed to by ra, marking that slot free on the m1-page
-;; input:  ZP_RA
-;; output: ZP_RA is invalid
+;; input:  RA
+;; usage: A, X, Y, RA
+;; output: RA is invalid
+;; funcs:
+;;   VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
+;;   VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
 ;; currently once allocated pages are not garbage collected. this is bad and needs to be changed
 ;; (e.g. keep count of used slots)? used slots = 0 => free page
 ;; INFO: NO GC! (this must be done, freeing specific types (e.g. an array) <- knows the number of slots etc.
@@ -5019,6 +5030,11 @@ call frame primitives etc.
                   "slots used:     7"
                   "next free slot: $10")))
 
+;; IDEA for optimization: keep m1 in RA, putting +1 offset on all accesses -> DEC/INC could be saved
+;; input:  RA (pointing to some m1 slot)
+;; usage:  A, Y, RA
+;; output: M1_SLOT Refcount++
+;; funcs: -
 (define INC_REFCNT_M1_SLOT_RA
   (list
    (label INC_REFCNT_M1_SLOT_RA)
@@ -5029,7 +5045,20 @@ call frame primitives etc.
           (ADC !$01)            ;; add 1 (there is no increment command for indirect addresses)
           (STA (ZP_RA),y)
           (INC ZP_RA)           ;; restore pointer
-          (RTS)))
+          (RTS) ;; 14 bytes
+
+
+   ;; ;; slightly longer (1 byte longer), self modifying code, 5 cycles faster
+   ;; (label ALT_INC_REFCNT_M1_SLOT_RA)
+   ;;        (LDA ZP_RA+1)
+   ;;        (LDY ZP_RA)
+   ;;        (DEY)
+   ;;        (STA INC_ABS__+2)
+   ;;        (STY INC_ABS__+1)
+   ;; (label INC_ABS__)
+   ;;        (INC $c000)
+   ;;        (RTS)
+          ))
 
 (module+ test #| vm_inc_ref_bucket_slot |#
   (define test-inc-ref-bucket-slot-1-code
@@ -5048,7 +5077,9 @@ call frame primitives etc.
   (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after #xf003 #xf003)
                 (list #xf1))
   (check-equal? (memory-list test-inc-ref-bucket-slot-1-state-after ZP_RA (add1 ZP_RA))
-                (list #x04 #xf0)))
+                (list #x04 #xf0))
+  (inform-check-equal? (cpu-state-clock-cycles test-inc-ref-bucket-slot-1-state-after)
+                       47))
 
 (module+ test #| vm_gc_array_slot_ptr |#
   (define test-gc-array-slot-ptr-code
@@ -5093,7 +5124,10 @@ call frame primitives etc.
 
 ;; allocate an array of bytes (native) (also useful for strings)
 ;; input:  A = number of bytes (1..)
-;; output: ZP_RA -> points to an allocated array (not initialized)
+;; usage:  A, X, Y, RA
+;; output: RA -> points to an allocated array (not initialized)
+;; funcs:
+;;   ALLOC_M1_SLOT_TO_RA
 (define ALLOC_NATARR_TO_RA
   (list
    (label ALLOC_NATARR_TO_RA)
@@ -5147,7 +5181,10 @@ call frame primitives etc.
 
 ;; allocate an array of cells (also useful for structures)
 ;; input:  A = number of cells (1..)
-;; output: ZP_RA -> points to an allocated array
+;; usage:  A, X, Y, RA
+;; output: RA -> points to an allocated array
+;; funcs:
+;;   ALLOC_M1_SLOT_TO_RA
 (define ALLOC_CELLARR_TO_RA
   (add-label-suffix
    "__" "__ALLOC_CELLARR_TO_RA"
@@ -5210,74 +5247,92 @@ call frame primitives etc.
                 "array is filled with zeros")
 )
 
-
-;; write the tos into array element a (0 indexed), array pointed to by zp_ptr2
-;; input:  a = index (0 indexed)
-;;         ZP_RA = pointer to array
-;;         ZP_RT = cell to store
-;; usage: A, X, Y, RT, RA
-;; NO CHECKING (NO BOUNDS, NO TYPE ...)
-;; DECREMENT ref of pointer if array element was a pointer (cell-ptr or cell-pair-ptr)
 (define WRITE_RT_TO_ARR_ATa_RA
   (add-label-suffix
    "__" "__WRITE_RT_TO_ARR_ATa_RA"
-  (list
-   (label POP_EVLSTK_TO_ARR_ATa_RA)
-          (JSR WRITE_RT_TO_ARR_ATa_RA)
-          (JMP POP_CELL_EVLSTK_TO_RT)
+   (list
+;; pop tos into array element a (0 indexed), array pointed to by RA
+;; input:  A = index (0 indexed)
+;;         RA = pointer to array
+;;         RT = cell to store
+;;         EVLSTK
+;; usage:  A, X, Y, RT, RA, RZ
+;; output: (RA),A <- RT, RT<<EVLSTK
+;; funcs:
+;;   DEC_REFCNT_RZ
+;;   WRITE_RT_ARR_ATa_RA
+;;   POP_CELL_EVLSTK_TO_RT
+;; NO BOUNDS CHECK!
+;; DECREMENT ref of pointer if array element was a pointer (cell-ptr or cell-pair-ptr)
+    (label POP_EVLSTK_TO_ARR_ATa_RA)
+           (JSR WRITE_RT_TO_ARR_ATa_RA)
+           (JMP POP_CELL_EVLSTK_TO_RT)
 
-   (label POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS)
-          (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
-          (JMP POP_CELL_EVLSTK_TO_RT)
+;; pop tos into array element a (0 indexed), array pointed to by RA
+;; same as POP_EVLSTK_TO_ARR_ATa_RA
+;; but with BOUNDS CHECK
+    (label POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS)
+           (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
+           (JMP POP_CELL_EVLSTK_TO_RT)
 
-   (label WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
-          (LDY !$01)
-          (CMP (ZP_RA),y)
-          (BPL BOUNDS_ERR__)
-          (CMP !$00)
-          (BPL WRITE_RT_TO_ARR_ATa_RA)
-   (label BOUNDS_ERR__)
-          (BRK)
+;; write the tos into array element a (0 indexed), array pointed to by RA
+;; same as WRITE_RT_TO_ARR_ATa_RA
+;; but with BOUNDS CHECK
+    (label WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
+           (LDY !$01)
+           (CMP (ZP_RA),y)
+           (BPL BOUNDS_ERR__)
+           (CMP !$00)
+           (BPL WRITE_RT_TO_ARR_ATa_RA)
+    (label BOUNDS_ERR__)
+           (BRK)
 
-   (label WRITE_RT_TO_ARR_ATa_RA)
-          (ASL A)
-          (CLC)
-          (ADC !$02) ;; point to first cell (index 0)
-          (STA ARRAY_INDEX__) ;; keep for later
+;; write the tos into array element a (0 indexed), array pointed to by RA
+;; input:  A = index (0 indexed)
+;;         RA = pointer to array
+;;         RT = cell to store
+;;         EVLSTK
+;; usage:  A, X, Y, RT, RA, RZ
+;; output: (RA),A <- RT
+;; funcs:
+;;   DEC_REFCNT_RZ
+;; NO CHECKING (NO BOUNDS, NO TYPE ...)
+;; DECREMENT ref of pointer if array element was a pointer (cell-ptr or cell-pair-ptr)
+    (label WRITE_RT_TO_ARR_ATa_RA)
+           (ASL A)
+           (CLC)
+           (ADC !$02) ;; point to first cell (index 0)
+           ;; get previous content into rt and decr ref count (if applicable)
+           (TAY)
+           (LDA (ZP_RA),y) ;; if low byte (tagged)
+           (BEQ NO_DEC_REFCNT__)
+           (STA ZP_RZ)     ;; store for later dec-refcnt!
+           (AND !$03)
+           (CMP !$03)
+           (BEQ NO_DEC_REFCNT__)
+           (INY)
+           (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
+           (BEQ NO_DEC_REFCNT_AND_DEC_Y__)
+           (STA ZP_RZ+1)   ;; store for later dec-refcnt!
+           (BNE MAYBE_DEC_REFCNT__) ;; lowbyte is always != 0 => branch is always taken
 
+    (label NO_DEC_REFCNT_AND_DEC_Y__)
+           (DEY)
+    (label NO_DEC_REFCNT__)
+           (LDA !$00)
+           (STA ZP_RZ) ;; mark RZ as empty
+    (label MAYBE_DEC_REFCNT__)
+           (LDA ZP_RT)
+           (STA (ZP_RA),y) ;;
+           (INY)
+           (LDA ZP_RT+1)
+           (STA (ZP_RA),y)
+           (LDA ZP_RZ)
+           (BEQ DONE__) ;; if RZ is marked as empty, return with DEC_REFCNT
+           (JMP DEC_REFCNT_RZ) ;; decrement
 
-          ;; get previous content into rt and decr ref count (if applicable)
-          (TAY)
-          (LDA (ZP_RA),y) ;; if low byte (tagged)
-          (BEQ NO_GC__)
-          (AND !$03)
-          (CMP !$03)
-          (BEQ NO_GC__)
-          (INY)
-          (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
-          (BEQ NO_GC__)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-          (LDY ARRAY_INDEX__)
-          (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
-          (STA ZP_RT)
-          (INY)
-          (LDA (ZP_RA),y) ;; previous low byte in that slot (load again)
-          (STA ZP_RT+1)
-          (JSR DEC_REFCNT_RT) ;; decrement array slot
-          (JSR POP_CELL_EVLSTK_TO_RT) ;; restore RT
-
-   (label NO_GC__)
-          (LDY ARRAY_INDEX__)
-          (LDA ZP_RT)
-          (STA (ZP_RA),y) ;;
-          (INY)
-          (LDA ZP_RT+1)
-          (STA (ZP_RA),y)
-
-          (RTS)
-
-   (label ARRAY_INDEX__)
-          (byte 0))))
+    (label DONE__)
+           (RTS))))
 
 (module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
   (define vm_cell_stack_write_tos_to_array_ata_ptr-code
@@ -5403,42 +5458,59 @@ call frame primitives etc.
                      "int $01ff")
                "got to pushing 0 since access index 0 is in bounds"))
 
+;; --------------------
+;; PUSH_ARR_ATa_RA_TO_EVLSTK
+;; push the cell at A of the array in RA onto the Stack (RT+EVLSTK)
+;; (RA),A -> RT+EVLSTK
+;; input:  A, RA, RT+EVLSTK
+;; usage:  A, X, Y
+;; output: RT+EVLSTK
+;; funcs:
+;;   PUSH_RT_TO_EVLSTK_IF_NONEMPTY
 (define PUSH_ARR_ATa_RA_TO_EVLSTK
   (add-label-suffix
    "__" "PUSH_ARR_ATa_RA_TO_EVLSTK"
-  (list
-   (label PUSH_ARR_ATa_RA_TO_EVLSTK)
-          (PHA)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-          (PLA)
-          (CLC)
-          (BCC WRITE_ARR_ATa_RA_TO_RT)
+   (list
+    (label PUSH_ARR_ATa_RA_TO_EVLSTK)
+           (PHA)
+           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+           (PLA)
+           (CLC)
+           (BCC WRITE_ARR_ATa_RA_TO_RT)
 
-   (label CHECK_BOUNDS__)
-          (PHA)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-          (PLA)
+    (label CHECK_BOUNDS__)
+           (PHA)
+           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+           (PLA)
 
-   (label CHECK_BOUNDS__)
-          (LDY !$01)
-          (CMP (ZP_RA),y)
-          (BPL BOUNDS_ERR__)
-          (CMP !$00)
-          (BPL WRITE_ARR_ATa_RA_TO_RT)
-   (label BOUNDS_ERR__)
-          (BRK)  ;; out of bounds error
+    (label CHECK_BOUNDS__)
+           (LDY !$01)
+           (CMP (ZP_RA),y)
+           (BPL BOUNDS_ERR__)
+           (CMP !$00)
+           (BPL WRITE_ARR_ATa_RA_TO_RT)
+    (label BOUNDS_ERR__)
+           (BRK)  ;; out of bounds error
 
-   (label WRITE_ARR_ATa_RA_TO_RT)
-          (ASL A)
-          (CLC)
-          (ADC !$03)                    ;; get y to point to high byte of cell at index
-          (TAY)
-          (LDA (ZP_RA),y)               ;; copy high byte
-          (STA ZP_RT+1)
-          (DEY)
-          (LDA (ZP_RA),y)               ;; copy low byte
-          (STA ZP_RT)
-          (RTS))))
+;; --------------------
+;; WRITE_ARR_ATa_RA_TO_EVLSTK
+;; write the cell at A of the array in RA into RT
+;; (RA),A -> RT
+;; input:  A, RA, RT
+;; usage:  A, Y
+;; output: RT
+;; funcs:  -
+    (label WRITE_ARR_ATa_RA_TO_RT)
+           (ASL A)
+           (CLC)
+           (ADC !$03)                    ;; get y to point to high byte of cell at index
+           (TAY)
+           (LDA (ZP_RA),y)               ;; copy high byte
+           (STA ZP_RT+1)
+           (DEY)
+           (LDA (ZP_RA),y)               ;; copy low byte
+           (STA ZP_RT)
+           (RTS))))
 
 (module+ test #| vm_cell_stack_push_array_ata_ptr |#
   (define test-cell-stack-push-array-ata-ptr-code
@@ -5464,7 +5536,7 @@ call frame primitives etc.
     (run-code-in-test test-cell-stack-push-array-ata-ptr-code))
 
   (inform-check-equal? (cpu-state-clock-cycles test-cell-stack-push-array-ata-ptr-state-after)
-                1272)
+                1275)
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 2 items"
                       "int $01ff  (rt)"
@@ -5672,4 +5744,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1765))
+                       1760))

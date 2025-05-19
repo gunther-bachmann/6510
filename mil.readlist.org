@@ -1571,11 +1571,11 @@ describes some lisp implementations (with some techn. detail) and does perforamc
 - (vm) [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::21++0.00][instructions]], [[pdfview:~/Downloads/c64_classics/minilisp/03_lisp_oriented_architecture.pdf::33++0.00][instruction format]] 
 ** the mu micro virtual machine :VM:
 https://microvm.github.io
-* references (phind)
-- https://github.com/SvenMichaelKlose/tunix/blob/main/src/bin/lisp/doc/manual.md
-- https://dercuano.github.io/notes/tiny-interpreters-for-microcontrollers.html
-- https://dwheeler.com/6502/#plasma
-- https://www.lemon64.com/forum/viewtopic.php?t=55465&sid=4c129dfc21d6f951f7e046f42187beb0&start=15
+* references
+- lisp interpreter in "C" for the 6502 https://github.com/SvenMichaelKlose/tunix/blob/main/src/bin/lisp/doc/manual.md
+- bytecode interpreter for tiny computers https://dercuano.github.io/notes/tiny-interpreters-for-microcontrollers.html
+- proto language assembler for apple https://dwheeler.com/6502/#plasma
+- attempt at a bytecode interpreter https://www.lemon64.com/forum/viewtopic.php?t=55465&sid=4c129dfc21d6f951f7e046f42187beb0&start=15
   #+begin_src asm
     	; Stacker mk. 2
     	; "The Fast Version"
@@ -2234,6 +2234,7 @@ https://microvm.github.io
     	.db "ROTR",0
     	.db $22
   #+end_src
+- multiplizieren und dividieren größerer Zahlen https://www.64er-magazin.de/8505/assembler.html
 * collected notes and considerations
 ** general ideas
 - implement byte code interpreter in racket
