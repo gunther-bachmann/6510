@@ -768,6 +768,7 @@ call frame primitives etc.
           (BNE WRITE_RP_TO_CELLy_CELLPAIR_RT)
 
    (label WRITE_RP_TO_CELL0_CELLPAIR_RT)
+   (label WRITE_RP_TO_CELL0_CELLPTR_RT) ;; TODO naming is misleading here
           (LDY !$00)
 
    ;; ----------------------------------------
@@ -3356,7 +3357,7 @@ call frame primitives etc.
    (label DEC_REFCNT_CELL_RZ_TO_CELL__)
           (STY DEC_PAGE_CELL_CNT__+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
    (label DEC_PAGE_CELL_CNT__)
-          (DEC $c000,x)               ;; c0 is overwritten by page (see above)
+          (DEC $c000,x)               ;; c0 is overwritten by page (see above), x = position of refcount (a >> 1)
           (BNE DONE__)
           (JMP FREE_CELL_RZ)      ;; free (since refcnt dropped to 0)
           ))))
@@ -3637,27 +3638,28 @@ call frame primitives etc.
 
   (define new-free-cell-pair-ptr-in-rt-4-state
     (compact-run-code-in-test
-     (JSR ALLOC_CELL_TO_RT)
+     ;; #:debug #t
+     (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [ ]
      (JSR INC_REFCNT_RT)
-     (JSR CP_RT_TO_RZ)
+     (JSR CP_RT_TO_RZ)                          ;; RZ -> [ ]
 
-     (JSR WRITE_INTm1_TO_RT)
-     (JSR CP_RT_TO_RP)
-     (JSR CP_RZ_TO_RT)
-     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
-     (JSR CP_RT_TO_RP)
+     (JSR WRITE_INTm1_TO_RT)                    ;; RT = -1
+     (JSR CP_RT_TO_RP)                          ;; RP = -1
+     (JSR CP_RZ_TO_RT)                          ;; RT -> [ ]
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)        ;; RT -> [-1]
+     (JSR CP_RT_TO_RP)                          ;; RP -> [-1]
 
-     (JSR ALLOC_CELLPAIR_TO_RT)
-     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
-     (JSR CP_RT_TO_RZ)
-     (JSR WRITE_INT1_TO_RT)
-     (JSR CP_RT_TO_RP)
-     (JSR CP_RZ_TO_RT)
-     (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)
+     (JSR ALLOC_CELLPAIR_TO_RT)                 ;; RT -> [ ][ ]
+     (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)        ;; RT -> [->[-1]][ ]
+     (JSR CP_RT_TO_RZ)                          ;; RZ -> [->[-1]][ ]
+     (JSR WRITE_INT1_TO_RT)                     ;; RT = -1
+     (JSR CP_RT_TO_RP)                          ;; RP = -1
+     (JSR CP_RZ_TO_RT)                          ;; RT -> [->[-1]][ ]
+     (JSR WRITE_RP_TO_CELL1_CELLPAIR_RT)        ;; RT -> [->[-1]][1]
 
-     ;; rt = ( -+ . int1 )               cell-pair @ cb05
-     ;;         |
-     ;;         +--> ( int-1 )           cell      @ cc02
+     ;; rt -> ( -+ . int1 )               cell-pair @ cb05
+     ;;          |
+     ;;          +--> ( int-1 )           cell      @ cc02
 
      (JSR FREE_CELLPAIR_RT)))
 
@@ -4054,9 +4056,12 @@ call frame primitives etc.
           (byte 0))))
 
 
-;; free the given cell in RZ (RA, RT). it can be of any cell type.
+;; generic free on any type of cell-ptr (either pointer to a cell, pointer to a cell-pair, pointer to a cell-array or pointer to a native-array)
+;; free the given cell in RZ (RA, RT). it can be of any cell type!
+;; TODO: currently failing fifo and a test in memory-manager has to be fixed
 ;; if it is a cell-ptr, the target is dec-refcnt'd
 ;; it must not be a header cell of an array or something
+;; if it is an atomic cell, nothing happens
 ;; input: RZ
 ;; usage: A, X, Y, RZ
 ;; output: -
@@ -4082,25 +4087,24 @@ call frame primitives etc.
     (label FREE_CELL_RZ)
            ;; clear
            (LDY !$00)
-           (STY LIST_TO_FREE__+1)
+           (STY CELL_TO_FREE_NEXT__+1)
 
           (LDA (ZP_RZ),y)
-          (BEQ DONE__) ;; lowbyte = 0 = cell-ptr into zero page (illegal value or nil) => nothing to do
-          (AND !$03)
-          (CMP !$03)
-          (BEQ IS_NEITHER_CELL_NOR_CELLPAIR_PTR__) ;; cell points to something != cell ptr and != cellpair ptr
-
-          ;;  case 1: rz points to a cell pair ptr: RZ -> [cell-pair-ptr] -> [cellA][cellB]
-          ;;  case 2: rz points to a cell ptr:      RZ -> [cell-ptr]      -> [cell]
+          (TAX)
+          (LSR)
+          (BCC IS_A_PTR__)
+          (LSR)
+          (BCS IS_NEITHER_CELLPTR_NOR_CELLPAIR_PTR__)
+          (JMP FREE_CELLPAIR_RZ)
 
    (label IS_A_PTR__)
           ;; cell is a pointer => save pointed to for tail call in temp
           ;; enqueue this rt in list to decrement refcount
           (LDA (ZP_RZ),y)
-          (STA LIST_TO_FREE__)
+          (STA CELL_TO_FREE_NEXT__)
           (INY)
           (LDA (ZP_RZ),y)
-          (STA LIST_TO_FREE__+1)               ;; might be overwritten if cell-array is freed!
+          (STA CELL_TO_FREE_NEXT__+1)               ;; might be overwritten if cell-array is freed!
 
    (label JUST_FREE_THIS_CELL__)
           ;; COPY previous head of free cells into this cell
@@ -4116,7 +4120,7 @@ call frame primitives etc.
           (LDA ZP_RZ+1)
           (STA GLOBAL_CELL_FREE_LIST+1)         ;; (new) FREE_CELL_LIST -> [cell] -> ...
 
-          (LDA LIST_TO_FREE__+1)
+          (LDA CELL_TO_FREE_NEXT__+1)
           (BNE PREP_TAILCALL__)                          ;; there wasn't any further pointer => done with free
    (label DONE__)
           (RTS)
@@ -4124,24 +4128,23 @@ call frame primitives etc.
    (label PREP_TAILCALL__)
           ;; fill rc for tail calling
           (STA ZP_RZ+1)
-          (LDA LIST_TO_FREE__)
+          (LDA CELL_TO_FREE_NEXT__)
           (STA ZP_RZ)                           ;; RZ -> [cellA][cellB]  || [cell] || [cell-arr-header][cell0][cell1]...[celln] || [cell-natarr-header][byte0][byte1] ...[byten]
-          (JMP DEC_REFCNT_RZ)               ;; tail call since cell did hold a reference ;; the type of the cell was alread checked so optimization could directly call the right decr function
+          (JMP DEC_REFCNT_RZ)                  ;; tail call since cell did hold a reference ;; the type of the cell was alread checked so optimization could directly call the right decr function
 
-   (label IS_NEITHER_CELL_NOR_CELLPAIR_PTR__)
+   (label IS_NEITHER_CELLPTR_NOR_CELLPAIR_PTR__)
           ;; could still be something pointer to (like cellarr or nativearr)
           (LDA (ZP_RZ),y)
           (CMP !TAG_BYTE_CELL_ARRAY)
-          (BEQ IS_A_PTR__)                ;; RZ -> [cell-arr-header][cell0][cell1]...[celln]
+          (BNE MIGHT_BE_A_NAT_ARRAY__)                ;; RZ -> [cell-arr-header][cell0][cell1]...[celln]
+          (JMP DEC_REFCNT_CELLARR_RZ)
+   (label MIGHT_BE_A_NAT_ARRAY__)
           (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BEQ IS_A_PTR__)                ;; RZ -> [cell-natarr-header][byte0][byte1] ...[byten]
-
-          ;; seems to be a value that does not need to be freed
           (BNE JUST_FREE_THIS_CELL__)
+          (JMP DEC_REFCNT_NATIVEARR_RZ)            ;; RZ -> [cell-natarr-header][byte0][byte1] ...[byten]
 
-
-   (label LIST_TO_FREE__)
-          (word 0) ;; holds (any) ptr for tail call (if necessary), use highbyte != 0 to detect whether pointer is set
+   (label CELL_TO_FREE_NEXT__)
+          (word 0) ;; holds a cell for tail call (if necessary = is a ptr), use highbyte != 0 to detect whether pointer is set
 )))
 
 (module+ test #| new_free_cell_rc |#
@@ -5341,6 +5344,7 @@ call frame primitives etc.
            (LDA (ZP_RA),y) ;; if high byte is 0, it is nil, no gc there
            (BEQ NO_DEC_REFCNT_AND_DEC_Y__)
            (STA ZP_RZ+1)   ;; store for later dec-refcnt!
+           (DEY)
            (BNE MAYBE_DEC_REFCNT__) ;; lowbyte is always != 0 => branch is always taken
 
     (label NO_DEC_REFCNT_AND_DEC_Y__)
