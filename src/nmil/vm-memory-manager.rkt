@@ -2434,7 +2434,7 @@ call frame primitives etc.
 
 ;; free nonatomic (is cell-ptr, cell-pair-ptr, cell-array-ptr, native-array-ptr)
 ;; parameter: zp_rt
-(define FREE_RT
+(define FREE_RT    ;; TODO: FREE_CELL_RT should work onl cell pointers only, anyone in need of generic free uses this function
   (add-label-suffix
    "__" "FREE_RT"
    (flatten
@@ -2826,6 +2826,12 @@ call frame primitives etc.
 
 ;; actively free all enqueued cell pairs of the free-list!
 ;; can be useful to find out whether a whole page is not used at all. free cells are still marked as used on a page.
+;; input:  GLOBAL_CELLPAIR_FREE_LIST
+;; usage:  A, Y, RZ
+;; output: GLOBAL_CELLPAIR_FREE_LIST+1 = 0
+;; funcs:
+;;   DEC_REFCNT_RZ >>
+;;   GC_CELLPAIR_FREE_LIST
 (define GC_CELLPAIR_FREE_LIST
   (add-label-suffix
    "__" "__GC_CELLPAIR_FREE_LIST"
@@ -2917,13 +2923,18 @@ call frame primitives etc.
    (label RC_COPY__)
           (word 0))))
 
-;; input:  none
-;; output: zp_rt = free cell-pair
-;;
 ;; try to reuse root of free tree: use root but make sure to deallocate cell1 of the root (since this might still point to some data)
 ;; if no free tree available, find page with free cells (GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
 ;; if no free cell page is available, allocate a new page and used the first free slot there
 ;; NOTE: the cell-pair is not initialized (cell0 and/or cell1 may contain old data that needs to be overwritten!)
+;; input:  GLOBAL_CELLPAIR_FREE_LIST
+;; usage:  A, X, Y
+;; output: RT
+;; funcs:
+;;   GET_FRESH_CELLPAIR_TO_AX
+;;   ALLOC_CELLPAIR_AX_TO_RT
+;;   WRITE_CELLPAIR_RT_CELL1_TO_RT
+;;   DEC_REFCNT_RT
 (define ALLOC_CELLPAIR_TO_RT
   (add-label-suffix
    "__" "__ALLOC_CELLPAIR_TO_RT"
@@ -3215,6 +3226,15 @@ call frame primitives etc.
                 "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree"))
 
 ;; impl complete, test missing
+
+;; decrement the refcount (if a pointer) in RZ, call respective free if refcount drops to 0
+;; input:  RZ (RA, RT)
+;; usage:  A, X, Y, RZ
+;; output:
+;; funcs:
+;;   FREE_M1_SLOT_RZ >>
+;;   FREE_CELL_RZ >>
+;;   FREE_CELLPAIR_RZ >>
 (define DEC_REFCNT_CELL_RZ #t)
 (define DEC_REFCNT_CELL_RT #t)
 (define DEC_REFCNT_CELL_RA #t)
@@ -3479,6 +3499,13 @@ call frame primitives etc.
                 "remaining refcount on m1_slot 0 is 1"))
 
 ;; impl complete, test missing
+;; free the m1 slot referenced by RZ
+;; input: RZ
+;; usage: A, X, Y, RZ
+;; output:
+;; funcs:
+;;   GC_INCR_ARRAY_SLOT_RZ >>
+;;   ADD_M1_SLOT_RZ_TO_PFL >>
 (define FREE_M1_SLOT_RZ
   (add-label-suffix
    "__" "__NEW_FREE_M1_SLOT_RZ"
@@ -3502,6 +3529,13 @@ call frame primitives etc.
            (JMP ADD_M1_SLOT_RZ_TO_PFL) ;; just add this slot to the free list of the respective page (and do some housekeeping)
 )))
 
+;; put the given cellpair on the global free list
+;; dec-refcnt cell0 if it is a ptr, defer dec-refcnt cell1 to allocation/reuse time
+;; input: RZ (RT RA), GLOBAL_CELLPAIR_FREE_LIST
+;; usage: A, X, Y, RZ
+;; output: GLOBAL_CELLPAIR_FREE_LIST << RZ
+;; funcs:
+;;   DEC_REFCNT_RZ>>
 (define FREE_CELLPAIR_RT #t)
 (define FREE_CELLPAIR_RA #t)
 (define FREE_CELLPAIR_RZ
@@ -3691,6 +3725,13 @@ call frame primitives etc.
            (RTS))))
 
 ;; impl complete, test missing
+;; add the given m1 slot in RZ back to the page free list of slots
+;; input:  RZ, page-meta-data
+;; usage:  A, X, Y, RZ
+;; output: page-meta-data
+;; funcs:
+;;   DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_RZ
+;;   PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ
 (define ADD_M1_SLOT_RZ_TO_PFL
   (add-label-suffix
    "__" "__NEW_ADD_M1_SLOT_RZ_TO_PFL"
@@ -3725,6 +3766,12 @@ call frame primitives etc.
 
           (RTS))))
 
+;; put this page to the head of free m1 pages of the same profile as RZ is
+;; input:  RZ, GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;; usage:  A, X, Y, RZ
+;; output: GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;;         A = first free slot of that page
+;; funcs:  -
 (define PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ
   (add-label-suffix
    "__" "__NEW_PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ"
@@ -3764,6 +3811,11 @@ call frame primitives etc.
 
           (RTS))))
 
+;; drop all full pages from the list of pages with available slots
+;; input:  RZ, GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;; usage:  A, X, Y
+;; output: GLOBAL_M1_PX_PAGE_FOR_ALLOC of this profile holds page with free slots
+;; funcs:  -
 (define DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
   (add-label-suffix
    "__" "NEW_DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A"
@@ -3801,6 +3853,19 @@ call frame primitives etc.
    (label DONE__)
           (RTS))))
 
+;; garbage collect all cells, all cell-pairs and all cell arrays marked for reuse or partially collected
+;; input:  GLOBAL_CELL_FREE_LIST, GLOBAL_CELLPAIR_FREE_LIST, ZP_PART_GCD_CELL_ARRAYS
+;; usage:  A, X, Y, RZ
+;; output: GLOBAL_CELL_FREE_LIST+1      = 0
+;;         GLOBAL_CELLPAIR_FREE_LIST+1  = 0
+;;         ZP_PART_GCD_CELL_ARRAYS+1    = 0
+;; funcs:
+;;   GC_CELL_ARRAYS
+;;   GC_CELL_ARRAY
+;;   GC_INCR_ARRAY_SLOT_RZ
+;;   GC_CELLPAIR_FREE_LIST
+;;   DEC_REFCNT_RZ >>
+;;   GC_CELLS
 (define GC_ALL
   (add-label-suffix
    "__" "__NEW_GC_ALL"
@@ -3811,6 +3876,11 @@ call frame primitives etc.
           (JMP GC_CELLS)          ;; until no more cells are available
           )))
 
+;; garbage collect all cells marked as reusable in GLOBAL_CELL_FFREE_LIST
+;; input:  GLOBAL_CELL_FFREE_LIST
+;; usage:  A, X, Y, RZ
+;; output: GLOBAL_CELL_FFREE_LIST+1 = 0   (no more cells left for reuse)
+;; funcs:  -
 (define GC_CELLS
   (add-label-suffix
    "__" "NEW_GC_CELLS"
@@ -3863,6 +3933,12 @@ call frame primitives etc.
            )))
 
 ;; do incremental collections until all cell arrays (and their slots) were garbage collected
+;; input:  ZP_PART_GCD_CELL_ARRAYS
+;; usage:  A, X, Y, RZ
+;; output: ZP_PART_GCD_CELL_ARRAYS+1 = 0  (no more arrays left that are partially gc'd)
+;; funcs:
+;;   GC_CELL_ARRAY
+;;   GC_INCR_ARRAY_SLOT_RZ
 (define GC_CELL_ARRAYS
   (add-label-suffix
    "__" "__NEW_GC_CELL_ARRAYS"
@@ -3881,6 +3957,11 @@ call frame primitives etc.
           (RTS))))
 
 ;; keep collecting until the whole (single) array was collected but stop then!
+;; input:  ZP_PART_GCD_CELL_ARRAYS
+;; usage:  A, X, Y, RZ
+;; output: <<ZP_PART_GCD_CELL_ARRAYS<<
+;; funcs:
+;;   GC_INCR_ARRAY_SLOT_RZ
 (define GC_CELL_ARRAY
   (add-label-suffix
    "__" "__NEW_GC_ARRAY"
@@ -4058,7 +4139,6 @@ call frame primitives etc.
 
 ;; generic free on any type of cell-ptr (either pointer to a cell, pointer to a cell-pair, pointer to a cell-array or pointer to a native-array)
 ;; free the given cell in RZ (RA, RT). it can be of any cell type!
-;; TODO: currently failing fifo and a test in memory-manager has to be fixed
 ;; if it is a cell-ptr, the target is dec-refcnt'd
 ;; it must not be a header cell of an array or something
 ;; if it is an atomic cell, nothing happens
@@ -4351,7 +4431,7 @@ call frame primitives etc.
 ;; input : Y = profile offset (0, 2, 4 ...)
 ;;         X = page
 ;; uses  : A, X, Y, RZ
-;; output: X = page
+;; output: X = page, initialized as m1 page of profile y
 ;;         A = first free slot
 ;; funcs:  -
 (define INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
@@ -4427,17 +4507,17 @@ call frame primitives etc.
           (byte $00) ;; local var
 
    (label TABLE__FIRST_REF_COUNT_OFFSET__)
-          (byte $03) ;; first ref count is 03, add 0a to get to next slot, slot-size $09 (09), contains 25 slots
-          (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), contains 14 slots
-          (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), contains 8 slots
-          (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), contains 5 slots
-          (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), contains 3 slots
+          (byte $03) ;; first ref count is 03, add 0a to get to next slot, slot-size $09 (09), page contains 25 slots
+          (byte $03) ;; first ref count is 03, add 12 to get to next slot, slot size $11 (17), page contains 14 slots
+          (byte $0f) ;; first ref count is 0f, add 1e to get to next slot, slot size $1d (29), page contains 8 slots
+          (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), page contains 5 slots
+          (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), page contains 3 slots
    (label TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE)
-          (byte $0a) ;; add 0a to get to next slot, slot-size $09 (09), contains 25 slots
-          (byte $12) ;; add 12 to get to next slot, slot size $11 (17), contains 14 slots
-          (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), contains 8 slots
-          (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), contains 5 slots
-          (byte $54) ;; add 54 to get to next slot, slot-size $53 (83), contains 3 slots
+          (byte $0a) ;; add 0a to get to next slot, slot-size $09 (09), page contains 25 slots
+          (byte $12) ;; add 12 to get to next slot, slot size $11 (17), page contains 14 slots
+          (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), page contains 8 slots
+          (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), page contains 5 slots
+          (byte $54) ;; add 54 to get to next slot, slot-size $53 (83), page contains 3 slots
           )))
 
 (module+ test #| vm_alloc_m1_page |#
@@ -4606,7 +4686,7 @@ call frame primitives etc.
 
    (label TYPE_X_STORE__)
           (STX PAGE_TYPE_IDX__)
-          (JSR VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
+          (JSR VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS) ;; x stays unchanged!
 
    (label ALLOC_M1_SLOT_TYPE_X_TO_RA)
           (LDA GLOBAL_M1_PX_PAGE_FOR_ALLOC,x) ;;
@@ -4829,8 +4909,7 @@ call frame primitives etc.
 
   ;; free-page for slot type 0 = cc
 
-;; inc ref count bucket slot
-;; dec ref count bucket slot
+(define VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS #t)
 
 ;; remove full pages in the free list of pages of the same type as are currently in ZP_RA
 ;; input: RA
@@ -4918,6 +4997,7 @@ call frame primitives etc.
           (RTS))))
 
 ;; free the m1 slot pointed to by ra, marking that slot free on the m1-page
+;; no check of the slot content is done! in case of cell-arrays: the elements of the array are not checked
 ;; input:  RA
 ;; usage: A, X, Y, RA
 ;; output: RA is invalid
@@ -4927,7 +5007,7 @@ call frame primitives etc.
 ;; currently once allocated pages are not garbage collected. this is bad and needs to be changed
 ;; (e.g. keep count of used slots)? used slots = 0 => free page
 ;; INFO: NO GC! (this must be done, freeing specific types (e.g. an array) <- knows the number of slots etc.
-;;       REF COUNT IS SET TO ZERO
+;;       REF COUNT IS SET TO ZERO (of this slot)
 (define FREE_M1_SLOT_RA
   (add-label-suffix
    "__" "__FREE_M1_SLOT_RA"
@@ -5060,6 +5140,7 @@ call frame primitives etc.
                   "slots used:     7"
                   "next free slot: $10")))
 
+;; increment refcount of m1 slot in RA
 ;; IDEA for optimization: keep m1 in RA, putting +1 offset on all accesses -> DEC/INC could be saved
 ;; input:  RA (pointing to some m1 slot)
 ;; usage:  A, Y, RA
@@ -5153,7 +5234,8 @@ call frame primitives etc.
                 "...and added as free tree root (for reuse)"))
 
 ;; allocate an array of bytes (native) (also useful for strings)
-;; input:  A = number of bytes (1..)
+;; overwrite RA no matter whether RA was filled
+;; input:  A = number of bytes (1..81)
 ;; usage:  A, X, Y, RA
 ;; output: RA -> points to an allocated array (not initialized)
 ;; funcs:
@@ -5210,7 +5292,8 @@ call frame primitives etc.
                 (list TAG_BYTE_NATIVE_ARRAY #x10)))
 
 ;; allocate an array of cells (also useful for structures)
-;; input:  A = number of cells (1..)
+;; this does overwrite RA without check RAs content!
+;; input:  A = number of cells (1..40)
 ;; usage:  A, X, Y, RA
 ;; output: RA -> points to an allocated array
 ;; funcs:
@@ -5282,6 +5365,7 @@ call frame primitives etc.
    "__" "__WRITE_RT_TO_ARR_ATa_RA"
    (list
 ;; pop tos into array element a (0 indexed), array pointed to by RA
+;; it will dec-refcnt on previous array entry, if it is a pointer that is overwritten
 ;; input:  A = index (0 indexed)
 ;;         RA = pointer to array
 ;;         RT = cell to store
@@ -5293,7 +5377,6 @@ call frame primitives etc.
 ;;   WRITE_RT_ARR_ATa_RA
 ;;   POP_CELL_EVLSTK_TO_RT
 ;; NO BOUNDS CHECK!
-;; DECREMENT ref of pointer if array element was a pointer (cell-ptr or cell-pair-ptr)
     (label POP_EVLSTK_TO_ARR_ATa_RA)
            (JSR WRITE_RT_TO_ARR_ATa_RA)
            (JMP POP_CELL_EVLSTK_TO_RT)
@@ -5318,16 +5401,16 @@ call frame primitives etc.
            (BRK)
 
 ;; write the tos into array element a (0 indexed), array pointed to by RA
+;; it will dec-refcnt on previous array entry, if it is a pointer that is overwritten
+;; it will NOT inc-refcnt on RT even though it is now in RT and the array, this has to be taken care of by the caller!
 ;; input:  A = index (0 indexed)
 ;;         RA = pointer to array
 ;;         RT = cell to store
-;;         EVLSTK
 ;; usage:  A, X, Y, RT, RA, RZ
 ;; output: (RA),A <- RT
 ;; funcs:
 ;;   DEC_REFCNT_RZ
 ;; NO CHECKING (NO BOUNDS, NO TYPE ...)
-;; DECREMENT ref of pointer if array element was a pointer (cell-ptr or cell-pair-ptr)
     (label WRITE_RT_TO_ARR_ATa_RA)
            (ASL A)
            (CLC)
@@ -5775,4 +5858,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1760))
+                       1767))
