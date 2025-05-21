@@ -4205,13 +4205,13 @@ call frame primitives etc.
           (JMP FREE_CELLPAIR_RZ)
 
    (label CONTAINS_A_PTR__)
-          ;; cell contains is a pointer => save pointed to for tail call in temp
+          ;; cell contains a pointer => save pointed to for tail call in temp
           ;; enqueue this rt in list to decrement refcount
           (LDA (ZP_RZ),y)
           (STA CELL_TO_FREE_NEXT__)
           (INY)
           (LDA (ZP_RZ),y)
-          (STA CELL_TO_FREE_NEXT__+1)               ;; might be overwritten if cell-array is freed!
+          (STA CELL_TO_FREE_NEXT__+1)
 
    (label JUST_FREE_THIS_CELL__)
           ;; COPY previous head of free cells into this cell
@@ -4219,36 +4219,36 @@ call frame primitives etc.
           (STA (ZP_RZ),y)
           (LDA GLOBAL_CELL_FREE_LIST)
           (DEY)
-          (STA (ZP_RZ),y)                       ;; RZ -> [cell] -> (old) FREE_CELL_LIST
+          (STA (ZP_RZ),y)                    ;; RZ -> [cell] -> (old) FREE_CELL_LIST
 
           ;; write this cell as new head into the list
           (LDA ZP_RZ)
           (STA GLOBAL_CELL_FREE_LIST)
           (LDA ZP_RZ+1)
-          (STA GLOBAL_CELL_FREE_LIST+1)         ;; (new) FREE_CELL_LIST -> [cell] -> ...
+          (STA GLOBAL_CELL_FREE_LIST+1)      ;; (new) FREE_CELL_LIST -> [cell] -> ...
 
           (LDA CELL_TO_FREE_NEXT__+1)
-          (BNE PREP_TAILCALL__)                          ;; there wasn't any further pointer => done with free
+          (BNE PREP_TAILCALL__)
    (label DONE__)
-          (RTS)
+          (RTS)                              ;; there wasn't any further pointer => done with free
 
    (label PREP_TAILCALL__)
           ;; fill rc for tail calling
           (STA ZP_RZ+1)
           (LDA CELL_TO_FREE_NEXT__)
-          (STA ZP_RZ)                           ;; RZ -> [cellA][cellB]  || [cell] || [cell-arr-header][cell0][cell1]...[celln] || [cell-natarr-header][byte0][byte1] ...[byten]
-          (JMP DEC_REFCNT_RZ)                  ;; tail call since cell did hold a reference ;; the type of the cell was alread checked so optimization could directly call the right decr function
+          (STA ZP_RZ)                        ;; RZ -> [cellA][cellB]  || [cell] || [cell-arr-header][cell0][cell1]...[celln] || [cell-natarr-header][byte0][byte1] ...[byten]
+          (JMP DEC_REFCNT_RZ)                ;; tail call since cell did hold a reference ;; the type of the cell was alread checked so optimization could directly call the right decr function
 
    (label CONTAINS_NEITHER_CELLPTR_NOR_CELLPAIR_PTR__)
-          ;; could still be something pointer to (like cellarr or nativearr)
+          ;; could still be a pointer to cellarr or nativearr
           (LDA (ZP_RZ),y)
           (CMP !TAG_BYTE_CELL_ARRAY)
-          (BNE MIGHT_BE_A_NAT_ARRAY__)                ;; RZ -> [cell-arr-header][cell0][cell1]...[celln]
+          (BNE MIGHT_BE_A_NAT_ARRAY__)       ;; RZ -> [cell-arr-header][cell0][cell1]...[celln]
           (JMP DEC_REFCNT_CELLARR_RZ)
    (label MIGHT_BE_A_NAT_ARRAY__)
           (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BNE JUST_FREE_THIS_CELL__) ;; contains neither cell-ptr nor cell-pair-ptr nor nat array nor cell-array => just free the cell and ignore its content
-          (JMP DEC_REFCNT_NATIVEARR_RZ)            ;; RZ -> [cell-natarr-header][byte0][byte1] ...[byten]
+          (BNE JUST_FREE_THIS_CELL__)        ;; contains neither cell-ptr nor cell-pair-ptr nor nat array nor cell-array => just free the cell and ignore its content
+          (JMP DEC_REFCNT_NATIVEARR_RZ)      ;; RZ -> [cell-natarr-header][byte0][byte1] ...[byten]
 
    (label CELL_TO_FREE_NEXT__)
           (word 0) ;; holds a cell for tail call (if necessary = is a ptr), use highbyte != 0 to detect whether pointer is set
