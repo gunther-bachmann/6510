@@ -1,13 +1,9 @@
 #+title: vm-memory-manager
 * open tasks
-** CONVENTION: function naming
-functions called BC_... must be refcnt'd correctly,
-functions called VM_... may be refcnt'd correctly (adding REFCNTD postfix)
-other functions do no refcnt (except for very special cases <- check which are necessary!)
 ** IMPLEMENT implement RP as (secondary) register for cell pairs
 - IDEA: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
-** TODO implement RTM (or maybe RP) as TOS-1 register on demand
+** TODO implement RP usage as TOS-1 register on demand
 - do this for operations in need of 2+ operands (which then discard the operands and just leave the result on the stack)
 - implement INT*, INT+, INT-, INT/ with this mechanism
 - e.g. POP_TOSM1_TO_RTM, WRITE_TOSM1_TO_RTM?, or WRITE_LOCAL_N_TO_RTM
@@ -33,17 +29,6 @@ other functions do no refcnt (except for very special cases <- check which are n
   - WRITE (RA + RAi) -> RB/RC/RBi/RBi  ;; and vice versa?
   - ALLOC INTO RA/RB/RC (initialize indices RAi,RBi,RCi)
 - implement matrix multiplication of 4x4 matrices (with ints) <- just as an expample (scale/move...)
-** TODO harmonize function description                -> ease the usage of functions as building blocks
-- do this in an incremental fashion
-- describe what is useful
-input:  A/X/Y (register) description
-usage:  A/X/Y (register) modifications
-        ZP_... memory/register modifications
-        VM_... memory/register modifications
-output: A/X/Y (register) description
-        ZP_... memory/register modifications
-        VM_... memory/register modifications
-funcs:  list of sub routines / functions used
 ** TODO create index of functions and purpose         -> increase reuse and discoverability
 - alphabetically
 - semantically
@@ -64,71 +49,101 @@ funcs:  list of sub routines / functions used
 - array access on ZP_RA
 - second argument function on ZP_RS
 ** TODO split vm-memory-manager in several submodules -> compile/test faster, racket integration better
+incrementally implemented by extracting the given from vm-memory-manager, including it there to stay compilable
+- variable map (included in all)
+- register (util) functions
+  e.g. cp_rt_to_rp
+- page level functions
+  e.g. allocate page, free page, initialize page, process global page list, process page type local free list
+- cell functions
+  load cell (register) with constants?
+- cell-pair functions
+- cell-array functions
+- nat-array functions
+- stack functions
 ** TODO check: do pointers on cells exist that are on the locals/eval-stack?
 - currently the answer is *NO*, does that restrict the programming model?
 ** TODO tweak configuration parameters                -> increase speed/reduce memory consumption
 use profiling data
 * current (en)coding
 ** naming
- naming: atomic cell
-         cell                      :: 16 bit value (finest granular memory managed block)
-         atomic cell               :: a cell that has no followup value and is complete in itself (currently int-cell, byte-cell, cell-ptr, cell-pair-ptr)
-         cell-ptr                  :: an atomic cell, lowest bit of low byte is set, points to a cell (of any type)
-                                     lowbyte: #bxxxx xxx0
-                                     highbyte = page
-                                     functions that allocated/free a cell in a register, are always considered cell-ptr (in the register)
-         cell-pair                 :: a pair of two cells, cell0 and cell1 (in memory: 00 lowbyte-cell0, 01 highbyte-cell0, 02 lowbyte-cell1, 03 highbyte-cell1),
-                                     each cell can be of any atomic cell
-         cell-pair-ptr             :: an atomic cell, second lowest bit is set, lowest bit is unset, points to a cell-pair
-                                     lowbyte: #bxxxx xx01
-                                     highbyte = page
-                                     functions that allocated/free a cell-pair in a register, are always considered cell-pair-ptr (in the register)
-         int-cell                  :: an atomic cell having 13 bit as payload
-                                     lowbyte mask: #b0xxx xx11, xxxxx = high bits of int
-                                     highbyte = lowbyte of int
-         byte-cell (char|bool)     :: an atomic cell having one byte as payload
-                                     lowbyte mask: #b1111 1111
-                                     highbyte = payload
-         complex cell              :: a cell that functions as header for followup values (follows directly in memory)
-                                     complex cells cannot be pushed on the stack, they can only be pointed to by cell-ptr!
-         (cell-structure-header    :: a complex cell that defines a structure)
-         cell-array-header         :: a complex cell that defines an array, defining the number of cells in the second byte
-                                     a structure is an array of cells
-                                     lowbyte mask: #b1000 0011
-                                     highbyte: #of cells in this array
-                                     n*2 bytes with cells <- each cell needs to be gc'ed separately
-         cell-native-array-header  :: a complex cell that defines an array of bytes
-                                     a string is an native array of bytes
-                                     lowbyte mask: #b1000 0111
-                                     highbyte: #of bytes in this array
-                                     n bytes with byte payloads <- no gc of this necessary (holds plain values, no pointers, no cells)
-         (cell-float-header        :: a complex cell that defines a float)
-         page                      :: 256 byte memory managed unit, holding slots
-         slot                      :: a fixed size portion of memory on a page (sizes are 2=cell, 4=cell=pair, 8 ...), only one size per page is allowed
-         ref count                 :: byte counting how many pointers to this value exist, there can be pointer to pointers
-         cell-stack aka eval-stack :: stack of cells. ZP_​CELL_​STACK_​TOS holds the index (on current page), ZP_​CELL_​STACK_​LB_​PTR, ZP_​CELL_​STACK_​HB_​PTR holds the pointer to the low/high byte
-                                      [RT]         RT is the top of the stack (even though not on the stack memory wise)
-                                      [cell n lb] [cell n hb]
-                                             ...
-                                      [cell 1 lb] [cell 1 hb]
-                                      [cell 0 lb] [cell 0 hb]
-                                      ZP_​CELL_​STACK_​TOS points to the current element below RT (cell n)
+- files
+  - vm- ...  :: implementation for the virtual byte code maching
+  - bc- ...  :: implementation using (only) byte code
+- functions
+  - BC_...     :: implement code for a single byte code command, must be refcnt'd correctly
+  - VM_...     :: implement code for virtual byte code machine, does no refcnt-ing
+  - ...REFCNTD :: implements refcounting (even if prefixed otherwise)
+  description
+    input:  A/X/Y (register) description
+    usage:  A/X/Y (register) modifications
+            ZP_... memory/register modifications
+            VM_... memory/register modifications
+    output: A/X/Y (register) description
+            ZP_... memory/register modifications
+            VM_... memory/register modifications
+    funcs:  list of sub routines / functions used
 
-         m1 page px       :: page for slots with ref count at -1 position, with profile x (0..3) <- defines size and payload start offset
-         call-frame page  :: page for call-frames (stack organized, no ref counting etc.)
-         cell-pairs page  :: page for cell-pairs, (lowbyte) lsr x 2 to get ref count position
-         cell page        :: page for cells, (lowbyte) lsr x 1 to get ref count position (last cell unusable)
-         [s8 page          :: page for slots of size <=8, (lowbyte) lsr x 3 to get ref count position] optional
-         fid->loc page    :: page that maps a function id to a location of first byte code
-         code page        :: page holding byte code (and function meta data, module meta data?)
-         constants page   :: page holding constants (not ref counted)
-         page block       :: a number of consecutive pages allocated/freed as a block, allowing for larger memory objects (having less wasted bytes (e.g. for call-frames)?)
-         cell-stack page  :: a pair of pages, actually, that hold low and high byte of a cell. it is stack organized.
-
+- other
+  - ZP_...     :: located on the zero page (6510)
+  - ...__      :: local labels (usually replaced through usage of ~add-label-suffix~ function), not available from outside this function!
+** concepts
+- cell                      :: 16 bit value (finest granular memory managed block)
+- atomic cell               :: a cell that has no followup value and is complete in itself (currently int-cell, byte-cell, cell-ptr, cell-pair-ptr)
+- cell-ptr                  :: an atomic cell, lowest bit of low byte is set, points to a cell (of any type)
+                               lowbyte: #bxxxx xxx0
+                               highbyte = page
+                               functions that allocated/free a cell in a register, are always considered cell-ptr (in the register)
+- cell-pair                 :: a pair of two cells, cell0 and cell1 (in memory: 00 lowbyte-cell0, 01 highbyte-cell0, 02 lowbyte-cell1, 03 highbyte-cell1),
+                               each cell can be of any atomic cell
+- cell-pair-ptr             :: an atomic cell, second lowest bit is set, lowest bit is unset, points to a cell-pair
+                               lowbyte: #bxxxx xx01
+                               highbyte = page
+                               functions that allocated/free a cell-pair in a register, are always considered cell-pair-ptr (in the register)
+- int-cell                  :: an atomic cell having 13 bit as payload
+                               lowbyte mask: #b0xxx xx11, xxxxx = high bits of int
+                               highbyte = lowbyte of int
+- byte-cell (char|bool)     :: an atomic cell having one byte as payload
+                               lowbyte mask: #b1111 1111
+                               highbyte = payload
+- complex cell              :: a cell that functions as header for followup values (follows directly in memory)
+                               complex cells cannot be pushed on the stack, they can only be pointed to by cell-ptr!
+- (cell-structure-header    :: a complex cell that defines a structure)
+- cell-array-header         :: a complex cell that defines an array, defining the number of cells in the second byte
+                               a structure is an array of cells
+                               lowbyte mask: #b1000 0011
+                               highbyte: #of cells in this array
+                               n*2 bytes with cells <- each cell needs to be gc'ed separately
+- cell-native-array-header  :: a complex cell that defines an array of bytes
+                               a string is an native array of bytes
+                               lowbyte mask: #b1000 0111
+                               highbyte: #of bytes in this array
+                               n bytes with byte payloads <- no gc of this necessary (holds plain values, no pointers, no cells)
+- (cell-float-header        :: a complex cell that defines a float)
+- page                      :: 256 byte memory managed unit, holding slots
+- slot                      :: a fixed size portion of memory on a page (sizes are 2=cell, 4=cell=pair, 8 ...), only one size per page is allowed
+- ref count                 :: byte counting how many pointers to this value exist, there can be pointer to pointers
+- cell-stack aka eval-stack :: stack of cells. ZP_​CELL_​STACK_​TOS holds the index (on current page), ZP_​CELL_​STACK_​LB_​PTR, ZP_​CELL_​STACK_​HB_​PTR holds the pointer to the low/high byte
+                               [RT]         RT is the top of the stack (even though not on the stack memory wise)
+                               [cell n lb] [cell n hb]
+                                       ...
+                               [cell 1 lb] [cell 1 hb]
+                               [cell 0 lb] [cell 0 hb]
+                               ZP_​CELL_​STACK_​TOS points to the current element below RT (cell n)
+- m1 page px       :: page for slots with ref count at -1 position, with profile x (0..3) <- defines size and payload start offset
+- call-frame page  :: page for call-frames (stack organized, no ref counting etc.)
+- cell-pairs page  :: page for cell-pairs, (lowbyte) lsr x 2 to get ref count position
+- cell page        :: page for cells, (lowbyte) lsr x 1 to get ref count position (last cell unusable)
+- [s8 page          :: page for slots of size <=8, (lowbyte) lsr x 3 to get ref count position] optional
+- fid->loc page    :: page that maps a function id to a location of first byte code
+- code page        :: page holding byte code (and function meta data, module meta data?)
+- constants page   :: page holding constants (not ref counted)
+- page block       :: a number of consecutive pages allocated/freed as a block, allowing for larger memory objects (having less wasted bytes (e.g. for call-frames)?)
+- cell-stack page  :: a pair of pages, actually, that hold low and high byte of a cell. it is stack organized.
 ** parameters
 - are passed as regular stack values
 - need to be copied to locals if multiple access is necessary and /dup/ does not suffice
-** page
+** pages
 #+begin_src dot :file memory-page-state.gen.png
   digraph finite_state_machine {
       node [shape=point]ENTRY; //,EXIT
@@ -647,7 +662,7 @@ cell-stack is organized as stack (page pair)
    ...
 
 each cell can be either a cell pointer or a call value (never cell header)
-* concepts
+* concepts with functions
 - page :: os allocation unit
   - alloc, free, bitmap of available pages
 - cell :: smallest data unit
@@ -798,51 +813,6 @@ black-node
    val  o
        / \
       L   R
-* modifications ideas
-** TODO clarify RA RT usage during GC
-*** concept
-RT = cell-pair-pointer | cell-pointer | value-cell 
-     \_ cell-pair        \_ cell-pair-pointer | cell-pointer | value-cell | header-cell
-RA = cell-pair-pointer | cell-pointer | value-cell ?header-cell?
-     \_ cell-pair        \_ cell-pair-pointer | cell-pointer | value-cell | header-cell
-*** cleanup code
-idea REFCOUNT​_INCR is needed only on RT
-     REFCOUNT​_DECR is needed on RT and RA
-     GC OPERATIONS should run on RA, never on RT
-[[file:vm-memory-manager.rkt::4641]]
-[[file:vm-memory-manager.rkt::4434]]
-- [ ] separate REFCOUNT​_DECR from actual garbage collection
-  inspect the following methods and extract GC (running on RA) into separate methods
-  #+begin_src scheme
-    VM_REFCOUNT_DECR_RT                                ;; generic decrement of refcount (dispatches depending on type)
-    VM_REFCOUNT_INCR_RT                                ;; generic increment of refcount (dispatches depending on type)
-
-    VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
-    VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
-    VM_REFCOUNT_DECR_RT__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
-
-    VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR                 ;; increment refcount of cell-pair
-    VM_REFCOUNT_INCR_RA__M1_SLOT                         ;; increment refcount of m1-slot
-    VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
-
-    VM_REFCOUNT_DECR_RA                                ;; generic decrement of refcount (dispatches depending on type)
-    VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
-    VM_REFCOUNT_DECR_RA__M1_SLOT                       ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
-    VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
-
-    VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS                ;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
-    VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
-    
-    VM_GC_ARRAY_SLOT_RT                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
-
-    VM_FREE_PTR_IN_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
-
-    VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
-
-  #+end_src
-  - VM​_REFCOUNT​_DECR​_RT
-  - VM​_REFCOUNT​_DECR​_RA
-- [ ] make garbage collection run on RA (and RZ) only
 * log
 ** GC usage of RA RT
 - RT may be used for regular dec/inc of refcount
@@ -1995,6 +1965,63 @@ instead of implementing free for RT and RA, implement one function, copying RT/R
 ** DONE make sure disassembler works for labels with lower case
 ** DONE reactivate tests involving RA functions now deactivated
 - State "DONE"       from "IMPLEMENT"  [2025-05-16 Fri 17:20]
+** DONE clarify RA RT usage during GC
+- State "DONE"       from "TODO"       [2025-05-21 Wed 18:50]
+*** concept
+RT = cell-pair-pointer | cell-pointer | value-cell
+     \_ cell-pair        \_ cell-pair-pointer | cell-pointer | value-cell | header-cell
+RA = cell-pair-pointer | cell-pointer | value-cell ?header-cell?
+     \_ cell-pair        \_ cell-pair-pointer | cell-pointer | value-cell | header-cell
+*** cleanup code
+idea REFCOUNT​_INCR is needed only on RT
+     REFCOUNT​_DECR is needed on RT and RA
+     GC OPERATIONS should run on RA, never on RT
+[[file:vm-memory-manager.rkt::4641]]
+[[file:vm-memory-manager.rkt::4434]]
+- [ ] separate REFCOUNT​_DECR from actual garbage collection
+  inspect the following methods and extract GC (running on RA) into separate methods
+  #+begin_src scheme
+    VM_REFCOUNT_DECR_RT                                ;; generic decrement of refcount (dispatches depending on type)
+    VM_REFCOUNT_INCR_RT                                ;; generic increment of refcount (dispatches depending on type)
+
+    VM_REFCOUNT_DECR_RT__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+    VM_REFCOUNT_DECR_RT__M1_SLOT_PTR                   ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+    VM_REFCOUNT_DECR_RT__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+
+    VM_REFCOUNT_INCR_RT__CELL_PAIR_PTR                 ;; increment refcount of cell-pair
+    VM_REFCOUNT_INCR_RA__M1_SLOT                         ;; increment refcount of m1-slot
+    VM_REFCOUNT_INCR_RT__CELL_PTR                      ;; increment refcount of the cell, rt is pointing to
+
+    VM_REFCOUNT_DECR_RA                                ;; generic decrement of refcount (dispatches depending on type)
+    VM_REFCOUNT_DECR_RA__CELL_PAIR_PTR                 ;; decrement refcount, calling vm_free_cell_pair_in_zp_ptr if dropping to 0
+    VM_REFCOUNT_DECR_RA__M1_SLOT                       ;; decrement refcount, calling vm_free_m1_slot_in_zp_ptr if dropping to 0
+    VM_REFCOUNT_DECR_RA__CELL_PTR                      ;; decrement refcount, calling vm_free_cell_in_zp_ptr if dropping to 0
+
+    VM_REMOVE_FULL_PAGES_FOR_PTR2_SLOTS                ;; remove full pages in the free list of pages of the same type as are currently in ZP_PTR2
+    VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
+
+    VM_GC_ARRAY_SLOT_RT                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
+
+    VM_FREE_PTR_IN_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
+
+    VM_ADD_CELL_PAIR_IN_RT_TO_ON_PAGE_FREE_LIST       ;; add the given cell-pair (in zp_rt) to the free list of cell-pairs on its page
+
+  #+end_src
+  - VM​_REFCOUNT​_DECR​_RT
+  - VM​_REFCOUNT​_DECR​_RA
+- [ ] make garbage collection run on RA (and RZ) only
+** DONE harmonize function description                -> ease the usage of functions as building blocks
+- State "DONE"       from "TODO"       [2025-05-21 Wed 18:51]
+- do this in an incremental fashion
+- describe what is useful
+input:  A/X/Y (register) description
+usage:  A/X/Y (register) modifications
+        ZP_... memory/register modifications
+        VM_... memory/register modifications
+output: A/X/Y (register) description
+        ZP_... memory/register modifications
+        VM_... memory/register modifications
+funcs:  list of sub routines / functions used
 * - :noexport:
 #+begin_src emacs-lisp
   ;; Local Variables:
