@@ -28,7 +28,8 @@
                   assembly-code-list-labels
                   ))
 
-(provide run-code-in-test-on-code remove-labels-for)
+(provide run-code-in-test-on-code
+         remove-labels-for)
 
 (define (remove-labels-for code labels-to-remove (result (list)))
   (cond

@@ -67,20 +67,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (require (only-in racket/list flatten take empty? range))
 
-(require (only-in "./vm-memory-manager.rkt"
-                  WRITE_CELLPAIR_RT_CELL0_TO_RT
-                  vm-memory-manager
-                  vm-cell-at-nil?
-                  vm-page->strings
-                  vm-stack->strings
-                  vm-regt->string
-                  vm-cell-at->string
-                  vm-cell->string
-                  vm-deref-cell-pair-w->string
-                  GLOBAL_CELLPAIR_FREE_LIST
-                  ALLOC_CELLARR_TO_RA
-                  POP_CELL_EVLSTK_TO_RT
-
+(require (only-in "./vm-memory-map.rkt"
                   ast-const-get
                   ZP_RT
                   ZP_VM_PC
@@ -91,6 +78,19 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
+(require (only-in "./vm-memory-manager.rkt"
+                  GLOBAL_CELLPAIR_FREE_LIST
+                  WRITE_CELLPAIR_RT_CELL0_TO_RT
+                  vm-memory-manager
+                  vm-cell-at-nil?
+                  vm-page->strings
+                  vm-stack->strings
+                  vm-regt->string
+                  vm-cell-at->string
+                  vm-cell->string
+                  vm-deref-cell-pair-w->string
+                  ALLOC_CELLARR_TO_RA
+                  POP_CELL_EVLSTK_TO_RT))
 (require (only-in "./vm-lists.rkt" vm-lists))
 (require (only-in "./vm-call-frame.rkt"
                   vm-call-frame->strings

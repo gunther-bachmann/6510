@@ -108,7 +108,7 @@ primes (ignore 0,1) up to 30
                   WRITE_L1
                   WRITE_L2
                   WRITE_L3])
-(require (only-in "./vm-memory-manager.rkt" ZP_VM_PC shorten-cell-strings shorten-cell-string))
+(require (only-in "./vm-memory-manager.rkt" shorten-cell-strings shorten-cell-string))
 
 (require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt" memory-list))

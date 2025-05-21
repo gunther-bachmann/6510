@@ -13,14 +13,15 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (require (only-in racket/list flatten))
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in "../tools/6510-interpreter.rkt" peek-word-at-address cpu-state-clock-cycles peek))
-(require (only-in "./vm-memory-manager.rkt"
+(require (only-in "./vm-memory-map.rkt"
                   ZP_CALL_FRAME
                   ZP_VM_PC
                   ZP_VM_FUNC_PTR
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_TOP_MARK
-                  ZP_CALL_FRAME_TOP_MARK
+                  ZP_CALL_FRAME_TOP_MARK))
+(require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
                   vm-stack->strings
                   vm-page->strings

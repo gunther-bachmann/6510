@@ -53,6 +53,17 @@
 (require (only-in "./vm-bc-disassembler.rkt"
                   disassembler-byte-code--byte-count
                   disassemble-byte-code))
+(require (only-in "./vm-memory-map.rkt"
+                  ast-const-get
+                  ZP_RT
+                  ZP_VM_PC
+                  ZP_LOCALS_LB_PTR
+                  ZP_LOCALS_HB_PTR
+                  ZP_VM_FUNC_PTR
+                  ZP_CALL_FRAME
+                  ZP_CELL_STACK_TOS
+                  ZP_CELL_STACK_LB_PTR
+                  ZP_CELL_STACK_HB_PTR))
 (require (only-in "./vm-memory-manager.rkt"
                   GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
                   GLOBAL_CELLPAIR_FREE_LIST
@@ -64,18 +75,7 @@
                   vm-regt->string
                   vm-cell-at->string
                   vm-cell->string
-                  vm-deref-cell-pair-w->string                  
-
-                  ast-const-get
-                  ZP_RT
-                  ZP_VM_PC
-                  ZP_LOCALS_LB_PTR
-                  ZP_LOCALS_HB_PTR
-                  ZP_VM_FUNC_PTR
-                  ZP_CALL_FRAME
-                  ZP_CELL_STACK_TOS
-                  ZP_CELL_STACK_LB_PTR
-                  ZP_CELL_STACK_HB_PTR))
+                  vm-deref-cell-pair-w->string))
 (require (only-in "./vm-call-frame.rkt" vm-call-frame->strings))
 
 

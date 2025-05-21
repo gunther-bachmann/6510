@@ -1,5 +1,18 @@
 #+title: vm-memory-manager
 * open tasks
+** TODO split vm-memory-manager in several submodules -> compile/test faster, racket integration better
+incrementally implemented by extracting the given from vm-memory-manager, including it there to stay compilable
+- variable map (included in all)
+- register (util) functions
+  e.g. cp_rt_to_rp
+- page level functions
+  e.g. allocate page, free page, initialize page, process global page list, process page type local free list
+- cell functions
+  load cell (register) with constants?
+- cell-pair functions
+- cell-array functions
+- nat-array functions
+- stack functions
 ** IMPLEMENT implement RP as (secondary) register for cell pairs
 - IDEA: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
@@ -48,19 +61,6 @@
 - one argument function on ZP_RT
 - array access on ZP_RA
 - second argument function on ZP_RS
-** TODO split vm-memory-manager in several submodules -> compile/test faster, racket integration better
-incrementally implemented by extracting the given from vm-memory-manager, including it there to stay compilable
-- variable map (included in all)
-- register (util) functions
-  e.g. cp_rt_to_rp
-- page level functions
-  e.g. allocate page, free page, initialize page, process global page list, process page type local free list
-- cell functions
-  load cell (register) with constants?
-- cell-pair functions
-- cell-array functions
-- nat-array functions
-- stack functions
 ** TODO check: do pointers on cells exist that are on the locals/eval-stack?
 - currently the answer is *NO*, does that restrict the programming model?
 ** TODO tweak configuration parameters                -> increase speed/reduce memory consumption

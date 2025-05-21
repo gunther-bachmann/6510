@@ -18,7 +18,6 @@
                     vm-cell-pairs-used-num-in-page))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
   (require (only-in "./vm-memory-manager.rkt"
-                    ZP_VM_PC
                     vm-page->strings
                     shorten-cell-strings
                     shorten-cell-string
