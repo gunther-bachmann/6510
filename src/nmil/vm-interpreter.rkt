@@ -1316,7 +1316,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_NIL_P)
           (JSR CP_RT_TO_RZ)             ;; keep for dec-refcnt
-          (JSR VM_NIL_P_R)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
+          (JSR VM_NIL_P)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
           (JSR DEC_REFCNT_RZ)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
@@ -1351,15 +1351,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define BC_COONS
   (list
    (label BC_COONS)
-          (JSR VM_CONS_R)
-          (JSR VM_CONS_R)
+          (JSR VM_CONS__REFCNTD)
+          (JSR VM_CONS__REFCNTD)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define CONS                #x42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
 (define BC_CONS
   (list
    (label BC_CONS)          
-          (JSR VM_CONS_R)
+          (JSR VM_CONS__REFCNTD)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| bc-cons |#
@@ -1382,7 +1382,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_CAR)
           (JSR CP_RT_TO_RZ)
-          (JSR VM_CAR_R)
+          (JSR VM_CAR)
           (JSR INC_REFCNT_RT)
           (JSR DEC_REFCNT_RZ)
           (JMP VM_INTERPRETER_INC_PC)))
@@ -1406,7 +1406,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_CDR)
           (JSR CP_RT_TO_RZ)
-          (JSR VM_CDR_R)
+          (JSR VM_CDR)
           (JSR INC_REFCNT_RT)
           (JSR DEC_REFCNT_RZ)
           (JMP VM_INTERPRETER_INC_PC)))
@@ -2366,7 +2366,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STX ZP_RZ)
           (LDX ZP_RT+1)
           (STX ZP_RZ+1)
-          (JSR VM_CxxR_R)
+          (JSR VM_CxxR)
           (JSR INC_REFCNT_RT)
           (JSR DEC_REFCNT_RZ)
           (JMP VM_INTERPRETER_INC_PC)))

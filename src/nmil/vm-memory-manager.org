@@ -1,5 +1,9 @@
 #+title: vm-memory-manager
 * open tasks
+** CONVENTION: function naming
+functions called BC_... must be refcnt'd correctly,
+functions called VM_... may be refcnt'd correctly (adding REFCNTD postfix)
+other functions do no refcnt (except for very special cases <- check which are necessary!)
 ** IMPLEMENT implement RP as (secondary) register for cell pairs
 - IDEA: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr

@@ -51,40 +51,40 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 ;;   VM_CDR   :: TOS := (cdr TOS)
 ;;   VM_CONS  :: TOS := (TOS . TOS-1)
 
-(define VM_NIL_P_R
+(define VM_NIL_P
   (list
-   (label STACK_EMPTY__VM_NIL_P_R)
-   (label NO_CELL_PAIR_PTR__VM_NIL_P_R)
+   (label STACK_EMPTY__VM_NIL_P)
+   (label NO_CELL_PAIR_PTR__VM_NIL_P)
           (BRK)
 
    ;; ----------------------------------------
-   (label VM_NIL_P_R)
+   (label VM_NIL_P)
           ;; check if stack is not empty
           (LDA ZP_RT)
-          (BEQ STACK_EMPTY__VM_NIL_P_R)
+          (BEQ STACK_EMPTY__VM_NIL_P)
 
           ;; check if tos is cell-pair-ptr
           (AND !$03)
           (CMP !$01)
-          (BNE NOT_NIL__VM_NIL_P_R)
+          (BNE NOT_NIL__VM_NIL_P)
 
-   (label VM_NIL_P_R__UC) ;; no checks
+   (label VM_NIL_P__UC) ;; no checks
           (LDA ZP_RT) ;; get tagged byte
           (CMP !<TAGGED_NIL) ;;
-          (BNE NOT_NIL__VM_NIL_P_R)
+          (BNE NOT_NIL__VM_NIL_P)
           ;; this additional check should not be necessary, since tagged low byte of a non-nil cell-pair-ptr may never be #x02
           ;; (LDA ZP_RT+1) ;; get high byte
-          ;; (BNE NOT_NIL__VM_NIL_P_R) ;; high byte of nil is 0! => branch if != 0
+          ;; (BNE NOT_NIL__VM_NIL_P) ;; high byte of nil is 0! => branch if != 0
           (JMP WRITE_INT1_TO_RT) ;; true
-   (label NOT_NIL__VM_NIL_P_R)
+   (label NOT_NIL__VM_NIL_P)
           (JMP WRITE_INT0_TO_RT) ;; false
           ))
 
-(module+ test #| VM_NIL_P_R |#
+(module+ test #| VM_NIL_P |#
   (define use-case-nil_p-a-code
     (list
      (JSR WRITE_NIL_TO_RT)
-     (JSR VM_NIL_P_R)
+     (JSR VM_NIL_P)
      ))
 
   (define use-case-nil_p-a-state-after  ;; (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-nil_p-a-state-before))
@@ -97,7 +97,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (define use-case-nil_p-b-code
     (list
      (JSR ALLOC_CELLPAIR_TO_RT)
-     (JSR VM_NIL_P_R)))
+     (JSR VM_NIL_P)))
 
   (define use-case-nil_p-b-state-after
     (run-code-in-test use-case-nil_p-b-code))
@@ -107,47 +107,47 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                       "int $0000  (rt)")
                 "which is false"))
 
-(define VM_CAR_R
+(define VM_CAR
   (list
-   (label STACK_EMPTY__VM_CAR_R)
-   (label RT_IS_NIL__VM_CAR_R)
-   (label NO_CELL_PAIR_PTR__VM_CAR_R)
+   (label STACK_EMPTY__VM_CAR)
+   (label RT_IS_NIL__VM_CAR)
+   (label NO_CELL_PAIR_PTR__VM_CAR)
           (BRK)
-   (label VM_CAR_R)
+   (label VM_CAR)
           ;; check operand present
           (LDA ZP_RT)
-          (BEQ STACK_EMPTY__VM_CAR_R)
+          (BEQ STACK_EMPTY__VM_CAR)
 
           ;; check RT is not nil
           (CMP !$01)
-          (BEQ RT_IS_NIL__VM_CAR_R)
+          (BEQ RT_IS_NIL__VM_CAR)
 
           ;; check RT is a cell-pair-ptr
           (AND !$03)
           (CMP !$01)
-          (BNE NO_CELL_PAIR_PTR__VM_CAR_R)
+          (BNE NO_CELL_PAIR_PTR__VM_CAR)
 
           (JMP WRITE_CELLPAIR_RT_CELL0_TO_RT)))
 
-(define VM_CDR_R
+(define VM_CDR
   (list
-   (label STACK_EMPTY__VM_CDR_R)
-   (label RT_IS_NIL__VM_CDR_R)
-   (label NO_CELL_PAIR_PTR__VM_CDR_R)
+   (label STACK_EMPTY__VM_CDR)
+   (label RT_IS_NIL__VM_CDR)
+   (label NO_CELL_PAIR_PTR__VM_CDR)
           (BRK)
-   (label VM_CDR_R)
+   (label VM_CDR)
           ;; check operand present
           (LDA ZP_RT)
-          (BEQ STACK_EMPTY__VM_CDR_R)
+          (BEQ STACK_EMPTY__VM_CDR)
 
           ;; check RT is not nil
           (CMP !$01)
-          (BEQ RT_IS_NIL__VM_CDR_R)
+          (BEQ RT_IS_NIL__VM_CDR)
 
           ;; check RT is a cell-pair-ptr
           (AND !$03)
           (CMP !$01)
-          (BNE NO_CELL_PAIR_PTR__VM_CDR_R)
+          (BNE NO_CELL_PAIR_PTR__VM_CDR)
 
           (JMP WRITE_CELLPAIR_RT_CELL1_TO_RT)))
 
@@ -156,40 +156,40 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 ;; cadr =  (car (cdr x))
 ;; cdar =  (cdr (car x))
 ;; cddr =  (cdr (cdr x))
-(define VM_CxxR_R
+(define VM_CxxR
   (list 
-   (label VM_CxxR_R)
+   (label VM_CxxR)
           (LSR)
-          (BCS CONSES__VM_CxxR_R)
+          (BCS CONSES__VM_CxxR)
           (TAX)
-          (LDA BRANCH_TARGETS__VM_CxxR_R,x)
-          (STA BRANCH_COMMAND__VM_CxxR_R+1)
-   (label BRANCH_COMMAND__VM_CxxR_R)
+          (LDA BRANCH_TARGETS__VM_CxxR,x)
+          (STA BRANCH_COMMAND__VM_CxxR+1)
+   (label BRANCH_COMMAND__VM_CxxR)
           (BNE $00)
-          (JSR VM_CAR_R) ;; caar
-          (JMP VM_CAR_R)
-          (JSR VM_CDR_R) ;; cadr
-          (JMP VM_CAR_R)
-          (JSR VM_CAR_R) ;; cdar
-          (JMP VM_CDR_R)
-          (JSR VM_CDR_R) ;; cddr
-          (JMP VM_CDR_R)
-   (label CONSES__VM_CxxR_R)
+          (JSR VM_CAR) ;; caar
+          (JMP VM_CAR)
+          (JSR VM_CDR) ;; cadr
+          (JMP VM_CAR)
+          (JSR VM_CAR) ;; cdar
+          (JMP VM_CDR)
+          (JSR VM_CDR) ;; cddr
+          (JMP VM_CDR)
+   (label CONSES__VM_CxxR)
           (RTS) ;; no implementation for the other 4 posssible commands
 
-   (label BRANCH_TARGETS__VM_CxxR_R)
+   (label BRANCH_TARGETS__VM_CxxR)
           (byte $00 $06 $0c $12)))
 
-(define VM_CONS_R
+(define VM_CONS__REFCNTD
   (list
-   (label STACK_HAS_LESS_THAN_TWO__VM_CONS_R)
+   (label STACK_HAS_LESS_THAN_TWO__VM_CONS__REFCNTD)
           (BRK)
-   (label VM_CONS_R)
+   (label VM_CONS__REFCNTD)
           (LDY ZP_CELL_STACK_TOS)
           (CPY !$01) ;; 01 = one element + RT = two elements
-          (BMI STACK_HAS_LESS_THAN_TWO__VM_CONS_R)
+          (BMI STACK_HAS_LESS_THAN_TWO__VM_CONS__REFCNTD)
 
-   (label VM_CONS_R__UC) ;; no checks
+   (label VM_CONS__REFCNTD__UC) ;; no checks
           (LDA ZP_RT)
           (STA ZP_RP)
           (LDA ZP_RT+1)
@@ -204,7 +204,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (list
      (JSR PUSH_NIL_TO_EVLSTK)
      (JSR PUSH_INT_1_TO_EVLSTK)
-     (JSR VM_CONS_R)
+     (JSR VM_CONS__REFCNTD)
      ))
 
   (define use-case-cons-state-after
@@ -222,11 +222,11 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                 "(int $0001 . pair-ptr NIL)"))
 
 (define just-vm-list
-  (append VM_CONS_R
-          VM_CAR_R
-          VM_CDR_R
-          VM_NIL_P_R
-          VM_CxxR_R))
+  (append VM_CONS__REFCNTD
+          VM_CAR
+          VM_CDR
+          VM_NIL_P
+          VM_CxxR))
 (define vm-lists
   (append just-vm-list vm-call-frame))
 
