@@ -1,8 +1,8 @@
 #lang racket/base
 
 (require (only-in racket/list flatten))
-(require "./bc-ast.rkt")
-(require (only-in "./bc-resolver.rkt" bc-resolve bc-bytes))
+(require "./vm-bc-ast.rkt")
+(require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
 
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter

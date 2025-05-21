@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "./vm-btree.rkt")
+(require "./bc-btree.rkt")
 
 (require "../6510.rkt")
 (require "../6510-test-utils.rkt")
@@ -8,7 +8,7 @@
 (module+ test
   (require rackunit)
   (require (only-in racket/list flatten make-list))
-  (require (only-in "./vm-btree.rkt" BTREE_PATH_TO_FIRST))
+  (require (only-in "./bc-btree.rkt" BTREE_PATH_TO_FIRST))
   (require (only-in "./vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings

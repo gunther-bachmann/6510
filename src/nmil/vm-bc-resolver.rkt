@@ -8,7 +8,7 @@ resolve unresolved reference in byte code ast
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require (only-in racket/list empty? flatten))
-(require (only-in "./bc-ast.rkt"
+(require (only-in "./vm-bc-ast.rkt"
                   bc-ast-rel-branch-reference
                   bc-ast-rel-branch-reference-label-ref
                   bc-ast-rel-branch-reference?
