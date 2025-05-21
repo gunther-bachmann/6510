@@ -194,9 +194,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (STA ZP_RP)
           (LDA ZP_RT+1)
           (STA ZP_RP+1)
-          (JSR ALLOC_CELLPAIR_TO_RT)
-          (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)
-          (JMP POP_CELL_EVLSTK_TO_CELL1_RT)))
+          (JSR ALLOC_CELLPAIR_TO_RT)             ;; this cellpair is new
+          (JSR INC_REFCNT_RT)
+          (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)    ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
+          (JMP POP_CELL_EVLSTK_TO_CELL1_RT)))    ;; and and write into cell1 => no refcnt mod needed here
 
 (module+ test #| VM_CONS |#
   (define use-case-cons-code
@@ -211,7 +212,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
   (check-equal? (vm-stack->strings use-case-cons-state-after)
                 (list "stack holds 1 item"
-                      (format "pair-ptr[0] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+                      (format "pair-ptr[1] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
   (check-equal? (vm-page->strings use-case-cons-state-after PAGE_AVAIL_0)
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
@@ -231,4 +232,4 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test #| vm-lists |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-list)))
-                       100))
+                       103))

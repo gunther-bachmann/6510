@@ -633,9 +633,9 @@ call frame primitives etc.
                   "pair-ptr NIL"
                   "pair-ptr NIL")))
 
-;; input:  x  (00 = RT, 02 = RA)
-;; output: Rx
-;; NO PUSH IS DONE, Rx IS SIMPLY OVERWRITTEN!
+;; write NIL into register, not checking its content (no dec-refcnt)
+;; input:  -
+;; output: RT (RP) = NIL
 (define WRITE_NIL_TO_RT
   (list
    (label WRITE_NIL_TO_RT)
@@ -667,10 +667,12 @@ call frame primitives etc.
 
   (check-true (vm-cell-at-nil? write-nil-to-rt ZP_RT)))
 
-;; input: A = lowbyte of int (0..255), written into high byte of cell register RT
-;;        Y = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register
-;;        X = (0 = RT, 2 = RA)
-;; output: Rx = cell-int
+;; write the given int in A/Y into RT, ignoring what was in RT (no dec-refcnt)
+;; input:  A = lowbyte of int (0..255), written into high byte of cell register RT
+;;         Y = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register
+;;         X = (0 = RT, 2 = RA)
+;; usage:  A, X, Y
+;; output: RT = cell-int
 (define WRITE_INT_AY_TO_RT
   (list
    (label WRITE_INTm1_TO_RT)
@@ -714,6 +716,11 @@ call frame primitives etc.
   (check-equal? (vm-regt->string vm-write-int-ay-to-rt-state)
                 "int $0201"))
 
+;; write the cell in RT into the CELL Y (0|2) of the cell-pair referenced in RP
+;; input:  Y, RT, RP
+;; usage:  A, Y
+;; output: RP@Y <- RT    Y=0: RP -> [RT][...],  Y=2: RP -> [...][RT]
+;; funcs:  -
 (define WRITE_RT_TO_CELLy_CELLPAIR_RP
   (list
    (label WRITE_RT_TO_CELL1_CELLPAIR_RP)
@@ -761,6 +768,11 @@ call frame primitives etc.
                 "(int $1001 . int $0110)"
                 "dereferencing the cell pair in rp, yields the int pairs 1001 and 0110"))
 
+;; write the cell in RP into the CELL Y (0|2) of the cell-pair referenced in RT
+;; input:  Y, RT, RP
+;; usage:  A, Y
+;; output: RT@Y <- RP    Y=0: RT -> [RP][...],  Y=2: RT -> [...][RP]
+;; funcs:  -
 (define WRITE_RP_TO_CELLy_CELLPAIR_RT
   (list
    (label WRITE_RP_TO_CELL1_CELLPAIR_RT)
@@ -814,11 +826,16 @@ call frame primitives etc.
                 "(int $1001 . int $0110)"
                 "dereferencing the cell pair in rt, yields the int pairs 1001 and 0110"))
 
+;; write the TOS of the EVLSTK (not RT) into CELL Y of cell-pair referenced by RT
+;; keep RT and pop TOS of EVLSTK ( RT+EVLSTK  -> RT+<<EVLSTK<<, and (Y=0) RT -> [<<EVLSTK][...], or (Y=1) RT -> [...][<<EVLSTK]
+;; no inc/dec refcnt needs to take place, since # references to RT nor the popped TOS of EVLSTK do change
 ;; input:  cell-stack (TOS)
 ;;         RT (must be a cell-pair ptr
 ;;         y = (0 = cell0, 2 = cell1)
+;; usage:  A, Y
 ;; output: cell-stack (one value less)
 ;;         cell0 of RA is set
+;; funcs:  -
 (define POP_CELL_EVLSTK_TO_CELLy_RT
   (add-label-suffix
    "__" "__POP_CELL_EVLSTK_TO_CELLy_RT"
@@ -951,9 +968,11 @@ call frame primitives etc.
   (check-equal? (vm-regt->string vm-cp-rt-to-ra-state)
                 "int $0001"))
 
+;; overwrite the given cell-pair ptr in RT with the value of the Y's cell pointed to by the cell-pair
+;; no reference count is adjusted! this has to be taken care of by caller!
 ;; input:  Y - 0 (cell0), 2 (cell1)
-;;         RT (must be cell-pair ptr)
-;; output: RT
+;;         RT (must be cell-pair ptr) -> [A][B]
+;; output: RT = A (Y=0) or B (Y=2)
 (define WRITE_CELLPAIR_RT_CELL1_TO_RT #t)
 (define WRITE_CELLPAIR_RT_CELL0_TO_RT #t)
 (define WRITE_CELLPAIR_RT_CELLy_TO_RT
@@ -1004,6 +1023,11 @@ call frame primitives etc.
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rt-state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"))
 
+;; write into RP the value of the Y's cell pointed to by the cell-pair ptr RT
+;; no reference count is adjusted! this has to be taken care of by caller!
+;; input:  Y - 0 (cell0), 2 (cell1)
+;;         RT (must be cell-pair ptr) -> [A][B]
+;; output: RP = A (Y=0) or B (Y=2)
 (define WRITE_CELLPAIR_RT_CELL1_TO_RP #t)
 (define WRITE_CELLPAIR_RT_CELL0_TO_RP #t)
 (define WRITE_CELLPAIR_RT_CELLy_TO_RP
@@ -1053,6 +1077,11 @@ call frame primitives etc.
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rp-state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"))
 
+;; overwrite the given cell-pair ptr in RP with the value of the Y's cell pointed to by the cell-pair
+;; no reference count is adjusted! this has to be taken care of by caller!
+;; input:  Y - 0 (cell0), 2 (cell1)
+;;         RP (must be cell-pair ptr) -> [A][B]
+;; output: RP = A (Y=0) or B (Y=2)
 (define WRITE_CELLPAIR_RP_CELLy_TO_RP
   (list
    (label WRITE_CELLPAIR_RP_CELL1_TO_RP)
@@ -1101,6 +1130,8 @@ call frame primitives etc.
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rp-celly-to-rp-state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"))
 
+;; push rt onto the evlstack, no dec/inc refcnt is done!
+;; allocate new evlstk page if necessary
 ;; input:  RT+EVLSTK
 ;; usage:  A, X, Y
 ;; output: RT +(EVLSTK << RT)
@@ -1160,7 +1191,7 @@ call frame primitives etc.
                       "int $1fff  (rt)"
                       "int $1fff")))
 
-;; push a cell onto the stack (that is push the RegT, if filled, and write the value into RegT)
+;; push an atomic cell onto the stack (that is push the RegT, if filled, and write the value into RegT)
 ;; input: call-frame stack, RT
 ;;        A = high byte,
 ;;        X = tagged low
@@ -2434,7 +2465,7 @@ call frame primitives etc.
 
 ;; free nonatomic (is cell-ptr, cell-pair-ptr, cell-array-ptr, native-array-ptr)
 ;; parameter: zp_rt
-(define FREE_RT    ;; TODO: FREE_CELL_RT should work onl cell pointers only, anyone in need of generic free uses this function
+(define FREE_RT    ;; TODO: FREE_CELL_RT should work only cell pointers only, anyone in need of generic free uses this function
   (add-label-suffix
    "__" "FREE_RT"
    (flatten
@@ -3379,7 +3410,7 @@ call frame primitives etc.
    (label DEC_PAGE_CELL_CNT__)
           (DEC $c000,x)               ;; c0 is overwritten by page (see above), x = position of refcount (a >> 1)
           (BNE DONE__)
-          (JMP FREE_CELL_RZ)      ;; free (since refcnt dropped to 0)
+          (JMP FREE_CELL_RZ)      ;; free (since refcnt dropped to 0), and this is definitely a cell-ptr => free-cell can be called
           ))))
 
 (module+ test #| DEC_REFCNT_RZ |#
@@ -4136,12 +4167,8 @@ call frame primitives etc.
    (label TEMP__)
           (byte 0))))
 
-
-;; generic free on any type of cell-ptr (either pointer to a cell, pointer to a cell-pair, pointer to a cell-array or pointer to a native-array)
-;; free the given cell in RZ (RA, RT). it can be of any cell type!
-;; if it is a cell-ptr, the target is dec-refcnt'd
+;; free the given cell in RZ (RA, RT), and dec-refcnt its content (if it is a pointer)
 ;; it must not be a header cell of an array or something
-;; if it is an atomic cell, nothing happens
 ;; input: RZ
 ;; usage: A, X, Y, RZ
 ;; output: -
@@ -4172,13 +4199,13 @@ call frame primitives etc.
           (LDA (ZP_RZ),y)
           (TAX)
           (LSR)
-          (BCC IS_A_PTR__)
+          (BCC CONTAINS_A_PTR__)
           (LSR)
-          (BCS IS_NEITHER_CELLPTR_NOR_CELLPAIR_PTR__)
+          (BCS CONTAINS_NEITHER_CELLPTR_NOR_CELLPAIR_PTR__)
           (JMP FREE_CELLPAIR_RZ)
 
-   (label IS_A_PTR__)
-          ;; cell is a pointer => save pointed to for tail call in temp
+   (label CONTAINS_A_PTR__)
+          ;; cell contains is a pointer => save pointed to for tail call in temp
           ;; enqueue this rt in list to decrement refcount
           (LDA (ZP_RZ),y)
           (STA CELL_TO_FREE_NEXT__)
@@ -4212,7 +4239,7 @@ call frame primitives etc.
           (STA ZP_RZ)                           ;; RZ -> [cellA][cellB]  || [cell] || [cell-arr-header][cell0][cell1]...[celln] || [cell-natarr-header][byte0][byte1] ...[byten]
           (JMP DEC_REFCNT_RZ)                  ;; tail call since cell did hold a reference ;; the type of the cell was alread checked so optimization could directly call the right decr function
 
-   (label IS_NEITHER_CELLPTR_NOR_CELLPAIR_PTR__)
+   (label CONTAINS_NEITHER_CELLPTR_NOR_CELLPAIR_PTR__)
           ;; could still be something pointer to (like cellarr or nativearr)
           (LDA (ZP_RZ),y)
           (CMP !TAG_BYTE_CELL_ARRAY)
@@ -4220,7 +4247,7 @@ call frame primitives etc.
           (JMP DEC_REFCNT_CELLARR_RZ)
    (label MIGHT_BE_A_NAT_ARRAY__)
           (CMP !TAG_BYTE_NATIVE_ARRAY)
-          (BNE JUST_FREE_THIS_CELL__)
+          (BNE JUST_FREE_THIS_CELL__) ;; contains neither cell-ptr nor cell-pair-ptr nor nat array nor cell-array => just free the cell and ignore its content
           (JMP DEC_REFCNT_NATIVEARR_RZ)            ;; RZ -> [cell-natarr-header][byte0][byte1] ...[byten]
 
    (label CELL_TO_FREE_NEXT__)

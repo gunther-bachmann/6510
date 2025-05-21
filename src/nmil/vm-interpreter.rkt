@@ -1352,9 +1352,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_COONS)
           (JSR VM_CONS_R)
-          (JSR INC_REFCNT_RT)
           (JSR VM_CONS_R)
-          (JSR INC_REFCNT_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define CONS                #x42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
@@ -1362,7 +1360,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_CONS)          
           (JSR VM_CONS_R)
-          (JSR INC_REFCNT_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (module+ test #| bc-cons |#
@@ -2978,4 +2975,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       901))
+                       892))
