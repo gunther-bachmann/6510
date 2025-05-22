@@ -1,5 +1,11 @@
 #lang racket/base
 
+#|
+
+  list of functions of generic register operations (RT, RP, RZ, RA, RB, RC ...)
+
+|#
+
 (require "../6510.rkt")
 (require (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
@@ -11,10 +17,10 @@
                   vm-rega->string
                   vm-regt->string))
 
-(provide WRITE_NIL_TO_RT
+(provide WRITE_NIL_TO_RT        ;; write constant NIL into RT
          WRITE_NIL_TO_RP
-         WRITE_INT_AY_TO_RT
-         CP_RA_TO_RT
+         WRITE_INT_AY_TO_RT     ;; write integer constant into Rx
+         CP_RA_TO_RT            ;; copy regiser from RA to RT
          CP_RA_TO_RZ
          CP_RT_TO_RA
          CP_RT_TO_RP

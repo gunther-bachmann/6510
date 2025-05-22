@@ -1,5 +1,11 @@
 #lang racket/base
 
+#|
+
+  define all functions, data and constants for generic page level management
+
+|#
+
 (require (only-in racket/list flatten))
 (require "../6510.rkt")
 (require (only-in "./vm-memory-map.rkt"
@@ -13,17 +19,17 @@
                   vm-regt->string))
 
 (provide
-         VM_INITIALIZE_MEMORY_MANAGER
+         VM_INITIALIZE_MEMORY_MANAGER     ;; initialize memory management (must be called before first allocation)
 
-         FREE_PAGE_A                                       ;; free a page (the type specific stuff, of any, must have finished)
-         ALLOC_PAGE_TO_X                                   ;; allocate new page (not initialized)
+         FREE_PAGE_A                      ;; free a page (the type specific stuff, of any, must have finished)
+         ALLOC_PAGE_TO_X                  ;; allocate new page (not initialized)
 
-         VM_INITIAL_MM_REGS
-         VM_PAGE_SLOT_DATA
+         VM_INITIAL_MM_REGS               ;; memory management registers
+         VM_PAGE_SLOT_DATA                ;; page that holds allocation status and/or first free slot per page
 
-         GLOBAL_CELL_FREE_LIST
-         GLOBAL_CELLPAIR_FREE_LIST
-         GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
+         GLOBAL_CELL_FREE_LIST            ;; head of free cell list
+         GLOBAL_CELLPAIR_FREE_LIST        ;; head of free cell-pair list
+         GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)  ;; first page for cell-pair allocation
 
 
 (module+ test
@@ -53,7 +59,6 @@
      VM_INITIAL_MM_REGS
      (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
-
 
 ;; initial data for the memory management registers
 ;; put into memory @ #xcec0 - len (currently 3)
