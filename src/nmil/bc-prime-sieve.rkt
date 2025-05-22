@@ -108,8 +108,6 @@ primes (ignore 0,1) up to 30
                   WRITE_L1
                   WRITE_L2
                   WRITE_L3])
-(require (only-in "./vm-memory-manager.rkt" shorten-cell-strings shorten-cell-string))
-
 (require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
@@ -120,7 +118,9 @@ primes (ignore 0,1) up to 30
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
   (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
 
-  (require (only-in "./vm-memory-manager.rkt"
+  (require (only-in "./vm-inspector-utils.rkt"
+                    shorten-cell-strings
+                    shorten-cell-string
                     vm-cell-at-nil?
                     vm-page->strings
                     vm-stack->strings

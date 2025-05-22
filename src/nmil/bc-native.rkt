@@ -64,10 +64,6 @@
                   WRITE_L3
                   NATIVE])
 (require (only-in "./vm-memory-map.rkt" ZP_VM_PC))
-(require (only-in "./vm-memory-manager.rkt"
-                  shorten-cell-strings
-                  shorten-cell-string))
-
 (require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
@@ -78,7 +74,9 @@
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
   (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
 
-  (require (only-in "./vm-memory-manager.rkt"
+  (require (only-in "./vm-inspector-utils.rkt"
+                    shorten-cell-strings
+                    shorten-cell-string
                     vm-cell-at-nil?
                     vm-page->strings
                     vm-stack->strings

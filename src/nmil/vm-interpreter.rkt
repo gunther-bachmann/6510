@@ -82,15 +82,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   GLOBAL_CELLPAIR_FREE_LIST
                   WRITE_CELLPAIR_RT_CELL0_TO_RT
                   vm-memory-manager
+                  ALLOC_CELLARR_TO_RA
+                  POP_CELL_EVLSTK_TO_RT))
+(require (only-in "./vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-page->strings
                   vm-stack->strings
                   vm-regt->string
                   vm-cell-at->string
                   vm-cell->string
-                  vm-deref-cell-pair-w->string
-                  ALLOC_CELLARR_TO_RA
-                  POP_CELL_EVLSTK_TO_RT))
+                  vm-deref-cell-pair-w->string))
 (require (only-in "./vm-lists.rkt" vm-lists))
 (require (only-in "./vm-call-frame.rkt"
                   vm-call-frame->strings

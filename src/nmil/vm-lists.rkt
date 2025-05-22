@@ -11,8 +11,12 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
 (require (only-in racket/list flatten take))
 (require (only-in "../ast/6510-relocator.rkt" command-len))
+(require (only-in "./vm-inspector-utils.rkt"
+                  vm-stack->strings
+                  vm-page->strings
+                  vm-regt->string
+                  vm-deref-cell-pair-w->string))
 
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager vm-stack->strings vm-page->strings vm-regt->string vm-deref-cell-pair-w->string))
 (require (only-in "./vm-call-frame.rkt" vm-call-frame))
 (require (only-in "./vm-memory-manager-test-utils.rkt" run-code-in-test-on-code))
 

@@ -21,12 +21,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_TOP_MARK
                   ZP_CALL_FRAME_TOP_MARK))
-(require (only-in "./vm-memory-manager.rkt"
-                  vm-memory-manager
-                  vm-stack->strings
-                  vm-page->strings
-                  vm-regt->string
-                  vm-deref-cell-pair-w->string))
+(require (only-in "./vm-memory-manager.rkt" vm-memory-manager))
+
 
 (module+ test #| after mem init |#
   (require (only-in "../ast/6510-relocator.rkt" command-len))
@@ -44,7 +40,14 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test
   (require "../6510-test-utils.rkt")
-  (require (only-in "./vm-memory-manager-test-utils.rkt" run-code-in-test-on-code remove-labels-for))
+  (require (only-in "./vm-inspector-utils.rkt"
+                    vm-stack->strings
+                    vm-page->strings
+                    vm-regt->string
+                    vm-deref-cell-pair-w->string))
+  (require (only-in "./vm-memory-manager-test-utils.rkt"
+                    run-code-in-test-on-code
+                    remove-labels-for))
 
   (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
     (append (list (org #xa000)

@@ -90,9 +90,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
 (require (only-in racket/list flatten))
 (require "./vm-bc-ast.rkt")
-(require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
-
-
+(require (only-in "./vm-bc-resolver.rkt"
+                  bc-resolve
+                  bc-bytes))
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
@@ -158,27 +158,31 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   WRITE_L2
                   WRITE_L3])
 (require (only-in "./vm-memory-map.rkt" ZP_VM_PC))
-(require (only-in "./vm-memory-manager.rkt" shorten-cell-strings shorten-cell-string))
-
 (require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
 (module+ test #|  |#
   (require "../6510-test-utils.rkt")
 
-  (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
+(require (only-in "./vm-inspector-utils.rkt"
+                  shorten-cell-strings
+                  shorten-cell-string
+                  vm-cell-at-nil?
+                  vm-page->strings
+                  vm-stack->strings
+                  vm-regt->string
+                  vm-cell-at->string
+                  vm-cell->string
+                  vm-deref-cell-pair-w->string))
+  (require (only-in "./vm-interpreter-test-utils.rkt"
+                    run-bc-wrapped-in-test-
+                    vm-list->strings))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
   (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
-
-  (require (only-in "./vm-memory-manager.rkt"
-                    vm-cell-at-nil?
-                    vm-page->strings
-                    vm-stack->strings
-                    vm-regt->string
-                    vm-cell-at->string
-                    vm-cell->string
-                    vm-deref-cell-pair-w->string))
-  (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
+  (require (only-in "../util.rkt"
+                    bytes->int
+                    format-hex-byte
+                    format-hex-word))
 
 
   (define PAGE_AVAIL_0 #x97)

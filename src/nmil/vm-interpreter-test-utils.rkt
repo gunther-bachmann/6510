@@ -66,7 +66,8 @@
                   ZP_CELL_STACK_HB_PTR))
 (require (only-in "./vm-memory-manager.rkt"
                   GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
-                  GLOBAL_CELLPAIR_FREE_LIST
+                  GLOBAL_CELLPAIR_FREE_LIST))
+(require (only-in "./vm-inspector-utils.rkt"
                   shorten-cell-string
                   shorten-cell-strings
                   vm-cell-at-nil?
