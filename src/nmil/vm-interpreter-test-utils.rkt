@@ -64,7 +64,7 @@
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
-(require (only-in "./vm-memory-manager.rkt"
+(require (only-in "./vm-mm-pages.rkt"
                   GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
                   GLOBAL_CELLPAIR_FREE_LIST))
 (require (only-in "./vm-inspector-utils.rkt"

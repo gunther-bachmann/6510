@@ -78,8 +78,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
+(require (only-in "./vm-mm-pages.rkt"
+                  GLOBAL_CELLPAIR_FREE_LIST))
 (require (only-in "./vm-memory-manager.rkt"
-                  GLOBAL_CELLPAIR_FREE_LIST
                   WRITE_CELLPAIR_RT_CELL0_TO_RT
                   vm-memory-manager
                   ALLOC_CELLARR_TO_RA

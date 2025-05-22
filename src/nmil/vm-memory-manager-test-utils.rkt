@@ -120,7 +120,7 @@
     (run-code-in-test-on-code (wrap-code-for-test bc vm-memory-manager mocked-code-list) debug))
 
   ;; run the given code using mocks, calls being counted, and label suffixes for the test-code
-(define (compact-run-code-in-test- #:runtime-code (vm-memory-manager (list)) #:debug (debug #f) #:mock (mocked-labels (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS))) . cmds)
+(define (compact-run-code-in-test- #:runtime-code (vm-memory-manager (list)) #:debug (debug #f) #:mock (mocked-labels (list)) . cmds)
     (run-code-in-test
      (apply list-with-label-suffix
             cmds
