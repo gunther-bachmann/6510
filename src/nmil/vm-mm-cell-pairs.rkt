@@ -24,9 +24,11 @@ all functions around cell-pairs
          WRITE_CELLPAIR_RP_CELLy_TO_RP
          WRITE_CELLPAIR_RT_CELLy_TO_RP
          WRITE_RP_TO_CELLy_CELLPAIR_RT
+         WRITE_RT_TO_CELLy_CELLPAIR_RP
          INC_REFCNT_CELLPAIR_RT
          DEC_REFCNT_CELLPAIR_RZ
          FREE_CELLPAIR_RZ ;; includes FREE_CELLPAIR_RT and _RA
+         GC_CELLPAIR_FREE_LIST
 
          ;; jump targets with bool definitions
          WRITE_CELLPAIR_RT_CELL0_TO_RT
@@ -36,7 +38,9 @@ all functions around cell-pairs
          WRITE_CELLPAIR_RT_CELL0_TO_RP
          WRITE_CELLPAIR_RT_CELL1_TO_RP
          WRITE_RP_TO_CELL0_CELLPAIR_RT
-         WRITE_RP_TO_CELL1_CELLPAIR_RT)
+         WRITE_RP_TO_CELL1_CELLPAIR_RT
+         WRITE_RT_TO_CELL0_CELLPAIR_RP
+         WRITE_RT_TO_CELL1_CELLPAIR_RP)
 
 (module+ test
   (require (only-in racket/list make-list))
@@ -51,6 +55,8 @@ all functions around cell-pairs
                     vm-cell-pair-free-tree->string
                     vm-deref-cell-pair-w->string
                     vm-deref-cell-w->string
+                    vm-refcount-cell-pair-ptr
+                    vm-refcount-cell-ptr
                     vm-regp->string
                     vm-page->strings))
   (require (only-in "./vm-mm-register-functions.rkt"
@@ -82,6 +88,7 @@ all functions around cell-pairs
      WRITE_CELLPAIR_RP_CELLy_TO_RP
      WRITE_CELLPAIR_RT_CELLy_TO_RP
      WRITE_RP_TO_CELLy_CELLPAIR_RT
+     WRITE_RT_TO_CELLy_CELLPAIR_RP
      INIT_CELLPAIR_PAGE_X_TO_AX
      WRITE_NIL_TO_RP
      CP_RT_TO_RZ
@@ -93,6 +100,7 @@ all functions around cell-pairs
      INC_REFCNT_CELLPAIR_RT
      (list (label DONE__) (RTS))
      DEC_REFCNT_CELLPAIR_RZ
+     GC_CELLPAIR_FREE_LIST
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label INIT_CELLSTACK_PAGE_X) (RTS))
@@ -880,6 +888,32 @@ all functions around cell-pairs
           (RTS)))
 
 
+(module+ test #| vm-refcount-mmcr-rt--cell-pair-ptr |#
+  (define vm-refcount-mmcr-rt--cell-pair-ptr-state
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+     (JSR ALLOC_CELLPAIR_TO_RT)
+     (JSR INC_REFCNT_CELLPAIR_RT)
+     (JSR INC_REFCNT_CELLPAIR_RT)))
+
+  (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-pair-ptr-state)
+                (format "pair-ptr[2] $~a05" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state (+ PAGE_AVAIL_0_W #x05))
+                2)
+
+  (define vm-refcount-mmcr-rt--cell-pair-ptr-state2
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+     (JSR ALLOC_CELLPAIR_TO_RT)
+     (JSR INC_REFCNT_CELLPAIR_RT)
+     (JSR INC_REFCNT_CELLPAIR_RT)
+     (JSR DEC_REFCNT_CELLPAIR_RT)))
+
+  (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-pair-ptr-state2)
+                (format "pair-ptr[1] $~a05" (format-hex-byte PAGE_AVAIL_0)))
+  (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state2 (+ PAGE_AVAIL_0_W #x05))
+                1))
+
 (define DEC_REFCNT_CELLPAIR_RZ
   (list
    (label DEC_REFCNT_CELLPAIR_RA)
@@ -1101,3 +1135,156 @@ all functions around cell-pairs
   ;; (check-equal? (vm-deref-cell-w->string new-free-cell-pair-ptr-in-rt-4-state (+ PAGE_AVAIL_0 #x02))
   ;;               "empty")
   )
+
+;; write the cell in RT into the CELL Y (0|2) of the cell-pair referenced in RP
+;; input:  Y, RT, RP
+;; usage:  A, Y
+;; output: RP@Y <- RT    Y=0: RP -> [RT][...],  Y=2: RP -> [...][RT]
+;; funcs:  -
+(define WRITE_RT_TO_CELL0_CELLPAIR_RP #t)
+(define WRITE_RT_TO_CELL1_CELLPAIR_RP #t)
+(define WRITE_RT_TO_CELLy_CELLPAIR_RP
+  (list
+   (label WRITE_RT_TO_CELL1_CELLPAIR_RP)
+          (LDY !$02) ;; offset 2 for cell1
+          (BNE WRITE_RT_TO_CELLy_CELLPAIR_RP)
+
+   (label WRITE_RT_TO_CELL0_CELLPAIR_RP)
+          (LDY !$00) ;; offset 0 for cell0
+
+   ;; ----------------------------------------
+   (label WRITE_RT_TO_CELLy_CELLPAIR_RP)
+          (LDA ZP_RT)
+          (STA (ZP_RP),y)
+          (INY)
+          (LDA ZP_RT+1)
+          (STA (ZP_RP),y)
+          (RTS)))
+
+(module+ test #| vm-write-rt-to-celly-ra |#
+  (define vm_write_rt_to_celly_rp_state
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+     (JSR ALLOC_CELLPAIR_TO_RT)                ;; rt <- [empty][empty]
+      (JSR CP_RT_TO_RP)                         ;; rp <- [empty][empty]
+      (LDA !$01)
+      (LDY !$10)
+      (JSR WRITE_INT_AY_TO_RT)                  ;; rt <- [int 1001]
+      (LDY !$00)
+      (JSR WRITE_RT_TO_CELLy_CELLPAIR_RP)       ;; rp <- [int 1001][empty]
+      (LDA !$10)
+      (LDY !$01)
+      (JSR WRITE_INT_AY_TO_RT)                  ;; rt <- [int 0110]
+      (LDY !$02)
+      (JSR WRITE_RT_TO_CELLy_CELLPAIR_RP)))    ;; rp <- [int 1001][int 0110]
+
+  (check-equal? (vm-regt->string vm_write_rt_to_celly_rp_state)
+                "int $0110"
+                "rt is filled with last written int 0110")
+
+  (check-equal? (vm-regp->string vm_write_rt_to_celly_rp_state)
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0))
+                "rp is a cell-pair ptr to the first cell (05) of the first page available")
+
+  (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_rp_state (+ PAGE_AVAIL_0_W #x05))
+                "(int $1001 . int $0110)"
+                "dereferencing the cell pair in rp, yields the int pairs 1001 and 0110"))
+
+;; actively free all enqueued cell pairs of the free-list!
+;; can be useful to find out whether a whole page is not used at all. free cells are still marked as used on a page.
+;; input:  GLOBAL_CELLPAIR_FREE_LIST
+;; usage:  A, Y, RZ
+;; output: GLOBAL_CELLPAIR_FREE_LIST+1 = 0
+;; funcs:
+;;   DEC_REFCNT_RZ >>
+;;   GC_CELLPAIR_FREE_LIST
+(define GC_CELLPAIR_FREE_LIST
+  (add-label-suffix
+   "__" "__GC_CELLPAIR_FREE_LIST"
+  (list
+   (label GC_CELLPAIR_FREE_LIST)
+          (LDA GLOBAL_CELLPAIR_FREE_LIST+1) ;; get highbyte (page) from ptr to cell-pair
+          (BNE CONTINUE__)   ;; if = 0, queue is empty, i'm done
+          (RTS)
+
+   (label CONTINUE__)
+          ;; put ptr to cell-pair into RZ, now RZ->cell0,cell1 with cell0 = pointer to the next in queue, cell1 could still be something that needs gc
+          (STA ZP_RZ+1)
+          (LDA GLOBAL_CELLPAIR_FREE_LIST)
+          (STA ZP_RZ)
+
+          ;; set new tree root for free tree to original cell0
+          (LDY !$00)
+          (LDA (ZP_RZ),y)
+          (BEQ CELL0_IS_NO_PTR__) ;; is zero => completely empty
+          (AND !$03)
+          (CMP !$03)
+          (BEQ CELL0_IS_NO_PTR__) ;; is no ptr
+          (INY)
+          (LDA (ZP_RZ),y)
+          (BEQ CELL0_IS_NO_PTR__) ;; is nil
+          (DEY)
+
+          ;; cell0 is a cell-pair-ptr => make new root of free queue
+          (STA GLOBAL_CELLPAIR_FREE_LIST+1)
+          (LDA (ZP_RZ),y)
+          (STA GLOBAL_CELLPAIR_FREE_LIST)
+          (BNE CHECK_CELL1__) ;; since must be !=0, it cannot be on page 0 always branch!
+
+   (label CELL0_IS_NO_PTR__)
+          ;; queue is now empty, this was the last cell-pair
+          ;; clear queue
+          (LDA !$00)
+          (STA GLOBAL_CELLPAIR_FREE_LIST+1) ;; just reset highbyte (checked at start of this function)
+          ;; (STA GLOBAL_CELLPAIR_FREE_LIST)
+
+   (label CHECK_CELL1__)
+          ;; now check cell1 on remaining ptrs
+          (LDY !$02)
+          (LDA (ZP_RZ),y) ;; get low byte
+          (TAX) ;; remember low byte
+          (BEQ CELL1_IS_NO_PTR__) ;; = 0 means totally empty => no ptr
+          (AND !$03)       ;; mask out all but low 2 bits
+          (CMP !$03)
+          (BEQ CELL1_IS_NO_PTR__) ;; no need to do further deallocation
+          (INY)
+          (LDA (ZP_RZ),y)
+          (BEQ CELL1_IS_NO_PTR__) ;; is nil
+
+          ;; write cell1 into zp_rc and decrement
+          (TAY)
+
+          (LDA ZP_RZ)
+          (STA RC_COPY__)
+          (LDA ZP_RZ+1)
+          (STA RC_COPY__+1)
+
+          (STX ZP_RZ)
+          (STY ZP_RZ+1)
+
+          (JSR DEC_REFCNT_RZ) ;; this may change the queue again, which is alright, since RZ was removed from queue
+
+          (LDA RC_COPY__)
+          (STA ZP_RZ)
+          (LDA RC_COPY__+1)
+          (STA ZP_RZ+1)
+
+  (label CELL1_IS_NO_PTR__)
+          ;; now add ra to its page as free cell-pair on that page
+          (LDX ZP_RZ+1)                 ;; A = page -> x
+          (LDA $cf00,x)         ;; current first free cell offset
+          (LDY !$00)
+          (STA (ZP_RZ),y)       ;; write into lowbyte of cell pointed to by RZ
+          ;; (INY)
+          ;; (TXA)
+          ;; (STA (ZP_RZ),y)       ;; write page into highbyte of cell pointed to by RZ
+          (LDA ZP_RZ)             ;; get offset into page of cell RZ points to
+          (STA $cf00,x)           ;; new first free cell now points to RZ
+          (LDA ZP_RZ+1)
+          (STA DEC_COMMAND__+2)
+   (label DEC_COMMAND__)
+          (DEC $c000)         ;; decrement number of used slots on cell-pair page (c0 is overwritten with page in zp_ra+1
+          (JMP GC_CELLPAIR_FREE_LIST) ;; do this until queue is empty
+
+   (label RC_COPY__)
+          (word 0))))
