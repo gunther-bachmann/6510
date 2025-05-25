@@ -72,9 +72,9 @@ cell functions
      ALLOC_CELL_AX_TO_RT
      GET_FRESH_CELL_TO_AX
      INIT_CELL_PAGE_X_TO_AX
-     DEC_REFCNT_CELL_RZ
+     (DEC_REFCNT_CELL_RZ "CELL_ALREADY_LSRED__" "DEC_REFCNT_CELL_RZ_TO_M1_SLOT__")
      (list (label DEC_REFCNT_CELL_RZ_TO_M1_SLOT__) (BRK))
-     INC_REFCNT_CELL_RT
+     (INC_REFCNT_CELL_RT "NOW_INCREMENT_REFCNT__CELL__")
      (list (label DONE__) (RTS))
      FREE_CELL_RZ
      (list (label INC_REFCNT_M1_PAGE) (RTS))
@@ -299,7 +299,7 @@ cell functions
 
 
 
-(define INC_REFCNT_CELL_RT
+(define (INC_REFCNT_CELL_RT now-increment-label)
   (list
    (label INC_REFCNT_CELL_RT)
           ;; find out which page type is used (cell-ptr-page, m1-page, slot-page)
@@ -319,7 +319,8 @@ cell functions
           (LSR)
           (TAX)
 
-   (label NOW_INCREMENT_REFCNT__CELL__)
+   (ast-label-def-cmd '() now-increment-label)
+   ;; (label NOW_INCREMENT_REFCNT__CELL__)
           (LDA ZP_RT+1)
           (STA INC_PAGE_REFCNT_CELL__+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
    (label INC_PAGE_REFCNT_CELL__)
@@ -329,7 +330,8 @@ cell functions
 
 (define DEC_REFCNT_CELL_RT #t)
 (define DEC_REFCNT_CELL_RA #t)
-(define DEC_REFCNT_CELL_RZ
+;; pass in the entry label which uses lowbyte (tag byte) already lsr'd twice!
+(define (DEC_REFCNT_CELL_RZ lsred-label dec-refcnt-m1-label)
   (list
    (label DEC_REFCNT_CELL_RA)
           (JSR CP_RA_TO_RZ)
@@ -344,7 +346,9 @@ cell functions
    (label DEC_REFCNT_CELL_RZ)  ;; RZ -> [cell] | [cell-array] | [native-array]
           (LDA ZP_RZ) ;; lowbyte (offset)
           (LSR)
-   (label CELL_ALREADY_LSRED__)
+
+   (ast-label-def-cmd '() lsred-label)
+   ;; (label CELL_ALREADY_LSRED__)
           ;; check what cell kind the target is: cell, cell-ptr, cell-pair-ptr, native-array, cell-array
           (LDY ZP_RZ+1)
           (BEQ DONE__) ;; nil -> done
@@ -353,7 +357,12 @@ cell functions
    (label LDA_PAGE_TYPE__)
           (LDA $c000)
           (ASL A)
-          (BCC DEC_REFCNT_CELL_RZ_TO_M1_SLOT__)
+
+          ;; (BCC DEC_REFCNT_CELL_RZ_TO_M1_SLOT__)
+          (ast-unresolved-rel-opcode-cmd
+           '()
+           '(144)
+           (ast-resolve-byte-scmd dec-refcnt-m1-label  'relative))
 
    (label DEC_REFCNT_CELL_RZ_TO_CELL__)
           (STY DEC_PAGE_CELL_CNT__+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)

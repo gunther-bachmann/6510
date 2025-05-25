@@ -97,9 +97,9 @@ all functions around cell-pairs
      CP_RA_TO_RZ
      FREE_CELLPAIR_RZ
      WRITE_INT_AY_TO_RT
-     INC_REFCNT_CELLPAIR_RT
+     (INC_REFCNT_CELLPAIR_RT "LSR__INC_RFCNT_CELLPAIR__")
      (list (label DONE__) (RTS))
-     DEC_REFCNT_CELLPAIR_RZ
+     (DEC_REFCNT_CELLPAIR_RZ "CELLPAIR_ALREADY_LSRED__")
      GC_CELLPAIR_FREE_LIST
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -871,13 +871,15 @@ all functions around cell-pairs
                 "(int $1001 . int $0110)"
                 "dereferencing the cell pair in rt, yields the int pairs 1001 and 0110"))
 
-(define INC_REFCNT_CELLPAIR_RT
+;; pass in the entry label which uses lowbyte (tag byte) already lsr'd twice!
+(define (INC_REFCNT_CELLPAIR_RT lsred-label)
   (list
    (label INC_REFCNT_CELLPAIR_RT)
           (LDA ZP_RT)
           (LSR)
           (LSR)
-   (label LSR__INC_RFCNT_CELLPAIR__)
+   (ast-label-def-cmd '() lsred-label)
+   ;; (label LSR__INC_RFCNT_CELLPAIR__)
           (TAX)
           (LDA ZP_RT+1)
           (BEQ DONE__)
@@ -914,7 +916,8 @@ all functions around cell-pairs
   (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state2 (+ PAGE_AVAIL_0_W #x05))
                 1))
 
-(define DEC_REFCNT_CELLPAIR_RZ
+;; pass in the entry label which uses lowbyte (tag byte) already lsr'd twice!
+(define (DEC_REFCNT_CELLPAIR_RZ lsred-label)
   (list
    (label DEC_REFCNT_CELLPAIR_RA)
           (JSR CP_RA_TO_RZ)
@@ -930,7 +933,9 @@ all functions around cell-pairs
           (LDA ZP_RZ)
           (LSR)
           (LSR)
-   (label CELLPAIR_ALREADY_LSRED__)
+
+   (ast-label-def-cmd '() lsred-label)
+   ;; (label CELLPAIR_ALREADY_LSRED__)
           (TAX)
           ;; now decrement cell count
           (LDA ZP_RZ+1)

@@ -754,22 +754,9 @@ call frame primitives etc.
    (label DONE__)
           (RTS)
 
-   INC_REFCNT_CELLPAIR_RT
+   (INC_REFCNT_CELLPAIR_RT "LSR__INC_RFCNT_CELLPAIR__")
 
-   INC_REFCNT_CELL_RT
-
-   ;; (label INC_REFCNT_CELL_RT)
-   ;;        ;; find out which page type is used (cell-ptr-page, m1-page, slot-page)
-   ;;        (LDA ZP_RT+1) ;; highbyte (page)
-   ;;        (BEQ DONE__) ;; page=0 => empty, nothing to be done
-   ;;        (STA LOAD_PAGE_TYPE__CELL__+2)
-   ;; (label LOAD_PAGE_TYPE__CELL__)
-   ;;        (LDA $c000) ;; c0 is overwritten by page
-   ;;        (BMI IS_CELL_PAGE__)
-   ;;        (AND !$ec)
-   ;;        (BEQ IS_M1_PAGE__)
-
-          ;; (BRK) ;; unhandled page type
+   (INC_REFCNT_CELL_RT "NOW_INCREMENT_REFCNT__CELL__")
 
    (label INC_REFCNT_CELLARR_RT)
    (label INC_REFCNT_NATIVEARR_RT)
@@ -777,18 +764,6 @@ call frame primitives etc.
           (LDX ZP_RT)
           (DEX)
           (BNE NOW_INCREMENT_REFCNT__CELL__) ;; is never 0! for m1 pages
-
-   ;; (label IS_CELL_PAGE__)
-   ;;        (LDA ZP_RT) ;; lowbyte (offset)
-   ;;        (LSR)
-   ;;        (TAX)
-
-   ;; (label NOW_INCREMENT_REFCNT__CELL__)
-   ;;        (LDA ZP_RT+1)
-   ;;        (STA INC_PAGE_REFCNT_CELL__+2) ;; store high byte (page) into inc-command high-byte (thus +2 on the label)
-   ;; (label INC_PAGE_REFCNT_CELL__)
-   ;;        (INC $c000,x) ;; c0 is overwritten by page (see above)
-   ;;        (RTS)
           ))))
 
 (module+ test #| vm-refcount-decr-rt |#
@@ -981,61 +956,12 @@ call frame primitives etc.
           (JMP FREE_M1_SLOT_RZ)
 
 
-   DEC_REFCNT_CELLPAIR_RZ
-   ;; (label DEC_REFCNT_CELLPAIR_RA)
-   ;;        (JSR CP_RA_TO_RZ)
-   ;;        (CLC)
-   ;;        (BCC DEC_REFCNT_CELLPAIR_RZ)
+   ;; include cellpair code here
+   (DEC_REFCNT_CELLPAIR_RZ "CELLPAIR_ALREADY_LSRED__")
 
-   ;; (label DEC_REFCNT_CELLPAIR_RT)
-   ;;        (JSR CP_RT_TO_RZ)
+   ;; include cell code here
+   (DEC_REFCNT_CELL_RZ "CELL_ALREADY_LSRED__" "DEC_REFCNT_CELL_RZ_TO_M1_SLOT__")
 
-   ;; ;; input: cell-pair ptr in ZP_RA
-   ;; ;; decrement ref count, if 0 deallocate
-   ;; (label DEC_REFCNT_CELLPAIR_RZ)
-   ;;        (LDA ZP_RZ)
-   ;;        (LSR)
-   ;;        (LSR)
-   ;; (label CELLPAIR_ALREADY_LSRED__)
-   ;;        (TAX)
-   ;;        ;; now decrement cell count
-   ;;        (LDA ZP_RZ+1)
-   ;;        (BEQ DONE__) ;; nil -> done
-   ;;        (STA DEC_PAGE_CELLPAIR_CNT__+2) ;; store high byte (page) into dec-command high-byte (thus +2 on the label)
-   ;; (label DEC_PAGE_CELLPAIR_CNT__)
-   ;;        (DEC $c000,x) ;; c0 is overwritten by page (see above)
-   ;;        (BNE DONE__)
-   ;;        (JMP FREE_CELLPAIR_RZ) ;; free (since refcnt dropped to 0)
-
-
-   DEC_REFCNT_CELL_RZ
-   ;; (label DEC_REFCNT_CELL_RA)
-   ;;        (JSR CP_RA_TO_RZ)
-   ;;        (CLC)
-   ;;        (BCC DEC_REFCNT_CELL_RZ)
-
-   ;; (label DEC_REFCNT_CELL_RT)
-   ;;        (JSR CP_RT_TO_RZ)
-
-   ;; input: cell ptr in ZP_RA
-   ;; decrement ref count, if 0 deallocate
-   ;; (label DEC_REFCNT_CELL_RZ)  ;; RZ -> [cell] | [cell-array] | [native-array]
-   ;;        (LDA ZP_RZ) ;; lowbyte (offset)
-   ;;        (LSR)
-   ;; (label CELL_ALREADY_LSRED__)
-   ;;        ;; check what cell kind the target is: cell, cell-ptr, cell-pair-ptr, native-array, cell-array
-   ;;        (LDY ZP_RZ+1)
-   ;;        (BEQ DONE__) ;; nil -> done
-   ;;        (STY LDA_PAGE_TYPE__+2)
-   ;;        (TAX)
-   ;; (label LDA_PAGE_TYPE__)
-   ;;        (LDA $c000)
-   ;;        (ASL A)
-   ;;        (BCS DEC_REFCNT_CELL_RZ_TO_CELL__)
-          ;; can't really be cellpair type page (was checked before)
-          ;; (LSL)
-          ;; (BCS DEC_REFCNT_CELL_RZ_TO_CELLPAIR)
-          ;; else must be a m1 slot
    (label DEC_REFCNT_CELL_RZ_TO_M1_SLOT__)
           (LDX ZP_RZ)
           (DEX)
