@@ -82,10 +82,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   GLOBAL_CELLPAIR_FREE_LIST))
 (require (only-in "./vm-mm-cell-pairs.rkt"
                   WRITE_CELLPAIR_RT_CELL0_TO_RT))
+(require (only-in "./vm-mm-cell-stack.rkt"
+                  POP_CELL_EVLSTK_TO_RT))
 (require (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager
-                  ALLOC_CELLARR_TO_RA
-                  POP_CELL_EVLSTK_TO_RT))
+                  ALLOC_CELLARR_TO_RA))
 (require (only-in "./vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-page->strings
