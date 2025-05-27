@@ -10,22 +10,16 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
 
 (require "../6510.rkt")
 (require (only-in "./vm-memory-map.rkt"
-                  TAGGED_NIL
-                  ZP_RP
                   ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "../ast/6510-resolver.rkt"
-                  add-label-suffix
-                  replace-labels))
+(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 
-(provide
-           INIT_CELLSTACK_PAGE_X        ;; initialize page A to previous cell stack page (X)
-           PUSH_TO_EVLSTK               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
-           POP_CELL_EVLSTK_TO_RT        ;; pop cell-stack into RT (discarding RT)
-           POP_CELL_EVLSTK_TO_RA
-           PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack
-           POP_CELL_EVLSTK_TO_CELLy_RT  ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
-          )
+(provide INIT_CELLSTACK_PAGE_X        ;; initialize page A to previous cell stack page (X)
+         PUSH_TO_EVLSTK               ;; push a value into RT, pushing RT onto the call frame cell stack if not empty
+         POP_CELL_EVLSTK_TO_RT        ;; pop cell-stack into RT (discarding RT)
+         POP_CELL_EVLSTK_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
+         PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack (effectively doing a dup)
+         POP_CELL_EVLSTK_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
 (module+ test
   (require (only-in racket/list make-list))
@@ -74,11 +68,8 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
      VM_MEMORY_MANAGEMENT_CONSTANTS
      VM_INITIALIZE_MEMORY_MANAGER
      (list (label DEC_REFCNT_RT) (RTS))
-     (list (org #xcec0))
      VM_INITIAL_MM_REGS
-     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
-
 
 ;; cell stack page(s)
 ;; offset  content

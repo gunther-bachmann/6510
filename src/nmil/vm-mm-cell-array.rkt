@@ -29,37 +29,31 @@ memory management for cell arrays
                   PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ))
 
 (provide
-          ALLOC_CELLARR_TO_RA   ;; allocate an array of cells (also useful for structures)
-          GC_INCR_ARRAY_SLOT_RZ
-          GC_CELL_ARRAYS
-          FREE_CELLARR_RZ
-          PUSH_ARR_ATa_RA_TO_EVLSTK
-          WRITE_RT_TO_ARR_ATa_RA)
+          ALLOC_CELLARR_TO_RA          ;; allocate an array of cells (also useful for structures)
+
+          GC_INCR_ARRAY_SLOT_RZ        ;; incremental gc of a cell-array
+          GC_CELL_ARRAYS               ;; completely collect all cell arrays
+          FREE_CELLARR_RZ              ;; free the given cell-array in rz (must not contain slots that need garbage collection)
+
+          PUSH_ARR_ATa_RA_TO_EVLSTK    ;; push from cell-array RA element A onto the EVLSTK
+          WRITE_RT_TO_ARR_ATa_RA)      ;; write cell in RT into cell-array RA at A
 
 (module+ test
   (require (only-in racket/list make-list))
   (require  "../6510-test-utils.rkt")
   (require "./vm-memory-manager-test-utils.rkt")
   (require (only-in "../tools/6510-interpreter.rkt"
-                    peek
                     memory-list
                     cpu-state-clock-cycles))
-  (require (only-in "../util.rkt" format-hex-byte format-hex-word))
+  (require (only-in "../util.rkt" format-hex-byte))
   (require (only-in "./vm-inspector-utils.rkt"
-                    vm-cell-at-nil?
-                    vm-rega->string
                     vm-regt->string
                     vm-cell-pair-free-tree->string
                     vm-deref-cell-pair-w->string
-                    vm-deref-cell-w->string
-                    vm-refcount-cell-pair-ptr
-                    vm-refcount-cell-ptr
-                    vm-regp->string
                     vm-stack->strings
                     vm-page->strings))
   (require (only-in "./vm-mm-register-functions.rkt"
                     CP_RT_TO_RZ
-                    CP_RT_TO_RA
                     CP_RT_TO_RP
                     CP_RZ_TO_RT
                     CP_RA_TO_RZ
@@ -68,17 +62,12 @@ memory management for cell arrays
                     WRITE_NIL_TO_RP))
   (require (only-in "./vm-mm-pages.rkt"
                     ALLOC_PAGE_TO_X
-                    GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
-                    GLOBAL_CELL_FREE_LIST
                     VM_PAGE_SLOT_DATA
                     VM_INITIAL_MM_REGS
                     VM_INITIALIZE_MEMORY_MANAGER))
   (require (only-in "./vm-mm-cells.rkt"
-                    ALLOC_CELL_TO_RT
-                    GET_FRESH_CELL_TO_AX
                     ALLOC_CELL_AX_TO_RT
                     INIT_CELL_PAGE_X_TO_AX
-                    INC_REFCNT_CELL_RT
                     DEC_REFCNT_CELL_RZ
                     FREE_CELL_RZ))
   (require (only-in "./vm-mm-cell-stack.rkt"
@@ -93,7 +82,8 @@ memory management for cell arrays
                     INIT_CELLPAIR_PAGE_X_TO_AX
                     ALLOC_CELLPAIR_AX_TO_RT
                     DEC_REFCNT_CELLPAIR_RZ
-                    INC_REFCNT_CELLPAIR_RT))
+                    INC_REFCNT_CELLPAIR_RT
+                    ))
 
   (define PAGE_AVAIL_0 #x9a)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #x9a00)  ;; word (absolute address) of first page available
@@ -134,11 +124,8 @@ memory management for cell arrays
      (INC_REFCNT_CELLPAIR_RT "LSR__INC_RFCNT_CELLPAIR__")
      (list (label DONE__) (RTS))
      (list (label INC_REFCNT_M1_PAGE) (RTS)) ;; TODO currently in vm-memory-manager (move to m1-slot)
-     (INC_REFCNT_CELL_RT "NOW_INCREMENT_REFCNT__CELL__")
      ALLOC_CELL_AX_TO_RT
      INIT_CELL_PAGE_X_TO_AX
-     ALLOC_CELL_TO_RT
-     GET_FRESH_CELL_TO_AX
      WRITE_NIL_TO_RP
      WRITE_INT_AY_TO_RT
      DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
@@ -148,7 +135,6 @@ memory management for cell arrays
      INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
      VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
      CP_RA_TO_RT
-     CP_RT_TO_RA
      CP_RA_TO_RZ
      CP_RT_TO_RP
      CP_RT_TO_RZ
@@ -165,10 +151,7 @@ memory management for cell arrays
            (JMP DEC_REFCNT_CELL_RZ)
            (label DEC_REFCNT_RZ__NO_CELL)
            (JMP DEC_REFCNT_CELLPAIR_RZ)) ;; assume that dec refcnt is operated on cellpair
-     ;; (list (label INC_REFCNT_RT) (JMP INC_REFCNT_CELL_RT)) ;; assume that inc refcnt is operated on cellpair
-     (list (org #xcec0))
      VM_INITIAL_MM_REGS
-     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
 ;; allocate an array of cells (also useful for structures)

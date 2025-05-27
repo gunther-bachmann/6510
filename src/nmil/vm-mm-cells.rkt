@@ -17,15 +17,14 @@ cell functions
                   add-label-suffix
                   replace-labels))
 
-(provide
-           INIT_CELL_PAGE_X_TO_AX                ;; initialize page (in a) for cell usage
-           INC_REFCNT_CELL_RT                    ;; increment refcount of the cell, rt is pointing to
-           DEC_REFCNT_CELL_RZ
-           FREE_CELL_RZ
-           ALLOC_CELL_TO_RT
-           GET_FRESH_CELL_TO_AX
-           ALLOC_CELL_AX_TO_RT
-           GC_CELLS)
+(provide INIT_CELL_PAGE_X_TO_AX                ;; initialize page (in a) for cell usage
+         INC_REFCNT_CELL_RT                    ;; increment refcount of the cell, rt is pointing to
+         DEC_REFCNT_CELL_RZ                    ;; decrement refcount of the cell pointed to by rz
+         FREE_CELL_RZ                          ;; free the cell pointed to by rz (must not contain anything that needs gc)
+         ALLOC_CELL_TO_RT                      ;; allocate a cell and put the pointer to that cell into rt
+         GET_FRESH_CELL_TO_AX                  ;; get a completely fresh cell into A/X (no cell reuse)
+         ALLOC_CELL_AX_TO_RT                   ;; allocate the cell A/X into RT
+         GC_CELLS)                             ;; garbage collect all cells
 
 (module+ test
   (require (only-in racket/list make-list))
@@ -33,26 +32,13 @@ cell functions
   (require "./vm-memory-manager-test-utils.rkt")
   (require (only-in "../tools/6510-interpreter.rkt" peek memory-list))
   (require (only-in "../util.rkt" format-hex-byte format-hex-word))
-  (require (only-in "./vm-inspector-utils.rkt"
-                    vm-cell-at-nil?
-                    vm-rega->string
-                    vm-regt->string
-                    vm-cell-pair-free-tree->string
-                    vm-deref-cell-pair-w->string
-                    vm-deref-cell-w->string
-                    vm-refcount-cell-pair-ptr
-                    vm-refcount-cell-ptr
-                    vm-regp->string
-                    vm-page->strings))
+  (require (only-in "./vm-inspector-utils.rkt" vm-page->strings))
   (require (only-in "./vm-mm-register-functions.rkt"
                     CP_RT_TO_RZ
                     CP_RT_TO_RA
                     CP_RA_TO_RT
                     CP_RT_TO_RP
-                    CP_RZ_TO_RT
-                    CP_RA_TO_RZ
-                    WRITE_INT_AY_TO_RT
-                    WRITE_NIL_TO_RP))
+                    CP_RA_TO_RZ))
   (require (only-in "./vm-mm-pages.rkt"
                     ALLOC_PAGE_TO_X
                     GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
@@ -97,20 +83,16 @@ cell functions
 
 
      WRITE_RP_TO_CELL_POINTED_TO_BY_RT
-     WRITE_NIL_TO_RP
+     ;;WRITE_NIL_TO_RP
      CP_RT_TO_RZ
      CP_RT_TO_RP
-     CP_RZ_TO_RT
      CP_RA_TO_RZ
      CP_RA_TO_RT
      CP_RT_TO_RA
-     WRITE_INT_AY_TO_RT
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label INIT_CELLSTACK_PAGE_X) (RTS))
-     (list (org #xcec0))
      VM_INITIAL_MM_REGS
-     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
   ;; page type cell page (slot size 2b) (refcount @ ptr >> 1) 84 cells (85th slot is used for previous page pointer)

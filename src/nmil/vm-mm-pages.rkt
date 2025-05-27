@@ -9,14 +9,9 @@
 (require (only-in racket/list flatten))
 (require "../6510.rkt")
 (require (only-in "./vm-memory-map.rkt"
-                  TAGGED_NIL
                   ZP_RP
-                  ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "./vm-inspector-utils.rkt"
-                  vm-cell-at-nil?
-                  vm-rega->string
-                  vm-regt->string))
+(require (only-in "./vm-inspector-utils.rkt" vm-regt->string))
 
 (provide
          VM_INITIALIZE_MEMORY_MANAGER     ;; initialize memory management (must be called before first allocation)
@@ -36,34 +31,33 @@
   (require  "../6510-test-utils.rkt")
   (require "./vm-memory-manager-test-utils.rkt")
   (require (only-in "../tools/6510-interpreter.rkt" peek))
-  (require (only-in "../util.rkt" format-hex-byte format-hex-word))
-
+  (require (only-in "../util.rkt" format-hex-byte))
   (require (only-in "./vm-mm-register-functions.rkt" WRITE_INT_AY_TO_RT))
 
 
   (define PAGE_AVAIL_0 #x9a)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #x9a00)  ;; word (absolute address) of first page available
   (define PAGE_AVAIL_1 #x99)      ;; high byte of second page available for allocation
-  (define PAGE_AVAIL_1_W #x9900) ;; word (absolute address) of second page available
+  (define PAGE_AVAIL_1_W #x9900)  ;; word (absolute address) of second page available
 
   (define test-runtime
     (append
      ALLOC_PAGE_TO_X
      FREE_PAGE_A
-     WRITE_INT_AY_TO_RT
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
-     (list (label INIT_CELLSTACK_PAGE_X) (RTS))
 
-     (list (org #xcec0))
+     (list (label INIT_CELLSTACK_PAGE_X) (RTS)) ;; ignore calls to this function during memory initialization
+
+     WRITE_INT_AY_TO_RT
      VM_INITIAL_MM_REGS
-     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
 ;; initial data for the memory management registers
 ;; put into memory @ #xcec0 - len (currently 3)
 (define VM_INITIAL_MM_REGS
   (list
+   (org #xcec0)
    (label VM_INITIAL_MM_REGS)
 
    ;; $cec0
@@ -125,12 +119,12 @@
 ;; keep a list of cells (16-bit), this is the head (at cecc)
 ;; a cell in the free list is allocated on a page and initialized to be used as cell
 ;; it contains the ptr to the next free list or 0000 (only high byte is actually checked)
-(define GLOBAL_CELL_FREE_LIST               #xcecc)
+(define GLOBAL_CELL_FREE_LIST #xcecc)
 
 ;; page that has free cells (must be a cell page)
 ;; it may be full in which case allocation will allocate a new page and link the new page to this full page, and put it here
 ;; otherwise a cell on this page is allocated
-(define GLOBAL_CELLPAIR_PAGE_FOR_ALLOC              #xcec3)
+(define GLOBAL_CELLPAIR_PAGE_FOR_ALLOC #xcec3)
 
 ;; keep list of cell-pairs that are (partially) free, cell0 is used to build the list,
 ;; cell1 is untouched and may have to be dec refcnt'd if it is a pointer, before reusing it
@@ -143,6 +137,7 @@
 ;; 00 = allocated for use, but not initialized/full
 (define VM_PAGE_SLOT_DATA
   (list
+   (org #xcf00)
    (label VM_PAGE_SLOT_DATA)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 0000-07ff is unavailable (zero page, stack ... screen)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 0800-0fff is unavailable (start of basic ram)

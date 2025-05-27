@@ -19,17 +19,17 @@ functions for m1 pages and slots
                   add-label-suffix
                   replace-labels))
 
-(provide INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
-         DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
-         PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ
-         ADD_M1_SLOT_RZ_TO_PFL
-         ALLOC_M1_SLOT_TO_RA
-         FREE_M1_SLOT_RA
-         FREE_M1_SLOT_RZ
-         VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
-         VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
-         INC_REFCNT_M1_SLOT_RA
-         VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)
+(provide INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX       ;; initialize m1 page in x of profile y, returning first free slot in A/X
+         DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A   ;; remove all full pages at the head of m1 page list a
+         PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ         ;; put the page of m1 slot in rz as head to the m1 page list
+         ADD_M1_SLOT_RZ_TO_PFL                  ;; add the given m1 slot in rz to the page free list (slot must not contain any data that needs gc)
+         ALLOC_M1_SLOT_TO_RA                    ;; allocate a m1 slot into ra (size wanted in a)
+         FREE_M1_SLOT_RA                        ;; free the m1 slot reference in RA (must not contain any data that need gc)
+         FREE_M1_SLOT_RZ                        ;; free the m1 slot reference in RZ (must not contain any data that need gc)
+         VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS      ;; remove full pages for the list of m1 slot page
+         VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS   ;; enqueue the page of m1 slot RA as head of the list of m1 slot pages
+         INC_REFCNT_M1_SLOT_RA                  ;; increment reference count of m1 slot pointer in RA
+         VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)  ;; remove full pages from the list of m1 slot pages of type x
 
 (module+ test
   (require (only-in racket/list make-list))
@@ -40,30 +40,12 @@ functions for m1 pages and slots
                     memory-list
                     cpu-state-clock-cycles))
   (require (only-in "../util.rkt" format-hex-byte format-hex-word))
-  (require (only-in "./vm-inspector-utils.rkt"
-                    vm-cell-at-nil?
-                    vm-rega->string
-                    vm-regt->string
-                    vm-cell-pair-free-tree->string
-                    vm-deref-cell-pair-w->string
-                    vm-deref-cell-w->string
-                    vm-refcount-cell-pair-ptr
-                    vm-refcount-cell-ptr
-                    vm-regp->string
-                    vm-page->strings))
+  (require (only-in "./vm-inspector-utils.rkt" vm-page->strings))
   (require (only-in "./vm-mm-register-functions.rkt"
-                    CP_RT_TO_RZ
                     CP_RT_TO_RA
-                    CP_RT_TO_RP
-                    CP_RZ_TO_RT
-                    CP_RA_TO_RZ
-                    CP_RA_TO_RT
-                    WRITE_INT_AY_TO_RT
-                    WRITE_NIL_TO_RP))
+                    CP_RA_TO_RT))
   (require (only-in "./vm-mm-pages.rkt"
                     ALLOC_PAGE_TO_X
-                    GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
-                    GLOBAL_CELL_FREE_LIST
                     VM_PAGE_SLOT_DATA
                     VM_INITIAL_MM_REGS
                     VM_INITIALIZE_MEMORY_MANAGER))
@@ -75,7 +57,6 @@ functions for m1 pages and slots
 
   (define test-runtime
     (append
-     ALLOC_PAGE_TO_X
      INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
      ALLOC_M1_SLOT_TO_RA
      VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
@@ -83,16 +64,13 @@ functions for m1 pages and slots
      VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
      INC_REFCNT_M1_SLOT_RA
 
+     ALLOC_PAGE_TO_X
      CP_RA_TO_RT
      CP_RT_TO_RA
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label INIT_CELLSTACK_PAGE_X) (RTS))
-     ;; (list (label DEC_REFCNT_RZ) (JMP DEC_REFCNT_CELL_RZ)) ;; assume that dec refcnt is operated on cellpair
-     ;; (list (label INC_REFCNT_RT) (JMP INC_REFCNT_CELL_RT)) ;; assume that inc refcnt is operated on cellpair
-     (list (org #xcec0))
      VM_INITIAL_MM_REGS
-     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
 

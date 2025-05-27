@@ -15,28 +15,15 @@ call frame primitives etc.
 
 ;; see also vm-memory-manager.org
 
-(require (only-in racket/format ~a))
+;;(require (only-in racket/format ~a))
 (require (only-in racket/list flatten take empty? drop make-list))
 
 (require "../6510.rkt")
-(require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
-(require (only-in "../ast/6510-calc-opcode-facades.rkt" LDA-immediate))
-(require (only-in "../util.rkt" bytes->int low-byte high-byte format-hex-byte format-hex-word))
-(require (only-in "../ast/6510-relocator.rkt" command-len))
+(require (only-in "../util.rkt" format-hex-byte))
 (require (only-in "../ast/6510-resolver.rkt"
                   add-label-suffix
                   replace-labels))
-(require (only-in "../tools/6510-interpreter.rkt"
-                  peek-word-at-address
-                  cpu-state-clock-cycles
-                  6510-load
-                  6510-load-multiple
-                  initialize-cpu
-                  run-interpreter
-                  run-interpreter-on
-                  memory-list
-                  cpu-state-accumulator
-                  peek))
+(require (only-in "../tools/6510-interpreter.rkt" peek))
 (require (only-in "./vm-memory-map.rkt"
                   VM_MEMORY_MANAGEMENT_CONSTANTS
                   ZP_RT
@@ -117,8 +104,9 @@ call frame primitives etc.
                   GC_CELL_ARRAYS
                   FREE_CELLARR_RZ
                   PUSH_ARR_ATa_RA_TO_EVLSTK
-                  WRITE_RT_TO_ARR_ATa_RA
-                  ))
+                  WRITE_RT_TO_ARR_ATa_RA))
+(require (only-in "./vm-mm-native-array.rkt"
+                  ALLOC_NATARR_TO_RA))
 
 (provide vm-memory-manager
           ;; ---------------------------------------- refcount
@@ -131,26 +119,14 @@ call frame primitives etc.
 
 (module+ test
   (require "../6510-test-utils.rkt")
+  (require (only-in "../ast/6510-relocator.rkt" command-len))
   (require (only-in "./vm-inspector-utils.rkt"
-                    vm-cell-at-nil?
-                    vm-rega->string
-                    vm-regt->string
-                    vm-regp->string
-                    vm-deref-cell-pair-w->string
-                    vm-stack->strings
-                    vm-page->strings
-                    vm-refcount-cell-pair-ptr
-                    vm-refcount-cell-ptr
-                    vm-cell-pair-free-tree->string
-                    vm-deref-cell-w->string))
+                     vm-regt->string
+                     vm-refcount-cell-pair-ptr
+                     vm-refcount-cell-ptr))
   (require (only-in "./vm-memory-manager-test-utils.rkt"
-                    run-code-in-test-on-code
-                    remove-labels-for
-                    wrap-code-for-test
-                    list-with-label-suffix
                     calls-to-mock
-                    compact-run-code-in-test-
-                    ))
+                    compact-run-code-in-test-))
 
   ;; ;; run the given code in test, wrapping it with mocks and counters, entering interactive debugger, if requested
   ;; (define (run-code-in-test bc (debug #f) #:mock (mocked-code-list (list)))

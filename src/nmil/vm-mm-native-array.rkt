@@ -24,7 +24,6 @@ memory management for native arrays
   (require  "../6510-test-utils.rkt")
   (require "./vm-memory-manager-test-utils.rkt")
   (require (only-in "../tools/6510-interpreter.rkt" peek memory-list))
-  (require (only-in "../util.rkt" format-hex-byte format-hex-word))
   (require (only-in "./vm-inspector-utils.rkt"
                     vm-cell-at-nil?
                     vm-rega->string
@@ -36,7 +35,6 @@ memory management for native arrays
                     vm-refcount-cell-ptr
                     vm-regp->string
                     vm-page->strings))
-  (require (only-in "./vm-mm-register-functions.rkt" WRITE_NIL_TO_RP))
   (require (only-in "./vm-mm-pages.rkt"
                     ALLOC_PAGE_TO_X
                     VM_PAGE_SLOT_DATA
@@ -57,9 +55,9 @@ memory management for native arrays
 
   (define test-runtime
     (append
-     ALLOC_PAGE_TO_X
      ALLOC_NATARR_TO_RA
 
+     ALLOC_PAGE_TO_X
      ALLOC_M1_SLOT_TO_RA
      VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
      ADD_M1_SLOT_RZ_TO_PFL
@@ -69,11 +67,8 @@ memory management for native arrays
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label INIT_CELLSTACK_PAGE_X) (RTS))
-     (list (org #xcec0))
      VM_INITIAL_MM_REGS
-     (list (org #xcf00))
-     VM_PAGE_SLOT_DATA))
-)
+     VM_PAGE_SLOT_DATA)))
 
 ;; allocate an array of bytes (native) (also useful for strings)
 ;; overwrite RA no matter whether RA was filled

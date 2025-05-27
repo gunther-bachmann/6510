@@ -20,15 +20,15 @@ all functions around cell-pairs
          ALLOC_CELLPAIR_AX_TO_RT           ;; allocate a cell-pair a from page x (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
          ALLOC_CELLPAIR_TO_RT              ;; allocate a cell-pair from the current page (or from a new page if full)
          GET_FRESH_CELLPAIR_TO_AX          ;; get the page and unused cellpair for allocation
-         WRITE_CELLPAIR_RT_CELLy_TO_RT
-         WRITE_CELLPAIR_RP_CELLy_TO_RP
-         WRITE_CELLPAIR_RT_CELLy_TO_RP
-         WRITE_RP_TO_CELLy_CELLPAIR_RT
-         WRITE_RT_TO_CELLy_CELLPAIR_RP
-         INC_REFCNT_CELLPAIR_RT
-         DEC_REFCNT_CELLPAIR_RZ
-         FREE_CELLPAIR_RZ ;; includes FREE_CELLPAIR_RT and _RA
-         GC_CELLPAIR_FREE_LIST
+         WRITE_CELLPAIR_RT_CELLy_TO_RT     ;; write cellY from cell-pair RT into RT (overwriting it)
+         WRITE_CELLPAIR_RP_CELLy_TO_RP     ;; write cellY from cell-pair RP into RP (overwriting it)
+         WRITE_CELLPAIR_RT_CELLy_TO_RP     ;; write cellY from cell-pair RT into RP
+         WRITE_RP_TO_CELLy_CELLPAIR_RT     ;; write RP into cellY of cell-pair RT
+         WRITE_RT_TO_CELLy_CELLPAIR_RP     ;; write RT into cellY of cell-pair RP
+         INC_REFCNT_CELLPAIR_RT            ;; increment ref count to cell-pair in RT
+         DEC_REFCNT_CELLPAIR_RZ            ;; decrement ref count to cell-pair in RZ
+         FREE_CELLPAIR_RZ                  ;; free the given cell-pair in RZ (cells must not reference anything that needs garbage collection)
+         GC_CELLPAIR_FREE_LIST             ;; garbage collect the complete cell-pair free list
 
          ;; jump targets with bool definitions
          WRITE_CELLPAIR_RT_CELL0_TO_RT
@@ -46,17 +46,13 @@ all functions around cell-pairs
   (require (only-in racket/list make-list))
   (require  "../6510-test-utils.rkt")
   (require "./vm-memory-manager-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt" peek memory-list))
-  (require (only-in "../util.rkt" format-hex-byte format-hex-word))
+  (require (only-in "../tools/6510-interpreter.rkt" memory-list))
+  (require (only-in "../util.rkt" format-hex-byte))
   (require (only-in "./vm-inspector-utils.rkt"
-                    vm-cell-at-nil?
-                    vm-rega->string
                     vm-regt->string
                     vm-cell-pair-free-tree->string
                     vm-deref-cell-pair-w->string
-                    vm-deref-cell-w->string
                     vm-refcount-cell-pair-ptr
-                    vm-refcount-cell-ptr
                     vm-regp->string
                     vm-page->strings))
   (require (only-in "./vm-mm-register-functions.rkt"
@@ -90,26 +86,25 @@ all functions around cell-pairs
      WRITE_RP_TO_CELLy_CELLPAIR_RT
      WRITE_RT_TO_CELLy_CELLPAIR_RP
      INIT_CELLPAIR_PAGE_X_TO_AX
+     FREE_CELLPAIR_RZ
+     GC_CELLPAIR_FREE_LIST
+
      WRITE_NIL_TO_RP
      CP_RT_TO_RZ
      CP_RT_TO_RP
      CP_RZ_TO_RT
      CP_RA_TO_RZ
-     FREE_CELLPAIR_RZ
      WRITE_INT_AY_TO_RT
      (INC_REFCNT_CELLPAIR_RT "LSR__INC_RFCNT_CELLPAIR__")
      (list (label DONE__) (RTS))
      (DEC_REFCNT_CELLPAIR_RZ "CELLPAIR_ALREADY_LSRED__")
-     GC_CELLPAIR_FREE_LIST
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label INIT_CELLSTACK_PAGE_X) (RTS))
      (list (label DEC_REFCNT_RT) (JMP DEC_REFCNT_CELLPAIR_RT)) ;; assume that dec refcnt is operated on cellpair
      (list (label DEC_REFCNT_RZ) (JMP DEC_REFCNT_CELLPAIR_RZ)) ;; assume that dec refcnt is operated on cellpair
      (list (label INC_REFCNT_RT) (JMP INC_REFCNT_CELLPAIR_RT)) ;; assume that inc refcnt is operated on cellpair
-     (list (org #xcec0))
      VM_INITIAL_MM_REGS
-     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
 ;; cell-pair page layout  (new layout with cell-pair-ptr having bit0 always set and bit1 always unset!)
