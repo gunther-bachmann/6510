@@ -84,9 +84,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   WRITE_CELLPAIR_RT_CELL0_TO_RT))
 (require (only-in "./vm-mm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RT))
-(require (only-in "./vm-memory-manager.rkt"
-                  vm-memory-manager
-                  ALLOC_CELLARR_TO_RA))
+(require (only-in "./vm-memory-manager.rkt" vm-memory-manager))
 (require (only-in "./vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-page->strings
@@ -99,6 +97,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-call-frame.rkt"
                   vm-call-frame->strings
                   VM_POP_CALL_FRAME_N))
+(require (only-in "./vm-mm-cell-array.rkt"
+                  ALLOC_CELLARR_TO_RA))
 
 (module+ test
   (require "../6510-test-utils.rkt")

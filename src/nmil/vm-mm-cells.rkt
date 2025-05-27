@@ -47,6 +47,7 @@ cell functions
   (require (only-in "./vm-mm-register-functions.rkt"
                     CP_RT_TO_RZ
                     CP_RT_TO_RA
+                    CP_RA_TO_RT
                     CP_RT_TO_RP
                     CP_RZ_TO_RT
                     CP_RA_TO_RZ
@@ -64,6 +65,17 @@ cell functions
   (define PAGE_AVAIL_0_W #x9a00)  ;; word (absolute address) of first page available
   (define PAGE_AVAIL_1 #x99)      ;; high byte of second page available for allocation
   (define PAGE_AVAIL_1_W #x9900) ;; word (absolute address) of second page available
+
+  (define WRITE_RP_TO_CELL_POINTED_TO_BY_RT
+    (list
+     (label WRITE_RP_TO_CELL_POINTED_TO_BY_RT)
+          (LDY !$00)
+          (LDA ZP_RP)
+          (STA (ZP_RT),y)
+          (INY)
+          (LDA ZP_RP+1)
+          (STA (ZP_RT),y)
+          (RTS)))
 
   (define test-runtime
     (append
@@ -83,18 +95,19 @@ cell functions
      (list (label DEC_REFCNT_NATIVEARR_RZ) (RTS))
      (list (label DEC_REFCNT_RZ) (JMP DEC_REFCNT_CELL_RZ))
 
+
+     WRITE_RP_TO_CELL_POINTED_TO_BY_RT
      WRITE_NIL_TO_RP
      CP_RT_TO_RZ
      CP_RT_TO_RP
      CP_RZ_TO_RT
      CP_RA_TO_RZ
+     CP_RA_TO_RT
      CP_RT_TO_RA
      WRITE_INT_AY_TO_RT
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label INIT_CELLSTACK_PAGE_X) (RTS))
-     ;; (list (label DEC_REFCNT_RZ) (JMP DEC_REFCNT_CELL_RZ)) ;; assume that dec refcnt is operated on cellpair
-     ;; (list (label INC_REFCNT_RT) (JMP INC_REFCNT_CELL_RT)) ;; assume that inc refcnt is operated on cellpair
      (list (org #xcec0))
      VM_INITIAL_MM_REGS
      (list (org #xcf00))
@@ -479,6 +492,110 @@ cell functions
    (label CELL_TO_FREE_NEXT__)
           (word 0) ;; holds a cell for tail call (if necessary = is a ptr), use highbyte != 0 to detect whether pointer is set
 )))
+
+(module+ test #| new_free_cell_rc |#
+  (define new-free-cell-ptr-in-rc-tailcall-state
+    (compact-run-code-in-test-                  ;; global_CELL_FREE_LIST = 0000
+     #:runtime-code test-runtime
+     (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 0 @ ..02]
+     (JSR INC_REFCNT_CELL_RT)
+     (JSR CP_RT_TO_RP)                          ;; RA -> [cell 0]
+     (JSR ALLOC_CELL_TO_RT)                     ;; RT -> [cell 1 @ ..08]
+     (JSR WRITE_RP_TO_CELL_POINTED_TO_BY_RT)        ;; RT -> [cell 1] -> [cell 0]
+
+     (JSR FREE_CELL_RT)                     ;; GLOBAL_CELL_FREE_LIST -> [cell 0] -> [cell 1] -> 0000
+     ;; #:debug #t
+     ))                                         ;; PFL -> [cell 2 @ ..0a]
+
+  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
+                (list #x02 PAGE_AVAIL_0)
+                (format "~a02 is new head of the free list" (number->string PAGE_AVAIL_0 16)))
+  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+                (list #x08 PAGE_AVAIL_0)
+                (format "~a02, which was freed, is referencing ~a08 as next in the free list"
+                        (number->string PAGE_AVAIL_0 16)
+                        (number->string PAGE_AVAIL_0 16)))
+  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x09))
+                (list #x00 #x00)
+                (format "~a08, which was freed, is the tail of the free list"
+                        (number->string PAGE_AVAIL_0 16)))
+  (check-equal? (vm-page->strings new-free-cell-ptr-in-rc-tailcall-state PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "two slots still allocated on page, they are however on the free list to be reused")
+
+  (define new-free-cell-ptr-in-rt-state
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+     (JSR ALLOC_CELL_TO_RT)
+     (JSR FREE_CELL_RT)))
+
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
+                (list #x02 PAGE_AVAIL_0)
+                "allocated cell is freed by adding it as head to the list of free cells")
+
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+                (list #x00 #x00)
+                "the cell is set to 00 00, marking the end of the list of free cells")
+
+  (check-equal? (vm-page->strings new-free-cell-ptr-in-rt-state PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $08")
+                "page has still 1 slot in use (it was freed, but is no in free list, not completely unallocated)")
+
+  (define new-free-cell-ptr-in-rt-realloc-state
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+     (JSR ALLOC_CELL_TO_RT)
+     (JSR FREE_CELL_RT)
+     (JSR ALLOC_CELL_TO_RT)))
+
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-realloc-state GLOBAL_CELL_FREE_LIST GLOBAL_CELL_FREE_LIST)
+                (list #x00)
+                "list of free cells is empty again")
+
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-realloc-state ZP_RT (add1 ZP_RT))
+                (list #x02 PAGE_AVAIL_0))
+
+  (check-equal? (vm-page->strings new-free-cell-ptr-in-rt-realloc-state PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $08")
+                "page has 1 slot in use")
+
+  (define new-free-cell-ptr-in-rt-2xfree-state
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+     (JSR ALLOC_CELL_TO_RT)
+     (JSR CP_RT_TO_RA)
+     (JSR ALLOC_CELL_TO_RT)
+     (JSR FREE_CELL_RT)        ;; free cc08
+     (JSR CP_RA_TO_RT)
+     (JSR FREE_CELL_RT)))      ;; then free cc02
+
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-2xfree-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
+                (list #x02 PAGE_AVAIL_0)
+                "last allocated cell is freed by adding it as head to the list of free cells")
+
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-2xfree-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
+                (list #x08 PAGE_AVAIL_0)
+                "the cell is set to $cc08, the next element in the free list")
+
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-2xfree-state (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x08))
+                (list #x00)
+                "the cell is set to 00, marking the end of the list of free cells")
+
+  (check-equal? (vm-page->strings new-free-cell-ptr-in-rt-2xfree-state PAGE_AVAIL_0)
+                (list "page-type:      cell page"
+                      "previous page:  $00"
+                      "slots used:     2"
+                      "next free slot: $0a")
+                "page has still 2 slot in use (it was freed, but is no in free list, not completely unallocated)"))
 
 ;; allocate (or reuse from free-list) cell into rt
 ;;
