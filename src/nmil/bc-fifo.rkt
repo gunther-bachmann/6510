@@ -17,9 +17,15 @@
 |#
 
 (require (only-in racket/list flatten))
+
+(require "../6510.rkt")
 (require "./vm-bc-ast.rkt")
-(require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
-(require [only-in "./vm-interpreter.rkt"
+(require (only-in "./bc-btree.rkt"
+                  REVERSE))
+(require (only-in "./vm-bc-resolver.rkt"
+                  bc-resolve
+                  bc-bytes))
+(require (only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
                   CONS
@@ -89,19 +95,14 @@
                   WRITE_L0
                   WRITE_L1
                   WRITE_L2
-                  WRITE_L3])
-(require (only-in "./vm-memory-map.rkt" ZP_VM_PC))
-(require "../6510.rkt")
-(require (only-in "../tools/6510-interpreter.rkt" memory-list))
-
-(require (only-in "./bc-btree.rkt" REVERSE))
+                  WRITE_L3))
 
 (module+ test #|  |#
   (require "../6510-test-utils.rkt")
 
   (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
-  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek))
+  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek memory-list))
 
   (require (only-in "./vm-inspector-utils.rkt"
                     shorten-cell-strings

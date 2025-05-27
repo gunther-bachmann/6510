@@ -57,16 +57,19 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   SET_CDR                  1                                 set cdr element to tos (of car-cdr-pair-ptr behind tos) and pop 2 values
 |#
 
-(require "../6510.rkt")
-(require (only-in racket/list flatten))
-(require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader org-for-code-seq))
-(require (only-in "../6510-utils.rkt" word->hex-string high-byte low-byte ))
-(require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
-(require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek-word-at-address))
-(require (only-in "../ast/6510-relocator.rkt" label-string-offsets command-len))
-
 (require (only-in racket/list flatten take empty? range))
 
+(require "../6510.rkt")
+(require (only-in "../6510-utils.rkt" word->hex-string
+                  high-byte
+                  low-byte ))
+(require (only-in "../util.rkt"
+                  bytes->int
+                  format-hex-byte
+                  format-hex-word))
+(require (only-in "../tools/6510-interpreter.rkt"
+                  cpu-state-clock-cycles
+                  peek-word-at-address))
 (require (only-in "./vm-memory-map.rkt"
                   ast-const-get
                   ZP_RT
@@ -80,11 +83,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   ZP_CELL_STACK_HB_PTR))
 (require (only-in "./vm-mm-pages.rkt"
                   GLOBAL_CELLPAIR_FREE_LIST))
-(require (only-in "./vm-mm-cell-pairs.rkt"
-                  WRITE_CELLPAIR_RT_CELL0_TO_RT))
-(require (only-in "./vm-mm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RT))
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager))
 (require (only-in "./vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-page->strings
@@ -97,13 +95,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-call-frame.rkt"
                   vm-call-frame->strings
                   VM_POP_CALL_FRAME_N))
-(require (only-in "./vm-mm-cell-array.rkt"
-                  ALLOC_CELLARR_TO_RA))
+(require (only-in "../tools/6510-interpreter.rkt"
+                  6510-load
+                  6510-load-multiple
+                  initialize-cpu
+                  run-interpreter
+                  run-interpreter-on
+                  memory-list
+                  cpu-state-accumulator
+                  cpu-state-program-counter
+                  peek))
 
 (module+ test
   (require "../6510-test-utils.rkt")
   (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-next-instruction-bytes))
-
+  (require (only-in "../ast/6510-relocator.rkt" command-len))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                     BRK))
 
@@ -134,8 +140,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define PAGE_AVAIL_0_W #x9700)
   (define PAGE_AVAIL_1 #x96)
   (define PAGE_AVAIL_1_W #x9600))
-
-(require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator cpu-state-program-counter peek))
 
 (provide vm-interpreter
          bc

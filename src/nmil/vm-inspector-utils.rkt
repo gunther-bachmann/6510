@@ -1,5 +1,11 @@
 #lang racket/base
 
+#|
+
+provide functions to inspect the current status of the virtual machine
+
+|#
+
 (require (only-in racket/list flatten take empty? drop make-list))
 (require (only-in "../tools/6510-interpreter.rkt"
                   memory-list

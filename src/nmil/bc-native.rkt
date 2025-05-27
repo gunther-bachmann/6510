@@ -1,9 +1,8 @@
 #lang racket/base
 
 (require (only-in racket/list flatten))
-(require "./vm-bc-ast.rkt")
-(require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
 
+(require "../6510.rkt")
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
@@ -63,17 +62,12 @@
                   WRITE_L2
                   WRITE_L3
                   NATIVE])
-(require (only-in "./vm-memory-map.rkt" ZP_VM_PC))
-(require "../6510.rkt")
-(require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
 (module+ test #|  |#
   (require "../6510-test-utils.rkt")
 
   (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
-  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
-
   (require (only-in "./vm-inspector-utils.rkt"
                     shorten-cell-strings
                     shorten-cell-string
@@ -84,8 +78,6 @@
                     vm-cell-at->string
                     vm-cell->string
                     vm-deref-cell-pair-w->string))
-  (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
-
 
   (define PAGE_AVAIL_0 #x97)
   (define PAGE_AVAIL_0_W #x9700)
@@ -106,7 +98,6 @@
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
-
 
 (define BC_ADD_NATIVE
   (list

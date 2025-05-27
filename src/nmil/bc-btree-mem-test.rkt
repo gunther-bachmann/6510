@@ -231,7 +231,6 @@
                        (make-list 7 "")
                        "all pair ptrs in use are referenced only once!")]))
 
-
 (module+ test #| btree from-list, path-to-first, add-value-after, to-list |#
   (define b-tree-3-state
     (run-bc-wrapped-in-test

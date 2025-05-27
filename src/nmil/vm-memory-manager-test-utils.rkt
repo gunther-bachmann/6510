@@ -1,15 +1,17 @@
 #lang racket/base
 
+#|
+
+provide routines that are useful for testing memory management routines
+
+|#
+
 (require (only-in racket/port open-output-nowhere))
 (require (only-in racket/list empty? drop flatten range))
 (require (only-in racket/string string-replace))
 (require (only-in uuid uuid-string))
 
 (require "../6510.rkt" )
-
-(require  "../6510-test-utils.rkt")
-(require  "../util.rkt")
-
 (require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in "../tools/6510-debugger.rkt"
                   run-debugger-on
@@ -17,20 +19,15 @@
 (require (only-in "../tools/6510-debugger-shared.rkt" breakpoint))
 (require (only-in "../ast/6510-command.rkt" ast-label-def-cmd? ast-label-def-cmd-label))
 (require (only-in "../tools/6510-interpreter.rkt"
-                  peek-word-at-address
-                  cpu-state-clock-cycles
-                  peek
                   cpu-state-program-counter
                   6510-load-multiple
                   initialize-cpu
                   run-interpreter-on
-                  memory-list
-                  ))
+                  memory-list))
 (require (only-in "../ast/6510-assembler.rkt"
                   new-assemble-to-code-list
                   assembly-code-list-org-code-sequences
-                  assembly-code-list-labels
-                  ))
+                  assembly-code-list-labels))
 
 (provide run-code-in-test-on-code
          remove-labels-for

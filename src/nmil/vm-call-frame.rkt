@@ -10,9 +10,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (require "../6510.rkt")
 (require "../util.rkt")
-(require (only-in racket/list flatten))
-(require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
-(require (only-in "../tools/6510-interpreter.rkt" peek-word-at-address cpu-state-clock-cycles peek))
+(require (only-in "../tools/6510-interpreter.rkt"
+                  peek-word-at-address
+                  peek))
 (require (only-in "./vm-memory-map.rkt"
                   ZP_CALL_FRAME
                   ZP_VM_PC
@@ -23,6 +23,11 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   ZP_CALL_FRAME_TOP_MARK))
 (require (only-in "./vm-memory-manager.rkt" vm-memory-manager))
 
+(provide vm-call-frame
+         vm-call-frame->strings
+         vm-call-frames->string
+
+         VM_POP_CALL_FRAME_N)
 
 (module+ test #| after mem init |#
   (require (only-in "../ast/6510-relocator.rkt" command-len))
@@ -40,14 +45,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test
   (require "../6510-test-utils.rkt")
-  (require (only-in "./vm-inspector-utils.rkt"
-                    vm-stack->strings
-                    vm-page->strings
-                    vm-regt->string
-                    vm-deref-cell-pair-w->string))
   (require (only-in "./vm-memory-manager-test-utils.rkt"
                     run-code-in-test-on-code
                     remove-labels-for))
+  (require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
   (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
     (append (list (org #xa000)
@@ -62,14 +63,6 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
      (wrap-code-for-test bc vm-call-frame mocked-code-list)
      debug)))
 
-
-(require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator))
-
-(provide vm-call-frame
-         vm-call-frame->strings
-         vm-call-frames->string
-
-         VM_POP_CALL_FRAME_N)
 
 (define (vm-call-frames->string state)
   (define call-frame-page (peek state (add1 ZP_CALL_FRAME)))

@@ -15,9 +15,10 @@
 |#
 
 (require (only-in racket/list flatten))
-(require "./vm-bc-ast.rkt")
-(require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
+;; (require "./vm-bc-ast.rkt")
+;; (require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
 
+(require "../6510.rkt")
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
@@ -88,7 +89,6 @@
                   WRITE_L1
                   WRITE_L2
                   WRITE_L3])
-(require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
 (module+ test #|  |#

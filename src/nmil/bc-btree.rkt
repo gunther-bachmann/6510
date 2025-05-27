@@ -89,6 +89,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 |#
 
 (require (only-in racket/list flatten))
+
+(require "../6510.rkt")
+(require (only-in "../tools/6510-interpreter.rkt" memory-list))
+
 (require "./vm-bc-ast.rkt")
 (require (only-in "./vm-bc-resolver.rkt"
                   bc-resolve
@@ -158,8 +162,6 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   WRITE_L2
                   WRITE_L3])
 (require (only-in "./vm-memory-map.rkt" ZP_VM_PC))
-(require "../6510.rkt")
-(require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
 (module+ test #|  |#
   (require "../6510-test-utils.rkt")
@@ -207,36 +209,36 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
 
 (provide vm-btree
-    REVERSE
-    APPEND
+    REVERSE                       ;; reverse a list:  list :: result=nil -> list
+    APPEND                        ;; append to lists:  head-list :: tail-list -> list
 
-    BTREE_MAKE_ROOT
+    BTREE_MAKE_ROOT               ;; create a root for a btree: value -> node
 
-    BTREE_VALUE_P
-    BTREE_NODE_P
-    BTREE_DEPTH
+    BTREE_VALUE_P                 ;; is this node a value:  node -> bool
+    BTREE_NODE_P                  ;; is this node a node w/ children:  node -> bool
+    BTREE_DEPTH                   ;; get the max depth of this tree:  node :: right-list=nil :: depth=0 :: max-depth=0 -> int
 
-    BTREE_PATH_TO_LAST
-    BTREE_PATH_TO_FIRST
-    BTREE_NEXT
-    BTREE_PREV
+    BTREE_PATH_TO_LAST            ;; generate path to the last element in the tree:  node :: result-path=nil -> path
+    BTREE_PATH_TO_FIRST           ;; generate path to the first element in the tree:  node :: result-path=nil -> path
+    BTREE_NEXT                    ;; find the next node following the given path:  path -> path
+    BTREE_PREV                    ;; find the previous node before the given path:  path -> path
 
-    BTREE_NODE_FOR_PATH
+    BTREE_NODE_FOR_PATH           ;; extract the node for the given path:  path -> node
 
-    BTREE_REC_REBUILD_PATH_WITH
+    BTREE_REC_REBUILD_PATH_WITH   ;; recursively construct a path:  (list path) :: repl-node :: result=nil -> (list path)
     ;; BTREE_VALIDATE
 
-    BTREE_ADD_VALUE_BEFORE
-    BTREE_ADD_VALUE_AFTER
+    BTREE_ADD_VALUE_BEFORE        ;; add a value to the tree before the given:  value :: path -> path
+    BTREE_ADD_VALUE_AFTER         ;; add a value to the tree after the given:  value :: path -> path
 
-    BTREE_TO_LIST
-    BTREE_FROM_LIST
+    BTREE_TO_LIST                 ;; translate tree into an ordered list of values:  node :: btree-prefix=nil :: result=nil -> (list node)
+    BTREE_FROM_LIST               ;; construct a (balanced) tree from a list of values:  (list node) :: result=nil -> node
 
-    BTREE_REMOVE_VALUE_AT
+    BTREE_REMOVE_VALUE_AT         ;; remove the given value from the tree:  path :: result=nil :: old-prev=nil
 
-    BTREE_ROOT_FOR_PATH
+    BTREE_ROOT_FOR_PATH           ;; get the root of this path in the btree:  path -> node
 
-    BTREE_REVERSE)
+    BTREE_REVERSE)                ;; reverse the given tree:  node -> node
 
 
 ;; (define (btree-make-root value)
