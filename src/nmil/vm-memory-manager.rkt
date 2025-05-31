@@ -82,7 +82,7 @@ call frame primitives etc.
                   GC_CELLS))
 (require (only-in "./vm-mm-cell-stack.rkt"
                   INIT_CELLSTACK_PAGE_X
-                  PUSH_TO_EVLSTK
+                  PUSH_XA_TO_EVLSTK
                   POP_CELL_EVLSTK_TO_RT
                   PUSH_RT_TO_EVLSTK
                   POP_CELL_EVLSTK_TO_CELLy_RT
@@ -747,7 +747,7 @@ call frame primitives etc.
           POP_CELL_EVLSTK_TO_RT                                ;; pop cell-stack into RT (discarding RT)
           POP_CELL_EVLSTK_TO_RA
 
-          PUSH_TO_EVLSTK                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
+          PUSH_XA_TO_EVLSTK                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty
           PUSH_RT_TO_EVLSTK                         ;; push RT onto call frame cell stack
 
@@ -809,4 +809,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1767))
+                       1773))

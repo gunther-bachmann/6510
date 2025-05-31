@@ -15,7 +15,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
 (require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 
 (provide INIT_CELLSTACK_PAGE_X        ;; initialize page A to previous cell stack page (X)
-         PUSH_TO_EVLSTK               ;; push a value into RT, pushing RT onto the call frame cell stack if not empty
+         PUSH_XA_TO_EVLSTK               ;; push a value into RT, pushing RT onto the call frame cell stack if not empty
          POP_CELL_EVLSTK_TO_RT        ;; pop cell-stack into RT (discarding RT)
          POP_CELL_EVLSTK_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
          PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack (effectively doing a dup)
@@ -54,7 +54,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
     (append
      ALLOC_PAGE_TO_X
      INIT_CELLSTACK_PAGE_X
-     PUSH_TO_EVLSTK
+     PUSH_XA_TO_EVLSTK
      POP_CELL_EVLSTK_TO_RT
      PUSH_RT_TO_EVLSTK
      POP_CELL_EVLSTK_TO_CELLy_RT
@@ -264,12 +264,11 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
 ;;        A = high byte,
 ;;        X = tagged low
 ;; output: call-frame stack, RT
-(define PUSH_TO_EVLSTK
+(define PUSH_XA_TO_EVLSTK
   (list
-
-   ;; ints are saved high byte first, then low byte !!!!
-   ;; X = high byte of int (max 31 = $1f) (stored in low byte (tagged) position)
-   ;; A = low byte of int (0..255) (stored in high byte (untagged) position)
+          ;; ints are saved high byte first, then low byte !!!!
+          ;; X = high byte of int (max 31 = $1f) (stored in low byte (tagged) position)
+          ;; A = low byte of int (0..255) (stored in high byte (untagged) position)
    (label PUSH_INT_TO_EVLSTK)         ;; idea: can be optimized since it is known that this is an atomic value
           (TAY)
           (TXA)
@@ -279,27 +278,35 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
           (AND !$7f)           ;; mask out top bit
           (TAX)
           (TYA)
-          (JMP PUSH_TO_EVLSTK)
+          (JMP PUSH_XA_TO_EVLSTK)
+
+   (label PUSH_BYTE_X_TO_EVLSTK)
+          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+   (label WRITE_BYTE_X_TO_RT)
+          (LDA !TAG_BYTE_BYTE_CELL)
+          (STA ZP_RT)
+          (STX ZP_RT+1)
+          (RTS)
 
    (label PUSH_INT_m1_TO_EVLSTK)
           (LDA !$ff) ;; 1f << 2
           (LDX !$7f)
-          (BNE PUSH_TO_EVLSTK)
+          (BNE PUSH_XA_TO_EVLSTK)
 
    (label PUSH_INT_2_TO_EVLSTK)
           (LDA !$02)
           (LDX !$03)
-          (BNE PUSH_TO_EVLSTK)
+          (BNE PUSH_XA_TO_EVLSTK)
 
    (label PUSH_INT_1_TO_EVLSTK)
           (LDA !$01)
           (LDX !$03)
-          (BNE PUSH_TO_EVLSTK)
+          (BNE PUSH_XA_TO_EVLSTK)
 
    (label PUSH_INT_0_TO_EVLSTK)
           (LDA !$00)
           (LDX !$03)
-          (BNE PUSH_TO_EVLSTK)
+          (BNE PUSH_XA_TO_EVLSTK)
 
    ;; push NIL (cell-pair-ptr)           ;; idea: can be optimized since it is known that this is cell-pair-ptr
    (label PUSH_NIL_TO_EVLSTK)
@@ -309,7 +316,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
    ;; push a cell
    ;; A = high byte
    ;; X = tagged low byte
-   (label PUSH_TO_EVLSTK)
+   (label PUSH_XA_TO_EVLSTK)
           (PHA)
           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY) ;; uses A and Y
           (PLA)
@@ -365,7 +372,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
      #:runtime-code test-runtime
      (LDX !$05)
      (LDA !$ce)
-     (JSR PUSH_TO_EVLSTK)))
+     (JSR PUSH_XA_TO_EVLSTK)))
 
   (check-equal? (vm-regt->string vm_cell_stack_push_r_cell_ptr_state)
                 "pair-ptr[0] $ce05")

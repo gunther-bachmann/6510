@@ -95,6 +95,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-call-frame.rkt"
                   vm-call-frame->strings
                   VM_POP_CALL_FRAME_N))
+(require (only-in "./vm-mm-cell-stack.rkt"
+                  PUSH_XA_TO_EVLSTK))
 (require (only-in "../tools/6510-interpreter.rkt"
                   6510-load
                   6510-load-multiple
@@ -2455,7 +2457,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
           (LDX !$ff)
-          (JSR PUSH_TO_EVLSTK)
+          (JSR PUSH_XA_TO_EVLSTK)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (module+ test #| push byte |#

@@ -1,5 +1,13 @@
 #+title: vm-memory-manager
 * open tasks
+** TODO find a way to know what routines are available
+** TODO find a way of how to import the right symbol to have access to this routine!
+- e.g. use PUSH_XA_TO_EVLSTKSTK to make use of PUSH_INT_m1_TO_EVLSTK
+** TODO find a documentation that allows for easy composition of functions
+- group semantically [stack functions, register functions, cell-array functions, native array functions etc.]
+- provide information like input, usage, output
+- provide semantic level (e.g. 6510, vm, bc, scheme)
+- extract this information automatically
 ** IMPLEMENT implement RP as (secondary) register for cell pairs
 - OBSOLETE: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr

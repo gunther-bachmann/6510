@@ -71,7 +71,7 @@ memory management for cell arrays
                     DEC_REFCNT_CELL_RZ
                     FREE_CELL_RZ))
   (require (only-in "./vm-mm-cell-stack.rkt"
-                    PUSH_TO_EVLSTK
+                    PUSH_XA_TO_EVLSTK
                     PUSH_RT_TO_EVLSTK))
   (require (only-in "./vm-mm-cell-pairs.rkt"
                     WRITE_RP_TO_CELLy_CELLPAIR_RT
@@ -139,7 +139,7 @@ memory management for cell arrays
      CP_RT_TO_RP
      CP_RT_TO_RZ
      CP_RZ_TO_RT
-     PUSH_TO_EVLSTK
+     PUSH_XA_TO_EVLSTK
      PUSH_RT_TO_EVLSTK
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
