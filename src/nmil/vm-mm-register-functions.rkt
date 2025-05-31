@@ -7,10 +7,14 @@
 |#
 
 (require "../6510.rkt")
+(require (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix))
 (require (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   ZP_RP
                   ZP_RT
+                  ZP_RA
+                  ZP_RC
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
 (require (only-in "./vm-inspector-utils.rkt"
                   vm-cell-at-nil?
@@ -25,11 +29,15 @@
          CP_RT_TO_RA
          CP_RT_TO_RP
          CP_RT_TO_RZ
-         CP_RZ_TO_RT)
+         CP_RZ_TO_RT
+         SWAP_ZP_WORD
+         CP_RA_TO_RB
+         SWAP_RA_RB)
 
 (module+ test
   (require  "../6510-test-utils.rkt")
   (require "./vm-memory-manager-test-utils.rkt")
+  (require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
   (define test-runtime
     (append
@@ -42,6 +50,8 @@
      CP_RT_TO_RP
      CP_RT_TO_RZ
      CP_RZ_TO_RT
+     SWAP_ZP_WORD
+
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS)))))
 
@@ -210,3 +220,91 @@
 
   (check-equal? (vm-regt->string vm-write-int-ay-to-rt-state)
                 "int $0201"))
+
+;; swap 16 bits of two zero page locations
+;; e.g. swapping RA with RB: A = !ZP_RA, X = !ZP_RB
+;; input:  A = zero-page address 1
+;;         X = zero page address 2
+;; usage:  A, X, Y, TEMP..TEMP4
+;; output: swapped zero page 16 bit values
+(define SWAP_ZP_WORD ;; 33 bytes
+  (add-label-suffix
+   "__" "SWAP_ZP_WORD"
+   (list
+    (label SWAP_ZP_WORD)
+           (LDY !$00)
+           (STY ZP_TEMP2)
+           (STA ZP_TEMP)
+           (STY ZP_TEMP4)
+           (STX ZP_TEMP3)
+
+           (LDA (ZP_TEMP3),y)
+           (TAX)
+
+           (LDA (ZP_TEMP),y)
+           (STA (ZP_TEMP3),y)
+           (INY)
+           (LDA (ZP_TEMP3),y)
+           (PHA)
+
+           (LDA (ZP_TEMP),y)
+           (STA (ZP_TEMP3),y)
+
+           (PLA)
+           (STA (ZP_TEMP),y)
+           (DEY)
+           (TXA)
+           (STA (ZP_TEMP),y)
+           (RTS))))
+
+(module+ test #| swap-zp-word |#
+  (define swap-zp-word-t0
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+     (LDX !$1e)
+     (STX ZP_RA)
+     (INX)
+     (STX ZP_RA+1)
+     (INX)
+     (STX ZP_RC)
+     (INX)
+     (STX ZP_RC+1)
+
+     (LDA !ZP_RC)
+     (LDX !ZP_RA)
+     (JSR SWAP_ZP_WORD)))
+
+  (check-equal? (memory-list swap-zp-word-t0 ZP_RA (+ 1 ZP_RA))
+                (list #x20 #x21)
+                "originally $1e $1f")
+  (check-equal? (memory-list swap-zp-word-t0 ZP_RC (+ 1 ZP_RC))
+                (list #x1e #x1f)
+                "originally $20 $21"))
+
+(define CP_RA_TO_RB
+  (add-label-suffix
+   "__" "CP_RA_TO_RB"
+   (list
+    (label CP_RA_TO_RB)
+           (LDX ZP_RA)
+           (STX ZP_RB)
+           (LDX ZP_RA+1)
+           (STX ZP_RB+1)
+           (RTS))))
+
+(define SWAP_RA_RB ;; 17 bytes
+  (add-label-suffix
+   "__" "SWAP_RA_RB"
+   (list
+    (label SWAP_RA_RB)
+           (LDA ZP_RB)
+           (LDY ZP_RB+1)
+
+           (LDX ZP_RA)
+           (STX ZP_RB)
+           (LDX ZP_RA+1)
+           (STX ZP_RB+1)
+
+           (STA ZP_RA)
+           (STY ZP_RA+1)
+           (RTS))))

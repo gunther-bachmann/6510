@@ -21,6 +21,7 @@ memory management for native arrays
                   replace-labels))
 
 (provide ALLOC_NATARR_TO_RA
+         ALLOC_NATARR_TO_RB
          WRITE_RT_TO_NATARR_RAI
          POP_TO_NATARR_RAI
          WRITE_NATARR_RAI_TO_RT
@@ -51,8 +52,12 @@ memory management for native arrays
                     VM_PAGE_SLOT_DATA
                     VM_INITIAL_MM_REGS
                     VM_INITIALIZE_MEMORY_MANAGER))
+  (require (only-in "./vm-mm-register-functions.rkt"
+                    CP_RA_TO_RB
+                    SWAP_RA_RB))
   (require (only-in "./vm-mm-m1-slots.rkt"
                     ALLOC_M1_SLOT_TO_RA
+                    ALLOC_M1_SLOT_TO_RB
                     INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
                     VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
                     ADD_M1_SLOT_RZ_TO_PFL
@@ -71,15 +76,21 @@ memory management for native arrays
   (define test-runtime
     (append
      ALLOC_NATARR_TO_RA
+     ALLOC_NATARR_TO_RB
      WRITE_RT_TO_NATARR_RAI
      POP_TO_NATARR_RAI
+     WRITE_NATARR_RAI_TO_RT
+     CP_NATARR_RA_TO_RB
+     CP_NATARR_RANGE_RA_TO_RB
 
-
+     CP_RA_TO_RB
+     SWAP_RA_RB
      PUSH_XA_TO_EVLSTK
      POP_CELL_EVLSTK_TO_RT
      PUSH_RT_TO_EVLSTK
      ALLOC_PAGE_TO_X
      ALLOC_M1_SLOT_TO_RA
+     ALLOC_M1_SLOT_TO_RB
      VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
      ADD_M1_SLOT_RZ_TO_PFL
      DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
@@ -118,16 +129,7 @@ memory management for native arrays
           (PLA)
           (STA (ZP_RA),y) ;; store number of array elements
 
-   ;; no initializing with 0 (might be useful for debugging, though)
-   ;;        (TAX) ;; use number of array elements as loop counter
-
-   ;;        ;; initialize slots/array with 0
-   ;;        (LDA !$00)
-   ;; (label LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
-   ;;        (INY)
-   ;;        (STA (ZP_RA),y)
-   ;;        (DEX)
-   ;;        (BNE LOOP_INIT__VM_ALLOC_NATIVE_ARRAY_TO_ZP_PTR2)
+          ;; no initializing with 0 (might be useful for debugging, though)
 
           (INC ZP_RA)
           (INC ZP_RA) ;; ensure RA points to first entry of array
@@ -155,6 +157,31 @@ memory management for native arrays
   (check-equal? (memory-list test-alloc-native-array-state-after (+ PAGE_AVAIL_0_W #x10) (+ PAGE_AVAIL_0_W #x11))
                 (list TAG_BYTE_NATIVE_ARRAY #x10)
                 "the native array in this slot starts with its appropriate tag_byte and its length #x10"))
+
+(define ALLOC_NATARR_TO_RB
+  (list
+   (label ALLOC_NATARR_TO_RB)
+          (PHA)
+          (CLC)
+          (ADC !$02) ;; add to total slot size
+
+          (JSR ALLOC_M1_SLOT_TO_RB)
+
+          ;; write header cell
+          (LDY !$00)
+          (STY ZP_RBI)
+          (LDA !TAG_BYTE_NATIVE_ARRAY)
+          (STA (ZP_RB),y) ;; store tag byte
+
+          (INY)
+          (PLA)
+          (STA (ZP_RB),y) ;; store number of array elements
+
+          ;; no initializing with 0 (might be useful for debugging, though)
+
+          (INC ZP_RB)
+          (INC ZP_RB) ;; ensure RA points to first entry of array
+          (RTS)))
 
 ;; write byte value of rt (high byte) into nat array
 ;; referenced by RA at index RAI and increment RAI
@@ -270,51 +297,174 @@ memory management for native arrays
           (INC ZP_RAI)
           (RTS)))
 
+(module+ test #| push-natarr-rai |#
+
+  (define push-natarr-rai-t0
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+     (LDA !$04)
+     (JSR ALLOC_NATARR_TO_RA)
+     (LDX !$32)
+     (JSR PUSH_BYTE_X_TO_EVLSTK)
+     (JSR POP_TO_NATARR_RAI)
+     (DEC ZP_RAI)
+     (JSR PUSH_NATARR_RAI)))
+
+  (check-equal? (vm-page->strings push-natarr-rai-t0 PAGE_AVAIL_0)
+                (list
+                 "page-type:      m1 page p0"
+                 "previous page:  $00"
+                 "slots used:     1"
+                 "next free slot: $0e"))
+  (check-equal? (vm-stack->strings push-natarr-rai-t0)
+                (list "stack holds 1 item"
+                      "byte $32  (rt)"))
+  (check-equal? (memory-list pop-to-natarra-rai-t0 (+ PAGE_AVAIL_0_W #x04) (+ PAGE_AVAIL_0_W #x06))
+                (list TAG_BYTE_NATIVE_ARRAY #x04 #x58)
+                "native array is made of tag-byte, length=4, @0 = #x32")
+  (check-equal? (peek pop-to-natarra-rai-t0 ZP_RAI)
+                1
+                "index for array a points to the next"))
 
 ;; copy the whole lenght of the array ra into the array rb (same position)
 ;; input:  RA, RB
 ;; usage:  A, Y
 ;; output: start of RB is equal to RA (length of RB needs to >= RA)
 (define CP_NATARR_RA_TO_RB
-  (list
-   (label CP_NATARR_RA_TO_RB)
-          (LDY !$00)
-          (DEC ZP_RA)
-          (LDA (ZP_RA),y)       ;; A = length of array
-          (INC ZP_RA)
-          (TAY)
+  (add-label-suffix
+   "__" "CP_NATARR_RA_TO_RB"
+   (list
+    (label CP_NATARR_RA_TO_RB)
+           (LDY !$00)
+           (DEC ZP_RA)
+           (LDA (ZP_RA),y)       ;; A = length of array
+           (INC ZP_RA)
+           (TAY)
+           (DEY)
 
-   (label LOOP__)
-          (DEY)
-          (LDA (ZP_RA),y)
-          (STA (ZP_RB),y)
-          (BNE LOOP__)
-          (RTS)))
+    (label LOOP__)
+           (LDA (ZP_RA),y)
+           (STA (ZP_RB),y)
+           (DEY)
+           (BPL LOOP__)
+           (RTS))))
+
+(module+ test #| cp-natarr-ra-to-rb |#
+  (define cp-natarr-ra-to-rb-t0
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+            (LDA !$04)
+            (JSR ALLOC_NATARR_TO_RA)
+            (LDY ZP_RAI)
+     (label LOOP__)
+            (TYA)
+            (STA (ZP_RA),y)
+            (INY)
+            (CPY !$04)
+            (BNE LOOP__)
+            (LDA !$08)
+            (JSR ALLOC_NATARR_TO_RB)
+            (JSR CP_NATARR_RA_TO_RB)))
+
+  (check-equal? (memory-list cp-natarr-ra-to-rb-t0 ZP_RA (+ 1 ZP_RA))
+                (list #x06 PAGE_AVAIL_0)
+                "ra is allocated first on page 0")
+  (check-equal? (vm-page->strings cp-natarr-ra-to-rb-t0 PAGE_AVAIL_0)
+                (list "page-type:      m1 page p0"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $0e")
+                "page 0 is of profile 0, since length is 4")
+  (check-equal? (memory-list cp-natarr-ra-to-rb-t0 ZP_RB (+ 1 ZP_RB))
+                (list #x06 PAGE_AVAIL_1)
+                "rb is allocated first on page 1")
+  (check-equal? (vm-page->strings cp-natarr-ra-to-rb-t0 PAGE_AVAIL_1)
+                (list "page-type:      m1 page p1"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $16")
+                "page 1 is of profile 1, since length is 8")
+  (check-equal? (memory-list cp-natarr-ra-to-rb-t0 (+ PAGE_AVAIL_0_W 4) (+ PAGE_AVAIL_0_W 9))
+                (list TAG_BYTE_NATIVE_ARRAY 4 0 1 2 3)
+                "ra points to page0, containing a native array of len 4 filled with 0 1 2 3")
+  (check-equal? (memory-list cp-natarr-ra-to-rb-t0 (+ PAGE_AVAIL_1_W 4) (+ PAGE_AVAIL_1_W 9))
+                (list TAG_BYTE_NATIVE_ARRAY 8 0 1 2 3)
+                "rb points to page1, containing a native array of len 8 (first 4 bytes) filled with 0 1 2 3"))
 
 ;; copy from nat array ra, range index x..y to the start of array rb
 ;; input:  RA, RB, X, Y
 ;; usage:  A, X, Y
 ;; output: start of RB is equal to RA@X..Y (0-indexed), RB needs to have sufficient size (>=Y-X)
 (define CP_NATARR_RANGE_RA_TO_RB
-  (list
-   (label CP_NATARR_RANGE_RA_TO_RB)
-          (SEC)
-          (TXA)
-          (SBC ZP_RB)
-          (STA ZP_RB)           ;; set start of rb such that range is copy to start of rb
+  (add-label-suffix
+   "__" "CP_NATARR_RANGE_RA_TO_RB"
+   (list
+    (label CP_NATARR_RANGE_RA_TO_RB)
+           (SEC)
+           (STX ZP_TEMP)
+           (LDA ZP_RB)
+           (SBC ZP_TEMP)
+           (STA ZP_RB)           ;; set start of rb such that range is copy to start of rb
 
-          (STX LOOP_COMPARE__+1)
+           (STX LOOP_COMPARE__+1)
 
-   (label LOOP__)
-          (LDA (ZP_RA),y)
-          (STA (ZP_RB),y)
-          (DEY)
-   (label LOOP_COMPARE__)
-          (CPY !$ff)
-          (BNE LOOP__)
+    (label LOOP__)
+           (LDA (ZP_RA),y)
+           (STA (ZP_RB),y)
+           (DEY)
+    (label LOOP_COMPARE__)
+           (CPY !$ff)
+           (BPL LOOP__)
 
-          (TXA)
-          (CLC)
-          (ADC ZP_RB)
-          (STA ZP_RB) ;; restore original ZP_RB
-          (RTS)))
+           (TXA)
+           (CLC)
+           (ADC ZP_RB)
+           (STA ZP_RB) ;; restore original ZP_RB
+           (RTS))))
+
+(module+ test #| cp-natarr-range-ra-to-rb |#
+  (define cp-natarr-range-ra-to-rb-t0
+    (compact-run-code-in-test-
+     ;; #:debug #t
+     #:runtime-code test-runtime
+            (LDA !$04)
+            (JSR ALLOC_NATARR_TO_RA)
+            (LDY ZP_RAI)
+     (label LOOP__)
+            (TYA)
+            (STA (ZP_RA),y)
+            (INY)
+            (CPY !$04)
+            (BNE LOOP__)
+            (LDA !$08)
+            (JSR ALLOC_NATARR_TO_RB)
+
+            (LDX !$02) ;; not including 1
+            (LDY !$03)
+            (JSR CP_NATARR_RANGE_RA_TO_RB)))
+
+
+  (check-equal? (memory-list cp-natarr-range-ra-to-rb-t0 ZP_RA (+ 1 ZP_RA))
+                (list #x06 PAGE_AVAIL_0)
+                "ra is allocated first on page 0")
+  (check-equal? (vm-page->strings cp-natarr-range-ra-to-rb-t0 PAGE_AVAIL_0)
+                (list "page-type:      m1 page p0"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $0e")
+                "page 0 is of profile 0, since length is 4")
+  (check-equal? (memory-list cp-natarr-range-ra-to-rb-t0 ZP_RB (+ 1 ZP_RB))
+                (list #x06 PAGE_AVAIL_1)
+                "rb is allocated first on page 1")
+  (check-equal? (vm-page->strings cp-natarr-range-ra-to-rb-t0 PAGE_AVAIL_1)
+                (list "page-type:      m1 page p1"
+                      "previous page:  $00"
+                      "slots used:     1"
+                      "next free slot: $16")
+                "page 1 is of profile 1, since length is 8")
+  (check-equal? (memory-list cp-natarr-range-ra-to-rb-t0 (+ PAGE_AVAIL_0_W 4) (+ PAGE_AVAIL_0_W 9))
+                (list TAG_BYTE_NATIVE_ARRAY 4 0 1 2 3)
+                "ra points to page0, containing a native array of len 4 filled with 0 1 2 3")
+  (check-equal? (memory-list cp-natarr-range-ra-to-rb-t0 (+ PAGE_AVAIL_1_W 4) (+ PAGE_AVAIL_1_W 7))
+                (list TAG_BYTE_NATIVE_ARRAY 8 2 3)
+                "rb points to page1, containing a native array of len 8 (first 4 bytes) filled with 2 3"))

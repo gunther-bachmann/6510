@@ -32,6 +32,7 @@
          ZP_TEMP
          ZP_TEMP2
          ZP_TEMP3
+         ZP_TEMP4
          ZP_VM_PC
          ZP_VM_FUNC_PTR
          ZP_LOCALS_LB_PTR
@@ -59,11 +60,13 @@
    (word-const TAGGED_BYTE0              $00ff)
    (word-const TAGGED_NIL                $0001) ;; tag indicates cell-pair-ptr
 
+   ;; ZP_TEMP3 may be used as pointer (in combination with ZP_TEMP4 => must be in adjacent memory locations)
    (byte-const ZP_TEMP3                  $d9)
-   ;; (byte-const ZP_TEMP4                $da)
+   (byte-const ZP_TEMP4                  $da)
+
    (byte-const ZP_CELL_STACK_TOS         $db) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
 
-   ;; ZP_TEMP may be used as pointer (in combination with ZP_TEMP2)
+   ;; ZP_TEMP may be used as pointer (in combination with ZP_TEMP2 => must be in adjacent memory locations)
    (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
    (byte-const ZP_TEMP2                  $dd) ;; may not be used after sub calls (just within a routine without jsr)
 
@@ -139,6 +142,7 @@
 (define ZP_TEMP                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP"))
 (define ZP_TEMP2                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP2"))
 (define ZP_TEMP3                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP3"))
+(define ZP_TEMP4                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP4"))
 (define ZP_VM_PC                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_PC"))
 (define ZP_VM_FUNC_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_FUNC_PTR"))
 (define ZP_LOCALS_LB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_LB_PTR"))

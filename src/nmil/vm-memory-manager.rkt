@@ -47,7 +47,10 @@ call frame primitives etc.
                   CP_RT_TO_RA
                   CP_RT_TO_RP
                   CP_RT_TO_RZ
-                  CP_RZ_TO_RT))
+                  CP_RZ_TO_RT
+                  SWAP_ZP_WORD
+                  CP_RA_TO_RB
+                  SWAP_RA_RB))
 (require (only-in "./vm-mm-pages.rkt"
                   VM_INITIALIZE_MEMORY_MANAGER
                   FREE_PAGE_A
@@ -784,6 +787,10 @@ call frame primitives etc.
           CP_RT_TO_RZ                                     ;; copy RT -> RZ
           CP_RT_TO_RP
           CP_RZ_TO_RT
+
+          SWAP_ZP_WORD
+          CP_RA_TO_RB
+          SWAP_RA_RB
 
           POP_CELL_EVLSTK_TO_CELLy_RT                           ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 

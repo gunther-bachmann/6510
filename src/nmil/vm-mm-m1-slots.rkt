@@ -12,6 +12,7 @@ functions for m1 pages and slots
                   TAGGED_NIL
                   ZP_RP
                   ZP_RA
+                  ZP_RB
                   ZP_TEMP
                   ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
@@ -24,6 +25,7 @@ functions for m1 pages and slots
          PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ         ;; put the page of m1 slot in rz as head to the m1 page list
          ADD_M1_SLOT_RZ_TO_PFL                  ;; add the given m1 slot in rz to the page free list (slot must not contain any data that needs gc)
          ALLOC_M1_SLOT_TO_RA                    ;; allocate a m1 slot into ra (size wanted in a)
+         ALLOC_M1_SLOT_TO_RB                    ;; allocate a m1 slot into ra (size wanted in a)
          FREE_M1_SLOT_RA                        ;; free the m1 slot reference in RA (must not contain any data that need gc)
          FREE_M1_SLOT_RZ                        ;; free the m1 slot reference in RZ (must not contain any data that need gc)
          VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS      ;; remove full pages for the list of m1 slot page
@@ -43,7 +45,10 @@ functions for m1 pages and slots
   (require (only-in "./vm-inspector-utils.rkt" vm-page->strings))
   (require (only-in "./vm-mm-register-functions.rkt"
                     CP_RT_TO_RA
-                    CP_RA_TO_RT))
+                    CP_RA_TO_RT
+                    CP_RA_TO_RB
+                    SWAP_RA_RB
+                    SWAP_ZP_WORD))
   (require (only-in "./vm-mm-pages.rkt"
                     ALLOC_PAGE_TO_X
                     VM_PAGE_SLOT_DATA
@@ -59,6 +64,7 @@ functions for m1 pages and slots
     (append
      INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
      ALLOC_M1_SLOT_TO_RA
+     ALLOC_M1_SLOT_TO_RB
      VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
      FREE_M1_SLOT_RA
      VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
@@ -67,12 +73,14 @@ functions for m1 pages and slots
      ALLOC_PAGE_TO_X
      CP_RA_TO_RT
      CP_RT_TO_RA
+     CP_RA_TO_RB
+     SWAP_RA_RB
+     SWAP_ZP_WORD
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label INIT_CELLSTACK_PAGE_X) (RTS))
      VM_INITIAL_MM_REGS
      VM_PAGE_SLOT_DATA)))
-
 
 ;; ----------------------------------------
 ;; page type slot w/ different sizes (refcount @ ptr-1) x cells
@@ -434,6 +442,35 @@ functions for m1 pages and slots
 
    (label DONE__)
           (RTS))))
+
+(define ALLOC_M1_SLOT_TO_RB
+  (add-label-suffix
+   "__" "ALLOC_M1_SLOT_TO_RB"
+   (list
+    (label ALLOC_M1_SLOT_TO_RB)
+           (JSR CP_RA_TO_RB)
+           (JSR ALLOC_M1_SLOT_TO_RA)
+           ;; alnative swap implementation
+           ;; (LDA !ZP_RA)
+           ;; (LDX !ZP_RB)
+           ;; (JMP SWAP_ZP_WORD)
+           (JMP SWAP_RA_RB))))
+
+(module+ test #| |#
+  (define alloc-m1-slot-to-rb-t0
+    (compact-run-code-in-test-
+     #:runtime-code test-runtime
+     (LDA !$57)
+     (STA ZP_RA) ;; fill ra with some value
+     (LDA !$10)
+     (JSR ALLOC_M1_SLOT_TO_RB)))
+
+  (check-equal? (peek alloc-m1-slot-to-rb-t0 ZP_RA)
+               #x57
+               "ra holds original value")
+  (check-equal? (memory-list alloc-m1-slot-to-rb-t0 ZP_RB (+ 1 ZP_RB))
+               (list #x04 PAGE_AVAIL_0)
+               "rb holds an allocated slot"))
 
 ;; allocate a slot of min A size, allocating a new page if necessary
 ;; input:  A = size
