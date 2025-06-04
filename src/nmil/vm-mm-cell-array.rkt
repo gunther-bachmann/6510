@@ -154,6 +154,7 @@ memory management for cell arrays
      VM_INITIAL_MM_REGS
      VM_PAGE_SLOT_DATA)))
 
+;; @DC-FUN: ALLOC_CELLARR_TO_RA, group: cell_array
 ;; allocate an array of cells (also useful for structures)
 ;; this does overwrite RA without check RAs content!
 ;; input:  A = number of cells (1..40)
@@ -229,6 +230,7 @@ memory management for cell arrays
     (label FREE_CELLARR_RZ)
            (RTS))))
 
+;; @DC-FUN: GC_CELL_ARRAYS, group: gc
 ;; do incremental collections until all cell arrays (and their slots) were garbage collected
 ;; input:  ZP_PART_GCD_CELL_ARRAYS
 ;; usage:  A, X, Y, RZ
@@ -253,6 +255,7 @@ memory management for cell arrays
    (label DONE__)
           (RTS))))
 
+;; @DC-FUN: GC_CELL_ARRAY, group: gc
 ;; keep collecting until the whole (single) array was collected but stop then!
 ;; input:  ZP_PART_GCD_CELL_ARRAYS
 ;; usage:  A, X, Y, RZ
@@ -290,11 +293,16 @@ memory management for cell arrays
     (label PREV_ARRAY__)
            (word 0))))
 
+;; ----
+;; @DC-FUN: GC_INCR_ARRAY_SLOT_RA, group: gc
+;; incrementally garbage collect an array by slots (see GC_INCR_ARRAY_SLOT_RZ)
+;; ------------------------------
+;; @DC-FUN: GC_INCR_ARRAY_SLOT_RZ, group: gc
 ;; incrementally garbage collect an array by slots
 ;; may destroy RZ (on dec refcnt of a cell in the array)
 ;; will free this cell-array, if no refcnts need to be dec (anymore)
 ;; will add this cell array to ZP_PART_GCD_CELL_ARRAYS if not completely gc'd
-;; input: RZ (RA, RT)
+;; input: RZ
 ;; usage: A, X, Y, RZ
 ;; output: -
 ;; funcs:
@@ -580,11 +588,18 @@ memory management for cell arrays
                 (format "pair $~a05 -> [ empty . empty ]" (format-hex-byte PAGE_AVAIL_1))
                 "...and added as free tree root (for reuse)"))
 
-
-(define WRITE_RT_TO_ARR_ATa_RA
-  (add-label-suffix
-   "__" "__WRITE_RT_TO_ARR_ATa_RA"
-   (list
+;; ---
+;; @DC-FUN: WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS, group: cell_array
+;; write the tos into array element a (0 indexed), array pointed to by RA
+;; same as WRITE_RT_TO_ARR_ATa_RA
+;; but with BOUNDS CHECK
+;; ---
+;; @DC-FUN: POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS, group: cell_array
+;; pop tos into array element a (0 indexed), array pointed to by RA
+;; same as POP_EVLSTK_TO_ARR_ATa_RA
+;; but with BOUNDS CHECK
+;; ---
+;; @DC-FUN: POP_EVLSTK_TO_ARR_ATa_RA, group: cell_array
 ;; pop tos into array element a (0 indexed), array pointed to by RA
 ;; it will dec-refcnt on previous array entry, if it is a pointer that is overwritten
 ;; input:  A = index (0 indexed)
@@ -598,29 +613,8 @@ memory management for cell arrays
 ;;   WRITE_RT_ARR_ATa_RA
 ;;   POP_CELL_EVLSTK_TO_RT
 ;; NO BOUNDS CHECK!
-    (label POP_EVLSTK_TO_ARR_ATa_RA)
-           (JSR WRITE_RT_TO_ARR_ATa_RA)
-           (JMP POP_CELL_EVLSTK_TO_RT)
-
-;; pop tos into array element a (0 indexed), array pointed to by RA
-;; same as POP_EVLSTK_TO_ARR_ATa_RA
-;; but with BOUNDS CHECK
-    (label POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS)
-           (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
-           (JMP POP_CELL_EVLSTK_TO_RT)
-
-;; write the tos into array element a (0 indexed), array pointed to by RA
-;; same as WRITE_RT_TO_ARR_ATa_RA
-;; but with BOUNDS CHECK
-    (label WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
-           (LDY !$01)
-           (CMP (ZP_RA),y)
-           (BPL BOUNDS_ERR__)
-           (CMP !$00)
-           (BPL WRITE_RT_TO_ARR_ATa_RA)
-    (label BOUNDS_ERR__)
-           (BRK)
-
+;; -------------------------------
+;; @DC-FUN: WRITE_RT_TO_ARR_ATa_RA, group: cell_array
 ;; write the tos into array element a (0 indexed), array pointed to by RA
 ;; it will dec-refcnt on previous array entry, if it is a pointer that is overwritten
 ;; it will NOT inc-refcnt on RT even though it is now in RT and the array, this has to be taken care of by the caller!
@@ -632,6 +626,27 @@ memory management for cell arrays
 ;; funcs:
 ;;   DEC_REFCNT_RZ
 ;; NO CHECKING (NO BOUNDS, NO TYPE ...)
+(define WRITE_RT_TO_ARR_ATa_RA
+  (add-label-suffix
+   "__" "__WRITE_RT_TO_ARR_ATa_RA"
+   (list
+    (label POP_EVLSTK_TO_ARR_ATa_RA)
+           (JSR WRITE_RT_TO_ARR_ATa_RA)
+           (JMP POP_CELL_EVLSTK_TO_RT)
+
+    (label POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS)
+           (JSR WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
+           (JMP POP_CELL_EVLSTK_TO_RT)
+
+    (label WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS)
+           (LDY !$01)
+           (CMP (ZP_RA),y)
+           (BPL BOUNDS_ERR__)
+           (CMP !$00)
+           (BPL WRITE_RT_TO_ARR_ATa_RA)
+    (label BOUNDS_ERR__)
+           (BRK)
+
     (label WRITE_RT_TO_ARR_ATa_RA)
            (ASL A)
            (CLC)
@@ -792,7 +807,7 @@ memory management for cell arrays
                "got to pushing 0 since access index 0 is in bounds"))
 
 ;; --------------------
-;; PUSH_ARR_ATa_RA_TO_EVLSTK
+;; @DC-FUN: PUSH_ARR_ATa_RA_TO_EVLSTK, group: cell_array
 ;; push the cell at A of the array in RA onto the Stack (RT+EVLSTK)
 ;; (RA),A -> RT+EVLSTK
 ;; input:  A, RA, RT+EVLSTK

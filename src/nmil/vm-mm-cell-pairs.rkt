@@ -107,6 +107,7 @@ all functions around cell-pairs
      VM_INITIAL_MM_REGS
      VM_PAGE_SLOT_DATA)))
 
+;; @DC-FUN: INIT_CELLPAIR_PAGE_X_TO_AX, group: cell_pair
 ;; cell-pair page layout  (new layout with cell-pair-ptr having bit0 always set and bit1 always unset!)
 ;; offset  content
 ;; ---------------
@@ -246,6 +247,7 @@ all functions around cell-pairs
                 (list #xa0)
                 "last byte on page points to previous free page of cell-pairs"))
 
+;; @DC-FUN: ALLOC_CELLPAIR_AX_TO_RT, group: cell_pair
 ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
 ;; this will not check the free cell-pair tree!
 ;; input:  X : page to allocate cell-pair on (a new page is allocated, if this page does not have any free cell-pairs)
@@ -288,6 +290,7 @@ all functions around cell-pairs
   (check-equal? (vm-regt->string vm-alloc-cell-pair-on-page-a-into-rt-state)
                 (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0))))
 
+;; @DC-FUN: ALLOC_CELLPAIR_TO_RT, group: cell_pair
 ;; try to reuse root of free tree: use root but make sure to deallocate cell1 of the root (since this might still point to some data)
 ;; if no free tree available, find page with free cells (GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
 ;; if no free cell page is available, allocate a new page and used the first free slot there
@@ -580,6 +583,7 @@ all functions around cell-pairs
                       "next free slot: $41")
                 "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree"))
 
+;; @DC-FUN: GET_FRESH_CELLPAIR_TO_AX, group: cell_pair
 ;; get the page and unused cellpair for allocation
 ;;
 ;; get the complete ptr, do not allocate this cellpair yet
@@ -642,6 +646,7 @@ all functions around cell-pairs
                 "since first page (page_0) is marked as full, first slot (05) of page_1 is allocated"))
 
 
+;; @DC-FUN: WRITE_CELLPAIR_RT_CELLy_TO_RT, group: cell_pair
 ;; overwrite the given cell-pair ptr in RT with the value of the Y's cell pointed to by the cell-pair
 ;; no reference count is adjusted! this has to be taken care of by caller!
 ;; input:  Y - 0 (cell0), 2 (cell1)
@@ -697,6 +702,7 @@ all functions around cell-pairs
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rt-state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"))
 
+;; @DC-FUN: WRITE_CELLPAIR_RT_CELLy_TO_RP, group: cell_pair
 ;; write into RP the value of the Y's cell pointed to by the cell-pair ptr RT
 ;; no reference count is adjusted! this has to be taken care of by caller!
 ;; input:  Y - 0 (cell0), 2 (cell1)
@@ -751,6 +757,7 @@ all functions around cell-pairs
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rp-state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"))
 
+;; @DC-FUN: WRITE_CELLPAIR_RP_CELLy_TO_RP, group: cell_pair
 ;; overwrite the given cell-pair ptr in RP with the value of the Y's cell pointed to by the cell-pair
 ;; no reference count is adjusted! this has to be taken care of by caller!
 ;; input:  Y - 0 (cell0), 2 (cell1)
@@ -942,6 +949,7 @@ all functions around cell-pairs
           (JMP FREE_CELLPAIR_RZ) ;; free (since refcnt dropped to 0)
 ))
 
+;; @DC-FUN: FREE_CELLPAIR_RZ, group: gc
 ;; put the given cellpair on the global free list
 ;; dec-refcnt cell0 if it is a ptr, defer dec-refcnt cell1 to allocation/reuse time
 ;; input: RZ (RT RA), GLOBAL_CELLPAIR_FREE_LIST
@@ -1136,6 +1144,7 @@ all functions around cell-pairs
   ;;               "empty")
   )
 
+;; @DC-FUN: WRITE_RT_TO_CELLy_CELLPAIR_RP, group: cell_pair
 ;; write the cell in RT into the CELL Y (0|2) of the cell-pair referenced in RP
 ;; input:  Y, RT, RP
 ;; usage:  A, Y
@@ -1190,6 +1199,7 @@ all functions around cell-pairs
                 "(int $1001 . int $0110)"
                 "dereferencing the cell pair in rp, yields the int pairs 1001 and 0110"))
 
+;; @DC-FUN: GC_CELLPAIR_FREE_LIST, group: gc
 ;; actively free all enqueued cell pairs of the free-list!
 ;; can be useful to find out whether a whole page is not used at all. free cells are still marked as used on a page.
 ;; input:  GLOBAL_CELLPAIR_FREE_LIST

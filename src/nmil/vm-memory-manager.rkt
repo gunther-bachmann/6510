@@ -215,6 +215,7 @@ call frame primitives etc.
    label-nativearr
    label-m1))
 
+;; @DC-FUN: INC_REFCNT_RT, group: gc
 ;; find out what kind of cell zp_rt points to,
 ;; then call the right decrement refcounts function
 ;; input:  ZP_RT
@@ -301,6 +302,7 @@ call frame primitives etc.
   (check-equal? (vm-refcount-cell-ptr vm-refcount-mmcr-rt--cell-ptr-state2 (+ PAGE_AVAIL_0_W #x02))
                 1))
 
+;; @DC-FUN: FREE_RT, group: gc
 ;; free nonatomic (is cell-ptr, cell-pair-ptr, cell-array-ptr, native-array-ptr)
 ;; parameter: zp_rt
 (define FREE_RT    ;; TODO: FREE_CELL_RT should work only cell pointers only, anyone in need of generic free uses this function
@@ -366,6 +368,7 @@ call frame primitives etc.
 
 ;; impl complete, test missing
 
+;; @DC-FUN: DEC_REFCNT_RZ, group: gc
 ;; decrement the refcount (if a pointer) in RZ, call respective free if refcount drops to 0
 ;; input:  RZ (RA, RT)
 ;; usage:  A, X, Y, RZ
@@ -584,6 +587,7 @@ call frame primitives etc.
                 #x01
                 "remaining refcount on m1_slot 0 is 1"))
 
+;; @DC-FUN: GC_ALL, group: gc
 ;; garbage collect all cells, all cell-pairs and all cell arrays marked for reuse or partially collected
 ;; input:  GLOBAL_CELL_FREE_LIST, GLOBAL_CELLPAIR_FREE_LIST, ZP_PART_GCD_CELL_ARRAYS
 ;; usage:  A, X, Y, RZ

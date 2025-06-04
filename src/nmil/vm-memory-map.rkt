@@ -13,35 +13,35 @@
 (require (only-in racket/list empty?))
 
 (provide ast-const-get
-         VM_MEMORY_MANAGEMENT_CONSTANTS
-         ZP_RT
-         ZP_RP
-         ZP_RA
-         ZP_RB
-         ZP_RC
-         ZP_RAI
-         ZP_RBI
-         ZP_RCI
-         ZP_RZ
-         ZP_PART_GCD_CELL_ARRAYS
-         ZP_CALL_FRAME
-         ZP_CALL_FRAME_TOP_MARK
-         ZP_CELL_STACK_LB_PTR
-         ZP_CELL_STACK_HB_PTR
-         ZP_CELL_STACK_TOS
-         ZP_TEMP
-         ZP_TEMP2
-         ZP_TEMP3
-         ZP_TEMP4
-         ZP_VM_PC
-         ZP_VM_FUNC_PTR
-         ZP_LOCALS_LB_PTR
-         ZP_LOCALS_HB_PTR
-         ZP_LOCALS_TOP_MARK
-         TAG_BYTE_BYTE_CELL
-         TAG_BYTE_CELL_ARRAY
-         TAG_BYTE_NATIVE_ARRAY
-         TAGGED_NIL)
+         VM_MEMORY_MANAGEMENT_CONSTANTS  ;; contains all zp variable locations and constant definitions to be included into a asm program
+         ZP_RT                           ;; (word) register top of stack held on zp (whereas the rest of the evlstk is held in main memory)
+         ZP_RP                           ;; (word) register used temporary for 2+ operand operations (to reduce stack copy/move ops during exec)
+         ZP_RA                           ;; (word) primary register for array access
+         ZP_RB                           ;; (word) secondary register for array access
+         ZP_RC                           ;; (word) tertiary register for array access
+         ZP_RAI                          ;; (byte) index for primary array register
+         ZP_RBI                          ;; (byte) index for secondary array register
+         ZP_RCI                          ;; (byte) index for tertiary array register
+         ZP_RZ                           ;; (word) register reserved for garbage collection operations
+         ZP_PART_GCD_CELL_ARRAYS         ;; (word) list of partially garbage collected cell arrays
+         ZP_CALL_FRAME                   ;; (word) pointer to current call frame
+         ZP_CALL_FRAME_TOP_MARK          ;; (byte) top mark of call frame stack
+         ZP_CELL_STACK_LB_PTR            ;; (word) pointer to low byte of current eval stack
+         ZP_CELL_STACK_HB_PTR            ;; (word) pointer to high byte of current eval stack
+         ZP_CELL_STACK_TOS               ;; (byte) top mark of evlstk
+         ZP_TEMP                         ;; (byte) temp location, can be used in combination with TEMP2 to be used as word
+         ZP_TEMP2                        ;; (byte) temp location
+         ZP_TEMP3                        ;; (byte) temp location, can be used in combination with TEMP4 to be used as word
+         ZP_TEMP4                        ;; (byte) temp location
+         ZP_VM_PC                        ;; (word) current program counter of the vm
+         ZP_VM_FUNC_PTR                  ;; (word) pointer to the currently executing function
+         ZP_LOCALS_LB_PTR                ;; (word) pointer to the low byte of the current locals of this function
+         ZP_LOCALS_HB_PTR                ;; (word) pointer to the high byte of the current locals of this function
+         ZP_LOCALS_TOP_MARK              ;; (byte) top mark of locals cell stack
+         TAG_BYTE_BYTE_CELL              ;; (byte) constant identifying a byte cell (low-byte = this constant)
+         TAG_BYTE_CELL_ARRAY             ;; (byte) constant identifying a cell-array (first byte in a m1 slot)
+         TAG_BYTE_NATIVE_ARRAY           ;; (byte) constant identifying a native-array (first byte in a m1 slot)
+         TAGGED_NIL)                     ;; (word) constant identifying a nil cell (low + high byte)
 
 (define VM_MEMORY_MANAGEMENT_CONSTANTS
   (list

@@ -102,6 +102,7 @@ memory management for native arrays
      VM_INITIAL_MM_REGS
      VM_PAGE_SLOT_DATA)))
 
+;; @DC-FUN: ALLOC_NATARR_TO_RA, group: native_array
 ;; allocate an array of bytes (native) (also useful for strings)
 ;; overwrite RA no matter whether RA was filled
 ;; input:  A = number of bytes (1..81)
@@ -183,6 +184,7 @@ memory management for native arrays
           (INC ZP_RB) ;; ensure RA points to first entry of array
           (RTS)))
 
+;; @DC-FUN: WRITE_RT_TO_NATARR_RAI, group: native_array
 ;; write byte value of rt (high byte) into nat array
 ;; referenced by RA at index RAI and increment RAI
 ;; input:  RT, RA, RAi
@@ -278,6 +280,7 @@ memory management for native arrays
                 1
                 "index for array a points to the next"))
 
+;; @DC-FUN: WRITE_NATARR_RAI_TO_RT, group: native_array
 ;; write/push byte referenced by RA at index RAI
 ;; onto the eval stack and increment RAI
 ;; input:  RT, RA, RAi, EVLSTK
@@ -326,6 +329,7 @@ memory management for native arrays
                 1
                 "index for array a points to the next"))
 
+;; @DC-FUN: CP_NATARR_RA_TO_RB, group: native_array
 ;; copy the whole lenght of the array ra into the array rb (same position)
 ;; input:  RA, RB
 ;; usage:  A, Y
@@ -391,6 +395,7 @@ memory management for native arrays
                 (list TAG_BYTE_NATIVE_ARRAY 8 0 1 2 3)
                 "rb points to page1, containing a native array of len 8 (first 4 bytes) filled with 0 1 2 3"))
 
+;; @DC-FUN: CP_NATARR_RANGE_RA_TO_RB, group: native_array
 ;; copy from nat array ra, range index x..y to the start of array rb
 ;; input:  RA, RB, X, Y
 ;; usage:  A, X, Y

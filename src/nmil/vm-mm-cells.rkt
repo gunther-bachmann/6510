@@ -388,6 +388,7 @@ cell functions
                 #x01
                 "remaining refcount on cell0 is 1"))
 
+;; @DC-FUN: FREE_CELL_RZ, group: gc
 ;; free the given cell in RZ (RA, RT), and dec-refcnt its content (if it is a pointer)
 ;; it must not be a header cell of an array or something
 ;; input: RZ
@@ -579,6 +580,7 @@ cell functions
                       "next free slot: $0a")
                 "page has still 2 slot in use (it was freed, but is no in free list, not completely unallocated)"))
 
+;; @DC-FUN: ALLOC_CELL_TO_RT, group: cell
 ;; allocate (or reuse from free-list) cell into rt
 ;;
 ;; input:  GLOBAL_CELL_FREE_LIST
@@ -704,6 +706,7 @@ cell functions
                 (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
                 "free cell list is initial again"))
 
+;; @DC-FUN: GET_FRESH_CELL_TO_AX, group: cell
 ;; get the page and unused cell for allocation
 ;;
 ;; get the complete ptr, do not allocate this cell yet
@@ -767,6 +770,7 @@ cell functions
                 (list #x02 PAGE_AVAIL_1)
                 "since first page (page_0) is marked as full, first slot (02) of page_1 is allocated"))
 
+;; @DC-FUN: ALLOC_CELL_AX_TO_RT, group: cell
 ;; allocate the cell at A on page X
 ;;
 ;; update next free cell in vm_page_slot_data
@@ -840,6 +844,7 @@ cell functions
                       "next free slot: $0a")
                 "page has 2 slot in use"))
 
+;; @DC-FUN: GC_CELLS, group: gc
 ;; garbage collect all cells marked as reusable in GLOBAL_CELL_FFREE_LIST
 ;; input:  GLOBAL_CELL_FFREE_LIST
 ;; usage:  A, X, Y, RZ

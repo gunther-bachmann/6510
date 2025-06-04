@@ -1,0 +1,148 @@
+#+title: vm documentation
+- collection of all annotated elements
+- @DC-FUN :: function annotation
+  @DC_FUN: <fun-label>(, group: <fun-group>(-<fun-group)*)*
+  example: ;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages
+  may have multiple groups
+  the file name is used for creating the racket require line
+  the define (following) is used for racket require line
+  the @DC-FUN line is used for the org-link
+  the line following this @DC-FUN comment must:
+  - have 1..n comments (describing the function)
+  - have a single "define <some-label>" (which must include the fun-label in its body)
+- @DC-ZP :: zero page annotation
+  @DC-ZP: <zero-page-constant>(, group: <zp-group>(-<zp-group>)*)*
+  example: ;; @DC-ZP: ZP_RA, group: registers-array
+  the file name is used for creating the racket require line
+  the enclosing define is used for racket require line
+  the @DC-ZP line is used for the org-link
+  the line following this @DC-ZP comment must:
+  - have a single (byte-const <zero-page-constant>) followed by a describing comment
+  - or have a single (word-const <zero-page-constant>) followed by a describing comment
+- @DC-C :: constant
+  @DC-C: <constant-label>(, group: <c-group>(-<cgroup>)*)*
+  example: ;; @DC-C: TAG_BYTE_BYTE_CELL
+  the file name is used for creating the racket require line
+  the enclosing define is used for racket require line
+  the @DC-C line is used for the org-link
+  the line following this @DC-C comment must:
+  - have a single (byte-const <zero-page-constant>) followed by a describing comment
+  - or have a single (word-const <zero-page-constant>) followed by a describing comment
+- @DC-M :: memory (locations)
+  @DC-M: <mem-label>(, group: <m-group>(-<m-group)*)*
+  example: ;; @DC-M: GLOBAL_CELLPAIR_PAGE_FOR_ALLOC, group: gc
+  the file name is used for creating the racket require line
+  the enclosing define is used for racket require line, must start with an org (<- allows for actual location derivation)
+  the @DC-M line is used for the org-link
+  the line following this @DC-M comment must:
+  - be a line (label <mem-label>) with comments followed by
+  - a single (byte ..) or (word ..) constant with comments
+* constants / tag bytes
+- TAG_BYTE_BYTE_CELL ::    (byte) constant identifying a byte cell (low-byte = this constant)
+- TAG_BYTE_CELL_ARRAY ::   (byte) constant identifying a cell-array (first byte in a m1 slot)
+- TAG_BYTE_NATIVE_ARRAY :: (byte) constant identifying a native-array (first byte in a m1 slot)
+- TAGGED_NIL ::            (word) constant identifying a nil cell (low + high byte)
+* zero-page-locations (by address)
+- $fb..fc :: ZP_RT (word) register top of stack held on zp (whereas the rest of the evlstk is held in main memory)
+  - racket include :: (require (only-in "./vm-memory-map" ZP_RT))
+  - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
+* zero-page-locations (by name)
+- ZP_RT ::                          (word) register top of stack held on zp (whereas the rest of the evlstk is held in main memory)
+  - racket include :: (require (only-in "./vm-memory-map" ZP_RT))
+  - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
+- ZP_RP ::                          (word) register used temporary for 2+ operand operations (to reduce stack copy/move ops during exec)
+- ZP_RA ::                          (word) primary register for array access
+- ZP_RB ::                          (word) secondary register for array access
+- ZP_RC ::                          (word) tertiary register for array access
+- ZP_RAI ::                         (byte) index for primary array register
+- ZP_RBI ::                         (byte) index for secondary array register
+- ZP_RCI ::                         (byte) index for tertiary array register
+- ZP_RZ ::                          (word) register reserved for garbage collection operations
+- ZP_PART_GCD_CELL_ARRAYS ::        (word) list of partially garbage collected cell arrays
+- ZP_CALL_FRAME ::                  (word) pointer to current call frame
+- ZP_CALL_FRAME_TOP_MARK ::         (byte) top mark of call frame stack
+- ZP_CELL_STACK_LB_PTR ::           (word) pointer to low byte of current eval stack
+- ZP_CELL_STACK_HB_PTR ::           (word) pointer to high byte of current eval stack
+- ZP_CELL_STACK_TOS ::              (byte) top mark of evlstk
+- ZP_TEMP ::                        (byte) temp location, can be used in combination with TEMP2 to be used as word
+- ZP_TEMP2 ::                       (byte) temp location
+- ZP_TEMP3 ::                       (byte) temp location, can be used in combination with TEMP4 to be used as word
+- ZP_TEMP4 ::                       (byte) temp location
+- ZP_VM_PC ::                       (word) current program counter of the vm
+- ZP_VM_FUNC_PTR ::                 (word) pointer to the currently executing function
+- ZP_LOCALS_LB_PTR ::               (word) pointer to the low byte of the current locals of this function
+- ZP_LOCALS_HB_PTR ::               (word) pointer to the high byte of the current locals of this function
+- ZP_LOCALS_TOP_MARK ::             (byte) top mark of locals cell stack
+- TAG_BYTE_BYTE_CELL ::             (byte) constant identifying a byte cell (low-byte = this constant)
+- TAG_BYTE_CELL_ARRAY ::            (byte) constant identifying a cell-array (first byte in a m1 slot)
+- TAG_BYTE_NATIVE_ARRAY ::          (byte) constant identifying a native-array (first byte in a m1 slot)
+- TAGGED_NIL ::                     (word) constant identifying a nil cell (low + high byte)
+* zero-page-locations (by group)
+** registers
+*** stack
+- ZP_CELL_STACK_LB_PTR ::       (word) pointer to low byte of current eval stack
+- ZP_CELL_STACK_HB_PTR ::       (word) pointer to high byte of current eval stack
+- ZP_CELL_STACK_TOS ::          (byte) top mark of evlstk
+*** gc
+- ZP_RZ ::                      (word) register reserved for garbage collection operations
+*** array
+- ZP_RA ::                      (word) primary register for array access
+- ZP_RB ::                      (word) secondary register for array access
+- ZP_RC ::                      (word) tertiary register for array access
+- ZP_RAI ::                     (byte) index for primary array register
+- ZP_RBI ::                     (byte) index for secondary array register
+- ZP_RCI ::                     (byte) index for tertiary array register
+** temp
+- ZP_TEMP ::                      (byte) temp location, can be used in combination with TEMP2 to be used as word
+- ZP_TEMP2 ::                     (byte) temp location
+- ZP_TEMP3 ::                     (byte) temp location, can be used in combination with TEMP4 to be used as word
+- ZP_TEMP4 ::                     (byte) temp location
+** vm
+- ZP_VM_PC ::                     (word) current program counter of the vm
+- ZP_VM_FUNC_PTR ::               (word) pointer to the currently executing function
+*** evlstk
+- ZP_CELL_STACK_LB_PTR ::       (word) pointer to low byte of current eval stack
+- ZP_CELL_STACK_HB_PTR ::       (word) pointer to high byte of current eval stack
+- ZP_CELL_STACK_TOS ::          (byte) top mark of evlstk
+*** frame
+- ZP_CALL_FRAME ::              (word) pointer to current call frame
+- ZP_CALL_FRAME_TOP_MARK ::     (byte) top mark of call frame stack
+*** locals
+- ZP_LOCALS_LB_PTR ::           (word) pointer to the low byte of the current locals of this function
+- ZP_LOCALS_HB_PTR ::           (word) pointer to the high byte of the current locals of this function
+- ZP_LOCALS_TOP_MARK ::         (byte) top mark of locals cell stack
+*** gc
+- ZP_PART_GCD_CELL_ARRAYS ::    (word) list of partially garbage collected cell arrays
+* memory locations (by address)
+* memory locations (by name)
+* memory locations (by group)
+** pages
+- VM_INITIAL_MM_REGS ::              memory management registers
+- VM_PAGE_SLOT_DATA ::               page that holds allocation status and/or first free slot per page
+- GLOBAL_CELL_FREE_LIST ::           head of free cell list
+- GLOBAL_CELLPAIR_FREE_LIST ::       head of free cell-pair list
+- GLOBAL_CELLPAIR_PAGE_FOR_ALLOC ::  first page for cell-pair allocation
+* functions (by name)
+* functions (by group)
+** pages
+- [[file:vm-mm-pages.rkt::(define VM_INITIALIZE_MEMORY_MANAGER][VM_INITIALIZE_MEMORY_MANAGER]] ::    initialize memory management (must be called before first allocation)
+  - racket include :: (require (only-in "./vm-mm-pages" VM_INITIALIZE_MEMORY_MANAGER))
+  - assembler include :: VM_INITIALIZE_MEMORY_MANAGER
+  initialize memory management (paging)
+  - setup 'next free page' information, basically initializing the whole page with zeros
+  - setup cell stack (to empty)
+  destroys: A Y
+- [[file:vm-mm-pages.rkt::(define FREE_PAGE_A][FREE_PAGE_A]] ::                     free a page (the type specific stuff, of any, must have finished)
+  - racket include :: (require (only-in "./vm-mm-pages" FREE_PAGE_A))
+  - assembler include :: FREE_PAGE_A
+- [[file:vm-mm-pages.rkt::(define ALLOC_PAGE_TO_X][ALLOC_PAGE_TO_X]] ::                 allocate new page (not initialized)
+  - racket include :: (require (only-in "./vm-mm-pages" ALLOC_PAGE_TO_X))
+  - assembler include :: ALLOC_PAGE_TO_X
+* byte codes (by name)
+* byte codes (by group)
+* - :noexport:
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; org-pretty-entities-include-sub-superscripts: nil
+  ;; End:
+  #+end_src

@@ -55,6 +55,7 @@
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS)))))
 
+;; @DC-FUN: WRITE_NIL_TO_RT, group: register
 ;; write NIL into register, not checking its content (no dec-refcnt)
 ;; input:  -
 ;; output: RT (RP) = NIL
@@ -91,6 +92,8 @@
 
   (check-true (vm-cell-at-nil? write-nil-to-rt ZP_RT)))
 
+;; @DC-FUN: CP_RA_TO_RT, group: register
+;; copy RA -> RT
 ;; input:  RA
 ;; output: RT (copy of RA)
 (define CP_RA_TO_RT
@@ -103,6 +106,8 @@
           (STA ZP_RT)
           (RTS)))
 
+;; @DC-FUN: CP_RA_TO_RZ, group: register
+;; copy RA -> RZ
 ;; input:  RA
 ;; output: RZ (copy of RA)
 (define CP_RA_TO_RZ
@@ -114,6 +119,8 @@
           (STA ZP_RZ)
           (RTS)))
 
+;; @DC-FUN: CP_RT_TO_RZ, group: register
+;; copy RT -> RZ
 ;; input:  RT
 ;; output: RZ (copy of RT)
 (define CP_RT_TO_RZ
@@ -125,6 +132,8 @@
           (STA ZP_RZ)
           (RTS)))
 
+;; @DC-FUN: CP_RZ_TO_RT, group: register
+;; copy RZ -> RT
 ;; input:  RZ
 ;; output: RT (copy of RZ)
 (define CP_RZ_TO_RT
@@ -136,6 +145,8 @@
           (STA ZP_RT)
           (RTS)))
 
+;; @DC-FUN: CP_RT_TO_RP, group: register
+;; copy RT -> RP
 ;; input:  RT
 ;; output: RP (copy of RT)
 (define CP_RT_TO_RP
@@ -147,6 +158,8 @@
           (STA ZP_RP)
           (RTS)))
 
+;; @DC-FUN: CP_RT_TO_RA, group: register
+;; copy RT -> RA
 ;; input:  RT
 ;; output: RA (copy of RT)
 (define CP_RT_TO_RA
@@ -172,6 +185,7 @@
   (check-equal? (vm-regt->string vm-cp-rt-to-ra-state)
                 "int $0001"))
 
+;; @DC-FUN: WRITE_INT_AY_TO_RT, group: register
 ;; write the given int in A/Y into RT, ignoring what was in RT (no dec-refcnt)
 ;; input:  A = lowbyte of int (0..255), written into high byte of cell register RT
 ;;         Y = highbyte (0.31), written into lowbyte and tagged lowbyte of cell register
@@ -221,6 +235,7 @@
   (check-equal? (vm-regt->string vm-write-int-ay-to-rt-state)
                 "int $0201"))
 
+;; @DC-FUN: SWAP_ZP_WORD, group: register
 ;; swap 16 bits of two zero page locations
 ;; e.g. swapping RA with RB: A = !ZP_RA, X = !ZP_RB
 ;; input:  A = zero-page address 1

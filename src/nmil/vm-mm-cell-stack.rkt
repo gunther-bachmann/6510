@@ -71,6 +71,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
      VM_INITIAL_MM_REGS
      VM_PAGE_SLOT_DATA)))
 
+;; @DC-FUN: INIT_CELLSTACK_PAGE_X, group: cell_stack
 ;; cell stack page(s)
 ;; offset  content
 ;; ---------------
@@ -123,7 +124,11 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
                 (list #x1b #x05)
                 "new low byte page is initialized with cell-stack page type and 05"))
 
-
+;; @DC-FUN: POP_CELL_EVLSTK_TO_RT, group: cell_stack
+;; pop the topmost value of the evlstk into RT (no gc done)
+;; input:  EVLSTK
+;; usage:  A,Y, RT
+;; output: RT <<EVLSTK<<
 (define POP_CELL_EVLSTK_TO_RT
   (list
    (label POP_CELL_EVLSTK_TO_RT)
@@ -259,6 +264,27 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
                   "int $1000"
                   "int $1fff")))
 
+;; ---
+;; @DC-FUN: PUSH_NIL_TO_EVLSTK, group: cell_stack
+;; push nil to evlstk (actually RT TO evlstk and nil-cell into RT)
+;; @DC-FUN: PUSH_INT_0_TO_EVLSTK, group: cell_stack
+;; push cell int 0 to evlstk (actually RT TO evlstk and cell int 0 into RT)
+;; @DC-FUN: PUSH_INT_1_TO_EVLSTK, group: cell_stack
+;; push cell int 1 to evlstk (actually RT TO evlstk and cell int 1 into RT)
+;; @DC-FUN: PUSH_INT_2_TO_EVLSTK, group: cell_stack
+;; push cell int 2 to evlstk (actually RT TO evlstk and cell int 2 into RT)
+;; @DC-FUN: PUSH_INT_m1_TO_EVLSTK, group: cell_stack
+;; push cell int -1 to evlstk (actually RT TO evlstk and cell int -1 into RT)
+;; @DC-FUN: WRITE_BYTE_X_TO_RT, group: cell_stack
+;; write cell byte X into RT (overwriting it)
+;; @DC-FUN: PUSH_BYTE_X_TO_EVLSTK, group: cell_stack
+;; push cell byte X to evlstk (actually RT TO evlstk and cell byte X into RT)
+;; @DC-FUN: PUSH_INT_TO_EVLSTK, group: cell_stack
+;; ints are saved high byte first, then low byte !!!!
+;; X = high byte of int (max 31 = $1f) (stored in low byte (tagged) position)
+;; A = low byte of int (0..255) (stored in high byte (untagged) position)
+;; --------------------------
+;; @DC-FUN: PUSH_XA_TO_EVLSTK, group: cell_stack
 ;; push an atomic cell onto the stack (that is push the RegT, if filled, and write the value into RegT)
 ;; input: call-frame stack, RT
 ;;        A = high byte,
@@ -266,9 +292,6 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
 ;; output: call-frame stack, RT
 (define PUSH_XA_TO_EVLSTK
   (list
-          ;; ints are saved high byte first, then low byte !!!!
-          ;; X = high byte of int (max 31 = $1f) (stored in low byte (tagged) position)
-          ;; A = low byte of int (0..255) (stored in high byte (untagged) position)
    (label PUSH_INT_TO_EVLSTK)         ;; idea: can be optimized since it is known that this is an atomic value
           (TAY)
           (TXA)
@@ -411,6 +434,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
   (check-equal? (memory-list vm_cell_stack_push_r_push2_state ZP_RT (add1 ZP_RT))
                 (list #x01 #x00)))
 
+;; @DC-FUN: PUSH_RT_TO_EVLSTK, group: cell_stack
 ;; push rt onto the evlstack, no dec/inc refcnt is done!
 ;; allocate new evlstk page if necessary
 ;; input:  RT+EVLSTK
@@ -471,6 +495,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
                       "int $1fff")))
 
 
+;; @DC-FUN: POP_CELL_EVLSTK_TO_CELLy_RT, group: cell_stack
 ;; write the TOS of the EVLSTK (not RT) into CELL Y of cell-pair referenced by RT
 ;; keep RT and pop TOS of EVLSTK ( RT+EVLSTK  -> RT+<<EVLSTK<<, and (Y=0) RT -> [<<EVLSTK][...], or (Y=1) RT -> [...][<<EVLSTK]
 ;; no inc/dec refcnt needs to take place, since # references to RT nor the popped TOS of EVLSTK do change
@@ -528,13 +553,14 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
   (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1fff . int $0001)"))
 
-;; pop cell from stack (that is, discard RegT, move tos of call-frame stack into RegT (if available))
-;; input: call-frame stack, RT
-;; output: call-frame stack reduced by`1, RT <- popped value
-;; NO GC CHECKS!
-;; pop cell from stack (that is, discard RegT, move tos of call-frame stack into RegT (if available))
-;; input: call-frame stack, RT
-;; output: call-frame stack reduced by`1, RT <- popped value
+;; ----
+;; @DC-FUN: WRITE_00_TO_RA, group: cell_array
+;; write 00 00 into RA marking it as empty!
+;; ----
+;; @DC-FUN: POP_CELL_EVLSTK_TO_RA, group: cell_stack
+;; pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
+;; input: call-frame stack, RA
+;; output:  RA << EVLSTK, <<EVLSTK<<, RT unchanged!
 ;; NO GC CHECKS!
 (define POP_CELL_EVLSTK_TO_RA
   (list

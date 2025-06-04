@@ -172,6 +172,8 @@
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem F000-F7ff is unavailable (C64 KERNAL)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)))   ;; mem F800-Ffff is unavailable (C64 KERNAL)
 
+
+;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages
 ;; initialize memory management (paging)
 ;; - setup 'next free page' information, basically initializing the whole page with zeros
 ;; - setup cell stack (to empty)
@@ -229,6 +231,7 @@
            (STX ZP_RZ+1)
            (RTS))))
 
+;; @DC-FUN: ALLOC_PAGE_TO_X, group: pages
 ;; does a linear search for the next free page
 ;; allocate a page (completely uninitialized), just the page, update the memory page status in VM_PAGE_SLOT_DATA
 ;; parameter: (none)
@@ -258,6 +261,7 @@
           (BRK)
           ))
 
+;; @DC-FUN: FREE_PAGE_A, group: pages
 ;; whether a page is free or used is kept in the 256 bytes starting at VM_PAGE_SLOT_DATA
 ;; each byte represents one page
 ;;   00 = allocated (used) but no free slots

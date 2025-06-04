@@ -83,6 +83,7 @@ functions for m1 pages and slots
      VM_PAGE_SLOT_DATA)))
 
 ;; ----------------------------------------
+;; @DC-FUN: INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX, group: m1_slot
 ;; page type slot w/ different sizes (refcount @ ptr-1) x cells
 ;; math: first entry @FIRST_REF_COUNT_OFFSET__INIT_M1Px_PAGE_A + 1, refcount @ -1, next slot += INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A, slot-size = INC_TO_NEXT_SLOT__INIT_M1Px_PAGE_A -1
 ;; input : Y = profile offset (0, 2, 4 ...)
@@ -315,6 +316,7 @@ functions for m1 pages and slots
                   "next free slot: $04")))
 
 ;; impl complete, test missing
+;; @DC-FUN: ADD_M1_SLOT_RZ_TO_PFL, group: m1_slot
 ;; add the given m1 slot in RZ back to the page free list of slots
 ;; input:  RZ, page-meta-data
 ;; usage:  A, X, Y, RZ
@@ -356,6 +358,7 @@ functions for m1 pages and slots
 
           (RTS))))
 
+;; @DC-FUN: PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ, group: m1_slot
 ;; put this page to the head of free m1 pages of the same profile as RZ is
 ;; input:  RZ, GLOBAL_M1_PX_PAGE_FOR_ALLOC
 ;; usage:  A, X, Y, RZ
@@ -401,6 +404,7 @@ functions for m1 pages and slots
 
           (RTS))))
 
+;; @DC-FUN: DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A, group: m1_slot
 ;; drop all full pages from the list of pages with available slots
 ;; input:  RZ, GLOBAL_M1_PX_PAGE_FOR_ALLOC
 ;; usage:  A, X, Y
@@ -443,6 +447,19 @@ functions for m1 pages and slots
    (label DONE__)
           (RTS))))
 
+;; @DC-FUN: ALLOC_M1_SLOT_TO_RB, group: m1_slot
+;; allocate a slot of min A size, allocating a new page if necessary
+;; input:  A = size
+;; usage:  A, X, Y, RB, GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;; output: RB = available slot of the given size (or a bit more)
+;;         Y = actual size
+;;         GLOBAL_M1_PX_PAGE_FOR_ALLOC
+;; funcs:
+;;   VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS
+;;   ALLOC_PAGE_TO_X
+;;   INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
+;;   ALLOC_M1_SLOT_TO_RA,
+;;   SWAP_RA_RB
 (define ALLOC_M1_SLOT_TO_RB
   (add-label-suffix
    "__" "ALLOC_M1_SLOT_TO_RB"
@@ -450,7 +467,7 @@ functions for m1 pages and slots
     (label ALLOC_M1_SLOT_TO_RB)
            (JSR CP_RA_TO_RB)
            (JSR ALLOC_M1_SLOT_TO_RA)
-           ;; alnative swap implementation
+           ;; alternative swap implementation
            ;; (LDA !ZP_RA)
            ;; (LDX !ZP_RB)
            ;; (JMP SWAP_ZP_WORD)
@@ -472,6 +489,7 @@ functions for m1 pages and slots
                (list #x04 PAGE_AVAIL_0)
                "rb holds an allocated slot"))
 
+;; @DC-FUN: ALLOC_M1_SLOT_TO_RA, group: m1_slot
 ;; allocate a slot of min A size, allocating a new page if necessary
 ;; input:  A = size
 ;; usage:  A, X, Y, RA, GLOBAL_M1_PX_PAGE_FOR_ALLOC
@@ -712,6 +730,8 @@ functions for m1 pages and slots
 
 
 (define VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS #t)
+
+;; @DC-FUN: VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS, group: m1_slot
 ;; remove full pages in the free list of pages of the same type as are currently in ZP_RA
 ;; input: RA
 ;; usage: A, X, Y, RA, GLOBAL_M1_PX_PAGE_FOR_ALLOC
@@ -753,6 +773,7 @@ functions for m1 pages and slots
    (label DONE__)
           (RTS))))
 
+;; @DC-FUN: VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS, group: m1_slot
 ;; put this page as head of the page free list for slots of type as in ZP_RA
 ;; input:  RA
 ;; usage:  A, X, Y, RA, TEMP
@@ -797,6 +818,7 @@ functions for m1 pages and slots
 
           (RTS))))
 
+;; @DC-FUN: FREE_M1_SLOT_RA, group: gc
 ;; free the m1 slot pointed to by ra, marking that slot free on the m1-page
 ;; no check of the slot content is done! in case of cell-arrays: the elements of the array are not checked
 ;; input:  RA
@@ -937,6 +959,7 @@ functions for m1 pages and slots
                   "next free slot: $10")))
 
 
+;; @DC-FUN: INC_REFCNT_M1_SLOT_RA, group: gc
 ;; increment refcount of m1 slot in RA
 ;; IDEA for optimization: keep m1 in RA, putting +1 offset on all accesses -> DEC/INC could be saved
 ;; input:  RA (pointing to some m1 slot)
@@ -989,6 +1012,7 @@ functions for m1 pages and slots
 
 
 ;; impl complete, test missing
+;; @DC-FUN: FREE_M1_SLOT_RZ, group: gc
 ;; free the m1 slot referenced by RZ
 ;; input: RZ
 ;; usage: A, X, Y, RZ
