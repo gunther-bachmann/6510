@@ -4,12 +4,18 @@
 ;;  @DC-C
 ;;  @DC-M
 
+(defconst gb/racket--rgdc--define-regex
+  "define *\\([A-Za-z0-9-_]*\\)"
+  "regular expression with which to search for racket define")
+
 
 (defun gb/racket--rgdc--enrich (dc-plists)
   "enrich all plists in DC-PLISTS collected by rip grep"
   (mapcar
-   #'gb/racket--rgcd--enrich-plist-fun
-   dc-plists))
+   #'gb/racket--rgcd--enrich-plist-zp
+   (mapcar
+    #'gb/racket--rgcd--enrich-plist-fun
+    dc-plists)))
 
 (defun gb/racket--rgcd--surrounding-define (filename line)
   "get the define by searching backward from the given LINE in the FILENAME"
@@ -18,8 +24,21 @@
       (with-current-buffer (find-file filename)
         (goto-line (string-to-number line))
         (end-of-line)
-        (search-backward-regexp "define *\\([A-Z_]*\\)")
+        (search-backward-regexp gb/racket--rgdc--define-regex)
         (substring-no-properties (match-string 1))))))
+
+(defun gb/racket--rgcd--zp-doclines (filename line)
+  "get the next doclines until the second word/byte-const follows starting from LINE in FILENAME"
+  (save-current-buffer
+    (when (file-exists-p filename)
+      (with-temp-buffer
+        (find-file filename)
+        (goto-line (+ 1 (string-to-number line)))
+        (beginning-of-line)
+        (let ((beg (point)))
+          (search-forward-regexp gb/racket--rgdc--byte-word-val-regex)
+          (end-of-line)
+          (buffer-substring-no-properties beg (- (point) 1)))))))
 
 (defun gb/racket--rgcd--next-doclines (filename line)
   "get the next doclines until a define follows starting from LINE in FILENAME"
@@ -30,7 +49,7 @@
         (goto-line (+ 1 (string-to-number line)))
         (beginning-of-line)
         (let ((beg (point)))
-          (search-forward-regexp "define *\\([A-Z_]*\\)")
+          (search-forward-regexp gb/racket--rgdc--define-regex)
           (beginning-of-line)
           (buffer-substring-no-properties beg (- (point) 1)))))))
 
@@ -42,34 +61,92 @@
         (find-file filename)
         (goto-line (string-to-number line))
         (end-of-line)
-        (search-forward-regexp "(define *\\([A-Za-z0-9-_]*\\)")
+        (search-forward-regexp gb/racket--rgdc--define-regex)
         (substring-no-properties (match-string 1))))))
 
 (defun gb/racket--rgcd--cleanup-doc-lines (doc-lines)
   (--filter (and (not (string-prefix-p "@D" it))
                (not (string-prefix-p "---" it)))
             (mapcar (lambda (doc-line)
-                      (string-remove-prefix
-                       " "
-                       (string-remove-prefix
-                        ";"
-                        (string-remove-prefix
-                         ";"
-                         doc-line))))
+                      (string-match "^[^;]*;+ ?" doc-line)
+                      (let ((me (match-end 0)))
+                        (if me
+                            (substring doc-line me)
+                          doc-line))
+                      ;; (string-remove-prefix
+                      ;;  " "
+                      ;;  (string-remove-prefix
+                      ;;   ";"
+                      ;;   (string-remove-prefix
+                      ;;    ";"
+                      ;;    doc-line)))
+                      )
                     (-take-while
-                     (lambda (line) (and (string-prefix-p ";" line)
-                                  (not (string-match-p "^;+ *@DC-" line))))
-                     doc-lines))))
+                     (lambda (line) (and (string-match-p ";.+" line)
+                                  (not (string-match-p ";+ *@DC-" line))))
+                     (-filter (lambda (line) (stringp line))
+                              doc-lines)))))
 
 ;; (gb/racket--rgcd--cleanup-doc-lines
-;;  (list ";; line one"
+;;  (list "(some code) ;; line one"
 ;;        "; line two"
+;;        "(line without comment)"
 ;;        ";;@DC-C other"   ;; ignore this line, don't take anything here after
 ;;        ";line three"
 ;;        ";;line four"
 ;;        "(define "       ;; don't take from hereon
 ;;        ";; line five"
 ;;        ";;@DC-C some"))
+
+;; (gb/racket--rgcd--cleanup-doc-lines
+;;  (list
+;;   "   ;; zero page location 3 for temp usage"
+;;   "(byte-const ZP_TEMP3                  $d9) ;; may be used as pointer (in combination with ZP_TEMP4 => must be in adjacent memory locations)"))
+
+(defun gb/racket--rgcd--this-docline (filename line)
+  "read the doc within the line"
+  "UNKNOWN DOC")
+
+(defconst gb/racket--rgdc--byte-word-val-regex "\\(byte\\|word\\)-const *[A-Za-z0-9_-]+ *\\(\\$[a-fA-F0-9]+\\)")
+(defun gb/racket--rgcd--following-address (filename line)
+  "get the address/value of the following byte-const or word-const definition"
+  (ignore-errors
+    (save-current-buffer
+      (when (file-exists-p filename)
+        (with-temp-buffer
+          (find-file filename)
+          (goto-line (string-to-number line))
+          (end-of-line)
+          (search-forward-regexp gb/racket--rgdc--byte-word-val-regex nil t)
+          (list
+           (substring-no-properties (match-string 2))
+           (substring-no-properties (match-string 1))))))))
+
+(defun gb/racket--rgcd--enrich-plist-zp (plist)
+  "enrich the given PLIST with zero page data (if it is of type ZP)"
+  (if (not (string= "ZP" (plist-get plist :type)))
+      plist
+    (let ((surrouding-define-label
+           (or
+            (gb/racket--rgcd--surrounding-define
+             (plist-get plist :filename)
+             (plist-get plist :line))
+            "UNKNOWN"))
+          (address-n-len (or (gb/racket--rgcd--following-address
+                             (plist-get plist :filename)
+                             (plist-get plist :line))
+                            (list "UNKNOWN" "UNKNOWN"))))
+      `( :doclines ,(gb/racket--rgcd--cleanup-doc-lines
+                     (split-string (gb/racket--rgcd--zp-doclines
+                                    (plist-get plist :filename)
+                                    (plist-get plist :line))
+                                   "\n"))
+         :address ,(car address-n-len)
+         :length ,(cadr address-n-len)
+         :racket-require ,(format "(require (only-in \"%s\" %s))" (plist-get plist :filename) surrouding-define-label)
+         :assembler-include ,surrouding-define-label
+         :org-link ,(format "file:%s::%s" (plist-get plist :filename) (plist-get plist :line))
+         ,@plist))))
 
 (defun gb/racket--rgcd--enrich-plist-fun (plist)
   "enrich the given PLIST with function data (if it is of type FUN)"
@@ -142,6 +219,56 @@
                indented-doc-lines)))
    (format "- ERROR ON PROCESSING %S" plist)))
 
+(defun gb/racket--rgcd--org-zp->string (level plist)
+  (or
+   (ignore-errors
+     (let* ((file-ref (plist-get plist :org-link))
+            (zp-label (plist-get plist :label))
+            (zp-address (plist-get plist :address))
+            (zp-len  (plist-get plist :length))
+            (docline-sep (make-string (min 0 (- 40 (length zp-address))) ?\ ))
+            (doc-line (car (or (plist-get plist :doclines) (list "no doc"))))
+            (racket-require (plist-get plist :racket-require))
+            (assembler-include (plist-get plist :assembler-include))
+            (indented-doc-lines (string-join (or (plist-get plist :doclines) (list "no doc")) "\n  ")))
+       (format "- [[%s][%s]] :: %s %s %s\n  - len :: %s\n  - racket require :: %s\n  - assembler include :: %s\n  %s"
+               file-ref
+               zp-label
+               zp-address
+               docline-sep
+               doc-line
+               zp-len
+               racket-require
+               assembler-include
+               indented-doc-lines)))
+   (format "- ERROR ON PROCESSING %S" plist)))
+
+(defun gb/racket--rgcd--org-zp-by-address->string (level plist)
+  (or
+   (ignore-errors
+     (let* ((file-ref (plist-get plist :org-link))
+            (zp-label (plist-get plist :label))
+            (zp-address (plist-get plist :address))
+            (zp-len  (plist-get plist :length))
+            (docline-sep (make-string (min 0 (- 40 (length zp-address))) ?\ ))
+            (doc-line (car (or (plist-get plist :doclines) (list "no doc"))))
+            (racket-require (plist-get plist :racket-require))
+            (assembler-include (plist-get plist :assembler-include))
+            (indented-doc-lines (string-join (or (plist-get plist :doclines) (list "no doc")) "\n  ")))
+       (format "- [[%s][%s]] :: %s %s %s\n  - len :: %s\n  - racket require :: %s\n  - assembler include :: %s\n  %s"
+               file-ref
+               zp-address
+               zp-label
+               docline-sep
+               doc-line
+               zp-len
+               racket-require
+               assembler-include
+               indented-doc-lines)))
+   (format "- ERROR ON PROCESSING %S" plist)))
+
+;; (gb/racket--rgcd--org-zp-by-address->string 1 (list :doclines nil :address "$d9" :length "byte" :racket-require "(require (only-in \"vm-memory-map.rkt\" VM_MEMORY_MANAGEMENT_CONSTANTS))" :assembler-include "VM_MEMORY_MANAGEMENT_CONSTANTS" :org-link "file:vm-memory-map.rkt::63" :filename "vm-memory-map.rkt" :line "63" :column "7" :type "ZP" :label "ZP_TEMP3" :group (list "temp")))
+
 (defun gb/racket--rgcd--loop-over-lists-and-sort ()
   (save-excursion
     (goto-char 0)
@@ -160,20 +287,66 @@
         (insert (format "\n%s %s" (make-string level ?\*) (car groups))))
       (gb/racket--rgcd--jump-to-group (cdr groups) (+ 1 level) max-point))))
 
+(defconst gb/racket--rgcd--fun-by-name-regex
+  "^* functions \(by name\)"
+  "function by name org header for regex search")
+
+(defconst gb/racket--rgcd--fun-by-group-regex
+  "^* functions \(by group\)"
+  "function by name org header for regex search")
+
+(defconst gb/racket--rgcd--zp-by-address-regex
+  "* zero-page-locations \(by address\)")
+
+(defconst gb/racket--rgcd--zp-by-name-regex
+  "* zero-page-locations \(by name\)")
+
+(defconst gb/racket--rgcd--zp-by-group-regex
+  "* zero-page-locations \(by group\)")
+
+(defun gb/racket--rgcd--gen-org-zp (plist org-file)
+  "generate all entries for azp constant described by PLIST int ORG-FILE"
+  (unless (file-exists-p org-file)
+    (gb/racket--rgcd--org-file-create org-file))
+  (with-current-buffer (find-file-noselect org-file)
+    (goto-char 0)
+    (search-forward-regexp gb/racket--rgcd--zp-by-address-regex)
+    (end-of-line)
+    (insert "\n")
+    (insert (gb/racket--rgcd--org-zp-by-address->string 1 plist))
+    (save-buffer)
+    (goto-char 0)
+    (search-forward-regexp gb/racket--rgcd--zp-by-name-regex)
+    (end-of-line)
+    (insert "\n")
+    (insert (gb/racket--rgcd--org-zp->string 1 plist))
+    (save-buffer)
+    (when (plist-get plist :group)
+      (goto-char 0)
+      (search-forward-regexp gb/racket--rgcd--zp-by-group-regex)
+      (end-of-line)
+      (let ((max-point-for-search
+             (save-excursion
+               (search-forward-regexp "^* ")
+               (point))))
+        (gb/racket--rgcd--jump-to-group (plist-get plist :group) 2 max-point-for-search)
+        (insert (format "\n%s" (gb/racket--rgcd--org-zp->string 1 plist)))
+        (save-buffer)))))
+
 (defun gb/racket--rgcd--gen-org-fun (plist org-file)
   "generate all entries for function described by PLIST into ORG-FILE"
   (unless (file-exists-p org-file)
     (gb/racket--rgcd--org-file-create org-file))
   (with-current-buffer (find-file-noselect org-file)
     (goto-char 0)
-    (search-forward-regexp "^* functions \(by name\)")
+    (search-forward-regexp gb/racket--rgcd--fun-by-name-regex)
     (end-of-line)
     (insert "\n")
     (insert (gb/racket--rgcd--org-fun->string 1 plist))
     (save-buffer)
     (when (plist-get plist :group)
       (goto-char 0)
-      (search-forward-regexp "^* functions \(by group\)")
+      (search-forward-regexp gb/racket--rgcd--fun-by-group-regex)
       (end-of-line)
       (let ((max-point-for-search
              (save-excursion
@@ -192,6 +365,9 @@
     (mapc (lambda (plist) (gb/racket--rgcd--gen-org-fun plist file-name))
           (gb/racket--rgdc--enrich
            (gb/racket--rip-grep-dc "FUN")))
+    (mapc (lambda (plist) (gb/racket--rgcd--gen-org-zp plist file-name))
+          (gb/racket--rgdc--enrich
+           (gb/racket--rip-grep-dc "ZP")))
     (with-temp-buffer (find-file file-name)
                       (gb/racket--rgcd--loop-over-lists-and-sort))))
 
@@ -226,7 +402,7 @@
 
 (defun gb/racket--rgdc-match--label (match-line)
   "convert the MATCH-LINE into a plist"
-  (string-match "^;; *@DC-\\([^:]*\\): *\\([^ ,]+\\)\\(, *group: *\\([^ ,]*\\)\\)?" match-line)
+  (string-match "^ *;; *@DC-\\([^:]*\\): *\\([^ ,]+\\)\\(, *group: *\\([^ ,]*\\)\\)?" match-line)
   `(:type  ,(match-string 1 match-line)
     :label ,(match-string 2 match-line)
     :group ,(or (when (match-string 4 match-line) (split-string (match-string 4 match-line) "-")) (list))))

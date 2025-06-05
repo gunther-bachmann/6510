@@ -60,8 +60,11 @@
    (word-const TAGGED_BYTE0              $00ff)
    (word-const TAGGED_NIL                $0001) ;; tag indicates cell-pair-ptr
 
-   ;; ZP_TEMP3 may be used as pointer (in combination with ZP_TEMP4 => must be in adjacent memory locations)
-   (byte-const ZP_TEMP3                  $d9)
+   ;; @DC-ZP: ZP_TEMP3, group: temp
+   ;; zero page location 3 for temp usage
+   (byte-const ZP_TEMP3                  $d9) ;; may be used as pointer (in combination with ZP_TEMP4 => must be in adjacent memory locations)
+   ;; @DC-ZP: ZP_TEMP4, group: temp
+   ;; zero page location 4 for temp usage
    (byte-const ZP_TEMP4                  $da)
 
    (byte-const ZP_CELL_STACK_TOS         $db) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
