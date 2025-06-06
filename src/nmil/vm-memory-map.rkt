@@ -47,6 +47,7 @@
   (list
    ;; highest bit 0 and the lowest 2 bits are reserved for int, cell-ptr and cell-pair-ptr
    ;; => 32 values still available
+   ;; @DC-C: TAG_BYTE_BYTE_CELL, group: cell
    (byte-const TAG_BYTE_BYTE_CELL         $ff)
    (byte-const TAG_BYTE_CELL_ARRAY        $83) ;; LSR -> 41, LSR -> 20
    (byte-const TAG_BYTE_CELL_ARRAY_LSR2   $30)
@@ -60,21 +61,19 @@
    (word-const TAGGED_BYTE0              $00ff)
    (word-const TAGGED_NIL                $0001) ;; tag indicates cell-pair-ptr
 
-   ;; @DC-ZP: ZP_TEMP3, group: temp
+                                              ;; @DC-ZP: ZP_TEMP3, group: temp
    ;; zero page location 3 for temp usage
    (byte-const ZP_TEMP3                  $d9) ;; may be used as pointer (in combination with ZP_TEMP4 => must be in adjacent memory locations)
-   ;; @DC-ZP: ZP_TEMP4, group: temp
+                                              ;; @DC-ZP: ZP_TEMP4, group: temp
    ;; zero page location 4 for temp usage
    (byte-const ZP_TEMP4                  $da)
-
+                                              ;; @DC-ZP: ZP_CELL_STACK_TOS, group: evlstk
    (byte-const ZP_CELL_STACK_TOS         $db) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
 
    ;; ZP_TEMP may be used as pointer (in combination with ZP_TEMP2 => must be in adjacent memory locations)
    (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
    (byte-const ZP_TEMP2                  $dd) ;; may not be used after sub calls (just within a routine without jsr)
 
-   ;; the following twelve bytes need to be continuous, since they are saved into the call frame!
-   (byte-const ZP_VM_PC                  $de) ;; de..df program counter (ptr to currently executing byte code)
 
    (byte-const ZP_RB                     $c0) ;; c0..c1 array register b
    (byte-const ZP_RC                     $c2) ;; c2..c3 array register c
@@ -83,13 +82,24 @@
 
    (byte-const ZP_RP                     $c6) ;; c6..c7 register for cell pairs
 
+                                              ;; @DC-ZP: ZP_VM_PC, group: call_frame
+   ;; the following twelve bytes need to be continuous, since they are saved into the call frame!
+   (byte-const ZP_VM_PC                  $de) ;; de..df program counter (ptr to currently executing byte code)
+                                              ;; @DC-ZP: ZP_VM_FUNC_PTR, group: call_frame
    (byte-const ZP_VM_FUNC_PTR            $e0) ;; e0..e1 pointer to the currently running function
+                                              ;; @DC-ZP: ZP_LOCALS_LB_PTR, group: locals
    (byte-const ZP_LOCALS_LB_PTR          $e2) ;; e2..e3 pointer to low byte of first local in call-frame
+                                              ;; @DC-ZP: ZP_LOCALS_HB_PTR, group: locals
    (byte-const ZP_LOCALS_HB_PTR          $e4) ;; e4..e5 pointer to high byte of first local in call-frame
+                                              ;; @DC-ZP: ZP_LOCALS_LB_PTR, group: evlstk
    (byte-const ZP_CELL_STACK_LB_PTR      $e6) ;; e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+                                              ;; @DC-ZP: ZP_LOCALS_HB_PTR, group: evlstk
    (byte-const ZP_CELL_STACK_HB_PTR      $e8) ;; e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+                                              ;; @DC-ZP: ZP_CALL_FRAME_TOP_MARK, group: call_frame
    (byte-const ZP_CALL_FRAME_TOP_MARK    $ea) ;; ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
+                                              ;; @DC-ZP: ZP_LOCALS_TOP_MARK, group: locals
    (byte-const ZP_LOCALS_TOP_MARK        $eb) ;; eb byte pointing to the byte past the last local on the locals stack
+                                              ;; @DC-ZP: ZP_CALL_FRAME, group: call_frame
    (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2
 
    (byte-const ZP_RZ                     $f3) ;; f3..f4   for garbage collection (and temp use outside of gc) only

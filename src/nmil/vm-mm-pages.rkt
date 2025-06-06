@@ -61,6 +61,7 @@
    (label VM_INITIAL_MM_REGS)
 
    ;; $cec0
+   ;; @DC-M: GLOBAL_CELL_PAGE_FOR_ALLOC, group: page
    (label GLOBAL_CELL_PAGE_FOR_ALLOC) ;; page with free cells
           (byte $00)
    ;; $cec1
@@ -79,11 +80,12 @@
           (byte $cd) ;; safe to start with $cd as index
 
    ;; $cec5
+   ;; @DC-M: GLOBAL_CELLPAIR_FREE_LIST, group: cell_pair
+   ;; this queue holds only cell-pairs, cell0 is always the pointer to the next in queue of this free cells
+   ;; cell1 is left untouched => may still hold live references => to reuse a cell-pair of this queue,
+   ;; cell1 must be checked (if ptr, decr ref count and possibly free, else ignore)
    (label GLOBAL_CELLPAIR_FREE_LIST) ;; list of cell-pairs that are unused but only potentially partially freed (second cell may still hold references to heap objects)
           (word $0000) ;; if high byte is 0, the tree is empty!
-          ;; this queue holds only cell-pairs, cell0 is always the pointer to the next in queue of this free cells
-          ;; cell1 is left untouched => may still hold live references => to reuse a cell-pair of this queue,
-          ;; cell1 must be checked (if ptr, decr ref count and possibly free, else ignore)
 
    ;; $cec7
    (label GLOBAL_M1_PX_PAGE_FOR_ALLOC)
