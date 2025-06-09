@@ -107,6 +107,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   cpu-state-accumulator
                   cpu-state-program-counter
                   peek))
+(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -2738,6 +2739,182 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_VM_PC+1)
           (JMP VM_INTERPRETER_INC_PC)))
 
+(module+ test #| bdec |#
+  (define native-return-test
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_B) (byte #x14)
+       (bc NATIVE)
+       (INC ZP_RT+1)
+       (JSR RETURN_TO_BC)
+       (bc PUSH_B) (byte #x16)))))
+
+  (check-equal? (vm-stack->strings native-return-test)
+                (list "stack holds 2 items"
+                      "byte $16  (rt)"
+                      "byte $15")))
+
+(define BDEC #x1a)
+(define BC_BDEC
+  (list
+   (label BC_BDEC)
+   (DEC ZP_RT+1)
+   (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| bdec |#
+  (define bdec-20
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_B) (byte #x14)
+       (bc BDEC)))))
+
+  (check-equal? (vm-stack->strings bdec-20)
+                (list "stack holds 1 item"
+                      "byte $13  (rt)")))
+
+;; @DC-B: BINC, group: byte
+;; *B*​yte *INC*​rement, increment byte RT (no checks)
+;; len: 1
+(define BINC #x1c)
+(define BC_BINC
+  (list
+   (label BC_BINC)
+   (INC ZP_RT+1)
+   (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| bdec |#
+  (define binc-20
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_B) (byte #x14)
+       (bc BINC)))))
+
+  (check-equal? (vm-stack->strings binc-20)
+                (list "stack holds 1 item"
+                      "byte $15  (rt)")))
+
+
+                            ;; @DC-B: Z_P_RET_POP_0, group: return
+(define Z_P_RET_POP_0 #xc1) ;; *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return without popping anything
+                            ;; len: 1
+                            ;; @DC-B: Z_P_RET_POP_1, group: return
+(define Z_P_RET_POP_1 #xc3) ;; *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 1 value from evlstk
+                            ;; len: 1
+                            ;; @DC-B: Z_P_RET_POP_2, group: return
+(define Z_P_RET_POP_2 #xc5) ;; *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 2 values from evlstk
+                            ;; len: 1
+                            ;; @DC-B: Z_P_RET_POP_3, group: return
+(define Z_P_RET_POP_3 #xc7) ;; *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 3 values from evlstk
+                            ;; len: 1
+                            ;; @DC-B: NZ_P_RET_POP_0, group: return
+(define NZ_P_RET_POP_0 #xc0) ;; *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return without popping anything
+                             ;; len: 1
+                             ;; @DC-B: NZ_P_RET_POP_1, group: return
+(define NZ_P_RET_POP_1 #xc2) ;; *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 1 value from evlstk
+                             ;; len: 1
+                             ;; @DC-B: NZ_P_RET_POP_2, group: return
+(define NZ_P_RET_POP_2 #xc4) ;; *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 2 values from evlstk
+                             ;; len: 1
+                             ;; @DC-B: NZ_P_RET_POP_3, group: return
+(define NZ_P_RET_POP_3 #xc6) ;; *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 3 values from evlstk
+                             ;; len: 1
+(define BC_Z_P_RET_POP_N
+  (add-label-suffix
+   "__" "BC_Z_P_RET_POP_N"
+   (list
+    (label BC_Z_P_RET_POP_N)
+           (LSR)                        ;; number to pop
+           (BCC NOT_ZERO__)
+           (LDX ZP_RT+1)
+           (BNE DONE__)                 ;; tos != byte 0 => do nothing
+           (LDX ZP_RT)
+           (CPX !>TAGGED_INT_0)
+           (BEQ POP_N_RET__)            ;; tos = int 0 => pop and return
+           (CPX !TAG_BYTE_BYTE_CELL)
+           (BNE DONE__)                 ;; tos is neither int nor byte => do nothing
+
+    (label POP_N_RET__)
+           (CMP !$00)                   ;;
+           (BEQ RET__)                  ;; nothing to pop -> just return
+           (STA COUNT__)                ;; keep count to pop
+    (label POP_LOOP__)
+           (JSR DEC_REFCNT_RT)
+           (JSR POP_CELL_EVLSTK_TO_RT)
+           (DEC COUNT__)
+           (BNE POP_LOOP__)
+    (label RET__)
+           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+           (JSR VM_POP_CALL_FRAME_N)                     ;; now pop the call frame
+
+    (label DONE__)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    (label NOT_ZERO__)
+           (LDX ZP_RT+1)
+           (BEQ DONE__)                 ;; tos (hb) = 0 => do nothing, cannot be byte 0 nor int 0
+           (LDX ZP_RT)
+           (CPX !TAG_BYTE_BYTE_CELL)
+           (BEQ POP_N_RET__)            ;; is a byte cell (and high byte !=0) -> do pop and return
+           (CPX !>TAGGED_INT_0)
+           (BNE POP_N_RET__)            ;; tos = int != 0 => pop and return
+           (JMP VM_INTERPRETER_INC_PC)  ;; tos is int 0 => do nothing
+
+    ;; type specialized method (byte)
+    (label BC_BZ_P_RET_POP_N)
+           (LSR)                        ;; number to pop
+           (BCC BYTE_NOT_ZERO__)
+           (LDX ZP_RT+1)
+           (BEQ POP_N_RET__)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    (label BYTE_NOT_ZERO__)
+           (LDX ZP_RT+1)
+           (BNE POP_N_RET__)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    ;; type specialized method (int)
+    (label BC_IZ_P_RET_POP_N)
+           (LSR)                        ;; number to pop
+           (BCC INT_NOT_ZERO__)
+
+           (LDX ZP_RT+1)
+           (BNE DONE__)
+           (LDX ZP_RT)
+           (CMP !>TAGGED_INT_0)
+           (BEQ POP_N_RET__)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    (label INT_NOT_ZERO__)
+           (LDX ZP_RT+1)
+           (BNE POP_N_RET__)
+           (LDX ZP_RT)
+           (CPX !>TAGGED_INT_0)
+           (BNE POP_N_RET__)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    (label COUNT__)
+           (byte 0))))
+
+(define Z_P_BRA #x1b)
+(define BC_Z_P_BRA
+  (flatten
+   (list
+    (label BC_Z_P_BRA)
+           (LDX ZP_RT+1)
+           (BNE NO_BRA__BC_Z_P_BRA)
+           (LDX ZP_RT)
+           (CPX !$03)
+           (BEQ BRA__BC_Z_P_BRA)
+           (CPX !TAG_BYTE_BYTE_CELL)
+           (BNE NO_BRA__BC_Z_P_BRA)
+    (label BRA__BC_Z_P_BRA)
+           (JSR POP_CELL_EVLSTK_TO_RT)
+           (JMP BRANCH__BC_T_P_BRA)
+    (label NO_BRA__BC_Z_P_BRA)
+           (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
 
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
@@ -2770,9 +2947,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_B)                   ;; 2e  <-  17
            (word-ref BC_NIL_P_RET_LN_POP)         ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 34  <-  1a reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 36  <-  1b reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 38  <-  1c reserved
+           (word-ref BC_BDEC)                     ;; 34  <-  1a
+           (word-ref BC_Z_P_BRA)                  ;; 36  <-  1b
+           (word-ref BC_BINC)                     ;; 38  <-  1c
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3a  <-  1d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3c  <-  1e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
@@ -2808,15 +2985,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7a  <-  3d reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7c  <-  3e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 7e  <-  3f reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 80  <-  c0..a7 reserved
-           (word-ref BC_CDR)                      ;; 82  <-  41 
+           (word-ref BC_Z_P_RET_POP_N)            ;; 80  <-  c0..c7
+           (word-ref BC_CDR)                      ;; 82  <-  41
            (word-ref BC_CONS)                     ;; 84  <-  42 
            (word-ref BC_CAR)                      ;; 86  <-  43 
            (word-ref BC_COONS)                    ;; 88  <-  44
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8a  <-  45 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8e  <-  47 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 90  <-  c8..af reserved
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 90  <-  c8..cf reserved
            (word-ref BC_BINC_RAI)                 ;; 92  <-  49 reserved
            (word-ref BC_NATIVE)                   ;; 94  <-  4a reserved
            (word-ref BC_POP_TO_RA)                ;; 96  <-  4b reserved
@@ -2971,6 +3148,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_RA_AF
           BC_POP_TO_RA_AF
           BC_POP_TO_RAI
+          BC_BDEC
+          BC_BINC
+          BC_Z_P_BRA
+          BC_Z_P_RET_POP_N
           VM_INTERPRETER))
 
 (define vm-interpreter
@@ -2985,4 +3166,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       892))
+                       948))

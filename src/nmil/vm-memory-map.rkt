@@ -48,7 +48,7 @@
    ;; highest bit 0 and the lowest 2 bits are reserved for int, cell-ptr and cell-pair-ptr
    ;; => 32 values still available
    ;; @DC-C: TAG_BYTE_BYTE_CELL, group: cell
-   (byte-const TAG_BYTE_BYTE_CELL         $ff)
+   (byte-const TAG_BYTE_BYTE_CELL         $ff) ;; low byte in a cell that indicates the cell to be a byte-cell
    (byte-const TAG_BYTE_CELL_ARRAY        $83) ;; LSR -> 41, LSR -> 20
    (byte-const TAG_BYTE_CELL_ARRAY_LSR2   $30)
    (byte-const TAG_BYTE_NATIVE_ARRAY      $87) ;; LSR -> 43, LSR -> 21
@@ -58,6 +58,8 @@
    ;; (word-const VM_FIRST_FREE_SLOT_ON_PAGE     $cf00) ;; location: table of first free slot for each page
 
    (word-const TAGGED_INT_0              $0003)
+   (byte-const TAGGED_INT_0_HB           $00)
+   (byte-const TAGGED_INT_0_LB           $03)
    (word-const TAGGED_BYTE0              $00ff)
    (word-const TAGGED_NIL                $0001) ;; tag indicates cell-pair-ptr
 

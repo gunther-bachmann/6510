@@ -37,6 +37,15 @@
   the line following this @DC-M comment must:
   - be a line (label <mem-label>) with comments followed by
   - a single (byte ..) or (word ..) constant with comments
+- @DC-B :: byte code
+  @DC-B: <bc-label>(, group: <b-group>(-<b-group>)*)*
+  example: ;; @DC-B: BINC, group: byte
+           ;; @DC-B: GET_ARRAY_FIELD_0, group: cell_array
+  the file name is used for creating the racket require line
+  the following define is used for racket require line and to extract the actual byte code
+  the next define (starting with BC_) is used for assembler include
+  the @DC-B line is used for the org-link
+  the line following this @DC-B comment must:
 * constants / tag bytes
 - TAG_BYTE_BYTE_CELL ::    (byte) constant identifying a byte cell (low-byte = this constant)
 - TAG_BYTE_CELL_ARRAY ::   (byte) constant identifying a cell-array (first byte in a m1 slot)
@@ -138,8 +147,22 @@
 - [[file:vm-mm-pages.rkt::(define ALLOC_PAGE_TO_X][ALLOC_PAGE_TO_X]] ::                 allocate new page (not initialized)
   - racket include :: (require (only-in "./vm-mm-pages" ALLOC_PAGE_TO_X))
   - assembler include :: ALLOC_PAGE_TO_X
+* byte codes (by code)
+- $1c :: BINC, Byte INCrement, increment the cell-byte in RT (no check)
+  - racket include :: (require (only-in "./vm-interpreter.rkt") BINC)
+  - assembler include :: BC_BINC
+  ....
 * byte codes (by name)
+- BINC :: $1c Byte INCrement, increment the cell-byte in RT (no check)
+  - racket include :: (require (only-in "./vm-interpreter.rkt") BINC)
+  - assembler include :: BC_BINC
+  ....
 * byte codes (by group)
+** byte
+- BINC :: $1c Byte INCrement, increment the cell-byte in RT (no check)
+  - racket include :: (require (only-in "./vm-interpreter.rkt") BINC)
+  - assembler include :: BC_BINC
+  ....
 * - :noexport:
 #+begin_src emacs-lisp
   ;; Local Variables:
