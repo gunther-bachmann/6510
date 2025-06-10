@@ -98,7 +98,7 @@ then mark the current point and search the REGEXP N-TIMES and return the text up
               (beginning-of-line)
             (end-of-line))
           (let ((beg (point)))
-            (--dotimes  n-times (search-forward-regexp regexp))
+            (--dotimes  n-times (search-forward-regexp regexp nil t))
             (if after-line-beg
                 (beginning-of-line)
               (end-of-line))
@@ -344,7 +344,7 @@ filter lines that start with ---"
         "- @DC-B :: byte code"
         "  @DC-B: <bc-label>(, group: <b-group>(-<b-group>)*)"
         "  example: ;; @DC-B: BINC, group: byt"
-        "           ;; @DC-B: GET_ARRAY_FIELD_0, group: cell_array"
+        "           ;; @DC-B: GET_AF_0, group: cell_array"
         "  the file name is used for creating the racket require line"
         "  the following define is used for racket require line and to extract the actual byte code"
         "  the next define (starting with BC_) is used for assembler include"
@@ -389,7 +389,7 @@ filter lines that start with ---"
             (doc-line (car (or (plist-get plist :doclines) (list "no doc"))))
             (racket-require (plist-get plist :racket-require))
             (assembler-include (plist-get plist :assembler-include))
-            (indented-doc-lines (string-join (plist-get plist :doclines) "\n  ")))
+            (indented-doc-lines (string-join (or (plist-get plist :doclines) (list "no doc")) "\n  ")))
        (format "- [[%s][$%s]] :: %s %s %s\n  - racket require :: %s\n  - assembler include :: %s\n  %s"
                file-ref
                bytecode

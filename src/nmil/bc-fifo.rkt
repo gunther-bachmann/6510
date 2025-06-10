@@ -38,14 +38,14 @@
                   GC_FL
                   ALLOC_A
                   F_P_RET_F
-                  GET_ARRAY_FIELD_0
-                  GET_ARRAY_FIELD_1
-                  GET_ARRAY_FIELD_2
-                  GET_ARRAY_FIELD_3
-                  SET_ARRAY_FIELD_0
-                  SET_ARRAY_FIELD_1
-                  SET_ARRAY_FIELD_2
-                  SET_ARRAY_FIELD_3
+                  GET_AF_0
+                  GET_AF_1
+                  GET_AF_2
+                  GET_AF_3
+                  SET_AF_0
+                  SET_AF_1
+                  SET_AF_2
+                  SET_AF_3
                   CELL_EQ_P
                   EXT
                   CAAR
@@ -146,9 +146,9 @@
           (bc PUSH_B) (byte 2)
           (bc ALLOC_A)
           (bc WRITE_TO_L0)
-          (bc SET_ARRAY_FIELD_0)
+          (bc SET_AF_0)
           (bc PUSH_L0)
-          (bc SET_ARRAY_FIELD_1)
+          (bc SET_AF_1)
           (bc PUSH_L0)
           (bc RET)))
 
@@ -180,11 +180,11 @@
    (label FIFO_ENQUEUE)
           (byte 1)
           (bc WRITE_TO_L0)
-          (bc GET_ARRAY_FIELD_0)
+          (bc GET_AF_0)
           (bc SWAP)
           (bc CONS)
           (bc PUSH_L0)
-          (bc SET_ARRAY_FIELD_0)          
+          (bc SET_AF_0)          
           (bc RET)))
 
 (module+ test #| enqueue |#
@@ -247,14 +247,14 @@
      (label FIFO_DEQUEUE)
             (byte 2)
             (bc WRITE_TO_L0)
-            (bc GET_ARRAY_FIELD_1)
+            (bc GET_AF_1)
             (bc WRITE_TO_L1)
             (bc NIL_P)
             (bc F_P_BRA) (bc-rel-ref OUT_IS_NOT_EMPTY)
   
             (bc PUSH_NIL)                   ;; result for reverse
             (bc PUSH_L0)
-            (bc GET_ARRAY_FIELD_0)
+            (bc GET_AF_0)
             ;; exception if result is NIL!
   
             (bc CALL) (word-ref REVERSE)
@@ -262,12 +262,12 @@
             ;; set 'in' to be empty
             (bc PUSH_NIL)
             (bc PUSH_L0)
-            (bc SET_ARRAY_FIELD_0)
+            (bc SET_AF_0)
   
      (label OUT_IS_NOT_EMPTY)
             (bc PUSH_L1_CDR)
             (bc PUSH_L0)
-            (bc SET_ARRAY_FIELD_1)
+            (bc SET_AF_1)
             (bc PUSH_L1_CAR)
             (bc RET)))))
 

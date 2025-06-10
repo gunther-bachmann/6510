@@ -40,7 +40,7 @@
 - @DC-B :: byte code
   @DC-B: <bc-label>(, group: <b-group>(-<b-group>)*)*
   example: ;; @DC-B: BINC, group: byte
-           ;; @DC-B: GET_ARRAY_FIELD_0, group: cell_array
+           ;; @DC-B: GET_AF_0, group: cell_array
   the file name is used for creating the racket require line
   the following define is used for racket require line and to extract the actual byte code
   the next define (starting with BC_) is used for assembler include

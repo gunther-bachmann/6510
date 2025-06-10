@@ -31,14 +31,14 @@
                   PUSH_I
                   ALLOC_A
                   F_P_RET_F
-                  GET_ARRAY_FIELD_0
-                  GET_ARRAY_FIELD_1
-                  GET_ARRAY_FIELD_2
-                  GET_ARRAY_FIELD_3
-                  SET_ARRAY_FIELD_0
-                  SET_ARRAY_FIELD_1
-                  SET_ARRAY_FIELD_2
-                  SET_ARRAY_FIELD_3
+                  GET_AF_0
+                  GET_AF_1
+                  GET_AF_2
+                  GET_AF_3
+                  SET_AF_0
+                  SET_AF_1
+                  SET_AF_2
+                  SET_AF_3
                   CELL_EQ_P
                   EXT
                   CAAR
@@ -138,11 +138,11 @@
 ;;           (bc PUSH_B) (byte 3)
 ;;           (bc ALLOC_A)
 ;;           (bc WRITE_TO_L0)
-;;           (bc SET_ARRAY_FIELD_0)
+;;           (bc SET_AF_0)
 ;;           (bc PUSH_L0)
-;;           (bc SET_ARRAY_FIELD_1)
+;;           (bc SET_AF_1)
 ;;           (bc PUSH_L0)
-;;           (bc SET_ARRAY_FIELD_2)
+;;           (bc SET_AF_2)
 ;;           (bc PUSH_L0)
 ;;           (bc RET)))
 
@@ -208,9 +208,9 @@
   (list
    (label POINT_XDIST)
           (byte 0)
-          (bc GET_ARRAY_FIELD_0)
+          (bc GET_AF_0)
           (bc SWAP)
-          (bc GET_ARRAY_FIELD_0)
+          (bc GET_AF_0)
           (bc ISUB)
           (bc RET)))
 
@@ -243,9 +243,9 @@
   (list
    (label POINT_YDIST)
           (byte 0)
-          (bc GET_ARRAY_FIELD_1)
+          (bc GET_AF_1)
           (bc SWAP)
-          (bc GET_ARRAY_FIELD_1)
+          (bc GET_AF_1)
           (bc ISUB)
           (bc RET)))
 
@@ -279,16 +279,16 @@
    (label POINT_EQUAL)
           (byte 2)
           (bc WRITE_TO_L0)
-          (bc GET_ARRAY_FIELD_0)
+          (bc GET_AF_0)
           (bc SWAP)
           (bc WRITE_TO_L1)
-          (bc GET_ARRAY_FIELD_0)
+          (bc GET_AF_0)
           (bc CELL_EQ_P)
           (bc F_P_RET_F)
           (bc PUSH_L0)
-          (bc GET_ARRAY_FIELD_1)
+          (bc GET_AF_1)
           (bc PUSH_L1)
-          (bc GET_ARRAY_FIELD_1)
+          (bc GET_AF_1)
           (bc CELL_EQ_P)
           (bc RET)))
 

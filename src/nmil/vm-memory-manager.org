@@ -823,7 +823,7 @@ black-node
 - instead of
   #+begin_src scheme
     (bc PUSH_Lx)           ;; extra push of array reference on stack
-    (bc GET_ARRAY_FIELD_y)      ;; removes array reference from stack, pushing the field value of the array
+    (bc GET_AF_y)      ;; removes array reference from stack, pushing the field value of the array
   #+end_src
 - keep array in local (no special ref couting compared to regular locals)
   #+begin_src scheme
@@ -851,7 +851,7 @@ black-node
 - instead of
   #+begin_src scheme
     (bc PUSH_Lx)           ;; extra push of array reference on stack
-    (bc GET_ARRAY_FIELD_y)      ;; removes array reference from stack, pushing the field value of the array
+    (bc GET_AF_y)      ;; removes array reference from stack, pushing the field value of the array
   #+end_src
 - keep array e.g. in R0 (arrays in registers are refcounted once, and discarded explicitly)
   #+begin_src scheme

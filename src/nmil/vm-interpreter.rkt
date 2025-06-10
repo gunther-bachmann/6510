@@ -162,14 +162,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_NIL
          ALLOC_A
          F_P_RET_F
-         GET_ARRAY_FIELD_0
-         GET_ARRAY_FIELD_1
-         GET_ARRAY_FIELD_2
-         GET_ARRAY_FIELD_3
-         SET_ARRAY_FIELD_0
-         SET_ARRAY_FIELD_1
-         SET_ARRAY_FIELD_2
-         SET_ARRAY_FIELD_3
+         GET_AF_0
+         GET_AF_1
+         GET_AF_2
+         GET_AF_3
+         SET_AF_0
+         SET_AF_1
+         SET_AF_2
+         SET_AF_3
          GC_FL
          CELL_EQ_P
          CAAR
@@ -393,7 +393,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
-;; @DC-B: TAIL_CALL, group: call
+;; @DC-B: TAIL_CALL, group: flow
 (define TAIL_CALL           #x35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
 (define BC_TAIL_CALL
   (list
@@ -509,7 +509,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
-;; @DC-B: CALL, group: call
+;; @DC-B: CALL, group: flow
 (define CALL                #x34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
 (define BC_CALL
   (add-label-suffix
@@ -862,7 +862,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define WRITE_L2 #x85) ;; *WRITE* *L*​ocal *2* into rt
 ;;                        @DC-B: WRITE_L3, group: stack
 (define WRITE_L3 #x87) ;; *WRITE* *L*​ocal *3* into rt
-
 (define BC_PUSH_LOCAL_SHORT
   (add-label-suffix
    "__" "__BC_PUSH_LOCAL_SHORT"
@@ -897,7 +896,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
            ))))
 
-
 ;;                         @DC-B: POP_TO_L0, group: stack
 (define POP_TO_L0 #x90) ;; *POP* *TO* *L*​ocal *0* from evlstk
 ;;                         @DC-B: POP_TO_L1, group: stack
@@ -906,7 +904,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define POP_TO_L2 #x94) ;; *POP* *TO* *L*​ocal *2* from evlstk
 ;;                         @DC-B: POP_TO_L3, group: stack
 (define POP_TO_L3 #x96) ;; *POP* *TO* *L*​ocal *3* from evlstk
-
 ;;                         @DC-B: WRITE_TO_L0, group: stack
 (define WRITE_TO_L0 #x91) ;; *WRITE* *TO* *L*​ocal *0* from evlstk
 ;;                         @DC-B: WRITE_TO_L1, group: stack
@@ -915,7 +912,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define WRITE_TO_L2 #x95) ;; *WRITE* *TO* *L*​ocal *2* from evlstk
 ;;                         @DC-B: WRITE_TO_L3, group: stack
 (define WRITE_TO_L3 #x97) ;; *WRITE* *TO* *L*​ocal *3* from evlstk
-
 (define BC_POP_TO_LOCAL_SHORT
   (add-label-suffix
    "__" "__BC_POP_TO_LOCAL_SHORT"
@@ -2294,7 +2290,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
           (JMP VM_INTERPRETER_INC_PC)))
 
-;; @DC-B: CELL_EQ_P, group: stack
+;; @DC-B: CELL_EQ_P, group: predicates
 ;; *CELL* *EQ*​ual *P*​redicate
 ;; len: 1
 (define CELL_EQ_P #x12)
@@ -2497,13 +2493,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0001  (rt)"
                       "int $0000")))
 
-;;                    @DC-B: CAAR, group: cell-pair
+;;                    @DC-B: CAAR, group: cell_pair
 (define CAAR #xa8) ;; len: 1
-;;                    @DC-B: CADR, group: cell-pair
+;;                    @DC-B: CADR, group: cell_pair
 (define CADR #xaa) ;; len: 1
-;;                    @DC-B: CDAR, group: cell-pair
+;;                    @DC-B: CDAR, group: cell_pair
 (define CDAR #xac) ;; len: 1
-;;                    @DC-B: CDDR, group: cell-pair
+;;                    @DC-B: CDDR, group: cell_pair
 (define CDDR #xae) ;; len: 1
 (define BC_CxxR
   (list
@@ -2602,7 +2598,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "byte $01"
                       "byte $00")))
 
-;; @DC-B: POP_TO_RA_AF, group: cell-array
+;; @DC-B: POP_TO_RA_AF, group: cell_array
 ;; *POP* top of evlstk *TO* *RA* *A*​rray *F*​ield
 ;; len: 1
 (define POP_TO_RA_AF #x4e)
@@ -2614,7 +2610,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (INC ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
 
-;; @DC-B: POP_TO_AF, group: cell-array
+;; @DC-B: POP_TO_AF, group: cell_array
 ;; *POP* *TO* *A*​rray *F*​ield using the stack
 ;; len: 1
 ;; stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
@@ -2776,15 +2772,31 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JMP VM_INTERPRETER_INC_PC)))
 
 
-(define GET_ARRAY_FIELD_0 #xb0) ;; stack: [array-ptr] -> [cell@0 of array]
-(define GET_ARRAY_FIELD_1 #xb2) ;; stack: [array-ptr] -> [cell@1 of array]
-(define GET_ARRAY_FIELD_2 #xb4) ;; stack: [array-ptr] -> [cell@2 of array]
-(define GET_ARRAY_FIELD_3 #xb6) ;; stack: [array-ptr] -> [cell@3 of array]
+;;                        @DC-B: GET_AF_0, group: cell_array
+;;                        *GET* *A*​rray *F*​ield 0
+(define GET_AF_0 #xb0) ;; stack: [array-ptr] -> [cell@0 of array]
+;;                        @DC-B: GET_AF_1, group: cell_array
+;;                        *GET* *A*​rray *F*​ield 1
+(define GET_AF_1 #xb2) ;; stack: [array-ptr] -> [cell@1 of array]
+;;                        @DC-B: GET_AF_2, group: cell_array
+;;                        *GET* *A*​rray *F*​ield 2
+(define GET_AF_2 #xb4) ;; stack: [array-ptr] -> [cell@2 of array]
+;;                        @DC-B: GET_AF_3, group: cell_array
+;;                        *GET* *A*​rray *F*​ield 3
+(define GET_AF_3 #xb6) ;; stack: [array-ptr] -> [cell@3 of array]
 
-(define SET_ARRAY_FIELD_0 #xb1)
-(define SET_ARRAY_FIELD_1 #xb3)
-(define SET_ARRAY_FIELD_2 #xb5)
-(define SET_ARRAY_FIELD_3 #xb7)
+;;                        @DC-B: SET_AF_0, group: cell_array
+;;                        *SET* *A*​rray *F*​ield 0
+(define SET_AF_0 #xb1) ;; stack: [array-ptr] :: [value] -> [cell@0 of array]
+;;                        @DC-B: SET_AF_1, group: cell_array
+;;                        *SET* *A*​rray *F*​ield 1
+(define SET_AF_1 #xb3) ;; stack: [array-ptr] :: [value] -> [cell@1 of array]
+;;                        @DC-B: SET_AF_2, group: cell_array
+;;                        *SET* *A*​rray *F*​ield 2
+(define SET_AF_2 #xb5) ;; stack: [array-ptr] :: [value] -> [cell@2 of array]
+;;                        @DC-B: SET_AF_3, group: cell_array
+;;                        *SET* *A*​rray *F*​ield 3
+(define SET_AF_3 #xb7) ;; stack: [array-ptr] :: [value] -> [cell@3 of array]
 
 (define BC_XET_ARRAY_FIELD
   (flatten
@@ -2811,6 +2823,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR DEC_REFCNT_RA)
            (JMP VM_INTERPRETER_INC_PC))))
 
+;; @DC-B: ALLOC_ARA, group: cell_array
+;; *ALLOC*​ate cell *A*​rray into *RA*
+;; len: 1
 (define ALLOC_ARA #x4c)
 (define BC_ALLOC_ARA
   (list
@@ -2823,6 +2838,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR CP_RA_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; @DC-B: BINC_RAI, group: cell_array
+;; *B*​yte *INC*​rement *RA* *I*​ndex register
 (define BINC_RAI #x49)
 (define BC_BINC_RAI
   (list
@@ -2830,6 +2847,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (INC ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; @DC-B: POP_TO_RAI, group: cell_array
+;; *POP* top of evlstk byte *TO* *RA* *I*​ndex
+;; len: 1
 (define POP_TO_RAI #x4f)
 (define BC_POP_TO_RAI
   (list
@@ -3038,6 +3058,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (label COUNT__)
            (byte 0))))
 
+;; @DC-B: Z_P_BRA, group: flow
+;; *Z*​ero *P*​redicate *BRA*​nch
+;; len: 2
 (define Z_P_BRA #x1b)
 (define BC_Z_P_BRA
   (flatten
