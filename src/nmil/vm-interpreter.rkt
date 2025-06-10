@@ -250,35 +250,41 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $8000 
           (RTS)))
 
-(define NIL_P_RET_L0_POP_1 #x98)
-(define NIL_P_RET_L0_POP_2 #x9a)
-(define NIL_P_RET_L0_POP_3 #x9c)
-(define NIL_P_RET_L0_POP_4 #x9e)
 ;; (define ZERO?_RET_LOCAL0_POP_1 #x99)
 ;; (define ZERO?_RET_LOCAL0_POP_2 #x9b)
 ;; (define ZERO?_RET_LOCAL0_POP_3 #x9d)
 ;; (define ZERO?_RET_LOCAL0_POP_4 #x9f)
 
-(define BC_NIL_P_RET_LN_POP
+                                 ;; @DC-B: NIL_P_RET_L0_POP_1, group: return
+(define NIL_P_RET_L0_POP_1 #x98) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *1* from evlstk
+                                 ;; @DC-B: NIL_P_RET_L0_POP_2, group: return
+(define NIL_P_RET_L0_POP_2 #x9a) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *2* from evlstk
+                                 ;; @DC-B: NIL_P_RET_L0_POP_3, group: return
+(define NIL_P_RET_L0_POP_3 #x9c) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *3* from evlstk
+                                 ;; @DC-B: NIL_P_RET_L0_POP_4, group: return
+(define NIL_P_RET_L0_POP_4 #x9e) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *4* from evlstk
+(define BC_NIL_P_RET_L0_POP_N
+  (add-label-suffix
+   "__" "__BC_NIL_P_RET_L0_POP_N"
   (list
-   (label BC_NIL_P_RET_LN_POP)
+   (label BC_NIL_P_RET_L0_POP_N)
           (LDX ZP_RT)
-          (CPX !<TAGGED_NIL)                            ;; lowbyte = tagged_nil lowbyte
-          (BEQ RETURN__BC_NIL_P_RET_LN_POP)        ;; is nil => return param or local
-          (JMP VM_INTERPRETER_INC_PC)                   ;; next instruction
+          (CPX !<TAGGED_NIL)                 ;; lowbyte = tagged_nil lowbyte
+          (BEQ RETURN__)                     ;; is nil => return param or local
+          (JMP VM_INTERPRETER_INC_PC)        ;; next instruction
 
-   (label RETURN__BC_NIL_P_RET_LN_POP)
-          (LSR)                                         ;; lowest bit decides 0 = LOCAL_0, 1 = some other short command
+   (label RETURN__)
+          (LSR)                              ;; lowest bit decides 0 = LOCAL_0, 1 = some other short command
           (TAX)
-          (BCS SHORTCMD__BC_NIL_P_RET_LN_POP)
+          (BCS SHORTCMD__)
 
-   (label LOCAL_0_POP__BC_NIL_P_RET_LN_POP)     
+   (label LOCAL_0_POP__)
           ;; local 0 is written into tos (which is one pop already)          
           ;; now pop the rest (0..3 times additionally)
-   (label NOW_POP__BC_NIL_P_RET_LN_POP)
+   (label NOW_POP__)
           (TXA)
-          (BEQ DONE__BC_NIL_P_RET_LN_POP)
-   (label LOOP_POP__BC_NIL_P_RET_LN_POP)
+          (BEQ DONE__)
+   (label LOOP_POP__)
           (DEC ZP_CELL_STACK_TOS)
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
@@ -292,43 +298,43 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (TAX)
           (LDY ZP_CELL_STACK_TOS)
           (CPY !$01)
-          (BEQ STACK_DEPLETED__BC_NIL_P_RET_LN_POP)
+          (BEQ STACK_DEPLETED__)
           (DEX)
-          (BNE LOOP_POP__BC_NIL_P_RET_LN_POP)
+          (BNE LOOP_POP__)
 
-          (STY ZP_CELL_STACK_TOS)                       ;; store new tos marker
+          (STY ZP_CELL_STACK_TOS)             ;; store new tos marker
 
-   (label DONE__BC_NIL_P_RET_LN_POP)
+   (label DONE__)
           (LDY !$00)
-          (LDA (ZP_LOCALS_LB_PTR),y)                    ;; load low byte from local
-          (STA ZP_RT)                                   ;; -> RT
-          (LDA (ZP_LOCALS_HB_PTR),y)                    ;; load high byte from local
-          (STA ZP_RT+1)                                 ;; -> RT
+          (LDA (ZP_LOCALS_LB_PTR),y)          ;; load low byte from local
+          (STA ZP_RT)                         ;; -> RT
+          (LDA (ZP_LOCALS_HB_PTR),y)          ;; load high byte from local
+          (STA ZP_RT+1)                       ;; -> RT
 
           (LDA !$00)
-          (STA (ZP_LOCALS_LB_PTR),y)                    ;; clear low byte from local
-          (STA (ZP_LOCALS_HB_PTR),y)                    ;; clear high byte from local
+          (STA (ZP_LOCALS_LB_PTR),y)          ;; clear low byte from local
+          (STA (ZP_LOCALS_HB_PTR),y)          ;; clear high byte from local
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
-          (JSR VM_POP_CALL_FRAME_N)                     ;; now pop the call frame
+          (JSR VM_POP_CALL_FRAME_N)           ;; now pop the call frame
 
-          (JMP VM_INTERPRETER)                          ;; and continue 
+          (JMP VM_INTERPRETER)                ;; and continue
 
-   (label STACK_DEPLETED__BC_NIL_P_RET_LN_POP)
-          ;; (LDY !$01)                                 ;; Y already is 01 when entering here
-          (LDA (ZP_CELL_STACK_LB_PTR),y)               ;; get previous lb page
-          (BEQ ERROR_EMPTY_STACK__BC_NIL_P_RET_LN_POP) ;; = 0 => stack ran empty
+   (label STACK_DEPLETED__)
+          ;; (LDY !$01)                       ;; Y already is 01 when entering here
+          (LDA (ZP_CELL_STACK_LB_PTR),y)      ;; get previous lb page
+          (BEQ ERROR_EMPTY_STACK__)           ;; = 0 => stack ran empty
 
-          (STA ZP_CELL_STACK_LB_PTR+1)                 ;; store previous lb page to lb ptr
-          (LDA (ZP_CELL_STACK_HB_PTR),y)               ;; get previous hb page  
-          (STA ZP_CELL_STACK_HB_PTR+1)                 ;; store previous hb page into hb ptr
-          (LDY !$ff)                                   ;; assume $ff as new cell_stack_tos
-          (BNE LOOP_POP__BC_NIL_P_RET_LN_POP)     ;; always jump
+          (STA ZP_CELL_STACK_LB_PTR+1)        ;; store previous lb page to lb ptr
+          (LDA (ZP_CELL_STACK_HB_PTR),y)      ;; get previous hb page
+          (STA ZP_CELL_STACK_HB_PTR+1)        ;; store previous hb page into hb ptr
+          (LDY !$ff)                          ;; assume $ff as new cell_stack_tos
+          (BNE LOOP_POP__)                    ;; always jump
 
 
-   (label SHORTCMD__BC_NIL_P_RET_LN_POP)
+   (label SHORTCMD__)
           ;; open for other shortcut command
-   (label ERROR_EMPTY_STACK__BC_NIL_P_RET_LN_POP)
-          (BRK)))
+   (label ERROR_EMPTY_STACK__)
+          (BRK))))
 
 (module+ test #| bc-nil-ret |#
   (define bc-nil-ret-state
@@ -387,6 +393,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
+;; @DC-B: TAIL_CALL, group: call
 (define TAIL_CALL           #x35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
 (define BC_TAIL_CALL
   (list
@@ -485,7 +492,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     4"
                          "next free slot: $49"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4765)
+                4737)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -502,17 +509,20 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
+;; @DC-B: CALL, group: call
 (define CALL                #x34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
 (define BC_CALL
+  (add-label-suffix
+   "__" "__CALL"
   (list
    (label BC_CALL)
-          ;; load the two bytes following into ZP_RA (ptr to function descriptor)
+          ;; load the two bytes following into ZP_RP (ptr to function descriptor)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)                    ;; load lowbyte of call target, right behind byte-code
-          (STA ZP_RA)                           ;; -> RA
+          (STA ZP_RP)                           ;; -> RA
           (INY)
           (LDA (ZP_VM_PC),y)                    ;; load highbyte of call target, behind lowbyte
-          (STA ZP_RA+1)                         ;; -> RA
+          (STA ZP_RP+1)                         ;; -> RA
           ;; RA now holds the call target function address
 
           ;; put return to adress into zp_vm_pc (for save)
@@ -520,31 +530,31 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (CLC)
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)                        ;; write into program counter
-          (BCC DONE_INC_PC__BC_CALL)
+          (BCC DONE_INC_PC__)
           (INC ZP_VM_PC+1)                      ;; inc page of program counter
           ;; zp_vm_pc holds follow bc after this call
-   (label DONE_INC_PC__BC_CALL)          
+   (label DONE_INC_PC__)
 
    (label VM_CALL_NO_PUSH_FUN_IN_RA)
-          ;; ZP_RA holds pointer to function descriptor          
+          ;; ZP_RP holds pointer to function descriptor
           (LDY !$00)                            ;; index to number of locals (0)
-          (LDA (ZP_RA),y)                       ;; A = #locals                    
+          (LDA (ZP_RP),y)                       ;; A = #locals
           (TAX)
           (JSR VM_PUSH_CALL_FRAME_N)
           (LDY !$00)                            ;; index to number of locals (0)
-          (LDA (ZP_RA),y)                       ;; A = #locals
+          (LDA (ZP_RP),y)                       ;; A = #locals
           (AND !$0f)                            ;; mask out the number of locals
           (JSR VM_ALLOC_LOCALS)                 ;; even if A=0 will set the top_mark and the locals appropriately
 
           ;; load zp_vm_pc with address of function bytecode
-          (LDA ZP_RA)
+          (LDA ZP_RP)
           (STA ZP_VM_PC)
           (STA ZP_VM_FUNC_PTR)
-          (LDA ZP_RA+1)
+          (LDA ZP_RP+1)
           (STA ZP_VM_PC+1)
           (STA ZP_VM_FUNC_PTR+1)
 
-          (JMP VM_INTERPRETER_INC_PC))) ;; function starts at function descriptor + 1
+          (JMP VM_INTERPRETER_INC_PC)))) ;; function starts at function descriptor + 1
 
 (module+ test #| bc_call |#
   (define test-bc-before-call-state
@@ -669,6 +679,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    "stack holds the pushed int, and all parameters"))
 
 (define VM_REFCOUNT_DECR_CURRENT_LOCALS
+  (add-label-suffix
+   "__" "__VM_REFCOUNT_DECR_CURRENT_LOCALS"
   (list
    (label VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (LDA ZP_LOCALS_LB_PTR)
@@ -679,36 +691,35 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (TAY) ;; y = number of locals of current tunction
           ;; loop over locals -> rt, decr refcount
           (DEY)
-          (BMI DONE__BC_RET)
-   (label LOOP__BC_RET)
+          (BMI DONE__)
+   (label LOOP__)
           (LDA (ZP_LOCALS_LB_PTR),y)
-          (BEQ NEXT_ITER__BC_RET)
+          (BEQ NEXT_ITER__)
           (STA ZP_RZ)
           (AND !$03)
           (CMP !$03)
-          (BEQ S0_NEXT_ITER__BC_RET) ;; definitely no pointer since lower 2 bits are set
+          (BEQ S0_NEXT_ITER__) ;; definitely no pointer since lower 2 bits are set
           (LDA (ZP_LOCALS_HB_PTR),y)
-          (BEQ NEXT_ITER__BC_RET)       ;; definitely no pointer, since page is 00
+          (BEQ NEXT_ITER__)       ;; definitely no pointer, since page is 00
           (STA ZP_RZ+1)
-          (STY COUNTER__BC_RET)
+          (STY COUNTER__)
           (JSR DEC_REFCNT_RZ)
-          (LDY COUNTER__BC_RET)
-   (label S0_NEXT_ITER__BC_RET)
+          (LDY COUNTER__)
+   (label S0_NEXT_ITER__)
           (LDA !$00)
-   (label NEXT_ITER__BC_RET)
+   (label NEXT_ITER__)
           (STA (ZP_LOCALS_LB_PTR),y)
           (STA (ZP_LOCALS_HB_PTR),y)
           (DEY)
-          (BPL LOOP__BC_RET)
-   (label DONE__BC_RET)
+          (BPL LOOP__)
+   (label DONE__)
           (RTS)
 
-   (label COUNTER__BC_RET)
-          (byte 0)
-   (label ZP_RT_BACKUP)
-          (word 0)))
+   (label COUNTER__)
+          (byte 0))))
 
-(define RET                 #x33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
+;; @DC-B: RET, group: return
+(define RET #x33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
 (define BC_RET
   (list
    (label BC_RET)
@@ -782,23 +793,32 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   )
 
 
+;;                           @DC-B: PUSH_L0_CAR, group: stack
+(define PUSH_L0_CAR #xa0) ;; *PUSH* *L*​ocal *0* and *CAR*
+;;                           @DC-B: PUSH_L1_CAR, group: stack
+(define PUSH_L1_CAR #xa2) ;; *PUSH* *L*​ocal *1* and *CAR*
+;;                           @DC-B: PUSH_L2_CAR, group: stack
+(define PUSH_L2_CAR #xa4) ;; *PUSH* *L*​ocal *2* and *CAR*
+;;                           @DC-B: PUSH_L3_CAR, group: stack
+(define PUSH_L3_CAR #xa6) ;; *PUSH* *L*​ocal *3* and *CAR*
 
-(define PUSH_L0_CAR #xa0)
-(define PUSH_L1_CAR #xa2)
-(define PUSH_L2_CAR #xa4)
-(define PUSH_L3_CAR #xa6)
-
-(define PUSH_L0_CDR #xa1)
-(define PUSH_L1_CDR #xa3)
-(define PUSH_L2_CDR #xa5)
-(define PUSH_L3_CDR #xa7)
+;;                           @DC-B: PUSH_L0_CDR, group: stack
+(define PUSH_L0_CDR #xa1) ;; *PUSH* *L*​ocal *0* and *CDR*
+;;                           @DC-B: PUSH_L1_CDR, group: stack
+(define PUSH_L1_CDR #xa3) ;; *PUSH* *L*​ocal *1* and *CDR*
+;;                           @DC-B: PUSH_L2_CDR, group: stack
+(define PUSH_L2_CDR #xa5) ;; *PUSH* *L*​ocal *2* and *CDR*
+;;                           @DC-B: PUSH_L3_CDR, group: stack
+(define PUSH_L3_CDR #xa7) ;; *PUSH* *L*​ocal *3* and *CDR*
 
 (define BC_PUSH_LOCAL_CXR
+  (add-label-suffix
+   "__" "__BC_PUSH_LOCAL_CXR"
   (flatten
    (list
     (label BC_PUSH_LOCAL_CXR)
            (LSR)                                ;; encoding is ---- xxxp (p=1 CDR, p=0 CAR)
-           (BCS CDR__BC_PUSH_LOCAL_SHORT)
+           (BCS CDR__)
 
     ;; CAR
            (STA ZP_RA)
@@ -812,7 +832,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
-    (label CDR__BC_PUSH_LOCAL_SHORT)
+    (label CDR__)
            (STA ZP_RA)
            (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
            (LDY ZP_RA) ;; index -> Y
@@ -822,25 +842,35 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT+1)
            (JSR WRITE_CELLPAIR_RT_CELL1_TO_RT)
            (JSR INC_REFCNT_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-)))
+           (JMP VM_INTERPRETER_INC_PC)))))
 
-(define PUSH_L0 #x80)
-(define PUSH_L1 #x82)
-(define PUSH_L2 #x84)
-(define PUSH_L3 #x86)
 
-(define WRITE_L0 #x81)
-(define WRITE_L1 #x83)
-(define WRITE_L2 #x85)
-(define WRITE_L3 #x87)
+;;                       @DC-B: PUSH_L0, group: stack
+(define PUSH_L0 #x80) ;; *PUSH* *L*​ocal *0* on evlstk
+;;                       @DC-B: PUSH_L1, group: stack
+(define PUSH_L1 #x82) ;; *PUSH* *L*​ocal *1* on evlstk
+;;                       @DC-B: PUSH_L2, group: stack
+(define PUSH_L2 #x84) ;; *PUSH* *L*​ocal *2* on evlstk
+;;                       @DC-B: PUSH_L3, group: stack
+(define PUSH_L3 #x86) ;; *PUSH* *L*​ocal *3* on evlstk
+
+;;                        @DC-B: WRITE_L0, group: stack
+(define WRITE_L0 #x81) ;; *WRITE* *L*​ocal *0* into rt
+;;                        @DC-B: WRITE_L1, group: stack
+(define WRITE_L1 #x83) ;; *WRITE* *L*​ocal *1* into rt
+;;                        @DC-B: WRITE_L2, group: stack
+(define WRITE_L2 #x85) ;; *WRITE* *L*​ocal *2* into rt
+;;                        @DC-B: WRITE_L3, group: stack
+(define WRITE_L3 #x87) ;; *WRITE* *L*​ocal *3* into rt
 
 (define BC_PUSH_LOCAL_SHORT
+  (add-label-suffix
+   "__" "__BC_PUSH_LOCAL_SHORT"
   (flatten
    (list
     (label BC_PUSH_LOCAL_SHORT)
            (LSR)                                ;; encoding is ---- xxxp (p=1 write local, p=0 push local)
-           (BCS WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
+           (BCS WRITE_FROM_LOCAL__)
 
     ;; push local           
            (PHA)
@@ -854,7 +884,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
-    (label WRITE_FROM_LOCAL__BC_PUSH_LOCAL_SHORT)
+    (label WRITE_FROM_LOCAL__)
            (PHA)
            (JSR DEC_REFCNT_RT)
            (PLA)
@@ -865,35 +895,47 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT+1)                        ;; 
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
-           )))
+           ))))
 
-(define POP_TO_L0 #x90)
-(define POP_TO_L1 #x92)
-(define POP_TO_L2 #x94)
-(define POP_TO_L3 #x96)
 
-(define WRITE_TO_L0 #x91)
-(define WRITE_TO_L1 #x93)
-(define WRITE_TO_L2 #x95)
-(define WRITE_TO_L3 #x97)
+;;                         @DC-B: POP_TO_L0, group: stack
+(define POP_TO_L0 #x90) ;; *POP* *TO* *L*​ocal *0* from evlstk
+;;                         @DC-B: POP_TO_L1, group: stack
+(define POP_TO_L1 #x92) ;; *POP* *TO* *L*​ocal *1* from evlstk
+;;                         @DC-B: POP_TO_L2, group: stack
+(define POP_TO_L2 #x94) ;; *POP* *TO* *L*​ocal *2* from evlstk
+;;                         @DC-B: POP_TO_L3, group: stack
+(define POP_TO_L3 #x96) ;; *POP* *TO* *L*​ocal *3* from evlstk
+
+;;                         @DC-B: WRITE_TO_L0, group: stack
+(define WRITE_TO_L0 #x91) ;; *WRITE* *TO* *L*​ocal *0* from evlstk
+;;                         @DC-B: WRITE_TO_L1, group: stack
+(define WRITE_TO_L1 #x93) ;; *WRITE* *TO* *L*​ocal *1* from evlstk
+;;                         @DC-B: WRITE_TO_L2, group: stack
+(define WRITE_TO_L2 #x95) ;; *WRITE* *TO* *L*​ocal *2* from evlstk
+;;                         @DC-B: WRITE_TO_L3, group: stack
+(define WRITE_TO_L3 #x97) ;; *WRITE* *TO* *L*​ocal *3* from evlstk
 
 (define BC_POP_TO_LOCAL_SHORT
+  (add-label-suffix
+   "__" "__BC_POP_TO_LOCAL_SHORT"
   (flatten
    (list
     (label BC_POP_TO_LOCAL_SHORT)
            (LSR)                                ;; encoding is ---- xxxp (p=1 parameter, p=0 local)
-           (BCS WRITE__POP_TO_LOCAL_SHORT)
+           (BCS WRITE__)
        
-           ;; pop to local           
+    ;; pop to local
            (PHA)
            (TAY)                                ;; index -> Y
            ;; decrement old local
            (LDA (ZP_LOCALS_LB_PTR),y)
+           (BEQ POP_NO_GC__)
            (STA ZP_RZ)
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RZ+1)
            (JSR DEC_REFCNT_RZ)
-
+    (label POP_NO_GC__)
            (PLA)
            (TAY)                                ;; index -> Y
            (LDA ZP_RT)
@@ -906,17 +948,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 
     ;; write to local
-   (label  WRITE__POP_TO_LOCAL_SHORT)
+   (label  WRITE__)
            (PHA)
            (TAY)                                ;; index -> Y
 
            ;; decrement old local
            (LDA (ZP_LOCALS_LB_PTR),y)
+           (BEQ WRITE_NO_GC__)
            (STA ZP_RZ)
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RZ+1)
            (JSR DEC_REFCNT_RZ)
-
+    (label WRITE_NO_GC__)
            (PLA)
            (TAY)                                ;; index -> Y
            (LDA ZP_RT)
@@ -926,7 +969,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            ;; increment, since it is now in locals and on stack
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
-)))
+))))
 
 (module+ test #| BC_PUSH_LOCAL_SHORT |#
   (define test-bc-pop-to-l-state
@@ -1109,27 +1152,33 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
-(define PUSH_I  #x06) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
-(define PUSH_I0 #xb8)
-(define PUSH_I1 #xb9)
-(define PUSH_I2 #xba)
-(define PUSH_IM1 #xbb)
+
+;;                        @DC-B: PUSH_I0, group: stack
+(define PUSH_I0 #xb8)  ;; *PUSH* *I*​nt *0* onto evlstk
+;;                        @DC-B: PUSH_I1, group: stack
+(define PUSH_I1 #xb9)  ;; *PUSH* *I*​nt *1* onto evlstk
+;;                        @DC-B: PUSH_I2, group: stack
+(define PUSH_I2 #xba)  ;; *PUSH* *I*​nt *2* onto evlstk
+;;                        @DC-B: PUSH_IM1, group: stack
+(define PUSH_IM1 #xbb) ;; *PUSH* *I*​nt *-1* onto evlstk
 
 (define BC_PUSH_CONST_NUM_SHORT
+  (add-label-suffix
+   "__" "__BC_PUSH_CONST_NUM_SHORT"
   (flatten
    (list
     (label BC_PUSH_CONST_NUM_SHORT)
-           (ASL A)                                        ;; * 2 (for 2 byte index into jump_refs)!
-           (TAY)                                          ;; -> Y
-           (LDA VM_PUSH_CONST_NUM_SHORT__JUMP_REFS,y)     ;; get lowbyte of jumpref
-           (STA VM_PUSH_CONST_NUM_SHORT__JSR_TARGET+1)    ;; store into lowbyte of jsr command
-           (LDA VM_PUSH_CONST_NUM_SHORT__JUMP_REFS+1,y)   ;; load highbyte of jumpref
-           (STA VM_PUSH_CONST_NUM_SHORT__JSR_TARGET+2)    ;; store into highbyte of jsr command
-    (label VM_PUSH_CONST_NUM_SHORT__JSR_TARGET)
-           (JSR PUSH_INT_0_TO_EVLSTK)               ;; execute (modified) jsr 
-           (JMP VM_INTERPRETER_INC_PC)                    ;; interpreter loop
+           (ASL A)                     ;; * 2 (for 2 byte index into jump_refs)!
+           (TAY)                       ;; -> Y
+           (LDA REFS__,y)              ;; get lowbyte of jumpref
+           (STA JSR_TARGET__+1)        ;; store into lowbyte of jsr command
+           (LDA REFS__+1,y)            ;; load highbyte of jumpref
+           (STA JSR_TARGET__+2)        ;; store into highbyte of jsr command
+    (label JSR_TARGET__)
+           (JSR PUSH_INT_0_TO_EVLSTK)  ;; execute (modified) jsr
+           (JMP VM_INTERPRETER_INC_PC) ;; interpreter loop
 
-    (label VM_PUSH_CONST_NUM_SHORT__JUMP_REFS)
+    (label REFS__)
            (word-ref PUSH_INT_0_TO_EVLSTK)
            (word-ref PUSH_INT_1_TO_EVLSTK)
            (word-ref PUSH_INT_2_TO_EVLSTK)
@@ -1138,7 +1187,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            ;; (word-ref PUSH_B1)
            ;; (word-ref PUSH_B2)
            ;; (word-ref PUSH_Bm1)
-           )))
+           ))))
 
 (module+ test #| push const num |#
   (define use-case-push-num-s-state-after
@@ -1157,6 +1206,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0001"
                       "int $0000")))
 
+;; @DC-B: PUSH_I, group: stack
+(define PUSH_I  #x06) ;; *PUSH* *I*​nt onto evlstk, op1=low byte op2=high byte, stack [] -> [cell-int]
+;; len: 3
 (define BC_PUSH_I
   (list
    (label BC_PUSH_I)
@@ -2706,8 +2758,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; @DC-B: ALLOC_A, group: cell_array
+;; allocate a cell-array of A size into RA
+;; len: 1
 ;; stack: size (byte)
-;; ->      cell-ptr -> cell-array
+;; ->     cell-ptr -> cell-array
 (define ALLOC_A #x14)
 (define BC_ALLOC_A
   (list
@@ -2719,6 +2774,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JMP VM_INTERPRETER_INC_PC)))
 
 
+;; @DC-B: NATIVE, group: misc
+;; following bytes are native 6510 commands, JSR RETURN_TO_BC ends this sequence
+;; len: 1
 (define NATIVE #x4a)
 (define BC_NATIVE
   (list
@@ -2755,6 +2813,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "byte $16  (rt)"
                       "byte $15")))
 
+;; @DC-B: BDEC, group: byte
+;; *B*​yte *DEC*​rement, increment byte RT (no checks)
+;; len: 1
 (define BDEC #x1a)
 (define BC_BDEC
   (list
@@ -2796,8 +2857,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "byte $15  (rt)")))
 
-
-                            ;; @DC-B: Z_P_RET_POP_0, group: return
+;; @DC-B: Z_P_RET_POP_0, group: return
 (define Z_P_RET_POP_0 #xc1) ;; *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return without popping anything
                             ;; len: 1
                             ;; @DC-B: Z_P_RET_POP_1, group: return
@@ -2945,7 +3005,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_AF)                  ;; 2a  <-  15
            (word-ref BC_POP_TO_AF)                ;; 2c  <-  16
            (word-ref BC_PUSH_B)                   ;; 2e  <-  17
-           (word-ref BC_NIL_P_RET_LN_POP)         ;; 30  <-  98..9f
+           (word-ref BC_NIL_P_RET_L0_POP_N)       ;; 30  <-  98..9f
            (word-ref VM_INTERPRETER_INC_PC)       ;; 32  <-  19 reserved
            (word-ref BC_BDEC)                     ;; 34  <-  1a
            (word-ref BC_Z_P_BRA)                  ;; 36  <-  1b
@@ -3106,7 +3166,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_NIL
           BC_NIL_P
           BC_I0_P
-          BC_NIL_P_RET_LN_POP
+          BC_NIL_P_RET_L0_POP_N
           BC_CONS
           BC_CAR
           BC_CDR
@@ -3166,4 +3226,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       948))
+                       1001))
