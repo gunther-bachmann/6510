@@ -58,7 +58,7 @@ primes (ignore 0,1) up to 30
                   CALL
                   PUSH_I
                   PUSH_B
-                  CELL_EQ
+                  CELL_EQ_P
                   EXT
                   CAAR
                   CADR
@@ -68,9 +68,9 @@ primes (ignore 0,1) up to 30
                   POP
                   DUP
                   BNOP
-                  I0_P
-                  INC_INT
-                  MAX_INT
+                  I_Z_P
+                  IINC
+                  IMAX
                   F_P_BRA
                   T_P_BRA
                   I_GT_P

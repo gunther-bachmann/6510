@@ -46,7 +46,7 @@
                   SET_ARRAY_FIELD_1
                   SET_ARRAY_FIELD_2
                   SET_ARRAY_FIELD_3
-                  CELL_EQ
+                  CELL_EQ_P
                   EXT
                   CAAR
                   CADR
@@ -56,9 +56,9 @@
                   POP
                   DUP
                   BNOP
-                  I0_P
-                  INC_INT
-                  MAX_INT
+                  I_Z_P
+                  IINC
+                  IMAX
                   F_P_BRA
                   T_P_BRA
                   I_GT_P

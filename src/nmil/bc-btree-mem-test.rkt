@@ -32,7 +32,7 @@
                     PUSH_I
                     PUSH_B
                     GC_FL
-                    CELL_EQ
+                    CELL_EQ_P
                     EXT
                     CAAR
                     CADR
@@ -42,9 +42,9 @@
                     POP
                     DUP
                     BNOP
-                    I0_P
-                    INC_INT
-                    MAX_INT
+                    I_Z_P
+                    IINC
+                    IMAX
                     F_P_BRA
                     T_P_BRA
                     I_GT_P

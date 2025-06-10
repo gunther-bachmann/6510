@@ -171,7 +171,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          SET_ARRAY_FIELD_2
          SET_ARRAY_FIELD_3
          GC_FL
-         CELL_EQ
+         CELL_EQ_P
          CAAR
          CADR
          CDAR
@@ -180,10 +180,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          DUP
          POP
          BNOP
-         I0_P
+         I_Z_P
          EXT
-         MAX_INT
-         INC_INT
+         IMAX
+         IINC
          T_P_BRA
          F_P_BRA
          I_GT_P
@@ -1232,8 +1232,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $04f0  (rt)")))
 
-(define IADD                #x62) ;; stack [cell-int a, cell-int b] -> [sum]
+;; @DC-B: IADD, group: int
+;; len: 1
+;; stack [cell-int a, cell-int b] -> [sum]
+(define IADD #x62)
 (define BC_IADD
+  (add-label-suffix
+   "__" "__IADD"
   (list
    (label BC_IADD)
           (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte          
@@ -1244,17 +1249,17 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           
           (LDA (ZP_CELL_STACK_LB_PTR),y)       ;; A = tagged high byte of int (stored in low byte)
           (AND !$7c)                            ;; mask out lower two and highest bit
-          (BCC VM_INT_PLUS__NO_INC_HIGH)        ;; if previous addition had no overflow, skip inc
+          (BCC NO_INC_HIGH__)        ;; if previous addition had no overflow, skip inc
           (CLC)                                 ;; clear for addition
           (ADC !$04)                            ;; increment int (adding 4 into the enoded int starting at bit 2)
 
-    (label VM_INT_PLUS__NO_INC_HIGH)
+    (label NO_INC_HIGH__)
           (ADC ZP_RT)                           ;; A = A + stack value (int high byte)
           (AND !$7f)                            ;; since ZP_RT has the lower two bits set, just mask out the highest bit
           (STA ZP_RT)                           ;; RT tagged high byte = result
 
           (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in RT as tos)
-          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
+          (JMP VM_INTERPRETER_INC_PC))))         ;; interpreter loop
 
 (module+ test #| vm_interpreter |#
   (define (bc-int-plus-state a b)
@@ -1302,8 +1307,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "int $0003"
                          )))
 
-(define ISUB                #x61) ;; stack [cell-int a, cell-int b] -> [difference]
+;; @DC-B: ISUB, group: int
+(define ISUB #x61) ;; stack [cell-int a, cell-int b] -> [difference]
 (define BC_ISUB
+  (add-label-suffix
+   "__" "__ISUB"
   (list
    (label BC_ISUB)
           (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte          
@@ -1313,19 +1321,19 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_RT+1)                         ;; RT untagged lowbyte = result
 
           (LDA ZP_RT)                           ;; A = tagged highbyte of int (stored in low byte)
-          (BCS VM_INT_MINUS__NO_DEC_HIGH)       ;; if carry is set from subtraction of lower bits, no subtraction carry over necessary
+          (BCS NO_DEC_HIGH__)       ;; if carry is set from subtraction of lower bits, no subtraction carry over necessary
           (SEC)                                 ;; for subtraction carry needs to be set
           (SBC !$04)                            ;; subtract 1 in the masked int highbyte (starting at bit2) => 4
 
-   (label VM_INT_MINUS__NO_DEC_HIGH)
+   (label NO_DEC_HIGH__)
           (SBC (ZP_CELL_STACK_LB_PTR),y)      ;; A = A - stack value (int high byte)
           (AND !$7c)                            ;; mask out under/overflow (lower two bits and high bit)
           (ORA !$03)                            ;; set lower two bits to tag it as integer value
           (STA ZP_RT)                           ;; RT tagged high byte = result
           
-   (label VM_INT_MINUS__DONE)
+   (label DONE__)
           (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in rt untouched)
-          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
+          (JMP VM_INTERPRETER_INC_PC))))         ;; interpreter loop
 
 (module+ test #| vm_interpreter |#
   (define (bc-int-minus-state a b)
@@ -1374,7 +1382,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                           "int $1c2f"
                           "int $0001")))
 
-(define NIL_P                #x21) ;; stack [cell-list-ptr] -> [cell-boolean]
+;; @DC-B: NIL_P, group: predicates
+(define NIL_P #x21) ;; stack [cell-list-ptr] -> [cell-boolean]
 (define BC_NIL_P
   (list
    (label BC_NIL_P)
@@ -1410,6 +1419,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0000  (rt)")))
 
+;; @DC-B: COONS, group: cell_pair
 (define COONS #x44)
 (define BC_COONS
   (list
@@ -1418,7 +1428,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_CONS__REFCNTD)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define CONS                #x42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+;; @DC-B: CONS, group: cell_pair
+(define CONS #x42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
 (define BC_CONS
   (list
    (label BC_CONS)          
@@ -1440,7 +1451,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x05))
                     "(int $0000 . pair-ptr NIL)"))
 
-(define CAR                 #x43) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
+;; @DC-B: CAR, group: cell_pair
+(define CAR #x43) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
 (define BC_CAR
   (list
    (label BC_CAR)
@@ -1464,7 +1476,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                  (list "stack holds 1 item"
                        "int $0002  (rt)")))
 
-(define CDR                 #x41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
+;; @DC-B: CDR, group: cell_pair
+(define CDR #x41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
 (define BC_CDR
   (list
    (label BC_CDR)
@@ -1487,6 +1500,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (check-equal? (vm-stack->strings bc-cdr-state)
                  (list "stack holds 1 item"
                        "pair-ptr NIL  (rt)")))
+
+;; @DC-B: SWAP, group: stack
 (define SWAP #x03)
 (define BC_SWAP
   (list
@@ -1507,28 +1522,31 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| swap |#
   (skip (check-equal? #t #f "implement")))
 
-(define I_GT_P #x63)
+;; @DC-B: I_GT_P, group: predicates
+(define I_GT_P #x63) ;; *I*​nt *G*​reater *T*​han *P*​redicates
 (define BC_I_GT_P
+  (add-label-suffix
+   "__" "__I_GT_P"
   (list
    (label BC_I_GT_P)
           (LDA ZP_RT)
-          (STA ZP_TEMP)
+          (STA ZP_RP)
           (LDA ZP_RT+1)
-          (STA ZP_TEMP2)
+          (STA ZP_RP+1)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (LDA ZP_RT)
-          (CMP ZP_TEMP)
-          (BMI GREATER__BC_I_GT_P)
-          (BNE LESS_OR_EQUAL__BC_I_GT_P)
+          (CMP ZP_RP)
+          (BMI GREATER__)
+          (BNE LESS_OR_EQUAL__)
           (LDA ZP_RT+1)
-          (CMP ZP_TEMP+1)
-          (BMI GREATER__BC_I_GT_P)
-   (label LESS_OR_EQUAL__BC_I_GT_P)
+          (CMP ZP_RP+1)
+          (BMI GREATER__)
+   (label LESS_OR_EQUAL__)
           (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER__BC_I_GT_P)
+    (label GREATER__)
           (JSR WRITE_INT1_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_INTERPRETER_INC_PC))))
 
 (module+ test #| INT GREATER? |#
   (define int-greater-0>-1-state
@@ -1605,85 +1623,103 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (define INT_P #x07)
 (define BC_INT_P
+  (add-label-suffix
+   "__" "__INT_P"
   (list
    (label BC_INT_P)
           (LDA ZP_RT)
           (LDX !$01)
           (AND !$83)
           (CMP !$03)
-          (BEQ IS_INT__BC_INT_P)
+          (BEQ IS_INT__)
           (JSR DEC_REFCNT_RT)
           (LDA !$03)
           (LDX !$00)
-   (label IS_INT__BC_INT_P)
+   (label IS_INT__)
           (STA ZP_RT)
           (STX ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_INTERPRETER_INC_PC))))
 
 (module+ test #| int? |#
   (skip (check-equal? #t #f "implement")))
 
-(define F_P_RET_F #x13)
+;; @DC-B: F_P_RET_F, group: return
+(define F_P_RET_F #x13) ;; *F*​alse *P*​redicate *RET*​urn *F*​alse
 (define BC_F_P_RET_F
+  (add-label-suffix
+   "__" "__F_P_RET_F"
   (list
    (label BC_F_P_RET_F)
           (LDA ZP_RT+1)
-          (BNE IS_TRUE__BC_F_P_RET_F)
+          (BNE IS_TRUE__)
           ;; don't pop false value, return it!
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
-   (label IS_TRUE__BC_F_P_RET_F)
+   (label IS_TRUE__)
           (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_INTERPRETER_INC_PC))))
 
-(define F_P_RET #x0e)
+;; @DC-B: F_P_RET, group: return
+(define F_P_RET #x0e) ;; *F*​alse *P*​redicate *RET*​urn
 (define BC_F_P_RET
+  (add-label-suffix
+   "__" "__F_P_RET"
   (list
    (label BC_F_P_RET)
           (LDA ZP_RT+1)
-          (BNE IS_TRUE__BC_F_P_RET)
+          (BNE IS_TRUE__)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
-   (label IS_TRUE__BC_F_P_RET)
+   (label IS_TRUE__)
           (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_INTERPRETER_INC_PC))))
 
+;; @DC-B: T_P_RET, group: return
+;; *T*​rue *P*​redicate *RET*​urn
+;; len: 1
 (define T_P_RET #x0b)
 (define BC_T_P_RET
+  (add-label-suffix
+   "__" "__BC_T_P_RET"
   (list
    (label BC_T_P_RET)
           (LDA ZP_RT+1)
-          (BEQ IS_FALSE__BC_T_P_RET)
+          (BEQ IS_FALSE__)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
-   (label IS_FALSE__BC_T_P_RET)
+   (label IS_FALSE__)
           (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_INTERPRETER_INC_PC))))
 
-(define GOTO                #x32) ;; op = relative offset
+;; @DC-B: GOTO, group: flow
+;; goto relative by byte following in code
+;; len: 2
+(define GOTO #x32) ;; op = relative offset
 (define BC_GOTO
+  (add-label-suffix
+   "__" "__GOTO"
   (list
    (label BC_GOTO)
           (CLC)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
-          (BMI JUMP_BACK__BC_GOTO)
+          (BMI JUMP_BACK__)
 
           (ADC !$02)
           (JMP VM_INTERPRETER_INC_PC_A_TIMES)
 
-   (label JUMP_BACK__BC_GOTO)
+   (label JUMP_BACK__)
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)
-          (BCS NO_PAGE_CHANGE_ON_BACK__BC_GOTO)
+          (BCS NO_PAGE_CHANGE_ON_BACK__)
           (DEC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE_ON_BACK__BC_GOTO)
-          (JMP VM_INTERPRETER)))
+   (label NO_PAGE_CHANGE_ON_BACK__)
+          (JMP VM_INTERPRETER))))
 
 (module+ test #| goto |#
   (define goto-0-state
@@ -1817,15 +1853,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0001"
                       "int $0000")))
 
+;; @DC-B: F_P_BRA, group: flow
+;; *F*​alse *P*​redicate *BRA*​nch
+;; len: 1
 (define F_P_BRA #x0d)
 (define BC_F_P_BRA
   (list
    (label BC_F_P_BRA)
           (CLC)
           (LDA ZP_RT+1)
-          (BEQ BRANCH__BC_T_P_BRA)
+          (BEQ BRANCH_BY_NEXT_BYTE)
           (LDA !$00)
-          (BEQ POP_AND_CONTINUE__BC_T_P_BRA)))
+          (BEQ POP_AND_CONTINUE_AFTER_BRA)))
 
 (module+ test #| branch true |#
   (define branch-false-0-state
@@ -1946,38 +1985,43 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
+;; @DC-B: T_P_BRA, group: flow
+;; *T*​rue *P*​redicate *BRA*​nch
+;; len: 2
 (define T_P_BRA #x0c)
 (define BC_T_P_BRA
+  (add-label-suffix
+   "__" "__T_P_BRA"
   (list
    (label BC_T_P_BRA)
           (CLC)
           (LDA ZP_RT+1)
-          (BEQ POP_AND_CONTINUE__BC_T_P_BRA) ;; when false (A = 0), just continue, no branch
+          (BEQ POP_AND_CONTINUE_AFTER_BRA) ;; when false (A = 0), just continue, no branch
 
-   (label BRANCH__BC_T_P_BRA)
+   (label BRANCH_BY_NEXT_BYTE)
    ;; branch by adding second byte code
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
-          (BMI NEGATIVE_BRANCH__BC_T_P_BRA)
+          (BMI NEGATIVE_BRANCH__)
 
-   (label POP_AND_CONTINUE__BC_T_P_BRA)
+   (label POP_AND_CONTINUE_AFTER_BRA)
           (ADC !$02)
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)
-          (BCC NO_PAGE_CHANGE__BC_T_P_BRA)
+          (BCC NO_PAGE_CHANGE__)
           (INC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE__BC_T_P_BRA)
+   (label NO_PAGE_CHANGE__)
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER)
 
-   (label NEGATIVE_BRANCH__BC_T_P_BRA)
+   (label NEGATIVE_BRANCH__)
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)
-          (BCS NO_PAGE_CHANGE_ON_BACK__BC_T_P_BRA)
+          (BCS NO_PAGE_CHANGE_ON_BACK__)
           (DEC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE_ON_BACK__BC_T_P_BRA)
+   (label NO_PAGE_CHANGE_ON_BACK__)
           (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER)))
+          (JMP VM_INTERPRETER))))
 
 (module+ test #| branch true |#
   (define branch-true-0-state
@@ -2098,6 +2142,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
+;; @DC-B: CONS_PAIR_P, group: predicates
+;; *CONS* *PAIR* *P*​redicate
+;; len: 1
 (define CONS_PAIR_P #x0a)
 (define BC_CONS_PAIR_P
   (list
@@ -2118,6 +2165,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR DEC_REFCNT_RZ)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; @DC-B: PUSH_NIL, group: stack
+;; *PUSH* *NIL* to evlstk
+;; len: 1
 (define PUSH_NIL            #x09) ;; stack: [] -> [NIL]
 (define BC_PUSH_NIL
   (list
@@ -2136,19 +2186,24 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "pair-ptr NIL  (rt)")))
 
-(define INC_INT #x02) ;; extended (could be mapped to regular byte code, if needed very often!)
-(define BC_INC_INT
+;; @DC-B: IINC, group: int
+;; *I*​nt *INC*​rement
+;; len: 2 (extended)
+(define IINC #x02) ;; extended (could be mapped to regular byte code, if needed very often!)
+(define BC_IINC
+  (add-label-suffix
+   "__" "__IINC"
   (list
-   (label BC_INC_INT)
+   (label BC_IINC)
           (INC ZP_RT+1)
-          (BNE DONE__BC_INC_INT)
+          (BNE DONE__)
           (INC ZP_RT)
           (LDA ZP_RT)
           (ORA !$03)
           (AND !$7f)
           (STA ZP_RT)
-   (label DONE__BC_INC_INT)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
+   (label DONE__)
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
 
 (module+ test #| inc int |#
   (define inc-int-0-state
@@ -2156,7 +2211,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I0)
       (bc EXT)
-      (bc INC_INT))))
+      (bc IINC))))
 
   (check-equal? (vm-stack->strings inc-int-0-state)
                 (list "stack holds 1 item"
@@ -2167,7 +2222,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I) (byte 255) (byte 0)
       (bc EXT)
-      (bc INC_INT))
+      (bc IINC))
      ))
 
   (check-equal? (vm-stack->strings inc-int-1-state)
@@ -2179,7 +2234,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_IM1)
       (bc EXT)
-      (bc INC_INT))
+      (bc IINC))
      ))
 
   (check-equal? (vm-stack->strings inc-int-2-state)
@@ -2191,40 +2246,46 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I) (byte 255) (byte 05)
       (bc EXT)
-      (bc INC_INT))
+      (bc IINC))
      ))
 
   (check-equal? (vm-stack->strings inc-int-3-state)
                 (list "stack holds 1 item"
                       "int $0600  (rt)")))
 
-(define MAX_INT #x01) ;; extended
-(define BC_MAX_INT
+;; @DC-B: IMAX, group: int
+;; *I*​nt *MAX*​imum, return the maximum of two ints
+;; len: 2 (extended)
+(define IMAX #x01) ;; extended
+(define BC_IMAX
+  (add-label-suffix
+   "__" "__IMAX"
   (list
-   (label BC_MAX_INT)
+   (label BC_IMAX)
           (LDY ZP_CELL_STACK_TOS)
 
           ;; compare high byte of int (which is lb)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (CMP ZP_RT)
-          (BNE NO_OTHER_COMPARE__BC_MAX_INT) ;; already different => no need to compare low byte
+          (BNE NO_OTHER_COMPARE__) ;; already different => no need to compare low byte
 
           ;; compare low byte of int (which is hb)
           (LDA (ZP_CELL_STACK_HB_PTR),y)
           (CMP ZP_RT+1)
 
-   (label NO_OTHER_COMPARE__BC_MAX_INT)
-          (BMI KEEP_RT__BC_MAX_INT)
+   (label NO_OTHER_COMPARE__)
+          (BMI KEEP_RT__)
 
           (JSR POP_CELL_EVLSTK_TO_RT)     ;; pop RT and move TOS into RT
-          (CLC)
-          (BCC AND_RETURN__BC_MAX_INT)
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES)
 
-    (label KEEP_RT__BC_MAX_INT)
-          (DEC ZP_CELL_STACK_TOS) ;; just pop but keep RT
-    (label AND_RETURN__BC_MAX_INT)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
+    (label KEEP_RT__)
+          (DEC ZP_CELL_STACK_TOS) ;; just pop but keep RT, since INT no GC necessary
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
 
+;; @DC-B: DUP, group: stack
+;; *DUP*​licate top of stack
+;; len: 1
 (define DUP #x0f)
 (define BC_DUP
   (list
@@ -2233,19 +2294,24 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define CELL_EQ #x12)
-(define BC_CELL_EQ
+;; @DC-B: CELL_EQ_P, group: stack
+;; *CELL* *EQ*​ual *P*​redicate
+;; len: 1
+(define CELL_EQ_P #x12)
+(define BC_CELL_EQ_P
+  (add-label-suffix
+   "__" "__CELL_EQ_P"
   (list
-   (label BC_CELL_EQ)
+   (label BC_CELL_EQ_P)
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_HB_PTR),y)
           (STA ZP_RZ+1)
           (CMP ZP_RT+1)
-          (BNE NE_LB__BC_CELL_EQ)
+          (BNE NE_LB__)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (STA ZP_RZ)
           (CMP ZP_RT)
-          (BNE NE__BC_CELL_EQ)
+          (BNE NE__)
 
           (JSR DEC_REFCNT_RT)
           (JSR DEC_REFCNT_RZ)
@@ -2253,39 +2319,46 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
 
-   (label NE_LB__BC_CELL_EQ)
+   (label NE_LB__)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (STA ZP_RZ)
-   (label NE__BC_CELL_EQ)
+   (label NE__)
           (JSR DEC_REFCNT_RT)
           (JSR DEC_REFCNT_RZ)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT0_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_INTERPRETER_INC_PC))))
 
-(define I0_P #x22)
-(define BC_I0_P
+;; @DC-B: I_Z_P, group: predicates
+;; *I*​nt *Z*​ero *P*​redicate
+;; len: 1
+(define I_Z_P #x22)
+(define BC_I_Z_P
+  (add-label-suffix
+   "__" "__I_Z_P"
   (list
-   (label BC_I0_P)
+   (label BC_I_Z_P)
           (LDA ZP_RT+1)
-          (BNE IS_NOT_ZERO__BC_I0_P)
+          (BNE IS_NOT_ZERO__)
           (LDA ZP_RT)
           (CMP !$03)
-          (BEQ IS_ZERO__BC_I0_P)
+          (BEQ IS_ZERO__)
 
-   (label IS_NOT_ZERO__BC_I0_P)
+   (label IS_NOT_ZERO__)
           (LDA !$00)
           (STA ZP_RT+1)
           (LDA !$03)
           (STA ZP_RT)
           (JMP VM_INTERPRETER_INC_PC)
 
-   (label IS_ZERO__BC_I0_P)
+   (label IS_ZERO__)
           (LDA !$01)    
           (STA ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_INTERPRETER_INC_PC))))
 
+;; @DC-B: GC_FL, group: gc
 ;; garbage collect the freelist
+;; len: 2 (extended)
 (define GC_FL #x03)  ;; extended
 (define BC_GC_FL
   (list
@@ -2298,8 +2371,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (list
     (label VM_INTERPRETER_OPTABLE_EXT1_LB)
            (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
-           (byte-ref <BC_MAX_INT)                ;; 01
-           (byte-ref <BC_INC_INT)                ;; 02
+           (byte-ref <BC_IMAX)                ;; 01
+           (byte-ref <BC_IINC)                ;; 02
            (byte-ref <BC_GC_FL)                  ;; 03
            )))
 
@@ -2308,8 +2381,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (list
     (label VM_INTERPRETER_OPTABLE_EXT1_HB)
            (byte-ref >VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
-           (byte-ref >BC_MAX_INT)                ;; 01
-           (byte-ref >BC_INC_INT)                ;; 02
+           (byte-ref >BC_IMAX)                ;; 01
+           (byte-ref >BC_IINC)                ;; 02
            (byte-ref >BC_GC_FL)                  ;; 03
            )))
 
@@ -2335,7 +2408,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_I2)
       (bc PUSH_I1)
       (bc EXT)
-      (bc MAX_INT))))
+      (bc IMAX))))
 
   (check-equal? (vm-stack->strings max-int-state)
                 (list "stack holds 1 item"
@@ -2347,12 +2420,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc PUSH_I1)
       (bc PUSH_I2)
       (bc EXT)
-      (bc MAX_INT))))
+      (bc IMAX))))
 
   (check-equal? (vm-stack->strings max-int-2-state)
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
+;; @DC-B: BNOP, misc
+;; *N*​o *OP*​eration
+;; len: 1
 (define BNOP #x01)
 (define BC_BNOP
   (list
@@ -2369,8 +2445,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 31))
 
 
+;; @DC-B: POP_TO_RA, group: stack
+;; *POP* top of evlstk *TO* *RA*, setting RAI=0
+;; len: 1
 (define POP_TO_RA #x4b)
-
+;; @DC-B: POP, group: stack
+;; len: 1
 (define POP #x11)
 (define BC_POP
   (list
@@ -2417,11 +2497,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0001  (rt)"
                       "int $0000")))
 
-(define CAAR #xa8)
-(define CADR #xaa)
-(define CDAR #xac)
-(define CDDR #xae)
-;; (define ? #xaf)
+;;                    @DC-B: CAAR, group: cell-pair
+(define CAAR #xa8) ;; len: 1
+;;                    @DC-B: CADR, group: cell-pair
+(define CADR #xaa) ;; len: 1
+;;                    @DC-B: CDAR, group: cell-pair
+(define CDAR #xac) ;; len: 1
+;;                    @DC-B: CDDR, group: cell-pair
+(define CDDR #xae) ;; len: 1
 (define BC_CxxR
   (list
    (label BC_CxxR)
@@ -2491,19 +2574,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
+;; @DC-B: PUSH_B
+;; *PUSH* *B*​yte, following the instruction
+;; len: 2
 (define PUSH_B #x17)
-;; (define BC_PUSH_B
-
-;;   (flatten
-;;    (list
-;;     (label BC_PUSH_B)
-;;            (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-;;            (LDY !$01)
-;;            (LDA (ZP_VM_PC),y)
-;;            (STA ZP_RT+1)
-;;            (LDA !TAG_BYTE_BYTE_CELL)
-;;            (STA ZP_RT)
-;;            (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
 (define BC_PUSH_B
   (list
    (label BC_PUSH_B)
@@ -2528,6 +2602,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "byte $01"
                       "byte $00")))
 
+;; @DC-B: POP_TO_RA_AF, group: cell-array
+;; *POP* top of evlstk *TO* *RA* *A*​rray *F*​ield
+;; len: 1
 (define POP_TO_RA_AF #x4e)
 (define BC_POP_TO_RA_AF
   (list
@@ -2537,6 +2614,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (INC ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; @DC-B: POP_TO_AF, group: cell-array
+;; *POP* *TO* *A*​rray *F*​ield using the stack
+;; len: 1
 ;; stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
 ;; ->     []
 ;;        cell-array @ index = value
@@ -2972,7 +3052,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (BNE NO_BRA__BC_Z_P_BRA)
     (label BRA__BC_Z_P_BRA)
            (JSR POP_CELL_EVLSTK_TO_RT)
-           (JMP BRANCH__BC_T_P_BRA)
+           (JMP BRANCH_BY_NEXT_BYTE)
     (label NO_BRA__BC_Z_P_BRA)
            (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
 
@@ -2999,7 +3079,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_DUP)                      ;; 1e  <-  0f 
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref BC_POP)                      ;; 22  <-  11
-           (word-ref BC_CELL_EQ)                  ;; 24  <-  12 
+           (word-ref BC_CELL_EQ_P)                  ;; 24  <-  12 
            (word-ref BC_F_P_RET_F)                ;; 26  <-  13
            (word-ref BC_ALLOC_A)                  ;; 28  <-  14
            (word-ref BC_PUSH_AF)                  ;; 2a  <-  15
@@ -3015,7 +3095,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
            (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 
            (word-ref BC_NIL_P)                    ;; 42  <-  21 (RZ)
-           (word-ref BC_I0_P)                     ;; 44  <-  22
+           (word-ref BC_I_Z_P)                     ;; 44  <-  22
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 48  <-  24 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
@@ -3165,7 +3245,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_I
           BC_PUSH_NIL
           BC_NIL_P
-          BC_I0_P
+          BC_I_Z_P
           BC_NIL_P_RET_L0_POP_N
           BC_CONS
           BC_CAR
@@ -3180,7 +3260,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_INT_P
           BC_I_GT_P
           BC_TAIL_CALL
-          BC_CELL_EQ
+          BC_CELL_EQ_P
           BC_SWAP
           BC_DUP
           BC_T_P_RET
@@ -3188,10 +3268,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_CONS_PAIR_P
           BC_T_P_BRA
           BC_F_P_BRA
-          BC_MAX_INT
+          BC_IMAX
           BC_GOTO
           BC_EXT1_CMD
-          BC_INC_INT
+          BC_IINC
           BC_BNOP
           BC_GC_FL
           BC_ALLOC_A

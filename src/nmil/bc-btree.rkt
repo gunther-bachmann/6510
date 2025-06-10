@@ -110,7 +110,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   RET
                   CALL
                   PUSH_I
-                  CELL_EQ
+                  CELL_EQ_P
                   EXT
                   CAAR
                   CADR
@@ -120,9 +120,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                   POP
                   DUP
                   BNOP
-                  I0_P
-                  INC_INT
-                  MAX_INT
+                  I_Z_P
+                  IINC
+                  IMAX
                   F_P_BRA
                   T_P_BRA
                   I_GT_P
@@ -539,14 +539,14 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       ;;             (empty? right-list))
       ;;          (max depth max-depth)]
             (bc EXT)
-            (bc MAX_INT)
+            (bc IMAX)
             (bc RET)
   
      (label NOT_PAIR_COND__BTREE_DEPTH)
      ;;     [(not (pair? node))  
      ;;      (btree-depth (caar right-list) (cdr right-list) (cdar right-list) (max depth max-depth))]
             (bc EXT)
-            (bc MAX_INT)
+            (bc IMAX)
   
             (bc PUSH_L1_CAR)        ;; car right-list
             (bc WRITE_TO_L2)        ;; remember car of right-list for later
@@ -565,7 +565,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      ;;                                 ;; stack currently: [right-list :: depth :: max-depth]
             (bc POP_TO_L1)         ;; local1 = right-list
             (bc EXT)
-            (bc INC_INT)
+            (bc IINC)
             (bc WRITE_TO_L2)       ;; local2 = depth +1
             (bc PUSH_L1)           ;; [right-list :: depth+1 :: max-depth]
             (bc PUSH_L2)           ;; [depth+1 :: right-list :: depth+1 :: max-depth]
@@ -714,7 +714,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                 (list "stack holds 1 item"
                       "3  (rt)"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 13220))
+                 13210))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -902,7 +902,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc PUSH_L0_CAR)
   
             (bc CAR)
-            (bc I0_P)
+            (bc I_Z_P)
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_NODE_FOR_PATH) 
   
             (bc PUSH_L0_CAR)
@@ -994,7 +994,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      (label LEFT_NODE_COND__BTREE_PREV) 
       ;; [(= 0 (caar path))
             (bc CAAR)
-            (bc I0_P)
+            (bc I_Z_P)
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_PREV) 
   
      (label LOOP_FN__BTREE_PREV)
@@ -1002,7 +1002,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc WRITE_TO_L0)         ;; top-most-relevant = local0 = (cdr path) <- looping cdr
             (bc NIL_P_RET_L0_POP_1)
             (bc CAAR)
-            (bc I0_P)
+            (bc I_Z_P)
             (bc T_P_BRA) (bc-rel-ref LOOP_FN__BTREE_PREV) 
   
      (label END_LOOP__BTREE_PREV)
@@ -1305,7 +1305,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
       (label COND__BTREE_NEXT)
              (bc CAAR)
-             (bc I0_P)
+             (bc I_Z_P)
              (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_NEXT)  ;; !=0 => goto to else branch
    
              (bc PUSH_L0_CAR)
@@ -1327,7 +1327,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (bc PUSH_L0_CDR)         ;; (cdr path) <-- loop entry
              (bc WRITE_TO_L0)         ;; local2= (list pe ...) 
              (bc CAAR)                      ;; (car pe)
-             (bc I0_P)
+             (bc I_Z_P)
              (bc F_P_BRA) (bc-rel-ref LOOP_FN__BTREE_NEXT) ;; next --> loop
              (bc PUSH_L0_CAR)         ;; pe
              (bc CDDR)                      ;; (cddr pe)
@@ -1541,7 +1541,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             ;; check cond
             (bc PUSH_L0_CAR)       
             (bc CAR)
-            (bc I0_P)                 ;; (== 0 (caar path)
+            (bc I_Z_P)                 ;; (== 0 (caar path)
             (bc F_P_BRA) (bc-rel-ref ELSE__BTREE_REC_REBUILD_PATH_WITH) ;; check next cond expression
   
             (bc PUSH_L0_CAR)        
@@ -1701,7 +1701,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   
             ;; cond (and (= -1 (caar path)) (empty? (cddar path)))
             (bc CAAR)
-            (bc I0_P)
+            (bc I_Z_P)
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_ADD_VALUE_AFTER) ;; -> else cond
             (bc PUSH_L0_CAR)
             (bc CDDR)
@@ -2003,7 +2003,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
             (bc NIL_P_RET_L0_POP_1)
   
             (bc CAAR)
-            (bc I0_P)
+            (bc I_Z_P)
             (bc F_P_BRA) (bc-rel-ref ELSE_COND__BTREE_ADD_VALUE_BEFORE) ;; -> else cond
 
             ;; cond (and (= -1 (caar path)) (empty? (cddar path)))
@@ -2695,7 +2695,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
              (bc WRITE_L0)                  ;; result
              (bc CALL) (word-ref BTREE_NODE_FOR_PATH)   ;; (btree-node-for-path result)
              (bc PUSH_L2)                          ;; old-prev
-             (bc CELL_EQ)                               
+             (bc CELL_EQ_P)                               
              (bc F_P_BRA) (bc-rel-ref NEXT_RESULT__BTREE_REMOVE_VALUE_AT)
              (bc PUSH_L0)
              (bc RET)
@@ -2710,7 +2710,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
              (bc PUSH_L1_CAR)
              (bc CAR)                           ;; (caar path)
-             (bc I0_P)
+             (bc I_Z_P)
              (bc F_P_BRA) (bc-rel-ref CAAR_PATH_1__BTREE_REMOVE_VALUE_AT)
 
              ;; from now on (caar path) = 0
