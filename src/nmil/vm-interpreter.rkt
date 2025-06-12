@@ -26,10 +26,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   Byte code command list and description
   opcode                 len       options                   description
   -----------------------------------------------------------------------------------
-  ALLOC_A              1  14                             allocate cell-ptr to cell-array onto stack
-  BRK                      1  01                             break (stop)
-  CALL                     3  34                             statically call function pointed to be following two bytes
-  CAR                      1  43                             replace tos with car
+  ALLOC_   A              1  14                             allocate cell-ptr to cell-array onto stack
+  BREAK                   1  01                             break (stop)
+  CALL                    3  34                             statically call function pointed to be following two bytes
+  CAR                     1  43                             replace tos with car
   CDR                      1  41                             replace tos with cdr
   CONS                     1  42                             pop car and cdr and push cons of car cdr
   INT_MINUS                1  61                             pop two integers and push the subtraction of them
@@ -224,10 +224,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          WRITE_L1
          WRITE_L2
          WRITE_L3
+         PUSH_RA_AF
          NATIVE)
 
 (define (bc code)
-    (ast-bytes-cmd '()  (list code)))
+  (ast-bytes-cmd '()  (flatten (list code))))
 
 (define VM_INTERPRETER_VARIABLES
   (list
@@ -238,6 +239,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    ;; $18..25   
    ))
 
+;; @DC-F: VM_INTERPRETER_INIT, group: misc
 ;; initialize PC to $8000
 (define VM_INTERPRETER_INIT
   (list
@@ -678,6 +680,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "int $0000")
                    "stack holds the pushed int, and all parameters"))
 
+;; @DC-F: VM_REFCOUNT_DECR_CURRENT_LOCALS, group: gc
+;; decrement the refcount to all locals that are not initial (e.g. upon leaving a function)
 (define VM_REFCOUNT_DECR_CURRENT_LOCALS
   (add-label-suffix
    "__" "__VM_REFCOUNT_DECR_CURRENT_LOCALS"
@@ -754,9 +758,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "int $0000")
                    "previous value on the stack is there + returned value (in rt)"))
 
-(define BC_BRK
+;; @DC-B: BREAK, group: misc
+(define BREAK #x02) ;; collision with 6510 BRK code
+(define BC_BREAK
   (list
-   (label BC_BRK)
+   (label BC_BREAK)
           (BRK)))
 
 (module+ test #| bc_brk |#
@@ -810,7 +816,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define PUSH_L2_CDR #xa5) ;; *PUSH* *L*​ocal *2* and *CDR*
 ;;                           @DC-B: PUSH_L3_CDR, group: stack
 (define PUSH_L3_CDR #xa7) ;; *PUSH* *L*​ocal *3* and *CDR*
-
 (define BC_PUSH_LOCAL_CXR
   (add-label-suffix
    "__" "__BC_PUSH_LOCAL_CXR"
@@ -1157,7 +1162,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define PUSH_I2 #xba)  ;; *PUSH* *I*​nt *2* onto evlstk
 ;;                        @DC-B: PUSH_IM1, group: stack
 (define PUSH_IM1 #xbb) ;; *PUSH* *I*​nt *-1* onto evlstk
-
 (define BC_PUSH_CONST_NUM_SHORT
   (add-label-suffix
    "__" "__BC_PUSH_CONST_NUM_SHORT"
@@ -1416,7 +1420,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0000  (rt)")))
 
 ;; @DC-B: COONS, group: cell_pair
-(define COONS #x44)
+(define COONS #x44) ;; execute two CONS in a row
 (define BC_COONS
   (list
    (label BC_COONS)
@@ -1498,7 +1502,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                        "pair-ptr NIL  (rt)")))
 
 ;; @DC-B: SWAP, group: stack
-(define SWAP #x03)
+(define SWAP #x03) ;; swap tos with tos-1
 (define BC_SWAP
   (list
    (label BC_SWAP)
@@ -1617,6 +1621,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (check-equal? (vm-regt->string int-greater-0>1-state)
                 "int $0000"))
 
+;; @DC-B: INT_P, group: predicates
+;; is top of evlstk an *INT*​eger (*P*​redicate)?
 (define INT_P #x07)
 (define BC_INT_P
   (add-label-suffix
@@ -2382,6 +2388,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (byte-ref >BC_GC_FL)                  ;; 03
            )))
 
+;; @DC-B: EXT, group: misc
+;; extension byte code, the next byte is the actual command (decoded from the extended byte code jump table)
 (define EXT #x04)
 (define BC_EXT1_CMD
   (list
@@ -2653,6 +2661,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       0 0    ;; element 0
                       3 1))) ;; element 1 = int 1
 
+;; @DC-B: PUSH_AF, group: cell_array
 ;; stack: index (byte) :: cell-ptr -> cell-array
 ;; ->     value (cell)
 (define PUSH_AF    #x15) ;; op = field-idx, stack [array-ref] -> [cell-]
@@ -2694,10 +2703,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
        (bc SWAP)
        (bc PUSH_B) (byte 10)
-       (bc PUSH_AF)))
-     ))
+       (bc PUSH_AF)))))
 
-(check-equal? (memory-list push-array-field-state (+ PAGE_AVAIL_0_W 05) (+ PAGE_AVAIL_0_W 29))
+  (check-equal? (memory-list push-array-field-state (+ PAGE_AVAIL_0_W 05) (+ PAGE_AVAIL_0_W 29))
                 (list 1      ;; refcnt = 1 (one reference on the stack)
                       #x83   ;; page type = m1p3 (slot size 49, used 20*2)
                       20     ;; number of elements
@@ -2720,47 +2728,50 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0001"
                       "ptr[1] $9706")))
 
-;; alternative coding
-;; [x] POP_TO_RA, writes tos into RA and initializes RAi to 0
+  ;; alternative coding
+  ;; [x] POP_TO_RA, writes tos into RA and initializes RAi to 0
 
-;; maybe extended commands
-;; POP_TO_RB
-;; POP_TO_RC
+  ;; maybe extended commands
+  ;; POP_TO_RB
+  ;; POP_TO_RC
 
-;; [x] ALLOC_ARA, allocate array of size (tos) into RA, (?and push it onto the stack?), and initilaize rai to 0
+  ;; [x] ALLOC_ARA, allocate array of size (tos) into RA, (?and push it onto the stack?), and initilaize rai to 0
 
-;; [x] PUSH_RA_AF         ;; push cell from array RA @ RAI onto stack
+  ;; [x] PUSH_RA_AF         ;; push cell from array RA @ RAI onto stack
 
-;; [x] POP_TO_RA_AF       ;; pop tos cell into array RA @ RAI
-;; WRITE_L0_TO_RA_AF  ;; no stack change
-;; WRITE_RA_AF_TO_L0
+  ;; [x] POP_TO_RA_AF       ;; pop tos cell into array RA @ RAI
+  ;; WRITE_L0_TO_RA_AF  ;; no stack change
+  ;; WRITE_RA_AF_TO_L0
 
-;; BINC_RAI           ;; byte increment RAi(ndex)
-;; BDEC_RAI
-;; BADD_RAI
-;; BSUB_RAI
-;; CP_RAI_TO_RBI
+  ;; BINC_RAI           ;; byte increment RAi(ndex)
+  ;; BDEC_RAI
+  ;; BADD_RAI
+  ;; BSUB_RAI
+  ;; CP_RAI_TO_RBI
 
-;; WRITE_RA_TO_L0
-;; WRITE_RAI_TO_L0
-;; WRITE_RA_TO_L1
-;; WRITE_RA_TO_L2
-;; WRITE_RA_TO_L3
+  ;; WRITE_RA_TO_L0
+  ;; WRITE_RAI_TO_L0
+  ;; WRITE_RA_TO_L1
+  ;; WRITE_RA_TO_L2
+  ;; WRITE_RA_TO_L3
 
-;; WRITE_L0_TO_RA
-;; WRITE_L1_TO_RA
-;; WRITE_L2_TO_RA
-;; WRITE_L3_TO_RA
+  ;; WRITE_L0_TO_RA
+  ;; WRITE_L1_TO_RA
+  ;; WRITE_L2_TO_RA
+  ;; WRITE_L3_TO_RA
 
 
-;; maybe extended commands
-;; CP_RA_TO_RB copy array pointer and index
-;; CP_RB_TO_RA
-;; CP_RA_TO_RC
-;; CP_RC_TO_RA
-;; CP_RB_TO_RC
-;; CP_RC_TO_RA
+  ;; maybe extended commands
+  ;; CP_RA_TO_RB copy array pointer and index
+  ;; CP_RB_TO_RA
+  ;; CP_RA_TO_RC
+  ;; CP_RC_TO_RA
+  ;; CP_RB_TO_RC
+  ;; CP_RC_TO_RA
 
+;; @DC-B: PUSH_RA_AF, group: cell_array
+;; *PUSH* from array *RA* *A*​rray *F*​ield indexed by RAI to evlstk
+;; stack -> (RA),RAI :: stack
 (define PUSH_RA_AF #x4d)
 (define BC_PUSH_RA_AF
   (list
@@ -2771,33 +2782,30 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR INC_REFCNT_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
-
-;;                        @DC-B: GET_AF_0, group: cell_array
-;;                        *GET* *A*​rray *F*​ield 0
+;; @DC-B: GET_AF_0, group: cell_array
+                       ;; *GET* *A*​rray *F*​ield 0
 (define GET_AF_0 #xb0) ;; stack: [array-ptr] -> [cell@0 of array]
-;;                        @DC-B: GET_AF_1, group: cell_array
-;;                        *GET* *A*​rray *F*​ield 1
+                       ;; @DC-B: GET_AF_1, group: cell_array
+                       ;; *GET* *A*​rray *F*​ield 1
 (define GET_AF_1 #xb2) ;; stack: [array-ptr] -> [cell@1 of array]
-;;                        @DC-B: GET_AF_2, group: cell_array
-;;                        *GET* *A*​rray *F*​ield 2
+                       ;; @DC-B: GET_AF_2, group: cell_array
+                       ;; *GET* *A*​rray *F*​ield 2
 (define GET_AF_2 #xb4) ;; stack: [array-ptr] -> [cell@2 of array]
-;;                        @DC-B: GET_AF_3, group: cell_array
-;;                        *GET* *A*​rray *F*​ield 3
+                       ;; @DC-B: GET_AF_3, group: cell_array
+                       ;; *GET* *A*​rray *F*​ield 3
 (define GET_AF_3 #xb6) ;; stack: [array-ptr] -> [cell@3 of array]
-
-;;                        @DC-B: SET_AF_0, group: cell_array
-;;                        *SET* *A*​rray *F*​ield 0
+                       ;; @DC-B: SET_AF_0, group: cell_array
+                       ;; *SET* *A*​rray *F*​ield 0
 (define SET_AF_0 #xb1) ;; stack: [array-ptr] :: [value] -> [cell@0 of array]
-;;                        @DC-B: SET_AF_1, group: cell_array
-;;                        *SET* *A*​rray *F*​ield 1
+                       ;; @DC-B: SET_AF_1, group: cell_array
+                       ;; *SET* *A*​rray *F*​ield 1
 (define SET_AF_1 #xb3) ;; stack: [array-ptr] :: [value] -> [cell@1 of array]
-;;                        @DC-B: SET_AF_2, group: cell_array
-;;                        *SET* *A*​rray *F*​ield 2
+                       ;; @DC-B: SET_AF_2, group: cell_array
+                       ;; *SET* *A*​rray *F*​ield 2
 (define SET_AF_2 #xb5) ;; stack: [array-ptr] :: [value] -> [cell@2 of array]
-;;                        @DC-B: SET_AF_3, group: cell_array
-;;                        *SET* *A*​rray *F*​ield 3
+                       ;; @DC-B: SET_AF_3, group: cell_array
+                       ;; *SET* *A*​rray *F*​ield 3
 (define SET_AF_3 #xb7) ;; stack: [array-ptr] :: [value] -> [cell@3 of array]
-
 (define BC_XET_ARRAY_FIELD
   (flatten
    (list
@@ -2824,7 +2832,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC))))
 
 ;; @DC-B: ALLOC_ARA, group: cell_array
-;; *ALLOC*​ate cell *A*​rray into *RA*
+;; *ALLOC*​ate cell *A*​rray into *RA* and put a copy on evlstk
 ;; len: 1
 (define ALLOC_ARA #x4c)
 (define BC_ALLOC_ARA
@@ -3086,7 +3094,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (label VM_INTERPRETER_OPTABLE)                ;;         byte code
            (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  <-  80..87 (RZ)
            (word-ref BC_BNOP)                     ;; 02  <-  01 
-           (word-ref BC_BRK)                      ;; 04  <-  02 break into debugger/exit program
+           (word-ref BC_BREAK)                    ;; 04  <-  02 break into debugger/exit program
            (word-ref BC_SWAP)                     ;; 06  <-  03 
            (word-ref BC_EXT1_CMD)                 ;; 08  <-  04 
            (word-ref VM_INTERPRETER_INC_PC)       ;; 0a  <-  05 reserved
@@ -3102,7 +3110,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_DUP)                      ;; 1e  <-  0f 
            (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  <-  90..97
            (word-ref BC_POP)                      ;; 22  <-  11
-           (word-ref BC_CELL_EQ_P)                  ;; 24  <-  12 
+           (word-ref BC_CELL_EQ_P)                ;; 24  <-  12
            (word-ref BC_F_P_RET_F)                ;; 26  <-  13
            (word-ref BC_ALLOC_A)                  ;; 28  <-  14
            (word-ref BC_PUSH_AF)                  ;; 2a  <-  15
@@ -3118,7 +3126,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
            (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 
            (word-ref BC_NIL_P)                    ;; 42  <-  21 (RZ)
-           (word-ref BC_I_Z_P)                     ;; 44  <-  22
+           (word-ref BC_I_Z_P)                    ;; 44  <-  22
            (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 48  <-  24 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
@@ -3157,13 +3165,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8e  <-  47 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 90  <-  c8..cf reserved
-           (word-ref BC_BINC_RAI)                 ;; 92  <-  49 reserved
-           (word-ref BC_NATIVE)                   ;; 94  <-  4a reserved
-           (word-ref BC_POP_TO_RA)                ;; 96  <-  4b reserved
-           (word-ref BC_ALLOC_ARA)                ;; 98  <-  4c reserved
-           (word-ref BC_PUSH_RA_AF)               ;; 9a  <-  4d reserved
-           (word-ref BC_POP_TO_RA_AF)             ;; 9c  <-  4e reserved
-           (word-ref BC_POP_TO_RAI)               ;; 9e  <-  4f reserved
+           (word-ref BC_BINC_RAI)                 ;; 92  <-  49
+           (word-ref BC_NATIVE)                   ;; 94  <-  4a
+           (word-ref BC_POP_TO_RA)                ;; 96  <-  4b
+           (word-ref BC_ALLOC_ARA)                ;; 98  <-  4c
+           (word-ref BC_PUSH_RA_AF)               ;; 9a  <-  4d
+           (word-ref BC_POP_TO_RA_AF)             ;; 9c  <-  4e
+           (word-ref BC_POP_TO_RAI)               ;; 9e  <-  4f
            (word-ref VM_INTERPRETER_INC_PC)       ;; a0  <-  d0..d7 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; a2  <-  51 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; a4  <-  52 reserved
@@ -3277,7 +3285,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_COONS
           BC_CALL
           BC_RET
-          BC_BRK
+          BC_BREAK
           BC_IADD
           BC_ISUB
           BC_INT_P
@@ -3315,6 +3323,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_BINC
           BC_Z_P_BRA
           BC_Z_P_RET_POP_N
+          BC_PUSH_RA_AF
           VM_INTERPRETER))
 
 (define vm-interpreter
