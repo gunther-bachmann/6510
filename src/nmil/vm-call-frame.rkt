@@ -2,7 +2,9 @@
 
 #|
 
-implementation of list primitives (car, cdr, cons) using 6510 assembler routines
+implementation of a call frame for vm calls
+implemented as stack with fat/slim stack frames
+using a cell-stack
 
 |#
 

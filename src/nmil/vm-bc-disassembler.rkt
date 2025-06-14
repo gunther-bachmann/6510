@@ -1,5 +1,11 @@
 #lang racket/base
 
+#|
+
+disassembler for byte code
+
+|#
+
 (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 (require (only-in "../tools/6510-disassembler.rkt" info-for-label))
 

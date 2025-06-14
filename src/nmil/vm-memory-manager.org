@@ -1,9 +1,12 @@
 #+title: vm-memory-manager
 * open tasks
-** TODO find a way to know what routines are available
-** TODO find a way of how to import the right symbol to have access to this routine!
+** DONE find a way to know what routines are available
+- State "DONE"       from "TODO"       [2025-06-14 Sat 23:09]
+** DONE find a way of how to import the right symbol to have access to this routine!
+- State "DONE"       from "TODO"       [2025-06-14 Sat 23:09]
 - e.g. use PUSH_XA_TO_EVLSTKSTK to make use of PUSH_INT_m1_TO_EVLSTK
-** TODO find a documentation that allows for easy composition of functions
+** DONE find a documentation that allows for easy composition of functions
+- State "DONE"       from "TODO"       [2025-06-14 Sat 23:09]
 - group semantically [stack functions, register functions, cell-array functions, native array functions etc.]
 - provide information like input, usage, output
 - provide semantic level (e.g. 6510, vm, bc, scheme)
@@ -11,6 +14,22 @@
 ** IMPLEMENT implement RP as (secondary) register for cell pairs
 - OBSOLETE: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
+** TODO use new array functions for array access, and provide bc functions optimized for them
+- new
+  - ALLOC_CELLARR_TO_RA
+  - FREE_CELLARR_RZ
+  - WRITE_RT_TO_ARR_ATa_RA
+  - POP_EVLSTK_TO_ARR_ATa_RA
+  - PUSH_ARR_ATa_RA_TO_EVLSTK
+- optimizing bc functions
+  - load array pointers into RA/B/C
+  - access array through these pointers instead of repeatedly pushing the array ptr onto the stack
+  - old
+    - BC_XET_ARRAY_FIELD (GET_AF_n, SET_AF_n)
+  - new
+    - GET_Rx_AF_n, SET_Rx_AF_n
+    - BC_POP_TO_Rx (pop tos into ra/b/c)
+IDEA: make use of RA/b/c optional (e.g. command for using tos, command for using ra/b/c)
 ** TODO implement RP usage as TOS-1 register on demand
 - do this for operations in need of 2+ operands (which then discard the operands and just leave the result on the stack)
 - implement INT*, INT+, INT-, INT/ with this mechanism
