@@ -73,12 +73,12 @@ using a cell-stack
   (define top-mark       (peek state ZP_CALL_FRAME_TOP_MARK))
   (define slow-fast-ind  (peek state (bytes->int (sub1 top-mark) call-frame-page)))
   (cond [(= 0 (bitwise-and #xfe slow-fast-ind))
-         ;; slow frame
+         ;; fat frame
          (define locals-ptr-low (peek state (+ 3 call-frame-ptr)))
          (define locals-lb-page (peek state (+ 4 call-frame-ptr)))
          (define locals-hb-page (peek state (+ 5 call-frame-ptr)))
          (define func-ptr-low   (peek state (+ 6 call-frame-ptr)))
-         (list (format "slow-frame ($~a..$~a)" (format-hex-word call-frame-ptr) (format-hex-word (+ 7 call-frame-ptr)))
+         (list (format "fat-frame ($~a..$~a)" (format-hex-word call-frame-ptr) (format-hex-word (+ 7 call-frame-ptr)))
                (format "return-pc:           $~a" (format-hex-word return-address))
                (format "return-function-ptr: $~a" (format-hex-word (bytes->int func-ptr-low (- (high-byte return-address) slow-fast-ind))))
                (format "return-locals-ptr:   $~a, $~a (lb,hb)"
@@ -86,10 +86,10 @@ using a cell-stack
                        (format-hex-word (bytes->int locals-ptr-low locals-hb-page))))
          ]
         [else
-         ;; fast frame
+         ;; slim frame
          (define func-ptr-low   (peek state (+ 2 call-frame-ptr)))
          (define locals-ptr-low (peek state (+ 3 call-frame-ptr)))
-         (list (format "fast-frame ($~a..$~a)" (format-hex-word call-frame-ptr) (format-hex-word (+ 3 call-frame-ptr)))
+         (list (format "slim-frame ($~a..$~a)" (format-hex-word call-frame-ptr) (format-hex-word (+ 3 call-frame-ptr)))
                (format "return-pc:           $~a" (format-hex-word return-address))
                (format "return-function-ptr: $~a" (format-hex-word (bytes->int func-ptr-low (high-byte return-address))))
                (format "return-locals-ptr:   $~a, $~a (lb,hb)"
@@ -113,6 +113,14 @@ using a cell-stack
        (vm-call-frames->string state))))
 
 
+;; @DC-FUN: ALLOC_LOCALS_STACK, group: call_frame
+;; allocate two pages for a cell-stack, store previous ZP_LOCALS_xB ptrs into these
+;; and initialise the new cell-stack
+;; input:  ZP_LOCALS_LB_PTR  ptr to old locals cell-stack
+;;         ZP_LOCALS_HB_PTR
+;; usage:  A X Y
+;; output: ZP_LOCALS_LB_PTR  ptr to new locals cell-stack
+;;         ZP_LOCALS_HB_PTR
 (define ALLOC_LOCALS_STACK
   (list
    (label ALLOC_FIRST_LOCALS_STACK)
@@ -131,6 +139,15 @@ using a cell-stack
           (STX ZP_LOCALS_LB_PTR+1)
           (JMP INIT_CELLSTACK_PAGE_X)))
 
+;; @DC-FUN: VM_INITIALIZE_CALL_FRAME, group: call_frame
+;; initialise first call frame
+;; input:  -
+;; usage:  A X Y
+;; output: ZP_LOCALS_LB_PTR
+;;         ZP_LOCALS_HB_PTR
+;;         ZP_LOCALS_TOP_MARK
+;;         ZP_CALL_FRAME
+;;         ZP_CALL_FRAME_TOP_MARK
 (define VM_INITIALIZE_CALL_FRAME
   (list
    (label VM_INITIALIZE_CALL_FRAME)
@@ -150,8 +167,9 @@ using a cell-stack
           (RTS)))
 
 
+;; @DC-FUN: VM_ALLOC_CALL_FRAME_N, group: call_frame
+;; allocate a new call frame,
 ;; close the current call frame (set top mark)
-;; allocate a new call frame
 ;; and initialize the page accordingly
 ;; input:  ZP_CALL_FRAME
 ;;         ZP_CALL_FRAME_TOP_MARK
@@ -191,6 +209,8 @@ using a cell-stack
           (STY ZP_CALL_FRAME)           ;; write new 03 into lowbyte of call-frame
           (RTS)))
 
+;; @DC-FUN: VM_PUSH_CALL_FRAME_N, group: call_frame
+;; push a call frame and allocate X locals
 ;; input:  X = number of locals to allocate on locals frame
 ;;         zp_call_frame
 ;;         zp_call_frame_top_mark
@@ -367,7 +387,7 @@ using a cell-stack
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
                       (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))
-                      (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                      (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
                       "return-pc:           $090b"
                       "return-function-ptr: $090a"
                       (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB)))
@@ -390,8 +410,8 @@ using a cell-stack
               (LDX !$03) ;; need 3 local cells
               (JSR VM_PUSH_CALL_FRAME_N)
               (LDA !$03)
-              (JSR VM_ALLOC_LOCALS)
-)))
+              (JSR VM_ALLOC_LOCALS))))
+
   (define push-call-frame-misfit-page-sl-frame-0-state
     (run-code-in-test push-call-frame-misfit-page-sl-frame-0-code))
 
@@ -400,7 +420,7 @@ using a cell-stack
                       "program-counter:  $0a0b"
                       "function-ptr:     $090a"
                       (format "locals-ptr:       $~a05, $~a05 (lb, hb), topmark: 08" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))
-                      (format "slow-frame ($~a03..$~a0a)" (format-hex-byte PAGE_AVAIL_0) (format-hex-byte PAGE_AVAIL_0))
+                      (format "fat-frame ($~a03..$~a0a)" (format-hex-byte PAGE_AVAIL_0) (format-hex-byte PAGE_AVAIL_0))
                       "return-pc:           $0a0b"
                       "return-function-ptr: $090a"
                       (format "return-locals-ptr:   $~a05, $~a05 (lb,hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
@@ -441,7 +461,7 @@ using a cell-stack
                       "program-counter:  $090b"
                       "function-ptr:     $090a"
                       (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 06" (format-hex-byte (- PAGE_LOCALS_LB 3)) (format-hex-byte (- PAGE_LOCALS_HB 3)))
-                      (format  "slow-frame ($~a03..$~a0a)" (format-hex-byte PAGE_AVAIL_0) (format-hex-byte PAGE_AVAIL_0))
+                      (format  "fat-frame ($~a03..$~a0a)" (format-hex-byte PAGE_AVAIL_0) (format-hex-byte PAGE_AVAIL_0))
                       "return-pc:           $090b"
                       "return-function-ptr: $090a"
                       (format "return-locals-ptr:   $~afe, $~afe (lb,hb)" (format-hex-byte PAGE_LOCALS_LB) (format-hex-byte PAGE_LOCALS_HB))))
@@ -461,7 +481,8 @@ using a cell-stack
                 "the call frame is a slow frame (8 bytes)
                  low byte of locals-ptr"))
 
-
+;; @DC-FUN: VM_POP_CALL_FRAME_N, group: call_frame
+;; pop the current call frame
 ;; input:  zp_call_frame_top_mark
 ;;         zp_call_frame
 ;; output: zp_call_frame_top_mark
@@ -732,6 +753,8 @@ using a cell-stack
 ;;                 #xfb
 ;;                 "top mark points to the first free byte on the call frame stack"))
 
+;; @DC-FUN: VM_ALLOC_LOCALS, group: call_frame
+;; allocate A locals onto the locals stack
 ;; input:  A number of locals needed by this function
 ;;         zp_locals_lb_ptr
 ;;         zp_locals_hb_ptr
@@ -783,6 +806,7 @@ using a cell-stack
 (module+ test #| alloc locals |#
   (skip (check-equal? #t #f)))
 
+;; @DC-FUN: VM_FREE_LOCALS, group: gc
 ;; input:  A number of locals to keep after free (locals of current function?)
 ;;         zp_locals_lb_ptr
 ;;         zp_locals_hb_ptr

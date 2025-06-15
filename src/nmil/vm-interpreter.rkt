@@ -239,7 +239,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    ;; $18..25   
    ))
 
-;; @DC-F: VM_INTERPRETER_INIT, group: misc
+;; @DC-FUN: VM_INTERPRETER_INIT, group: misc
 ;; initialize PC to $8000
 (define VM_INTERPRETER_INIT
   (list
@@ -680,7 +680,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "int $0000")
                    "stack holds the pushed int, and all parameters"))
 
-;; @DC-F: VM_REFCOUNT_DECR_CURRENT_LOCALS, group: gc
+;; @DC-FUN: VM_REFCOUNT_DECR_CURRENT_LOCALS, group: gc
 ;; decrement the refcount to all locals that are not initial (e.g. upon leaving a function)
 (define VM_REFCOUNT_DECR_CURRENT_LOCALS
   (add-label-suffix

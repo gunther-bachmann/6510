@@ -55,6 +55,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 ;;   VM_CDR   :: TOS := (cdr TOS)
 ;;   VM_CONS  :: TOS := (TOS . TOS-1)
 
+;; @DC-FUN: VM_NIL_P, group: predicates
+;; is tos currently NIL?
 (define VM_NIL_P
   (list
    (label STACK_EMPTY__VM_NIL_P)
@@ -111,6 +113,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                       "int $0000  (rt)")
                 "which is false"))
 
+;; @DC-FUN: VM_CAR, group: list
+;; replace cell-pair on tos with CAR element
 (define VM_CAR
   (list
    (label STACK_EMPTY__VM_CAR)
@@ -133,6 +137,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
           (JMP WRITE_CELLPAIR_RT_CELL0_TO_RT)))
 
+;; @DC-FUN: VM_CDR, group: list
+;; replace cell-pair on tos with CDR element
 (define VM_CDR
   (list
    (label STACK_EMPTY__VM_CDR)
@@ -160,6 +166,15 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 ;; cadr =  (car (cdr x))
 ;; cdar =  (cdr (car x))
 ;; cddr =  (cdr (cdr x))
+;; @DC-FUN: VM_CxxR, group: list
+;; execute caar, cadr, cdar or cddr depending on value in A
+;; A = 00 -> caar
+;; A = 02 -> cadr
+;; A = 04 -> cdar
+;; A = 06 -> cddr
+;; input:  A, evlstk
+;; usage:  A X Y
+;; output: cell-pair on the stack replaced with its cxxr
 (define VM_CxxR
   (list 
    (label VM_CxxR)
@@ -184,6 +199,11 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
    (label BRANCH_TARGETS__VM_CxxR)
           (byte $00 $06 $0c $12)))
 
+;; @DC-FUN: VM_CONS__REFCNTD, group: list
+;; cons value to cell-pair on the stack
+;; input: stack = value :: cell-pair
+;; output: stack = new cell-pair
+;;         new cell-pair = [value:old cell-pair]
 (define VM_CONS__REFCNTD
   (list
    (label STACK_HAS_LESS_THAN_TWO__VM_CONS__REFCNTD)
