@@ -43,6 +43,7 @@ call frame primitives etc.
                   WRITE_NIL_TO_RP
                   WRITE_INT_AY_TO_RT
                   CP_RA_TO_RT
+                  CP_RT_TO_RB
                   CP_RA_TO_RZ
                   CP_RB_TO_RZ
                   CP_RC_TO_RZ
@@ -798,6 +799,7 @@ call frame primitives etc.
           WRITE_RT_TO_CELLy_CELLPAIR_RP
 
           CP_RT_TO_RA
+          CP_RT_TO_RB
           CP_RA_TO_RT
           CP_RA_TO_RZ
           CP_RB_TO_RZ

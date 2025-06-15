@@ -32,6 +32,7 @@
          CP_RT_TO_RP
          CP_RT_TO_RZ
          CP_RZ_TO_RT
+         CP_RT_TO_RB
          SWAP_ZP_WORD
          CP_RA_TO_RB
          SWAP_RA_RB)
@@ -198,6 +199,20 @@
           (STA ZP_RA+1)
           (LDA ZP_RT)
           (STA ZP_RA)
+          (RTS)))
+
+;; @DC-FUN: CP_RT_TO_RB, group: register
+;; copy RT -> RB
+;; input:  RT
+;; output: RB (copy of RT)
+(define CP_RT_TO_RB
+  (list
+   (label CP_RT_TO_RB)
+   (label CP_RT_TO_RB__VALUE) ;;just value, no tagged byte
+          (LDA ZP_RT+1)
+          (STA ZP_RB+1)
+          (LDA ZP_RT)
+          (STA ZP_RB)
           (RTS)))
 
 (module+ test #| vm-cp-rt-to-ra |#

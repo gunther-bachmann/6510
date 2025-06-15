@@ -23,7 +23,12 @@
                   vm-interpreter
                   bc
                   ALLOC_ARA
+                  SWAP_RA_RB
                   PUSH_RA
+                  GET_RA_AF_0
+                  GET_RA_AF_1
+                  POP_TO_RA
+                  POP_TO_RB
                   POP_TO_RA_AF
                   CALL
                   RET
@@ -193,9 +198,9 @@
   (list
    (label POINT_XDIST)
           (byte 0)
-          (bc GET_AF_0)
+          (bc GET_AF_0)    ;; pop_to_ra, get_ra_af_0
           (bc SWAP)
-          (bc GET_AF_0)
+          (bc GET_AF_0)    ;; pop_to_ra, get_ra_af_0
           (bc ISUB)
           (bc RET)))
 
@@ -259,21 +264,21 @@
                 (list "stack holds 1 item"
                       "int $0096  (rt)")))
 
+
 (define POINT_EQUAL ;; point1 :: point2 -> bool
   (list
    (label POINT_EQUAL)
-          (byte 2)
-          (bc WRITE_TO_L0)
-          (bc GET_AF_0)
-          (bc SWAP)
-          (bc WRITE_TO_L1)
-          (bc GET_AF_0)
+          (byte 0)
+          (bc POP_TO_RA)
+          (bc POP_TO_RB)
+          (bc GET_RA_AF_0)
+          (bc SWAP_RA_RB)
+          (bc GET_RA_AF_0)
           (bc CELL_EQ_P)
           (bc F_P_RET_F)
-          (bc PUSH_L0)
-          (bc GET_AF_1)
-          (bc PUSH_L1)
-          (bc GET_AF_1)
+          (bc GET_RA_AF_1)
+          (bc SWAP_RA_RB)
+          (bc GET_RA_AF_1)
           (bc CELL_EQ_P)
           (bc RET)))
 
@@ -301,6 +306,9 @@
   (check-equal? (vm-stack->strings point-equal-1-state)
                 (list "stack holds 1 item"
                       "int $0001  (rt)"))
+
+  (inform-check-equal? (cpu-state-clock-cycles point-equal-1-state)
+                       8510)
 
   (define point-equal-2-state
     (run-bc-wrapped-in-test

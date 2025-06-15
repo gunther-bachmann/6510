@@ -147,7 +147,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (provide vm-interpreter
          bc
          ALLOC_ARA
+         SWAP_RA_RB
          PUSH_RA
+         POP_TO_RA
+         POP_TO_RB
          GET_RA_AF_0
          GET_RA_AF_1
          GET_RA_AF_2
@@ -874,9 +877,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (BCS CDR__)
 
     ;; CAR
-           (STA ZP_RA)
+           (STA ZP_RP)
            (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-           (LDY ZP_RA) ;; index -> Y
+           (LDY ZP_RP) ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
            (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
@@ -886,9 +889,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)
 
     (label CDR__)
-           (STA ZP_RA)
+           (STA ZP_RP)
            (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-           (LDY ZP_RA) ;; index -> Y
+           (LDY ZP_RP) ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
            (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
@@ -2496,23 +2499,42 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (check-equal? (cpu-state-clock-cycles nop-state)
                 31))
 
+;; @DC-B: SWAP_RA_RB, group: array
+;; swap array register RA with RB
+(define SWAP_RA_RB #x45)
+(define BC_SWAP_RA_RB
+  (list
+   (label BC_SWAP_RA_RB)
+          (JSR SWAP_RA_RB)
+          (JMP VM_INTERPRETER_INC_PC)))
+
 
 ;; @DC-B: POP_TO_RA, group: stack
 ;; *POP* top of evlstk *TO* *RA*, setting RAI=0
 ;; len: 1
 (define POP_TO_RA #x4b)
+(define POP_TO_RB #x46)
 ;; @DC-B: POP, group: stack
 ;; len: 1
 (define POP #x11)
 (define BC_POP
   (list
+   (label BC_POP_TO_RB)
+          (LDA !$00)
+          (STA ZP_RBI)          ;; initialize index to 0
+          (JSR CP_RT_TO_RB)     ;; copy tos to rb
+          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JMP VM_INTERPRETER_INC_PC)
+
    (label BC_POP_TO_RA)
           (LDA !$00)
           (STA ZP_RAI)          ;; initialize index to 0
           (JSR CP_RT_TO_RA)     ;; copy tos to ra
+          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JMP VM_INTERPRETER_INC_PC)
 
    (label BC_POP) ;;--------------------------------------------------------------------------------
-          (JSR DEC_REFCNT_RT)
+          (JSR DEC_REFCNT_RT) ;; no dec, since ra is refcounted too
           (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -2843,7 +2865,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 ;; @DC-B: GET_AF_0, group: cell_array
                        ;; *GET* *A*​rray *F*​ield 0
-(define GET_AF_0 #xb0) ;; stack: [array-ptr] -> [cell@0 of array]
+(define GET_AF_0 #xb0) ;; stack: [array-ptr] -> [cell@0 of array]  (replace tos with value from array)
                        ;; @DC-B: GET_AF_1, group: cell_array
                        ;; *GET* *A*​rray *F*​ield 1
 (define GET_AF_1 #xb2) ;; stack: [array-ptr] -> [cell@1 of array]
@@ -3270,10 +3292,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_CONS)                     ;; 84  <-  42 
            (word-ref BC_CAR)                      ;; 86  <-  43 
            (word-ref BC_COONS)                    ;; 88  <-  44
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 8a  <-  45 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
-           (word-ref BC_PUSH_RA)                  ;; 8e  <-  47 reserved
-           (word-ref BC_XET_RA_ARRAY_FIELD)       ;; 90  <-  c8..cf reserved
+           (word-ref BC_SWAP_RA_RB)               ;; 8a  <-  45
+           (word-ref BC_POP_TO_RB)                ;; 8c  <-  46
+           (word-ref BC_PUSH_RA)                  ;; 8e  <-  47
+           (word-ref BC_XET_RA_ARRAY_FIELD)       ;; 90  <-  c8..cf
            (word-ref BC_BINC_RAI)                 ;; 92  <-  49
            (word-ref BC_NATIVE)                   ;; 94  <-  4a
            (word-ref BC_POP_TO_RA)                ;; 96  <-  4b
@@ -3436,6 +3458,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_Z_P_RET_POP_N
           BC_PUSH_RA_AF
           BC_PUSH_RA
+          BC_SWAP_RA_RB
           VM_INTERPRETER))
 
 (define vm-interpreter
