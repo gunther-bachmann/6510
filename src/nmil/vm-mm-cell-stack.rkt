@@ -17,6 +17,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
 (provide INIT_CELLSTACK_PAGE_X        ;; initialize page A to previous cell stack page (X)
          PUSH_XA_TO_EVLSTK               ;; push a value into RT, pushing RT onto the call frame cell stack if not empty
          POP_CELL_EVLSTK_TO_RT        ;; pop cell-stack into RT (discarding RT)
+         POP_CELL_EVLSTK_TO_RP        ;; pop cell-stack into RP, RT is not changed, the stack is reduced by 1 (above RT)
          POP_CELL_EVLSTK_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
          PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack (effectively doing a dup)
          POP_CELL_EVLSTK_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
@@ -56,6 +57,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
      INIT_CELLSTACK_PAGE_X
      PUSH_XA_TO_EVLSTK
      POP_CELL_EVLSTK_TO_RT
+     POP_CELL_EVLSTK_TO_RP
      PUSH_RT_TO_EVLSTK
      POP_CELL_EVLSTK_TO_CELLy_RT
 
@@ -593,4 +595,47 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
           (LDA !$00)
           (STA ZP_RA)
           (STA ZP_RA+1)
+          (RTS)))
+
+
+;; ----
+;; @DC-FUN: WRITE_00_TO_RP, group: cell_array
+;; write 00 00 into RA marking it as empty!
+;; ----
+;; @DC-FUN: POP_CELL_EVLSTK_TO_RP, group: cell_stack
+;; pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
+;; input: call-frame stack, RA
+;; output:  RP << EVLSTK, <<EVLSTK<<, RT unchanged!
+;; NO GC CHECKS!
+(define POP_CELL_EVLSTK_TO_RP
+  (list
+   (label POP_CELL_EVLSTK_TO_RP)
+          ;; optional: stack marked empty? => error: cannot pop from empty stack!
+          ;; (LDY !$00)
+          ;; (BEQ ERROR_NO_VALUE_ON_STACK)
+
+          ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
+          (LDY ZP_CELL_STACK_TOS)
+          (CPY !$01) ;; stack empty?
+          (BEQ WRITE_00_TO_RP) ;; which effectively clears the RT
+          ;; pop value from call-frame stack into RT!
+          (LDA (ZP_CELL_STACK_LB_PTR),y) ;; tagged low byte
+          (STA ZP_RP)
+
+
+          ;; (optional) quick check for atomic cells [speeds up popping atomic cells, slows popping cell-ptr, slight slows popping cell-pair-ptr
+          ;; (AND !$03)
+          ;; (BEQ WRITE_TOS_TO_RP__POP_CELL_EVLSTK_TO_RP)
+          ;; (TXA)
+
+          (LDA (ZP_CELL_STACK_HB_PTR),y) ;; high byte
+          (STA ZP_RP+1)
+          (DEC ZP_CELL_STACK_TOS)
+          (RTS)
+
+   (label WRITE_00_TO_RP)
+          ;; mark RA as empty
+          (LDA !$00)
+          (STA ZP_RP)
+          (STA ZP_RP+1)
           (RTS)))

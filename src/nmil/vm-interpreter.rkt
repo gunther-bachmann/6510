@@ -147,10 +147,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         BDEC
+         BADD
+         B_GT_P
+         B_LT_P
          ALLOC_ARA
          SWAP_RA_RB
          PUSH_RA
+         NZ_P_BRA
          POP_TO_RA
+         POP_TO_RAI
          POP_TO_RB
          GET_RA_AF_0
          GET_RA_AF_1
@@ -167,6 +173,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          GOTO
          RET
          CONS
+         BINC
          NIL_P
          CALL
          ISUB
@@ -1573,6 +1580,31 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| swap |#
   (skip (check-equal? #t #f "implement")))
 
+;; @DC-B: B_GT_P, group: predicates
+(define B_GT_P #x24)
+(define BC_B_GT_P
+  (add-label-suffix
+   "__" "__BC_B_GT_P"
+   (list
+    (label BC_B_GT_P)
+           (JSR POP_CELL_EVLSTK_TO_RT)
+           (JSR POP_CELL_EVLSTK_TO_RT)
+           (JSR PUSH_INT_1_TO_EVLSTK) ;; TODO: implement
+           (JMP VM_INTERPRETER_INC_PC))))
+
+;; @DC-B: B_LT_P, group: predicates
+(define B_LT_P #x25)
+(define BC_B_LT_P
+  (add-label-suffix
+   "__" "__BC_B_LT_P"
+   (list
+    (label BC_B_LT_P)
+           (JSR POP_CELL_EVLSTK_TO_RT)
+           (JSR POP_CELL_EVLSTK_TO_RT)
+           (JSR PUSH_INT_1_TO_EVLSTK) ;; TODO: implement
+           (JMP VM_INTERPRETER_INC_PC))))
+
+
 ;; @DC-B: I_GT_P, group: predicates
 (define I_GT_P #x63) ;; *I*​nt *G*​reater *T*​han *P*​redicates
 (define BC_I_GT_P
@@ -2509,10 +2541,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JMP VM_INTERPRETER_INC_PC)))
 
 
-;; @DC-B: POP_TO_RA, group: stack
+;; @DC-B: POP_TO_RA, group: cell_array
 ;; *POP* top of evlstk *TO* *RA*, setting RAI=0
 ;; len: 1
 (define POP_TO_RA #x4b)
+;; @DC-B: POP_TO_RB, group: cell_array
+;; *POP* top of evlstk *TO* *RB*, setting RAI=0
+;; len: 1
 (define POP_TO_RB #x46)
 ;; @DC-B: POP, group: stack
 ;; len: 1
@@ -3042,6 +3077,33 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "byte $16  (rt)"
                       "byte $15")))
 
+;; @DC-B: BADD, group: byte
+;; *B*​yte *ADD* top two values on stack (no checks)
+;; len: 1
+(define BADD #x23)
+(define BC_BADD
+  (list
+   (label BC_BADD)
+          (JSR POP_CELL_EVLSTK_TO_RP)
+          (CLC)
+          (LDA ZP_RT+1)
+          (ADC ZP_RP+1)
+          (STA ZP_RT+1)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(module+ test #| badd |#
+  (define badd-20-9
+    (run-bc-wrapped-in-test
+     (flatten
+      (list
+       (bc PUSH_B) (byte #x14)
+       (bc PUSH_B) (byte #x09)
+       (bc BADD)))))
+
+  (check-equal? (vm-stack->strings badd-20-9)
+                (list "stack holds 1 item"
+                      "byte $1d  (rt)")))
+
 ;; @DC-B: BDEC, group: byte
 ;; *B*​yte *DEC*​rement, increment byte RT (no checks)
 ;; len: 1
@@ -3208,6 +3270,27 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (label NO_BRA__BC_Z_P_BRA)
            (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
 
+;; @DC-B: NZ_P_BRA, group: flow
+;; *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+;; len: 2
+(define NZ_P_BRA #x1d)
+(define BC_NZ_P_BRA
+  (flatten
+   (list
+    (label BC_NZ_P_BRA)
+           (LDX ZP_RT+1)
+           (BNE BRA__BC_NZ_P_BRA) ;; != 0 => branch before even looking at anything else
+           (LDX ZP_RT)
+           (CPX !$03)
+           (BEQ NO_BRA__BC_NZ_P_BRA) ;; lowbyte = 03 (zero int)  => definitely no branch
+           (CPX !TAG_BYTE_BYTE_CELL)
+           (BEQ NO_BRA__BC_NZ_P_BRA)
+    (label BRA__BC_NZ_P_BRA)
+           (JMP BRANCH_BY_NEXT_BYTE)
+    (label NO_BRA__BC_NZ_P_BRA)
+           (JSR POP_CELL_EVLSTK_TO_RT)
+           (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
+
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
@@ -3242,15 +3325,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_BDEC)                     ;; 34  <-  1a
            (word-ref BC_Z_P_BRA)                  ;; 36  <-  1b
            (word-ref BC_BINC)                     ;; 38  <-  1c
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 3a  <-  1d reserved
+           (word-ref BC_NZ_P_BRA)                 ;; 3a  <-  1d
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3c  <-  1e reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 3e  <-  1f reserved
            (word-ref BC_PUSH_LOCAL_CXR)           ;; 40  <-  a0..a7 
            (word-ref BC_NIL_P)                    ;; 42  <-  21 (RZ)
            (word-ref BC_I_Z_P)                    ;; 44  <-  22
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 46  <-  23 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 48  <-  24 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 4a  <-  25 reserved
+           (word-ref BC_BADD)                     ;; 46  <-  23
+           (word-ref BC_B_GT_P)                   ;; 48  <-  24
+           (word-ref BC_B_LT_P)                   ;; 4a  <-  25 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4c  <-  26 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 4e  <-  27 reserved
            (word-ref BC_CxxR)                     ;; 50  <-  a8..af 
@@ -3448,6 +3531,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_PUSH_RA_AF
           BC_PUSH_RA
           BC_SWAP_RA_RB
+          BC_NZ_P_BRA
+          BC_BADD
+          BC_B_GT_P
+          BC_B_LT_P
           VM_INTERPRETER))
 
 (define vm-interpreter
@@ -3462,4 +3549,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1086))
+                       1112))

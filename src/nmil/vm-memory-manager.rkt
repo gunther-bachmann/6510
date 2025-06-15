@@ -90,6 +90,7 @@ call frame primitives etc.
                   INIT_CELLSTACK_PAGE_X
                   PUSH_XA_TO_EVLSTK
                   POP_CELL_EVLSTK_TO_RT
+                  POP_CELL_EVLSTK_TO_RP
                   PUSH_RT_TO_EVLSTK
                   POP_CELL_EVLSTK_TO_CELLy_RT
                   POP_CELL_EVLSTK_TO_RA))
@@ -766,6 +767,7 @@ call frame primitives etc.
           ;; ---------------------------------------- CELL_STACK / RT / RA
           POP_CELL_EVLSTK_TO_RT                                ;; pop cell-stack into RT (discarding RT)
           POP_CELL_EVLSTK_TO_RA
+          POP_CELL_EVLSTK_TO_RP
 
           PUSH_XA_TO_EVLSTK                               ;; push value into RT, pushing RT onto the call frame cell stack if not empty
           ;; vm_cell_stack_push_rt_if_nonempty

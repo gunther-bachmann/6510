@@ -1,65 +1,20 @@
 #+title: vm-memory-manager
 * open tasks
-** DONE find a way to know what routines are available
-- State "DONE"       from "TODO"       [2025-06-14 Sat 23:09]
-** DONE find a way of how to import the right symbol to have access to this routine!
-- State "DONE"       from "TODO"       [2025-06-14 Sat 23:09]
-- e.g. use PUSH_XA_TO_EVLSTKSTK to make use of PUSH_INT_m1_TO_EVLSTK
-** DONE find a documentation that allows for easy composition of functions
-- State "DONE"       from "TODO"       [2025-06-14 Sat 23:09]
-- group semantically [stack functions, register functions, cell-array functions, native array functions etc.]
-- provide information like input, usage, output
-- provide semantic level (e.g. 6510, vm, bc, scheme)
-- extract this information automatically
 ** IMPLEMENT implement RP as (secondary) register for cell pairs
 - OBSOLETE: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
-** TODO use new array functions for array access, and provide bc functions optimized for them
-- new
-  - ALLOC_CELLARR_TO_RA
-  - FREE_CELLARR_RZ
-  - WRITE_RT_TO_ARR_ATa_RA
-  - POP_EVLSTK_TO_ARR_ATa_RA
-  - PUSH_ARR_ATa_RA_TO_EVLSTK
-- optimizing bc functions
-  - load array pointers into RA/B/C
-  - access array through these pointers instead of repeatedly pushing the array ptr onto the stack
-  - old
-    - BC_XET_ARRAY_FIELD (GET_AF_n, SET_AF_n)
-  - new
-    - GET_Rx_AF_n, SET_Rx_AF_n
-    - BC_POP_TO_Rx (pop tos into ra/b/c)
-IDEA: make use of RA/b/c optional (e.g. command for using tos, command for using ra/b/c)
+** TODO split vm-interpreter in groups of interpreted bc commands
 ** TODO implement RP usage as TOS-1 register on demand
-- do this for operations in need of 2+ operands (which then discard the operands and just leave the result on the stack)
-- implement INT*, INT+, INT-, INT/ with this mechanism
-- e.g. POP_TOSM1_TO_RTM, WRITE_TOSM1_TO_RTM?, or WRITE_LOCAL_N_TO_RTM
-- then execute binary operation and discard RTM (and ensure that reference counting for RTM can be ignored)
-=> if both operands are on the stack, then POP_TOSM1_TO_RTM before executing the operation
-   if one operand is on the stack, the other can be written directly to RTM
-   if the result keeps references to cells referenced through RTM, it might be necessary to inc-refcnt them <- who does that
++ do this for operations in need of 2+ operands (which then discard the operands and just leave the result on the stack)
++ implement INT*, INT+, INT-, INT/ with this mechanism
++ e.g. POP_TOSM1_TO_RP, WRITE_TOSM1_TO_RP?, or WRITE_LOCAL_N_TO_RP
++ then execute binary operation and discard RP (and ensure that reference counting for RP can be ignored)
+=> if both operands are on the stack, then POP_TOSM1_TO_RP before executing the operation
+   if one operand is on the stack, the other can be written directly to RP
+   if the result keeps references to cells referenced through RP, it might be necessary to inc-refcnt them <- who does that
 - identify all binary operations that may benefit from this mechanism
   operand operation operand -> result : most benefit if operands and result don't need refcnt'ing
   - mult, add, sub, div, mod, shift-right, shift-left, ... (byte/int)
-** IMPLEMENT implement RA, RB, RC as array access registers and indexes for each
-- IDEA: RA dec-refcnt and inc-refcnt can safely assume that ra holds either 0, nil or a reference to an array!
-- RA is default and should be accessible with short commands
-- RB, RC can be accessed with longer byte code commands
-- provide functions to:
-  - WRITE/POP TOS -> RA, RB. RC
-  - WRITE/POP TOS -> RAi, RBi, RCi <- byte index registers
-  - INC RAi, ADD RAi, SUB RAi, DEC RAi (and RB/RC)
-  - WRITE/PUSH RA, RB, RC -> TOS
-  - WRITE/PUSH RAi, RBi, RCi -> TOS
-  - WRITE/PUSH (RA + RAi) -> TOS       ;; retrieve field at RAi in array (pointed to by) RA into TOS
-  - WRITE/POP TOS -> (RA + RAi)        ;; (over)write field at RAi in array (pointer to by) RA with TOS
-  - WRITE (RA + RAi) -> RB/RC/RBi/RBi  ;; and vice versa?
-  - ALLOC INTO RA/RB/RC (initialize indices RAi,RBi,RCi)
-- implement matrix multiplication of 4x4 matrices (with ints) <- just as an expample (scale/move...)
-** TODO create index of functions and purpose         -> increase reuse and discoverability
-- alphabetically
-- semantically
-- ues-case driven
 ** TODO unify function naming (mostly done)           -> clean code
 ** TODO ensure test coverage                          -> ensure functionality over changes
 - define use cases
@@ -70,11 +25,6 @@ IDEA: make use of RA/b/c optional (e.g. command for using tos, command for using
   - all tests must have a text describing the test
   - all tests should be resilient to memory location changes of registers etc.
 - use most recent test utils
-** TODO define register usage convention for commands -> prevent accidental overlapping use
-- e.g. gc only on ZP_RZ
-- one argument function on ZP_RT
-- array access on ZP_RA
-- second argument function on ZP_RS
 ** TODO check: do pointers on cells exist that are on the locals/eval-stack?
 - currently the answer is *NO*, does that restrict the programming model?
 ** TODO tweak configuration parameters                -> increase speed/reduce memory consumption
@@ -2050,6 +2000,46 @@ incrementally implemented by extracting the given from vm-memory-manager, includ
 - cell-array functions
 - nat-array functions
 - stack functions
+** DONE find a way to know what routines are available
+- State "DONE"       from "TODO"       [2025-06-14 Sat 23:09]
+** DONE find a way of how to import the right symbol to have access to this routine!
+- State "DONE"       from "TODO"       [2025-06-14 Sat 23:09]
+- e.g. use PUSH_XA_TO_EVLSTKSTK to make use of PUSH_INT_m1_TO_EVLSTK
+** DONE find a documentation that allows for easy composition of functions
+- State "DONE"       from "TODO"       [2025-06-14 Sat 23:09]
+- group semantically [stack functions, register functions, cell-array functions, native array functions etc.]
+- provide information like input, usage, output
+- provide semantic level (e.g. 6510, vm, bc, scheme)
+- extract this information automatically
+** DONE use new array functions for array access, and provide bc functions optimized for them
+- State "DONE"       from "TODO"       [2025-06-15 Sun 19:55]
+IDEA: make use of RA/b/c optional (e.g. command for using tos, command for using ra/b/c)
+** DONE implement RA, RB, RC as array access registers and indexes for each
+- IDEA: RA dec-refcnt and inc-refcnt can safely assume that ra holds either 0, nil or a reference to an array!
+- RA is default and should be accessible with short commands
+- RB, RC can be accessed with longer byte code commands
+- provide functions to:
+  - [X] WRITE/POP TOS -> RA, RB. RC
+  - [X] WRITE/POP TOS -> RAi, RBi, RCi <- byte index registers
+  - [X] INC RAi, ADD RAi, SUB RAi, DEC RAi (and RB/RC)
+  - [X] WRITE/PUSH RA, RB, RC -> TOS
+  - [X] WRITE/PUSH RAi, RBi, RCi -> TOS
+  - [X] WRITE/PUSH (RA + RAi) -> TOS       ;; retrieve field at RAi in array (pointed to by) RA into TOS
+  - [X] WRITE/POP TOS -> (RA + RAi)        ;; (over)write field at RAi in array (pointer to by) RA with TOS
+  - ? WRITE (RA + RAi) -> RB/RC/RBi/RBi  ;; and vice versa?
+  - [X] ALLOC INTO RA/RB/RC (initialize indices RAi,RBi,RCi)
+- (someday) implement matrix multiplication of 4x4 matrices (with ints) <- just as an expample (scale/move...)
+** DONE create index of functions and purpose         -> increase reuse and discoverability
+- State "DONE"       from "TODO"       [2025-06-15 Sun 21:38]
+- alphabetically
+- semantically
+- ues-case driven
+** DONE define register usage convention for commands -> prevent accidental overlapping use
+- State "DONE"       from "TODO"       [2025-06-15 Sun 21:39]
+- [X] e.g. gc only on ZP_RZ
+- [X] one argument function on ZP_RT
+- [X] array access on ZP_RA, ZP_RB, ZP_RC
+- [X] second argument function on ZP_RP
 * - :noexport:
 #+begin_src emacs-lisp
   ;; Local Variables:
