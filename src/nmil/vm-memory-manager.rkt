@@ -44,6 +44,8 @@ call frame primitives etc.
                   WRITE_INT_AY_TO_RT
                   CP_RA_TO_RT
                   CP_RA_TO_RZ
+                  CP_RB_TO_RZ
+                  CP_RC_TO_RZ
                   CP_RT_TO_RA
                   CP_RT_TO_RP
                   CP_RT_TO_RZ
@@ -389,11 +391,21 @@ call frame primitives etc.
 (define DEC_REFCNT_NATIVEARR_RA #t)
 (define DEC_REFCNT_RT #t)
 (define DEC_REFCNT_RA #t)
+(define DEC_REFCNT_RB #t)
+(define DEC_REFCNT_RC #t)
 (define DEC_REFCNT_RZ
   (add-label-suffix
    "__" "__DEC_REFCNT_RZ"
    (flatten
    (list
+    (label DEC_REFCNT_RC)
+           (JSR CP_RC_TO_RZ)
+           (JMP DEC_REFCNT_RZ)
+
+    (label DEC_REFCNT_RB)
+           (JSR CP_RB_TO_RZ)
+           (JMP DEC_REFCNT_RZ)
+
     (label DEC_REFCNT_RA)
            (JSR CP_RA_TO_RZ)
            (JMP DEC_REFCNT_RZ)
@@ -785,10 +797,12 @@ call frame primitives etc.
           WRITE_CELLPAIR_RT_CELLy_TO_RP
           WRITE_RT_TO_CELLy_CELLPAIR_RP
 
-          CP_RT_TO_RA                                     ;; copy RT -> RA
-          CP_RA_TO_RT                                     ;; copy RA -> RT
-          CP_RA_TO_RZ                                     ;; copy RA -> RZ
-          CP_RT_TO_RZ                                     ;; copy RT -> RZ
+          CP_RT_TO_RA
+          CP_RA_TO_RT
+          CP_RA_TO_RZ
+          CP_RB_TO_RZ
+          CP_RC_TO_RZ
+          CP_RT_TO_RZ
           CP_RT_TO_RP
           CP_RZ_TO_RT
 
@@ -820,4 +834,4 @@ call frame primitives etc.
 
 (module+ test #| vm-memory-manager |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
-                       1800))
+                       1814))

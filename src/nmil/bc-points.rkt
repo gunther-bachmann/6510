@@ -23,6 +23,7 @@
                   vm-interpreter
                   bc
                   ALLOC_ARA
+                  PUSH_RA
                   POP_TO_RA_AF
                   CALL
                   RET
@@ -131,32 +132,16 @@
     (define wrapped-code (wrap-bytecode-for-test bc))
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
 
-;; (define POINT_CREATE ;; x :: y :: color -> point struct
-;;   (list
-;;    (label POINT_CREATE)
-;;           (byte 1)
-;;           (bc PUSH_B) (byte 3)
-;;           (bc ALLOC_A)
-;;           (bc WRITE_TO_L0)
-;;           (bc SET_AF_0)
-;;           (bc PUSH_L0)
-;;           (bc SET_AF_1)
-;;           (bc PUSH_L0)
-;;           (bc SET_AF_2)
-;;           (bc PUSH_L0)
-;;           (bc RET)))
-
 (define POINT_CREATE ;; x :: y :: color -> point struct
   (list
    (label POINT_CREATE)
           (byte 1)
           (bc PUSH_B) (byte 3)
           (bc ALLOC_ARA)
-          (bc POP_TO_L0)
           (bc POP_TO_RA_AF)
           (bc POP_TO_RA_AF)
           (bc POP_TO_RA_AF)
-          (bc PUSH_L0)
+          (bc PUSH_RA)
           (bc RET)))
 
 (module+ test #| point create |#

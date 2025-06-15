@@ -26,6 +26,8 @@
          WRITE_INT_AY_TO_RT     ;; write integer constant into Rx
          CP_RA_TO_RT            ;; copy regiser from RA to RT
          CP_RA_TO_RZ
+         CP_RB_TO_RZ
+         CP_RC_TO_RZ
          CP_RT_TO_RA
          CP_RT_TO_RP
          CP_RT_TO_RZ
@@ -116,6 +118,32 @@
           (LDA ZP_RA+1)
           (STA ZP_RZ+1)
           (LDA ZP_RA)
+          (STA ZP_RZ)
+          (RTS)))
+
+;; @DC-FUN: CP_RB_TO_RZ, group: register
+;; copy RB -> RZ
+;; input:  RB
+;; output: RZ (copy of RA)
+(define CP_RB_TO_RZ
+  (list
+   (label CP_RB_TO_RZ)
+          (LDA ZP_RB+1)
+          (STA ZP_RZ+1)
+          (LDA ZP_RB)
+          (STA ZP_RZ)
+          (RTS)))
+
+;; @DC-FUN: CP_RC_TO_RZ, group: register
+;; copy RC -> RZ
+;; input:  RC
+;; output: RZ (copy of RA)
+(define CP_RC_TO_RZ
+  (list
+   (label CP_RC_TO_RZ)
+          (LDA ZP_RC+1)
+          (STA ZP_RZ+1)
+          (LDA ZP_RC)
           (STA ZP_RZ)
           (RTS)))
 

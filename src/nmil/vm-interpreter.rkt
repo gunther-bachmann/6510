@@ -147,6 +147,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (provide vm-interpreter
          bc
          ALLOC_ARA
+         PUSH_RA
+         GET_RA_AF_0
+         GET_RA_AF_1
+         GET_RA_AF_2
+         GET_RA_AF_3
+         SET_RA_AF_0
+         SET_RA_AF_1
+         SET_RA_AF_2
+         SET_RA_AF_3
          POP_TO_RA_AF
          TAIL_CALL
          CAR
@@ -599,7 +608,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
                          "return-pc:           $8004"
                          "return-function-ptr: $8000"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
@@ -633,7 +642,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
                          "return-pc:           $8005"
                          "return-function-ptr: $8000"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
@@ -667,7 +676,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
                          "return-pc:           $8005"
                          "return-function-ptr: $8000"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
@@ -679,6 +688,38 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "int $1fff"
                          "int $0000")
                    "stack holds the pushed int, and all parameters"))
+
+;; @DC-FUN: VM_REFCOUNT_DECR_ARRAY_REGS, group: gc
+;; decrement refcount to all array register (ra, rb, rc)
+;; rb is only checked, if ra != 0,
+;; rc is only checked, if rb != 0,
+(define VM_REFCOUNT_DECR_ARRAY_REGS
+  (add-label-suffix
+   "__" "__VM_REFCOUNT_DECR_ARRAY_REGS"
+  (list
+   (label VM_REFCOUNT_DECR_ARRAY_REGS)
+          (LDA ZP_RA)
+          (BEQ DONE__)
+          (JSR DEC_REFCNT_RA)
+   (label TRY_RB__)
+          (LDA ZP_RB)
+          (BEQ CLEAR_RA__)
+          (JSR DEC_REFCNT_RB)
+   (label TRY_RC__)
+          (LDA ZP_RC)
+          (BEQ CLEAR_RAB__)
+          (JSR DEC_REFCNT_RC)
+          (LDA !$00)
+          (STA ZP_RC)
+          (STA ZP_RC+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
+   (label CLEAR_RAB__)
+          (STA ZP_RB)
+          (STA ZP_RB+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
+   (label CLEAR_RA__)
+          (STA ZP_RA)
+          (STA ZP_RA+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
+   (label DONE__)
+          (RTS))))
 
 ;; @DC-FUN: VM_REFCOUNT_DECR_CURRENT_LOCALS, group: gc
 ;; decrement the refcount to all locals that are not initial (e.g. upon leaving a function)
@@ -725,11 +766,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 ;; @DC-B: RET, group: return
 (define RET #x33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
 (define BC_RET
+  (add-label-suffix
+   "__" "__BC_RET"
   (list
    (label BC_RET)
+          ;; load # locals = 0 skip this step
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (LDA ZP_RA)
+          (BEQ NO_RA__)
+          (JSR VM_REFCOUNT_DECR_ARRAY_REGS)
+   (label NO_RA__)
           (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
-          (JMP VM_INTERPRETER)))
+          (JMP VM_INTERPRETER))))
 
 (module+ test #| bc_ret |#
   (define test-bc-ret-state
@@ -1002,7 +1050,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME)(format-hex-byte PAGE_CALL_FRAME))
+                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME)(format-hex-byte PAGE_CALL_FRAME))
                          "return-pc:           $8005"
                          "return-function-ptr: $8000"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
@@ -1044,7 +1092,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
                          "return-pc:           $8005"
                          "return-function-ptr: $8000"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
@@ -1077,7 +1125,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 04"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
                          "return-pc:           $8003"
                          "return-function-ptr: $8000"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
@@ -1112,7 +1160,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
                          "return-pc:           $8005"
                          "return-function-ptr: $8000"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
@@ -1146,7 +1194,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "fast-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
+                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
                          "return-pc:           $8005"
                          "return-function-ptr: $8000"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
@@ -2769,6 +2817,17 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   ;; CP_RB_TO_RC
   ;; CP_RC_TO_RA
 
+;; @DC-B: PUSH_RA, group: cell_array
+;; *PUSH* *R*​egister *A* to stack
+(define PUSH_RA #x47)
+(define BC_PUSH_RA
+  (list
+   (label BC_PUSH_RA)
+          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+          (JSR CP_RA_TO_RT)
+          (JSR INC_REFCNT_RT)
+          (JMP VM_INTERPRETER_INC_PC)))
+
 ;; @DC-B: PUSH_RA_AF, group: cell_array
 ;; *PUSH* from array *RA* *A*​rray *F*​ield indexed by RAI to evlstk
 ;; stack -> (RA),RAI :: stack
@@ -2820,6 +2879,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR WRITE_ARR_ATa_RA_TO_RT)
            (JSR INC_REFCNT_RT)
            (JSR DEC_REFCNT_RA)
+           (LDA !$00)
+           (STA ZP_RA)
+           (STA ZP_RA+1)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping
@@ -2829,10 +2891,57 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (PLA)
            (JSR POP_EVLSTK_TO_ARR_ATa_RA)
            (JSR DEC_REFCNT_RA)
+           (LDA !$00)
+           (STA ZP_RA)
+           (STA ZP_RA+1)
+           (JMP VM_INTERPRETER_INC_PC))))
+
+;; @DC-B: GET_RA_AF_0, group: cell_array
+                       ;; *GET* *A*​rray *F*​ield 0
+(define GET_RA_AF_0 #xc8) ;; stack: [array-ptr] -> [cell@0 of array]
+                       ;; @DC-B: GET_RA_AF_1, group: cell_array
+                       ;; *GET* *A*​rray *F*​ield 1
+(define GET_RA_AF_1 #xca) ;; stack: [array-ptr] -> [cell@1 of array]
+                       ;; @DC-B: GET_RA_AF_2, group: cell_array
+                       ;; *GET* *A*​rray *F*​ield 2
+(define GET_RA_AF_2 #xcc) ;; stack: [array-ptr] -> [cell@2 of array]
+                       ;; @DC-B: GET_RA_AF_3, group: cell_array
+                       ;; *GET* *A*​rray *F*​ield 3
+(define GET_RA_AF_3 #xce) ;; stack: [array-ptr] -> [cell@3 of array]
+                       ;; @DC-B: SET_RA_AF_0, group: cell_array
+                       ;; *SET* *A*​rray *F*​ield 0
+(define SET_RA_AF_0 #xc9) ;; stack: [array-ptr] :: [value] -> [cell@0 of array]
+                       ;; @DC-B: SET_RA_AF_1, group: cell_array
+                       ;; *SET* *A*​rray *F*​ield 1
+(define SET_RA_AF_1 #xcb) ;; stack: [array-ptr] :: [value] -> [cell@1 of array]
+                       ;; @DC-B: SET_RA_AF_2, group: cell_array
+                       ;; *SET* *A*​rray *F*​ield 2
+(define SET_RA_AF_2 #xcd) ;; stack: [array-ptr] :: [value] -> [cell@2 of array]
+                       ;; @DC-B: SET_RA_AF_3, group: cell_array
+                       ;; *SET* *A*​rray *F*​ield 3
+(define SET_RA_AF_3 #xcf) ;; stack: [array-ptr] :: [value] -> [cell@3 of array]
+(define BC_XET_RA_ARRAY_FIELD
+  (flatten
+   (list
+    (label BC_XET_RA_ARRAY_FIELD)
+           (LSR)
+           (BCS BC_SET_RA_ARRAY_FIELD)
+
+    (label BC_GET_RA_ARRAY_FIELD)               ;; (RA),A -> RT
+           (PHA)
+           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+           (PLA)
+           (JSR WRITE_ARR_ATa_RA_TO_RT)
+           (JSR INC_REFCNT_RT)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    (label BC_SET_RA_ARRAY_FIELD)               ;; RT -> (RA),A
+           (JSR POP_EVLSTK_TO_ARR_ATa_RA)       ;; no refcount adjustment, since value is off the stack (-1), but in array (+1)
            (JMP VM_INTERPRETER_INC_PC))))
 
 ;; @DC-B: ALLOC_ARA, group: cell_array
-;; *ALLOC*​ate cell *A*​rray into *RA* and put a copy on evlstk
+;; *ALLOC*​ate cell *A*​rray into *RA* and pops the byte size off the stack
+;; stack: <byte-size> -> -
 ;; len: 1
 (define ALLOC_ARA #x4c)
 (define BC_ALLOC_ARA
@@ -2843,7 +2952,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR INC_REFCNT_M1_SLOT_RA)   ;; only cell-array needs to be inc-refcnt'd
           (LDA !$00)
           (STA ZP_RAI)
-          (JSR CP_RA_TO_RT)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; @DC-B: BINC_RAI, group: cell_array
@@ -3163,8 +3272,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_COONS)                    ;; 88  <-  44
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8a  <-  45 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 8c  <-  46 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 8e  <-  47 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; 90  <-  c8..cf reserved
+           (word-ref BC_PUSH_RA)                  ;; 8e  <-  47 reserved
+           (word-ref BC_XET_RA_ARRAY_FIELD)       ;; 90  <-  c8..cf reserved
            (word-ref BC_BINC_RAI)                 ;; 92  <-  49
            (word-ref BC_NATIVE)                   ;; 94  <-  4a
            (word-ref BC_POP_TO_RA)                ;; 96  <-  4b
@@ -3308,8 +3417,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_ALLOC_A
           BC_ALLOC_ARA
           BC_XET_ARRAY_FIELD
+          BC_XET_RA_ARRAY_FIELD
           BC_F_P_RET_F
           VM_REFCOUNT_DECR_CURRENT_LOCALS
+          VM_REFCOUNT_DECR_ARRAY_REGS
           BC_PUSH_AF
           BC_POP_TO_AF
           BC_PUSH_B
@@ -3324,6 +3435,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_Z_P_BRA
           BC_Z_P_RET_POP_N
           BC_PUSH_RA_AF
+          BC_PUSH_RA
           VM_INTERPRETER))
 
 (define vm-interpreter
@@ -3338,4 +3450,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1001))
+                       1075))

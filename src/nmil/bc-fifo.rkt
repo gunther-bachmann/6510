@@ -28,6 +28,16 @@
 (require (only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  ALLOC_ARA
+                  PUSH_RA
+                  GET_RA_AF_0
+                  GET_RA_AF_1
+                  GET_RA_AF_2
+                  GET_RA_AF_3
+                  SET_RA_AF_0
+                  SET_RA_AF_1
+                  SET_RA_AF_2
+                  SET_RA_AF_3
                   CONS
                   CALL
                   RET
@@ -137,19 +147,32 @@
     (define wrapped-code (wrap-bytecode-for-test bc))
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
 
+(define FIFO_CREATE_N ;;  -> point struct
+  (list
+   (label FIFO_CREATE_N)
+          (byte 1)
+          (bc PUSH_B) (byte 2)  ;;                                stack: 2
+          (bc ALLOC_ARA)        ;; RA = aptr -> [-,-]             stack: -
+          (bc PUSH_NIL)         ;;                                stack: NIL
+          (bc SET_RA_AF_0)      ;; RA = aptr -> [NIL, -]          stack: -
+          (bc PUSH_NIL)         ;;                                stack: NIL
+          (bc SET_RA_AF_1)      ;; RA = aptr -> [NIL, NIL]        stack: -
+          (bc PUSH_RA)          ;;                                stack: aptr -> [NIL, NIL]
+          (bc RET)))
+
 (define FIFO_CREATE ;;  -> point struct
   (list
    (label FIFO_CREATE)
           (byte 1)
-          (bc PUSH_NIL)
-          (bc PUSH_NIL)
-          (bc PUSH_B) (byte 2)
-          (bc ALLOC_A)
-          (bc WRITE_TO_L0)
-          (bc SET_AF_0)
-          (bc PUSH_L0)
-          (bc SET_AF_1)
-          (bc PUSH_L0)
+          (bc PUSH_NIL)         ;; stack: NIL
+          (bc PUSH_NIL)         ;; stack: NIL :: NIL
+          (bc PUSH_B) (byte 2)  ;; stack: 2 :: NIL :: NIL
+          (bc ALLOC_A)          ;; stack: <point-struct-ptr> :: NIL :: NIL
+          (bc WRITE_TO_L0)      ;; l0 = <point-struct-ptr> -> [-, -]
+          (bc SET_AF_0)         ;; stack: NIL, <point-struct-ptr> -> [NIL, -]
+          (bc PUSH_L0)          ;; stack: <point-struct-ptr> :: NIL
+          (bc SET_AF_1)         ;; stack: -, <point-struct-ptr> -> [NIL, NIL]
+          (bc PUSH_L0)          ;; stack: <point-struct-ptr>
           (bc RET)))
 
 (module+ test #| fifo create |#
