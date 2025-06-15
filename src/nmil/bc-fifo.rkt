@@ -47,7 +47,6 @@
                   PUSH_I
                   PUSH_B
                   GC_FL
-                  ALLOC_A
                   F_P_RET_F
                   GET_AF_0
                   GET_AF_1

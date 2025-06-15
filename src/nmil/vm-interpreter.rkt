@@ -73,6 +73,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-memory-map.rkt"
                   ast-const-get
                   ZP_RT
+                  ZP_RA
                   ZP_VM_PC
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
@@ -172,7 +173,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_I
          PUSH_B
          PUSH_NIL
-         ALLOC_A
          F_P_RET_F
          GET_AF_0
          GET_AF_1
@@ -2713,7 +2713,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_B) (byte 20)
-      (bc ALLOC_A)
+      (bc ALLOC_ARA)
+      (bc PUSH_RA)
       (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
       (bc PUSH_I1)
       (bc SWAP)
@@ -2723,9 +2724,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-stack->strings pop-to-array-field-state)
                 (list "stack holds 1 item"
-                      (format "ptr[1] $~a06  (rt)" (number->string PAGE_AVAIL_0 16))))
+                      (format "ptr[2] $~a06  (rt)" (number->string PAGE_AVAIL_0 16))))
+  (check-equal? (memory-list pop-to-array-field-state (+ ZP_RA 0) (+ ZP_RA 1))
+                (list #x06 PAGE_AVAIL_0)
+                "RA holds a pointer to the array, too")
   (check-equal? (memory-list pop-to-array-field-state (+ PAGE_AVAIL_0_W 05) (+ PAGE_AVAIL_0_W 11))
-                (list 1      ;; refcnt = 1 (one reference on the stack)
+                (list 2      ;; refcnt = 1 (one reference on the stack)
                       #x83   ;; page type = m1p3 (slot size 49, used 20*2)
                       20     ;; number of elements
                       0 0    ;; element 0
@@ -2752,8 +2756,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (flatten
       (list
        (bc PUSH_B) (byte 20)
-       (bc ALLOC_A)
-
+       (bc ALLOC_ARA)
+       (bc PUSH_RA)
        (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
        (bc PUSH_I1)
        (bc SWAP)
@@ -2776,7 +2780,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
        (bc PUSH_AF)))))
 
   (check-equal? (memory-list push-array-field-state (+ PAGE_AVAIL_0_W 05) (+ PAGE_AVAIL_0_W 29))
-                (list 1      ;; refcnt = 1 (one reference on the stack)
+                (list 2      ;; refcnt = 2 (one reference on the stack, one in RA)
                       #x83   ;; page type = m1p3 (slot size 49, used 20*2)
                       20     ;; number of elements
                       0 0    ;; element 0
@@ -2791,12 +2795,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       0 0
                       3 2   ;; element 10
                       ))
-
+  (check-equal? (memory-list push-array-field-state (+ ZP_RA 0) (+ ZP_RA 1))
+                (list #x06 PAGE_AVAIL_0)
+                "RA holds a pointer to the array, too")
   (check-equal? (vm-stack->strings push-array-field-state)
                 (list "stack holds 3 items"
                       "int $0002  (rt)"
                       "int $0001"
-                      "ptr[1] $9706")))
+                      (format "ptr[2] $~a06" (number->string PAGE_AVAIL_0 16)))))
 
   ;; alternative coding
   ;; [x] POP_TO_RA, writes tos into RA and initializes RAi to 0
@@ -2996,22 +3002,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA ZP_RT+1)
           (STA ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
-
-;; @DC-B: ALLOC_A, group: cell_array
-;; allocate a cell-array of A size into RA
-;; len: 1
-;; stack: size (byte)
-;; ->     cell-ptr -> cell-array
-(define ALLOC_A #x14)
-(define BC_ALLOC_A
-  (list
-   (label BC_ALLOC_A)
-          (LDA ZP_RT+1)                 ;; byte size
-          (JSR ALLOC_CELLARR_TO_RA)     ;;
-          (JSR INC_REFCNT_M1_SLOT_RA)   ;; only cell-array needs to be inc-refcnt'd
-          (JSR CP_RA_TO_RT)             ;; overwrite byte on stack
-          (JMP VM_INTERPRETER_INC_PC)))
-
 
 ;; @DC-B: NATIVE, group: misc
 ;; following bytes are native 6510 commands, JSR RETURN_TO_BC ends this sequence
@@ -3243,7 +3233,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_POP)                      ;; 22  <-  11
            (word-ref BC_CELL_EQ_P)                ;; 24  <-  12
            (word-ref BC_F_P_RET_F)                ;; 26  <-  13
-           (word-ref BC_ALLOC_A)                  ;; 28  <-  14
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 28  <-  14 reserved
            (word-ref BC_PUSH_AF)                  ;; 2a  <-  15
            (word-ref BC_POP_TO_AF)                ;; 2c  <-  16
            (word-ref BC_PUSH_B)                   ;; 2e  <-  17
@@ -3436,7 +3426,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_IINC
           BC_BNOP
           BC_GC_FL
-          BC_ALLOC_A
           BC_ALLOC_ARA
           BC_XET_ARRAY_FIELD
           BC_XET_RA_ARRAY_FIELD
@@ -3473,4 +3462,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1075))
+                       1086))
