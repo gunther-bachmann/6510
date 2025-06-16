@@ -97,7 +97,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   vm-call-frame->strings
                   VM_POP_CALL_FRAME_N))
 (require (only-in "./vm-mm-cell-stack.rkt"
-                  PUSH_XA_TO_EVLSTK))
+                  PUSH_XA_TO_EVLSTK
+                  POP_CELL_EVLSTK_TO_RT))
 (require (only-in "../tools/6510-interpreter.rkt"
                   6510-load
                   6510-load-multiple
@@ -513,7 +514,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     4"
                          "next free slot: $49"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4737)
+                4674)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -1587,10 +1588,56 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    "__" "__BC_B_GT_P"
    (list
     (label BC_B_GT_P)
-           (JSR POP_CELL_EVLSTK_TO_RT)
-           (JSR POP_CELL_EVLSTK_TO_RT)
-           (JSR PUSH_INT_1_TO_EVLSTK) ;; TODO: implement
+           (JSR POP_CELL_EVLSTK_TO_RP)
+           (LDA ZP_RP+1)
+           (CMP ZP_RT+1)
+           (BMI GREATER__)
+           (JSR WRITE_INT0_TO_RT)
+           (JMP VM_INTERPRETER_INC_PC)
+    (label GREATER__)
+           (JSR WRITE_INT1_TO_RT)
            (JMP VM_INTERPRETER_INC_PC))))
+
+(module+ test #| BC_B_GT_P |#
+  (define gt-01-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 10)
+      (bc PUSH_B) (byte 20)
+      (bc B_GT_P))))
+
+  (check-equal? (vm-regt->string gt-01-state)
+                "int $0001")
+
+  (define gt-02-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 20)
+      (bc B_GT_P))))
+
+  (check-equal? (vm-regt->string gt-02-state)
+                "int $0000")
+
+  (define gt-03-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 21)
+      (bc B_GT_P))))
+
+  (check-equal? (vm-regt->string gt-03-state)
+                "int $0001")
+
+  (define gt-04-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 19)
+      (bc B_GT_P))))
+
+  (check-equal? (vm-regt->string gt-04-state)
+                "int $0000"))
 
 ;; @DC-B: B_LT_P, group: predicates
 (define B_LT_P #x25)
@@ -1599,11 +1646,56 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    "__" "__BC_B_LT_P"
    (list
     (label BC_B_LT_P)
-           (JSR POP_CELL_EVLSTK_TO_RT)
-           (JSR POP_CELL_EVLSTK_TO_RT)
-           (JSR PUSH_INT_1_TO_EVLSTK) ;; TODO: implement
+           (JSR POP_CELL_EVLSTK_TO_RP)
+           (LDA ZP_RT+1)
+           (CMP ZP_RP+1)
+           (BPL GREATER_OR_EQUAL__)
+           (JSR WRITE_INT1_TO_RT)
+           (JMP VM_INTERPRETER_INC_PC)
+    (label GREATER_OR_EQUAL__)
+           (JSR WRITE_INT0_TO_RT)
            (JMP VM_INTERPRETER_INC_PC))))
 
+(module+ test #| BC_B_LT_P |#
+  (define lt-01-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 10)
+      (bc B_LT_P))))
+
+  (check-equal? (vm-regt->string lt-01-state)
+                "int $0001")
+
+  (define lt-02-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 20)
+      (bc B_LT_P))))
+
+  (check-equal? (vm-regt->string lt-02-state)
+                "int $0000")
+
+  (define lt-03-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 21)
+      (bc B_LT_P))))
+
+  (check-equal? (vm-regt->string lt-03-state)
+                "int $0000")
+
+  (define lt-04-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 19)
+      (bc B_LT_P))))
+
+  (check-equal? (vm-regt->string lt-04-state)
+                "int $0001"))
 
 ;; @DC-B: I_GT_P, group: predicates
 (define I_GT_P #x63) ;; *I*​nt *G*​reater *T*​han *P*​redicates
@@ -3036,6 +3128,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_POP_TO_RAI)
           (LDA ZP_RT+1)
           (STA ZP_RAI)
+          (JSR POP_CELL_EVLSTK_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; @DC-B: NATIVE, group: misc
@@ -3549,4 +3642,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1112))
+                       1146))

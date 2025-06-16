@@ -175,17 +175,18 @@ call frame primitives etc.
     (LSR)
     (BCC CELLPAIR)                      ;; lowbyte ends on '01' => is a cell-pair pointer
 
-    (CMP !TAG_BYTE_CELL_ARRAY_LSR2)
-    (BEQ CELLARR)                       ;; tagged low byte = cell-array tag => is cell-array
-    (CMP !TAG_BYTE_NATIVE_ARRAY_LSR2)
-    (BEQ NATIVEARR)                     ;; tagged low byte = native-array tag => is native-array
+    ;; (CMP !TAG_BYTE_CELL_ARRAY_LSR2)
+    ;; (BEQ CELLARR)                       ;; tagged low byte = cell-array tag => is cell-array
+    ;; (CMP !TAG_BYTE_NATIVE_ARRAY_LSR2)
+    ;; (BEQ NATIVEARR)                     ;; tagged low byte = native-array tag => is native-array
 
-    ;; fall-back
-    (LDY  !$00)
-    (LDA (REGISTER),y)                  ;; get first byte of page
-    (AND !$f8)                          ;; mask out low 3 bits
-    (CMP !$10)                          ;;
-    (BEQ M1))))                         ;; jump if page tag b00010xxx => m1-slots page
+    ;; ;; fall-back
+    ;; (LDY  !$00)
+    ;; (LDA (REGISTER),y)                  ;; get first byte of page
+    ;; (AND !$f8)                          ;; mask out low 3 bits
+    ;; (CMP !$10)                          ;;
+    ;; (BEQ M1)
+)))                         ;; jump if page tag b00010xxx => m1-slots page
 
 (define (PTR_DETECTION_MACRO_RZ
          label-unknown

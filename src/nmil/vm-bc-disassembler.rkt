@@ -18,6 +18,7 @@ disassembler for byte code
                         #x06)) 3]           ;; push int
         [(memq bc (list #x0c                ;; branch on true, 
                         #x0d                ;; branch on false,
+                        #x1d                ;; branch if non zero
                         #x32                ;; goto
                         #x05)) 2]           ;; push byte
         [(= bc #x04)                        ;; ext command
@@ -71,6 +72,9 @@ disassembler for byte code
      (if (= 1 (bitwise-and bc #x01))
          (format "nil? ret param #~a" n)
          (format "nil? ret local #~a" n))]
+    [(= byte-code-t2 #x34) "byte dec"]
+    [(= byte-code-t2 #x38) "byte inc"]
+    [(= byte-code-t2 #x3a) (format "not zero? -> branch by ~a" (format-hex-byte bc_p1))]
     [(= byte-code-t2 #x40)
      (define n (arithmetic-shift (bitwise-and #x0e bc) -1))
      (if (= 1 (bitwise-and bc #x01))
@@ -78,6 +82,9 @@ disassembler for byte code
          (format "push local #~a, car" n))]
     [(= byte-code-t2 #x42) "nil?"]
     [(= byte-code-t2 #x44) "int 0?"]
+    [(= byte-code-t2 #x46) "byte add"]
+    [(= byte-code-t2 #x48) "byte > ?"]
+    [(= byte-code-t2 #x4a) "byte < ?"]
     [(= byte-code-t2 #x50)
      (define n (bitwise-and #x07 bc))
      (case n
@@ -118,6 +125,11 @@ disassembler for byte code
     [(= byte-code-t2 #x84) "cons"]
     [(= byte-code-t2 #x86) "car"]
     [(= byte-code-t2 #x88) "coons"]
+    [(= byte-code-t2 #x8e) "push ra"]
+    [(= byte-code-t2 #x98) "alloc array to ra"]
+    [(= byte-code-t2 #x9a) "push (ra),rai"]
+    [(= byte-code-t2 #x9c) "pop to (ra),rai"]
+    [(= byte-code-t2 #x9e) "pop byte to rai"]
     [(= byte-code-t2 #xc2) "int -"]
     [(= byte-code-t2 #xc4) "int +"]
     [(= byte-code-t2 #xc6) "int > ?"]
