@@ -307,7 +307,7 @@
                       "int $0001  (rt)"))
 
   (inform-check-equal? (cpu-state-clock-cycles point-equal-1-state)
-                       8361)
+                       8193)
 
   (define point-equal-2-state
     (run-bc-wrapped-in-test
