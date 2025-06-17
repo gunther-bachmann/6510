@@ -4090,6 +4090,19 @@ https://microvm.github.io
   - rethink file level separation of code after complete redesign
   - don't do too much thinks in parallel
 - see [[file:src/nmil/vm-memory-manager.org::*modularize functions using naming convention][modularize functions using naming convention]]
+**** DONE implement some code for arrays (structures)
+- State "DONE"       from "IMPLEMENT"  [2025-06-16 Mon 22:28]
+- cell arrays are put into the appropriate m1 slot pages
+  => max size of a cell array is in profile 3 m1 page (slot size 83 bytes => 1 byte cell-type, 1 byte array len, 81 bytes for cells => 40 cells)
+- arrays may hold one cell at each index
+- each cell may be an atomic cell only (just: byte, int, cell-ptr, cell-pair-ptr)
+- a cell-ptr may point to one cell, but depending on this cell, more cells may follow (cell-header + ..)
+- a cell-pair-ptr points to a cell-pair
+- functions
+  - write to @/read from @
+  - (copy subarray)
+  - (concatenate arrays)
+  - (to-list/from-list)
 **** IMPLEMENT what part of the 6510 vm design should be implement w/ racket to validate design?
 implement all necessary to do a reverse function tail called implementation with space optimized byte code
 see [[file:src/nmil/svm-compiler.rkt::(m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*][test with reverse function]]
@@ -4338,19 +4351,10 @@ this will include the implementation of
   - [X] run to next call/return
   - [X] step over call
 **** TODO write new tests for call-stack to verify local allocation/free on same page and over pages
-**** IMPLEMENT implement some code for arrays (structures)
-- cell arrays are put into the appropriate m1 slot pages
-  => max size of a cell array is in profile 3 m1 page (slot size 83 bytes => 1 byte cell-type, 1 byte array len, 81 bytes for cells => 40 cells)
-- arrays may hold one cell at each index
-- each cell may be an atomic cell only (just: byte, int, cell-ptr, cell-pair-ptr)
-- a cell-ptr may point to one cell, but depending on this cell, more cells may follow (cell-header + ..)
-- a cell-pair-ptr points to a cell-pair
-- functions
-  - write to @/read from @
-  - copy subarray
-  - concatenate arrays
-  - to-list/from-list
 **** IMPLEMENT implement prime sieve (using native array)
+- [X] prime sieve with cell-array
+- [ ] prime sieve with native array (byte indicator)
+- [ ] prime sieve with native array (bit indicator)
 **** IMPLEMENT implement some code for native arrays (strings)
 - native-array/string functions
   - write to @/read from @
@@ -4459,11 +4463,16 @@ both)
     - number of cell/cell-pair/cell-array/native-array alloc, free, reclaim, etc.
     - pages (type, #free cells ...) over time
 
-**** IDEA inline native code
+**** DONE IDEA inline native code
 - enter: byte code that will simply run the following natively (jmp there)
 - exit:  JSR interpreter reentrance:
   - pop next byte code address from stack into bc program counter
   - run bc interpreter from there
+**** IDEA bc optimization
+- combine POP n, PUSH_​RA -> WRITE_​RA
+- combine POP n, PUSH_​RA, RET -> RET_​RA_​POP n
+- combine DUP, POP_​TO​_​RAI -> WRITE_​TO_​RAI
+- combine POP, PUSH_​B b -> WRITE_​B b
 **** IDEA implement larger array by using a BST tree of arrays?
 **** IDEA change table with dispatch addresses (for certain programs? might optimize memory footprint)
 **** IDEA collect statistics for
@@ -4727,32 +4736,32 @@ What information is needed for the different phases? => check the different opti
              undo/redo = persistent tree data structure?, undo/redo organized in n-ary tree itself.
              <- when to discard? (running low on memory, discard most distant (tree distance) nodes)
                 siblings are ordered last touched first
-
-**** debugging
-- level 0: debug vm code (byte code), trace, inspect, step-debugger, memory inspector
-- level 1: debug mil, function/expression entry, inspect parameters, locals, etc, call stack, memory inspector
+**** IMPLEMENT debugging
+- [X] level 0: debug 6510 code
+- [X] level 1: debug vm code (byte code), trace, inspect, step-debugger, memory inspector
+- [ ] level 2: debug mil, function/expression entry, inspect parameters, locals, etc, call stack, memory inspector
 **** implement vm in mil
 - precondition: all language features are implemented, debugging should be possible
 - information gained: optimize execution speed + bytecode size + heap usage + c64 implementability
 **** memory management
-  - basic idea: don't do ref counting within a function
-    - do reference counting only upon returning from a function
-    - try to allocate/discard locally
-  - idea: memory pages
-    each page is used to allocate a certain type
-    - list page (car/cdr cell-pairs)
-    - array<> page (uniform type arrays)
-    - structure page (page storing structures)
-    - dynamicArray<> page (arrays of polymorphic types)
-    - hashmap page (table for hashmaps)
-    - float page (page for float numbers)
-    - byte-code page
-    - native-code page
-  - sketch a memory usage upon function enter / leave (and during execution) to find a way to achieve this goal
-  - atomic values (char, byte, int) are copied (to-from locals) without reference counting, except when used to create a list?
-  - lists and arrays/strings are allocated on the heap and need to ref-count the cells
-  - describe each instruction more closely to check how we can avoid reference counting
-  - maybe start with explicit memory management (alloc, free)
+- basic idea: don't do ref counting within a function
+  - do reference counting only upon returning from a function
+  - try to allocate/discard locally
+- idea: memory pages
+  each page is used to allocate a certain type
+  - [X] list page (car/cdr cell-pairs)
+  - [X] array<> page (uniform type arrays)
+  - [X] structure page (page storing structures)
+  - dynamicArray<> page (arrays of polymorphic types)
+  - hashmap page (table for hashmaps)
+  - float page (page for float numbers)
+  - byte-code page
+  - native-code page
+- sketch a memory usage upon function enter / leave (and during execution) to find a way to achieve this goal
+- atomic values (char, byte, int) are copied (to-from locals) without reference counting, except when used to create a list?
+- lists and arrays/strings are allocated on the heap and need to ref-count the cells
+- describe each instruction more closely to check how we can avoid reference counting
+- maybe start with explicit memory management (alloc, free)
 ** memory management
 *** layout
 **** operations

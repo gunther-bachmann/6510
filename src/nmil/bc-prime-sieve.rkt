@@ -57,7 +57,9 @@ primes (ignore 0,1) up to 30
                   bc
                   ALLOC_ARA
                   POP_TO_RA_AF
+                  BSHR
                   PUSH_RA_AF
+                  B_GE_P
                   B_GT_P
                   NZ_P_BRA
                   GOTO
@@ -171,20 +173,21 @@ primes (ignore 0,1) up to 30
    (flatten
   (list
    (label PRIME_SIEVE)
-          (byte 2) ;; locals
+          (byte 3) ;; locals
           (bc WRITE_TO_L0)              ;; l0 = size/max num (as byte)
-          (bc ALLOC_ARA)                ;; RA = cell-array
-          (bc PUSH_L0)
-   (label LOOP_ARR_INIT__PRIME_SIEVE)
-          (bc PUSH_I0)
-          (bc POP_TO_RA_AF)
-          (bc BDEC)
           (bc DUP)
-          (bc NZ_P_BRA) (bc-rel-ref LOOP_ARR_INIT__PRIME_SIEVE)
+          (bc BSHR)
+          (bc POP_TO_L2)                ;; l2 = size/2
+          (bc ALLOC_ARA)                ;; RA = cell-array
+          (bc PUSH_L0)                  ;;                       stack: size
+   (label LOOP_ARR_INIT__PRIME_SIEVE)
+          (bc PUSH_I0)                  ;;                       stack: 0 :: size
+          (bc POP_TO_RA_AF)             ;; (RA),RAI = 0          stack: size
+          (bc BDEC)                     ;;                       stack: size-1
+          (bc NZ_P_BRA) (bc-rel-ref LOOP_ARR_INIT__PRIME_SIEVE);;stack: size-1
 
-          (bc POP)
           (bc PUSH_B) (byte 02)         ;;                       stack: 2
-          (bc WRITE_TO_L1)
+          (bc WRITE_TO_L1)              ;; l1 = current candidate
 
    (label LOOP_MARKING__PRIME_SIEVE)
           (bc PUSH_L1)                  ;;                       stack: 2 :: 2
@@ -201,25 +204,26 @@ primes (ignore 0,1) up to 30
           (bc GOTO) (bc-rel-ref LOOP_MARKING__PRIME_SIEVE)
 
    (label DONE_MARKING__PRIME_SIEVE)
-          (bc POP)                      ;;                       stack: -
-          (bc PUSH_L1)                  ;;                       stack: 2
+          (bc WRITE_L1)                 ;;                       stack: 2
 
    (label NEXT_CAND__PRIME_SIEVE)
           (bc DUP)                      ;;                       stack: 2 :: 2
           (bc POP_TO_RAI)               ;;                       stack: 2
           (bc BINC)                     ;;                       stack: 3
+          ;; check whether half of size is reached => done
+          (bc DUP)                      ;;                       stack: 3 :: 3
+          (bc PUSH_L2)                  ;;                       stack: size/2 :: 3 :: 3
+          (bc B_LT_P)                   ;;                       stack: size/2 < 3 :: 3
+          (bc T_P_BRA) (bc-rel-ref ALL_DONE__PRIME_SIEVE) ;;     stack: 3
+
           (bc PUSH_RA_AF)               ;;                       stack: x :: 3
           (bc T_P_BRA) (bc-rel-ref NEXT_CAND__PRIME_SIEVE) ;;    stack: 3
-
-          ;; check whether double > bound => already done
 
           (bc WRITE_TO_L1)              ;;                       stack: 3
           (bc DUP)                      ;;                       stack: 3 :: 3
           (bc PUSH_L0)                  ;;                       stack: size :: 3 :: 3
-          (bc B_LT_P)                   ;;                       stack: < :: 3
-          (bc T_P_BRA) (bc-rel-ref ALL_DONE__PRIME_SIEVE) ;;     stack: 3
-          (bc GOTO) (bc-rel-ref LOOP_MARKING__PRIME_SIEVE) ;;    stack: 3
-
+          (bc B_GE_P)                   ;;                       stack: < :: 3
+          (bc T_P_BRA) (bc-rel-ref LOOP_MARKING__PRIME_SIEVE) ;; stack: 3
 
    (label ALL_DONE__PRIME_SIEVE)                     ;;          stack: 20+
           (bc POP)
@@ -239,7 +243,7 @@ primes (ignore 0,1) up to 30
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                       51115)
+                       42022)
 
   (check-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 5) (+ PAGE_AVAIL_0_W 47))
                 (list #x01 #x83 #x14
