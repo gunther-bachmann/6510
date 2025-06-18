@@ -55,6 +55,11 @@ primes (ignore 0,1) up to 30
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  WRITE_RA
+                  WRITE_TO_RBI
+                  DEC_RBI_NZ_P_BRA
+                  DEC_RAI
+                  WRITE_TO_RAI
                   ALLOC_ARA
                   POP_TO_RA_AF
                   BSHR
@@ -167,6 +172,10 @@ primes (ignore 0,1) up to 30
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
 
 
+;; init loop cnt (e.g. # -> RAI/BI/CI
+;; execute loop body
+;; jump until done     DEC RAI/BI/CI, NZ_P_BRA
+
 ;; stack: size (up to number)
 (define PRIME_SIEVE
   (bc-resolve
@@ -175,16 +184,15 @@ primes (ignore 0,1) up to 30
    (label PRIME_SIEVE)
           (byte 3) ;; locals
           (bc WRITE_TO_L0)              ;; l0 = size/max num (as byte)
+          (bc WRITE_TO_RBI)
           (bc DUP)
           (bc BSHR)
           (bc POP_TO_L2)                ;; l2 = size/2
           (bc ALLOC_ARA)                ;; RA = cell-array
-          (bc PUSH_L0)                  ;;                       stack: size
    (label LOOP_ARR_INIT__PRIME_SIEVE)
-          (bc PUSH_I0)                  ;;                       stack: 0 :: size
-          (bc POP_TO_RA_AF)             ;; (RA),RAI = 0          stack: size
-          (bc BDEC)                     ;;                       stack: size-1
-          (bc NZ_P_BRA) (bc-rel-ref LOOP_ARR_INIT__PRIME_SIEVE);;stack: size-1
+          (bc PUSH_I0)                  ;;                       stack: 0
+          (bc POP_TO_RA_AF)             ;; (RA),RAI = 0          stack: -
+          (bc DEC_RBI_NZ_P_BRA) (bc-rel-ref LOOP_ARR_INIT__PRIME_SIEVE)
 
           (bc PUSH_B) (byte 02)         ;;                       stack: 2
           (bc WRITE_TO_L1)              ;; l1 = current candidate
@@ -196,9 +204,10 @@ primes (ignore 0,1) up to 30
           (bc PUSH_L0)                  ;;                       stack: size :: 4 :: 4
           (bc B_LT_P)                   ;;                       stack: < :: 4
           (bc T_P_BRA) (bc-rel-ref DONE_MARKING__PRIME_SIEVE) ;; stack: 4
-          (bc DUP)                      ;;                       stack: 4 :: 4
-          (bc BDEC)
-          (bc POP_TO_RAI)               ;;                       stack: 4
+
+          (bc WRITE_TO_RAI)             ;;                       stack: 4
+          (bc DEC_RAI)
+
           (bc PUSH_I1)                  ;;                       stack: 1 :: 4
           (bc POP_TO_RA_AF)             ;;                       stack: 4
           (bc GOTO) (bc-rel-ref LOOP_MARKING__PRIME_SIEVE)
@@ -225,9 +234,8 @@ primes (ignore 0,1) up to 30
           (bc B_GE_P)                   ;;                       stack: < :: 3
           (bc T_P_BRA) (bc-rel-ref LOOP_MARKING__PRIME_SIEVE) ;; stack: 3
 
-   (label ALL_DONE__PRIME_SIEVE)                     ;;          stack: 20+
-          (bc POP)
-          (bc PUSH_RA)                  ;;                       stack: array-ptr
+   (label ALL_DONE__PRIME_SIEVE)        ;;                       stack: 20+
+          (bc WRITE_RA)                 ;;                       stack: array-ptr
           (bc RET)))))
 
 (module+ test #| primve-sieve |#
@@ -243,7 +251,7 @@ primes (ignore 0,1) up to 30
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                       42022)
+                       38110)
 
   (check-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 5) (+ PAGE_AVAIL_0_W 47))
                 (list #x01 #x83 #x14

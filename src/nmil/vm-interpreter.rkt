@@ -148,7 +148,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (provide vm-interpreter
          bc
+         WRITE_RA
          BDEC
+         DEC_RAI
+         DEC_RBI_NZ_P_BRA
+         WRITE_TO_RBI
+         WRITE_TO_RAI
          BSHR
          BADD
          B_GT_P
@@ -3018,6 +3023,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   ;; CP_RB_TO_RC
   ;; CP_RC_TO_RA
 
+;; @DC-B: WRITE_RA, group: cell_array
+;; *WRITE* *R*​egister *A* to stack
+(define WRITE_RA #x55)
 ;; @DC-B: PUSH_RA, group: cell_array
 ;; *PUSH* *R*​egister *A* to stack
 (define PUSH_RA #x47)
@@ -3025,6 +3033,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label BC_PUSH_RA)
           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+   (label BC_WRITE_RA)
           (JSR CP_RA_TO_RT)
           (JSR INC_REFCNT_RT)
           (JMP VM_INTERPRETER_INC_PC)))
@@ -3175,6 +3184,38 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA ZP_RT+1)
           (STA ZP_RAI)
           (JSR POP_CELL_EVLSTK_TO_RT)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+;; @DC-B: WRITE_TO_RAI, group: cell_array
+;; *WRITE* top of evlstk byte *TO* *RA* *I*​ndex
+;; len: 1
+(define WRITE_TO_RAI #x51)
+(define BC_WRITE_TO_RAI
+  (list
+   (label BC_WRITE_TO_RAI)
+          (LDA ZP_RT+1)
+          (STA ZP_RAI)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+;; @DC-B: WRITE_TO_RBI, group: cell_array
+;; *WRITE* top of evlstk byte *TO* *RA* *I*​ndex
+;; len: 1
+(define WRITE_TO_RBI #x53)
+(define BC_WRITE_TO_RBI
+  (list
+   (label BC_WRITE_TO_RBI)
+          (LDA ZP_RT+1)
+          (STA ZP_RBI)
+          (JMP VM_INTERPRETER_INC_PC)))
+
+;; @DC-B: DEC_RAI, group: cell_array
+;; *DEC*​rement *RA* *I*​ndex
+;; len: 1
+(define DEC_RAI #x52)
+(define BC_DEC_RAI
+  (list
+   (label BC_DEC_RAI)
+          (DEC ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; @DC-B: NATIVE, group: misc
@@ -3432,6 +3473,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR POP_CELL_EVLSTK_TO_RT)
            (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
 
+
+;; @DC-B: DEC_RBI_NZ_P_BRA, group: flow
+;; *DEC*​rement *RBI* and *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+;; len: 2
+(define DEC_RBI_NZ_P_BRA #x54)
+(define BC_DEC_RBI_NZ_P_BRA
+  (flatten
+   (list
+    (label BC_DEC_RBI_NZ_P_BRA)
+           (DEC ZP_RBI)
+           (BNE BRA__BC_DEC_RBI_NZ_P_BRA) ;; != 0 => branch before even looking at anything else
+           (JMP VM_INTERPRETER_INC_PC_2_TIMES)
+    (label BRA__BC_DEC_RBI_NZ_P_BRA)
+           (JMP BRANCH_BY_NEXT_BYTE__NO_POP))))
+
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
@@ -3518,11 +3574,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_POP_TO_RA_AF)             ;; 9c  <-  4e
            (word-ref BC_POP_TO_RAI)               ;; 9e  <-  4f
            (word-ref VM_INTERPRETER_INC_PC)       ;; a0  <-  d0..d7 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; a2  <-  51 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; a4  <-  52 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; a6  <-  53 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; a8  <-  54 reserved
-           (word-ref VM_INTERPRETER_INC_PC)       ;; aa  <-  55 reserved
+           (word-ref BC_WRITE_TO_RAI)             ;; a2  <-  51
+           (word-ref BC_DEC_RAI)                  ;; a4  <-  52
+           (word-ref BC_WRITE_TO_RBI)             ;; a6  <-  53
+           (word-ref BC_DEC_RBI_NZ_P_BRA)         ;; a8  <-  54
+           (word-ref BC_WRITE_RA)                 ;; aa  <-  55 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ac  <-  56 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; ae  <-  57 reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; b0  <-  d8..df reserved
@@ -3678,6 +3734,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_B_LT_P
           BC_B_GE_P
           BC_BSHR
+          BC_WRITE_TO_RAI
+          BC_DEC_RAI
+          BC_WRITE_TO_RBI
+          BC_DEC_RBI_NZ_P_BRA
           VM_INTERPRETER))
 
 (define vm-interpreter
@@ -3692,4 +3752,4 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1166))
+                       1201))
