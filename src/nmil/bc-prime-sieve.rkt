@@ -216,8 +216,7 @@ primes (ignore 0,1) up to 30
           (bc WRITE_L1)                 ;;                       stack: 2
 
    (label NEXT_CAND__PRIME_SIEVE)
-          (bc DUP)                      ;;                       stack: 2 :: 2
-          (bc POP_TO_RAI)               ;;                       stack: 2
+          (bc WRITE_TO_RAI)             ;;                       stack: 2
           (bc BINC)                     ;;                       stack: 3
           ;; check whether half of size is reached => done
           (bc DUP)                      ;;                       stack: 3 :: 3
@@ -243,7 +242,7 @@ primes (ignore 0,1) up to 30
     (run-bc-wrapped-in-test
      (append
       (list
-       (bc PUSH_B) (byte 20)
+       (bc PUSH_B) (byte 40)
        (bc CALL) (word-ref PRIME_SIEVE)  ;; calc primes in the range of 1..20
        (bc BRK))
       (list (org #x8F00))
@@ -251,10 +250,10 @@ primes (ignore 0,1) up to 30
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                       38110)
+                       83402)
 
-  (check-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 5) (+ PAGE_AVAIL_0_W 47))
-                (list #x01 #x83 #x14
+  (check-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 3) (+ PAGE_AVAIL_0_W 85))
+                (list #x01 #x83 40
                       #x03 #x00  ;; 1 prime
                       #x03 #x00  ;; 2 prime
                       #x03 #x00  ;; 3 prime
@@ -275,4 +274,24 @@ primes (ignore 0,1) up to 30
                       #x03 #x01  ;; 18
                       #x03 #x00  ;; 19 prime
                       #x03 #x01  ;; 20
+                      #x03 #x01  ;; 21
+                      #x03 #x01  ;; 22
+                      #x03 #x00  ;; 23 prime
+                      #x03 #x01  ;; 24
+                      #x03 #x01  ;; 25
+                      #x03 #x01  ;; 26
+                      #x03 #x01  ;; 27
+                      #x03 #x01  ;; 28
+                      #x03 #x00  ;; 29 prime
+                      #x03 #x01  ;; 30
+                      #x03 #x00  ;; 31 prime
+                      #x03 #x01  ;; 32
+                      #x03 #x01  ;; 33
+                      #x03 #x01  ;; 34
+                      #x03 #x01  ;; 35
+                      #x03 #x01  ;; 36
+                      #x03 #x00  ;; 37 prime
+                      #x03 #x01  ;; 38
+                      #x03 #x01  ;; 39
+                      #x03 #x01  ;; 40
                       )))

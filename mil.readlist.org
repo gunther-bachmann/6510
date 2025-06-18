@@ -4468,11 +4468,12 @@ both)
 - exit:  JSR interpreter reentrance:
   - pop next byte code address from stack into bc program counter
   - run bc interpreter from there
-**** IDEA bc optimization
-- combine POP n, PUSH_​RA -> WRITE_​RA
-- combine POP n, PUSH_​RA, RET -> RET_​RA_​POP n
-- combine DUP, POP_​TO​_​RAI -> WRITE_​TO_​RAI
-- combine POP, PUSH_​B b -> WRITE_​B b
+**** DONE bc optimization - looping with index registers
+- [X] combine POP n, PUSH_​RA -> WRITE_​RA
+- [X] looping with RAI, RBI as index -> DEC_​RAI_​NZ_​P_​BRA (decrement RAI, if nz branch)
+- (combine POP n, PUSH_​RA, RET -> RET_​RA_​POP n)
+- [X] combine DUP, POP_​TO​_​RAI -> WRITE_​TO_​RAI
+- (combine POP, PUSH_​B b -> WRITE_​B b)
 **** IDEA implement larger array by using a BST tree of arrays?
 **** IDEA change table with dispatch addresses (for certain programs? might optimize memory footprint)
 **** IDEA collect statistics for

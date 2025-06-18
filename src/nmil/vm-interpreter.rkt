@@ -3198,7 +3198,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JMP VM_INTERPRETER_INC_PC)))
 
 ;; @DC-B: WRITE_TO_RBI, group: cell_array
-;; *WRITE* top of evlstk byte *TO* *RA* *I*​ndex
+;; *WRITE* top of evlstk byte *TO* *RB* *I*​ndex
 ;; len: 1
 (define WRITE_TO_RBI #x53)
 (define BC_WRITE_TO_RBI
