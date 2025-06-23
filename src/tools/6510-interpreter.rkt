@@ -1500,8 +1500,11 @@
 
 (define/c (peek-indirect-woffset state address offset)
   (-> cpu-state? word/c exact-integer? word/c)
-  (peek state
-        (word (fx+ offset (peek-word-at-address state address)))))
+  (let ([target-adr (peek-word-at-address state address)])
+    (peek state
+          (if (<= target-adr #xff)
+              (bitwise-and #xff (fx+ offset target-adr))
+              (word (fx+ offset target-adr))))))
 
 ;; put the value at the address constructed from reading
 ;; low, high byte order from the address provided
@@ -1516,23 +1519,26 @@
 
 (define/c (poke-indirect-woffset state address offset value)
   (-> cpu-state? word/c exact-integer? byte/c cpu-state?)
-  (poke state
-        (word (fx+ offset (peek-word-at-address state address)))
-        value))
+  (let ([target-adr (peek-word-at-address state address)])
+    (poke state
+          (if (<= target-adr #xff)
+              (bitwise-and #xff (fx+ offset target-adr))
+              (word (fx+ offset target-adr)))
+          value)))
 
 ;; (zp,x) ->
 (define/c (peek-izx state)
   (-> cpu-state? byte/c)
   (let* [(zero-page-idx (peek-pc+1 state))
          (x             (cpu-state-x-index state))]
-    (peek-indirect state (fx+ x zero-page-idx))))
+    (peek-indirect state (bitwise-and #xff (fx+ x zero-page-idx)))))
 
 ;; (zp,x) <-
 (define/c (poke-izx state value)
   (-> cpu-state? byte/c cpu-state?)
   (let* [(zero-page-idx (peek-pc+1 state))
          (x             (cpu-state-x-index state))]
-    (poke-indirect state (fx+ x zero-page-idx) value)))
+    (poke-indirect state (bitwise-and #xff (fx+ x zero-page-idx)) value)))
 
 ;; (zp),y ->
 (define/c (peek-izy state)
