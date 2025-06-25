@@ -54,11 +54,11 @@
 
 (define/c (create-d64 name)
   (-> string? boolean?)
-  (system (string-append "c1541 -format \"" name ",01\" d64 " name)))
+  (system (string-append "c1541 -format \"" name ",01\" d64 " name " >/dev/null")))
 
 (define/c (add-prg-to-d64 prg-file-name d64 target-name)
   (-> string? string? string? boolean?)
-  (system (string-append "c1541 -attach " d64 " -write " prg-file-name " " target-name)))
+  (system (string-append "c1541 -attach " d64 " -write " prg-file-name " " target-name " >/dev/null")))
 
 ;; create a d64 image with prg file
 (define/c (create-image-with-program program org file-name d64 target-name)

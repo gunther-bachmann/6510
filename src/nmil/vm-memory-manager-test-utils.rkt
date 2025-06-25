@@ -93,10 +93,13 @@ provide routines that are useful for testing memory management routines
   ;; mock away labels in the mock list
   ;; add subroutine that counts calls to mocks incresing TEST_COUNTERS+<idx of mock>
   ;; where idx is the list position number of the mock passed
-  (define (list-with-label-suffix #:mock (mocked-code-list (list)) . list-elements )
+(define (list-with-label-suffix #:org (ast-org-cmd #f) #:mock (mocked-code-list (list)) . list-elements )
     (add-label-suffix
      "__" (string-replace (uuid-string) "-" "_")
      (append
+      (if ast-org-cmd
+          (list ast-org-cmd)
+          (list))
       (list (JMP TEST_ENTRY))
       (flatten (map (lambda (mocked-label idx)
                       (list mocked-label
