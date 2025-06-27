@@ -194,7 +194,6 @@
 (define CP_RT_TO_RA
   (list
    (label CP_RT_TO_RA)
-   (label CP_RT_TO_RA__VALUE) ;;just value, no tagged byte
           (LDA ZP_RT+1)
           (STA ZP_RA+1)
           (LDA ZP_RT)
@@ -208,7 +207,6 @@
 (define CP_RT_TO_RB
   (list
    (label CP_RT_TO_RB)
-   (label CP_RT_TO_RB__VALUE) ;;just value, no tagged byte
           (LDA ZP_RT+1)
           (STA ZP_RB+1)
           (LDA ZP_RT)

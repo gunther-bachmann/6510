@@ -26,11 +26,12 @@ extensions to the ast definitions that are originally specified only for assembl
          bc-cmd?
          bc-rel-ref)
 
+;; is this ast command structure a valid byte code ast command?
 (define (bc-cmd? cmd)
-  (or (ast-bytes-cmd? cmd)
-     (ast-label-def-cmd? cmd)
-     (bc-ast-rel-branch-reference? cmd)
-     (ast-unresolved-bytes-cmd? cmd)))
+  (or (ast-bytes-cmd? cmd)               ;; reused for simple byte lists
+     (ast-label-def-cmd? cmd)           ;; reused to define labels
+     (bc-ast-rel-branch-reference? cmd) ;; relative byte code branch reference
+     (ast-unresolved-bytes-cmd? cmd)))  ;; reused byte list with references
 
 (struct bc-ast-rel-branch-reference ast-bytes-cmd
   (label-ref)
@@ -40,7 +41,7 @@ extensions to the ast definitions that are originally specified only for assembl
            (listof byte?)
            string?))
 
-
+;; a relative reference e.g. for byte code branch commands
 (define-syntax (bc-rel-ref stx)
   (syntax-case stx ()
     ([_ str]

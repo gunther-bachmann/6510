@@ -93,9 +93,9 @@
    (byte-const ZP_LOCALS_LB_PTR          $e2) ;; e2..e3 pointer to low byte of first local in call-frame
                                               ;; @DC-ZP: ZP_LOCALS_HB_PTR, group: locals
    (byte-const ZP_LOCALS_HB_PTR          $e4) ;; e4..e5 pointer to high byte of first local in call-frame
-                                              ;; @DC-ZP: ZP_LOCALS_LB_PTR, group: evlstk
+                                              ;; @DC-ZP: ZP_CELL_STACK_LB_PTR, group: evlstk
    (byte-const ZP_CELL_STACK_LB_PTR      $e6) ;; e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
-                                              ;; @DC-ZP: ZP_LOCALS_HB_PTR, group: evlstk
+                                              ;; @DC-ZP: ZP_CELL_STACK_HB_PTR, group: evlstk
    (byte-const ZP_CELL_STACK_HB_PTR      $e8) ;; e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
                                               ;; @DC-ZP: ZP_CALL_FRAME_TOP_MARK, group: call_frame
    (byte-const ZP_CALL_FRAME_TOP_MARK    $ea) ;; ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)

@@ -4,6 +4,10 @@
 
 resolve unresolved reference in byte code ast
 
+functions
+- bc-resolve :: resolve references to labels in byte code commands
+- bc-bytes   :: find length in bytes of byte code commands
+
 |#
 
 (require (rename-in  racket/contract [define/contract define/c]))
@@ -41,6 +45,10 @@ resolve unresolved reference in byte code ast
                     GOTO)))
 
 
+;; collect all labels in this list of BC-AST-CMDS
+;; and build/extend the returned LABEL-HASH
+;; with the labels and their relative offset
+;; to the first command +OFFSET passed
 (define/c (bc-collect-labels bc-ast-cmds (offset 0) (label-hash (hash)))
   (->* [(listof bc-cmd?)] [integer? hash?] hash?)
   (cond
@@ -76,10 +84,15 @@ resolve unresolved reference in byte code ast
                    (label last))))
                 (hash "first" 0 "next" 1 "last" 6)))
 
+;; resolve the given BC-AST-CMDS
+;; collect labels first and resolve with the collected labels
 (define/c (bc-resolve bc-ast-cmds)
   (-> (listof bc-cmd?) (listof bc-cmd?))
   (bc-resolve- bc-ast-cmds (bc-collect-labels bc-ast-cmds)))
 
+;; inner function
+;; resolve the given BC-AST-CMDS into the RESULT list
+;; using the given LABELS hash adding OFFSET
 (define/c (bc-resolve- bc-ast-cmds labels (offset 0) (result (list)))
   (->* [(listof bc-cmd?) hash?] [integer? (listof bc-cmd?)] (listof bc-cmd?))  
   [cond
@@ -179,20 +192,22 @@ resolve unresolved reference in byte code ast
                  (ast-bytes-cmd '() '(2))
                  (ast-label-def-cmd '() "IS_PAIR__BTREE_VALIDATE"))))
 
+;; calculate the number of bytes the given list of BC-CMDS actually take
+;; useful for calculating the length of a sequence of byte code commands
 (define/c (bc-bytes bc-cmds (result 0))
   (-> (listof bc-cmd?) integer?)
-  (cond [(empty? bc-cmds) result]
-        [(ast-unresolved-bytes-cmd? (car bc-cmds))
+  (cond [(empty? bc-cmds) result] ;; done? return collected count
+        [(ast-unresolved-bytes-cmd? (car bc-cmds)) ;; unresolved byte command depend on referenc len (word/byte)
          (define bytes-count
            (cond
              [(ast-resolve-word-scmd? (ast-unresolved-bytes-cmd-resolve-sub-command (car bc-cmds))) 2]
              [(ast-resolve-byte-scmd? (ast-unresolved-bytes-cmd-resolve-sub-command (car bc-cmds))) 1]
              [else (raise-user-error "unknown case")]))
          (bc-bytes (cdr bc-cmds) (+ result bytes-count))]
-        [(ast-bytes-cmd? (car bc-cmds))
+        [(ast-bytes-cmd? (car bc-cmds)) ;; ast-bytes-cmd simply counts the length of bytes in this command
          (define bytes-count (length (ast-bytes-cmd-bytes (car bc-cmds))))
-         (when (= 0 bytes-count) (raise-user-error "suspicious byte cound"))
+         (when (= 0 bytes-count) (raise-user-error "suspicious byte count 0"))
          (bc-bytes (cdr bc-cmds) (+ result bytes-count))]
-        [(ast-label-def-cmd? (car bc-cmds))
+        [(ast-label-def-cmd? (car bc-cmds)) ;; labels count as 0
          (bc-bytes (cdr bc-cmds) result)]
         [else (raise-user-error "unknown case")]))

@@ -10,8 +10,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 
 ;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
-;; TODO: implement structure access, allocation, deallocation
-;; TODO: implement array access, allocation, deallocation (native arrays, regular arrays)
 ;; TODO: implement constant pool
 ;; TODO: implement structure creation
 ;; TODO: implement strings
@@ -20,42 +18,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 ;; PLANNED: harmonize virtual byte code machine with this implementation?
 
 ;; IDEA: implement exact numbers (as list of bcd digits e.g. 3 bcds in 16 bit?)
-;; IDEA allow to switch debugger to byte code debugger and vice versa
-
-#|
-  Byte code command list and description
-  opcode                 len       options                   description
-  -----------------------------------------------------------------------------------
-  ALLOC_   A              1  14                             allocate cell-ptr to cell-array onto stack
-  BREAK                   1  01                             break (stop)
-  CALL                    3  34                             statically call function pointed to be following two bytes
-  CAR                     1  43                             replace tos with car
-  CDR                      1  41                             replace tos with cdr
-  CONS                     1  42                             pop car and cdr and push cons of car cdr
-  INT_MINUS                1  61                             pop two integers and push the subtraction of them
-  INT_PLUS                 1  62                             pop two integers and push the sum of them
-  NIL?                     1  21                             replace tos with 0 (false) or 1 (true) if tos was nil
-  NIL_P_RET_L0_POP_n   1  98+  n=1..4                     if tos is nil, pop n from eval-stack and return local0 as result (on tos)
-  POP_TO_AF       1  16                             pop the cell at tos-2 into array (tos-1) at index (tos)
-  POP_TO_Ln           1  90+  n=0..3                     pop tos into local#n
-  PUSH_AF         1  15                             push field of the array (tos-1) at index (tos) onto eval-stack
-  PUSH_B byte              2  17   byte=0..255 -128..+127     push a byte constant onto the eval-stack
-  PUSH_I int               3  06   int=0..8191, -4096..4095   push integer constant onto eval-stack
-  PUSH_Ii                  1  b8+  i=0,1,2,-1(m1)            push constant 0,1,2,-1 onto eval-stack
-  PUSH_Ln                  1  80+  n=0..3                     push local#n onto eval-stack
-  PUSH_NIL                 1  09                             push nil onto eval-stack
-  RET                      1  33                             return from function
-  TAIL_CALL                1  35                             tail call same function
-  WRITE_Ln       1  81+  n=0..3                     write local#n into tos (overwriting old tos)
-  WRITE_TO_Ln         1  91+  n=0..3                     write tos into local#n (without popping)
-
-
-  (not implemented yet)
-  PUSH_B byte           2  05   byte=0..255, -128..127      push byte constant onto eval-stack
-  POP_n                    1       n=1..4                     pop top n values
-  SET_CAR                  1                                 set car element to tos (of car-cdr-pair-ptr behind tos) and pop 2 values
-  SET_CDR                  1                                 set cdr element to tos (of car-cdr-pair-ptr behind tos) and pop 2 values
-|#
 
 (require (only-in racket/list flatten take empty? range))
 
@@ -3753,3 +3715,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
                        1201))
+
+(module+ test #| vm-interpreter total len |#
+  (define interpreter-len (foldl + 0 (map command-len (flatten vm-interpreter))))
+  (inform-check-equal?
+   (< interpreter-len 3840)
+   #t
+   (format "total memory usage of the interpreter (now ~a) should stay within c000..ceff" interpreter-len)))
