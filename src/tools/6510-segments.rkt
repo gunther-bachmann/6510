@@ -14,6 +14,8 @@ define code/data segments for a c64 program that are used for generating a loade
          segment-type?
          resolution-type?)
 
+(require (only-in racket/list flatten empty? take))
+
 (require (only-in racket/contract/base struct-guard/c and/c list/c)
          (only-in "../6510-utils.rkt" word/c  byte/c))
 
@@ -133,58 +135,138 @@ define code/data segments for a c64 program that are used for generating a loade
 
 (module+ test #| looped-copy-region |#
   (require (only-in  "../nmil/vm-memory-manager-test-utils.rkt" list-with-label-suffix))
-  (define looped-copy-region-01
+
+  ;; load two code sections (located in the program loaded to 0800)
+  ;; into c000 and 8000 that print out 0 and 1 (and some more) on the screen
+  ;; absolute and relative references within these sections are resolved
+  ;; with the target location in mind, copy descriptor is resolved,
+  ;; using the src locations of the code to be copied
+  (define (looped-copy-region-01 for-test)
+      (append
+       (if for-test
+           (list)
+           (list   (org #x0810)
+                   (word-const CHAR_OUT $ffd2)
+                   (JMP CTRL_SECTION)))
+       LOOPED_COPY_REGION
+       COPY_REGION
+       (if for-test
+           (list
+                   (org #x0900)
+            (label TEST_COUNTERS)
+                   (byte 0)
+            (label COPY_DESCRIPTOR)
+                   (byte 27 00 00 #x10 00 #x80)
+                   (byte 24 00 00 #x20 00 #xc0)
+                   (byte 00 00))
+           (flatten
+            (list
+            (label COPY_DESCRIPTOR)
+                   (byte 27 00)
+                   (byte-ref <SECTION_ONE)
+                   (byte-ref >SECTION_ONE)
+                   (byte 00 #x80)
+                   (byte 24 00)
+                   (byte-ref <SECTION_TWO)
+                   (byte-ref >SECTION_TWO)
+                   (byte 00 #xc0)
+                   (byte 00 00))))
+       (list
+            (label TEST_ENTRY)
+            (label CTRL_SECTION)
+            ;; now copy sections to right place
+                   (LDA !<COPY_DESCRIPTOR)
+                   (LDX !>COPY_DESCRIPTOR)
+                   (JSR LOOPED_COPY_REGION)
+
+                   (JSR $8000)
+                   (JSR $c000))
+       (if for-test
+           (list   (BRK)
+                   (org #x1000))
+           (list   (RTS)
+                   (org #x8000) ;; this should only be active for resolving references within section on, not for using the byte reference in the COPY_DESCRIPTOR!
+                   ))
+       (list
+            (label SECTION_ONE)
+                   (LDA !48)
+                   (JSR CHAR_OUT)
+                   (LDY STRING1_MSG)
+            (label LOOP_OUT_1)
+                   (LDA STRING1_MSG,y)
+                   (JSR CHAR_OUT)
+                   (DEY)
+                   (BNE LOOP_OUT_1)
+                   (RTS)
+            (label STRING1_MSG)
+                   (byte 6)
+                   (asc "!OLLEH"))
+       (if for-test
+           (list   (org #x2000))
+           (list   (org #xc000)
+                   ))
+       (list
+            (label SECTION_TWO)  ;; this should only be active for resolving references within section on, not for using the byte reference in the COPY_DESCRIPTOR!
+                   (LDA !49)
+                   (JSR CHAR_OUT)
+                   (LDY STRING2_MSG)
+            (label LOOP_OUT_2)
+                   (LDA STRING2_MSG,y)
+                   (JSR CHAR_OUT)
+                   (DEY)
+                   (BNE LOOP_OUT_2)
+                   (RTS)
+            (label STRING2_MSG)
+                   (byte 3)
+                   (asc "!IH"))))
+
+  (define looped-copy-region-01t
     (run-code-in-test-on-code
-     (append
-     (list-with-label-suffix
-      #:org  (org #x0804)
-      #:mock (list (label CHAR_OUT))
-             ;; (JMP CTRL_SECTION)
+     (apply
+      list-with-label-suffix
+      (looped-copy-region-01 #t)
+      #:org  (org #x0810)
+      #:mock (list (label CHAR_OUT)))))
 
-             (org #x0900)
-      (label TEST_COUNTERS)
-             (byte 0)
-      (label COPY_DESCRIPTOR)
-             (byte 06 00 00 #x10 00 #x80)
-             (byte 06 00 00 #x20 00 #xc0)
-             (byte 00 00)
-
-             ;; (word-const CHAR_OUT $ffd2)
-
-      (label TEST_ENTRY)
-      (label CTRL_SECTION)
-             ;; now copy sections to right place
-             (LDA !<COPY_DESCRIPTOR)
-             (LDX !>COPY_DESCRIPTOR)
-             (JSR LOOPED_COPY_REGION)
-
-             (JSR $8000)
-             (JSR $c000)
-             (BRK)
-
-             (org #x1000)
-      (label SECTION_ONE)
-             (LDA !48)
-             (JSR CHAR_OUT)
-             (RTS)
-             (org #x2000)
-      (label SECTION_TWO)
-             (LDA !49)
-             (JSR CHAR_OUT)
-             (RTS))
-     LOOPED_COPY_REGION
-     COPY_REGION)
-     ))
-
-  (check-equal? (memory-list looped-copy-region-01 #x0900 #x0900)
-                (list 02)
-                "CHAR_OUT has been called two times!")
-  (check-equal? (memory-list looped-copy-region-01 #x1000 #x1002)
+  (check-equal? (memory-list looped-copy-region-01t #x0900 #x0900)
+                (list 11)
+                "CHAR_OUT has been called eleven times!")
+  (check-equal? (memory-list looped-copy-region-01t #x1000 #x1002)
                 (list 169 48 32)
-                "load and jump command")
-  (check-equal? (memory-list looped-copy-region-01 #x2000 #x2002)
+                "load and jump command were copied to the right location")
+  (check-equal? (memory-list looped-copy-region-01t #x2000 #x2002)
                 (list 169 49 32)
-                "load and jump command"))
+                "load and jump command were copied to the expected location")
+
+  (define looped-copy-region-prg
+    (looped-copy-region-01 #f))
+
+  (define (remove-all-but-first-org-cmd ast-commands)
+    (unless (empty? ast-commands)
+      (append (list (car ast-commands))
+              (filter (lambda (cmd) (not (ast-org-command? cmd))) (cdr ast-commands)))))
+
+  ;; use first code segment, resolving all labels based in the first (and only that) org directives
+  ;; use all other code segments, resolving them based on their respective org directives
+  ;; this is necessary to create the copy descriptors correctly (located in first code segment)
+  ;; and resove references in the other code segments based on the requested target location
+  ;; they are actually (finally) located at
+  (define looped-copy-region-raw-bytes
+    (let ([sections-as-loaded
+           (cdar (assembly-code-list-org-code-sequences
+                  (new-assemble-to-code-list (remove-all-but-first-org-cmd looped-copy-region-prg))))]
+          [remaining-sections-located-right
+            (flatten (map cdr (cdr (assembly-code-list-org-code-sequences
+                                    (new-assemble-to-code-list looped-copy-region-prg)))))])
+      (append
+       (take  sections-as-loaded (- (length sections-as-loaded) (length remaining-sections-located-right)))
+       remaining-sections-located-right)))
+
+  (define basic-org-loc 2064)
+  (define looped-copy-region-generated-d64-program
+    (begin
+      (create-prg looped-copy-region-raw-bytes basic-org-loc "loader2.prg")
+      (create-image-with-program looped-copy-region-raw-bytes basic-org-loc "loader2.prg" "loader2.d64" "loader2"))))
 
 ;; copy region from: zp:  fc/fd (low/high), to fe/ff (low/high), size fa/fb (low/high)
 ;; starting from the end, then page wise (with 0 offset first) => there should be no page overlap
@@ -346,3 +428,8 @@ define code/data segments for a c64 program that are used for generating a loade
     (begin
       (create-prg raw-bytes orgloc "loader.prg")
       (create-image-with-program raw-bytes orgloc "loader.prg" "loader.d64" "."))))
+
+
+;; TODO: now implement transforming segment definitions -> code
+;; TODO: define segments for current virtual machine implementation of VM
+;; TODO: define bytecode to run for VM to execute
