@@ -3,9 +3,27 @@
 
 including a debugger, an interpreter and functions to write vice compatible executable
 
+* TODO run bytecode on c64
+- implement code that produces statically linked prg files with interpreter and bytecode
+  copy byte code interpreter into final target memory (it was statically located to)
+  start interpretation of byte code at the spot it was loaded
+  => segments
+  - header        -> kept
+  - byte code     -> kept at this location
+  - copy routines -> discarded
+  - interpreter   -> moved up into c000
+
+  After startup, the memory manager of the interpreter is initialized to
+  regard the (remaining) byte code pages as occupied, everything else
+  ...9FFF as free pages for allocation of data
+  is it possible to write interpreter as terse as to fit into c000-cfff (4k)?
+  might be a bit too ambitous -> alternative:
+  interpreter comes in two segments, one moved up to c000, the other into
+  9000-9fff (linking between the two segments should not be a problem)
 * ideas
 ** c64 lisp editor
-- is written in mil! => extend mil such that this editor can be written
+- is written in mil! =>
+  extend mil such that this editor can be written
   - including efficient string manipulation (rope algorithms)
   - efficient mapping source-code (text) -> screen
   - efficient search and s/r algorithms

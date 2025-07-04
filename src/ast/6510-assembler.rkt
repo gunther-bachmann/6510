@@ -197,6 +197,7 @@
 (struct assembly-code-list
   (org-code-sequences
    labels)
+  #:transparent
   #:guard (struct-guard/c (listof pair?) hash?))
 
 ;; get all constants from the command list and return a hash label->value (byte or word)
@@ -214,14 +215,20 @@
                          [else '()]))
                  (constant-instructions program)))))
 
-(define/contract (new-assemble-to-code-list program)
-  (-> (listof ast-command?) assembly-code-list?)
+
+;; assemble the given program into a list of org-code-sequences and
+;; defined labels (and constants)
+;; one may pass additional labels (and constants) into the assembly run
+(define/contract (new-assemble-to-code-list program (labels (hash)))
+  (->* [(listof ast-command?)] [(hash/c string? nonnegative-integer?)] assembly-code-list?)
   (hash)
   (define constants (hash-constants program))
   (define program-p1 (->resolved-decisions (label-instructions program) program))
   (define lsoffsets (label-string-offsets (org-for-code-seq program-p1) program-p1))
-  (define program-p2 (->resolve-labels (org-for-code-seq program-p1) lsoffsets program-p1 '()))
-  (define program-p3 (resolve-constants (constant-definitions-hash program-p1) program-p2))
+  (define combined-offsets (hash-union lsoffsets labels #:combine (lambda (a _b) a)))
+  (define program-p2 (->resolve-labels (org-for-code-seq program-p1) combined-offsets program-p1 '()))
+  (define combined-constants (hash-union constants labels #:combine (lambda (a _b) a)))
+  (define program-p3 (resolve-constants combined-constants program-p2))
   (define code-list (split-into-code-list program-p3))
   (define result-wo-align
     (map (lambda (code-seq) `(,(org-for-code-seq code-seq) . ,(resolved-program->bytes (cdr code-seq)))) code-list))

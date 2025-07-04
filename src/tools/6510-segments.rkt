@@ -16,8 +16,10 @@ define code/data segments for a c64 program that are used for generating a loade
 
 (require (only-in racket/list flatten empty? take))
 
-(require (only-in racket/contract/base struct-guard/c and/c list/c)
+(require (only-in racket/contract/base struct-guard/c and/c list/c listof)
          (only-in "../6510-utils.rkt" word/c  byte/c))
+
+(require (only-in "../6510-utils.rkt" low-byte high-byte))
 
 (define (width? w)
   (memq w (list 'byte 'word)))
@@ -70,11 +72,11 @@ define code/data segments for a c64 program that are used for generating a loade
   #:guard (struct-guard/c
            segment-type?
            word/c
-           (list/c c64-relocation-info?)
-           (list/c c64-resolution-info?)
-           (list/c c64-resolution-symbols?)
+           (listof c64-relocation-info?)
+           (listof c64-resolution-info?)
+           (listof c64-resolution-symbols?)
            word/c
-           (list/c byte?))
+           (listof byte?))
   )
 
 ;; placing/copying a segment somewhere into the code includes the following steps
@@ -266,7 +268,140 @@ define code/data segments for a c64 program that are used for generating a loade
   (define looped-copy-region-generated-d64-program
     (begin
       (create-prg looped-copy-region-raw-bytes basic-org-loc "loader2.prg")
-      (create-image-with-program looped-copy-region-raw-bytes basic-org-loc "loader2.prg" "loader2.d64" "loader2"))))
+      (create-image-with-program looped-copy-region-raw-bytes basic-org-loc "loader2.prg" "loader2.d64" "loader2")))
+
+  (define segment-1-assembly
+    (new-assemble-to-code-list
+     (list
+             (org #x8000)
+
+             (word-const CHAR_OUT $ffd2)
+
+      (label SECTION_ONE)
+             (LDA !48)
+             (JSR CHAR_OUT)
+             (LDY STRING1_MSG)
+      (label LOOP_OUT_1)
+             (LDA STRING1_MSG,y)
+             (JSR CHAR_OUT)
+             (DEY)
+             (BNE LOOP_OUT_1)
+             (RTS)
+      (label STRING1_MSG)
+             (byte 6)
+             (asc "!OLLEH"))))
+
+  (define raw-bytes-segment-1
+    (cdar (assembly-code-list-org-code-sequences segment-1-assembly)))
+
+  (define segment-2-assembly
+    (new-assemble-to-code-list
+     (list
+             (org #xc000)
+
+             (word-const CHAR_OUT $ffd2)
+
+      (label SECTION_TWO)
+             (LDA !49)
+             (JSR CHAR_OUT)
+             (LDY STRING2_MSG)
+      (label LOOP_OUT_2)
+             (LDA STRING2_MSG,y)
+             (JSR CHAR_OUT)
+             (DEY)
+             (BNE LOOP_OUT_2)
+             (JSR SECTION_ONE) ;; reference to final location of section1
+             (RTS)
+      (label STRING2_MSG)
+             (byte 3)
+             (asc "!IH"))
+
+     (assembly-code-list-labels segment-1-assembly)))
+
+  (define raw-bytes-segment-2
+    (cdar (assembly-code-list-org-code-sequences segment-2-assembly)))
+
+  (define segment-1-descriptor
+    (segment->copy-descriptor
+     (c64-segment 'pinned ;; type
+                  #x8000  ;; location
+                  '()       ;; reloc info
+                  '()       ;; resolution info
+                  '()       ;; resolution symbols
+                  (length raw-bytes-segment-1)
+                  raw-bytes-segment-1)
+     "SECTION_ONE"))  ;; <- where do I get source location from, e.g. depends on number of segments? (could be a label)
+
+  (define segment-2-descriptor
+    (segment->copy-descriptor
+     (c64-segment 'pinned ;; type
+                  #xc000  ;; location
+                  '()       ;; reloc info
+                  '()       ;; resolution info
+                  '()       ;; resolution symbols
+                  (length raw-bytes-segment-2)
+                  raw-bytes-segment-2)
+     "SECTION_TWO"))
+
+  (define trampoline
+    (append
+     (list
+             (org #x0810)
+      (label CALLED_FROM_BASIC)
+             (LDA !<COPY_DESCRIPTOR)
+             (LDX !>COPY_DESCRIPTOR)
+             (JSR LOOPED_COPY_REGION)
+
+             ;; add code to initialize memory manage and interpreter
+             (JSR $8000)
+             (JSR $c000)
+             (RTS)
+
+     ;; byte code could go here
+
+      (label COPY_DESCRIPTOR))
+     ;; make this section dynamic?
+     segment-1-descriptor ;; <- use section one as parameter
+     segment-2-descriptor
+     (list (byte 0 0)) ;; end mark
+     LOOPED_COPY_REGION
+     COPY_REGION
+     ;; make this section dynamic?
+     (list (label "SECTION_ONE")
+           (ast-bytes-cmd '() raw-bytes-segment-1)
+           (label "SECTION_TWO")
+           (ast-bytes-cmd '() raw-bytes-segment-2))))
+
+  (define trampoline-code
+    (cdar (assembly-code-list-org-code-sequences (new-assemble-to-code-list trampoline))))
+
+  (define generated-trampoline
+    (begin
+      (create-prg trampoline-code #x0810 "trampoline.prg")
+      (create-image-with-program trampoline-code #x0810 "trampoline.prg" "trampoline.d64" "trampoline"))))
+
+
+;; create a copy descriptor for a segment as ast commands (to be resolved by assembler)
+(define (segment->copy-descriptor seg label-str)
+  (list
+   (ast-bytes-cmd
+    '()
+    (list (low-byte (c64-segment--length seg))
+          (high-byte (c64-segment--length seg))))
+   (ast-unresolved-bytes-cmd
+    '() '()
+    (ast-resolve-byte-scmd label-str 'low-byte))
+   (ast-unresolved-bytes-cmd
+    '() '()
+    (ast-resolve-byte-scmd label-str 'high-byte))
+   (ast-bytes-cmd
+    '()
+    (list (low-byte (c64-segment--location seg))
+          (high-byte (c64-segment--location seg))))))
+
+;; create a c64 prg basic loader for all segments
+(define (segments->prg segments prg-name)
+  '())
 
 ;; copy region from: zp:  fc/fd (low/high), to fe/ff (low/high), size fa/fb (low/high)
 ;; starting from the end, then page wise (with 0 offset first) => there should be no page overlap
