@@ -70,7 +70,9 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
      VM_MEMORY_MANAGEMENT_CONSTANTS
      VM_INITIALIZE_MEMORY_MANAGER
      (list (label DEC_REFCNT_RT) (RTS))
+     (list (org #xcec0))
      VM_INITIAL_MM_REGS
+     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
 ;; @DC-FUN: INIT_CELLSTACK_PAGE_X, group: cell_stack

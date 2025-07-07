@@ -104,7 +104,9 @@ all functions around cell-pairs
      (list (label DEC_REFCNT_RT) (JMP DEC_REFCNT_CELLPAIR_RT)) ;; assume that dec refcnt is operated on cellpair
      (list (label DEC_REFCNT_RZ) (JMP DEC_REFCNT_CELLPAIR_RZ)) ;; assume that dec refcnt is operated on cellpair
      (list (label INC_REFCNT_RT) (JMP INC_REFCNT_CELLPAIR_RT)) ;; assume that inc refcnt is operated on cellpair
+     (list (org #xcec0))
      VM_INITIAL_MM_REGS
+     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
 ;; @DC-FUN: INIT_CELLPAIR_PAGE_X_TO_AX, group: cell_pair

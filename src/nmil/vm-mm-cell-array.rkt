@@ -151,7 +151,9 @@ memory management for cell arrays
            (JMP DEC_REFCNT_CELL_RZ)
            (label DEC_REFCNT_RZ__NO_CELL)
            (JMP DEC_REFCNT_CELLPAIR_RZ)) ;; assume that dec refcnt is operated on cellpair
+     (list (org #xcec0))
      VM_INITIAL_MM_REGS
+     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
 ;; @DC-FUN: ALLOC_CELLARR_TO_RA, group: cell_array

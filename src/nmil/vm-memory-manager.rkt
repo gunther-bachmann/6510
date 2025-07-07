@@ -116,6 +116,7 @@ call frame primitives etc.
                   ALLOC_NATARR_TO_RA))
 
 (provide vm-memory-manager
+         vm-memory-manager-wo-data-tail
           ;; ---------------------------------------- refcount
           INC_REFCNT_RT         ;; generic increment of refcount (dispatches depending on type)
 
@@ -694,7 +695,7 @@ call frame primitives etc.
           ;; optional: create function id mapping on function id mapping page
           (RTS))) ;; not implemented yet
 
-(define vm-memory-manager
+(define vm-memory-manager-wo-data-tail
   (append VM_MEMORY_MANAGEMENT_CONSTANTS
           VM_INITIALIZE_MEMORY_MANAGER
 
@@ -762,7 +763,7 @@ call frame primitives etc.
           ;; VM_ENQUEUE_PAGE_AS_HEAD_FOR_PTR2_SLOTS             ;; put this page as head of the page free list for slots of type as in ZP_PTR2
 
           ;; GC_ARRAY_SLOT_RT                               ;; execute garbage collection on a cell array (decr-ref all array elements and collect if 0)
-          
+
           FREE_RT                                 ;; free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, slot8-ptr)
 
           ;; ---------------------------------------- CELL_STACK / RT / RA
@@ -830,7 +831,10 @@ call frame primitives etc.
           FREE_M1_SLOT_RZ
 
 
-    (list (label END__MEMORY_MANAGER))
+    (list (label END__MEMORY_MANAGER))))
+
+(define vm-memory-manager
+  (append vm-memory-manager-wo-data-tail
           ;; ---------------------------------------- registers and maps
           (list (org #xcec0))
           VM_INITIAL_MM_REGS

@@ -378,7 +378,130 @@ define code/data segments for a c64 program that are used for generating a loade
   (define generated-trampoline
     (begin
       (create-prg trampoline-code #x0810 "trampoline.prg")
-      (create-image-with-program trampoline-code #x0810 "trampoline.prg" "trampoline.d64" "trampoline"))))
+      (create-image-with-program trampoline-code #x0810 "trampoline.prg" "trampoline.d64" "trampoline")))
+
+
+  ;; idea
+  (require (only-in "../nmil/vm-interpreter.rkt"
+                    bc
+                    NATIVE
+                    VM_INTERPRETER_OPTABLE_EXT1_HB
+                    VM_INTERPRETER_OPTABLE_EXT1_LB
+                    VM_INTERPRETER_OPTABLE
+                    vm-interpreter-wo-jt))
+  (require (only-in "../nmil/vm-mm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
+
+
+
+  ;; @c000 interpreter + runtime + memory management etc
+  (define bc-interpreter
+    (new-assemble-to-code-list
+       (append (list (org #xc000)
+                     (word-const VM_INTERPRETER_OPTABLE $ce00)
+
+                     (JSR VM_INTERPRETER_INIT_AX)
+                     (JSR VM_INITIALIZE_MEMORY_MANAGER)
+                     (JSR VM_INITIALIZE_CALL_FRAME)
+                     (JMP VM_INTERPRETER))
+               vm-interpreter-wo-jt))
+)
+  (define raw-bc-interpreter
+    (cdar
+     (assembly-code-list-org-code-sequences
+      bc-interpreter)))
+
+  ;; @cdc0 mm-regs
+  (define raw-mem-data  (cdar (assembly-code-list-org-code-sequences (new-assemble-to-code-list (append (list (org #xcdc0)) VM_INITIAL_MM_REGS)))))
+  ;; @ce00
+  (define raw-bc-jump-table
+    (cdar
+     (assembly-code-list-org-code-sequences
+      (new-assemble-to-code-list
+       (append (list (org #xcdc0)) VM_INTERPRETER_OPTABLE)
+       (assembly-code-list-labels bc-interpreter) ;; (need to add labels collected by interpreter)
+       ))))
+  ;; @cf00
+  (define raw-page-data (cdar (assembly-code-list-org-code-sequences (new-assemble-to-code-list (append (list (org #xcf00)) VM_PAGE_SLOT_DATA)))))
+
+  (define (byte-code-loader byte-codes)
+    (append
+     (list
+             (org #x0810)
+      (label CALLED_FROM_BASIC)
+             (LDA !<COPY_DESCRIPTOR)
+             (LDX !>COPY_DESCRIPTOR)
+             (JSR LOOPED_COPY_REGION)
+
+             ;; add code to initialize memory manage and interpreter
+             (LDA !<BC_START) ;; lb start of available memory
+             (LDX !>BC_START) ;; hb  start of available memory
+             (JSR $c000)      ;; initialize memory manager & interpreter & start interpreter
+
+      (label BC_START)
+             (ast-bytes-cmd '() byte-codes)
+             (bc NATIVE)     ;; end execution of interpreter
+             (RTS)          ;; return to basic (SYS 2064)
+
+      (label COPY_DESCRIPTOR)) ;; all data following here is discarded when interpreter is started and regarded as free
+     (segment->copy-descriptor
+      (c64-segment 'pinned ;; type
+                   #xc000  ;; location
+                   '()       ;; reloc info
+                   '()       ;; resolution info
+                   '()       ;; resolution symbols
+                   (length raw-bc-interpreter)
+                   raw-bc-interpreter)
+      "SECTION_ONE")
+     (segment->copy-descriptor
+      (c64-segment 'pinned ;; type
+                   #xcdc0  ;; location
+                   '()       ;; reloc info
+                   '()       ;; resolution info
+                   '()       ;; resolution symbols
+                   (length raw-mem-data)
+                   raw-mem-data)
+      "SECTION_MD")
+     (segment->copy-descriptor
+      (c64-segment 'pinned ;; type
+                   #xce00  ;; location
+                   '()       ;; reloc info
+                   '()       ;; resolution info
+                   '()       ;; resolution symbols
+                   (length raw-bc-jump-table)
+                   raw-bc-jump-table)
+      "SECTION_BCJT")
+     (segment->copy-descriptor
+      (c64-segment 'pinned ;; type
+                   #xcf00  ;; location
+                   '()       ;; reloc info
+                   '()       ;; resolution info
+                   '()       ;; resolution symbols
+                   (length raw-page-data)
+                   raw-page-data)
+      "SECTION_PD")
+     (list (byte 0 0)) ;; end mark
+     LOOPED_COPY_REGION
+     COPY_REGION
+     (list (label "SECTION_ONE")
+           (ast-bytes-cmd '() raw-bc-interpreter) ;; <-- this part is too large to fit into c000-#xcdbf => split byte codes
+           (label "SECTION_MD")
+           (ast-bytes-cmd '() raw-mem-data)
+           (label "SECTION_BCJT")
+           (ast-bytes-cmd '() raw-bc-jump-table)
+           (label "SECTION_PD")
+           (ast-bytes-cmd '() raw-page-data) ;;
+           )))
+
+  (define bc-code-trampoline
+    (cdar
+     (assembly-code-list-org-code-sequences
+      (new-assemble-to-code-list
+       (byte-code-loader (list))))))
+
+  (define generated-bc-trampoline
+    (begin
+      (create-prg trampoline-code #x0810 "bc-tramp.prg")
+      (create-image-with-program trampoline-code #x0810 "bc-tramp.prg" "bc-tramp.d64" "bc-tramp"))))
 
 
 ;; create a copy descriptor for a segment as ast commands (to be resolved by assembler)

@@ -99,7 +99,9 @@ memory management for native arrays
      VM_INITIALIZE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label INIT_CELLSTACK_PAGE_X) (RTS))
+     (list (org #xcec0))
      VM_INITIAL_MM_REGS
+     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
 ;; @DC-FUN: ALLOC_NATARR_TO_RA, group: native_array

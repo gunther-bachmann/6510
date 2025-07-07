@@ -50,14 +50,16 @@
      (list (label INIT_CELLSTACK_PAGE_X) (RTS)) ;; ignore calls to this function during memory initialization
 
      WRITE_INT_AY_TO_RT
+     (list (org #xcec0))
      VM_INITIAL_MM_REGS
+     (list (org #xcf00))
      VM_PAGE_SLOT_DATA)))
 
 ;; initial data for the memory management registers
 ;; put into memory @ #xcec0 - len (currently 3)
 (define VM_INITIAL_MM_REGS
   (list
-   (org #xcec0)
+   ;; (org #xcec0)
    (label VM_INITIAL_MM_REGS)
 
    ;; $cec0
@@ -139,7 +141,7 @@
 ;; 00 = allocated for use, but not initialized/full
 (define VM_PAGE_SLOT_DATA
   (list
-   (org #xcf00)
+   ;; (org #xcf00)
    (label VM_PAGE_SLOT_DATA)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 0000-07ff is unavailable (zero page, stack ... screen)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 0800-0fff is unavailable (start of basic ram)

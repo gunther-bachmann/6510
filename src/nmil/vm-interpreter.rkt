@@ -109,6 +109,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define PAGE_AVAIL_1_W #x9600))
 
 (provide vm-interpreter
+         VM_INTERPRETER_OPTABLE_EXT1_HB
+         VM_INTERPRETER_OPTABLE_EXT1_LB
+         VM_INTERPRETER_OPTABLE
+         vm-interpreter-wo-jt
+
          bc
          WRITE_RA
          BDEC
@@ -234,11 +239,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (list
    (label VM_INTERPRETER_INIT)
           (LDA !$00)
+          (LDX !$80)                            ;; bc start at $8000
+   (label VM_INTERPRETER_INIT_AX)
           (STA ZP_VM_PC)
           (STA ZP_VM_FUNC_PTR)
-          (LDA !$80)                            ;; bc start at $8000
-          (STA ZP_VM_PC+1)          
-          (STA ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $8000 
+          (STX ZP_VM_PC+1)
+          (STX ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $8000
           (RTS)))
 
 ;; (define ZERO?_RET_LOCAL0_POP_1 #x99)
@@ -3598,6 +3604,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (BCS VM_INTERPRETER__NEXT_PAGE)       ;; always branch to pc now on next page
 
    (label VM_INTERPRETER_INC_PC)                ;; inc by one (regular case)
+   ;; (label BC_NOP)                               ;; is equivalent to NOP
           (INC ZP_VM_PC)                    
           (BNE VM_INTERPRETER)                  ;; same page -> no further things to do
    (label VM_INTERPRETER__NEXT_PAGE)
@@ -3702,15 +3709,19 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_DEC_RBI_NZ_P_BRA
           VM_INTERPRETER))
 
-(define vm-interpreter
+(define vm-interpreter-wo-jt
   (append just-vm-interpreter
           (list (label END__INTERPRETER))
           VM_INTERPRETER_OPTABLE_EXT1_HB
           VM_INTERPRETER_OPTABLE_EXT1_LB
+          vm-lists))
+
+(define vm-interpreter
+  (append vm-interpreter-wo-jt
           (list (org-align #x100)) ;; align to next page
           VM_INTERPRETER_OPTABLE
           (list (label END__INTERPRETER_DATA))
-          vm-lists))
+          ))
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))

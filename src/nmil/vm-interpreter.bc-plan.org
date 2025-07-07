@@ -1,0 +1,851 @@
+#+title: byte codes planned
+* decisions to be made
+- what byte codes are extended byte codes
+- what byte codes are short byte code (including operand)
+- what byte codes are minimal (able to emulate all others)
+- how do I move a given byte code + implementation + disassembler etc. to a different category
+- collect bc available for categories
+  - [R]B (1 byte) regular byte code:    112
+  - [S]B (1 byte) short byte code:      16, 8 possible operands each
+  - [E]B (2 bytes) extendend byte code: 254
+  - [X]B optional: (3 bytes) exex byte code:      254
+* minimal byte code (92)
+- flow (5)
+  - CALL
+  - TAIL_CALL
+  - RET
+  - T_P_BRA
+  - GOTO
+- locals (4)
+  - PUSH_LOCAL
+  - WRITE_LOCAL
+  - POP_TO_LOCAL
+  - WRITE_TO_LOCAL
+- native array (9)
+  - ALLOC_NAR_RA
+  - BPOKE_RA
+  - BPEEK_TO_RA
+  - CP_NAR_RA_TO_RB
+  - CP_NAR_RANGE_RA_TO_RB
+  - PUSH_NAR_RA_AF
+  - WRITE_NAR_RA_AF
+  - POP_TO_NAR_RA_AF
+  - WRITE_TO_NAR_RA_AF
+- cell array (7)
+  - ALLOC_RA
+  - CP_RA_TO_RB
+  - CP_RANGE_RA_TO_RB
+  - PUSH_RA_AF
+  - WRITE_RA_AF
+  - POP_TO_RA_AF
+  - WRITE_TO_RA_AF
+- generic array (6)
+  - SWAP_RA_RB
+  - PUSH_RAI
+  - POP_TO_RAI
+  - BINC_RAI
+  - BDEC_RAI
+  - PUSH_RA_LEN
+- misc (3)
+  - GC
+  - NATIVE
+  - EXT
+- call pairs (3)
+  - CAR
+  - CDR
+  - CONS
+- predicates (13)
+  - ARRAY_P | STRUCT_P
+  - NARRAY_P | STRING_P
+  - I_P (instead of INT_P)
+  - B_P
+  - F_P
+  - Z_P
+  - NIL_P
+  - I_GT_P
+  - I_EQ_P
+  - B_GT_P
+  - B_EQ_P
+  - F_GT_P
+  - F_WI_P
+- logic (4)
+  - NOT
+  - OR
+  - AND
+  - XOR
+- conversion (3)
+  - I2B
+  - B2I
+  - I2F
+- byte (12)
+  - BAND
+  - BOR
+  - BAND
+  - BXOR
+  - BPOKE
+  - BPEEK
+  - BSHL
+  - BSHR
+  - BINC
+  - BDEC
+  - BADD
+  - BSUB
+- int (7)
+  - IINC
+  - IDEC
+  - IADD
+  - ISUB
+  - IMUL
+  - IDIV
+  - IREM
+- stack (7)
+  - PUSH_NIL
+  - IPUSH
+  - BPUSH
+  - FPUSH
+  - SWAP
+  - DUP
+  - POP
+- float (9)
+  - FINT :: convert to integer (cut off digits, max if >, min if <)
+  - FADD
+  - FSUB
+  - FMUL
+  - FDIV
+  - FPOW
+  - FLOG
+  - FSIN
+  - FASIN
+* additional byte code
+- flow (11)
+  - F_P_BRA
+  - DEC_RAI_NZ_P_BRA
+  - DEC_RBI_NZ_P_BRA
+  - DEC_RCI_NZ_P_BRA
+  - RAI_NZ_P_BRA
+  - RBI_NZ_P_BRA
+  - RCI_NZ_P_BRA
+  - Z_P_BRA
+  - NZ_P_BRA
+  - NIL_P_BRA
+  - NNIL_P_BRA
+- locals (24)
+  - PUSH_LOCAL_0..3
+  - WRITE_LOCAL_0..3
+  - POP_TO_LOCAL_0..3
+  - WRITE_TO_LOCAL_0..3
+  - PUSH_LOCAL_0..3_CxR
+- native array (8)
+  - POP_TO_NAR_RB_AF
+  - WRITE_TO_NAR_RB_AF
+  - PUSH_NAR_RB_AF
+  - WRITE_NAR_RB_AF
+  - POP_TO_NAR_RC_AF
+  - WRITE_TO_NAR_RC_AF
+  - PUSH_NAR_RC_AF
+  - WRITE_NAR_RC_AF
+- cell array (16)
+  - PUSH_RA_AF0..3
+  - WRITE_RA_AF0..3
+  - POP_TO_RA_AF0..3
+  - WRITE_TO_RA_AF0..3
+- generic array (11)
+  - SWAP_RA_RC
+  - PUSH_RBI
+  - POP_TO_RBI
+  - BINC_RBI
+  - BDEC_RBI
+  - PUSH_RCI
+  - POP_TO_RCI
+  - BINC_RCI
+  - BDEC_RCI
+  - PUSH_RB_LEN
+  - PUSH_RC_LEN
+- misc
+- cell pairs (5)
+  - CAAR
+  - CDAR
+  - CADR
+  - CDDR
+  - COONS
+- predicates (9)
+  - I_GE_P
+  - I_LE_P
+  - I_LT_P
+  - B_GE_P
+  - B_LE_P
+  - B_LT_P
+  - F_GE_P
+  - F_LE_P
+  - F_LT_P
+- logic
+- conversion
+- byte
+- int (2)
+  - IMIN
+  - IMAX
+- stack (8)
+  PUSH_I_-1..2
+  PUSH_B_-1..2
+- float
+  - FPUSH_PI
+  - FPUSH_E
+  - FPUSH_p5
+  - FPUSH_10
+  - FPUSH_m1
+  - FPUSH_1
+  - FPUSH_0
+  - FPUSH_2
+  - FSQRT
+  - FEXP
+* byte codes (by group)
+** cell_array
+remove
+- GET_AF_0..3
+- SET_AF_0..3
+- POP_TO_AF
+- PUSH_AF
+planned
+- BINC_RBI
+- BDEC_RBI
+- BINC_RCI
+- BDEC_RCI
+- WRITE_TO_RCI
+- POP_TO_RBI
+- POP_TO_RCI
+existing
+- [[file:vm-interpreter.rkt::3120][ALLOC_ARA]] :: $4c  *ALLOC*​ate cell *A*​rray into *RA* and pops the byte size off the stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" ALLOC_ARA))
+  - assembler include :: BC_ALLOC_ARA
+  *ALLOC*​ate cell *A*​rray into *RA* and pops the byte size off the stack
+  stack: <byte-size> -> -
+  len: 1
+- [[file:vm-interpreter.rkt::3136][BINC_RAI]] :: $49  *B*​yte *INC*​rement *RA* *I*​ndex register
+  - racket require :: (require (only-in "vm-interpreter.rkt" BINC_RAI))
+  - assembler include :: BC_BINC_RAI
+  *B*​yte *INC*​rement *RA* *I*​ndex register
+- [[file:vm-interpreter.rkt::3179][DEC_RAI]] :: $52  *DEC*​rement *RA* *I*​ndex
+  - racket require :: (require (only-in "vm-interpreter.rkt" DEC_RAI))
+  - assembler include :: BC_DEC_RAI
+  *DEC*​rement *RA* *I*​ndex
+  len: 1
+- [[file:vm-interpreter.rkt::3022][GET_AF_0]] :: $b0  *GET* *A*​rray *F*​ield 0
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_AF_0))
+  - assembler include :: BC_GET_AF_0
+  *GET* *A*​rray *F*​ield 0
+  stack: [array-ptr] -> [cell@0 of array]  (replace tos with value from array)
+- [[file:vm-interpreter.rkt::3025][GET_AF_1]] :: $b2  *GET* *A*​rray *F*​ield 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_AF_1))
+  - assembler include :: BC_GET_AF_1
+  *GET* *A*​rray *F*​ield 1
+  stack: [array-ptr] -> [cell@1 of array]
+- [[file:vm-interpreter.rkt::3028][GET_AF_2]] :: $b4  *GET* *A*​rray *F*​ield 2
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_AF_2))
+  - assembler include :: BC_GET_AF_2
+  *GET* *A*​rray *F*​ield 2
+  stack: [array-ptr] -> [cell@2 of array]
+- [[file:vm-interpreter.rkt::3031][GET_AF_3]] :: $b6  *GET* *A*​rray *F*​ield 3
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_AF_3))
+  - assembler include :: BC_GET_AF_3
+  *GET* *A*​rray *F*​ield 3
+  stack: [array-ptr] -> [cell@3 of array]
+- [[file:vm-interpreter.rkt::3077][GET_RA_AF_0]] :: $c8  *GET* *A*​rray *F*​ield 0
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_RA_AF_0))
+  - assembler include :: BC_GET_RA_AF_0
+  *GET* *A*​rray *F*​ield 0
+  stack: [array-ptr] -> [cell@0 of array]
+- [[file:vm-interpreter.rkt::3080][GET_RA_AF_1]] :: $ca  *GET* *A*​rray *F*​ield 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_RA_AF_1))
+  - assembler include :: BC_GET_RA_AF_1
+  *GET* *A*​rray *F*​ield 1
+  stack: [array-ptr] -> [cell@1 of array]
+- [[file:vm-interpreter.rkt::3083][GET_RA_AF_2]] :: $cc  *GET* *A*​rray *F*​ield 2
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_RA_AF_2))
+  - assembler include :: BC_GET_RA_AF_2
+  *GET* *A*​rray *F*​ield 2
+  stack: [array-ptr] -> [cell@2 of array]
+- [[file:vm-interpreter.rkt::3086][GET_RA_AF_3]] :: $ce  *GET* *A*​rray *F*​ield 3
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_RA_AF_3))
+  - assembler include :: BC_GET_RA_AF_3
+  *GET* *A*​rray *F*​ield 3
+  stack: [array-ptr] -> [cell@3 of array]
+- [[file:vm-interpreter.rkt::2837][POP_TO_AF]] :: $16  *POP* *TO* *A*​rray *F*​ield using the stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_AF))
+  - assembler include :: BC_POP_TO_AF
+  *POP* *TO* *A*​rray *F*​ield using the stack
+  len: 1
+  stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
+  ->     []
+         cell-array @ index = value
+  op = array-idx, stack [cell- array-ptr-] -> []
+- [[file:vm-interpreter.rkt::2655][POP_TO_RA]] :: $4b  *POP* top of evlstk *TO* *RA*, setting RAI=0
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_RA))
+  - assembler include :: BC_POP_TO_RA
+  *POP* top of evlstk *TO* *RA*, setting RAI=0
+  len: 1
+- [[file:vm-interpreter.rkt::2825][POP_TO_RA_AF]] :: $4e  *POP* top of evlstk *TO* *RA* *A*​rray *F*​ield
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_RA_AF))
+  - assembler include :: BC_POP_TO_RA_AF
+  *POP* top of evlstk *TO* *RA* *A*​rray *F*​ield
+  len: 1
+- [[file:vm-interpreter.rkt::3145][POP_TO_RAI]] :: $4f  *POP* top of evlstk byte *TO* *RA* *I*​ndex
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_RAI))
+  - assembler include :: BC_POP_TO_RAI
+  *POP* top of evlstk byte *TO* *RA* *I*​ndex
+  len: 1
+- [[file:vm-interpreter.rkt::2659][POP_TO_RB]] :: $46  *POP* top of evlstk *TO* *RB*, setting RAI=0
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_RB))
+  - assembler include :: BC_POP_TO_RB
+  *POP* top of evlstk *TO* *RB*, setting RAI=0
+  len: 1
+- [[file:vm-interpreter.rkt::2884][PUSH_AF]] :: $15  stack: index (byte) :: cell-ptr -> cell-array
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_AF))
+  - assembler include :: BC_PUSH_AF
+  stack: index (byte) :: cell-ptr -> cell-array
+  ->     value (cell)
+  op = field-idx, stack [array-ref] -> [cell-]
+- [[file:vm-interpreter.rkt::2997][PUSH_RA]] :: $47  *PUSH* *R*​egister *A* to stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_RA))
+  - assembler include :: BC_PUSH_RA
+  *PUSH* *R*​egister *A* to stack
+- [[file:vm-interpreter.rkt::3009][PUSH_RA_AF]] :: $4d  *PUSH* from array *RA* *A*​rray *F*​ield indexed by RAI to evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_RA_AF))
+  - assembler include :: BC_PUSH_RA_AF
+  *PUSH* from array *RA* *A*​rray *F*​ield indexed by RAI to evlstk
+  stack -> (RA),RAI :: stack
+- [[file:vm-interpreter.rkt::3034][SET_AF_0]] :: $b1  *SET* *A*​rray *F*​ield 0
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_AF_0))
+  - assembler include :: BC_SET_AF_0
+  *SET* *A*​rray *F*​ield 0
+  stack: [array-ptr] :: [value] -> [cell@0 of array]
+- [[file:vm-interpreter.rkt::3037][SET_AF_1]] :: $b3  *SET* *A*​rray *F*​ield 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_AF_1))
+  - assembler include :: BC_SET_AF_1
+  *SET* *A*​rray *F*​ield 1
+  stack: [array-ptr] :: [value] -> [cell@1 of array]
+- [[file:vm-interpreter.rkt::3040][SET_AF_2]] :: $b5  *SET* *A*​rray *F*​ield 2
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_AF_2))
+  - assembler include :: BC_SET_AF_2
+  *SET* *A*​rray *F*​ield 2
+  stack: [array-ptr] :: [value] -> [cell@2 of array]
+- [[file:vm-interpreter.rkt::3043][SET_AF_3]] :: $b7  *SET* *A*​rray *F*​ield 3
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_AF_3))
+  - assembler include :: BC_SET_AF_3
+  *SET* *A*​rray *F*​ield 3
+  stack: [array-ptr] :: [value] -> [cell@3 of array]
+- [[file:vm-interpreter.rkt::3089][SET_RA_AF_0]] :: $c9  *SET* *A*​rray *F*​ield 0
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_RA_AF_0))
+  - assembler include :: BC_SET_RA_AF_0
+  *SET* *A*​rray *F*​ield 0
+  stack: [array-ptr] :: [value] -> [cell@0 of array]
+- [[file:vm-interpreter.rkt::3092][SET_RA_AF_1]] :: $cb  *SET* *A*​rray *F*​ield 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_RA_AF_1))
+  - assembler include :: BC_SET_RA_AF_1
+  *SET* *A*​rray *F*​ield 1
+  stack: [array-ptr] :: [value] -> [cell@1 of array]
+- [[file:vm-interpreter.rkt::3095][SET_RA_AF_2]] :: $cd  *SET* *A*​rray *F*​ield 2
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_RA_AF_2))
+  - assembler include :: BC_SET_RA_AF_2
+  *SET* *A*​rray *F*​ield 2
+  stack: [array-ptr] :: [value] -> [cell@2 of array]
+- [[file:vm-interpreter.rkt::3098][SET_RA_AF_3]] :: $cf  *SET* *A*​rray *F*​ield 3
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_RA_AF_3))
+  - assembler include :: BC_SET_RA_AF_3
+  *SET* *A*​rray *F*​ield 3
+  stack: [array-ptr] :: [value] -> [cell@3 of array]
+- [[file:vm-interpreter.rkt::2994][WRITE_RA]] :: $55  *WRITE* *R*​egister *A* to stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_RA))
+  - assembler include :: BC_WRITE_RA
+  *WRITE* *R*​egister *A* to stack
+- [[file:vm-interpreter.rkt::3157][WRITE_TO_RAI]] :: $51  *WRITE* top of evlstk byte *TO* *RA* *I*​ndex
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_RAI))
+  - assembler include :: BC_WRITE_TO_RAI
+  *WRITE* top of evlstk byte *TO* *RA* *I*​ndex
+  len: 1
+- [[file:vm-interpreter.rkt::3168][WRITE_TO_RBI]] :: $53  *WRITE* top of evlstk byte *TO* *RB* *I*​ndex
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_RBI))
+  - assembler include :: BC_WRITE_TO_RBI
+  *WRITE* top of evlstk byte *TO* *RB* *I*​ndex
+  len: 1
+** native array
+planned
+- ALLOC_NATARA :: allocate native array
+- BPOKE_A :: poke array bytes (len)
+- BPEEK_TO_A :: peek data into array (len)
+- CP_RA_TO_RB :: cp ra into rb
+- CP_RANGE_RA_TO_RB :: cp range of ra into rb
+- WRITE_NATARR_TO_RA_AF :: write byte of RA (index by RAI) into tos (overwriting it)
+- PUSH_NATARR_RA_AF :: push byte of RA (index by RAI)
+- POP_TO_NATARR_RA_AF ::  pop tos (byte) into RA (indexed by RAI)
+- WRITE_NATARR_TO_RB_AF :: write byte of RA (index by RAI) into tos (overwriting it)
+- PUSH_NATARR_RB_AF :: push byte of RA (index by RAI)
+- POP_TO_NATARR_RB_AF ::  pop tos (byte) into RA (indexed by RAI)
+** array
+planned
+- SWAP_RA_RC
+existing
+- [[file:vm-interpreter.rkt::2645][SWAP_RA_RB]] :: $45  swap array register RA with RB
+  - racket require :: (require (only-in "vm-interpreter.rkt" SWAP_RA_RB))
+  - assembler include :: BC_SWAP_RA_RB
+  swap array register RA with RB
+** gc
+- [[file:vm-interpreter.rkt::2555][GC_FL]] :: $03  garbage collect the freelist
+  - racket require :: (require (only-in "vm-interpreter.rkt" GC_FL))
+  - assembler include :: BC_GC_FL
+  garbage collect the freelist
+  len: 2 (extended)
+  extended
+** _cell_pair_
+- [[file:vm-interpreter.rkt::2726][CDDR]] :: $ae  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" CDDR))
+  - assembler include :: BC_CDDR
+  len: 1
+- [[file:vm-interpreter.rkt::2724][CDAR]] :: $ac  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" CDAR))
+  - assembler include :: BC_CDAR
+  len: 1
+- [[file:vm-interpreter.rkt::2722][CADR]] :: $aa  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" CADR))
+  - assembler include :: BC_CADR
+  len: 1
+- [[file:vm-interpreter.rkt::2720][CAAR]] :: $a8  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" CAAR))
+  - assembler include :: BC_CAAR
+  len: 1
+- [[file:vm-interpreter.rkt::1513][CDR]] :: $41  stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
+  - racket require :: (require (only-in "vm-interpreter.rkt" CDR))
+  - assembler include :: BC_CDR
+  stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
+- [[file:vm-interpreter.rkt::1488][CAR]] :: $43  stack [cell-list-ptr] -> [cell- car of list pointed at]
+  - racket require :: (require (only-in "vm-interpreter.rkt" CAR))
+  - assembler include :: BC_CAR
+  stack [cell-list-ptr] -> [cell- car of list pointed at]
+- [[file:vm-interpreter.rkt::1465][CONS]] :: $42  stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+  - racket require :: (require (only-in "vm-interpreter.rkt" CONS))
+  - assembler include :: BC_CONS
+  stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+- [[file:vm-interpreter.rkt::1456][COONS]] :: $44  execute two CONS in a row
+  - racket require :: (require (only-in "vm-interpreter.rkt" COONS))
+  - assembler include :: BC_COONS
+  execute two CONS in a row
+** _predicates_
+planned
+- ARRAY_P | STRUCT_P
+- NARRAY_P | STRING_P
+- I_P (instead of INT_P)
+- B_P
+- F_P
+- F_GE_P
+- F_EQ_P (within) F_WI_P
+- F_LT_P
+- F_LE_P
+- F_GT_P
+- I_GE_P
+- I_EQ_P
+- I_LT_P
+- I_LE_P
+- B_LE_P
+- B_EQ_P
+existing
+- [[file:vm-interpreter.rkt::2528][I_Z_P]] :: $22  *I*​nt *Z*​ero *P*​redicate
+  - racket require :: (require (only-in "vm-interpreter.rkt" I_Z_P))
+  - assembler include :: BC_I_Z_P
+  *I*​nt *Z*​ero *P*​redicate
+  len: 1
+- [[file:vm-interpreter.rkt::1704][I_GT_P]] :: $63  *I*​nt *G*​reater *T*​han *P*​redicates
+  - racket require :: (require (only-in "vm-interpreter.rkt" I_GT_P))
+  - assembler include :: BC_I_GT_P
+  *I*​nt *G*​reater *T*​han *P*​redicates
+- [[file:vm-interpreter.rkt::2493][CELL_EQ_P]] :: $12  *CELL* *EQ*​ual *P*​redicate
+  - racket require :: (require (only-in "vm-interpreter.rkt" CELL_EQ_P))
+  - assembler include :: BC_CELL_EQ_P
+  *CELL* *EQ*​ual *P*​redicate
+  len: 1
+- [[file:vm-interpreter.rkt::2341][CONS_PAIR_P]] :: $0a  *CONS* *PAIR* *P*​redicate
+  - racket require :: (require (only-in "vm-interpreter.rkt" CONS_PAIR_P))
+  - assembler include :: BC_CONS_PAIR_P
+  *CONS* *PAIR* *P*​redicate
+  len: 1
+- [[file:vm-interpreter.rkt::1803][INT_P]] :: $07  is top of evlstk an *INT*​eger (*P*​redicate)?
+  - racket require :: (require (only-in "vm-interpreter.rkt" INT_P))
+  - assembler include :: BC_INT_P
+  is top of evlstk an *INT*​eger (*P*​redicate)?
+- [[file:vm-interpreter.rkt::1646][B_GE_P]] :: $26  no doc
+  - racket require :: (require (only-in "vm-interpreter.rkt" B_GE_P))
+  - assembler include :: BC_B_GE_P
+- [[file:vm-interpreter.rkt::1617][B_LT_P]] :: $25  no doc
+  - racket require :: (require (only-in "vm-interpreter.rkt" B_LT_P))
+  - assembler include :: BC_B_LT_P
+- [[file:vm-interpreter.rkt::1559][B_GT_P]] :: $24  no doc
+  - racket require :: (require (only-in "vm-interpreter.rkt" B_GT_P))
+  - assembler include :: BC_B_GT_P
+- [[file:vm-interpreter.rkt::1419][NIL_P]] :: $21  stack [cell-list-ptr] -> [cell-boolean]
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P))
+  - assembler include :: BC_NIL_P
+  stack [cell-list-ptr] -> [cell-boolean]
+** conversion
+planned
+- I2B :: Int 2 Byte
+- B2I :: Byte 2 Int
+- I2F :: Int 2 Float
+** boolean
+planned
+- AND
+- OR
+- XOR
+- NOT
+** _byte_
+rational: mul and div are not really necessary, are they? could use int then instead
+planned
+- BAND
+- BOR
+- BXOR
+- BSUB
+- BPOKE
+- BPEEK
+- BSHL
+existing
+- [[file:vm-interpreter.rkt::3277][BINC]] :: $1c  *B*​yte *INC*​rement, increment byte RT (no checks)
+  - racket require :: (require (only-in "vm-interpreter.rkt" BINC))
+  - assembler include :: BC_BINC
+  *B*​yte *INC*​rement, increment byte RT (no checks)
+  len: 1
+- [[file:vm-interpreter.rkt::3255][BDEC]] :: $1a  *B*​yte *DEC*​rement, increment byte RT (no checks)
+  - racket require :: (require (only-in "vm-interpreter.rkt" BDEC))
+  - assembler include :: BC_BDEC
+  *B*​yte *DEC*​rement, increment byte RT (no checks)
+  len: 1
+- [[file:vm-interpreter.rkt::3228][BADD]] :: $23  *B*​yte *ADD* top two values on stack (no checks)
+  - racket require :: (require (only-in "vm-interpreter.rkt" BADD))
+  - assembler include :: BC_BADD
+  *B*​yte *ADD* top two values on stack (no checks)
+  len: 1
+- [[file:vm-interpreter.rkt::1634][BSHR]] :: $27  no doc
+  - racket require :: (require (only-in "vm-interpreter.rkt" BSHR))
+  - assembler include :: BC_BSHR
+** _int_
+planned
+- IMIN
+- IDEC
+- IMUL
+- IDIV
+- IMOD
+existing
+- [[file:vm-interpreter.rkt::2452][IMAX]] :: $01  *I*​nt *MAX*​imum, return the maximum of two ints
+  - racket require :: (require (only-in "vm-interpreter.rkt" IMAX))
+  - assembler include :: BC_IMAX
+  *I*​nt *MAX*​imum, return the maximum of two ints
+  len: 2 (extended)
+  extended
+- [[file:vm-interpreter.rkt::2385][IINC]] :: $02  *I*​nt *INC*​rement
+  - racket require :: (require (only-in "vm-interpreter.rkt" IINC))
+  - assembler include :: BC_IINC
+  *I*​nt *INC*​rement
+  len: 2 (extended)
+  extended (could be mapped to regular byte code, if needed very often!)
+- [[file:vm-interpreter.rkt::1344][ISUB]] :: $61  stack [cell-int a, cell-int b] -> [difference]
+  - racket require :: (require (only-in "vm-interpreter.rkt" ISUB))
+  - assembler include :: BC_ISUB
+  stack [cell-int a, cell-int b] -> [difference]
+- [[file:vm-interpreter.rkt::1269][IADD]] :: $62  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" IADD))
+  - assembler include :: BC_IADD
+  len: 1
+  stack [cell-int a, cell-int b] -> [sum]
+** _stack_
+- [[file:vm-interpreter.rkt::2663][POP]] :: $11  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP))
+  - assembler include :: BC_POP
+  len: 1
+- [[file:vm-interpreter.rkt::2482][DUP]] :: $0f  *DUP*​licate top of stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" DUP))
+  - assembler include :: BC_DUP
+  *DUP*​licate top of stack
+  len: 1
+- [[file:vm-interpreter.rkt::2364][PUSH_NIL]] :: $09  *PUSH* *NIL* to evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_NIL))
+  - assembler include :: BC_PUSH_NIL
+  *PUSH* *NIL* to evlstk
+  len: 1
+  stack: [] -> [NIL]
+- [[file:vm-interpreter.rkt::1538][SWAP]] :: $03  swap tos with tos-1
+  - racket require :: (require (only-in "vm-interpreter.rkt" SWAP))
+  - assembler include :: BC_SWAP
+  swap tos with tos-1
+- [[file:vm-interpreter.rkt::1243][PUSH_I]] :: $06  *PUSH* *I*​nt onto evlstk, op1=low byte op2=high byte, stack [] -> [cell-int]
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_I))
+  - assembler include :: BC_PUSH_I
+  *PUSH* *I*​nt onto evlstk, op1=low byte op2=high byte, stack [] -> [cell-int]
+  len: 3
+- [[file:vm-interpreter.rkt::1197][PUSH_IM1]] :: $bb  *PUSH* *I*​nt *-1* onto evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_IM1))
+  - assembler include :: BC_PUSH_IM1
+  *PUSH* *I*​nt *-1* onto evlstk
+- [[file:vm-interpreter.rkt::1195][PUSH_I2]] :: $ba  *PUSH* *I*​nt *2* onto evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_I2))
+  - assembler include :: BC_PUSH_I2
+  *PUSH* *I*​nt *2* onto evlstk
+- [[file:vm-interpreter.rkt::1193][PUSH_I1]] :: $b9  *PUSH* *I*​nt *1* onto evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_I1))
+  - assembler include :: BC_PUSH_I1
+  *PUSH* *I*​nt *1* onto evlstk
+- [[file:vm-interpreter.rkt::1191][PUSH_I0]] :: $b8  *PUSH* *I*​nt *0* onto evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_I0))
+  - assembler include :: BC_PUSH_I0
+  *PUSH* *I*​nt *0* onto evlstk
+- [[file:vm-interpreter.rkt::952][WRITE_TO_L3]] :: $97  *WRITE* *TO* *L*​ocal *3* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_L3))
+  - assembler include :: BC_WRITE_TO_L3
+  *WRITE* *TO* *L*​ocal *3* from evlstk
+- [[file:vm-interpreter.rkt::950][WRITE_TO_L2]] :: $95  *WRITE* *TO* *L*​ocal *2* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_L2))
+  - assembler include :: BC_WRITE_TO_L2
+  *WRITE* *TO* *L*​ocal *2* from evlstk
+- [[file:vm-interpreter.rkt::948][WRITE_TO_L1]] :: $93  *WRITE* *TO* *L*​ocal *1* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_L1))
+  - assembler include :: BC_WRITE_TO_L1
+  *WRITE* *TO* *L*​ocal *1* from evlstk
+- [[file:vm-interpreter.rkt::946][WRITE_TO_L0]] :: $91  *WRITE* *TO* *L*​ocal *0* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_L0))
+  - assembler include :: BC_WRITE_TO_L0
+  *WRITE* *TO* *L*​ocal *0* from evlstk
+- [[file:vm-interpreter.rkt::944][POP_TO_L3]] :: $96  *POP* *TO* *L*​ocal *3* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_L3))
+  - assembler include :: BC_POP_TO_L3
+  *POP* *TO* *L*​ocal *3* from evlstk
+- [[file:vm-interpreter.rkt::942][POP_TO_L2]] :: $94  *POP* *TO* *L*​ocal *2* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_L2))
+  - assembler include :: BC_POP_TO_L2
+  *POP* *TO* *L*​ocal *2* from evlstk
+- [[file:vm-interpreter.rkt::940][POP_TO_L1]] :: $92  *POP* *TO* *L*​ocal *1* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_L1))
+  - assembler include :: BC_POP_TO_L1
+  *POP* *TO* *L*​ocal *1* from evlstk
+- [[file:vm-interpreter.rkt::938][POP_TO_L0]] :: $90  *POP* *TO* *L*​ocal *0* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_L0))
+  - assembler include :: BC_POP_TO_L0
+  *POP* *TO* *L*​ocal *0* from evlstk
+- [[file:vm-interpreter.rkt::902][WRITE_L3]] :: $87  *WRITE* *L*​ocal *3* into rt
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_L3))
+  - assembler include :: BC_WRITE_L3
+  *WRITE* *L*​ocal *3* into rt
+- [[file:vm-interpreter.rkt::900][WRITE_L2]] :: $85  *WRITE* *L*​ocal *2* into rt
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_L2))
+  - assembler include :: BC_WRITE_L2
+  *WRITE* *L*​ocal *2* into rt
+- [[file:vm-interpreter.rkt::898][WRITE_L1]] :: $83  *WRITE* *L*​ocal *1* into rt
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_L1))
+  - assembler include :: BC_WRITE_L1
+  *WRITE* *L*​ocal *1* into rt
+- [[file:vm-interpreter.rkt::896][WRITE_L0]] :: $81  *WRITE* *L*​ocal *0* into rt
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_L0))
+  - assembler include :: BC_WRITE_L0
+  *WRITE* *L*​ocal *0* into rt
+- [[file:vm-interpreter.rkt::893][PUSH_L3]] :: $86  *PUSH* *L*​ocal *3* on evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L3))
+  - assembler include :: BC_PUSH_L3
+  *PUSH* *L*​ocal *3* on evlstk
+- [[file:vm-interpreter.rkt::891][PUSH_L2]] :: $84  *PUSH* *L*​ocal *2* on evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L2))
+  - assembler include :: BC_PUSH_L2
+  *PUSH* *L*​ocal *2* on evlstk
+- [[file:vm-interpreter.rkt::889][PUSH_L1]] :: $82  *PUSH* *L*​ocal *1* on evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L1))
+  - assembler include :: BC_PUSH_L1
+  *PUSH* *L*​ocal *1* on evlstk
+- [[file:vm-interpreter.rkt::887][PUSH_L0]] :: $80  *PUSH* *L*​ocal *0* on evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L0))
+  - assembler include :: BC_PUSH_L0
+  *PUSH* *L*​ocal *0* on evlstk
+- [[file:vm-interpreter.rkt::851][PUSH_L3_CDR]] :: $a7  *PUSH* *L*​ocal *3* and *CDR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L3_CDR))
+  - assembler include :: BC_PUSH_L3_CDR
+  *PUSH* *L*​ocal *3* and *CDR*
+- [[file:vm-interpreter.rkt::849][PUSH_L2_CDR]] :: $a5  *PUSH* *L*​ocal *2* and *CDR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L2_CDR))
+  - assembler include :: BC_PUSH_L2_CDR
+  *PUSH* *L*​ocal *2* and *CDR*
+- [[file:vm-interpreter.rkt::847][PUSH_L1_CDR]] :: $a3  *PUSH* *L*​ocal *1* and *CDR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L1_CDR))
+  - assembler include :: BC_PUSH_L1_CDR
+  *PUSH* *L*​ocal *1* and *CDR*
+- [[file:vm-interpreter.rkt::845][PUSH_L0_CDR]] :: $a1  *PUSH* *L*​ocal *0* and *CDR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L0_CDR))
+  - assembler include :: BC_PUSH_L0_CDR
+  *PUSH* *L*​ocal *0* and *CDR*
+- [[file:vm-interpreter.rkt::842][PUSH_L3_CAR]] :: $a6  *PUSH* *L*​ocal *3* and *CAR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L3_CAR))
+  - assembler include :: BC_PUSH_L3_CAR
+  *PUSH* *L*​ocal *3* and *CAR*
+- [[file:vm-interpreter.rkt::840][PUSH_L2_CAR]] :: $a4  *PUSH* *L*​ocal *2* and *CAR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L2_CAR))
+  - assembler include :: BC_PUSH_L2_CAR
+  *PUSH* *L*​ocal *2* and *CAR*
+- [[file:vm-interpreter.rkt::838][PUSH_L1_CAR]] :: $a2  *PUSH* *L*​ocal *1* and *CAR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L1_CAR))
+  - assembler include :: BC_PUSH_L1_CAR
+  *PUSH* *L*​ocal *1* and *CAR*
+- [[file:vm-interpreter.rkt::836][PUSH_L0_CAR]] :: $a0  *PUSH* *L*​ocal *0* and *CAR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L0_CAR))
+  - assembler include :: BC_PUSH_L0_CAR
+  *PUSH* *L*​ocal *0* and *CAR*
+** misc
+planned
+-
+existing
+- [[file:vm-interpreter.rkt::3189][NATIVE]] :: $4a  following bytes are native 6510 commands, JSR RETURN_TO_BC ends this sequence
+  - racket require :: (require (only-in "vm-interpreter.rkt" NATIVE))
+  - assembler include :: BC_NATIVE
+  following bytes are native 6510 commands, JSR RETURN_TO_BC ends this sequence
+  len: 1
+- [[file:vm-interpreter.rkt::2585][EXT]] :: $04  extension byte code, the next byte is the actual command (decoded from the extended byte code jump table)
+  - racket require :: (require (only-in "vm-interpreter.rkt" EXT))
+  - assembler include :: BC_EXT
+  extension byte code, the next byte is the actual command (decoded from the extended byte code jump table)
+- [[file:vm-interpreter.rkt::795][BREAK]] :: $02  collision with 6510 BRK code
+  - racket require :: (require (only-in "vm-interpreter.rkt" BREAK))
+  - assembler include :: BC_BREAK
+  collision with 6510 BRK code
+** flow
+planned
+- DEC_RAI_NZ_P_BRA
+- DEC_RCI_NZ_P_BRA
+existing
+- [[file:vm-interpreter.rkt::3445][DEC_RBI_NZ_P_BRA]] :: $54  *DEC*​rement *RBI* and *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" DEC_RBI_NZ_P_BRA))
+  - assembler include :: BC_DEC_RBI_NZ_P_BRA
+  *DEC*​rement *RBI* and *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+  len: 2
+- [[file:vm-interpreter.rkt::3421][NZ_P_BRA]] :: $1d  *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_BRA))
+  - assembler include :: BC_NZ_P_BRA
+  *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+  on branch, it does no pop
+  on fall through, it removes the 0 from the stack
+  len: 2
+- [[file:vm-interpreter.rkt::3400][Z_P_BRA]] :: $1b  *Z*​ero *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_BRA))
+  - assembler include :: BC_Z_P_BRA
+  *Z*​ero *P*​redicate *BRA*​nch
+  len: 2
+- [[file:vm-interpreter.rkt::2170][T_P_BRA]] :: $0c  *T*​rue *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" T_P_BRA))
+  - assembler include :: BC_T_P_BRA
+  *T*​rue *P*​redicate *BRA*​nch
+  len: 2
+- [[file:vm-interpreter.rkt::2037][F_P_BRA]] :: $0d  *F*​alse *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" F_P_BRA))
+  - assembler include :: BC_F_P_BRA
+  *F*​alse *P*​redicate *BRA*​nch
+  len: 1
+- [[file:vm-interpreter.rkt::1880][GOTO]] :: $32  goto relative by byte following in code
+  - racket require :: (require (only-in "vm-interpreter.rkt" GOTO))
+  - assembler include :: BC_GOTO
+  goto relative by byte following in code
+  len: 2
+  op = relative offset
+- [[file:vm-interpreter.rkt::509][CALL]] :: $34  stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+  - racket require :: (require (only-in "vm-interpreter.rkt" CALL))
+  - assembler include :: BC_CALL
+  stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+- [[file:vm-interpreter.rkt::393][TAIL_CALL]] :: $35  stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
+  - racket require :: (require (only-in "vm-interpreter.rkt" TAIL_CALL))
+  - assembler include :: BC_TAIL_CALL
+  stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
+** floats
+planned
+- FINT :: convert to integer (cut off digits, max if >, min if <)
+- FADD
+- FSUB
+- FMUL
+- FDIV
+- FSQRT
+- FPOW
+- FLOG
+- FEXP
+- FSIN
+- FCOS
+- FTAN
+- FASIN
+- FACOS
+- FATAN
+** return
+- [[file:vm-interpreter.rkt::3320][NZ_P_RET_POP_3]] :: $c6  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 3 values from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_RET_POP_3))
+  - assembler include :: BC_NZ_P_RET_POP_3
+  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 3 values from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3317][NZ_P_RET_POP_2]] :: $c4  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 2 values from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_RET_POP_2))
+  - assembler include :: BC_NZ_P_RET_POP_2
+  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 2 values from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3314][NZ_P_RET_POP_1]] :: $c2  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 1 value from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_RET_POP_1))
+  - assembler include :: BC_NZ_P_RET_POP_1
+  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 1 value from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3311][NZ_P_RET_POP_0]] :: $c0  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return without popping anything
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_RET_POP_0))
+  - assembler include :: BC_NZ_P_RET_POP_0
+  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return without popping anything
+  len: 1
+- [[file:vm-interpreter.rkt::3308][Z_P_RET_POP_3]] :: $c7  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 3 values from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_RET_POP_3))
+  - assembler include :: BC_Z_P_RET_POP_3
+  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 3 values from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3305][Z_P_RET_POP_2]] :: $c5  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 2 values from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_RET_POP_2))
+  - assembler include :: BC_Z_P_RET_POP_2
+  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 2 values from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3302][Z_P_RET_POP_1]] :: $c3  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 1 value from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_RET_POP_1))
+  - assembler include :: BC_Z_P_RET_POP_1
+  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 1 value from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3299][Z_P_RET_POP_0]] :: $c1  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return without popping anything
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_RET_POP_0))
+  - assembler include :: BC_Z_P_RET_POP_0
+  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return without popping anything
+  len: 1
+- [[file:vm-interpreter.rkt::1861][T_P_RET]] :: $0b  *T*​rue *P*​redicate *RET*​urn
+  - racket require :: (require (only-in "vm-interpreter.rkt" T_P_RET))
+  - assembler include :: BC_T_P_RET
+  *T*​rue *P*​redicate *RET*​urn
+  len: 1
+- [[file:vm-interpreter.rkt::1844][F_P_RET]] :: $0e  *F*​alse *P*​redicate *RET*​urn
+  - racket require :: (require (only-in "vm-interpreter.rkt" F_P_RET))
+  - assembler include :: BC_F_P_RET
+  *F*​alse *P*​redicate *RET*​urn
+- [[file:vm-interpreter.rkt::1827][F_P_RET_F]] :: $13  *F*​alse *P*​redicate *RET*​urn *F*​alse
+  - racket require :: (require (only-in "vm-interpreter.rkt" F_P_RET_F))
+  - assembler include :: BC_F_P_RET_F
+  *F*​alse *P*​redicate *RET*​urn *F*​alse
+- [[file:vm-interpreter.rkt::752][RET]] :: $33  stack [cell paramN, ... cell param1, cell param0] -> []
+  - racket require :: (require (only-in "vm-interpreter.rkt" RET))
+  - assembler include :: BC_RET
+  stack [cell paramN, ... cell param1, cell param0] -> []
+- [[file:vm-interpreter.rkt::261][NIL_P_RET_L0_POP_4]] :: $9e  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *4* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P_RET_L0_POP_4))
+  - assembler include :: BC_NIL_P_RET_L0_POP_4
+  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *4* from evlstk
+- [[file:vm-interpreter.rkt::259][NIL_P_RET_L0_POP_3]] :: $9c  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *3* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P_RET_L0_POP_3))
+  - assembler include :: BC_NIL_P_RET_L0_POP_3
+  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *3* from evlstk
+- [[file:vm-interpreter.rkt::257][NIL_P_RET_L0_POP_2]] :: $9a  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *2* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P_RET_L0_POP_2))
+  - assembler include :: BC_NIL_P_RET_L0_POP_2
+  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *2* from evlstk
+- [[file:vm-interpreter.rkt::255][NIL_P_RET_L0_POP_1]] :: $98  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *1* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P_RET_L0_POP_1))
+  - assembler include :: BC_NIL_P_RET_L0_POP_1
+  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *1* from evlstk
+* - :noexport:
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; org-pretty-entities-include-sub-superscripts: nil
+  ;; End:
+#+end_src
