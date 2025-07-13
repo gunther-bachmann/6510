@@ -274,14 +274,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label RETURN__)
           (LSR)                              ;;
           (AND !$03)
+          (BEQ DONE__)
           (TAX)
 
-   (label LOCAL_0_POP__)
-          ;; local 0 is written into tos (which is one pop already)          
-          ;; now pop the rest (0..3 times additionally)
-   (label NOW_POP__)
-          (TXA)
-          (BEQ DONE__)
    (label LOOP_POP__)
           (DEC ZP_CELL_STACK_TOS)
           (LDY ZP_CELL_STACK_TOS)
@@ -289,11 +284,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_RZ)
           (LDA (ZP_CELL_STACK_HB_PTR),y)
           (STA ZP_RZ+1)
-          (TXA)
-          (PHA)
+          (STX ZP_RP)
           (JSR DEC_REFCNT_RZ)
-          (PLA)
-          (TAX)
+          (LDX ZP_RP)
           (LDY ZP_CELL_STACK_TOS)
           (CPY !$01)
           (BEQ STACK_DEPLETED__)
@@ -559,8 +552,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
              (bc PUSH_I0)
-             (bc BREAK
-))
+             (bc BREAK))
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-before-call-state)
@@ -857,9 +849,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    "__" "__BC_PUSH_LOCAL_CXR"
   (flatten
    (list
-    (label BC_PUSH_LX_CAR)
-           (AND !$06)
+    (label PUSH_RT_WRITE_LOCAL_bc_enc)
            (LSR)
+           (AND !$03)
            (PHA)
            (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
            (PLA)
@@ -868,21 +860,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT)                                ;; low byte -> X
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
+           (RTS)
+
+    (label BC_PUSH_LX_CAR)
+           (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_PUSH_LX_CDR)
-           (AND !$06)
-           (LSR)
-           (PHA)
-           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-           (PLA)
-           (TAY)                                ;; index -> Y
-           (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
-           (STA ZP_RT)                                ;; low byte -> X
-           (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
-           (STA ZP_RT+1)
+           (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR WRITE_CELLPAIR_RT_CELL1_TO_RT)
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)))))
@@ -912,22 +899,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (list
     (label BC_PUSH_LOCAL_SHORT)
     ;; push local
-           (AND !$06) ;; mask out 0000 0110 (lower two relevant bits)
-           (LSR)
-           (PHA)
-           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-           (PLA)
-           (TAY) ;; index -> Y
-           (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
-           (STA ZP_RT)                                ;; low byte -> X
-           (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
-           (STA ZP_RT+1)
+           (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_WRITE_LOCAL_SHORT)
-           (AND !$06) ;; mask out 0000 0110 (lower two relevant bits)
            (LSR)
+           (AND !$03)
            (PHA)
            (JSR DEC_REFCNT_RT)
            (PLA)
@@ -962,8 +940,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label BC_POP_TO_LOCAL_SHORT)
-           (AND !$06)
            (LSR)
+           (AND !$03)
            (PHA)
            (TAY)                                ;; index -> Y
            ;; decrement old local
@@ -3045,8 +3023,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label BC_GET_ARRAY_FIELD) ;; replace RT with RT.@A
-           (AND !$06)
            (LSR)
+           (AND !$03)
            (PHA)
            (JSR CP_RT_TO_RA)
            (PLA)
@@ -3059,8 +3037,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping
-           (AND !$06)
            (LSR)
+           (AND !$03)
            (PHA)
            (JSR CP_RT_TO_RA)
            (JSR POP_CELL_EVLSTK_TO_RT)
@@ -3363,37 +3341,40 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)  ;; tos is int 0 => do nothing
 
     ;; type specialized method (byte)
-    (label BC_BZ_P_RET_POP_N)
-           (LSR)                        ;; number to pop
-           (BCC BYTE_NOT_ZERO__)
-           (LDX ZP_RT+1)
-           (BEQ POP_N_RET__)
-           (JMP VM_INTERPRETER_INC_PC)
+    ;; (label BC_BZ_P_RET_POP_N)
+    ;;        (LSR)                        ;; number to pop
+    ;;        (AND !$03)
+    ;;        (LDX ZP_RT+1)
+    ;;        (BEQ POP_N_RET__)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
 
-    (label BYTE_NOT_ZERO__)
-           (LDX ZP_RT+1)
-           (BNE POP_N_RET__)
-           (JMP VM_INTERPRETER_INC_PC)
+    ;; (label BC_BNZ_P_RET_POP_N)
+    ;;        (LSR)                        ;; number to pop
+    ;;        (AND !$03)
+    ;;        (LDX ZP_RT+1)
+    ;;        (BNE POP_N_RET__)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
 
-    ;; type specialized method (int)
-    (label BC_IZ_P_RET_POP_N)
-           (LSR)                        ;; number to pop
-           (BCC INT_NOT_ZERO__)
+    ;; ;; type specialized method (int)
+    ;; (label BC_IZ_P_RET_POP_N)
+    ;;        (LSR)                        ;; number to pop
+    ;;        (AND !$03)
+    ;;        (LDX ZP_RT+1)
+    ;;        (BNE DONE__)
+    ;;        (LDX ZP_RT)
+    ;;        (CMP !>TAGGED_INT_0)
+    ;;        (BEQ POP_N_RET__)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
 
-           (LDX ZP_RT+1)
-           (BNE DONE__)
-           (LDX ZP_RT)
-           (CMP !>TAGGED_INT_0)
-           (BEQ POP_N_RET__)
-           (JMP VM_INTERPRETER_INC_PC)
-
-    (label INT_NOT_ZERO__)
-           (LDX ZP_RT+1)
-           (BNE POP_N_RET__)
-           (LDX ZP_RT)
-           (CPX !>TAGGED_INT_0)
-           (BNE POP_N_RET__)
-           (JMP VM_INTERPRETER_INC_PC)
+    ;; (label BC_INZ_P_RET_POP_N)
+    ;;        (LSR)                        ;; number to pop
+    ;;        (AND !$03)
+    ;;        (LDX ZP_RT+1)
+    ;;        (BNE POP_N_RET__)
+    ;;        (LDX ZP_RT)
+    ;;        (CPX !>TAGGED_INT_0)
+    ;;        (BNE POP_N_RET__)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
 
     (label COUNT__)
            (byte 0))))
