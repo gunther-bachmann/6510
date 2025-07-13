@@ -958,10 +958,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index                      
            (LDA ZP_RT+1)
            (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
-           (JSR POP_CELL_EVLSTK_TO_RT)            ;; fill RT with next tos
-
+           (JMP VM_POP_EVLSTK_AND_INC_PC)          ;; fill RT with next tos
            ;; no increment, since pop removes it from stack
-           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
+           ;; next bc
 
     ;; write to local
    (label  BC_WRITE_TO_LOCAL_SHORT)
@@ -1308,7 +1307,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
       (bc BREAK))))
 
   (inform-check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                       669)
+                       668)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                    (list "stack holds 3 items"
                          "int $0000  (rt)"
@@ -1384,7 +1383,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 
    (inform-check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                        669)
+                        667)
     (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                     (list "stack holds 3 items"
                           "int $1fff  (rt)"
@@ -1813,8 +1812,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_TRUE__)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC))))
+          (JMP VM_POP_EVLSTK_AND_INC_PC))))
 
 ;; @DC-B: F_P_RET, group: return
 (define F_P_RET #x1c) ;; *F*​alse *P*​redicate *RET*​urn
@@ -1830,8 +1828,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_TRUE__)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC))))
+          (JMP VM_POP_EVLSTK_AND_INC_PC))))
 
 ;; @DC-B: T_P_RET, group: return
 ;; *T*​rue *P*​redicate *RET*​urn
@@ -1849,8 +1846,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_FALSE__)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC))))
+          (JMP VM_POP_EVLSTK_AND_INC_PC))))
 
 ;; @DC-B: GOTO, group: flow
 ;; goto relative by byte following in code
@@ -2644,20 +2640,17 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (LDA !$00)
           (STA ZP_RBI)          ;; initialize index to 0
           (JSR CP_RT_TO_RB)     ;; copy tos to rb
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)
+          (JMP VM_POP_EVLSTK_AND_INC_PC)
 
    (label BC_POP_TO_RA)
           (LDA !$00)
           (STA ZP_RAI)          ;; initialize index to 0
           (JSR CP_RT_TO_RA)     ;; copy tos to ra
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)
+          (JMP VM_POP_EVLSTK_AND_INC_PC)
 
    (label BC_POP) ;;--------------------------------------------------------------------------------
           (JSR DEC_REFCNT_RT) ;; no dec, since ra is refcounted too
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
 (module+ test #| pop |#
   (define pop-0-state
@@ -2707,7 +2700,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STX ZP_RZ)
           (LDX ZP_RT+1)
           (STX ZP_RZ+1)
-          (AND !$1f)            ;; prepare offset for branch in VM_CxxR call ($00 = CAAR, $06 = CADR, $0c = CDAR, $12 = CDDR)
+          ;; prepared offset for branch in VM_CxxR call ($00 = CAAR, $06 = CADR, $0c = CDAR, $12 = CDDR)
           (JSR VM_CxxR)
           (JSR INC_REFCNT_RT)
           (JSR DEC_REFCNT_RZ)
@@ -3106,8 +3099,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR INC_REFCNT_M1_SLOT_RA)   ;; only cell-array needs to be inc-refcnt'd
           (LDA !$00)
           (STA ZP_RAI)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
 ;; @DC-B: BINC_RAI, group: cell_array
 ;; *B*​yte *INC*​rement *RA* *I*​ndex register
@@ -3127,8 +3119,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_POP_TO_RAI)
           (LDA ZP_RT+1)
           (STA ZP_RAI)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
 ;; @DC-B: WRITE_TO_RAI, group: cell_array
 ;; *WRITE* top of evlstk byte *TO* *RA* *I*​ndex
@@ -3587,6 +3578,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (BCC VM_INTERPRETER)                  ;; same page -> no further things to do
           (BCS VM_INTERPRETER_NEXT_PAGE)
 
+   (label VM_POP_EVLSTK_AND_INC_PC)
+          (JSR POP_CELL_EVLSTK_TO_RT)
+
    (label VM_INTERPRETER_INC_PC)                ;; inc by one (regular case)
    ;; (label BC_NOP)                               ;; is equivalent to NOP
           (INC ZP_VM_PC)
@@ -3696,11 +3690,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1162))
+                       1129))
 
 (module+ test #| vm-interpreter total len |#
   (define interpreter-len (foldl + 0 (map command-len (flatten vm-interpreter))))
   (inform-check-equal?
-   (< interpreter-len 3840)
+   (< interpreter-len (- 4096 256)) ;; 4 k (c000-cfff) minus one page
    #t
    (format "total memory usage of the interpreter (now ~a) should stay within c000..ceff" interpreter-len)))

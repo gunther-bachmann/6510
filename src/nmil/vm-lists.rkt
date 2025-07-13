@@ -169,9 +169,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 ;; @DC-FUN: VM_CxxR, group: list
 ;; execute caar, cadr, cdar or cddr depending on value in A
 ;; A = 00 -> caar
-;; A = 02 -> cadr
-;; A = 04 -> cdar
-;; A = 06 -> cddr
+;; A = 06 -> cadr
+;; A = 0c -> cdar
+;; A = 12 -> cddr
 ;; input:  A, evlstk
 ;; usage:  A X Y
 ;; output: cell-pair on the stack replaced with its cxxr
@@ -184,15 +184,15 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (BNE $00)
           (JSR VM_CAR) ;; caar
           (JMP VM_CAR)
+
           (JSR VM_CDR) ;; cadr
           (JMP VM_CAR)
+
           (JSR VM_CAR) ;; cdar
           (JMP VM_CDR)
+
           (JSR VM_CDR) ;; cddr
-          (JMP VM_CDR)
-   (label CONSES__VM_CxxR)
-          (RTS) ;; no implementation for the other 4 posssible commands
-))
+          (JMP VM_CDR)))
 
 ;; @DC-FUN: VM_CONS__REFCNTD, group: list
 ;; cons value to cell-pair on the stack
@@ -251,4 +251,4 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test #| vm-lists |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-list)))
-                       97))
+                       96))
