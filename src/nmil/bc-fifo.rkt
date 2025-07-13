@@ -306,7 +306,7 @@
                 "1 -> FIFO, 2 -> FIFO, FIFO -> 1")
 
   (inform-check-equal? (cpu-state-clock-cycles dequeue-state-1)
-                       12843)
+                       12879)
 
   (define dequeue-state-2
     (run-bc-wrapped-in-test

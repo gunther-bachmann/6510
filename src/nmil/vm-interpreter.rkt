@@ -483,7 +483,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "slots used:     4"
                          "next free slot: $49"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4383)
+                4415)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -1185,14 +1185,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label BC_PUSH_INT0)
-           (JSR PUSH_INT_0_TO_EVLSTK)
-           (JMP VM_INTERPRETER_INC_PC)
     (label BC_PUSH_INT1)
-           (JSR PUSH_INT_1_TO_EVLSTK)  ;;
-           (JMP VM_INTERPRETER_INC_PC) ;; interpreter loop
     (label BC_PUSH_INT2)
-           (JSR PUSH_INT_2_TO_EVLSTK)  ;;
-           (JMP VM_INTERPRETER_INC_PC) ;; interpreter loop
+           (LSR)
+           (AND !$03)
+           (LDX !$03)
+           (JSR PUSH_XA_TO_EVLSTK)
+           (JMP VM_INTERPRETER_INC_PC)
+
     (label BC_PUSH_INTm1)
            (JSR PUSH_INT_m1_TO_EVLSTK)  ;;
            (JMP VM_INTERPRETER_INC_PC) ;; interpreter loop
@@ -3696,7 +3696,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1217))
+                       1162))
 
 (module+ test #| vm-interpreter total len |#
   (define interpreter-len (foldl + 0 (map command-len (flatten vm-interpreter))))
