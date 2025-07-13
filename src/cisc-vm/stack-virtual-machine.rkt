@@ -312,21 +312,21 @@
 ;; commands operate mostly on tos
 ;; (p) prefix commands: modify the behaviour of the following command or change the operand sizes for the command operands
 
-(define NOP                 #x01) ;; just increase pc (no operation)
-(define BRK                 #x02) ;; stop
+(define NOP                 #x7c) ;; just increase pc (no operation)
+(define BRK                 #x54) ;; stop
 (define pLONG               #x03) ;; NOT SYNCED double operand size
 
-(define PUSH_BYTE           #x05) ;; op = byte value, stack [] -> [cell-byte]
-(define PUSH_I            #x06) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
+(define PUSH_BYTE           #x2e) ;; op = byte value, stack [] -> [cell-byte]
+(define PUSH_I              #x0c) ;; op1=low byte op2=high byte, stack [] -> [cell-int]
 ;; also used for struct-index or function-index
 
-(define PUSH_NIL            #x09) ;; stack: [] -> [NIL]
+(define PUSH_NIL            #x28) ;; stack: [] -> [NIL]
 (define PUSH_PARAM          #x0a) ;; NOT SYNCED op = param-idx from tail, stack [] -> [cell-]
 (define PUSH_GLOBAL         #x0b) ;; NOT SYNCED op1=low byte index op2=high byte index stack [] -> [cell-]
-(define PUSH_LOCAL          #x0c) ;; NOT SYNCED op = local-idx, stack [] -> [cell-]
+(define PUSH_LOCAL          #x02) ;; NOT SYNCED op = local-idx, stack [] -> [cell-]
 
-(define PUSH_STRUCT_FIELD   #x15) ;; op = field-idx, stack [struct-ref] -> [cell-]
-(define PUSH_ARRAY_FIELD    #x15) ;; op = field-idx, stack [array-ref] -> [cell-]
+(define PUSH_STRUCT_FIELD   #x2a) ;; op = field-idx, stack [struct-ref] -> [cell-]
+(define PUSH_ARRAY_FIELD    #x2a) ;; op = field-idx, stack [array-ref] -> [cell-]
 
 (define POP_TO_PARAM        #x0f) ;; NOT SYNCED op= param-idx from tail, stack [cell-] -> []
 (define POP_TO_GLOBAL       #x11) ;; NOT SYNCED op1=low byte index op2=high byte index, stack [cell-] -> []
@@ -335,23 +335,23 @@
 (define POP_TO_STRUCT_FIELD #x16) ;; op = field-idx, stack [cell- struct-ptr-] -> []
 (define POP_TO_ARRAY_FIELD  #x16) ;; op = array-idx, stack [cell- array-ptr-] -> []
 
-(define NIL?                #x21) ;; stack [cell-list-ptr] -> [cell-boolean]
+(define NIL?                #x42) ;; stack [cell-list-ptr] -> [cell-boolean]
 
-(define BRA                 #x31) ;; NOT SYNCED op = relative offset
-(define GOTO                #x32) ;; op = relative offset
-(define RET                 #x33) ;; stack [cell paramN, ... cell param1, cell param0] -> []
-(define CALL                #x34) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
-(define TAIL_CALL           #x35) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
+(define BRA                 #x18) ;; NOT SYNCED op = relative offset
+(define GOTO                #x78) ;; op = relative offset
+(define RET                 #x7A) ;; stack [cell paramN, ... cell param1, cell param0] -> []
+(define CALL                #x68) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+(define TAIL_CALL           #x6a) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
 (define NIL?-RET-PARAM      #x36) ;; NOT SYNCED op = param, stack [ ... paramN .. param0 ] -> [ paramOP ] if tos is nil, else no change!
 (define NIL?-RET-LOCAL      #x37) ;; NOT SYNCED op = param, stack [ ... paramN .. param0 ] -> [ localOP ] if tos is nil, else no change!
 
-(define CDR                 #x41) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
-(define CONS                #x42) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
-(define CAR                 #x43) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
+(define CDR                 #x7e) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
+(define CONS                #x6e) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+(define CAR                 #xba) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
 
 (define BYTE+               #x63) ;; NOT SYNCED stack [cell-byte a, cell-byte b] -> [sum]
-(define INT+                #x62) ;; stack [cell-int a, cell-int b] -> [sum]
-(define INT-                #x61) ;; stack [cell-int a, cell-int b] -> [difference]
+(define INT+                #xbe) ;; stack [cell-int a, cell-int b] -> [sum]
+(define INT-                #xbc) ;; stack [cell-int a, cell-int b] -> [difference]
 
 ;; BYTE-INC, BYTE-DEC, BYTE-, BYTE*, BYTE_DIV, BYTE_REM
 ;; INT-INC, INT-DEC, INT+, INT-, INT*, INT_DIV, INT_REM
@@ -384,7 +384,7 @@
 
 (define CREATE_LIST         #x73) ;; op = N+1 (byte), stack [elN .. el0] -> [cell-list-ptr-]
 
-(define ALLOCATE_ARRAY      #x75) ;; op = array len, stack [] -> [array-ref-]
+(define ALLOCATE_ARRAY      #x98) ;; op = array len, stack [] -> [array-ref-]
 (define FREE_ARRAY          #x76) ;; stack [array-ref-] -> []
 
 ;; example of short (one byte instruction)

@@ -114,6 +114,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          VM_INTERPRETER_OPTABLE
          vm-interpreter-wo-jt
 
+         BREAK
          bc
          WRITE_RA
          BDEC
@@ -271,7 +272,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JMP VM_INTERPRETER_INC_PC)        ;; next instruction
 
    (label RETURN__)
-          (LSR)                              ;; lowest bit decides 0 = LOCAL_0, 1 = some other short command
+          (LSR)                              ;;
           (AND !$03)
           (TAX)
 
@@ -897,13 +898,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define PUSH_L3 #x06) ;; *PUSH* *L*​ocal *3* on evlstk
 
 ;;                        @DC-B: WRITE_L0, group: stack
-(define WRITE_L0 #x81) ;; *WRITE* *L*​ocal *0* into rt
+(define WRITE_L0 #x10) ;; *WRITE* *L*​ocal *0* into rt
 ;;                        @DC-B: WRITE_L1, group: stack
-(define WRITE_L1 #x83) ;; *WRITE* *L*​ocal *1* into rt
+(define WRITE_L1 #x12) ;; *WRITE* *L*​ocal *1* into rt
 ;;                        @DC-B: WRITE_L2, group: stack
-(define WRITE_L2 #x85) ;; *WRITE* *L*​ocal *2* into rt
+(define WRITE_L2 #x14) ;; *WRITE* *L*​ocal *2* into rt
 ;;                        @DC-B: WRITE_L3, group: stack
-(define WRITE_L3 #x87) ;; *WRITE* *L*​ocal *3* into rt
+(define WRITE_L3 #x16) ;; *WRITE* *L*​ocal *3* into rt
 (define BC_PUSH_LOCAL_SHORT
   (add-label-suffix
    "__" "__BC_PUSH_LOCAL_SHORT"
@@ -2728,6 +2729,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STX ZP_RZ)
           (LDX ZP_RT+1)
           (STX ZP_RZ+1)
+          (AND !$1f)            ;; prepare offset for branch in VM_CxxR call ($00 = CAAR, $06 = CADR, $0c = CDAR, $12 = CDDR)
           (JSR VM_CxxR)
           (JSR INC_REFCNT_RT)
           (JSR DEC_REFCNT_RZ)
@@ -3043,6 +3045,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label BC_GET_ARRAY_FIELD) ;; replace RT with RT.@A
+           (AND !$06)
+           (LSR)
            (PHA)
            (JSR CP_RT_TO_RA)
            (PLA)
@@ -3056,6 +3060,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
     (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping
            (AND !$06)
+           (LSR)
            (PHA)
            (JSR CP_RT_TO_RA)
            (JSR POP_CELL_EVLSTK_TO_RT)
@@ -3710,7 +3715,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1211))
+                       1217))
 
 (module+ test #| vm-interpreter total len |#
   (define interpreter-len (foldl + 0 (map command-len (flatten vm-interpreter))))

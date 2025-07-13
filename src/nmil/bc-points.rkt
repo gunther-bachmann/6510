@@ -22,6 +22,7 @@
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
                   bc
+                  BREAK
                   ALLOC_ARA
                   SWAP_RA_RB
                   PUSH_RA
@@ -157,7 +158,7 @@
        (bc PUSH_I) (word 100)
        (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
-       (bc BRK))
+       (bc BREAK))
       POINT_CREATE)
      ))
 
@@ -183,7 +184,7 @@
        (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
        (bc POP)
-       (bc BRK))
+       (bc BREAK))
       POINT_CREATE)
      ))
 
@@ -219,7 +220,7 @@
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_XDIST)
-       (bc BRK))
+       (bc BREAK))
       POINT_CREATE
       POINT_XDIST)
      ))
@@ -254,7 +255,7 @@
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_YDIST)
-       (bc BRK))
+       (bc BREAK))
       POINT_CREATE
       POINT_YDIST)
      ))
@@ -297,7 +298,7 @@
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_EQUAL)
-       (bc BRK))
+       (bc BREAK))
       POINT_CREATE
       POINT_EQUAL)
      ))
@@ -307,7 +308,7 @@
                       "int $0001  (rt)"))
 
   (inform-check-equal? (cpu-state-clock-cycles point-equal-1-state)
-                       8193)
+                       7949)
 
   (define point-equal-2-state
     (run-bc-wrapped-in-test
@@ -324,7 +325,7 @@
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_EQUAL)
-       (bc BRK))
+       (bc BREAK))
       POINT_CREATE
       POINT_EQUAL)
      ))
@@ -348,7 +349,7 @@
        (bc CALL) (word-ref POINT_CREATE)
 
        (bc CALL) (word-ref POINT_EQUAL)
-       (bc BRK))
+       (bc BREAK))
       POINT_CREATE
       POINT_EQUAL)
      ))
@@ -366,7 +367,7 @@
        (bc PUSH_I) (word 100)
        (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
-       (bc BRK))
+       (bc BREAK))
       POINT_CREATE)
      ))
 
@@ -389,7 +390,7 @@
        (bc PUSH_I) (word 500)
        (bc CALL) (word-ref POINT_CREATE)
        (bc POP)
-       (bc BRK))
+       (bc BREAK))
       POINT_CREATE)
      ))
 
