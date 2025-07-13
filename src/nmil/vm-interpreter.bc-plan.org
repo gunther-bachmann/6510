@@ -1,140 +1,249 @@
 #+title: byte codes planned
+* ideas
+** reduce code size in memory by using special byte code for calls
+- [ ] how much potential is there (for the added complexity)?
+- e.g. byte code ranges reserved for hot functions (which are then called by one byte, saving two bytes)
+- dynamically register byte code -> function mapping (that may change during program execution)
+** provide easy ROM Routine access
+- [ ] rom calling conventions and which registers are used for parameter passing
+- e.g.: ROM : execute a call to ROM (fill A with Byte from stack)
+  could be implemented as short command (-,  A,  AX, AY, AXY, XY, X,  Y)
+                                         000 001 011 101 111  110 010 100
+  put result on the stack (as bytes) <- how do I know which to store
+  store carry, for later branch (if necessary)
+- alternative coding: 4 byte code
+  byte
+  1 - ROM byte code
+  2 - flags for source/target/carry register copy
+      IN   OUT
+      0000 0000
+      |||+- accumulator is copied (byte value)
+      ||+-- x
+      |+--- Y
+      +---- carry bit (is boolean value)
+  3 - lowbyte call target
+  4 - highbyte call target
+** remove short commands, use regular commands that jump to routine
+which uses the lower bits as arguments/operand
+this allows for the removal of short command logic
 * decisions to be made
 - what byte codes are extended byte codes
 - what byte codes are short byte code (including operand)
 - what byte codes are minimal (able to emulate all others)
 - how do I move a given byte code + implementation + disassembler etc. to a different category
 - collect bc available for categories
-  - [R]B (1 byte) regular byte code:    112
-  - [S]B (1 byte) short byte code:      16, 8 possible operands each
-  - [E]B (2 bytes) extendend byte code: 254
-  - [X]B optional: (3 bytes) exex byte code:      254
-* minimal byte code (92)
-- flow (5)
-  - CALL
-  - TAIL_CALL
-  - RET
-  - T_P_BRA
-  - GOTO
+  - [R]B (1 byte) regular byte code:    *112*
+    short encoding, used for often used commands
+  - [S]B (1 byte) short byte code:      *16*, *8* possible operands each
+    short encoding of commands with limited number of operands or variations
+    - with operand: try to reuse bit pattern of byte code for operand encoding/decoding <- preferred use of short encoding
+    - w/o operand: use bit pattern of byte code for function selection <- it is preferred to use regular byte code for this
+  - [E]B (2 bytes) extendend byte code: *254*
+    - uncommon commands
+  - [X]B optional: (3 bytes) byte code: *254*
+    - rare commands (if ever)
+* byte code definition
+** R
+- e.g. BADD
+  single {
+    BADD, opcode #x55, "BADD" (disassembled), commandlen 1 byte, operands: tos, tos@-1
+    implementation: (...)
+  }
+- e.g. BPUSH
+  single {
+    BPUSH, opcode #x62, "BPUSH (PC+1)" (disassembled), commandlen 2 byte, operands: PC+1
+    implementation: (...)
+  }
+- e.g. CALL
+  single {
+    CALL, opcode #x76, "CALL (PC+2)(PC+1)" (disassembled), commandlen 3 byte, operands: PC+1, PC+2
+    implementation: (...)
+  }
+** S
+- e.g. IPUSH_x
+  group {
+    IPUSH 0, opcode #x81, "IPUSH 0" (disassembled), commandlen 1 byte, operands: w/i bc
+    IPUSH -1, opcode #x83, "IPUSH -1" (disassembled), commandlen 1 byte, operands: w/i bc
+    IPUSH 1, opcode #x85 ..
+    IPUSH 2, opcode #x87
+    BPUSH 0, opcode #x80, "BPUSH 0" (disassembled), commandlen 1 byte, operands: w/i bc
+    BPUSH -1, opcode #x82, "BPUSH -1" (disassembled), commandlen 1 byte, operands: w/i bc
+    BPUSH 1, opcode #x84 ..
+    BPUSH 2, opcode #x86
+    implementation: (...)  <- group implementation (low bit 0 = group IPUSH/BPUSH, bits 1..2 = operand)
+  }
+** E
+- e.g. GC
+  extended {
+    GC, opcodes: EXT, #x01, "GC", commandlen 2 bytes, no operands
+    implementation: ( ... )
+  }
+** X, same as E
+** conversion
+- R <-> E (change opcode and command len)
+- S <-> R/E (change implementation and more, no automatic conversion)
+* idea for short commands (max 16)
+** PUSH_LOCAL, WRITE_LOCAL (1 * 8)
+PUSH_LOCAL_0..3
+WRITE_LOCAL_0..3
+** POP_TO_LOCAL, WRITE_TO_LOCAL (1 * 8)
+POP_TO_LOCAL_0..3
+WRITE_TO_LOCAL_0..3
+** PUSH_CONST
+BPUSH_m1..2
+IPUSH_m1..2
+** PUSH_RA_AF0..7
+** WRITE_RA_AF0..7
+** POP_TO_RA_AF0..7
+** WRITE_TO_RA_AF0..7
+** CRT_0..7
+** NIL_RET_L0_POP_1..4
+NNIL_RET_L0_POP_1..4
+** Z_P_RET_POP_0..3
+NZ_P_RET_POP_0..3
+** PUSH_L0..3_CAR
+PUSH_L0..3_CDR
+* minimal byte code (94)
+- flow (6)
+  - CALL                :: call a subroutine
+  - TAIL_CALL           :: tail call this very function
+  - RET                 :: return from a subroutine
+  - T_P_BRA             :: branch if the tos is true, popping it, if false, pop but don't branch
+  - GOTO                :: jump (relative)
+  - ROM                 :: call into rom
 - locals (4)
-  - PUSH_LOCAL
-  - WRITE_LOCAL
-  - POP_TO_LOCAL
-  - WRITE_TO_LOCAL
+  - PUSH_LOCAL          :: push the given local cell onto the stack
+  - WRITE_LOCAL         :: write the given local cell onto the stack
+  - POP_TO_LOCAL        :: pop the tos into the given local cell
+  - WRITE_TO_LOCAL      :: write the tos into the given local cell
 - native array (9)
-  - ALLOC_NAR_RA
-  - BPOKE_RA
-  - BPEEK_TO_RA
-  - CP_NAR_RA_TO_RB
-  - CP_NAR_RANGE_RA_TO_RB
-  - PUSH_NAR_RA_AF
-  - WRITE_NAR_RA_AF
-  - POP_TO_NAR_RA_AF
-  - WRITE_TO_NAR_RA_AF
+  - ALLOC_NAR_RA        :: allocate a new array into ra, setting index register to len
+  - BPOKE_RA            :: poke all values of ra into the given memory address
+  - BPEEK_TO_RA         :: fill the array of ra by peeking the given memory address
+  - CP_NAR_RA_TO_RB     :: copy the whole array
+  - CP_NAR_RANGE_RA_TO_RB :: copy a range of the array
+  - PUSH_NAR_RA_AF      :: push the byte referenced by the ra and its index (decrement? post/pre)
+  - WRITE_NAR_RA_AF     :: write the byte referenced by ra and its index into the tos (decrement? post/pre)
+  - POP_TO_NAR_RA_AF    :: pop the tos byte into the array field referenced by ra and its index (decrement? post/pre)
+  - WRITE_TO_NAR_RA_AF  :: write the tos byte into the array field referenced by ra and its index (decrement? post/pre)
 - cell array (7)
-  - ALLOC_RA
-  - CP_RA_TO_RB
-  - CP_RANGE_RA_TO_RB
-  - PUSH_RA_AF
-  - WRITE_RA_AF
-  - POP_TO_RA_AF
-  - WRITE_TO_RA_AF
+  - ALLOC_RA            :: allocate a new array into ra, setting index register to 0
+  - CP_RA_TO_RB         :: copy the whole array from ra to rb
+  - CP_RANGE_RA_TO_RB   :: copy a range of array pointed to by ra into the array pointer to by rb
+  - PUSH_RA_AF          :: push the array field pointed to by ra and its index register (decrement? post/pre)
+  - WRITE_RA_AF         :: write the array field pointed to by ra and its index register into the tos (decrement? post/pre)
+  - POP_TO_RA_AF        :: pop the top of the stack into the array field pointed to by ra and its index register (decrement? post/pre)
+  - WRITE_TO_RA_AF      :: write the top of the stack into the array field pointed to by ra and its index register (decrement? post/pre)
 - generic array (6)
-  - SWAP_RA_RB
-  - PUSH_RAI
-  - POP_TO_RAI
-  - BINC_RAI
-  - BDEC_RAI
-  - PUSH_RA_LEN
+  - SWAP_RA_RB          :: swap array register ra with rb (including index registers)
+  - PUSH_RAI            :: push value if array register ra index
+  - POP_TO_RAI          :: pop tos byte into array register ra index
+  - BINC_RAI            :: byte increment array register ra index
+  - BDEC_RAI            :: byte decrement array register ra index
+  - PUSH_RA_LEN         :: push array len of array in ra onto stack
 - misc (3)
-  - GC
-  - NATIVE
-  - EXT
+  - GC                  :: execute a complete garbage collection
+  - NATIVE              :: following bytes are not interpreted by native executed
+  - EXT                 :: next byte is an extended byte code
 - call pairs (3)
-  - CAR
-  - CDR
-  - CONS
+  - CAR                 :: first cell of cell pair
+  - CDR                 :: second cell of cell pair
+  - CONS                :: create a new cell pair from the top two cells on the stack
 - predicates (13)
-  - ARRAY_P | STRUCT_P
-  - NARRAY_P | STRING_P
-  - I_P (instead of INT_P)
-  - B_P
-  - F_P
-  - Z_P
-  - NIL_P
-  - I_GT_P
-  - I_EQ_P
-  - B_GT_P
-  - B_EQ_P
-  - F_GT_P
-  - F_WI_P
+  - ARRAY_P | STRUCT_P  :: is tos an array/structure?
+  - NARRAY_P | STRING_P :: is tos a native array/string?
+  - I_P                 :: is tos an integer?
+  - B_P                 :: is tos a byte?
+  - F_P                 :: is tos a float?
+  - Z_P                 :: is tos zero? (only for bytes/ints)
+  - NIL_P               :: is tos nil?
+  - I_GT_P              :: is int TOS > TOS@-1?
+  - I_EQ_P              :: is int TOS = TOS@-1?
+  - B_GT_P              :: is byte TOS > TOS@-1?
+  - B_EQ_P              :: is byte TOS = TOS@-1?
+  - F_GT_P              :: is float TOS > TOS@-1?
+  - F_WI_P              :: is float TOS =(within some epsilon) TOS@-1?
 - logic (4)
-  - NOT
-  - OR
-  - AND
-  - XOR
-- conversion (3)
-  - I2B
-  - B2I
-  - I2F
-- byte (12)
-  - BAND
-  - BOR
-  - BAND
-  - BXOR
-  - BPOKE
-  - BPEEK
-  - BSHL
-  - BSHR
-  - BINC
-  - BDEC
-  - BADD
-  - BSUB
+  - NOT                 :: negate boolean tos
+  - OR                  :: TOS || TOS@-1
+  - AND                 :: TOS && TOS@-1
+  - XOR                 :: TOS ^^ TOS@-1
+- conversion (5)
+  - I2B                 :: integer -> byte
+  - B2I                 :: byte -> integer
+  - I2F                 :: integer -> float
+  - A2L                 :: array -> list
+  - L2A                 :: list -> array
+- byte (11)
+  - BAND                :: binary and of byte tos & tos@-1
+  - BOR                 :: binary or of byte tos | tos@-1
+  - BXOR                :: binary xor of byte tos ^ tos@-1
+  - BPOKE               :: poke byte tos -> memory location
+  - BPEEK               :: peek byte from memory location -> tos
+  - BSHL                :: shift left byte
+  - BSHR                :: shift right byte
+  - BINC                :: increment byte
+  - BDEC                :: decrement byte
+  - BADD                :: add to bytes
+  - BSUB                :: subtract two bytes
 - int (7)
-  - IINC
-  - IDEC
-  - IADD
-  - ISUB
-  - IMUL
-  - IDIV
-  - IREM
+  - IINC                :: increment int
+  - IDEC                :: decrement int
+  - IADD                :: add two ints
+  - ISUB                :: subtract to ints
+  - IMUL                :: multiply to ints
+  - IDIV                :: divide to ints
+  - IREM                :: remainder of two ints
 - stack (7)
-  - PUSH_NIL
-  - IPUSH
-  - BPUSH
-  - FPUSH
-  - SWAP
-  - DUP
-  - POP
+  - PUSH_NIL            :: push nil to tos
+  - IPUSH               :: push integer
+  - BPUSH               :: push byte
+  - FPUSH               :: push float
+  - SWAP                :: swap tos with tos@-1
+  - DUP                 :: duplicate tos
+  - POP                 :: pop
 - float (9)
-  - FINT :: convert to integer (cut off digits, max if >, min if <)
-  - FADD
-  - FSUB
-  - FMUL
-  - FDIV
-  - FPOW
-  - FLOG
-  - FSIN
-  - FASIN
-* additional byte code
-- flow (11)
+  - FINT                :: convert to integer (cut off digits, max if >, min if <)
+  - FADD                :: add two floats
+  - FSUB                :: subtract two floats
+  - FMUL                :: multiply two floats
+  - FDIV                :: divide two floats
+  - FPOW                :: raise one float to the power of the other
+  - FLOG                :: logarithm of a float
+  - FSIN                :: sine of a float
+  - FASIN               :: arc sine of a float
+* additional byte code (118)
+- long numbers (8)
+  - conversion
+    - I2R               :: convert integer to rational number
+    - R2F               :: convert ration to float
+    - F2R               :: convert float to rational
+  - math
+    - RINT              :: take integer part of long number
+    - RADD              :: +
+    - RSUB              :: -
+    - RMUL              :: *
+    - RDIV              :: /
+- flow (12 + 1*8)
+  - CRT                 :: call (special) runtime routine (PC+1 = index into jump table)
+  - CRT0..7             :: short encoding for the 8 most frequently used runtime routines
   - F_P_BRA
-  - DEC_RAI_NZ_P_BRA
+  - DEC_RAI_NZ_P_BRA    :: decrement ra index and branch if not zero?
   - DEC_RBI_NZ_P_BRA
   - DEC_RCI_NZ_P_BRA
-  - RAI_NZ_P_BRA
+  - RAI_NZ_P_BRA        :: branch if rai is not zero?
   - RBI_NZ_P_BRA
   - RCI_NZ_P_BRA
-  - Z_P_BRA
-  - NZ_P_BRA
-  - NIL_P_BRA
-  - NNIL_P_BRA
-- locals (24)
-  - PUSH_LOCAL_0..3
+  - Z_P_BRA             :: branch if zero
+  - NZ_P_BRA            :: branch if not zero
+  - NIL_P_BRA           :: branch if nil
+  - NNIL_P_BRA          :: branch if not nil
+- locals (6 * 4)
+  - PUSH_LOCAL_0..3     :: push local (operand 0..3 encoded into byte code)
   - WRITE_LOCAL_0..3
   - POP_TO_LOCAL_0..3
   - WRITE_TO_LOCAL_0..3
-  - PUSH_LOCAL_0..3_CxR
+  - PUSH_LOCAL_0..3_CxR :: push local and do car/cdr on that
 - native array (8)
   - POP_TO_NAR_RB_AF
   - WRITE_TO_NAR_RB_AF
@@ -144,12 +253,12 @@
   - WRITE_TO_NAR_RC_AF
   - PUSH_NAR_RC_AF
   - WRITE_NAR_RC_AF
-- cell array (16)
+- cell array (4*4)
   - PUSH_RA_AF0..3
   - WRITE_RA_AF0..3
   - POP_TO_RA_AF0..3
   - WRITE_TO_RA_AF0..3
-- generic array (11)
+- generic array (17)
   - SWAP_RA_RC
   - PUSH_RBI
   - POP_TO_RBI
@@ -161,43 +270,49 @@
   - BDEC_RCI
   - PUSH_RB_LEN
   - PUSH_RC_LEN
+  - WRITE_LEN_TO_RAI    :: write array len into index register
+  - WRITE_LEN_TO_RBI
+  - WRITE_LEN_TO_RCI
+  - CLEAR_RAI           :: init rai to 0
+  - CLEAR_RBI
+  - CLEAR_RCI
 - misc
 - cell pairs (5)
-  - CAAR
-  - CDAR
-  - CADR
-  - CDDR
-  - COONS
+  - CAAR                :: (car (car tos))
+  - CDAR                :: (cdr (car tos))
+  - CADR                :: (car (cdr tos))
+  - CDDR                :: (cdr (cdr tos))
+  - COONS               :: (cons tos (cons tos@-1 tos@-2)
 - predicates (9)
-  - I_GE_P
-  - I_LE_P
-  - I_LT_P
-  - B_GE_P
-  - B_LE_P
-  - B_LT_P
-  - F_GE_P
-  - F_LE_P
-  - F_LT_P
+  - I_GE_P              :: int tos >= tos@-1 ?
+  - I_LE_P              :: <=
+  - I_LT_P              :: <
+  - B_GE_P              :: >=
+  - B_LE_P              :: <=
+  - B_LT_P              :: <
+  - F_GE_P              :: >=
+  - F_LE_P              :: <=
+  - F_LT_P              :: <
 - logic
 - conversion
 - byte
 - int (2)
-  - IMIN
-  - IMAX
-- stack (8)
-  PUSH_I_-1..2
-  PUSH_B_-1..2
-- float
-  - FPUSH_PI
-  - FPUSH_E
-  - FPUSH_p5
-  - FPUSH_10
-  - FPUSH_m1
-  - FPUSH_1
-  - FPUSH_0
-  - FPUSH_2
-  - FSQRT
-  - FEXP
+  - IMIN                :: min of two ints
+  - IMAX                :: max of two ints
+- stack (2*4)
+  PUSH_I_-1..2          :: quick push integer constant -1 | 0 | 1 | 2
+  PUSH_B_-1..2          :: quick push byte constant
+- float (10)
+  - FPUSH_PI            :: push pi
+  - FPUSH_E             :: push e (euler)
+  - FPUSH_p5            :: push 0.5 (1/2)
+  - FPUSH_10            :: push 10
+  - FPUSH_m1            :: push -1
+  - FPUSH_1             :: push 1
+  - FPUSH_0             :: push 0
+  - FPUSH_2             :: push 2
+  - FSQRT               :: square root
+  - FEXP                :: e^x
 * byte codes (by group)
 ** cell_array
 remove

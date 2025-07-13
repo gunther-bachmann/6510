@@ -178,10 +178,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (define VM_CxxR
   (list 
    (label VM_CxxR)
-          (LSR)
-          (BCS CONSES__VM_CxxR)
-          (TAX)
-          (LDA BRANCH_TARGETS__VM_CxxR,x)
+          (AND !$1f)
           (STA BRANCH_COMMAND__VM_CxxR+1)
    (label BRANCH_COMMAND__VM_CxxR)
           (BNE $00)
@@ -195,9 +192,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (JMP VM_CDR)
    (label CONSES__VM_CxxR)
           (RTS) ;; no implementation for the other 4 posssible commands
-
-   (label BRANCH_TARGETS__VM_CxxR)
-          (byte $00 $06 $0c $12)))
+))
 
 ;; @DC-FUN: VM_CONS__REFCNTD, group: list
 ;; cons value to cell-pair on the stack
