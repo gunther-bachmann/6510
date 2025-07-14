@@ -882,4 +882,5 @@ using a cell-stack
 
 (module+ test #| vm-call-frame |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-call-frame)))
-                       255))
+                       570
+                       "estimated code length of call-frame runtime"))

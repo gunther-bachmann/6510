@@ -403,8 +403,8 @@ define code/data segments for a c64 program that are used for generating a loade
                      (JSR VM_INITIALIZE_MEMORY_MANAGER)
                      (JSR VM_INITIALIZE_CALL_FRAME)
                      (JMP VM_INTERPRETER))
-               vm-interpreter-wo-jt))
-)
+               vm-interpreter-wo-jt)))
+
   (define raw-bc-interpreter
     (cdar
      (assembly-code-list-org-code-sequences
@@ -443,6 +443,8 @@ define code/data segments for a c64 program that are used for generating a loade
              (RTS)          ;; return to basic (SYS 2064)
 
       (label COPY_DESCRIPTOR)) ;; all data following here is discarded when interpreter is started and regarded as free
+      ;; use (bc interpreter) in 9000-9fff (4k)
+      ;; use (memory manager) in c000-cfff (4k)
      (segment->copy-descriptor
       (c64-segment 'pinned ;; type
                    #xc000  ;; location

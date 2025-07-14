@@ -177,7 +177,7 @@ primes (ignore 0,1) up to 30
 ;; jump until done     DEC RAI/BI/CI, NZ_P_BRA
 
 ;; stack: size (up to number)
-(define PRIME_SIEVE
+(define PRIME_SIEVE ;; currently using 46 byte
   (bc-resolve
    (flatten
   (list
@@ -243,7 +243,7 @@ primes (ignore 0,1) up to 30
      (append
       (list
        (bc PUSH_B) (byte 40)
-       (bc CALL) (word-ref PRIME_SIEVE)  ;; calc primes in the range of 1..20
+       (bc CALL) (word-ref PRIME_SIEVE)  ;; calc primes in the range of 1..40
        (bc BRK))
       (list (org #x8F00))
       PRIME_SIEVE)

@@ -20,6 +20,11 @@
 (define/c (command-len command)
   (-> command/c nonnegative-integer?)
   (cond
+    [(ast-decide-cmd? command)
+     (apply max
+      (map command-len (ast-decide-cmd-options command)))] ;; just estimated, dependes on decisions to be made
+    [(ast-org-command? command) 0]
+    [(ast-org-align-command? command) 0]
     [(ast-unresolved-bytes-cmd? command)
      (if (ast-resolve-word-scmd? (ast-unresolved-bytes-cmd-resolve-sub-command command))
          2
@@ -34,10 +39,13 @@
              (ast-unresolved-opcode-cmd-resolve-sub-command command))
             2
             1))]
+    [(ast-unresolved-rel-opcode-cmd? command) 2]
     ;; order is important here!
     [(ast-opcode-cmd? command)
      (length (ast-opcode-cmd-bytes command))]
-    [else 0]))
+    [(ast-label-def-cmd? command) 0]
+    [(ast-const? command) 0]
+    [else (raise-user-error (format "unknown command for command len ~a" command))]))
 
 (module+ test #| command-len |#
   (check-equal? (command-len (ast-opcode-cmd '() '(100)))

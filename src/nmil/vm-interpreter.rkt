@@ -3690,7 +3690,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1129))
+                       1681
+                       "estimated len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#
   (define interpreter-len (foldl + 0 (map command-len (flatten vm-interpreter))))

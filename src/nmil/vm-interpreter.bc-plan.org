@@ -23,18 +23,18 @@
       +---- carry bit (is boolean value)
   3 - lowbyte call target
   4 - highbyte call target
-** remove short commands, use regular commands that jump to routine
+** DONE remove short commands, use regular commands that jump to routine
 which uses the lower bits as arguments/operand
 this allows for the removal of short command logic
 * decisions to be made
 - what byte codes are extended byte codes
-- what byte codes are short byte code (including operand)
+- +what byte codes are short byte code (including operand)+
 - what byte codes are minimal (able to emulate all others)
 - how do I move a given byte code + implementation + disassembler etc. to a different category
 - collect bc available for categories
-  - [R]B (1 byte) regular byte code:    *112*
+  - [R]B (1 byte) regular byte code:    *127*
     short encoding, used for often used commands
-  - [S]B (1 byte) short byte code:      *16*, *8* possible operands each
+  - +[S]B (1 byte) short byte code:      *16*, *8* possible operands each+
     short encoding of commands with limited number of operands or variations
     - with operand: try to reuse bit pattern of byte code for operand encoding/decoding <- preferred use of short encoding
     - w/o operand: use bit pattern of byte code for function selection <- it is preferred to use regular byte code for this
@@ -58,8 +58,8 @@ this allows for the removal of short command logic
   single {
     CALL, opcode #x76, "CALL (PC+2)(PC+1)" (disassembled), commandlen 3 byte, operands: PC+1, PC+2
     implementation: (...)
-  }
-** S
+    }
+** OBSOLETE +S+
 - e.g. IPUSH_x
   group {
     IPUSH 0, opcode #x81, "IPUSH 0" (disassembled), commandlen 1 byte, operands: w/i bc
@@ -82,7 +82,7 @@ this allows for the removal of short command logic
 ** conversion
 - R <-> E (change opcode and command len)
 - S <-> R/E (change implementation and more, no automatic conversion)
-* idea for short commands (max 16)
+* OBSOLETE idea for short commands (max 16)
 ** PUSH_LOCAL, WRITE_LOCAL (1 * 8)
 PUSH_LOCAL_0..3
 WRITE_LOCAL_0..3
