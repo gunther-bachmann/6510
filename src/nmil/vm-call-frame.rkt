@@ -35,15 +35,15 @@ using a cell-stack
   (require (only-in "../ast/6510-relocator.rkt" command-len))
 
 
-  (define PAGE_AVAIL_0 #x97)
-  (define PAGE_AVAIL_0_W #x9700)
-  (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600)
+  (define PAGE_AVAIL_0 #x8a)
+  (define PAGE_AVAIL_0_W #x8a00)
+  (define PAGE_AVAIL_1 #x89)
+  (define PAGE_AVAIL_1_W #x8900)
 
-  (define PAGE_CALL_FRAME #x9a)
-  (define PAGE_CALL_FRAME_W #x9a00)
-  (define PAGE_LOCALS_LB #x98)
-  (define PAGE_LOCALS_HB #x99))
+  (define PAGE_CALL_FRAME #x8d)
+  (define PAGE_CALL_FRAME_W #x8d00)
+  (define PAGE_LOCALS_LB #x8b)
+  (define PAGE_LOCALS_HB #x8c))
 
 (module+ test
   (require "../6510-test-utils.rkt")

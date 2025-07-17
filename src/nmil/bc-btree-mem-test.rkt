@@ -124,10 +124,10 @@
                 (list "stack holds 1 item"
                       "((1 . 2) . (3 . 4))  (rt)"))
   (check-equal? (vm-cell-pair-pages b-tree-0-state)
-                (list #x97)) ;; corresponds to (define PAGE_AVAIL_0 #x97) in vm-interpreter
-  (check-equal? (length (vm-cell-pairs-free-in-page b-tree-0-state #x97))
+                (list #x8a)) ;; corresponds to (define PAGE_AVAIL_0 #x8b) in vm-interpreter
+  (check-equal? (length (vm-cell-pairs-free-in-page b-tree-0-state #x8a))
                 46) ;; after garbage collection, this should rise to (- 49 3)
-  (check-equal? (vm-cell-pairs-used-num-in-page b-tree-0-state #x97)
+  (check-equal? (vm-cell-pairs-used-num-in-page b-tree-0-state #x8a)
                 3)) ;; should be 3 (since the resulting tree only needs 3 cells)
 
 (module+ test #| btree from-list, to-list |#
@@ -165,10 +165,10 @@
                        (list "stack holds 1 item"
                              "(1 . (2 . (3 . (4 . NIL))))  (rt)"))
          (check-equal? (vm-cell-pair-pages b-tree-1-state)
-                       (list #x97)) ;; corresponds to (define PAGE_AVAIL_0 #x97) in vm-interpreter
-         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-1-state #x97))
+                       (list #x8a)) ;; corresponds to (define PAGE_AVAIL_0 #x8b) in vm-interpreter
+         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-1-state #x8a))
                        45) ;; after garbage collection, this should rise to (- 49 3)
-         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-1-state #x97)
+         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-1-state #x8a)
                        4)]))
 
 (module+ test #| btree from-list, path-to-first, add-value-after, to-list |#
@@ -221,13 +221,13 @@
                              "(10 . (15 . (20 . (30 . (40 . (50 . (60 . NIL)))))))  (rt)"
                              ))
          (check-equal? (vm-cell-pair-pages b-tree-2-state)
-                       (list #x97)) ;; corresponds to (define PAGE_AVAIL_0 #x97) in vm-interpreter
-         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-2-state #x97))
+                       (list #x8a)) ;; corresponds to (define PAGE_AVAIL_0 #x8a) in vm-interpreter
+         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-2-state #x8a))
                        42) 
-         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-2-state #x97)
+         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-2-state #x8a)
                        7) ;; is actually the number of cons cells (which is the number of dots in the list above)
          (check-equal? (map (lambda (str) (regexp-replace #rx"^pair-ptr\\[1\\].*" str ""))
-                            (vm-cell-pairs-used-info  b-tree-2-state #x97))
+                            (vm-cell-pairs-used-info  b-tree-2-state #x8a))
                        (make-list 7 "")
                        "all pair ptrs in use are referenced only once!")]))
 
@@ -296,13 +296,13 @@
                              "(10 . (15 . (20 . (25 . (30 . (50 . (60 . NIL)))))))  (rt)"
                              ))
          (check-equal? (vm-cell-pair-pages b-tree-3-state)
-                       (list #x97)) ;; corresponds to (define PAGE_AVAIL_0 #x97) in vm-interpreter
-         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-3-state #x97))
+                       (list #x8a)) ;; corresponds to (define PAGE_AVAIL_0 #x8a) in vm-interpreter
+         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-3-state #x8a))
                        42)
-         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-3-state #x97)
+         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-3-state #x8a)
                        7) ;; is actually the number of cons cells (which is the number of dots in the list above)
          (check-equal? (map (lambda (str) (regexp-replace #rx"^pair-ptr\\[1\\].*" str "ok"))
-                            (vm-cell-pairs-used-info  b-tree-3-state #x97))
+                            (vm-cell-pairs-used-info  b-tree-3-state #x8a))
                        (make-list 7 "ok")
                        "all pair ptrs in use are referenced only once!")]))
 
@@ -326,9 +326,9 @@
   (check-equal? (shorten-cell-strings (vm-stack->strings btree-reverse-0-state 10 #t))
                 (list "stack holds 1 item"
                       "(0 . 1)  (rt)"))
-  (check-equal? (vm-cell-pairs-used-num-in-page btree-reverse-0-state #x97)
+  (check-equal? (vm-cell-pairs-used-num-in-page btree-reverse-0-state #x8a)
                 1) ;; is actually the number of cons cells (which is the number of dots in the list above)
   (check-equal? (map (lambda (str) (regexp-replace #rx"^pair-ptr\\[1\\].*" str "ok"))
-                     (vm-cell-pairs-used-info  btree-reverse-0-state #x97))
+                     (vm-cell-pairs-used-info  btree-reverse-0-state #x8a))
                 (make-list 1 "ok")
                 "all pair ptrs in use are referenced only once!"))

@@ -138,6 +138,8 @@ define code/data segments for a c64 program that are used for generating a loade
 (module+ test #| looped-copy-region |#
   (require (only-in  "../nmil/vm-memory-manager-test-utils.rkt" list-with-label-suffix))
 
+  (require (only-in "../nmil/vm-lists.rkt" vm-lists))
+
   ;; load two code sections (located in the program loaded to 0800)
   ;; into c000 and 8000 that print out 0 and 1 (and some more) on the screen
   ;; absolute and relative references within these sections are resolved
@@ -388,27 +390,48 @@ define code/data segments for a c64 program that are used for generating a loade
                     VM_INTERPRETER_OPTABLE_EXT1_HB
                     VM_INTERPRETER_OPTABLE_EXT1_LB
                     VM_INTERPRETER_OPTABLE
-                    vm-interpreter-wo-jt))
+                    just-vm-interpreter))
   (require (only-in "../nmil/vm-mm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
 
 
+  ;; @c000 runtime + memory management etc
+  (define vm-runtime
+    (new-assemble-to-code-list
+     (append (list (org #xc000))
+             vm-lists)))
 
-  ;; @c000 interpreter + runtime + memory management etc
+  (define raw-vm-runtime
+    (cdar
+     (assembly-code-list-org-code-sequences
+      vm-runtime)))
+
+  (check-true (> (- #xcec0 #xc000)
+                 (length raw-vm-runtime))
+              "vm runtime must fit into upper memory")
+
+  ;; @9000 just bc interpreter
   (define bc-interpreter
     (new-assemble-to-code-list
-       (append (list (org #xc000)
+       (append (list (org #x9000)
                      (word-const VM_INTERPRETER_OPTABLE $ce00)
 
                      (JSR VM_INTERPRETER_INIT_AX)
                      (JSR VM_INITIALIZE_MEMORY_MANAGER)
                      (JSR VM_INITIALIZE_CALL_FRAME)
                      (JMP VM_INTERPRETER))
-               vm-interpreter-wo-jt)))
+               just-vm-interpreter
+               VM_INTERPRETER_OPTABLE_EXT1_HB
+               VM_INTERPRETER_OPTABLE_EXT1_LB)
+       (assembly-code-list-labels vm-runtime)))
 
   (define raw-bc-interpreter
     (cdar
      (assembly-code-list-org-code-sequences
       bc-interpreter)))
+
+  (check-true (> (- #xa000 #x9000)
+                 (length raw-bc-interpreter))
+              "bc interpreter must fit right before basic mem")
 
   ;; @cdc0 mm-regs
   (define raw-mem-data  (cdar (assembly-code-list-org-code-sequences (new-assemble-to-code-list (append (list (org #xcdc0)) VM_INITIAL_MM_REGS)))))
@@ -435,7 +458,7 @@ define code/data segments for a c64 program that are used for generating a loade
              ;; add code to initialize memory manage and interpreter
              (LDA !<BC_START) ;; lb start of available memory
              (LDX !>BC_START) ;; hb  start of available memory
-             (JSR $c000)      ;; initialize memory manager & interpreter & start interpreter
+             (JSR $9000)      ;; initialize memory manager & interpreter & start interpreter
 
       (label BC_START)
              (ast-bytes-cmd '() byte-codes)
@@ -447,13 +470,22 @@ define code/data segments for a c64 program that are used for generating a loade
       ;; use (memory manager) in c000-cfff (4k)
      (segment->copy-descriptor
       (c64-segment 'pinned ;; type
-                   #xc000  ;; location
+                   #x9000  ;; location
                    '()       ;; reloc info
                    '()       ;; resolution info
                    '()       ;; resolution symbols
                    (length raw-bc-interpreter)
                    raw-bc-interpreter)
-      "SECTION_ONE")
+      "SECTION_BC")
+     (segment->copy-descriptor
+      (c64-segment 'pinned ;; type
+                   #xc000  ;; location
+                   '()       ;; reloc info
+                   '()       ;; resolution info
+                   '()       ;; resolution symbols
+                   (length raw-vm-runtime)
+                   raw-vm-runtime)
+      "SECTION_RT")
      (segment->copy-descriptor
       (c64-segment 'pinned ;; type
                    #xcdc0  ;; location
@@ -484,8 +516,10 @@ define code/data segments for a c64 program that are used for generating a loade
      (list (byte 0 0)) ;; end mark
      LOOPED_COPY_REGION
      COPY_REGION
-     (list (label "SECTION_ONE")
+     (list (label "SECTION_BC")
            (ast-bytes-cmd '() raw-bc-interpreter) ;; <-- this part is too large to fit into c000-#xcdbf => split byte codes
+           (label "SECTION_RT")
+           (ast-bytes-cmd '() raw-vm-runtime)
            (label "SECTION_MD")
            (ast-bytes-cmd '() raw-mem-data)
            (label "SECTION_BCJT")

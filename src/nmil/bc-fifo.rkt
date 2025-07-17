@@ -127,10 +127,10 @@
   (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 
 
-  (define PAGE_AVAIL_0 #x97)
-  (define PAGE_AVAIL_0_W #x9700)
-  (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600)
+  (define PAGE_AVAIL_0 #x8a)
+  (define PAGE_AVAIL_0_W #x8a00)
+  (define PAGE_AVAIL_1 #x89)
+  (define PAGE_AVAIL_1_W #x8900)
 
   (define (wrap-bytecode-for-test bc)
     (append (list (org #x7000)
@@ -220,7 +220,7 @@
                 (list "int $0001"))
 
   (inform-check-equal? (cpu-state-clock-cycles enqueue-state-1)
-                       6637)
+                       6806)
 
   (define enqueue-state-2
     (run-bc-wrapped-in-test
@@ -306,7 +306,7 @@
                 "1 -> FIFO, 2 -> FIFO, FIFO -> 1")
 
   (inform-check-equal? (cpu-state-clock-cycles dequeue-state-1)
-                       12877)
+                       13046)
 
   (define dequeue-state-2
     (run-bc-wrapped-in-test

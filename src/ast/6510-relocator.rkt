@@ -45,6 +45,8 @@
      (length (ast-opcode-cmd-bytes command))]
     [(ast-label-def-cmd? command) 0]
     [(ast-const? command) 0]
+    [(ast-provide? command) 0]
+    [(ast-require? command) 0]
     [else (raise-user-error (format "unknown command for command len ~a" command))]))
 
 (module+ test #| command-len |#

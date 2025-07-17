@@ -35,10 +35,10 @@
   (require (only-in "./vm-mm-register-functions.rkt" WRITE_INT_AY_TO_RT))
 
 
-  (define PAGE_AVAIL_0 #x9a)      ;; high byte of first page available for allocation
-  (define PAGE_AVAIL_0_W #x9a00)  ;; word (absolute address) of first page available
-  (define PAGE_AVAIL_1 #x99)      ;; high byte of second page available for allocation
-  (define PAGE_AVAIL_1_W #x9900)  ;; word (absolute address) of second page available
+  (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
+  (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available
+  (define PAGE_AVAIL_1 #x8c)      ;; high byte of second page available for allocation
+  (define PAGE_AVAIL_1_W #x8c00)  ;; word (absolute address) of second page available
 
   (define test-runtime
     (append
@@ -161,8 +161,8 @@
           (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 7800-7fff is free
           (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 8000-87ff is free
           (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 8800-8fff is free
-          (byte $ff $ff $ff $ff  $ff $ff $ff $ff)     ;; mem 9000-97ff is free
-          (byte $ff $ff $ff $ff  $ff $01 $01 $01)     ;; mem 9800-9cff is free, 9d00..9dff = first free code page, 9e00..9eff stack page, 9f00..9fff cell page
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 9000-97ff is unavailable (bc interpreter)
+          (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem 9800-9cff is unavailable (bc interpreter)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem A000-A7ff is unavailable (C64 BASIC)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem A800-Afff is unavailable (C64 BASIC)
           (byte $01 $01 $01 $01  $01 $01 $01 $01)     ;; mem B000-B7ff is unavailable (C64 BASIC)

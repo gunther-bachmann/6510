@@ -79,10 +79,10 @@
                     vm-cell->string
                     vm-deref-cell-pair-w->string))
 
-  (define PAGE_AVAIL_0 #x97)
-  (define PAGE_AVAIL_0_W #x9700)
-  (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600)
+  (define PAGE_AVAIL_0 #x8a)
+  (define PAGE_AVAIL_0_W #x8a00)
+  (define PAGE_AVAIL_1 #x89)
+  (define PAGE_AVAIL_1_W #x8900)
 
   (define (wrap-bytecode-for-test bc)
     (append (list (org #x7000)
@@ -126,7 +126,7 @@
        (bc CALL) (word-ref BC_ADD_NATIVE)
        (bc PUSH_I1)
        (bc BRK))
-      (list (org #x8F00))
+      (list (org #x8700))
       BC_ADD_NATIVE)
      ))
   (check-equal? (vm-stack->strings add-native-state)
@@ -161,7 +161,7 @@
        (bc CALL) (word-ref BC_ADD_NATIVE_2)
        (bc PUSH_I2)
        (bc BRK))
-      (list (org #x8F00))
+      (list (org #x8700))
       BC_ADD_NATIVE_2)
      ))
   (check-equal? (vm-stack->strings add-native-state-2)

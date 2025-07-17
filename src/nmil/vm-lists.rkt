@@ -39,10 +39,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (run-code-in-test-on-code wrapped-code  debug)))
 
 (module+ test #| after mem init |#
-  (define PAGE_AVAIL_0 #x97)
-  (define PAGE_AVAIL_0_W #x9700)
-  (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600))
+  (define PAGE_AVAIL_0 #x8a)
+  (define PAGE_AVAIL_0_W #x8a00)
+  (define PAGE_AVAIL_1 #x89)
+  (define PAGE_AVAIL_1_W #x8900))
 
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator))
@@ -168,10 +168,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 ;; cddr =  (cdr (cdr x))
 ;; @DC-FUN: VM_CxxR, group: list
 ;; execute caar, cadr, cdar or cddr depending on value in A
-;; A = 00 -> caar
-;; A = 06 -> cadr
-;; A = 0c -> cdar
-;; A = 12 -> cddr
+;; A & $1f = 00 -> caar
+;; A & $1f = 06 -> cadr
+;; A & $1f = 0c -> cdar
+;; A & $1f = 12 -> cddr
 ;; input:  A, evlstk
 ;; usage:  A X Y
 ;; output: cell-pair on the stack replaced with its cxxr

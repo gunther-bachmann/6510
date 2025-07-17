@@ -46,10 +46,10 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
                     GET_FRESH_CELLPAIR_TO_AX
                     INIT_CELLPAIR_PAGE_X_TO_AX))
 
-  (define PAGE_AVAIL_0 #x9a)      ;; high byte of first page available for allocation
-  (define PAGE_AVAIL_0_W #x9a00)  ;; word (absolute address) of first page available
-  (define PAGE_AVAIL_1 #x99)      ;; high byte of second page available for allocation
-  (define PAGE_AVAIL_1_W #x9900) ;; word (absolute address) of second page available
+  (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
+  (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available
+  (define PAGE_AVAIL_1 #x8c)      ;; high byte of second page available for allocation
+  (define PAGE_AVAIL_1_W #x8c00) ;; word (absolute address) of second page available
 
   (define test-runtime
     (append

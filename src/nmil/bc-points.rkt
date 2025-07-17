@@ -117,10 +117,10 @@
   (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 
 
-  (define PAGE_AVAIL_0 #x97)
-  (define PAGE_AVAIL_0_W #x9700)
-  (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600)
+  (define PAGE_AVAIL_0 #x8a)
+  (define PAGE_AVAIL_0_W #x8a00)
+  (define PAGE_AVAIL_1 #x89)
+  (define PAGE_AVAIL_1_W #x8900)
 
   (define (wrap-bytecode-for-test bc)
     (append (list (org #x7000)
@@ -308,7 +308,7 @@
                       "int $0001  (rt)"))
 
   (inform-check-equal? (cpu-state-clock-cycles point-equal-1-state)
-                       7947)
+                       8116)
 
   (define point-equal-2-state
     (run-bc-wrapped-in-test

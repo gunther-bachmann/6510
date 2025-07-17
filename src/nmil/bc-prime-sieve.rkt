@@ -151,10 +151,10 @@ primes (ignore 0,1) up to 30
   (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 
 
-  (define PAGE_AVAIL_0 #x97)
-  (define PAGE_AVAIL_0_W #x9700)
-  (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600)
+  (define PAGE_AVAIL_0 #x8a)
+  (define PAGE_AVAIL_0_W #x8a00)
+  (define PAGE_AVAIL_1 #x89)
+  (define PAGE_AVAIL_1_W #x8900)
 
   (define (wrap-bytecode-for-test bc)
     (append (list (org #x7000)
@@ -245,12 +245,12 @@ primes (ignore 0,1) up to 30
        (bc PUSH_B) (byte 40)
        (bc CALL) (word-ref PRIME_SIEVE)  ;; calc primes in the range of 1..40
        (bc BRK))
-      (list (org #x8F00))
+      (list (org #x8700))
       PRIME_SIEVE)
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                       76325)
+                       76494)
 
   (check-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 3) (+ PAGE_AVAIL_0_W 85))
                 (list #x01 #x83 40

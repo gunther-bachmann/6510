@@ -98,20 +98,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
 
 (module+ test #| after mem init |#
-  (define PAGE_CALL_FRAME #x9a)
-  (define PAGE_LOCALS_LB #x98)
-  (define PAGE_LOCALS_LB_W #x9800)
-  (define PAGE_LOCALS_HB #x99)
-  (define PAGE_LOCALS_HB_W #x9900)
-  (define PAGE_AVAIL_0 #x97)
-  (define PAGE_AVAIL_0_W #x9700)
-  (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600))
+  (define PAGE_CALL_FRAME #x8d)
+  (define PAGE_LOCALS_LB #x8b)
+  (define PAGE_LOCALS_LB_W #x8b00)
+  (define PAGE_LOCALS_HB #x8c)
+  (define PAGE_LOCALS_HB_W #x8c00)
+  (define PAGE_AVAIL_0 #x8a)
+  (define PAGE_AVAIL_0_W #x8a00)
+  (define PAGE_AVAIL_1 #x89)
+  (define PAGE_AVAIL_1_W #x8900))
 
 (provide vm-interpreter
          VM_INTERPRETER_OPTABLE_EXT1_HB
          VM_INTERPRETER_OPTABLE_EXT1_LB
          VM_INTERPRETER_OPTABLE
+         just-vm-interpreter
          vm-interpreter-wo-jt
 
          BREAK
@@ -333,10 +334,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
              (bc PUSH_NIL)
              (bc PUSH_I1)
-             (bc CALL) (byte 00) (byte $8f)
+             (bc CALL) (byte 00) (byte $87)
              (bc BREAK)
 
-             (org #x8F00)
+             (org #x8700)
       (label TEST_FUN)
              (byte 1)                     ;; number of locals
              (bc POP_TO_L0)          ;; pop tos into local 0 (now int 1)
@@ -360,10 +361,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
              (bc PUSH_I1)
              (bc PUSH_NIL)
-             (bc CALL) (byte 00) (byte $8f)
+             (bc CALL) (byte 00) (byte $87)
              (bc BREAK)
 
-             (org #x8F00)
+             (org #x8700)
       (label TEST_FUN)    
              (byte 2)            ;; number of locals
              (bc POP_TO_L1)
@@ -404,10 +405,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc PUSH_NIL)
              (bc PUSH_I0)
              (bc CONS)
-             (bc CALL) (byte 00) (byte $8f)
+             (bc CALL) (byte 00) (byte $87)
              (bc BREAK)
 
-             (org #x8F00)
+             (org #x8700)
       (label TEST_FUN)
              (byte 1)            ;; number of locals
              (bc POP_TO_L0)
@@ -458,10 +459,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc CONS)                  ;; (add ref to this cell) does allocate a cell (removes a cell-ref from stack and adds a ref in the pair cell)
              (bc PUSH_NIL)
              (bc BNOP)
-             (bc CALL) (byte 00) (byte $8f)
+             (bc CALL) (byte 00) (byte $87)
              (bc BREAK)                   ;; << to make debugger stop/exit
 
-             (org #x8F00)
+             (org #x8700)
       (label TEST_FUN)
              (byte 2)                   ;; number of locals
              (bc POP_TO_L0)        ;; b-list (#refs stay)
@@ -571,10 +572,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
              (bc PUSH_I0)
-             (bc CALL) (byte 00) (byte $8f)
+             (bc CALL) (byte 00) (byte $87)
              (bc BREAK)
 
-             (org #x8F00)
+             (org #x8700)
       (label TEST_FUN)     
              (byte 0)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
@@ -583,8 +584,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
    (check-equal? (vm-call-frame->strings test-bc-call-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8f02"
-                          "function-ptr:     $8f00"
+                         "program-counter:  $8702"
+                          "function-ptr:     $8700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
@@ -605,10 +606,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
              (bc PUSH_I0)
              (bc PUSH_IM1)
-             (bc CALL) (byte 00) (byte $8f)
+             (bc CALL) (byte 00) (byte $87)
              (bc BREAK)
 
-             (org #x8F00)
+             (org #x8700)
       (label TEST_FUN)      
              (byte 0)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
@@ -617,8 +618,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8f02"
-                         "function-ptr:     $8f00"
+                         "program-counter:  $8702"
+                         "function-ptr:     $8700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
@@ -640,10 +641,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
              (bc PUSH_I0)
              (bc PUSH_IM1)
-             (bc CALL) (byte 00) (byte $8f)
+             (bc CALL) (byte 00) (byte $87)
              (bc BREAK)
 
-             (org #x8F00)
+             (org #x8700)
       (label TEST_FUN)    
              (byte 2)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
@@ -651,8 +652,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8f02"
-                         "function-ptr:     $8f00"
+                         "program-counter:  $8702"
+                         "function-ptr:     $8700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
@@ -764,10 +765,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (run-bc-wrapped-in-test
      (list
              (bc PUSH_I0)
-             (bc CALL) (byte 00) (byte $8f)
+             (bc CALL) (byte 00) (byte $87)
              (bc BREAK)
 
-             (org #x8F00)
+             (org #x8700)
       (label TEST_FUN)      
              (byte 0)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
@@ -994,9 +995,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
              (bc PUSH_I0)
              (bc PUSH_IM1)
-             (bc CALL) (byte 00) (byte $8f)
+             (bc CALL) (byte 00) (byte $87)
 
-             (org #x8F00)
+             (org #x8700)
       (label TEST_FUN)
              (byte 2)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
@@ -1013,8 +1014,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 #x01)
   (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8f03"
-                         "function-ptr:     $8f00"
+                         "program-counter:  $8703"
+                         "function-ptr:     $8700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
@@ -1030,9 +1031,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I0)
       (bc PUSH_IM1)
-      (bc CALL) (byte 00) (byte $8f)
+      (bc CALL) (byte 00) (byte $87)
 
-      (org #x8F00)
+      (org #x8700)
       (label TEST_FUN)      
       (byte 2)            ;; number of locals
       (bc POP_TO_L0)
@@ -1055,8 +1056,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 #x00 "local1 = int 0")
   (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8f05"
-                         "function-ptr:     $8f00"
+                         "program-counter:  $8705"
+                         "function-ptr:     $8700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
@@ -1070,9 +1071,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define test-bc-push-l-state
     (run-bc-wrapped-in-test
      (list
-      (bc CALL) (byte 00) (byte $8f)
+      (bc CALL) (byte 00) (byte $87)
 
-      (org #x8F00)
+      (org #x8700)
       (label TEST_FUN)
       (byte 1)            ;; number of locals
       (bc PUSH_I1)     ;; value to return
@@ -1088,8 +1089,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   "int 1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-l-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8f05"
-                         "function-ptr:     $8f00"
+                         "program-counter:  $8705"
+                         "function-ptr:     $8700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 04"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
@@ -1105,9 +1106,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I0)
       (bc PUSH_IM1)
-      (bc CALL) (byte 00) (byte $8f)
+      (bc CALL) (byte 00) (byte $87)
 
-      (org #x8F00)
+      (org #x8700)
       (label TEST_FUN)      
       (byte 2)            ;; number of locals
       (bc POP_TO_L0)
@@ -1123,8 +1124,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                    "int -1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-p-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8f05"
-                         "function-ptr:     $8f00"
+                         "program-counter:  $8705"
+                         "function-ptr:     $8700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
@@ -1140,9 +1141,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
      (list
       (bc PUSH_I0)
       (bc PUSH_IM1)
-      (bc CALL) (byte 00) (byte $8f)
+      (bc CALL) (byte 00) (byte $87)
 
-      (org #x8F00)
+      (org #x8700)
       (label TEST_FUN)      
       (byte 2)            ;; number of locals
       (bc POP_TO_L0)
@@ -1157,8 +1158,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                          "int $0001  (rt)"))
   (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8f06"
-                         "function-ptr:     $8f00"
+                         "program-counter:  $8706"
+                         "function-ptr:     $8700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))

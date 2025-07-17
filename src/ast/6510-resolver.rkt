@@ -8,7 +8,7 @@
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require "6510-command.rkt")
-(require (only-in "../6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of))
+(require (only-in "../6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of in-word-range? in-byte-range?))
 (require (only-in "6510-relocator.rkt" command-len label-string-offsets))
 
 (module+ test #| require |#
@@ -16,6 +16,7 @@
 
 (provide resolved-instruction->bytes
          ->resolved-decisions
+         ->resolved-decisions-new
          label-instructions
          constant-instructions
          ->resolve-labels
@@ -144,6 +145,28 @@
                #f))
          decide-options))
 
+;; find first unresolved command that contains an option to decide on that may be resolved by the first matching label
+(define/c (matching-decide-option-new labels label-commands decide-options)
+  (-> (hash/c string? integer?)(listof label-instruction?) (listof ast-unresolved-command?) (or/c ast-unresolved-command? #f))
+  (findf (λ (decide-option)
+           (define resolve-scmd    (ast-unresolved-opcode-cmd-resolve-sub-command decide-option))
+           (define label           (label-label (ast-resolve-sub-cmd-label resolve-scmd)))
+           (define label-entry     (hash-ref labels label #f))
+           (define label-cmd-entry (first-label-in label label-commands))
+           ;; (displayln (format "resolve label: ~a, found entry: ~a, found label-cmd: ~a" label label-entry label-cmd-entry))
+           (if (or label-entry label-cmd-entry)
+               (cond [(ast-resolve-byte-scmd? resolve-scmd)
+                      (if label-entry
+                          (in-byte-range? label-entry)
+                          (byte-label-cmd? label-cmd-entry))]
+                     [(ast-resolve-word-scmd? resolve-scmd)
+                      (if label-entry
+                          (in-word-range? label-entry)
+                          (word-label-cmd? label-cmd-entry))]
+                     [else #f])
+               #f))
+         decide-options))
+
 (module+ test #| matching-decide-option |#
   (check-equal? (matching-decide-option
                  (list (ast-label-def-cmd '() "hello"))
@@ -183,6 +206,22 @@
                       (moption (matching-decide-option labels options)))
                  (if moption
                      (cons moption (->resolved-decisions labels (cdr program)))
+                     (default-result-f)))]
+              [else
+               (default-result-f)]))))
+
+;; given program with all decisions resolved that can be resolved with the given list of labels
+(define/c (->resolved-decisions-new labels label-commands program)
+  (-> (hash/c string? integer?) (listof label-instruction?) (listof ast-command?) (listof ast-command?))
+  (if (empty? program)
+      '()
+      (let* ((instruction      (car program))
+             (default-result-f (λ () (cons instruction (->resolved-decisions-new labels label-commands (cdr program))))))
+        (cond [(ast-decide-cmd? instruction)
+               (let* ((options (ast-decide-cmd-options instruction))
+                      (moption (matching-decide-option-new labels label-commands options)))
+                 (if moption
+                     (cons moption (->resolved-decisions-new labels label-commands (cdr program)))
                      (default-result-f)))]
               [else
                (default-result-f)]))))

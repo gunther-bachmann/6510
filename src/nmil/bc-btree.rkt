@@ -187,10 +187,10 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
                     format-hex-word))
 
 
-  (define PAGE_AVAIL_0 #x97)
-  (define PAGE_AVAIL_0_W #x9700)
-  (define PAGE_AVAIL_1 #x96)
-  (define PAGE_AVAIL_1_W #x9600)
+  (define PAGE_AVAIL_0 #x8a)
+  (define PAGE_AVAIL_0_W #x8a00)
+  (define PAGE_AVAIL_1 #x89)
+  (define PAGE_AVAIL_1_W #x8900)
 
   (define (wrap-bytecode-for-test bc)
     (append (list (org #x7000)
@@ -261,7 +261,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc BRK))
 
-      (list (org #x8F00))
+      (list (org #x8800))
       BTREE_MAKE_ROOT)
      ))
 
@@ -278,7 +278,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CAR)
        (bc BRK))
 
-      (list (org #x8F00))
+      (list (org #x8800))
       BTREE_MAKE_ROOT)))
 
   (check-equal? (vm-stack->strings btree-make-root-2-state)
@@ -305,7 +305,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_VALUE_P)
        (bc BRK))
 
-      (list (org #x8F00))
+      (list (org #x8800))
       BTREE_MAKE_ROOT
       BTREE_VALUE_P)
      ))
@@ -325,7 +325,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_VALUE_P)
        (bc BRK))
 
-      (list (org #x8F00))
+      (list (org #x8800))
       BTREE_MAKE_ROOT
       BTREE_VALUE_P)
      ))
@@ -355,7 +355,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_NODE_P)
        (bc BRK))
 
-      (list (org #x8F00))
+      (list (org #x8800))
       BTREE_MAKE_ROOT
       BTREE_NODE_P)
      ))
@@ -375,7 +375,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_NODE_P)
        (bc BRK))
 
-      (list (org #x8F00))
+      (list (org #x8800))
       BTREE_MAKE_ROOT
       BTREE_NODE_P)
      ))
@@ -458,7 +458,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_VALIDATE)
        (bc BRK))
 
-      (list (org #x8F00))
+      (list (org #x8800))
       BTREE_MAKE_ROOT
       BTREE_NODE_P
       BTREE_VALUE_P
@@ -482,14 +482,14 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_VALIDATE)
        (bc BRK))
 
-      (list (org #x8F00))
+      (list (org #x8800))
       BTREE_NODE_P
       BTREE_VALUE_P
       BTREE_VALIDATE)
     ))
 
   (check-equal? (memory-list btree-validate2-state (add1 ZP_VM_PC) (add1 ZP_VM_PC))
-                (list #x8f)
+                (list #x88)
                 "program counter on other page => validation failed ")
 
   (define btree-validate3-state
@@ -502,14 +502,14 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_VALIDATE)
        (bc BRK))
 
-      (list (org #x8F00))
+      (list (org #x8800))
       BTREE_NODE_P
       BTREE_VALUE_P
       BTREE_VALIDATE)
     ))
 
   (check-equal? (memory-list btree-validate3-state (add1 ZP_VM_PC) (add1 ZP_VM_PC))
-                (list #x8f)
+                (list #x88)
                 "program counter on other page => validation failed (bytes are not allowed, yet)"))
 
 ;; (define (btree-depth node (right-list (list)) (depth 0) (max-depth 0))
