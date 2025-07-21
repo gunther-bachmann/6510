@@ -23,9 +23,10 @@ using a cell-stack
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_TOP_MARK
                   ZP_CALL_FRAME_TOP_MARK))
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager))
+(require (only-in "./vm-memory-manager.rkt" vm-memory-manager-wo-data-tail vm-memory-manager))
 
 (provide vm-call-frame
+         vm-call-frame-wo-data-tail
          vm-call-frame->strings
          vm-call-frames->string
 
@@ -875,6 +876,10 @@ using a cell-stack
           VM_POP_CALL_FRAME_N                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
           VM_ALLOC_LOCALS
           VM_FREE_LOCALS))
+
+(define vm-call-frame-wo-data-tail
+  (append just-vm-call-frame
+          vm-memory-manager-wo-data-tail))
 
 (define vm-call-frame
   (append just-vm-call-frame

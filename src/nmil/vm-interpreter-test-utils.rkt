@@ -64,9 +64,9 @@
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
-(require (only-in "./vm-mm-pages.rkt"
-                  GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
-                  GLOBAL_CELLPAIR_FREE_LIST))
+;; (require (only-in "./vm-mm-pages.rkt"
+;;                   GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
+;;                   GLOBAL_CELLPAIR_FREE_LIST))
 (require (only-in "./vm-inspector-utils.rkt"
                   shorten-cell-string
                   shorten-cell-strings
@@ -555,7 +555,7 @@
 
 ;; get list of pages used for cell-pairs
 (define (vm-cell-pair-pages state)
-  (define page-w-free-cell-pairs (peek state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC))
+  (define page-w-free-cell-pairs (peek state #xcec3))
   (vm-cell-pair-pages- state page-w-free-cell-pairs))
 
 (define (vm-cell-pair-free-list- state free-cell-pair-adr (result (list)))
@@ -565,7 +565,7 @@
          (vm-cell-pair-free-list- state next (cons free-cell-pair-adr result))]))
 ;; give a list of pointers to free cell-pairs that are free for reallocation
 (define (vm-cell-pair-free-list-info state)
-  (define first-free (peek-word-at-address state GLOBAL_CELLPAIR_FREE_LIST))
+  (define first-free (peek-word-at-address state #xcecc))
   (define free-adr-list (vm-cell-pair-free-list- state first-free))
   (cond [(empty? free-adr-list) "free-list: empty"]
         [else

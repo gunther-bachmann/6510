@@ -41,8 +41,6 @@ cell functions
                     CP_RA_TO_RZ))
   (require (only-in "./vm-mm-pages.rkt"
                     ALLOC_PAGE_TO_X
-                    GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
-                    GLOBAL_CELL_FREE_LIST
                     VM_PAGE_SLOT_DATA
                     VM_INITIAL_MM_REGS
                     VM_INITIALIZE_MEMORY_MANAGER))
@@ -492,7 +490,7 @@ cell functions
      ;; #:debug #t
      ))                                         ;; PFL -> [cell 2 @ ..0a]
 
-  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
+  (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state #xcecc (add1 #xcecc))
                 (list #x02 PAGE_AVAIL_0)
                 (format "~a02 is new head of the free list" (number->string PAGE_AVAIL_0 16)))
   (check-equal? (memory-list new-free-cell-ptr-in-rc-tailcall-state (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
@@ -517,7 +515,7 @@ cell functions
      (JSR ALLOC_CELL_TO_RT)
      (JSR FREE_CELL_RT)))
 
-  (check-equal? (memory-list new-free-cell-ptr-in-rt-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-state #xcecc (add1 #xcecc))
                 (list #x02 PAGE_AVAIL_0)
                 "allocated cell is freed by adding it as head to the list of free cells")
 
@@ -539,7 +537,7 @@ cell functions
      (JSR FREE_CELL_RT)
      (JSR ALLOC_CELL_TO_RT)))
 
-  (check-equal? (memory-list new-free-cell-ptr-in-rt-realloc-state GLOBAL_CELL_FREE_LIST GLOBAL_CELL_FREE_LIST)
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-realloc-state #xcecc #xcecc)
                 (list #x00)
                 "list of free cells is empty again")
 
@@ -563,7 +561,7 @@ cell functions
      (JSR CP_RA_TO_RT)
      (JSR FREE_CELL_RT)))      ;; then free cc02
 
-  (check-equal? (memory-list new-free-cell-ptr-in-rt-2xfree-state GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
+  (check-equal? (memory-list new-free-cell-ptr-in-rt-2xfree-state #xcecc (add1 #xcecc))
                 (list #x02 PAGE_AVAIL_0)
                 "last allocated cell is freed by adding it as head to the list of free cells")
 
@@ -625,7 +623,7 @@ cell functions
      #:runtime-code test-runtime
      (JSR ALLOC_CELL_TO_RT)))
 
-  (check-equal? (memory-list test-alloc-cell-to-rt-state-after GLOBAL_CELL_FREE_LIST GLOBAL_CELL_FREE_LIST)
+  (check-equal? (memory-list test-alloc-cell-to-rt-state-after #xcecc #xcecc)
                 (list #x00)
                 "list of free cells is empty")
 
@@ -646,7 +644,7 @@ cell functions
      (JSR ALLOC_CELL_TO_RT)
      (JSR ALLOC_CELL_TO_RT)))
 
-  (check-equal? (memory-list test-alloc-cell-to-rt-twice-state-after GLOBAL_CELL_FREE_LIST GLOBAL_CELL_FREE_LIST)
+  (check-equal? (memory-list test-alloc-cell-to-rt-twice-state-after #xcecc #xcecc)
                 (list #x00)
                 "list of free cells is empty")
 
@@ -670,7 +668,7 @@ cell functions
      (JSR ALLOC_CELL_TO_RT)
      (JSR FREE_CELL_RA)))
 
-  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfree-state-after GLOBAL_CELL_FREE_LIST (add1 GLOBAL_CELL_FREE_LIST))
+  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfree-state-after #xcecc (add1 #xcecc))
                 (list #x02 PAGE_AVAIL_0)
                 "free cell list has xx02 now as head of the list")
 
@@ -704,7 +702,7 @@ cell functions
                       "next free slot: $0a")
                 "still (only) two slots are used on the page, one from the free list was reused")
 
-  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfreenalloc-state-after GLOBAL_CELL_FREE_LIST GLOBAL_CELL_FREE_LIST)
+  (check-equal? (memory-list test-alloc-cell-to-rt-twicenfreenalloc-state-after #xcecc #xcecc)
                 (list #x00) ;; lowbyte is zero => it is initial (high byte is not heeded in that case)
                 "free cell list is initial again"))
 

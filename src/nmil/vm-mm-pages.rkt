@@ -22,10 +22,10 @@
          VM_INITIAL_MM_REGS               ;; memory management registers
          VM_PAGE_SLOT_DATA                ;; page that holds allocation status and/or first free slot per page
 
-         GLOBAL_CELL_FREE_LIST            ;; head of free cell list
-         GLOBAL_CELLPAIR_FREE_LIST        ;; head of free cell-pair list
-         GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)  ;; first page for cell-pair allocation
-
+         ;; GLOBAL_CELL_FREE_LIST            ;; head of free cell list
+         ;; GLOBAL_CELLPAIR_FREE_LIST        ;; head of free cell-pair list
+         ;; GLOBAL_CELLPAIR_PAGE_FOR_ALLOC  ;; first page for cell-pair allocation
+         )
 
 (module+ test
   (require  "../6510-test-utils.rkt")
@@ -123,16 +123,16 @@
 ;; keep a list of cells (16-bit), this is the head (at cecc)
 ;; a cell in the free list is allocated on a page and initialized to be used as cell
 ;; it contains the ptr to the next free list or 0000 (only high byte is actually checked)
-(define GLOBAL_CELL_FREE_LIST #xcecc)
+;; (define GLOBAL_CELL_FREE_LIST #xcecc)
 
 ;; page that has free cells (must be a cell page)
 ;; it may be full in which case allocation will allocate a new page and link the new page to this full page, and put it here
 ;; otherwise a cell on this page is allocated
-(define GLOBAL_CELLPAIR_PAGE_FOR_ALLOC #xcec3)
+;; (define GLOBAL_CELLPAIR_PAGE_FOR_ALLOC #xcec3)
 
 ;; keep list of cell-pairs that are (partially) free, cell0 is used to build the list,
 ;; cell1 is untouched and may have to be dec refcnt'd if it is a pointer, before reusing it
-(define GLOBAL_CELLPAIR_FREE_LIST #xcec5)
+;; (define GLOBAL_CELLPAIR_FREE_LIST #xcec5)
 
 ;; each page is described by one byte, page 00 at 0, page 01 at 1 ...
 ;; 01 = reserved

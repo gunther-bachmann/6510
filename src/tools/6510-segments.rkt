@@ -138,7 +138,7 @@ define code/data segments for a c64 program that are used for generating a loade
 (module+ test #| looped-copy-region |#
   (require (only-in  "../nmil/vm-memory-manager-test-utils.rkt" list-with-label-suffix))
 
-  (require (only-in "../nmil/vm-lists.rkt" vm-lists))
+  (require (only-in "../nmil/vm-lists.rkt" vm-lists vm-lists-wo-data-tail))
 
   ;; load two code sections (located in the program loaded to 0800)
   ;; into c000 and 8000 that print out 0 and 1 (and some more) on the screen
@@ -393,12 +393,20 @@ define code/data segments for a c64 program that are used for generating a loade
                     just-vm-interpreter))
   (require (only-in "../nmil/vm-mm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
 
+  ;; @cdc0 mm-regs
+  (define mem-data
+    (new-assemble-to-code-list (append (list (org #xcdc0)) VM_INITIAL_MM_REGS)))
+  (define raw-mem-data
+    (cdar (assembly-code-list-org-code-sequences mem-data)))
 
   ;; @c000 runtime + memory management etc
   (define vm-runtime
     (new-assemble-to-code-list
-     (append (list (org #xc000))
-             vm-lists)))
+     (append (flatten
+              (list (org #xc000)
+                    (word-const VM_PAGE_SLOT_DATA $cf00)))
+             vm-lists-wo-data-tail)
+     (assembly-code-list-labels mem-data)))
 
   (define raw-vm-runtime
     (cdar
@@ -433,8 +441,8 @@ define code/data segments for a c64 program that are used for generating a loade
                  (length raw-bc-interpreter))
               "bc interpreter must fit right before basic mem")
 
-  ;; @cdc0 mm-regs
-  (define raw-mem-data  (cdar (assembly-code-list-org-code-sequences (new-assemble-to-code-list (append (list (org #xcdc0)) VM_INITIAL_MM_REGS)))))
+
+
   ;; @ce00
   (define raw-bc-jump-table
     (cdar
@@ -458,12 +466,25 @@ define code/data segments for a c64 program that are used for generating a loade
              ;; add code to initialize memory manage and interpreter
              (LDA !<BC_START) ;; lb start of available memory
              (LDX !>BC_START) ;; hb  start of available memory
-             (JSR $9000)      ;; initialize memory manager & interpreter & start interpreter
+             (JMP $9000)      ;; initialize memory manager & interpreter & start interpreter
 
       (label BC_START)
              (ast-bytes-cmd '() byte-codes)
+
              (bc NATIVE)     ;; end execution of interpreter
-             (RTS)          ;; return to basic (SYS 2064)
+
+             (LDY STRING1_MSG)
+      (label LOOP_OUT_1)
+             (LDA STRING1_MSG,y)
+             (JSR $FFD2)
+             (DEY)
+             (BNE LOOP_OUT_1)
+             (RTS)
+      (label STRING1_MSG)
+             (byte 6)
+             (asc "!OLLEH")
+
+             (RTS)           ;; return to basic, but since zero page is used by interpreter, don't expect anything to work
 
       (label COPY_DESCRIPTOR)) ;; all data following here is discarded when interpreter is started and regarded as free
       ;; use (bc interpreter) in 9000-9fff (4k)
@@ -536,8 +557,8 @@ define code/data segments for a c64 program that are used for generating a loade
 
   (define generated-bc-trampoline
     (begin
-      (create-prg trampoline-code #x0810 "bc-tramp.prg")
-      (create-image-with-program trampoline-code #x0810 "bc-tramp.prg" "bc-tramp.d64" "bc-tramp"))))
+      (create-prg bc-code-trampoline #x0810 "bc-tramp.prg")
+      (create-image-with-program bc-code-trampoline #x0810 "bc-tramp.prg" "bc-tramp.d64" "bc-tramp"))))
 
 
 ;; create a copy descriptor for a segment as ast commands (to be resolved by assembler)

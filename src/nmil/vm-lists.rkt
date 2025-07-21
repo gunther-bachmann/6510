@@ -17,7 +17,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   vm-regt->string
                   vm-deref-cell-pair-w->string))
 
-(require (only-in "./vm-call-frame.rkt" vm-call-frame))
+(require (only-in "./vm-call-frame.rkt" vm-call-frame vm-call-frame-wo-data-tail))
 (require (only-in "./vm-memory-manager-test-utils.rkt" run-code-in-test-on-code))
 
 (module+ test
@@ -47,7 +47,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator))
 
-(provide vm-lists)
+(provide vm-lists
+         vm-lists-wo-data-tail)
 
 ;; code
 ;;   VM_NIL_P :: TOS := (TOS = nil?)
@@ -246,6 +247,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           VM_CDR
           VM_NIL_P
           VM_CxxR))
+
+(define vm-lists-wo-data-tail
+  (append just-vm-list vm-call-frame-wo-data-tail))
+
 (define vm-lists
   (append just-vm-list vm-call-frame))
 

@@ -59,10 +59,7 @@ call frame primitives etc.
                   FREE_PAGE_A
                   ALLOC_PAGE_TO_X
                   VM_INITIAL_MM_REGS
-                  VM_PAGE_SLOT_DATA
-                  GLOBAL_CELL_FREE_LIST
-                  GLOBAL_CELLPAIR_FREE_LIST
-                  GLOBAL_CELLPAIR_PAGE_FOR_ALLOC))
+                  VM_PAGE_SLOT_DATA))
 (require (only-in "./vm-mm-cell-pairs.rkt"
                   INIT_CELLPAIR_PAGE_X_TO_AX
                   GET_FRESH_CELLPAIR_TO_AX

@@ -44,8 +44,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
-(require (only-in "./vm-mm-pages.rkt"
-                  GLOBAL_CELLPAIR_FREE_LIST))
 (require (only-in "./vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-page->strings
@@ -476,7 +474,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
              (bc BREAK))                  ;; just in case to make debugger stop/exit
      ))
 
-  (check-equal? (memory-list bc-tail-call-reverse-state GLOBAL_CELLPAIR_FREE_LIST (add1 GLOBAL_CELLPAIR_FREE_LIST))
+  (check-equal? (memory-list bc-tail-call-reverse-state #xcec5 (add1 #xcec5))
                    (list #x05 PAGE_AVAIL_0))
   (check-equal? (vm-page->strings bc-tail-call-reverse-state PAGE_AVAIL_0)
                    (list "page-type:      cell-pair page"

@@ -64,7 +64,6 @@ all functions around cell-pairs
                     WRITE_NIL_TO_RP))
   (require (only-in "./vm-mm-pages.rkt"
                     ALLOC_PAGE_TO_X
-                    GLOBAL_CELLPAIR_PAGE_FOR_ALLOC
                     VM_PAGE_SLOT_DATA
                     VM_INITIAL_MM_REGS
                     VM_INITIALIZE_MEMORY_MANAGER))
@@ -420,7 +419,7 @@ all functions around cell-pairs
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-1-state)
                 (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0)))
 
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-1-state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-1-state #xcec3 #xcec3)
                 (list PAGE_AVAIL_0))
 
   (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-1-state PAGE_AVAIL_0)
@@ -439,7 +438,7 @@ all functions around cell-pairs
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-2-state)
                 (format "pair-ptr[0] $~a09" (format-hex-byte PAGE_AVAIL_0)))
 
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-2-state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-2-state #xcec3 #xcec3)
                 (list PAGE_AVAIL_0))
 
   (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-2-state PAGE_AVAIL_0)
@@ -465,7 +464,7 @@ all functions around cell-pairs
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3-state)
                 (format "pair-ptr[0] $~af9" (format-hex-byte PAGE_AVAIL_0)))
 
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3-state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3-state #xcec3 #xcec3)
                 (list PAGE_AVAIL_0))
 
   (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3-state PAGE_AVAIL_0)
@@ -491,7 +490,7 @@ all functions around cell-pairs
   (check-equal? (vm-regt->string vm-allocate-cell-pair-ptr-to-rt-3a-state)
                 (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_1)))
 
-  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3a-state GLOBAL_CELLPAIR_PAGE_FOR_ALLOC GLOBAL_CELLPAIR_PAGE_FOR_ALLOC)
+  (check-equal? (memory-list vm-allocate-cell-pair-ptr-to-rt-3a-state #xcec3 #xcec3)
                 (list PAGE_AVAIL_1))
 
   (check-equal? (vm-page->strings vm-allocate-cell-pair-ptr-to-rt-3a-state PAGE_AVAIL_0)
