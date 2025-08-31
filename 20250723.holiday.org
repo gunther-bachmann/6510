@@ -1,0 +1,2868 @@
+#+title: things to think about
+#+OPTIONS: ^:nil
+* mil
+** IMPLEMENT what part of the 6510 vm design should be implement w/ racket to validate design?
+implement all necessary to do a reverse function tail called implementation with space optimized byte code
+see [[file:src/nmil/svm-compiler.rkt::(m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*][test with reverse function]]
+this will include the implementation of
+- [X] function call
+- [X] function selection (index vs. ptr to actual function), first impl use ptr (low bits indicate direct ptr / index)
+  - [X] currently only selection through direct pointers
+- [X] call frame construction
+- [X] parameter passing
+- [X] local vars
+- [X] tail call recursion
+- [X] returning from a call
+- [X] optimization idea: no parameter ptr, just cell-stack
+  - example reverse list
+    (def (reverse (a-list cell*) (b-list cell* '()))
+      "reverse the a-list into b-list"
+       (if (nil? a-list)
+           b-list
+           (reverse (cdr a-list) (cons (car a-list) b-list)))
+
+    push nil
+    push a-list
+    call reverse
+
+    entry without
+    push nil
+    swap
+    entry with default explicitly set
+    nil? return pop1       ;; one behind tos (if nil pop1 and return)
+    write-to-fast-local #0 ;; a-list b-list
+    car                    ;; car-a-list b-list
+    cons                   ;; new b-list
+    push fast local #0     ;; a-list new-b-list
+    cdr                    ;; new-a-list new-b-list
+    tail-call
+  - inline code
+    expected stack: a-list nil
+
+    loop:
+      nil? bra done
+      write-to-local #n ;; a-list b-list   (local #n = a-list)
+      car               ;; car-a-list b-list
+      cons              ;; new b-list
+      push local #n     ;; a-list new-b-list
+      cdr               ;; new-a-list new-b-list
+      bra loop
+    done:
+      pop               ;; new-b-list
+  - other parameter order
+
+    push a-list
+    push nil
+    call reverse
+
+    ;; push nil ;; <- entry if default is not set
+                           ;; resulting stack
+                           ;; b-list a-list
+    pop to local#0         ;; a-list
+    write to local#1       ;; a-list
+    nil? return local#0 pop 1 ;; a-list    ;; a-list = nil? => return b-list and pop one value
+    cdr                    ;; new-a-list
+    push local#0           ;; b-list new-a-list
+    push local#1           ;; a-list b-list new-a-list
+    car                    ;; car-a-list b-list new-a-list
+    cons                   ;; new b-list new-a-list
+    tail-call              ;; ...call into no defaults
+
+  - check out other functions to check validity of this optimization
+    - function 1: fibonacci
+      (def (fib n (a 0) (b 1))
+        (cond [(= n 0) a]
+              [(= n 1) b]
+              [else (fib (- n 1) b (+ a b))]))
+
+      bytecode:
+      caller:
+      push int n
+      call fib
+
+      function:
+      push int 0  ;; default for a
+      push int 1  ;; default for b
+
+      pop to local#0              ;; b
+      pop to local#1              ;; a
+      write to local #2           ;; n
+      zero? ret local#1           ;;
+      push int 1                  ;; 1
+      push local#2                ;; n 1
+      eq? ret local#0 and pop 2   ;;
+      push local #2               ;; n
+      push int -1                 ;; -1 n
+      add                         ;; n-1
+      push local #0               ;; b n-1
+      push local #0               ;; b b n-1
+      push local #1               ;; a b b n-1
+      add                         ;; a+b b n-1
+      tail-call                   ;; just a goto
+    - alternative with parameters and other order
+      ;; push int 1
+      ;; push int 0
+      push n
+      call-defaults#2 fib       ;; use 2 more param slots for this call and jump @ -4
+
+      fib-def-2
+      push int 1                ;; fill param slots
+      pop-to-param#2
+      push int 0
+      pop to param#1
+
+      push param#0              ;; n
+      zero? ret param#1
+      push param#0              ;; n
+      push int 1                ;; 1 n
+      eq? ret param#2           ;;
+      push param#2              ;; b
+      push param#1              ;; a b
+      add                       ;; a+b
+      push param#2              ;; b a+b
+      push param#0              ;; n b a+b
+      push int -1               ;; -1 n b a+b
+      add                       ;; n-1 b a+b
+      tail-call
+    - function 2:
+    - function 3:
+    - function 4:
+- [X] optimizations for call stack/frame
+  - [X] spread low/high over two pages
+    - allocation needs to allocate two pages for stack
+    - there need to be two zero page pointers, one for lowbyte-stack, one for highbyte-stack
+  - [X] allow fast call frames (less copying, less space consumption)
+  - [X] fix call-frame functions in vm-interpreter
+- [X] implement simple tree algorithms
+  - [X] ordered (not sorted) binary tree (of editor strings)
+    see [[file:src/nmil/vm-validate-bt-naive.rkt][scheme implementation]]
+    node: car = (ptr = level down | value) <- may not be nil
+          cdr = (ptr = level down | value | nil)
+          binary tree:   "1"
+          maps to: (->"1" . NIL)
+
+          binary tree:   o        ---- level_0
+                        / \
+                       1   2      ---- level_1
+          maps to: (l_1 "1" .  "2")
+
+          binary tree:     o      ---- level_0
+                          / \
+                         o   3    ---- level_1
+                        / \
+                       1   2      ---- level_2
+          maps to: (l_1 (l_2 "1" . "2") . "3")
+
+          binary tree:   o        ---- level_0
+                        / \
+                       o   o      ---- level_1
+                      /|   |\
+                     1 2   o 5    ---- level_2
+                          / \
+                         3   4    ---- Level_3
+          maps to: (l_1 (l_2 "1" . "2") . (l_2 (l_3 "3" . "4") . "5"))
+  - [X] translate scheme implementation to nmil byte code functions
+  - [X] tree algorithms + gc implementation (rc)
+    - add/remove/cut/paste ... (as in editors)
+  - [X] reverse order of binary tree + implementation of refcounting
+  - [X] depth of binary tree (travers full tree, tail-call-recursively, keeping max depth)
+- [ ] implement debugger commands
+- [ ] implement dereference?
+- [ ] implement concept of exception
+- [ ] implement concept of constants
+  be aware of pointer tagging that should still work
+  constants do not need reference counting and must never be put on the free-list (free-tree)
+  (use constant pages w/o refcounts? <- too much waste)
+  (use code space <- loader may have to resolve due to relocatable constants)
+  (constants->heap [and inc ref count] upon loading?)
+  - lists
+  - arrays, native-arrays (strings)
+  - structures
+- [X] allocation/deallocation of lists, cells, structures, strings
+  - [X] cells
+  - [X] lists
+  - [X] arrays/structures
+  - [X] strings/native arrays
+- [-] field access to
+  - [-] structures
+    - [X] by index
+    - [ ] by name/id
+  - [ ] strings/native arrays
+  - [X] arrays
+- [X] get a notion on when to do ref-counting inc/dec and garbage collection
+  - [X] refcount primitives (inc/dec/free)
+  - [X] implement refcount gc for revers function
+
+    cell2: [int2 . cell1: [int1 . cell0: [int0 . NIL]]]
+    cell5: [int0 . cell4: [int1 . cell3: [int2 . NIL]]]
+
+    refcounts on enter: cell2 refcount = 1, cell1: recount = 1, cell0: refcount = 1
+
+    iteration1: enter stack: [NIL][cell2], leave stack: [cell3][cell1]     : local0 := NIL,   local1 := cell2
+    | code                    | cell2-i1 | cell1-i1 | cell3-i1 |
+    |-------------------------+----------+----------+----------|
+    | POP​_TO​_LOCAL​_0         |          |          |          |
+    | WRITE​_TO​_LOCAL​_1       |       +1 |          |          |
+    | NIL?​_RET​_LOCAL​_0​_POP​_1 |        0 |          |          |
+    | CDR                     |       -1 |       +1 |          |
+    | PUSH​_LOCAL​_0           |          |          |          |
+    | PUSH​_LOCAL​_1           |       +1 |          |          |
+    | CAR                     |       -1 |          |          |
+    | CONS                    |          |          |       +1 |
+    | TAIL​_CALL              |          |          |          |
+
+    iteration2: enter stack: [cell3][cell1], leave stack: [cell4][cell0]   : local0 := cell3, local1 := cell1
+    | code                    | cell2-i2 | cell1-i2 | cell0-i2 | cell4-i2 | cell3-i2 |
+    |-------------------------+----------+----------+----------+----------+----------|
+    | POP​_TO​_LOCAL​_0         |          |          |          |          |        0 |
+    | WRITE​_TO​_LOCAL​_1       |       -1 |       +1 |          |          |          |
+    | NIL?​_RET​_LOCAL​_0​_POP​_1 |          |        0 |          |          |          |
+    | CDR                     |          |       -1 |       +1 |          |          |
+    | PUSH​_LOCAL​_0           |          |          |          |          |       +1 |
+    | PUSH​_LOCAL​_1           |          |       +1 |          |          |          |
+    | CAR                     |          |       -1 |          |          |          |
+    | CONS                    |          |          |          |       +1 |        0 |
+    | TAIL​_CALL              |          |          |          |          |          |
+
+    iteration3: enter stack: [cell4][cell0], leave stack: [cell5][NIL]     : local0 := cell4, local1 := cell0
+    | code                    | cell1-i3 | cell0-i3 | cell5-i3 | cell4-i3 | cell3-i3 |
+    |-------------------------+----------+----------+----------+----------+----------|
+    | POP​_TO​_LOCAL​_0         |          |          |          |        0 |       -1 |
+    | WRITE​_TO​_LOCAL​_1       |       -1 |       +1 |          |          |          |
+    | NIL?​_RET​_LOCAL​_0​_POP​_1 |          |        0 |          |          |          |
+    | CDR                     |          |        -1 |          |          |          |
+    | PUSH​_LOCAL​_0           |          |          |          |       +1 |          |
+    | PUSH​_LOCAL​_1           |          |       +1 |          |          |          |
+    | CAR                     |          |       -1 |          |          |          |
+    | CONS                    |          |          |        0 |          |          |
+    | TAIL​_CALL              |          |          |          |          |          |
+
+    iteration4: enter stack: [cell5][NIL] -> return                        : local0 := cell5, local1 := NIL
+    | code                    | cell0-i4 | cell5-i4 | cell4-i4 |
+    |-------------------------+----------+----------+----------|
+    | POP​_TO​_LOCAL​_0         |          |        0 |       -1 |
+    | WRITE​_TO​_LOCAL​_1       |       -1 |          |          |
+    | NIL?​_RET​_LOCAL​_0​_POP​_1 |          |          |          |
+  - [X] implement refcount gc for tree functions (having pointers in both cells)
+- [X] implement basic byte code debugger on top of 6510 debugger
+  - [X] single step
+  - [X] run to next call/return
+  - [X] step over call
+** TODO write new tests for call-stack to verify local allocation/free on same page and over pages
+** IMPLEMENT implement prime sieve (using native array)
+- [X] prime sieve with cell-array
+- [ ] prime sieve with native array (byte indicator)
+- [ ] prime sieve with native array (bit indicator)
+** IMPLEMENT implement some code for native arrays (strings)
+- native-array/string functions
+  - write to @/read from @
+  - copy subarray (substring)
+  - concatenate/append arrays
+  - to-list / from-list
+** refcount qualities
+- provide function w/ ref and w/o ref counting <- for optimization
+  - name-convention: function w/ ref counting: ...​_RZ
+- optimize check for ref-count applicable | atomic value
+  cell-stack and RT may only hold
+  - xxxxxxx0 -> ptr to cell or more complex structure, could be pointer to a cell-page, or a m1-page
+  - xxxxxx01 -> cell pair ptr
+  - 0xxxxx11 -> atomic int
+  - 11111111 -> atomic byte
+  => ptr check here can be done by: and $03; cmp $03; bne is-a-ptr; rts;
+     alternatively: lsr; bcc is-ptr; lsr; bcc is-pair-ptr; rts; <- benefit, a is index to refcount byte
+     or a combination of the two
+  heap cells may also be:
+  - 10000111 -> cell array + more
+  - 10001111 -> native array + more
+- provide additional info for ref counting (e.g. knowledge about the data)
+** enable easy byte code modification
+the byte code and its usage should be implemented flexible enough to make adjustments that either provide space or speed benefits (or even
+both)
+- combine cmds :: create one byte code for two one byte commands
+- prefix :: make less common one byte command a two byte (prefixed) command
+- remove prefix :: make more common two byte (prefixed) command a single byte command
+- combine cmd op :: combine common byte operand combinations into a 'fast' single byte command
+- decombine :: undo a combined command
+** IMPLEMENT optimize byte code
+- push_​local_​0, write_​to_​local_​0 :: make this a one byte command (not a short instruction) => speeds up decoding
+- [X] cadr cdar caar cddr :: could be put into a fast instruction
+- cxyzr :: 2 byte instruction, where the second byte is encoded to do
+  lldddddd : ll = 0..3 => 3..6 times apply car/cdr depending on bit d at position 0..5
+             d = 1 = cdr, d = 0 = car.
+- [X] true?-ret false?-ret :: combine true?-branch ret, false?-branch ret
+- [X] coons :: two conses ?
+- move inc_​int, max_​int into single byte opcodes
+- [X] push_​local_​n_​car, push_​local_​n_​cdr :: push and car or cdr
+- nil?_​branch, not_​nil?_​branch :: branch on (not) nil
+- int_​0_​branch, not_​int_​0_​branch :: branch on (not) int = 0
+- int_​1_​branch, not_​int_​1_​branch :: branch on (not) int = 1
+- byte_​0_​branch, not_​byte_​0_​branch :: branch on (not) byte = 0
+- byte_​1_​branch, not_​byte_​1_​branch :: branch on (not) byte = 1
+- string_​empty_​branch, not_​string_​empty_​branch :: branch on (not) string empty
+- pop + push :: can be done by a write
+- call + ret :: can be combined to a jump
+  iff enough locals are available (in current function)
+  careful! function pointer must be adjusted (for tail calls of the called function)
+** IMPLEMENT enhance debugger
+- [X] pretty print the next x byte code instructions
+- [X] make inspection routines fail safe (ignore exceptions)
+- [X] switch from/to bc/assembler debugger
+- [X] send command to surface interactor
+- [X] use colors to separate prompt, output, disassembly
+- [X] allow setting breakpoints on bytecode (at a certain address)
+- [X] allow in place execution of bytecode
+- [X] going back bc steps
+- [ ] print (shortened) call stack (w/ function names) [ function-name : pc : #locals ]
+- [ ] add watch on memory <- continuous output of this value after each step
+- [ ] add watch on variable <- implementation could be a trace point (like a breakpoint, but not stopping)
+- [ ] add page view (continuous update) during execution
+- [ ] add breakpoint on memory change
+- [ ] add stack view (continuous update)
+- [ ] add call-frame view (continuous update)
+- [X] inspection of vm variables (zp_​vm_​pc, zp_...)
+- [ ] inspect/manipulate call frame
+- [ ] inspect/manipulate value stack
+- [-] inspect/manipulate memory - cells/lists/structures/strings/native arrays/arrays
+  - [X] cells
+  - [X] lists
+  - [ ] structures
+  - [ ] strings/native arrays
+  - [ ] arrays
+** how much of the 6510 code should be actually written and tested with the interpreter (and actually used to interpret byte code)?
+** design persisted byte code (constants, unlinked symbols, bytecode), linker/loader
+** generate persisted byte code (single module, multi module in mind)
+** implement loader/linker
+** IMPLEMENT glue together mil + vm + loader and linker
+- (m-def ...) -> vm, execute, debug?
+- see [[file:src/cisc-vm/mil-svm-generator.rkt]]
+** glue together mil + 6510 vm
+** IDEA runtime profiling                    -> evaluate optimizations
+- build byte code profiling from assembly profiling building blocks?
+- assembly code
+  - run
+    - number/duration of calls of a method/label
+    - number of accesses on zp_ variables
+    - number of indirect accesses through zp_ variables
+    - number of accesses on vm_ variables (e.g. memory map etc)
+    - number of accesses on absolute variables (e.g. local function variables)
+- byte code
+  - static
+    - usage number of byte codes for programs
+  - run
+    - number/duration of executions of certain byte code
+    - number/duration of function calls
+    - number/duration of tail calls
+    - number/duration of locals accesses
+    - number/duration of stack push/pop operations
+    - number/duration of stack page allocations/deallocations
+    - number/duration of locals stack page allocations/deallocations
+    - stack sizes over time
+  - gc
+    - number of cell/cell-pair/cell-array/native-array alloc, free, reclaim, etc.
+    - pages (type, #free cells ...) over time
+
+** IDEA implement larger array by using a BST tree of arrays?
+** IDEA change table with dispatch addresses (for certain programs? might optimize memory footprint)
+** IDEA collect statistics for
+- common two byte combinations <- byte code combinations
+  - e.g. combine these into one byte commands
+- number of usages of single byte codes
+  - e.g. move less common to prefixed-commands, ...
+** IDEA for native code implementation of (parts of) functions
+(have a rough idea of how this could be done, don't actually implement)
+- replace byte code sequence with byte-code indicating switchover to native code
+  then use sequences of JSR that circumvent the decoding steps
+  leaving native code and going back to byte code is done by calling the interpreter loop again
+- calling functions that have been replaced by native code (hot swap)
+  need indirection (no direct pointer for call, rather index)
+  need for data structure for mapping index to ptr
+** IDEA reduce ref counting for locals
+did some experiments on branch ~optimize_rev_app_w_extra_bc~
+- PULL​_FROM​_LOCAL​_n <- remove the value pulled from the local store => no ref needed counting!
+- sequences of getting a ptr from locals, incrementing ref count, the doing car/cdr, decrementing pointer + incrementing new one
+  can be compacted to only incrementing the final retrieved value
+- incrementing ref count and then doing a destructive NIL? etc. is not necessary either
+  example:
+  #+begin_src scheme
+    (bc WRITE_TO_L1)   ;; increment ref count
+    (bc NIL?)               ;; replace tos with boolean result => decrement ref count
+  #+end_src
+- further analyse locals usage and how to reduce number of refcount changes in functions
+- ref counts are important if calling a sub routine <- do refcounting then (and keep that info)
+- leaving a function that has locals
+  - it has called a subfunction => locals were refcounted => upon leaving, decrement refcounts (without deallocation!)
+** IDEA do tracing only on call and ret
+- print function names, too
+- print stack on call and result on ret
+** IDEA profiling (on jsr/rts) e.g. via tracing point
+- use information of labels to convert addresses -> labels
+- collect cycles spent
+- collect number of calls
+** IDEA functions allow for metadata (could enhance tracing) and defaults
+(e.g. byte 0 includes flag for existence, absence of metadata, number of defaults and number of locals)
+MDDDLLLL  M : flag for metadata existence
+          DDD : 0..7 default values (or just 0..3)
+          LLLL: 0..15 locals        (or just 0..7)
+
+Metadata existence means: there is an additional cell, pointing to the function string (even aligned, readonly native array)
+offset   content
+----------------
+-2(n+1)  [cell-ptr -> native array with function string name]   <-- even aligend (so that cell-ptr is detected as such)
+-2n      [cell default n]
+         ...
+-2       [cell default 1]
+0        [MDDDLLLL] (byte)
+         [Function BC 0]
+         ...
+         [Function BC x]
+         ? possible one padding byte
+?        [native array function name]                           <-- even aligned ? (really, is there a need for that), or should this be alloced during loading and linking)
+?        [other default values, the default cells are pointing to (e.g. a structure)]
+
+** IDEA call with defaults (related to concept of constants!)
+- special call instruction
+  - call​_with​_1​_default ... n​_defaults
+  - defaults are cells before the byte defining the # of locals
+  - defaults are read only
+  - defaults (since cells) must be allocated on even addresses (bit 0=0)
+  - the call instruction pushes these defaults automatically in the stack before executing the function
+  - the defaults are organized reverse =>
+    if function accepts two defaults
+      and is called with the first default explicitly set by the caller
+      and call​_with​_1​_default is used
+    => only the second default is pushed on the stack
+** IDEA instruction cache (see python caching) (see https://github.com/python/cpython/blob/main/InternalDocs/interpreter.md#Specialization and https://www.youtube.com/watch?v=PGZPSWZSkJI&t=1470s)
+- use specialized byte code instruction (with guard to fall back to more general byte code)
+- fallback/specialization rewrites bytecode
+- right behind bytecode some information is 'cached'
+  - fallback/specialization counts
+- byte code that can be specialized is organized in 'families' that define how much extra bytes are needed
+- special byte code execution should be much faster than general byte code execution
+  (e.g. int-add vs. finding the right add and then use conversions + float-add?)
+** IDEA restrict function names to one case and only some special chars => function meta data as name is compact
+- store 3 characters in 2 bytes (each 5 bit)
+- A-Z (26) or a-z
+- _-?>< and byte 0 to mark end?
+- drawbacks: no numbers, no lower/upper case characters <- worth it?
+  probably not! get rid of metadata if possible (e.g. through static linking?)
+** IDEA make compilation phases more explicit
+- macro decomposition into an ast (this ast is worked on/rewritten during the different phases)
+- transformation from ast/stack orientation -> register oriented atomic commands
+- vm-register allocation + reordering sub expressions (optimization)
+  - function parameters can be evaluated in any order (strict eval scheme)
+- optional: others like constant folding
+** IDEA information collected/used during compilation phases
+Maybe add this information as a hashmap, allowing for arbitrary information to be added any time
+What information is needed for the different phases? => check the different optimization problems, collect necessary information
+- precode :: used to store atomic expressions that need to run before the code for the current node can be executed
+  e.g. ~(byte+ a 1)~ needs a precode instruction to load the constant 1 into a local reg such that the byte+ instruction has only references left, that can be passed to the call
+- is-recursive-call :: is the given node a recursive call? (must be a ast-e-fun-call)
+- parameter-id-map :: parameter id to parameter register map (to resolve parameter references), does not change w/i function
+- locals-id-map :: mapping locally introduced ids to local registers, does change, whenever a new local is introduced
+- globals-id-map :: mapping global ids to global registers, is setup once
+- registers-usage :: description of the register use and liveliness (e.g. vm_​l0 r/w, vm_​p1 r)
+  this information (of the dataflow) is used for instruction reordering
+  it can be used to find out which register are free (not live anymore) for allocation for other instructions
+- negated :: (on if nodes), is the given nodes' bool expression negated? => code generation needs to take this into account, may happen if else/then branches are swapped
+- source code location :: location of the original source
+- previous node :: reference to node before change (to track changes through compilation)
+- previous note :: note that describes the transformation done from previous node to current node
+*
+* byte code
+** ideas
+*** reduce code size in memory by using special byte code for calls
+- [ ] how much potential is there (for the added complexity)?
+- e.g. byte code ranges reserved for hot functions (which are then called by one byte, saving two bytes)
+- dynamically register byte code -> function mapping (that may change during program execution)
+*** provide easy ROM Routine access
+- [ ] rom calling conventions and which registers are used for parameter passing
+- e.g.: ROM : execute a call to ROM (fill A with Byte from stack)
+  could be implemented as short command (-,  A,  AX, AY, AXY, XY, X,  Y)
+                                         000 001 011 101 111  110 010 100
+  put result on the stack (as bytes) <- how do I know which to store
+  store carry, for later branch (if necessary)
+- alternative coding: 4 byte code
+  byte
+  1 - ROM byte code
+  2 - flags for source/target/carry register copy
+      IN   OUT
+      0000 0000
+      |||+- accumulator is copied (byte value)
+      ||+-- x
+      |+--- Y
+      +---- carry bit (is boolean value)
+  3 - lowbyte call target
+  4 - highbyte call target
+*** DONE remove short commands, use regular commands that jump to routine
+which uses the lower bits as arguments/operand
+this allows for the removal of short command logic
+** decisions to be made
+- what byte codes are extended byte codes
+- +what byte codes are short byte code (including operand)+
+- what byte codes are minimal (able to emulate all others)
+- how do I move a given byte code + implementation + disassembler etc. to a different category
+- collect bc available for categories
+  - [R]B (1 byte) regular byte code:    *127*
+    short encoding, used for often used commands
+  - +[S]B (1 byte) short byte code:      *16*, *8* possible operands each+
+    short encoding of commands with limited number of operands or variations
+    - with operand: try to reuse bit pattern of byte code for operand encoding/decoding <- preferred use of short encoding
+    - w/o operand: use bit pattern of byte code for function selection <- it is preferred to use regular byte code for this
+  - [E]B (2 bytes) extendend byte code: *254*
+    - uncommon commands
+  - [X]B optional: (3 bytes) byte code: *254*
+    - rare commands (if ever)
+** byte code definition
+*** R
+- e.g. BADD
+  single {
+    BADD, opcode #x55, "BADD" (disassembled), commandlen 1 byte, operands: tos, tos@-1
+    implementation: (...)
+  }
+- e.g. BPUSH
+  single {
+    BPUSH, opcode #x62, "BPUSH (PC+1)" (disassembled), commandlen 2 byte, operands: PC+1
+    implementation: (...)
+  }
+- e.g. CALL
+  single {
+    CALL, opcode #x76, "CALL (PC+2)(PC+1)" (disassembled), commandlen 3 byte, operands: PC+1, PC+2
+    implementation: (...)
+    }
+*** OBSOLETE +S+
+- e.g. IPUSH_x
+  group {
+    IPUSH 0, opcode #x81, "IPUSH 0" (disassembled), commandlen 1 byte, operands: w/i bc
+    IPUSH -1, opcode #x83, "IPUSH -1" (disassembled), commandlen 1 byte, operands: w/i bc
+    IPUSH 1, opcode #x85 ..
+    IPUSH 2, opcode #x87
+    BPUSH 0, opcode #x80, "BPUSH 0" (disassembled), commandlen 1 byte, operands: w/i bc
+    BPUSH -1, opcode #x82, "BPUSH -1" (disassembled), commandlen 1 byte, operands: w/i bc
+    BPUSH 1, opcode #x84 ..
+    BPUSH 2, opcode #x86
+    implementation: (...)  <- group implementation (low bit 0 = group IPUSH/BPUSH, bits 1..2 = operand)
+  }
+*** E
+- e.g. GC
+  extended {
+    GC, opcodes: EXT, #x01, "GC", commandlen 2 bytes, no operands
+    implementation: ( ... )
+  }
+*** X, same as E
+*** conversion
+- R <-> E (change opcode and command len)
+- S <-> R/E (change implementation and more, no automatic conversion)
+** minimal byte code (94)
+- flow (6)
+  - CALL                :: call a subroutine
+  - TAIL_CALL           :: tail call this very function
+  - RET                 :: return from a subroutine
+  - T_P_BRA             :: branch if the tos is true, popping it, if false, pop but don't branch
+  - GOTO                :: jump (relative)
+  - ROM                 :: call into rom
+- locals (4)
+  - PUSH_LOCAL          :: push the given local cell onto the stack
+  - WRITE_LOCAL         :: write the given local cell onto the stack
+  - POP_TO_LOCAL        :: pop the tos into the given local cell
+  - WRITE_TO_LOCAL      :: write the tos into the given local cell
+- native array (9)
+  - ALLOC_NAR_RA        :: allocate a new array into ra, setting index register to len
+  - BPOKE_RA            :: poke all values of ra into the given memory address
+  - BPEEK_TO_RA         :: fill the array of ra by peeking the given memory address
+  - CP_NAR_RA_TO_RB     :: copy the whole array
+  - CP_NAR_RANGE_RA_TO_RB :: copy a range of the array
+  - PUSH_NAR_RA_AF      :: push the byte referenced by the ra and its index (decrement? post/pre)
+  - WRITE_NAR_RA_AF     :: write the byte referenced by ra and its index into the tos (decrement? post/pre)
+  - POP_TO_NAR_RA_AF    :: pop the tos byte into the array field referenced by ra and its index (decrement? post/pre)
+  - WRITE_TO_NAR_RA_AF  :: write the tos byte into the array field referenced by ra and its index (decrement? post/pre)
+- cell array (7)
+  - ALLOC_RA            :: allocate a new array into ra, setting index register to 0
+  - CP_RA_TO_RB         :: copy the whole array from ra to rb
+  - CP_RANGE_RA_TO_RB   :: copy a range of array pointed to by ra into the array pointer to by rb
+  - PUSH_RA_AF          :: push the array field pointed to by ra and its index register (decrement? post/pre)
+  - WRITE_RA_AF         :: write the array field pointed to by ra and its index register into the tos (decrement? post/pre)
+  - POP_TO_RA_AF        :: pop the top of the stack into the array field pointed to by ra and its index register (decrement? post/pre)
+  - WRITE_TO_RA_AF      :: write the top of the stack into the array field pointed to by ra and its index register (decrement? post/pre)
+- generic array (6)
+  - SWAP_RA_RB          :: swap array register ra with rb (including index registers)
+  - PUSH_RAI            :: push value if array register ra index
+  - POP_TO_RAI          :: pop tos byte into array register ra index
+  - BINC_RAI            :: byte increment array register ra index
+  - BDEC_RAI            :: byte decrement array register ra index
+  - PUSH_RA_LEN         :: push array len of array in ra onto stack
+- misc (3)
+  - GC                  :: execute a complete garbage collection
+  - NATIVE              :: following bytes are not interpreted by native executed
+  - EXT                 :: next byte is an extended byte code
+- call pairs (3)
+  - CAR                 :: first cell of cell pair
+  - CDR                 :: second cell of cell pair
+  - CONS                :: create a new cell pair from the top two cells on the stack
+- predicates (13)
+  - ARRAY_P | STRUCT_P  :: is tos an array/structure?
+  - NARRAY_P | STRING_P :: is tos a native array/string?
+  - I_P                 :: is tos an integer?
+  - B_P                 :: is tos a byte?
+  - F_P                 :: is tos a float?
+  - Z_P                 :: is tos zero? (only for bytes/ints)
+  - NIL_P               :: is tos nil?
+  - I_GT_P              :: is int TOS > TOS@-1?
+  - I_EQ_P              :: is int TOS = TOS@-1?
+  - B_GT_P              :: is byte TOS > TOS@-1?
+  - B_EQ_P              :: is byte TOS = TOS@-1?
+  - F_GT_P              :: is float TOS > TOS@-1?
+  - F_WI_P              :: is float TOS =(within some epsilon) TOS@-1?
+- logic (4)
+  - NOT                 :: negate boolean tos
+  - OR                  :: TOS || TOS@-1
+  - AND                 :: TOS && TOS@-1
+  - XOR                 :: TOS ^^ TOS@-1
+- conversion (5)
+  - I2B                 :: integer -> byte
+  - B2I                 :: byte -> integer
+  - I2F                 :: integer -> float
+  - A2L                 :: array -> list
+  - L2A                 :: list -> array
+- byte (11)
+  - BAND                :: binary and of byte tos & tos@-1
+  - BOR                 :: binary or of byte tos | tos@-1
+  - BXOR                :: binary xor of byte tos ^ tos@-1
+  - BPOKE               :: poke byte tos -> memory location
+  - BPEEK               :: peek byte from memory location -> tos
+  - BSHL                :: shift left byte
+  - BSHR                :: shift right byte
+  - BINC                :: increment byte
+  - BDEC                :: decrement byte
+  - BADD                :: add to bytes
+  - BSUB                :: subtract two bytes
+- int (7)
+  - IINC                :: increment int
+  - IDEC                :: decrement int
+  - IADD                :: add two ints
+  - ISUB                :: subtract to ints
+  - IMUL                :: multiply to ints
+  - IDIV                :: divide to ints
+  - IREM                :: remainder of two ints
+- stack (7)
+  - PUSH_NIL            :: push nil to tos
+  - IPUSH               :: push integer
+  - BPUSH               :: push byte
+  - FPUSH               :: push float
+  - SWAP                :: swap tos with tos@-1
+  - DUP                 :: duplicate tos
+  - POP                 :: pop
+- float (9)
+  - FINT                :: convert to integer (cut off digits, max if >, min if <)
+  - FADD                :: add two floats
+  - FSUB                :: subtract two floats
+  - FMUL                :: multiply two floats
+  - FDIV                :: divide two floats
+  - FPOW                :: raise one float to the power of the other
+  - FLOG                :: logarithm of a float
+  - FSIN                :: sine of a float
+  - FASIN               :: arc sine of a float
+** additional byte code (118)
+- long numbers (8)
+  - conversion
+    - I2R               :: convert integer to rational number
+    - R2F               :: convert ration to float
+    - F2R               :: convert float to rational
+  - math
+    - RINT              :: take integer part of long number
+    - RADD              :: +
+    - RSUB              :: -
+    - RMUL              :: *
+    - RDIV              :: /
+- flow (12 + 1*8)
+  - CRT                 :: call (special) runtime routine (PC+1 = index into jump table)
+  - CRT0..7             :: short encoding for the 8 most frequently used runtime routines
+  - F_P_BRA
+  - DEC_RAI_NZ_P_BRA    :: decrement ra index and branch if not zero?
+  - DEC_RBI_NZ_P_BRA
+  - DEC_RCI_NZ_P_BRA
+  - RAI_NZ_P_BRA        :: branch if rai is not zero?
+  - RBI_NZ_P_BRA
+  - RCI_NZ_P_BRA
+  - Z_P_BRA             :: branch if zero
+  - NZ_P_BRA            :: branch if not zero
+  - NIL_P_BRA           :: branch if nil
+  - NNIL_P_BRA          :: branch if not nil
+- locals (6 * 4)
+  - PUSH_LOCAL_0..3     :: push local (operand 0..3 encoded into byte code)
+  - WRITE_LOCAL_0..3
+  - POP_TO_LOCAL_0..3
+  - WRITE_TO_LOCAL_0..3
+  - PUSH_LOCAL_0..3_CxR :: push local and do car/cdr on that
+- native array (8)
+  - POP_TO_NAR_RB_AF
+  - WRITE_TO_NAR_RB_AF
+  - PUSH_NAR_RB_AF
+  - WRITE_NAR_RB_AF
+  - POP_TO_NAR_RC_AF
+  - WRITE_TO_NAR_RC_AF
+  - PUSH_NAR_RC_AF
+  - WRITE_NAR_RC_AF
+- cell array (4*4)
+  - PUSH_RA_AF0..3
+  - WRITE_RA_AF0..3
+  - POP_TO_RA_AF0..3
+  - WRITE_TO_RA_AF0..3
+- generic array (17)
+  - SWAP_RA_RC
+  - PUSH_RBI
+  - POP_TO_RBI
+  - BINC_RBI
+  - BDEC_RBI
+  - PUSH_RCI
+  - POP_TO_RCI
+  - BINC_RCI
+  - BDEC_RCI
+  - PUSH_RB_LEN
+  - PUSH_RC_LEN
+  - WRITE_LEN_TO_RAI    :: write array len into index register
+  - WRITE_LEN_TO_RBI
+  - WRITE_LEN_TO_RCI
+  - CLEAR_RAI           :: init rai to 0
+  - CLEAR_RBI
+  - CLEAR_RCI
+- misc
+- cell pairs (5)
+  - CAAR                :: (car (car tos))
+  - CDAR                :: (cdr (car tos))
+  - CADR                :: (car (cdr tos))
+  - CDDR                :: (cdr (cdr tos))
+  - COONS               :: (cons tos (cons tos@-1 tos@-2)
+- predicates (9)
+  - I_GE_P              :: int tos >= tos@-1 ?
+  - I_LE_P              :: <=
+  - I_LT_P              :: <
+  - B_GE_P              :: >=
+  - B_LE_P              :: <=
+  - B_LT_P              :: <
+  - F_GE_P              :: >=
+  - F_LE_P              :: <=
+  - F_LT_P              :: <
+- logic
+- conversion
+- byte
+- int (2)
+  - IMIN                :: min of two ints
+  - IMAX                :: max of two ints
+- stack (2*4)
+  PUSH_I_-1..2          :: quick push integer constant -1 | 0 | 1 | 2
+  PUSH_B_-1..2          :: quick push byte constant
+- float (10)
+  - FPUSH_PI            :: push pi
+  - FPUSH_E             :: push e (euler)
+  - FPUSH_p5            :: push 0.5 (1/2)
+  - FPUSH_10            :: push 10
+  - FPUSH_m1            :: push -1
+  - FPUSH_1             :: push 1
+  - FPUSH_0             :: push 0
+  - FPUSH_2             :: push 2
+  - FSQRT               :: square root
+  - FEXP                :: e^x
+** byte codes (by group)
+*** cell_array
+remove
+- GET_AF_0..3
+- SET_AF_0..3
+- POP_TO_AF
+- PUSH_AF
+planned
+- BINC_RBI
+- BDEC_RBI
+- BINC_RCI
+- BDEC_RCI
+- WRITE_TO_RCI
+- POP_TO_RBI
+- POP_TO_RCI
+existing
+- [[file:vm-interpreter.rkt::3120][ALLOC_ARA]] :: $4c  *ALLOC*​ate cell *A*​rray into *RA* and pops the byte size off the stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" ALLOC_ARA))
+  - assembler include :: BC_ALLOC_ARA
+  *ALLOC*​ate cell *A*​rray into *RA* and pops the byte size off the stack
+  stack: <byte-size> -> -
+  len: 1
+- [[file:vm-interpreter.rkt::3136][BINC_RAI]] :: $49  *B*​yte *INC*​rement *RA* *I*​ndex register
+  - racket require :: (require (only-in "vm-interpreter.rkt" BINC_RAI))
+  - assembler include :: BC_BINC_RAI
+  *B*​yte *INC*​rement *RA* *I*​ndex register
+- [[file:vm-interpreter.rkt::3179][DEC_RAI]] :: $52  *DEC*​rement *RA* *I*​ndex
+  - racket require :: (require (only-in "vm-interpreter.rkt" DEC_RAI))
+  - assembler include :: BC_DEC_RAI
+  *DEC*​rement *RA* *I*​ndex
+  len: 1
+- [[file:vm-interpreter.rkt::3022][GET_AF_0]] :: $b0  *GET* *A*​rray *F*​ield 0
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_AF_0))
+  - assembler include :: BC_GET_AF_0
+  *GET* *A*​rray *F*​ield 0
+  stack: [array-ptr] -> [cell@0 of array]  (replace tos with value from array)
+- [[file:vm-interpreter.rkt::3025][GET_AF_1]] :: $b2  *GET* *A*​rray *F*​ield 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_AF_1))
+  - assembler include :: BC_GET_AF_1
+  *GET* *A*​rray *F*​ield 1
+  stack: [array-ptr] -> [cell@1 of array]
+- [[file:vm-interpreter.rkt::3028][GET_AF_2]] :: $b4  *GET* *A*​rray *F*​ield 2
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_AF_2))
+  - assembler include :: BC_GET_AF_2
+  *GET* *A*​rray *F*​ield 2
+  stack: [array-ptr] -> [cell@2 of array]
+- [[file:vm-interpreter.rkt::3031][GET_AF_3]] :: $b6  *GET* *A*​rray *F*​ield 3
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_AF_3))
+  - assembler include :: BC_GET_AF_3
+  *GET* *A*​rray *F*​ield 3
+  stack: [array-ptr] -> [cell@3 of array]
+- [[file:vm-interpreter.rkt::3077][GET_RA_AF_0]] :: $c8  *GET* *A*​rray *F*​ield 0
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_RA_AF_0))
+  - assembler include :: BC_GET_RA_AF_0
+  *GET* *A*​rray *F*​ield 0
+  stack: [array-ptr] -> [cell@0 of array]
+- [[file:vm-interpreter.rkt::3080][GET_RA_AF_1]] :: $ca  *GET* *A*​rray *F*​ield 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_RA_AF_1))
+  - assembler include :: BC_GET_RA_AF_1
+  *GET* *A*​rray *F*​ield 1
+  stack: [array-ptr] -> [cell@1 of array]
+- [[file:vm-interpreter.rkt::3083][GET_RA_AF_2]] :: $cc  *GET* *A*​rray *F*​ield 2
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_RA_AF_2))
+  - assembler include :: BC_GET_RA_AF_2
+  *GET* *A*​rray *F*​ield 2
+  stack: [array-ptr] -> [cell@2 of array]
+- [[file:vm-interpreter.rkt::3086][GET_RA_AF_3]] :: $ce  *GET* *A*​rray *F*​ield 3
+  - racket require :: (require (only-in "vm-interpreter.rkt" GET_RA_AF_3))
+  - assembler include :: BC_GET_RA_AF_3
+  *GET* *A*​rray *F*​ield 3
+  stack: [array-ptr] -> [cell@3 of array]
+- [[file:vm-interpreter.rkt::2837][POP_TO_AF]] :: $16  *POP* *TO* *A*​rray *F*​ield using the stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_AF))
+  - assembler include :: BC_POP_TO_AF
+  *POP* *TO* *A*​rray *F*​ield using the stack
+  len: 1
+  stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
+  ->     []
+         cell-array @ index = value
+  op = array-idx, stack [cell- array-ptr-] -> []
+- [[file:vm-interpreter.rkt::2655][POP_TO_RA]] :: $4b  *POP* top of evlstk *TO* *RA*, setting RAI=0
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_RA))
+  - assembler include :: BC_POP_TO_RA
+  *POP* top of evlstk *TO* *RA*, setting RAI=0
+  len: 1
+- [[file:vm-interpreter.rkt::2825][POP_TO_RA_AF]] :: $4e  *POP* top of evlstk *TO* *RA* *A*​rray *F*​ield
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_RA_AF))
+  - assembler include :: BC_POP_TO_RA_AF
+  *POP* top of evlstk *TO* *RA* *A*​rray *F*​ield
+  len: 1
+- [[file:vm-interpreter.rkt::3145][POP_TO_RAI]] :: $4f  *POP* top of evlstk byte *TO* *RA* *I*​ndex
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_RAI))
+  - assembler include :: BC_POP_TO_RAI
+  *POP* top of evlstk byte *TO* *RA* *I*​ndex
+  len: 1
+- [[file:vm-interpreter.rkt::2659][POP_TO_RB]] :: $46  *POP* top of evlstk *TO* *RB*, setting RAI=0
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_RB))
+  - assembler include :: BC_POP_TO_RB
+  *POP* top of evlstk *TO* *RB*, setting RAI=0
+  len: 1
+- [[file:vm-interpreter.rkt::2884][PUSH_AF]] :: $15  stack: index (byte) :: cell-ptr -> cell-array
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_AF))
+  - assembler include :: BC_PUSH_AF
+  stack: index (byte) :: cell-ptr -> cell-array
+  ->     value (cell)
+  op = field-idx, stack [array-ref] -> [cell-]
+- [[file:vm-interpreter.rkt::2997][PUSH_RA]] :: $47  *PUSH* *R*​egister *A* to stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_RA))
+  - assembler include :: BC_PUSH_RA
+  *PUSH* *R*​egister *A* to stack
+- [[file:vm-interpreter.rkt::3009][PUSH_RA_AF]] :: $4d  *PUSH* from array *RA* *A*​rray *F*​ield indexed by RAI to evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_RA_AF))
+  - assembler include :: BC_PUSH_RA_AF
+  *PUSH* from array *RA* *A*​rray *F*​ield indexed by RAI to evlstk
+  stack -> (RA),RAI :: stack
+- [[file:vm-interpreter.rkt::3034][SET_AF_0]] :: $b1  *SET* *A*​rray *F*​ield 0
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_AF_0))
+  - assembler include :: BC_SET_AF_0
+  *SET* *A*​rray *F*​ield 0
+  stack: [array-ptr] :: [value] -> [cell@0 of array]
+- [[file:vm-interpreter.rkt::3037][SET_AF_1]] :: $b3  *SET* *A*​rray *F*​ield 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_AF_1))
+  - assembler include :: BC_SET_AF_1
+  *SET* *A*​rray *F*​ield 1
+  stack: [array-ptr] :: [value] -> [cell@1 of array]
+- [[file:vm-interpreter.rkt::3040][SET_AF_2]] :: $b5  *SET* *A*​rray *F*​ield 2
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_AF_2))
+  - assembler include :: BC_SET_AF_2
+  *SET* *A*​rray *F*​ield 2
+  stack: [array-ptr] :: [value] -> [cell@2 of array]
+- [[file:vm-interpreter.rkt::3043][SET_AF_3]] :: $b7  *SET* *A*​rray *F*​ield 3
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_AF_3))
+  - assembler include :: BC_SET_AF_3
+  *SET* *A*​rray *F*​ield 3
+  stack: [array-ptr] :: [value] -> [cell@3 of array]
+- [[file:vm-interpreter.rkt::3089][SET_RA_AF_0]] :: $c9  *SET* *A*​rray *F*​ield 0
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_RA_AF_0))
+  - assembler include :: BC_SET_RA_AF_0
+  *SET* *A*​rray *F*​ield 0
+  stack: [array-ptr] :: [value] -> [cell@0 of array]
+- [[file:vm-interpreter.rkt::3092][SET_RA_AF_1]] :: $cb  *SET* *A*​rray *F*​ield 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_RA_AF_1))
+  - assembler include :: BC_SET_RA_AF_1
+  *SET* *A*​rray *F*​ield 1
+  stack: [array-ptr] :: [value] -> [cell@1 of array]
+- [[file:vm-interpreter.rkt::3095][SET_RA_AF_2]] :: $cd  *SET* *A*​rray *F*​ield 2
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_RA_AF_2))
+  - assembler include :: BC_SET_RA_AF_2
+  *SET* *A*​rray *F*​ield 2
+  stack: [array-ptr] :: [value] -> [cell@2 of array]
+- [[file:vm-interpreter.rkt::3098][SET_RA_AF_3]] :: $cf  *SET* *A*​rray *F*​ield 3
+  - racket require :: (require (only-in "vm-interpreter.rkt" SET_RA_AF_3))
+  - assembler include :: BC_SET_RA_AF_3
+  *SET* *A*​rray *F*​ield 3
+  stack: [array-ptr] :: [value] -> [cell@3 of array]
+- [[file:vm-interpreter.rkt::2994][WRITE_RA]] :: $55  *WRITE* *R*​egister *A* to stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_RA))
+  - assembler include :: BC_WRITE_RA
+  *WRITE* *R*​egister *A* to stack
+- [[file:vm-interpreter.rkt::3157][WRITE_TO_RAI]] :: $51  *WRITE* top of evlstk byte *TO* *RA* *I*​ndex
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_RAI))
+  - assembler include :: BC_WRITE_TO_RAI
+  *WRITE* top of evlstk byte *TO* *RA* *I*​ndex
+  len: 1
+- [[file:vm-interpreter.rkt::3168][WRITE_TO_RBI]] :: $53  *WRITE* top of evlstk byte *TO* *RB* *I*​ndex
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_RBI))
+  - assembler include :: BC_WRITE_TO_RBI
+  *WRITE* top of evlstk byte *TO* *RB* *I*​ndex
+  len: 1
+*** native array
+planned
+- ALLOC_NATARA :: allocate native array
+- BPOKE_A :: poke array bytes (len)
+- BPEEK_TO_A :: peek data into array (len)
+- CP_RA_TO_RB :: cp ra into rb
+- CP_RANGE_RA_TO_RB :: cp range of ra into rb
+- WRITE_NATARR_TO_RA_AF :: write byte of RA (index by RAI) into tos (overwriting it)
+- PUSH_NATARR_RA_AF :: push byte of RA (index by RAI)
+- POP_TO_NATARR_RA_AF ::  pop tos (byte) into RA (indexed by RAI)
+- WRITE_NATARR_TO_RB_AF :: write byte of RA (index by RAI) into tos (overwriting it)
+- PUSH_NATARR_RB_AF :: push byte of RA (index by RAI)
+- POP_TO_NATARR_RB_AF ::  pop tos (byte) into RA (indexed by RAI)
+*** array
+planned
+- SWAP_RA_RC
+existing
+- [[file:vm-interpreter.rkt::2645][SWAP_RA_RB]] :: $45  swap array register RA with RB
+  - racket require :: (require (only-in "vm-interpreter.rkt" SWAP_RA_RB))
+  - assembler include :: BC_SWAP_RA_RB
+  swap array register RA with RB
+*** gc
+- [[file:vm-interpreter.rkt::2555][GC_FL]] :: $03  garbage collect the freelist
+  - racket require :: (require (only-in "vm-interpreter.rkt" GC_FL))
+  - assembler include :: BC_GC_FL
+  garbage collect the freelist
+  len: 2 (extended)
+  extended
+*** _cell_pair_
+- [[file:vm-interpreter.rkt::2726][CDDR]] :: $ae  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" CDDR))
+  - assembler include :: BC_CDDR
+  len: 1
+- [[file:vm-interpreter.rkt::2724][CDAR]] :: $ac  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" CDAR))
+  - assembler include :: BC_CDAR
+  len: 1
+- [[file:vm-interpreter.rkt::2722][CADR]] :: $aa  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" CADR))
+  - assembler include :: BC_CADR
+  len: 1
+- [[file:vm-interpreter.rkt::2720][CAAR]] :: $a8  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" CAAR))
+  - assembler include :: BC_CAAR
+  len: 1
+- [[file:vm-interpreter.rkt::1513][CDR]] :: $41  stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
+  - racket require :: (require (only-in "vm-interpreter.rkt" CDR))
+  - assembler include :: BC_CDR
+  stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
+- [[file:vm-interpreter.rkt::1488][CAR]] :: $43  stack [cell-list-ptr] -> [cell- car of list pointed at]
+  - racket require :: (require (only-in "vm-interpreter.rkt" CAR))
+  - assembler include :: BC_CAR
+  stack [cell-list-ptr] -> [cell- car of list pointed at]
+- [[file:vm-interpreter.rkt::1465][CONS]] :: $42  stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+  - racket require :: (require (only-in "vm-interpreter.rkt" CONS))
+  - assembler include :: BC_CONS
+  stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
+- [[file:vm-interpreter.rkt::1456][COONS]] :: $44  execute two CONS in a row
+  - racket require :: (require (only-in "vm-interpreter.rkt" COONS))
+  - assembler include :: BC_COONS
+  execute two CONS in a row
+*** _predicates_
+planned
+- ARRAY_P | STRUCT_P
+- NARRAY_P | STRING_P
+- I_P (instead of INT_P)
+- B_P
+- F_P
+- F_GE_P
+- F_EQ_P (within) F_WI_P
+- F_LT_P
+- F_LE_P
+- F_GT_P
+- I_GE_P
+- I_EQ_P
+- I_LT_P
+- I_LE_P
+- B_LE_P
+- B_EQ_P
+existing
+- [[file:vm-interpreter.rkt::2528][I_Z_P]] :: $22  *I*​nt *Z*​ero *P*​redicate
+  - racket require :: (require (only-in "vm-interpreter.rkt" I_Z_P))
+  - assembler include :: BC_I_Z_P
+  *I*​nt *Z*​ero *P*​redicate
+  len: 1
+- [[file:vm-interpreter.rkt::1704][I_GT_P]] :: $63  *I*​nt *G*​reater *T*​han *P*​redicates
+  - racket require :: (require (only-in "vm-interpreter.rkt" I_GT_P))
+  - assembler include :: BC_I_GT_P
+  *I*​nt *G*​reater *T*​han *P*​redicates
+- [[file:vm-interpreter.rkt::2493][CELL_EQ_P]] :: $12  *CELL* *EQ*​ual *P*​redicate
+  - racket require :: (require (only-in "vm-interpreter.rkt" CELL_EQ_P))
+  - assembler include :: BC_CELL_EQ_P
+  *CELL* *EQ*​ual *P*​redicate
+  len: 1
+- [[file:vm-interpreter.rkt::2341][CONS_PAIR_P]] :: $0a  *CONS* *PAIR* *P*​redicate
+  - racket require :: (require (only-in "vm-interpreter.rkt" CONS_PAIR_P))
+  - assembler include :: BC_CONS_PAIR_P
+  *CONS* *PAIR* *P*​redicate
+  len: 1
+- [[file:vm-interpreter.rkt::1803][INT_P]] :: $07  is top of evlstk an *INT*​eger (*P*​redicate)?
+  - racket require :: (require (only-in "vm-interpreter.rkt" INT_P))
+  - assembler include :: BC_INT_P
+  is top of evlstk an *INT*​eger (*P*​redicate)?
+- [[file:vm-interpreter.rkt::1646][B_GE_P]] :: $26  no doc
+  - racket require :: (require (only-in "vm-interpreter.rkt" B_GE_P))
+  - assembler include :: BC_B_GE_P
+- [[file:vm-interpreter.rkt::1617][B_LT_P]] :: $25  no doc
+  - racket require :: (require (only-in "vm-interpreter.rkt" B_LT_P))
+  - assembler include :: BC_B_LT_P
+- [[file:vm-interpreter.rkt::1559][B_GT_P]] :: $24  no doc
+  - racket require :: (require (only-in "vm-interpreter.rkt" B_GT_P))
+  - assembler include :: BC_B_GT_P
+- [[file:vm-interpreter.rkt::1419][NIL_P]] :: $21  stack [cell-list-ptr] -> [cell-boolean]
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P))
+  - assembler include :: BC_NIL_P
+  stack [cell-list-ptr] -> [cell-boolean]
+*** conversion
+planned
+- I2B :: Int 2 Byte
+- B2I :: Byte 2 Int
+- I2F :: Int 2 Float
+*** boolean
+planned
+- AND
+- OR
+- XOR
+- NOT
+*** _byte_
+rational: mul and div are not really necessary, are they? could use int then instead
+planned
+- BAND
+- BOR
+- BXOR
+- BSUB
+- BPOKE
+- BPEEK
+- BSHL
+existing
+- [[file:vm-interpreter.rkt::3277][BINC]] :: $1c  *B*​yte *INC*​rement, increment byte RT (no checks)
+  - racket require :: (require (only-in "vm-interpreter.rkt" BINC))
+  - assembler include :: BC_BINC
+  *B*​yte *INC*​rement, increment byte RT (no checks)
+  len: 1
+- [[file:vm-interpreter.rkt::3255][BDEC]] :: $1a  *B*​yte *DEC*​rement, increment byte RT (no checks)
+  - racket require :: (require (only-in "vm-interpreter.rkt" BDEC))
+  - assembler include :: BC_BDEC
+  *B*​yte *DEC*​rement, increment byte RT (no checks)
+  len: 1
+- [[file:vm-interpreter.rkt::3228][BADD]] :: $23  *B*​yte *ADD* top two values on stack (no checks)
+  - racket require :: (require (only-in "vm-interpreter.rkt" BADD))
+  - assembler include :: BC_BADD
+  *B*​yte *ADD* top two values on stack (no checks)
+  len: 1
+- [[file:vm-interpreter.rkt::1634][BSHR]] :: $27  no doc
+  - racket require :: (require (only-in "vm-interpreter.rkt" BSHR))
+  - assembler include :: BC_BSHR
+*** _int_
+planned
+- IMIN
+- IDEC
+- IMUL
+- IDIV
+- IMOD
+existing
+- [[file:vm-interpreter.rkt::2452][IMAX]] :: $01  *I*​nt *MAX*​imum, return the maximum of two ints
+  - racket require :: (require (only-in "vm-interpreter.rkt" IMAX))
+  - assembler include :: BC_IMAX
+  *I*​nt *MAX*​imum, return the maximum of two ints
+  len: 2 (extended)
+  extended
+- [[file:vm-interpreter.rkt::2385][IINC]] :: $02  *I*​nt *INC*​rement
+  - racket require :: (require (only-in "vm-interpreter.rkt" IINC))
+  - assembler include :: BC_IINC
+  *I*​nt *INC*​rement
+  len: 2 (extended)
+  extended (could be mapped to regular byte code, if needed very often!)
+- [[file:vm-interpreter.rkt::1344][ISUB]] :: $61  stack [cell-int a, cell-int b] -> [difference]
+  - racket require :: (require (only-in "vm-interpreter.rkt" ISUB))
+  - assembler include :: BC_ISUB
+  stack [cell-int a, cell-int b] -> [difference]
+- [[file:vm-interpreter.rkt::1269][IADD]] :: $62  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" IADD))
+  - assembler include :: BC_IADD
+  len: 1
+  stack [cell-int a, cell-int b] -> [sum]
+*** _stack_
+- [[file:vm-interpreter.rkt::2663][POP]] :: $11  len: 1
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP))
+  - assembler include :: BC_POP
+  len: 1
+- [[file:vm-interpreter.rkt::2482][DUP]] :: $0f  *DUP*​licate top of stack
+  - racket require :: (require (only-in "vm-interpreter.rkt" DUP))
+  - assembler include :: BC_DUP
+  *DUP*​licate top of stack
+  len: 1
+- [[file:vm-interpreter.rkt::2364][PUSH_NIL]] :: $09  *PUSH* *NIL* to evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_NIL))
+  - assembler include :: BC_PUSH_NIL
+  *PUSH* *NIL* to evlstk
+  len: 1
+  stack: [] -> [NIL]
+- [[file:vm-interpreter.rkt::1538][SWAP]] :: $03  swap tos with tos-1
+  - racket require :: (require (only-in "vm-interpreter.rkt" SWAP))
+  - assembler include :: BC_SWAP
+  swap tos with tos-1
+- [[file:vm-interpreter.rkt::1243][PUSH_I]] :: $06  *PUSH* *I*​nt onto evlstk, op1=low byte op2=high byte, stack [] -> [cell-int]
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_I))
+  - assembler include :: BC_PUSH_I
+  *PUSH* *I*​nt onto evlstk, op1=low byte op2=high byte, stack [] -> [cell-int]
+  len: 3
+- [[file:vm-interpreter.rkt::1197][PUSH_IM1]] :: $bb  *PUSH* *I*​nt *-1* onto evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_IM1))
+  - assembler include :: BC_PUSH_IM1
+  *PUSH* *I*​nt *-1* onto evlstk
+- [[file:vm-interpreter.rkt::1195][PUSH_I2]] :: $ba  *PUSH* *I*​nt *2* onto evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_I2))
+  - assembler include :: BC_PUSH_I2
+  *PUSH* *I*​nt *2* onto evlstk
+- [[file:vm-interpreter.rkt::1193][PUSH_I1]] :: $b9  *PUSH* *I*​nt *1* onto evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_I1))
+  - assembler include :: BC_PUSH_I1
+  *PUSH* *I*​nt *1* onto evlstk
+- [[file:vm-interpreter.rkt::1191][PUSH_I0]] :: $b8  *PUSH* *I*​nt *0* onto evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_I0))
+  - assembler include :: BC_PUSH_I0
+  *PUSH* *I*​nt *0* onto evlstk
+- [[file:vm-interpreter.rkt::952][WRITE_TO_L3]] :: $97  *WRITE* *TO* *L*​ocal *3* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_L3))
+  - assembler include :: BC_WRITE_TO_L3
+  *WRITE* *TO* *L*​ocal *3* from evlstk
+- [[file:vm-interpreter.rkt::950][WRITE_TO_L2]] :: $95  *WRITE* *TO* *L*​ocal *2* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_L2))
+  - assembler include :: BC_WRITE_TO_L2
+  *WRITE* *TO* *L*​ocal *2* from evlstk
+- [[file:vm-interpreter.rkt::948][WRITE_TO_L1]] :: $93  *WRITE* *TO* *L*​ocal *1* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_L1))
+  - assembler include :: BC_WRITE_TO_L1
+  *WRITE* *TO* *L*​ocal *1* from evlstk
+- [[file:vm-interpreter.rkt::946][WRITE_TO_L0]] :: $91  *WRITE* *TO* *L*​ocal *0* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_TO_L0))
+  - assembler include :: BC_WRITE_TO_L0
+  *WRITE* *TO* *L*​ocal *0* from evlstk
+- [[file:vm-interpreter.rkt::944][POP_TO_L3]] :: $96  *POP* *TO* *L*​ocal *3* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_L3))
+  - assembler include :: BC_POP_TO_L3
+  *POP* *TO* *L*​ocal *3* from evlstk
+- [[file:vm-interpreter.rkt::942][POP_TO_L2]] :: $94  *POP* *TO* *L*​ocal *2* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_L2))
+  - assembler include :: BC_POP_TO_L2
+  *POP* *TO* *L*​ocal *2* from evlstk
+- [[file:vm-interpreter.rkt::940][POP_TO_L1]] :: $92  *POP* *TO* *L*​ocal *1* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_L1))
+  - assembler include :: BC_POP_TO_L1
+  *POP* *TO* *L*​ocal *1* from evlstk
+- [[file:vm-interpreter.rkt::938][POP_TO_L0]] :: $90  *POP* *TO* *L*​ocal *0* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" POP_TO_L0))
+  - assembler include :: BC_POP_TO_L0
+  *POP* *TO* *L*​ocal *0* from evlstk
+- [[file:vm-interpreter.rkt::902][WRITE_L3]] :: $87  *WRITE* *L*​ocal *3* into rt
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_L3))
+  - assembler include :: BC_WRITE_L3
+  *WRITE* *L*​ocal *3* into rt
+- [[file:vm-interpreter.rkt::900][WRITE_L2]] :: $85  *WRITE* *L*​ocal *2* into rt
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_L2))
+  - assembler include :: BC_WRITE_L2
+  *WRITE* *L*​ocal *2* into rt
+- [[file:vm-interpreter.rkt::898][WRITE_L1]] :: $83  *WRITE* *L*​ocal *1* into rt
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_L1))
+  - assembler include :: BC_WRITE_L1
+  *WRITE* *L*​ocal *1* into rt
+- [[file:vm-interpreter.rkt::896][WRITE_L0]] :: $81  *WRITE* *L*​ocal *0* into rt
+  - racket require :: (require (only-in "vm-interpreter.rkt" WRITE_L0))
+  - assembler include :: BC_WRITE_L0
+  *WRITE* *L*​ocal *0* into rt
+- [[file:vm-interpreter.rkt::893][PUSH_L3]] :: $86  *PUSH* *L*​ocal *3* on evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L3))
+  - assembler include :: BC_PUSH_L3
+  *PUSH* *L*​ocal *3* on evlstk
+- [[file:vm-interpreter.rkt::891][PUSH_L2]] :: $84  *PUSH* *L*​ocal *2* on evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L2))
+  - assembler include :: BC_PUSH_L2
+  *PUSH* *L*​ocal *2* on evlstk
+- [[file:vm-interpreter.rkt::889][PUSH_L1]] :: $82  *PUSH* *L*​ocal *1* on evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L1))
+  - assembler include :: BC_PUSH_L1
+  *PUSH* *L*​ocal *1* on evlstk
+- [[file:vm-interpreter.rkt::887][PUSH_L0]] :: $80  *PUSH* *L*​ocal *0* on evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L0))
+  - assembler include :: BC_PUSH_L0
+  *PUSH* *L*​ocal *0* on evlstk
+- [[file:vm-interpreter.rkt::851][PUSH_L3_CDR]] :: $a7  *PUSH* *L*​ocal *3* and *CDR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L3_CDR))
+  - assembler include :: BC_PUSH_L3_CDR
+  *PUSH* *L*​ocal *3* and *CDR*
+- [[file:vm-interpreter.rkt::849][PUSH_L2_CDR]] :: $a5  *PUSH* *L*​ocal *2* and *CDR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L2_CDR))
+  - assembler include :: BC_PUSH_L2_CDR
+  *PUSH* *L*​ocal *2* and *CDR*
+- [[file:vm-interpreter.rkt::847][PUSH_L1_CDR]] :: $a3  *PUSH* *L*​ocal *1* and *CDR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L1_CDR))
+  - assembler include :: BC_PUSH_L1_CDR
+  *PUSH* *L*​ocal *1* and *CDR*
+- [[file:vm-interpreter.rkt::845][PUSH_L0_CDR]] :: $a1  *PUSH* *L*​ocal *0* and *CDR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L0_CDR))
+  - assembler include :: BC_PUSH_L0_CDR
+  *PUSH* *L*​ocal *0* and *CDR*
+- [[file:vm-interpreter.rkt::842][PUSH_L3_CAR]] :: $a6  *PUSH* *L*​ocal *3* and *CAR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L3_CAR))
+  - assembler include :: BC_PUSH_L3_CAR
+  *PUSH* *L*​ocal *3* and *CAR*
+- [[file:vm-interpreter.rkt::840][PUSH_L2_CAR]] :: $a4  *PUSH* *L*​ocal *2* and *CAR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L2_CAR))
+  - assembler include :: BC_PUSH_L2_CAR
+  *PUSH* *L*​ocal *2* and *CAR*
+- [[file:vm-interpreter.rkt::838][PUSH_L1_CAR]] :: $a2  *PUSH* *L*​ocal *1* and *CAR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L1_CAR))
+  - assembler include :: BC_PUSH_L1_CAR
+  *PUSH* *L*​ocal *1* and *CAR*
+- [[file:vm-interpreter.rkt::836][PUSH_L0_CAR]] :: $a0  *PUSH* *L*​ocal *0* and *CAR*
+  - racket require :: (require (only-in "vm-interpreter.rkt" PUSH_L0_CAR))
+  - assembler include :: BC_PUSH_L0_CAR
+  *PUSH* *L*​ocal *0* and *CAR*
+*** misc
+planned
+-
+existing
+- [[file:vm-interpreter.rkt::3189][NATIVE]] :: $4a  following bytes are native 6510 commands, JSR RETURN_TO_BC ends this sequence
+  - racket require :: (require (only-in "vm-interpreter.rkt" NATIVE))
+  - assembler include :: BC_NATIVE
+  following bytes are native 6510 commands, JSR RETURN_TO_BC ends this sequence
+  len: 1
+- [[file:vm-interpreter.rkt::2585][EXT]] :: $04  extension byte code, the next byte is the actual command (decoded from the extended byte code jump table)
+  - racket require :: (require (only-in "vm-interpreter.rkt" EXT))
+  - assembler include :: BC_EXT
+  extension byte code, the next byte is the actual command (decoded from the extended byte code jump table)
+- [[file:vm-interpreter.rkt::795][BREAK]] :: $02  collision with 6510 BRK code
+  - racket require :: (require (only-in "vm-interpreter.rkt" BREAK))
+  - assembler include :: BC_BREAK
+  collision with 6510 BRK code
+*** flow
+planned
+- DEC_RAI_NZ_P_BRA
+- DEC_RCI_NZ_P_BRA
+existing
+- [[file:vm-interpreter.rkt::3445][DEC_RBI_NZ_P_BRA]] :: $54  *DEC*​rement *RBI* and *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" DEC_RBI_NZ_P_BRA))
+  - assembler include :: BC_DEC_RBI_NZ_P_BRA
+  *DEC*​rement *RBI* and *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+  len: 2
+- [[file:vm-interpreter.rkt::3421][NZ_P_BRA]] :: $1d  *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_BRA))
+  - assembler include :: BC_NZ_P_BRA
+  *N*​ot *Z*​ero *P*​redicate *BRA*​nch
+  on branch, it does no pop
+  on fall through, it removes the 0 from the stack
+  len: 2
+- [[file:vm-interpreter.rkt::3400][Z_P_BRA]] :: $1b  *Z*​ero *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_BRA))
+  - assembler include :: BC_Z_P_BRA
+  *Z*​ero *P*​redicate *BRA*​nch
+  len: 2
+- [[file:vm-interpreter.rkt::2170][T_P_BRA]] :: $0c  *T*​rue *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" T_P_BRA))
+  - assembler include :: BC_T_P_BRA
+  *T*​rue *P*​redicate *BRA*​nch
+  len: 2
+- [[file:vm-interpreter.rkt::2037][F_P_BRA]] :: $0d  *F*​alse *P*​redicate *BRA*​nch
+  - racket require :: (require (only-in "vm-interpreter.rkt" F_P_BRA))
+  - assembler include :: BC_F_P_BRA
+  *F*​alse *P*​redicate *BRA*​nch
+  len: 1
+- [[file:vm-interpreter.rkt::1880][GOTO]] :: $32  goto relative by byte following in code
+  - racket require :: (require (only-in "vm-interpreter.rkt" GOTO))
+  - assembler include :: BC_GOTO
+  goto relative by byte following in code
+  len: 2
+  op = relative offset
+- [[file:vm-interpreter.rkt::509][CALL]] :: $34  stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+  - racket require :: (require (only-in "vm-interpreter.rkt" CALL))
+  - assembler include :: BC_CALL
+  stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
+- [[file:vm-interpreter.rkt::393][TAIL_CALL]] :: $35  stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
+  - racket require :: (require (only-in "vm-interpreter.rkt" TAIL_CALL))
+  - assembler include :: BC_TAIL_CALL
+  stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
+*** floats
+planned
+- FINT :: convert to integer (cut off digits, max if >, min if <)
+- FADD
+- FSUB
+- FMUL
+- FDIV
+- FSQRT
+- FPOW
+- FLOG
+- FEXP
+- FSIN
+- FCOS
+- FTAN
+- FASIN
+- FACOS
+- FATAN
+*** return
+- [[file:vm-interpreter.rkt::3320][NZ_P_RET_POP_3]] :: $c6  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 3 values from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_RET_POP_3))
+  - assembler include :: BC_NZ_P_RET_POP_3
+  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 3 values from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3317][NZ_P_RET_POP_2]] :: $c4  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 2 values from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_RET_POP_2))
+  - assembler include :: BC_NZ_P_RET_POP_2
+  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 2 values from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3314][NZ_P_RET_POP_1]] :: $c2  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 1 value from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_RET_POP_1))
+  - assembler include :: BC_NZ_P_RET_POP_1
+  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 1 value from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3311][NZ_P_RET_POP_0]] :: $c0  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return without popping anything
+  - racket require :: (require (only-in "vm-interpreter.rkt" NZ_P_RET_POP_0))
+  - assembler include :: BC_NZ_P_RET_POP_0
+  *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return without popping anything
+  len: 1
+- [[file:vm-interpreter.rkt::3308][Z_P_RET_POP_3]] :: $c7  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 3 values from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_RET_POP_3))
+  - assembler include :: BC_Z_P_RET_POP_3
+  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 3 values from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3305][Z_P_RET_POP_2]] :: $c5  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 2 values from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_RET_POP_2))
+  - assembler include :: BC_Z_P_RET_POP_2
+  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 2 values from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3302][Z_P_RET_POP_1]] :: $c3  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 1 value from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_RET_POP_1))
+  - assembler include :: BC_Z_P_RET_POP_1
+  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 1 value from evlstk
+  len: 1
+- [[file:vm-interpreter.rkt::3299][Z_P_RET_POP_0]] :: $c1  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return without popping anything
+  - racket require :: (require (only-in "vm-interpreter.rkt" Z_P_RET_POP_0))
+  - assembler include :: BC_Z_P_RET_POP_0
+  *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return without popping anything
+  len: 1
+- [[file:vm-interpreter.rkt::1861][T_P_RET]] :: $0b  *T*​rue *P*​redicate *RET*​urn
+  - racket require :: (require (only-in "vm-interpreter.rkt" T_P_RET))
+  - assembler include :: BC_T_P_RET
+  *T*​rue *P*​redicate *RET*​urn
+  len: 1
+- [[file:vm-interpreter.rkt::1844][F_P_RET]] :: $0e  *F*​alse *P*​redicate *RET*​urn
+  - racket require :: (require (only-in "vm-interpreter.rkt" F_P_RET))
+  - assembler include :: BC_F_P_RET
+  *F*​alse *P*​redicate *RET*​urn
+- [[file:vm-interpreter.rkt::1827][F_P_RET_F]] :: $13  *F*​alse *P*​redicate *RET*​urn *F*​alse
+  - racket require :: (require (only-in "vm-interpreter.rkt" F_P_RET_F))
+  - assembler include :: BC_F_P_RET_F
+  *F*​alse *P*​redicate *RET*​urn *F*​alse
+- [[file:vm-interpreter.rkt::752][RET]] :: $33  stack [cell paramN, ... cell param1, cell param0] -> []
+  - racket require :: (require (only-in "vm-interpreter.rkt" RET))
+  - assembler include :: BC_RET
+  stack [cell paramN, ... cell param1, cell param0] -> []
+- [[file:vm-interpreter.rkt::261][NIL_P_RET_L0_POP_4]] :: $9e  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *4* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P_RET_L0_POP_4))
+  - assembler include :: BC_NIL_P_RET_L0_POP_4
+  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *4* from evlstk
+- [[file:vm-interpreter.rkt::259][NIL_P_RET_L0_POP_3]] :: $9c  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *3* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P_RET_L0_POP_3))
+  - assembler include :: BC_NIL_P_RET_L0_POP_3
+  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *3* from evlstk
+- [[file:vm-interpreter.rkt::257][NIL_P_RET_L0_POP_2]] :: $9a  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *2* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P_RET_L0_POP_2))
+  - assembler include :: BC_NIL_P_RET_L0_POP_2
+  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *2* from evlstk
+- [[file:vm-interpreter.rkt::255][NIL_P_RET_L0_POP_1]] :: $98  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *1* from evlstk
+  - racket require :: (require (only-in "vm-interpreter.rkt" NIL_P_RET_L0_POP_1))
+  - assembler include :: BC_NIL_P_RET_L0_POP_1
+  *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *1* from evlstk
+
+** byte code map
+
+|  low |            |             |             |             |              |              |              |           |               |              |                |              |                |              |                |          |
+| high | 00         | 01          | 02          | 03          | 04           | 05           | 06           | 07        | 08            | 09           | 0a             | 0b           | 0c             | 0d           | 0e             | 0f       |
+|------+------------+-------------+-------------+-------------+--------------+--------------+--------------+-----------+---------------+--------------+----------------+--------------+----------------+--------------+----------------+----------|
+|   00 | -          | BNOP        | BREAK       | SWAP        | EXT          |              | PUSH_I        | INT_P      | -             | PUSH_NIL      | CONS_PAIR_P      | T_P_RET        | T_P_BRA          | F_P_BRA        | F_P_RET          | DUP      |
+|   10 | -          | POP         | CELL_EQ_P     | F_P_RET_F      | ALLOC_A       | PUSH_AF       | POP_TO_AF      | PUSH_B     | -             |              |                |              |                |              |                |          |
+|   20 | -          | NIL_P        | I_Z_P         | (BZ_P)       | (PUSH_L)      | (POP_TO_L)     | (PUSH_AL)     |           | -             |              |                | (I_Z_P_RET)     | (I_Z_P_BRA)       | (B0_P_BRA)     | (B0_P_RET)       |          |
+|   30 | -          |             | GOTO        | RET         | CALL         | TAIL_CALL     |              |           | -             | (INC_RAI)     | (INC_RBI)       | (INC_RCI)     | (ADD_RAI)       | (ADD_RBI)     | (ADD_RCI)       | (DEC_RAI) |
+|   40 | -          | CDR         | CONS        | CAR         | COONS        |              |              |           | -             | BINC_RAI      | NATIVE         | POP_TO_RA      | ALLOC_ARA       | PUSH_RA_AF     | POP_TO_RA_AF      | POP_TO_RAI |
+|   50 | -          | (PUSH_AF_RAI) | (PUSH_AF_RBI) | (PUSH_AF_RCI) | (WRITE_AF_RAI) | (WRITE_AF_RBI) | (WRITE_AF_RCI) |           | -             | (POP_TO_AF_RAI) | (WRITE_TO_AF_RAI) | (POP_TO_AF_RBI) | (WRITE_TO_AF_RBI) | (POP_TO_AF_RCI) | (WRITE_TO_AF_RCI) | (DEC_RCI) |
+|   60 | -          | ISUB        | IADD        | I_GT_P        | (IMUL)       | (IDIV)       | (IMOD)       | (I_LE_P)    | -             | (BSUB)       | (BADD)         | (B_GT_P)       | (BMUL)         | (BDIV)       | (BMOD)         | (B_LE_P)   |
+|   70 | -          | (I_GE_P)      | (I_LT_P)      | (B_GE_P)      | (B_LT_P)       |              |              |           | -             |              |                |              |                |              |                |          |
+|------+------------+-------------+-------------+-------------+--------------+--------------+--------------+-----------+---------------+--------------+----------------+--------------+----------------+--------------+----------------+----------|
+|   80 | PUSH_L0     | WRITE_L0     | PUSH_L1      | WRITE_L1     | PUSH_L2       | WRITE_L2      | PUSH_L3       | WRITE_L3   |               |              |                |              |                |              |                |          |
+|   90 | POP_TO_L0    | WRITE_TO_L0   | POP_TO_L1     | WRITE_TO_L1   | POP_TO_L2      | WRITE_TO_L2    | POP_TO_L3      | WRITE_TO_L3 | NIL_P_RET_L0_POP_1 |              | NIL_P_RET_L0_POP_2  |              | NIL_P_RET_L0_POP_3  |              | NIL_P_RET_L0_POP_4  |          |
+|   a0 | PUSH_L0_CAR  | PUSH_L0_CDR   | PUSH_L1_CAR   | PUSH_L1_CDR   | PUSH_L2_CAR    | PUSH_L2_CDR    | PUSH_L3_CAR    | PUSH_L3_CDR | CAAR          |              | CADR           |              | CDAR           |              | CDDR           |          |
+|   b0 | GET_AF_0     | SET_AF_0      | GET_AF_1      | SET_AF_1      | GET_AF_2       | SET_AF_2       | GET_AF_3       | SET_AF_3    | PUSH_I0        | PUSH_I1       | PUSH_I2         | PUSH_IM1      |                |              |                |          |
+|   c0 | NZ_P_RET_POP_0 | Z_P_RET_POP_0   | NZ_P_RET_POP_1  | Z_P_RET_POP_1   | NZ_P_RET_POP_2   | Z_P_RET_POP_2    | NZ_P_RET_POP_3   | Z_P_RET_POP_3 |               |              |                |              |                |              |                |          |
+|   d0 |            |             |             |             |              |              |              |           |               |              |                |              |                |              |                |          |
+|   e0 |            |             |             |             |              |              |              |           |               |              |                |              |                |              |                |          |
+|   f0 |            |             |             |             |              |              |              |           |               |              |                |              |                |              |                |          |
+
+extended commands commands seldomly used and long running)
+
+| low  |    |      |      |       |        |        |        |    |    |    |    |    |    |    |    |    |
+| high | 00 |   01 |   02 |    03 |     04 |     05 |     06 | 07 | 08 | 09 | 0a | 0b | 0c | 0d | 0e | 0f |
+|------+----+------+------+-------+--------+--------+--------+----+----+----+----+----+----+----+----+----|
+| 00   |  - | IMAX | IINC | GC_FL | (IMIN) | (BMAX) | (BMIN) |    |    |    |    |    |    |    |    |    |
+
+encoding:
+- command word
+  - PUSH :: push
+  - WRITE :: write
+  - CALL :: call
+
+- postfix
+  - _P :: compare/check predicate
+
+- operand
+  - Lx :: local number x
+
+- type
+  - B :: byte
+  - I :: int
+  - A :: array
+  - AF :: array-field
+
+- constants
+  - F :: false
+  - T :: true
+  - m1 :: minus 1
+  - nil :: nil
+
+- comparators
+  - EQ :: equal
+  - LE :: less or equal
+  - GE :: greater or equal
+  - LT :: less than
+  - GT :: greater than
+
+- qunators
+  - MAX :: maximum
+  - MIN :: minimum
+
+** moldable byte code definition
+- definition
+  - byte code command
+    name, bytecode, routinedefinition, disassembly, size (incl. operands), debugger routine
+    - example NOP
+      BC_NOP = (list of commands)
+      NOP = #x01
+      #x01 -> "NOP"
+      size = 01
+    - example INT-
+      BC_ISUB = (list of commands)
+      INT_MINUS = #x61
+      #x61 -> "INT ~a - ~a" TOS TOSm1
+      size = 01
+    - example PUSH_B
+      BC_PUSH_B = (list of commands)
+      PUSH_B = #x05
+      #x05 -> "PUSH BYTE ~a" (peek-byte PC+1)
+      size = 02
+  - enc. byte code command
+    name, bytecode, routinedefinition, disassembly, size (incl. operands)
+    - example PUSH_LX, WRITE_LX
+      BC_PUSH_O_WRITE_LX = (list of commands)
+      PUSH_O_WRITE_LX - #x80..#x87
+      PUSH_L0=#x80, PUSH_L1= #x82, PUSH_L2=#x84, PUSH_L3=#x86
+      WRITE_L0=#x81, WRITE_L1= #x83, WRITE_L2=#x85, WRITE_L3=#x87
+      #x80..#x87 -> (see above)
+      size 01
+  - extended byte code command
+    name, bytecode, routinedefinition, disassembly, size (incl. operands), debugger routine
+    - example GC
+      BC_GC = (list of commands)
+      GC = #x04 #x03
+      #x04 #x03 -> "GC"
+      size = 02
+- spread information into
+  - VM_INTERPRETER_OPTABLE (byte code and enc. byte code references)
+  - define command with byte value
+  - define condition for disassembler :: define function to print (parameters are bc, bc_p1, bc_p2, labels
+  - define condition for size calculation
+
+* planned
+** more elaborate data structures
+- OPTIONAL tree for ordered traversal/find (each node needs data to decide <=, >)
+  useful for set implementation, sorted/ordered dynamic growing/shrinking data structure.
+  useful for implementation of editor metadata for each line (with int = linenumber, value=line-string), but maybe n-ary tree is better suited
+  useful for implementation and validation reference counting algorithm for byte code commands, stack, locals, register and heap usage!
+  could be implemented as persistent data structure (rewriting parents to the root on changes)
+  first implementation with overwriting through addition byte codes set-car, set-cdr operations (gc-ing overwritten pointers)
+      invariant: all values of left-subtree ov level-a node A are < value of the level-a node!
+                 level-a nodes do not hold value payloads (only compare values/hashes)
+                 level-b nodes hold references to level-a nodes or values!
+                 level-b nodes must hold either a value or a ref in car position (never NIL), cdr may be NIL (or a value or reference).
+      there are level a and level b nodes. level a nodes are for holding values in car position,
+      level b nodes are the actual binary tree structure
+      level a nodes have the (actual) sub tree (level b) in cdr and the max left subtree value in car position
+        binary tree:   o        ---- level_0
+                      /
+                     1
+        maps to: (l_0a c1 . (l_0b 1 . NIL))
+        (these binary trees do not always map to lists, since they may hold values in cdr position)
+       binary tree:   o        ---- level_0
+                      / \
+                     1   2      ---- level_1
+        maps to: (l_0a c1 . (l_0b 1 . 2))
+
+        binary tree:     o      ---- level_0
+                        / \
+                       o   3    ---- level_1
+                      / \
+                     1   2      ---- level_2
+        maps to: (l_0a c2 . (l_0b (l_1a c2 . (l_1b 1. 2)) . 3))
+       binary tree:   o        ---- level_0
+                      / \
+                     o   o      ---- level_1
+                    /|   |\
+                   1 2   o 5    ---- level_2
+                        / \
+                       3   4    ---- Level_3
+        maps to: (l_0a c2 . (l_0b (l_1a c2 . (l_1b 1 . 2)) (l_1a c4 . (l_1b (l_2a c4 . (l_2b 3 . 4)) . 5))))
+  - tree construction/update
+    - (make-la level-b-sub-tree) => (cValue . B-SubTree)
+      get max value of left subtree of the given b-sub-tree as cValue
+    - (add level-a-root value)
+      traverse tree to find right spot where to add the new value
+    - (remove level-a-root value)
+      travers tree to find value and remove it from the tree
+     travers to node with value, returning keeping tree trail to it
+      (fn (tree-trail-to la-node val (trail '()))
+        (cond [(<= val (car node)) ;; search left sub tree
+               (tree-left-trail-to (cdr node) value (cons node trail))]
+              [else
+               (tree-right-trail-to (cdr node) value (cons node trail))]))
+      (fn (tree-left-trail-to lb-node value trail)
+        (def new-trail (cons lb-node trail))
+        (cond [(and (atomic-value? (car lb-node))
+                      (= (car lb-node) value))
+                 new-trail]
+                [else (tree-trail-to (car lb-node) value new-trail)]))
+      (fn (tree-right-trail-to lb-node value trail)
+        (def new-trail (cons lb-node trail))
+        (cond [(and (atomic-value? (cdr lb-node))
+                    (= (cdr lb-node) value))
+               new-trail]
+              [else (tree-trail-to (cdr lb-node) value new-trail)]))
+     to make it tail recursive, move code from tree-left/right-... to tree-trail!
+  - tree traversal
+- b-tree (persistent) <- keep somewhat balanced? balancing tree will enlarge undo/redo buffer usage!
+  - eval b-tree compared to n-ary tree for source code (line) meta data (or multiple lines on one leaf?)
+  - avl tree ? (https://en.wikipedia.org/wiki/AVL_tree)
+  - read-black tree maybe, to keep it somewhat balanced ?
+    how to keep the color on a car/cdr node? (could be kept in the reference count byte e.g. bit 7)
+    tree may contain pointer to other tree nodes (cons pairs) or native arrays (leading spaces, total len, character data). no payload bit is free.
+    red,black nodes may be used from different page sets. => there is a function to determine whether a cons pair comes from a "red" (or a "black") page => changing color = moving cons cell to other page?
+- n-ary tree (non-persistent)
+- n-ary tree (of editor strings)
+  node: car = (ptr = level-down | value)
+        cdr = ptr to sibling | NIL <- n-arry tree allows for n siblings (same level)
+  - (make-node val) -> node
+      creates a list: (list val)
+  - (add-sibling node val) -> node
+      extends list (node) by inserting (list val) as last element of the list <- cannot be put at the head, because tree structure would be lost
+  - (first-child node) -> node
+      is car (with result being a ptr, otherwise it has no children!)
+  - (next-sibling node) -> node
+      is cdr
+  - (data node) -> val
+      is car (with result being no ptr, otherwise it would have children!)
+  - necessary lisp functions: car, cdr, cons, append <- append can be simplified in case of binary trees!
+      (def (append (a list) (b list) list)
+           (reverse (reverse a) b))
+** keep meta information (related to debugging)
+- source code location
+- default values
+- types
+- name -> index
+** implement text editor (mostly) in mil
+  Data structures for a text editor:
+
+  gap buffer:
+  - keep text two separate portions of memory, copying between them.
+  - cursor is at the end of the left buffer, inserting = adding to first buffer
+  - second buffer is the text behind the cursor
+  - moving cursor = copying first buffer <-> second buffer (can be delayed until insertion is done)
+
+  - gap buffer implementation using a list of pages before cursor, list of pages after cursor
+    (head of gap_pre_buffers is page with cursor) lines + text before cursor
+    (head of gap_post_buffers is page right after cursor) <- text + lines after cursor
+
+  - IDEA: no gap buffer, use screen data only, storing lines into memory when scrolling out of visibility?
+          => there cannot be invisible data (scrolled out left and right)? => need for line break
+             alternative: left|right invisible chars need to be saved/rendered efficiently <- is this really possible / not overly complex?
+          ADVANTAGE: no dual changes (memory model + render)
+          PROBLEM: undo/redo?
+
+  - IDEA: gap buffer modification
+          put current edit line (when actually editing, not if moving)
+              into one extra page (text before cursor at start of page, text behind cursor, end of page),
+              text is plain, without any encoding (like leading spaces or length data)
+              cursor = ptr in page, typing = inserting text at cursor position
+                                    erasing = deleting text before cursor position
+              [<text before cursor>| ........  <text behind cursor>]
+                                   /\        /\
+                  pointer to cursor            pointer to text behind cursor
+          once editing a line is done, it is copied into the regular text buffers
+          format: [len][#leading-spaces]characters[len][0],
+                  with len = total length of this line (including leading spaces) [stored two times, to do fast scanning|moving
+                       #leading-spaces = number of spaces before first char starts
+                       characters = actual text
+                       0 = zero, marking end of line (for scanning)
+                  lines are always kept completely on one page!
+
+  - IDEA: keep current line# up to date <- needs to be updated with insertions / deletions
+  - IDEA: keep line anchors (limited number of pointers to strings with their line number) <- need to be updated once lines are inserted (or invalidated)
+  - IDEA: keep line anchors for all visible lines
+
+    fast implementation:
+    - render-line 'a starting from column 'b [to column 'c] at visual line 'd (two variants: 1. for currently edited line, 2. regular encoded text line)
+    - scroll up/down 'n lines
+    - scroll left/right 'n columns
+
+    - insert/delete char
+    - insert/delete line
+    - insert/delete block
+    - undo/redo (keep modifications + undo data)
+
+  - multiple cursors (are not supported for fast operation)
+
+  - IDEA: use mil data structures to implement the above
+          => native array for currently edited line <- indexed access + copy left<->right from cursor
+             tree of strings for current buffer text
+             path to current line (for moving cursor line-wise through the text) = search previous/next leaf based on current node-path
+             (e.g. line of a buffer = cell-pair (car = int, leading spaces + strlen, cdr = pointer to native string/array))
+             buffer = n-ary tree of lines <- binary tree has advantage of using car/cdr pair only <- start out with this
+             (rebalance tree once in a while)
+             undo/redo = persistent tree data structure?, undo/redo organized in n-ary tree itself.
+             <- when to discard? (running low on memory, discard most distant (tree distance) nodes)
+                siblings are ordered last touched first
+** IMPLEMENT debugging
+- [X] level 0: debug 6510 code
+- [X] level 1: debug vm code (byte code), trace, inspect, step-debugger, memory inspector
+- [ ] level 2: debug mil, function/expression entry, inspect parameters, locals, etc, call stack, memory inspector
+** implement vm in mil
+- precondition: all language features are implemented, debugging should be possible
+- information gained: optimize execution speed + bytecode size + heap usage + c64 implementability
+** memory management
+- basic idea: don't do ref counting within a function
+  - do reference counting only upon returning from a function
+  - try to allocate/discard locally
+- idea: memory pages
+  each page is used to allocate a certain type
+  - [X] list page (car/cdr cell-pairs)
+  - [X] array<> page (uniform type arrays)
+  - [X] structure page (page storing structures)
+  - dynamicArray<> page (arrays of polymorphic types)
+  - hashmap page (table for hashmaps)
+  - float page (page for float numbers)
+  - byte-code page
+  - native-code page
+- sketch a memory usage upon function enter / leave (and during execution) to find a way to achieve this goal
+- atomic values (char, byte, int) are copied (to-from locals) without reference counting, except when used to create a list?
+- lists and arrays/strings are allocated on the heap and need to ref-count the cells
+- describe each instruction more closely to check how we can avoid reference counting
+- maybe start with explicit memory management (alloc, free)
+* memory manager
+** open tasks
+*** IMPLEMENT implement RP as (secondary) register for cell pairs
+- OBSOLETE: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
+  not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
+*** TODO split vm-interpreter in groups of interpreted bc commands
+*** TODO implement RP usage as TOS-1 register on demand
++ do this for operations in need of 2+ operands (which then discard the operands and just leave the result on the stack)
++ implement INT*, INT+, INT-, INT/ with this mechanism
++ e.g. POP_TOSM1_TO_RP, WRITE_TOSM1_TO_RP?, or WRITE_LOCAL_N_TO_RP
++ then execute binary operation and discard RP (and ensure that reference counting for RP can be ignored)
+=> if both operands are on the stack, then POP_TOSM1_TO_RP before executing the operation
+   if one operand is on the stack, the other can be written directly to RP
+   if the result keeps references to cells referenced through RP, it might be necessary to inc-refcnt them <- who does that
+- identify all binary operations that may benefit from this mechanism
+  operand operation operand -> result : most benefit if operands and result don't need refcnt'ing
+  - mult, add, sub, div, mod, shift-right, shift-left, ... (byte/int)
+*** TODO unify function naming (mostly done)           -> clean code
+*** TODO ensure test coverage                          -> ensure functionality over changes
+- define use cases
+- is there a way to automate test-coverage stats (e.g. branch coverage, command coverage)?
+  - generate list of addresses (for line coverage) + indicator executed
+  - generate list of addresses w/ branches + indicator taken/not-taken
+- define tests
+  - all tests must have a text describing the test
+  - all tests should be resilient to memory location changes of registers etc.
+- use most recent test utils
+*** TODO check: do pointers on cells exist that are on the locals/eval-stack?
+- currently the answer is *NO*, does that restrict the programming model?
+*** TODO tweak configuration parameters                -> increase speed/reduce memory consumption
+use profiling data
+** current (en)coding
+*** naming
+- files
+  - vm- ...  :: implementation for the virtual byte code maching
+  - bc- ...  :: implementation using (only) byte code
+- functions
+  - BC_...     :: implement code for a single byte code command, must be refcnt'd correctly
+  - VM_...     :: implement code for virtual byte code machine, does no refcnt-ing
+  - ...REFCNTD :: implements refcounting (even if prefixed otherwise)
+  description
+    input:  A/X/Y (register) description
+    usage:  A/X/Y (register) modifications
+            ZP_... memory/register modifications
+            VM_... memory/register modifications
+    output: A/X/Y (register) description
+            ZP_... memory/register modifications
+            VM_... memory/register modifications
+    funcs:  list of sub routines / functions used
+
+- other
+  - ZP_...     :: located on the zero page (6510)
+  - ...__      :: local labels (usually replaced through usage of ~add-label-suffix~ function), not available from outside this function!
+*** concepts
+- cell                      :: 16 bit value (finest granular memory managed block)
+- atomic cell               :: a cell that has no followup value and is complete in itself (currently int-cell, byte-cell, cell-ptr, cell-pair-ptr)
+- cell-ptr                  :: an atomic cell, lowest bit of low byte is set, points to a cell (of any type)
+                               lowbyte: #bxxxx xxx0
+                               highbyte = page
+                               functions that allocated/free a cell in a register, are always considered cell-ptr (in the register)
+- cell-pair                 :: a pair of two cells, cell0 and cell1 (in memory: 00 lowbyte-cell0, 01 highbyte-cell0, 02 lowbyte-cell1, 03 highbyte-cell1),
+                               each cell can be of any atomic cell
+- cell-pair-ptr             :: an atomic cell, second lowest bit is set, lowest bit is unset, points to a cell-pair
+                               lowbyte: #bxxxx xx01
+                               highbyte = page
+                               functions that allocated/free a cell-pair in a register, are always considered cell-pair-ptr (in the register)
+- int-cell                  :: an atomic cell having 13 bit as payload
+                               lowbyte mask: #b0xxx xx11, xxxxx = high bits of int
+                               highbyte = lowbyte of int
+- byte-cell (char|bool)     :: an atomic cell having one byte as payload
+                               lowbyte mask: #b1111 1111
+                               highbyte = payload
+- complex cell              :: a cell that functions as header for followup values (follows directly in memory)
+                               complex cells cannot be pushed on the stack, they can only be pointed to by cell-ptr!
+- (cell-structure-header    :: a complex cell that defines a structure)
+- cell-array-header         :: a complex cell that defines an array, defining the number of cells in the second byte
+                               a structure is an array of cells
+                               lowbyte mask: #b1000 0011
+                               highbyte: #of cells in this array
+                               n*2 bytes with cells <- each cell needs to be gc'ed separately
+- cell-native-array-header  :: a complex cell that defines an array of bytes
+                               a string is an native array of bytes
+                               lowbyte mask: #b1000 0111
+                               highbyte: #of bytes in this array
+                               n bytes with byte payloads <- no gc of this necessary (holds plain values, no pointers, no cells)
+- (cell-float-header        :: a complex cell that defines a float)
+- page                      :: 256 byte memory managed unit, holding slots
+- slot                      :: a fixed size portion of memory on a page (sizes are 2=cell, 4=cell=pair, 8 ...), only one size per page is allowed
+- ref count                 :: byte counting how many pointers to this value exist, there can be pointer to pointers
+- cell-stack aka eval-stack :: stack of cells. ZP_​CELL_​STACK_​TOS holds the index (on current page), ZP_​CELL_​STACK_​LB_​PTR, ZP_​CELL_​STACK_​HB_​PTR holds the pointer to the low/high byte
+                               [RT]         RT is the top of the stack (even though not on the stack memory wise)
+                               [cell n lb] [cell n hb]
+                                       ...
+                               [cell 1 lb] [cell 1 hb]
+                               [cell 0 lb] [cell 0 hb]
+                               ZP_​CELL_​STACK_​TOS points to the current element below RT (cell n)
+- m1 page px       :: page for slots with ref count at -1 position, with profile x (0..3) <- defines size and payload start offset
+- call-frame page  :: page for call-frames (stack organized, no ref counting etc.)
+- cell-pairs page  :: page for cell-pairs, (lowbyte) lsr x 2 to get ref count position
+- cell page        :: page for cells, (lowbyte) lsr x 1 to get ref count position (last cell unusable)
+- [s8 page          :: page for slots of size <=8, (lowbyte) lsr x 3 to get ref count position] optional
+- fid->loc page    :: page that maps a function id to a location of first byte code
+- code page        :: page holding byte code (and function meta data, module meta data?)
+- constants page   :: page holding constants (not ref counted)
+- page block       :: a number of consecutive pages allocated/freed as a block, allowing for larger memory objects (having less wasted bytes (e.g. for call-frames)?)
+- cell-stack page  :: a pair of pages, actually, that hold low and high byte of a cell. it is stack organized.
+*** parameters
+- are passed as regular stack values
+- need to be copied to locals if multiple access is necessary and /dup/ does not suffice
+*** pages
+#+begin_src dot :file memory-page-state.gen.png
+  digraph finite_state_machine {
+      node [shape=point]ENTRY; //,EXIT
+      node [shape=ellipse];
+
+      ENTRY->free;
+      ENTRY->blocked;
+      free -> allocated[label="ALLOC_PAGE__PAGE_UNINIT"]
+      allocated -> initialized
+      free -> initialized[label="ALLOC_PAGE_FOR..."];
+      initialized -> used;
+      used -> full[label="alloc slot"];
+      free -> used[label="alloc slot"];
+      used -> used[label="free slot"];
+      full -> used[label="free slot"];
+  }
+#+end_src
+
+#+RESULTS:
+[[file:memory-page-state.gen.png]]
+- free :: VM​_PAGE​_SLOT​_DATA holds at page idx $ff, indicating that this page is free
+- blocked :: VM​_PAGE​_SLOT​_DATA holds at page idx $01, indicating that this page is unavailable
+- allocated :: VM​_PAGE​_SLOT​_DATA holds at page idx $00, this status is temporary
+- initialized :: VM​_PAGE​_SLOT​_DATA holds at page idx $02..$fe, this status is temporary
+- used :: page is in use, VM​_PAGE​_SLOT​_DATA holds at page idx $02..$fe = next free slot, a page in use may still hold 0 slots
+- full :: page is in use, there are no free slots, VM​_PAGE​_SLOT​_DATA holds at page idx $00
+**** page usage
+pages can be allocated and freed
+the status of the 256 pages is held in VM​_PAGE​_SLOT​_DATA + pageidx (at cf00):
+content of this memory location is interpreted as
+00: allocated but not initialized
+01: unavailable
+x : used, holding first free slot of this page (for some kind of pages)
+ff: free
+**** evaluation stack
+- holds parameters
+- holds current values to be evaluated
+- real tos is held in zero page ZP_​RT
+- all but tos is held on cell-stack page
+- push V is then
+  - push RT onto cell-stack page (if RT not empty)
+  - write V into RT
+- pop is then
+  - write tos from cell-stack page into RT (if not empty)
+  - or clear RT (if cell-stack page is empty)
+**** page types
+1xxx xxxx = (cell page) page with cells (slots of byte 2), xxxxxx = number of used cells 0..127 (actually only 85 possible)
+01yy yyyy = (cell-pairs page) page with cell-pairs (slots of byte 4) yyyyy = number of cells used 0..63 (actually only 51 possible)
+[001z zzzz = (s8 page) page with slots of (max) size 8 byte, zzzz = number of slots used 0..31 (actually only possible)]
+0001 0000 = (m1 page p0) page with buckets type 0 (byte at offset 02: holds the number of used slots)
+0001 0001 = (m1 page p1) page with buckets type 1 (byte at offset 02: holds the number of used slots)
+0001 0010 = (m1 page p2) page with buckets type 2 (byte at offset 02: holds the number of used slots)
+0001 0011 = (m1 page p3) page with buckets type 3 (byte at offset 02: holds the number of used slots)
+0001 0100 = (m1 page p4) page with buckets type 4 (byte at offset 02: holds the number of used slots)
+0001 0101 = reserved
+0001 0110 = reserved
+0001 0111 = reserved
+0001 1000 = (call-frame page) (stack organized, full+free detection already implemented)
+0001 1001 = (fid->loc page) page with 16 bit values (starting at $02), filled without gaps, next slot = offset to free, no ref counting
+0001 1010 = (code page) page with byte code and function meta data <- filled without gaps, next slot = offset to free, no ref counting
+0001 1011 = cell stack page (come in pairs for low and high byte)
+0001 1100 = reserved
+0001 1101 = reserved
+0001 1110 = reserved
+0001 1111 = reserved
+
+- detection for cell pages (1bbb bbbb)
+  #+begin_src asm
+    ;; after load
+    BMI IS_CELL_PAGE
+
+    ;;
+    AND #$80
+    CMP #$80
+    BEQ IS_CELL_PAGE
+  #+end_src
+- detection for cell-pair page (01bb bbbb)
+  #+begin_src asm
+    AND #$c0
+    CMP #$40
+    BEQ IS_CELL_PAIR_PAGE
+  #+end_src
+- detection for m1 pages (0001 0bbb)
+  #+begin_src asm
+    AND #$f8
+    CMP #$10
+    BEQ IS_M1_PAGE_HEADER
+  #+end_src
+- detect special page
+  #+begin_src asm
+    AND #$f8
+    CMP #$18
+    BEQ IS_SPECIAL_PAGE
+  #+end_src
+**** general page layout
+$00 = page type
+$01 = (code page, m1 page px, call-frame page, cell stack page) previous page (of same type)
+      (cell-pairs and cell page) payload
+$02 = (m1 page px, s8 page) number of used slots
+      (call-frame page) top mark (if full)
+      (cell-pairs and cell page) payload
+$ff = (cell-pairs and cell page) previous page
+      (others) payload
+**** cell page layout
+offset  content
+---------------------
+00      #b1zzz zzzz page type + number of used slots
+01      ref-count for cell at 02 (cell 0)
+02..03  cell 0
+04      ref-count for cell at 08 (cell 1)
+..07    ref-count for cell at 08 (cell 4)
+08..09  cell 1
+...
+0e..0f  cell 4
+10      ref-count for cell at 20 (cell 5)
+.. 1f   ref-count for cell at 20 (cell 20)
+20..21  cell 5
+...
+3e..3f  cell 20
+40..7e  ref-count for cell at 80..fc (cell 21..83)
+7f      unused
+80..fd  cell 21..83
+fe      unused
+ff      previous page of this type
+**** cell allocation/free
+#+begin_src dot :file cell-page-state.gen.png
+  digraph finite_state_machine {
+      node [shape=point]ENTRY; //,EXIT
+      node [shape=ellipse];
+
+      ENTRY->free;
+      free -> used[label="ALLOC_CELL_PTR_TO_RT"]
+      used -> enqueued[label="FREE_CELL_PTR_IN_RT"]
+      enqueued -> used[label="ALLOC_CELL_PTR_TO_RT"]
+
+      labelloc="t";
+      label="cell state";
+  }
+#+end_src
+
+#+RESULTS:
+[[file:cell-page-state.gen.png]]
+- free :: cell is not counted as used on page
+          points to the next free cell on this page (low byte), 0 = no next free
+          it is reachable through the first free cell on this page (VM​_PAGE​_SLOT​_DATA)
+          refcount of this cell is 0 (no one keeps a reference to this cell)
+- used :: cell is counted as used on the page
+          it is NOT reachable through the first free cell on this page (VM​_PAGE​_SLOT​_DATA)
+          it is NOT reachable through the list of free cells VM​_LIST​_OF​_FREE​_CELLS
+          refcount of this cell is >0 (at least on reference to this cell exists)
+- enqueued :: cell is enqueued in list of free cells
+              it is NOT reachable through the first free cell on this page (VM​_PAGE​_SLOT​_DATA)
+              it is reachable through the list of free cells VM​_LIST​_OF​_FREE​_CELLS
+              refcount of this cell is 0 (no one keeps a reference to this cell)
+              it contains a word pointer to the next element of the list of free celss
+
+**** cell-pair page layout
+offset  content
+---------------------
+00      #b01xx xxxx page type + number of used slots
+01      ref-count cell-pair at 05 (cell-pair 0)
+02      ref-count cell-pair at 09 (cell-pair 1)
+03..04  unused (2)
+05..08  cell-pair 0
+09..0c  cell-pair 1
+0d..0f  unused (3)
+10      ref-count for cell-pair at 40 (cell-pair 2)
+11      ref-count for cell-pair at 44 (cell-pair 3)
+..3e    ref-count for cell-pair at f9 (cell-pair 48)
+3f..40  unused (2)
+41..44  cell-pair 2
+45..48  cell-pair 3
+...
+f9..fc  cell-pair 48
+fd..fe  unused (2)
+ff      previous page of this type
+
+**** cell-pair allocation/free
+#+begin_src dot :file cell-pair-page-state.gen.png
+  digraph finite_state_machine {
+      node [shape=point]ENTRY; //,EXIT
+      node [shape=ellipse];
+
+      ENTRY->free;
+      free -> used[label="ALLOC_CELL_PAIR_PTR_TO_RT"]
+      used -> enqueued[label="FREE_CELL_PAIR_PTR_IN_RT"]
+      enqueued -> used[label="ALLOC_CELL_PAIR_PTR_TO_RT"]
+
+      labelloc="t";
+      label="cell-pair state";
+  }
+#+end_src
+
+#+RESULTS:
+[[file:cell-pair-page-state.gen.png]]
+- free :: cell-pair is not counted as used on page
+          points to the next free cell-pair on this page (low byte), 0 = no next free
+          it is reachable through the first free cell-pair on this page (VM​_PAGE​_SLOT​_DATA)
+          refcount of this cell-pair is 0 (no one keeps a reference to this cell-pair)
+- used :: cell-pair is counted as used on the page
+          it is NOT reachable through the first free cell-pair on this page (VM​_PAGE​_SLOT​_DATA)
+          it is NOT reachable through the list of free cell-pairs VM​_QUEUE​_ROOT​_OF​_CELL​_PAIRS​_TO​_FREE
+          refcount of this cell-pair is >0 (at least on reference to this cell-pair exists)
+- enqueued :: cell-pair is enqueued in list of free cell-pairs
+              it is NOT reachable through the first free cell-pair on this page (VM​_PAGE​_SLOT​_DATA)
+              it is reachable through the list of free cell-pairs VM​_QUEUE​_ROOT​_OF​_CELL​_PAIRS​_TO​_FREE
+              refcount of this cell-pair is 0 (no one keeps a reference to this cell-pair)
+              car cell contains a word pointer to the next element of the list of free cell-pairs
+              cdr cell may still contain a value to be garbage collected, so the cell-pair cannot be reused right away
+
+**** m1p0 page layout
+provides space for structures with 1-3 fields
+page type slot size 9 (refcount @ ptr-1) 25 slots
+math: first entry $,,m refcount @ -1, next slot += $0a, slot-size = $09 (9)
+offset content
+--------------------
+00      #b0001 0000 page type bucket with slot size 9 (either use this or the one above)
+01      previous page
+02      number of slots used
+03      refcount slot0
+04..0c  slot0  <- lowest bit must be 0 (to qualify as a cell-ptr!)
+0d      refcount slot1
+0e..16  slot1
+...
+f3      refcount slot23
+f4..fc  slot23
+fd..ff  unused
+**** m1p1 page layout
+provides space for structures with 4-7 fields
+page type slot size 17  (refcount @ ptr-1) 14 slots
+math: first entry $04, refcount @ -1, next slot += $12, slot-size = $11 (17)
+offset content
+--------------------
+00      #b0001 0001 page type bucket with slot size 17 (either use this or the one above)
+01      previous page
+02      number of slots used
+03      refcount slot0
+04..14  slot0  <- lowest bit must be 0 (to qualify as a cell-ptr!)
+15      refcount slot1
+16..26  slot1
+27      refcount slot2
+28..38  slot2
+...
+ed      refcount slot13
+ee..fe  slot13
+ff      unused
+**** m1p2 page layout
+provides space for structures with 8-13 fields
+page type slot size 29 (refcount @ ptr-1) 8 slots total
+math: first entry $10, refcount @ -1, next slot += $1e, slot-size = $1d (29)
+offset content
+--------------------
+00      #b0001 0010 page type bucket + slot size 29
+01      previous page
+02      number of used slots
+03..0f  unused
+0f      refcount slot0
+10..2c  slot0
+2d      refcount slot1
+2e..4a  slot1
+4b      refcount slot2
+4c..68  slot2
+...
+e1      refcount slot7
+e2..fe  slot7
+ff      unused
+**** m1p3 page layout
+page type slot size 49 (refcount @ ptr-1) 5 slots total
+math: first entry $06, refcount @ -1, next slot += $32, slot-size = $31
+offset content
+--------------------
+00      #b0001 0011
+01      previous page
+02      # of slots used
+03..04  unused
+05      refcount slot0
+06..36  slot0
+37      refcount slot1
+38..68  slot1
+69      refcount slot2
+6a..9a  slot2
+9b      refcount slot3
+9c..cc  slot3
+cd      refcount slot4
+ce..fe  slot4
+ff      unused
+**** m1p4 page layout
+page type slot size 83 (refcount @ ptr-1) 3 slots total
+math: first entry $04, refcount @ -1, next slot += $54, slot-size = $53
+offset content
+--------------------
+00      #b001 0100
+01      previous page
+02      number of slots used
+03      refcount slot0
+04..56  slot0
+57      refcount slot1
+58..aa  slot1
+ab      refcount slot2
+ac..fe  slot2
+ff      unused
+**** s8 page layout ??
+page type slot size 8 (refcount @ ptr >> 3) 28 cells
+offset content
+--------------------
+00      #b001x xxxx  page type + number of used slots
+01      previous page
+02..03  unused
+04..1f  refcount cell 0..27
+20..27   -> 04 (cell 0)
+...
+f8..ff  -> 1f (cell 27)
+**** call-frame (stack organized) page layout
+memory layout of call frame page (organized in stack)
+offset  content
+00      #b0001 1000 page type call-frame
+01      previous page (just high byte), 00 for first stack page
+02      top mark (one past last allocated frame payload) <- usually set once full)
+03      payload of first call frame
+...ff
+**** fid->loc page layout
+**** code page layout
+**** cell-stack page layout (locals, eval stack)
+- used for locals and for the evaluation stack
+offset  content
+---------------
+00      page type #b0001 1011
+01      previous page (of the stack)
+02..ff  payload (either lowbyte or highbyte of the cell)
+
+**** cell-array allocation-free
+#+begin_src dot :file cell-array-page-state.gen.png
+  digraph finite_state_machine {
+      node [shape=point]ENTRY; //,EXIT
+      node [shape=ellipse];
+
+      ENTRY->free;
+      free -> used[label="ALLOC_CELL_ARRAY_TO_RA"]
+      used -> enqueued[label="FREE_CELL_ARRAY_IN_RA"]
+      enqueued -> used[label="ALLOC_CELL_ARRAY_TO_RA"]
+      enqueued -> enqueued[label="gc"]
+
+      labelloc="t";
+      label="cell-array state";
+  }
+#+end_src
+
+#+RESULTS:
+[[file:cell-array-page-state.gen.png]]
+- free :: slot (cell-array) is NOT counted as used on m1-page
+          points to the next free slot on this page (low byte), 0 = no next free.
+          it is reachable through the first free slot on this page (VM​_PAGE​_SLOT​_DATA)
+          refcount of this slot (cell-array) is 0 (no one keeps a reference to this cell pair)
+- used :: cell-array is counted as used on m1-page
+          it is NOT reachable through the first free slot on this page (VM​_PAGE​_SLOT​_DATA)
+          it is NOT reachable through the queue root of arrays to free (VM​_Px​_QUEUE​_ROOT​_OF​_ARRAYS​_TO​_FREE)
+          refcount to this cell-array is >0 (at least on reference to this cell-pair exists)
+- enqueued :: cell-array is counted as used on m1-page
+              it is NOT reachable through the first free slot on this page (VM​_PAGE​_SLOT​_DATA)
+              it is reachable through the queue root of arrays to free (VM​_Px​_QUEUE​_ROOT​_OF​_ARRAYS​_TO​_FREE)
+              refcount of this cell-array is 0 (no one keeps a reference to this cell pair)
+              the array may still contain cells that are cell pointer that need to be garbage collected
+              each gc reduces the amount of cell pointer in the array by 1
+              the array keeps the amount of unchecked cells
+              the array keeps a pointer to the next enqueued cell-array in the slot right behind the unchecked cells
+
+*** cell types and references
+cell types fall into 3 categories
+**** cell pointer
+tag byte ends on bits 0 [cell-ptr], or 01 [cell-pair-ptr]
+points somewhere.
+- it points to another cell (points to either a cell pointer, a value cell or a header cell)
+- it points to a cell-pair
+**** value cell
+a value cell holds its (complete) value
+- int, tag byte  = 0... ..11 (& $83 = $03)
+- byte, tag byte = 1111 1111 ($FF)
+**** header cell
+is a cell that is used as a header of a number of cells. the following headers exist
+- header for an *array of cells* (useful for structures)
+  tag byte = 1000 0011 ($83)
+  offset  content        <- memory layout
+  ------------------
+  00      header-cell
+  01      length of array (n+1)
+  02..03  cell index 0 *)
+  04..05  cell index 1
+  ...
+  ..n*2+3 cell index n
+
+  *) cells in an array of cells may be either cell-ptr or value cells, never header cells!!
+
+- header fo a *native array of bytes* (useful for strings)
+  tag byte = 1000 0111 ($87)
+  offset  content        <- memory layout
+  ------------------
+  00      header-cell
+  01      length of byte array (n+1)
+  02      byte index 0
+  ...
+  n+2     byte index n
+*** pointer tagging
+RT = 00 (low byte) is equivalent to RT is empty!
+use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples (low, then high byte):
+  zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                    0000 001[0]    1100 1101   cd02 (first allocated slot in cell-ptr page)
+  xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)            0000 01[01]    1100 1101   cd05 (first allocated slot in a cell-pair-ptr page)
+  0iii ii11 = int-cell (bool) (no direct adding of highbyte possible)   [0]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
+  1111 1111 = byte-cell (char|bcd digits)                               [1111 1111]    0000 0001   01  <- payload is in high byte
+  1000 0011 = cell-array-header                                         [1000 0011]    0000 0100   04 cells in array
+  1000 0111 = cell-native-array-header                                  [1000 0111]    0000 1000   08 bytes in array
+
+  1000 1011   (29 values reserved)
+  ...
+  1111 1011
+#+begin_src asm
+  ;; check for cell-ptr
+          AND !$01
+          BEQ IS_CELL_PTR
+          ;; alternatively
+          LSR A
+          BCC IS_CELL_PTR
+
+  ;; check for cell-pair-ptr
+          AND !$03
+          CMP !$01
+          BEQ IS_CELL_PAIR_PTR
+          ;; alternatively
+          LSR A
+          ;; BCC IS_CELL_PTR
+          LSR A
+          BCC IS_CELL_PAIR_PTR
+
+  ;; check for int-cell
+          AND !$83
+          CMP !$03
+          BEQ IS_INT_CELL
+
+  ;; check for byte-cell
+          CMP !$FF ;; CMP !TAG_BYTE_BYTE_CELL
+          BEQ IS_BYTE_CELL
+
+  ;; check for cell-array-header
+          CMP !$83 ;; CMP !TAG_BYTE_CELL_ARRAY
+          BEQ IS_CELL_ARRAY_HEADER
+
+  ;; check for cell-native-array-header
+          CMP !$87 ;; CMP !TAG_BYTE_NATIVE_ARRAY
+          BEQ IS_CELL_NATIVE_ARRAY_HEADER
+#+end_src
+*** call frames
+- a call frame is defined by the following variables (on the zero page)
+  ZP_​​VM_​PC                    *  ptr to the current byte code
+  ZP_​VM_​FUNC_​PTR              *  ptr to the current running function
+  ZP_​​CELL​_​STACK​_​LB​_​PTR           ptr to the low byte of the cell stack (cell-eval-stack is spread over two pages) [the lb of this ptr itself is always 0]
+  ZP_​CELL_​STACK_​HB_​PTR           ptr to the high byte of the cell stack [the lb of this ptr itself is always 0]
+  ZP_​LOCALS_​LB_​PTR            *  ptr to the low bytes of the locals of the currently running function [lowbyte of the ptr itself is equal to the highbytes one]
+  ZP_​LOCALS_​HB_​PTR            *  ptr to the high bytes of the locals of the currently running function [lowbyte of the ptr itself is equal to the lowbytes one]
+  ZP_​CELL_​STACK_​TOP              index to the top element on the cell stack
+
+  ZP_​CALL_​FRAME                  pointer to start of current call frame stack
+  ZP_​CALL_​FRAME_​TOP_​MARK         index to byte behind current call frame stack (byte) (is stored into page at $02, when page is full)
+- a stack frame pushed on to the stack can either be a slow/fast frame
+- fast stack call frame (4b): allowed for calls w/o overflows (neither stack, nor local overflow nor function running over page boundary)
+
+    |                  vm pc                  | <-- call-frame-ptr
+    | func-ptr low-byte | locals-ptr low byte |   ;; locals-ptr low byte must be != $00/$01
+
+    push: possible if - vm_​pc and func-ptr share the same page
+                      - cell-stack does not overflow (has 16 entries reserve)
+                      - locals do not overflow (has reserves to hold functions' need)
+    pop: if (call-frame-tr + 3) != $00 (or $01), its a a fast frame
+- slow stack call frame (10b): allowed for any call (including page overflows: stack, locals allocation or function running over page boundary)
+
+    |                   vm pc                     | <-- call-frame-ptr
+    |     (reserved)       | locals ptr shared lb |
+    | locals-lb page       | locals-hb-page       |
+    |  func-ptr  low       | $00 / $01            | func-ptr could be encoded into: lowbyte, highbyte =  vm_​pc page + $00/$01 (of byte 4 in this stack) <- would save two bytes of stack size
+
+    NOTE: if func-ptr page would be copied into (reserved), additional encoding/decoding into last byte could be removed, saving code bytes and complexity
+          reserved byte could be used for somthing else, though => remove later?
+          last byte must be either $00 or $01 to identify frame type!
+
+    NOTE:  | cell-stack-lb page   | cell-stack-hb-page   | (copying the cell stack should not be necessary, the resulting stack should be cleaned up by the called method, known the # of parameters to actually remove etc.)
+           cell-stack-tos  (copying not necessayr!)
+
+    push: all relevant data
+    pop: if (call-frame-ptr + 9) == $00(or $01)), its a a slow frame
+         in a slow frame, high byte of func-ptr is high byte of vm_​pc - byte at 9 (either 00 or 01)
+*** function metadata (descriptors)
+ function descriptor:
+ ---- idea
+         function name
+         length of function name
+         default cell d-1       default cells can only be value cells or NIL ptr
+    ...
+         default cell 0
+ ---- implemented
+    00 : mddd llll  (#of locals in lower 4 bits, # of default values, m flag, indicating presence of function metadata)
+    01 : start of byte code  (defaults offset?)
+    ...
+
+*** locals
+locals are organized as stack (page pair)
+   00: page type           00: page type
+   01: previous lb page    01: previous hb page
+   02: top mark (filled when leaving this page)
+   03: lowbyte cell 0      03: high byte cell 0
+   ...
+
+each cell can be either a cell pointer or a call value (never cell header)
+*** cell stack (evaluation stack)
+cell-stack is organized as stack (page pair)
+   00: page type           00: page type
+   01: previous lb page    01: previous hb page
+   02: lowbyte cell 0      02: high byte cell 0
+   ...
+
+each cell can be either a cell pointer or a call value (never cell header)
+** concepts with functions
+- page :: os allocation unit
+  - alloc, free, bitmap of available pages
+- cell :: smallest data unit
+  - alloc, refcount, free, free-list, cells-page, cell-page-list
+- cell-pair :: pair of cells, usable for lists etc.
+  - alloc, refcount, free, free-list, cell-pairs-page, cell-pairs-page-list
+- cell-array :: array of cells, need special incremental gc on free
+  - alloc, refcount, inc-free, inc-free-list, m1px-page, m1px-page-list
+- native-array :: array of native bytes (e.g. for strings)
+  - alloc, refcount, free, free-list, m1px-page, m1px-page-list
+- call-frame :: frame with data to restore upon return
+- cell-stack :: a stack of cells (split over two pages)
+  - eval-stack :: stack used for evaluation
+    - pop->rt :: pop from eval stack into rt (discard previous rt)
+    - push<-rt :: push rt onto eval stack (effectively a dub)
+    - write->rt :: write tos of eval stack into rt
+    - write<-rt :: write rt into tos of eval stack
+  - locals-stack :: stack used for function locals storage
+    - alloc :: allocate n cells
+    - free :: free n cells
+    - write-n->rt :: write n-th local to rt
+    - write-rt->n :: write rt to n-th local
+    - refcount-n-dec/inc :: refcount slot pointed to by n-th local
+- Rx :: register
+  - refcount-dec/inc :: refcount slot pointed to by register
+  - clear :: mark as empty
+** memory allocation/deallocation
+*** free-lists
+**** cell-array free list (for reusage)
+- one per m1 profile => free list holds arrays blocking a slot of a certain m1 profile page
+root -> [tag-byte : len n]
+        [cell0]
+        [cell1]
+        ...
+        [cell n-1]
+         \_...
+- the last cell points to the next cell-array
+- enqueueing this array to the free list, the last cell must be recount--
+- all but the last cell must be refcount-- before further reuse
+- once cell n-1 is recount--, n = n-1, making n-2 the next last cell
+- once all cells were refcount--, the whole array can be freed
+**** cell free list (for reusage)
+root -> [cell]
+         \_...
+**** cell-pair free list (for reusage)
+root -> [car][cdr]
+         \_ [car][cdr]
+             \_...
+- car cell is used to connect the cell-pairs
+- cdr cell needs to be refcount-- before reuse
+*** allocation
+**** cell
+- if free-list nil
+     allocate new cell <- IDEA: try freeing slots in cell-array free-lists (there might be cells that can be reused)
+     reuse head of free list
+- reuse head of free list
+  - remember head
+  - set head of free list to cdr of free list
+  - return old head
+**** cell-pair
+- if free-list nil
+     allocate new cell-pair <- IDEA: try freeing slots in cell-array free-lists (there might be cell-pairs that can be reused)
+     reuse head of free list
+- reuse head of free list
+  - remember head
+  - refcount-- on cdr cell of head (single subroutine jump, no recursion)
+  - new head = old heads car cell
+  - return remembered head
+**** cell-array
+- if free-list nil
+     allocate new cell-array
+     free the array at the head of the list <- this might change due to the tail call
+- free the array at the head of the list
+  - reduce num (if num dropped to 0, the array can be reused)
+  - remember now last cell
+  - copy previous last cell into now last cell
+  - refcount-- remembered now last cell  <- tail call (just jump, no recursion)
+**** native-array
+*** deallocation
+any refcount-- on a value cell will just return (and do nothing), ending a chain of refcount-- calls
+only if refcount drops to zero a free is done, else refcount returns
+**** refcount-- cell-ptr (drops to 0)
+- enqueue cell into free list
+  - put old root of free list into this
+  - set root of free list to this cell
+**** refcount-- cell-pair-ptr (drops to 0)
+- remember car cell (since it is overwritten in next step and used for refcount-- later on)
+- enqueue cell-pair into free list
+  - put old root of free list into car of this
+  - set root of free list to this cell-pair
+- refcount-- car cell <- tail-call (just jump, no recursion)
+**** refcount-- cell-array (drops to 0)
+- remember last cell of the array (since it is overwritten in next step and used for refcount-- later on)
+- enqueue cell-array into free list
+  - put old root into last cell of array
+  - set root of free list to this cell-array
+- refcount-- last cell of the array
+**** refcount-- native-array (drops to 0)
+- reclaim space (native array may not hold further references)
+*** behavior
+- overarching idea: make deallocation cheap, delay work to the time, allocation is done
+- reuse of cell is of constant time, since the head of the free list can be used (directly) or a new cell is allocated, which is both O(1)
+- reuse of cell-pair can be O(n) in worst case, if the cdr cell of the head (which needs to be refcount--) points to a tree of n cell-pairs,
+  where each car points to another cell-pair that needs to be refcount-- before enqueued into the free-list.  it is more likely to be must
+  faster since this worst case is of rather hypothetical nature.
+  IDEA: this time can be reduced by incrementally refcount-- cdr cells of the free list (e.g. during allocation of cells or cell-pairs).
+- reuse of cell-arrays could be very expensive if the array contains pointers to cell-arrays up to the max memory allocated thus
+  IDEA: this time can be reduced by incrementally refcount-- cells of the array (e.g. during allocation of cells or cell-pairs).
+*** musings
+**** bst with value implemented with structure/array or cell-pairs
+***** btree with array, fits into profile 5 (uses 9 bytes)
+[table-header, len=3]
+[left cell-ptr]
+[right cell-ptr]
+[value cell-ptr|cell]
+***** btree with cell-pairs (uses 8 bytes for the cell pairs)
+      o      cell-pair
+     / \
+   val  o    cell-pair
+       / \
+      L   R
+***** red-black tree needs additional flag (for color)
+- in arrays this could be put into higher bits of the length byte (since not all bits are used)
+  -or- use the 9th byte of the structure as an auxiliary byte that is always available
+- in cell-pair implementation L and R lower two bits can be used <- complicates a lot, don't!
+  (since they must be '01' to identify them as cell-pair-ptr)
+***** red/black btree with cell-pairs
+****** red/black detection needs more code, search l/r search needs more code, no more memory is needed
+(val may not be a cell-pair-ptr)
+red-node
+      o
+     / \
+   val  o
+       / \
+      L   R
+
+black-node
+      o
+     / \
+    o   val
+   / \
+  L   R
+****** red/black as additional cell-pair, code stays uniform, + 1 cell-pair for each node (total 12 bytes)
+    o
+   / \
+ R/B  o
+     / \
+   val  o
+       / \
+      L   R
+
+* main todo
+** naming conventions
+ZP_ <- on zero page
+functions have a verb (what they do, e.g. ALLOC​_PAGE​_TO​_A)
+functions define main return register
+register available are A, X, Y (as cpu registers), and vm registers RT RA
+parameters for functions are passed through registers A/X/Y or use vm resources like the registers, stack, call-frame stack etc.
+each function defines which cpu resources and/or vm resources are used during execution (including transitively called functions)
+=> only the most basic functions don't use all cpu resources
+
+e.g. INC​_REFCNT​_CELL​_RT, WRITE​_EVLSTK​_TOS​_CELL​_TO​_RT, POP​_EVLSTK​_TOS​_CELL​_TO​_RT
+VERB - TYPE - OBJECT
+
+- *nouns*
+  ARR       :: array
+  BOOL      :: boolean (0/1)
+  BYTE      :: byte (0..255 | -128..127)
+  CELL      :: cell
+  CELLARR   :: cell-array (is a vslot)
+  CELLPAIR  :: cell-pair
+  CELLy     :: cell at y of either cell-array or cell-pair (depending on context), y = 0, 2, 4 ... <- actual offset
+  CONST     :: constants
+  EVLSTK    :: cell eval stack (without RT!)
+  FL        :: free list <- list of free elements (pages, cells, cell-pairs, cell-arrays)
+  FRMSTK    :: frame stack
+  GFL       :: global freelist
+  GLOBALy   :: global cell slot y-register (0,2,4 ...)
+  INT       :: integer (0..8191 | -4096..4095)
+  LIST      :: linked cell-pairs forming a  list (car element = value, cdr elment = ptr to next pair)
+  LOCALy    :: function local cell slot y-register (0,2,4,6 ...)
+  M1Px      :: m1 page of profile x (can be register x)
+  NARR      :: native (byte) array
+  NIL       :: nil
+  PAGE      :: page
+  PFL       :: page freelist (local within page)
+  REFCNT    :: refcount
+  RT        :: register extending cell eval stack, making it the real TOS
+  Rx        :: register (x = T | A | B ...)
+  SLOT      :: allocation unit within a page (CELL, CELLPAIR, VSLOT is a SLOT)
+  TOSmr     :: top of stack - r (can be a constant or a register)
+  VSLOT     :: slot of (initially) variable size, allocated to one profile of m1-px pages
+
+- *verbs*
+  ADD       :: add
+  ALLOC     :: allocate
+  COPY      :: copy
+  DEC       :: decrement
+  EVICT     :: remove (from within a stack)
+  FREE      :: free
+  GC        :: garbage collect
+  INC       :: increment
+  INIT      :: initialize
+  POP       :: pop
+  PUSH      :: push
+  READ      :: read
+  REM       :: remove
+  RET       :: return
+  REUSE     :: reuse
+  WRITE     :: write
+
+- *attributes*
+  FIRST     :: first
+
+** memory management
+- free lists always use memory-sections of the element itself to provide the structure needed (no additional memory is used)
+*** atoms for memory management
+- {allocate|free} page
+  ALLOC​_PAGE​​_TO​_A, FREE​_PAGE​_A, FREE​_PAGE​_RT
+- {add|remove} page to {cell|cell-pair|m1-px} free-list
+  ADD​_CEL​_PAGE​_a​_TO​_FL
+- initialize page for type {cell|cell-pair|m1-px...}
+  INIT​_CEL​_PAGE​_a, INIT​_CELPAR​_PAGE​_a, INIT​_M1Px​_PAGE​_a (use x register as profile, a as page id)
+- {add|remove} {cell|cell-pair|vslot} to/from free-list of page
+  ADD​_CEL​_RT​_TO​_PAGE​_FL
+- {add|remove|reuse|return-to-page} cell to/from global free list
+  ADD​​_CEL​_RT​_TO​_FL
+- {add|remove|reuse|return-to-page|inc-gc} cell-pair to/from global free list
+  ADD​​_CELPAR​_RT​_TO​_FL
+- {add|remove|reuse|return-to-page|inc-gc} cell-array to/from global free list
+  ADD​​_CELARR​_RT​_TO​_FL
+- {push|pop|read|write} cell on/from/to stack
+  PUSH​_RT​_ON​_EVLSTK, POP​_FROM​_EVLSTK​, WRITE​_TOSmx​_TO​_RT
+- {dec|inc} refcount on {cell|cell-pair|vslot}
+  INC​_REFCNT​_RT, INC​_REFCNT​_CELL​_RT
+*** cells
+- allocate page for cells
+- allocate cells on page
+- free cells into free list
+- reuse cell from free-list
+- free cells on page
+- free cell page
+- inc/dec refcount
+- gc run
+*** cell-pairs
+- allocate page for cell-pairs
+- allocate cell-pairs on page
+- free cell-pairs into free list
+- reuse cell-pair from free list
+- free cell-pairs on page
+- free cell-pair page
+- inc/dec refcount
+- gc run
+*** cell-arrays
+- allocate page for cell-arrays
+- allocate cell-arrays on page
+- free cell-arrays into free list
+- reuse cell-array from free list
+- free cell-arrays on page
+- free cell-array (m1) page
+- inc/dec refcount
+- gc run
+*** define byte code operations w/ atoms for mm (and other atoms)
+**** complex mm atoms
+- ALLOC​_CELPAR​_TO​_RA
+  GFL​_CELPAR​​_EMPTY?
+    CELPAR​_PAGE​_LIST​_HEAD​_EMPTY?
+      ALLOC​_PAGE
+      INIT​_PAGE​_FOR​_CELPAR
+    REM​_CELPAR​_PFL​_TO​_RA
+  ELSE
+    REM​_CELPAR​_GFL​_TO​_RA
+- FREE​_CELPAR​_RT
+  WRITE​_CELy​_RT​_TO​_RA ;; y=0 = car-cell
+  ADD​_CELPAR​_RT​_TO​_GFL
+  tailcall FREE​_CEL​_RA
+- FREE​_CEL​_RT
+  ADD​_CEL​_RT​_TO​_GFL
+- FREE​_CELARR​_RT
+  GET​_LEN​_CELARR​_RT​_TO​_y
+  WRITE​_CELLy​_CELARR​_RT​_TO​_RA  <-- 1
+  IS​_RA​_PTR?
+    DEC​_y
+    WRITEy​_TO​_CELARR​_LEN
+    ADD​_CELARR​_RT​_TO​_GFL
+    DEC​_REFCNT​_RA    ;; might result in gc
+  ELSE
+    DEC​_y
+    >0 LOOP --> 1
+    WRITEy​_TO​_CELARR​_LEN
+    ADD​_CELARR​_RT​_TO​_GFL
+**** INT+
+ADD​_INT​_RT​_TOSm1​_TO​_RT
+EVICT​_TOSm1​_FROM​_EVLSTK
+**** CONS
+ALLOC​_CELPAR​_TO​_RA
+WRITE​_RT​_TO​_CELy​_RA
+WRITE TOSm1​_TO​_CELy​_RA
+EVICT​_TOSm1​_FROM​_EVLSTK
+WRITE​_RA​_TO​_RT
+INC​_REFCNT​_RT
+** output a string
+e.g. ~(displayln "hello world")~
+*** stories
+**** vm-interpreter
+***** memory manage strings
+- bootstrap code (program startup)
+- constant strings / array of char => byte/char-array-page
+***** code as list of vm-instructions
+- give translation of (display "some string") in vm instructions
+***** runtime method to write string to the screen
+***** fetch, decode, execute
+- for all vm instructions necessary to do hello word
+* mil add
+** memory management
+*** layout
+**** operations
+  - pass parameter to function
+    - access with static offset
+    - decide whether to allow overwrite (shared memory)
+  - allocate local slots <- access with static offset
+  - return into slot (via static offset)
+**** call-frame : continuous memory allocating cells for parameters and locals
+return address
+no of parameter (byte)          # could be variable
+parameter - cells (copied)      # is known by caller (access fast)
+locals - cells (uninitialized)  # is known by callee (and known by caller if it is a static call)
+=> call-frame <alloc-num> <local-num> <- only available if the function is statically known!
+   copy loc/arg -> arg
+   call function
+   cisc code: *call functionid, #args, l/a#->a# ..., (#locals)*, (bytecode for call0 and call1 and call2 with short copy encoding) function is 16bit id / jump address
+   dynamic call (getting the functionid from as symbol form a cell): *calld #args, l/a#->a# ..., func-id-l/a/g#*
+- (is part of call frame) local-frame (access fastest) <- must be put onto the call frame to allow multiple instantiations of the same call
+  locals - cells (uninitialized)  number is known by called function +[accessible right before bytecode] => local0 is @ function - 2+
+The call frames are organized in a stack. Accessing a parameter will
+c64 implementation detail:
+    first parameter cell = lda (parameter),x=0 .. lda (parameter),x=1
+    first local cell = lda (locals),x=0 .. lda (locals),x=1
+    /parameter/ is a zero page address that is set for each activation frame
+    same for /locals/
+    idea: since locals should be a fixed number, they could come first such that the accessing index (x) is fixed for locals and params, even though params may vary (variadic) allowing for only on zero page "register"/pointer
+**** global-frame [fixed number during program run?]
+global - cells  (access not so fast)
+*** data types
+see [[file:src/cisc-vm/stack-virtual-machine.rkt::define CELL_PTR #b00000001) ;; xxxx xxx1 xxxx xxxx (ptr to words/cells][cell data layout]]
+**** obsolete
+(nil pointer should be easy to spot!, e.g. zero page has no cells => first byte 0 = nil ptr)
+- cell
+  - pointer to cell (need 15 bits)
+    layout: [ptr (15bits)] 1 (uneven pointers?, page warp?)
+  - pointer to cell-pair (list) (needs 14 bits)
+    layout: [ptr (14bits)] 10
+  - header (need max bits, describing the type of the header + as much information as possible)
+    headers are usually followed by the bytes specific for this type
+    layout: [type ()] .....0100
+  - int (need max bits, low bits should all be zero to allow adding/subtraction without shifting)
+    layout: [value (x bits)] ......000
+    range: 0..8191, -4096..4095
+  - byte/char (need 8 bits, one full byte should be used unmodified)
+    layout: [value (8 bits)] .....1100
+  - specialty idea: bcd encoded digits (3) for exact number maybe?
+- float, exact, array/string, (hash)-map
+- list = pair of cells (car + cdr=ptr to next cell-pair), car=0 => empty-list or nil
+  e.g. list of bytes =
+  (1 . o)->(2 . o)->(ptr0 . x)  ;; o)-> = cdr pointer, ptr0 = a pointer to cell 0 which is encoded into hex 0001
+- list of pairs = (car=ptr to cell-pair of which car=key, cdr=value, + cdr=ptr to next pair)
+- e.g. list of pairs, byte->string
+  (o . o)->(o . o)->(ptr0 . x)
+   |        |
+   |        +->(5 . o)-> {header: string, length: 7, values: "at five"}
+   +-->(2 . o)-> {header: string, length: 6, values: "at two" }
+*** allocation
+*** deallocation
+** continuations
+** vm registers and runtime behavior
+call, tail-call, variable resolution, continuations, closures, macros?
+- (later) use cpu registers for parameters (quickest)
+- (later) use zero page for parameters (quick)
+- use stack for parameters (slow)
+- tail call should be as simple as test + branch instruction
+- macros should already be resolved (no vm instructions for that, for now)
+- use flattened closures to allow O(1) access to live locals and globals
+** vm instructions
+- use single byte for vm instruction
+- use minimal length for common (short) instructions (e.g. lists with 0-3 elements)
+- allow larger lengths for uncommon (long) instructions (e.g. lists with 1000 elements)
+- idea
+  - define vm instructions
+  - optimize for size and speed of decoding later
+  - keep optimizing strategies in mind
+    - encode (small) values into opcode
+    - use prefix byte for long commands (long running and seldom used)
+    - how can table jumps be used
+    - how can bits in the opcode be used for common actions (bit = micro op)
+** loading/linking
+** repl
+* current jump table
+#+begin_src scheme
+     (list
+      (label VM_INTERPRETER_OPTABLE)                ;; code
+             (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  L0
+             (word-ref BC_PUSH_LOCAL_SHORT)         ;; 02  L1
+             (word-ref BC_PUSH_LOCAL_SHORT)         ;; 04  L2
+             (word-ref BC_PUSH_LOCAL_SHORT)         ;; 06  L3
+             (word-ref BC_EXT1_CMD)                 ;; 08
+             (word-ref VM_INTERPRETER_INC_PC)       ;; 0a reserved
+             (word-ref BC_PUSH_I)                   ;; 0c
+             (word-ref BC_INT_P)                    ;; 0e
+             (word-ref BC_WRITE_LOCAL_SHORT)        ;; 10  L0
+             (word-ref BC_WRITE_LOCAL_SHORT)        ;; 12  L1
+             (word-ref BC_WRITE_LOCAL_SHORT)        ;; 14  L2
+             (word-ref BC_WRITE_LOCAL_SHORT)        ;; 16  L3
+             (word-ref BC_T_P_BRA)                  ;; 18
+             (word-ref BC_F_P_BRA)                  ;; 1a
+             (word-ref BC_F_P_RET)                  ;; 1c
+             (word-ref BC_DUP)                      ;; 1e
+             (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  L0
+             (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 22  L1
+             (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 24  L2
+             (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 26  L3
+             (word-ref BC_PUSH_NIL)                 ;; 28
+             (word-ref BC_PUSH_AF)                  ;; 2a
+             (word-ref BC_POP_TO_AF)                ;; 2c
+             (word-ref BC_PUSH_B)                   ;; 2e
+             (word-ref BC_WRITE_TO_LOCAL_SHORT)     ;; 30  L0
+             (word-ref BC_WRITE_TO_LOCAL_SHORT)     ;; 32  L1
+             (word-ref BC_WRITE_TO_LOCAL_SHORT)     ;; 34  L2
+             (word-ref BC_WRITE_TO_LOCAL_SHORT)     ;; 36  L3
+             (word-ref BC_BINC)                     ;; 38
+             (word-ref BC_NZ_P_BRA)                 ;; 3a
+             (word-ref BC_CELL_EQ_P)                ;; 3c
+             (word-ref BC_F_P_RET_F)                ;; 3e
+             (word-ref VM_INTERPRETER_INC_PC)       ;; 40 reserved
+             (word-ref BC_NIL_P)                    ;; 42
+             (word-ref BC_I_Z_P)                    ;; 44
+             (word-ref BC_BADD)                     ;; 46
+             (word-ref BC_B_GT_P)                   ;; 48
+             (word-ref BC_NATIVE)                   ;; 4a
+             (word-ref BC_B_GE_P)                   ;; 4c
+             (word-ref BC_BSHR)                     ;; 4e
+             (word-ref VM_INTERPRETER_INC_PC)       ;; 50 reserved
+             (word-ref BC_CxxR)                     ;; 52  CDDR (bitwise-and #x1f x) must be #x12!
+             (word-ref BC_BREAK)                    ;; 54
+             (word-ref BC_SWAP)                     ;; 56
+             (word-ref BC_POP)                      ;; 58
+             (word-ref BC_CONS_PAIR_P)              ;; 5a
+             (word-ref BC_T_P_RET)                  ;; 5c
+             (word-ref BC_Z_P_BRA)                  ;; 5e
+             (word-ref BC_SET_ARRAY_FIELD)          ;; 60
+             (word-ref BC_SET_ARRAY_FIELD)          ;; 62
+             (word-ref BC_SET_ARRAY_FIELD)          ;; 64
+             (word-ref BC_SET_ARRAY_FIELD)          ;; 66
+             (word-ref BC_CALL)                     ;; 68
+             (word-ref BC_TAIL_CALL)                ;; 6a
+             (word-ref BC_BDEC)                     ;; 6c
+             (word-ref BC_CONS)                     ;; 6e
+             (word-ref BC_PUSH_INT0)                ;; 70
+             (word-ref BC_PUSH_INT1)                ;; 72
+             (word-ref BC_PUSH_INT2)                ;; 74
+             (word-ref BC_PUSH_INTm1)               ;; 76
+             (word-ref BC_GOTO)                     ;; 78
+             (word-ref BC_RET)                      ;; 7a
+             (word-ref BC_BNOP)                     ;; 7c
+             (word-ref BC_CDR)                      ;; 7e
+             (word-ref BC_Z_P_RET_POP_N)            ;; 80
+             (word-ref BC_Z_P_RET_POP_N)            ;; 82
+             (word-ref BC_Z_P_RET_POP_N)            ;; 84
+             (word-ref BC_Z_P_RET_POP_N)            ;; 86
+             (word-ref BC_COONS)                    ;; 88
+             (word-ref BC_SWAP_RA_RB)               ;; 8a
+             (word-ref BC_POP_TO_RB)                ;; 8c
+             (word-ref BC_PUSH_RA)                  ;; 8e
+             (word-ref BC_SET_RA_ARRAY_FIELD)       ;; 90
+             (word-ref BC_SET_RA_ARRAY_FIELD)       ;; 92
+             (word-ref BC_SET_RA_ARRAY_FIELD)       ;; 94
+             (word-ref BC_SET_RA_ARRAY_FIELD)       ;; 96
+             (word-ref BC_ALLOC_ARA)                ;; 98
+             (word-ref BC_PUSH_RA_AF)               ;; 9a
+             (word-ref BC_POP_TO_RA_AF)             ;; 9c
+             (word-ref BC_POP_TO_RAI)               ;; 9e
+             (word-ref BC_PUSH_LX_CAR)              ;; a0  L0
+             (word-ref BC_PUSH_LX_CAR)              ;; a2  L1
+             (word-ref BC_PUSH_LX_CAR)              ;; a4  L2
+             (word-ref BC_PUSH_LX_CAR)              ;; a6  L3
+             (word-ref BC_DEC_RBI_NZ_P_BRA)         ;; a8
+             (word-ref BC_WRITE_RA)                 ;; aa
+             (word-ref BC_WRITE_TO_RAI)             ;; ac
+             (word-ref BC_DEC_RAI)                  ;; ae
+             (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b0  N=1
+             (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b2  N=2
+             (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b4  N=3
+             (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b6  N=4
+             (word-ref BC_WRITE_TO_RBI)             ;; b8
+             (word-ref BC_CAR)                      ;; ba
+             (word-ref BC_ISUB)                     ;; bc
+             (word-ref BC_IADD)                     ;; be
+             (word-ref BC_NZ_P_RET_POP_N)           ;; c0
+             (word-ref BC_NZ_P_RET_POP_N)           ;; c2
+             (word-ref BC_NZ_P_RET_POP_N)           ;; c4
+             (word-ref BC_NZ_P_RET_POP_N)           ;; c6
+             (word-ref BC_I_GT_P)                   ;; c8
+             (word-ref BC_BINC_RAI)                 ;; ca
+             (word-ref BC_B_LT_P)                   ;; cc
+             (word-ref BC_POP_TO_RA)                ;; ce
+             (word-ref BC_PUSH_LX_CDR)              ;; d0  L0
+             (word-ref BC_PUSH_LX_CDR)              ;; d2  L1
+             (word-ref BC_PUSH_LX_CDR)              ;; d4  L2
+             (word-ref BC_PUSH_LX_CDR)              ;; d6  L3
+             (word-ref BC_POKE_B)                   ;; d8
+             (word-ref VM_INTERPRETER_INC_PC)       ;; da reserved
+             (word-ref VM_INTERPRETER_INC_PC)       ;; dc reserved
+             (word-ref VM_INTERPRETER_INC_PC)       ;; de reserved
+             (word-ref BC_CxxR)                     ;; e0  CAAR (bitwise-and #x1f x) must be #x12!
+             (word-ref VM_INTERPRETER_INC_PC)       ;; e2 reserved
+             (word-ref VM_INTERPRETER_INC_PC)       ;; e4 reserved
+             (word-ref BC_CxxR)                     ;; e6  CADR (bitwise-and #x1f x) must be #x12!
+             (word-ref VM_INTERPRETER_INC_PC)       ;; e8 reserved
+             (word-ref VM_INTERPRETER_INC_PC)       ;; ea reserved
+             (word-ref BC_CxxR)                     ;; ec  CDAR (bitwise-and #x1f x) must be #x12!
+             (word-ref VM_INTERPRETER_INC_PC)       ;; ee reserved
+             (word-ref BC_GET_ARRAY_FIELD)          ;; f0
+             (word-ref BC_GET_ARRAY_FIELD)          ;; f2
+             (word-ref BC_GET_ARRAY_FIELD)          ;; f4
+             (word-ref BC_GET_ARRAY_FIELD)          ;; f6
+             (word-ref BC_GET_RA_ARRAY_FIELD)       ;; f8
+             (word-ref BC_GET_RA_ARRAY_FIELD)       ;; fa
+             (word-ref BC_GET_RA_ARRAY_FIELD)       ;; fc
+             (word-ref BC_GET_RA_ARRAY_FIELD)       ;; fe
+             ;; ...
+             )
+#+end_src
+* ...
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; eval: (gb/set-dictionary "en")                      ;; set flyspell dictionary
+  ;; eval: (org-overview)                                ;; show org overview (just headlines)
+  ;; org-pretty-entities-include-sub-superscripts: nil   ;; make sure _ is not interpreted as subscript
+  ;; fill-column: 100                                    ;; fill paragraphs with 100 char width
+  ;; End:
+  #+end_src

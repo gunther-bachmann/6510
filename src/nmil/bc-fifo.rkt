@@ -194,7 +194,7 @@
           (bc SET_RA_AF_0)
           (bc RET)))
 
- (module+ test #| enqueue |#
+(module+ test #| enqueue |#
   (define enqueue-state-1
     (run-bc-wrapped-in-test
      (append

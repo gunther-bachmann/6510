@@ -4103,6 +4103,17 @@ https://microvm.github.io
   - (copy subarray)
   - (concatenate arrays)
   - (to-list/from-list)
+**** DONE IDEA inline native code
+- enter: byte code that will simply run the following natively (jmp there)
+- exit:  JSR interpreter reentrance:
+  - pop next byte code address from stack into bc program counter
+  - run bc interpreter from there
+**** DONE bc optimization - looping with index registers
+- [X] combine POP n, PUSH_​RA -> WRITE_​RA
+- [X] looping with RAI, RBI as index -> DEC_​RAI_​NZ_​P_​BRA (decrement RAI, if nz branch)
+- (combine POP n, PUSH_​RA, RET -> RET_​RA_​POP n)
+- [X] combine DUP, POP_​TO​_​RAI -> WRITE_​TO_​RAI
+- (combine POP, PUSH_​B b -> WRITE_​B b)
 **** IMPLEMENT what part of the 6510 vm design should be implement w/ racket to validate design?
 implement all necessary to do a reverse function tail called implementation with space optimized byte code
 see [[file:src/nmil/svm-compiler.rkt::(m-fun-def (reverse (a-list cell*) (b-list cell* '()) -> cell*][test with reverse function]]
@@ -4463,17 +4474,6 @@ both)
     - number of cell/cell-pair/cell-array/native-array alloc, free, reclaim, etc.
     - pages (type, #free cells ...) over time
 
-**** DONE IDEA inline native code
-- enter: byte code that will simply run the following natively (jmp there)
-- exit:  JSR interpreter reentrance:
-  - pop next byte code address from stack into bc program counter
-  - run bc interpreter from there
-**** DONE bc optimization - looping with index registers
-- [X] combine POP n, PUSH_​RA -> WRITE_​RA
-- [X] looping with RAI, RBI as index -> DEC_​RAI_​NZ_​P_​BRA (decrement RAI, if nz branch)
-- (combine POP n, PUSH_​RA, RET -> RET_​RA_​POP n)
-- [X] combine DUP, POP_​TO​_​RAI -> WRITE_​TO_​RAI
-- (combine POP, PUSH_​B b -> WRITE_​B b)
 **** IDEA implement larger array by using a BST tree of arrays?
 **** IDEA change table with dispatch addresses (for certain programs? might optimize memory footprint)
 **** IDEA collect statistics for
@@ -4580,6 +4580,30 @@ What information is needed for the different phases? => check the different opti
 - source code location :: location of the original source
 - previous node :: reference to node before change (to track changes through compilation)
 - previous note :: note that describes the transformation done from previous node to current node
+**** IDEA page defragmentation
+***** age / longivity of object
+- is higher if on the stack when leaving a function
+- is prop. to the stack eval stack depth
+***** need to defrag arises, if sum of free slots within all pages of one slot size > a page
+***** defrag could be initiated, iff:
+- memory is running low (# pages free < # pages used)
+- free slots in sum > 1 page (for one slot size), using 4 pages max
+=> moving these slots into less pages will free 1 page
+   select objects to be moved (from page with the lowest number of used slots)
+
+- find all references to these objects
+  use refcount to know when all references were found
+- scan eval stack + call-frames (w/ parameters) to search for matching references
+- follow stack + call-frame references into the heap to check for references
+- make sure to quickly identify refs to this page (share same page portion of the ptr)
+- find algorithm to have only tailcall recursion? (no additional heap nor stack usage!)
+***** use rc byte for more information
+[ma--cccc]
+cccc 4 bit for actual # of references
+m currently marked
+a age (old)
+- reserved
+***** during defrag, make temp usage of free slots on page to be freed (e.g. min 30% free)
 *** some iteration (ideas)
 **** more elaborate data structures
 - OPTIONAL tree for ordered traversal/find (each node needs data to decide <=, >)
@@ -4597,21 +4621,21 @@ What information is needed for the different phases? => check the different opti
       level a nodes have the (actual) sub tree (level b) in cdr and the max left subtree value in car position
         binary tree:   o        ---- level_0
                       /
-                     1  
+                     1
         maps to: (l_0a c1 . (l_0b 1 . NIL))
         (these binary trees do not always map to lists, since they may hold values in cdr position)
        binary tree:   o        ---- level_0
                       / \
                      1   2      ---- level_1
         maps to: (l_0a c1 . (l_0b 1 . 2))
-                     
+
         binary tree:     o      ---- level_0
                         / \
                        o   3    ---- level_1
                       / \
                      1   2      ---- level_2
         maps to: (l_0a c2 . (l_0b (l_1a c2 . (l_1b 1. 2)) . 3))
-       binary tree:   o        ---- level_0 
+       binary tree:   o        ---- level_0
                       / \
                      o   o      ---- level_1
                     /|   |\

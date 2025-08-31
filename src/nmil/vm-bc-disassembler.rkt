@@ -5,31 +5,44 @@
 disassembler for byte code
 
 |#
-
+;; (require (only-in racket/list findf))
 (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 (require (only-in "../tools/6510-disassembler.rkt" info-for-label))
+
+(require (only-in "./vm-opcode-definitions.rkt"
+                  opcode-definitions
+                  od-simple-bc?
+                  od-simple-bc--byte-code
+                  od-simple-bc--disassembler
+                  od-simple-bc--byte-count
+                  get-dyn-opcode-def))
 
 (provide disassembler-byte-code--byte-count
          disassemble-byte-code)
 
 ;; get count of bytes belonging to the given bc command
 (define (disassembler-byte-code--byte-count bc (bc_p1 0))
-  (cond [(memq bc (list #x68                ;; call
-                        #x0c)) 3]           ;; push int
-        [(memq bc (list #x18                ;; branch on true,
-                        #x1a                ;; branch on false,
-                        #x2e                ;; push byte
-                        #x3a                ;; branch if not zero
-                        #x5e                ;; branch if  zero
-                        #x78                ;; goto
-                        #xa8)) 2]           ;; BC_DEC_RBI_NZ_P_BRA
-        [(= bc #x04)                        ;; ext command
-         (cond [else 2])]                   ;; default is 2 bytes (for ext command)
-        [else 1]))                          ;; default is 1 byte (for regular byte code command)
+  (define dyn-opcode-def (get-dyn-opcode-def bc))
+  (cond
+    [dyn-opcode-def (apply (od-simple-bc--byte-count dyn-opcode-def) (list bc bc_p1))]
+    [(memq bc (list #x68                ;; call
+                    #x0c)) 3]           ;; push int
+    [(memq bc (list #x18                ;; branch on true,
+                    #x1a                ;; branch on false,
+                    #x2e                ;; push byte
+                    #x3a                ;; branch if not zero
+                    #x5e                ;; branch if  zero
+                    #x78                ;; goto
+                    #xa8)) 2]           ;; BC_DEC_RBI_NZ_P_BRA
+    [(= bc #x04)                        ;; ext command
+     (cond [else 2])]                   ;; default is 2 bytes (for ext command)
+    [else 1]))                          ;; default is 1 byte (for regular byte code command)
 
 ;; return disassembled string for bc (and byte 1, byte 2 thereafter)
 (define (disassemble-byte-code bc (bc_p1 0) (bc_p2 0) #:labels (labels (hash)))
+  (define dyn-opcode-def (get-dyn-opcode-def bc))
   (cond
+    [dyn-opcode-def (apply (od-simple-bc--disassembler dyn-opcode-def) bc bc_p1 bc_p2)]
     [(= bc #x00) "push l0"]
     [(= bc #x02) "push l1"]
     [(= bc #x04) "push l2"]
@@ -41,7 +54,7 @@ disassembler for byte code
        [(= bc_p1 #x03) "x gc free-list"]
        [else "x unknown"])]
     [(= bc #x0a) "reserved"]
-    [(= bc #x0c) (format "push int ~a" (format-hex-word (bytes->int bc_p1 bc_p2)))]
+    ;; [(= bc #x0c) (format "push int ~a" (format-hex-word (bytes->int bc_p1 bc_p2)))]
     [(= bc #x0e) "int?"]
     [(= bc #x10) "write l0"]
     [(= bc #x12) "write l1"]

@@ -550,11 +550,11 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   
             (bc PUSH_L1_CAR)        ;; car right-list
             (bc WRITE_TO_L2)        ;; remember car of right-list for later
-            (bc CDR)
+            (bc CDR)                ;; cdar right-list
             
             (bc PUSH_L1_CDR)
   
-            (bc PUSH_L2_CAR)        ;; push car of right-list
+            (bc PUSH_L2_CAR)        ;; push caar of right-list
             (bc TAIL_CALL)
   
      (label ELSE_COND__BTREE_DEPTH)

@@ -19,7 +19,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 ;; IDEA: implement exact numbers (as list of bcd digits e.g. 3 bcds in 16 bit?)
 
-(require (only-in racket/list flatten take empty? range))
+(require (only-in racket/list flatten take empty? range drop))
 
 (require "../6510.rkt")
 (require (only-in "../6510-utils.rkt" word->hex-string
@@ -109,12 +109,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (provide vm-interpreter
          VM_INTERPRETER_OPTABLE_EXT1_HB
          VM_INTERPRETER_OPTABLE_EXT1_LB
-         VM_INTERPRETER_OPTABLE
+         ;; VM_INTERPRETER_OPTABLE
+         final-interpreter-opcode-table
          just-vm-interpreter
          vm-interpreter-wo-jt
 
          BREAK
          bc
+         POKE_B
          WRITE_RA
          BDEC
          DEC_RAI
@@ -219,7 +221,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          WRITE_L2
          WRITE_L3
          PUSH_RA_AF
-         NATIVE)
+         NATIVE
+         IADD)
 
 (define (bc code)
   (ast-bytes-cmd '()  (flatten (list code))))
@@ -3428,6 +3431,33 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (label BRA__BC_DEC_RBI_NZ_P_BRA)
            (JMP BRANCH_BY_NEXT_BYTE__NO_POP))))
 
+
+(define POKE_B #xd8)
+(define BC_POKE_B
+  (flatten
+   (list
+    (label BC_POKE_B)
+           (LDY !$02)
+           (LDA (ZP_VM_PC),y)
+           (STA ZP_RP+1)
+           (DEY)
+           (LDA (ZP_VM_PC),y)
+           (STA ZP_RP)
+           (LDA ZP_RT+1)
+           (DEY)
+           (STA (ZP_RP),y)
+           (LDA !$03)
+           (JMP VM_INTERPRETER_INC_PC_A_TIMES))))
+
+(require racket/contract)
+(define/contract (write-opcode-into-optable optable byte-code label)
+  (-> (listof ast-command?) byte? string? (listof ast-command?))
+  (define idx (add1 (arithmetic-shift byte-code -1)))
+  (append
+   (take optable idx)
+   (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd label)))
+   (drop optable (add1 idx))))
+
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
@@ -3439,7 +3469,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_LOCAL_SHORT)         ;; 06  L3
            (word-ref BC_EXT1_CMD)                 ;; 08
            (word-ref VM_INTERPRETER_INC_PC)       ;; 0a reserved
-           (word-ref BC_PUSH_I)                   ;; 0c
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 0c           (word-ref BC_PUSH_I)
            (word-ref BC_INT_P)                    ;; 0e
            (word-ref BC_WRITE_LOCAL_SHORT)        ;; 10  L0
            (word-ref BC_WRITE_LOCAL_SHORT)        ;; 12  L1
@@ -3493,7 +3523,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_INT1)                ;; 72
            (word-ref BC_PUSH_INT2)                ;; 74
            (word-ref BC_PUSH_INTm1)               ;; 76
-           (word-ref BC_GOTO)                     ;; 78 
+           (word-ref BC_GOTO)                     ;; 78
            (word-ref BC_RET)                      ;; 7a
            (word-ref BC_BNOP)                     ;; 7c
            (word-ref BC_CDR)                      ;; 7e
@@ -3541,7 +3571,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_PUSH_LX_CDR)              ;; d2  L1
            (word-ref BC_PUSH_LX_CDR)              ;; d4  L2
            (word-ref BC_PUSH_LX_CDR)              ;; d6  L3
-           (word-ref VM_INTERPRETER_INC_PC)       ;; d8 reserved
+           (word-ref BC_POKE_B)                   ;; d8
            (word-ref VM_INTERPRETER_INC_PC)       ;; da reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; dc reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; de reserved
@@ -3563,6 +3593,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_GET_RA_ARRAY_FIELD)       ;; fe
            ;; ...
            )))
+
+(require (only-in "./vm-opcode-definitions.rkt"
+                  opcode-definitions
+                  od-simple-bc?
+                  od-simple-bc--byte-code
+                  od-simple-bc--label))
+
+(define final-interpreter-opcode-table
+  (foldl (lambda (od acc)
+           (cond
+             [(od-simple-bc? od)
+              (write-opcode-into-optable acc (od-simple-bc--byte-code od) (od-simple-bc--label od) )]
+             [else (raise-user-error "unknown opcode definition")]))
+         VM_INTERPRETER_OPTABLE
+         opcode-definitions))
 
 ;; interpreter loop without short commands
 ;; each byte command must have lowest bit set to 0 to be aligned to the jump table
@@ -3671,6 +3716,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_DEC_RAI
           BC_WRITE_TO_RBI
           BC_DEC_RBI_NZ_P_BRA
+          BC_POKE_B
           VM_INTERPRETER))
 
 (define vm-interpreter-wo-jt
@@ -3683,7 +3729,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define vm-interpreter
   (append vm-interpreter-wo-jt
           (list (org-align #x100)) ;; align to next page
-          VM_INTERPRETER_OPTABLE
+          final-interpreter-opcode-table
+          ;; VM_INTERPRETER_OPTABLE
           (list (label END__INTERPRETER_DATA))
           ))
 

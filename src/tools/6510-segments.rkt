@@ -387,9 +387,15 @@ define code/data segments for a c64 program that are used for generating a loade
   (require (only-in "../nmil/vm-interpreter.rkt"
                     bc
                     NATIVE
+                    PUSH_I2
+                    PUSH_I1
+                    IADD
+                    PUSH_B
+                    POKE_B
+                    BADD
                     VM_INTERPRETER_OPTABLE_EXT1_HB
                     VM_INTERPRETER_OPTABLE_EXT1_LB
-                    VM_INTERPRETER_OPTABLE
+                    final-interpreter-opcode-table
                     just-vm-interpreter))
   (require (only-in "../nmil/vm-mm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
 
@@ -448,7 +454,7 @@ define code/data segments for a c64 program that are used for generating a loade
     (cdar
      (assembly-code-list-org-code-sequences
       (new-assemble-to-code-list
-       (append (list (org #xcdc0)) VM_INTERPRETER_OPTABLE)
+       (append (list (org #xcdc0)) final-interpreter-opcode-table)
        (assembly-code-list-labels bc-interpreter) ;; (need to add labels collected by interpreter)
        ))))
   ;; @cf00
@@ -471,18 +477,23 @@ define code/data segments for a c64 program that are used for generating a loade
       (label BC_START)
              (ast-bytes-cmd '() byte-codes)
 
-             (bc NATIVE)     ;; end execution of interpreter
+             (bc PUSH_B) (byte $ff)
+             (bc PUSH_B) (byte $02)
+             (bc BADD)
+             (bc POKE_B) (byte $00 $04) ;; poke result $01 into $0400 (first character on screen)
 
-             (LDY STRING1_MSG)
-      (label LOOP_OUT_1)
-             (LDA STRING1_MSG,y)
-             (JSR $FFD2)
-             (DEY)
-             (BNE LOOP_OUT_1)
-             (RTS)
-      (label STRING1_MSG)
-             (byte 6)
-             (asc "!OLLEH")
+             (bc NATIVE)
+
+      ;;        (LDY STRING1_MSG)
+      ;; (label LOOP_OUT_1)
+      ;;        (LDA STRING1_MSG,y)
+      ;;        (JSR $FFD2)
+      ;;        (DEY)
+      ;;        (BNE LOOP_OUT_1)
+      ;;        (RTS)
+      ;; (label STRING1_MSG)
+      ;;        (byte 6)
+      ;;        (asc "!OLLEH")
 
              (RTS)           ;; return to basic, but since zero page is used by interpreter, don't expect anything to work
 
