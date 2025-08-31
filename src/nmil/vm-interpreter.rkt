@@ -3594,8 +3594,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            ;; ...
            )))
 
-(require (only-in "./vm-opcode-definitions.rkt"
-                  opcode-definitions
+(require (only-in "./vm-bc-opcode-definitions.rkt"
+                  bc-opcode-definitions
                   od-simple-bc?
                   od-simple-bc--byte-code
                   od-simple-bc--label))
@@ -3607,7 +3607,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
               (write-opcode-into-optable acc (od-simple-bc--byte-code od) (od-simple-bc--label od) )]
              [else (raise-user-error "unknown opcode definition")]))
          VM_INTERPRETER_OPTABLE
-         opcode-definitions))
+         bc-opcode-definitions))
 
 ;; interpreter loop without short commands
 ;; each byte command must have lowest bit set to 0 to be aligned to the jump table

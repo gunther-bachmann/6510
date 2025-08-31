@@ -13,7 +13,7 @@ depending on number of usage to make it as compact as possible!
 (require racket/contract/base)
 (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 
-(provide opcode-definitions
+(provide bc-opcode-definitions
          (struct-out od-simple-bc)
          get-dyn-opcode-def)
 
@@ -29,7 +29,7 @@ depending on number of usage to make it as compact as possible!
            (-> byte? byte? byte? string?)
            (-> byte? byte? byte?)))
 
-(define opcode-definitions
+(define bc-opcode-definitions
   (list
    (od-simple-bc "BC_PUSH_I" #x0c
                  (lambda (_bc bc-p1 bc-p2) (format "push int ~a" (format-hex-word (bytes->int bc-p1 bc-p2))))
@@ -39,4 +39,4 @@ depending on number of usage to make it as compact as possible!
   (findf (lambda (od)
            (and (od-simple-bc? od)
               (eq? od-simple-bc--byte-code bc)))
-         opcode-definitions))
+         bc-opcode-definitions))

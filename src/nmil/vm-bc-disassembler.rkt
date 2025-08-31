@@ -9,8 +9,8 @@ disassembler for byte code
 (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
 (require (only-in "../tools/6510-disassembler.rkt" info-for-label))
 
-(require (only-in "./vm-opcode-definitions.rkt"
-                  opcode-definitions
+(require (only-in "./vm-bc-opcode-definitions.rkt"
+                  bc-opcode-definitions
                   od-simple-bc?
                   od-simple-bc--byte-code
                   od-simple-bc--disassembler
