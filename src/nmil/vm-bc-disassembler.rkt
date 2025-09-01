@@ -42,7 +42,7 @@ disassembler for byte code
 (define (disassemble-byte-code bc (bc_p1 0) (bc_p2 0) #:labels (labels (hash)))
   (define dyn-opcode-def (get-dyn-opcode-def bc))
   (cond
-    [dyn-opcode-def (apply (od-simple-bc--disassembler dyn-opcode-def) bc bc_p1 bc_p2)]
+    [dyn-opcode-def (apply (od-simple-bc--disassembler dyn-opcode-def) (list bc bc_p1 bc_p2))]
     [(= bc #x00) "push l0"]
     [(= bc #x02) "push l1"]
     [(= bc #x04) "push l2"]

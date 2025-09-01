@@ -38,5 +38,5 @@ depending on number of usage to make it as compact as possible!
 (define (get-dyn-opcode-def bc)
   (findf (lambda (od)
            (and (od-simple-bc? od)
-              (eq? od-simple-bc--byte-code bc)))
+              (eq? (od-simple-bc--byte-code od) bc)))
          bc-opcode-definitions))
