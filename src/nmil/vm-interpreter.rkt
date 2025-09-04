@@ -3461,91 +3461,91 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (word-ref BC_EXT1_CMD)                 ;; 08
            (word-ref VM_INTERPRETER_INC_PC)       ;; 0a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 0c           (word-ref BC_PUSH_I)
-           (word-ref BC_INT_P)                    ;; 0e
-           (word-ref BC_WRITE_LOCAL_SHORT)        ;; 10  L0
-           (word-ref BC_WRITE_LOCAL_SHORT)        ;; 12  L1
-           (word-ref BC_WRITE_LOCAL_SHORT)        ;; 14  L2
-           (word-ref BC_WRITE_LOCAL_SHORT)        ;; 16  L3
-           (word-ref BC_T_P_BRA)                  ;; 18
-           (word-ref BC_F_P_BRA)                  ;; 1a
-           (word-ref BC_F_P_RET)                  ;; 1c
-           (word-ref BC_DUP)                      ;; 1e
-           (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 20  L0
-           (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 22  L1
-           (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 24  L2
-           (word-ref BC_POP_TO_LOCAL_SHORT)       ;; 26  L3
-           (word-ref BC_PUSH_NIL)                 ;; 28
-           (word-ref BC_PUSH_AF)                  ;; 2a
-           (word-ref BC_POP_TO_AF)                ;; 2c
-           (word-ref BC_PUSH_B)                   ;; 2e
-           (word-ref BC_WRITE_TO_LOCAL_SHORT)     ;; 30  L0
-           (word-ref BC_WRITE_TO_LOCAL_SHORT)     ;; 32  L1
-           (word-ref BC_WRITE_TO_LOCAL_SHORT)     ;; 34  L2
-           (word-ref BC_WRITE_TO_LOCAL_SHORT)     ;; 36  L3
-           (word-ref BC_BINC)                     ;; 38
-           (word-ref BC_NZ_P_BRA)                 ;; 3a
-           (word-ref BC_CELL_EQ_P)                ;; 3c
-           (word-ref BC_F_P_RET_F)                ;; 3e
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 0e           (word-ref BC_INT_P)
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 10  L0       (word-ref BC_WRITE_LOCAL_SHORT)
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 12  L1       (word-ref BC_WRITE_LOCAL_SHORT)
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 14  L2       (word-ref BC_WRITE_LOCAL_SHORT)
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 16  L3       (word-ref BC_WRITE_LOCAL_SHORT)
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 18           (word-ref BC_T_P_BRA)
+           (word-ref VM_INTERPRETER_INC_PC)                  ;; 1a
+           (word-ref VM_INTERPRETER_INC_PC)                  ;; 1c
+           (word-ref VM_INTERPRETER_INC_PC)                      ;; 1e
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 20  L0
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 22  L1
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 24  L2
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 26  L3
+           (word-ref VM_INTERPRETER_INC_PC)                 ;; 28
+           (word-ref VM_INTERPRETER_INC_PC)                  ;; 2a
+           (word-ref VM_INTERPRETER_INC_PC)                ;; 2c
+           (word-ref VM_INTERPRETER_INC_PC)                   ;; 2e
+           (word-ref VM_INTERPRETER_INC_PC)     ;; 30  L0
+           (word-ref VM_INTERPRETER_INC_PC)     ;; 32  L1
+           (word-ref VM_INTERPRETER_INC_PC)     ;; 34  L2
+           (word-ref VM_INTERPRETER_INC_PC)     ;; 36  L3
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 38
+           (word-ref VM_INTERPRETER_INC_PC)                 ;; 3a
+           (word-ref VM_INTERPRETER_INC_PC)                ;; 3c
+           (word-ref VM_INTERPRETER_INC_PC)                ;; 3e
            (word-ref VM_INTERPRETER_INC_PC)       ;; 40 reserved
-           (word-ref BC_NIL_P)                    ;; 42
-           (word-ref BC_I_Z_P)                    ;; 44
-           (word-ref BC_BADD)                     ;; 46
-           (word-ref BC_B_GT_P)                   ;; 48
-           (word-ref BC_NATIVE)                   ;; 4a
-           (word-ref BC_B_GE_P)                   ;; 4c
-           (word-ref BC_BSHR)                     ;; 4e
+           (word-ref VM_INTERPRETER_INC_PC)                    ;; 42
+           (word-ref VM_INTERPRETER_INC_PC)                    ;; 44
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 46
+           (word-ref VM_INTERPRETER_INC_PC)                   ;; 48
+           (word-ref VM_INTERPRETER_INC_PC)                   ;; 4a
+           (word-ref VM_INTERPRETER_INC_PC)                   ;; 4c
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 4e
            (word-ref VM_INTERPRETER_INC_PC)       ;; 50 reserved
-           (word-ref BC_CxxR)                     ;; 52  CDDR (bitwise-and #x1f x) must be #x12!
-           (word-ref BC_BREAK)                    ;; 54
-           (word-ref BC_SWAP)                     ;; 56
-           (word-ref BC_POP)                      ;; 58
-           (word-ref BC_CONS_PAIR_P)              ;; 5a
-           (word-ref BC_T_P_RET)                  ;; 5c
-           (word-ref BC_Z_P_BRA)                  ;; 5e
-           (word-ref BC_SET_ARRAY_FIELD)          ;; 60
-           (word-ref BC_SET_ARRAY_FIELD)          ;; 62
-           (word-ref BC_SET_ARRAY_FIELD)          ;; 64
-           (word-ref BC_SET_ARRAY_FIELD)          ;; 66
-           (word-ref BC_CALL)                     ;; 68
-           (word-ref BC_TAIL_CALL)                ;; 6a
-           (word-ref BC_BDEC)                     ;; 6c
-           (word-ref BC_CONS)                     ;; 6e
-           (word-ref BC_PUSH_INT0)                ;; 70
-           (word-ref BC_PUSH_INT1)                ;; 72
-           (word-ref BC_PUSH_INT2)                ;; 74
-           (word-ref BC_PUSH_INTm1)               ;; 76
-           (word-ref BC_GOTO)                     ;; 78
-           (word-ref BC_RET)                      ;; 7a
-           (word-ref BC_BNOP)                     ;; 7c
-           (word-ref BC_CDR)                      ;; 7e
-           (word-ref BC_Z_P_RET_POP_N)            ;; 80
-           (word-ref BC_Z_P_RET_POP_N)            ;; 82
-           (word-ref BC_Z_P_RET_POP_N)            ;; 84
-           (word-ref BC_Z_P_RET_POP_N)            ;; 86
-           (word-ref BC_COONS)                    ;; 88
-           (word-ref BC_SWAP_RA_RB)               ;; 8a
-           (word-ref BC_POP_TO_RB)                ;; 8c
-           (word-ref BC_PUSH_RA)                  ;; 8e
-           (word-ref BC_SET_RA_ARRAY_FIELD)       ;; 90
-           (word-ref BC_SET_RA_ARRAY_FIELD)       ;; 92
-           (word-ref BC_SET_RA_ARRAY_FIELD)       ;; 94
-           (word-ref BC_SET_RA_ARRAY_FIELD)       ;; 96
-           (word-ref BC_ALLOC_ARA)                ;; 98
-           (word-ref BC_PUSH_RA_AF)               ;; 9a
-           (word-ref BC_POP_TO_RA_AF)             ;; 9c
-           (word-ref BC_POP_TO_RAI)               ;; 9e
-           (word-ref BC_PUSH_LX_CAR)              ;; a0  L0
-           (word-ref BC_PUSH_LX_CAR)              ;; a2  L1
-           (word-ref BC_PUSH_LX_CAR)              ;; a4  L2
-           (word-ref BC_PUSH_LX_CAR)              ;; a6  L3
-           (word-ref BC_DEC_RBI_NZ_P_BRA)         ;; a8
-           (word-ref BC_WRITE_RA)                 ;; aa
-           (word-ref BC_WRITE_TO_RAI)             ;; ac
-           (word-ref BC_DEC_RAI)                  ;; ae
-           (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b0  N=1
-           (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b2  N=2
-           (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b4  N=3
-           (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b6  N=4
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 52  CDDR (bitwise-and #x1f x) must be #x12!
+           (word-ref VM_INTERPRETER_INC_PC)                    ;; 54
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 56
+           (word-ref VM_INTERPRETER_INC_PC)                      ;; 58
+           (word-ref VM_INTERPRETER_INC_PC)              ;; 5a
+           (word-ref VM_INTERPRETER_INC_PC)                  ;; 5c
+           (word-ref VM_INTERPRETER_INC_PC)                  ;; 5e
+           (word-ref VM_INTERPRETER_INC_PC)          ;; 60
+           (word-ref VM_INTERPRETER_INC_PC)          ;; 62
+           (word-ref VM_INTERPRETER_INC_PC)          ;; 64
+           (word-ref VM_INTERPRETER_INC_PC)          ;; 66
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 68
+           (word-ref VM_INTERPRETER_INC_PC)                ;; 6a
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 6c
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 6e
+           (word-ref VM_INTERPRETER_INC_PC)                ;; 70
+           (word-ref VM_INTERPRETER_INC_PC)                ;; 72
+           (word-ref VM_INTERPRETER_INC_PC)                ;; 74
+           (word-ref VM_INTERPRETER_INC_PC)               ;; 76
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 78
+           (word-ref VM_INTERPRETER_INC_PC)                      ;; 7a
+           (word-ref VM_INTERPRETER_INC_PC)                     ;; 7c
+           (word-ref VM_INTERPRETER_INC_PC)                      ;; 7e
+           (word-ref VM_INTERPRETER_INC_PC)            ;; 80
+           (word-ref VM_INTERPRETER_INC_PC)            ;; 82
+           (word-ref VM_INTERPRETER_INC_PC)            ;; 84
+           (word-ref VM_INTERPRETER_INC_PC)            ;; 86
+           (word-ref VM_INTERPRETER_INC_PC)                    ;; 88
+           (word-ref VM_INTERPRETER_INC_PC)               ;; 8a
+           (word-ref VM_INTERPRETER_INC_PC)                ;; 8c
+           (word-ref VM_INTERPRETER_INC_PC)                  ;; 8e
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 90
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 92
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 94
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 96
+           (word-ref VM_INTERPRETER_INC_PC)                ;; 98
+           (word-ref VM_INTERPRETER_INC_PC)               ;; 9a
+           (word-ref VM_INTERPRETER_INC_PC)             ;; 9c
+           (word-ref VM_INTERPRETER_INC_PC)               ;; 9e
+           (word-ref VM_INTERPRETER_INC_PC)              ;; a0  L0
+           (word-ref VM_INTERPRETER_INC_PC)              ;; a2  L1
+           (word-ref VM_INTERPRETER_INC_PC)              ;; a4  L2
+           (word-ref VM_INTERPRETER_INC_PC)              ;; a6  L3
+           (word-ref VM_INTERPRETER_INC_PC)         ;; a8
+           (word-ref VM_INTERPRETER_INC_PC)                 ;; aa
+           (word-ref VM_INTERPRETER_INC_PC)             ;; ac
+           (word-ref VM_INTERPRETER_INC_PC)                  ;; ae
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b0  N=1
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b2  N=2
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b4  N=3
+           (word-ref VM_INTERPRETER_INC_PC)       ;; b6  N=4
            (word-ref BC_WRITE_TO_RBI)             ;; b8
            (word-ref BC_CAR)                      ;; ba
            (word-ref BC_ISUB)                     ;; bc
