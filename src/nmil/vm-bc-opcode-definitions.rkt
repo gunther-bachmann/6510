@@ -41,7 +41,14 @@ depending on number of usage to make it as compact as possible!
    (od-simple-bc "BC_PUSH_LOCAL_SHORT"       #x02 "push l1" 1)
    (od-simple-bc "BC_PUSH_LOCAL_SHORT"       #x04 "push l2" 1)
    (od-simple-bc "BC_PUSH_LOCAL_SHORT"       #x06 "push l3" 1)
-   ;;                                        #x08 = BC_EXT
+   (od-simple-bc "BC_EXT1_CMD"               #x08
+                 (lambda (_labels _bc bc-p1 _bc-p2)
+                   (cond
+                     [(= bc-p1 #x01) "int max"]
+                     [(= bc-p1 #x02) "int inc"]
+                     [(= bc-p1 #x03) "gc"]
+                     [else "unknown"]))
+                 2)
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #x0a "reserved" 1) ;; reserved
    (od-simple-bc "BC_PUSH_I"                 #x0c
                  (lambda (_l _bc bc-p1 bc-p2) (format "push int $~a" (format-hex-word (bytes->int bc-p1 bc-p2))))
@@ -149,6 +156,42 @@ depending on number of usage to make it as compact as possible!
    (od-simple-bc "BC_NIL_P_RET_L0_POP_N"     #xb2 "ret l0 on zero? and pop 2" 1)
    (od-simple-bc "BC_NIL_P_RET_L0_POP_N"     #xb4 "ret l0 on zero? and pop 3" 1)
    (od-simple-bc "BC_NIL_P_RET_L0_POP_N"     #xb6 "ret l0 on zero? and pop 4" 1)
+   (od-simple-bc "BC_WRITE_TO_RBI"           #xb8 "write to rbi" 1)
+   (od-simple-bc "BC_CAR"                    #xba "car" 1)
+   (od-simple-bc "BC_ISUB"                   #xbc "int -" 1)
+   (od-simple-bc "BC_IADD"                   #xbe "int +" 1)
+   (od-simple-bc "BC_NZ_P_RET_POP_N"         #xc0 "ret on not zero? and pop 1" 1)
+   (od-simple-bc "BC_NZ_P_RET_POP_N"         #xc2 "ret on not zero? and pop 2" 1)
+   (od-simple-bc "BC_NZ_P_RET_POP_N"         #xc4 "ret on not zero? and pop 3" 1)
+   (od-simple-bc "BC_NZ_P_RET_POP_N"         #xc6 "ret on not zero? and pop 4" 1)
+   (od-simple-bc "BC_I_GT_P"                 #xc8 "int >?" 1)
+   (od-simple-bc "BC_BINC_RAI"               #xca "inc rai" 1)
+   (od-simple-bc "BC_B_LT_P"                 #xcc "byte <?" 1)
+   (od-simple-bc "BC_POP_TO_RA"              #xce "pop to ra" 1)
+   (od-simple-bc "BC_PUSH_LX_CDR"            #xd0 "push (cdr l0)" 1)
+   (od-simple-bc "BC_PUSH_LX_CDR"            #xd2 "push (cdr l1)" 1)
+   (od-simple-bc "BC_PUSH_LX_CDR"            #xd4 "push (cdr l2)" 1)
+   (od-simple-bc "BC_PUSH_LX_CDR"            #xd6 "push (cdr l3)" 1)
+   (od-simple-bc "BC_POKE_B"                 #xd8 "poke byte" 1)
+   (od-simple-bc "VM_INTERPRETER_INC_PC"     #xda "reserved" 1) ;; reserved
+   (od-simple-bc "VM_INTERPRETER_INC_PC"     #xdc "reserved" 1) ;; reserved
+   (od-simple-bc "VM_INTERPRETER_INC_PC"     #xde "reserved" 1) ;; reserved
+   (od-simple-bc "BC_CxxR"                   #xe0 "caar" 1)
+   (od-simple-bc "VM_INTERPRETER_INC_PC"     #xe2 "reserved" 1) ;; reserved
+   (od-simple-bc "VM_INTERPRETER_INC_PC"     #xe4 "reserved" 1) ;; reserved
+   (od-simple-bc "BC_CxxR"                   #xe6 "cadr" 1)
+   (od-simple-bc "VM_INTERPRETER_INC_PC"     #xe8 "reserved" 1) ;; reserved
+   (od-simple-bc "VM_INTERPRETER_INC_PC"     #xea "reserved" 1) ;; reserved
+   (od-simple-bc "BC_CxxR"                   #xec "cdar" 1)
+   (od-simple-bc "VM_INTERPRETER_INC_PC"     #xee "reserved" 1) ;; reserved
+   (od-simple-bc "BC_GET_ARRAY_FIELD"        #xf0 "get array field 0" 1)
+   (od-simple-bc "BC_GET_ARRAY_FIELD"        #xf2 "get array field 1" 1)
+   (od-simple-bc "BC_GET_ARRAY_FIELD"        #xf4 "get array field 2" 1)
+   (od-simple-bc "BC_GET_ARRAY_FIELD"        #xf6 "get array field 3" 1)
+   (od-simple-bc "BC_GET_RA_ARRAY_FIELD"     #xf8 "get (ra),0" 1)
+   (od-simple-bc "BC_GET_RA_ARRAY_FIELD"     #xfa "get (ra),1" 1)
+   (od-simple-bc "BC_GET_RA_ARRAY_FIELD"     #xfc "get (ra),2" 1)
+   (od-simple-bc "BC_GET_RA_ARRAY_FIELD"     #xfe "get (ra),3" 1)
    ))
 
 (define/contract (disassemble-od-simple-bc dyn-opcode-def labels bc bc_p1 bc_p2)
