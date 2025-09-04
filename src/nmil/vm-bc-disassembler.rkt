@@ -15,7 +15,9 @@ disassembler for byte code
                   od-simple-bc--byte-code
                   od-simple-bc--disassembler
                   od-simple-bc--byte-count
-                  get-dyn-opcode-def))
+                  get-dyn-opcode-def
+                  disassemble-od-simple-bc
+                  byte-count-od-simple-bc))
 
 (provide disassembler-byte-code--byte-count
          disassemble-byte-code)
@@ -24,7 +26,7 @@ disassembler for byte code
 (define (disassembler-byte-code--byte-count bc (bc_p1 0))
   (define dyn-opcode-def (get-dyn-opcode-def bc))
   (cond
-    [dyn-opcode-def (apply (od-simple-bc--byte-count dyn-opcode-def) (list bc bc_p1))]
+    [dyn-opcode-def (byte-count-od-simple-bc dyn-opcode-def bc bc_p1)]
     [(memq bc (list #x68                ;; call
                     #x0c)) 3]           ;; push int
     [(memq bc (list #x18                ;; branch on true,
@@ -42,11 +44,11 @@ disassembler for byte code
 (define (disassemble-byte-code bc (bc_p1 0) (bc_p2 0) #:labels (labels (hash)))
   (define dyn-opcode-def (get-dyn-opcode-def bc))
   (cond
-    [dyn-opcode-def (apply (od-simple-bc--disassembler dyn-opcode-def) (list bc bc_p1 bc_p2))]
-    [(= bc #x00) "push l0"]
-    [(= bc #x02) "push l1"]
-    [(= bc #x04) "push l2"]
-    [(= bc #x06) "push l3"]
+    [dyn-opcode-def (disassemble-od-simple-bc dyn-opcode-def bc bc_p1 bc_p2)]
+    ;; [(= bc #x00) "push l0"]
+    ;; [(= bc #x02) "push l1"]
+    ;; [(= bc #x04) "push l2"]
+    ;; [(= bc #x06) "push l3"]
     [(= bc #x08) ;; ext command
      (cond
        [(= bc_p1 #x01) "x max int"]
@@ -175,3 +177,11 @@ disassembler for byte code
     [(= bc #xfc) "get (ra),2"]
     [(= bc #xfe) "get (ra),3"]
     [else "unknown bc"]))
+
+(module+ test #| disassemble |#
+  (require "../6510-test-utils.rkt")
+  (check-equal? (disassemble-byte-code #x00)
+                "push l0")
+
+  (check-equal? (disassemble-byte-code #x0c #x10 #x3f)
+                "push int $3f10"))

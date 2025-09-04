@@ -3449,24 +3449,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LDA !$03)
            (JMP VM_INTERPRETER_INC_PC_A_TIMES))))
 
-(require racket/contract)
-(define/contract (write-opcode-into-optable optable byte-code label)
-  (-> (listof ast-command?) byte? string? (listof ast-command?))
-  (define idx (add1 (arithmetic-shift byte-code -1)))
-  (append
-   (take optable idx)
-   (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd label)))
-   (drop optable (add1 idx))))
-
 ;; must be page aligned!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
     (label VM_INTERPRETER_OPTABLE)                ;; code
-           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 00  L0
-           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 02  L1
-           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 04  L2
-           (word-ref BC_PUSH_LOCAL_SHORT)         ;; 06  L3
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 00  L0       (word-ref BC_PUSH_LOCAL_SHORT)
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 02  L1       (word-ref BC_PUSH_LOCAL_SHORT)
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 04  L2       (word-ref BC_PUSH_LOCAL_SHORT)
+           (word-ref VM_INTERPRETER_INC_PC)       ;; 06  L3       (word-ref BC_PUSH_LOCAL_SHORT)
            (word-ref BC_EXT1_CMD)                 ;; 08
            (word-ref VM_INTERPRETER_INC_PC)       ;; 0a reserved
            (word-ref VM_INTERPRETER_INC_PC)       ;; 0c           (word-ref BC_PUSH_I)
@@ -3598,7 +3589,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   bc-opcode-definitions
                   od-simple-bc?
                   od-simple-bc--byte-code
-                  od-simple-bc--label))
+                  od-simple-bc--label
+                  write-opcode-into-optable))
 
 (define final-interpreter-opcode-table
   (foldl (lambda (od acc)
