@@ -35,14 +35,7 @@ functions
 (module+ test
   (require rackunit)
   (require "../6510.rkt")
-  (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
-  (require (only-in "./vm-interpreter.rkt"
-                    BNOP
-                    WRITE_TO_L0
-                    T_P_BRA
-                    PUSH_L0
-                    CALL
-                    GOTO)))
+  (require (only-in "./vm-bc-opcode-definitions.rkt" bc)))
 
 
 ;; collect all labels in this list of BC-AST-CMDS
@@ -147,13 +140,13 @@ functions
   (check-equal? (bc-resolve- bc-cmds-unresolved (bc-collect-labels bc-cmds-unresolved))
                 (list
                  (ast-label-def-cmd '() "first")
-                 (ast-bytes-cmd '() (list BNOP))
+                 (bc BNOP)
                  (ast-label-def-cmd '() "next")
-                 (ast-bytes-cmd '() (list GOTO))
+                 (bc GOTO)
                  (ast-bytes-cmd '() '(255))
-                 (ast-bytes-cmd '() (list GOTO))
+                 (bc GOTO)
                  (ast-bytes-cmd '() '(3))
-                 (ast-bytes-cmd '() (list CALL))
+                 (bc CALL)
                  (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "yz"))
                  (ast-label-def-cmd '() "last")))
 

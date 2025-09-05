@@ -410,13 +410,6 @@ currently the following test programs are created
   ;; idea
   (require (only-in "../nmil/vm-bc-opcode-definitions.rkt" bc))
   (require (only-in "../nmil/vm-interpreter.rkt"
-                    NATIVE
-                    PUSH_I2
-                    PUSH_I1
-                    IADD
-                    PUSH_B
-                    POKE_B
-                    BADD
                     final-extended-optable-lb
                     final-extended-optable-hb
                     final-interpreter-opcode-table

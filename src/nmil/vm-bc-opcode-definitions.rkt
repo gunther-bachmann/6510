@@ -10,9 +10,7 @@ depending on number of usage to make it as compact as possible!
 
 |#
 
-(require racket/contract)
-(require (only-in racket/string string-prefix?))
-(require (only-in "../6510.rkt" byte-ref))
+(require (only-in racket/contract define/contract struct-guard/c or/c -> listof ->*))
 (require (only-in "../util.rkt"
                   bytes->int
                   format-hex-byte
@@ -24,6 +22,7 @@ depending on number of usage to make it as compact as possible!
 (require (only-in "../ast/6510-command.rkt"
                   ast-command?
                   ast-bytes-cmd
+                  ast-bytes-cmd-bytes
                   ast-unresolved-bytes-cmd
                   ast-resolve-byte-scmd
                   ast-resolve-word-scmd))
@@ -39,6 +38,8 @@ depending on number of usage to make it as compact as possible!
          write-lb-opcode-into-x-optable
          disassemble-od-simple-bc
          byte-count-od-simple-bc
+         fetch-opcode-list
+         get-single-opcode
          bc)
 
 (define-struct od-simple-bc
@@ -311,6 +312,12 @@ depending on number of usage to make it as compact as possible!
                (list (od-extended-bc--byte-code od))
                (fetch-opcode-list opcode-label (od-extended-bc--sub-commands od))))]
     [else (raise-user-error (format "opcode not found ~a" opcode-label))]))
+
+(define (get-single-opcode label)
+  (define opcodes (fetch-opcode-list label))
+  (when (> (length opcodes) 1)
+    (raise-user-error (format "opcode ~a has more than one byte code (rather a list)" opcodes)))
+  (car opcodes))
 
 (define-syntax-rule  (bc label)
   (ast-bytes-cmd '() (fetch-opcode-list (symbol->string 'label))))

@@ -13,7 +13,7 @@
 (require (only-in racket/list range take))
 (require (only-in racket/match match))
 (require (only-in racket/vector vector-append))
-
+(require/typed "./vm-bc-opcode-definitions.rkt" [get-single-opcode (-> String Byte)])
 (require (only-in racket/hash hash-union))
 
 (require (only-in threading ~>>))
@@ -22,15 +22,6 @@
 (require "./ast.rkt")
 (require "./parse.rkt")
 
-(require/typed "./vm-interpreter.rkt"
-  [PUSH_B Byte]
-  [PUSH_I Byte]
-  [PUSH_NIL Byte]
-  [CONS Byte]
-  [CALL Byte]
-  [RET Byte]
-  [NIL_P Byte]
-  )
 (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                   disassemble-byte-code
                   make-vm
@@ -132,9 +123,9 @@
   (cond
     [(ast-at-int-? atom)
      (define value (ast-at-int--value atom))
-     (vector-immutable PUSH_I (low-byte value) (high-byte value))]
+     (vector-immutable (get-single-opcode "PUSH_I") (low-byte value) (high-byte value))]
     [(ast-at-bool-? atom)
-     (vector-immutable PUSH_B (if (ast-at-bool--bool atom) (cell-byte--value TRUE) (cell-byte--value FALSE)))]
+     (vector-immutable (get-single-opcode "PUSH_B") (if (ast-at-bool--bool atom) (cell-byte--value TRUE) (cell-byte--value FALSE)))]
     [(ast-at-id-? atom)
      (define reg-ref (hash-ref (ast-info--id-map (ast-node--info atom)) (ast-at-id--id atom)))
      (generate-push reg-ref)]
@@ -152,10 +143,10 @@
   (check-exn exn:fail? (lambda () (gen-atom (ast-at-id- (make-ast-info #:id-map (hash 'some (register-ref- 'Param 10))) 'unknown))))
 
   (check-equal? (gen-atom (ast-at-int- (make-ast-info) #x02fe))
-                (vector-immutable PUSH_I #xfe #x02))
+                (vector-immutable (get-single-opcode "PUSH_I") #xfe #x02))
 
   (check-equal? (gen-atom (ast-at-bool- (make-ast-info) #t))
-                (vector-immutable PUSH_B (cell-byte--value TRUE))))
+                (vector-immutable (get-single-opcode "PUSH_B") (cell-byte--value TRUE))))
 
 (define-type Id-Reg-Map (Immutable-HashTable Symbol register-ref-))
 
@@ -633,17 +624,17 @@
                 (generation-artifact--bytes generated-body)
                 (if (generation-artifact--ret-can-be-removed generated-body)
                     (vector-immutable)
-                    (vector-immutable RET))))
+                    (vector-immutable (get-single-opcode "RET")))))
 
 ;; generate for a call to a function (built in or user)
 (define (svm-generate--fun-call (call : ast-ex-fun-call-) (artifact : generation-artifact-)) : generation-artifact-
   ;; open: tail call, user function call, runtime function call, complete list of vm internal function calls
   (define call-symbol (ast-ex-fun-call--fun call))
   (define call-byte (case call-symbol
-                      [(nil?) NIL_P]
-                      [(car)  CAR]
-                      [(cdr)  CDR]
-                      [(cons) CONS]
+                      [(nil?) (get-single-opcode "NIL_P")]
+                      [(car)  (get-single-opcode "CAR")]
+                      [(cdr)  (get-single-opcode "CDR")]
+                      [(cons) (get-single-opcode "CONS")]
                       [else
                        (if (eq? call-symbol
                                 (string->symbol (generation-artifact--function-scope artifact)))
@@ -685,19 +676,19 @@
     (svm-generate--fun-call
      (ast-ex-fun-call- (make-ast-info) 'nil? (list (ast-at-int- (make-ast-info) 10) (ast-at-int- (make-ast-info) 20)))
      (make-generation-artifact)))
-   (vector-immutable PUSH_I (low-byte 20) (high-byte 20)
-                     PUSH_I (low-byte 10) (high-byte 10)
-                     NIL_P)))
+   (vector-immutable (get-single-opcode "PUSH_I") (low-byte 20) (high-byte 20)
+                     (get-single-opcode "PUSH_I") (low-byte 10) (high-byte 10)
+                     (get-single-opcode "NIL_P"))))
 
 ;; push integer
 (define (svm-generate--int (a : ast-at-int-) (artifact : generation-artifact-)) : generation-artifact-
   (define val (ast-at-int--value a))
-  (append-bytes artifact (vector-immutable PUSH_I (low-byte val) (high-byte val))))
+  (append-bytes artifact (vector-immutable (get-single-opcode "PUSH_I") (low-byte val) (high-byte val))))
 
 (module+ test #| svm-generate--int |#
   (check-equal? (generation-artifact--bytes
                  (svm-generate--int (ast-at-int- (make-ast-info) 300) (make-generation-artifact)))
-                (vector-immutable PUSH_I 44 1)))
+                (vector-immutable (get-single-opcode "PUSH_I") 44 1)))
 
 ;; generate an if expression
 (define (svm-generate--if (node : ast-ex-if-) (artifact : generation-artifact-)) : generation-artifact-
@@ -711,7 +702,7 @@
   (define cond-matches-param-push-nil?
     (and (= 2 (vector-length cond-code))
        (is-push-param-short (vector-ref cond-code 0))
-       (= NIL_P (vector-ref cond-code 1))))
+       (= (get-single-opcode "NIL_P") (vector-ref cond-code 1))))
   (define second-block-matches-param-push
     (and (= 1 (vector-length second-block))
        (is-push-param-short (vector-ref second-block 0))))
@@ -736,7 +727,7 @@
                     first-block
                     (if first-block-ends-in-jump
                         (vector-immutable)
-                        (vector-immutable GOTO (cast (+ 1 #|offset itself is one byte length|#
+                        (vector-immutable (get-single-opcode "GOTO") (cast (+ 1 #|offset itself is one byte length|#
                                                        (vector-length second-block)) Byte)))
                     second-block)))
 
@@ -761,13 +752,13 @@
                                   #f)
                       (make-generation-artifact)))
 
-   (vector-immutable PUSH_I (low-byte 20) (high-byte 20)
-                     PUSH_I (low-byte 10) (high-byte 10)
-                     NIL_P
-                     BRA 6
-                     PUSH_I (low-byte 200) (high-byte 200)
-                     GOTO 4
-                     PUSH_I (low-byte 100) (high-byte 100))))
+   (vector-immutable (get-single-opcode "PUSH_I") (low-byte 20) (high-byte 20)
+                     (get-single-opcode "PUSH_I") (low-byte 10) (high-byte 10)
+                     (get-single-opcode "NIL_P")
+                     (get-single-opcode "T_P_BRA") 6
+                     (get-single-opcode "PUSH_I") (low-byte 200) (high-byte 200)
+                     (get-single-opcode "GOTO") 4
+                     (get-single-opcode "PUSH_I") (low-byte 100) (high-byte 100))))
 
 ;; generate a node (dispatch to specific generator)
 (define (svm-generate (node : ast-node-) (artifact : generation-artifact-)) : generation-artifact-
@@ -800,11 +791,11 @@
     (vector-immutable (sPUSH_PARAMc 0)     ;; a-list
                       (sNIL?-RET-PARAMc 1) ;; if a-list is nil, return b-list
                       (sPUSH_PARAMc 0)
-                      CDR                  ;; (cdr a-list)
+                      (get-single-opcode "CDR")                  ;; (cdr a-list)
                       (sPUSH_PARAMc 1)
                       (sPUSH_PARAMc 0)
-                      CAR
-                      CONS                 ;; (cons (car a-list) b-list)
-                      TAIL_CALL            ;; write two stack values into param0 and 1 and jump to function start
+                      (get-single-opcode "CAR")
+                      (get-single-opcode "CONS")                 ;; (cons (car a-list) b-list)
+                      (get-single-opcode "TAIL_CALL")            ;; write two stack values into param0 and 1 and jump to function start
                       )
    "optimization should yield 9 bytes (current min)"))

@@ -4,64 +4,7 @@
 
 (require "../6510.rkt")
 (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
-(require [only-in "./vm-interpreter.rkt"
-                  vm-interpreter
-                  RET
-                  CALL
-                  PUSH_NIL
-                  PUSH_I
-                  PUSH_B
-                  CELL_EQ_P
-                  EXT
-                  CAAR
-                  CADR
-                  CDAR
-                  CDDR
-                  COONS
-                  POP
-                  DUP
-                  BNOP
-                  I_Z_P
-                  IINC
-                  IMAX
-                  F_P_BRA
-                  T_P_BRA
-                  I_GT_P
-                  CONS_PAIR_P
-                  T_P_RET
-                  F_P_RET
-                  NIL_P_RET_L0_POP_1
-                  INT_P
-                  SWAP
-                  POP_TO_L0
-                  POP_TO_L1
-                  POP_TO_L2
-                  POP_TO_L3
-                  WRITE_TO_L0
-                  WRITE_TO_L1
-                  WRITE_TO_L2
-                  WRITE_TO_L3
-                  PUSH_L0
-                  PUSH_L1
-                  PUSH_L2
-                  PUSH_L3
-                  PUSH_L0_CAR
-                  PUSH_L1_CAR
-                  PUSH_L2_CAR
-                  PUSH_L3_CAR
-                  PUSH_L0_CDR
-                  PUSH_L1_CDR
-                  PUSH_L2_CDR
-                  PUSH_L3_CDR
-                  PUSH_I0
-                  PUSH_I1
-                  PUSH_I2
-                  PUSH_IM1
-                  WRITE_L0
-                  WRITE_L1
-                  WRITE_L2
-                  WRITE_L3
-                  NATIVE])
+(require [only-in "./vm-interpreter.rkt" vm-interpreter])
 
 (module+ test #|  |#
   (require "../6510-test-utils.rkt")
