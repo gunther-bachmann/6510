@@ -11,6 +11,7 @@ depending on number of usage to make it as compact as possible!
 |#
 
 (require racket/contract)
+(require (only-in "../6510.rkt" byte-ref))
 (require (only-in "../util.rkt"
                   bytes->int
                   format-hex-byte
@@ -28,7 +29,8 @@ depending on number of usage to make it as compact as possible!
 (provide bc-opcode-definitions
          (struct-out od-simple-bc)
          (struct-out od-extended-bc)
-         get-dyn-opcode-def
+         get-dyn-opcode-simple-def
+         find-dyn-opcode-def
          write-opcode-into-optable
          write-hb-opcode-into-x-optable
          write-lb-opcode-into-x-optable
@@ -37,7 +39,7 @@ depending on number of usage to make it as compact as possible!
 
 (define-struct od-simple-bc
   (-label               ;; ast label into the implementation of this bc within the interpreter
-   -byte-code           ;; the actual byte code
+   -byte-code           ;; the actual byte code (must be even!)
    -disassembler        ;; function to disassemble this byte code (and its operands)
    -byte-count)         ;; function returning the number of bytes used by this byte code and its operands
   #:transparent
@@ -48,16 +50,14 @@ depending on number of usage to make it as compact as possible!
            (or/c byte? (-> byte? byte? byte?))))
 
 (define-struct od-extended-bc
-  (-label
-   -byte-code
-   -sub-commands)
+  (-label               ;; ast label into the implementation of this bc (loading code from the extended table)
+   -byte-code           ;; the actual byte code (can be any byte, no need to be even)
+   -sub-commands)       ;; subcommands (all od-simple-bc definitions) jumped at by the extended command
   #:transparent
   #:guard (struct-guard/c
            string?
            byte?
            (listof od-simple-bc?)))
-
-
 
 (define bc-opcode-definitions
   (list
@@ -67,7 +67,7 @@ depending on number of usage to make it as compact as possible!
    (od-simple-bc "BC_PUSH_LOCAL_SHORT"       #x06 "push l3" 1)
 
    (od-extended-bc "BC_EXT1_CMD"             #x08
-    (list (od-simple-bc "VM_INTERPRETER_INC_PC" #x00 "reserved" 1)
+    (list (od-simple-bc "VM_INTERPRETER_INC_PC_2_TIMES" #x00 "reserved" 1)
           (od-simple-bc "BC_IMAX"               #x01 "int max" 1)
           (od-simple-bc "BC_IINC"               #x02 "int inc" 1)
           (od-simple-bc "BC_GC_FL"              #x03 "gc" 1)))
@@ -231,12 +231,24 @@ depending on number of usage to make it as compact as possible!
       df
       (apply df (list bc bc_p1))))
 
-(define/contract (get-dyn-opcode-def bc)
-  (-> byte? (or/c #f od-simple-bc?))
+(define/contract (find-dyn-opcode-def bc (opcode-defs bc-opcode-definitions))
+  (->* [byte?] [(listof (or/c od-simple-bc? od-extended-bc?))] (or/c od-simple-bc? od-extended-bc?))
   (findf (lambda (od)
-           (and (od-simple-bc? od)
-              (eq? (od-simple-bc--byte-code od) bc)))
-         bc-opcode-definitions))
+           (or (and (od-simple-bc? od)
+                 (eq? (od-simple-bc--byte-code od) bc))
+              (and (od-extended-bc? od)
+                 (eq? (od-extended-bc--byte-code od) bc))))
+         opcode-defs))
+
+(define/contract (get-dyn-opcode-simple-def bc bc-p1)
+  (-> byte? byte? (or/c #f od-simple-bc?))
+  (define opcode (find-dyn-opcode-def bc))
+  (cond
+    [(od-simple-bc? opcode)
+     opcode]
+    [(od-extended-bc? opcode)
+     (find-dyn-opcode-def bc-p1 (od-extended-bc--sub-commands opcode))]
+    [else #f]))
 
 (define/contract (write-opcode-into-optable optable byte-code label)
   (-> (listof ast-command?) byte? string? (listof ast-command?))
@@ -247,15 +259,22 @@ depending on number of usage to make it as compact as possible!
    (drop optable (add1 idx))))
 
 (define (write-hb-opcode-into-x-optable x-optable label byte-code)
-  (define idx (add1 byte-code))
-  (append
-   (take x-optable idx)
-   (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-byte-scmd label 'high-byte)))
-   (drop x-optable (add1 idx))))
+  (write-byte-opcode-into-x-optable x-optable label byte-code 'high-byte))
 
 (define (write-lb-opcode-into-x-optable x-optable label byte-code)
+  (write-byte-opcode-into-x-optable x-optable label byte-code 'low-byte))
+
+(define (write-byte-opcode-into-x-optable x-optable label byte-code lb-indicator)
   (define idx (add1 byte-code))
+  (define table-len (length x-optable))
+  (define x-table (if (> table-len idx)
+                      x-optable
+                      (append x-optable
+                              (build-list (- idx table-len)
+                                          (lambda (_i) (ast-unresolved-bytes-cmd '() '() (ast-resolve-byte-scmd "VM_INTERPRETER_INC_PC" lb-indicator)))))))
   (append
-   (take x-optable idx)
-   (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-byte-scmd label 'low-byte)))
-   (drop x-optable (add1 idx))))
+   (take x-table idx)
+   (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-byte-scmd label lb-indicator)))
+   (if (> table-len idx)
+       (drop x-table (add1 idx))
+       (list))))

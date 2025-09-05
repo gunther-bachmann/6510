@@ -119,9 +119,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define PAGE_AVAIL_1_W #x8900))
 
 (provide vm-interpreter
-         ;; VM_INTERPRETER_OPTABLE_EXT1_HB
-         ;; VM_INTERPRETER_OPTABLE_EXT1_LB
-         ;; VM_INTERPRETER_OPTABLE
          final-interpreter-opcode-table
          final-extended-optable-hb
          final-extended-optable-lb
@@ -263,11 +260,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STX ZP_VM_PC+1)
           (STX ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $8000
           (RTS)))
-
-;; (define ZERO?_RET_LOCAL0_POP_1 #x99)
-;; (define ZERO?_RET_LOCAL0_POP_2 #x9b)
-;; (define ZERO?_RET_LOCAL0_POP_3 #x9d)
-;; (define ZERO?_RET_LOCAL0_POP_4 #x9f)
 
                                  ;; @DC-B: NIL_P_RET_L0_POP_1, group: return
 (define NIL_P_RET_L0_POP_1 #xb0) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *1* from evlstk
@@ -2550,28 +2542,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define VM_INTERPRETER_OPTABLE_EXT1_LB
-  (flatten
-   (list
-    (label VM_INTERPRETER_OPTABLE_EXT1_LB)
-    (build-list 4 (lambda (_i) (byte-ref <VM_INTERPRETER_INC_PC)))
-    ;; (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
-    ;;        (byte-ref <BC_IMAX)                ;; 01
-    ;;        (byte-ref <BC_IINC)                ;; 02
-    ;;        (byte-ref <BC_GC_FL)
-           ;; 03
-           )))
+  (list
+   (label VM_INTERPRETER_OPTABLE_EXT1_LB)))
 
 (define VM_INTERPRETER_OPTABLE_EXT1_HB
-  (flatten
-   (list
-    (label VM_INTERPRETER_OPTABLE_EXT1_HB)
-    (build-list 4 (lambda (_i) (byte-ref >VM_INTERPRETER_INC_PC)))
-    ;; (byte-ref >VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
-    ;;        (byte-ref >BC_IMAX)                ;; 01
-    ;;        (byte-ref >BC_IINC)                ;; 02
-    ;;        (byte-ref >BC_GC_FL)
-           ;; 03
-           )))
+  (list
+   (label VM_INTERPRETER_OPTABLE_EXT1_HB)))
 
 ;; @DC-B: EXT, group: misc
 ;; extension byte code, the next byte is the actual command (decoded from the extended byte code jump table)
@@ -3636,17 +3612,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (list (label END__INTERPRETER))
           final-extended-optable-hb
           final-extended-optable-lb
-          ;; VM_INTERPRETER_OPTABLE_EXT1_HB
-          ;; VM_INTERPRETER_OPTABLE_EXT1_LB
           vm-lists))
 
 (define vm-interpreter
   (append vm-interpreter-wo-jt
           (list (org-align #x100)) ;; align to next page
           final-interpreter-opcode-table
-          ;; VM_INTERPRETER_OPTABLE
-          (list (label END__INTERPRETER_DATA))
-          ))
+          (list (label END__INTERPRETER_DATA))))
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))

@@ -15,7 +15,10 @@ disassembler for byte code
                   od-simple-bc--byte-code
                   od-simple-bc--disassembler
                   od-simple-bc--byte-count
-                  get-dyn-opcode-def
+                  get-dyn-opcode-simple-def
+                  od-extended-bc?
+                  od-extended-bc--sub-commands
+                  find-dyn-opcode-def
                   disassemble-od-simple-bc
                   byte-count-od-simple-bc))
 
@@ -23,15 +26,35 @@ disassembler for byte code
          disassemble-byte-code)
 
 ;; get count of bytes belonging to the given bc command
-(define (disassembler-byte-code--byte-count bc (bc_p1 0))
-  (define dyn-opcode-def (get-dyn-opcode-def bc))
+(define (disassembler-byte-code--byte-count bc (bc_p1 0) (bc_p2 0))
+  (define dyn-opcode-def (find-dyn-opcode-def bc))
   (cond
-    [dyn-opcode-def (byte-count-od-simple-bc dyn-opcode-def bc bc_p1)]
-    [else 1]))                          ;; default is 1 byte (for regular byte code command)
+    [(and dyn-opcode-def (od-simple-bc? dyn-opcode-def))
+     (byte-count-od-simple-bc dyn-opcode-def bc bc_p1)]
+    [(and dyn-opcode-def (od-extended-bc? dyn-opcode-def))
+     (add1 (byte-count-od-simple-bc
+            (find-dyn-opcode-def bc_p1 (od-extended-bc--sub-commands dyn-opcode-def))
+            bc_p1
+            bc_p2))]
+    [else (raise-user-error (format "unknown bc: ~a" (format-hex-byte bc)))]))                          ;; default is 1 byte (for regular byte code command)
+
+(module+ test #| disassemble |#
+  (require "../6510-test-utils.rkt")
+  (check-equal? (disassembler-byte-code--byte-count #x00)
+                1
+                "push l0")
+
+  (check-equal? (disassembler-byte-code--byte-count #x0c #x10 #x3f)
+                3
+                "push int $3f10")
+
+  (check-equal? (disassembler-byte-code--byte-count #x08 #x01)
+                2
+                "int max"))
 
 ;; return disassembled string for bc (and byte 1, byte 2 thereafter)
 (define (disassemble-byte-code bc (bc_p1 0) (bc_p2 0) #:labels (labels (hash)))
-  (define dyn-opcode-def (get-dyn-opcode-def bc))
+  (define dyn-opcode-def (get-dyn-opcode-simple-def bc bc_p1))
   (cond
     [dyn-opcode-def (disassemble-od-simple-bc dyn-opcode-def labels bc bc_p1 bc_p2)]
     [else "unknown bc"]))
@@ -42,4 +65,7 @@ disassembler for byte code
                 "push l0")
 
   (check-equal? (disassemble-byte-code #x0c #x10 #x3f)
-                "push int $3f10"))
+                "push int $3f10")
+
+  (check-equal? (disassemble-byte-code #x08 #x01)
+                "int max"))

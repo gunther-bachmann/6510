@@ -4,6 +4,30 @@
 
 define code/data segments for a c64 program that are used for generating a loader/linker
 
+currently the following test programs are created
+  bc-tramp:
+  - loading and initializing byte code interpreter
+  - executing a simple byte code routine
+  - printing A in the upper left corner of the text screen
+  - cursor etc. is garbled since zero page is used in non intended ways!
+  - return to basic (although reset is necessary)
+
+  loader:
+  - use code relocator for loading native code
+  - print hello world, return to basic
+
+  loader2:
+  - use code relocator for loading native code
+  - resolve labels within each relocated section
+  - print out 0HELLO! (from one section)
+  - print out 1HI! (from another section)
+
+  trampoline:
+  - use trampoline loading code
+  - use two sections, one printing 0HELLO!
+  - the other 1HI! and referencing the first section routine in its copied to location
+  => output is: 0HELLO!1HI!0HELLO! then returning back to BASIC
+
 |#
 
 (provide (struct-out c64-segment)
@@ -253,7 +277,7 @@ define code/data segments for a c64 program that are used for generating a loade
   ;; use first code segment, resolving all labels based in the first (and only that) org directives
   ;; use all other code segments, resolving them based on their respective org directives
   ;; this is necessary to create the copy descriptors correctly (located in first code segment)
-  ;; and resove references in the other code segments based on the requested target location
+  ;; and resolve references in the other code segments based on the requested target location
   ;; they are actually (finally) located at
   (define looped-copy-region-raw-bytes
     (let ([sections-as-loaded
@@ -393,8 +417,6 @@ define code/data segments for a c64 program that are used for generating a loade
                     PUSH_B
                     POKE_B
                     BADD
-                    ;; VM_INTERPRETER_OPTABLE_EXT1_HB
-                    ;; VM_INTERPRETER_OPTABLE_EXT1_LB
                     final-extended-optable-lb
                     final-extended-optable-hb
                     final-interpreter-opcode-table
@@ -437,10 +459,7 @@ define code/data segments for a c64 program that are used for generating a loade
                      (JMP VM_INTERPRETER))
                just-vm-interpreter
                final-extended-optable-hb
-               final-extended-optable-lb
-               ;; VM_INTERPRETER_OPTABLE_EXT1_HB
-               ;; VM_INTERPRETER_OPTABLE_EXT1_LB
-               )
+               final-extended-optable-lb)
        (assembly-code-list-labels vm-runtime)))
 
   (define raw-bc-interpreter
