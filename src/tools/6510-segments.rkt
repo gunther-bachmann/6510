@@ -393,8 +393,10 @@ define code/data segments for a c64 program that are used for generating a loade
                     PUSH_B
                     POKE_B
                     BADD
-                    VM_INTERPRETER_OPTABLE_EXT1_HB
-                    VM_INTERPRETER_OPTABLE_EXT1_LB
+                    ;; VM_INTERPRETER_OPTABLE_EXT1_HB
+                    ;; VM_INTERPRETER_OPTABLE_EXT1_LB
+                    final-extended-optable-lb
+                    final-extended-optable-hb
                     final-interpreter-opcode-table
                     just-vm-interpreter))
   (require (only-in "../nmil/vm-mm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
@@ -434,8 +436,11 @@ define code/data segments for a c64 program that are used for generating a loade
                      (JSR VM_INITIALIZE_CALL_FRAME)
                      (JMP VM_INTERPRETER))
                just-vm-interpreter
-               VM_INTERPRETER_OPTABLE_EXT1_HB
-               VM_INTERPRETER_OPTABLE_EXT1_LB)
+               final-extended-optable-hb
+               final-extended-optable-lb
+               ;; VM_INTERPRETER_OPTABLE_EXT1_HB
+               ;; VM_INTERPRETER_OPTABLE_EXT1_LB
+               )
        (assembly-code-list-labels vm-runtime)))
 
   (define raw-bc-interpreter

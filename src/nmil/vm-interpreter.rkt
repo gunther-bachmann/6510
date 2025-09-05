@@ -70,6 +70,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   cpu-state-program-counter
                   peek))
 (require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require (only-in "./vm-bc-opcode-definitions.rkt"
+                  bc-opcode-definitions
+                  od-simple-bc?
+                  od-extended-bc?
+                  od-simple-bc--byte-code
+                  od-simple-bc--label
+                  od-extended-bc--byte-code
+                  od-extended-bc--label
+                  od-extended-bc--sub-commands
+                  write-opcode-into-optable
+                  write-hb-opcode-into-x-optable
+                  write-lb-opcode-into-x-optable))
 
 (module+ test
   (require "../6510-test-utils.rkt")
@@ -107,10 +119,12 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define PAGE_AVAIL_1_W #x8900))
 
 (provide vm-interpreter
-         VM_INTERPRETER_OPTABLE_EXT1_HB
-         VM_INTERPRETER_OPTABLE_EXT1_LB
+         ;; VM_INTERPRETER_OPTABLE_EXT1_HB
+         ;; VM_INTERPRETER_OPTABLE_EXT1_LB
          ;; VM_INTERPRETER_OPTABLE
          final-interpreter-opcode-table
+         final-extended-optable-hb
+         final-extended-optable-lb
          just-vm-interpreter
          vm-interpreter-wo-jt
 
@@ -2539,20 +2553,24 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (flatten
    (list
     (label VM_INTERPRETER_OPTABLE_EXT1_LB)
-           (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
-           (byte-ref <BC_IMAX)                ;; 01
-           (byte-ref <BC_IINC)                ;; 02
-           (byte-ref <BC_GC_FL)                  ;; 03
+    (build-list 4 (lambda (_i) (byte-ref <VM_INTERPRETER_INC_PC)))
+    ;; (byte-ref <VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
+    ;;        (byte-ref <BC_IMAX)                ;; 01
+    ;;        (byte-ref <BC_IINC)                ;; 02
+    ;;        (byte-ref <BC_GC_FL)
+           ;; 03
            )))
 
 (define VM_INTERPRETER_OPTABLE_EXT1_HB
   (flatten
    (list
     (label VM_INTERPRETER_OPTABLE_EXT1_HB)
-           (byte-ref >VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
-           (byte-ref >BC_IMAX)                ;; 01
-           (byte-ref >BC_IINC)                ;; 02
-           (byte-ref >BC_GC_FL)                  ;; 03
+    (build-list 4 (lambda (_i) (byte-ref >VM_INTERPRETER_INC_PC)))
+    ;; (byte-ref >VM_INTERPRETER_INC_PC)     ;; 00 - reserved (could be used for another extension command)
+    ;;        (byte-ref >BC_IMAX)                ;; 01
+    ;;        (byte-ref >BC_IINC)                ;; 02
+    ;;        (byte-ref >BC_GC_FL)
+           ;; 03
            )))
 
 ;; @DC-B: EXT, group: misc
@@ -3459,18 +3477,49 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-bc-opcode-definitions.rkt"
                   bc-opcode-definitions
                   od-simple-bc?
+                  od-extended-bc?
                   od-simple-bc--byte-code
                   od-simple-bc--label
-                  write-opcode-into-optable))
+                  od-extended-bc--byte-code
+                  od-extended-bc--label
+                  write-opcode-into-optable
+                  write-hb-opcode-into-x-optable
+                  write-lb-opcode-into-x-optable))
 
 (define final-interpreter-opcode-table
   (foldl (lambda (od acc)
            (cond
              [(od-simple-bc? od)
               (write-opcode-into-optable acc (od-simple-bc--byte-code od) (od-simple-bc--label od) )]
+             [(od-extended-bc? od)
+              (write-opcode-into-optable acc (od-extended-bc--byte-code od) (od-extended-bc--label od))]
              [else (raise-user-error "unknown opcode definition")]))
          VM_INTERPRETER_OPTABLE
          bc-opcode-definitions))
+
+(define final-extended-optable-lb
+  (let ((ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-opcode-definitions)))
+   (foldl (lambda (od-simple acc)
+            (cond
+              [(od-simple-bc? od-simple)
+               (write-lb-opcode-into-x-optable acc (od-simple-bc--label od-simple) (od-simple-bc--byte-code od-simple))]
+              [else (raise-user-error "unknown opcode definition")]))
+          VM_INTERPRETER_OPTABLE_EXT1_LB
+          (if ext-cmd
+              (od-extended-bc--sub-commands ext-cmd)
+              (list)))))
+
+(define final-extended-optable-hb
+  (let ((ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-opcode-definitions)))
+   (foldl (lambda (od-simple acc)
+            (cond
+              [(od-simple-bc? od-simple)
+               (write-hb-opcode-into-x-optable acc (od-simple-bc--label od-simple) (od-simple-bc--byte-code od-simple))]
+              [else (raise-user-error "unknown opcode definition")]))
+          VM_INTERPRETER_OPTABLE_EXT1_HB
+          (if ext-cmd
+              (od-extended-bc--sub-commands ext-cmd)
+              (list)))))
 
 ;; interpreter loop without short commands
 ;; each byte command must have lowest bit set to 0 to be aligned to the jump table
@@ -3585,8 +3634,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define vm-interpreter-wo-jt
   (append just-vm-interpreter
           (list (label END__INTERPRETER))
-          VM_INTERPRETER_OPTABLE_EXT1_HB
-          VM_INTERPRETER_OPTABLE_EXT1_LB
+          final-extended-optable-hb
+          final-extended-optable-lb
+          ;; VM_INTERPRETER_OPTABLE_EXT1_HB
+          ;; VM_INTERPRETER_OPTABLE_EXT1_LB
           vm-lists))
 
 (define vm-interpreter

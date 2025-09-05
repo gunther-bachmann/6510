@@ -182,7 +182,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (AND !$1f)
           (STA BRANCH_COMMAND__VM_CxxR+1)
    (label BRANCH_COMMAND__VM_CxxR)
-          (BNE $00)
+          (BNE $00)    ;; x00 = caar (no branch), x06 = cadr, x0c = cdar, x12 = cddr
           (JSR VM_CAR) ;; caar
           (JMP VM_CAR)
 

@@ -11,15 +11,27 @@ depending on number of usage to make it as compact as possible!
 |#
 
 (require racket/contract)
-(require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
-(require (only-in racket/list take drop))
-(require (only-in "../ast/6510-command.rkt" ast-command? ast-unresolved-bytes-cmd ast-resolve-word-scmd))
+(require (only-in "../util.rkt"
+                  bytes->int
+                  format-hex-byte
+                  format-hex-word))
+(require (only-in racket/list
+                  take
+                  drop))
+(require (only-in "../ast/6510-command.rkt"
+                  ast-command?
+                  ast-unresolved-bytes-cmd
+                  ast-resolve-byte-scmd
+                  ast-resolve-word-scmd))
 (require (only-in "../tools/6510-disassembler.rkt" info-for-label))
 
 (provide bc-opcode-definitions
          (struct-out od-simple-bc)
+         (struct-out od-extended-bc)
          get-dyn-opcode-def
          write-opcode-into-optable
+         write-hb-opcode-into-x-optable
+         write-lb-opcode-into-x-optable
          disassemble-od-simple-bc
          byte-count-od-simple-bc)
 
@@ -35,20 +47,31 @@ depending on number of usage to make it as compact as possible!
            (or/c string? (-> hash? byte? byte? byte? string?))
            (or/c byte? (-> byte? byte? byte?))))
 
+(define-struct od-extended-bc
+  (-label
+   -byte-code
+   -sub-commands)
+  #:transparent
+  #:guard (struct-guard/c
+           string?
+           byte?
+           (listof od-simple-bc?)))
+
+
+
 (define bc-opcode-definitions
   (list
    (od-simple-bc "BC_PUSH_LOCAL_SHORT"       #x00 "push l0" 1)
    (od-simple-bc "BC_PUSH_LOCAL_SHORT"       #x02 "push l1" 1)
    (od-simple-bc "BC_PUSH_LOCAL_SHORT"       #x04 "push l2" 1)
    (od-simple-bc "BC_PUSH_LOCAL_SHORT"       #x06 "push l3" 1)
-   (od-simple-bc "BC_EXT1_CMD"               #x08
-                 (lambda (_labels _bc bc-p1 _bc-p2)
-                   (cond
-                     [(= bc-p1 #x01) "int max"]
-                     [(= bc-p1 #x02) "int inc"]
-                     [(= bc-p1 #x03) "gc"]
-                     [else "unknown"]))
-                 2)
+
+   (od-extended-bc "BC_EXT1_CMD"             #x08
+    (list (od-simple-bc "VM_INTERPRETER_INC_PC" #x00 "reserved" 1)
+          (od-simple-bc "BC_IMAX"               #x01 "int max" 1)
+          (od-simple-bc "BC_IINC"               #x02 "int inc" 1)
+          (od-simple-bc "BC_GC_FL"              #x03 "gc" 1)))
+
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #x0a "reserved" 1) ;; reserved
    (od-simple-bc "BC_PUSH_I"                 #x0c
                  (lambda (_l _bc bc-p1 bc-p2) (format "push int $~a" (format-hex-word (bytes->int bc-p1 bc-p2))))
@@ -95,7 +118,7 @@ depending on number of usage to make it as compact as possible!
    (od-simple-bc "BC_B_GE_P"                 #x4c "byte >=?" 1)
    (od-simple-bc "BC_BSHR"                   #x4e "byte shift right" 1)
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #x50 "reserved" 1) ;; reserved
-   (od-simple-bc "BC_CxxR"                   #x52 "cddr" 1) ;; CDDR (bitwise-and #x1f x) must be #x12!
+   (od-simple-bc "BC_CxxR"                   #x52 "cddr" 1) ;; CDDR (bitwise-and #x1f x) must be #x12 (18)!
    (od-simple-bc "BC_BREAK"                  #x54 "break" 1)
    (od-simple-bc "BC_SWAP"                   #x56 "swap" 1)
    (od-simple-bc "BC_POP"                    #x58 "pop" 1)
@@ -176,13 +199,13 @@ depending on number of usage to make it as compact as possible!
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #xda "reserved" 1) ;; reserved
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #xdc "reserved" 1) ;; reserved
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #xde "reserved" 1) ;; reserved
-   (od-simple-bc "BC_CxxR"                   #xe0 "caar" 1)
+   (od-simple-bc "BC_CxxR"                   #xe0 "caar" 1) ;; and #x1f needs to produce 0!
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #xe2 "reserved" 1) ;; reserved
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #xe4 "reserved" 1) ;; reserved
-   (od-simple-bc "BC_CxxR"                   #xe6 "cadr" 1)
+   (od-simple-bc "BC_CxxR"                   #xe6 "cadr" 1) ;; and #x1f needs to produce #x06 (6)!
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #xe8 "reserved" 1) ;; reserved
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #xea "reserved" 1) ;; reserved
-   (od-simple-bc "BC_CxxR"                   #xec "cdar" 1)
+   (od-simple-bc "BC_CxxR"                   #xec "cdar" 1) ;; and #x1f needs to produce #x0c (12)!
    (od-simple-bc "VM_INTERPRETER_INC_PC"     #xee "reserved" 1) ;; reserved
    (od-simple-bc "BC_GET_ARRAY_FIELD"        #xf0 "get array field 0" 1)
    (od-simple-bc "BC_GET_ARRAY_FIELD"        #xf2 "get array field 1" 1)
@@ -222,3 +245,17 @@ depending on number of usage to make it as compact as possible!
    (take optable idx)
    (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd label)))
    (drop optable (add1 idx))))
+
+(define (write-hb-opcode-into-x-optable x-optable label byte-code)
+  (define idx (add1 byte-code))
+  (append
+   (take x-optable idx)
+   (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-byte-scmd label 'high-byte)))
+   (drop x-optable (add1 idx))))
+
+(define (write-lb-opcode-into-x-optable x-optable label byte-code)
+  (define idx (add1 byte-code))
+  (append
+   (take x-optable idx)
+   (list (ast-unresolved-bytes-cmd '() '() (ast-resolve-byte-scmd label 'low-byte)))
+   (drop x-optable (add1 idx))))
