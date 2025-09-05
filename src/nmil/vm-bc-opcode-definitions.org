@@ -1,0 +1,3 @@
+#+title: vm-bc-opcode-definitions
+
+* TODO make opcode definition also define an easy to use byte code command

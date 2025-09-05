@@ -19,9 +19,9 @@
 ;; (require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
 
 (require "../6510.rkt")
+(require (only-in "./vm-bc-opcode-definitions.rkt" bc))
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
-                  bc
                   BREAK
                   ALLOC_ARA
                   SWAP_RA_RB

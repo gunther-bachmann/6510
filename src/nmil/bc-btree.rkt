@@ -97,9 +97,9 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 (require (only-in "./vm-bc-resolver.rkt"
                   bc-resolve
                   bc-bytes))
+(require (only-in "./vm-bc-opcode-definitions.rkt" bc))
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
-                  bc
                   NIL_P
                   CDR
                   TAIL_CALL
@@ -259,7 +259,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_I1)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
-       (bc BRK))
+       (bc BREAK))
 
       (list (org #x8800))
       BTREE_MAKE_ROOT)
@@ -276,7 +276,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I1)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CAR)
-       (bc BRK))
+       (bc BREAK))
 
       (list (org #x8800))
       BTREE_MAKE_ROOT)))
@@ -303,7 +303,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CAR)
        (bc CALL) (word-ref BTREE_VALUE_P)
-       (bc BRK))
+       (bc BREAK))
 
       (list (org #x8800))
       BTREE_MAKE_ROOT
@@ -323,7 +323,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CDR)
        (bc CALL) (word-ref BTREE_VALUE_P)
-       (bc BRK))
+       (bc BREAK))
 
       (list (org #x8800))
       BTREE_MAKE_ROOT
@@ -353,7 +353,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CAR)
        (bc CALL) (word-ref BTREE_NODE_P)
-       (bc BRK))
+       (bc BREAK))
 
       (list (org #x8800))
       BTREE_MAKE_ROOT
@@ -373,7 +373,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CDR)
        (bc CALL) (word-ref BTREE_NODE_P)
-       (bc BRK))
+       (bc BREAK))
 
       (list (org #x8800))
       BTREE_MAKE_ROOT
@@ -456,7 +456,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CALL) (word-ref BTREE_VALIDATE)
-       (bc BRK))
+       (bc BREAK))
 
       (list (org #x8800))
       BTREE_MAKE_ROOT
@@ -480,7 +480,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_NIL)
        (bc CONS)
        (bc CALL) (word-ref BTREE_VALIDATE)
-       (bc BRK))
+       (bc BREAK))
 
       (list (org #x8800))
       BTREE_NODE_P
@@ -500,7 +500,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_B) (byte 15)
        (bc CONS)
        (bc CALL) (word-ref BTREE_VALIDATE)
-       (bc BRK))
+       (bc BREAK))
 
       (list (org #x8800))
       BTREE_NODE_P
@@ -538,14 +538,12 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       ;;   [(and (not (pair? node))
       ;;             (empty? right-list))
       ;;          (max depth max-depth)]
-            (bc EXT)
             (bc IMAX)
             (bc RET)
   
      (label NOT_PAIR_COND__BTREE_DEPTH)
      ;;     [(not (pair? node))  
      ;;      (btree-depth (caar right-list) (cdr right-list) (cdar right-list) (max depth max-depth))]
-            (bc EXT)
             (bc IMAX)
   
             (bc PUSH_L1_CAR)        ;; car right-list
@@ -564,7 +562,6 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
      ;;          (btree-depth l (cons (cons r (add1 depth)) right-list) (add1 depth) max-depth)]))
      ;;                                 ;; stack currently: [right-list :: depth :: max-depth]
             (bc POP_TO_L1)         ;; local1 = right-list
-            (bc EXT)
             (bc IINC)
             (bc WRITE_TO_L2)       ;; local2 = depth +1
             (bc PUSH_L1)           ;; [right-list :: depth+1 :: max-depth]
@@ -587,7 +584,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CALL) (word-ref BTREE_DEPTH)
-       (bc BRK))
+       (bc BREAK))
       BTREE_MAKE_ROOT
       BTREE_DEPTH)
      ))
@@ -608,7 +605,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I1)
        (bc CONS)
        (bc CALL) (word-ref BTREE_DEPTH)
-       (bc BRK))
+       (bc BREAK))
       BTREE_MAKE_ROOT
       BTREE_DEPTH)
     ))
@@ -631,7 +628,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I0)
        (bc CONS)
        (bc CALL) (word-ref BTREE_DEPTH)
-       (bc BRK))
+       (bc BREAK))
       BTREE_MAKE_ROOT
       BTREE_DEPTH)
     ))
@@ -653,7 +650,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc SWAP)                                ;; 2  nil
        (bc CONS)                                ;;            ->o
        (bc CALL) (word-ref BTREE_DEPTH)         ;;            /   \    
-       (bc BRK))                                ;;           o     1                 
+       (bc BREAK))                                ;;           o     1                 
       BTREE_MAKE_ROOT                           ;;          / \                      
       BTREE_DEPTH)                              ;;          2  nil                   
     ))                                          ;;                    
@@ -678,7 +675,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc SWAP)                                ;;            o     1
        (bc CONS)                                ;;           / \                 o
        (bc CALL) (word-ref BTREE_DEPTH)         ;;          2  nil             /   \
-       (bc BRK))                                ;;                            o     0 
+       (bc BREAK))                                ;;                            o     0 
       BTREE_MAKE_ROOT                           ;;                          /   \
       BTREE_DEPTH)                              ;;                         o     1
     ))                                          ;;                        / \
@@ -705,7 +702,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CONS)                                ;;           / \        -> o
        (bc BNOP)                                ;;          2  nil       /   \
        (bc CALL) (word-ref BTREE_DEPTH)         ;;                      0     o    
-       (bc BRK))                                ;;                          /   \   
+       (bc BREAK))                                ;;                          /   \   
       BTREE_MAKE_ROOT                           ;;                         o     1 
       BTREE_DEPTH)                              ;;                        / \      
     ))                                          ;;                       2  nil    
@@ -744,7 +741,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
-       (bc BRK))
+       (bc BREAK))
       BTREE_MAKE_ROOT
       BTREE_VALUE_P
       BTREE_PATH_TO_FIRST)
@@ -767,7 +764,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I0)                          ;;          /   \   
        (bc CONS)                                ;;         o     1  
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST) ;;        / \       
-       (bc BRK))                                ;;       2  nil     
+       (bc BREAK))                                ;;       2  nil     
       BTREE_MAKE_ROOT                           ;;
       BTREE_VALUE_P                             ;;
       BTREE_PATH_TO_FIRST)                      ;;
@@ -822,7 +819,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_MAKE_ROOT)
 
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_LAST
       BTREE_VALUE_P
       BTREE_MAKE_ROOT)))
@@ -843,7 +840,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I0)                          ;;          /   \
        (bc CONS)                                ;;         o     nil
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;;        / \       
-       (bc BRK))                                ;;    -> 2  nil
+       (bc BREAK))                                ;;    -> 2  nil
       BTREE_MAKE_ROOT                           ;;
       BTREE_VALUE_P                             ;;
       BTREE_PATH_TO_LAST)                       ;;
@@ -869,7 +866,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I0)                          ;;          /   \
        (bc CONS)                                ;;         o  -> 1
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;;        / \       
-       (bc BRK))                                ;;       2  nil
+       (bc BREAK))                                ;;       2  nil
       BTREE_MAKE_ROOT                           ;;
       BTREE_VALUE_P                             ;;
       BTREE_PATH_TO_LAST)                       ;;
@@ -927,7 +924,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CONS)
        (bc CONS)
        (bc CALL) (word-ref BTREE_NODE_FOR_PATH)
-       (bc BRK))
+       (bc BREAK))
       BTREE_NODE_FOR_PATH
       BTREE_MAKE_ROOT
       BTREE_VALUE_P)))
@@ -948,7 +945,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CONS)
        (bc CONS)
        (bc CALL) (word-ref BTREE_NODE_FOR_PATH)
-       (bc BRK))
+       (bc BREAK))
       BTREE_NODE_FOR_PATH
       BTREE_MAKE_ROOT
       BTREE_VALUE_P)
@@ -1041,7 +1038,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
        (bc BNOP)
        (bc CALL) (word-ref BTREE_PREV)
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_PREV
@@ -1066,7 +1063,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST) ;; ((0 . (2 . 3)) . NIL)
        (bc BNOP)
        (bc CALL) (word-ref BTREE_PREV)
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_PREV
@@ -1091,7 +1088,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;; ((1 . (2 . 3)) . NIL)
        (bc BNOP)
        (bc CALL) (word-ref BTREE_PREV)
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_PREV
@@ -1118,7 +1115,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;; ((1 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))
        (bc BNOP)
        (bc CALL) (word-ref BTREE_PREV)
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_PREV
@@ -1153,7 +1150,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc DUP)
        (bc BNOP)
        (bc CALL) (word-ref BTREE_PREV)          ;; ((0 . (1 . ((2 . 3) . 4))) . NIL)))
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_PREV
@@ -1207,7 +1204,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc SWAP)
        (bc BNOP)
        (bc CALL) (word-ref REVERSE)
-       (bc BRK))
+       (bc BREAK))
       REVERSE)
      )) ;; TODO remove #t
 
@@ -1260,7 +1257,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref APPEND)
-       (bc BRK))
+       (bc BREAK))
       APPEND
       REVERSE)))
 
@@ -1366,7 +1363,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST) ;; ((0 . (2 . NIL)) . NIL)
        (bc BNOP)
        (bc CALL) (word-ref BTREE_NEXT)
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_NEXT
@@ -1391,7 +1388,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST) ;; ((0 . (2 . 3)) . NIL)
        (bc BNOP)
        (bc CALL) (word-ref BTREE_NEXT)
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_NEXT
@@ -1417,7 +1414,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_PATH_TO_LAST)  ;; ((1 . (2 . 3)) . NIL)
        (bc BNOP)
        (bc CALL) (word-ref BTREE_NEXT)
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_NEXT
@@ -1444,7 +1441,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)  ;; ((1 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))
        (bc BNOP)
        (bc CALL) (word-ref BTREE_NEXT)
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_NEXT
@@ -1480,7 +1477,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc DUP)
        (bc BNOP)
        (bc CALL) (word-ref BTREE_NEXT)          ;; NIL
-       (bc BRK))
+       (bc BREAK))
       BTREE_PATH_TO_FIRST
       BTREE_MAKE_ROOT
       BTREE_NEXT
@@ -1635,7 +1632,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REC_REBUILD_PATH_WITH)
-       (bc BRK))
+       (bc BREAK))
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
       APPEND
@@ -1796,7 +1793,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -1828,7 +1825,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -1862,7 +1859,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
-       (bc BRK)) 
+       (bc BREAK)) 
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -1894,7 +1891,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -1948,7 +1945,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ADD_VALUE_AFTER
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -2095,7 +2092,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_I) (word $0005)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ADD_VALUE_BEFORE
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -2148,7 +2145,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc BNOP)
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
-       (bc BRK))
+       (bc BREAK))
 
       BTREE_ADD_VALUE_BEFORE
       BTREE_REC_REBUILD_PATH_WITH
@@ -2187,7 +2184,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc PUSH_I) (word $0005)
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ADD_VALUE_BEFORE
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -2241,7 +2238,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
        
-       (bc BRK))
+       (bc BREAK))
       BTREE_ADD_VALUE_BEFORE
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -2279,7 +2276,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc DUP)
        (bc PUSH_I) (word $0005)
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ADD_VALUE_BEFORE
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -2348,7 +2345,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_ADD_VALUE_BEFORE)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ADD_VALUE_BEFORE
       BTREE_REC_REBUILD_PATH_WITH
       BTREE_VALUE_P
@@ -2461,7 +2458,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_FROM_LIST)
-       (bc BRK))
+       (bc BREAK))
       BTREE_FROM_LIST
       REVERSE)
      ))
@@ -2501,7 +2498,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_FROM_LIST)
-       (bc BRK))
+       (bc BREAK))
       BTREE_FROM_LIST
       REVERSE)))
 
@@ -2531,7 +2528,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_FROM_LIST)
-       (bc BRK))
+       (bc BREAK))
       BTREE_FROM_LIST
       REVERSE)))
 
@@ -2618,7 +2615,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_TO_LIST)
-       (bc BRK))
+       (bc BREAK))
       BTREE_TO_LIST
       BTREE_VALUE_P)
      ))
@@ -2824,7 +2821,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)))
 
   (check-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-0-state 10 #t))
@@ -2840,7 +2837,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc PUSH_NIL)
        (bc PUSH_NIL)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)))
 
   (check-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-1-state 10 #t))
@@ -2869,7 +2866,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -2900,7 +2897,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -2966,7 +2963,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -3043,7 +3040,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -3120,7 +3117,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -3192,7 +3189,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -3260,7 +3257,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_PREV)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -3307,7 +3304,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_PREV)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -3379,7 +3376,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -3487,7 +3484,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
-       (bc BRK))
+       (bc BREAK))
       dependecies-remove-value-at)
      ))
 
@@ -3540,7 +3537,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
       (list
        (bc PUSH_NIL)
        (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ROOT_FOR_PATH)))
 
   (check-equal? (shorten-cell-strings (vm-stack->strings root-for-path-0-state 10 #t))
@@ -3560,7 +3557,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
        (bc CONS)
        (bc DUP)
        (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ROOT_FOR_PATH)))
 
   (check-equal? (shorten-cell-strings (vm-stack->strings root-for-path-1-state 10 #t))
@@ -3620,7 +3617,7 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
        (bc BNOP)
        (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
-       (bc BRK))
+       (bc BREAK))
       BTREE_ROOT_FOR_PATH)))
 
   (check-equal? (shorten-cell-strings (vm-stack->strings root-for-path-2-state 10 #t))

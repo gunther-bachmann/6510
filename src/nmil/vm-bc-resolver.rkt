@@ -35,8 +35,8 @@ functions
 (module+ test
   (require rackunit)
   (require "../6510.rkt")
+  (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
   (require (only-in "./vm-interpreter.rkt"
-                    bc
                     BNOP
                     WRITE_TO_L0
                     T_P_BRA

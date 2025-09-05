@@ -3,9 +3,9 @@
 (require (only-in racket/list flatten))
 
 (require "../6510.rkt")
+(require (only-in "./vm-bc-opcode-definitions.rkt" bc))
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
-                  bc
                   RET
                   CALL
                   PUSH_NIL
@@ -125,7 +125,7 @@
        (bc PUSH_B) (byte 6)
        (bc CALL) (word-ref BC_ADD_NATIVE)
        (bc PUSH_I1)
-       (bc BRK))
+       (bc BREAK))
       (list (org #x8700))
       BC_ADD_NATIVE)
      ))
@@ -160,7 +160,7 @@
        (bc PUSH_B) (byte 6)
        (bc CALL) (word-ref BC_ADD_NATIVE_2)
        (bc PUSH_I2)
-       (bc BRK))
+       (bc BREAK))
       (list (org #x8700))
       BC_ADD_NATIVE_2)
      ))

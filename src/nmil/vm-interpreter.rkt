@@ -71,6 +71,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   peek))
 (require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in "./vm-bc-opcode-definitions.rkt"
+                  bc
                   bc-opcode-definitions
                   od-simple-bc?
                   od-extended-bc?
@@ -84,6 +85,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   write-lb-opcode-into-x-optable))
 
 (module+ test
+  (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
   (require "../6510-test-utils.rkt")
   (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-next-instruction-bytes))
   (require (only-in "../ast/6510-relocator.rkt" command-len))
@@ -126,7 +128,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          vm-interpreter-wo-jt
 
          BREAK
-         bc
          POKE_B
          WRITE_RA
          BDEC
@@ -234,9 +235,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          PUSH_RA_AF
          NATIVE
          IADD)
-
-(define (bc code)
-  (ast-bytes-cmd '()  (flatten (list code))))
 
 (define VM_INTERPRETER_VARIABLES
   (list
@@ -2383,10 +2381,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| inc int |#
   (define inc-int-0-state
     (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc EXT)
-      (bc IINC))))
+     (flatten
+      (list
+       (bc PUSH_I0)
+       (bc IINC)))))
 
   (check-equal? (vm-stack->strings inc-int-0-state)
                 (list "stack holds 1 item"
@@ -2394,10 +2392,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (define inc-int-1-state
     (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I) (byte 255) (byte 0)
-      (bc EXT)
-      (bc IINC))
+     (flatten
+      (list
+       (bc PUSH_I) (byte 255) (byte 0)
+       (bc IINC)))
      ))
 
   (check-equal? (vm-stack->strings inc-int-1-state)
@@ -2406,10 +2404,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (define inc-int-2-state
     (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_IM1)
-      (bc EXT)
-      (bc IINC))
+     (flatten
+      (list
+       (bc PUSH_IM1)
+       (bc IINC)))
      ))
 
   (check-equal? (vm-stack->strings inc-int-2-state)
@@ -2418,10 +2416,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (define inc-int-3-state
     (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I) (byte 255) (byte 05)
-      (bc EXT)
-      (bc IINC))
+     (flatten
+      (list
+       (bc PUSH_I) (byte 255) (byte 05)
+       (bc IINC)))
      ))
 
   (check-equal? (vm-stack->strings inc-int-3-state)
@@ -2569,11 +2567,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| ext max-int |#
   (define max-int-state
     (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I2)
-      (bc PUSH_I1)
-      (bc EXT)
-      (bc IMAX))))
+     (flatten
+      (list
+       (bc PUSH_I2)
+       (bc PUSH_I1)
+       (bc IMAX)))))
 
   (check-equal? (vm-stack->strings max-int-state)
                 (list "stack holds 1 item"
@@ -2581,11 +2579,11 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
   (define max-int-2-state
     (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc PUSH_I2)
-      (bc EXT)
-      (bc IMAX))))
+     (flatten
+      (list
+       (bc PUSH_I1)
+       (bc PUSH_I2)
+       (bc IMAX)))))
 
   (check-equal? (vm-stack->strings max-int-2-state)
                 (list "stack holds 1 item"

@@ -23,9 +23,9 @@
                     shorten-cell-string
                     vm-stack->strings))
   (require (only-in "../tools/6510-interpreter.rkt" initialize-cpu cpu-state-clock-cycles))
+  (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
   (require [only-in "./vm-interpreter.rkt"
                     vm-interpreter
-                    bc
                     CONS
                     CALL
                     PUSH_NIL
@@ -102,21 +102,22 @@
   (define b-tree-0-state
     (run-bc-wrapped-in-test
      (append
-      (list
-       (bc PUSH_NIL)
-       (bc PUSH_I) (word $0004)
-       (bc CONS)
-       (bc PUSH_I) (word $0003)
-       (bc CONS)
-       (bc PUSH_I) (word $0002)
-       (bc CONS)
-       (bc PUSH_I) (word $0001)
-       (bc CONS)
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_FROM_LIST)
-       (bc EXT) (bc GC_FL)
-       (bc BRK))
+      (flatten
+       (list
+        (bc PUSH_NIL)
+        (bc PUSH_I) (word $0004)
+        (bc CONS)
+        (bc PUSH_I) (word $0003)
+        (bc CONS)
+        (bc PUSH_I) (word $0002)
+        (bc CONS)
+        (bc PUSH_I) (word $0001)
+        (bc CONS)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_FROM_LIST)
+        (bc GC)
+        (bc BREAK)))
       vm-btree)
      ))
 
@@ -134,27 +135,28 @@
   (define b-tree-1-state
     (run-bc-wrapped-in-test
      (append
-      (list
-       (bc PUSH_NIL)
-       (bc PUSH_I) (word $0004)
-       (bc CONS)
-       (bc PUSH_I) (word $0003)
-       (bc CONS)
-       (bc PUSH_I) (word $0002)
-       (bc CONS)
-       (bc PUSH_I) (word $0001)
-       (bc CONS)
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_FROM_LIST)
-       ;; make sure to have the two defaul parameter filled with nil on the stack before the function
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_TO_LIST)
-       (bc EXT) (bc GC_FL)
-       (bc BRK))
+      (flatten
+       (list
+        (bc PUSH_NIL)
+        (bc PUSH_I) (word $0004)
+        (bc CONS)
+        (bc PUSH_I) (word $0003)
+        (bc CONS)
+        (bc PUSH_I) (word $0002)
+        (bc CONS)
+        (bc PUSH_I) (word $0001)
+        (bc CONS)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_FROM_LIST)
+        ;; make sure to have the two defaul parameter filled with nil on the stack before the function
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_TO_LIST)
+        (bc GC)
+        (bc BREAK)))
       vm-btree)
      ))
 
@@ -175,41 +177,42 @@
   (define b-tree-2-state
     (run-bc-wrapped-in-test
      (append
-      (list
-       (bc PUSH_NIL)
-       (bc PUSH_I) (word $0060)
-       (bc CONS)
-       (bc PUSH_I) (word $0050)
-       (bc CONS)
-       (bc PUSH_I) (word $0040)
-       (bc CONS)
-       (bc PUSH_I) (word $0030)
-       (bc CONS)
-       (bc PUSH_I) (word $0020)
-       (bc CONS)
-       (bc PUSH_I) (word $0010)
-       (bc CONS)
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_FROM_LIST)
+      (flatten
+       (list
+        (bc PUSH_NIL)
+        (bc PUSH_I) (word $0060)
+        (bc CONS)
+        (bc PUSH_I) (word $0050)
+        (bc CONS)
+        (bc PUSH_I) (word $0040)
+        (bc CONS)
+        (bc PUSH_I) (word $0030)
+        (bc CONS)
+        (bc PUSH_I) (word $0020)
+        (bc CONS)
+        (bc PUSH_I) (word $0010)
+        (bc CONS)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_FROM_LIST)
 
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
 
-       (bc PUSH_I) (word $0015)
-       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+        (bc PUSH_I) (word $0015)
+        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
 
-       (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
+        (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
 
-       ;; ;; make sure to have the two defaul parameter filled with nil on the stack before the function
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_TO_LIST)
-       (bc EXT) (bc GC_FL)
-       (bc BRK))
+        ;; ;; make sure to have the two defaul parameter filled with nil on the stack before the function
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_TO_LIST)
+        (bc GC)
+        (bc BREAK)))
       vm-btree)
      ))
 
@@ -235,56 +238,57 @@
   (define b-tree-3-state
     (run-bc-wrapped-in-test
      (append
-      (list
-       (bc PUSH_NIL)
-       (bc PUSH_I) (word $0060)
-       (bc CONS)
-       (bc PUSH_I) (word $0050)
-       (bc CONS)
-       (bc PUSH_I) (word $0040)
-       (bc CONS)
-       (bc PUSH_I) (word $0030)
-       (bc CONS)
-       (bc PUSH_I) (word $0020)
-       (bc CONS)
-       (bc PUSH_I) (word $0010)
-       (bc CONS)
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_FROM_LIST)
+      (flatten
+       (list
+        (bc PUSH_NIL)
+        (bc PUSH_I) (word $0060)
+        (bc CONS)
+        (bc PUSH_I) (word $0050)
+        (bc CONS)
+        (bc PUSH_I) (word $0040)
+        (bc CONS)
+        (bc PUSH_I) (word $0030)
+        (bc CONS)
+        (bc PUSH_I) (word $0020)
+        (bc CONS)
+        (bc PUSH_I) (word $0010)
+        (bc CONS)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_FROM_LIST)
 
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_PATH_TO_FIRST)
 
-       (bc PUSH_I) (word $0015)
-       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+        (bc PUSH_I) (word $0015)
+        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
 
-       (bc CALL) (word-ref BTREE_NEXT)
+        (bc CALL) (word-ref BTREE_NEXT)
 
-       (bc PUSH_I) (word $0025)
-       (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
+        (bc PUSH_I) (word $0025)
+        (bc CALL) (word-ref BTREE_ADD_VALUE_AFTER)
 
-       (bc CALL) (word-ref BTREE_NEXT)
-       (bc CALL) (word-ref BTREE_NEXT)
+        (bc CALL) (word-ref BTREE_NEXT)
+        (bc CALL) (word-ref BTREE_NEXT)
 
-       ;; make sure to have the two defaul parameter filled with nil on the stack before the function
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
+        ;; make sure to have the two defaul parameter filled with nil on the stack before the function
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_REMOVE_VALUE_AT)
 
-       (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
+        (bc CALL) (word-ref BTREE_ROOT_FOR_PATH)
 
-       ;; ;; make sure to have the two defaul parameter filled with nil on the stack before the function
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc PUSH_NIL)
-       (bc SWAP)
-       (bc CALL) (word-ref BTREE_TO_LIST)
-       (bc EXT) (bc GC_FL)
-       (bc BRK))
+        ;; ;; make sure to have the two defaul parameter filled with nil on the stack before the function
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc PUSH_NIL)
+        (bc SWAP)
+        (bc CALL) (word-ref BTREE_TO_LIST)
+        (bc GC)
+        (bc BREAK)))
       vm-btree)
      ))
 
@@ -310,14 +314,15 @@
   (define btree-reverse-0-state
     (run-bc-wrapped-in-test
      (append
-      (list
-       (bc PUSH_I0)
-       (bc PUSH_I1)
-       (bc CONS)
-       (bc BNOP)
-       (bc CALL) (word-ref BTREE_REVERSE)
-       (bc EXT) (bc GC_FL)
-       (bc BRK))
+      (flatten
+       (list
+        (bc PUSH_I0)
+        (bc PUSH_I1)
+        (bc CONS)
+        (bc BNOP)
+        (bc CALL) (word-ref BTREE_REVERSE)
+        (bc GC)
+        (bc BREAK)))
       vm-btree)
      ))
 

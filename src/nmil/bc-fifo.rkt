@@ -25,9 +25,9 @@
 (require (only-in "./vm-bc-resolver.rkt"
                   bc-resolve
                   bc-bytes))
+(require (only-in "./vm-bc-opcode-definitions.rkt" bc))
 (require (only-in "./vm-interpreter.rkt"
                   vm-interpreter
-                  bc
                   ALLOC_ARA
                   POP_TO_RA
                   PUSH_RA
@@ -166,7 +166,7 @@
      (append
       (list
        (bc CALL) (word-ref FIFO_CREATE)
-       (bc BRK))
+       (bc BREAK))
       FIFO_CREATE)
      ))
 
@@ -204,7 +204,7 @@
        (bc PUSH_I1)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc BRK))
+       (bc BREAK))
       FIFO_CREATE
       FIFO_ENQUEUE)))
 
@@ -235,7 +235,7 @@
        (bc PUSH_I2)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc BRK))
+       (bc BREAK))
       FIFO_CREATE
       FIFO_ENQUEUE)))
 
@@ -293,7 +293,7 @@
        (bc SWAP)
        (bc CALL) (word-ref FIFO_ENQUEUE)
        (bc CALL) (word-ref FIFO_DEQUEUE)
-       (bc BRK))
+       (bc BREAK))
       FIFO_CREATE
       FIFO_ENQUEUE
       FIFO_DEQUEUE
@@ -325,7 +325,7 @@
        (bc CALL) (word-ref FIFO_DEQUEUE)
        (bc SWAP)
        (bc CALL) (word-ref FIFO_DEQUEUE)
-       (bc BRK))
+       (bc BREAK))
       FIFO_CREATE
       FIFO_ENQUEUE
       FIFO_DEQUEUE
@@ -342,25 +342,26 @@
   (define mem-fifo-state-1
     (run-bc-wrapped-in-test
      (append
-      (list
-       (bc CALL) (word-ref FIFO_CREATE)
-       (bc DUP)
-       (bc DUP)
-       (bc PUSH_I1)
-       (bc SWAP)
-       (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc PUSH_I2)
-       (bc SWAP)
-       (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc DUP)
-       (bc CALL) (word-ref FIFO_DEQUEUE)
-       (bc SWAP)
-       (bc DUP)
-       (bc CALL) (word-ref FIFO_DEQUEUE)
-       (bc SWAP)
-       (bc POP)
-       (bc EXT) (bc GC_FL)
-       (bc BRK))
+      (flatten
+       (list
+        (bc CALL) (word-ref FIFO_CREATE)
+        (bc DUP)
+        (bc DUP)
+        (bc PUSH_I1)
+        (bc SWAP)
+        (bc CALL) (word-ref FIFO_ENQUEUE)
+        (bc PUSH_I2)
+        (bc SWAP)
+        (bc CALL) (word-ref FIFO_ENQUEUE)
+        (bc DUP)
+        (bc CALL) (word-ref FIFO_DEQUEUE)
+        (bc SWAP)
+        (bc DUP)
+        (bc CALL) (word-ref FIFO_DEQUEUE)
+        (bc SWAP)
+        (bc POP)
+        (bc GC)
+        (bc BREAK)))
       FIFO_CREATE
       FIFO_ENQUEUE
       FIFO_DEQUEUE
@@ -388,22 +389,23 @@
   (define mem-fifo-state-2
     (run-bc-wrapped-in-test
      (append
-      (list
-       (bc CALL) (word-ref FIFO_CREATE)
-       (bc DUP)
-       (bc DUP)
-       (bc PUSH_I1)
-       (bc SWAP)
-       (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc PUSH_I2)
-       (bc SWAP)
-       (bc CALL) (word-ref FIFO_ENQUEUE)
-       (bc DUP)
-       (bc CALL) (word-ref FIFO_DEQUEUE)
-       (bc SWAP)
-       (bc CALL) (word-ref FIFO_DEQUEUE)
-       (bc EXT) (bc GC_FL)
-       (bc BRK))
+      (flatten
+       (list
+        (bc CALL) (word-ref FIFO_CREATE)
+        (bc DUP)
+        (bc DUP)
+        (bc PUSH_I1)
+        (bc SWAP)
+        (bc CALL) (word-ref FIFO_ENQUEUE)
+        (bc PUSH_I2)
+        (bc SWAP)
+        (bc CALL) (word-ref FIFO_ENQUEUE)
+        (bc DUP)
+        (bc CALL) (word-ref FIFO_DEQUEUE)
+        (bc SWAP)
+        (bc CALL) (word-ref FIFO_DEQUEUE)
+        (bc GC)
+        (bc BREAK)))
       FIFO_CREATE
       FIFO_ENQUEUE
       FIFO_DEQUEUE

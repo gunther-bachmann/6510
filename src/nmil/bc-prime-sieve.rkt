@@ -52,9 +52,9 @@ primes (ignore 0,1) up to 30
 (require (only-in "../ast/6510-resolver.rkt"  add-label-suffix))
 (require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
 
+(require (only-in "./vm-bc-opcode-definitions.rkt" bc))
 (require [only-in "./vm-interpreter.rkt"
                   vm-interpreter
-                  bc
                   WRITE_RA
                   WRITE_TO_RBI
                   DEC_RBI_NZ_P_BRA
@@ -244,7 +244,7 @@ primes (ignore 0,1) up to 30
       (list
        (bc PUSH_B) (byte 40)
        (bc CALL) (word-ref PRIME_SIEVE)  ;; calc primes in the range of 1..40
-       (bc BRK))
+       (bc BREAK))
       (list (org #x8700))
       PRIME_SIEVE)
      ))
