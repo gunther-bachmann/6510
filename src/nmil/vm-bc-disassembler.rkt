@@ -62,10 +62,10 @@ disassembler for byte code
 (module+ test #| disassemble |#
   (require "../6510-test-utils.rkt")
   (check-equal? (disassemble-byte-code #x00)
-                "push l0")
+                "PUSH_L0\t(push l0)")
 
   (check-equal? (disassemble-byte-code #x0c #x10 #x3f)
-                "push int $3f10")
+                "PUSH_I\t(push int $3f10)")
 
   (check-equal? (disassemble-byte-code #x08 #x01)
-                "int max"))
+                "IMAX\t(int max)"))

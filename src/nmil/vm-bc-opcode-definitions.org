@@ -1,3 +1,11 @@
 #+title: vm-bc-opcode-definitions
 
-* TODO make opcode definition also define an easy to use byte code command
+* TODO use unified byte code naming
+- e.g. IADD, IPUSH, BADD, BPUSH ... _P..
+- see notebook
+* TODO remove obsolete commands
+- see notebook
+* TODO add missing commands
+- see notebook
+* DONE make opcode definition also define an easy to use byte code command
+- State "DONE"       from "TODO"       [2025-09-06 Sat 14:08]
