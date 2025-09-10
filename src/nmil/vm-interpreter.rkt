@@ -70,20 +70,16 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   cpu-state-program-counter
                   peek))
 (require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require (only-in "./vm-interpreter-rt.rkt"
+                  BC_PUSH_LOCAL_SHORT
+                  BC_EXT1_CMD
+                  PUSH_RT_WRITE_LOCAL_bc_enc))
 (require (only-in "./vm-bc-opcode-definitions.rkt"
-                  bc
-                  bc-opcode-definitions
-                  od-simple-bc?
-                  od-extended-bc?
-                  od-simple-bc--byte-code
-                  od-simple-bc--label
-                  od-extended-bc--byte-code
-                  od-extended-bc--label
-                  od-extended-bc--sub-commands
-                  write-opcode-into-optable
-                  write-hb-opcode-into-x-optable
-                  write-lb-opcode-into-x-optable))
-(require (only-in "./vm-interpreter-rt.rkt" BC_PUSH_LOCAL_SHORT))
+                  final-extended-optable-lb
+                  final-extended-optable-hb
+                  final-interpreter-opcode-table))
+(require (only-in "./vm-interpreter-loop.rkt"
+                  VM_INTERPRETER))
 
 (module+ test
   (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
@@ -92,6 +88,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (require (only-in "../ast/6510-relocator.rkt" command-len))
   (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
                     BRK))
+  (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
 
   (define (wrap-bytecode-for-test bc-to-wrap)
     (append (list (org #x7000)
@@ -747,19 +744,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    "__" "__BC_PUSH_LOCAL_CXR"
   (flatten
    (list
-    (label PUSH_RT_WRITE_LOCAL_bc_enc)
-           (LSR)
-           (AND !$03)
-           (PHA)
-           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-           (PLA)
-           (TAY)                                ;; index -> Y
-           (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
-           (STA ZP_RT)                                ;; low byte -> X
-           (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
-           (STA ZP_RT+1)
-           (RTS)
-
     (label BC_PUSH_LX_CAR)
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)
@@ -2388,31 +2372,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR GC_ALL)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
-(define VM_INTERPRETER_OPTABLE_EXT1_LB
-  (list
-   (label VM_INTERPRETER_OPTABLE_EXT1_LB)))
-
-(define VM_INTERPRETER_OPTABLE_EXT1_HB
-  (list
-   (label VM_INTERPRETER_OPTABLE_EXT1_HB)))
-
-;; @DC-B: EXT, group: misc
-;; extension byte code, the next byte is the actual command (decoded from the extended byte code jump table)
-(define EXT #x08)
-(define BC_EXT1_CMD
-  (list
-   (label BC_EXT1_CMD)
-          (INY)
-          (LDA (ZP_VM_PC),y)
-          (TAY)
-          (LDA VM_INTERPRETER_OPTABLE_EXT1_LB,y)
-          (STA CALL_COMMAND__BC_EXT1_CMD+1)
-          (LDA VM_INTERPRETER_OPTABLE_EXT1_HB,y)
-          (STA CALL_COMMAND__BC_EXT1_CMD+2)
-   (label CALL_COMMAND__BC_EXT1_CMD)
-          (JMP $cf00)))
-
-
 (module+ test #| ext max-int |#
   (define max-int-state
     (run-bc-wrapped-in-test
@@ -3290,95 +3249,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LDA !$03)
            (JMP VM_INTERPRETER_INC_PC_A_TIMES))))
 
-;; must be page aligned!
-(define VM_INTERPRETER_OPTABLE
-  (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
-   (list
-    (label VM_INTERPRETER_OPTABLE)                ;; code
-           (build-list 128 (lambda (_n) (word-ref VM_INTERPRETER_INC_PC))))))
-
-(require (only-in "./vm-bc-opcode-definitions.rkt"
-                  bc-opcode-definitions
-                  od-simple-bc?
-                  od-extended-bc?
-                  od-simple-bc--byte-code
-                  od-simple-bc--label
-                  od-extended-bc--byte-code
-                  od-extended-bc--label
-                  write-opcode-into-optable
-                  write-hb-opcode-into-x-optable
-                  write-lb-opcode-into-x-optable))
-
-(define final-interpreter-opcode-table
-  (foldl (lambda (od acc)
-           (cond
-             [(od-simple-bc? od)
-              (write-opcode-into-optable acc (od-simple-bc--byte-code od) (od-simple-bc--label od) )]
-             [(od-extended-bc? od)
-              (write-opcode-into-optable acc (od-extended-bc--byte-code od) (od-extended-bc--label od))]
-             [else (raise-user-error "unknown opcode definition")]))
-         VM_INTERPRETER_OPTABLE
-         bc-opcode-definitions))
-
-(define final-extended-optable-lb
-  (let ((ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-opcode-definitions)))
-   (foldl (lambda (od-simple acc)
-            (cond
-              [(od-simple-bc? od-simple)
-               (write-lb-opcode-into-x-optable acc (od-simple-bc--label od-simple) (od-simple-bc--byte-code od-simple))]
-              [else (raise-user-error "unknown opcode definition")]))
-          VM_INTERPRETER_OPTABLE_EXT1_LB
-          (if ext-cmd
-              (od-extended-bc--sub-commands ext-cmd)
-              (list)))))
-
-(define final-extended-optable-hb
-  (let ((ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-opcode-definitions)))
-   (foldl (lambda (od-simple acc)
-            (cond
-              [(od-simple-bc? od-simple)
-               (write-hb-opcode-into-x-optable acc (od-simple-bc--label od-simple) (od-simple-bc--byte-code od-simple))]
-              [else (raise-user-error "unknown opcode definition")]))
-          VM_INTERPRETER_OPTABLE_EXT1_HB
-          (if ext-cmd
-              (od-extended-bc--sub-commands ext-cmd)
-              (list)))))
-
-;; interpreter loop without short commands
-;; each byte command must have lowest bit set to 0 to be aligned to the jump table
-(define VM_INTERPRETER
-  (list
-   (label VM_INTERPRETER_INC_PC_2_TIMES)
-          (LDA !$02)
-   (label VM_INTERPRETER_INC_PC_A_TIMES)
-          (CLC)                                 ;; clear for add
-          (ADC ZP_VM_PC)                        ;; PC = PC + A
-          (STA ZP_VM_PC)
-          (BCC VM_INTERPRETER)                  ;; same page -> no further things to do
-          (BCS VM_INTERPRETER_NEXT_PAGE)
-
-   (label VM_POP_EVLSTK_AND_INC_PC)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-
-   (label VM_INTERPRETER_INC_PC)                ;; inc by one (regular case)
-   ;; (label BC_NOP)                               ;; is equivalent to NOP
-          (INC ZP_VM_PC)
-          (BNE VM_INTERPRETER)                  ;; same page -> no further things to do
-   (label VM_INTERPRETER_NEXT_PAGE)
-          (INC ZP_VM_PC+1)                      ;; increment high byte of pc (into next page)
-
-    ;; ----------------------------------------
-   (label VM_INTERPRETER)
-          (LDY !$00)                            ;; use 0 offset to ZP_VM_PV
-   (label VM_INTERPRETERy)
-          (LDA (ZP_VM_PC),y)                    ;; load byte code
-          ;; normal bytecode command
-   (label OPERAND__VM_INTERPRETER)
-          (STA JMPOP__VM_INTERPRETER+1)         ;; lowbyte of the table
-   (label JMPOP__VM_INTERPRETER)
-          (JMP (VM_INTERPRETER_OPTABLE))        ;; jump by table
-))
-
 (define just-vm-interpreter
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT
@@ -3386,6 +3256,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_POP_TO_LOCAL_SHORT
           BC_PUSH_LOCAL_SHORT
           BC_PUSH_LOCAL_CXR
+          PUSH_RT_WRITE_LOCAL_bc_enc
           BC_PUSH_CONST_NUM_SHORT
           BC_PUSH_I
           BC_PUSH_NIL
@@ -3469,7 +3340,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1681
+                       1705
                        "estimated len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#

@@ -1,11 +1,101 @@
 #+title: vm-bc-opcode-definitions
 
-* TODO use unified byte code naming
+* IMPLEMENT split vm-interpreter in smaller modules
+* TODO use unified byte code naming (rename existing ones)
 - e.g. IADD, IPUSH, BADD, BPUSH ... _P..
 - see notebook
+  VERB (SUBJECT) (CONDITION) (...POSTACTIONS)
+  - TAIL_CALL
+  - BRA_T :: branch TOS is true
+  - PUSH_I :: push integer
+  - PUSH_IZ :: push integer zero
+  - ADD_I :: add two integers (TOS + 2OS -> TOS)
+  - CAR :: get car field of list on TOS
+  - CMP_I_EQ_ZERO :: compare integer to be zero
+  - CMP_B_EQ_ZERO :: compare byte to be zero
+  - CMP_EQ_Z :: generic compare eq zero (check tag and do int checking or byte checking)
+  - BRA_I_EQ_Z_POP :: branch if integer is zero, popping its value if branching
+  - BRA_F :: branch on false
+  - SUBJECTS:
+    - INT, I
+    - BYTE, B
+    - BOOL, L
+    - FLOAT, O
+    - TRUE, T
+    - FALSE, F
+    - ARRAY_FIELD, AF
+    - ARRAY, A
+    - NATIVE ARRAY, NA
+    - ZERO, Z
+    - ONE, 1
+    - TWO, 2
+    - MINUS 1, m1
+    - NIL
+    - LOCAL n, Ln
+    - RA, RB, RC, RAI, RBI, RCI
+    - SYMBOL, SYM
+  - CONDITION:
+    - EQ
+    - LE
+    - GE
+    - LT
+    - GT
+  - POSTACTION:
+    - POPn
+    - RET_F
+    - RET_T
+    - RET_Ln
+    - RET
+  - VERB:
+    - COMPARE, CMP
+    - ADD
+    - SUB
+    - MUL
+    - DIV
+    - REM
+    - MAX
+    - MIN
+    - OR
+    - AND
+    - NOT
+    - EOR
+    - INC
+    - DEC
+    - NEGATE, NEG
+    - LEN
+    - REVERSE, REV
+    - CAR, CDR, CONS, CADR, CDDR, CDAR, COONS
+    - CALL
+    - PUSH
+    - POP (TO)
+    - WRITE (TO)
+    - SWAP
+    - DROP
+    - DUP
+    - ALLOC
+    - DEREF
+    - PEEK
+    - POKE
+    - COPY, CP
+    - (JUMP), Branch without condition works, too
+    - CALL
+    - BRANCH, BRA
 * TODO remove obsolete commands
 - see notebook
 * TODO add missing commands
 - see notebook
 * DONE make opcode definition also define an easy to use byte code command
 - State "DONE"       from "TODO"       [2025-09-06 Sat 14:08]
+
+* -
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; eval: (read-only-mode 1)                            ;; r/o
+  ;; eval: (flyspell-mode 0)                             ;; no spell check errors
+  ;; eval: (gb/set-dictionary "en")                      ;; set flyspell dictionary
+  ;; eval: (org-overview)                                ;; show org overview (just headlines)
+  ;; eval: (valign-mode 1)                               ;; switch pretty table mode on
+  ;; org-pretty-entities-include-sub-superscripts: nil   ;; make sure _ is not interpreted as subscript
+  ;; fill-column: 100                                    ;; fill paragraphs with 100 char width
+  ;; End:
+  #+end_src

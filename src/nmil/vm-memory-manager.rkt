@@ -116,6 +116,7 @@ call frame primitives etc.
          vm-memory-manager-wo-data-tail
           ;; ---------------------------------------- refcount
           INC_REFCNT_RT         ;; generic increment of refcount (dispatches depending on type)
+          DEC_REFCNT_RT
 
           DEC_REFCNT_RZ         ;; generic decrement of refcount (dispatches depending on type)
 

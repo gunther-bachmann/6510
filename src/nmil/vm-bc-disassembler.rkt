@@ -6,8 +6,10 @@ disassembler for byte code
 
 |#
 ;; (require (only-in racket/list findf))
-(require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
-(require (only-in "../tools/6510-disassembler.rkt" info-for-label))
+(require (only-in "../util.rkt"
+                  bytes->int
+                  format-hex-byte
+                  format-hex-word))
 
 (require (only-in "./vm-bc-opcode-definitions.rkt"
                   bc-opcode-definitions
@@ -15,10 +17,10 @@ disassembler for byte code
                   od-simple-bc--byte-code
                   od-simple-bc--disassembler
                   od-simple-bc--byte-count
-                  get-dyn-opcode-simple-def
                   od-extended-bc?
                   od-extended-bc--sub-commands
                   find-dyn-opcode-def
+                  get-dyn-opcode-simple-def
                   disassemble-od-simple-bc
                   byte-count-od-simple-bc))
 
