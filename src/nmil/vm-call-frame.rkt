@@ -24,13 +24,14 @@ using a cell-stack
                   ZP_LOCALS_TOP_MARK
                   ZP_CALL_FRAME_TOP_MARK))
 (require (only-in "./vm-memory-manager.rkt" vm-memory-manager-wo-data-tail vm-memory-manager))
-
+(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 (provide vm-call-frame
          vm-call-frame-wo-data-tail
          vm-call-frame->strings
          vm-call-frames->string
 
-         VM_POP_CALL_FRAME_N)
+         VM_POP_CALL_FRAME_N
+         VM_REFCOUNT_DECR_CURRENT_LOCALS)
 
 (module+ test #| after mem init |#
   (require (only-in "../ast/6510-relocator.rkt" command-len))
@@ -865,6 +866,50 @@ using a cell-stack
 
           (RTS)))
 
+
+;; @DC-FUN: VM_REFCOUNT_DECR_CURRENT_LOCALS, group: gc
+;; decrement the refcount to all locals that are not initial (e.g. upon leaving a function)
+(define VM_REFCOUNT_DECR_CURRENT_LOCALS
+  (add-label-suffix
+   "__" "__VM_REFCOUNT_DECR_CURRENT_LOCALS"
+  (list
+   (label VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (LDA ZP_LOCALS_LB_PTR)
+          (STA ZP_LOCALS_TOP_MARK) ;; restore top mark
+          (LDY !$00)
+          (LDA (ZP_VM_FUNC_PTR),y)
+          (AND !$0f)
+          (TAY) ;; y = number of locals of current tunction
+          ;; loop over locals -> rt, decr refcount
+          (DEY)
+          (BMI DONE__)
+   (label LOOP__)
+          (LDA (ZP_LOCALS_LB_PTR),y)
+          (BEQ NEXT_ITER__)
+          (STA ZP_RZ)
+          (AND !$03)
+          (CMP !$03)
+          (BEQ S0_NEXT_ITER__) ;; definitely no pointer since lower 2 bits are set
+          (LDA (ZP_LOCALS_HB_PTR),y)
+          (BEQ NEXT_ITER__)       ;; definitely no pointer, since page is 00
+          (STA ZP_RZ+1)
+          (STY COUNTER__)
+          (JSR DEC_REFCNT_RZ)
+          (LDY COUNTER__)
+   (label S0_NEXT_ITER__)
+          (LDA !$00)
+   (label NEXT_ITER__)
+          (STA (ZP_LOCALS_LB_PTR),y)
+          (STA (ZP_LOCALS_HB_PTR),y)
+          (DEY)
+          (BPL LOOP__)
+   (label DONE__)
+          (RTS)
+
+   (label COUNTER__)
+          (byte 0))))
+
+
 (module+ test #| free locals |#
   (skip (check-equal? #t #f)))
 
@@ -875,7 +920,8 @@ using a cell-stack
           VM_PUSH_CALL_FRAME_N                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
           VM_POP_CALL_FRAME_N                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
           VM_ALLOC_LOCALS
-          VM_FREE_LOCALS))
+          VM_FREE_LOCALS
+          VM_REFCOUNT_DECR_CURRENT_LOCALS))
 
 (define vm-call-frame-wo-data-tail
   (append just-vm-call-frame
@@ -887,5 +933,5 @@ using a cell-stack
 
 (module+ test #| vm-call-frame |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-call-frame)))
-                       570
+                       626
                        "estimated code length of call-frame runtime"))

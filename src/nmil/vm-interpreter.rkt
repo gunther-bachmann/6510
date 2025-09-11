@@ -55,7 +55,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-lists.rkt" vm-lists))
 (require (only-in "./vm-call-frame.rkt"
                   vm-call-frame->strings
-                  VM_POP_CALL_FRAME_N))
+                  VM_POP_CALL_FRAME_N
+                  VM_REFCOUNT_DECR_CURRENT_LOCALS))
 (require (only-in "./vm-mm-cell-stack.rkt"
                   PUSH_XA_TO_EVLSTK
                   POP_CELL_EVLSTK_TO_RT))
@@ -595,48 +596,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STA ZP_RA+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
    (label DONE__)
           (RTS))))
-
-;; @DC-FUN: VM_REFCOUNT_DECR_CURRENT_LOCALS, group: gc
-;; decrement the refcount to all locals that are not initial (e.g. upon leaving a function)
-(define VM_REFCOUNT_DECR_CURRENT_LOCALS
-  (add-label-suffix
-   "__" "__VM_REFCOUNT_DECR_CURRENT_LOCALS"
-  (list
-   (label VM_REFCOUNT_DECR_CURRENT_LOCALS)
-          (LDA ZP_LOCALS_LB_PTR)
-          (STA ZP_LOCALS_TOP_MARK) ;; restore top mark
-          (LDY !$00)
-          (LDA (ZP_VM_FUNC_PTR),y)
-          (AND !$0f)
-          (TAY) ;; y = number of locals of current tunction
-          ;; loop over locals -> rt, decr refcount
-          (DEY)
-          (BMI DONE__)
-   (label LOOP__)
-          (LDA (ZP_LOCALS_LB_PTR),y)
-          (BEQ NEXT_ITER__)
-          (STA ZP_RZ)
-          (AND !$03)
-          (CMP !$03)
-          (BEQ S0_NEXT_ITER__) ;; definitely no pointer since lower 2 bits are set
-          (LDA (ZP_LOCALS_HB_PTR),y)
-          (BEQ NEXT_ITER__)       ;; definitely no pointer, since page is 00
-          (STA ZP_RZ+1)
-          (STY COUNTER__)
-          (JSR DEC_REFCNT_RZ)
-          (LDY COUNTER__)
-   (label S0_NEXT_ITER__)
-          (LDA !$00)
-   (label NEXT_ITER__)
-          (STA (ZP_LOCALS_LB_PTR),y)
-          (STA (ZP_LOCALS_HB_PTR),y)
-          (DEY)
-          (BPL LOOP__)
-   (label DONE__)
-          (RTS)
-
-   (label COUNTER__)
-          (byte 0))))
 
 ;; @DC-B: RET, group: return
 (define RET #x7a) ;; stack [cell paramN, ... cell param1, cell param0] -> []
@@ -3294,7 +3253,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_XET_ARRAY_FIELD
           BC_XET_RA_ARRAY_FIELD
           BC_F_P_RET_F
-          VM_REFCOUNT_DECR_CURRENT_LOCALS
           VM_REFCOUNT_DECR_ARRAY_REGS
           BC_PUSH_AF
           BC_POP_TO_AF
@@ -3340,7 +3298,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1705
+                       1649
                        "estimated len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#
