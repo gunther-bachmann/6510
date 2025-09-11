@@ -70,7 +70,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   cpu-state-program-counter
                   peek))
 (require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
-(require (only-in "./vm-interpreter-rt.rkt"
+(require (only-in "./vm-interpreter-bc.rkt"
                   BC_PUSH_LOCAL_SHORT
                   BC_EXT1_CMD
                   PUSH_RT_WRITE_LOCAL_bc_enc))

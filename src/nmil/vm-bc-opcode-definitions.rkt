@@ -33,7 +33,7 @@ depending on number of usage to make it as compact as possible!
                   ast-resolve-byte-scmd
                   ast-resolve-word-scmd))
 (require (only-in "../tools/6510-disassembler.rkt" info-for-label))
-(require (only-in "./vm-interpreter-rt.rkt"
+(require (only-in "./vm-interpreter-bc.rkt"
                   BC_PUSH_LOCAL_SHORT
                   BC_EXT1_CMD
                   VM_INTERPRETER_OPTABLE_EXT1_LB
