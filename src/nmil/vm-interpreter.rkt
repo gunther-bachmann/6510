@@ -81,15 +81,19 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   final-interpreter-opcode-table))
 (require (only-in "./vm-interpreter-loop.rkt"
                   VM_INTERPRETER))
+(require (only-in "./vm-interpreter-bc.compare.rkt"
+                  BC_B_GT_P
+                  BC_B_LT_P
+                  BC_B_GE_P
+                  BC_I_GT_P))
 
 (module+ test
   (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
   (require "../6510-test-utils.rkt")
-  (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-next-instruction-bytes))
+  (require (only-in "./vm-interpreter-test-utils.rkt"
+                    run-bc-wrapped-in-test-
+                    vm-next-instruction-bytes))
   (require (only-in "../ast/6510-relocator.rkt" command-len))
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt"
-                    BRK))
-  (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
 
   (define (wrap-bytecode-for-test bc-to-wrap)
     (append (list (org #x7000)
@@ -1328,80 +1332,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| swap |#
   (skip (check-equal? #t #f "implement")))
 
-;; @DC-B: B_GT_P, group: predicates
-(define B_GT_P #x48)
-(define BC_B_GT_P
-  (add-label-suffix
-   "__" "__BC_B_GT_P"
-   (list
-    (label BC_B_GT_P)
-           (JSR POP_CELL_EVLSTK_TO_RP)
-           (LDA ZP_RP+1)
-           (CMP ZP_RT+1)
-           (BMI GREATER__)
-           (JSR WRITE_INT0_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER__)
-           (JSR WRITE_INT1_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC))))
 
-(module+ test #| BC_B_GT_P |#
-  (define gt-01-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 10)
-      (bc PUSH_B) (byte 20)
-      (bc B_GT_P))))
-
-  (check-equal? (vm-regt->string gt-01-state)
-                "int $0001")
-
-  (define gt-02-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 20)
-      (bc B_GT_P))))
-
-  (check-equal? (vm-regt->string gt-02-state)
-                "int $0000")
-
-  (define gt-03-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 21)
-      (bc B_GT_P))))
-
-  (check-equal? (vm-regt->string gt-03-state)
-                "int $0001")
-
-  (define gt-04-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 19)
-      (bc B_GT_P))))
-
-  (check-equal? (vm-regt->string gt-04-state)
-                "int $0000"))
-
-;; @DC-B: B_LT_P, group: predicates
-(define B_LT_P #xcc)
-(define BC_B_LT_P
-  (add-label-suffix
-   "__" "__BC_B_LT_P"
-   (list
-    (label BC_B_LT_P)
-           (JSR POP_CELL_EVLSTK_TO_RP)
-           (LDA ZP_RT+1)
-           (CMP ZP_RP+1)
-           (BPL GREATER_OR_EQUAL__)
-           (JSR WRITE_INT1_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER_OR_EQUAL__)
-           (JSR WRITE_INT0_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC))))
 
 ;; @DC-B: BSHR, group: byte
 (define BSHR #x4e)
@@ -1415,162 +1346,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA ZP_RT+1)
            (JMP VM_INTERPRETER_INC_PC))))
 
-;; @DC-B: B_GE_P, group: predicates
-(define B_GE_P #x4c)
-(define BC_B_GE_P
-  (add-label-suffix
-   "__" "__BC_B_GE_P"
-   (list
-    (label BC_B_GE_P)
-           (JSR POP_CELL_EVLSTK_TO_RP)
-           (LDA ZP_RP+1)
-           (CMP ZP_RT+1)
-           (BPL GREATER_OR_EQUAL__)
-           (JSR WRITE_INT1_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER_OR_EQUAL__)
-           (JSR WRITE_INT0_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC))))
 
-(module+ test #| BC_B_LT_P |#
-  (define lt-01-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 10)
-      (bc B_LT_P))))
-
-  (check-equal? (vm-regt->string lt-01-state)
-                "int $0001")
-
-  (define lt-02-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 20)
-      (bc B_LT_P))))
-
-  (check-equal? (vm-regt->string lt-02-state)
-                "int $0000")
-
-  (define lt-03-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 21)
-      (bc B_LT_P))))
-
-  (check-equal? (vm-regt->string lt-03-state)
-                "int $0000")
-
-  (define lt-04-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 19)
-      (bc B_LT_P))))
-
-  (check-equal? (vm-regt->string lt-04-state)
-                "int $0001"))
-
-;; @DC-B: I_GT_P, group: predicates
-(define I_GT_P #xc8) ;; *I*​nt *G*​reater *T*​han *P*​redicates
-(define BC_I_GT_P
-  (add-label-suffix
-   "__" "__I_GT_P"
-  (list
-   (label BC_I_GT_P)
-          (LDA ZP_RT)
-          (STA ZP_RP)
-          (LDA ZP_RT+1)
-          (STA ZP_RP+1)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (LDA ZP_RT)
-          (CMP ZP_RP)
-          (BMI GREATER__)
-          (BNE LESS_OR_EQUAL__)
-          (LDA ZP_RT+1)
-          (CMP ZP_RP+1)
-          (BMI GREATER__)
-   (label LESS_OR_EQUAL__)
-          (JSR WRITE_INT0_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER__)
-          (JSR WRITE_INT1_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC))))
-
-(module+ test #| INT GREATER? |#
-  (define int-greater-0>-1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_IM1)
-      (bc PUSH_I0)
-      (bc I_GT_P))
-     ))
-
-  (skip (check-equal? (vm-regt->string int-greater-0>-1-state)
-                      "int $0001"
-                      "comparison of negative with positive number (failing currently)"))
-
-  (define int-greater-0>0-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_I0)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-0>0-state)
-                "int $0000")
-
-  (define int-greater-1>1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc PUSH_I1)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-1>1-state)
-                "int $0000")
-
-  (define int-greater-2>2-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I2)
-      (bc PUSH_I2)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-2>2-state)
-                "int $0000")
-
-  (define int-greater-2>1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc PUSH_I2)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-2>1-state)
-                "int $0001")
-
-  (define int-greater-1>0-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_I1)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-1>0-state)
-                "int $0001")
-
-    (define int-greater-0>1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc PUSH_I0)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-0>1-state)
-                "int $0000"))
 
 ;; @DC-B: INT_P, group: predicates
 ;; is top of evlstk an *INT*​eger (*P*​redicate)?
@@ -3207,6 +2983,162 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (STA (ZP_RP),y)
            (LDA !$03)
            (JMP VM_INTERPRETER_INC_PC_A_TIMES))))
+
+
+(module+ test #| BC_B_GT_P |#
+  (define gt-01-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 10)
+      (bc PUSH_B) (byte 20)
+      (bc B_GT_P))))
+
+  (check-equal? (vm-regt->string gt-01-state)
+                "int $0001")
+
+  (define gt-02-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 20)
+      (bc B_GT_P))))
+
+  (check-equal? (vm-regt->string gt-02-state)
+                "int $0000")
+
+  (define gt-03-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 21)
+      (bc B_GT_P))))
+
+  (check-equal? (vm-regt->string gt-03-state)
+                "int $0001")
+
+  (define gt-04-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 19)
+      (bc B_GT_P))))
+
+  (check-equal? (vm-regt->string gt-04-state)
+                "int $0000"))
+
+(module+ test #| BC_B_LT_P |#
+  (define lt-01-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 10)
+      (bc B_LT_P))))
+
+  (check-equal? (vm-regt->string lt-01-state)
+                "int $0001")
+
+  (define lt-02-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 20)
+      (bc B_LT_P))))
+
+  (check-equal? (vm-regt->string lt-02-state)
+                "int $0000")
+
+  (define lt-03-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 21)
+      (bc B_LT_P))))
+
+  (check-equal? (vm-regt->string lt-03-state)
+                "int $0000")
+
+  (define lt-04-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_B) (byte 20)
+      (bc PUSH_B) (byte 19)
+      (bc B_LT_P))))
+
+  (check-equal? (vm-regt->string lt-04-state)
+                "int $0001"))
+
+(module+ test #| INT GREATER? |#
+  (define int-greater-0>-1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_IM1)
+      (bc PUSH_I0)
+      (bc I_GT_P))
+     ))
+
+  (skip (check-equal? (vm-regt->string int-greater-0>-1-state)
+                      "int $0001"
+                      "comparison of negative with positive number (failing currently)"))
+
+  (define int-greater-0>0-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_I0)
+      (bc PUSH_I0)
+      (bc I_GT_P))))
+
+  (check-equal? (vm-regt->string int-greater-0>0-state)
+                "int $0000")
+
+  (define int-greater-1>1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_I1)
+      (bc PUSH_I1)
+      (bc I_GT_P))))
+
+  (check-equal? (vm-regt->string int-greater-1>1-state)
+                "int $0000")
+
+  (define int-greater-2>2-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_I2)
+      (bc PUSH_I2)
+      (bc I_GT_P))))
+
+  (check-equal? (vm-regt->string int-greater-2>2-state)
+                "int $0000")
+
+  (define int-greater-2>1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_I1)
+      (bc PUSH_I2)
+      (bc I_GT_P))))
+
+  (check-equal? (vm-regt->string int-greater-2>1-state)
+                "int $0001")
+
+  (define int-greater-1>0-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_I0)
+      (bc PUSH_I1)
+      (bc I_GT_P))))
+
+  (check-equal? (vm-regt->string int-greater-1>0-state)
+                "int $0001")
+
+  (define int-greater-0>1-state
+    (run-bc-wrapped-in-test
+     (list
+      (bc PUSH_I1)
+      (bc PUSH_I0)
+      (bc I_GT_P))))
+
+  (check-equal? (vm-regt->string int-greater-0>1-state)
+                "int $0000"))
 
 (define just-vm-interpreter
   (append VM_INTERPRETER_VARIABLES

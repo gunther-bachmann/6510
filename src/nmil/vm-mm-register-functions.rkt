@@ -24,6 +24,8 @@
 (provide WRITE_NIL_TO_RT        ;; write constant NIL into RT
          WRITE_NIL_TO_RP
          WRITE_INT_AY_TO_RT     ;; write integer constant into Rx
+         WRITE_INT0_TO_RT
+         WRITE_INT1_TO_RT
          CP_RA_TO_RT            ;; copy regiser from RA to RT
          CP_RA_TO_RZ
          CP_RB_TO_RZ
@@ -226,6 +228,8 @@
   (check-equal? (vm-regt->string vm-cp-rt-to-ra-state)
                 "int $0001"))
 
+(define WRITE_INT0_TO_RT #t)
+(define WRITE_INT1_TO_RT #t)
 ;; @DC-FUN: WRITE_INT_AY_TO_RT, group: register
 ;; write the given int in A/Y into RT, ignoring what was in RT (no dec-refcnt)
 ;; input:  A = lowbyte of int (0..255), written into high byte of cell register RT
