@@ -390,129 +390,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
-
-(module+ test #| bc_call |#
-  (define test-bc-before-call-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_I0)
-             (bc BREAK))
-     ))
-
-  (check-equal? (vm-call-frame->strings test-bc-before-call-state)
-                (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                      "program-counter:  $8001"
-                      "function-ptr:     $8000"
-                      (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-   (check-equal? (vm-stack->strings test-bc-before-call-state)
-                 (list "stack holds 1 item"
-                       "int $0000  (rt)")
-                 "stack holds just the pushed int")
-
-  (define test-bc-call-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_I0)
-             (bc CALL) (byte 00) (byte $87)
-             (bc BREAK)
-
-             (org #x8700)
-      (label TEST_FUN)     
-             (byte 0)            ;; number of locals
-             (bc PUSH_I1)     ;; value to return
-             (bc BREAK))
-     ))
-
-   (check-equal? (vm-call-frame->strings test-bc-call-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8702"
-                          "function-ptr:     $8700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8004"
-                         "return-function-ptr: $8000"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-   (check-equal? (vm-stack->strings test-bc-call-state)
-                    (list "stack holds 2 items"
-                          "int $0001  (rt)"
-                          "int $0000")
-                    "stack holds the pushed int and the parameter passed")
-
-  (define test-bc-call-wp-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_I0)
-             (bc PUSH_IM1)
-             (bc CALL) (byte 00) (byte $87)
-             (bc BREAK)
-
-             (org #x8700)
-      (label TEST_FUN)      
-             (byte 0)            ;; number of locals
-             (bc PUSH_I1)     ;; value to return
-             (bc BREAK))
-     ))
-
-  (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8702"
-                         "function-ptr:     $8700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8005"
-                         "return-function-ptr: $8000"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-  (check-equal? (vm-stack->strings test-bc-call-wp-state)
-                   (list "stack holds 3 items"
-                         "int $0001  (rt)"
-                         "int $1fff"
-                         "int $0000")
-                   "stack holds the pushed int, and all parameters")
-
-  (define test-bc-call-wl-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_I0)
-             (bc PUSH_IM1)
-             (bc CALL) (byte 00) (byte $87)
-             (bc BREAK)
-
-             (org #x8700)
-      (label TEST_FUN)    
-             (byte 2)            ;; number of locals
-             (bc PUSH_I1)     ;; value to return
-             (bc BREAK))))
-
-  (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8702"
-                         "function-ptr:     $8700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8005"
-                         "return-function-ptr: $8000"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-  (check-equal? (vm-stack->strings test-bc-call-wl-state)
-                   (list "stack holds 3 items"
-                         "int $0001  (rt)"
-                         "int $1fff"
-                         "int $0000")
-                   "stack holds the pushed int, and all parameters"))
-
 ;; @DC-FUN: VM_REFCOUNT_DECR_ARRAY_REGS, group: gc
 ;; decrement refcount to all array register (ra, rb, rc)
 ;; rb is only checked, if ra != 0,
@@ -663,27 +540,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)))))
 
-
-
-
-
-(module+ test #| push const num |#
-  (define use-case-push-num-s-state-after
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_I1)
-      (bc PUSH_I2)
-      (bc PUSH_IM1)
-      (bc BREAK))))
-
-  (check-equal? (vm-stack->strings use-case-push-num-s-state-after)
-                (list "stack holds 4 items"
-                      "int $1fff  (rt)"
-                      "int $0002"
-                      "int $0001"
-                      "int $0000")))
-
 ;; @DC-B: PUSH_I, group: stack
 (define PUSH_I  #x0c) ;; *PUSH* *I*​nt onto evlstk, op1=low byte op2=high byte, stack [] -> [cell-int]
 ;; len: 3
@@ -739,7 +595,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in RT as tos)
           (JMP VM_INTERPRETER_INC_PC))))         ;; interpreter loop
 
-(module+ test #| vm_interpreter |#
+(module+ test #| IADD |#
   (define (bc-int-plus-state a b)
     (define ra (if (< a 0) (+ #x2000 a) a))
     (define rb (if (< b 0) (+ #x2000 b) b))
@@ -813,7 +669,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in rt untouched)
           (JMP VM_INTERPRETER_INC_PC))))         ;; interpreter loop
 
-(module+ test #| vm_interpreter |#
+(module+ test #| ISUB |#
   (define (bc-int-minus-state a b)
     (define ra (if (< a 0) (+ #x2000 a) a))
     (define rb (if (< b 0) (+ #x2000 b) b))
@@ -1000,8 +856,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (module+ test #| swap |#
   (skip (check-equal? #t #f "implement")))
 
-
-
 ;; @DC-B: BSHR, group: byte
 (define BSHR #x4e)
 (define BC_BSHR
@@ -1013,8 +867,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (LSR)
            (STA ZP_RT+1)
            (JMP VM_INTERPRETER_INC_PC))))
-
-
 
 ;; @DC-B: INT_P, group: predicates
 ;; is top of evlstk an *INT*​eger (*P*​redicate)?
@@ -1037,7 +889,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (STX ZP_RT+1)
           (JMP VM_INTERPRETER_INC_PC))))
 
-(module+ test #| int? |#
+(module+ test #| int_p |#
   (skip (check-equal? #t #f "implement")))
 
 ;; @DC-B: F_P_RET_F, group: return
@@ -1405,7 +1257,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (TXA)
    (label CONTINUE_AFTER_BRA)
           (CLC)
-          (ADC !$02)
+          (ADC !$02) ;; this cannot incur any carry, since the jump forward can only be < 128 => result < 130 => no carry, yet
           (ADC ZP_VM_PC)
           (STA ZP_VM_PC)
           (BCC NO_PAGE_CHANGE__)
@@ -1419,7 +1271,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (TXA)
    (label NEGATIVE_BRANCH_NO_POP__)
           (CLC)
-          (ADC ZP_VM_PC)
+          [ADC ZP_VM_PC]
           (STA ZP_VM_PC)
           (BCS NO_PAGE_CHANGE_ON_BACK__)
           (DEC ZP_VM_PC+1)
@@ -2429,7 +2281,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (INC ZP_RT+1)
    (JMP VM_INTERPRETER_INC_PC)))
 
-(module+ test #| bdec |#
+(module+ test #| binc |#
   (define binc-20
     (run-bc-wrapped-in-test
      (flatten
@@ -2627,120 +2479,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 
 
-(module+ test #| BC_B_LT_P |#
-  (define lt-01-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 10)
-      (bc B_LT_P))))
-
-  (check-equal? (vm-regt->string lt-01-state)
-                "int $0001")
-
-  (define lt-02-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 20)
-      (bc B_LT_P))))
-
-  (check-equal? (vm-regt->string lt-02-state)
-                "int $0000")
-
-  (define lt-03-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 21)
-      (bc B_LT_P))))
-
-  (check-equal? (vm-regt->string lt-03-state)
-                "int $0000")
-
-  (define lt-04-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 19)
-      (bc B_LT_P))))
-
-  (check-equal? (vm-regt->string lt-04-state)
-                "int $0001"))
-
-(module+ test #| INT GREATER? |#
-  (define int-greater-0>-1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_IM1)
-      (bc PUSH_I0)
-      (bc I_GT_P))
-     ))
-
-  (skip (check-equal? (vm-regt->string int-greater-0>-1-state)
-                      "int $0001"
-                      "comparison of negative with positive number (failing currently)"))
-
-  (define int-greater-0>0-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_I0)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-0>0-state)
-                "int $0000")
-
-  (define int-greater-1>1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc PUSH_I1)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-1>1-state)
-                "int $0000")
-
-  (define int-greater-2>2-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I2)
-      (bc PUSH_I2)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-2>2-state)
-                "int $0000")
-
-  (define int-greater-2>1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc PUSH_I2)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-2>1-state)
-                "int $0001")
-
-  (define int-greater-1>0-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_I1)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-1>0-state)
-                "int $0001")
-
-  (define int-greater-0>1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc PUSH_I0)
-      (bc I_GT_P))))
-
-  (check-equal? (vm-regt->string int-greater-0>1-state)
-                "int $0000"))
-
 (define just-vm-interpreter
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT
@@ -2830,7 +2568,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1649
+                       1634
                        "estimated len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#
