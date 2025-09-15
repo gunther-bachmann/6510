@@ -20,5 +20,9 @@ combines all implementations of the runtime byte code implementations
                   BC_PUSH_LOCAL_SHORT
                   PUSH_RT_WRITE_LOCAL_bc_enc))
 
+(require (only-in "./vm-interpreter-bc.push_n_pop.rkt"
+                  BC_PUSH_B))
+
 (provide (all-from-out "./vm-interpreter-bc.push_local.rkt")
-         (all-from-out "./vm-interpreter-bc.ext.rkt"))
+         (all-from-out "./vm-interpreter-bc.ext.rkt")
+         (all-from-out "./vm-interpreter-bc.push_n_pop.rkt"))

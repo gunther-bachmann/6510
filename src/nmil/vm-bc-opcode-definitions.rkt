@@ -24,6 +24,7 @@ depending on number of usage to make it as compact as possible!
 (require (only-in racket/list
                   take
                   flatten
+                  empty?
                   drop))
 (require (only-in "../ast/6510-command.rkt"
                   ast-command?
@@ -51,9 +52,13 @@ depending on number of usage to make it as compact as possible!
          fetch-opcode-list
          get-single-opcode
          bc
-         final-extended-optable-lb
-         final-extended-optable-hb
-         final-interpreter-opcode-table)
+         full-extended-optable-lb
+         full-extended-optable-hb
+         full-interpreter-opcode-table
+         build-extended-optable-hb
+         build-extended-optable-lb
+         build-interpreter-optable
+         filtered-opcode-definitions)
 
 (module+ test
   (require "../6510-test-utils.rkt"))
@@ -414,8 +419,8 @@ depending on number of usage to make it as compact as possible!
   (check-equal? (bc IADD)
                 (ast-bytes-cmd '() '(190))))
 
-(define final-extended-optable-lb
-  (let ([ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-opcode-definitions)])
+(define (build-extended-optable-lb bc-defs (lb-table VM_INTERPRETER_OPTABLE_EXT1_LB))
+  (let ([ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-defs)])
    (foldl (lambda (od-simple acc)
             (cond
               [(od-simple-bc? od-simple)
@@ -424,13 +429,16 @@ depending on number of usage to make it as compact as possible!
                 (od-simple-bc--label od-simple)
                 (od-simple-bc--byte-code od-simple))]
               [else (raise-user-error "unknown opcode definition")]))
-          VM_INTERPRETER_OPTABLE_EXT1_LB
+          lb-table
           (if ext-cmd
               (od-extended-bc--sub-commands ext-cmd)
               (list)))))
 
-(define final-extended-optable-hb
-  (let ([ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-opcode-definitions)])
+(define full-extended-optable-lb
+  (build-extended-optable-lb bc-opcode-definitions))
+
+(define (build-extended-optable-hb bc-defs (hb-table VM_INTERPRETER_OPTABLE_EXT1_HB))
+  (let ([ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-defs)])
    (foldl (lambda (od-simple acc)
             (cond
               [(od-simple-bc? od-simple)
@@ -439,14 +447,15 @@ depending on number of usage to make it as compact as possible!
                 (od-simple-bc--label od-simple)
                 (od-simple-bc--byte-code od-simple))]
               [else (raise-user-error "unknown opcode definition")]))
-          VM_INTERPRETER_OPTABLE_EXT1_HB
+          hb-table
           (if ext-cmd
               (od-extended-bc--sub-commands ext-cmd)
               (list)))))
 
-(require "../6510.rkt")
+(define full-extended-optable-hb
+  (build-extended-optable-hb bc-opcode-definitions))
 
-(define final-interpreter-opcode-table
+(define (build-interpreter-optable bc-defs (table VM_INTERPRETER_OPTABLE))
   (foldl (lambda (od acc)
            (cond
              [(od-simple-bc? od)
@@ -454,5 +463,32 @@ depending on number of usage to make it as compact as possible!
              [(od-extended-bc? od)
               (write-opcode-into-optable acc (od-extended-bc--byte-code od) (od-extended-bc--label od))]
              [else (raise-user-error "unknown opcode definition")]))
-         VM_INTERPRETER_OPTABLE
-         bc-opcode-definitions))
+         table
+         bc-defs))
+
+(define full-interpreter-opcode-table
+  (build-interpreter-optable bc-opcode-definitions))
+
+(define (filtered-opcode-definitions wanted-bc-list (bc-defs bc-opcode-definitions))
+  (map (lambda (od)
+         (cond
+           [(od-simple-bc? od) od]
+           [(od-extended-bc? od)
+            (define new-sub-commands (filtered-opcode-definitions wanted-bc-list (od-extended-bc--sub-commands od)))
+            (struct-copy od-extended-bc od [-sub-commands new-sub-commands])]
+           [else (raise-user-error (format "unknown definition type ~a" od))]))
+       (filter (lambda (od)
+                 (cond
+                   [(od-simple-bc? od)
+                    (memf (lambda (s) (string=? s (od-simple-bc--label od))) wanted-bc-list)]
+                   [(od-extended-bc? od)
+                    (not (empty? (filtered-opcode-definitions wanted-bc-list (od-extended-bc--sub-commands od))))]
+                   [else (raise-user-error (format "unknown definition type ~a" od))]))
+               bc-defs)))
+
+(module+ test #| filtered-opcode-definitions |#
+  (check-equal? (filtered-opcode-definitions (list "BC_B_GT_P"))
+                (list (od-simple-bc "BC_B_GT_P" "B_GT_P" 72 1 "byte >?")))
+
+  (check-equal? (length (filtered-opcode-definitions (list "BC_PUSH_B" "BC_B_GT_P")))
+                2))

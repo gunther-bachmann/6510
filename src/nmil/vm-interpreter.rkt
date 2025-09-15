@@ -76,16 +76,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_EXT1_CMD
                   PUSH_RT_WRITE_LOCAL_bc_enc))
 (require (only-in "./vm-bc-opcode-definitions.rkt"
-                  final-extended-optable-lb
-                  final-extended-optable-hb
-                  final-interpreter-opcode-table))
+                  full-extended-optable-lb
+                  full-extended-optable-hb
+                  full-interpreter-opcode-table))
 (require (only-in "./vm-interpreter-loop.rkt"
-                  VM_INTERPRETER))
+                  VM_INTERPRETER
+                  VM_INTERPRETER_INIT))
 (require (only-in "./vm-interpreter-bc.compare.rkt"
                   BC_B_GT_P
                   BC_B_LT_P
                   BC_B_GE_P
                   BC_I_GT_P))
+(require (only-in "./vm-interpreter-bc.push_n_pop.rkt" BC_PUSH_B))
+(require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+(require (only-in "./vm-interpreter-bc.call_ret.rkt" BC_CALL))
+(require (only-in "./vm-interpreter-bc.pop_local.rkt" BC_POP_TO_LOCAL_SHORT))
 
 (module+ test
   (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
@@ -124,9 +129,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (define PAGE_AVAIL_1_W #x8900))
 
 (provide vm-interpreter
-         final-interpreter-opcode-table
-         final-extended-optable-hb
-         final-extended-optable-lb
+         full-interpreter-opcode-table
+         full-extended-optable-hb
+         full-extended-optable-lb
          just-vm-interpreter
          vm-interpreter-wo-jt)
 
@@ -138,21 +143,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    ;; $0f..11
    ;; $18..25   
    ))
-
-;; @DC-FUN: VM_INTERPRETER_INIT, group: misc
-;; initialize PC to $8000
-(define VM_INTERPRETER_INIT
-  (list
-   (label VM_INTERPRETER_INIT)
-          (LDA !$00)
-          (LDX !$80)                            ;; bc start at $8000
-   (label VM_INTERPRETER_INIT_AX)
-          (STA ZP_VM_PC)
-          (STA ZP_VM_FUNC_PTR)
-          (STX ZP_VM_PC+1)
-          (STX ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $8000
-          (RTS)))
-
                                  ;; @DC-B: NIL_P_RET_L0_POP_1, group: return
 (define NIL_P_RET_L0_POP_1 #xb0) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *1* from evlstk
                                  ;; @DC-B: NIL_P_RET_L0_POP_2, group: return
@@ -400,52 +390,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
 
-;; @DC-B: CALL, group: flow
-(define CALL #x68) ;; stack [int-cell: function index, cell paramN, ... cell param1, cell param0] -> [cell paramN, ... cell param1, cell param0]
-(define BC_CALL
-  (add-label-suffix
-   "__" "__CALL"
-  (list
-   (label BC_CALL)
-          ;; load the two bytes following into ZP_RP (ptr to function descriptor)
-          (LDY !$01)
-          (LDA (ZP_VM_PC),y)                    ;; load lowbyte of call target, right behind byte-code
-          (STA ZP_RP)                           ;; -> RA
-          (INY)
-          (LDA (ZP_VM_PC),y)                    ;; load highbyte of call target, behind lowbyte
-          (STA ZP_RP+1)                         ;; -> RA
-          ;; RA now holds the call target function address
-
-          ;; put return to adress into zp_vm_pc (for save)
-          (LDA !$03)                            ;; call is 3 bytes long (bc + address)
-          (CLC)
-          (ADC ZP_VM_PC)
-          (STA ZP_VM_PC)                        ;; write into program counter
-          (BCC DONE_INC_PC__)
-          (INC ZP_VM_PC+1)                      ;; inc page of program counter
-          ;; zp_vm_pc holds follow bc after this call
-   (label DONE_INC_PC__)
-
-   (label VM_CALL_NO_PUSH_FUN_IN_RA)
-          ;; ZP_RP holds pointer to function descriptor
-          (LDY !$00)                            ;; index to number of locals (0)
-          (LDA (ZP_RP),y)                       ;; A = #locals
-          (TAX)
-          (JSR VM_PUSH_CALL_FRAME_N)
-          (LDY !$00)                            ;; index to number of locals (0)
-          (LDA (ZP_RP),y)                       ;; A = #locals
-          (AND !$0f)                            ;; mask out the number of locals
-          (JSR VM_ALLOC_LOCALS)                 ;; even if A=0 will set the top_mark and the locals appropriately
-
-          ;; load zp_vm_pc with address of function bytecode
-          (LDA ZP_RP)
-          (STA ZP_VM_PC)
-          (STA ZP_VM_FUNC_PTR)
-          (LDA ZP_RP+1)
-          (STA ZP_VM_PC+1)
-          (STA ZP_VM_FUNC_PTR+1)
-
-          (JMP VM_INTERPRETER_INC_PC)))) ;; function starts at function descriptor + 1
 
 (module+ test #| bc_call |#
   (define test-bc-before-call-state
@@ -720,284 +664,8 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC)))))
 
 
-;;                         @DC-B: POP_TO_L0, group: stack
-(define POP_TO_L0 #x20) ;; *POP* *TO* *L*​ocal *0* from evlstk
-;;                         @DC-B: POP_TO_L1, group: stack
-(define POP_TO_L1 #x22) ;; *POP* *TO* *L*​ocal *1* from evlstk
-;;                         @DC-B: POP_TO_L2, group: stack
-(define POP_TO_L2 #x24) ;; *POP* *TO* *L*​ocal *2* from evlstk
-;;                         @DC-B: POP_TO_L3, group: stack
-(define POP_TO_L3 #x26) ;; *POP* *TO* *L*​ocal *3* from evlstk
-;;                         @DC-B: WRITE_TO_L0, group: stack
-(define WRITE_TO_L0 #x30) ;; *WRITE* *TO* *L*​ocal *0* from evlstk
-;;                         @DC-B: WRITE_TO_L1, group: stack
-(define WRITE_TO_L1 #x32) ;; *WRITE* *TO* *L*​ocal *1* from evlstk
-;;                         @DC-B: WRITE_TO_L2, group: stack
-(define WRITE_TO_L2 #x34) ;; *WRITE* *TO* *L*​ocal *2* from evlstk
-;;                         @DC-B: WRITE_TO_L3, group: stack
-(define WRITE_TO_L3 #x36) ;; *WRITE* *TO* *L*​ocal *3* from evlstk
-(define BC_POP_TO_LOCAL_SHORT
-  (add-label-suffix
-   "__" "__BC_POP_TO_LOCAL_SHORT"
-  (flatten
-   (list
-    (label BC_POP_TO_LOCAL_SHORT)
-           (LSR)
-           (AND !$03)
-           (PHA)
-           (TAY)                                ;; index -> Y
-           ;; decrement old local
-           (LDA (ZP_LOCALS_LB_PTR),y)
-           (BEQ POP_NO_GC__)
-           (STA ZP_RZ)
-           (LDA (ZP_LOCALS_HB_PTR),y)
-           (STA ZP_RZ+1)
-           (JSR DEC_REFCNT_RZ)
-    (label POP_NO_GC__)
-           (PLA)
-           (TAY)                                ;; index -> Y
-           (LDA ZP_RT)
-           (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index                      
-           (LDA ZP_RT+1)
-           (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
-           (JMP VM_POP_EVLSTK_AND_INC_PC)          ;; fill RT with next tos
-           ;; no increment, since pop removes it from stack
-           ;; next bc
-
-    ;; write to local
-   (label  BC_WRITE_TO_LOCAL_SHORT)
-           (AND !$06)
-           (LSR)
-           (PHA)
-           (TAY)                                ;; index -> Y
-
-           ;; decrement old local
-           (LDA (ZP_LOCALS_LB_PTR),y)
-           (BEQ WRITE_NO_GC__)
-           (STA ZP_RZ)
-           (LDA (ZP_LOCALS_HB_PTR),y)
-           (STA ZP_RZ+1)
-           (JSR DEC_REFCNT_RZ)
-    (label WRITE_NO_GC__)
-           (PLA)
-           (TAY)                                ;; index -> Y
-           (LDA ZP_RT)
-           (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
-           (LDA ZP_RT+1)
-           (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
-           ;; increment, since it is now in locals and on stack
-           (JSR INC_REFCNT_RT)
-           (JMP VM_INTERPRETER_INC_PC)          ;; next bc
-))))
-
-(module+ test #| BC_PUSH_LOCAL_SHORT |#
-  (define test-bc-pop-to-l-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_I0)
-             (bc PUSH_IM1)
-             (bc CALL) (byte 00) (byte $87)
-
-             (org #x8700)
-      (label TEST_FUN)
-             (byte 2)            ;; number of locals
-             (bc PUSH_I1)     ;; value to return
-             (bc POP_TO_L0) ;;
-             (bc BREAK))))
-
-  (check-equal? (vm-stack->strings test-bc-pop-to-l-state)
-                (list "stack holds 2 items"
-                      "int $1fff  (rt)"
-                      "int $0000"))
-  (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_LB_W #x03))
-                #x03)
-  (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_HB_W #x03))
-                #x01)
-  (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8703"
-                         "function-ptr:     $8700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME)(format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8005"
-                         "return-function-ptr: $8000"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-
-  (define test-bc-pop-to-p-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_IM1)
-      (bc CALL) (byte 00) (byte $87)
-
-      (org #x8700)
-      (label TEST_FUN)      
-      (byte 2)            ;; number of locals
-      (bc POP_TO_L0)
-      (bc POP_TO_L1)
-      (bc PUSH_I1)     ;; value to return
-      (bc POP_TO_L0) ;; overwrites -1
-      (bc BREAK))
-     ))
-
-  (check-equal? (vm-stack->strings test-bc-pop-to-p-state)
-                  (list "stack is empty"))
-  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_LB_W #x03))
-                #x03)
-  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_HB_W #x03))
-                #x01
-                "local0 = int 1")
-  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_LB_W #x04))
-                #x03)
-  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_HB_W #x04))
-                #x00 "local1 = int 0")
-  (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8705"
-                         "function-ptr:     $8700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8005"
-                         "return-function-ptr: $8000"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-
-  (define test-bc-push-l-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc CALL) (byte 00) (byte $87)
-
-      (org #x8700)
-      (label TEST_FUN)
-      (byte 1)            ;; number of locals
-      (bc PUSH_I1)     ;; value to return
-      (bc POP_TO_L0) ;;
-      (bc PUSH_I0)
-      (bc PUSH_L0)
-      (bc BREAK))))
-
-  (check-equal? (vm-stack->strings test-bc-push-l-state)
-                  (list "stack holds 2 items"
-                        "int $0001  (rt)"
-                        "int $0000")
-                  "int 1 was pushed from local")
-  (check-equal? (vm-call-frame->strings test-bc-push-l-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8705"
-                         "function-ptr:     $8700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 04"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8003"
-                         "return-function-ptr: $8000"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-
-  (define test-bc-push-p-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_IM1)
-      (bc CALL) (byte 00) (byte $87)
-
-      (org #x8700)
-      (label TEST_FUN)      
-      (byte 2)            ;; number of locals
-      (bc POP_TO_L0)
-      (bc POP_TO_L1)
-      (bc PUSH_I1)   
-      (bc PUSH_L0)
-      (bc BREAK))))
-
-  (check-equal? (vm-stack->strings test-bc-push-p-state)
-                   (list "stack holds 2 items"
-                         "int $1fff  (rt)"
-                         "int $0001")
-                   "int -1 was pushed from local")
-  (check-equal? (vm-call-frame->strings test-bc-push-p-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8705"
-                         "function-ptr:     $8700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8005"
-                         "return-function-ptr: $8000"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-
-  (define test-bc-pop-push-to-p-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_IM1)
-      (bc CALL) (byte 00) (byte $87)
-
-      (org #x8700)
-      (label TEST_FUN)      
-      (byte 2)            ;; number of locals
-      (bc POP_TO_L0)
-      (bc POP_TO_L1)
-      (bc PUSH_I1)     ;; value to return
-      (bc POP_TO_L0) ;; overwrites -1
-      (bc PUSH_L0)
-      (bc BREAK))))
-
-  (check-equal? (vm-stack->strings test-bc-pop-push-to-p-state)
-                   (list "stack holds 1 item"
-                         "int $0001  (rt)"))
-  (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8706"
-                         "function-ptr:     $8700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8005"
-                         "return-function-ptr: $8000"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB)))))
 
 
-;;                        @DC-B: PUSH_I0, group: stack
-(define PUSH_I0 #x70)  ;; *PUSH* *I*​nt *0* onto evlstk
-;;                        @DC-B: PUSH_I1, group: stack
-(define PUSH_I1 #x72)  ;; *PUSH* *I*​nt *1* onto evlstk
-;;                        @DC-B: PUSH_I2, group: stack
-(define PUSH_I2 #x74)  ;; *PUSH* *I*​nt *2* onto evlstk
-;;                        @DC-B: PUSH_IM1, group: stack
-(define PUSH_IM1 #x76) ;; *PUSH* *I*​nt *-1* onto evlstk
-(define BC_PUSH_CONST_NUM_SHORT
-  (add-label-suffix
-   "__" "__BC_PUSH_CONST_NUM_SHORT"
-  (flatten
-   (list
-    (label BC_PUSH_INT0)
-    (label BC_PUSH_INT1)
-    (label BC_PUSH_INT2)
-           (LSR)
-           (AND !$03)
-           (LDX !$03)
-           (JSR PUSH_XA_TO_EVLSTK)
-           (JMP VM_INTERPRETER_INC_PC)
-
-    (label BC_PUSH_INTm1)
-           (JSR PUSH_INT_m1_TO_EVLSTK)  ;;
-           (JMP VM_INTERPRETER_INC_PC) ;; interpreter loop
-           ))))
 
 (module+ test #| push const num |#
   (define use-case-push-num-s-state-after
@@ -2300,34 +1968,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 1 item"
                       "int $0002  (rt)")))
 
-;; @DC-B: PUSH_B
-;; *PUSH* *B*​yte, following the instruction
-;; len: 2
-(define PUSH_B #x2e)
-(define BC_PUSH_B
-  (list
-   (label BC_PUSH_B)
-          (LDY !$01)
-          (LDA (ZP_VM_PC),y)
-          (LDX !$ff)
-          (JSR PUSH_XA_TO_EVLSTK)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
-
-(module+ test #| push byte |#
-  (define push-byte-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_B) (byte 0)
-       (bc PUSH_B) (byte 1)
-       (bc PUSH_B) (byte 10)))))
-
-  (check-equal? (vm-stack->strings push-byte-state)
-                (list "stack holds 3 items"
-                      "byte $0a  (rt)"
-                      "byte $01"
-                      "byte $00")))
-
 ;; @DC-B: POP_TO_RA_AF, group: cell_array
 ;; *POP* top of evlstk *TO* *RA* *A*​rray *F*​ield
 ;; len: 1
@@ -2985,46 +2625,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JMP VM_INTERPRETER_INC_PC_A_TIMES))))
 
 
-(module+ test #| BC_B_GT_P |#
-  (define gt-01-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 10)
-      (bc PUSH_B) (byte 20)
-      (bc B_GT_P))))
 
-  (check-equal? (vm-regt->string gt-01-state)
-                "int $0001")
-
-  (define gt-02-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 20)
-      (bc B_GT_P))))
-
-  (check-equal? (vm-regt->string gt-02-state)
-                "int $0000")
-
-  (define gt-03-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 21)
-      (bc B_GT_P))))
-
-  (check-equal? (vm-regt->string gt-03-state)
-                "int $0001")
-
-  (define gt-04-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc PUSH_B) (byte 19)
-      (bc B_GT_P))))
-
-  (check-equal? (vm-regt->string gt-04-state)
-                "int $0000"))
 
 (module+ test #| BC_B_LT_P |#
   (define lt-01-state
@@ -3144,11 +2745,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT
           BC_POP
-          BC_POP_TO_LOCAL_SHORT
           BC_PUSH_LOCAL_SHORT
+          BC_POP_TO_LOCAL_SHORT
           BC_PUSH_LOCAL_CXR
-          PUSH_RT_WRITE_LOCAL_bc_enc
+          BC_PUSH_B
+          BC_CALL
           BC_PUSH_CONST_NUM_SHORT
+          PUSH_RT_WRITE_LOCAL_bc_enc
           BC_PUSH_I
           BC_PUSH_NIL
           BC_NIL_P
@@ -3159,7 +2762,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_CDR
           BC_CxxR
           BC_COONS
-          BC_CALL
           BC_RET
           BC_BREAK
           BC_IADD
@@ -3188,7 +2790,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           VM_REFCOUNT_DECR_ARRAY_REGS
           BC_PUSH_AF
           BC_POP_TO_AF
-          BC_PUSH_B
           BC_NATIVE
           RETURN_TO_BC
           BC_BINC_RAI
@@ -3199,7 +2800,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_BINC
           BC_Z_P_BRA
           BC_Z_P_RET_POP_N
-          BC_PUSH_RA_AF
           BC_PUSH_RA
           BC_SWAP_RA_RB
           BC_NZ_P_BRA
@@ -3218,14 +2818,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (define vm-interpreter-wo-jt
   (append just-vm-interpreter
           (list (label END__INTERPRETER))
-          final-extended-optable-hb
-          final-extended-optable-lb
+          full-extended-optable-hb
+          full-extended-optable-lb
           vm-lists))
 
 (define vm-interpreter
   (append vm-interpreter-wo-jt
           (list (org-align #x100)) ;; align to next page
-          final-interpreter-opcode-table
+          full-interpreter-opcode-table
           (list (label END__INTERPRETER_DATA))))
 
 (module+ test #| vm-interpreter |#

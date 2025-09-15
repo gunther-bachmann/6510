@@ -22,24 +22,14 @@ TODO: get tests (still in vm-interpreter) into this file
 (require (only-in "./vm-mm-register-functions.rkt"
                   WRITE_INT0_TO_RT
                   WRITE_INT1_TO_RT))
+(require (only-in "./vm-interpreter-bc.push_n_pop.rkt" BC_PUSH_B))
 
 (provide BC_B_GT_P
          BC_B_LT_P
          BC_B_GE_P
          BC_I_GT_P)
 
-(module+ test
-  (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
-  (require "../6510-test-utils.rkt")
-  (require (only-in "../ast/6510-relocator.rkt" command-len))
-  (require (only-in "./vm-inspector-utils.rkt"
-                    vm-cell-at-nil?
-                    vm-page->strings
-                    vm-stack->strings
-                    vm-regt->string
-                    vm-cell-at->string
-                    vm-cell->string
-                    vm-deref-cell-pair-w->string)))
+
 
 ;; @DC-B: B_GT_P, group: predicates
 (define B_GT_P #x48)
@@ -99,7 +89,7 @@ TODO: get tests (still in vm-interpreter) into this file
    "__" "__I_GT_P"
    (list
     (label BC_I_GT_P)
-           (LDA ZP_RT)
+           (LDA ZP_RT)                  ;; TODO: optimize by using POP_CELL_EVLSTK_TO_RP, but take care to change branch commands accordingly
            (STA ZP_RP)
            (LDA ZP_RT+1)
            (STA ZP_RP+1)

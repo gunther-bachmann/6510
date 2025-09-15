@@ -87,7 +87,13 @@
              (next-results
               (cond
                 [(ast-label-def-cmd? command)
-                 (hash-set collected-results (ast-label-def-cmd-label command) offset)]
+                 (define label (ast-label-def-cmd-label command))
+                 (when (hash-has-key? collected-results label)
+                   (raise-user-error (format "duplicate label found '~a' at ~a, now again at ~a"
+                                             label
+                                             (hash-ref collected-results label)
+                                             offset)))
+                 (hash-set collected-results label offset)]
                 [else collected-results])))
         (cond
           [(ast-org-command? command)

@@ -375,7 +375,11 @@
          (label  (ast-resolve-sub-cmd-label subcmd))
          (ex-offset (label-offset label))
          (value  (hash-ref labels (label-label label) #f)))
+    ;; (println instruction)
     ;; (println label)
+    ;; (println ex-offset)
+    ;; (println value)
+    ;; (println offset)
     (cond [value
            (let ([rel-value (two-complement-of (+ ex-offset (- value (+ offset 2))))])
              (unless (byte? rel-value)

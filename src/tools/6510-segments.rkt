@@ -253,6 +253,7 @@ currently the following test programs are created
      (apply
       list-with-label-suffix
       (looped-copy-region-01 #t)
+      #:provide-own-test-entry-label #t
       #:org  (org #x0810)
       #:mock (list (label CHAR_OUT)))))
 
@@ -410,9 +411,9 @@ currently the following test programs are created
   ;; idea
   (require (only-in "../nmil/vm-bc-opcode-definitions.rkt" bc))
   (require (only-in "../nmil/vm-interpreter.rkt"
-                    final-extended-optable-lb
-                    final-extended-optable-hb
-                    final-interpreter-opcode-table
+                    full-extended-optable-lb
+                    full-extended-optable-hb
+                    full-interpreter-opcode-table
                     just-vm-interpreter))
   (require (only-in "../nmil/vm-mm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
 
@@ -451,8 +452,8 @@ currently the following test programs are created
                      (JSR VM_INITIALIZE_CALL_FRAME)
                      (JMP VM_INTERPRETER))
                just-vm-interpreter
-               final-extended-optable-hb
-               final-extended-optable-lb)
+               full-extended-optable-hb
+               full-extended-optable-lb)
        (assembly-code-list-labels vm-runtime)))
 
   (define raw-bc-interpreter
@@ -471,7 +472,7 @@ currently the following test programs are created
     (cdar
      (assembly-code-list-org-code-sequences
       (new-assemble-to-code-list
-       (append (list (org #xcdc0)) final-interpreter-opcode-table)
+       (append (list (org #xcdc0)) full-interpreter-opcode-table)
        (assembly-code-list-labels bc-interpreter) ;; (need to add labels collected by interpreter)
        ))))
   ;; @cf00
@@ -670,13 +671,13 @@ currently the following test programs are created
      (append
       (list
        (org #x00f7)
-             (JMP TEST_ENTRY)
+             (JMP NTEST_ENTRY)
        (org #x00fa)
              (word #x000a) ;; copy 10 bytes
              (word #xB000) ;; from b000
              (word #xF1FA) ;; to f1fa
        (org #xa000)
-       (label TEST_ENTRY)
+       (label NTEST_ENTRY)
               (JSR COPY_REGION)
               (BRK)
 
@@ -694,13 +695,13 @@ currently the following test programs are created
      (append
       (list
        (org #x00f7)
-             (JMP TEST_ENTRY)
+             (JMP NTEST_ENTRY)
        (org #x00fa)
              (word #x010a) ;; copy 266 bytes
              (word #xAFFC) ;; from affc
              (word #xF1FA) ;; to f1fa
        (org #xa000)
-       (label TEST_ENTRY)
+       (label NTEST_ENTRY)
               (JSR COPY_REGION)
               (BRK)
 

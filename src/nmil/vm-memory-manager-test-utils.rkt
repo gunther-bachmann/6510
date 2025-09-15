@@ -93,7 +93,7 @@ provide routines that are useful for testing memory management routines
   ;; mock away labels in the mock list
   ;; add subroutine that counts calls to mocks incresing TEST_COUNTERS+<idx of mock>
   ;; where idx is the list position number of the mock passed
-(define (list-with-label-suffix #:org (ast-org-cmd #f) #:mock (mocked-code-list (list)) . list-elements )
+(define (list-with-label-suffix #:provide-own-test-entry-label (provide-own-test-entry-label #f) #:org (ast-org-cmd #f) #:mock (mocked-code-list (list)) . list-elements )
     (add-label-suffix
      "__" (string-replace (uuid-string) "-" "_")
      (append
@@ -112,7 +112,9 @@ provide routines that are useful for testing memory management routines
                             ))
                     mocked-code-list
                     (range (length mocked-code-list))))
-      (list (label TEST_ENTRY))
+      (if provide-own-test-entry-label
+          (list)
+          (list (label TEST_ENTRY)))
       list-elements)))
 
   ;; run the given code in test, wrapping it with mocks and counters, entering interactive debugger, if requested
