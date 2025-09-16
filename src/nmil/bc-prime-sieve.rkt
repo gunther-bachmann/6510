@@ -176,7 +176,7 @@ primes (ignore 0,1) up to 30
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                       76494)
+                       76456)
 
   (check-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 3) (+ PAGE_AVAIL_0_W 85))
                 (list #x01 #x83 40

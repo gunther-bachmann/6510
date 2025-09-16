@@ -91,6 +91,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
 (require (only-in "./vm-interpreter-bc.call_ret.rkt" BC_CALL))
 (require (only-in "./vm-interpreter-bc.pop_local.rkt" BC_POP_TO_LOCAL_SHORT))
+(require (only-in "./vm-interpreter-bc.native.rkt" BC_POKE_B BC_NATIVE RETURN_TO_BC))
+(require (only-in "./vm-interpreter-bc.arrays.rkt" BC_DEC_RBI_NZ_P_BRA))
+(require (only-in "./vm-interpreter-bc.branch.rkt"
+                  BC_Z_P_BRA
+                  BC_NZ_P_BRA
+                  BC_T_P_BRA
+                  BC_F_P_BRA))
 
 (module+ test
   (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
@@ -1099,310 +1106,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                       "int $0001"
                       "int $0000")))
 
-;; @DC-B: F_P_BRA, group: flow
-;; *F*​alse *P*​redicate *BRA*​nch
-;; len: 1
-(define F_P_BRA #x1a)
-(define BC_F_P_BRA
-  (list
-   (label BC_F_P_BRA)
-          (CLC)
-          (LDA ZP_RT+1)
-          (BEQ BRANCH_BY_NEXT_BYTE)
-          (LDA !$00)
-          (BEQ POP_AND_CONTINUE_AFTER_BRA)))
-
-(module+ test #| branch true |#
-  (define branch-false-0-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc F_P_BRA) (byte 2)
-      (bc PUSH_I0)
-      (bc BREAK)
-      (bc PUSH_I2))
-     ))
-  (check-equal? (vm-stack->strings branch-false-0-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-false-1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc F_P_BRA) (byte $75)
-      (bc BREAK)
-      (org-align #x78)
-      (bc PUSH_I2))))
-  (check-equal? (vm-stack->strings branch-false-1-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-false-2-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I0)
-       (bc F_P_BRA) (byte $7d)
-       (bc BREAK)
-       (org-align #x80)
-       (bc PUSH_I0)
-       (bc F_P_BRA) (byte $6d)
-       (bc BREAK)
-       (org-align #xf0)
-       (bc PUSH_I0)
-       ;; 80f1
-       (bc F_P_BRA) (byte $0d)
-       (build-list 13 (lambda (_i) (bc BREAK)))
-       ;; now at 8100
-       (bc PUSH_I2)))
-   ))
-  (check-equal? (vm-stack->strings branch-false-2-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-false-3-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I0)
-       (bc F_P_BRA) (byte $7d)
-       (bc BREAK)
-       (org-align #x80)
-       (bc PUSH_I0)
-       ;; now at 8081
-       (bc F_P_BRA) (byte $6d)
-       ;; 8083
-       (bc BREAK)
-       (org-align #xf0)
-       (bc PUSH_I0)
-       ;; now at 80f1
-       (bc F_P_BRA) (byte $0e)
-       (build-list 14 (lambda (_i) (bc BREAK)))
-       ;; now at 8102
-       (bc PUSH_I2)))
-   ))
-  (check-equal? (vm-stack->strings branch-false-3-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-false-4-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I0)
-       (bc F_P_BRA) (byte 3)
-       (bc BREAK)
-       (bc PUSH_I2)
-       (bc BREAK)
-       (bc PUSH_I0)
-       (bc F_P_BRA) (byte $fd)))
-     ))
-  (check-equal? (vm-stack->strings branch-false-4-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-false-5-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I0)
-       (bc F_P_BRA) (byte $7d)
-       (bc BREAK)
-       (org-align #x80)
-       (bc PUSH_I0)
-       ;; now at 8081
-       (bc F_P_BRA) (byte $6d)
-       ;; 8083
-       (bc BREAK)
-       (org-align #xf0)
-       (bc PUSH_I0)
-       ;; now at 80f1
-       (bc F_P_BRA) (byte $0e)
-       (build-list 12 (lambda (_i) (bc BREAK)))
-       ;; 80ff
-       (bc PUSH_I2)
-       ;; 8100
-       (bc BREAK)
-       ;; now at 8101
-       (bc PUSH_I0)
-       (bc F_P_BRA) (byte $fd)))
-     ))
-  (check-equal? (vm-stack->strings branch-false-5-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)")))
-
-;; @DC-B: T_P_BRA, group: flow
-;; *T*​rue *P*​redicate *BRA*​nch
-;; len: 2
-(define T_P_BRA #x18)
-(define BC_T_P_BRA
-  (add-label-suffix
-   "__" "__T_P_BRA"
-  (list
-   (label BC_T_P_BRA)
-          ;; (CLC)
-          (LDA ZP_RT+1)
-          (BEQ POP_AND_CONTINUE_AFTER_BRA) ;; when false (A = 0), just continue, no branch
-
-   (label BRANCH_BY_NEXT_BYTE)
-   ;; branch by adding second byte code
-          (LDY !$01)
-          (LDA (ZP_VM_PC),y)
-          (BMI NEGATIVE_BRANCH__)
-
-   (label POP_AND_CONTINUE_AFTER_BRA)
-          (TAX)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (TXA)
-   (label CONTINUE_AFTER_BRA)
-          (CLC)
-          (ADC !$02) ;; this cannot incur any carry, since the jump forward can only be < 128 => result < 130 => no carry, yet
-          (ADC ZP_VM_PC)
-          (STA ZP_VM_PC)
-          (BCC NO_PAGE_CHANGE__)
-          (INC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE__)
-          (JMP VM_INTERPRETER)
-
-   (label NEGATIVE_BRANCH__)
-          (TAX)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (TXA)
-   (label NEGATIVE_BRANCH_NO_POP__)
-          (CLC)
-          [ADC ZP_VM_PC]
-          (STA ZP_VM_PC)
-          (BCS NO_PAGE_CHANGE_ON_BACK__)
-          (DEC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE_ON_BACK__)
-          (JMP VM_INTERPRETER)
-
-   (label BRANCH_BY_NEXT_BYTE__NO_POP)
-          (LDY !$01)
-          (LDA (ZP_VM_PC),y)
-          (BMI NEGATIVE_BRANCH_NO_POP__)
-          (JMP CONTINUE_AFTER_BRA))))
-
-(module+ test #| branch true |#
-  (define branch-true-0-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc T_P_BRA) (byte 2)
-      (bc PUSH_I1)
-      (bc BREAK)
-      (bc PUSH_I2))))
-  (check-equal? (vm-stack->strings branch-true-0-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-true-1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc T_P_BRA) (byte $75)
-      (bc BREAK)
-      (org-align #x78)
-      (bc PUSH_I2))))
-  (check-equal? (vm-stack->strings branch-true-1-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-true-2-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I1)
-       (bc T_P_BRA) (byte $7d)
-       (bc BREAK)
-       (org-align #x80)
-       (bc PUSH_I1)
-       (bc T_P_BRA) (byte $6d)
-       (bc BREAK)
-       (org-align #xf0)
-       (bc PUSH_I1)
-       ;; 80f1
-       (bc T_P_BRA) (byte $0d)
-       (build-list 13 (lambda (_i) (bc BREAK)))
-       ;; now at 8100
-       (bc PUSH_I2)))
-   ))
-  (check-equal? (vm-stack->strings branch-true-2-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-true-3-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I1)
-       (bc T_P_BRA) (byte $7d)
-       (bc BREAK)
-       (org-align #x80)
-       (bc PUSH_I1)
-       ;; now at 8081
-       (bc T_P_BRA) (byte $6d)
-       ;; 8083
-       (bc BREAK)
-       (org-align #xf0)
-       (bc PUSH_I1)
-       ;; now at 80f1
-       (bc T_P_BRA) (byte $0e)
-       (build-list 14 (lambda (_i) (bc BREAK)))
-       ;; now at 8102
-       (bc PUSH_I2)))
-   ))
-  (check-equal? (vm-stack->strings branch-true-3-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-true-4-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I1)
-       (bc T_P_BRA) (byte 3)
-       (bc BREAK)
-       (bc PUSH_I2)
-       (bc BREAK)
-       (bc PUSH_I1)
-       (bc T_P_BRA) (byte $fd)))
-     ))
-  (check-equal? (vm-stack->strings branch-true-4-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define branch-true-5-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I1)
-       (bc T_P_BRA) (byte $7d)
-       (bc BREAK)
-       (org-align #x80)
-       (bc PUSH_I1)
-       ;; now at 8081
-       (bc T_P_BRA) (byte $6d)
-       ;; 8083
-       (bc BREAK)
-       (org-align #xf0)
-       (bc PUSH_I1)
-       ;; now at 80f1
-       (bc T_P_BRA) (byte $0e)
-       (build-list 12 (lambda (_i) (bc BREAK)))
-       ;; 80ff
-       (bc PUSH_I2)
-       ;; 8100
-       (bc BREAK)
-       ;; now at 8101
-       (bc PUSH_I1)
-       (bc T_P_BRA) (byte $fd)))
-     ))
-  (check-equal? (vm-stack->strings branch-true-5-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)")))
-
 ;; @DC-B: CONS_PAIR_P, group: predicates
 ;; *CONS* *PAIR* *P*​redicate
 ;; len: 1
@@ -2182,45 +1885,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (DEC ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
 
-;; @DC-B: NATIVE, group: misc
-;; following bytes are native 6510 commands, JSR RETURN_TO_BC ends this sequence
-;; len: 1
-(define NATIVE #x4a)
-(define BC_NATIVE
-  (list
-   (label BC_NATIVE)
-          ;; (INC ZP_VM_PC)
-          ;; (BNE CONT__BC_NATIVE)
-          ;; (INC ZP_VM_PC+1)
-   (label CONT__BC_NATIVE)
-          (JMP (ZP_VM_PC)))) ;; this jump actually jumps onto the current bytecode command,
-                             ;; but since NATIVE is 4a (which is 6510 LSR), this can be done without the incr.
 
-(define RETURN_TO_BC
-  (list
-   (label RETURN_TO_BC)
-          (PLA)
-          (STA ZP_VM_PC)
-          (PLA)
-          (STA ZP_VM_PC+1)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| bdec |#
-  (define native-return-test
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_B) (byte #x14)
-       (bc NATIVE)
-       (INC ZP_RT+1)
-       (JSR RETURN_TO_BC)
-       (bc PUSH_B) (byte #x16)))
-     ))
-
-  (check-equal? (vm-stack->strings native-return-test)
-                (list "stack holds 2 items"
-                      "byte $16  (rt)"
-                      "byte $15")))
 
 ;; @DC-B: BADD, group: byte
 ;; *B*​yte *ADD* top two values on stack (no checks)
@@ -2399,86 +2064,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
     (label COUNT__)
            (byte 0))))
 
-;; @DC-B: Z_P_BRA, group: flow
-;; *Z*​ero *P*​redicate *BRA*​nch
-;; len: 2
-(define Z_P_BRA #x5e)
-(define BC_Z_P_BRA
-  (flatten
-   (list
-    (label BC_Z_P_BRA)
-           (LDX ZP_RT+1)
-           (BNE NO_BRA__BC_Z_P_BRA)
-           (LDX ZP_RT)
-           (CPX !$03)
-           (BEQ BRA__BC_Z_P_BRA)
-           (CPX !TAG_BYTE_BYTE_CELL)
-           (BNE NO_BRA__BC_Z_P_BRA)
-    (label BRA__BC_Z_P_BRA)
-           (JSR POP_CELL_EVLSTK_TO_RT)
-           (JMP BRANCH_BY_NEXT_BYTE)
-    (label NO_BRA__BC_Z_P_BRA)
-           (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
-
-;; @DC-B: NZ_P_BRA, group: flow
-;; *N*​ot *Z*​ero *P*​redicate *BRA*​nch
-;; on branch, it does no pop
-;; on fall through, it removes the 0 from the stack
-;; len: 2
-(define NZ_P_BRA #x3a)
-(define BC_NZ_P_BRA
-  (flatten
-   (list
-    (label BC_NZ_P_BRA)
-           (LDX ZP_RT+1)
-           (BNE BRA__BC_NZ_P_BRA) ;; != 0 => branch before even looking at anything else
-           (LDX ZP_RT)
-           (CPX !$03)
-           (BEQ NO_BRA__BC_NZ_P_BRA) ;; lowbyte = 03 (zero int)  => definitely no branch
-           (CPX !TAG_BYTE_BYTE_CELL)
-           (BEQ NO_BRA__BC_NZ_P_BRA)
-    (label BRA__BC_NZ_P_BRA)
-           (JMP BRANCH_BY_NEXT_BYTE__NO_POP)
-    (label NO_BRA__BC_NZ_P_BRA)
-           (JSR POP_CELL_EVLSTK_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
-
-
-;; @DC-B: DEC_RBI_NZ_P_BRA, group: flow
-;; *DEC*​rement *RBI* and *N*​ot *Z*​ero *P*​redicate *BRA*​nch
-;; len: 2
-(define DEC_RBI_NZ_P_BRA #xa8)
-(define BC_DEC_RBI_NZ_P_BRA
-  (flatten
-   (list
-    (label BC_DEC_RBI_NZ_P_BRA)
-           (DEC ZP_RBI)
-           (BNE BRA__BC_DEC_RBI_NZ_P_BRA) ;; != 0 => branch before even looking at anything else
-           (JMP VM_INTERPRETER_INC_PC_2_TIMES)
-    (label BRA__BC_DEC_RBI_NZ_P_BRA)
-           (JMP BRANCH_BY_NEXT_BYTE__NO_POP))))
-
-
-(define POKE_B #xd8)
-(define BC_POKE_B
-  (flatten
-   (list
-    (label BC_POKE_B)
-           (LDY !$02)
-           (LDA (ZP_VM_PC),y)
-           (STA ZP_RP+1)
-           (DEY)
-           (LDA (ZP_VM_PC),y)
-           (STA ZP_RP)
-           (LDA ZP_RT+1)
-           (DEY)
-           (STA (ZP_RP),y)
-           (LDA !$03)
-           (JMP VM_INTERPRETER_INC_PC_A_TIMES))))
-
-
-
-
 (define just-vm-interpreter
   (append VM_INTERPRETER_VARIABLES
           VM_INTERPRETER_INIT
@@ -2537,10 +2122,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           BC_BDEC
           BC_BINC
           BC_Z_P_BRA
+          BC_NZ_P_BRA
           BC_Z_P_RET_POP_N
           BC_PUSH_RA
           BC_SWAP_RA_RB
-          BC_NZ_P_BRA
           BC_BADD
           BC_B_GT_P
           BC_B_LT_P
@@ -2568,7 +2153,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1634
+                       1637
                        "estimated len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#

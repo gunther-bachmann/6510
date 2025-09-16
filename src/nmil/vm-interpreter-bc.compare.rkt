@@ -29,8 +29,6 @@ TODO: get tests (still in vm-interpreter) into this file
          BC_B_GE_P
          BC_I_GT_P)
 
-
-
 ;; @DC-B: B_GT_P, group: predicates
 (define B_GT_P #x48)
 (define BC_B_GT_P
