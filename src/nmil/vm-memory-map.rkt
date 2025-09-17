@@ -41,6 +41,9 @@
          TAG_BYTE_BYTE_CELL              ;; (byte) constant identifying a byte cell (low-byte = this constant)
          TAG_BYTE_CELL_ARRAY             ;; (byte) constant identifying a cell-array (first byte in a m1 slot)
          TAG_BYTE_NATIVE_ARRAY           ;; (byte) constant identifying a native-array (first byte in a m1 slot)
+         TAGGED_INT_0                    ;; (word) constant identifying an int cell with value 0
+         TAGGED_INT_0_HB                 ;; (byte) high byte of const int 0
+         TAGGED_INT_0_LB                 ;; (byte) low byte of const int 0
          TAGGED_NIL)                     ;; (word) constant identifying a nil cell (low + high byte)
 
 (define VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -166,4 +169,7 @@
 (define TAG_BYTE_BYTE_CELL      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_BYTE_CELL"))
 (define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
 (define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
+(define TAGGED_INT_0            (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_INT_0"))
+(define TAGGED_INT_0_HB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_INT_0_HB"))
+(define TAGGED_INT_0_LB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_INT_0_LB"))
 (define TAGGED_NIL              (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_NIL"))

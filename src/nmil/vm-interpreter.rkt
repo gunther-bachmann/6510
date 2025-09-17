@@ -89,7 +89,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_I_GT_P))
 (require (only-in "./vm-interpreter-bc.push_n_pop.rkt" BC_PUSH_B))
 (require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
-(require (only-in "./vm-interpreter-bc.call_ret.rkt" BC_CALL))
+(require (only-in "./vm-interpreter-bc.call_ret.rkt"
+                  BC_CALL
+                  BC_Z_P_RET_POP_N))
 (require (only-in "./vm-interpreter-bc.pop_local.rkt" BC_POP_TO_LOCAL_SHORT))
 (require (only-in "./vm-interpreter-bc.native.rkt" BC_POKE_B BC_NATIVE RETURN_TO_BC))
 (require (only-in "./vm-interpreter-bc.arrays.rkt" BC_DEC_RBI_NZ_P_BRA))
@@ -98,6 +100,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_NZ_P_BRA
                   BC_T_P_BRA
                   BC_F_P_BRA))
+(require (only-in "./vm-interpreter-bc.atom-num.rkt"
+                  BC_BINC
+                  BC_BDEC
+                  BC_BADD))
 
 (module+ test
   (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
@@ -1884,185 +1890,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_DEC_RAI)
           (DEC ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
-
-
-
-;; @DC-B: BADD, group: byte
-;; *B*​yte *ADD* top two values on stack (no checks)
-;; len: 1
-(define BADD #x46)
-(define BC_BADD
-  (list
-   (label BC_BADD)
-          (JSR POP_CELL_EVLSTK_TO_RP)
-          (CLC)
-          (LDA ZP_RT+1)
-          (ADC ZP_RP+1)
-          (STA ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| badd |#
-  (define badd-20-9
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_B) (byte #x14)
-       (bc PUSH_B) (byte #x09)
-       (bc BADD)))))
-
-  (check-equal? (vm-stack->strings badd-20-9)
-                (list "stack holds 1 item"
-                      "byte $1d  (rt)")))
-
-;; @DC-B: BDEC, group: byte
-;; *B*​yte *DEC*​rement, increment byte RT (no checks)
-;; len: 1
-(define BDEC #x6c)
-(define BC_BDEC
-  (list
-   (label BC_BDEC)
-   (DEC ZP_RT+1)
-   (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| bdec |#
-  (define bdec-20
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_B) (byte #x14)
-       (bc BDEC)))))
-
-  (check-equal? (vm-stack->strings bdec-20)
-                (list "stack holds 1 item"
-                      "byte $13  (rt)")))
-
-;; @DC-B: BINC, group: byte
-;; *B*​yte *INC*​rement, increment byte RT (no checks)
-;; len: 1
-(define BINC #x38)
-(define BC_BINC
-  (list
-   (label BC_BINC)
-   (INC ZP_RT+1)
-   (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| binc |#
-  (define binc-20
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_B) (byte #x14)
-       (bc BINC)))))
-
-  (check-equal? (vm-stack->strings binc-20)
-                (list "stack holds 1 item"
-                      "byte $15  (rt)")))
-
-;; @DC-B: Z_P_RET_POP_0, group: return
-(define Z_P_RET_POP_0 #x80) ;; *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return without popping anything
-                            ;; len: 1
-                            ;; @DC-B: Z_P_RET_POP_1, group: return
-(define Z_P_RET_POP_1 #x82) ;; *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 1 value from evlstk
-                            ;; len: 1
-                            ;; @DC-B: Z_P_RET_POP_2, group: return
-(define Z_P_RET_POP_2 #x84) ;; *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 2 values from evlstk
-                            ;; len: 1
-                            ;; @DC-B: Z_P_RET_POP_3, group: return
-(define Z_P_RET_POP_3 #x86) ;; *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt holds byte = 0 or int = 0 return, popping 3 values from evlstk
-                            ;; len: 1
-                            ;; @DC-B: NZ_P_RET_POP_0, group: return
-(define NZ_P_RET_POP_0 #xc0) ;; *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return without popping anything
-                             ;; len: 1
-                             ;; @DC-B: NZ_P_RET_POP_1, group: return
-(define NZ_P_RET_POP_1 #xc2) ;; *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 1 value from evlstk
-                             ;; len: 1
-                             ;; @DC-B: NZ_P_RET_POP_2, group: return
-(define NZ_P_RET_POP_2 #xc4) ;; *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 2 values from evlstk
-                             ;; len: 1
-                             ;; @DC-B: NZ_P_RET_POP_3, group: return
-(define NZ_P_RET_POP_3 #xc6) ;; *N*​ot *Z*​ero *P*​redicate then *RET*​urn and *POP*, if rt does hold byte != 0 or int != 0 return, popping 3 values from evlstk
-                             ;; len: 1
-(define BC_Z_P_RET_POP_N
-  (add-label-suffix
-   "__" "BC_Z_P_RET_POP_N"
-   (list
-    (label BC_Z_P_RET_POP_N)
-           (LSR)                        ;; number to pop
-           (AND !$03)
-           (LDX ZP_RT+1)
-           (BNE DONE__)                 ;; tos != byte 0 => do nothing
-           (LDX ZP_RT)
-           (CPX !>TAGGED_INT_0)
-           (BEQ POP_N_RET__)            ;; tos = int 0 => pop and return
-           (CPX !TAG_BYTE_BYTE_CELL)
-           (BNE DONE__)                 ;; tos is neither int nor byte => do nothing
-
-    (label POP_N_RET__)
-           (CMP !$00)                   ;;
-           (BEQ RET__)                  ;; nothing to pop -> just return
-           (STA COUNT__)                ;; keep count to pop
-    (label POP_LOOP__)
-           (JSR DEC_REFCNT_RT)
-           (JSR POP_CELL_EVLSTK_TO_RT)
-           (DEC COUNT__)
-           (BNE POP_LOOP__)
-    (label RET__)
-           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
-           (JSR VM_POP_CALL_FRAME_N)                     ;; now pop the call frame
-
-    (label DONE__)
-           (JMP VM_INTERPRETER_INC_PC)
-
-    (label BC_NZ_P_RET_POP_N)
-           (LSR)                        ;; number to pop
-           (AND !$03)
-           (LDX ZP_RT+1)
-           (BEQ DONE__)                 ;; tos (hb) = 0 => do nothing, cannot be byte 0 nor int 0
-           (LDX ZP_RT)
-           (CPX !TAG_BYTE_BYTE_CELL)
-           (BEQ POP_N_RET__)            ;; is a byte cell (and high byte !=0) -> do pop and return
-           (CPX !>TAGGED_INT_0)
-           (BNE POP_N_RET__)            ;; tos = int != 0 => pop and return
-           (JMP VM_INTERPRETER_INC_PC)  ;; tos is int 0 => do nothing
-
-    ;; type specialized method (byte)
-    ;; (label BC_BZ_P_RET_POP_N)
-    ;;        (LSR)                        ;; number to pop
-    ;;        (AND !$03)
-    ;;        (LDX ZP_RT+1)
-    ;;        (BEQ POP_N_RET__)
-    ;;        (JMP VM_INTERPRETER_INC_PC)
-
-    ;; (label BC_BNZ_P_RET_POP_N)
-    ;;        (LSR)                        ;; number to pop
-    ;;        (AND !$03)
-    ;;        (LDX ZP_RT+1)
-    ;;        (BNE POP_N_RET__)
-    ;;        (JMP VM_INTERPRETER_INC_PC)
-
-    ;; ;; type specialized method (int)
-    ;; (label BC_IZ_P_RET_POP_N)
-    ;;        (LSR)                        ;; number to pop
-    ;;        (AND !$03)
-    ;;        (LDX ZP_RT+1)
-    ;;        (BNE DONE__)
-    ;;        (LDX ZP_RT)
-    ;;        (CMP !>TAGGED_INT_0)
-    ;;        (BEQ POP_N_RET__)
-    ;;        (JMP VM_INTERPRETER_INC_PC)
-
-    ;; (label BC_INZ_P_RET_POP_N)
-    ;;        (LSR)                        ;; number to pop
-    ;;        (AND !$03)
-    ;;        (LDX ZP_RT+1)
-    ;;        (BNE POP_N_RET__)
-    ;;        (LDX ZP_RT)
-    ;;        (CPX !>TAGGED_INT_0)
-    ;;        (BNE POP_N_RET__)
-    ;;        (JMP VM_INTERPRETER_INC_PC)
-
-    (label COUNT__)
-           (byte 0))))
 
 (define just-vm-interpreter
   (append VM_INTERPRETER_VARIABLES

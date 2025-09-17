@@ -31,7 +31,9 @@ using a cell-stack
          vm-call-frames->string
 
          VM_POP_CALL_FRAME_N
-         VM_REFCOUNT_DECR_CURRENT_LOCALS)
+         VM_REFCOUNT_DECR_CURRENT_LOCALS
+         VM_ALLOC_LOCALS
+         VM_PUSH_CALL_FRAME_N)
 
 (module+ test #| after mem init |#
   (require (only-in "../ast/6510-relocator.rkt" command-len))

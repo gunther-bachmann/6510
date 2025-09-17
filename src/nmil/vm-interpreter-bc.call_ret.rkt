@@ -4,7 +4,23 @@
 (require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
 
-(provide BC_CALL)
+(require (only-in "./vm-memory-map.rkt"
+                  ZP_VM_PC
+                  ZP_VM_FUNC_PTR
+                  ZP_RP
+                  TAGGED_INT_0
+                  TAG_BYTE_BYTE_CELL))
+(require (only-in "./vm-interpreter-loop.rkt" VM_INTERPRETER_INC_PC))
+(require (only-in "./vm-call-frame.rkt"
+                  VM_PUSH_CALL_FRAME_N
+                  VM_ALLOC_LOCALS
+                  VM_REFCOUNT_DECR_CURRENT_LOCALS))
+(require (only-in "./vm-memory-manager.rkt"
+                  DEC_REFCNT_RT))
+
+(provide BC_CALL
+         BC_Z_P_RET_POP_N
+         BC_NZ_P_RET_POP_N)
 
 (define BC_CALL
   (add-label-suffix
@@ -50,3 +66,86 @@
           (STA ZP_VM_FUNC_PTR+1)
 
           (JMP VM_INTERPRETER_INC_PC)))) ;; function starts at function descriptor + 1
+
+(define BC_NZ_P_RET_POP_N #t)
+(define BC_Z_P_RET_POP_N
+  (add-label-suffix
+   "__" "BC_Z_P_RET_POP_N"
+   (list
+    (label BC_Z_P_RET_POP_N)
+           (LSR)                        ;; number to pop
+           (AND !$03)
+           (LDX ZP_RT+1)
+           (BNE DONE__)                 ;; tos != byte 0 => do nothing
+           (LDX ZP_RT)
+           (CPX !>TAGGED_INT_0)
+           (BEQ POP_N_RET__)            ;; tos = int 0 => pop and return
+           (CPX !TAG_BYTE_BYTE_CELL)
+           (BNE DONE__)                 ;; tos is neither int nor byte => do nothing
+
+    (label POP_N_RET__)
+           (CMP !$00)                   ;;
+           (BEQ RET__)                  ;; nothing to pop -> just return
+           (STA COUNT__)                ;; keep count to pop
+    (label POP_LOOP__)
+           (JSR DEC_REFCNT_RT)
+           (JSR POP_CELL_EVLSTK_TO_RT)
+           (DEC COUNT__)
+           (BNE POP_LOOP__)
+    (label RET__)
+           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+           (JSR VM_POP_CALL_FRAME_N)                     ;; now pop the call frame
+
+    (label DONE__)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    (label BC_NZ_P_RET_POP_N)
+           (LSR)                        ;; number to pop
+           (AND !$03)
+           (LDX ZP_RT+1)
+           (BEQ DONE__)                 ;; tos (hb) = 0 => do nothing, cannot be byte 0 nor int 0
+           (LDX ZP_RT)
+           (CPX !TAG_BYTE_BYTE_CELL)
+           (BEQ POP_N_RET__)            ;; is a byte cell (and high byte !=0) -> do pop and return
+           (CPX !>TAGGED_INT_0)
+           (BNE POP_N_RET__)            ;; tos = int != 0 => pop and return
+           (JMP VM_INTERPRETER_INC_PC)  ;; tos is int 0 => do nothing
+
+    ;; type specialized method (byte)
+    ;; (label BC_BZ_P_RET_POP_N)
+    ;;        (LSR)                        ;; number to pop
+    ;;        (AND !$03)
+    ;;        (LDX ZP_RT+1)
+    ;;        (BEQ POP_N_RET__)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+
+    ;; (label BC_BNZ_P_RET_POP_N)
+    ;;        (LSR)                        ;; number to pop
+    ;;        (AND !$03)
+    ;;        (LDX ZP_RT+1)
+    ;;        (BNE POP_N_RET__)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+
+    ;; ;; type specialized method (int)
+    ;; (label BC_IZ_P_RET_POP_N)
+    ;;        (LSR)                        ;; number to pop
+    ;;        (AND !$03)
+    ;;        (LDX ZP_RT+1)
+    ;;        (BNE DONE__)
+    ;;        (LDX ZP_RT)
+    ;;        (CMP !>TAGGED_INT_0)
+    ;;        (BEQ POP_N_RET__)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+
+    ;; (label BC_INZ_P_RET_POP_N)
+    ;;        (LSR)                        ;; number to pop
+    ;;        (AND !$03)
+    ;;        (LDX ZP_RT+1)
+    ;;        (BNE POP_N_RET__)
+    ;;        (LDX ZP_RT)
+    ;;        (CPX !>TAGGED_INT_0)
+    ;;        (BNE POP_N_RET__)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+
+    (label COUNT__)
+           (byte 0))))
