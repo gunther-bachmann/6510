@@ -9,19 +9,19 @@ implement some useful test utils for testing bcs in a somewhat isolated environm
 
 (require (only-in racket/list flatten))
 (require "../6510.rkt")
+;; (require "../util.rkt")
 (require "../6510-test-utils.rkt")
 (require (only-in "./vm-call-frame.rkt" vm-call-frame->strings))
-(require (only-in "../util.rkt" format-hex-byte))
 (require (only-in "./vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_INIT))
 (require (only-in "./vm-memory-manager.rkt" VM_INITIALIZE_MEMORY_MANAGER))
 (require (only-in "vm-lists.rkt" vm-lists))
 
-(require "../6510.rkt")
 (require (only-in "../tools/6510-interpreter.rkt"
                   peek
-                  memory-list))
+                  memory-list
+                  cpu-state-clock-cycles))
 (require (only-in "./vm-interpreter-test-utils.rkt"
                   run-bc-wrapped-in-test-
                   vm-next-instruction-bytes))
@@ -47,7 +47,7 @@ implement some useful test utils for testing bcs in a somewhat isolated environm
          (all-from-out "./vm-call-frame.rkt")
          (all-from-out "./vm-bc-opcode-definitions.rkt")
          (all-from-out "../6510.rkt")
-         (all-from-out "../util.rkt")
+         ;; (all-from-out "../util.rkt")
          (all-from-out "../6510-test-utils.rkt")
          (all-from-out "../tools/6510-interpreter.rkt")
          (all-from-out "./vm-memory-map.rkt")

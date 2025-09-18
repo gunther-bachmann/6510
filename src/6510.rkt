@@ -23,8 +23,10 @@
 (require "ops/6510.subroutine-ops.rkt")
 (require "ops/6510.stack-ops.rkt")
 (require (for-syntax "scheme-asm/6510-syntax-utils.rkt"))
+(require (only-in "util.rkt" format-hex-byte format-hex-word bytes->int))
 
-
+(provide (all-from-out "util.rkt"))
+(provide (all-from-out "6510-utils.rkt"))
 (provide (all-from-out "ast/6510-command.rkt"))
 
 (provide (all-from-out "ops/6510.logic-ops.rkt"))

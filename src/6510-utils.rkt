@@ -10,26 +10,24 @@
 (module+ test
   (require "6510-test-utils.rkt"))
 
-(provide
- 6510-number-string?
- absolute
- byte
- byte->hex-string
- byte/c
- decimal-from-two-complement
- high-byte
- is-immediate-number?
- low-byte
- parse-number-string
- two-complement-of
- word
- word->hex-string
- word/c
- in-word-range?
- in-byte-range?
- ->string
- base-label-str
- )
+(provide 6510-number-string?
+         absolute
+         byte
+         byte->hex-string
+         byte/c
+         decimal-from-two-complement
+         high-byte
+         is-immediate-number?
+         low-byte
+         parse-number-string
+         two-complement-of
+         word
+         word->hex-string
+         word/c
+         in-word-range?
+         in-byte-range?
+         ->string
+         base-label-str)
 
 ;; convert given element to string
 (define/c (->string el)

@@ -24,6 +24,7 @@
                   VM_POP_EVLSTK_AND_INC_PC))
 (require (only-in "./vm-interpreter-bc.branch.rkt"
                   BRANCH_BY_NEXT_BYTE__NO_POP))
+(require (only-in "./vm-mm-register-functions.rkt" SWAP_RA_RB))
 
 (provide BC_DEC_RBI_NZ_P_BRA            ;; decrement cell array index register RBI and branch if NOT Zero
          BC_DEC_RAI                     ;; decrement cell array index register RAI
@@ -44,6 +45,7 @@
          BC_POP_TO_RA_AF                ;; pop tos into cell-array RA field A onto the eval stack (TODO: ref count old content!)
          BC_PUSH_AF                     ;; push array field (stack: index :: cell-array-ptr)
          BC_POP_TO_AF                   ;; pop tos to array field (stack: index :: cell-ptr->cell-array  :: value )
+         BC_SWAP_RA_RB                  ;; swap cell array register RA with RB
          )
 
 (define BC_DEC_RBI_NZ_P_BRA
@@ -211,3 +213,9 @@
            (JSR POP_EVLSTK_TO_ARR_ATa_RA) ;; array@a <- rt (TODO: check that old value is dec-refcnt'd)
            (JSR DEC_REFCNT_RA)            ;; since array is no longer on stack dec refcnt (value moved => no change)
            (JMP VM_INTERPRETER_INC_PC))))
+
+(define BC_SWAP_RA_RB
+  (list
+   (label BC_SWAP_RA_RB)
+          (JSR SWAP_RA_RB)
+          (JMP VM_INTERPRETER_INC_PC)))

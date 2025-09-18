@@ -19,9 +19,6 @@ of the decoder and the jump
          VM_INTERPRETER_OPTABLE_EXT1_LB
          VM_INTERPRETER_OPTABLE_EXT1_HB)
 
-;; @DC-B: EXT, group: misc
-;; extension byte code, the next byte is the actual command (decoded from the extended byte code jump table)
-(define EXT #x08)
 (define BC_EXT1_CMD
   (list
    (label BC_EXT1_CMD)

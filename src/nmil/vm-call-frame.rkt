@@ -11,7 +11,6 @@ using a cell-stack
 (require (only-in racket/list flatten take))
 
 (require "../6510.rkt")
-(require "../util.rkt")
 (require (only-in "../tools/6510-interpreter.rkt"
                   peek-word-at-address
                   peek))

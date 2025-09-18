@@ -24,12 +24,17 @@ TODO: get tests (still in vm-interpreter) into this file
                   VM_INTERPRETER_INC_PC_2_TIMES))
 (require (only-in "./vm-mm-cell-stack.rkt"
                   PUSH_XA_TO_EVLSTK
+                  PUSH_INT_TO_EVLSTK
                   PUSH_RT_TO_EVLSTK_IF_NONEMPTY))
 
 
 (provide BC_PUSH_B
          BC_DUP
-         BC_SWAP)
+         BC_SWAP
+         BC_POP
+         BC_POP_TO_RA
+         BC_POP_TO_RB
+         BC_PUSH_I)
 
 (define BC_PUSH_B
   (list
@@ -62,3 +67,35 @@ TODO: get tests (still in vm-interpreter) into this file
           (STA (ZP_CELL_STACK_HB_PTR),y)
           (STX ZP_RT+1)
           (JMP VM_INTERPRETER_INC_PC)))
+
+(define BC_POP_TO_RB '())
+(define BC_POP_TO_RA '())
+(define BC_POP
+  (list
+   (label BC_POP_TO_RB)
+          (LDA !$00)
+          (STA ZP_RBI)          ;; initialize index to 0
+          (JSR CP_RT_TO_RB)     ;; copy tos to rb
+          (JMP VM_POP_EVLSTK_AND_INC_PC)
+
+   (label BC_POP_TO_RA)
+          (LDA !$00)
+          (STA ZP_RAI)          ;; initialize index to 0
+          (JSR CP_RT_TO_RA)     ;; copy tos to ra
+          (JMP VM_POP_EVLSTK_AND_INC_PC)
+
+   (label BC_POP) ;;--------------------------------------------------------------------------------
+          (JSR DEC_REFCNT_RT) ;; no dec, since ra is refcounted too
+          (JMP VM_POP_EVLSTK_AND_INC_PC)))
+
+(define BC_PUSH_I
+  (list
+   (label BC_PUSH_I)
+          (LDY !$02)                             ;; index 1 past the byte code itself
+          (LDA (ZP_VM_PC),y)                     ;; load high byte of int (not encoded)
+          (TAX)                                  ;; -> X
+          (DEY)                                  ;; index 2 past the byte code
+          (LDA (ZP_VM_PC),y)                     ;; load low byte of int  -> A
+          (JSR PUSH_INT_TO_EVLSTK)         ;; push A/X as int onto stack
+          (LDA !$03)                             ;; increment program counter by 3 (bytecode + int)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))  ;; interpreter loop

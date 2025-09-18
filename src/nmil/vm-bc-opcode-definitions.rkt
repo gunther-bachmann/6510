@@ -490,5 +490,9 @@ depending on number of usage to make it as compact as possible!
   (check-equal? (filtered-opcode-definitions (list "BC_B_GT_P"))
                 (list (od-simple-bc "BC_B_GT_P" "B_GT_P" 72 1 "byte >?")))
 
+  (check-equal? (filtered-opcode-definitions (list "BC_IMAX" "BC_B_GT_P"))
+                (list (od-extended-bc "BC_EXT1_CMD" #x08 (list (od-simple-bc "BC_IMAX" "IMAX" 1 1 "int max")))
+                      (od-simple-bc "BC_B_GT_P" "B_GT_P" 72 1 "byte >?")))
+
   (check-equal? (length (filtered-opcode-definitions (list "BC_PUSH_B" "BC_B_GT_P")))
                 2))

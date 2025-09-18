@@ -101,11 +101,17 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_PUSH_RA_AF                  ;; push cell-array RA field A onto the eval stack (inc ref count)
                   BC_POP_TO_RA_AF
                   BC_PUSH_AF
-                  BC_POP_TO_AF))
+                  BC_POP_TO_AF
+                  BC_SWAP_RA_RB))
 (require (only-in "./vm-interpreter-bc.atom-num.rkt"
                   BC_BINC
                   BC_BDEC
-                  BC_BADD))
+                  BC_BADD
+                  BC_IMAX
+                  BC_IINC
+                  BC_IADD
+                  BC_BSHR
+                  BC_ISUB))
 (require (only-in "./vm-interpreter-bc.branch.rkt"
                   BC_Z_P_BRA
                   BC_NZ_P_BRA
@@ -127,12 +133,15 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_B_LT_P
                   BC_B_GE_P
                   BC_I_GT_P))
+(require (only-in "./vm-interpreter-bc.misc.rkt" BC_BNOP))
 (require (only-in "./vm-interpreter-bc.native.rkt" BC_POKE_B BC_NATIVE RETURN_TO_BC))
 (require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
 (require (only-in "./vm-interpreter-bc.push_n_pop.rkt"
                   BC_PUSH_B
                   BC_DUP
-                  BC_SWAP))
+                  BC_SWAP
+                  BC_POP
+                  BC_PUSH_I))
 (require (only-in "./vm-interpreter-bc.pop_local.rkt" BC_POP_TO_LOCAL_SHORT))
 
 (module+ test
@@ -583,193 +592,9 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
            (JSR INC_REFCNT_RT)
            (JMP VM_INTERPRETER_INC_PC)))))
 
-;; @DC-B: PUSH_I, group: stack
-(define PUSH_I  #x0c) ;; *PUSH* *I*​nt onto evlstk, op1=low byte op2=high byte, stack [] -> [cell-int]
-;; len: 3
-(define BC_PUSH_I
-  (list
-   (label BC_PUSH_I)
-          (LDY !$02)                             ;; index 1 past the byte code itself
-          (LDA (ZP_VM_PC),y)                     ;; load high byte of int (not encoded)
-          (TAX)                                  ;; -> X
-          (DEY)                                  ;; index 2 past the byte code
-          (LDA (ZP_VM_PC),y)                     ;; load low byte of int  -> A
-          (JSR PUSH_INT_TO_EVLSTK)         ;; push A/X as int onto stack
-          (LDA !$03)                             ;; increment program counter by 3 (bytecode + int)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)))  ;; interpreter loop
-
-(module+ test #| VM_PUSH_CONST_INT |#
-  (define use-case-push-int-state-after
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I) (byte #xf0 #x04)
-      (bc BREAK))))
-
-  (check-equal? (vm-stack->strings use-case-push-int-state-after)
-                (list "stack holds 1 item"
-                      "int $04f0  (rt)")))
-
-;; @DC-B: IADD, group: int
-;; len: 1
-;; stack [cell-int a, cell-int b] -> [sum]
-(define IADD #xbe)
-(define BC_IADD
-  (add-label-suffix
-   "__" "__IADD"
-  (list
-   (label BC_IADD)
-          (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte          
-          (LDA (ZP_CELL_STACK_HB_PTR),y)        ;; A = untagged lowbyte of int (stored in high byte)
-          (CLC)                                 ;; for addition the carry flags needs to be clear
-          (ADC ZP_RT+1)                         ;; A = A + stack value (int low byte)
-          (STA ZP_RT+1)                         ;; RT untagged lowbyte = result
-          
-          (LDA (ZP_CELL_STACK_LB_PTR),y)       ;; A = tagged high byte of int (stored in low byte)
-          (AND !$7c)                            ;; mask out lower two and highest bit
-          (BCC NO_INC_HIGH__)        ;; if previous addition had no overflow, skip inc
-          (CLC)                                 ;; clear for addition
-          (ADC !$04)                            ;; increment int (adding 4 into the enoded int starting at bit 2)
-
-    (label NO_INC_HIGH__)
-          (ADC ZP_RT)                           ;; A = A + stack value (int high byte)
-          (AND !$7f)                            ;; since ZP_RT has the lower two bits set, just mask out the highest bit
-          (STA ZP_RT)                           ;; RT tagged high byte = result
-
-          (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in RT as tos)
-          (JMP VM_INTERPRETER_INC_PC))))         ;; interpreter loop
-
-(module+ test #| IADD |#
-  (define (bc-int-plus-state a b)
-    (define ra (if (< a 0) (+ #x2000 a) a))
-    (define rb (if (< b 0) (+ #x2000 b) b))
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
-      (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
-      (bc IADD)
-      (bc BREAK))))
-
-  (define (bc-int-plus-expectation state c)
-    (check-equal? (vm-stack->strings state)
-                  (list "stack holds 1 item"
-                        (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
- 
-  ;; Execute this test only, if major change to int + have been done
-  ;; (define _run-bc-int-plus-tests
-  ;;   (for/list ([j '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
-  ;;     (for/list ([i '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
-  ;;       (bc-int-plus-expectation (bc-int-plus-state i j) (+ i j)))))
-
-  (define use-case-int-plus-state-after
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc PUSH_I2)
-      (bc BNOP)
-      (bc IADD)                      ;; byte code for INT_PLUS = 3
-      (bc PUSH_I) (byte #xf0 #x04) ;; push int #x4f0 (1264)
-      (bc PUSH_I) (byte #x1f #x01) ;; push int #x11f (287)
-      (bc IADD)                      ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
-      (bc PUSH_I1)
-      (bc PUSH_IM1)
-      (bc IADD)                      ;; byte code for INT_PLUS = 0
-      (bc BREAK))))
-
-  (inform-check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                       668)
-  (check-equal? (vm-stack->strings use-case-int-plus-state-after)
-                   (list "stack holds 3 items"
-                         "int $0000  (rt)"
-                         "int $060f"
-                         "int $0003"
-                         )))
-
-;; @DC-B: ISUB, group: int
-(define ISUB #xbc) ;; stack [cell-int a, cell-int b] -> [difference]
-(define BC_ISUB
-  (add-label-suffix
-   "__" "__ISUB"
-  (list
-   (label BC_ISUB)
-          (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte          
-          (SEC)                                 ;; for subtraction carry needs to be set
-          (LDA ZP_RT+1)                         ;; A = untagged lowbyte of int (stored in high byte)
-          (SBC (ZP_CELL_STACK_HB_PTR),y)      ;; A = A - stack value (int low byte)
-          (STA ZP_RT+1)                         ;; RT untagged lowbyte = result
-
-          (LDA ZP_RT)                           ;; A = tagged highbyte of int (stored in low byte)
-          (BCS NO_DEC_HIGH__)       ;; if carry is set from subtraction of lower bits, no subtraction carry over necessary
-          (SEC)                                 ;; for subtraction carry needs to be set
-          (SBC !$04)                            ;; subtract 1 in the masked int highbyte (starting at bit2) => 4
-
-   (label NO_DEC_HIGH__)
-          (SBC (ZP_CELL_STACK_LB_PTR),y)      ;; A = A - stack value (int high byte)
-          (AND !$7c)                            ;; mask out under/overflow (lower two bits and high bit)
-          (ORA !$03)                            ;; set lower two bits to tag it as integer value
-          (STA ZP_RT)                           ;; RT tagged high byte = result
-          
-   (label DONE__)
-          (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in rt untouched)
-          (JMP VM_INTERPRETER_INC_PC))))         ;; interpreter loop
-
-(module+ test #| ISUB |#
-  (define (bc-int-minus-state a b)
-    (define ra (if (< a 0) (+ #x2000 a) a))
-    (define rb (if (< b 0) (+ #x2000 b) b))
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
-      (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
-      (bc ISUB)
-      (bc BREAK))))
-
-  (define (bc-int-minus-expectation state c)
-    (check-equal? (vm-stack->strings state)
-                    (list "stack holds 1 item"
-                          (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
-
-  ;; Execute this test only, if major change to int - have been done
-  ;; (define _run-bc-int-minus-tests
-  ;;   (for/list ([j '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
-  ;;     (for/list ([i '(-4096 -4095 -256 -255 -10 -5 -1 0 1 5 10 255 256 4095)])
-  ;;       (bc-int-minus-expectation (bc-int-minus-state i j) (- j i)))))
+         ;; interpreter loop
 
 
-  (define use-case-int-minus-state-after
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I1)
-      (bc PUSH_I2)
-      (bc BNOP)
-      (bc ISUB)                      ;; byte code for INT_MINUS = 2 - 1 = 1
-      (bc PUSH_I) (byte #xf0 #x04) ;; push int #x4f0 (1264)
-      (bc PUSH_I) (byte #x1f #x01) ;; push int #x11f (287)
-      (bc ISUB)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x1c2f)
-      (bc PUSH_I1)
-      (bc PUSH_I0)      
-      (bc ISUB)                      ;; byte code for INT_MINUS => -1
-      (bc BREAK))))                    ;; brk
-
-
-   (inform-check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                        667)
-    (check-equal? (vm-stack->strings use-case-int-minus-state-after)
-                    (list "stack holds 3 items"
-                          "int $1fff  (rt)"
-                          "int $1c2f"
-                          "int $0001")))
-
-;; @DC-B: BSHR, group: byte
-(define BSHR #x4e)
-(define BC_BSHR
-  (add-label-suffix
-   "__" "__BC_BSHR"
-   (list
-    (label BC_BSHR)
-           (LDA ZP_RT+1)
-           (LSR)
-           (STA ZP_RT+1)
-           (JMP VM_INTERPRETER_INC_PC))))
 
 ;; @DC-B: INT_P, group: predicates
 ;; is top of evlstk an *INT*​eger (*P*​redicate)?
@@ -1025,106 +850,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR DEC_REFCNT_RZ)
           (JMP VM_INTERPRETER_INC_PC)))
 
-
-;; @DC-B: IINC, group: int
-;; *I*​nt *INC*​rement
-;; len: 2 (extended)
-(define IINC #x02) ;; extended (could be mapped to regular byte code, if needed very often!)
-(define BC_IINC
-  (add-label-suffix
-   "__" "__IINC"
-  (list
-   (label BC_IINC)
-          (INC ZP_RT+1)
-          (BNE DONE__)
-          (INC ZP_RT)
-          (LDA ZP_RT)
-          (ORA !$03)
-          (AND !$7f)
-          (STA ZP_RT)
-   (label DONE__)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
-
-(module+ test #| inc int |#
-  (define inc-int-0-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I0)
-       (bc IINC)))))
-
-  (check-equal? (vm-stack->strings inc-int-0-state)
-                (list "stack holds 1 item"
-                      "int $0001  (rt)"))
-
-  (define inc-int-1-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I) (byte 255) (byte 0)
-       (bc IINC)))
-     ))
-
-  (check-equal? (vm-stack->strings inc-int-1-state)
-                (list "stack holds 1 item"
-                      "int $0100  (rt)"))
-
-  (define inc-int-2-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_IM1)
-       (bc IINC)))
-     ))
-
-  (check-equal? (vm-stack->strings inc-int-2-state)
-                (list "stack holds 1 item"
-                      "int $0000  (rt)"))
-
-  (define inc-int-3-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I) (byte 255) (byte 05)
-       (bc IINC)))
-     ))
-
-  (check-equal? (vm-stack->strings inc-int-3-state)
-                (list "stack holds 1 item"
-                      "int $0600  (rt)")))
-
-;; @DC-B: IMAX, group: int
-;; *I*​nt *MAX*​imum, return the maximum of two ints
-;; len: 2 (extended)
-(define IMAX #x01) ;; extended
-(define BC_IMAX
-  (add-label-suffix
-   "__" "__IMAX"
-  (list
-   (label BC_IMAX)
-          (LDY ZP_CELL_STACK_TOS)
-
-          ;; compare high byte of int (which is lb)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
-          (CMP ZP_RT)
-          (BNE NO_OTHER_COMPARE__) ;; already different => no need to compare low byte
-
-          ;; compare low byte of int (which is hb)
-          (LDA (ZP_CELL_STACK_HB_PTR),y)
-          (CMP ZP_RT+1)
-
-   (label NO_OTHER_COMPARE__)
-          (BMI KEEP_RT__)
-
-          (JSR POP_CELL_EVLSTK_TO_RT)     ;; pop RT and move TOS into RT
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)
-
-    (label KEEP_RT__)
-          (DEC ZP_CELL_STACK_TOS) ;; just pop but keep RT, since INT no GC necessary
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
-
-
-
 ;; @DC-B: CELL_EQ_P, group: predicates
 ;; *CELL* *EQ*​ual *P*​redicate
 ;; len: 1
@@ -1196,121 +921,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    (label BC_GC_FL)
           (JSR GC_ALL)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
-
-(module+ test #| ext max-int |#
-  (define max-int-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I2)
-       (bc PUSH_I1)
-       (bc IMAX)))))
-
-  (check-equal? (vm-stack->strings max-int-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define max-int-2-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I1)
-       (bc PUSH_I2)
-       (bc IMAX)))))
-
-  (check-equal? (vm-stack->strings max-int-2-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)")))
-
-;; @DC-B: BNOP, misc
-;; *N*​o *OP*​eration
-;; len: 1
-(define BNOP #x7c)
-(define BC_BNOP
-  (list
-   (label BC_BNOP)
-          (JSR $0100)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| nop |#
-  (define nop-state
-    (run-bc-wrapped-in-test
-     (list (bc BNOP))))
-
-  (inform-check-equal? (cpu-state-clock-cycles nop-state)
-                27))
-
-;; @DC-B: SWAP_RA_RB, group: array
-;; swap array register RA with RB
-(define SWAP_RA_RB #x8a)
-(define BC_SWAP_RA_RB
-  (list
-   (label BC_SWAP_RA_RB)
-          (JSR SWAP_RA_RB)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-
-;; @DC-B: POP_TO_RA, group: cell_array
-;; *POP* top of evlstk *TO* *RA*, setting RAI=0
-;; len: 1
-(define POP_TO_RA #xce)
-;; @DC-B: POP_TO_RB, group: cell_array
-;; *POP* top of evlstk *TO* *RB*, setting RAI=0
-;; len: 1
-(define POP_TO_RB #x8c)
-;; @DC-B: POP, group: stack
-;; len: 1
-(define POP #x58)
-(define BC_POP
-  (list
-   (label BC_POP_TO_RB)
-          (LDA !$00)
-          (STA ZP_RBI)          ;; initialize index to 0
-          (JSR CP_RT_TO_RB)     ;; copy tos to rb
-          (JMP VM_POP_EVLSTK_AND_INC_PC)
-
-   (label BC_POP_TO_RA)
-          (LDA !$00)
-          (STA ZP_RAI)          ;; initialize index to 0
-          (JSR CP_RT_TO_RA)     ;; copy tos to ra
-          (JMP VM_POP_EVLSTK_AND_INC_PC)
-
-   (label BC_POP) ;;--------------------------------------------------------------------------------
-          (JSR DEC_REFCNT_RT) ;; no dec, since ra is refcounted too
-          (JMP VM_POP_EVLSTK_AND_INC_PC)))
-
-(module+ test #| pop |#
-  (define pop-0-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc POP))))
-
-  (check-equal? (vm-stack->strings pop-0-state)
-                (list "stack is empty"))
-
-  (define pop-1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_I1)
-      (bc POP))))
-
-  (check-equal? (vm-stack->strings pop-1-state)
-                (list "stack holds 1 item"
-                      "int $0000  (rt)"))
-  (define pop-2-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc PUSH_I1)
-      (bc PUSH_I2)
-      (bc POP))))
-
-  (check-equal? (vm-stack->strings pop-2-state)
-                (list "stack holds 2 items"
-                      "int $0001  (rt)"
-                      "int $0000")))
 
   ;; alternative coding
   ;; [x] POP_TO_RA, writes tos into RA and initializes RAi to 0
