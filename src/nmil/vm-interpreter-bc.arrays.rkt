@@ -46,6 +46,7 @@
          BC_PUSH_AF                     ;; push array field (stack: index :: cell-array-ptr)
          BC_POP_TO_AF                   ;; pop tos to array field (stack: index :: cell-ptr->cell-array  :: value )
          BC_SWAP_RA_RB                  ;; swap cell array register RA with RB
+         VM_REFCOUNT_DECR_ARRAY_REGS
          )
 
 (define BC_DEC_RBI_NZ_P_BRA
@@ -219,3 +220,32 @@
    (label BC_SWAP_RA_RB)
           (JSR SWAP_RA_RB)
           (JMP VM_INTERPRETER_INC_PC)))
+
+;; TODO: should be moved to ./vm-mm-cell-array.rkt
+(define VM_REFCOUNT_DECR_ARRAY_REGS
+  (add-label-suffix
+   "__" "__VM_REFCOUNT_DECR_ARRAY_REGS"
+  (list
+   (label VM_REFCOUNT_DECR_ARRAY_REGS)
+          (LDA ZP_RA)
+          (BEQ DONE__)
+          (JSR DEC_REFCNT_RA)
+   (label TRY_RB__)
+          (LDA ZP_RB)
+          (BEQ CLEAR_RA__)
+          (JSR DEC_REFCNT_RB)
+   (label TRY_RC__)
+          (LDA ZP_RC)
+          (BEQ CLEAR_RAB__)
+          (JSR DEC_REFCNT_RC)
+          (LDA !$00)
+          (STA ZP_RC)
+          (STA ZP_RC+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
+   (label CLEAR_RAB__)
+          (STA ZP_RB)
+          (STA ZP_RB+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
+   (label CLEAR_RA__)
+          (STA ZP_RA)
+          (STA ZP_RA+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
+   (label DONE__)
+          (RTS))))

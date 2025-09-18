@@ -83,6 +83,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   VM_INTERPRETER
                   VM_INTERPRETER_INIT))
 (require (only-in "./vm-interpreter-bc.arrays.rkt"
+                  VM_REFCOUNT_DECR_ARRAY_REGS
                   BC_DEC_RBI_NZ_P_BRA
                   BC_DEC_RAI
                   BC_WRITE_TO_RBI
@@ -119,7 +120,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_F_P_BRA))
 (require (only-in "./vm-interpreter-bc.call_ret.rkt"
                   BC_CALL
-                  BC_Z_P_RET_POP_N))
+                  BC_Z_P_RET_POP_N
+                  BC_NIL_P_RET_L0_POP_N
+                  BC_RET
+                  BC_TAIL_CALL))
 (require (only-in "./vm-interpreter-bc.cell-pair.rkt"
                   BC_PUSH_NIL
                   BC_CxxR
@@ -142,6 +146,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_SWAP
                   BC_POP
                   BC_PUSH_I))
+(require (only-in "./vm-interpreter-bc.push_local.rkt" BC_PUSH_LOCAL_CXR))
 (require (only-in "./vm-interpreter-bc.pop_local.rkt" BC_POP_TO_LOCAL_SHORT))
 
 (module+ test
@@ -195,327 +200,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    ;; $0f..11
    ;; $18..25   
    ))
-                                 ;; @DC-B: NIL_P_RET_L0_POP_1, group: return
-(define NIL_P_RET_L0_POP_1 #xb0) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *1* from evlstk
-                                 ;; @DC-B: NIL_P_RET_L0_POP_2, group: return
-(define NIL_P_RET_L0_POP_2 #xb2) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *2* from evlstk
-                                 ;; @DC-B: NIL_P_RET_L0_POP_3, group: return
-(define NIL_P_RET_L0_POP_3 #xb4) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *3* from evlstk
-                                 ;; @DC-B: NIL_P_RET_L0_POP_4, group: return
-(define NIL_P_RET_L0_POP_4 #xb6) ;; *NIL* *P*​redicate *RET*​urn *L*​ocal *0* and *POP* *4* from evlstk
-(define BC_NIL_P_RET_L0_POP_N
-  (add-label-suffix
-   "__" "__BC_NIL_P_RET_L0_POP_N"
-  (list
-   (label BC_NIL_P_RET_L0_POP_N)
-          (LDX ZP_RT)
-          (CPX !<TAGGED_NIL)                 ;; lowbyte = tagged_nil lowbyte
-          (BEQ RETURN__)                     ;; is nil => return param or local
-          (JMP VM_INTERPRETER_INC_PC)        ;; next instruction
-
-   (label RETURN__)
-          (LSR)                              ;;
-          (AND !$03)
-          (BEQ DONE__)
-          (TAX)
-
-   (label LOOP_POP__)
-          (DEC ZP_CELL_STACK_TOS)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
-          (STA ZP_RZ)
-          (LDA (ZP_CELL_STACK_HB_PTR),y)
-          (STA ZP_RZ+1)
-          (STX ZP_RP)
-          (JSR DEC_REFCNT_RZ)
-          (LDX ZP_RP)
-          (LDY ZP_CELL_STACK_TOS)
-          (CPY !$01)
-          (BEQ STACK_DEPLETED__)
-          (DEX)
-          (BNE LOOP_POP__)
-
-          (STY ZP_CELL_STACK_TOS)             ;; store new tos marker
-
-   (label DONE__)
-          (LDY !$00)
-          (LDA (ZP_LOCALS_LB_PTR),y)          ;; load low byte from local
-          (STA ZP_RT)                         ;; -> RT
-          (LDA (ZP_LOCALS_HB_PTR),y)          ;; load high byte from local
-          (STA ZP_RT+1)                       ;; -> RT
-
-          (LDA !$00)
-          (STA (ZP_LOCALS_LB_PTR),y)          ;; clear low byte from local
-          (STA (ZP_LOCALS_HB_PTR),y)          ;; clear high byte from local
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
-          (JSR VM_POP_CALL_FRAME_N)           ;; now pop the call frame
-
-          (JMP VM_INTERPRETER)                ;; and continue
-
-   (label STACK_DEPLETED__)
-          ;; (LDY !$01)                       ;; Y already is 01 when entering here
-          (LDA (ZP_CELL_STACK_LB_PTR),y)      ;; get previous lb page
-          (BEQ ERROR_EMPTY_STACK__)           ;; = 0 => stack ran empty
-
-          (STA ZP_CELL_STACK_LB_PTR+1)        ;; store previous lb page to lb ptr
-          (LDA (ZP_CELL_STACK_HB_PTR),y)      ;; get previous hb page
-          (STA ZP_CELL_STACK_HB_PTR+1)        ;; store previous hb page into hb ptr
-          (LDY !$ff)                          ;; assume $ff as new cell_stack_tos
-          (BNE LOOP_POP__)                    ;; always jump
-
-
-   (label SHORTCMD__)
-          ;; open for other shortcut command
-   (label ERROR_EMPTY_STACK__)
-          (BRK))))
-
-(module+ test #| bc-nil-ret |#
-  (define bc-nil-ret-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_NIL)
-             (bc PUSH_I1)
-             (bc CALL) (byte 00) (byte $87)
-             (bc BREAK)
-
-             (org #x8700)
-      (label TEST_FUN)
-             (byte 1)                     ;; number of locals
-             (bc POP_TO_L0)          ;; pop tos into local 0 (now int 1)
-             (bc NIL_P_RET_L0_POP_1)  ;; return local 0  if tos = nil (which it is)
-             (bc BREAK))
-     ))
-
- (check-equal? (vm-stack->strings bc-nil-ret-state)
-                  (list "stack holds 1 item"
-                        "int $0001  (rt)"))
- (check-equal? (vm-call-frame->strings bc-nil-ret-state)
-               (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                     "program-counter:  $8005"
-                     "function-ptr:     $8000"
-                     (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
-                             (format-hex-byte PAGE_LOCALS_LB)
-                             (format-hex-byte PAGE_LOCALS_HB))))
-
-  (define bc-nil-ret-local-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_I1)
-             (bc PUSH_NIL)
-             (bc CALL) (byte 00) (byte $87)
-             (bc BREAK)
-
-             (org #x8700)
-      (label TEST_FUN)    
-             (byte 2)            ;; number of locals
-             (bc POP_TO_L1)
-             (bc POP_TO_L0)
-             (bc PUSH_L1)
-             (bc NIL_P_RET_L0_POP_1)     ;; return local 0 (int 1) if nil
-             (bc BREAK))
-     ))
-
-  (check-equal? (vm-stack->strings bc-nil-ret-local-state)
-                   (list "stack holds 1 item"
-                         "int $0001  (rt)"))
-  (check-equal? (vm-call-frame->strings bc-nil-ret-local-state)
-                (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8005"
-                         "function-ptr:     $8000"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB)))))
-
-;; @DC-B: TAIL_CALL, group: flow
-(define TAIL_CALL #x6a) ;; stack [new-paramN .. new-param0, ..., original-paramN ... original-param0] -> [new-paramN .. new-param0]
-(define BC_TAIL_CALL
-  (list
-   (label BC_TAIL_CALL)
-          (LDA ZP_VM_FUNC_PTR)
-          (STA ZP_VM_PC)
-          (LDA ZP_VM_FUNC_PTR+1)
-          (STA ZP_VM_PC+1)
-
-          ;; adjust pc to start executing function ptr +1
-          (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| bc-tail-call |#
-  (define bc-tail-call-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_NIL)
-             (bc PUSH_I0)
-             (bc CONS)
-             (bc CALL) (byte 00) (byte $87)
-             (bc BREAK)
-
-             (org #x8700)
-      (label TEST_FUN)
-             (byte 1)            ;; number of locals
-             (bc POP_TO_L0)
-             (bc PUSH_L0)
-             (bc NIL_P_RET_L0_POP_1)    ;; return param0 if nil
-             (bc POP_TO_L0)
-             (bc PUSH_NIL)       ;; value to use with tail call
-             (bc TAIL_CALL)
-             (bc BREAK))))
-
-   (check-equal? (vm-stack->strings bc-tail-call-state)
-                   (list "stack holds 1 item"
-                         "pair-ptr NIL  (rt)"))
-   (check-equal? (vm-call-frame->strings bc-tail-call-state)
-                 (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                          "program-counter:  $8006"
-                          "function-ptr:     $8000"
-                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-
-  ;; convert the list given by cell-pair-ptr (addresss) as a list of strings
-  (define (vm-list->strings state address (string-list '()))
-    (cond [(= address #x0001) ;; this is the nil ptr           
-           (reverse string-list)]
-          [else
-           (unless (= (bitwise-and #x03 address) #x01)
-             (raise-user-error (format "address is not a cell-pair-ptr ~a" (format-hex-word address))))
-           (define cell-cdr (peek-word-at-address state (+ address 2)))
-           (unless (= (bitwise-and #x03 cell-cdr) #x01)
-             (raise-user-error (format "cdr cell is not a cell-pair-ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
-           (if (vm-cell-at-nil? state address)
-               (reverse string-list)
-               (vm-list->strings state
-                                cell-cdr
-                                (cons (vm-cell-at->string state address)
-                                      string-list)))]))
-
-  (define bc-tail-call-reverse-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_NIL)
-             (bc PUSH_I0)
-             (bc CONS)                  ;; (add ref to this cell) does allocate a cell
-             (bc PUSH_I1)
-             (bc CONS)                  ;; (add ref to this cell) does allocate a cell (removes a cell-ref from stack and adds a ref in the pair cell)
-             (bc PUSH_I2)
-             (bc CONS)                  ;; (add ref to this cell) does allocate a cell (removes a cell-ref from stack and adds a ref in the pair cell)
-             (bc PUSH_NIL)
-             (bc BNOP)
-             (bc CALL) (byte 00) (byte $87)
-             (bc BREAK)                   ;; << to make debugger stop/exit
-
-             (org #x8700)
-      (label TEST_FUN)
-             (byte 2)                   ;; number of locals
-             (bc POP_TO_L0)        ;; b-list (#refs stay)
-             (bc WRITE_TO_L1)      ;; a-list (#refs increase)
-             (bc NIL_P_RET_L0_POP_1);; return b-list if a-list is nil (if popping, #refs decrease)
-             (bc CDR)                   ;; shrinking original list (ref to cdr cell increases, ref of original cell decreases, order!)
-             (bc PUSH_L0)          ;; (ref to local0 cell increases)
-             (bc PUSH_L1_CAR)      ;; (ref to local1 cell increases)
-             (bc CONS)                  ;; growing reverse list (ref to this cell set to 1), refs to cells consed, stay the same)
-             (bc TAIL_CALL)
-             (bc BREAK))                  ;; just in case to make debugger stop/exit
-     ))
-
-  (check-equal? (memory-list bc-tail-call-reverse-state #xcec5 (add1 #xcec5))
-                   (list #x05 PAGE_AVAIL_0))
-  (check-equal? (vm-page->strings bc-tail-call-reverse-state PAGE_AVAIL_0)
-                   (list "page-type:      cell-pair page"
-                         "previous page:  $00"
-                         "slots used:     4"
-                         "next free slot: $49"))
-  (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4415)
-  (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
-                   (list "int $0000"
-                         "int $0001"
-                         "int $0002")
-                   "list got reversed")
-  (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
-                   (list "stack holds 1 item"
-                         (format "pair-ptr[1] $~a09  (rt)" (format-hex-byte PAGE_AVAIL_0))))
-  (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $800c"
-                         "function-ptr:     $8000"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB)))))
-
-;; @DC-FUN: VM_REFCOUNT_DECR_ARRAY_REGS, group: gc
-;; decrement refcount to all array register (ra, rb, rc)
-;; rb is only checked, if ra != 0,
-;; rc is only checked, if rb != 0,
-(define VM_REFCOUNT_DECR_ARRAY_REGS
-  (add-label-suffix
-   "__" "__VM_REFCOUNT_DECR_ARRAY_REGS"
-  (list
-   (label VM_REFCOUNT_DECR_ARRAY_REGS)
-          (LDA ZP_RA)
-          (BEQ DONE__)
-          (JSR DEC_REFCNT_RA)
-   (label TRY_RB__)
-          (LDA ZP_RB)
-          (BEQ CLEAR_RA__)
-          (JSR DEC_REFCNT_RB)
-   (label TRY_RC__)
-          (LDA ZP_RC)
-          (BEQ CLEAR_RAB__)
-          (JSR DEC_REFCNT_RC)
-          (LDA !$00)
-          (STA ZP_RC)
-          (STA ZP_RC+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
-   (label CLEAR_RAB__)
-          (STA ZP_RB)
-          (STA ZP_RB+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
-   (label CLEAR_RA__)
-          (STA ZP_RA)
-          (STA ZP_RA+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)
-   (label DONE__)
-          (RTS))))
-
-;; @DC-B: RET, group: return
-(define RET #x7a) ;; stack [cell paramN, ... cell param1, cell param0] -> []
-(define BC_RET
-  (add-label-suffix
-   "__" "__BC_RET"
-  (list
-   (label BC_RET)
-          ;; load # locals = 0 skip this step
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
-          (LDA ZP_RA)
-          (BEQ NO_RA__)
-          (JSR VM_REFCOUNT_DECR_ARRAY_REGS)
-   (label NO_RA__)
-          (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
-          (JMP VM_INTERPRETER))))
-
-(module+ test #| bc_ret |#
-  (define test-bc-ret-state
-    (run-bc-wrapped-in-test
-     (list
-             (bc PUSH_I0)
-             (bc CALL) (byte 00) (byte $87)
-             (bc BREAK)
-
-             (org #x8700)
-      (label TEST_FUN)      
-             (byte 0)            ;; number of locals
-             (bc PUSH_I1)     ;; value to return
-             (bc RET))))
-  
-  (check-equal? (vm-call-frame->strings test-bc-ret-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8004"
-                         "function-ptr:     $8000"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
-  (check-equal? (vm-stack->strings test-bc-ret-state)
-                   (list "stack holds 2 items"
-                         "int $0001  (rt)"
-                         "int $0000")
-                   "previous value on the stack is there + returned value (in rt)"))
 
 ;; @DC-B: BREAK, group: misc
 (define BREAK #x54) ;; collision with 6510 BRK code
@@ -556,44 +240,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   ;;        --------
   ;;        00+len(datarecord): next free record
   )
-
-
-;;                           @DC-B: PUSH_L0_CAR, group: stack
-(define PUSH_L0_CAR #xa0) ;; *PUSH* *L*​ocal *0* and *CAR*
-;;                           @DC-B: PUSH_L1_CAR, group: stack
-(define PUSH_L1_CAR #xa2) ;; *PUSH* *L*​ocal *1* and *CAR*
-;;                           @DC-B: PUSH_L2_CAR, group: stack
-(define PUSH_L2_CAR #xa4) ;; *PUSH* *L*​ocal *2* and *CAR*
-;;                           @DC-B: PUSH_L3_CAR, group: stack
-(define PUSH_L3_CAR #xa6) ;; *PUSH* *L*​ocal *3* and *CAR*
-
-;;                           @DC-B: PUSH_L0_CDR, group: stack
-(define PUSH_L0_CDR #xd0) ;; *PUSH* *L*​ocal *0* and *CDR*
-;;                           @DC-B: PUSH_L1_CDR, group: stack
-(define PUSH_L1_CDR #xd2) ;; *PUSH* *L*​ocal *1* and *CDR*
-;;                           @DC-B: PUSH_L2_CDR, group: stack
-(define PUSH_L2_CDR #xd4) ;; *PUSH* *L*​ocal *2* and *CDR*
-;;                           @DC-B: PUSH_L3_CDR, group: stack
-(define PUSH_L3_CDR #xd6) ;; *PUSH* *L*​ocal *3* and *CDR*
-(define BC_PUSH_LOCAL_CXR
-  (add-label-suffix
-   "__" "__BC_PUSH_LOCAL_CXR"
-  (flatten
-   (list
-    (label BC_PUSH_LX_CAR)
-           (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
-           (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)
-           (JSR INC_REFCNT_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-
-    (label BC_PUSH_LX_CDR)
-           (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
-           (JSR WRITE_CELLPAIR_RT_CELL1_TO_RT)
-           (JSR INC_REFCNT_RT)
-           (JMP VM_INTERPRETER_INC_PC)))))
-
-         ;; interpreter loop
-
 
 
 ;; @DC-B: INT_P, group: predicates

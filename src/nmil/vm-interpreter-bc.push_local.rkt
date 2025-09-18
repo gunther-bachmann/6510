@@ -24,6 +24,7 @@ implement bc push/write local commands
 
 (provide BC_WRITE_LOCAL_SHORT           ;; write a local into the tos (rt)
          BC_PUSH_LOCAL_SHORT            ;; push the local onto the eval stack
+         BC_PUSH_LOCAL_CXR              ;; push local 0-3 and then car
          PUSH_RT_WRITE_LOCAL_bc_enc)    ;; push rt, then write local (encoded w/i bc) into rt, no refcnt!
 
 (define BC_WRITE_LOCAL_SHORT #t)
@@ -70,3 +71,20 @@ implement bc push/write local commands
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index -> A
            (STA ZP_RT+1)
            (RTS)))))
+
+(define BC_PUSH_LOCAL_CXR
+  (add-label-suffix
+   "__" "__BC_PUSH_LOCAL_CXR"
+  (flatten
+   (list
+    (label BC_PUSH_LX_CAR)
+           (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
+           (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)
+           (JSR INC_REFCNT_RT)
+           (JMP VM_INTERPRETER_INC_PC)
+
+    (label BC_PUSH_LX_CDR)
+           (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
+           (JSR WRITE_CELLPAIR_RT_CELL1_TO_RT)
+           (JSR INC_REFCNT_RT)
+           (JMP VM_INTERPRETER_INC_PC)))))

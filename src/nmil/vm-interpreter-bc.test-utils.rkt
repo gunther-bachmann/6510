@@ -20,6 +20,7 @@ implement some useful test utils for testing bcs in a somewhat isolated environm
 
 (require (only-in "../tools/6510-interpreter.rkt"
                   peek
+                  peek-word-at-address
                   memory-list
                   cpu-state-clock-cycles))
 (require (only-in "./vm-interpreter-test-utils.rkt"

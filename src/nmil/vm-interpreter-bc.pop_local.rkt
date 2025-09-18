@@ -7,7 +7,7 @@
 (provide BC_POP_TO_LOCAL_SHORT
          BC_WRITE_TO_LOCAL_SHORT)
 
-(define BC_WRITE_TO_LOCAL_SHORT #t)
+(define BC_WRITE_TO_LOCAL_SHORT '())
 (define BC_POP_TO_LOCAL_SHORT
   (add-label-suffix
    "__" "__BC_POP_TO_LOCAL_SHORT"

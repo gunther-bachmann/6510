@@ -20,7 +20,10 @@
 
 (provide BC_CALL
          BC_Z_P_RET_POP_N
-         BC_NZ_P_RET_POP_N)
+         BC_NZ_P_RET_POP_N
+         BC_NIL_P_RET_L0_POP_N
+         BC_TAIL_CALL
+         BC_RET)
 
 (define BC_CALL
   (add-label-suffix
@@ -67,7 +70,7 @@
 
           (JMP VM_INTERPRETER_INC_PC)))) ;; function starts at function descriptor + 1
 
-(define BC_NZ_P_RET_POP_N #t)
+(define BC_NZ_P_RET_POP_N '())
 (define BC_Z_P_RET_POP_N
   (add-label-suffix
    "__" "BC_Z_P_RET_POP_N"
@@ -149,3 +152,94 @@
 
     (label COUNT__)
            (byte 0))))
+
+(define BC_NIL_P_RET_L0_POP_N
+  (add-label-suffix
+   "__" "__BC_NIL_P_RET_L0_POP_N"
+  (list
+   (label BC_NIL_P_RET_L0_POP_N)
+          (LDX ZP_RT)
+          (CPX !<TAGGED_NIL)                 ;; lowbyte = tagged_nil lowbyte
+          (BEQ RETURN__)                     ;; is nil => return param or local
+          (JMP VM_INTERPRETER_INC_PC)        ;; next instruction
+
+   (label RETURN__)
+          (LSR)                              ;;
+          (AND !$03)
+          (BEQ DONE__)
+          (TAX)
+
+   (label LOOP_POP__)
+          (DEC ZP_CELL_STACK_TOS)
+          (LDY ZP_CELL_STACK_TOS)
+          (LDA (ZP_CELL_STACK_LB_PTR),y)
+          (STA ZP_RZ)
+          (LDA (ZP_CELL_STACK_HB_PTR),y)
+          (STA ZP_RZ+1)
+          (STX ZP_RP)
+          (JSR DEC_REFCNT_RZ)
+          (LDX ZP_RP)
+          (LDY ZP_CELL_STACK_TOS)
+          (CPY !$01)
+          (BEQ STACK_DEPLETED__)
+          (DEX)
+          (BNE LOOP_POP__)
+
+          (STY ZP_CELL_STACK_TOS)             ;; store new tos marker
+
+   (label DONE__)
+          (LDY !$00)
+          (LDA (ZP_LOCALS_LB_PTR),y)          ;; load low byte from local
+          (STA ZP_RT)                         ;; -> RT
+          (LDA (ZP_LOCALS_HB_PTR),y)          ;; load high byte from local
+          (STA ZP_RT+1)                       ;; -> RT
+
+          (LDA !$00)
+          (STA (ZP_LOCALS_LB_PTR),y)          ;; clear low byte from local
+          (STA (ZP_LOCALS_HB_PTR),y)          ;; clear high byte from local
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (JSR VM_POP_CALL_FRAME_N)           ;; now pop the call frame
+
+          (JMP VM_INTERPRETER)                ;; and continue
+
+   (label STACK_DEPLETED__)
+          ;; (LDY !$01)                       ;; Y already is 01 when entering here
+          (LDA (ZP_CELL_STACK_LB_PTR),y)      ;; get previous lb page
+          (BEQ ERROR_EMPTY_STACK__)           ;; = 0 => stack ran empty
+
+          (STA ZP_CELL_STACK_LB_PTR+1)        ;; store previous lb page to lb ptr
+          (LDA (ZP_CELL_STACK_HB_PTR),y)      ;; get previous hb page
+          (STA ZP_CELL_STACK_HB_PTR+1)        ;; store previous hb page into hb ptr
+          (LDY !$ff)                          ;; assume $ff as new cell_stack_tos
+          (BNE LOOP_POP__)                    ;; always jump
+
+
+   (label SHORTCMD__)
+          ;; open for other shortcut command
+   (label ERROR_EMPTY_STACK__)
+          (BRK))))
+
+(define BC_TAIL_CALL
+  (list
+   (label BC_TAIL_CALL)
+          (LDA ZP_VM_FUNC_PTR)
+          (STA ZP_VM_PC)
+          (LDA ZP_VM_FUNC_PTR+1)
+          (STA ZP_VM_PC+1)
+
+          ;; adjust pc to start executing function ptr +1
+          (JMP VM_INTERPRETER_INC_PC)))
+
+(define BC_RET
+  (add-label-suffix
+   "__" "__BC_RET"
+  (list
+   (label BC_RET)
+          ;; load # locals = 0 skip this step
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (LDA ZP_RA)
+          (BEQ NO_RA__)
+          (JSR VM_REFCOUNT_DECR_ARRAY_REGS)
+   (label NO_RA__)
+          (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
+          (JMP VM_INTERPRETER))))
