@@ -19,7 +19,9 @@ implement some useful test utils for testing bcs in a somewhat isolated environm
 (require (only-in "vm-lists.rkt" vm-lists))
 
 (require "../6510.rkt")
-(require (only-in "../tools/6510-interpreter.rkt" peek))
+(require (only-in "../tools/6510-interpreter.rkt"
+                  peek
+                  memory-list))
 (require (only-in "./vm-interpreter-test-utils.rkt"
                   run-bc-wrapped-in-test-
                   vm-next-instruction-bytes))
@@ -38,6 +40,7 @@ implement some useful test utils for testing bcs in a somewhat isolated environm
                   vm-cell-at->string
                   vm-cell->string
                   vm-deref-cell-pair-w->string))
+(require "./vm-memory-map.rkt")
 
 (provide (all-from-out "./vm-inspector-utils.rkt")
          (all-from-out "./vm-interpreter-test-utils.rkt")
@@ -47,6 +50,7 @@ implement some useful test utils for testing bcs in a somewhat isolated environm
          (all-from-out "../util.rkt")
          (all-from-out "../6510-test-utils.rkt")
          (all-from-out "../tools/6510-interpreter.rkt")
+         (all-from-out "./vm-memory-map.rkt")
          (all-from-out racket/list)
          wrap-bytecode-for-bc-test
          PAGE_CALL_FRAME

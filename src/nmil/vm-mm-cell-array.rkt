@@ -36,6 +36,12 @@ memory management for cell arrays
           FREE_CELLARR_RZ              ;; free the given cell-array in rz (must not contain slots that need garbage collection)
 
           PUSH_ARR_ATa_RA_TO_EVLSTK    ;; push from cell-array RA element A onto the EVLSTK
+          PUSH_ARR_ATa_RA_TO_EVLSTK__CHECK_BOUNDS  ;; push from cell-array RA element A onto the EVLSTK, checking array bounds
+          WRITE_ARR_ATa_RA_TO_RT       ;; write from cell-array RA element A into RT
+
+          POP_EVLSTK_TO_ARR_ATa_RA     ;; pop tos into cell-array RA element A
+          POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS ;; pop tos into cell-array RA element A checking array bounds
+          WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS ;; write tos into cell-array RA element A checking array bounds
           WRITE_RT_TO_ARR_ATa_RA)      ;; write cell in RT into cell-array RA at A
 
 (module+ test
@@ -628,6 +634,9 @@ memory management for cell arrays
 ;; funcs:
 ;;   DEC_REFCNT_RZ
 ;; NO CHECKING (NO BOUNDS, NO TYPE ...)
+(define POP_EVLSTK_TO_ARR_ATa_RA '())
+(define POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS '())
+(define WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS '())
 (define WRITE_RT_TO_ARR_ATa_RA
   (add-label-suffix
    "__" "__WRITE_RT_TO_ARR_ATa_RA"
@@ -817,6 +826,8 @@ memory management for cell arrays
 ;; output: RT+EVLSTK
 ;; funcs:
 ;;   PUSH_RT_TO_EVLSTK_IF_NONEMPTY
+(define WRITE_ARR_ATa_RA_TO_RT '())
+(define PUSH_ARR_ATa_RA_TO_EVLSTK__CHECK_BOUNDS '())
 (define PUSH_ARR_ATa_RA_TO_EVLSTK
   (add-label-suffix
    "__" "PUSH_ARR_ATa_RA_TO_EVLSTK"

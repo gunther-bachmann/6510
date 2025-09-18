@@ -82,28 +82,49 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_INIT))
-(require (only-in "./vm-interpreter-bc.compare.rkt"
-                  BC_B_GT_P
-                  BC_B_LT_P
-                  BC_B_GE_P
-                  BC_I_GT_P))
-(require (only-in "./vm-interpreter-bc.push_n_pop.rkt" BC_PUSH_B))
-(require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
-(require (only-in "./vm-interpreter-bc.call_ret.rkt"
-                  BC_CALL
-                  BC_Z_P_RET_POP_N))
-(require (only-in "./vm-interpreter-bc.pop_local.rkt" BC_POP_TO_LOCAL_SHORT))
-(require (only-in "./vm-interpreter-bc.native.rkt" BC_POKE_B BC_NATIVE RETURN_TO_BC))
-(require (only-in "./vm-interpreter-bc.arrays.rkt" BC_DEC_RBI_NZ_P_BRA))
+(require (only-in "./vm-interpreter-bc.arrays.rkt"
+                  BC_DEC_RBI_NZ_P_BRA
+                  BC_DEC_RAI
+                  BC_WRITE_TO_RBI
+                  BC_WRITE_TO_RAI
+                  BC_POP_TO_RAI
+                  BC_BINC_RAI
+                  BC_ALLOC_ARA
+                  BC_XET_RA_ARRAY_FIELD
+                  BC_GET_RA_ARRAY_FIELD
+                  BC_SET_RA_ARRAY_FIELD
+                  BC_GET_ARRAY_FIELD
+                  BC_SET_ARRAY_FIELD
+                  BC_XET_ARRAY_FIELD
+                  BC_WRITE_RA                    ;; write cell-array register RA into tos
+                  BC_PUSH_RA                     ;; push cell-array register RA itself onto eval stack
+                  BC_PUSH_RA_AF                  ;; push cell-array RA field A onto the eval stack (inc ref count)
+                  BC_PUSH_AF
+                  BC_POP_TO_AF))
+(require (only-in "./vm-interpreter-bc.atom-num.rkt"
+                  BC_BINC
+                  BC_BDEC
+                  BC_BADD))
 (require (only-in "./vm-interpreter-bc.branch.rkt"
                   BC_Z_P_BRA
                   BC_NZ_P_BRA
                   BC_T_P_BRA
                   BC_F_P_BRA))
-(require (only-in "./vm-interpreter-bc.atom-num.rkt"
-                  BC_BINC
-                  BC_BDEC
-                  BC_BADD))
+(require (only-in "./vm-interpreter-bc.call_ret.rkt"
+                  BC_CALL
+                  BC_Z_P_RET_POP_N))
+(require (only-in "./vm-interpreter-bc.compare.rkt"
+                  BC_B_GT_P
+                  BC_B_LT_P
+                  BC_B_GE_P
+                  BC_I_GT_P))
+(require (only-in "./vm-interpreter-bc.native.rkt" BC_POKE_B BC_NATIVE RETURN_TO_BC))
+(require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+(require (only-in "./vm-interpreter-bc.push_n_pop.rkt"
+                  BC_PUSH_B
+                  BC_DUP
+                  BC_SWAP))
+(require (only-in "./vm-interpreter-bc.pop_local.rkt" BC_POP_TO_LOCAL_SHORT))
 
 (module+ test
   (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
@@ -848,27 +869,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                  (list "stack holds 1 item"
                        "pair-ptr NIL  (rt)")))
 
-;; @DC-B: SWAP, group: stack
-(define SWAP #x56) ;; swap tos with tos-1
-(define BC_SWAP
-  (list
-   (label BC_SWAP)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
-          (TAX)
-          (LDA ZP_RT)
-          (STA (ZP_CELL_STACK_LB_PTR),y)
-          (STX ZP_RT)
-          (LDA (ZP_CELL_STACK_HB_PTR),y)
-          (TAX)
-          (LDA ZP_RT+1)
-          (STA (ZP_CELL_STACK_HB_PTR),y)
-          (STX ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| swap |#
-  (skip (check-equal? #t #f "implement")))
-
 ;; @DC-B: BSHR, group: byte
 (define BSHR #x4e)
 (define BC_BSHR
@@ -1253,16 +1253,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (DEC ZP_CELL_STACK_TOS) ;; just pop but keep RT, since INT no GC necessary
           (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
 
-;; @DC-B: DUP, group: stack
-;; *DUP*​licate top of stack
-;; len: 1
-(define DUP #x1e)
-(define BC_DUP
-  (list
-   (label BC_DUP)
-          (JSR INC_REFCNT_RT)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-          (JMP VM_INTERPRETER_INC_PC)))
+
 
 ;; @DC-B: CELL_EQ_P, group: predicates
 ;; *CELL* *EQ*​ual *P*​redicate
@@ -1541,122 +1532,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (INC ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
 
-;; @DC-B: POP_TO_AF, group: cell_array
-;; *POP* *TO* *A*​rray *F*​ield using the stack
-;; len: 1
-;; stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
-;; ->     []
-;;        cell-array @ index = value
-(define POP_TO_AF  #x2c) ;; op = array-idx, stack [cell- array-ptr-] -> []
-(define BC_POP_TO_AF
-  (flatten
-   (list
-    (label BC_POP_TO_AF)
-           (LDA ZP_RT+1)                  ;; index                               (stack: index ::cell-ptr ::value )
-           (PHA)
-           (JSR POP_CELL_EVLSTK_TO_RA)    ;; ra = cell-ptr -> cell-array         (stack: index ::value )
-           (JSR POP_CELL_EVLSTK_TO_RT)    ;; rt = value                          (stack: value)
-           (PLA)                          ;; a = index
-           (JSR POP_EVLSTK_TO_ARR_ATa_RA) ;; array@a <- rt (TODO: check that old value is dec-refcnt'd)
-           (JSR DEC_REFCNT_RA)            ;; since array is no longer on stack dec refcnt (value moved => no change)
-           (JMP VM_INTERPRETER_INC_PC))))
-
-(module+ test #| pop to array field |#
-  (define pop-to-array-field-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_B) (byte 20)
-      (bc ALLOC_ARA)
-      (bc PUSH_RA)
-      (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
-      (bc PUSH_I1)
-      (bc SWAP)
-      (bc PUSH_B) (byte 1)
-      (bc POP_TO_AF))
-     ))
-
-  (check-equal? (vm-stack->strings pop-to-array-field-state)
-                (list "stack holds 1 item"
-                      (format "ptr[2] $~a06  (rt)" (number->string PAGE_AVAIL_0 16))))
-  (check-equal? (memory-list pop-to-array-field-state (+ ZP_RA 0) (+ ZP_RA 1))
-                (list #x06 PAGE_AVAIL_0)
-                "RA holds a pointer to the array, too")
-  (check-equal? (memory-list pop-to-array-field-state (+ PAGE_AVAIL_0_W 05) (+ PAGE_AVAIL_0_W 11))
-                (list 2      ;; refcnt = 1 (one reference on the stack)
-                      #x83   ;; page type = m1p3 (slot size 49, used 20*2)
-                      20     ;; number of elements
-                      0 0    ;; element 0
-                      3 1))) ;; element 1 = int 1
-
-;; @DC-B: PUSH_AF, group: cell_array
-;; stack: index (byte) :: cell-ptr -> cell-array
-;; ->     value (cell)
-(define PUSH_AF    #x2a) ;; op = field-idx, stack [array-ref] -> [cell-]
-(define BC_PUSH_AF
-  (flatten
-   (list
-    (label BC_PUSH_AF)
-           (JSR POP_CELL_EVLSTK_TO_RA)    ;; ra = cell-ptr -> cell-array         (stack: index)
-           (LDA ZP_RT+1)                  ;; index                               (stack: index)
-           (JSR WRITE_ARR_ATa_RA_TO_RT)   ;; rt <- array@a                       (stack: value)
-           (JSR INC_REFCNT_RT)            ;; now on stack and in array => inc refcnt'd
-           (JSR DEC_REFCNT_RA)            ;; removed from stack => dec refcnt'd
-           (JMP VM_INTERPRETER_INC_PC))))
-
-(module+ test #| push array field |#
-  (define push-array-field-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_B) (byte 20)
-       (bc ALLOC_ARA)
-       (bc PUSH_RA)
-       (bc DUP) ;; make sure to keep a reference to this array, otherwise it is freed!
-       (bc PUSH_I1)
-       (bc SWAP)
-       (bc PUSH_B) (byte 1)
-       (bc POP_TO_AF)
-
-       (bc DUP)
-       (bc PUSH_I2)
-       (bc SWAP)
-       (bc PUSH_B) (byte 10)
-       (bc POP_TO_AF)
-
-       (bc DUP)
-       (bc DUP)
-       (bc PUSH_B) (byte 1)
-       (bc PUSH_AF)
-
-       (bc SWAP)
-       (bc PUSH_B) (byte 10)
-       (bc PUSH_AF)))))
-
-  (check-equal? (memory-list push-array-field-state (+ PAGE_AVAIL_0_W 05) (+ PAGE_AVAIL_0_W 29))
-                (list 2      ;; refcnt = 2 (one reference on the stack, one in RA)
-                      #x83   ;; page type = m1p3 (slot size 49, used 20*2)
-                      20     ;; number of elements
-                      0 0    ;; element 0
-                      3 1
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      3 2   ;; element 10
-                      ))
-  (check-equal? (memory-list push-array-field-state (+ ZP_RA 0) (+ ZP_RA 1))
-                (list #x06 PAGE_AVAIL_0)
-                "RA holds a pointer to the array, too")
-  (check-equal? (vm-stack->strings push-array-field-state)
-                (list "stack holds 3 items"
-                      "int $0002  (rt)"
-                      "int $0001"
-                      (format "ptr[2] $~a06" (number->string PAGE_AVAIL_0 16)))))
-
   ;; alternative coding
   ;; [x] POP_TO_RA, writes tos into RA and initializes RAi to 0
 
@@ -1697,199 +1572,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   ;; CP_RC_TO_RA
   ;; CP_RB_TO_RC
   ;; CP_RC_TO_RA
-
-;; @DC-B: WRITE_RA, group: cell_array
-;; *WRITE* *R*​egister *A* to stack
-(define WRITE_RA #xaa)
-;; @DC-B: PUSH_RA, group: cell_array
-;; *PUSH* *R*​egister *A* to stack
-(define PUSH_RA #x8e)
-(define BC_PUSH_RA
-  (list
-   (label BC_PUSH_RA)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-   (label BC_WRITE_RA)
-          (JSR CP_RA_TO_RT)
-          (JSR INC_REFCNT_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-;; @DC-B: PUSH_RA_AF, group: cell_array
-;; *PUSH* from array *RA* *A*​rray *F*​ield indexed by RAI to evlstk
-;; stack -> (RA),RAI :: stack
-(define PUSH_RA_AF #x9a)
-(define BC_PUSH_RA_AF
-  (list
-   (label BC_PUSH_RA_AF)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-          (LDA ZP_RAI)
-          (JSR WRITE_ARR_ATa_RA_TO_RT)
-          (JSR INC_REFCNT_RT)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-;; @DC-B: GET_AF_0, group: cell_array
-                       ;; *GET* *A*​rray *F*​ield 0
-(define GET_AF_0 #xf0) ;; stack: [array-ptr] -> [cell@0 of array]  (replace tos with value from array)
-                       ;; @DC-B: GET_AF_1, group: cell_array
-                       ;; *GET* *A*​rray *F*​ield 1
-(define GET_AF_1 #xf2) ;; stack: [array-ptr] -> [cell@1 of array]
-                       ;; @DC-B: GET_AF_2, group: cell_array
-                       ;; *GET* *A*​rray *F*​ield 2
-(define GET_AF_2 #xf4) ;; stack: [array-ptr] -> [cell@2 of array]
-                       ;; @DC-B: GET_AF_3, group: cell_array
-                       ;; *GET* *A*​rray *F*​ield 3
-(define GET_AF_3 #xf6) ;; stack: [array-ptr] -> [cell@3 of array]
-                       ;; @DC-B: SET_AF_0, group: cell_array
-                       ;; *SET* *A*​rray *F*​ield 0
-(define SET_AF_0 #x60) ;; stack: [array-ptr] :: [value] -> [cell@0 of array]
-                       ;; @DC-B: SET_AF_1, group: cell_array
-                       ;; *SET* *A*​rray *F*​ield 1
-(define SET_AF_1 #x62) ;; stack: [array-ptr] :: [value] -> [cell@1 of array]
-                       ;; @DC-B: SET_AF_2, group: cell_array
-                       ;; *SET* *A*​rray *F*​ield 2
-(define SET_AF_2 #x64) ;; stack: [array-ptr] :: [value] -> [cell@2 of array]
-                       ;; @DC-B: SET_AF_3, group: cell_array
-                       ;; *SET* *A*​rray *F*​ield 3
-(define SET_AF_3 #x66) ;; stack: [array-ptr] :: [value] -> [cell@3 of array]
-(define BC_XET_ARRAY_FIELD
-  (flatten
-   (list
-    (label BC_GET_ARRAY_FIELD) ;; replace RT with RT.@A
-           (LSR)
-           (AND !$03)
-           (PHA)
-           (JSR CP_RT_TO_RA)
-           (PLA)
-           (JSR WRITE_ARR_ATa_RA_TO_RT)
-           (JSR INC_REFCNT_RT)
-           (JSR DEC_REFCNT_RA)
-           (LDA !$00)
-           (STA ZP_RA)
-           (STA ZP_RA+1)
-           (JMP VM_INTERPRETER_INC_PC)
-
-    (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping
-           (LSR)
-           (AND !$03)
-           (PHA)
-           (JSR CP_RT_TO_RA)
-           (JSR POP_CELL_EVLSTK_TO_RT)
-           (PLA)
-           (JSR POP_EVLSTK_TO_ARR_ATa_RA)
-           (JSR DEC_REFCNT_RA)
-           (LDA !$00)
-           (STA ZP_RA)
-           (STA ZP_RA+1)
-           (JMP VM_INTERPRETER_INC_PC))))
-
-;; @DC-B: GET_RA_AF_0, group: cell_array
-                       ;; *GET* *A*​rray *F*​ield 0
-(define GET_RA_AF_0 #xf8) ;; stack: [array-ptr] -> [cell@0 of array]
-                       ;; @DC-B: GET_RA_AF_1, group: cell_array
-                       ;; *GET* *A*​rray *F*​ield 1
-(define GET_RA_AF_1 #xfa) ;; stack: [array-ptr] -> [cell@1 of array]
-                       ;; @DC-B: GET_RA_AF_2, group: cell_array
-                       ;; *GET* *A*​rray *F*​ield 2
-(define GET_RA_AF_2 #xfc) ;; stack: [array-ptr] -> [cell@2 of array]
-                       ;; @DC-B: GET_RA_AF_3, group: cell_array
-                       ;; *GET* *A*​rray *F*​ield 3
-(define GET_RA_AF_3 #xfe) ;; stack: [array-ptr] -> [cell@3 of array]
-                       ;; @DC-B: SET_RA_AF_0, group: cell_array
-                       ;; *SET* *A*​rray *F*​ield 0
-(define SET_RA_AF_0 #x90) ;; stack: [array-ptr] :: [value] -> [cell@0 of array]
-                       ;; @DC-B: SET_RA_AF_1, group: cell_array
-                       ;; *SET* *A*​rray *F*​ield 1
-(define SET_RA_AF_1 #x92) ;; stack: [array-ptr] :: [value] -> [cell@1 of array]
-                       ;; @DC-B: SET_RA_AF_2, group: cell_array
-                       ;; *SET* *A*​rray *F*​ield 2
-(define SET_RA_AF_2 #x94) ;; stack: [array-ptr] :: [value] -> [cell@2 of array]
-                       ;; @DC-B: SET_RA_AF_3, group: cell_array
-                       ;; *SET* *A*​rray *F*​ield 3
-(define SET_RA_AF_3 #x96) ;; stack: [array-ptr] :: [value] -> [cell@3 of array]
-(define BC_XET_RA_ARRAY_FIELD
-  (flatten
-   (list
-    (label BC_GET_RA_ARRAY_FIELD)               ;; (RA),A -> RT
-           (LSR)
-           (AND !$03)
-           (PHA)
-           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-           (PLA)
-           (JSR WRITE_ARR_ATa_RA_TO_RT)
-           (JSR INC_REFCNT_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-
-    (label BC_SET_RA_ARRAY_FIELD)               ;; RT -> (RA),A
-           (LSR)
-           (AND !$03)
-           (JSR POP_EVLSTK_TO_ARR_ATa_RA)       ;; no refcount adjustment, since value is off the stack (-1), but in array (+1)
-           (JMP VM_INTERPRETER_INC_PC))))
-
-;; @DC-B: ALLOC_ARA, group: cell_array
-;; *ALLOC*​ate cell *A*​rray into *RA* and pops the byte size off the stack
-;; stack: <byte-size> -> -
-;; len: 1
-(define ALLOC_ARA #x98)
-(define BC_ALLOC_ARA
-  (list
-   (label BC_ALLOC_ARA)
-          (LDA ZP_RT+1)                 ;; byte size
-          (JSR ALLOC_CELLARR_TO_RA)     ;;
-          (JSR INC_REFCNT_M1_SLOT_RA)   ;; only cell-array needs to be inc-refcnt'd
-          (LDA !$00)
-          (STA ZP_RAI)
-          (JMP VM_POP_EVLSTK_AND_INC_PC)))
-
-;; @DC-B: BINC_RAI, group: cell_array
-;; *B*​yte *INC*​rement *RA* *I*​ndex register
-(define BINC_RAI #xca)
-(define BC_BINC_RAI
-  (list
-   (label BC_BINC_RAI)
-          (INC ZP_RAI)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-;; @DC-B: POP_TO_RAI, group: cell_array
-;; *POP* top of evlstk byte *TO* *RA* *I*​ndex
-;; len: 1
-(define POP_TO_RAI #x9e)
-(define BC_POP_TO_RAI
-  (list
-   (label BC_POP_TO_RAI)
-          (LDA ZP_RT+1)
-          (STA ZP_RAI)
-          (JMP VM_POP_EVLSTK_AND_INC_PC)))
-
-;; @DC-B: WRITE_TO_RAI, group: cell_array
-;; *WRITE* top of evlstk byte *TO* *RA* *I*​ndex
-;; len: 1
-(define WRITE_TO_RAI #xac)
-(define BC_WRITE_TO_RAI
-  (list
-   (label BC_WRITE_TO_RAI)
-          (LDA ZP_RT+1)
-          (STA ZP_RAI)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-;; @DC-B: WRITE_TO_RBI, group: cell_array
-;; *WRITE* top of evlstk byte *TO* *RB* *I*​ndex
-;; len: 1
-(define WRITE_TO_RBI #xb8)
-(define BC_WRITE_TO_RBI
-  (list
-   (label BC_WRITE_TO_RBI)
-          (LDA ZP_RT+1)
-          (STA ZP_RBI)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-;; @DC-B: DEC_RAI, group: cell_array
-;; *DEC*​rement *RA* *I*​ndex
-;; len: 1
-(define DEC_RAI #xae)
-(define BC_DEC_RAI
-  (list
-   (label BC_DEC_RAI)
-          (DEC ZP_RAI)
-          (JMP VM_INTERPRETER_INC_PC)))
 
 (define just-vm-interpreter
   (append VM_INTERPRETER_VARIABLES
