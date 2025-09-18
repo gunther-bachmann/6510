@@ -99,6 +99,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_WRITE_RA                    ;; write cell-array register RA into tos
                   BC_PUSH_RA                     ;; push cell-array register RA itself onto eval stack
                   BC_PUSH_RA_AF                  ;; push cell-array RA field A onto the eval stack (inc ref count)
+                  BC_POP_TO_RA_AF
                   BC_PUSH_AF
                   BC_POP_TO_AF))
 (require (only-in "./vm-interpreter-bc.atom-num.rkt"
@@ -113,6 +114,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-interpreter-bc.call_ret.rkt"
                   BC_CALL
                   BC_Z_P_RET_POP_N))
+(require (only-in "./vm-interpreter-bc.cell-pair.rkt"
+                  BC_PUSH_NIL
+                  BC_CxxR
+                  BC_CONS
+                  BC_COONS
+                  BC_NIL_P
+                  BC_CAR
+                  BC_CDR))
 (require (only-in "./vm-interpreter-bc.compare.rkt"
                   BC_B_GT_P
                   BC_B_LT_P
@@ -750,125 +759,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                           "int $1c2f"
                           "int $0001")))
 
-;; @DC-B: NIL_P, group: predicates
-(define NIL_P #x42) ;; stack [cell-list-ptr] -> [cell-boolean]
-(define BC_NIL_P
-  (list
-   (label BC_NIL_P)
-          (JSR CP_RT_TO_RZ)             ;; keep for dec-refcnt
-          (JSR VM_NIL_P)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
-          (JSR DEC_REFCNT_RZ)
-          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
-
-(module+ test #| bc-nil-p |#
-  (define bc-nil-p-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_NIL)
-      (bc NIL_P)
-      (bc BREAK))))
-
-  (check-equal? (vm-stack->strings bc-nil-p-state)
-                (list "stack holds 1 item"
-                      "int $0001  (rt)"))
-
-  (define bc-nil-p-2-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_NIL)
-      (bc PUSH_I2)
-      (bc CONS)
-      (bc NIL_P)
-      (bc BREAK))))
-
-  (check-equal? (vm-deref-cell-pair-w->string bc-nil-p-2-state (+ PAGE_AVAIL_0_W #x05))
-                "(empty . pair-ptr NIL)")
-  (check-equal? (vm-stack->strings bc-nil-p-2-state)
-                (list "stack holds 1 item"
-                      "int $0000  (rt)")))
-
-;; @DC-B: COONS, group: cell_pair
-(define COONS #x88) ;; execute two CONS in a row
-(define BC_COONS
-  (list
-   (label BC_COONS)
-          (JSR VM_CONS__REFCNTD)
-          (JSR VM_CONS__REFCNTD)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-;; @DC-B: CONS, group: cell_pair
-(define CONS #x6e) ;; stack [cell- car, cell-list-ptr cdr] -> stack [cell-list-ptr new-list]
-(define BC_CONS
-  (list
-   (label BC_CONS)          
-          (JSR VM_CONS__REFCNTD)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| bc-cons |#
-   (define bc-cons-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_NIL)
-      (bc PUSH_I0)
-      (bc CONS)
-      (bc BREAK))))
-
-   (check-equal? (vm-stack->strings bc-cons-state)
-                   (list "stack holds 1 item"
-                         (format "pair-ptr[1] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
-   (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x05))
-                    "(int $0000 . pair-ptr NIL)"))
-
-;; @DC-B: CAR, group: cell_pair
-(define CAR #xba) ;; stack [cell-list-ptr] -> [cell- car of list pointed at]
-(define BC_CAR
-  (list
-   (label BC_CAR)
-          (JSR CP_RT_TO_RZ)
-          (JSR VM_CAR)
-          (JSR INC_REFCNT_RT)
-          (JSR DEC_REFCNT_RZ)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| bc-car |#
-   (define bc-car-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_NIL)
-      (bc PUSH_I2)
-      (bc CONS)
-      (bc CAR)
-      (bc BREAK))))
-
-   (check-equal? (vm-stack->strings bc-car-state)
-                 (list "stack holds 1 item"
-                       "int $0002  (rt)")))
-
-;; @DC-B: CDR, group: cell_pair
-(define CDR #x7e) ;; stack [cell-list-ptr] -> [cell-list-ptr cdr of list pointed at]
-(define BC_CDR
-  (list
-   (label BC_CDR)
-          (JSR CP_RT_TO_RZ)
-          (JSR VM_CDR)
-          (JSR INC_REFCNT_RT)
-          (JSR DEC_REFCNT_RZ)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| bc-cdr |#
-   (define bc-cdr-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_NIL)
-      (bc PUSH_I2)
-      (bc CONS)
-      (bc CDR)
-      (bc BREAK))))
-
-   (check-equal? (vm-stack->strings bc-cdr-state)
-                 (list "stack holds 1 item"
-                       "pair-ptr NIL  (rt)")))
-
 ;; @DC-B: BSHR, group: byte
 (define BSHR #x4e)
 (define BC_BSHR
@@ -1135,26 +1025,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
           (JSR DEC_REFCNT_RZ)
           (JMP VM_INTERPRETER_INC_PC)))
 
-;; @DC-B: PUSH_NIL, group: stack
-;; *PUSH* *NIL* to evlstk
-;; len: 1
-(define PUSH_NIL            #x28) ;; stack: [] -> [NIL]
-(define BC_PUSH_NIL
-  (list
-   (label BC_PUSH_NIL)    
-   (JSR PUSH_NIL_TO_EVLSTK)        ;; push NIL on the stack
-   (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
-
-(module+ test #| bc-push-const-nil |#
-  (define bc-push-const-nil-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_NIL)
-      (bc BREAK))))
-
-  (check-equal? (vm-stack->strings bc-push-const-nil-state)
-                (list "stack holds 1 item"
-                      "pair-ptr NIL  (rt)")))
 
 ;; @DC-B: IINC, group: int
 ;; *I*​nt *INC*​rement
@@ -1441,96 +1311,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "int $0000")))
-
-;;                    @DC-B: CAAR, group: cell_pair
-(define CAAR #xe0) ;; len: 1
-;;                    @DC-B: CADR, group: cell_pair
-(define CADR #xe6) ;; len: 1
-;;                    @DC-B: CDAR, group: cell_pair
-(define CDAR #xec) ;; len: 1
-;;                    @DC-B: CDDR, group: cell_pair
-(define CDDR #x52) ;; len: 1
-(define BC_CxxR
-  (list
-   (label BC_CxxR)
-          (LDX ZP_RT)
-          (STX ZP_RZ)
-          (LDX ZP_RT+1)
-          (STX ZP_RZ+1)
-          ;; prepared offset for branch in VM_CxxR call ($00 = CAAR, $06 = CADR, $0c = CDAR, $12 = CDDR)
-          (JSR VM_CxxR)
-          (JSR INC_REFCNT_RT)
-          (JSR DEC_REFCNT_RZ)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-(module+ test #| cxxr |#
-  (define cxxr-0-state
-    (run-bc-wrapped-in-test
-      (list
-         (bc PUSH_NIL)
-         (bc PUSH_I2)
-         (bc PUSH_I1)
-         (bc CONS)
-         (bc CONS)
-         (bc CAAR))
-      ))
-  (check-equal? (vm-stack->strings cxxr-0-state)
-                (list "stack holds 1 item"
-                      "int $0001  (rt)"))
-
-  (define cxxr-1-state
-    (run-bc-wrapped-in-test
-      (list
-         (bc PUSH_NIL)
-         (bc PUSH_I2)
-         (bc PUSH_I1)
-         (bc CONS)
-         (bc CONS)
-         (bc CDAR))
-      ))
-  (check-equal? (vm-stack->strings cxxr-1-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
-
-  (define cxxr-2-state
-    (run-bc-wrapped-in-test
-      (list
-         (bc PUSH_I2)
-         (bc PUSH_I1)
-         (bc CONS)
-         (bc PUSH_NIL)
-         (bc CONS)
-         (bc CADR))
-      ))
-  (check-equal? (vm-stack->strings cxxr-2-state)
-                (list "stack holds 1 item"
-                      "int $0001  (rt)"))
-
-  (define cxxr-3-state
-    (run-bc-wrapped-in-test
-      (list
-         (bc PUSH_I2)
-         (bc PUSH_I1)
-         (bc CONS)
-         (bc PUSH_NIL)
-         (bc CONS)
-         (bc CDDR))
-      ))
-  (check-equal? (vm-stack->strings cxxr-3-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)")))
-
-;; @DC-B: POP_TO_RA_AF, group: cell_array
-;; *POP* top of evlstk *TO* *RA* *A*​rray *F*​ield
-;; len: 1
-(define POP_TO_RA_AF #x9c)
-(define BC_POP_TO_RA_AF
-  (list
-   (label BC_POP_TO_RA_AF)
-          (LDA ZP_RAI)
-          (JSR POP_EVLSTK_TO_ARR_ATa_RA) ;; array@a <- rt (TODO: check that old value is dec-refcnt'd)
-          (INC ZP_RAI)
-          (JMP VM_INTERPRETER_INC_PC)))
 
   ;; alternative coding
   ;; [x] POP_TO_RA, writes tos into RA and initializes RAi to 0

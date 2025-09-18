@@ -21,6 +21,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
          POP_CELL_EVLSTK_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
          PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack (effectively doing a dup)
          PUSH_RT_TO_EVLSTK_IF_NONEMPTY ;; push RT only if it is non empty
+         PUSH_NIL_TO_EVLSTK            ;; push constant nil onto the eval stack
          POP_CELL_EVLSTK_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
 (module+ test
@@ -295,6 +296,7 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
 ;;        A = high byte,
 ;;        X = tagged low
 ;; output: call-frame stack, RT
+(define PUSH_NIL_TO_EVLSTK '())
 (define PUSH_XA_TO_EVLSTK
   (list
    (label PUSH_INT_TO_EVLSTK)         ;; idea: can be optimized since it is known that this is an atomic value
