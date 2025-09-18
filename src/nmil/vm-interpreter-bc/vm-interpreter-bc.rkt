@@ -6,8 +6,8 @@ combines all implementations of the runtime byte code implementations
 
 |#
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require "../../6510.rkt")
+(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
 
 (require (only-in "./vm-interpreter-bc.ext.rkt"

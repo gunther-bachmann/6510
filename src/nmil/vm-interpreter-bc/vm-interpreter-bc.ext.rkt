@@ -8,11 +8,11 @@ of the decoder and the jump
 
 |#
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require "../../6510.rkt")
+(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
 
-(require (only-in "./vm-memory-map.rkt"
+(require (only-in "../vm-memory-map.rkt"
                   ZP_VM_PC))
 
 (provide BC_EXT1_CMD

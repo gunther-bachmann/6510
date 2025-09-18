@@ -1,21 +1,21 @@
 #lang racket/base
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require "../../6510.rkt")
+(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
 
-(require (only-in "./vm-memory-map.rkt"
+(require (only-in "../vm-memory-map.rkt"
                   ZP_VM_PC
                   ZP_VM_FUNC_PTR
                   ZP_RP
                   TAGGED_INT_0
                   TAG_BYTE_BYTE_CELL))
-(require (only-in "./vm-interpreter-loop.rkt" VM_INTERPRETER_INC_PC))
-(require (only-in "./vm-call-frame.rkt"
+(require (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_INC_PC))
+(require (only-in "../vm-call-frame.rkt"
                   VM_PUSH_CALL_FRAME_N
                   VM_ALLOC_LOCALS
                   VM_REFCOUNT_DECR_CURRENT_LOCALS))
-(require (only-in "./vm-memory-manager.rkt"
+(require (only-in "../vm-memory-manager.rkt"
                   DEC_REFCNT_RT))
 
 (provide BC_CALL

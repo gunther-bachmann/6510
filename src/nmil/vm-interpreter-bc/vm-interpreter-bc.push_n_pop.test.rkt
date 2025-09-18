@@ -12,7 +12,6 @@ test of bytecode implementation of push
                     BC_PUSH_B
                     BC_POP
                     BC_PUSH_I))
-  (require (only-in "./vm-mm-m1-slots.rkt" FREE_M1_SLOT_RZ))
   (require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
 
   (define relevant-opcode-definitions (filtered-opcode-definitions

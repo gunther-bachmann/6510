@@ -1,14 +1,14 @@
 #lang racket/base
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require "../../6510.rkt")
+(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
 
-(require (only-in "./vm-memory-map.rkt"
+(require (only-in "../vm-memory-map.rkt"
                   ZP_RT
                   ZP_VM_PC
                   TAG_BYTE_BYTE_CELL))
-(require (only-in "./vm-interpreter-loop.rkt"
+(require (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_INC_PC_2_TIMES))
 

@@ -1,30 +1,30 @@
 #lang racket/base
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require "../../6510.rkt")
+(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
 
-(require (only-in "./vm-memory-map.rkt"
+(require (only-in "../vm-memory-map.rkt"
                   ZP_RBI
                   ZP_RAI
                   ZP_RT))
-(require (only-in "./vm-mm-cell-array.rkt"
+(require (only-in "../vm-mm-cell-array.rkt"
                   ALLOC_CELLARR_TO_RA
                   POP_EVLSTK_TO_ARR_ATa_RA
                   WRITE_ARR_ATa_RA_TO_RT))
-(require (only-in "./vm-mm-m1-slots.rkt"
+(require (only-in "../vm-mm-m1-slots.rkt"
                   INC_REFCNT_M1_SLOT_RA))
-(require (only-in "./vm-memory-manager.rkt"
+(require (only-in "../vm-memory-manager.rkt"
                   INC_REFCNT_RT))
-(require (only-in "vm-mm-cell-stack.rkt"
+(require (only-in "../vm-mm-cell-stack.rkt"
                   PUSH_RT_TO_EVLSTK_IF_NONEMPTY))
-(require (only-in "./vm-interpreter-loop.rkt"
+(require (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES
                   VM_POP_EVLSTK_AND_INC_PC))
 (require (only-in "./vm-interpreter-bc.branch.rkt"
                   BRANCH_BY_NEXT_BYTE__NO_POP))
-(require (only-in "./vm-mm-register-functions.rkt" SWAP_RA_RB))
+(require (only-in "../vm-mm-register-functions.rkt" SWAP_RA_RB))
 
 (provide BC_DEC_RBI_NZ_P_BRA            ;; decrement cell array index register RBI and branch if NOT Zero
          BC_DEC_RAI                     ;; decrement cell array index register RAI

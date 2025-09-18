@@ -8,32 +8,31 @@ implement some useful test utils for testing bcs in a somewhat isolated environm
 
 
 (require (only-in racket/list flatten))
-(require "../6510.rkt")
-;; (require "../util.rkt")
-(require "../6510-test-utils.rkt")
-(require (only-in "./vm-call-frame.rkt" vm-call-frame->strings))
-(require (only-in "./vm-interpreter-loop.rkt"
+(require "../../6510.rkt")
+(require "../../6510-test-utils.rkt")
+(require (only-in "../vm-call-frame.rkt" vm-call-frame->strings))
+(require (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_INIT))
-(require (only-in "./vm-memory-manager.rkt" VM_INITIALIZE_MEMORY_MANAGER))
-(require (only-in "vm-lists.rkt" vm-lists))
+(require (only-in "../vm-memory-manager.rkt" VM_INITIALIZE_MEMORY_MANAGER))
+(require (only-in "../vm-lists.rkt" vm-lists))
 
-(require (only-in "../tools/6510-interpreter.rkt"
+(require (only-in "../../tools/6510-interpreter.rkt"
                   peek
                   peek-word-at-address
                   memory-list
                   cpu-state-clock-cycles))
-(require (only-in "./vm-interpreter-test-utils.rkt"
+(require (only-in "../vm-interpreter-test-utils.rkt"
                   run-bc-wrapped-in-test-
                   vm-next-instruction-bytes))
-(require (only-in "./vm-bc-opcode-definitions.rkt"
+(require (only-in "../vm-bc-opcode-definitions.rkt"
                   bc
                   bc-opcode-definitions
                   build-extended-optable-hb
                   build-extended-optable-lb
                   build-interpreter-optable
                   filtered-opcode-definitions))
-(require (only-in "./vm-inspector-utils.rkt"
+(require (only-in "../vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-page->strings
                   vm-stack->strings
@@ -41,17 +40,16 @@ implement some useful test utils for testing bcs in a somewhat isolated environm
                   vm-cell-at->string
                   vm-cell->string
                   vm-deref-cell-pair-w->string))
-(require "./vm-memory-map.rkt")
+(require "../vm-memory-map.rkt")
 
-(provide (all-from-out "./vm-inspector-utils.rkt")
-         (all-from-out "./vm-interpreter-test-utils.rkt")
-         (all-from-out "./vm-call-frame.rkt")
-         (all-from-out "./vm-bc-opcode-definitions.rkt")
-         (all-from-out "../6510.rkt")
-         ;; (all-from-out "../util.rkt")
-         (all-from-out "../6510-test-utils.rkt")
-         (all-from-out "../tools/6510-interpreter.rkt")
-         (all-from-out "./vm-memory-map.rkt")
+(provide (all-from-out "../vm-inspector-utils.rkt")
+         (all-from-out "../vm-interpreter-test-utils.rkt")
+         (all-from-out "../vm-call-frame.rkt")
+         (all-from-out "../vm-bc-opcode-definitions.rkt")
+         (all-from-out "../../6510.rkt")
+         (all-from-out "../../6510-test-utils.rkt")
+         (all-from-out "../../tools/6510-interpreter.rkt")
+         (all-from-out "../vm-memory-map.rkt")
          (all-from-out racket/list)
          wrap-bytecode-for-bc-test
          PAGE_CALL_FRAME

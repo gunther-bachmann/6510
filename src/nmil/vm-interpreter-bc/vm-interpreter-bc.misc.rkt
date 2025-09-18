@@ -1,8 +1,8 @@
 #lang racket/base
 
-(require "../6510.rkt")
+(require "../../6510.rkt")
 
-(require (only-in "./vm-interpreter-loop.rkt"
+(require (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES))
 

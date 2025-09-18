@@ -9,17 +9,17 @@ TODO: get tests (still in vm-interpreter) into this file
 |#
 
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require "../../6510.rkt")
+(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
-(require (only-in "./vm-memory-map.rkt"
+(require (only-in "../vm-memory-map.rkt"
                   ZP_RT
                   ZP_RP))
-(require (only-in "./vm-interpreter-loop.rkt"
+(require (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC))
-(require (only-in "./vm-mm-cell-stack.rkt"
+(require (only-in "../vm-mm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RP))
-(require (only-in "./vm-mm-register-functions.rkt"
+(require (only-in "../vm-mm-register-functions.rkt"
                   WRITE_INT0_TO_RT
                   WRITE_INT1_TO_RT))
 (require (only-in "./vm-interpreter-bc.push_n_pop.rkt" BC_PUSH_B))

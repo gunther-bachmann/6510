@@ -9,20 +9,20 @@ TODO: get tests (still in vm-interpreter) into this file
 |#
 
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require "../../6510.rkt")
+(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
-(require (only-in "./vm-memory-map.rkt"
+(require (only-in "../vm-memory-map.rkt"
                   ZP_RT
                   ZP_RP
                   ZP_VM_PC
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
-(require (only-in "./vm-interpreter-loop.rkt"
+(require (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES))
-(require (only-in "./vm-mm-cell-stack.rkt"
+(require (only-in "../vm-mm-cell-stack.rkt"
                   PUSH_XA_TO_EVLSTK
                   PUSH_INT_TO_EVLSTK
                   PUSH_RT_TO_EVLSTK_IF_NONEMPTY))

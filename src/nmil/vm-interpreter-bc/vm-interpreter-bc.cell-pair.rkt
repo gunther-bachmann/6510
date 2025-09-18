@@ -1,25 +1,25 @@
 #lang racket/base
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+(require "../../6510.rkt")
+(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
 
-(require (only-in "./vm-memory-map.rkt"
+(require (only-in "../vm-memory-map.rkt"
                   ZP_RT
                   ZP_RZ))
-(require (only-in "./vm-memory-manager.rkt"
+(require (only-in "../vm-memory-manager.rkt"
                   INC_REFCNT_RT
                   DEC_REFCNT_RZ))
-(require (only-in "./vm-interpreter-loop.rkt"
+(require (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC))
-(require (only-in "./vm-lists.rkt"
+(require (only-in "../vm-lists.rkt"
                   VM_CxxR
                   VM_CONS__REFCNTD
                   VM_CAR
                   VM_CDR))
-(require (only-in "./vm-mm-cell-stack.rkt"
+(require (only-in "../vm-mm-cell-stack.rkt"
                   PUSH_NIL_TO_EVLSTK))
-(require (only-in "./vm-mm-register-functions.rkt"
+(require (only-in "../vm-mm-register-functions.rkt"
                   CP_RT_TO_RZ))
 
 (provide BC_CxxR
