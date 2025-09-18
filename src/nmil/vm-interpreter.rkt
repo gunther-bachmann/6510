@@ -8,7 +8,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 |#
 
-
 ;; TODO: implement ~/repo/+1/6510/mil.readlist.org::*what part of the 6510 vm design should be implement w/ racket to validate design?
 ;; TODO: implement constant pool
 ;; TODO: implement structure creation
@@ -113,17 +112,21 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_IADD
                   BC_BSHR
                   BC_ISUB))
-(require (only-in "./vm-interpreter-bc.branch.rkt"
+(require [only-in "./vm-interpreter-bc.branch.rkt"
                   BC_Z_P_BRA
                   BC_NZ_P_BRA
                   BC_T_P_BRA
-                  BC_F_P_BRA))
+                  BC_F_P_BRA
+                  BC_GOTO])
 (require (only-in "./vm-interpreter-bc.call_ret.rkt"
                   BC_CALL
                   BC_Z_P_RET_POP_N
                   BC_NIL_P_RET_L0_POP_N
                   BC_RET
-                  BC_TAIL_CALL))
+                  BC_TAIL_CALL
+                  BC_T_P_RET
+                  BC_F_P_RET
+                  BC_F_P_RET_F))
 (require (only-in "./vm-interpreter-bc.cell-pair.rkt"
                   BC_PUSH_NIL
                   BC_CxxR
@@ -137,17 +140,31 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_B_LT_P
                   BC_B_GE_P
                   BC_I_GT_P))
-(require (only-in "./vm-interpreter-bc.misc.rkt" BC_BNOP))
-(require (only-in "./vm-interpreter-bc.native.rkt" BC_POKE_B BC_NATIVE RETURN_TO_BC))
-(require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+(require (only-in "./vm-interpreter-bc.misc.rkt"
+                  BC_BNOP
+                  BC_BREAK
+                  BC_GC_FL))
+(require (only-in "./vm-interpreter-bc.native.rkt"
+                  BC_POKE_B
+                  BC_NATIVE
+                  RETURN_TO_BC))
+(require (only-in "./vm-interpreter-bc.push_const.rkt"
+                  BC_PUSH_CONST_NUM_SHORT))
 (require (only-in "./vm-interpreter-bc.push_n_pop.rkt"
                   BC_PUSH_B
                   BC_DUP
                   BC_SWAP
                   BC_POP
                   BC_PUSH_I))
-(require (only-in "./vm-interpreter-bc.push_local.rkt" BC_PUSH_LOCAL_CXR))
-(require (only-in "./vm-interpreter-bc.pop_local.rkt" BC_POP_TO_LOCAL_SHORT))
+(require (only-in "./vm-interpreter-bc.push_local.rkt"
+                  BC_PUSH_LOCAL_CXR))
+(require (only-in "./vm-interpreter-bc.pop_local.rkt"
+                  BC_POP_TO_LOCAL_SHORT))
+(require (only-in "./vm-interpreter-bc.predicates.rkt"
+                  BC_I_Z_P
+                  BC_INT_P
+                  BC_CONS_PAIR_P
+                  BC_CELL_EQ_P))
 
 (module+ test
   (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
@@ -168,7 +185,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
             (list (bc BREAK))
             (list (org #xa000))
             vm-interpreter))
-
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
@@ -201,23 +217,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
    ;; $18..25   
    ))
 
-;; @DC-B: BREAK, group: misc
-(define BREAK #x54) ;; collision with 6510 BRK code
-(define BC_BREAK
-  (list
-   (label BC_BREAK)
-          (BRK)))
-
-(module+ test #| bc_brk |#
-  (define use-case-brk-state-after
-    (run-bc-wrapped-in-test
-     (list
-      (bc BREAK))))
-
-  (check-equal? (vm-next-instruction-bytes use-case-brk-state-after)
-                (list BREAK)
-                "stopped at byte code brk"))
-
 ;; return id of this function (id = 16 bit ptr to function = zp_vm_pc to set when called)
 ;; e.g. (register-function '() (list INT+ BRK) 2 3 "hello")
 (define (register-function state byte-code param-no locals-no name)  
@@ -241,332 +240,6 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
   ;;        00+len(datarecord): next free record
   )
 
-
-;; @DC-B: INT_P, group: predicates
-;; is top of evlstk an *INT*​eger (*P*​redicate)?
-(define INT_P #x0e)
-(define BC_INT_P
-  (add-label-suffix
-   "__" "__INT_P"
-  (list
-   (label BC_INT_P)
-          (LDA ZP_RT)
-          (LDX !$01)
-          (AND !$83)
-          (CMP !$03)
-          (BEQ IS_INT__)
-          (JSR DEC_REFCNT_RT)
-          (LDA !$03)
-          (LDX !$00)
-   (label IS_INT__)
-          (STA ZP_RT)
-          (STX ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC))))
-
-(module+ test #| int_p |#
-  (skip (check-equal? #t #f "implement")))
-
-;; @DC-B: F_P_RET_F, group: return
-(define F_P_RET_F #x3e) ;; *F*​alse *P*​redicate *RET*​urn *F*​alse
-(define BC_F_P_RET_F
-  (add-label-suffix
-   "__" "__F_P_RET_F"
-  (list
-   (label BC_F_P_RET_F)
-          (LDA ZP_RT+1)
-          (BNE IS_TRUE__)
-          ;; don't pop false value, return it!
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
-          (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
-          (JMP VM_INTERPRETER)
-   (label IS_TRUE__)
-          (JMP VM_POP_EVLSTK_AND_INC_PC))))
-
-;; @DC-B: F_P_RET, group: return
-(define F_P_RET #x1c) ;; *F*​alse *P*​redicate *RET*​urn
-(define BC_F_P_RET
-  (add-label-suffix
-   "__" "__F_P_RET"
-  (list
-   (label BC_F_P_RET)
-          (LDA ZP_RT+1)
-          (BNE IS_TRUE__)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
-          (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
-          (JMP VM_INTERPRETER)
-   (label IS_TRUE__)
-          (JMP VM_POP_EVLSTK_AND_INC_PC))))
-
-;; @DC-B: T_P_RET, group: return
-;; *T*​rue *P*​redicate *RET*​urn
-;; len: 1
-(define T_P_RET #x5c)
-(define BC_T_P_RET
-  (add-label-suffix
-   "__" "__BC_T_P_RET"
-  (list
-   (label BC_T_P_RET)
-          (LDA ZP_RT+1)
-          (BEQ IS_FALSE__)
-          (JSR POP_CELL_EVLSTK_TO_RT)
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
-          (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
-          (JMP VM_INTERPRETER)
-   (label IS_FALSE__)
-          (JMP VM_POP_EVLSTK_AND_INC_PC))))
-
-;; @DC-B: GOTO, group: flow
-;; goto relative by byte following in code
-;; len: 2
-(define GOTO #x78) ;; op = relative offset
-(define BC_GOTO
-  (add-label-suffix
-   "__" "__GOTO"
-  (list
-   (label BC_GOTO)
-          (CLC)
-          (LDY !$01)
-          (LDA (ZP_VM_PC),y)
-          (BMI JUMP_BACK__)
-
-          (ADC !$02)
-          (JMP VM_INTERPRETER_INC_PC_A_TIMES)
-
-   (label JUMP_BACK__)
-          (ADC ZP_VM_PC)
-          (STA ZP_VM_PC)
-          (BCS NO_PAGE_CHANGE_ON_BACK__)
-          (DEC ZP_VM_PC+1)
-   (label NO_PAGE_CHANGE_ON_BACK__)
-          (JMP VM_INTERPRETER))))
-
-(module+ test #| goto |#
-  (define goto-0-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc GOTO) (byte 2)
-      (bc PUSH_IM1)
-      (bc BREAK)
-      (bc PUSH_I1))))
-  (check-equal? (vm-stack->strings goto-0-state)
-                (list "stack holds 2 items"
-                      "int $0001  (rt)"
-                      "int $0000"))
-
-  (define goto-1-state
-    (run-bc-wrapped-in-test
-     (list
-      (bc PUSH_I0)
-      (bc GOTO) (byte $75)
-      (bc BREAK)
-      (org-align #x78)
-      (bc PUSH_I1))
-     ))
-  (check-equal? (vm-stack->strings goto-1-state)
-                (list "stack holds 2 items"
-                      "int $0001  (rt)"
-                      "int $0000"))
-
-  (define goto-2-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I0)
-       (bc GOTO) (byte $7d)
-       (bc BREAK)
-       (org-align #x80)
-       (bc PUSH_I1)
-       (bc GOTO) (byte $6d)
-       (bc BREAK)
-       (org-align #xf0)
-       (bc PUSH_I2)
-       ;; 80f1
-       (bc GOTO) (byte $0d)
-       (build-list 13 (lambda (_i) (bc BREAK)))
-       ;; now at 8100
-       (bc PUSH_IM1)))
-   ))
-  (check-equal? (vm-stack->strings goto-2-state)
-                (list "stack holds 4 items"
-                      "int $1fff  (rt)"
-                      "int $0002"
-                      "int $0001"
-                      "int $0000"))
-
-  (define goto-3-state
-    (run-bc-wrapped-in-test
-     (flatten 
-      (list
-       (bc PUSH_I0)
-       (bc GOTO) (byte $7d)
-       (bc BREAK)
-       (org-align #x80)
-       (bc PUSH_I1)
-       ;; now at 8081
-       (bc GOTO) (byte $6d)
-       ;; 8083
-       (bc BREAK)
-       (org-align #xf0)
-       (bc PUSH_I2)
-       ;; now at 80f1
-       (bc GOTO) (byte $0e)
-       (build-list 14 (lambda (_i) (bc BREAK)))
-       ;; now at 8102
-       (bc PUSH_IM1)))
-   ))
-  (check-equal? (vm-stack->strings goto-3-state)
-                (list "stack holds 4 items"
-                      "int $1fff  (rt)"
-                      "int $0002"
-                      "int $0001"
-                      "int $0000"))
-
-  (define goto-4-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I0)
-       (bc GOTO) (byte 3)
-       (bc BREAK)
-       (bc PUSH_I1)
-       (bc BREAK)
-       (bc GOTO) (byte $fe)))
-     ))
-  (check-equal? (vm-stack->strings goto-4-state)
-                (list "stack holds 2 items"
-                      "int $0001  (rt)"
-                      "int $0000"))
-
-  (define goto-5-state
-    (run-bc-wrapped-in-test
-     (flatten
-      (list
-       (bc PUSH_I0)
-       (bc GOTO) (byte $7d)
-       (bc BREAK)
-       (org-align #x80)
-       (bc PUSH_I1)
-       ;; now at 8081
-       (bc GOTO) (byte $6d)
-       ;; 8083
-       (bc BREAK)
-       (org-align #xf0)
-       (bc PUSH_I2)
-       ;; now at 80f1
-       (bc GOTO) (byte $0e)
-       (build-list 12 (lambda (_i) (bc BREAK)))
-       ;; 80ff
-       (bc PUSH_I0)
-       ;; 8100
-       (bc BREAK)
-       ;; now at 8101
-       (bc PUSH_IM1)
-       (bc GOTO) (byte $fd)))
-     ))
-  (check-equal? (vm-stack->strings goto-5-state)
-                (list "stack holds 5 items"
-                      "int $0000  (rt)"
-                      "int $1fff"
-                      "int $0002"
-                      "int $0001"
-                      "int $0000")))
-
-;; @DC-B: CONS_PAIR_P, group: predicates
-;; *CONS* *PAIR* *P*​redicate
-;; len: 1
-(define CONS_PAIR_P #x5a)
-(define BC_CONS_PAIR_P
-  (list
-   (label BC_CONS_PAIR_P)
-          (JSR CP_RT_TO_RZ)
-
-          (LDX !$03) ;; low byte of int (for bool)
-          (STX ZP_RT)
-          (CMP !$01)
-          (BEQ IS_NO_PAIR_SINCE_NIL__BC_CONS_PAIR_P)
-          (AND !$03)
-          (CMP !$01)
-          (BEQ IS_PAIR__BC_CONS_PAIR_P)
-   (label IS_NO_PAIR_SINCE_NIL__BC_CONS_PAIR_P)
-          (LDA !$00)
-   (label IS_PAIR__BC_CONS_PAIR_P)
-          (STA ZP_RT+1)
-          (JSR DEC_REFCNT_RZ)
-          (JMP VM_INTERPRETER_INC_PC)))
-
-;; @DC-B: CELL_EQ_P, group: predicates
-;; *CELL* *EQ*​ual *P*​redicate
-;; len: 1
-(define CELL_EQ_P #x3c)
-(define BC_CELL_EQ_P
-  (add-label-suffix
-   "__" "__CELL_EQ_P"
-  (list
-   (label BC_CELL_EQ_P)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_HB_PTR),y)
-          (STA ZP_RZ+1)
-          (CMP ZP_RT+1)
-          (BNE NE_LB__)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
-          (STA ZP_RZ)
-          (CMP ZP_RT)
-          (BNE NE__)
-
-          (JSR DEC_REFCNT_RT)
-          (JSR DEC_REFCNT_RZ)
-          (DEC ZP_CELL_STACK_TOS)
-          (JSR WRITE_INT1_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC)
-
-   (label NE_LB__)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
-          (STA ZP_RZ)
-   (label NE__)
-          (JSR DEC_REFCNT_RT)
-          (JSR DEC_REFCNT_RZ)
-          (DEC ZP_CELL_STACK_TOS)
-          (JSR WRITE_INT0_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC))))
-
-;; @DC-B: I_Z_P, group: predicates
-;; *I*​nt *Z*​ero *P*​redicate
-;; len: 1
-(define I_Z_P #x44)
-(define BC_I_Z_P
-  (add-label-suffix
-   "__" "__I_Z_P"
-  (list
-   (label BC_I_Z_P)
-          (LDA ZP_RT+1)
-          (BNE IS_NOT_ZERO__)
-          (LDA ZP_RT)
-          (CMP !$03)
-          (BEQ IS_ZERO__)
-
-   (label IS_NOT_ZERO__)
-          (LDA !$00)
-          (STA ZP_RT+1)
-          (LDA !$03)
-          (STA ZP_RT)
-          (JMP VM_INTERPRETER_INC_PC)
-
-   (label IS_ZERO__)
-          (LDA !$01)    
-          (STA ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC))))
-
-;; @DC-B: GC_FL, group: gc
-;; garbage collect the freelist
-;; len: 2 (extended)
-(define GC_FL #x03)  ;; extended
-(define BC_GC_FL
-  (list
-   (label BC_GC_FL)
-          (JSR GC_ALL)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
   ;; alternative coding
   ;; [x] POP_TO_RA, writes tos into RA and initializes RAi to 0

@@ -23,6 +23,9 @@
          BC_NZ_P_RET_POP_N
          BC_NIL_P_RET_L0_POP_N
          BC_TAIL_CALL
+         BC_F_P_RET_F
+         BC_F_P_RET
+         BC_T_P_RET
          BC_RET)
 
 (define BC_CALL
@@ -243,3 +246,45 @@
    (label NO_RA__)
           (JSR VM_POP_CALL_FRAME_N)             ;; maybe move the respective code into here, (save jsr)
           (JMP VM_INTERPRETER))))
+
+(define BC_F_P_RET_F
+  (add-label-suffix
+   "__" "__F_P_RET_F"
+  (list
+   (label BC_F_P_RET_F)
+          (LDA ZP_RT+1)
+          (BNE IS_TRUE__)
+          ;; don't pop false value, return it!
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
+          (JMP VM_INTERPRETER)
+   (label IS_TRUE__)
+          (JMP VM_POP_EVLSTK_AND_INC_PC))))
+
+(define BC_F_P_RET
+  (add-label-suffix
+   "__" "__F_P_RET"
+  (list
+   (label BC_F_P_RET)
+          (LDA ZP_RT+1)
+          (BNE IS_TRUE__)
+          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
+          (JMP VM_INTERPRETER)
+   (label IS_TRUE__)
+          (JMP VM_POP_EVLSTK_AND_INC_PC))))
+
+(define BC_T_P_RET
+  (add-label-suffix
+   "__" "__BC_T_P_RET"
+  (list
+   (label BC_T_P_RET)
+          (LDA ZP_RT+1)
+          (BEQ IS_FALSE__)
+          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (JSR VM_POP_CALL_FRAME_N)             ;; now pop the call frame
+          (JMP VM_INTERPRETER)
+   (label IS_FALSE__)
+          (JMP VM_POP_EVLSTK_AND_INC_PC))))

@@ -16,6 +16,7 @@
          BC_NZ_P_BRA                    ;; branch by next byte if tos is NOT zero (byte or int), pop if not branching
          BC_T_P_BRA                     ;; branch by next byte if tos is true (actually anything != 0), always pop
          BC_F_P_BRA                     ;; branch by next byte if tos is false (actually = 0), always pop
+         BC_GOTO                        ;; unconditional branch
 
          CONTINUE_AFTER_BRA             ;; pc = pc + 2 + A (number of bytes to jump forward)
          POP_AND_CONTINUE_AFTER_BRA     ;; pop eval stack and then CONTINUE_AFTER_BRA
@@ -122,3 +123,24 @@
           (BEQ BRANCH_BY_NEXT_BYTE)
           (LDA !$00)
           (BEQ POP_AND_CONTINUE_AFTER_BRA)))
+
+(define BC_GOTO
+  (add-label-suffix
+   "__" "__GOTO"
+  (list
+   (label BC_GOTO)
+          (CLC)
+          (LDY !$01)
+          (LDA (ZP_VM_PC),y)
+          (BMI JUMP_BACK__)
+
+          (ADC !$02)
+          (JMP VM_INTERPRETER_INC_PC_A_TIMES)
+
+   (label JUMP_BACK__)
+          (ADC ZP_VM_PC)
+          (STA ZP_VM_PC)
+          (BCS NO_PAGE_CHANGE_ON_BACK__)
+          (DEC ZP_VM_PC+1)
+   (label NO_PAGE_CHANGE_ON_BACK__)
+          (JMP VM_INTERPRETER))))

@@ -2,10 +2,13 @@
 
 (module+ test
   (require "./vm-interpreter-bc.test-utils.rkt")
-  (require (only-in "./vm-interpreter-bc.misc.rkt" BC_BNOP))
+  (require (only-in "./vm-interpreter-bc.misc.rkt"
+                    BC_BNOP
+                    BC_BREAK))
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
-                                       (list "BC_BNOP")))
+                                       (list "BC_BNOP"
+                                             "BC_BREAK")))
 
   (define (wrap-bytecode-for-test bc-to-wrap)
     (wrap-bytecode-for-bc-test
@@ -24,4 +27,14 @@
            (bc BNOP))))
 
   (inform-check-equal? (cpu-state-clock-cycles nop-state)
-                99))
+                27))
+
+(module+ test #| bc_brk |#
+  (define use-case-brk-state-after
+    (run-bc-wrapped-in-test
+     (list
+      (bc BREAK))))
+
+  (check-equal? (vm-next-instruction-bytes use-case-brk-state-after)
+                (ast-bytes-cmd-bytes (bc BREAK))
+                "stopped at byte code brk"))
