@@ -7,20 +7,20 @@ implement bc call/return commands
 |#
 
 (module+ test
-  (require "./vm-interpreter-bc.test-utils.rkt")
-  (require (only-in "./vm-interpreter-bc.call_ret.rkt"
+  (require "./test-utils.rkt")
+  (require (only-in "./call_ret.rkt"
                     BC_CALL
                     BC_NIL_P_RET_L0_POP_N
                     BC_TAIL_CALL
                     BC_RET))
 
-  (require (only-in "./vm-interpreter-bc.arrays.rkt" VM_REFCOUNT_DECR_ARRAY_REGS))
-  (require (only-in "./vm-interpreter-bc.cell-pair.rkt" BC_CONS BC_CAR BC_CDR))
-  (require (only-in "./vm-interpreter-bc.push_local.rkt" BC_PUSH_LOCAL_SHORT PUSH_RT_WRITE_LOCAL_bc_enc BC_PUSH_LOCAL_CXR))
-  (require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
-  (require (only-in "./vm-interpreter-bc.pop_local.rkt" BC_POP_TO_LOCAL_SHORT BC_WRITE_TO_LOCAL_SHORT))
-  (require (only-in "./vm-interpreter-bc.cell-pair.rkt" BC_PUSH_NIL))
-  (require (only-in "./vm-interpreter-bc.misc.rkt" BC_BNOP))
+  (require (only-in "./arrays.rkt" VM_REFCOUNT_DECR_ARRAY_REGS))
+  (require (only-in "./cell-pair.rkt" BC_CONS BC_CAR BC_CDR))
+  (require (only-in "./push_local.rkt" BC_PUSH_LOCAL_SHORT PUSH_RT_WRITE_LOCAL_bc_enc BC_PUSH_LOCAL_CXR))
+  (require (only-in "./push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+  (require (only-in "./pop_local.rkt" BC_POP_TO_LOCAL_SHORT BC_WRITE_TO_LOCAL_SHORT))
+  (require (only-in "./cell-pair.rkt" BC_PUSH_NIL))
+  (require (only-in "./misc.rkt" BC_BNOP))
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_PUSH_LOCAL_SHORT"        ;; PUSH_L0-3

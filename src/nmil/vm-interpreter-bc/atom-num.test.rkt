@@ -1,8 +1,8 @@
 #lang racket/base
 
 (module+ test
-  (require "./vm-interpreter-bc.test-utils.rkt")
-  (require (only-in "./vm-interpreter-bc.atom-num.rkt"
+  (require "./test-utils.rkt")
+  (require (only-in "./atom-num.rkt"
                     BC_BINC
                     BC_BDEC
                     BC_BADD
@@ -10,12 +10,12 @@
                     BC_IINC
                     BC_IADD
                     BC_ISUB))
-  (require (only-in "./vm-interpreter-bc.push_n_pop.rkt"
+  (require (only-in "./push_n_pop.rkt"
                     BC_PUSH_B
                     BC_PUSH_I))
-  (require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
-  (require (only-in "./vm-interpreter-bc.ext.rkt" BC_EXT1_CMD))
-  (require (only-in "./vm-interpreter-bc.misc.rkt" BC_BNOP))
+  (require (only-in "./push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+  (require (only-in "./ext.rkt" BC_EXT1_CMD))
+  (require (only-in "./misc.rkt" BC_BNOP))
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_BINC"

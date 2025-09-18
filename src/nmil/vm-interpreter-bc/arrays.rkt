@@ -22,7 +22,7 @@
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES
                   VM_POP_EVLSTK_AND_INC_PC))
-(require (only-in "./vm-interpreter-bc.branch.rkt"
+(require (only-in "./branch.rkt"
                   BRANCH_BY_NEXT_BYTE__NO_POP))
 (require (only-in "../vm-mm-register-functions.rkt" SWAP_RA_RB))
 

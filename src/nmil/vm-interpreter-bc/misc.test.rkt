@@ -1,8 +1,8 @@
 #lang racket/base
 
 (module+ test
-  (require "./vm-interpreter-bc.test-utils.rkt")
-  (require (only-in "./vm-interpreter-bc.misc.rkt"
+  (require "./test-utils.rkt")
+  (require (only-in "./misc.rkt"
                     BC_BNOP
                     BC_BREAK))
 

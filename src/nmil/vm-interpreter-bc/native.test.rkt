@@ -7,12 +7,12 @@ test of bytecode implementation of native commands
 |#
 
 (module+ test
-  (require "./vm-interpreter-bc.test-utils.rkt")
-  (require (only-in "./vm-interpreter-bc.native.rkt"
+  (require "./test-utils.rkt")
+  (require (only-in "./native.rkt"
                     BC_POKE_B
                     BC_NATIVE
                     RETURN_TO_BC))
-  (require (only-in "./vm-interpreter-bc.push_n_pop.rkt" BC_PUSH_B))
+  (require (only-in "./push_n_pop.rkt" BC_PUSH_B))
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_POKE_B"

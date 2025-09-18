@@ -10,19 +10,19 @@ combines all implementations of the runtime byte code implementations
 (require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in racket/list flatten))
 
-(require (only-in "./vm-interpreter-bc.ext.rkt"
+(require (only-in "./ext.rkt"
                   BC_EXT1_CMD
                   VM_INTERPRETER_OPTABLE_EXT1_LB
                   VM_INTERPRETER_OPTABLE_EXT1_HB))
 
-(require (only-in "./vm-interpreter-bc.push_local.rkt"
+(require (only-in "./push_local.rkt"
                   BC_WRITE_LOCAL_SHORT
                   BC_PUSH_LOCAL_SHORT
                   PUSH_RT_WRITE_LOCAL_bc_enc))
 
-(require (only-in "./vm-interpreter-bc.push_n_pop.rkt"
+(require (only-in "./push_n_pop.rkt"
                   BC_PUSH_B))
 
-(provide (all-from-out "./vm-interpreter-bc.push_local.rkt")
-         (all-from-out "./vm-interpreter-bc.ext.rkt")
-         (all-from-out "./vm-interpreter-bc.push_n_pop.rkt"))
+(provide (all-from-out "./push_local.rkt")
+         (all-from-out "./ext.rkt")
+         (all-from-out "./push_n_pop.rkt"))

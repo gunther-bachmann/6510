@@ -7,21 +7,21 @@ test of bytecode implementation of array commands
 |#
 
 (module+ test
-  (require "./vm-interpreter-bc.test-utils.rkt")
-  (require (only-in "./vm-interpreter-bc.arrays.rkt"
+  (require "./test-utils.rkt")
+  (require (only-in "./arrays.rkt"
                     BC_DEC_RBI_NZ_P_BRA
                     BC_PUSH_AF
                     BC_POP_TO_AF
                     BC_ALLOC_ARA
                     BC_PUSH_RA))
-  (require (only-in "./vm-interpreter-bc.branch.rkt"
+  (require (only-in "./branch.rkt"
                     BC_T_P_BRA))
-  (require (only-in "./vm-interpreter-bc.push_n_pop.rkt"
+  (require (only-in "./push_n_pop.rkt"
                     BC_PUSH_B
                     BC_DUP
                     BC_SWAP))
 
-  (require (only-in "./vm-interpreter-bc.push_const.rkt"
+  (require (only-in "./push_const.rkt"
                     BC_PUSH_CONST_NUM_SHORT))
 
 

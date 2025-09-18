@@ -7,8 +7,8 @@ test of bytecode implementation of push
 |#
 
 (module+ test
-  (require "./vm-interpreter-bc.test-utils.rkt")
-  (require (only-in "./vm-interpreter-bc.predicates.rkt"
+  (require "./test-utils.rkt")
+  (require (only-in "./predicates.rkt"
                     BC_I_Z_P
                     BC_INT_P))
 

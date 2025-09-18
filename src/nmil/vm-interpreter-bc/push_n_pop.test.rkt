@@ -7,12 +7,12 @@ test of bytecode implementation of push
 |#
 
 (module+ test
-  (require "./vm-interpreter-bc.test-utils.rkt")
-  (require (only-in "./vm-interpreter-bc.push_n_pop.rkt"
+  (require "./test-utils.rkt")
+  (require (only-in "./push_n_pop.rkt"
                     BC_PUSH_B
                     BC_POP
                     BC_PUSH_I))
-  (require (only-in "./vm-interpreter-bc.push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+  (require (only-in "./push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_PUSH_B"

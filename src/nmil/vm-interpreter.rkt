@@ -33,7 +33,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in "./vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_INIT))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.arrays.rkt"
+(require (only-in "./vm-interpreter-bc/arrays.rkt"
                   VM_REFCOUNT_DECR_ARRAY_REGS
                   BC_DEC_RBI_NZ_P_BRA
                   BC_DEC_RAI
@@ -55,7 +55,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_PUSH_AF
                   BC_POP_TO_AF
                   BC_SWAP_RA_RB))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.atom-num.rkt"
+(require (only-in "./vm-interpreter-bc/atom-num.rkt"
                   BC_BINC
                   BC_BDEC
                   BC_BADD
@@ -64,13 +64,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_IADD
                   BC_BSHR
                   BC_ISUB))
-(require [only-in "./vm-interpreter-bc/vm-interpreter-bc.branch.rkt"
+(require [only-in "./vm-interpreter-bc/branch.rkt"
                   BC_Z_P_BRA
                   BC_NZ_P_BRA
                   BC_T_P_BRA
                   BC_F_P_BRA
                   BC_GOTO])
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.call_ret.rkt"
+(require (only-in "./vm-interpreter-bc/call_ret.rkt"
                   BC_CALL
                   BC_Z_P_RET_POP_N
                   BC_NIL_P_RET_L0_POP_N
@@ -79,7 +79,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_T_P_RET
                   BC_F_P_RET
                   BC_F_P_RET_F))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.cell-pair.rkt"
+(require (only-in "./vm-interpreter-bc/cell-pair.rkt"
                   BC_PUSH_NIL
                   BC_CxxR
                   BC_CONS
@@ -87,32 +87,32 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_NIL_P
                   BC_CAR
                   BC_CDR))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.compare.rkt"
+(require (only-in "./vm-interpreter-bc/compare.rkt"
                   BC_B_GT_P
                   BC_B_LT_P
                   BC_B_GE_P
                   BC_I_GT_P))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.misc.rkt"
+(require (only-in "./vm-interpreter-bc/misc.rkt"
                   BC_BNOP
                   BC_BREAK
                   BC_GC_FL))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.native.rkt"
+(require (only-in "./vm-interpreter-bc/native.rkt"
                   BC_POKE_B
                   BC_NATIVE
                   RETURN_TO_BC))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.push_const.rkt"
+(require (only-in "./vm-interpreter-bc/push_const.rkt"
                   BC_PUSH_CONST_NUM_SHORT))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.push_n_pop.rkt"
+(require (only-in "./vm-interpreter-bc/push_n_pop.rkt"
                   BC_PUSH_B
                   BC_DUP
                   BC_SWAP
                   BC_POP
                   BC_PUSH_I))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.push_local.rkt"
+(require (only-in "./vm-interpreter-bc/push_local.rkt"
                   BC_PUSH_LOCAL_CXR))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.pop_local.rkt"
+(require (only-in "./vm-interpreter-bc/pop_local.rkt"
                   BC_POP_TO_LOCAL_SHORT))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.predicates.rkt"
+(require (only-in "./vm-interpreter-bc/predicates.rkt"
                   BC_I_Z_P
                   BC_INT_P
                   BC_CONS_PAIR_P

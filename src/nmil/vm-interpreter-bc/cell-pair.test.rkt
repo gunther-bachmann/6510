@@ -1,9 +1,9 @@
 #lang racket/base
 
 (module+ test
-  (require "./vm-interpreter-bc.test-utils.rkt")
+  (require "./test-utils.rkt")
 
-  (require (only-in "./vm-interpreter-bc.cell-pair.rkt"
+  (require (only-in "./cell-pair.rkt"
                     BC_CxxR
                     BC_PUSH_NIL
                     BC_CONS
@@ -11,7 +11,7 @@
                     BC_NIL_P
                     BC_CAR
                     BC_CDR))
-  (require (only-in "./vm-interpreter-bc.push_const.rkt"
+  (require (only-in "./push_const.rkt"
                     BC_PUSH_CONST_NUM_SHORT))
 
 

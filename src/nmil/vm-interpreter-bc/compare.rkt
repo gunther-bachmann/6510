@@ -22,7 +22,7 @@ TODO: get tests (still in vm-interpreter) into this file
 (require (only-in "../vm-mm-register-functions.rkt"
                   WRITE_INT0_TO_RT
                   WRITE_INT1_TO_RT))
-(require (only-in "./vm-interpreter-bc.push_n_pop.rkt" BC_PUSH_B))
+(require (only-in "./push_n_pop.rkt" BC_PUSH_B))
 
 (provide BC_B_GT_P
          BC_B_LT_P
