@@ -409,11 +409,12 @@ currently the following test programs are created
 
 
   ;; idea
-  (require (only-in "../nmil/vm-bc-opcode-definitions.rkt" bc))
-  (require (only-in "../nmil/vm-interpreter.rkt"
+  (require (only-in "../nmil/vm-bc-opcode-definitions.rkt"
                     full-extended-optable-lb
                     full-extended-optable-hb
                     full-interpreter-opcode-table
+                    bc))
+  (require (only-in "../nmil/vm-interpreter.rkt"
                     just-vm-interpreter))
   (require (only-in "../nmil/vm-mm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
 

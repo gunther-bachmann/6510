@@ -21,55 +21,7 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 (require (only-in racket/list flatten take empty? range drop))
 
 (require "../6510.rkt")
-(require (only-in "../6510-utils.rkt" word->hex-string
-                  high-byte
-                  low-byte ))
-(require (only-in "../util.rkt"
-                  bytes->int
-                  format-hex-byte
-                  format-hex-word))
-(require (only-in "../tools/6510-interpreter.rkt"
-                  cpu-state-clock-cycles
-                  peek-word-at-address))
-(require (only-in "./vm-memory-map.rkt"
-                  ast-const-get
-                  ZP_RT
-                  ZP_RA
-                  ZP_VM_PC
-                  ZP_LOCALS_LB_PTR
-                  ZP_LOCALS_HB_PTR
-                  ZP_VM_FUNC_PTR
-                  ZP_CALL_FRAME
-                  ZP_CELL_STACK_TOS
-                  ZP_CELL_STACK_LB_PTR
-                  ZP_CELL_STACK_HB_PTR))
-(require (only-in "./vm-inspector-utils.rkt"
-                  vm-cell-at-nil?
-                  vm-page->strings
-                  vm-stack->strings
-                  vm-regt->string
-                  vm-cell-at->string
-                  vm-cell->string
-                  vm-deref-cell-pair-w->string))
 (require (only-in "./vm-lists.rkt" vm-lists))
-(require (only-in "./vm-call-frame.rkt"
-                  vm-call-frame->strings
-                  VM_POP_CALL_FRAME_N
-                  VM_REFCOUNT_DECR_CURRENT_LOCALS))
-(require (only-in "./vm-mm-cell-stack.rkt"
-                  PUSH_XA_TO_EVLSTK
-                  POP_CELL_EVLSTK_TO_RT))
-(require (only-in "../tools/6510-interpreter.rkt"
-                  6510-load
-                  6510-load-multiple
-                  initialize-cpu
-                  run-interpreter
-                  run-interpreter-on
-                  memory-list
-                  cpu-state-accumulator
-                  cpu-state-program-counter
-                  peek))
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 (require (only-in "./vm-interpreter-bc.rkt"
                   BC_PUSH_LOCAL_SHORT
                   BC_EXT1_CMD
@@ -167,44 +119,13 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_CELL_EQ_P))
 
 (module+ test
-  (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
   (require "../6510-test-utils.rkt")
-  (require (only-in "./vm-interpreter-test-utils.rkt"
-                    run-bc-wrapped-in-test-
-                    vm-next-instruction-bytes))
-  (require (only-in "../ast/6510-relocator.rkt" command-len))
-
-  (define (wrap-bytecode-for-test bc-to-wrap)
-    (append (list (org #x7000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_INITIALIZE_CALL_FRAME)
-                  (JSR VM_INTERPRETER_INIT)
-                  (JMP VM_INTERPRETER))
-            (list (org #x8000))
-            bc-to-wrap
-            (list (bc BREAK))
-            (list (org #xa000))
-            vm-interpreter))
-
-  (define (run-bc-wrapped-in-test bc (debug #f))
-    (define wrapped-code (wrap-bytecode-for-test bc))
-    (run-bc-wrapped-in-test- bc wrapped-code debug)))
-
-(module+ test #| after mem init |#
-  (define PAGE_CALL_FRAME #x8d)
-  (define PAGE_LOCALS_LB #x8b)
-  (define PAGE_LOCALS_LB_W #x8b00)
-  (define PAGE_LOCALS_HB #x8c)
-  (define PAGE_LOCALS_HB_W #x8c00)
-  (define PAGE_AVAIL_0 #x8a)
-  (define PAGE_AVAIL_0_W #x8a00)
-  (define PAGE_AVAIL_1 #x89)
-  (define PAGE_AVAIL_1_W #x8900))
+  (require (only-in "../ast/6510-relocator.rkt" command-len)))
 
 (provide vm-interpreter
-         full-interpreter-opcode-table
-         full-extended-optable-hb
-         full-extended-optable-lb
+         ;; full-interpreter-opcode-table
+         ;; full-extended-optable-hb
+         ;; full-extended-optable-lb
          just-vm-interpreter
          vm-interpreter-wo-jt)
 
