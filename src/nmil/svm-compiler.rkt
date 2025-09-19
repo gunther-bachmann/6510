@@ -9,20 +9,26 @@
 
  |#
 
-(require (only-in racket/fixnum fx+ fx= fx< fx<= fx- fx>= fx>))
-(require (only-in racket/list range take))
-(require (only-in racket/match match))
-(require (only-in racket/vector vector-append))
-(require/typed "./vm-bc-opcode-definitions.rkt" [get-single-opcode (-> String Byte)])
-(require (only-in racket/hash hash-union))
-
-(require (only-in threading ~>>))
-
-(require (only-in "../util.rkt" nested->list low-byte high-byte bytes->int))
-(require "./ast.rkt")
-(require "./parse.rkt")
-
-(require (only-in "../cisc-vm/stack-virtual-machine.rkt"
+(require (only-in racket/fixnum
+                  fx+
+                  fx=
+                  fx<
+                  fx<=
+                  fx-
+                  fx>=
+                  fx>)
+         (only-in racket/hash
+                  hash-union)
+         (only-in racket/list
+                  range
+                  take)
+         (only-in racket/match
+                  match)
+         (only-in racket/vector
+                  vector-append)
+         (only-in threading
+                  ~>>)
+         (only-in "../cisc-vm/stack-virtual-machine.rkt"
                   disassemble-byte-code
                   make-vm
                   CAR
@@ -31,30 +37,31 @@
                   BYTE+
                   BRA
                   TAIL_CALL
-
                   PUSH_ARRAY_FIELD
                   PUSH_LOCAL
                   PUSH_GLOBAL
                   PUSH_STRUCT_FIELD
                   PUSH_PARAM
-
                   POP_TO_PARAM
                   POP_TO_LOCAL
                   POP_TO_GLOBAL
-
                   TRUE
                   FALSE
-
                   cell-byte--value
                   is-push-param-short
-
                   sPUSH_PARAMc
                   sPUSH_PARAMn
                   sPOP_TO_PARAMc
                   sPOP_TO_PARAMn
-
-                  sNIL?-RET-PARAMc
-                  ))
+                  sNIL?-RET-PARAMc)
+         (only-in "../util.rkt"
+                  nested->list
+                  low-byte
+                  high-byte
+                  bytes->int)
+         "./ast.rkt"
+         "./parse.rkt")
+(require/typed "./vm-bc-opcode-definitions.rkt" [get-single-opcode (-> String Byte)])
 
 (provide svm-compile svm-generate (struct-out generation-artifact-) generation-artifact--bytes make-generation-artifact)
 

@@ -7,10 +7,10 @@ test of bytecode implementation of push
 |#
 
 (module+ test
-  (require "./test-utils.rkt")
   (require (only-in "./predicates.rkt"
                     BC_I_Z_P
-                    BC_INT_P))
+                    BC_INT_P)
+           "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_I_Z_P"

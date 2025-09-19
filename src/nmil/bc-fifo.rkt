@@ -1,41 +1,37 @@
 #lang racket/base
 
 #|
- this file is implementing fifo by using two stacks (in a struct, a cell-pair could be used too)
+   this file is implementing fifo by using two stacks (in a struct, a cell-pair could be used too)
 
- this is foremost to test structures that have non atomic fields, pointing to other data,
- in this case lists
+   this is foremost to test structures that have non atomic fields, pointing to other data,
+   in this case lists
 
- (defs fifo
-   (in list)
-   (out list))
+   (defs fifo
+     (in list)
+     (out list))
 
-  create void -> FIFO
-  enqueue FIFO :: T -> void
-  dequeue FIFO -> T
+    create void -> FIFO
+    enqueue FIFO :: T -> void
+    dequeue FIFO -> T
 
 |#
 
-(require (only-in racket/list flatten))
-
-(require "../6510.rkt")
-(require "./vm-bc-ast.rkt")
-(require (only-in "./bc-btree.rkt"
-                  REVERSE))
-(require (only-in "./vm-bc-resolver.rkt"
+(require (only-in racket/list flatten)
+         "../6510.rkt"
+         (only-in "./bc-btree.rkt"
+                  REVERSE)
+         "./vm-bc-ast.rkt"
+         (only-in "./vm-bc-opcode-definitions.rkt" bc)
+         (only-in "./vm-bc-resolver.rkt"
                   bc-resolve
-                  bc-bytes))
-(require (only-in "./vm-bc-opcode-definitions.rkt" bc))
-(require (only-in "./vm-interpreter.rkt" vm-interpreter))
+                  bc-bytes)
+         (only-in "./vm-interpreter.rkt" vm-interpreter))
 
 (module+ test #|  |#
-  (require "../6510-test-utils.rkt")
-
-  (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
-  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek memory-list))
-
-  (require (only-in "./vm-inspector-utils.rkt"
+  (require "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek memory-list)
+           (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word)
+           (only-in "./vm-inspector-utils.rkt"
                     shorten-cell-strings
                     shorten-cell-string
                     vm-cell-at-nil?
@@ -44,8 +40,8 @@
                     vm-regt->string
                     vm-cell-at->string
                     vm-cell->string
-                    vm-deref-cell-pair-w->string))
-  (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
+                    vm-deref-cell-pair-w->string)
+           (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
 
 
   (define PAGE_AVAIL_0 #x8a)

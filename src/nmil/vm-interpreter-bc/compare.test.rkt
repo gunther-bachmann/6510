@@ -2,19 +2,21 @@
 
 #|
 
-test of bytecode implementation of comparison commands
+  test of bytecode implementation of comparison commands
 
 |#
 
 (module+ test
-  (require "./test-utils.rkt")
-  (require (only-in "./push_n_pop.rkt" BC_PUSH_B))
   (require (only-in "./compare.rkt"
                     BC_B_GT_P
                     BC_B_LT_P
                     BC_B_GE_P
-                    BC_I_GT_P))
-  (require (only-in "./push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+                    BC_I_GT_P)
+           (only-in "./push_const.rkt"
+                    BC_PUSH_CONST_NUM_SHORT)
+           (only-in "./push_n_pop.rkt"
+                    BC_PUSH_B)
+           "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_PUSH_B"

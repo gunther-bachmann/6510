@@ -5,13 +5,12 @@
 disassembler for byte code
 
 |#
-;; (require (only-in racket/list findf))
+
 (require (only-in "../util.rkt"
                   bytes->int
                   format-hex-byte
-                  format-hex-word))
-
-(require (only-in "./vm-bc-opcode-definitions.rkt"
+                  format-hex-word)
+         (only-in "./vm-bc-opcode-definitions.rkt"
                   bc-opcode-definitions
                   od-simple-bc?
                   od-simple-bc--byte-code

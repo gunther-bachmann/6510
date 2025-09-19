@@ -2,9 +2,9 @@
 
 #|
 
-implementation of a byte code interpreter completely in 6510 assembler
-this is a proof of concept and used to identify problems in the architecture of the overall implementation.
-if something cannot be elegantly implemented using 6510 assembler, some redesign has to take place.
+  implementation of a byte code interpreter completely in 6510 assembler
+  this is a proof of concept and used to identify problems in the architecture of the overall implementation.
+  if something cannot be elegantly implemented using 6510 assembler, some redesign has to take place.
 
 |#
 
@@ -18,22 +18,18 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
 
 ;; IDEA: implement exact numbers (as list of bcd digits e.g. 3 bcds in 16 bit?)
 
-(require (only-in racket/list flatten take empty? range drop))
-
-(require "../6510.rkt")
-(require (only-in "./vm-lists.rkt" vm-lists))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.rkt"
-                  BC_PUSH_LOCAL_SHORT
-                  BC_EXT1_CMD
-                  PUSH_RT_WRITE_LOCAL_bc_enc))
-(require (only-in "./vm-bc-opcode-definitions.rkt"
+(require (only-in racket/list
+                  flatten
+                  take
+                  empty?
+                  range
+                  drop)
+         "../6510.rkt"
+         (only-in "./vm-bc-opcode-definitions.rkt"
                   full-extended-optable-lb
                   full-extended-optable-hb
-                  full-interpreter-opcode-table))
-(require (only-in "./vm-interpreter-loop.rkt"
-                  VM_INTERPRETER
-                  VM_INTERPRETER_INIT))
-(require (only-in "./vm-interpreter-bc/arrays.rkt"
+                  full-interpreter-opcode-table)
+         (only-in "./vm-interpreter-bc/arrays.rkt"
                   VM_REFCOUNT_DECR_ARRAY_REGS
                   BC_DEC_RBI_NZ_P_BRA
                   BC_DEC_RAI
@@ -48,14 +44,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_GET_ARRAY_FIELD
                   BC_SET_ARRAY_FIELD
                   BC_XET_ARRAY_FIELD
-                  BC_WRITE_RA                    ;; write cell-array register RA into tos
-                  BC_PUSH_RA                     ;; push cell-array register RA itself onto eval stack
-                  BC_PUSH_RA_AF                  ;; push cell-array RA field A onto the eval stack (inc ref count)
+                  BC_WRITE_RA
+                  BC_PUSH_RA
+                  BC_PUSH_RA_AF
                   BC_POP_TO_RA_AF
                   BC_PUSH_AF
                   BC_POP_TO_AF
-                  BC_SWAP_RA_RB))
-(require (only-in "./vm-interpreter-bc/atom-num.rkt"
+                  BC_SWAP_RA_RB)
+         (only-in "./vm-interpreter-bc/atom-num.rkt"
                   BC_BINC
                   BC_BDEC
                   BC_BADD
@@ -63,14 +59,14 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_IINC
                   BC_IADD
                   BC_BSHR
-                  BC_ISUB))
-(require [only-in "./vm-interpreter-bc/branch.rkt"
+                  BC_ISUB)
+         (only-in "./vm-interpreter-bc/branch.rkt"
                   BC_Z_P_BRA
                   BC_NZ_P_BRA
                   BC_T_P_BRA
                   BC_F_P_BRA
-                  BC_GOTO])
-(require (only-in "./vm-interpreter-bc/call_ret.rkt"
+                  BC_GOTO)
+         (only-in "./vm-interpreter-bc/call_ret.rkt"
                   BC_CALL
                   BC_Z_P_RET_POP_N
                   BC_NIL_P_RET_L0_POP_N
@@ -78,49 +74,54 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
                   BC_TAIL_CALL
                   BC_T_P_RET
                   BC_F_P_RET
-                  BC_F_P_RET_F))
-(require (only-in "./vm-interpreter-bc/cell-pair.rkt"
+                  BC_F_P_RET_F)
+         (only-in "./vm-interpreter-bc/cell-pair.rkt"
                   BC_PUSH_NIL
                   BC_CxxR
                   BC_CONS
                   BC_COONS
                   BC_NIL_P
                   BC_CAR
-                  BC_CDR))
-(require (only-in "./vm-interpreter-bc/compare.rkt"
+                  BC_CDR)
+         (only-in "./vm-interpreter-bc/compare.rkt"
                   BC_B_GT_P
                   BC_B_LT_P
                   BC_B_GE_P
-                  BC_I_GT_P))
-(require (only-in "./vm-interpreter-bc/misc.rkt"
+                  BC_I_GT_P)
+         (only-in "./vm-interpreter-bc/misc.rkt"
                   BC_BNOP
                   BC_BREAK
-                  BC_GC_FL))
-(require (only-in "./vm-interpreter-bc/native.rkt"
+                  BC_GC_FL)
+         (only-in "./vm-interpreter-bc/native.rkt"
                   BC_POKE_B
                   BC_NATIVE
-                  RETURN_TO_BC))
-(require (only-in "./vm-interpreter-bc/push_const.rkt"
-                  BC_PUSH_CONST_NUM_SHORT))
-(require (only-in "./vm-interpreter-bc/push_n_pop.rkt"
+                  RETURN_TO_BC)
+         (only-in "./vm-interpreter-bc/pop_local.rkt"
+                  BC_POP_TO_LOCAL_SHORT)
+         (only-in "./vm-interpreter-bc/predicates.rkt"
+                  BC_I_Z_P
+                  BC_INT_P
+                  BC_CONS_PAIR_P
+                  BC_CELL_EQ_P)
+         (only-in "./vm-interpreter-bc/push_const.rkt"
+                  BC_PUSH_CONST_NUM_SHORT)
+         (only-in "./vm-interpreter-bc/push_local.rkt"
+                  BC_PUSH_LOCAL_CXR)
+         (only-in "./vm-interpreter-bc/push_n_pop.rkt"
                   BC_PUSH_B
                   BC_DUP
                   BC_SWAP
                   BC_POP
-                  BC_PUSH_I))
-(require (only-in "./vm-interpreter-bc/push_local.rkt"
-                  BC_PUSH_LOCAL_CXR))
-(require (only-in "./vm-interpreter-bc/pop_local.rkt"
-                  BC_POP_TO_LOCAL_SHORT))
-(require (only-in "./vm-interpreter-bc/predicates.rkt"
-                  BC_I_Z_P
-                  BC_INT_P
-                  BC_CONS_PAIR_P
-                  BC_CELL_EQ_P))
-
-(module+ test
-  (require "../6510-test-utils.rkt")
-  (require (only-in "../ast/6510-relocator.rkt" command-len)))
+                  BC_PUSH_I)
+         (only-in "./vm-interpreter-bc/vm-interpreter-bc.rkt"
+                  BC_PUSH_LOCAL_SHORT
+                  BC_EXT1_CMD
+                  PUSH_RT_WRITE_LOCAL_bc_enc)
+         (only-in "./vm-interpreter-loop.rkt"
+                  VM_INTERPRETER
+                  VM_INTERPRETER_INIT)
+         (only-in "./vm-lists.rkt"
+                  vm-lists))
 
 (provide vm-interpreter
          ;; full-interpreter-opcode-table
@@ -128,6 +129,10 @@ if something cannot be elegantly implemented using 6510 assembler, some redesign
          ;; full-extended-optable-lb
          just-vm-interpreter
          vm-interpreter-wo-jt)
+
+(module+ test
+  (require "../6510-test-utils.rkt"
+           (only-in "../ast/6510-relocator.rkt" command-len)))
 
 (define VM_INTERPRETER_VARIABLES
   (list

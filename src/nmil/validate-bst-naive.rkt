@@ -1,6 +1,8 @@
 #lang racket/base
 
-(require (only-in racket/list empty? permutations))
+(require (only-in racket/list
+                  empty?
+                  permutations))
 
 #|
 
@@ -79,97 +81,97 @@
 
 #|
 
-(balanced tree for editor with 200 lines of 30 bytes each)
-=> 200 nodes with values (lb nodes) * 4  + 255 + 127  (la nodes) * 4 (size) + 200 * 30
-   (+ (* 6 (+ 200 255 127))
-      (* 200 30))
-   = 9492 bytes (* 1.6 6000)
+  (balanced tree for editor with 200 lines of 30 bytes each)
+  => 200 nodes with values (lb nodes) * 4  + 255 + 127  (la nodes) * 4 (size) + 200 * 30
+     (+ (* 6 (+ 200 255 127))
+        (* 200 30))
+     = 9492 bytes (* 1.6 6000)
 
-la-node: car: value for comparison (car of pointed to lb-node contains values <= this value)
-          cdr: pointer to lb-node 
+  la-node: car: value for comparison (car of pointed to lb-node contains values <= this value)
+            cdr: pointer to lb-node
 
- lb-node: car: ptr to la-node | value
-          cdr: ptr to la-node | value | NIL
+   lb-node: car: ptr to la-node | value
+            cdr: ptr to la-node | value | NIL
 
 
- la-nodes are modified, if max needs to change
+   la-nodes are modified, if max needs to change
 
- la-nodes:     
+   la-nodes:
 
-  (A)          (B)           (C)           (D)         (E) 
-      o            o             o             o           o          
-     / \          / \           / \           / \         / \     
-    V1  NIL      V1  V2      la-N  NIL     la-N  V    la-N1 la-N2
+    (A)          (B)           (C)           (D)         (E)
+        o            o             o             o           o
+       / \          / \           / \           / \         / \
+      V1  NIL      V1  V2      la-N  NIL     la-N  V    la-N1 la-N2
 
-(A.1) v < V1 :  o   (update lb-node above to hold comparison value v) 
-               / \
-              v   V1
+  (A.1) v < V1 :  o   (update lb-node above to hold comparison value v)
+                 / \
+                v   V1
 
-(A.2) V1 < v:   o   
-               / \
-             V1   v
+  (A.2) V1 < v:   o
+                 / \
+               V1   v
 
-(B.1) v < V1:      o      (update lb-nodes above to hold comparison value v)
-                  / \
-             c=v o   V2
-                 |
-                 o
-                / \
-               v   V1
-
-(B.2) V1 < v < V2:       o    
-                        / \
-                  c=V1 o   V2
-                       |
-                       o
-                      / \
-                    V1   v
-
-(B.3) V2 < v:        o   (update lb-nodes above to hold comparison value V2  
+  (B.1) v < V1:      o      (update lb-nodes above to hold comparison value v)
                     / \
-              c=V1 o   v 
+               c=v o   V2
                    |
                    o
                   / \
-                V1   V2
+                 v   V1
 
-(C.1) v < V(la-N): go into la-N and recurse
-
-(C.2) v > V(la-N):       o
+  (B.2) V1 < v < V2:       o
+                          / \
+                    c=V1 o   V2
+                         |
+                         o
                         / \
-                     la-N  v
+                      V1   v
 
-(D.1) v < V(la-N): go into la-N and recurse
+  (B.3) V2 < v:        o   (update lb-nodes above to hold comparison value V2
+                      / \
+                c=V1 o   v
+                     |
+                     o
+                    / \
+                  V1   V2
 
-(D.2) V(la-N) < v < V:       o    
+  (C.1) v < V(la-N): go into la-N and recurse
+
+  (C.2) v > V(la-N):       o
+                          / \
+                       la-N  v
+
+  (D.1) v < V(la-N): go into la-N and recurse
+
+  (D.2) V(la-N) < v < V:       o
+                              / \
+                           la-N  o c=v
+                                 |
+                                 o
+                                / \
+                               v   V
+
+  (D.3) V < v:         o
+                      / \
+                   la-N  o c=V
+                         |
+                         o
+                        / \
+                       V   v
+
+  (E.1) v < V(la-N1): go into la-N1 and recurse
+
+  (E.2) V(la-N1) < v < V(la-N2): go into la-N2 and recurse
+
+  (E.3) V(la-N2) < v:        o
                             / \
-                         la-N  o c=v
-                               |      
+                        la-N1  o c=V(la-N2)
+                               |
                                o
                               / \
-                             v   V
+                          la-N2  v
 
-(D.3) V < v:         o       
-                    / \      
-                 la-N  o c=V
-                       |     
-                       o
-                      / \
-                     V   v
-
-(E.1) v < V(la-N1): go into la-N1 and recurse
-
-(E.2) V(la-N1) < v < V(la-N2): go into la-N2 and recurse
-
-(E.3) V(la-N2) < v:        o       
-                          / \
-                      la-N1  o c=V(la-N2)
-                             |     
-                             o
-                            / \
-                        la-N2  v
-
- |#
+|#
 
 (define (btree-make-root value)
   (mcons value (mcons value '())))

@@ -6,8 +6,11 @@ memory management for native arrays
 
 |#
 
-(require "../6510.rkt")
-(require (only-in "./vm-memory-map.rkt"
+(require "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix
+                  replace-labels)
+         (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   TAG_BYTE_NATIVE_ARRAY
                   TAG_BYTE_BYTE_CELL
@@ -16,9 +19,6 @@ memory management for native arrays
                   ZP_RB
                   ZP_RBI
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "../ast/6510-resolver.rkt"
-                  add-label-suffix
-                  replace-labels))
 
 (provide ALLOC_NATARR_TO_RA
          ALLOC_NATARR_TO_RB
@@ -29,13 +29,12 @@ memory management for native arrays
          CP_NATARR_RA_TO_RB
          CP_NATARR_RANGE_RA_TO_RB)
 
-
 (module+ test
-  (require (only-in racket/list make-list))
-  (require  "../6510-test-utils.rkt")
-  (require "./vm-memory-manager-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt" peek memory-list))
-  (require (only-in "./vm-inspector-utils.rkt"
+  (require "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt"
+                    peek
+                    memory-list)
+           (only-in "./vm-inspector-utils.rkt"
                     vm-cell-at-nil?
                     vm-rega->string
                     vm-regt->string
@@ -46,27 +45,28 @@ memory management for native arrays
                     vm-refcount-cell-pair-ptr
                     vm-refcount-cell-ptr
                     vm-regp->string
-                    vm-page->strings))
-  (require (only-in "./vm-mm-pages.rkt"
-                    ALLOC_PAGE_TO_X
-                    VM_PAGE_SLOT_DATA
-                    VM_INITIAL_MM_REGS
-                    VM_INITIALIZE_MEMORY_MANAGER))
-  (require (only-in "./vm-mm-register-functions.rkt"
-                    CP_RA_TO_RB
-                    SWAP_RA_RB))
-  (require (only-in "./vm-mm-m1-slots.rkt"
+                    vm-page->strings)
+           "./vm-memory-manager-test-utils.rkt"
+           (only-in "./vm-mm-cell-stack.rkt"
+                    PUSH_XA_TO_EVLSTK
+                    PUSH_RT_TO_EVLSTK
+                    POP_CELL_EVLSTK_TO_RT)
+           (only-in "./vm-mm-m1-slots.rkt"
                     ALLOC_M1_SLOT_TO_RA
                     ALLOC_M1_SLOT_TO_RB
                     INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
                     VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
                     ADD_M1_SLOT_RZ_TO_PFL
                     DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
-                    PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ))
-  (require (only-in "./vm-mm-cell-stack.rkt"
-                    PUSH_XA_TO_EVLSTK
-                    PUSH_RT_TO_EVLSTK
-                    POP_CELL_EVLSTK_TO_RT))
+                    PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ)
+           (only-in "./vm-mm-pages.rkt"
+                    ALLOC_PAGE_TO_X
+                    VM_PAGE_SLOT_DATA
+                    VM_INITIAL_MM_REGS
+                    VM_INITIALIZE_MEMORY_MANAGER)
+           (only-in "./vm-mm-register-functions.rkt"
+                    CP_RA_TO_RB
+                    SWAP_RA_RB))
 
   (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available

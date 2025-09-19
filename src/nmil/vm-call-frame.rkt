@@ -2,19 +2,25 @@
 
 #|
 
-implementation of a call frame for vm calls
-implemented as stack with fat/slim stack frames
-using a cell-stack
+  implementation of a call frame for vm calls
+  implemented as stack with fat/slim stack frames
+  using a cell-stack
 
 |#
 
-(require (only-in racket/list flatten take))
-
-(require "../6510.rkt")
-(require (only-in "../tools/6510-interpreter.rkt"
+(require (only-in racket/list
+                  flatten
+                  take)
+         "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix)
+         (only-in "../tools/6510-interpreter.rkt"
                   peek-word-at-address
-                  peek))
-(require (only-in "./vm-memory-map.rkt"
+                  peek)
+         (only-in "./vm-memory-manager.rkt"
+                  vm-memory-manager-wo-data-tail
+                  vm-memory-manager)
+         (only-in "./vm-memory-map.rkt"
                   ZP_CALL_FRAME
                   ZP_VM_PC
                   ZP_VM_FUNC_PTR
@@ -22,8 +28,7 @@ using a cell-stack
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_TOP_MARK
                   ZP_CALL_FRAME_TOP_MARK))
-(require (only-in "./vm-memory-manager.rkt" vm-memory-manager-wo-data-tail vm-memory-manager))
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
+
 (provide vm-call-frame
          vm-call-frame-wo-data-tail
          vm-call-frame->strings
@@ -49,11 +54,12 @@ using a cell-stack
   (define PAGE_LOCALS_HB #x8c))
 
 (module+ test
-  (require "../6510-test-utils.rkt")
-  (require (only-in "./vm-memory-manager-test-utils.rkt"
+  (require "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt"
+                    memory-list)
+           (only-in "./vm-memory-manager-test-utils.rkt"
                     run-code-in-test-on-code
                     remove-labels-for))
-  (require (only-in "../tools/6510-interpreter.rkt" memory-list))
 
   (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
     (append (list (org #xa000)

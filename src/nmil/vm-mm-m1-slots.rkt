@@ -2,13 +2,16 @@
 
 #|
 
-functions for m1 pages and slots
+  functions for m1 pages and slots
 
 |#
 
 
-(require "../6510.rkt")
-(require (only-in "./vm-memory-map.rkt"
+(require "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix
+                  replace-labels)
+         (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   ZP_RP
                   ZP_RA
@@ -16,9 +19,6 @@ functions for m1 pages and slots
                   ZP_TEMP
                   ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "../ast/6510-resolver.rkt"
-                  add-label-suffix
-                  replace-labels))
 
 (provide INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX       ;; initialize m1 page in x of profile y, returning first free slot in A/X
          DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A   ;; remove all full pages at the head of m1 page list a
@@ -34,26 +34,26 @@ functions for m1 pages and slots
          VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)  ;; remove full pages from the list of m1 slot pages of type x
 
 (module+ test
-  (require (only-in racket/list make-list))
-  (require  "../6510-test-utils.rkt")
-  (require "./vm-memory-manager-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt"
+  (require ;; (only-in racket/list make-list)
+           "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt"
                     peek
                     memory-list
-                    cpu-state-clock-cycles))
-  (require (only-in "../util.rkt" format-hex-byte format-hex-word))
-  (require (only-in "./vm-inspector-utils.rkt" vm-page->strings))
-  (require (only-in "./vm-mm-register-functions.rkt"
+                    cpu-state-clock-cycles)
+           (only-in "../util.rkt" format-hex-byte format-hex-word)
+           (only-in "./vm-inspector-utils.rkt" vm-page->strings)
+           "./vm-memory-manager-test-utils.rkt"
+           (only-in "./vm-mm-pages.rkt"
+                    ALLOC_PAGE_TO_X
+                    VM_PAGE_SLOT_DATA
+                    VM_INITIAL_MM_REGS
+                    VM_INITIALIZE_MEMORY_MANAGER)
+           (only-in "./vm-mm-register-functions.rkt"
                     CP_RT_TO_RA
                     CP_RA_TO_RT
                     CP_RA_TO_RB
                     SWAP_RA_RB
                     SWAP_ZP_WORD))
-  (require (only-in "./vm-mm-pages.rkt"
-                    ALLOC_PAGE_TO_X
-                    VM_PAGE_SLOT_DATA
-                    VM_INITIAL_MM_REGS
-                    VM_INITIALIZE_MEMORY_MANAGER))
 
   (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available

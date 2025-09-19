@@ -1,24 +1,63 @@
 #lang racket/base
 
-(require racket/set)
-
-(require "../6510.rkt")
-(require "../6510-test-utils.rkt")
-(require (only-in "../6510-utils.rkt" low-byte high-byte) )
-(require (only-in ansi-color with-colors foreground-color color-displayln))
-(require racket/exn)
-(require (only-in "../6510-utils.rkt" absolute))
-(require (only-in "../ast/6510-assembler.rkt"
+(require (only-in ansi-color
+                  with-colors
+                  foreground-color
+                  color-displayln)
+         racket/exn
+         (only-in racket/format
+                  ~a)
+         (only-in racket/list
+                  flatten
+                  take
+                  empty?
+                  range
+                  drop)
+         (only-in racket/match
+                  match-let)
+         (only-in racket/port
+                  open-output-nowhere)
+         racket/set
+         (only-in racket/string
+                  string-prefix?
+                  string-join)
+         "../6510-test-utils.rkt"
+         (only-in "../6510-utils.rkt"
+                  absolute)
+         (only-in "../6510-utils.rkt"
+                  low-byte
+                  high-byte)
+         "../6510.rkt"
+         (only-in "../ast/6510-assembler.rkt"
                   assemble
                   assemble-to-code-list
                   new-assemble-to-code-list
                   assembly-code-list-org-code-sequences
                   assembly-code-list-labels
                   translate-code-list-for-basic-loader
-                  org-for-code-seq))
-(require (only-in "../ast/6510-resolver.rkt" ->resolved-decisions label-instructions))
-(require (only-in "../ast/6510-relocator.rkt" label-string-offsets))
-(require (only-in "../tools/6510-interpreter.rkt"
+                  org-for-code-seq)
+         (only-in "../ast/6510-relocator.rkt"
+                  label-string-offsets)
+         (only-in "../ast/6510-resolver.rkt"
+                  ->resolved-decisions
+                  label-instructions)
+         (only-in "../tools/6510-debugger-shared.rkt"
+                  debug-state-states
+                  debug-state-tracepoints
+                  debug-state-labels
+                  tracepoint-description
+                  breakpoint
+                  tracepoint
+                  debug-state)
+         (only-in "../tools/6510-debugger.rkt"
+                  run-debugger-on
+                  dispatch-debugger-command
+                  debugger--run
+                  push-debugger-interactor
+                  debugger--assembler-interactor
+                  debugger--push-breakpoint
+                  debugger--remove-breakpoints)
+         (only-in "../tools/6510-interpreter.rkt"
                   cpu-state-program-counter
                   cpu-state-clock-cycles
                   peek-word-at-address
@@ -32,28 +71,27 @@
                   run-interpreter
                   run-interpreter-on
                   memory-list
-                  cpu-state-accumulator))
-(require (only-in "../tools/6510-debugger.rkt"
-                  run-debugger-on
-                  dispatch-debugger-command
-                  debugger--run
-                  push-debugger-interactor
-                  debugger--assembler-interactor
-                  debugger--push-breakpoint
-                  debugger--remove-breakpoints))
-(require (only-in "../tools/6510-debugger-shared.rkt"
-                  debug-state-states
-                  debug-state-tracepoints
-                  debug-state-labels
-                  tracepoint-description
-                  breakpoint
-                  tracepoint
-                  debug-state))
-(require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
-(require (only-in "./vm-bc-disassembler.rkt"
+                  cpu-state-accumulator)
+         (only-in "../util.rkt"
+                  bytes->int
+                  format-hex-byte
+                  format-hex-word)
+         (only-in "./vm-bc-disassembler.rkt"
                   disassembler-byte-code--byte-count
-                  disassemble-byte-code))
-(require (only-in "./vm-memory-map.rkt"
+                  disassemble-byte-code)
+         (only-in "./vm-call-frame.rkt"
+                  vm-call-frame->strings)
+         (only-in "./vm-inspector-utils.rkt"
+                  shorten-cell-string
+                  shorten-cell-strings
+                  vm-cell-at-nil?
+                  vm-page->strings
+                  vm-stack->strings
+                  vm-regt->string
+                  vm-cell-at->string
+                  vm-cell->string
+                  vm-deref-cell-pair-w->string)
+         (only-in "./vm-memory-map.rkt"
                   ast-const-get
                   ZP_RT
                   ZP_VM_PC
@@ -64,24 +102,6 @@
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
-(require (only-in "./vm-inspector-utils.rkt"
-                  shorten-cell-string
-                  shorten-cell-strings
-                  vm-cell-at-nil?
-                  vm-page->strings
-                  vm-stack->strings
-                  vm-regt->string
-                  vm-cell-at->string
-                  vm-cell->string
-                  vm-deref-cell-pair-w->string))
-(require (only-in "./vm-call-frame.rkt" vm-call-frame->strings))
-
-
-(require (only-in racket/string string-prefix? string-join))
-(require (only-in racket/format ~a))
-(require (only-in racket/match match-let))
-(require (only-in racket/list flatten take empty? range drop))
-(require (only-in racket/port open-output-nowhere))
 
 (provide run-bc-wrapped-in-test-
          vm-next-instruction-bytes

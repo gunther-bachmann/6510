@@ -10,15 +10,12 @@ functions
 
 |#
 
-(require (rename-in  racket/contract [define/contract define/c]))
-(require (only-in racket/list empty? flatten))
-(require (only-in "./vm-bc-ast.rkt"
-                  bc-ast-rel-branch-reference
-                  bc-ast-rel-branch-reference-label-ref
-                  bc-ast-rel-branch-reference?
-                  bc-cmd?
-                  bc-rel-ref))
-(require (only-in "../ast/6510-command.rkt"
+(require (rename-in racket/contract
+                    [define/contract define/c])
+         (only-in racket/list
+                  empty?
+                  flatten)
+         (only-in "../ast/6510-command.rkt"
                   ast-label-def-cmd
                   ast-label-def-cmd?
                   ast-label-def-cmd-label
@@ -28,14 +25,21 @@ functions
                   ast-unresolved-bytes-cmd?
                   ast-resolve-byte-scmd?
                   ast-resolve-word-scmd?
-                  ast-unresolved-bytes-cmd-resolve-sub-command))
+                  ast-unresolved-bytes-cmd-resolve-sub-command)
+         (only-in "./vm-bc-ast.rkt"
+                  bc-ast-rel-branch-reference
+                  bc-ast-rel-branch-reference-label-ref
+                  bc-ast-rel-branch-reference?
+                  bc-cmd?
+                  bc-rel-ref))
 
-(provide bc-resolve bc-bytes)
+(provide bc-resolve
+         bc-bytes)
 
 (module+ test
-  (require rackunit)
-  (require "../6510.rkt")
-  (require (only-in "./vm-bc-opcode-definitions.rkt" bc)))
+  (require rackunit
+           "../6510.rkt"
+           (only-in "./vm-bc-opcode-definitions.rkt" bc)))
 
 
 ;; collect all labels in this list of BC-AST-CMDS

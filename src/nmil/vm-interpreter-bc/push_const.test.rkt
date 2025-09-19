@@ -7,8 +7,9 @@ test of bytecode implementation of pushing constants
 |#
 
 (module+ test
-  (require "./test-utils.rkt")
-  (require (only-in "./push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+  (require (only-in "./push_const.rkt"
+                    BC_PUSH_CONST_NUM_SHORT)
+           "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_PUSH_INT0"

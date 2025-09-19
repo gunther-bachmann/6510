@@ -6,20 +6,20 @@
 
 |#
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt"
-                  add-label-suffix))
-(require (only-in "./vm-memory-map.rkt"
+(require "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix)
+         (only-in "./vm-inspector-utils.rkt"
+                  vm-cell-at-nil?
+                  vm-rega->string
+                  vm-regt->string)
+         (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   ZP_RP
                   ZP_RT
                   ZP_RA
                   ZP_RC
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "./vm-inspector-utils.rkt"
-                  vm-cell-at-nil?
-                  vm-rega->string
-                  vm-regt->string))
 
 (provide WRITE_NIL_TO_RT        ;; write constant NIL into RT
          WRITE_NIL_TO_RP
@@ -40,9 +40,9 @@
          SWAP_RA_RB)
 
 (module+ test
-  (require  "../6510-test-utils.rkt")
-  (require "./vm-memory-manager-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt" memory-list))
+  (require  "../6510-test-utils.rkt"
+            (only-in "../tools/6510-interpreter.rkt" memory-list)
+            "./vm-memory-manager-test-utils.rkt")
 
   (define test-runtime
     (append

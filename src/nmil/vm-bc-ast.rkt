@@ -1,26 +1,24 @@
 #lang racket/base
 
-(require (for-syntax racket/base))
-
 #|
 
-byte code ast definitions (bc-ast) are used to enable vm byte code specific
-extensions to the ast definitions that are originally specified only for assembler.
+  byte code ast definitions (bc-ast) are used to enable vm byte code specific
+  extensions to the ast definitions that are originally specified only for assembler.
 
 |#
 
-(require (only-in racket/contract/base
+(require (for-syntax racket/base)
+         (only-in racket/contract/base
                   struct-guard/c
-                  listof))
-
-(require (only-in "../ast/6510-command.rkt"
+                  listof)
+         (only-in "../6510-utils.rkt"
+                  ->string)
+         (only-in "../ast/6510-command.rkt"
                   ast-bytes-cmd
                   ast-bytes-cmd?
                   ast-label-def-cmd?
                   ast-command?
                   ast-unresolved-bytes-cmd?))
-
-(require (only-in "../6510-utils.rkt" ->string))
 
 (provide (struct-out bc-ast-rel-branch-reference)
          bc-cmd?

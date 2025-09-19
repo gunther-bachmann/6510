@@ -7,11 +7,16 @@ implement bc push/write local commands
 |#
 
 (module+ test
-  (require "./test-utils.rkt")
-  (require (only-in "./push_local.rkt" BC_PUSH_LOCAL_SHORT PUSH_RT_WRITE_LOCAL_bc_enc))
-  (require (only-in "./push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
-  (require (only-in "./call_ret.rkt" BC_CALL))
-  (require (only-in "./pop_local.rkt" BC_POP_TO_LOCAL_SHORT))
+  (require (only-in "./call_ret.rkt"
+                    BC_CALL)
+           (only-in "./pop_local.rkt"
+                    BC_POP_TO_LOCAL_SHORT)
+           (only-in "./push_const.rkt"
+                    BC_PUSH_CONST_NUM_SHORT)
+           (only-in "./push_local.rkt"
+                    BC_PUSH_LOCAL_SHORT
+                    PUSH_RT_WRITE_LOCAL_bc_enc)
+           "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_PUSH_LOCAL_SHORT"        ;; POP_TO_L0-3

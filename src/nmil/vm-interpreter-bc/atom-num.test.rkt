@@ -1,7 +1,6 @@
 #lang racket/base
 
 (module+ test
-  (require "./test-utils.rkt")
   (require (only-in "./atom-num.rkt"
                     BC_BINC
                     BC_BDEC
@@ -9,13 +8,17 @@
                     BC_IMAX
                     BC_IINC
                     BC_IADD
-                    BC_ISUB))
-  (require (only-in "./push_n_pop.rkt"
+                    BC_ISUB)
+           (only-in "./ext.rkt"
+                    BC_EXT1_CMD)
+           (only-in "./misc.rkt"
+                    BC_BNOP)
+           (only-in "./push_const.rkt"
+                    BC_PUSH_CONST_NUM_SHORT)
+           (only-in "./push_n_pop.rkt"
                     BC_PUSH_B
-                    BC_PUSH_I))
-  (require (only-in "./push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
-  (require (only-in "./ext.rkt" BC_EXT1_CMD))
-  (require (only-in "./misc.rkt" BC_BNOP))
+                    BC_PUSH_I)
+           "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_BINC"

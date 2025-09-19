@@ -5,14 +5,15 @@
 test of bytecode implementation of push
 
 |#
-
 (module+ test
-  (require "./test-utils.rkt")
-  (require (only-in "./push_n_pop.rkt"
+  (require (only-in "./push_const.rkt"
+                    BC_PUSH_CONST_NUM_SHORT)
+           (only-in "./push_n_pop.rkt"
                     BC_PUSH_B
                     BC_POP
-                    BC_PUSH_I))
-  (require (only-in "./push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+                    BC_PUSH_I)
+           "./test-utils.rkt")
+
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_PUSH_B"

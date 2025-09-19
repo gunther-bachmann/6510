@@ -1,10 +1,11 @@
 #lang racket/base
 
+
 (module+ test
-  (require "./test-utils.rkt")
   (require (only-in "./misc.rkt"
                     BC_BNOP
-                    BC_BREAK))
+                    BC_BREAK)
+           "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_BNOP"

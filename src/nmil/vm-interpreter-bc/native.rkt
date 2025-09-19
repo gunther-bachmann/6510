@@ -1,17 +1,18 @@
 #lang racket/base
 
-(require "../../6510.rkt")
-(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
-(require (only-in racket/list flatten))
-
-(require (only-in "../vm-memory-map.rkt"
+(require (only-in racket/list
+                  flatten)
+         "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
+                  add-label-suffix)
+         (only-in "../vm-interpreter-loop.rkt"
+                  VM_INTERPRETER_INC_PC_A_TIMES
+                  VM_INTERPRETER_INC_PC)
+         (only-in "../vm-memory-map.rkt"
                   ZP_VM_PC
                   ZP_RT
-                  ZP_RP))
-(require (only-in "../vm-interpreter-loop.rkt"
-                  VM_INTERPRETER_INC_PC_A_TIMES
-                  VM_INTERPRETER_INC_PC))
-(require (only-in "../vm-mm-cell-stack.rkt"
+                  ZP_RP)
+         (only-in "../vm-mm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RT))
 
 (provide BC_POKE_B

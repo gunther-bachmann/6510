@@ -1,12 +1,13 @@
 #lang racket/base
 
 (module+ test
-  (require "./test-utils.rkt")
   (require (only-in "./branch.rkt"
-                    BC_T_P_BRA
-                    BC_F_P_BRA
-                    BC_GOTO))
-  (require (only-in "./push_const.rkt" BC_PUSH_CONST_NUM_SHORT))
+                       BC_T_P_BRA
+                       BC_F_P_BRA
+                       BC_GOTO)
+            (only-in "./push_const.rkt"
+                     BC_PUSH_CONST_NUM_SHORT)
+             "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_PUSH_INT0"               ;; PUSH_I0

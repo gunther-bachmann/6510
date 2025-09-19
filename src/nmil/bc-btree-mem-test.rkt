@@ -1,30 +1,29 @@
 #lang racket/base
 
-(require "./bc-btree.rkt")
-
-(require "../6510.rkt")
-(require "../6510-test-utils.rkt")
+(require "../6510-test-utils.rkt"
+         "../6510.rkt"
+         "./bc-btree.rkt")
 
 (module+ test
-  (require rackunit)
-  (require (only-in racket/list flatten make-list))
-  (require (only-in "./bc-btree.rkt" BTREE_PATH_TO_FIRST))
-  (require (only-in "./vm-interpreter-test-utils.rkt"
+  (require (only-in racket/list flatten make-list)
+           rackunit
+           (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK)
+           (only-in "../tools/6510-interpreter.rkt" initialize-cpu cpu-state-clock-cycles)
+           (only-in "./bc-btree.rkt" BTREE_PATH_TO_FIRST)
+           (only-in "./vm-bc-opcode-definitions.rkt" bc)
+           (only-in "./vm-inspector-utils.rkt"
+                    vm-page->strings
+                    shorten-cell-strings
+                    shorten-cell-string
+                    vm-stack->strings)
+           (only-in "./vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings
                     vm-cell-pair-pages
                     vm-cell-pairs-free-in-page
                     vm-cell-pairs-used-info
-                    vm-cell-pairs-used-num-in-page))
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
-  (require (only-in "./vm-inspector-utils.rkt"
-                    vm-page->strings
-                    shorten-cell-strings
-                    shorten-cell-string
-                    vm-stack->strings))
-  (require (only-in "../tools/6510-interpreter.rkt" initialize-cpu cpu-state-clock-cycles))
-  (require (only-in "./vm-bc-opcode-definitions.rkt" bc))
-  (require [only-in "./vm-interpreter.rkt" vm-interpreter])
+                    vm-cell-pairs-used-num-in-page)
+           [only-in "./vm-interpreter.rkt" vm-interpreter])
 
   (define (wrap-bytecode-for-test bc)
     (append (list (org #x7000)

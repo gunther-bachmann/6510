@@ -1,8 +1,10 @@
 #lang racket/base
 
-(require "../../6510.rkt")
-(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
-(require (only-in racket/list flatten))
+(require (only-in racket/list
+                  flatten)
+         "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
+                  add-label-suffix))
 
 (provide BC_POP_TO_LOCAL_SHORT
          BC_WRITE_TO_LOCAL_SHORT)

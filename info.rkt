@@ -1,5 +1,5 @@
 #lang info
-(define name "6510 Tooling")
+(define name "s65")
 (define gracket-launcher-libraries '("src/example/6510-example.rkt"))
 (define gracket-launcher-names     '("6510 example"))
 

@@ -8,12 +8,13 @@ and the bc operation jump table
 |#
 
 
-(require "../6510.rkt")
-(require (only-in racket/list flatten))
-(require (only-in "./vm-memory-map.rkt"
+(require (only-in racket/list
+                  flatten)
+         "../6510.rkt"
+         (only-in "./vm-memory-map.rkt"
                   ZP_VM_PC
-                  ZP_VM_FUNC_PTR))
-(require (only-in "./vm-mm-cell-stack.rkt"
+                  ZP_VM_FUNC_PTR)
+         (only-in "./vm-mm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RT))
 
 (provide VM_INTERPRETER                         ;; fetch op at (VM_PC),y=0 and interpret that byte code
@@ -40,12 +41,12 @@ and the bc operation jump table
           (STX ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $8000
           (RTS)))
 
+;; interpreter loop without short commands
+;; each byte command must have lowest bit set to 0 to be aligned to the jump table
 (define VM_INTERPRETER_INC_PC_2_TIMES #t)
 (define VM_INTERPRETER_INC_PC_A_TIMES #t)
 (define VM_POP_EVLSTK_AND_INC_PC #t)
 (define VM_INTERPRETER_INC_PC #t)
-;; interpreter loop without short commands
-;; each byte command must have lowest bit set to 0 to be aligned to the jump table
 (define VM_INTERPRETER
   (list
    (label VM_INTERPRETER_INC_PC_2_TIMES)

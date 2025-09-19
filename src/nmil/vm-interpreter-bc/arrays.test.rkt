@@ -2,28 +2,26 @@
 
 #|
 
-test of bytecode implementation of array commands
+  test of bytecode implementation of array commands
 
 |#
 
 (module+ test
-  (require "./test-utils.rkt")
   (require (only-in "./arrays.rkt"
                     BC_DEC_RBI_NZ_P_BRA
                     BC_PUSH_AF
                     BC_POP_TO_AF
                     BC_ALLOC_ARA
-                    BC_PUSH_RA))
-  (require (only-in "./branch.rkt"
-                    BC_T_P_BRA))
-  (require (only-in "./push_n_pop.rkt"
+                    BC_PUSH_RA)
+           (only-in "./branch.rkt"
+                    BC_T_P_BRA)
+           (only-in "./push_const.rkt"
+                    BC_PUSH_CONST_NUM_SHORT)
+           (only-in "./push_n_pop.rkt"
                     BC_PUSH_B
                     BC_DUP
-                    BC_SWAP))
-
-  (require (only-in "./push_const.rkt"
-                    BC_PUSH_CONST_NUM_SHORT))
-
+                    BC_SWAP)
+           "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_DEC_RBI_NZ_P_BRA"

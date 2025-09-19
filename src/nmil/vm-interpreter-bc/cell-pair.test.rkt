@@ -1,8 +1,6 @@
 #lang racket/base
 
 (module+ test
-  (require "./test-utils.rkt")
-
   (require (only-in "./cell-pair.rkt"
                     BC_CxxR
                     BC_PUSH_NIL
@@ -10,10 +8,10 @@
                     BC_COONS
                     BC_NIL_P
                     BC_CAR
-                    BC_CDR))
-  (require (only-in "./push_const.rkt"
-                    BC_PUSH_CONST_NUM_SHORT))
-
+                    BC_CDR)
+           (only-in "./push_const.rkt"
+                    BC_PUSH_CONST_NUM_SHORT)
+           "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_CONS"

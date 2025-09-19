@@ -2,45 +2,47 @@
 
 #|
 
-implement some useful test utils for testing bcs in a somewhat isolated environment
+  implement some useful test utils for testing bcs in a somewhat isolated environment
 
 |#
 
-
-(require (only-in racket/list flatten))
-(require "../../6510.rkt")
-(require "../../6510-test-utils.rkt")
-(require (only-in "../vm-call-frame.rkt" vm-call-frame->strings))
-(require (only-in "../vm-interpreter-loop.rkt"
-                  VM_INTERPRETER
-                  VM_INTERPRETER_INIT))
-(require (only-in "../vm-memory-manager.rkt" VM_INITIALIZE_MEMORY_MANAGER))
-(require (only-in "../vm-lists.rkt" vm-lists))
-
-(require (only-in "../../tools/6510-interpreter.rkt"
+(require (only-in racket/list
+                  flatten)
+         "../../6510-test-utils.rkt"
+         "../../6510.rkt"
+         (only-in "../../tools/6510-interpreter.rkt"
                   peek
                   peek-word-at-address
                   memory-list
-                  cpu-state-clock-cycles))
-(require (only-in "../vm-interpreter-test-utils.rkt"
-                  run-bc-wrapped-in-test-
-                  vm-next-instruction-bytes))
-(require (only-in "../vm-bc-opcode-definitions.rkt"
+                  cpu-state-clock-cycles)
+         (only-in "../vm-bc-opcode-definitions.rkt"
                   bc
                   bc-opcode-definitions
                   build-extended-optable-hb
                   build-extended-optable-lb
                   build-interpreter-optable
-                  filtered-opcode-definitions))
-(require (only-in "../vm-inspector-utils.rkt"
+                  filtered-opcode-definitions)
+         (only-in "../vm-call-frame.rkt"
+                  vm-call-frame->strings)
+         (only-in "../vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-page->strings
                   vm-stack->strings
                   vm-regt->string
                   vm-cell-at->string
                   vm-cell->string
-                  vm-deref-cell-pair-w->string))
-(require "../vm-memory-map.rkt")
+                  vm-deref-cell-pair-w->string)
+         (only-in "../vm-interpreter-loop.rkt"
+                  VM_INTERPRETER
+                  VM_INTERPRETER_INIT)
+         (only-in "../vm-interpreter-test-utils.rkt"
+                  run-bc-wrapped-in-test-
+                  vm-next-instruction-bytes)
+         (only-in "../vm-lists.rkt"
+                  vm-lists)
+         (only-in "../vm-memory-manager.rkt"
+                  VM_INITIALIZE_MEMORY_MANAGER)
+         "../vm-memory-map.rkt")
 
 (provide (all-from-out "../vm-inspector-utils.rkt")
          (all-from-out "../vm-interpreter-test-utils.rkt")

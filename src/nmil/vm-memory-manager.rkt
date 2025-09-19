@@ -16,15 +16,21 @@ call frame primitives etc.
 ;; see also vm-memory-manager.org
 
 ;;(require (only-in racket/format ~a))
-(require (only-in racket/list flatten take empty? drop make-list))
-
-(require "../6510.rkt")
-(require (only-in "../util.rkt" format-hex-byte))
-(require (only-in "../ast/6510-resolver.rkt"
+(require (only-in racket/list
+                  flatten
+                  take
+                  empty?
+                  drop
+                  make-list)
+         "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
                   add-label-suffix
-                  replace-labels))
-(require (only-in "../tools/6510-interpreter.rkt" peek))
-(require (only-in "./vm-memory-map.rkt"
+                  replace-labels)
+         (only-in "../tools/6510-interpreter.rkt"
+                  peek)
+         (only-in "../util.rkt"
+                  format-hex-byte)
+         (only-in "./vm-memory-map.rkt"
                   VM_MEMORY_MANAGEMENT_CONSTANTS
                   ZP_RT
                   ZP_RP
@@ -37,8 +43,65 @@ call frame primitives etc.
                   TAG_BYTE_CELL_ARRAY
                   TAG_BYTE_NATIVE_ARRAY
                   TAGGED_NIL
-                  ZP_TEMP))
-(require (only-in "./vm-mm-register-functions.rkt"
+                  ZP_TEMP)
+         (only-in "./vm-mm-cell-array.rkt"
+                  ALLOC_CELLARR_TO_RA
+                  GC_INCR_ARRAY_SLOT_RZ
+                  GC_CELL_ARRAYS
+                  FREE_CELLARR_RZ
+                  PUSH_ARR_ATa_RA_TO_EVLSTK
+                  WRITE_RT_TO_ARR_ATa_RA)
+         (only-in "./vm-mm-cell-pairs.rkt"
+                  INIT_CELLPAIR_PAGE_X_TO_AX
+                  GET_FRESH_CELLPAIR_TO_AX
+                  ALLOC_CELLPAIR_AX_TO_RT
+                  ALLOC_CELLPAIR_TO_RT
+                  WRITE_CELLPAIR_RT_CELLy_TO_RT
+                  WRITE_CELLPAIR_RP_CELLy_TO_RP
+                  WRITE_CELLPAIR_RT_CELLy_TO_RP
+                  WRITE_RP_TO_CELLy_CELLPAIR_RT
+                  WRITE_RT_TO_CELLy_CELLPAIR_RP
+                  INC_REFCNT_CELLPAIR_RT
+                  DEC_REFCNT_CELLPAIR_RZ
+                  FREE_CELLPAIR_RZ
+                  GC_CELLPAIR_FREE_LIST)
+         (only-in "./vm-mm-cell-stack.rkt"
+                  INIT_CELLSTACK_PAGE_X
+                  PUSH_XA_TO_EVLSTK
+                  POP_CELL_EVLSTK_TO_RT
+                  POP_CELL_EVLSTK_TO_RP
+                  PUSH_RT_TO_EVLSTK
+                  POP_CELL_EVLSTK_TO_CELLy_RT
+                  POP_CELL_EVLSTK_TO_RA)
+         (only-in "./vm-mm-cells.rkt"
+                  INIT_CELL_PAGE_X_TO_AX
+                  INC_REFCNT_CELL_RT
+                  DEC_REFCNT_CELL_RZ
+                  FREE_CELL_RZ
+                  ALLOC_CELL_TO_RT
+                  GET_FRESH_CELL_TO_AX
+                  ALLOC_CELL_AX_TO_RT
+                  GC_CELLS)
+         (only-in "./vm-mm-m1-slots.rkt"
+                  INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
+                  DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
+                  PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ
+                  ADD_M1_SLOT_RZ_TO_PFL
+                  FREE_M1_SLOT_RA
+                  VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
+                  VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
+                  INC_REFCNT_M1_SLOT_RA
+                  FREE_M1_SLOT_RZ
+                  ALLOC_M1_SLOT_TO_RA)
+         (only-in "./vm-mm-native-array.rkt"
+                  ALLOC_NATARR_TO_RA)
+         (only-in "./vm-mm-pages.rkt"
+                  VM_INITIALIZE_MEMORY_MANAGER
+                  FREE_PAGE_A
+                  ALLOC_PAGE_TO_X
+                  VM_INITIAL_MM_REGS
+                  VM_PAGE_SLOT_DATA)
+         (only-in "./vm-mm-register-functions.rkt"
                   WRITE_NIL_TO_RT
                   WRITE_NIL_TO_RP
                   WRITE_INT_AY_TO_RT
@@ -54,84 +117,27 @@ call frame primitives etc.
                   SWAP_ZP_WORD
                   CP_RA_TO_RB
                   SWAP_RA_RB))
-(require (only-in "./vm-mm-pages.rkt"
-                  VM_INITIALIZE_MEMORY_MANAGER
-                  FREE_PAGE_A
-                  ALLOC_PAGE_TO_X
-                  VM_INITIAL_MM_REGS
-                  VM_PAGE_SLOT_DATA))
-(require (only-in "./vm-mm-cell-pairs.rkt"
-                  INIT_CELLPAIR_PAGE_X_TO_AX
-                  GET_FRESH_CELLPAIR_TO_AX
-                  ALLOC_CELLPAIR_AX_TO_RT
-                  ALLOC_CELLPAIR_TO_RT
-                  WRITE_CELLPAIR_RT_CELLy_TO_RT
-                  WRITE_CELLPAIR_RP_CELLy_TO_RP
-                  WRITE_CELLPAIR_RT_CELLy_TO_RP
-                  WRITE_RP_TO_CELLy_CELLPAIR_RT
-                  WRITE_RT_TO_CELLy_CELLPAIR_RP
-                  INC_REFCNT_CELLPAIR_RT
-                  DEC_REFCNT_CELLPAIR_RZ
-                  FREE_CELLPAIR_RZ
-                  GC_CELLPAIR_FREE_LIST))
-(require (only-in "./vm-mm-cells.rkt"
-                  INIT_CELL_PAGE_X_TO_AX
-                  INC_REFCNT_CELL_RT
-                  DEC_REFCNT_CELL_RZ
-                  FREE_CELL_RZ
-                  ALLOC_CELL_TO_RT
-                  GET_FRESH_CELL_TO_AX
-                  ALLOC_CELL_AX_TO_RT
-                  GC_CELLS))
-(require (only-in "./vm-mm-cell-stack.rkt"
-                  INIT_CELLSTACK_PAGE_X
-                  PUSH_XA_TO_EVLSTK
-                  POP_CELL_EVLSTK_TO_RT
-                  POP_CELL_EVLSTK_TO_RP
-                  PUSH_RT_TO_EVLSTK
-                  POP_CELL_EVLSTK_TO_CELLy_RT
-                  POP_CELL_EVLSTK_TO_RA))
-(require (only-in "./vm-mm-m1-slots.rkt"
-                  INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
-                  DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
-                  PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ
-                  ADD_M1_SLOT_RZ_TO_PFL
-                  FREE_M1_SLOT_RA
-                  VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
-                  VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS
-                  INC_REFCNT_M1_SLOT_RA
-                  FREE_M1_SLOT_RZ
-                  ALLOC_M1_SLOT_TO_RA))
-(require (only-in "./vm-mm-cell-array.rkt"
-                  ALLOC_CELLARR_TO_RA
-                  GC_INCR_ARRAY_SLOT_RZ
-                  GC_CELL_ARRAYS
-                  FREE_CELLARR_RZ
-                  PUSH_ARR_ATa_RA_TO_EVLSTK
-                  WRITE_RT_TO_ARR_ATa_RA))
-(require (only-in "./vm-mm-native-array.rkt"
-                  ALLOC_NATARR_TO_RA))
 
 (provide vm-memory-manager
          vm-memory-manager-wo-data-tail
          (all-from-out "./vm-mm-pages.rkt")
          ;; ---------------------------------------- refcount
          INC_REFCNT_RT         ;; generic increment of refcount (dispatches depending on type)
-          DEC_REFCNT_RT
+         DEC_REFCNT_RT
 
-          DEC_REFCNT_RZ         ;; generic decrement of refcount (dispatches depending on type)
+         DEC_REFCNT_RZ         ;; generic decrement of refcount (dispatches depending on type)
 
-          FREE_RT               ;; (includes FREE_RZ and _RA) free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, native-array, cell-array)
+         FREE_RT               ;; (includes FREE_RZ and _RA) free pointer (is cell-ptr, cell-pair-ptr, m1-slot-ptr, native-array, cell-array)
 )
 
 (module+ test
-  (require "../6510-test-utils.rkt")
-  (require (only-in "../ast/6510-relocator.rkt" command-len))
-  (require (only-in "./vm-inspector-utils.rkt"
-                     vm-regt->string
-                     vm-refcount-cell-pair-ptr
-                     vm-refcount-cell-ptr))
-  (require (only-in "./vm-memory-manager-test-utils.rkt"
+  (require "../6510-test-utils.rkt"
+           (only-in "../ast/6510-relocator.rkt" command-len)
+           (only-in "./vm-inspector-utils.rkt"
+                    vm-regt->string
+                    vm-refcount-cell-pair-ptr
+                    vm-refcount-cell-ptr)
+           (only-in "./vm-memory-manager-test-utils.rkt"
                     calls-to-mock
                     compact-run-code-in-test-))
 

@@ -5,14 +5,15 @@
 test of bytecode implementation of native commands
 
 |#
-
 (module+ test
-  (require "./test-utils.rkt")
   (require (only-in "./native.rkt"
                     BC_POKE_B
                     BC_NATIVE
-                    RETURN_TO_BC))
-  (require (only-in "./push_n_pop.rkt" BC_PUSH_B))
+                    RETURN_TO_BC)
+           (only-in "./push_n_pop.rkt"
+                    BC_PUSH_B)
+           "./test-utils.rkt")
+
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_POKE_B"

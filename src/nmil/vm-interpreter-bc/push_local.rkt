@@ -2,24 +2,25 @@
 
 #|
 
-implement bc push/write local commands
+  implement bc push/write local commands
 
 |#
 
-(require "../../6510.rkt")
-(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
-(require (only-in racket/list flatten))
-
-(require (only-in "../vm-memory-map.rkt"
+(require (only-in racket/list
+                  flatten)
+         "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
+                  add-label-suffix)
+         (only-in "../vm-interpreter-loop.rkt"
+                  VM_INTERPRETER_INC_PC)
+         (only-in "../vm-memory-manager.rkt"
+                  INC_REFCNT_RT
+                  DEC_REFCNT_RT)
+         (only-in "../vm-memory-map.rkt"
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_LB_PTR
-                  ZP_RT))
-(require (only-in "../vm-interpreter-loop.rkt"
-                  VM_INTERPRETER_INC_PC))
-(require (only-in "../vm-memory-manager.rkt"
-                  INC_REFCNT_RT
-                  DEC_REFCNT_RT))
-(require (only-in "../vm-mm-cell-stack.rkt"
+                  ZP_RT)
+         (only-in "../vm-mm-cell-stack.rkt"
                   PUSH_RT_TO_EVLSTK_IF_NONEMPTY))
 
 (provide BC_WRITE_LOCAL_SHORT           ;; write a local into the tos (rt)

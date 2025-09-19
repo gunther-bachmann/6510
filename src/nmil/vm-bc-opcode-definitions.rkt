@@ -2,11 +2,11 @@
 
 #|
 
-Byte Code Opcodes are completely defined here to be able to quickly switch between
-- param encoded byte code
-- single byte code
-- multiple byte code (extended byte code)
-depending on number of usage to make it as compact as possible!
+  Byte Code Opcodes are completely defined here to be able to quickly switch between
+  - param encoded byte code
+  - single byte code
+  - multiple byte code (extended byte code)
+  depending on number of usage to make it as compact as possible!
 
 |#
 
@@ -16,30 +16,31 @@ depending on number of usage to make it as compact as possible!
                   or/c
                   ->
                   listof
-                  ->*))
-(require (only-in "../util.rkt"
-                  bytes->int
-                  format-hex-byte
-                  format-hex-word))
-(require (only-in racket/list
+                  ->*)
+         (only-in racket/list
                   take
                   flatten
                   empty?
-                  drop))
-(require (only-in "../ast/6510-command.rkt"
+                  drop)
+         (only-in "../ast/6510-command.rkt"
                   ast-command?
                   ast-bytes-cmd
                   ast-bytes-cmd-bytes
                   ast-unresolved-bytes-cmd
                   ast-resolve-byte-scmd
-                  ast-resolve-word-scmd))
-(require (only-in "../tools/6510-disassembler.rkt" info-for-label))
-(require (only-in "./vm-interpreter-bc/vm-interpreter-bc.rkt"
+                  ast-resolve-word-scmd)
+         (only-in "../tools/6510-disassembler.rkt"
+                  info-for-label)
+         (only-in "../util.rkt"
+                  bytes->int
+                  format-hex-byte
+                  format-hex-word)
+         (only-in "./vm-interpreter-bc/vm-interpreter-bc.rkt"
                   BC_PUSH_LOCAL_SHORT
                   BC_EXT1_CMD
                   VM_INTERPRETER_OPTABLE_EXT1_LB
-                  VM_INTERPRETER_OPTABLE_EXT1_HB))
-(require (only-in "./vm-interpreter-loop.rkt"
+                  VM_INTERPRETER_OPTABLE_EXT1_HB)
+         (only-in "./vm-interpreter-loop.rkt"
                   VM_INTERPRETER_OPTABLE))
 
 (provide bc-opcode-definitions

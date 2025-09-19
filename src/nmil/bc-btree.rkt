@@ -2,10 +2,10 @@
 
 #|
 
-implementation of a persistent b-tree with values at leafs in pure bytecode
+  implementation of a persistent b-tree with values at leafs in pure bytecode
 
-this implementation will be the testbed for all refcounting gc testing
-exported scheme list: vm-btree <- contains the complete bytecode implementation
+  this implementation will be the testbed for all refcounting gc testing
+  exported scheme list: vm-btree <- contains the complete bytecode implementation
 
   data
   ----
@@ -88,42 +88,38 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
 
 |#
 
-(require (only-in racket/list flatten))
-
-(require "../6510.rkt")
-(require (only-in "../tools/6510-interpreter.rkt" memory-list))
-
-(require "./vm-bc-ast.rkt")
-(require (only-in "./vm-bc-resolver.rkt"
+(require (only-in racket/list flatten)
+         "../6510.rkt"
+         (only-in "../tools/6510-interpreter.rkt" memory-list)
+         "./vm-bc-ast.rkt"
+         (only-in "./vm-bc-opcode-definitions.rkt" bc)
+         (only-in "./vm-bc-resolver.rkt"
                   bc-resolve
-                  bc-bytes))
-(require (only-in "./vm-bc-opcode-definitions.rkt" bc))
-(require [only-in "./vm-interpreter.rkt" vm-interpreter])
-(require (only-in "./vm-memory-map.rkt" ZP_VM_PC))
+                  bc-bytes)
+         [only-in "./vm-interpreter.rkt" vm-interpreter]
+         (only-in "./vm-memory-map.rkt" ZP_VM_PC))
 
 (module+ test #|  |#
-  (require "../6510-test-utils.rkt")
-
-(require (only-in "./vm-inspector-utils.rkt"
-                  shorten-cell-strings
-                  shorten-cell-string
-                  vm-cell-at-nil?
-                  vm-page->strings
-                  vm-stack->strings
-                  vm-regt->string
-                  vm-cell-at->string
-                  vm-cell->string
-                  vm-deref-cell-pair-w->string))
-  (require (only-in "./vm-interpreter-test-utils.rkt"
-                    run-bc-wrapped-in-test-
-                    vm-list->strings))
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
-  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
-  (require (only-in "../util.rkt"
+  (require "../6510-test-utils.rkt"
+           (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK)
+           (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles)
+           (only-in "../util.rkt"
                     bytes->int
                     format-hex-byte
-                    format-hex-word))
-
+                    format-hex-word)
+           (only-in "./vm-inspector-utils.rkt"
+                    shorten-cell-strings
+                    shorten-cell-string
+                    vm-cell-at-nil?
+                    vm-page->strings
+                    vm-stack->strings
+                    vm-regt->string
+                    vm-cell-at->string
+                    vm-cell->string
+                    vm-deref-cell-pair-w->string)
+           (only-in "./vm-interpreter-test-utils.rkt"
+                    run-bc-wrapped-in-test-
+                    vm-list->strings))
 
   (define PAGE_AVAIL_0 #x8a)
   (define PAGE_AVAIL_0_W #x8a00)
@@ -144,7 +140,6 @@ exported scheme list: vm-btree <- contains the complete bytecode implementation
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
-
 
 (provide vm-btree
     REVERSE                       ;; reverse a list:  list :: result=nil -> list

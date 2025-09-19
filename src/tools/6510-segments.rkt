@@ -30,6 +30,21 @@ currently the following test programs are created
 
 |#
 
+(require (only-in racket/contract/base
+                  struct-guard/c
+                  and/c
+                  list/c
+                  listof)
+         (only-in racket/list flatten empty? take)
+         (only-in "../6510-utils.rkt"
+                  word/c
+                  byte/c
+                  low-byte
+                  high-byte)
+         "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix))
+
 (provide (struct-out c64-segment)
          (struct-out c64-relocation-info)
          (struct-out c64-resolution-info)
@@ -38,12 +53,11 @@ currently the following test programs are created
          segment-type?
          resolution-type?)
 
-(require (only-in racket/list flatten empty? take))
-
-(require (only-in racket/contract/base struct-guard/c and/c list/c listof)
-         (only-in "../6510-utils.rkt" word/c  byte/c))
-
-(require (only-in "../6510-utils.rkt" low-byte high-byte))
+(module+ test
+  (require "../ast/6510-assembler.rkt"
+           (only-in "../nmil/vm-lists.rkt" vm-lists vm-lists-wo-data-tail)
+           (only-in  "../nmil/vm-memory-manager-test-utils.rkt" list-with-label-suffix)
+           "../tools/6510-prg-generator.rkt"))
 
 (define (width? w)
   (memq w (list 'byte 'word)))
@@ -109,10 +123,6 @@ currently the following test programs are created
 ;; - go over all resolution info, resolving references to other segments
 
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-resolver.rkt"
-                  add-label-suffix))
-
 ;; A/X (l/h) bytes with starting descriptor of the format
 ;; mem at [xa]:  lb-len hb-len lb-src hb-src lb-tar hb-tar <- should start with highest mem region to minimize change
 ;;               ...
@@ -160,8 +170,9 @@ currently the following test programs are created
           (RTS))))
 
 (module+ test #| looped-copy-region |#
+  (require "../ast/6510-assembler.rkt")
+  (require "../tools/6510-prg-generator.rkt")
   (require (only-in  "../nmil/vm-memory-manager-test-utils.rkt" list-with-label-suffix))
-
   (require (only-in "../nmil/vm-lists.rkt" vm-lists vm-lists-wo-data-tail))
 
   ;; load two code sections (located in the program loaded to 0800)
@@ -724,9 +735,6 @@ currently the following test programs are created
                 (list 1 2 3 4 5 6 7 8 9 10)))
 
 (module+ test #| program |#
-  (require "../ast/6510-assembler.rkt")
-  (require "../tools/6510-prg-generator.rkt")
-
   (define orgloc 2064)
 
   (define program

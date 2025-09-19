@@ -2,22 +2,27 @@
 
 #|
 
-provide functions to inspect the current status of the virtual machine
+  provide functions to inspect the current status of the virtual machine
 
 |#
 
-(require (only-in racket/list flatten take empty? drop make-list))
-(require (only-in "../tools/6510-interpreter.rkt"
+(require (only-in racket/list
+                  flatten
+                  take
+                  empty?
+                  drop
+                  make-list)
+         (only-in "../tools/6510-interpreter.rkt"
                   memory-list
                   peek-word-at-address
-                  peek))
-(require (only-in "../util.rkt"
+                  peek)
+         (only-in "../util.rkt"
                   bytes->int
                   low-byte
                   high-byte
                   format-hex-byte
-                  format-hex-word))
-(require (only-in "./vm-memory-map.rkt"
+                  format-hex-word)
+         (only-in "./vm-memory-map.rkt"
                   TAG_BYTE_BYTE_CELL
                   TAG_BYTE_CELL_ARRAY
                   TAGGED_NIL
@@ -46,8 +51,8 @@ provide functions to inspect the current status of the virtual machine
          shorten-cell-strings)
 
 (module+ test
-  (require "../6510-test-utils.rkt")
-  (require "../6510.rkt"))
+  (require "../6510-test-utils.rkt"
+           "../6510.rkt"))
 
 ;; write out the cells that are marked as reallocatable
 (define (vm-cell-pair-free-tree->string state)

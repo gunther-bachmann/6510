@@ -6,11 +6,10 @@
 
 |#
 
-(require (only-in "../6510.rkt"
+(require (only-in racket/list empty?)
+         (only-in "../6510.rkt"
                   byte-const
-                  word-const
-                  ))
-(require (only-in racket/list empty?))
+                  word-const))
 
 (provide ast-const-get
          VM_MEMORY_MANAGEMENT_CONSTANTS  ;; contains all zp variable locations and constant definitions to be included into a asm program

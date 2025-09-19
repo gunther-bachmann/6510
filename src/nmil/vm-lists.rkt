@@ -6,20 +6,34 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 |#
 
-(require "../6510.rkt")
-(require (only-in "../ast/6510-assembler.rkt" assemble assemble-to-code-list translate-code-list-for-basic-loader))
-(require (only-in racket/list flatten take))
-(require (only-in "../ast/6510-relocator.rkt" command-len))
-(require (only-in "./vm-inspector-utils.rkt"
+(require (only-in racket/list
+                  flatten
+                  take)
+         "../6510.rkt"
+         (only-in "../ast/6510-assembler.rkt"
+                  assemble
+                  assemble-to-code-list
+                  translate-code-list-for-basic-loader)
+         (only-in "../ast/6510-relocator.rkt"
+                  command-len)
+         (only-in "../tools/6510-interpreter.rkt"
+                  6510-load
+                  6510-load-multiple
+                  initialize-cpu
+                  run-interpreter
+                  run-interpreter-on
+                  memory-list
+                  cpu-state-accumulator)
+         (only-in "./vm-call-frame.rkt"
+                  vm-call-frame
+                  vm-call-frame-wo-data-tail)
+         (only-in "./vm-inspector-utils.rkt"
                   vm-stack->strings
                   vm-page->strings
                   vm-regt->string
-                  vm-deref-cell-pair-w->string))
-
-(require (only-in "./vm-call-frame.rkt" vm-call-frame vm-call-frame-wo-data-tail))
-(require (only-in "./vm-memory-manager-test-utils.rkt" run-code-in-test-on-code))
-
-(require (only-in "../tools/6510-interpreter.rkt" 6510-load 6510-load-multiple initialize-cpu run-interpreter run-interpreter-on memory-list cpu-state-accumulator))
+                  vm-deref-cell-pair-w->string)
+         (only-in "./vm-memory-manager-test-utils.rkt"
+                  run-code-in-test-on-code))
 
 (provide vm-lists
          vm-lists-wo-data-tail
@@ -30,9 +44,6 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test
   (require "../6510-test-utils.rkt")
-  (require (only-in racket/port open-output-nowhere))
-  (require (only-in "../tools/6510-disassembler.rkt" disassemble-bytes))
-  (require (only-in "../tools/6510-debugger.rkt" run-debugger-on))
 
   (define (wrap-code-for-test bc)
     (append (list (org #xa000)

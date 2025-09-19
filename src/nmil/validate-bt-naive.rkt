@@ -4,87 +4,87 @@
 
 #|
 
-TODO: make all recursive functions tail-callable
+  TODO: make all recursive functions tail-callable
 
-simplest valued tree
+  simplest valued tree
 
-case A
-   o
-  / \
- P   T
+  case A
+     o
+    / \
+   P   T
 
-case B
-   o
-  / \
- P   nil
-
-
-add X after P:
-  case A:          case B
-      o                o
-    /   \             / \
-   P     o           P   X
-        / \
-       X   T
-
-add X after T (only case A):
-  case B:
-      o
-    /   \
-   P     o
-        / \
-       T   X
-
-add X before P:
-  case A:          case B
-      o                o
-    /   \             / \
-   o     T           X   P
-  / \
- X   P 
-
-add X before T (only case A)
-  case A:
-      o
-    /   \
-   P     o
-        / \       
-       X   T
-
-strategies for deleting:
-  if right node: just set nil
-  if left node and right is not nil: swap
-  if both are nil delete parent node (recurse)
-
-strategies for finding next/prev
-
-  next:
-    if left node and has right node: find first of right node
-    if left node and has no right node
-       or if right node: go up until coming from a left node (and right node != null), get first of right node
-
-  prev:
-   if right node: find last of left node
-   if left node: go up until coming from a right node. get last of left node
+  case B
+     o
+    / \
+   P   nil
 
 
-  first of node:
-    keep going left to first leaf
+  add X after P:
+    case A:          case B
+        o                o
+      /   \             / \
+     P     o           P   X
+          / \
+         X   T
+
+  add X after T (only case A):
+    case B:
+        o
+      /   \
+     P     o
+          / \
+         T   X
+
+  add X before P:
+    case A:          case B
+        o                o
+      /   \             / \
+     o     T           X   P
+    / \
+   X   P
+
+  add X before T (only case A)
+    case A:
+        o
+      /   \
+     P     o
+          / \
+         X   T
+
+  strategies for deleting:
+    if right node: just set nil
+    if left node and right is not nil: swap
+    if both are nil delete parent node (recurse)
+
+  strategies for finding next/prev
+
+    next:
+      if left node and has right node: find first of right node
+      if left node and has no right node
+         or if right node: go up until coming from a left node (and right node != null), get first of right node
+
+    prev:
+     if right node: find last of left node
+     if left node: go up until coming from a right node. get last of left node
 
 
-  last of node:
-    keep going right to first leaf, if leaf is nil, take last of left of same level
-    
-    
-invariants:
-  - left is never nil, tree is reorganized if left is deleted!
-  - left may be subtree or leaf value
-  - right may be nil, subtree or leaf value
+    first of node:
+      keep going left to first leaf
+
+
+    last of node:
+      keep going right to first leaf, if leaf is nil, take last of left of same level
+
+
+  invariants:
+    - left is never nil, tree is reorganized if left is deleted!
+    - left may be subtree or leaf value
+    - right may be nil, subtree or leaf value
 
 
  |#
 (module+ test 
-  (require rackunit)
+  (require (only-in rackunit check-equal?))
   (require "../6510-test-utils.rkt"))
 
 (define (btree-make-root value)

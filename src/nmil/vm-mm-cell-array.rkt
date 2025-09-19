@@ -6,21 +6,21 @@ memory management for cell arrays
 
 |#
 
-(require "../6510.rkt")
-(require (only-in "./vm-memory-map.rkt"
+(require "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix
+                  replace-labels)
+         (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   TAG_BYTE_CELL_ARRAY
                   ZP_RP
                   ZP_RA
                   ZP_TEMP
                   ZP_RT
-                  VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "../ast/6510-resolver.rkt"
-                  add-label-suffix
-                  replace-labels))
-(require (only-in "./vm-mm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RT))
-(require (only-in "./vm-mm-m1-slots.rkt"
+                  VM_MEMORY_MANAGEMENT_CONSTANTS)
+         (only-in "./vm-mm-cell-stack.rkt"
+                  POP_CELL_EVLSTK_TO_RT)
+         (only-in "./vm-mm-m1-slots.rkt"
                   ALLOC_M1_SLOT_TO_RA
                   INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
                   VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
@@ -45,41 +45,19 @@ memory management for cell arrays
           WRITE_RT_TO_ARR_ATa_RA)      ;; write cell in RT into cell-array RA at A
 
 (module+ test
-  (require (only-in racket/list make-list))
-  (require  "../6510-test-utils.rkt")
-  (require "./vm-memory-manager-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt"
+  (require "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt"
                     memory-list
-                    cpu-state-clock-cycles))
-  (require (only-in "../util.rkt" format-hex-byte))
-  (require (only-in "./vm-inspector-utils.rkt"
+                    cpu-state-clock-cycles)
+           (only-in "../util.rkt" format-hex-byte)
+           (only-in "./vm-inspector-utils.rkt"
                     vm-regt->string
                     vm-cell-pair-free-tree->string
                     vm-deref-cell-pair-w->string
                     vm-stack->strings
-                    vm-page->strings))
-  (require (only-in "./vm-mm-register-functions.rkt"
-                    CP_RT_TO_RZ
-                    CP_RT_TO_RP
-                    CP_RZ_TO_RT
-                    CP_RA_TO_RZ
-                    CP_RA_TO_RT
-                    WRITE_INT_AY_TO_RT
-                    WRITE_NIL_TO_RP))
-  (require (only-in "./vm-mm-pages.rkt"
-                    ALLOC_PAGE_TO_X
-                    VM_PAGE_SLOT_DATA
-                    VM_INITIAL_MM_REGS
-                    VM_INITIALIZE_MEMORY_MANAGER))
-  (require (only-in "./vm-mm-cells.rkt"
-                    ALLOC_CELL_AX_TO_RT
-                    INIT_CELL_PAGE_X_TO_AX
-                    DEC_REFCNT_CELL_RZ
-                    FREE_CELL_RZ))
-  (require (only-in "./vm-mm-cell-stack.rkt"
-                    PUSH_XA_TO_EVLSTK
-                    PUSH_RT_TO_EVLSTK))
-  (require (only-in "./vm-mm-cell-pairs.rkt"
+                    vm-page->strings)
+           "./vm-memory-manager-test-utils.rkt"
+           (only-in "./vm-mm-cell-pairs.rkt"
                     WRITE_RP_TO_CELLy_CELLPAIR_RT
                     WRITE_CELLPAIR_RT_CELLy_TO_RT
                     FREE_CELLPAIR_RZ
@@ -88,8 +66,28 @@ memory management for cell arrays
                     INIT_CELLPAIR_PAGE_X_TO_AX
                     ALLOC_CELLPAIR_AX_TO_RT
                     DEC_REFCNT_CELLPAIR_RZ
-                    INC_REFCNT_CELLPAIR_RT
-                    ))
+                    INC_REFCNT_CELLPAIR_RT)
+           (only-in "./vm-mm-cell-stack.rkt"
+                    PUSH_XA_TO_EVLSTK
+                    PUSH_RT_TO_EVLSTK)
+           (only-in "./vm-mm-cells.rkt"
+                    ALLOC_CELL_AX_TO_RT
+                    INIT_CELL_PAGE_X_TO_AX
+                    DEC_REFCNT_CELL_RZ
+                    FREE_CELL_RZ)
+           (only-in "./vm-mm-pages.rkt"
+                    ALLOC_PAGE_TO_X
+                    VM_PAGE_SLOT_DATA
+                    VM_INITIAL_MM_REGS
+                    VM_INITIALIZE_MEMORY_MANAGER)
+           (only-in "./vm-mm-register-functions.rkt"
+                    CP_RT_TO_RZ
+                    CP_RT_TO_RP
+                    CP_RZ_TO_RT
+                    CP_RA_TO_RZ
+                    CP_RA_TO_RT
+                    WRITE_INT_AY_TO_RT
+                    WRITE_NIL_TO_RP))
 
   (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available

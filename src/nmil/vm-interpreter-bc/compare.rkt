@@ -2,35 +2,34 @@
 
 #|
 
-Bytecode implementation of comparison commands
-
-TODO: get tests (still in vm-interpreter) into this file
+  Bytecode implementation of comparison commands
 
 |#
 
 
-(require "../../6510.rkt")
-(require (only-in "../../ast/6510-resolver.rkt" add-label-suffix))
-(require (only-in racket/list flatten))
-(require (only-in "../vm-memory-map.rkt"
+(require (only-in racket/list
+                  flatten)
+         "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
+                  add-label-suffix)
+         (only-in "../vm-interpreter-loop.rkt"
+                  VM_INTERPRETER_INC_PC)
+         (only-in "../vm-memory-map.rkt"
                   ZP_RT
-                  ZP_RP))
-(require (only-in "../vm-interpreter-loop.rkt"
-                  VM_INTERPRETER_INC_PC))
-(require (only-in "../vm-mm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RP))
-(require (only-in "../vm-mm-register-functions.rkt"
+                  ZP_RP)
+         (only-in "../vm-mm-cell-stack.rkt"
+                  POP_CELL_EVLSTK_TO_RP)
+         (only-in "../vm-mm-register-functions.rkt"
                   WRITE_INT0_TO_RT
-                  WRITE_INT1_TO_RT))
-(require (only-in "./push_n_pop.rkt" BC_PUSH_B))
+                  WRITE_INT1_TO_RT)
+         (only-in "./push_n_pop.rkt"
+                  BC_PUSH_B))
 
 (provide BC_B_GT_P
          BC_B_LT_P
          BC_B_GE_P
          BC_I_GT_P)
 
-;; @DC-B: B_GT_P, group: predicates
-(define B_GT_P #x48)
 (define BC_B_GT_P
   (add-label-suffix
    "__" "__BC_B_GT_P"
@@ -46,8 +45,6 @@ TODO: get tests (still in vm-interpreter) into this file
            (JSR WRITE_INT1_TO_RT)
            (JMP VM_INTERPRETER_INC_PC))))
 
-;; @DC-B: B_LT_P, group: predicates
-(define B_LT_P #xcc)
 (define BC_B_LT_P
   (add-label-suffix
    "__" "__BC_B_LT_P"
@@ -63,8 +60,6 @@ TODO: get tests (still in vm-interpreter) into this file
            (JSR WRITE_INT0_TO_RT)
            (JMP VM_INTERPRETER_INC_PC))))
 
-;; @DC-B: B_GE_P, group: predicates
-(define B_GE_P #x4c)
 (define BC_B_GE_P
   (add-label-suffix
    "__" "__BC_B_GE_P"
@@ -80,8 +75,6 @@ TODO: get tests (still in vm-interpreter) into this file
            (JSR WRITE_INT0_TO_RT)
            (JMP VM_INTERPRETER_INC_PC))))
 
-;; @DC-B: I_GT_P, group: predicates
-(define I_GT_P #xc8) ;; *I*​nt *G*​reater *T*​han *P*​redicates
 (define BC_I_GT_P
   (add-label-suffix
    "__" "__I_GT_P"

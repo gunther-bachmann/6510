@@ -1,36 +1,35 @@
 #lang racket/base
 
 #|
- this file is implementing some functions around a
- (defs point
-  (x int)
-  (y int)
-  (color string))
+   this file is implementing some functions around a
+   (defs point
+    (x int)
+    (y int)
+    (color string))
 
 
- xdist between two points:   x2-x1
- ydist between two points:   y2-y1
- equal (not comparing color)
+   xdist between two points:   x2-x1
+   ydist between two points:   y2-y1
+   equal (not comparing color)
 
 |#
 
-(require (only-in racket/list flatten))
-;; (require "./vm-bc-ast.rkt")
-;; (require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
-
-(require "../6510.rkt")
-(require (only-in "./vm-bc-opcode-definitions.rkt" bc))
-(require [only-in "./vm-interpreter.rkt" vm-interpreter])
-(require (only-in "../tools/6510-interpreter.rkt" memory-list))
+(require (only-in racket/list flatten)
+         "../6510.rkt"
+         (only-in "../tools/6510-interpreter.rkt" memory-list)
+         (only-in "./vm-bc-opcode-definitions.rkt" bc)
+         (only-in "./vm-interpreter.rkt" vm-interpreter))
 
 (module+ test #|  |#
-  (require "../6510-test-utils.rkt")
-
-  (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
-  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek))
-
-  (require (only-in "./vm-inspector-utils.rkt"
+  (require "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt"
+                    cpu-state-clock-cycles
+                    peek)
+           (only-in "../util.rkt"
+                    bytes->int
+                    format-hex-byte
+                    format-hex-word)
+           (only-in "./vm-inspector-utils.rkt"
                     shorten-cell-strings
                     shorten-cell-string
                     vm-cell-at-nil?
@@ -39,8 +38,10 @@
                     vm-regt->string
                     vm-cell-at->string
                     vm-cell->string
-                    vm-deref-cell-pair-w->string))
-  (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
+                    vm-deref-cell-pair-w->string)
+           (only-in "./vm-interpreter-test-utils.rkt"
+                    run-bc-wrapped-in-test-
+                    vm-list->strings))
 
 
   (define PAGE_AVAIL_0 #x8a)

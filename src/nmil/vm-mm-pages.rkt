@@ -6,12 +6,14 @@
 
 |#
 
-(require (only-in racket/list flatten))
-(require "../6510.rkt")
-(require (only-in "./vm-memory-map.rkt"
+(require (only-in racket/list
+                  flatten)
+         "../6510.rkt"
+         (only-in "./vm-inspector-utils.rkt"
+                  vm-regt->string)
+         (only-in "./vm-memory-map.rkt"
                   ZP_RP
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "./vm-inspector-utils.rkt" vm-regt->string))
 
 (provide
          VM_INITIALIZE_MEMORY_MANAGER     ;; initialize memory management (must be called before first allocation)
@@ -28,11 +30,14 @@
          )
 
 (module+ test
-  (require  "../6510-test-utils.rkt")
-  (require "./vm-memory-manager-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt" peek))
-  (require (only-in "../util.rkt" format-hex-byte))
-  (require (only-in "./vm-mm-register-functions.rkt" WRITE_INT_AY_TO_RT))
+  (require  "../6510-test-utils.rkt"
+            (only-in "../tools/6510-interpreter.rkt"
+                     peek)
+            (only-in "../util.rkt"
+                     format-hex-byte)
+            "./vm-memory-manager-test-utils.rkt"
+            (only-in "./vm-mm-register-functions.rkt"
+                     WRITE_INT_AY_TO_RT))
 
 
   (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation

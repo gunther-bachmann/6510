@@ -2,17 +2,18 @@
 
 #|
 
-all functions around cell-stacks (including evlstk)
+  all functions around cell-stacks (including evlstk)
 
-cell-stacks are stack organized cells, split into a high-byte page and a low-byte page
+  cell-stacks are stack organized cells, split into a high-byte page and a low-byte page
 
 |#
 
-(require "../6510.rkt")
-(require (only-in "./vm-memory-map.rkt"
+(require "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix)
+         (only-in "./vm-memory-map.rkt"
                   ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "../ast/6510-resolver.rkt" add-label-suffix))
 
 (provide INIT_CELLSTACK_PAGE_X        ;; initialize page A to previous cell stack page (X)
          PUSH_XA_TO_EVLSTK               ;; push a value into RT, pushing RT onto the call frame cell stack if not empty
@@ -26,28 +27,27 @@ cell-stacks are stack organized cells, split into a high-byte page and a low-byt
          POP_CELL_EVLSTK_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
 (module+ test
-  (require (only-in racket/list make-list))
-  (require  "../6510-test-utils.rkt")
-  (require "./vm-memory-manager-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt" peek memory-list))
-  (require (only-in "../util.rkt" format-hex-byte format-hex-word))
-  (require (only-in "./vm-inspector-utils.rkt"
+  (require "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt" peek memory-list)
+           (only-in "../util.rkt" format-hex-byte format-hex-word)
+           (only-in "./vm-inspector-utils.rkt"
                     vm-deref-cell-pair-w->string
                     vm-stack->strings
-                    vm-regt->string))
-  (require (only-in "./vm-mm-register-functions.rkt"
-                    WRITE_INT_AY_TO_RT))
-  (require (only-in "./vm-mm-pages.rkt"
-                    ALLOC_PAGE_TO_X
-                    VM_PAGE_SLOT_DATA
-                    VM_INITIAL_MM_REGS
-                    VM_INITIALIZE_MEMORY_MANAGER))
-  (require (only-in "./vm-mm-cell-pairs.rkt"
+                    vm-regt->string)
+           "./vm-memory-manager-test-utils.rkt"
+           (only-in "./vm-mm-cell-pairs.rkt"
                     ALLOC_CELLPAIR_TO_RT
                     ALLOC_CELLPAIR_AX_TO_RT
                     WRITE_CELLPAIR_RT_CELLy_TO_RT
                     GET_FRESH_CELLPAIR_TO_AX
-                    INIT_CELLPAIR_PAGE_X_TO_AX))
+                    INIT_CELLPAIR_PAGE_X_TO_AX)
+           (only-in "./vm-mm-pages.rkt"
+                    ALLOC_PAGE_TO_X
+                    VM_PAGE_SLOT_DATA
+                    VM_INITIAL_MM_REGS
+                    VM_INITIALIZE_MEMORY_MANAGER)
+           (only-in "./vm-mm-register-functions.rkt"
+                    WRITE_INT_AY_TO_RT))
 
   (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available

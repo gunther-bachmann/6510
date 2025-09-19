@@ -2,79 +2,66 @@
 
 #|
 
-implementation of the sieve of Eratosthenes
+  implementation of the sieve of Eratosthenes
 
-create an array of boolean values (native array)
-1st implementation: use cell array with byte values (as booleans)
-2nd implementation: native array, 1 byte =  boolean value
-3rd implementation: native array, 1 byte = 8 boolean values
+  create an array of boolean values (native array)
+  1st implementation: use cell array with byte values (as booleans)
+  2nd implementation: native array, 1 byte =  boolean value
+  3rd implementation: native array, 1 byte = 8 boolean values
 
-functions to implement access and usage of native array
-
-
-- create native array with 0s
-- 0 = is (possibly) prime
-- set # = 2
-- mark all multiples (not including itself) of # up to max as 1 (non-prime)
-- scan array for next (possibly) prime number
-- set # = number found (next is 3, then 5 (since 4 is marked), then 7 ...)
-- if # > max end the loop
-- else loop
-
-test: check the content of the array
-primes (ignore 0,1) up to 30
+  functions to implement access and usage of native array
 
 
-- - 2 3 . 5 . 7 . . . 11 . 13 . . . 17 . 19 . . . 23 . . . . . 29 .
-0 0 0 0 1 0 1 0 1 1 1 0  1 0  1 1 1 0  1 0  1 1 1 0  1 1 1 1 1 0  1  <--  array/memory content to check!
+  - create native array with 0s
+  - 0 = is (possibly) prime
+  - set # = 2
+  - mark all multiples (not including itself) of # up to max as 1 (non-prime)
+  - scan array for next (possibly) prime number
+  - set # = number found (next is 3, then 5 (since 4 is marked), then 7 ...)
+  - if # > max end the loop
+  - else loop
+
+  test: check the content of the array
+  primes (ignore 0,1) up to 30
+
+
+  - - 2 3 . 5 . 7 . . . 11 . 13 . . . 17 . 19 . . . 23 . . . . . 29 .
+  0 0 0 0 1 0 1 0 1 1 1 0  1 0  1 1 1 0  1 0  1 1 1 0  1 1 1 1 1 0  1  <--  array/memory content to check!
 
 
 
-- cell array operations: index = byte, read/write cells
-  PUSH_CELLARR_FIELD    tos = index(byte) :: cell-array-ptr                 -> tos = value (cell)
-  POP_TO_CELLARR_FIELD  tos = index(byte) :: value (cell) :: cell-array-ptr -> []
-  ALLOC_CELLARR         tos = size != 0                                    -> tos = cell-array-ptr
+  - cell array operations: index = byte, read/write cells
+    PUSH_CELLARR_FIELD    tos = index(byte) :: cell-array-ptr                 -> tos = value (cell)
+    POP_TO_CELLARR_FIELD  tos = index(byte) :: value (cell) :: cell-array-ptr -> []
+    ALLOC_CELLARR         tos = size != 0                                    -> tos = cell-array-ptr
 
-- native array operations: index = byte, read/write byte
-  PUSH_NATARR_FIELD     tos = index(byte) :: array-ptr                      -> tos = value (byte)
-  POP_TO_NATARR_FIELD   tos = index(byte) :: value(byte) :: array-ptr       -> []
-  ALLOC_NATARR          tos = size != 0                                    -> tos = array-ptr
+  - native array operations: index = byte, read/write byte
+    PUSH_NATARR_FIELD     tos = index(byte) :: array-ptr                      -> tos = value (byte)
+    POP_TO_NATARR_FIELD   tos = index(byte) :: value(byte) :: array-ptr       -> []
+    ALLOC_NATARR          tos = size != 0                                    -> tos = array-ptr
 
-  write native array ra @ index rt -> local (byte)?
-  write local byte -> native array ra @ index rt?
+    write native array ra @ index rt -> local (byte)?
+    write local byte -> native array ra @ index rt?
 
 
 |#
 
 
-(require (only-in racket/list flatten))
-(require "./vm-bc-ast.rkt")
-(require (only-in "../ast/6510-resolver.rkt"  add-label-suffix))
-(require (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes))
-
-(require (only-in "./vm-bc-opcode-definitions.rkt" bc))
-(require [only-in "./vm-interpreter.rkt" vm-interpreter])
-(require "../6510.rkt")
-(require (only-in "../tools/6510-interpreter.rkt" memory-list))
+[require (only-in racket/list flatten)
+         "../6510.rkt"
+         (only-in "../tools/6510-interpreter.rkt" memory-list)
+         "./vm-bc-ast.rkt"
+         (only-in "./vm-bc-opcode-definitions.rkt" bc)
+         (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes)
+         (only-in "./vm-interpreter.rkt" vm-interpreter)]
 
 (module+ test #|  |#
-  (require "../6510-test-utils.rkt")
-
-  (require (only-in "./vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
-  (require (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK))
-  (require (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles))
-
-  (require (only-in "./vm-inspector-utils.rkt"
-                    shorten-cell-strings
-                    shorten-cell-string
-                    vm-cell-at-nil?
-                    vm-page->strings
-                    vm-stack->strings
-                    vm-regt->string
-                    vm-cell-at->string
-                    vm-cell->string
-                    vm-deref-cell-pair-w->string))
-  (require (only-in "../util.rkt" bytes->int format-hex-byte format-hex-word))
+  (require "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt"
+                    cpu-state-clock-cycles)
+           (only-in "./vm-interpreter-test-utils.rkt"
+                    run-bc-wrapped-in-test-
+                    vm-list->strings))
 
 
   (define PAGE_AVAIL_0 #x8a)

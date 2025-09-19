@@ -13,11 +13,10 @@
 ;; complex types
 ;;   array, list, map, struct
 
-(require syntax/parse/define)
-
-(require (only-in "../6510-utils.rkt" two-complement-of))
-
-(require (only-in "../cisc-vm/rvm-structures.rkt"
+(require syntax/parse/define
+         (only-in "../6510-utils.rkt"
+                  two-complement-of)
+         (only-in "../cisc-vm/rvm-structures.rkt"
                   disassemble
                   make-vm
                   CISC_VM_CONS
@@ -34,17 +33,14 @@
                   CISC_VM_CALL
                   CISC_VM_NIL_P
                   CISC_VM_NOT
-
                   VM_L0
                   VM_L1
                   VM_L2
                   VM_L3
                   VM_L4
                   VM_L5
-
                   VM_P0
                   VM_P1
-
                   encode-idx
                   l-local
                   l-param

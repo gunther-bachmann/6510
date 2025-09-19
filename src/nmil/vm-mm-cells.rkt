@@ -3,19 +3,19 @@
 
 #|
 
-cell functions
+  cell functions
 
 |#
 
-(require "../6510.rkt")
-(require (only-in "./vm-memory-map.rkt"
+(require "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix
+                  replace-labels)
+         (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   ZP_RP
                   ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "../ast/6510-resolver.rkt"
-                  add-label-suffix
-                  replace-labels))
 
 (provide INIT_CELL_PAGE_X_TO_AX                ;; initialize page (in a) for cell usage
          INC_REFCNT_CELL_RT                    ;; increment refcount of the cell, rt is pointing to
@@ -27,23 +27,22 @@ cell functions
          GC_CELLS)                             ;; garbage collect all cells
 
 (module+ test
-  (require (only-in racket/list make-list))
-  (require  "../6510-test-utils.rkt")
-  (require "./vm-memory-manager-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt" peek memory-list))
-  (require (only-in "../util.rkt" format-hex-byte format-hex-word))
-  (require (only-in "./vm-inspector-utils.rkt" vm-page->strings))
-  (require (only-in "./vm-mm-register-functions.rkt"
+  (require (only-in racket/list make-list)
+           "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt" peek memory-list)
+           (only-in "./vm-inspector-utils.rkt" vm-page->strings)
+           "./vm-memory-manager-test-utils.rkt"
+           (only-in "./vm-mm-pages.rkt"
+                    ALLOC_PAGE_TO_X
+                    VM_PAGE_SLOT_DATA
+                    VM_INITIAL_MM_REGS
+                    VM_INITIALIZE_MEMORY_MANAGER)
+           (only-in "./vm-mm-register-functions.rkt"
                     CP_RT_TO_RZ
                     CP_RT_TO_RA
                     CP_RA_TO_RT
                     CP_RT_TO_RP
                     CP_RA_TO_RZ))
-  (require (only-in "./vm-mm-pages.rkt"
-                    ALLOC_PAGE_TO_X
-                    VM_PAGE_SLOT_DATA
-                    VM_INITIAL_MM_REGS
-                    VM_INITIALIZE_MEMORY_MANAGER))
 
   (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available

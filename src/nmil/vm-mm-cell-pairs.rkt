@@ -2,19 +2,19 @@
 
 #|
 
-all functions around cell-pairs
+  all functions around cell-pairs
 
 |#
 
-(require "../6510.rkt")
-(require (only-in "./vm-memory-map.rkt"
+(require "../6510.rkt"
+         (only-in "../ast/6510-resolver.rkt"
+                  add-label-suffix
+                  replace-labels)
+         (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   ZP_RP
                   ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-(require (only-in "../ast/6510-resolver.rkt"
-                  add-label-suffix
-                  replace-labels))
 
 (provide INIT_CELLPAIR_PAGE_X_TO_AX        ;; initialize page A for ref counted cell-pairs
          ALLOC_CELLPAIR_AX_TO_RT           ;; allocate a cell-pair a from page x (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
@@ -43,30 +43,30 @@ all functions around cell-pairs
          WRITE_RT_TO_CELL1_CELLPAIR_RP)
 
 (module+ test
-  (require (only-in racket/list make-list))
-  (require  "../6510-test-utils.rkt")
-  (require "./vm-memory-manager-test-utils.rkt")
-  (require (only-in "../tools/6510-interpreter.rkt" memory-list))
-  (require (only-in "../util.rkt" format-hex-byte))
-  (require (only-in "./vm-inspector-utils.rkt"
+  (require (only-in racket/list make-list)
+           "../6510-test-utils.rkt"
+           (only-in "../tools/6510-interpreter.rkt" memory-list)
+           (only-in "../util.rkt" format-hex-byte)
+           (only-in "./vm-inspector-utils.rkt"
                     vm-regt->string
                     vm-cell-pair-free-tree->string
                     vm-deref-cell-pair-w->string
                     vm-refcount-cell-pair-ptr
                     vm-regp->string
-                    vm-page->strings))
-  (require (only-in "./vm-mm-register-functions.rkt"
+                    vm-page->strings)
+           "./vm-memory-manager-test-utils.rkt"
+           (only-in "./vm-mm-pages.rkt"
+                    ALLOC_PAGE_TO_X
+                    VM_PAGE_SLOT_DATA
+                    VM_INITIAL_MM_REGS
+                    VM_INITIALIZE_MEMORY_MANAGER)
+           (only-in "./vm-mm-register-functions.rkt"
                     CP_RT_TO_RZ
                     CP_RT_TO_RP
                     CP_RZ_TO_RT
                     CP_RA_TO_RZ
                     WRITE_INT_AY_TO_RT
                     WRITE_NIL_TO_RP))
-  (require (only-in "./vm-mm-pages.rkt"
-                    ALLOC_PAGE_TO_X
-                    VM_PAGE_SLOT_DATA
-                    VM_INITIAL_MM_REGS
-                    VM_INITIALIZE_MEMORY_MANAGER))
 
   (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available

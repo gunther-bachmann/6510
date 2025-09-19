@@ -5,7 +5,7 @@
 
 #|
 
-Generator translating a mil module to a stack-virtual-machine
+  Generator translating a mil module to a stack-virtual-machine
 
 |#
 
@@ -20,15 +20,15 @@ Generator translating a mil module to a stack-virtual-machine
                   cell-byte-
                   BRK
                   NIL_CELL
-                  vm--value-stack))
-(require (only-in "./svm-compiler.rkt"
+                  vm--value-stack)
+         (only-in "./parse.rkt"
+                  m-fun-def
+                  m-val-def)
+         (only-in "./svm-compiler.rkt"
                   svm-compile
                   svm-generate
                   generation-artifact--bytes
                   make-generation-artifact))
-(require (only-in "./parse.rkt"
-                  m-fun-def
-                  m-val-def))
 
 (module+ test #| require test utils |#
   (require typed/rackunit))
