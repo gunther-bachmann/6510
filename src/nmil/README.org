@@ -14,13 +14,32 @@ Extensions
 - swap in/out of code
 
 * code organisation
-- ast :: definition of the mil ast used by the compiler to generate code
+bc-code
 - bc-* :: functions coded with byte codes
   - bc-btree :: implementation of a persistent b-tree with values at leafs in pure bytecode
   - bc-fifo :: simple fifo implementation using basic records
   - bc-native :: example for mixing byte code and native 6510 assembler
   - bc-points :: example of a point structure
   - bc-prime-sieve :: example of the sieve of eratosthenes
+vm-interpreter-bc (6510 implementation of ... related byte codes)
+- arrays :: cell-arrays, native arrays
+- atom-num :: int, byte
+- branch :: control flow w/i functions
+- call​_ret :: control flow to/from functions
+- cell-pair :: lists and cell-pairs
+- compare :: producing booleans (similar to predicates)
+- ext :: command extensions (multibyte byte codes)
+- misc :: miscellaneous functions like /gc/ /break/ etc.
+- native :: interfacing native 6510 code
+- pop_​local :: popping cells into locals
+- predicates :: predicate functions producting booleans
+- push_​const :: push number constants
+- push_​local :: push cells from locals
+- push_​n_​pop :: other push and pop functions
+- test-utils :: utils for testing byte codes, reducing clutter in testing files
+- vm-interpreter-bc :: meta module to make importing easier
+root
+- ast :: definition of the mil ast used by the compiler to generate code
 - parse :: parser (basically racket syntax macros) for minimal lisp to generate ast
 - rvm-function :: deprecated experiments with a register based virtual machine
 - svm-compiler :: translates the ast into vm byte code (of a stack vm)

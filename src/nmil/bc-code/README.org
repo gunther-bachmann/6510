@@ -1,0 +1,4 @@
+#+title: bc-code
+
+folder contains code that is written as pure bytecode,
+examples, code experiments and tests
