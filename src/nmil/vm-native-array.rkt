@@ -47,11 +47,11 @@ memory management for native arrays
                     vm-regp->string
                     vm-page->strings)
            "./vm-memory-manager-test-utils.rkt"
-           (only-in "./vm-mm-cell-stack.rkt"
+           (only-in "./vm-cell-stack.rkt"
                     PUSH_XA_TO_EVLSTK
                     PUSH_RT_TO_EVLSTK
                     POP_CELL_EVLSTK_TO_RT)
-           (only-in "./vm-mm-m1-slots.rkt"
+           (only-in "./vm-m1-slots.rkt"
                     ALLOC_M1_SLOT_TO_RA
                     ALLOC_M1_SLOT_TO_RB
                     INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
@@ -59,12 +59,12 @@ memory management for native arrays
                     ADD_M1_SLOT_RZ_TO_PFL
                     DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
                     PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ)
-           (only-in "./vm-mm-pages.rkt"
+           (only-in "./vm-pages.rkt"
                     ALLOC_PAGE_TO_X
                     VM_PAGE_SLOT_DATA
                     VM_INITIAL_MM_REGS
                     VM_INITIALIZE_MEMORY_MANAGER)
-           (only-in "./vm-mm-register-functions.rkt"
+           (only-in "./vm-register-functions.rkt"
                     CP_RA_TO_RB
                     SWAP_RA_RB))
 

@@ -13,15 +13,15 @@
                   ZP_RBI
                   ZP_RAI
                   ZP_RT)
-         (only-in "../vm-mm-cell-array.rkt"
+         (only-in "../vm-cell-array.rkt"
                   ALLOC_CELLARR_TO_RA
                   POP_EVLSTK_TO_ARR_ATa_RA
                   WRITE_ARR_ATa_RA_TO_RT)
-         (only-in "../vm-mm-cell-stack.rkt"
+         (only-in "../vm-cell-stack.rkt"
                   PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-         (only-in "../vm-mm-m1-slots.rkt"
+         (only-in "../vm-m1-slots.rkt"
                   INC_REFCNT_M1_SLOT_RA)
-         (only-in "../vm-mm-register-functions.rkt" SWAP_RA_RB)
+         (only-in "../vm-register-functions.rkt" SWAP_RA_RB)
          (only-in "./branch.rkt"
                   BRANCH_BY_NEXT_BYTE__NO_POP))
 
@@ -220,7 +220,7 @@
           (JSR SWAP_RA_RB)
           (JMP VM_INTERPRETER_INC_PC)))
 
-;; TODO: should be moved to ./vm-mm-cell-array.rkt
+;; TODO: should be moved to ./vm-cell-array.rkt
 (define VM_REFCOUNT_DECR_ARRAY_REGS
   (add-label-suffix
    "__" "__VM_REFCOUNT_DECR_ARRAY_REGS"

@@ -24,7 +24,7 @@ TODO: get tests (still in vm-interpreter) into this file
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR)
-         (only-in "../vm-mm-cell-stack.rkt"
+         (only-in "../vm-cell-stack.rkt"
                   PUSH_XA_TO_EVLSTK
                   PUSH_INT_TO_EVLSTK
                   PUSH_RT_TO_EVLSTK_IF_NONEMPTY))

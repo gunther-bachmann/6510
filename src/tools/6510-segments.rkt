@@ -427,7 +427,7 @@ currently the following test programs are created
                     bc))
   (require (only-in "../nmil/vm-interpreter.rkt"
                     just-vm-interpreter))
-  (require (only-in "../nmil/vm-mm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
+  (require (only-in "../nmil/vm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
 
   ;; @cdc0 mm-regs
   (define mem-data

@@ -36,7 +36,7 @@
             (only-in "../util.rkt"
                      format-hex-byte)
             "./vm-memory-manager-test-utils.rkt"
-            (only-in "./vm-mm-register-functions.rkt"
+            (only-in "./vm-register-functions.rkt"
                      WRITE_INT_AY_TO_RT))
 
 

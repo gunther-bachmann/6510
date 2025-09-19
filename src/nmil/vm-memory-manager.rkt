@@ -5,7 +5,7 @@
 
 combines all the implementation of basic memory primitives for the native 6510 assembler implementation of mil.
 
-implements the integrative functions, making use of vm-mm-... files and their implementations
+implements the integrative functions, making use of vm-... files and their implementations
 
 primitives are e.g. allocation of cell-pair(s)
 evalation stack operations
@@ -44,14 +44,14 @@ call frame primitives etc.
                   TAG_BYTE_NATIVE_ARRAY
                   TAGGED_NIL
                   ZP_TEMP)
-         (only-in "./vm-mm-cell-array.rkt"
+         (only-in "./vm-cell-array.rkt"
                   ALLOC_CELLARR_TO_RA
                   GC_INCR_ARRAY_SLOT_RZ
                   GC_CELL_ARRAYS
                   FREE_CELLARR_RZ
                   PUSH_ARR_ATa_RA_TO_EVLSTK
                   WRITE_RT_TO_ARR_ATa_RA)
-         (only-in "./vm-mm-cell-pairs.rkt"
+         (only-in "./vm-cell-pairs.rkt"
                   INIT_CELLPAIR_PAGE_X_TO_AX
                   GET_FRESH_CELLPAIR_TO_AX
                   ALLOC_CELLPAIR_AX_TO_RT
@@ -65,7 +65,7 @@ call frame primitives etc.
                   DEC_REFCNT_CELLPAIR_RZ
                   FREE_CELLPAIR_RZ
                   GC_CELLPAIR_FREE_LIST)
-         (only-in "./vm-mm-cell-stack.rkt"
+         (only-in "./vm-cell-stack.rkt"
                   INIT_CELLSTACK_PAGE_X
                   PUSH_XA_TO_EVLSTK
                   POP_CELL_EVLSTK_TO_RT
@@ -73,7 +73,7 @@ call frame primitives etc.
                   PUSH_RT_TO_EVLSTK
                   POP_CELL_EVLSTK_TO_CELLy_RT
                   POP_CELL_EVLSTK_TO_RA)
-         (only-in "./vm-mm-cells.rkt"
+         (only-in "./vm-cells.rkt"
                   INIT_CELL_PAGE_X_TO_AX
                   INC_REFCNT_CELL_RT
                   DEC_REFCNT_CELL_RZ
@@ -82,7 +82,7 @@ call frame primitives etc.
                   GET_FRESH_CELL_TO_AX
                   ALLOC_CELL_AX_TO_RT
                   GC_CELLS)
-         (only-in "./vm-mm-m1-slots.rkt"
+         (only-in "./vm-m1-slots.rkt"
                   INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX
                   DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
                   PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ
@@ -93,15 +93,15 @@ call frame primitives etc.
                   INC_REFCNT_M1_SLOT_RA
                   FREE_M1_SLOT_RZ
                   ALLOC_M1_SLOT_TO_RA)
-         (only-in "./vm-mm-native-array.rkt"
+         (only-in "./vm-native-array.rkt"
                   ALLOC_NATARR_TO_RA)
-         (only-in "./vm-mm-pages.rkt"
+         (only-in "./vm-pages.rkt"
                   VM_INITIALIZE_MEMORY_MANAGER
                   FREE_PAGE_A
                   ALLOC_PAGE_TO_X
                   VM_INITIAL_MM_REGS
                   VM_PAGE_SLOT_DATA)
-         (only-in "./vm-mm-register-functions.rkt"
+         (only-in "./vm-register-functions.rkt"
                   WRITE_NIL_TO_RT
                   WRITE_NIL_TO_RP
                   WRITE_INT_AY_TO_RT
@@ -120,7 +120,7 @@ call frame primitives etc.
 
 (provide vm-memory-manager
          vm-memory-manager-wo-data-tail
-         (all-from-out "./vm-mm-pages.rkt")
+         (all-from-out "./vm-pages.rkt")
          ;; ---------------------------------------- refcount
          INC_REFCNT_RT         ;; generic increment of refcount (dispatches depending on type)
          DEC_REFCNT_RT

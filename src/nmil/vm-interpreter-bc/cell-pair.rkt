@@ -18,9 +18,9 @@
          (only-in "../vm-memory-map.rkt"
                   ZP_RT
                   ZP_RZ)
-         (only-in "../vm-mm-cell-stack.rkt"
+         (only-in "../vm-cell-stack.rkt"
                   PUSH_NIL_TO_EVLSTK)
-         (only-in "../vm-mm-register-functions.rkt"
+         (only-in "../vm-register-functions.rkt"
                   CP_RT_TO_RZ))
 
 (provide BC_CxxR

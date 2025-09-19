@@ -12,7 +12,7 @@
                   ZP_VM_PC
                   ZP_RT
                   ZP_RP)
-         (only-in "../vm-mm-cell-stack.rkt"
+         (only-in "../vm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RT))
 
 (provide BC_POKE_B

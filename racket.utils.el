@@ -298,7 +298,7 @@ filter lines that start with ---"
          :org-link ,(format "file:%s::%s" (plist-get plist :filename) (plist-get plist :line))
          ,@plist))))
 
-;; (gb/racket--rgdc--enrich-plist-fun (gb/racket--rgdc-line-to-plist "repo/+1/6510/src/nmil/vm-mm-pages.rkt:176:4:;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages"))
+;; (gb/racket--rgdc--enrich-plist-fun (gb/racket--rgdc-line-to-plist "repo/+1/6510/src/nmil/vm-pages.rkt:176:4:;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages"))
 
 (defconst gb/racket--rgdc--org-template
   (list "#+title: vm-object-index"
@@ -797,9 +797,9 @@ filter lines that start with ---"
                 :column   ,(nth 2 tokens)
                 ,@(gb/racket--rgdc-match--label match))))
 
-;; (gb/racket--rgdc-line-to-plist "src/nmil/vm-mm-pages.rkt:176:4:;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages")
+;; (gb/racket--rgdc-line-to-plist "src/nmil/vm-pages.rkt:176:4:;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages")
 
-;; (plist-get (gb/racket--rgdc-line-to-plist "src/nmil/vm-mm-pages.rkt:176:4:;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages") :filename)
+;; (plist-get (gb/racket--rgdc-line-to-plist "src/nmil/vm-pages.rkt:176:4:;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages") :filename)
 
 (defun gb/racket--rgdc-match--label (match-line)
   "convert the MATCH-LINE into a plist"

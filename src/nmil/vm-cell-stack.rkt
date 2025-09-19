@@ -35,18 +35,18 @@
                     vm-stack->strings
                     vm-regt->string)
            "./vm-memory-manager-test-utils.rkt"
-           (only-in "./vm-mm-cell-pairs.rkt"
+           (only-in "./vm-cell-pairs.rkt"
                     ALLOC_CELLPAIR_TO_RT
                     ALLOC_CELLPAIR_AX_TO_RT
                     WRITE_CELLPAIR_RT_CELLy_TO_RT
                     GET_FRESH_CELLPAIR_TO_AX
                     INIT_CELLPAIR_PAGE_X_TO_AX)
-           (only-in "./vm-mm-pages.rkt"
+           (only-in "./vm-pages.rkt"
                     ALLOC_PAGE_TO_X
                     VM_PAGE_SLOT_DATA
                     VM_INITIAL_MM_REGS
                     VM_INITIALIZE_MEMORY_MANAGER)
-           (only-in "./vm-mm-register-functions.rkt"
+           (only-in "./vm-register-functions.rkt"
                     WRITE_INT_AY_TO_RT))
 
   (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation

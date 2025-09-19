@@ -12,7 +12,7 @@
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR)
-         (only-in "../vm-mm-cell-stack.rkt"
+         (only-in "../vm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RP
                   POP_CELL_EVLSTK_TO_RT))
 

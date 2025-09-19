@@ -42,12 +42,12 @@
            (only-in "../util.rkt" format-hex-byte format-hex-word)
            (only-in "./vm-inspector-utils.rkt" vm-page->strings)
            "./vm-memory-manager-test-utils.rkt"
-           (only-in "./vm-mm-pages.rkt"
+           (only-in "./vm-pages.rkt"
                     ALLOC_PAGE_TO_X
                     VM_PAGE_SLOT_DATA
                     VM_INITIAL_MM_REGS
                     VM_INITIALIZE_MEMORY_MANAGER)
-           (only-in "./vm-mm-register-functions.rkt"
+           (only-in "./vm-register-functions.rkt"
                     CP_RT_TO_RA
                     CP_RA_TO_RT
                     CP_RA_TO_RB

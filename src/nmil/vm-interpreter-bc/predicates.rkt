@@ -15,7 +15,7 @@
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_HB_PTR
                   ZP_CELL_STACK_LB_PTR)
-         (only-in "../vm-mm-register-functions.rkt"
+         (only-in "../vm-register-functions.rkt"
                   WRITE_INT1_TO_RT
                   WRITE_INT0_TO_RT))
 

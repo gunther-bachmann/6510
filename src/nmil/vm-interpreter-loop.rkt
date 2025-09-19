@@ -14,7 +14,7 @@ and the bc operation jump table
          (only-in "./vm-memory-map.rkt"
                   ZP_VM_PC
                   ZP_VM_FUNC_PTR)
-         (only-in "./vm-mm-cell-stack.rkt"
+         (only-in "./vm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RT))
 
 (provide VM_INTERPRETER                         ;; fetch op at (VM_PC),y=0 and interpret that byte code

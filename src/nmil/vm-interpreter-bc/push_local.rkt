@@ -20,7 +20,7 @@
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_LB_PTR
                   ZP_RT)
-         (only-in "../vm-mm-cell-stack.rkt"
+         (only-in "../vm-cell-stack.rkt"
                   PUSH_RT_TO_EVLSTK_IF_NONEMPTY))
 
 (provide BC_WRITE_LOCAL_SHORT           ;; write a local into the tos (rt)
