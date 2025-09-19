@@ -1,13 +1,17 @@
 #lang racket/base
 
 (require (only-in racket/list flatten)
-         "../6510.rkt"
-         (only-in "./vm-bc-opcode-definitions.rkt" bc)
-         [only-in "./vm-interpreter.rkt" vm-interpreter])
+         "../../6510.rkt"
+         (only-in "../../tools/6510-interpreter.rkt"
+                    cpu-state-clock-cycles)
+         (only-in "../vm-bc-opcode-definitions.rkt"
+                  bc)
+         (only-in "../vm-interpreter.rkt"
+                  vm-interpreter))
 
 (module+ test #|  |#
-  (require "../6510-test-utils.rkt"
-           (only-in "./vm-inspector-utils.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../vm-inspector-utils.rkt"
                     shorten-cell-strings
                     shorten-cell-string
                     vm-cell-at-nil?
@@ -17,7 +21,7 @@
                     vm-cell-at->string
                     vm-cell->string
                     vm-deref-cell-pair-w->string)
-           (only-in "./vm-interpreter-test-utils.rkt"
+           (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings))
 
@@ -55,7 +59,7 @@
           (STA ZP_RT+1)
           (JSR RETURN_TO_BC)    ;; uses address on the stack (=> jsr) to calculate next bc to execute
 
-          (bc RET)
+          (bc RET)              ;; bc interpretation continues here
           ))
 
 (module+ test #| bc_add_native |#
@@ -63,6 +67,7 @@
     (run-bc-wrapped-in-test
      (append
       (list
+       (bc BNOP)
        (bc PUSH_B) (byte 4)
        (bc PUSH_B) (byte 6)
        (bc CALL) (word-ref BC_ADD_NATIVE)
@@ -71,6 +76,8 @@
       (list (org #x8700))
       BC_ADD_NATIVE)
      ))
+  (inform-check-equal? (cpu-state-clock-cycles add-native-state)
+                       844)
   (check-equal? (vm-stack->strings add-native-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
@@ -98,6 +105,7 @@
     (run-bc-wrapped-in-test
      (append
       (list
+       (bc BNOP)
        (bc PUSH_B) (byte 4)
        (bc PUSH_B) (byte 6)
        (bc CALL) (word-ref BC_ADD_NATIVE_2)
@@ -106,6 +114,8 @@
       (list (org #x8700))
       BC_ADD_NATIVE_2)
      ))
+  (inform-check-equal? (cpu-state-clock-cycles add-native-state-2)
+                       806)
   (check-equal? (vm-stack->strings add-native-state-2)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"

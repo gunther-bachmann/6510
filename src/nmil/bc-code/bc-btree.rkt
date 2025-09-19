@@ -89,25 +89,25 @@
 |#
 
 (require (only-in racket/list flatten)
-         "../6510.rkt"
-         (only-in "../tools/6510-interpreter.rkt" memory-list)
-         "./vm-bc-ast.rkt"
-         (only-in "./vm-bc-opcode-definitions.rkt" bc)
-         (only-in "./vm-bc-resolver.rkt"
+         "../../6510.rkt"
+         (only-in "../../tools/6510-interpreter.rkt" memory-list)
+         "../vm-bc-ast.rkt"
+         (only-in "../vm-bc-opcode-definitions.rkt" bc)
+         (only-in "../vm-bc-resolver.rkt"
                   bc-resolve
                   bc-bytes)
-         [only-in "./vm-interpreter.rkt" vm-interpreter]
-         (only-in "./vm-memory-map.rkt" ZP_VM_PC))
+         [only-in "../vm-interpreter.rkt" vm-interpreter]
+         (only-in "../vm-memory-map.rkt" ZP_VM_PC))
 
 (module+ test #|  |#
-  (require "../6510-test-utils.rkt"
-           (only-in "../cisc-vm/stack-virtual-machine.rkt" BRK)
-           (only-in "../tools/6510-interpreter.rkt" cpu-state-clock-cycles)
-           (only-in "../util.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../../cisc-vm/stack-virtual-machine.rkt" BRK)
+           (only-in "../../tools/6510-interpreter.rkt" cpu-state-clock-cycles)
+           (only-in "../../util.rkt"
                     bytes->int
                     format-hex-byte
                     format-hex-word)
-           (only-in "./vm-inspector-utils.rkt"
+           (only-in "../vm-inspector-utils.rkt"
                     shorten-cell-strings
                     shorten-cell-string
                     vm-cell-at-nil?
@@ -117,7 +117,7 @@
                     vm-cell-at->string
                     vm-cell->string
                     vm-deref-cell-pair-w->string)
-           (only-in "./vm-interpreter-test-utils.rkt"
+           (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings))
 

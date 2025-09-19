@@ -48,18 +48,18 @@
 
 
 [require (only-in racket/list flatten)
-         "../6510.rkt"
-         (only-in "../tools/6510-interpreter.rkt" memory-list)
-         "./vm-bc-ast.rkt"
-         (only-in "./vm-bc-opcode-definitions.rkt" bc)
-         (only-in "./vm-bc-resolver.rkt" bc-resolve bc-bytes)
-         (only-in "./vm-interpreter.rkt" vm-interpreter)]
+         "../../6510.rkt"
+         (only-in "../../tools/6510-interpreter.rkt" memory-list)
+         "../vm-bc-ast.rkt"
+         (only-in "../vm-bc-opcode-definitions.rkt" bc)
+         (only-in "../vm-bc-resolver.rkt" bc-resolve bc-bytes)
+         (only-in "../vm-interpreter.rkt" vm-interpreter)]
 
 (module+ test #|  |#
-  (require "../6510-test-utils.rkt"
-           (only-in "../tools/6510-interpreter.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../../tools/6510-interpreter.rkt"
                     cpu-state-clock-cycles)
-           (only-in "./vm-interpreter-test-utils.rkt"
+           (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings))
 

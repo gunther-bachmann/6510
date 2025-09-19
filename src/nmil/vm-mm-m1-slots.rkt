@@ -34,8 +34,7 @@
          VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)  ;; remove full pages from the list of m1 slot pages of type x
 
 (module+ test
-  (require ;; (only-in racket/list make-list)
-           "../6510-test-utils.rkt"
+  (require "../6510-test-utils.rkt"
            (only-in "../tools/6510-interpreter.rkt"
                     peek
                     memory-list

@@ -15,21 +15,21 @@
 |#
 
 (require (only-in racket/list flatten)
-         "../6510.rkt"
-         (only-in "../tools/6510-interpreter.rkt" memory-list)
-         (only-in "./vm-bc-opcode-definitions.rkt" bc)
-         (only-in "./vm-interpreter.rkt" vm-interpreter))
+         "../../6510.rkt"
+         (only-in "../../tools/6510-interpreter.rkt" memory-list)
+         (only-in "../vm-bc-opcode-definitions.rkt" bc)
+         (only-in "../vm-interpreter.rkt" vm-interpreter))
 
 (module+ test #|  |#
-  (require "../6510-test-utils.rkt"
-           (only-in "../tools/6510-interpreter.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../../tools/6510-interpreter.rkt"
                     cpu-state-clock-cycles
                     peek)
-           (only-in "../util.rkt"
+           (only-in "../../util.rkt"
                     bytes->int
                     format-hex-byte
                     format-hex-word)
-           (only-in "./vm-inspector-utils.rkt"
+           (only-in "../vm-inspector-utils.rkt"
                     shorten-cell-strings
                     shorten-cell-string
                     vm-cell-at-nil?
@@ -39,7 +39,7 @@
                     vm-cell-at->string
                     vm-cell->string
                     vm-deref-cell-pair-w->string)
-           (only-in "./vm-interpreter-test-utils.rkt"
+           (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings))
 
