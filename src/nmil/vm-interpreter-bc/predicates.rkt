@@ -6,16 +6,16 @@
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES)
-         (only-in "../vm-memory-manager.rkt"
+         (only-in "../vm-runtime/vm-memory-manager.rkt"
                   DEC_REFCNT_RT
                   DEC_REFCNT_RZ)
-         (only-in "../vm-memory-map.rkt"
+         (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RZ
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_HB_PTR
                   ZP_CELL_STACK_LB_PTR)
-         (only-in "../vm-register-functions.rkt"
+         (only-in "../vm-runtime/vm-register-functions.rkt"
                   WRITE_INT1_TO_RT
                   WRITE_INT0_TO_RT))
 

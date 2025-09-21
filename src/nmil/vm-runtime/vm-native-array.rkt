@@ -6,8 +6,8 @@ memory management for native arrays
 
 |#
 
-(require "../6510.rkt"
-         (only-in "../ast/6510-resolver.rkt"
+(require "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix
                   replace-labels)
          (only-in "./vm-memory-map.rkt"
@@ -30,11 +30,11 @@ memory management for native arrays
          CP_NATARR_RANGE_RA_TO_RB)
 
 (module+ test
-  (require "../6510-test-utils.rkt"
-           (only-in "../tools/6510-interpreter.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../../tools/6510-interpreter.rkt"
                     peek
                     memory-list)
-           (only-in "./vm-inspector-utils.rkt"
+           (only-in "../vm-inspector-utils.rkt"
                     vm-cell-at-nil?
                     vm-rega->string
                     vm-regt->string

@@ -275,6 +275,7 @@
    (build-list (length (od-extended-bc--sub-commands extended-opcode)) (lambda (i) i))
    "the extended opcodes must be consequatively numbered, starting at 0"))
 
+;; disassemble the given opcode using the actual 3 bytes bc, bc_p1, bc_p2
 (define/contract (disassemble-od-simple-bc dyn-opcode-def labels bc bc_p1 bc_p2)
   (-> od-simple-bc? hash? byte? byte? byte? string? )
   (define df (od-simple-bc--disassembler dyn-opcode-def))
@@ -412,14 +413,17 @@
 
 (module+ test #| bc |#
   (check-equal? (bc CALL)
-                (ast-bytes-cmd '() '(104)))
+                (ast-bytes-cmd '() '(#x68)))
 
   (check-equal? (bc IMAX)
-                (ast-bytes-cmd '() '(8 1)))
+                (ast-bytes-cmd '() '(#x08 #x01))
+                "extended command consisting of two byte codes")
 
   (check-equal? (bc IADD)
-                (ast-bytes-cmd '() '(190))))
+                (ast-bytes-cmd '() '(#xbe))))
 
+
+;; build table of lowbyte jump table for extended opcodes
 (define (build-extended-optable-lb bc-defs (lb-table VM_INTERPRETER_OPTABLE_EXT1_LB))
   (let ([ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-defs)])
    (foldl (lambda (od-simple acc)
@@ -438,6 +442,7 @@
 (define full-extended-optable-lb
   (build-extended-optable-lb bc-opcode-definitions))
 
+;; build table of high byte jump table for extended opcodes
 (define (build-extended-optable-hb bc-defs (hb-table VM_INTERPRETER_OPTABLE_EXT1_HB))
   (let ([ext-cmd (findf (lambda (od) (od-extended-bc? od)) bc-defs)])
    (foldl (lambda (od-simple acc)
@@ -456,6 +461,7 @@
 (define full-extended-optable-hb
   (build-extended-optable-hb bc-opcode-definitions))
 
+;; build jumptable for non extended (one byte) bcs (lb,hb combinations)
 (define (build-interpreter-optable bc-defs (table VM_INTERPRETER_OPTABLE))
   (foldl (lambda (od acc)
            (cond
@@ -470,6 +476,7 @@
 (define full-interpreter-opcode-table
   (build-interpreter-optable bc-opcode-definitions))
 
+;; get a filtered list of opcodes (useful for testing, filtering out irrelevant codes)
 (define (filtered-opcode-definitions wanted-bc-list (bc-defs bc-opcode-definitions))
   (map (lambda (od)
          (cond

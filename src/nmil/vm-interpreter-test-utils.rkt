@@ -79,8 +79,6 @@
          (only-in "./vm-bc-disassembler.rkt"
                   disassembler-byte-code--byte-count
                   disassemble-byte-code)
-         (only-in "./vm-call-frame.rkt"
-                  vm-call-frame->strings)
          (only-in "./vm-inspector-utils.rkt"
                   shorten-cell-string
                   shorten-cell-strings
@@ -91,7 +89,9 @@
                   vm-cell-at->string
                   vm-cell->string
                   vm-deref-cell-pair-w->string)
-         (only-in "./vm-memory-map.rkt"
+         (only-in "vm-runtime/vm-call-frame.rkt"
+                  vm-call-frame->strings)
+         (only-in "vm-runtime/vm-memory-map.rkt"
                   ast-const-get
                   ZP_RT
                   ZP_VM_PC

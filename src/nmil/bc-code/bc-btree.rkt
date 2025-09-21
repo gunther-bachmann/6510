@@ -97,7 +97,7 @@
                   bc-resolve
                   bc-bytes)
          [only-in "../vm-interpreter.rkt" vm-interpreter]
-         (only-in "../vm-memory-map.rkt" ZP_VM_PC))
+         (only-in "../vm-runtime/vm-memory-map.rkt" ZP_VM_PC))
 
 (module+ test #|  |#
   (require "../../6510-test-utils.rkt"

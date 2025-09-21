@@ -22,13 +22,13 @@ call frame primitives etc.
                   empty?
                   drop
                   make-list)
-         "../6510.rkt"
-         (only-in "../ast/6510-resolver.rkt"
+         "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix
                   replace-labels)
-         (only-in "../tools/6510-interpreter.rkt"
+         (only-in "../../tools/6510-interpreter.rkt"
                   peek)
-         (only-in "../util.rkt"
+         (only-in "../../util.rkt"
                   format-hex-byte)
          (only-in "./vm-memory-map.rkt"
                   VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -131,9 +131,9 @@ call frame primitives etc.
 )
 
 (module+ test
-  (require "../6510-test-utils.rkt"
-           (only-in "../ast/6510-relocator.rkt" command-len)
-           (only-in "./vm-inspector-utils.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../../ast/6510-relocator.rkt" command-len)
+           (only-in "../vm-inspector-utils.rkt"
                     vm-regt->string
                     vm-refcount-cell-pair-ptr
                     vm-refcount-cell-ptr)

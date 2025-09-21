@@ -17,22 +17,22 @@ provide routines that are useful for testing memory management routines
                   string-replace)
          (only-in uuid
                   uuid-string)
-         "../6510.rkt"
-         (only-in "../ast/6510-assembler.rkt"
+         "../../6510.rkt"
+         (only-in "../../ast/6510-assembler.rkt"
                   new-assemble-to-code-list
                   assembly-code-list-org-code-sequences
                   assembly-code-list-labels)
-         (only-in "../ast/6510-command.rkt"
+         (only-in "../../ast/6510-command.rkt"
                   ast-label-def-cmd?
                   ast-label-def-cmd-label)
-         (only-in "../ast/6510-resolver.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
-         (only-in "../tools/6510-debugger-shared.rkt"
+         (only-in "../../tools/6510-debugger-shared.rkt"
                   breakpoint)
-         (only-in "../tools/6510-debugger.rkt"
+         (only-in "../../tools/6510-debugger.rkt"
                   run-debugger-on
                   debugger--assembler-interactor)
-         (only-in "../tools/6510-interpreter.rkt"
+         (only-in "../../tools/6510-interpreter.rkt"
                   cpu-state-program-counter
                   6510-load-multiple
                   initialize-cpu

@@ -6,18 +6,10 @@ memory management for cell arrays
 
 |#
 
-(require "../6510.rkt"
-         (only-in "../ast/6510-resolver.rkt"
+(require "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix
                   replace-labels)
-         (only-in "./vm-memory-map.rkt"
-                  TAGGED_NIL
-                  TAG_BYTE_CELL_ARRAY
-                  ZP_RP
-                  ZP_RA
-                  ZP_TEMP
-                  ZP_RT
-                  VM_MEMORY_MANAGEMENT_CONSTANTS)
          (only-in "./vm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RT)
          (only-in "./vm-m1-slots.rkt"
@@ -26,7 +18,15 @@ memory management for cell arrays
                   VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS
                   ADD_M1_SLOT_RZ_TO_PFL
                   DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
-                  PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ))
+                  PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ)
+         (only-in "./vm-memory-map.rkt"
+                  TAGGED_NIL
+                  TAG_BYTE_CELL_ARRAY
+                  ZP_RP
+                  ZP_RA
+                  ZP_TEMP
+                  ZP_RT
+                  VM_MEMORY_MANAGEMENT_CONSTANTS))
 
 (provide
           ALLOC_CELLARR_TO_RA          ;; allocate an array of cells (also useful for structures)
@@ -45,18 +45,17 @@ memory management for cell arrays
           WRITE_RT_TO_ARR_ATa_RA)      ;; write cell in RT into cell-array RA at A
 
 (module+ test
-  (require "../6510-test-utils.rkt"
-           (only-in "../tools/6510-interpreter.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../../tools/6510-interpreter.rkt"
                     memory-list
                     cpu-state-clock-cycles)
-           (only-in "../util.rkt" format-hex-byte)
-           (only-in "./vm-inspector-utils.rkt"
+           (only-in "../../util.rkt" format-hex-byte)
+           (only-in "../vm-inspector-utils.rkt"
                     vm-regt->string
                     vm-cell-pair-free-tree->string
                     vm-deref-cell-pair-w->string
                     vm-stack->strings
                     vm-page->strings)
-           "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-cell-pairs.rkt"
                     WRITE_RP_TO_CELLy_CELLPAIR_RT
                     WRITE_CELLPAIR_RT_CELLy_TO_RT
@@ -75,6 +74,7 @@ memory management for cell arrays
                     INIT_CELL_PAGE_X_TO_AX
                     DEC_REFCNT_CELL_RZ
                     FREE_CELL_RZ)
+           "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-pages.rkt"
                     ALLOC_PAGE_TO_X
                     VM_PAGE_SLOT_DATA

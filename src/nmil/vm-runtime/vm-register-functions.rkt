@@ -6,10 +6,10 @@
 
 |#
 
-(require "../6510.rkt"
-         (only-in "../ast/6510-resolver.rkt"
+(require "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
-         (only-in "./vm-inspector-utils.rkt"
+         (only-in "../vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-rega->string
                   vm-regt->string)
@@ -40,8 +40,8 @@
          SWAP_RA_RB)
 
 (module+ test
-  (require  "../6510-test-utils.rkt"
-            (only-in "../tools/6510-interpreter.rkt" memory-list)
+  (require  "../../6510-test-utils.rkt"
+            (only-in "../../tools/6510-interpreter.rkt" memory-list)
             "./vm-memory-manager-test-utils.rkt")
 
   (define test-runtime

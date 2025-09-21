@@ -9,29 +9,17 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (require (only-in racket/list
                   flatten
                   take)
-         "../6510.rkt"
-         (only-in "../ast/6510-assembler.rkt"
-                  assemble
-                  assemble-to-code-list
-                  translate-code-list-for-basic-loader)
-         (only-in "../ast/6510-relocator.rkt"
+         "../../6510.rkt"
+         (only-in "../../ast/6510-relocator.rkt"
                   command-len)
-         (only-in "../tools/6510-interpreter.rkt"
-                  6510-load
-                  6510-load-multiple
-                  initialize-cpu
-                  run-interpreter
-                  run-interpreter-on
-                  memory-list
-                  cpu-state-accumulator)
-         (only-in "./vm-call-frame.rkt"
-                  vm-call-frame
-                  vm-call-frame-wo-data-tail)
-         (only-in "./vm-inspector-utils.rkt"
+         (only-in "../vm-inspector-utils.rkt"
                   vm-stack->strings
                   vm-page->strings
                   vm-regt->string
                   vm-deref-cell-pair-w->string)
+         (only-in "./vm-call-frame.rkt"
+                  vm-call-frame
+                  vm-call-frame-wo-data-tail)
          (only-in "./vm-memory-manager-test-utils.rkt"
                   run-code-in-test-on-code))
 
@@ -43,7 +31,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
          VM_CONS__REFCNTD)
 
 (module+ test
-  (require "../6510-test-utils.rkt")
+  (require "../../6510-test-utils.rkt")
 
   (define (wrap-code-for-test bc)
     (append (list (org #xa000)

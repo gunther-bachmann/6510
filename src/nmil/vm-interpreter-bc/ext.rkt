@@ -13,7 +13,7 @@ of the decoder and the jump
          "../../6510.rkt"
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
-         (only-in "../vm-memory-map.rkt"
+         (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_VM_PC))
 
 (provide BC_EXT1_CMD

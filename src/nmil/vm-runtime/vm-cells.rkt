@@ -7,8 +7,8 @@
 
 |#
 
-(require "../6510.rkt"
-         (only-in "../ast/6510-resolver.rkt"
+(require "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix
                   replace-labels)
          (only-in "./vm-memory-map.rkt"
@@ -28,9 +28,9 @@
 
 (module+ test
   (require (only-in racket/list make-list)
-           "../6510-test-utils.rkt"
-           (only-in "../tools/6510-interpreter.rkt" peek memory-list)
-           (only-in "./vm-inspector-utils.rkt" vm-page->strings)
+           "../../6510-test-utils.rkt"
+           (only-in "../../tools/6510-interpreter.rkt" peek memory-list)
+           (only-in "../vm-inspector-utils.rkt" vm-page->strings)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-pages.rkt"
                     ALLOC_PAGE_TO_X

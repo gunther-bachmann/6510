@@ -11,11 +11,11 @@ and the bc operation jump table
 (require (only-in racket/list
                   flatten)
          "../6510.rkt"
-         (only-in "./vm-memory-map.rkt"
+         (only-in "vm-runtime/vm-cell-stack.rkt"
+                  POP_CELL_EVLSTK_TO_RT)
+         (only-in "vm-runtime/vm-memory-map.rkt"
                   ZP_VM_PC
-                  ZP_VM_FUNC_PTR)
-         (only-in "./vm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RT))
+                  ZP_VM_FUNC_PTR))
 
 (provide VM_INTERPRETER                         ;; fetch op at (VM_PC),y=0 and interpret that byte code
          VM_INTERPRETER_OPTABLE                 ;; 256 byte holding the function vector for 128 byte codes (low, high each)
@@ -28,7 +28,7 @@ and the bc operation jump table
 
 ;; @DC-FUN: VM_INTERPRETER_INIT, group: misc
 ;; initialize PC to $8000
-(define VM_INTERPRETER_INIT_AX #t)
+(define VM_INTERPRETER_INIT_AX '())
 (define VM_INTERPRETER_INIT
   (list
    (label VM_INTERPRETER_INIT)
@@ -43,10 +43,10 @@ and the bc operation jump table
 
 ;; interpreter loop without short commands
 ;; each byte command must have lowest bit set to 0 to be aligned to the jump table
-(define VM_INTERPRETER_INC_PC_2_TIMES #t)
-(define VM_INTERPRETER_INC_PC_A_TIMES #t)
-(define VM_POP_EVLSTK_AND_INC_PC #t)
-(define VM_INTERPRETER_INC_PC #t)
+(define VM_INTERPRETER_INC_PC_2_TIMES '())
+(define VM_INTERPRETER_INC_PC_A_TIMES '())
+(define VM_POP_EVLSTK_AND_INC_PC '())
+(define VM_INTERPRETER_INC_PC '())
 (define VM_INTERPRETER
   (list
    (label VM_INTERPRETER_INC_PC_2_TIMES)
@@ -80,8 +80,8 @@ and the bc operation jump table
           (JMP (VM_INTERPRETER_OPTABLE))        ;; jump by table
 ))
 
-;; the jump table is filled by codes defined here
-;; must be page aligned!
+;; the jump table is filled by codes defined in the bx opcode definitions file
+;; must be page aligned! since only lowbyte is modified in indirect call => optable needs to be exactly within one page!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list

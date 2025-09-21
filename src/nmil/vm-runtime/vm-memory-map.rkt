@@ -7,9 +7,16 @@
 |#
 
 (require (only-in racket/list empty?)
-         (only-in "../6510.rkt"
+         (only-in "../../6510.rkt"
                   byte-const
-                  word-const))
+                  word-const)
+         (only-in "../../ast/6510-command.rkt"
+                  ast-const-byte-cmd?
+                  ast-const-byte-cmd-label
+                  ast-const-byte-cmd-byte
+                  ast-const-word-cmd?
+                  ast-const-word-cmd-label
+                  ast-const-word-cmd-word))
 
 (provide ast-const-get
          VM_MEMORY_MANAGEMENT_CONSTANTS  ;; contains all zp variable locations and constant definitions to be included into a asm program
@@ -118,13 +125,7 @@
    ;; currently no need to register B (maybe someday)
    ))
 
-(require (only-in "../ast/6510-command.rkt"
-                  ast-const-byte-cmd?
-                  ast-const-byte-cmd-label
-                  ast-const-byte-cmd-byte
-                  ast-const-word-cmd?
-                  ast-const-word-cmd-label
-                  ast-const-word-cmd-word))
+
 
 ;; extract constant definition in assembler into racket constant
 (define (ast-const-get ast-commands key)

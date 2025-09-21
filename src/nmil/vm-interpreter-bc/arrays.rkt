@@ -7,21 +7,21 @@
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES
                   VM_POP_EVLSTK_AND_INC_PC)
-         (only-in "../vm-memory-manager.rkt"
+         (only-in "../vm-runtime/vm-memory-manager.rkt"
                   INC_REFCNT_RT)
-         (only-in "../vm-memory-map.rkt"
+         (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RBI
                   ZP_RAI
                   ZP_RT)
-         (only-in "../vm-cell-array.rkt"
+         (only-in "../vm-runtime/vm-cell-array.rkt"
                   ALLOC_CELLARR_TO_RA
                   POP_EVLSTK_TO_ARR_ATa_RA
                   WRITE_ARR_ATa_RA_TO_RT)
-         (only-in "../vm-cell-stack.rkt"
+         (only-in "../vm-runtime/vm-cell-stack.rkt"
                   PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-         (only-in "../vm-m1-slots.rkt"
+         (only-in "../vm-runtime/vm-m1-slots.rkt"
                   INC_REFCNT_M1_SLOT_RA)
-         (only-in "../vm-register-functions.rkt" SWAP_RA_RB)
+         (only-in "../vm-runtime/vm-register-functions.rkt" SWAP_RA_RB)
          (only-in "./branch.rkt"
                   BRANCH_BY_NEXT_BYTE__NO_POP))
 

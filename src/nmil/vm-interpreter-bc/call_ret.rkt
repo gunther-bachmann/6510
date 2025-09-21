@@ -5,15 +5,15 @@
          "../../6510.rkt"
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
-         (only-in "../vm-call-frame.rkt"
+         (only-in "../vm-runtime/vm-call-frame.rkt"
                   VM_PUSH_CALL_FRAME_N
                   VM_ALLOC_LOCALS
                   VM_REFCOUNT_DECR_CURRENT_LOCALS)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC)
-         (only-in "../vm-memory-manager.rkt"
+         (only-in "../vm-runtime/vm-memory-manager.rkt"
                   DEC_REFCNT_RT)
-         (only-in "../vm-memory-map.rkt"
+         (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_VM_PC
                   ZP_VM_FUNC_PTR
                   ZP_RP

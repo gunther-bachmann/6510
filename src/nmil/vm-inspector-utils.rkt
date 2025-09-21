@@ -22,7 +22,7 @@
                   high-byte
                   format-hex-byte
                   format-hex-word)
-         (only-in "./vm-memory-map.rkt"
+         (only-in "vm-runtime/vm-memory-map.rkt"
                   TAG_BYTE_BYTE_CELL
                   TAG_BYTE_CELL_ARRAY
                   TAGGED_NIL

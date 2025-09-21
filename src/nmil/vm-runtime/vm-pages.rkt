@@ -8,8 +8,8 @@
 
 (require (only-in racket/list
                   flatten)
-         "../6510.rkt"
-         (only-in "./vm-inspector-utils.rkt"
+         "../../6510.rkt"
+         (only-in "../vm-inspector-utils.rkt"
                   vm-regt->string)
          (only-in "./vm-memory-map.rkt"
                   ZP_RP
@@ -30,10 +30,10 @@
          )
 
 (module+ test
-  (require  "../6510-test-utils.rkt"
-            (only-in "../tools/6510-interpreter.rkt"
+  (require  "../../6510-test-utils.rkt"
+            (only-in "../../tools/6510-interpreter.rkt"
                      peek)
-            (only-in "../util.rkt"
+            (only-in "../../util.rkt"
                      format-hex-byte)
             "./vm-memory-manager-test-utils.rkt"
             (only-in "./vm-register-functions.rkt"

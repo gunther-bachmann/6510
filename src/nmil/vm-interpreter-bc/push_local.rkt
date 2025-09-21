@@ -13,14 +13,14 @@
                   add-label-suffix)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC)
-         (only-in "../vm-memory-manager.rkt"
+         (only-in "../vm-runtime/vm-memory-manager.rkt"
                   INC_REFCNT_RT
                   DEC_REFCNT_RT)
-         (only-in "../vm-memory-map.rkt"
+         (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_LB_PTR
                   ZP_RT)
-         (only-in "../vm-cell-stack.rkt"
+         (only-in "../vm-runtime/vm-cell-stack.rkt"
                   PUSH_RT_TO_EVLSTK_IF_NONEMPTY))
 
 (provide BC_WRITE_LOCAL_SHORT           ;; write a local into the tos (rt)

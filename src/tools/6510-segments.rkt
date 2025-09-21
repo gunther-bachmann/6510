@@ -36,11 +36,6 @@ currently the following test programs are created
                   list/c
                   listof)
          (only-in racket/list flatten empty? take)
-         (only-in "../6510-utils.rkt"
-                  word/c
-                  byte/c
-                  low-byte
-                  high-byte)
          "../6510.rkt"
          (only-in "../ast/6510-resolver.rkt"
                   add-label-suffix))
@@ -54,9 +49,26 @@ currently the following test programs are created
          resolution-type?)
 
 (module+ test
-  (require "../ast/6510-assembler.rkt"
-           (only-in "../nmil/vm-lists.rkt" vm-lists vm-lists-wo-data-tail)
-           (only-in  "../nmil/vm-memory-manager-test-utils.rkt" list-with-label-suffix)
+  (require "../6510-test-utils.rkt"
+           "../ast/6510-assembler.rkt"
+           (only-in "../nmil/vm-bc-opcode-definitions.rkt"
+                    full-extended-optable-lb
+                    full-extended-optable-hb
+                    full-interpreter-opcode-table
+                    bc)
+           (only-in "../nmil/vm-interpreter.rkt"
+                    just-vm-interpreter)
+           (only-in "../nmil/vm-runtime/vm-lists.rkt"
+                    vm-lists
+                    vm-lists-wo-data-tail)
+           (only-in  "../nmil/vm-runtime/vm-memory-manager-test-utils.rkt"
+                     list-with-label-suffix
+                     run-code-in-test-on-code)
+           (only-in "../nmil/vm-runtime/vm-pages.rkt"
+                    VM_INITIAL_MM_REGS
+                    VM_PAGE_SLOT_DATA)
+           (only-in "../tools/6510-interpreter.rkt"
+                    memory-list)
            "../tools/6510-prg-generator.rkt"))
 
 (define (width? w)
@@ -170,11 +182,6 @@ currently the following test programs are created
           (RTS))))
 
 (module+ test #| looped-copy-region |#
-  (require "../ast/6510-assembler.rkt")
-  (require "../tools/6510-prg-generator.rkt")
-  (require (only-in  "../nmil/vm-memory-manager-test-utils.rkt" list-with-label-suffix))
-  (require (only-in "../nmil/vm-lists.rkt" vm-lists vm-lists-wo-data-tail))
-
   ;; load two code sections (located in the program loaded to 0800)
   ;; into c000 and 8000 that print out 0 and 1 (and some more) on the screen
   ;; absolute and relative references within these sections are resolved
@@ -420,15 +427,6 @@ currently the following test programs are created
 
 
   ;; idea
-  (require (only-in "../nmil/vm-bc-opcode-definitions.rkt"
-                    full-extended-optable-lb
-                    full-extended-optable-hb
-                    full-interpreter-opcode-table
-                    bc))
-  (require (only-in "../nmil/vm-interpreter.rkt"
-                    just-vm-interpreter))
-  (require (only-in "../nmil/vm-pages.rkt" VM_INITIAL_MM_REGS VM_PAGE_SLOT_DATA))
-
   ;; @cdc0 mm-regs
   (define mem-data
     (new-assemble-to-code-list (append (list (org #xcdc0)) VM_INITIAL_MM_REGS)))
@@ -674,10 +672,6 @@ currently the following test programs are created
           (RTS))))
 
 (module+ test #| copy-region |#
-  (require (only-in "../nmil/vm-memory-manager-test-utils.rkt" run-code-in-test-on-code))
-  (require (only-in "../tools/6510-interpreter.rkt" memory-list))
-  (require "../6510-test-utils.rkt")
-
   (define copy-region-state
     (run-code-in-test-on-code
      (append

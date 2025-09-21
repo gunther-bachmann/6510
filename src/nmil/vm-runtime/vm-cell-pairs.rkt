@@ -6,8 +6,8 @@
 
 |#
 
-(require "../6510.rkt"
-         (only-in "../ast/6510-resolver.rkt"
+(require "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix
                   replace-labels)
          (only-in "./vm-memory-map.rkt"
@@ -44,10 +44,10 @@
 
 (module+ test
   (require (only-in racket/list make-list)
-           "../6510-test-utils.rkt"
-           (only-in "../tools/6510-interpreter.rkt" memory-list)
-           (only-in "../util.rkt" format-hex-byte)
-           (only-in "./vm-inspector-utils.rkt"
+           "../../6510-test-utils.rkt"
+           (only-in "../../tools/6510-interpreter.rkt" memory-list)
+           (only-in "../../util.rkt" format-hex-byte)
+           (only-in "../vm-inspector-utils.rkt"
                     vm-regt->string
                     vm-cell-pair-free-tree->string
                     vm-deref-cell-pair-w->string

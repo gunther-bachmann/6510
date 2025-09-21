@@ -8,8 +8,8 @@
 
 |#
 
-(require "../6510.rkt"
-         (only-in "../ast/6510-resolver.rkt"
+(require "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
          (only-in "./vm-memory-map.rkt"
                   ZP_RT
@@ -27,20 +27,20 @@
          POP_CELL_EVLSTK_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
 (module+ test
-  (require "../6510-test-utils.rkt"
-           (only-in "../tools/6510-interpreter.rkt" peek memory-list)
-           (only-in "../util.rkt" format-hex-byte format-hex-word)
-           (only-in "./vm-inspector-utils.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../../tools/6510-interpreter.rkt" peek memory-list)
+           (only-in "../../util.rkt" format-hex-byte format-hex-word)
+           (only-in "../vm-inspector-utils.rkt"
                     vm-deref-cell-pair-w->string
                     vm-stack->strings
                     vm-regt->string)
-           "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-cell-pairs.rkt"
                     ALLOC_CELLPAIR_TO_RT
                     ALLOC_CELLPAIR_AX_TO_RT
                     WRITE_CELLPAIR_RT_CELLy_TO_RT
                     GET_FRESH_CELLPAIR_TO_AX
                     INIT_CELLPAIR_PAGE_X_TO_AX)
+           "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-pages.rkt"
                     ALLOC_PAGE_TO_X
                     VM_PAGE_SLOT_DATA

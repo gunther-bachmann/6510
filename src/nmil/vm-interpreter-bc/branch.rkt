@@ -8,7 +8,7 @@
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_INC_PC_2_TIMES)
-         (only-in "../vm-memory-map.rkt"
+         (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_VM_PC
                   TAG_BYTE_BYTE_CELL))

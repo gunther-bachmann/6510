@@ -8,11 +8,11 @@
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC_A_TIMES
                   VM_INTERPRETER_INC_PC)
-         (only-in "../vm-memory-map.rkt"
+         (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_VM_PC
                   ZP_RT
                   ZP_RP)
-         (only-in "../vm-cell-stack.rkt"
+         (only-in "../vm-runtime/vm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RT))
 
 (provide BC_POKE_B

@@ -22,7 +22,7 @@
                   build-extended-optable-lb
                   build-interpreter-optable
                   filtered-opcode-definitions)
-         (only-in "../vm-call-frame.rkt"
+         (only-in "../vm-runtime/vm-call-frame.rkt"
                   vm-call-frame->strings)
          (only-in "../vm-inspector-utils.rkt"
                   vm-cell-at-nil?
@@ -38,20 +38,20 @@
          (only-in "../vm-interpreter-test-utils.rkt"
                   run-bc-wrapped-in-test-
                   vm-next-instruction-bytes)
-         (only-in "../vm-lists.rkt"
+         (only-in "../vm-runtime/vm-lists.rkt"
                   vm-lists)
-         (only-in "../vm-memory-manager.rkt"
+         (only-in "../vm-runtime/vm-memory-manager.rkt"
                   VM_INITIALIZE_MEMORY_MANAGER)
-         "../vm-memory-map.rkt")
+         "../vm-runtime/vm-memory-map.rkt")
 
 (provide (all-from-out "../vm-inspector-utils.rkt")
          (all-from-out "../vm-interpreter-test-utils.rkt")
-         (all-from-out "../vm-call-frame.rkt")
+         (all-from-out "../vm-runtime/vm-call-frame.rkt")
          (all-from-out "../vm-bc-opcode-definitions.rkt")
          (all-from-out "../../6510.rkt")
          (all-from-out "../../6510-test-utils.rkt")
          (all-from-out "../../tools/6510-interpreter.rkt")
-         (all-from-out "../vm-memory-map.rkt")
+         (all-from-out "../vm-runtime/vm-memory-map.rkt")
          (all-from-out racket/list)
          wrap-bytecode-for-bc-test
          PAGE_CALL_FRAME

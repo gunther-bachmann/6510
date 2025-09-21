@@ -120,7 +120,7 @@
          (only-in "./vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_INIT)
-         (only-in "./vm-lists.rkt"
+         (only-in "vm-runtime/vm-lists.rkt"
                   vm-lists))
 
 (provide vm-interpreter

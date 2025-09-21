@@ -14,12 +14,12 @@
                   add-label-suffix)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC)
-         (only-in "../vm-memory-map.rkt"
+         (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RP)
-         (only-in "../vm-cell-stack.rkt"
+         (only-in "../vm-runtime/vm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RP)
-         (only-in "../vm-register-functions.rkt"
+         (only-in "../vm-runtime/vm-register-functions.rkt"
                   WRITE_INT0_TO_RT
                   WRITE_INT1_TO_RT)
          (only-in "./push_n_pop.rkt"

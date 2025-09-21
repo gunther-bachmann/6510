@@ -7,8 +7,8 @@
 |#
 
 
-(require "../6510.rkt"
-         (only-in "../ast/6510-resolver.rkt"
+(require "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix
                   replace-labels)
          (only-in "./vm-memory-map.rkt"
@@ -34,13 +34,13 @@
          VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)  ;; remove full pages from the list of m1 slot pages of type x
 
 (module+ test
-  (require "../6510-test-utils.rkt"
-           (only-in "../tools/6510-interpreter.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../../tools/6510-interpreter.rkt"
                     peek
                     memory-list
                     cpu-state-clock-cycles)
-           (only-in "../util.rkt" format-hex-byte format-hex-word)
-           (only-in "./vm-inspector-utils.rkt" vm-page->strings)
+           (only-in "../../util.rkt" format-hex-byte format-hex-word)
+           (only-in "../vm-inspector-utils.rkt" vm-page->strings)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-pages.rkt"
                     ALLOC_PAGE_TO_X

@@ -7,20 +7,20 @@
                   add-label-suffix)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC)
-         (only-in "../vm-lists.rkt"
+         (only-in "../vm-runtime/vm-lists.rkt"
                   VM_CxxR
                   VM_CONS__REFCNTD
                   VM_CAR
                   VM_CDR)
-         (only-in "../vm-memory-manager.rkt"
+         (only-in "../vm-runtime/vm-memory-manager.rkt"
                   INC_REFCNT_RT
                   DEC_REFCNT_RZ)
-         (only-in "../vm-memory-map.rkt"
+         (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RZ)
-         (only-in "../vm-cell-stack.rkt"
+         (only-in "../vm-runtime/vm-cell-stack.rkt"
                   PUSH_NIL_TO_EVLSTK)
-         (only-in "../vm-register-functions.rkt"
+         (only-in "../vm-runtime/vm-register-functions.rkt"
                   CP_RT_TO_RZ))
 
 (provide BC_CxxR

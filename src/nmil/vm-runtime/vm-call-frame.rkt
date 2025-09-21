@@ -11,10 +11,10 @@
 (require (only-in racket/list
                   flatten
                   take)
-         "../6510.rkt"
-         (only-in "../ast/6510-resolver.rkt"
+         "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
-         (only-in "../tools/6510-interpreter.rkt"
+         (only-in "../../tools/6510-interpreter.rkt"
                   peek-word-at-address
                   peek)
          (only-in "./vm-memory-manager.rkt"
@@ -40,7 +40,7 @@
          VM_PUSH_CALL_FRAME_N)
 
 (module+ test #| after mem init |#
-  (require (only-in "../ast/6510-relocator.rkt" command-len))
+  (require (only-in "../../ast/6510-relocator.rkt" command-len))
 
 
   (define PAGE_AVAIL_0 #x8a)
@@ -54,8 +54,8 @@
   (define PAGE_LOCALS_HB #x8c))
 
 (module+ test
-  (require "../6510-test-utils.rkt"
-           (only-in "../tools/6510-interpreter.rkt"
+  (require "../../6510-test-utils.rkt"
+           (only-in "../../tools/6510-interpreter.rkt"
                     memory-list)
            (only-in "./vm-memory-manager-test-utils.rkt"
                     run-code-in-test-on-code
