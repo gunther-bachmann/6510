@@ -16,14 +16,14 @@
                   POP_CELL_EVLSTK_TO_RP
                   POP_CELL_EVLSTK_TO_RT))
 
-(provide BC_BINC
-         BC_BDEC
-         BC_BADD
-         BC_IMAX
-         BC_IINC
-         BC_IADD
-         BC_BSHR
-         BC_ISUB)
+(provide BC_BINC        ;; increment byte (tos)
+         BC_BDEC        ;; decrement
+         BC_BADD        ;; add two topmost bytes
+         BC_IMAX        ;; get max of two topmost integers
+         BC_IINC        ;; increment integer (tos)
+         BC_IADD        ;; add two topmost integer
+         BC_BSHR        ;; shift tos byte one bit to the right
+         BC_ISUB)       ;; subtract two topmost integers
 
 (define BC_BINC
   (list
