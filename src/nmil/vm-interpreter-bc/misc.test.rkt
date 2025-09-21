@@ -28,7 +28,7 @@
            (bc BNOP))))
 
   (inform-check-equal? (cpu-state-clock-cycles nop-state)
-                27))
+                26))
 
 (module+ test #| bc_brk |#
   (define use-case-brk-state-after

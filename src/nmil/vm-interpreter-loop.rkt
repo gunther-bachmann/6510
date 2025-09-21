@@ -49,6 +49,15 @@ and the bc operation jump table
 (define VM_INTERPRETER_INC_PC '())
 (define VM_INTERPRETER
   (list
+                                               ;; for this shortcut to work, the interpreter must be initialized accordingly
+   (label VM_INTERPRETER_RTS_TARGET)           ;; if the bc command ends with RTS, I want to end up here
+          (LDA !>VM_INTERPRETER_RTS_TARGET-1)  ;; restore return target for next RTS command
+          (PHA)                                ;; high byte first
+          (LDA !<VM_INTERPRETER_RTS_TARGET-1)  ;; then
+          (PHA)                                ;; low byte
+          (BNE VM_INTERPRETER_INC_PC)          ;; now do regular inc pc and fetch next command
+          ;; alternatively jump to zero page (JMP VM_INTERPRETER_ZP_INC_PC)
+
    (label VM_INTERPRETER_INC_PC_2_TIMES)
           (LDA !$02)
    (label VM_INTERPRETER_INC_PC_A_TIMES)
@@ -57,16 +66,15 @@ and the bc operation jump table
           (STA ZP_VM_PC)
           (BCC VM_INTERPRETER)                  ;; same page -> no further things to do
           (BCS VM_INTERPRETER_NEXT_PAGE)
+          ;; alternatively jump to zero page (JMP VM_INTZP__INC_PAGE)
 
    (label VM_POP_EVLSTK_AND_INC_PC)
           (JSR POP_CELL_EVLSTK_TO_RT)
 
    (label VM_INTERPRETER_INC_PC)                ;; inc by one (regular case)
-   ;; (label BC_NOP)                               ;; is equivalent to NOP
+   ;; (label BC_NOP)                            ;; is equivalent to NOP
           (INC ZP_VM_PC)
-          (BNE VM_INTERPRETER)                  ;; same page -> no further things to do
-   (label VM_INTERPRETER_NEXT_PAGE)
-          (INC ZP_VM_PC+1)                      ;; increment high byte of pc (into next page)
+          (BEQ VM_INTERPRETER_NEXT_PAGE)        ;; other page -> inc page
 
     ;; ----------------------------------------
    (label VM_INTERPRETER)
@@ -78,12 +86,40 @@ and the bc operation jump table
           (STA JMPOP__VM_INTERPRETER+1)         ;; lowbyte of the table
    (label JMPOP__VM_INTERPRETER)
           (JMP (VM_INTERPRETER_OPTABLE))        ;; jump by table
+   (label VM_INTERPRETER_NEXT_PAGE)
+          (INC ZP_VM_PC+1)                      ;; increment high byte of pc (into next page)
+          (BNE VM_INTERPRETER)
 ))
+
+;; interpreter loop completely in the zero page
+;; the program counter (two bytes) is kept at VM_PCM1+1 and VM_PCM1+2!
+;; usage 16 bytes (including VM_PC => 14 additional bytes used in zero page)
+;; cycle count: 19 normal, 27 on page change
+;; compared to non zero page impl: 23 normal, 31 on page change
+(define VM_INTERPRETER_ZP
+  (list
+
+    ;; optional (3 additional bytes)
+    ;; (label VM_INTERPRETER_ZP_POP_EVLSTK_AND_INC_PC)
+    ;;        (JSR POP_CELL_EVLSTK_TO_RT)
+
+   (label VM_INTERPRETER_ZP_INC_PC)
+           (INC ZP_VM_PCM1+1)                   ;; increment the lowbyte of the program counter (part of this code)
+           (BEQ VM_INTZP__INC_PAGE)             ;; in the rare case of page increments jump off
+    (label VM_INTZP__LOAD_BC)
+    (label ZP_VM_PCM1)
+           (LDA $0000)                          ;; load the byte pointed to by the program counter (which is held exactly here)!
+           (STA VM_INTZP_JUMP+1)                ;; store as lowbyte for the jumptable jump
+    (label VM_INTZP_JUMP)
+           (JMP (VM_INTERPRETER_OPTABLE))       ;; do the indirect jump via the jump table
+    (label VM_INTZP__INC_PAGE)
+           (INC ZP_VM_PCM1+2)                   ;; do the page increment
+           (BNE VM_INTZP__LOAD_BC)))            ;; go back to routine to load byte code
 
 ;; the jump table is filled by codes defined in the bx opcode definitions file
 ;; must be page aligned! since only lowbyte is modified in indirect call => optable needs to be exactly within one page!
 (define VM_INTERPRETER_OPTABLE
   (flatten ;; necessary because word ref creates a list of ast-byte-codes ...
    (list
-    (label VM_INTERPRETER_OPTABLE)                ;; code
-           (build-list 128 (lambda (_n) (word-ref VM_INTERPRETER_INC_PC))))))
+    (label VM_INTERPRETER_OPTABLE)              ;; code
+    (build-list 128 (lambda (_n) (word-ref VM_INTERPRETER_INC_PC))))))

@@ -644,7 +644,7 @@
                 (list "stack holds 1 item"
                       "3  (rt)"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 12162))
+                 12096))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -1103,7 +1103,7 @@
                       "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"))
 
   (inform-check-equal? (cpu-state-clock-cycles prev-4-state)
-                6446))
+                6408))
 
 ;; optimization idea: NIL?_RET instead of NIL?, T_P_RET
 (define REVERSE ;; list :: result=nil -> list
@@ -1145,7 +1145,7 @@
                  (vm-regt->string reverse-0-state #t))
                 "(0 . (1 . (2 . (1fff . NIL))))")
   (inform-check-equal? (cpu-state-clock-cycles reverse-0-state)
-                5182))
+                5150))
 
 (define APPEND ;; head-list :: tail-list -> list
   (bc-resolve
@@ -1197,7 +1197,7 @@
   (check-equal? (shorten-cell-string (vm-regt->string append-0-state #t))
                 "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
   (inform-check-equal? (cpu-state-clock-cycles append-0-state)
-                8218))
+                8170))
 
 
 ;; (define (btree-next path)
@@ -1431,7 +1431,7 @@
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)"))
 
   (inform-check-equal? (cpu-state-clock-cycles next-4-state)
-                2093))
+                2079))
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
@@ -2286,7 +2286,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
-                18242)
+                18139)
 
   (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -2559,7 +2559,7 @@
                       "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                28351))
+                28182))
 
 
 ;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
@@ -3423,7 +3423,7 @@
 
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                62692)
+                62339)
   (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append

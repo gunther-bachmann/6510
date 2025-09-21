@@ -33,14 +33,13 @@ functions
                   bc-cmd?
                   bc-rel-ref))
 
-(provide bc-resolve
-         bc-bytes)
+(provide bc-resolve ;; resolve labels in commands by collecting labels first and resolve with the collected labels
+         bc-bytes)  ;; calculate the number of bytes the given list of BC-CMDS actually take
 
 (module+ test
   (require rackunit
            "../6510.rkt"
            (only-in "./vm-bc-opcode-definitions.rkt" bc)))
-
 
 ;; collect all labels in this list of BC-AST-CMDS
 ;; and build/extend the returned LABEL-HASH
