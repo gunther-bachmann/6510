@@ -17,17 +17,18 @@ TODO: get tests (still in vm-interpreter) into this file
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES)
-         (only-in "../vm-runtime/vm-memory-map.rkt"
-                  ZP_RT
-                  ZP_RP
-                  ZP_VM_PC
-                  ZP_CELL_STACK_TOS
-                  ZP_CELL_STACK_LB_PTR
-                  ZP_CELL_STACK_HB_PTR)
+         (only-in "../vm-interpreter-loop.rkt"
+                  ZP_VM_PC)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
                   PUSH_XA_TO_EVLSTK
                   PUSH_INT_TO_EVLSTK
-                  PUSH_RT_TO_EVLSTK_IF_NONEMPTY))
+                  PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+         (only-in "../vm-runtime/vm-memory-map.rkt"
+                  ZP_RT
+                  ZP_RP
+                  ZP_CELL_STACK_TOS
+                  ZP_CELL_STACK_LB_PTR
+                  ZP_CELL_STACK_HB_PTR))
 
 (provide BC_PUSH_B
          BC_DUP

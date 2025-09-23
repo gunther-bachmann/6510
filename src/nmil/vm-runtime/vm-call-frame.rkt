@@ -17,12 +17,13 @@
          (only-in "../../tools/6510-interpreter.rkt"
                   peek-word-at-address
                   peek)
+         (only-in "../vm-interpreter-loop.rkt"
+                  ZP_VM_PC)
          (only-in "./vm-memory-manager.rkt"
                   vm-memory-manager-wo-data-tail
                   vm-memory-manager)
          (only-in "./vm-memory-map.rkt"
                   ZP_CALL_FRAME
-                  ZP_VM_PC
                   ZP_VM_FUNC_PTR
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
@@ -57,17 +58,25 @@
   (require "../../6510-test-utils.rkt"
            (only-in "../../tools/6510-interpreter.rkt"
                     memory-list)
+           (only-in "../vm-interpreter-loop.rkt"
+                    VM_INTERPRETER_ZP)
            (only-in "./vm-memory-manager-test-utils.rkt"
                     run-code-in-test-on-code
                     remove-labels-for))
 
   (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
-    (append (list (org #xa000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_INITIALIZE_CALL_FRAME))
+    (append
+            (list
+             (org #xa000)
+             (JSR VM_INITIALIZE_MEMORY_MANAGER)
+             (JSR VM_INITIALIZE_CALL_FRAME)
+             (label TEST_ENTRY))
             bc
             (list (BRK))
-            (remove-labels-for complete-code (filter (lambda (ast-cmd) (ast-label-def-cmd? ast-cmd)) mocked-code-list))))
+            (remove-labels-for complete-code (filter (lambda (ast-cmd) (ast-label-def-cmd? ast-cmd)) mocked-code-list))
+            (list (org #x0080))
+            VM_INTERPRETER_ZP
+            (list (label VM_INTERPRETER_OPTABLE))))
 
   (define (run-code-in-test bc (debug #f) #:mock (mocked-code-list (list)))
     (run-code-in-test-on-code 

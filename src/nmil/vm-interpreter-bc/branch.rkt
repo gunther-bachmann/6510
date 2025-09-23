@@ -7,10 +7,10 @@
                   add-label-suffix)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
+                  ZP_VM_PC
                   VM_INTERPRETER_INC_PC_2_TIMES)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
-                  ZP_VM_PC
                   TAG_BYTE_BYTE_CELL))
 
 (provide BC_Z_P_BRA                     ;; branch by next byte if tos is zero (byte or int), pop if branching

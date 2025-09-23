@@ -88,7 +88,7 @@
 
 |#
 
-(require (only-in racket/list flatten)
+{require (only-in racket/list flatten)
          "../../6510.rkt"
          (only-in "../../tools/6510-interpreter.rkt" memory-list)
          "../vm-bc-ast.rkt"
@@ -96,8 +96,8 @@
          (only-in "../vm-bc-resolver.rkt"
                   bc-resolve
                   bc-bytes)
-         [only-in "../vm-interpreter.rkt" vm-interpreter]
-         (only-in "../vm-runtime/vm-memory-map.rkt" ZP_VM_PC))
+         (only-in "../vm-interpreter-loop.rkt" ZP_VM_PC)
+         (only-in "../vm-interpreter.rkt" vm-interpreter)}
 
 (provide vm-btree
     REVERSE                       ;; reverse a list:  list :: result=nil -> list
@@ -149,6 +149,8 @@
                     vm-cell-at->string
                     vm-cell->string
                     vm-deref-cell-pair-w->string)
+           (only-in "../vm-interpreter-loop.rkt"
+                    VM_INTERPRETER_ZP)
            (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings))
@@ -167,7 +169,9 @@
             (list (org #x8000))
             (flatten bc)
             (list (org #xa000))
-            vm-interpreter))
+            vm-interpreter
+            (list (org #x0080))
+            VM_INTERPRETER_ZP))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
@@ -644,7 +648,7 @@
                 (list "stack holds 1 item"
                       "3  (rt)"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 12096))
+                 11779))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -1103,7 +1107,7 @@
                       "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"))
 
   (inform-check-equal? (cpu-state-clock-cycles prev-4-state)
-                6408))
+                6224))
 
 ;; optimization idea: NIL?_RET instead of NIL?, T_P_RET
 (define REVERSE ;; list :: result=nil -> list
@@ -1145,7 +1149,7 @@
                  (vm-regt->string reverse-0-state #t))
                 "(0 . (1 . (2 . (1fff . NIL))))")
   (inform-check-equal? (cpu-state-clock-cycles reverse-0-state)
-                5150))
+                5030))
 
 (define APPEND ;; head-list :: tail-list -> list
   (bc-resolve
@@ -1197,7 +1201,7 @@
   (check-equal? (shorten-cell-string (vm-regt->string append-0-state #t))
                 "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
   (inform-check-equal? (cpu-state-clock-cycles append-0-state)
-                8170))
+                7976))
 
 
 ;; (define (btree-next path)
@@ -1431,7 +1435,7 @@
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)"))
 
   (inform-check-equal? (cpu-state-clock-cycles next-4-state)
-                2079))
+                2011))
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
@@ -2286,7 +2290,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
-                18139)
+                17693)
 
   (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -2559,7 +2563,7 @@
                       "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                28182))
+                27371))
 
 
 ;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
@@ -3423,7 +3427,7 @@
 
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                62339)
+                60691)
   (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 2 items"
                       (string-append

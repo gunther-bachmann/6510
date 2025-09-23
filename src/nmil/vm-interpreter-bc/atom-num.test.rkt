@@ -208,7 +208,7 @@
       (bc BREAK))))
 
   (inform-check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                       209)
+                       333)
   (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                    (list "stack holds 3 items"
                          "int $0000  (rt)"
@@ -257,7 +257,7 @@
 
 
    (inform-check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                        776)
+                        880)
     (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                     (list "stack holds 3 items"
                           "int $1fff  (rt)"

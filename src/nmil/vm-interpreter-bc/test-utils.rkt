@@ -34,6 +34,7 @@
                   vm-deref-cell-pair-w->string)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
+                  VM_INTERPRETER_ZP
                   VM_INTERPRETER_INIT)
          (only-in "../vm-interpreter-test-utils.rkt"
                   run-bc-wrapped-in-test-
@@ -85,7 +86,9 @@
            (build-extended-optable-lb relevant-opcode-definitions)
            vm-lists ;; includes vm-memory-manager
            (list (org-align #x100)) ;; align to next page
-           (build-interpreter-optable relevant-opcode-definitions)))) ;; TODO create opcode table w/ wanted / knonwn opcodes only?
+           (build-interpreter-optable relevant-opcode-definitions)
+           (list (org #x0080))
+           VM_INTERPRETER_ZP))) ;; TODO create opcode table w/ wanted / knonwn opcodes only?
 
 (define PAGE_CALL_FRAME #x8d)
 (define PAGE_LOCALS_LB #x8b)

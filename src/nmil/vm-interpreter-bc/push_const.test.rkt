@@ -15,7 +15,8 @@ test of bytecode implementation of pushing constants
                                        (list "BC_PUSH_INT0"
                                              "BC_PUSH_INT1"
                                              "BC_PUSH_INT2"
-                                             "BC_PUSH_INTm1")))
+                                             "BC_PUSH_INTm1"
+                                             "BC_BREAK")))
   (define (wrap-bytecode-for-test bc-to-wrap)
     (wrap-bytecode-for-bc-test
      bc-to-wrap

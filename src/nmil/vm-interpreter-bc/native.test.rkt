@@ -18,7 +18,8 @@ test of bytecode implementation of native commands
   (define relevant-opcode-definitions (filtered-opcode-definitions
                                        (list "BC_POKE_B"
                                              "BC_PUSH_B"
-                                             "BC_NATIVE")))
+                                             "BC_NATIVE"
+                                             "BC_BREAK")))
 
 (define (wrap-bytecode-for-test bc-to-wrap)
     (wrap-bytecode-for-bc-test

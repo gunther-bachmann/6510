@@ -59,6 +59,7 @@
   (require "../../6510-test-utils.rkt"
            (only-in "../../tools/6510-interpreter.rkt"
                     cpu-state-clock-cycles)
+           (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
            (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings))
@@ -78,7 +79,9 @@
             (list (org #x8000))
             (flatten bc)
             (list (org #xa000))
-            vm-interpreter))
+            vm-interpreter
+            (list (org #x0080))
+            VM_INTERPRETER_ZP))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
@@ -163,7 +166,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                       75747)
+                       72159)
 
   (check-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 3) (+ PAGE_AVAIL_0_W 85))
                 (list #x01 #x83 40

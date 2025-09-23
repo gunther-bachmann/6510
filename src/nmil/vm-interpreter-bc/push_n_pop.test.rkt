@@ -21,7 +21,8 @@ test of bytecode implementation of push
                                              "BC_PUSH_INT0"
                                              "BC_PUSH_INT1"
                                              "BC_PUSH_INT2"
-                                             "BC_PUSH_I")))
+                                             "BC_PUSH_I"
+                                             "BC_BREAK")))
 
   (define (wrap-bytecode-for-test bc-to-wrap)
     (wrap-bytecode-for-bc-test
@@ -45,7 +46,8 @@ test of bytecode implementation of push
       (list
        (bc PUSH_B) (byte 0)
        (bc PUSH_B) (byte 1)
-       (bc PUSH_B) (byte 10)))))
+       (bc PUSH_B) (byte 10)))
+     ))
 
   (check-equal? (vm-stack->strings push-byte-state)
                 (list "stack holds 3 items"
@@ -58,7 +60,8 @@ test of bytecode implementation of push
     (run-bc-wrapped-in-test
      (list
       (bc PUSH_I0)
-      (bc POP))))
+      (bc POP))
+     ))
 
   (check-equal? (vm-stack->strings pop-0-state)
                 (list "stack is empty"))
@@ -79,7 +82,8 @@ test of bytecode implementation of push
       (bc PUSH_I0)
       (bc PUSH_I1)
       (bc PUSH_I2)
-      (bc POP))))
+      (bc POP))
+     ))
 
   (check-equal? (vm-stack->strings pop-2-state)
                 (list "stack holds 2 items"

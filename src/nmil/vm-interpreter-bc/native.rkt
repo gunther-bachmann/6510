@@ -6,14 +6,14 @@
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
          (only-in "../vm-interpreter-loop.rkt"
+                  ZP_VM_PC
                   VM_INTERPRETER_INC_PC_A_TIMES
                   VM_INTERPRETER_INC_PC)
-         (only-in "../vm-runtime/vm-memory-map.rkt"
-                  ZP_VM_PC
-                  ZP_RT
-                  ZP_RP)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RT))
+                  POP_CELL_EVLSTK_TO_RT)
+         (only-in "../vm-runtime/vm-memory-map.rkt"
+                  ZP_RT
+                  ZP_RP))
 
 (provide BC_POKE_B
          BC_NATIVE

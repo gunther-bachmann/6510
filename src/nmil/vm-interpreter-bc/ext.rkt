@@ -13,7 +13,7 @@ of the decoder and the jump
          "../../6510.rkt"
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
-         (only-in "../vm-runtime/vm-memory-map.rkt"
+         (only-in "../vm-interpreter-loop.rkt"
                   ZP_VM_PC))
 
 (provide BC_EXT1_CMD
@@ -23,7 +23,7 @@ of the decoder and the jump
 (define BC_EXT1_CMD
   (list
    (label BC_EXT1_CMD)
-          (INY)
+          (LDY !$01)
           (LDA (ZP_VM_PC),y)
           (TAY)
           (LDA VM_INTERPRETER_OPTABLE_EXT1_LB,y)

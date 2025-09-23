@@ -49,13 +49,16 @@ currently the following test programs are created
          resolution-type?)
 
 (module+ test
-  (require "../6510-test-utils.rkt"
+  (require  racket/hash
+           "../6510-test-utils.rkt"
            "../ast/6510-assembler.rkt"
            (only-in "../nmil/vm-bc-opcode-definitions.rkt"
                     full-extended-optable-lb
                     full-extended-optable-hb
                     full-interpreter-opcode-table
                     bc)
+           (only-in "../nmil/vm-interpreter-loop.rkt"
+                    VM_INTERPRETER_ZP)
            (only-in "../nmil/vm-interpreter.rkt"
                     just-vm-interpreter)
            (only-in "../nmil/vm-runtime/vm-lists.rkt"
@@ -429,7 +432,7 @@ currently the following test programs are created
   ;; idea
   ;; @cdc0 mm-regs
   (define mem-data
-    (new-assemble-to-code-list (append (list (org #xcdc0)) VM_INITIAL_MM_REGS)))
+    (new-assemble-to-code-list (append (list (org #xcdc0) (byte-const ZP_VM_PC #x85)) VM_INITIAL_MM_REGS)))
   (define raw-mem-data
     (cdar (assembly-code-list-org-code-sequences mem-data)))
 
@@ -456,6 +459,9 @@ currently the following test programs are created
     (new-assemble-to-code-list
        (append (list (org #x9000)
                      (word-const VM_INTERPRETER_OPTABLE $ce00)
+                     (word-const VM_INTERPRETER $0084)
+                     (word-const VM_INTERPRETER_INC_PC $0080)
+                     (byte-const ZP_VM_PC #x85) ;; #x80 + 5
 
                      (JSR VM_INTERPRETER_INIT_AX)
                      (JSR VM_INITIALIZE_MEMORY_MANAGER)
@@ -471,11 +477,19 @@ currently the following test programs are created
      (assembly-code-list-org-code-sequences
       bc-interpreter)))
 
+  (define zp-interpreter-loop
+    (new-assemble-to-code-list
+     (append (list (org #x0080)) VM_INTERPRETER_ZP)
+     (assembly-code-list-labels bc-interpreter)))
+
+  (define raw-zp-interpreter-loop
+    (cdar
+     (assembly-code-list-org-code-sequences
+      zp-interpreter-loop)))
+
   (check-true (> (- #xa000 #x9000)
                  (length raw-bc-interpreter))
               "bc interpreter must fit right before basic mem")
-
-
 
   ;; @ce00
   (define raw-bc-jump-table
@@ -530,6 +544,15 @@ currently the following test programs are created
       ;; use (memory manager) in c000-cfff (4k)
      (segment->copy-descriptor
       (c64-segment 'pinned ;; type
+                   #x0080  ;; location
+                   '()       ;; reloc info
+                   '()       ;; resolution info
+                   '()       ;; resolution symbols
+                   (length raw-zp-interpreter-loop)
+                   raw-zp-interpreter-loop)
+      "SECTION_ZI")
+     (segment->copy-descriptor
+      (c64-segment 'pinned ;; type
                    #x9000  ;; location
                    '()       ;; reloc info
                    '()       ;; resolution info
@@ -576,7 +599,9 @@ currently the following test programs are created
      (list (byte 0 0)) ;; end mark
      LOOPED_COPY_REGION
      COPY_REGION
-     (list (label "SECTION_BC")
+     (list (label "SECTION_ZI")
+           (ast-bytes-cmd '() raw-zp-interpreter-loop)
+           (label "SECTION_BC")
            (ast-bytes-cmd '() raw-bc-interpreter) ;; <-- this part is too large to fit into c000-#xcdbf => split byte codes
            (label "SECTION_RT")
            (ast-bytes-cmd '() raw-vm-runtime)

@@ -23,6 +23,7 @@
                     vm-cell-pairs-free-in-page
                     vm-cell-pairs-used-info
                     vm-cell-pairs-used-num-in-page)
+           (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
            [only-in "../vm-interpreter.rkt" vm-interpreter])
 
   (define (wrap-bytecode-for-test bc)
@@ -34,7 +35,9 @@
             (list (org #x8000))
             (flatten bc)
             (list (org #xa000))
-            vm-interpreter))
+            vm-interpreter
+            (list (org #x0080))
+            VM_INTERPRETER_ZP))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
@@ -269,7 +272,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-reverse-0-state)
-                       16214)
+                       15786)
   (check-equal? (shorten-cell-strings (vm-stack->strings btree-reverse-0-state 10 #t))
                 (list "stack holds 1 item"
                       "(0 . 1)  (rt)"))

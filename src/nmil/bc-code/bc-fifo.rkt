@@ -41,6 +41,7 @@
                     vm-cell-at->string
                     vm-cell->string
                     vm-deref-cell-pair-w->string)
+           (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
            (only-in "../vm-interpreter-test-utils.rkt" run-bc-wrapped-in-test- vm-list->strings))
 
 
@@ -58,7 +59,9 @@
             (list (org #x8000))
             (flatten bc)
             (list (org #xa000))
-            vm-interpreter))
+            vm-interpreter
+            (list (org #x0080))
+            VM_INTERPRETER_ZP))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
@@ -137,7 +140,7 @@
                 (list "int $0001"))
 
   (inform-check-equal? (cpu-state-clock-cycles enqueue-state-1)
-                       6790)
+                       6718)
 
   (define enqueue-state-2
     (run-bc-wrapped-in-test
@@ -223,7 +226,7 @@
                 "1 -> FIFO, 2 -> FIFO, FIFO -> 1")
 
   (inform-check-equal? (cpu-state-clock-cycles dequeue-state-1)
-                       12991)
+                       12762)
 
   (define dequeue-state-2
     (run-bc-wrapped-in-test

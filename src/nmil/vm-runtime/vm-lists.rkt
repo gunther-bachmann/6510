@@ -31,7 +31,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
          VM_CONS__REFCNTD)
 
 (module+ test
-  (require "../../6510-test-utils.rkt")
+  (require "../../6510-test-utils.rkt"
+           (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP))
 
   (define (wrap-code-for-test bc)
     (append (list (org #xa000)
@@ -39,7 +40,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   (JSR VM_INITIALIZE_CALL_FRAME))
             bc
             (list (BRK))
-            vm-lists))
+            vm-lists
+            (list (label VM_INTERPRETER_OPTABLE)) ;; needed by interpreter_zp
+            (list (org #x0080))
+            VM_INTERPRETER_ZP)) ;; needed because of references to ZP_VM_PC
 
   (define (run-code-in-test bc (debug #f))
     (define wrapped-code (wrap-code-for-test bc))

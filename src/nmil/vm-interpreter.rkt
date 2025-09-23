@@ -119,6 +119,7 @@
                   PUSH_RT_WRITE_LOCAL_bc_enc)
          (only-in "./vm-interpreter-loop.rkt"
                   VM_INTERPRETER
+                  VM_INTERPRETER_ZP
                   VM_INTERPRETER_INIT)
          (only-in "vm-runtime/vm-lists.rkt"
                   vm-lists))
@@ -297,7 +298,7 @@
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
-                       1637
+                       1639
                        "estimated len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#

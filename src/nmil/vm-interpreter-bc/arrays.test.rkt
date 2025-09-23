@@ -35,7 +35,8 @@
                                              "BC_T_P_BRA"
                                              "BC_PUSH_INT1"
                                              "BC_PUSH_INT2"
-                                             "BC_PUSH_B")))
+                                             "BC_PUSH_B"
+                                             "BC_BREAK")))
 
   (define (wrap-bytecode-for-test bc-to-wrap)
     (wrap-bytecode-for-bc-test

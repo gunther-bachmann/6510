@@ -39,7 +39,7 @@
          ZP_TEMP2                        ;; (byte) temp location
          ZP_TEMP3                        ;; (byte) temp location, can be used in combination with TEMP4 to be used as word
          ZP_TEMP4                        ;; (byte) temp location
-         ZP_VM_PC                        ;; (word) current program counter of the vm
+         ZP_VM_PC_OLD                    ;; (word) current program counter of the vm
          ZP_VM_FUNC_PTR                  ;; (word) pointer to the currently executing function
          ZP_LOCALS_LB_PTR                ;; (word) pointer to the low byte of the current locals of this function
          ZP_LOCALS_HB_PTR                ;; (word) pointer to the high byte of the current locals of this function
@@ -73,6 +73,16 @@
    (word-const TAGGED_NIL                $0001) ;; tag indicates cell-pair-ptr
 
                                               ;; @DC-ZP: ZP_TEMP3, group: temp
+
+   (byte-const ZP_RB                     $c0) ;; c0..c1 array register b
+   (byte-const ZP_RC                     $c2) ;; c2..c3 array register c
+   (byte-const ZP_RBI                    $c4) ;; byte index into array b
+   (byte-const ZP_RCI                    $c5) ;; byte index into array c
+
+   (byte-const ZP_RP                     $c6) ;; c6..c7 register for cell pairs
+
+                                              ;; @DC-ZP: ZP_VM_PC, group: call_frame
+   ;; the following twelve bytes need to be continuous, since they are saved into the call frame!
    ;; zero page location 3 for temp usage
    (byte-const ZP_TEMP3                  $d9) ;; may be used as pointer (in combination with ZP_TEMP4 => must be in adjacent memory locations)
                                               ;; @DC-ZP: ZP_TEMP4, group: temp
@@ -85,17 +95,7 @@
    (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
    (byte-const ZP_TEMP2                  $dd) ;; may not be used after sub calls (just within a routine without jsr)
 
-
-   (byte-const ZP_RB                     $c0) ;; c0..c1 array register b
-   (byte-const ZP_RC                     $c2) ;; c2..c3 array register c
-   (byte-const ZP_RBI                    $c4) ;; byte index into array b
-   (byte-const ZP_RCI                    $c5) ;; byte index into array c
-
-   (byte-const ZP_RP                     $c6) ;; c6..c7 register for cell pairs
-
-                                              ;; @DC-ZP: ZP_VM_PC, group: call_frame
-   ;; the following twelve bytes need to be continuous, since they are saved into the call frame!
-   (byte-const ZP_VM_PC                  $de) ;; de..df program counter (ptr to currently executing byte code)
+   (byte-const ZP_VM_PC_OLD              $d0) ;; de..df program counter (ptr to currently executing byte code)
                                               ;; @DC-ZP: ZP_VM_FUNC_PTR, group: call_frame
    (byte-const ZP_VM_FUNC_PTR            $e0) ;; e0..e1 pointer to the currently running function
                                               ;; @DC-ZP: ZP_LOCALS_LB_PTR, group: locals
@@ -161,7 +161,7 @@
 (define ZP_TEMP2                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP2"))
 (define ZP_TEMP3                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP3"))
 (define ZP_TEMP4                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP4"))
-(define ZP_VM_PC                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_PC"))
+(define ZP_VM_PC_OLD            (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_PC_OLD"))
 (define ZP_VM_FUNC_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_FUNC_PTR"))
 (define ZP_LOCALS_LB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_LB_PTR"))
 (define ZP_LOCALS_HB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_HB_PTR"))

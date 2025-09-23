@@ -21,6 +21,7 @@
                     vm-cell-at->string
                     vm-cell->string
                     vm-deref-cell-pair-w->string)
+           (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
            (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings))
@@ -39,7 +40,9 @@
             (list (org #x8000))
             (flatten bc)
             (list (org #xa000))
-            vm-interpreter))
+            vm-interpreter
+            (list (org #x0080))
+            VM_INTERPRETER_ZP))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-test bc))
@@ -77,7 +80,7 @@
       BC_ADD_NATIVE)
      ))
   (inform-check-equal? (cpu-state-clock-cycles add-native-state)
-                       839)
+                       814)
   (check-equal? (vm-stack->strings add-native-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
@@ -115,7 +118,7 @@
       BC_ADD_NATIVE_2)
      ))
   (inform-check-equal? (cpu-state-clock-cycles add-native-state-2)
-                       802)
+                       781)
   (check-equal? (vm-stack->strings add-native-state-2)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"

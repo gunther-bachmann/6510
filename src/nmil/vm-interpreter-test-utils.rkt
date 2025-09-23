@@ -89,12 +89,13 @@
                   vm-cell-at->string
                   vm-cell->string
                   vm-deref-cell-pair-w->string)
+         (only-in "vm-interpreter-loop.rkt"
+                  ZP_VM_PC)
          (only-in "vm-runtime/vm-call-frame.rkt"
                   vm-call-frame->strings)
          (only-in "vm-runtime/vm-memory-map.rkt"
                   ast-const-get
                   ZP_RT
-                  ZP_VM_PC
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
                   ZP_VM_FUNC_PTR
@@ -609,7 +610,7 @@
                        ""
                        #t
                        (list
-                        (breakpoint bc-debugger--instruction-breakpoint-name
+                        (breakpoint (format "~a @ $~a" bc-debugger--instruction-breakpoint-name (number->string interpreter-loop 16))
                                     (lambda (lc-state)
                                       (eq? (cpu-state-program-counter lc-state)
                                            interpreter-loop))

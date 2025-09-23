@@ -441,7 +441,10 @@
 ;; peek into memory at the location the program counter points to (current point of execution)
 (define/c (peek-pc state)
   (-> cpu-state? byte/c)
-  (peek state (cpu-state-program-counter state)))
+  (define result
+    (peek state (cpu-state-program-counter state)))
+  ;; (displayln (format "peek-pc:$~a -> $~a" (number->string (cpu-state-program-counter state) 16) (number->string result 16)))
+  result)
 
 ;; peek into memory at the location the program counter+1 points to (current point of execution+1)
 (define/c (peek-pc+1 state)
