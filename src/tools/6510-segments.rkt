@@ -1,4 +1,11 @@
 #lang racket/base
+#|
+  TODO: think about reducing dependencies (currently hardcoded based on #x0080 location!
+        vm_interpreter_zp --(VM_OPERATIONS_TABLE)-->
+                          <-(VM_ZP_PC)
+                          <-(VM_INTERPRETER)
+                          <-(VM_INTERPRETER_INC_PC)
+|#
 
 #|
 
