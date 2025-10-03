@@ -1,5 +1,597 @@
 #+title: vm-memory-manager
+* AI questions asked
+** pointer tagging and memory bucket size questions
+- Propose a pointer tagging on 16-bit pointers to identify two different types of pointers, one pointing to 32 bit values (car and cons
+  cell) and one pointing to memory objects of distinct sizes up to 128 organized in a number of bucket sizes (e.g. up to 8 different
+  ones). The buckets should be organized in pages of 256 bytes each, leaving some bytes for page type information and a reference count byte
+  for each memory object. make sure to have as little waste as possible. since the 32 bit values are always 4 bytes, the last two bits in
+  the pointer can be used as tag for these pointers, but the other type of pointer needs to be able to adress the different sizes of memory
+  objects that should be possible without changing the ptr value itself. the tag should however give information about which type of pointer
+  it is.
+- adjust the pointer tagging theme using one bucket size per page. make sure the tagging does not need more than two bits of the
+  pointer. make sure that one pointer type can point to memory objects of all bucket sizes while the other pointer type can still address 32
+  bit values in memory. ensure that minimal bytes are wasted in padding and such.
+- ensure that each memory object is reference counted and make sure that the bucket sizes are chosen such that on each 256 byte page, some
+  bytes are used for reference counting the memory objects, the page type is kept and the number of actually allocated objects on that page
+  are kept, too.
+- Make the design even more compact. Reduce waste, make the reference count smaller. Expected reference counts stay mostly below 4.
+- Consider using bucket sizes that are not multiples of 8 to reduce waste. Propose sizes that allow efficient pointer tagging while reducing
+  the waste
+- negative waste is not possible in this case, make sure waste is not negative! use even bucket sizes, which increase more slowly, not by
+  powers of 2. make sure objects of these bucket sizes are addressible with tagged pointers without adjustung these pointers. additionally
+  ensure to easily reach the reference count for each object by minimal adjustments to the tagged pointer.
 * open tasks
+** IMPLEMENT DEFINITION OF call / ret
+*memory layout of call frame page* (organized in stack, lb, hb on separate pages)
+                 offset  content page lb  page hb
+                 --------------------------------
+                 00      #b0000 0001 page type call-frame
+
+                             / \              / \
+                              |                |
+                         vm_pc offset     locals offset
+                         function offset  function page
+zp-local-ptr-hb -->      local 0 cell-lb  local 0 cell-hb   <-- zp-local-ptr-hb
+                         ...
+                 fe      local n
+                 ff      previous page    prev page
+
+*memory layout of code*
+---------------------
+function-ptr-> xxxx llll        0..15 locals
+               bytecode 0
+               ...
+
+*** call
+vm_pc inc by call (+3)
+memorize current locals_lb_ptr+0 (offset) for later save!
+load #locals
+check call frame page has sufficient space for call (# locals + 2)
+  does not fit:
+    allocate 2 new call frame pages (and init)
+    set respective previous pages to new call frame pages
+    set locals_lb_ptr+1 := new page 1
+    set locals_hb_ptr+1 := new page 2
+    set locals_lb_ptr+0, locals_hb_ptr+0 := ff - # locals (is locals allocation)
+  does fit:
+    allocate locals on frame page
+save current function_ptr+1   -> function page
+save current function_ptr+0   -> function offset
+save current vm_pc+0          -> vm_pc offset
+save (memorized) current locals_lb_ptr+0  -> locals offset
+set locals_lb_ptr+0 = locals_hb_ptr+0 := new locals offset
+set function_ptr+1 = vm_pc+1 := page of call target
+setfunction_ptr+0 = vm_pc+0 := offset of call target
+JMP INTERPRET_INC_VM_PC
+*** ret
+load #locals
+free (gc) remaining ptrs in locals
+check change to previous call page necessary?
+  no change necessary:
+    vm_pc_offset is on call-frame page @ current zp_local_lb_ptr+0 + current # of locals
+    or alternatively: vm_pc_offset is on call-frame page @ previous locals offset - 2
+  change necessary:
+    get previous locals offset
+    get previous page 1 and 2
+    vm_pc_offset is on (previous) call-frame page @ previous locals offset - 2
+    restore vm_pc+0 from vm_pc offset on (prev) call frame
+restore function_ptr+0 from function offset on (prev) call frame
+restore function_ptr+1 and vm_pc+1 from function page on (prev) call frame
+adjust vm_pc+1 (+1 if function_ptr+0 > vm_pc+0, [restriction: code, including overhead, may never be longer than 256 byte!])
+restore locals_lb_ptr+0 and locals_hb_ptr+0 from locals offset on (prev) call frame
+JMP INTERPRETER
+** IMPLEMENT DEFINITION OF vm state
+- RT :: (cell) top of stack is held in this register
+- RP :: (cell) aux register
+- RZ :: (cell) used for gc, refcounting etc.
+- RA (RAI) :: (ptr->array, index) register A for array access
+- RB (RBI) ::
+- RC (RCI) ::
+- PC :: (ptr) program counter for the byte code
+- LOCALS_LB :: (ptr) into call-stack to low byte of the 0s local cell
+- LOCALS_HB :: (ptr) into call-stack to high byte of the 0s local cell
+- FUNC :: (ptr) to the currently execution function (right before first byte code)
+- EVLSTK_LB :: (ptr) to eval-stack low byte (only page, offset = 0)
+- EVLSTK_HB :: (ptr) to eval-stack high byte (only page, offset = 0)
+- EVLSTK_OFF :: offset into EVLSTK_LB and _HB to 2os
+
+IDEA: keep RT and RP in sequence to allow ,y/,x addressing them, making some functions work on either RP or RT, passing the right y/x
+** IMPLEMENT DEFINITION OF cell types and references
+cell types fall into 3 categories
+*** pointers
+tag byte ends on bits 0 [m1-ptr], or 01 [cell-pair-ptr]
+points somewhere.
+- it points to a complex cell (on a m1 page), e.g. cell-array, native array
+- it points to a cell-pair
+- pointers to cells are emulated by pointers to cell-pairs, using the car field only
+*** value cell
+a value cell holds its (complete) value
+- int, tag byte  = 1... ..11 (& $83 = $03)
+- byte, tag byte = 0000 0011 (== $03)
+- bcd, symbol, ...
+*** header cell
+is a cell that is used as a header for some payload. the following headers exist
+0lll llll native array (length 1..82)
+10ll llll cell-array   (length 1..41)
+110x xxxx function     (0..7 constants, static/dynamic)
+1110 ffff float
+1111 xxxx unused
+- header fof a *native array of bytes* (useful for strings)
+  tag byte = 0lll llll (and $7f = len)
+  offset  content        <- memory layout
+  ------------------
+  00      header-byte including length of byte array
+  01      byte index 0
+  ...
+  n+1     byte index n
+- header for an *array of cells* (useful for structures)
+  tag byte = 10ll llll (and $7f = len)
+  offset  content        <- memory layout
+  ------------------
+  00      header-byte including length of cell-array
+  01..02  cell index 0 *)
+  03..04  cell index 1
+  ...
+  ..n*2+2 cell index n
+
+  *) cells in an array of cells may be either pointers or value cells, never header-bytes!!
+- header for *(dynamic) functions*
+  tag byte = 110r sccc
+  r = reserved
+  s = static flag
+  ccc = 0..7 constants
+  offset  content        <- memory layout
+  ------------------
+  -1      reference count
+  00      header byte
+  01..02  constant 0
+   ..n*2  constant n
+  n*2+1   function header byte    <-- func-ptr
+  n*2+2   bc0
+          ...
+
+  function header byte = gccc llll
+  g = flag indicating whether function is gc'ed (0=no gc)
+  ccc = 0..7 constants
+  llll = 0..15 locals
+- header for a *float*
+  tag byte = 1110 ffff
+  offset  content        <- memory layout
+  ------------------
+  -1      reference count of this field (including top 4 bits of 5th byte of float)
+  00      header-byte (including 4 bits of 5th byte of float)
+  01.04   4 bytes of the float
+** IMPLEMENT alternative pages
+- idea: store single floats (5 bytes) in 8 byte buckets (6 bytes payload, 1 wasted)
+- idea: storing matrices of floats in native arrays (4x4x5 = 80 bytes), (3x3x5) = 45
+- idea: store vectors (3*5) = 15, (4x5) = 20
+- idea: what if pages have different bucket sizes?
+  - possibility to reduce waste.
+  - does not help with pointer tags using the last 2 bits
+  - possible sizes must be multiples of 4
+    8 (* 31 8) => 248
+    *8* (with one 12 byte slot) (+ (* 30 8) 12) => 252
+    *12* (* 21 12) => 252
+    *16* (with one 12 byte slot) (+ (* 15 16) 12) => 252
+    *20* (with one 12 byte slot) (+ (* 12 20) 12) => 252
+    24 (with one 12 byte slot) (+ (* 10 24) 12) => 252
+    *28* (* 9 28) => 252
+       32 (with one 28 byte slot) (+ (* 7 32) 28) => 252
+    *36* (* 7 36) => 252
+       44 (with one 32 byte slot) (+ (* 5 44) 32) => 252
+    *48* (with one 12 byte slot) (+ (* 5 48) 12) => 252
+    60 (with one 12 byte slot) (+ (* 4 60) 12) => 252
+    *84* (* 3 84) => 252
+       124 (* 2 124) => 248
+  - tagging theme: m1-page 10, cell-pair-page 00, int 11, 01 = reserved (others)
+  - keep (global) free list for each bucket size, thus adding the additional slot to the right free list!
+  - only 12 byte slots are used for padding
+  - how many profiles will be used is up to optimization (depends on allocation behavior of app)
+  - change: no more byte for each page, that points to the first free slot
+            free slots are kept in a free list (head points to first free slot, head located in zp)
+            each free slot points to the next free slot (or 0 if none)
+*** pointer tagging
+no more cell-ptr!
+RT = 00 (low byte) is equivalent to RT is empty!
+use new pointer tagging scheme :        examples (low, then high byte):
+  zzzz zz10 = ptr to m1 slot            0000 00[10]    1100 1101   cx00 (first allocated slot in m1 page), rc @ $01
+  0000 0000 = nil (a ptr to cell-pair)
+  xxxx xx00 = ptr to cell-pair          0000 01[00]    1100 1101   cp01 (first allocated slot in a cell-pair page), rc @ $01
+  iiii ii11 = int-cell                  0000 10[11]    0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
+  0000 0001 = byte-cell (char)          [0000 0001]    0000 0001   01  <- payload is in high byte
+  1xxx xx01 = reserved
+  01bb bb01 = bcds-cell (3 digits)      [01]10 01[01]  0110 0100   964 (digits 9, 6 and 4)
+  001s ss01 = symbol (1024)             [001]1 00[01]  0010 0110   symbol #550 (512+32+4+2)
+  0001 xx01 = reserved
+
+  changes:
+  - no more cell ptr, just ptr->m1 and ptr->cell-pair
+  - ptr->m1 end fixed on [10], putting some restriction on where these slots are located
+  - ptr->cell pair end fixed on [00] => 0000 0000 (nil) is a cell-pair-ptr!
+  - int now with just two bits wasted (both 11 for easy + and -)
+  - byte has other tag
+  - bcds cell  (new, optional)
+  - symbol (new, option)
+*** p8 layout (no more minus 1 to get to rc field) (ptr),0 = rc, (ptr),1 = header, (ptr),2 = first payload byte
+offset  content
+---------------------
+00      (page type)
+01      reserved
+02      refcount slot 0                 <-- ptr (ends on ..10)
+03      header slot 0
+04..09  slot0 (6 bytes)
+0a      refcount slot 1                 <-- ptr (ends on ..10)
+0b      header slot 1
+0c..11  slot1 (6 bytes)
+...
+ea      refcount slot 29
+eb      header slot 29
+ec..f1  slot 29 (6 bytes)
+f2      refcount extra slot
+f3      header extra slot
+f4..fd  extra slot of size 12, payload 10
+fe      # of slots in use (top bit for extra slot?)
+ff      previous page of same profile
+*** cell-pair page layout
+offset  content
+---------------------
+00      #b0000 0000 (page type)
+01      ref-count cell-pair at 04 (cell-pair 0)
+02      ref-count cell-pair at 08 (cell-pair 1)
+03      ref-count cell-pair at 0c (cell-pair 2)
+04..07  cell-pair 0
+08..0b  cell-pair 1
+0c..0f  cell-pair 2
+10      ref-count for cell-pair at 40 (cell-pair 3)
+11      ref-count for cell-pair at 44 (cell-pair 4)
+..3e    ref-count for cell-pair at f9 (cell-pair 49)
+3f      reserved
+41..44  cell-pair 3
+45..48  cell-pair 4
+...
+f8..fb  cell-pair 49
+fc..fd  reserved (2)
+fe      # of cell-pairs used
+ff      previous page of this type
+** IMPLEMENT new pages
+*** page types
+alternatives
+- 0000 0000 :: cell pairs page, #slots used can be held elsewhere
+- 1000 0xxx :: m1 page (xxx = profile index 0..7)
+  1000 0000 :: m1p6
+  1000 0001 :: m1p8
+  1000 0010 :: m1p12
+  1000 0011 :: m1p18
+  1000 0100 :: m1p24
+  1000 0101 :: m1p42
+  1000 0110 :: m1p84
+  1000 0111 :: reserved
+- 0000 0001 :: call frame stack (stack organized, full+free detection already implemented)
+- 0000 0010 :: cell stack (come in pairs for low and high byte)
+  0000 0011 ..
+  0111 1111 :: reserved (32)
+
+call-frame page
+cell stack page
+
+optional: (fid->loc page) page with 16 bit values (starting at $02), filled without gaps, next slot = offset to free, no ref counting
+optional: (code page) page with byte code and function meta data <- filled without gaps, next slot = offset to free, no ref counting
+
+- cell-pair detection (BEQ)
+- m1page detection (BMI)
+- others: (CMP !$xx, BEQ)
+**** old ideas
+11yy yyyy = (cell-pairs page) page with cell-pairs (slots of byte 4) yyyyy = number of cells used 0..63 (actually only 51 possible)
+10xx xxxx = (m1 page - p6) page with slots, xxxxxx = number of used slots  0..42
+010x xxxx = (m1 page - p8) page with slots, xxxxx = number of used slots  0..31
+011x xxxx = (m1 page - p12) page with slots, xxxxx = number of used slots  0..21
+0011 xxxx = (m1 page - p18) page with slots, xxxx = number of used slots  0..14
+0010 xxxx = (m1 page - p28) page  with slots, xxxx = number of used slots  0..9
+0001 0xxx = (m1 page - p42) page  with slots, xxx = number of used slots  0..6
+0001 11xx = (m1 page - p84) page with solots, xx  = number of used slots  0..3
+
+1111 0010 .. 1111 1111 reserved (15, not used by cell-pairs page)
+1010 1011 .. 1011 1111 reserved (22, not used by m1p6)
+0111 0110 .. 0111 1111 reserved (10, not used by m1p12)
+0011 1111              reserved (1, not used by m1p18)
+0010 1010 .. 0010 1111 reserved (6, not used by m1p28)
+0001 1111              reserved (1, not used by m1p42)
+
+0001 10xx = reserved
+
+
+- detection for cell pages (1bbb bbbb)
+  #+begin_src asm
+    ;; after load
+    BMI IS_CELL_PAGE
+
+    ;;
+    AND #$80
+    CMP #$80
+    BEQ IS_CELL_PAGE
+  #+end_src
+- detection for cell-pair page (01bb bbbb)
+  #+begin_src asm
+    AND #$c0
+    CMP #$40
+    BEQ IS_CELL_PAIR_PAGE
+  #+end_src
+- detection for m1 pages (0001 0bbb)
+  #+begin_src asm
+    AND #$f8
+    CMP #$10
+    BEQ IS_M1_PAGE_HEADER
+  #+end_src
+- detect special page
+  #+begin_src asm
+    AND #$f8
+    CMP #$18
+    BEQ IS_SPECIAL_PAGE
+  #+end_src
+*** general page layout (m1-pages + cell-pairs page)
+$00 = page type
+$fe = # of slots used
+$ff = previous page
+*** cell-pair page layout
+offset  content
+---------------------
+00      #b0000 0000 (page type)
+01      ref-count cell-pair at 05 (cell-pair 0)
+02      ref-count cell-pair at 09 (cell-pair 1)
+03..04  unused (2)
+05..08  cell-pair 0
+09..0c  cell-pair 1
+0d..0f  unused (3)
+10      ref-count for cell-pair at 40 (cell-pair 2)
+11      ref-count for cell-pair at 44 (cell-pair 3)
+..3e    ref-count for cell-pair at f9 (cell-pair 48)
+3f..40  unused (2)
+41..44  cell-pair 2
+45..48  cell-pair 3
+...
+f9..fc  cell-pair 48
+fd      unused
+fe      # of cell-pairs used
+ff      previous page of this type
+
+*** m1p6 page layout (4 bytes payload) <- used for floats (5bytes) with a trick
+provides space for structures with 1-2 fields
+page type slot size 6  (refcount @ ptr-1) 42 slots
+math: first entry $02, refcount @ -1, next slot += 6, slot-size = 4
+offset content
+--------------------
+00      #b1000 0000 page type bucket with slot size 4
+01      refcount slot0
+02      header slot0
+03..08  slot0
+09      refcount slot1
+0a      header slot1
+0b..0e  slot1
+0f      refcount slot2
+10      header slot2
+11..14  slot2
+...
+f7      refcount slot41
+f8      header slot41
+f9..fc  slot41
+fd      reserved
+fe      # slots used
+ff      previous page
+*** m1p8 page layout (6 byte payload)
+provides space for structures with 1-3 fields
+page type slot size 8 (refcount @ ptr-1) 31 slots
+math: first entry $02, refcount @ -1, next slot += $08, slot-size = $06
+offset content
+--------------------
+00      #b1000 0001 page type bucket with slot size 9 (either use this or the one above)
+01      refcount slot0
+02      header slot0  <- lowest bit must be 0 (to qualify as a m1-ptr!)
+03..08  payload slot0 (6 bytes)
+09      refcount slot1
+0a      header slot1
+0b..10  slot1
+...
+f1      refcount slot30
+f2      header slot30
+f3..f8  slot30
+f9..fd  reserved (5)
+fe      # slots used
+ff      previous page
+*** m1p12 page layout
+provides space for structures with 4-5 fields
+page type slot size 12  (refcount @ ptr-1) 21 slots
+math: first entry $02, refcount @ -1, next slot += 12, slot-size = 10
+offset content
+--------------------
+00      #b1000 0011 page type bucket with slot size 12 (either use this or the one above)
+01      refcount slot0
+02      header slot0
+03..0c  slot0
+0d      refcount slot1
+0e      header slot1
+0f..18  slot1
+19      refcount slot2
+1a      header slot2
+1b..24  slot2
+...
+f1      refcount slot20
+f2      header slot20
+f3..fc  slot20
+fd      reserved
+fe      # slots used
+ff      previous page
+*** m1p18 page layout
+provides space for structures with 8-13 fields
+page type slot size 18 (refcount @ ptr-1) 14 slots total
+math: first entry $02, refcount @ -1, next slot += 18, slot-size = 16)
+offset content
+--------------------
+00      #b1000 0011 page type bucket + slot size 18
+01      refcount slot0
+02      header slot0
+03..12  slot0
+13      refcount slot1
+14      header slot1
+15..24  slot1
+...
+eb      refcount slot13
+ec      header slot13
+ed..fc  slot13
+fd      reserved
+fe      # of slots used
+ff      previous page
+*** m1p28 page layout
+page type slot size 28 (refcount @ ptr-1) 9 slots total
+math: first entry $02, refcount @ -1, next slot += 28, slot-size = 26
+offset content
+--------------------
+00      #b1000 0100
+01      refcount slot0
+02      header slot0
+03..1c  slot0
+1d      refcount slot0
+1e      header slot1
+1f..38  slot1
+...
+e1      refcount slot8
+e2      header slot8
+e3..fc  slot8
+fd      reserved
+fe      # slots used
+ff      previous page
+*** m1p42 page layout
+page type slot size 42 (refcount @ ptr-1) 6 slots total
+math: first entry $02, refcount @ -1, next slot += 42, slot-size = 40
+offset content
+--------------------
+00      #b1000 0101
+01      refcount slot0
+02      header slot0
+03..2c  slot0
+2d      refcount slot0
+2e      header slot1
+2f..58  slot1
+...
+d1      refcount slot8
+d2      header slot8
+d3..fc  slot5
+fd      reserved
+fe      # slots used
+ff      previous page
+*** m1p84 page layout
+page type slot size 84 (refcount @ ptr-1) 3 slots total
+math: first entry $02, refcount @ -1, next slot += 84, slot-size = 82
+offset content
+--------------------
+00      #b100 0110
+01      refcount slot0
+02      header slot0
+03..54  slot0
+55      refcount slot1
+56      header slot1
+57..a8  slot1
+a9      refcount slot2
+aa      header slot2
+ab..fc  slot2
+fd      reserved
+fe      # slots used
+ff      previous page
+
+*** call-frame (stack organized) page layout
+*memory layout of call frame page* (organized in stack, lb, hb on separate pages)
+                 offset  content page lb  page hb
+                 --------------------------------
+                 00      #b0000 0001 page type call-frame
+
+                             / \              / \
+                              |                |
+                         vm_pc offset     locals offset
+                         function offset  function page
+zp-local-ptr-hb -->      local 0 cell-lb  local 0 cell-hb   <-- zp-local-ptr-hb
+                 ...
+                 fe      local n
+                 ff      previous page    prev page
+
+*memory layout of code*
+---------------------
+function-ptr-> xxxx llll        0..15 locals
+               bytecode 0
+               ...
+
+NOTE: constant cells are kept on module level (or global)
+*** cell-stack page layout (eval stack)
+- used for the evaluation stack
+- one page for lowbyte and highbyte each (is either full or has zp_evlstk_offset point to current 2os)
+offset  content page lb   page hb
+---------------------------------
+00      page type #b0000 0010 cell-stack    <-- zp_evlstk_l/hb_ptr
+
+
+                  / \
+                   |
+        cell-lb           cell-hb    <-- zp_evlstk_offset
+        ...
+ff      previous page (of the stack)
+
+** IMPLEMENT new pointer tagging
+no more cell-ptr!
+RT = 00 (low byte) is equivalent to RT is empty!
+use new pointer tagging scheme :        examples (low, then high byte):
+  zzzz zzz0 = ptr to m1 slot            0000 001[0]    1100 1101   cx00 (first allocated slot in m1 page), rc @ $01
+  xxxx xx01 = ptr to cell-pair          0000 01[01]    1100 1101   cp01 (first allocated slot in a cell-pair page), rc @ $01
+  1iii ii11 = int-cell                  [1]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
+  0000 0011 = byte-cell (char)          [0000 0011]    0000 0001   01  <- payload is in high byte
+  01bb bb11 = bcds-cell (3 digits)      [01]10 01[11]  0110 0100   964 (digits 9, 6 and 4)
+  001s ss11 = symbol (1024)             [001]1 00[11]  0010 0110   symbol #550 (512+32+4+2)
+  0001 xx11 = reserved
+
+  changes:
+  - no more cell ptr, just ptr->m1 and ptr->cell-pair
+  - highest bit of int now 1 (allows easy overflow checks and hopefully easier subtraction, too)
+  - byte has other tag
+  - bcds cell  (new, optional)
+  - symbol (new, option)
+#+begin_src asm
+  ;; check for m1-ptr
+          AND !$01
+          BEQ IS_M1_PTR
+
+          ;; alternatively
+          LSR A
+          BCC IS_M1_PTR
+
+  ;; check for cell-pair-ptr
+          AND !$03
+          CMP !$01
+          BEQ IS_CELL_PAIR_PTR
+
+          ;; alternatively
+          LSR A
+          ;; BCC IS_M1_PTR
+          LSR A
+          BCC IS_CELL_PAIR_PTR
+          ;; NO PTR AT ALL!
+
+  ;; check for int-cell
+          AND !$83
+          CMP !$83
+          BEQ IS_INT_CELL
+
+          ;; alternatively
+          ;; if definitely no ptr
+          BMI IS_INT_CELL
+
+  ;; check for byte-cell
+          CMP !$03 ;; CMP !TAG_BYTE_BYTE_CELL
+          BEQ IS_BYTE_CELL
+
+  ;; if int or byte: check 0
+          LDA LB
+          BNE IS_NOT_ZERO
+          LDA HB
+          AND #$7c
+          BEQ IS_ZERO
+#+end_src
 ** IMPLEMENT implement RP as (secondary) register for cell pairs
 - OBSOLETE: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
@@ -512,10 +1104,12 @@ is a cell that is used as a header of a number of cells. the following headers e
 ** pointer tagging
 RT = 00 (low byte) is equivalent to RT is empty!
 use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples (low, then high byte):
-  zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                    0000 001[0]    1100 1101   cd02 (first allocated slot in cell-ptr page)
-  xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)            0000 01[01]    1100 1101   cd05 (first allocated slot in a cell-pair-ptr page)
+  zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                    0000 001[0]    1100 1101   cx01 (second allocated slot in cell-ptr page)
+  xxxx xx01 = cell-pair-ptr (change on cell-pair-ptr pages!)            0000 01[01]    1100 1101   cp01 (second allocated slot in a cell-pair-ptr page)
   0iii ii11 = int-cell (bool) (no direct adding of highbyte possible)   [0]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
   1111 1111 = byte-cell (char|bcd digits)                               [1111 1111]    0000 0001   01  <- payload is in high byte
+
+  --- header bytes (define elsewhere)
   1000 0011 = cell-array-header                                         [1000 0011]    0000 0100   04 cells in array
   1000 0111 = cell-native-array-header                                  [1000 0111]    0000 1000   08 bytes in array
 
@@ -578,7 +1172,7 @@ use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples
     push: possible if - vm_​pc and func-ptr share the same page
                       - cell-stack does not overflow (has 16 entries reserve)
                       - locals do not overflow (has reserves to hold functions' need)
-    pop: if (call-frame-tr + 3) != $00 (or $01), its a a fast frame
+    pop: if (call-frame-tr + 3) != $00 (or $01), its a fast frame
 - slow stack call frame (10b): allowed for any call (including page overflows: stack, locals allocation or function running over page boundary)
 
     |                   vm pc                     | <-- call-frame-ptr
@@ -591,7 +1185,7 @@ use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples
           last byte must be either $00 or $01 to identify frame type!
 
     NOTE:  | cell-stack-lb page   | cell-stack-hb-page   | (copying the cell stack should not be necessary, the resulting stack should be cleaned up by the called method, known the # of parameters to actually remove etc.)
-           cell-stack-tos  (copying not necessayr!)
+           cell-stack-tos  (copying not necessary!)
 
     push: all relevant data
     pop: if (call-frame-ptr + 9) == $00(or $01)), its a a slow frame

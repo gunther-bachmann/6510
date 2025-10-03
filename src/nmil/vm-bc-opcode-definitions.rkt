@@ -98,6 +98,23 @@
 (define-syntax-rule (def-xt-bc label byte-code lst)
   (od-extended-bc (symbol->string 'label) byte-code lst))
 
+;; operator description:
+;; - implicit:
+;;   - pc += len
+;; - explicit:
+;;   - stack change
+;;     notation: a : b : c ::  (stack with n>=3 elements, tos = a, 2os = b, 3os = c, other irrelevant and unchanged)
+;;               ::            (stack with n>=0 elements, all irrelevant and unchanged)
+;;               a :: -> ::     (stack pops a)
+;;   - variable change (e.g. Ln for local #n, RAI)
+;;     notation: l0 <- ..      (.. is moved into l0)
+;;   - gc operations/checks done
+;;     gc[a]
+;;   - array change (structure change etc.)
+;;     notation: [.. a_i ..]        value of ra at index rai
+;;   - list change
+;;     notation: (a ..) -> (..)  remove a from head of list
+;;               l0 <- a        l0 is assigned head of list just removed
 ;; stack operation:
 ;; e.g.: IADD: a:b:: -> a+b:: (before a is tos, b is 2os, after a+b is tos, a and b were popped
 ;; m[pc] = byte @ current pc
@@ -107,6 +124,7 @@
 ;;
 (define bc-opcode-definitions
   (list ;; opcode must start at 0 at increment by 2!
+   ;;         code to include          bc command          byte len disassembled to
    (define-bc BC_PUSH_LOCAL_SHORT      PUSH_L0              #x00 1 "push l0")           ;; stack: :: -> l0::, ensure opcode & #x06 = 0
    (define-bc BC_PUSH_LOCAL_SHORT      PUSH_L1              #x02 1 "push l1")           ;; stack: :: -> l1::, ensure opcode & #x06 = 2
    (define-bc BC_PUSH_LOCAL_SHORT      PUSH_L2              #x04 1 "push l2")           ;; stack: :: -> l2::, ensure opcode & #x06 = 4
@@ -131,10 +149,10 @@
      (lambda (_l _bc bc-p1 _bc-p2) (format "branch on false? by $~a" (format-hex-byte bc-p1))))
    (define-bc BC_F_P_RET               F_P_RET              #x1c 1 "ret on false?")     ;; stack: b:: -> ::, pc:=previous call frame
    (define-bc BC_DUP                   DUP                  #x1e 1 "dup")               ;; stack: a:: -> a:a::
-   (define-bc BC_POP_TO_LOCAL_SHORT    POP_TO_L0            #x20 1 "pop to l0")         ;; l0 := tos, stack: a:: -> ::, ensure opcode & #x06 = 0
-   (define-bc BC_POP_TO_LOCAL_SHORT    POP_TO_L1            #x22 1 "pop to l1")         ;; l1 := tos, stack: a:: -> ::, ensure opcode & #x06 = 2
-   (define-bc BC_POP_TO_LOCAL_SHORT    POP_TO_L2            #x24 1 "pop to l2")         ;; l2 := tos, stack: a:: -> ::, ensure opcode & #x06 = 4
-   (define-bc BC_POP_TO_LOCAL_SHORT    POP_TO_L3            #x26 1 "pop to l3")         ;; l3 := tos, stack: a:: -> ::, ensure opcode & #x06 = 6
+   (define-bc BC_POP_TO_LOCAL_SHORT    POP_TO_L0            #x20 1 "pop to l0")         ;; l0 := a, stack: a:: -> ::, ensure opcode & #x06 = 0
+   (define-bc BC_POP_TO_LOCAL_SHORT    POP_TO_L1            #x22 1 "pop to l1")         ;; l1 := a, stack: a:: -> ::, ensure opcode & #x06 = 2
+   (define-bc BC_POP_TO_LOCAL_SHORT    POP_TO_L2            #x24 1 "pop to l2")         ;; l2 := a, stack: a:: -> ::, ensure opcode & #x06 = 4
+   (define-bc BC_POP_TO_LOCAL_SHORT    POP_TO_L3            #x26 1 "pop to l3")         ;; l3 := a, stack: a:: -> ::, ensure opcode & #x06 = 6
    (define-bc BC_PUSH_NIL              PUSH_NIL             #x28 1 "push nil")          ;; stack: :: -> nil::
    (define-bc BC_PUSH_AF               PUSH_AF              #x2a 1 "push array field")  ;; stack: y:ca:: -> (ca),y::
    (define-bc BC_POP_TO_AF             POP_TO_AF            #x2c 1 "pop to array field");; (ca),y := a, stack: y:ca:a -> ::

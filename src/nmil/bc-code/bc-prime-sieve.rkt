@@ -6,8 +6,8 @@
 
   create an array of boolean values (native array)
   1st implementation: use cell array with byte values (as booleans)
-  2nd implementation: native array, 1 byte =  boolean value
-  3rd implementation: native array, 1 byte = 8 boolean values
+  planned 2nd implementation: native array, 1 byte =  boolean value
+  planned 3rd implementation: native array, 1 byte = 8 boolean values
 
   functions to implement access and usage of native array
 

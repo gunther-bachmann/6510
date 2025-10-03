@@ -115,20 +115,20 @@ and the bc operation jump table
    (byte-const JUMP_LOWBYTE #x8a) ;; #x80 + 10
 
    (label VM_INTERPRETER_INC_PC)
-           (INC ZP_VM_PC)                   ;; increment the lowbyte of the program counter (part of this code)
-           (BEQ VM_INTZP__INC_PAGE)             ;; in the rare case of page increments jump off
+           (INC ZP_VM_PC)                      ;; increment the lowbyte of the program counter (part of this code)
+           (BEQ VM_INTZP__INC_PAGE)            ;; in the rare case of page increments jump off
     (label VM_INTZP__LOAD_BC)
     (label VM_INTERPRETER)
            (ast-bytes-cmd '() (list (car (ast-opcode-cmd-bytes (LDA $8000)))))
     (label ZP_VM_PCXXX)
-           (ast-bytes-cmd '() (list #x00 #x00))   ;; load the byte pointed to by the program counter (which is held exactly here)!
-           ;; (STA VM_INTZP_JUMP+1)                ;; store as lowbyte for the jumptable jump
+           (ast-bytes-cmd '() (list #x00 #x00))  ;; load the byte pointed to by the program counter (which is held exactly here)!
+           ;; (STA VM_INTZP_JUMP+1)            ;; store as lowbyte for the jumptable jump
            (STA JUMP_LOWBYTE)
     (label VM_INTZP_JUMP)
-           (JMP (VM_INTERPRETER_OPTABLE))       ;; do the indirect jump via the jump table
+           (JMP (VM_INTERPRETER_OPTABLE))      ;; do the indirect jump via the jump table
     (label VM_INTZP__INC_PAGE)
-           (INC ZP_VM_PC+1)                   ;; do the page increment
-           (BNE VM_INTZP__LOAD_BC)))            ;; go back to routine to load byte code
+           (INC ZP_VM_PC+1)                    ;; do the page increment
+           (BNE VM_INTZP__LOAD_BC)))           ;; go back to routine to load byte code
 
 ;; (module+ test
 ;;   (require (only-in "../ast/6510-assembler.rkt" new-assemble-to-code-list))

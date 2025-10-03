@@ -6,11 +6,13 @@ It is an byte code interpreting vm running on the c64.
 
 _Primary design goals_
 - very compact byte code  to allow as much code in memory as possible
-- very compact data       to allow as much data in memory as possible
+- compact data            to allow as much data in memory as possible
+- no moving gc            pointed to data stays where it is, no moving overhead
 - decent execution speed
 
 Extensions
 - relocation of data / code to allow memory bank switching/extensions
+  e.g. access through ptr->ptr->[rc=1]data
 - swap in/out of code
 
 * code organisation
@@ -81,14 +83,15 @@ current items to work on are found in [[file:~/repo/+1/6510/mil.readlist.org::*n
   - byte/char/boolean
   - int
   - cell-pair-ptr :: special cell-ptr that identifies the targeted data as list (car-cell+cdr-cell)
-  - cell-ptr :: pointer to any complex data (first byte pointed to identifies complex structure w/ additional meta data)
+  - ptr :: pointer to any complex data within a m1 page (first byte pointed to identifies complex structure w/ additional meta data)
+  - no cell-ptr :: ptr to cells are emulated by using cell-pair-ptr and using just the car field
   - tagging is used to identify the type of a cell
   - pointers can be used directly (without masking etc.) <- no need to repeatedly do masking/unmasking of tag bits when operating on pointers (which happens very often)
 - complex data types :: do not fit in a cell and thus must be pointed to
   - list (car-cell + cdr-cell) (4 bytes) :: cell-pair-ptr points always to these cell-pairs, this should speedup list processing
   - float (6 bytes) :: float as implemented by the c64 basic
-  - array/structure/string (n-bytes) :: structures are arrays of fields, each a single cell, strings are arrays of char-cells (currently)
-  - native-byte-array :: used for strings and buffers etc. (extension for later)
+  - array/structure :: structures are arrays of fields, each a single cell (can again be any cell, either simple or complex)
+  - native-byte-array (n-bytes) :: used for strings and buffers etc. (extension for later), strings are native arrays of bytes
 - byte code data :: this may have two different usages
   - removable :: code that may be dropped again and thus free data / pages
     this type could be handled by using the regular page buckets of the right size (with the drawback of waste)
