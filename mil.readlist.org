@@ -6,6 +6,8 @@ tags
 - MEM :: memory management
 - T :: theoretical, concepts
 - SYS :: complete lisp system
+** IMPLEMENT 6502 mint :vm:sc:mem:
+https://github.com/etu/0blayout
 ** DONE Ribbit: A Small Scheme VM, Compiler, and REPL in 4K :VM:SC:
 [[file:Downloads/c64_classics/minilisp/00_small_scheme_compiler.pdf][paper]] 11p, 2021, [[https://github.com/udem-dlteam/ribbit/tree/main][repository]]
 - includes REPL (Picobit does not)

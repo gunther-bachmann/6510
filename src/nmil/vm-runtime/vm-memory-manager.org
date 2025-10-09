@@ -21,6 +21,123 @@
   powers of 2. make sure objects of these bucket sizes are addressible with tagged pointers without adjustung these pointers. additionally
   ensure to easily reach the reference count for each object by minimal adjustments to the tagged pointer.
 * open tasks
+** What would happen if the eval stack was located in ZP
+- limited to fixed number of depth ..or.. swap in and out from pages
+- tos is kept in x, access to ptrs would be
+  #+begin_src asm
+        ;; ---------------------------------------- access of JUST THE FIRST BYTE pointer to
+        LDX TOS
+        LDA (STACK,x) ;; loads indirect first byte of pointed to cell (being the tag cell, it might be enough for several decisions!)
+
+        ;; get second byte thereafter
+        TXA
+        CLC
+        ADC STACK
+        STA access
+        LDY !$01
+    access:
+        LDA ($FF),y
+
+        ;; ---------------------------------------- one option (advantage, no RT necessary, no copy during push/pop!)
+        LDA TOS
+        CLC
+        ADC STACK
+        STA access1+1
+        STA access2+1
+        LDY #$00
+    access1:
+        LDA ($FF),y ;; indirect first byte of cell pointed to
+        INY
+    access2:
+        LDA ($FF),y ;; indirect second byte of cell pointed to
+
+        ;; ---------------------------------------- keep tos in rt
+        ;; pop to rt
+        LDA TOS
+        LDA STACK,x
+        STA RT
+        INX
+        LDA STACK,x
+        STA RT+1
+        INX
+        STA TOS ;; don't store for just copying
+
+        ;; access through rt (as usual)
+        LDY #$00
+        LDA (RT),y      ;; indirect first byte of cell pointer to
+        INY
+        LDA (RT),y      ;; indirect second byte of cell pointer to
+
+        ;; push rt
+        LDX TOS
+        DEX
+        LDA RT+1
+        STA STACK,x
+        DEX
+        LDA RT
+        STA STACK,x
+        STX TOS
+
+  #+end_src
+- access to cell values
+  #+begin_src asm
+    LDX TOS
+    LDA STACK,x ;; get lowbyte of cell on the stack
+    INX
+    LDA STACK,x ;; get highbyte of cell on the stack
+  #+end_src
+** IMPLEMENT new pointer tagging
+no more cell-ptr!
+RT = 00 (low byte) is equivalent to RT is empty!
+use new pointer tagging scheme :        examples (low, then high byte):
+  zzzz zz10 = ptr to m1 slot            0000 00[10]    1100 1101   cx00 (first allocated slot in m1 page), rc @ $02, head @ $03, payload thereafter
+  0000 0000 = nil
+  xxxx xx00 = ptr to cell-pair          0000 01[01]    1100 1101   cp01 (first allocated slot in a cell-pair page), rc @ $01
+  iiii ii11 = int-cell                  [1]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
+  0000 0001 = byte-cell (char)          [0000 0001]    0000 0001   01  <- payload is in high byte
+  1xxx xx01 = reserved
+  01bb bb01 = bcds-cell (3 digits)      [01]10 01[01]  0110 0100   964 (digits 9, 6 and 4)
+  001s ss01 = symbol (1024)             [001]1 00[01]  0010 0110   symbol #550 (512+32+4+2)
+  0001 xx01 = reserved
+
+  changes:
+  - no more cell ptr, just ptr->complex cells and ptr->cell-pair
+  - int now ends on 11 to allow for easy arithmetic functions
+  - byte has other tag
+  - bcds cell  (new, optional)
+  - symbol (new, option)
+#+begin_src asm
+  ;; check for m1-ptr
+          AND !$02
+          BEQ IS_M1_PTR
+
+  ;; check for cell-pair-ptr
+          AND !$03
+          BEQ IS_CELL_PAIR_PTR
+
+          ;; alternatively
+          LSR A
+          ;; BCS IS_NO_PTR
+          LSR A
+          BCC IS_CELL_PAIR_PTR
+          ;; IS PTR TO COMPLEX CELL
+
+  ;; check for int-cell
+          AND !$03
+          CMP !$03
+          BEQ IS_INT_CELL
+
+  ;; check for byte-cell
+          CMP !$01 ;; CMP !TAG_BYTE_BYTE_CELL
+          BEQ IS_BYTE_CELL
+
+  ;; if int or byte: check 0
+          LDA LB
+          BNE IS_NOT_ZERO
+          LDA HB
+          AND #$fc
+          BEQ IS_ZERO
+#+end_src
 ** IMPLEMENT DEFINITION OF call / ret
 *memory layout of call frame page* (organized in stack, lb, hb on separate pages)
                  offset  content page lb  page hb
@@ -33,8 +150,7 @@
                          function offset  function page
 zp-local-ptr-hb -->      local 0 cell-lb  local 0 cell-hb   <-- zp-local-ptr-hb
                          ...
-                 fe      local n
-                 ff      previous page    prev page
+                 ff      local n
 
 *memory layout of code*
 ---------------------
@@ -48,8 +164,8 @@ memorize current locals_lb_ptr+0 (offset) for later save!
 load #locals
 check call frame page has sufficient space for call (# locals + 2)
   does not fit:
-    allocate 2 new call frame pages (and init)
-    set respective previous pages to new call frame pages
+    [allocate 2 new call frame pages (and init)] see call-frame-stack
+    [set respective previous pages to new call frame pages] see call-frame-stack
     set locals_lb_ptr+1 := new page 1
     set locals_hb_ptr+1 := new page 2
     set locals_lb_ptr+0, locals_hb_ptr+0 := ff - # locals (is locals allocation)
@@ -81,27 +197,49 @@ adjust vm_pc+1 (+1 if function_ptr+0 > vm_pc+0, [restriction: code, including ov
 restore locals_lb_ptr+0 and locals_hb_ptr+0 from locals offset on (prev) call frame
 JMP INTERPRETER
 ** IMPLEMENT DEFINITION OF vm state
-- RT :: (cell) top of stack is held in this register
-- RP :: (cell) aux register
-- RZ :: (cell) used for gc, refcounting etc.
-- RA (RAI) :: (ptr->array, index) register A for array access
-- RB (RBI) ::
-- RC (RCI) ::
-- PC :: (ptr) program counter for the byte code
-- LOCALS_LB :: (ptr) into call-stack to low byte of the 0s local cell
-- LOCALS_HB :: (ptr) into call-stack to high byte of the 0s local cell
-- FUNC :: (ptr) to the currently execution function (right before first byte code)
-- EVLSTK_LB :: (ptr) to eval-stack low byte (only page, offset = 0)
-- EVLSTK_HB :: (ptr) to eval-stack high byte (only page, offset = 0)
-- EVLSTK_OFF :: offset into EVLSTK_LB and _HB to 2os
-
+- vm state
+  defines before and after state of a byte code command completely
+  registers held on the zero page
+  - RT :: (cell) top of stack is held in this register
+  - RA (RAI) :: (ptr->array, index) register A for array access
+  - RB (RBI) ::
+  - RC (RCI) ::
+  - PC :: (ptr) program counter for the byte code
+  - LOCALS_LB :: (ptr) into call-stack to low byte of the 0s local cell
+  - LOCALS_HB :: (ptr) into call-stack to high byte of the 0s local cell
+  - FUNC :: (ptr) to the currently execution function (right before first byte code)
+  - EVLSTK_LB :: (ptr) to eval-stack low byte (only page, offset = 0)
+  - EVLSTK_HB :: (ptr) to eval-stack high byte (only page, offset = 0)
+  - EVLSTK_OFF :: offset into EVLSTK_LB and _HB to 2os
+  - data on the eval stack (pointed to by evlstck_l/hb)
+  - data on the call frame stack (pointed to by locals_l/hb)
+- vm free lists and garbage collection data
+  - FL_P8 :: (ptr) free list of profile 8
+  - FL_P12 :: (ptr) free list of profile 12
+  - FL_P16 :: (ptr) free list of profile 16
+  - FL_P20 :: (ptr) free list of profile 20
+  - FL_P28 :: (ptr) free list of profile 28
+  - FL_P36 :: (ptr) free list of profile 36
+  - FL_P48 :: (ptr) free list of profile 48
+  - FL_P84 :: (ptr) free list of profile 84
+  - FL_CELLPAIRS :: (ptr) list of free cell pairs
+  - FL_PC_CELLPAIRS :: (ptr) partially collected cell pairs (cdr field may hold pointers not collected yet)
+  - FL_PC_CELLARRAYS :: (ptr) partially collected cell pair arrays
+- vm temporaries
+  temporarily used by the implementation of byte code commands
+  held on the zero page
+  - RP :: (cell) aux register
+  - RZ :: (cell) used for gc, refcounting etc.
+  - PAGE_PTR :: (ptr) with offset always 0!
+  - TEMP :: (cell)
+  - TEMP2 :: (cell)
 IDEA: keep RT and RP in sequence to allow ,y/,x addressing them, making some functions work on either RP or RT, passing the right y/x
 ** IMPLEMENT DEFINITION OF cell types and references
 cell types fall into 3 categories
 *** pointers
-tag byte ends on bits 0 [m1-ptr], or 01 [cell-pair-ptr]
+tag byte ends on bits 10 [complex-cell-ptr], or 00 [cell-pair-ptr]
 points somewhere.
-- it points to a complex cell (on a m1 page), e.g. cell-array, native array
+- it points to a complex cell (on a page), e.g. cell-array, native array
 - it points to a cell-pair
 - pointers to cells are emulated by pointers to cell-pairs, using the car field only
 *** value cell
@@ -110,29 +248,32 @@ a value cell holds its (complete) value
 - byte, tag byte = 0000 0011 (== $03)
 - bcd, symbol, ...
 *** header cell
-is a cell that is used as a header for some payload. the following headers exist
+is a cell that is used as a header for some payload. it may only be used on complex cell pages
+the following headers exist:
 0lll llll native array (length 1..82)
 10ll llll cell-array   (length 1..41)
 110x xxxx function     (0..7 constants, static/dynamic)
 1110 ffff float
 1111 xxxx unused
-- header fof a *native array of bytes* (useful for strings)
+- header of a *native array of bytes* (useful for strings)
   tag byte = 0lll llll (and $7f = len)
   offset  content        <- memory layout
   ------------------
-  00      header-byte including length of byte array
-  01      byte index 0
+  00      reference count
+  01      header-byte including length of byte array
+  02      byte index 0
   ...
-  n+1     byte index n
+  n+2     byte index n
 - header for an *array of cells* (useful for structures)
   tag byte = 10ll llll (and $7f = len)
   offset  content        <- memory layout
   ------------------
-  00      header-byte including length of cell-array
-  01..02  cell index 0 *)
-  03..04  cell index 1
+  00      refcount
+  01      header-byte including length of cell-array
+  02..03  cell index 0 *)
+  04..05  cell index 1
   ...
-  ..n*2+2 cell index n
+  ..n*2+3 cell index n
 
   *) cells in an array of cells may be either pointers or value cells, never header-bytes!!
 - header for *(dynamic) functions*
@@ -142,12 +283,12 @@ is a cell that is used as a header for some payload. the following headers exist
   ccc = 0..7 constants
   offset  content        <- memory layout
   ------------------
-  -1      reference count
-  00      header byte
-  01..02  constant 0
-   ..n*2  constant n
-  n*2+1   function header byte    <-- func-ptr
-  n*2+2   bc0
+  00      reference count
+  01      header byte
+  02..03  constant 0
+  ..n*2+1 constant n
+  n*2+2   function header byte    <-- func-ptr
+  n*2+3   bc0
           ...
 
   function header byte = gccc llll
@@ -158,29 +299,52 @@ is a cell that is used as a header for some payload. the following headers exist
   tag byte = 1110 ffff
   offset  content        <- memory layout
   ------------------
-  -1      reference count of this field (including top 4 bits of 5th byte of float)
-  00      header-byte (including 4 bits of 5th byte of float)
-  01.04   4 bytes of the float
+  00      reference count of this field (including top 4 bits of 5th byte of float)
+  01      header-byte (including 4 bits of 5th byte of float)
+  02.06   5 bytes of the float
+** DISCARDED IDEA optimization: evlstk -> zp (just 24 cells = 48 bytes)
+- precious zp space
+- cycles faster: 0 on pop, 2 on push, seems not worth it!
+#+begin_src asm
+  ;; push
+          ldx evlstk_offset       ; 3 cycles
+          dex                     ; 2
+          dex                     ; 2
+          lda rt                  ;
+          sta 0,x                 ; 4
+          lda rt+1                ;
+          sta 1,x                 ; 4
+          stx evlstk_offset       ; 3
+  ;;pop
+          ldx evlstk_offset       ; 3 cycles
+          lda 0,x                 ; 4 cycles
+          sta rt
+          lda 1,x                 ; 4 cycles
+          sta rt+1
+          inx                     ; 2 cycles
+          inx                     ; 2 cycles
+          stx evlstk_offset       ; 3 cycles
+#+end_src
 ** IMPLEMENT alternative pages
 - idea: store single floats (5 bytes) in 8 byte buckets (6 bytes payload, 1 wasted)
 - idea: storing matrices of floats in native arrays (4x4x5 = 80 bytes), (3x3x5) = 45
 - idea: store vectors (3*5) = 15, (4x5) = 20
 - idea: what if pages have different bucket sizes?
   - possibility to reduce waste.
-  - does not help with pointer tags using the last 2 bits
-  - possible sizes must be multiples of 4
-    8 (* 31 8) => 248
+  - does help with pointer tags using the last 2 bits only if used just for the last cell on the page
+  - possible (base) sizes must be multiples of 4
+    +8 (* 31 8) => 248+
     *8* (with one 12 byte slot) (+ (* 30 8) 12) => 252
     *12* (* 21 12) => 252
     *16* (with one 12 byte slot) (+ (* 15 16) 12) => 252
     *20* (with one 12 byte slot) (+ (* 12 20) 12) => 252
-    24 (with one 12 byte slot) (+ (* 10 24) 12) => 252
+    +24 (with one 12 byte slot) (​+ (* 10 24) 12) => 252+
     *28* (* 9 28) => 252
-       32 (with one 28 byte slot) (+ (* 7 32) 28) => 252
+       +32 (with one 28 byte slot) (​+ (* 7 32) 28) => 252+
     *36* (* 7 36) => 252
-       44 (with one 32 byte slot) (+ (* 5 44) 32) => 252
+       +44 (with one 32 byte slot) (​+ (* 5 44) 32) => 252+
     *48* (with one 12 byte slot) (+ (* 5 48) 12) => 252
-    60 (with one 12 byte slot) (+ (* 4 60) 12) => 252
+    +60 (with one 12 byte slot) (​+ (* 4 60) 12) => 252+
     *84* (* 3 84) => 252
        124 (* 2 124) => 248
   - tagging theme: m1-page 10, cell-pair-page 00, int 11, 01 = reserved (others)
@@ -253,7 +417,155 @@ f8..fb  cell-pair 49
 fc..fd  reserved (2)
 fe      # of cell-pairs used
 ff      previous page of this type
-** IMPLEMENT new pages
+*** call-frame-stack page layout
+- used for call frames
+- one page for low byte, one for high byte
+- meta data is held outside of this page (in a cell-pair page)
+- cframe_meta_lb -> cell-pair [car = [prev-locals_lb_ptr] cons = ptr-to-next-in-list]
+- cframe_meta_hb -> cell-pair [car = [prev-locals_hb_ptr] cons = ptr-to-next-in-list]
+- advantage: under/overflow easier to detect
+offset  content page lb   page hb
+---------------------------------
+00     page type
+
+                    / \
+                     |
+       vm_pc offset      locals offset
+       function offset   function page
+       cell-lb0          cell-hb0    <-- zp_locals_l/hb_ptr, points here to have minimal code for locals access!
+       ...
+       cell-lbn-1        cell-hbn-1
+
+ff     last possible payload
+
+- idea: call frame allocation hysteresis
+  to prevent a permanent allocation/free of pages if call/ret happens constantly at this border
+  - ret frees slot on old page call-frame stack (until e.g. reduced to 3/4 of the page)
+  - new calls are pushed onto the new page call-frame-stack
+  => always 2 stacks (and their pages) are kept, the current and the previous
+- example
+  #+begin_src asm
+    ;; allocate n-locals + 2 space for call-frame
+    ;; a = # locals
+                CLC
+                ADC #$02
+                STA temp
+                ADC #$03
+                SEC
+                SBC local_lb_ptr
+                BCC frame-overflow              ; use new page for this data, put current locals_l/hb_ptr into meta list
+                LDA local_lb_ptr
+                SEC
+                SBC temp                        ; carry is still set after this operation
+                STA local_lb_ptr
+                ;; SBC #$02                     ; store pointer to location where to store vm_pc offset and locals offset
+                STA local_hb_ptr
+                RTS
+
+    ;; allocate new page (make it as compact as possible, runtime is not important, since this will happen very seldom!)
+    frame-overflow:
+                ;; make sure temp is not overwritten here (or use other memory location)
+                JSR ALLOC_CELL_PAIR_TO_RP
+                LDY #$00
+                LDX #$00
+                JSR local_xb_to_rp
+                JSR ALLOC_CELL_PAIR_TO_RP
+                LDY #$00
+                LDX #$02
+                JSR local_xb_to_rp
+
+                LDA #PAGE_TYPE_CALL_FRAME
+                JSR ALLOC_PAGE_PAIR_TO_AX ; no init of page necessary (except page type)
+                STA local_lb_ptr+1      ; store allocated page #1
+                STX local_hb_ptr+1      ; store allocated page #2
+                SEC
+                LDA #$02                ;
+                SBC temp                ; overlaps regular code (see before), could be jumped to, to save some bytes
+                STA local_lb_ptr
+                ;; SEC
+                ;; SBC #$02              ; local where vm_pc and locals-offset is stored
+                STA local_hb_ptr
+                RTS
+
+    local_xb_to_rp:                 ; works if local_lb_ptr and local_hb_ptr are x-bytes apart (same for meta)
+                LDA local_lb_ptr+1,x
+                STA (RP),y
+                LDA local_lb_ptr,x
+                INY
+                STA (RP),y
+                INY
+                LDA local_lb_meta+1,x
+                STA (RP),y
+                LDA local_lb_meta,x
+                INY
+                STA (RP),y
+                LDA RP
+                STA local_lb_meta,x
+                LDA RP+1
+                STA local_lb_meta+1,x
+
+  #+end_src
+- hysterisis check
+  #+begin_src asm
+            BIT CALL_FRAME_HYSTERISIS
+            BMI IS_IN_HYSTERISIS ; checks topmost bit (7)
+    REGULAR_CODE:
+            ;; hysterisis detection
+            ;; if running into a call-stack underflow (set hysterisis and jump into IS_IN_HYSTERISIS)
+    REGULAR_CODE_NO_HYST_DETECTION:
+            ;  regular code follows here
+
+
+    IS_IN_HYSTERISIS:
+            LDA locals_lb_ptr
+            BPL KEEP_HYSTERISIS
+            LDA #$00
+            STA CALL_FRAME_HYSTERISIS
+            BEQ REGULAR_CODE
+    KEEP_HYSTERISIS:
+            ;; on ret, pop from call-frame-page of old locals ptr
+            ;; on call, push onto call-frame-page of new locals ptr
+            JMP REGULAR_CODE_NO_HYST_DETECTION
+  #+end_src
+*** cell-stack page layout (eval stack)
+- used for the evaluation stack
+- one page for lowbyte and highbyte each (is either full or has zp_evlstk_offset point to current 2os)
+- meta data is held outside of this page (in a cell-pair page)
+- evlstk_meta -> cell-pair [car = [offset page] cons = ptr-to-next-in-list]
+- advantage dey/dex iny/inx will run over byte border, making it easily checkable, whether it runs over the borders
+offset  content page lb   page hb
+---------------------------------
+00     page type  <--- zp_evlstk_l/hb ptr
+01     topmost available payload on the stack
+                    / \
+                     |
+        cell-lb           cell-hb    <-- zp_evlstk_offset (+ zp_evlstk_l/hb_ptr)
+        ...
+ff      cell-lb0          cell-hb0
+
+- example
+  #+begin_src asm
+    ;; pop
+    ldy evlstk_offset               ; 3 cycles
+    lda (evlstk_lb_ptr),y           ; 5 cycles
+    sta rt
+    lda (evlstk_hb_ptr),y           ; 5 cycles
+    sta rt+1
+    inc evlstk_offset               ; 5 cycles
+    beq stack_underflow             ; only if bounds checking (if 255 stack size is enough, no checking necessary)
+
+    ;; push
+    ldy evlstk_offset               ; 3 cycles
+    dey                             ; 2
+    beq stack_full                  ; only if bounds checking (if 255 stack size is enough, no checking necessary)
+    lda rt
+    sta (evlstk_lb_ptr),y           ; 6
+    lda rt+1
+    sta (evlstk_hb_ptr),y           ; 6
+    sty evlstk_offset               ; 3 cycles
+  #+end_src
+
+** musings about pages
 *** page types
 alternatives
 - 0000 0000 :: cell pairs page, #slots used can be held elsewhere
@@ -533,7 +845,7 @@ offset  content page lb   page hb
         ...
 ff      previous page (of the stack)
 
-** IMPLEMENT new pointer tagging
+** musings about new pointer tagging
 no more cell-ptr!
 RT = 00 (low byte) is equivalent to RT is empty!
 use new pointer tagging scheme :        examples (low, then high byte):
@@ -595,7 +907,6 @@ use new pointer tagging scheme :        examples (low, then high byte):
 ** IMPLEMENT implement RP as (secondary) register for cell pairs
 - OBSOLETE: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
-** TODO split vm-interpreter in groups of interpreted bc commands
 ** TODO implement RP usage as TOS-1 register on demand
 + do this for operations in need of 2+ operands (which then discard the operands and just leave the result on the stack)
 + implement INT*, INT+, INT-, INT/ with this mechanism
@@ -2634,6 +2945,7 @@ IDEA: make use of RA/b/c optional (e.g. command for using tos, command for using
 - [X] one argument function on ZP_RT
 - [X] array access on ZP_RA, ZP_RB, ZP_RC
 - [X] second argument function on ZP_RP
+** DONE split vm-interpreter in groups of interpreted bc commands
 * - :noexport:
 #+begin_src emacs-lisp
   ;; Local Variables:
