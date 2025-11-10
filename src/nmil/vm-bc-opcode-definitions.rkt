@@ -330,7 +330,7 @@
 
 ;; find the opcode definition of the given bc (using a list of definitions)
 (define/contract (find-dyn-opcode-def bc (opcode-defs bc-opcode-definitions))
-  (->* [byte?] [(listof (or/c od-simple-bc? od-extended-bc?))] (or/c od-simple-bc? od-extended-bc?))
+  (->* [byte?] [(listof (or/c od-simple-bc? od-extended-bc?))] (or/c od-simple-bc? od-extended-bc? #f))
   (findf (lambda (od)
            (or (and (od-simple-bc? od)
                  (eq? (od-simple-bc--byte-code od) bc))

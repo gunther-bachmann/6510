@@ -4,6 +4,7 @@
 (defun 6510-debugger--execute-command-in-repl (command-str)
   (with-current-buffer (racket-repl-buffer-name-shared)
     (let ((quoted-command (replace-regexp-in-string "\"" "\\\\\"" command-str)))
+      (racket--repl-add-to-input-history command-str)
       (insert command-str)
       (insert "\n")
       (racket--repl-delete-prompt-mark nil)
@@ -117,6 +118,9 @@
     "C-c d p" #'6510-debugger-back
     "C-c d b" #'6510-debugger-toggle-break-point
     "C-c d q" #'6510-debugger-quit
+    "M-<up>" #'gb-racket-repl-previous-input
+    "M-<down>" #'gb-racket-repl-next-input
+    "<RET>" #'racket-repl-submit
     "x" #'6510-debugger-execute-startup
     "r" #'6510-debugger-run
     "n" #'6510-debugger-step
@@ -125,6 +129,7 @@
     "b" #'6510-debugger-toggle-break-point
     "q" #'6510-debugger-quit
     "c" #'6510-debugger--center))
+
 
 (define-minor-mode 6510-connected-debugger-mode
   "connect the given source code with a racket debugger process and execute commands"

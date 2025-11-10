@@ -30,6 +30,7 @@
    prompter
    dispatcher
    pre-prompter
+   ident
    interactor-queue
    labels)
   #:guard (struct-guard/c (listof cpu-state?)
@@ -40,6 +41,7 @@
                           (-> any/c string?)        ;; any/c is actually debug-state? 
                           (-> string? any/c any/c)  ;; any/c is actually debug-state?
                           (-> any/c string?)        ;; any/c is actually debug-state?
+                          symbol?                   ;; identity of this interactor
                           (listof any/c)            ;; interactors
                           (hash/c string? word/c)    ;; resolved labels
                           ))

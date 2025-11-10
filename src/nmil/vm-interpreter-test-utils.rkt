@@ -89,6 +89,8 @@
                   vm-cell-at->string
                   vm-cell->string
                   vm-deref-cell-pair-w->string)
+         (only-in "vm-bc-opcode-definitions.rkt"
+                  get-single-opcode)
          (only-in "vm-interpreter-loop.rkt"
                   ZP_VM_PC)
          (only-in "vm-runtime/vm-call-frame.rkt"
@@ -270,7 +272,7 @@
      (eq? (cpu-state-program-counter lc-state)
           interpreter-loop-adr))
    bc-debugger--instruction-breakpoint-name
-   #f))
+   ))
 
 ;; run until the given condition hits (or any other break point) other than the regular bc instruction level break
 ;; remove the breakpoint with this condition again (regardless which breakpoint actually triggered)
@@ -286,7 +288,7 @@
          (= (cpu-state-program-counter bc-state)
             interpreter-loop-adr)))
       "next instruction is a call or return"
-      #f))
+      #t))
     "next instruction is a call or return")
    (lambda (lc-state)
      (eq? (cpu-state-program-counter lc-state)
@@ -352,7 +354,7 @@
     (foreground-color 'yellow)
     (begin0
         (with-handlers ([exn:fail? (lambda (e)
-                                     (color-displayln (format "ignored exception (~a)" (exn->string e)))
+                                     (color-displayln (format "ignored exception: ~a" (exn->string e)))
                                      d-state)])
           (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
                 [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
@@ -462,15 +464,14 @@
                   (debugger--bc-run-until d-state interpreter-loop-adr
                                           (lambda (bc-state)
                                             (memq (peek bc-state (peek-word-at-address bc-state ZP_VM_PC))
-                                                  '(#x34 ;; call
-                                                    #x35 ;; tail call
-                                                    ))))
+                                                  (list (get-single-opcode "CALL")
+                                                        (get-single-opcode "TAIL_CALL")))))
                   interpreter-loop-adr)]
                 [(or (string=? command "run")
                     (string=? command "r"))
                  (wrap-into-bc-states d-state (debugger--bc-run d-state interpreter-loop-adr) interpreter-loop-adr)]
                 [(string=? command "so")
-                 (cond [(= #x34 (peek c-state (peek-word-at-address c-state ZP_VM_PC)))
+                 (cond [(= (get-single-opcode "CALL") (peek c-state (peek-word-at-address c-state ZP_VM_PC)))
                         ;; step over, since it is a call!
                         (define state-after-call (debugger--run d-state #t))
                         (define nc-state (car (debug-state-states state-after-call)))
@@ -512,7 +513,7 @@
                 [(string-prefix? command "^")
                  (dispatch-debugger-command (substring command 1) d-state) ]
                 [else
-                 (color-displayln "dispatching -> assembler-debugger")
+                 ;; (color-displayln "dispatching -> assembler-debugger")
                  (dispatch-debugger-command command d-state)]))
       (foreground-color 'b-white))))
 
@@ -520,8 +521,8 @@
   (list
    `(dispatcher . ,(debugger--bc-dispatcher- interpreter-loop-adr))
    `(prompter . ,(lambda (d-state) (format "BC [~x] > " (length (debug-state-states d-state)))))
-   `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble (car (debug-state-states d-state)) #:labels (debug-state-labels d-state)))))))
-
+   `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble (car (debug-state-states d-state)) #:labels (debug-state-labels d-state)))))
+   `(ident . nmil-debugger)))
 
 ;; get the number of pages not in the free list nor allocated (totally untouched/free)
 (define (vm-free-pages-num state (page-map-start #xcf00))
@@ -610,7 +611,7 @@
                        ""
                        #t
                        (list
-                        (breakpoint (format "~a @ $~a" bc-debugger--instruction-breakpoint-name (number->string interpreter-loop 16))
+                        (breakpoint bc-debugger--instruction-breakpoint-name ;; (format "~a @ $~a" bc-debugger--instruction-breakpoint-name (number->string interpreter-loop 16))
                                     (lambda (lc-state)
                                       (eq? (cpu-state-program-counter lc-state)
                                            interpreter-loop))

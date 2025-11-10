@@ -33,10 +33,14 @@
 (require (only-in "./6510-processor-display.rkt"
                   6510-debugger--proc-buffer-display
                   6510-debugger--proc-buffer-kill))
+(require (only-in "./nmil-debugger-stack-display.rkt"
+                  nmil-debugger--stack-buffer-display
+                  nmil-debugger--stack-buffer-kill))
 (require (only-in "./6510-emacs-integration.rkt"
                   6510-debugger--has-single-step-cap
                   6510-debugger--has-output-cap
-                  6510-debugger--has-proc-display-cap))
+                  6510-debugger--has-proc-display-cap
+                  nmil-debugger--has-stack-display-cap))
 (require "6510-debugger-shared.rkt")
 
 (provide run-debugger
@@ -159,7 +163,7 @@
                                           (breakpoint-description breakpoint))))
                                    (debug-state-breakpoints d-state))]))
 
-(define/c (debugger--push-breakpoint d-state fun description (verbose #t))
+(define/c (debugger--push-breakpoint d-state fun description (verbose #f))
   (->* [debug-state? any/c string?] [boolean?] debug-state?)
   (struct-copy debug-state d-state
                [breakpoints (cons (breakpoint description fun verbose)
@@ -172,14 +176,14 @@
 (define/c (debugger--run d-state (display #t))
   (->* [debug-state?] [boolean?] debug-state?)
   (define c-states (debug-state-states d-state))
-  (displayln "execute cpu step")
+  ;; (displayln "execute cpu step")
   (define next-states (cons (execute-cpu-step (car c-states) #t (debug-state-output-function d-state)) c-states))
   ;; (displayln (format "~a" (cpu-state-program-counter (car next-states))))
   (let-values (((breakpoint new-states) (run-until-breakpoint next-states (debug-state-breakpoints d-state) (debug-state-tracepoints d-state) 0 (debug-state-output-function d-state))))
-    (when (and breakpoint display (breakpoint-verbose breakpoint))
-      (with-colors 'cyan (lambda () (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))))
-    (when (-debugger-at-brk (car new-states))
-      (with-colors 'cyan (lambda () (displayln (format "hit BRK instruction")))))
+    ;; (when (and breakpoint display (breakpoint-verbose breakpoint))
+    ;;   (with-colors 'cyan (lambda () (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))))
+    ;; (when (-debugger-at-brk (car new-states))
+    ;;   (with-colors 'cyan (lambda () (displayln (format "hit BRK instruction")))))
     (struct-copy debug-state d-state [states new-states])))
 
 (define/c (print-latest-cpu-state d-state)
@@ -446,7 +450,8 @@ EOF
 (struct emacs-capabilities
   (print-proc-status
    sync-step-with-source
-   output)
+   output
+   nmil-stack-display)
   #:transparent)
 
 (define/c (collect-emacs-capabilities file-name)
@@ -454,7 +459,8 @@ EOF
   (emacs-capabilities
    (6510-debugger--has-proc-display-cap)
    (and (non-empty-string? file-name) (file-exists? file-name) (6510-debugger--has-single-step-cap file-name))
-   (6510-debugger--has-output-cap)))
+   (6510-debugger--has-output-cap)
+   (nmil-debugger--has-stack-display-cap)))
 
 (define/c (run-debugger--prepare-emacs-integration capabilities file-name d-state)
   (-> emacs-capabilities? string? debug-state? any/c)
@@ -472,8 +478,12 @@ EOF
         [else
          (display (apply (debug-state-pre-prompter d-state) (list d-state)))
          (displayln "")])
-  (when (emacs-capabilities-print-proc-status capabilities)
-    (6510-debugger--proc-buffer-display d-state)))
+  (when (and (emacs-capabilities-print-proc-status capabilities)
+           (eq? (debug-state-ident d-state) '6510-debugger))
+    (6510-debugger--proc-buffer-display d-state))
+  (when (and (emacs-capabilities-nmil-stack-display capabilities)
+           (eq? (debug-state-ident d-state) 'nmil-debugger))
+    (nmil-debugger--stack-buffer-display d-state)))
 
 (define/c (run-debugger--step-cleanup-emacs-integration capabilities s-entry)
   (-> emacs-capabilities? (or/c pc-source-map-entry? #f) any/c)
@@ -486,6 +496,8 @@ EOF
   (-> emacs-capabilities? string?  any/c)
   (when (emacs-capabilities-print-proc-status capabilities)
     (6510-debugger--proc-buffer-kill))
+  (when (emacs-capabilities-nmil-stack-display capabilities)
+    (nmil-debugger--stack-buffer-kill))
   (when (emacs-capabilities-sync-step-with-source capabilities)
     (6510-debugger--remove-all-addresses-on-source file-name)))
 
@@ -502,7 +514,8 @@ EOF
   (list
    `(prompter . ,debugger--assembler-prompter)
    `(dispatcher . ,dispatch-debugger-command)
-   `(pre-prompter . ,debugger--assembler-pre-prompter)))
+   `(pre-prompter . ,debugger--assembler-pre-prompter)
+   `(ident . 6510-debugger)))
 
 (define/c (push-debugger-interactor interactor d-state)
   (-> (listof any/c) debug-state? debug-state?)
@@ -512,7 +525,8 @@ EOF
            `(tracepoints . ,(debug-state-tracepoints d-state))
            `(prompter . ,(debug-state-prompter d-state))
            `(dispatcher . ,(debug-state-dispatcher d-state))
-           `(pre-prompter . ,(debug-state-pre-prompter d-state)))
+           `(pre-prompter . ,(debug-state-pre-prompter d-state))
+           `(ident . ,(debug-state-ident d-state)))
           (debug-state-interactor-queue d-state)))
   (struct-copy debug-state d-state
                [breakpoints      '()]
@@ -520,6 +534,7 @@ EOF
                [prompter         (dict-ref interactor 'prompter interactor)]
                [dispatcher       (dict-ref interactor 'dispatcher interactor)]
                [pre-prompter     (dict-ref interactor 'pre-prompter interactor)]
+               [ident            (dict-ref interactor 'ident interactor)]
                [interactor-queue new-interactor-queue]))
 
 (define/c (pop-debugger-interactor d-state)
@@ -532,6 +547,7 @@ EOF
                [prompter         (dict-ref interactor 'prompter interactor)]
                [dispatcher       (dict-ref interactor 'dispatcher interactor)]
                [pre-prompter     (dict-ref interactor 'pre-prompter interactor)]
+               [ident            (dict-ref interactor 'ident interactor)]
                [interactor-queue new-interactor-queue]))
 
 ;; run an read eval print loop debugger on the passed program
@@ -552,6 +568,7 @@ EOF
                  (dict-ref interactor 'prompter debugger--assembler-prompter)
                  (dict-ref interactor 'dispatcher dispatch-debugger-command)
                  (dict-ref interactor 'pre-prompter debugger--assembler-pre-prompter)
+                 (dict-ref interactor 'ident '6510-debugger)
                  (list)
                  labels))
 
@@ -656,7 +673,8 @@ EOF
            (with-colors 'red (lambda () (displayln "hit BRK.")))
            (values breakpoint states)]
           [breakpoint
-           (with-colors 'red (lambda () (displayln "hit breakpoint.")))
+           (when (breakpoint-verbose breakpoint)
+             (with-colors 'red (lambda () (displayln (format "hit breakpoint ~a" (breakpoint-description breakpoint))))))
            (values breakpoint states)]
           [(> steps debugger-max-uninterrupted-steps)
            (with-colors 'red (lambda () (displayln (format "stopped exceeding ~a interpreter steps." debugger-max-uninterrupted-steps))))
