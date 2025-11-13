@@ -39,13 +39,30 @@
 
 (define BC_BADD
   (list
-   (label BC_BADD)
+   (label BC_BADD) ;; 13 bytes long
           (JSR POP_CELL_EVLSTK_TO_RP)
           (CLC)
           (LDA ZP_RT+1)
           (ADC ZP_RP+1)
           (STA ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC)))
+          (JMP VM_INTERPRETER_INC_PC)
+
+;; ;; alternatively (speed optimized) : 23 bytes long
+;;           (LDY ZP_CELL_STACK_TOS)
+;;           (CMP !$01)
+;;           (BEQ SWITCH_TO_PREV_CELL_STK__BC_ADD)
+;;           ;; no stack check
+;;    (label DO_ADD__BC_ADD)
+;;           (LDA (ZP_CELL_STACK_HB_PTR),y) ;; high byte = payload of byte-cell
+;;           (CLC)
+;;           (ADC ZP_RT+1)
+;;           (STA ZP_RT+1)
+;;           (DEC ZP_CELL_STACK_TOS)
+;;           (JMP VM_INTERPRETER_INC_PC)
+;;    (label SWITCH_TO_PREV_CELL_STK__BC_ADD)
+;;           (JSR SWITCH_TO_PREV_CELL_STK)
+;;           (BNE DO_ADD__BC_ADD)
+))
 
 (define BC_IMAX
   (add-label-suffix

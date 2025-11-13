@@ -21,71 +21,24 @@
   powers of 2. make sure objects of these bucket sizes are addressible with tagged pointers without adjustung these pointers. additionally
   ensure to easily reach the reference count for each object by minimal adjustments to the tagged pointer.
 * open tasks
-** What would happen if the eval stack was located in ZP
-- limited to fixed number of depth ..or.. swap in and out from pages
-- tos is kept in x, access to ptrs would be
-  #+begin_src asm
-        ;; ---------------------------------------- access of JUST THE FIRST BYTE pointer to
-        LDX TOS
-        LDA (STACK,x) ;; loads indirect first byte of pointed to cell (being the tag cell, it might be enough for several decisions!)
-
-        ;; get second byte thereafter
-        TXA
-        CLC
-        ADC STACK
-        STA access
-        LDY !$01
-    access:
-        LDA ($FF),y
-
-        ;; ---------------------------------------- one option (advantage, no RT necessary, no copy during push/pop!)
-        LDA TOS
-        CLC
-        ADC STACK
-        STA access1+1
-        STA access2+1
-        LDY #$00
-    access1:
-        LDA ($FF),y ;; indirect first byte of cell pointed to
-        INY
-    access2:
-        LDA ($FF),y ;; indirect second byte of cell pointed to
-
-        ;; ---------------------------------------- keep tos in rt
-        ;; pop to rt
-        LDA TOS
-        LDA STACK,x
-        STA RT
-        INX
-        LDA STACK,x
-        STA RT+1
-        INX
-        STA TOS ;; don't store for just copying
-
-        ;; access through rt (as usual)
-        LDY #$00
-        LDA (RT),y      ;; indirect first byte of cell pointer to
-        INY
-        LDA (RT),y      ;; indirect second byte of cell pointer to
-
-        ;; push rt
-        LDX TOS
-        DEX
-        LDA RT+1
-        STA STACK,x
-        DEX
-        LDA RT
-        STA STACK,x
-        STX TOS
-
-  #+end_src
-- access to cell values
-  #+begin_src asm
-    LDX TOS
-    LDA STACK,x ;; get lowbyte of cell on the stack
-    INX
-    LDA STACK,x ;; get highbyte of cell on the stack
-  #+end_src
+** plan to implement the changes
+- remove all cell ptr related code,
+  - put aliases for cell-pair ptr where necessary
+- ~R0~ add zp register that has offset always 0 (for indexed page access)
+- change pointer tagging
+  - pointer detection
+  - pointer allocation through free list (for each profile and for cell-pair-ptr)
+    do not use separate page with first free slot per page
+    -> allocation of page: add first free slot on page as head of free list
+       put old head of free list into the last free slot on the page (that was previously initialized with 0)
+       (what about local/global free list ptrs)
+       each page can be analyzed separately by
+       - looking at the number of allocated slots (page full?)
+       - looking at the reference count of each slot (0 => must be part of the free list)
+  - cell-pair pointer
+    - change allocation/initialization of page
+  - m1 page pointer
+    - change allocation/initialization of page
 ** IMPLEMENT new pointer tagging
 no more cell-ptr!
 RT = 00 (low byte) is equivalent to RT is empty!
@@ -95,20 +48,26 @@ use new pointer tagging scheme :        examples (low, then high byte):
   xxxx xx00 = ptr to cell-pair          0000 01[01]    1100 1101   cp01 (first allocated slot in a cell-pair page), rc @ $01
   iiii ii11 = int-cell                  [1]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
   0000 0001 = byte-cell (char)          [0000 0001]    0000 0001   01  <- payload is in high byte
-  1xxx xx01 = reserved
+  1xxx xx01 = reserved (or symbols, then up to 8192)
   01bb bb01 = bcds-cell (3 digits)      [01]10 01[01]  0110 0100   964 (digits 9, 6 and 4)
   001s ss01 = symbol (1024)             [001]1 00[01]  0010 0110   symbol #550 (512+32+4+2)
   0001 xx01 = reserved
 
   changes:
-  - no more cell ptr, just ptr->complex cells and ptr->cell-pair
+  - no more cell ptr, just ptr->complex cells and ptr->cell-pair, references to cells are kept within a cell-pair (wasting one slot for this rare case)
   - int now ends on 11 to allow for easy arithmetic functions
   - byte has other tag
   - bcds cell  (new, optional)
   - symbol (new, option)
 #+begin_src asm
+  ;; check for pointer
+          LSR A
+          BCS NO_POINTER
+          ;; (BCC) POINTER
+
   ;; check for m1-ptr
-          AND !$02
+          AND !$03
+          CMP !$02 ; EOR !$02
           BEQ IS_M1_PTR
 
   ;; check for cell-pair-ptr
@@ -117,14 +76,14 @@ use new pointer tagging scheme :        examples (low, then high byte):
 
           ;; alternatively
           LSR A
-          ;; BCS IS_NO_PTR
+          ;; (BCS) IS_NO_PTR
           LSR A
           BCC IS_CELL_PAIR_PTR
-          ;; IS PTR TO COMPLEX CELL
+          ;; (BCS) IS_M1_PTR
 
   ;; check for int-cell
           AND !$03
-          CMP !$03
+          CMP !$03 ; EOR !$03
           BEQ IS_INT_CELL
 
   ;; check for byte-cell
@@ -137,6 +96,11 @@ use new pointer tagging scheme :        examples (low, then high byte):
           LDA HB
           AND #$fc
           BEQ IS_ZERO
+
+  ;; if byte: check 0
+          LDA LB
+          BNE IS_NOT_ZERO
+          ;; (BEQ) IS_ZERO
 #+end_src
 ** IMPLEMENT DEFINITION OF call / ret
 *memory layout of call frame page* (organized in stack, lb, hb on separate pages)
@@ -302,49 +266,59 @@ the following headers exist:
   00      reference count of this field (including top 4 bits of 5th byte of float)
   01      header-byte (including 4 bits of 5th byte of float)
   02.06   5 bytes of the float
-** DISCARDED IDEA optimization: evlstk -> zp (just 24 cells = 48 bytes)
-- precious zp space
-- cycles faster: 0 on pop, 2 on push, seems not worth it!
-#+begin_src asm
-  ;; push
-          ldx evlstk_offset       ; 3 cycles
-          dex                     ; 2
-          dex                     ; 2
-          lda rt                  ;
-          sta 0,x                 ; 4
-          lda rt+1                ;
-          sta 1,x                 ; 4
-          stx evlstk_offset       ; 3
-  ;;pop
-          ldx evlstk_offset       ; 3 cycles
-          lda 0,x                 ; 4 cycles
-          sta rt
-          lda 1,x                 ; 4 cycles
-          sta rt+1
-          inx                     ; 2 cycles
-          inx                     ; 2 cycles
-          stx evlstk_offset       ; 3 cycles
-#+end_src
 ** IMPLEMENT alternative pages
 - idea: store single floats (5 bytes) in 8 byte buckets (6 bytes payload, 1 wasted)
-- idea: storing matrices of floats in native arrays (4x4x5 = 80 bytes), (3x3x5) = 45
-- idea: store vectors (3*5) = 15, (4x5) = 20
-- idea: what if pages have different bucket sizes?
+- idea: keep a page local free list
+- idea: keep a list of pages with free slots per profile
+- (postponed) idea: keep additional 12sized byte slots on other pages in separate free list
+  (detection: do they all have the same offset? they do, but not on every page (yet))
+  e.g. last slot on page is always a 12byte slot at the same offset
+  resulting page profiles (with last 12byte slot on page at the same offset): => detection during free is easier, what if 12 byte slots are unused (lots of waste??)
+    8 (* 30 + 12)  [3 slot per payload]
+    12 (* 21 + 12) [5]
+    16 (* 15 + 12) [7]
+    20 (* 12 + 12) [9]
+    30 (* 8 + 12)  [14]
+    40 (* 6 + 12)  [19]
+    60 (* 4 + 12)  [29]
+    80 (*3 + 12)   [39]
+    rule: before other p12 slots are allocated, the free list must be consultated (which is a 16ptr, page spanning list)
+    rule: freeing a reference with offset $f2 (regardless of page) is a p12 slot that is held in this special free list!
+  alternative:
+    8   +12 (or - and waste 4)
+    12  ?
+    16  +12
+    20  +12
+    28  -
+    36  -
+    48  +12
+    84  -
+    keep p12 slots in separate free list. on free, check $f2, if matching, check page type, only on pages p8
+    (not if additional waste of 4 is acceptable), p16, p20 and p48 are
+- (postponed) idea put those 12slots at the end all on $f3 (not colliding with any other slots) => detection is easier
+- (later) idea: storing matrices of floats in native arrays (4x4x5 = 80 bytes), (3x3x5) = 45
+- (later) idea: store vectors (3*5) = 15, (4x5) = 20
+- (postponed) idea: what if pages have different bucket sizes?
+  - clutter within pages making cleanup/allocation more complex
   - possibility to reduce waste.
-  - does help with pointer tags using the last 2 bits only if used just for the last cell on the page
+  - does help with pointer tags using the last 2 bits only, if used just for the last cell on the page
   - possible (base) sizes must be multiples of 4
-    +8 (* 31 8) => 248+
+       8 (* 31 8) => 248
     *8* (with one 12 byte slot) (+ (* 30 8) 12) => 252
     *12* (* 21 12) => 252
     *16* (with one 12 byte slot) (+ (* 15 16) 12) => 252
     *20* (with one 12 byte slot) (+ (* 12 20) 12) => 252
-    +24 (with one 12 byte slot) (​+ (* 10 24) 12) => 252+
+       24 (with one 12 byte slot) (​+ (* 10 24) 12) => 252
     *28* (* 9 28) => 252
-       +32 (with one 28 byte slot) (​+ (* 7 32) 28) => 252+
+       30 (+ 12 (* 8 30)) => 252
+       32 (with one 28 byte slot) (​+ (* 7 32) 28) => 252
+       34 (+ 12 (* 7 34)) => 250
     *36* (* 7 36) => 252
-       +44 (with one 32 byte slot) (​+ (* 5 44) 32) => 252+
+       40 (+ 12 (* 6 40)) = > 252
+       44 (with one 32 byte slot) (​+ (* 5 44) 32) => 252
     *48* (with one 12 byte slot) (+ (* 5 48) 12) => 252
-    +60 (with one 12 byte slot) (​+ (* 4 60) 12) => 252+
+       60 (with one 12 byte slot) (​+ (* 4 60) 12) => 252
+       80 (+ (* 3 80) 12)
     *84* (* 3 84) => 252
        124 (* 2 124) => 248
   - tagging theme: m1-page 10, cell-pair-page 00, int 11, 01 = reserved (others)
@@ -354,33 +328,18 @@ the following headers exist:
   - change: no more byte for each page, that points to the first free slot
             free slots are kept in a free list (head points to first free slot, head located in zp)
             each free slot points to the next free slot (or 0 if none)
-*** pointer tagging
-no more cell-ptr!
-RT = 00 (low byte) is equivalent to RT is empty!
-use new pointer tagging scheme :        examples (low, then high byte):
-  zzzz zz10 = ptr to m1 slot            0000 00[10]    1100 1101   cx00 (first allocated slot in m1 page), rc @ $01
-  0000 0000 = nil (a ptr to cell-pair)
-  xxxx xx00 = ptr to cell-pair          0000 01[00]    1100 1101   cp01 (first allocated slot in a cell-pair page), rc @ $01
-  iiii ii11 = int-cell                  0000 10[11]    0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
-  0000 0001 = byte-cell (char)          [0000 0001]    0000 0001   01  <- payload is in high byte
-  1xxx xx01 = reserved
-  01bb bb01 = bcds-cell (3 digits)      [01]10 01[01]  0110 0100   964 (digits 9, 6 and 4)
-  001s ss01 = symbol (1024)             [001]1 00[01]  0010 0110   symbol #550 (512+32+4+2)
-  0001 xx01 = reserved
-
-  changes:
-  - no more cell ptr, just ptr->m1 and ptr->cell-pair
-  - ptr->m1 end fixed on [10], putting some restriction on where these slots are located
-  - ptr->cell pair end fixed on [00] => 0000 0000 (nil) is a cell-pair-ptr!
-  - int now with just two bits wasted (both 11 for easy + and -)
-  - byte has other tag
-  - bcds cell  (new, optional)
-  - symbol (new, option)
+*** general coding within pages
+- 00 :: page type
+- 01 :: # of slots in used (0 = page is empty) || # of free slots (0 = page is full)
+- +00 :: refcount of slot [0=unused|free]
+- +01 :: header byte (or if unused, pointer to next free cell on this page or 0 if this was the last free cell)
+- +02..+xx :: payload (size depending on payload)
+- ff :: ptr to next page of this profile
 *** p8 layout (no more minus 1 to get to rc field) (ptr),0 = rc, (ptr),1 = header, (ptr),2 = first payload byte
 offset  content
 ---------------------
 00      (page type)
-01      reserved
+01      # of slots in use (top bit for extra slot?) => 0 = page is unused and can be freed
 02      refcount slot 0                 <-- ptr (ends on ..10)
 03      header slot 0
 04..09  slot0 (6 bytes)
@@ -391,11 +350,131 @@ offset  content
 ea      refcount slot 29
 eb      header slot 29
 ec..f1  slot 29 (6 bytes)
-f2      refcount extra slot
-f3      header extra slot
-f4..fd  extra slot of size 12, payload 10
-fe      # of slots in use (top bit for extra slot?)
-ff      previous page of same profile
+f2      refcount slot 30
+f3      header slot 30
+f4..f9  slot 30 (6 bytes)
+fa..fe  reserved (5 bytes)
+[f2      refcount extra slot           <-- ptr (ends on ..10)
+ f3      header extra slot
+ f4..fd  extra slot of size 12, payload 10
+ fe      reserved]
+ff      previous page of same profile (with potentially free slots)
+*** p12 (21 slots, 10 bytes payload)
+offset  content
+--------------------
+00      (page type)
+01      # of slots in use/empty
+02      ref count slot 0
+03      header slot 0
+04..0d  slot 0 (10 bytes)
+0e      ref count slot 1
+0f      header slot 1
+10..19  slot 1 (10 bytes)
+...
+f2      ref count slot 20
+f3      header slot 20
+f4..fd  slot 20 (10 bytes)
+fe      reserved
+ff      ptr to next page
+*** p16
+offset  content
+--------------------
+00      (page type)
+01      # of slots in use/empty
+02      ref count slot 0
+03      header slot 0
+04..11  slot 0 (14 bytes)
+12      ref count slot 1
+13      header slot 1
+14..21  slot 1 (14 bytes)
+...
+e4..f1  slot 14
+f2..fe  reserved (13 bytes, alternative: put slot12 at f2)
+ff      ptr to next page
+*** p20
+offset  content
+--------------------
+00      (page type)
+01      # of slots in use/empty
+02      ref count slot 0
+03      header slot 0
+04..15  slot 0 (18 bytes)
+16      ref count slot 1
+17      header slot 1
+18..29  slot 1 (18 bytes)
+...
+ea      ref count slot 12
+eb      header slot 12
+ec..fd  slot 12 (18 bytes)
+fe      reserved
+ff      ptr to next page
+*** p28
+offset  content
+--------------------
+00      (page type)
+01      # of slots in use/empty
+02      ref count slot 0
+03      header slot 0
+04..1d  slot 0 (26 bytes)
+1e
+1f
+20..39  slot 1
+...
+e2      refcount slot 8
+e3      header slot 8
+e4..fd  slot 8
+fe      reserved
+ff      ptr to next page
+*** p36
+offset  content
+--------------------
+00      (page type)
+01      # of slots in use/empty
+02      ref count slot 0
+03      header slot 0
+04..27  slot 0 (36 bytes)
+28
+29
+2a..4d
+...
+d9      refcount slot 6
+d0      header slot 6
+da..fd  slot 6 (36 bytes)
+fe      reserved
+ff      ptr to next page
+*** p48
+offset  content
+--------------------
+00      (page type)
+01      # of slots in use/empty
+02      ref count slot 0
+03      header slot 0
+04..31  slot 0 (46
+32
+33
+34..61
+...
+d2      ref count slot 4
+e3      header slot 4
+c4..f1  slot 4 (payload 46)
+fe      reserved
+ff      ptr to next page
+*** p84
+offset  content
+--------------------
+00      (page type)
+01      # of slots in use/empty
+02      ref count slot 0
+03      header slot 0
+04..55  slot 0 (82 bytes)
+56
+57
+58..a9
+aa
+ab
+ac..fd
+fe      reserved
+ff      ptr to next page
 *** cell-pair page layout
 offset  content
 ---------------------
@@ -414,7 +493,8 @@ offset  content
 45..48  cell-pair 4
 ...
 f8..fb  cell-pair 49
-fc..fd  reserved (2)
+fc      reserved
+fd      first free cell-pair on the page?
 fe      # of cell-pairs used
 ff      previous page of this type
 *** call-frame-stack page layout
@@ -438,11 +518,6 @@ offset  content page lb   page hb
 
 ff     last possible payload
 
-- idea: call frame allocation hysteresis
-  to prevent a permanent allocation/free of pages if call/ret happens constantly at this border
-  - ret frees slot on old page call-frame stack (until e.g. reduced to 3/4 of the page)
-  - new calls are pushed onto the new page call-frame-stack
-  => always 2 stacks (and their pages) are kept, the current and the previous
 - example
   #+begin_src asm
     ;; allocate n-locals + 2 space for call-frame
@@ -505,6 +580,11 @@ ff     last possible payload
                 STA local_lb_meta+1,x
 
   #+end_src
+- idea: call frame allocation hysteresis
+  to prevent a permanent allocation/free of pages if call/ret happens constantly at this border
+  - ret frees slot on old page call-frame stack (until e.g. reduced to 3/4 of the page)
+  - new calls are pushed onto the new page call-frame-stack
+  => always 2 stacks (and their pages) are kept, the current and the previous
 - hysterisis check
   #+begin_src asm
             BIT CALL_FRAME_HYSTERISIS
@@ -904,7 +984,7 @@ use new pointer tagging scheme :        examples (low, then high byte):
           AND #$7c
           BEQ IS_ZERO
 #+end_src
-** IMPLEMENT implement RP as (secondary) register for cell pairs
+** IMPLEMENT implement RP as (secondary) register for (only) cell pairs?
 - OBSOLETE: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
 ** TODO implement RP usage as TOS-1 register on demand
@@ -2946,6 +3026,97 @@ IDEA: make use of RA/b/c optional (e.g. command for using tos, command for using
 - [X] array access on ZP_RA, ZP_RB, ZP_RC
 - [X] second argument function on ZP_RP
 ** DONE split vm-interpreter in groups of interpreted bc commands
+** DISCARDED What would happen if the eval stack was located in ZP
+- limited to fixed number of depth ..or.. swap in and out from pages
+- tos is kept in x, access to ptrs would be
+  #+begin_src asm
+        ;; ---------------------------------------- access of JUST THE FIRST BYTE pointer to
+        LDX TOS
+        LDA (STACK,x) ;; loads indirect first byte of pointed to cell (being the tag cell, it might be enough for several decisions!)
+
+        ;; get second byte thereafter
+        TXA
+        CLC
+        ADC STACK
+        STA access
+        LDY !$01
+    access:
+        LDA ($FF),y
+
+        ;; ---------------------------------------- one option (advantage, no RT necessary, no copy during push/pop!)
+        LDA TOS
+        CLC
+        ADC STACK
+        STA access1+1
+        STA access2+1
+        LDY #$00
+    access1:
+        LDA ($FF),y ;; indirect first byte of cell pointed to
+        INY
+    access2:
+        LDA ($FF),y ;; indirect second byte of cell pointed to
+
+        ;; ---------------------------------------- keep tos in rt
+        ;; pop to rt
+        LDA TOS
+        LDA STACK,x
+        STA RT
+        INX
+        LDA STACK,x
+        STA RT+1
+        INX
+        STA TOS ;; don't store for just copying
+
+        ;; access through rt (as usual)
+        LDY #$00
+        LDA (RT),y      ;; indirect first byte of cell pointer to
+        INY
+        LDA (RT),y      ;; indirect second byte of cell pointer to
+
+        ;; push rt
+        LDX TOS
+        DEX
+        LDA RT+1
+        STA STACK,x
+        DEX
+        LDA RT
+        STA STACK,x
+        STX TOS
+
+  #+end_src
+- access to cell values
+  #+begin_src asm
+    LDX TOS
+    LDA STACK,x ;; get lowbyte of cell on the stack
+    INX
+    LDA STACK,x ;; get highbyte of cell on the stack
+  #+end_src
+- LDA zp,x (4 cycles) is not much faster than LDA (zp),y (5 cycles)
+- two INX/DEX (4 cycles) need to be done for stack changes (not mich faster than INC zp/DEC zp, 5 cycles)
+- eval stack very limited <- need to investigate whether this limitation is a problem
+** DISCARDED IDEA optimization: evlstk -> zp (just 24 cells = 48 bytes)
+- precious zp space
+- cycles faster: 0 on pop, 2 on push, seems not worth it!
+#+begin_src asm
+  ;; push
+          ldx evlstk_offset       ; 3 cycles
+          dex                     ; 2
+          dex                     ; 2
+          lda rt                  ;
+          sta 0,x                 ; 4
+          lda rt+1                ;
+          sta 1,x                 ; 4
+          stx evlstk_offset       ; 3
+  ;;pop
+          ldx evlstk_offset       ; 3 cycles
+          lda 0,x                 ; 4 cycles
+          sta rt
+          lda 1,x                 ; 4 cycles
+          sta rt+1
+          inx                     ; 2 cycles
+          inx                     ; 2 cycles
+          stx evlstk_offset       ; 3 cycles
+#+end_src
 * - :noexport:
 #+begin_src emacs-lisp
   ;; Local Variables:

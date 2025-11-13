@@ -11,7 +11,7 @@
 ;;   push the integer 386, duplicate, add, print
 
         lda #$82       ; lb $82
-        ldx #$01       ; hb 1 * 256 + 8 * 16 + 2 = 386
+        ldx #$01       ; hb $01
         jsr push       ; 1 * 256 + 8 * 16 + 2 = 386
 
         jsr dup        ; stack holds the int 386 twice
