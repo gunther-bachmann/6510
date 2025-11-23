@@ -25,21 +25,158 @@
 - remove all cell ptr related code,
   - put aliases for cell-pair ptr where necessary
 - ~R0~ add zp register that has offset always 0 (for indexed page access)
-- change pointer tagging
+- IDEA: use one pointer type only. write code to know places where optimizations are active because of this
+  make a change of this decision to may be have two pointer types in the future possible without forgetting code
+- TODO: change pointer tagging
   - pointer detection
-  - pointer allocation through free list (for each profile and for cell-pair-ptr)
+  - pointer allocation through free list
     do not use separate page with first free slot per page
     -> allocation of page: add first free slot on page as head of free list
        put old head of free list into the last free slot on the page (that was previously initialized with 0)
        (what about local/global free list ptrs)
        each page can be analyzed separately by
-       - looking at the number of allocated slots (page full?)
-       - looking at the reference count of each slot (0 => must be part of the free list)
-  - cell-pair pointer
-    - change allocation/initialization of page
+    - looking at the number of allocated slots (page full?)
+    - looking at the reference count of each slot (0 => must be part of the free list)
   - m1 page pointer
     - change allocation/initialization of page
 ** IMPLEMENT new pointer tagging
+no more cell-ptr!
+RT = 00 (low byte) is equivalent to RT is empty!
+use new pointer tagging scheme :        examples (low, then high byte):
+  0000 0000 = nil
+  xxxx xxx0 = ptr to cplx cell          0000 001[0]    1100 1010   a ptr to the first slot of a m1 page at 1100 1010 ($CA)
+  iiii ii11 = int-cell                  [1]000 10[11]  0001 1000   0218 (decimal 2*256+16+8 = 536) <- high byte comes first in this special int encoding
+  0000 0001 = byte-cell (char)          [0000 0001]    0000 0001   01  <- payload is in high byte
+  1xxx xx01 = reserved (or symbols, then up to 8192)
+  01bb bb01 = bcds-cell (3 digits)      [01]10 01[01]  0110 0100   964 (digits 9, 6 and 4)
+  001s ss01 = symbol (1024)             [001]1 00[01]  0010 0110   symbol #550 (512+32+4+2)
+  0001 xx01 = reserved
+
+  changes:
+  - no more cell ptr, no more ptr to cell-pairs, just ptr->complex cells, references to cells are kept within a cell-pair (wasting one slot
+    for this rare case), references to cell-pairs are kept in arrays allocating 6 bytes (1 RC, 1 CPLX-Type, 4 Payload), wasting 1 byte each
+    but with big saving on runtime complexity and code
+  - int now ends on 11 to allow for easy arithmetic functions
+  - byte has other tag
+  - bcds cell  (new, optional)
+  - symbol (new, option)
+#+begin_src asm
+  ;; check for pointer
+          LSR A
+          BCS NO_POINTER
+          ;; (BCC) POINTER
+
+  ;; check for int-cell
+          AND !$03
+          CMP !$03 ; EOR !$03
+          BEQ IS_INT_CELL
+
+  ;; check for byte-cell
+          CMP !$01 ;; CMP !TAG_BYTE_BYTE_CELL
+          BEQ IS_BYTE_CELL
+
+  ;; if int or byte: check 0
+          LDA LB
+          BNE IS_NOT_ZERO
+          LDA HB
+          AND #$fc
+          BEQ IS_ZERO
+
+  ;; if byte: check 0
+          LDA LB
+          BNE IS_NOT_ZERO
+          ;; (BEQ) IS_ZERO
+#+end_src
+** IMPLEMENT think about fast array access for cell-pairs
+- no need to copy things into RA or set index of RAI, since this will always be worked on on RT and the rest of the expression stack
+- allocating new cell-pairs (array of size 2)
+  allocate cplx slot (initializes RC=1, TYPE with param)
+  (optional: write NIL into car- and into cdr-field)
+- cell-pair operations
+  CAR  = interpret RT as pointer to an array and fetch first cell (which is at offset 2)
+  CDR  = interpret RT as pointer to an array and fetch second cell (which is at offset 4)
+  CONS = create new array of size 6,
+- GC   cell-pair arrays:
+  - strategy: free fields starting from the end until freeing the first ptr,
+    then put the remaining (partially-freed) array in a list (one for each size/type)
+  - when allocating, run (partial) free on the partially freed array at head
+    use now free array or an available slot on an allocated page
+    before allocating new pages continue freeing existing partially-freed arrays
+  => for cell-pair arrays:
+     cdr cell is freed on first free
+     car cell is freed on allocation
+     => reuse is immediate after free, and free itself running in constant time, allocate is running in constant time, too
+        reuse of large arrays may need more time when allocating partially-freed arrays
+** IMPLEMENT idea: use arrays (2 elements) for lists, too?
+=> only m1 pages
+   ptr tag: xxxx xxx0
+possible sizes (with little to no waste):
+6  (/ 252 6)  => 42 slots (no waste) <- new and used for cell pairs [refcount, array-header, car-field-lb, car-field-hb, cdr-field-lb, cdr-field-hb]
+8  (/ 252 8)  => 31 slots (4 waste)  [3  cells]
+10            => 25 slots (2 waste)  [4  cells]
+12 (/ 252 12) => 21 slots (no waste) [5  cells]
+18 (/ 252 18) => 14 slots (no waste) [8  cells]
+28 (/ 252 28) => 9  slots (no waste) [13 cells]
+36 (/ 252 32) => 7  slots (no waste) [17 cells]
+50            => 5  slots (1 waste)  [24 cells]
+84 (/ 252 84) => 3  slots (no waste) [41 cells]
+- which sizes (or how many should be used)
+- only size 6 is mandatory, the others can be dynamically used/removed (table driven definition)
+
+what would have to be done if I decide to use special 5byte slots for cell-pairs?
+- option 1: pointer tagging stays at xxxx xxx0 with additional check on page type
+- option 2: pointer tagging m1 xxxx xx10 and cell-pair xxxx xx00, reducing the types of pages possible
+            check for pointer type is done on pointer itself
+            page sizes possible: [8, 12, 16, 20, 28, 36, 48, 84], but sizes are dynamically used => easy change
+** TODO idea: check number of refcount +/-, allocation/free processes when running a relevant algorithm
+=> find out how often certain code passages are run
+   find out how expensive this would be
+** OBSOLETE idea: harmonize pointer handling
+- could m1 pages be organized as the cell-pair pages (getting RC field by >>2): NO WONT WORK FOR LARGER SLOTS
+- could cellpairs be organized as m1 slots?: no: the size of 5 will make the bits change such that pointer tagging is not possible
+0 1 2 3 4 5 6 7 8 9 A B C D E F
+- x c c c c c x c c c c c x c c
+  cells-pairs are 5 bytes each + rc => 41 (42 but need some metadata), compared to 51(or50) with other method
+- use translation table to get index (e.g. TAX, LDY translate,x, LDA (page),y)
+- need for different translation tables for m1 page and cell-pair pages make this unusable
+** BRAIN eval new idea
+- all pointers end on bitmask xxxx xxx0
+- how to handle pointer specific (refcount) operations
+  premise: most operations work on one type of pointer only (e.g. CAR on cell-pair)
+  1. e.g. make byte code operations pointer specific (e.g. DUP-CELL-PAIR, DUP-CPLX-CELL)
+     makes sense, if there are not too many pointer generic operations
+     and it is mostly statically known, what pointer type is present
+     generic pointer operations could be used, too, with additional overhead
+  2. make pointer type detection fast by providing fast page type lookup
+- this allows new object alignment
+  - cell-pair page: only use 1 byte on page for metadata, all else is kept somewhere else 0xnn nnnn
+  - option: use no page space for metadata => page metadata is held elsewhere
+    - fast lookup: page-number -> page-type
+      e.g. use page-number as index: lda c000,x to load page type 1xxx xxxx for complex page, 0xxx xxxx for cell-pair page (bmi)
+      store offset to first free slot (needs *​ 2 or asl)
+      meta data for complex page is held on page, meta data for cell pair pages is not.
+      all cell pair pages are held in separate list?
+** OBSOLETE new idea for pointer tagging
+- idea: cell-pairs are tagged either 01 or 00 and use the ref count at m1, too
+- does not work, since placing slots of size 5 one after the other produces, this will result in 00, 01, 10, 11 changes in the last two bits
+  => cannot be used!
+  0000
+  0101
+  1010
+  1111
+
+- current page layout
+  00 (0, 4, 8, 12, 16, 20 ...)
+  01 (1, 5, 9, 13)
+  .    RC04 RC08 RC0C C04 ... C08 ... C0C ...
+  RC40 RC44 RC48 RC4C RC50 RC54 ...
+
+                               RCFC
+  C40... C44... C48... C4C...
+  C50...
+
+                       CFC...
+** OBSOLETE new pointer tagging
 no more cell-ptr!
 RT = 00 (low byte) is equivalent to RT is empty!
 use new pointer tagging scheme :        examples (low, then high byte):
