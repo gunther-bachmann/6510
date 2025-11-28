@@ -5,6 +5,9 @@ how are pages allocated, freed etc.
 * [#A] free page list (stack)
 - one zp-variable holding the head of the free page list
 - each page on the free list points to the next free page
+- code is allocated as a monolith on vm start, pages left are available for memory manager
+- running different program = reinitialize memory for new program (allocate monolith, rest is available for data)
+- vm runtime is not available for memory management and is kept through different sessions
 
 - allocation: pop head of free list
 - deallocation: push page to head of free list
@@ -13,10 +16,27 @@ how are pages allocated, freed etc.
   - minimal code
   - fast
 - disadvantages:
-  - no blocked allocation possible
+  - no blocked allocation possible (except on program start for the code)
   - needs initialization phase to build initial free list
     (is not too bad, since # of pages is <254, which should be done fast and only once on startup of vm)
     idea: code is on a separate page that is added last as head of free list itself (thus freeing the code)
+** subideas
+- code / data separation
+  - keep to lists, code (continuously) growing up (stack-like), data growing down (arbitrarily)
+  - prefer highest pages near to the head => returning pages to the free list should push them someway down to keep highest pages near the head => allocation from top to down
+- code / data are handled unified
+  - code split between two pages (pages may reside anywhere)
+    - advantage: less waste
+    - disadvantage: added complexity for tail calls, branches, gotos etc. (in general control flow)
+  - code never split
+    - advantage: easy control flow (tail call, branches etc.), easy dynamic load of code (can be placed anywhere)
+    - disadvantage: waste on non fitting code
+- code organisation blocked as modules
+  - loading / unloading only on module level w/ tree shaking?
+  - loading modules into continuous memory => memory management needs to be able to allocate blocks of continuous memory
+  - loading modules into paged memory is possible with easy strategy without handling pages differently
+- monolithic code = very compact, organized in continuous memory, cannot be swapped, stays until program ends
+- dynamic code = allocated just as other data, waste acceptable as long as use is temporary, or it can be swapped out/in main memory!
 * requirements (soft and hard)
 - allocate free page
 - deallocate used page (return to free space such that continuous space is identified)
