@@ -38,6 +38,7 @@
          vm-cell-at->string
          vm-cell->string
          vm-page->strings
+         vm-page-n->strings
          vm-regt->string
          vm-regp->string
          vm-rega->string
@@ -97,6 +98,35 @@
        (bitwise-and #x3f page-type-enc)]
       [(= #x20 (bitwise-and #xe0 page-type-enc))
        (bitwise-and #x1f page-type-enc)]
+      [else 0]
+      ))
+  (cond [(= #x18 page-type-enc)
+         (list (format "page-type:      ~a" page-type)
+               (format "previous page:  $~a" (format-hex-byte previous-page)))]
+        [else
+         (list (format "page-type:      ~a" page-type)
+               (format "previous page:  $~a" (format-hex-byte previous-page))
+               (format "slots used:     ~a" slots-used)
+               (format "next free slot: $~a" (format-hex-byte next-free-slot)))]))
+
+;; write a status string of a memory page
+(define (vm-page-n->strings state page)
+  (define page-type-enc (peek state (bytes->int 0 page)))
+  (define next-free-slot (peek state (bytes->int #xfe page)))
+  (define page-type
+    (cond
+      [(= #x20 (bitwise-and #xf0 page-type-enc))
+       (format "m1 page p~a" (bitwise-and #x0f page-type-enc))]
+      [(= #x18 page-type-enc)
+       "call-frame page"]
+      [else (raise-user-error "unknown page type")]))
+  (define previous-page
+    (cond
+      [else (peek state (bytes->int #xff page))]))
+  (define slots-used
+    (cond
+      [(= #x20 (bitwise-and #xf0 page-type-enc))
+       (peek state (bytes->int 1 page))]
       [else 0]
       ))
   (cond [(= #x18 page-type-enc)

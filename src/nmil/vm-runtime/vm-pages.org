@@ -1,0 +1,261 @@
+#+title: vm-pages
+
+how are pages allocated, freed etc.
+
+* [#A] free page list (stack)
+- one zp-variable holding the head of the free page list
+- each page on the free list points to the next free page
+
+- allocation: pop head of free list
+- deallocation: push page to head of free list
+
+- advantage:
+  - minimal code
+  - fast
+- disadvantages:
+  - no blocked allocation possible
+  - needs initialization phase to build initial free list
+    (is not too bad, since # of pages is <254, which should be done fast and only once on startup of vm)
+    idea: code is on a separate page that is added last as head of free list itself (thus freeing the code)
+* requirements (soft and hard)
+- allocate free page
+- deallocate used page (return to free space such that continuous space is identified)
+- allocate several continuous pages (e.g. for code)
+
+this works only for pages initially available to the memory management unit and only for RAM:
+=> how to quickly find out if a page is actually available or not (e.g. using a page bitmap)
+* ideas
+** list of free pages (actually a stack)
+(initialization on first start to put all available pages into a list)
+allocation = pop head from stack
+free = push head on stack
+drawback:  no (easy) way to allocate contiguous memory regions (e.g. two consecutive pages)
+           one use of continuous pages: code spanning multiple pages,
+           - mitigation: code continuous on different page, use *goto* to connect code segments
+                         question: what about tail calls etc. might not work easily for multi code segment code
+           - mitigation: don't let code span multiple pages => unused space on code segments
+           - mitigation: keep list sorted to find continuous areas more easily
+advantage: no searching, no bitmap, more compact
+allocating one page is the most common case => is there a need for keeping blocks?
+find out the usage pattern for blocks
+how dynamic (swap in, swap out) is running the programs?
+start simple => memory available for usage is kept in a free list (stack), all else will be added later!
+** how about keeping managing data for free pages on the free pages themselves?
+probably needs indirection, harder to implement
+** what about pages owned by a program => freed automatically once the program is done
+* [#B] block merging memory management of pages
+
+check whether a given page is available for alloc/free
+input: x = page
+output: C = 0 is memory managed (available for alloc/free)
+        C = 1 is not available for memory management (not available for alloc/free)
+#+begin_src asm
+   page_x_available_for_memory_management:
+           TXA
+           LSR
+           LSR
+           LSR
+           TAY
+           LDA page_memorymanaged_bitmap,y
+           BNE might_be_managed
+           ;; all 8 pages are managed => done
+  managed:
+           CLC
+           RTS                    ;; this page is available for free/alloc, since it is used by memory manager
+
+   might_be_managed:
+           PHA
+           TXA
+           AND #$07
+           TAY
+           PLA
+           AND bitpattern8,y
+           BEQ managed            ;; this page is managed
+   not_managed:
+           SEC
+           RTS                    ;; this page is reserved (e.g. ROM) that is not used by memory manager
+
+#+end_src
+
+free-page layout
+| offset | description                                                                                              |
+|--------+----------------------------------------------------------------------------------------------------------|
+| $00    | page type = 0  (meaning this page is free!)                                                              |
+| $01    | first page of block (only first page of block and last page of block have this meta data set correctly!) |
+|        | 0 = no first page (no block)                                                                             |
+| $02    | last page of block  (only first page of block and last page of block have this meta data set correctly!) |
+|        | 0 = no last page (no block)                                                                              |
+| ...    |                                                                                                          |
+| $ff    | next free page (block?) (need not be of this block?)                                                     |
+
+used || not managed: if byte at offset 0 is != 0 it may be a managed page that is used or a ROM that has a value != 0 there (which is likely) => most of the time this will be decidable quite fast!
+memory management could be initialized to prefer pages on which decision is made fast!
+
+- each block holds data on the first page and on the last page of the block
+- deallocating a page it could look left and right (since there must be blocks there)
+- merge this page with left (if free) and with right (if free)
+- cases:
+  - left used || not managed, right used || not managed:
+    - this very page is its own block (of size 1)
+  - left free && managed, right used || not managed:
+    - get first page of left, put this page as new rightmost
+    - this very page is now the rightmost, store the leftmost page
+  - left used || not managed, right free && managed:
+    - get last page of right, put this page as new leftmost
+    - this very page is now the leftmost, store the rightmost page
+  - left free && managed, right free && managed:
+    - get leftmost of left and put rightmost of right as new rightmost
+    - get rightmost of right and put leftmost of left as new leftmost
+
+algorithm to prefer single pages for allocation over pages of larger blocks:
+- block size = number of tries to find a better suited page => if it is a block of size 4, use it after 4 searches if no better suited one is found!
+- number of blocks in total: 1 = no need to search, 2 take first, 3 one try ... => never search more often than # blocks >> 1
+- keep # of blocks of memory pages (allocating a page of a block, always use end of block) may reduce # of blocks
+- while searching, keep the pages of smallest blocksize.
+
+algorithm to find blocks of pages for allocation:
+- blocksize / searched for blocksize = number of tries to find better suited block (use LSR, that is /2^n)
+- (algorithm = algorithm for single page, with block size search for = 1)
+
+* [#C] bitmap based page allocation
+** page allocation map
+a bitmap that defines which pages are available and which are not
+
+each bitmap corresponds to exactly one bit:
+=> page -> offset to bitmap byte (3xLSR)
+=> offset to bitmap byte (3xLSL)
+
+
+ oooo oiii : o = offset into bitmap 0.31 iii = index of bit 0..7
+
+ bit = 1: occupied, bit = 0: free
+
+
+** memory layout
+- page_usage_topmark :: highest (current) index to start searching for free pages
+  if a page is freed and marked as such, the topmark may increase
+  if pages are allocated and marked as full, the topmark may decrease
+- page_usage_bitmap :: bitmap with a bit for each page (1 = used, 0 = free)
+  pages may be marked as used, even though they have 0 slots used, but are handled by slot
+  allocation not by page allocation
+
+** scan for free page
+look for first free page in the bitmap, starting at the current topmark
+this example currently does not change the bitmap
+output: A = first free page page
+#+begin_src asm
+  scan_for_free_page:
+
+          LDX page_usage_topmark
+          INX
+  scan_loop:
+          DEX
+          BEQ all_full ;; lowest 8 pages are not managed
+          LDA page_usage_bitmap-1,x
+          CMP #$ff
+          BEQ scan_loop
+
+          TAY ;; keep bitpattern in Y
+
+          ;; x is offset (not shifted into right position yet)
+          TXA
+          ;; STX ZP_RZ
+          ASL
+          ASL
+          ASL
+          STA ZP_RZ+1 ;; store page offset (lower 7 bits missing yet)
+
+          ;; now find bit that is not 0
+          TYA ;; restore bitpattern to A
+          LDX !$FF ;; index
+
+  loop_over_byte:
+          INX
+          ASL ;;
+          BCS loop_over_byte
+
+          TXA         ;; x = xxx (# within byte)
+          ORA ZP_RZ+1 ;; A = oooo oxxx, ZP_RZ+1 = oooo o000
+          LDY ZP_RZ   ;; Y = 000o oooo
+          RTS
+
+  all_full:
+          BRK ;; error
+
+  page_usage_topmark:
+          .byte $20 ;;
+
+  page_usage_bitmap:
+          ;; pages $00..$07 are always blocked (for system purposes)
+          .byte            %0000_0000 %0000_0000 %0000_0000 ;; pages   8..31  $08..$1f
+          .byte %0000_0000 %0000_0000 %0000_0000 %0000_0000 ;; pages  32..63  $20..$3f
+          .byte %0000_0000 %0000_0000 %0000_0000 %0000_0000 ;; pages  64..95  $40..$5f
+          .byte %0000_0000 %0000_0000 %0000_0000 %0000_0000 ;; pages  96..127 $60..$7f
+          .byte %0000_0000 %0000_0000 %0000_0000 %0000_0000 ;; pages 128..159 $80..$9f
+          .byte %0000_0000 %0000_0000 %0000_0000 %0000_0000 ;; pages 160..191 $a0..$bf
+          .byte %0000_0000 %0000_0000 %0000_0000 %0000_0000 ;; pages 192..223 $c0..$df
+          .byte %0000_0000 %0000_0000 %0000_0000 %0000_0000 ;; pages 224..255 $e0..$ff
+#+end_src
+
+** allocate scanned free page
+#+begin_src asm
+  allocate_free_page:
+          JSR scan_for_free_page
+
+          ;; write new pattern to bitmap to mark page as not free
+          PHA
+          LDA page_usage_bitmap-1,y
+          ORA bitpattern8,x             ;; ora instead of eor makes sure that the bit is set, no matter its previous state
+          STA page_usage_bitmap-1,y
+
+          ;; update topmark of page usage
+          STY page_usage_topmark
+
+          PLA
+          RTS
+
+  bitpattern8:
+          .byte %0000_0001      ;; idx 0
+          .byte %0000_0010      ;;     1
+          .byte %0000_0100      ;;     2
+          .byte %0000_1000      ;;     3
+          .byte %0001_0000      ;;     4
+          .byte %0010_0000      ;;     5
+          .byte %0100_0000      ;;     6
+          .byte %1000_0000      ;;     7
+
+#+end_src
+
+** free page
+- input:  X = page
+#+begin_src asm
+  deallocate_used_page:
+          TXA
+          AND #$07
+          TAY           ;; y = index within byte (0..7)
+          TXA
+          AND #$f8
+          LSR
+          LSR
+          LSR
+          TAX           ;; x = index within page bitmap (0..31)
+
+          CPX page_usage_topmark
+          BMI no_topmark_update
+          STX page_usage_topmark;
+
+  no_topmark_update:
+          LDA bitpattern8,y
+          XOR #$FF                      ;; xor in combination with
+          AND page_usage_bitmap-1,x     ;; and makes sure the bit is definitely clear, no matter its previous state
+          STA page_usage_bitmap-1,x
+
+#+end_src
+
+* ..
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; org-pretty-entities-include-sub-superscripts: nil   ;; make sure _ is not interpreted as subscript
+  ;; fill-column: 100                                    ;; fill paragraphs with 100 char width
+  ;; End:
+  #+end_src

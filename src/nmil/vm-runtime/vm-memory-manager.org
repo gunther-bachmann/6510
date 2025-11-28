@@ -21,6 +21,44 @@
   powers of 2. make sure objects of these bucket sizes are addressible with tagged pointers without adjustung these pointers. additionally
   ensure to easily reach the reference count for each object by minimal adjustments to the tagged pointer.
 * open tasks
+** IMPLEMENT all pointers do now point to the following layout => access to cell, cell-pairs, cell-array etc. all change!
+| offset | description      |
+|--------+------------------|
+|     +0 | reference count  |
+|     +1 | slot type        |
+|     +2 | start of payload |
+|    ... | ...              |
+- rc modifications
+  rc = LDA (ZP_RZ),0
+- slot type identification
+  st = LDA (ZP_RT),1
+  - slot type cell-pair
+    0000 0000
+  - slot type open
+    001x xxxx 32 type reserved
+  - slot type cell-array size 1..41
+    01xx xxxx 0..63 <- lots of values not used (reserved?)
+  - slot type native-array size 1..81
+    1xxx xxxx 0..127 <- lots of values not used (reserved?)
+- cell access
+  lowbyte = LDA (ZP_RT),2
+  highbyte = LDA (ZP_RT),3
+- cell-pair access
+  car lowbyte = LDA (ZP_RT),2
+  car highbyte = LDA (ZP_RT),3
+  cdr lowbyte = LDA (ZP_RT),4
+  cdr highbyte = LDA (ZP_RT),5
+- cell-array access
+  @0 lowbyte = LDA (ZP_RT),2
+  @0 highbyte = LDA (ZP_RT),3
+  @1 lowbyte = LDA (ZP_RT),4
+  @1 highbyte = LDA (ZP_RT),5
+  @N lowbyte = LDA (ZP_RT), (N+1)>>1
+  @N highbyte = LDA (ZP_RT), 1+ (N+1)>>1
+- native-array access
+  @0 byte = LDA (ZP_RT),2
+  @1 byte = LDA (ZP_RT),3
+  @N byte = LDA (ZP_RT), N+2
 ** plan to implement the changes
 - remove all cell ptr related code,
   - put aliases for cell-pair ptr where necessary
