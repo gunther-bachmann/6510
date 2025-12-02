@@ -133,7 +133,7 @@
 
 (module+ test
   (require "../6510-test-utils.rkt"
-           (only-in "../ast/6510-relocator.rkt" command-len)))
+           (only-in "../ast/6510-relocator.rkt" command-len code-len)))
 
 (define VM_INTERPRETER_VARIABLES
   (list
@@ -297,12 +297,12 @@
           (list (label END__INTERPRETER_DATA))))
 
 (module+ test #| vm-interpreter |#
-  (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-interpreter)))
+  (inform-check-equal? (code-len (flatten just-vm-interpreter))
                        1639
                        "estimated len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#
-  (define interpreter-len (foldl + 0 (map command-len (flatten vm-interpreter))))
+  (define interpreter-len (code-len (flatten vm-interpreter)))
   (inform-check-equal?
    (< interpreter-len (- 4096 256)) ;; 4 k (c000-cfff) minus one page
    #t

@@ -5,17 +5,55 @@
 
  |#
 
-(require (rename-in  racket/contract [define/contract define/c]))
-(require (only-in  racket/fixnum fx+))
-(require (only-in "../6510-utils.rkt" byte/c word/c low-byte high-byte absolute word))
-(require "6510-command.rkt")
+(require (rename-in racket/contract
+                    [define/contract define/c])
+         (only-in racket/fixnum
+                  fx+)
+         (only-in "../6510-utils.rkt"
+                  byte/c
+                  word/c
+                  low-byte
+                  high-byte
+                  absolute
+                  word)
+         "6510-command.rkt")
 
-(provide label-string-offsets command-len label->hilo-indicator)
+(provide
+ label-string-offsets
+ code-len
+ command-len
+ label->hilo-indicator
+ )
 
 (module+ test
   (require "../6510-test-utils.rkt"))
 
 (define command/c (or/c ast-command? (listof any/c)))
+
+(define/c (code-len code)
+  (-> (listof command/c) nonnegative-integer?)
+  (foldl + 0 (map command-len code)))
+
+(module+ test #|code-len|#
+  (check-equal? (code-len
+                 (list))
+                0
+                "empty list has code len 0")
+
+  (check-equal? (code-len
+                 (list
+                  (ast-label-def-cmd '() "some")
+                  (ast-label-def-cmd '() "other")))
+                0
+                "just labels have together code len 0")
+
+  (check-equal? (code-len
+                 (list
+                  (ast-label-def-cmd '() "some")
+                  (ast-opcode-cmd '() (list 1 2 3))
+                  (ast-label-def-cmd '() "other")))
+                3
+                "mix code has the right code len"))
 
 (define/c (command-len command)
   (-> command/c nonnegative-integer?)

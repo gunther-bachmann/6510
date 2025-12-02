@@ -132,7 +132,7 @@ call frame primitives etc.
 
 (module+ test
   (require "../../6510-test-utils.rkt"
-           (only-in "../../ast/6510-relocator.rkt" command-len)
+           (only-in "../../ast/6510-relocator.rkt" command-len code-len)
            (only-in "../vm-inspector-utils.rkt"
                     vm-regt->string
                     vm-refcount-cell-pair-ptr
@@ -847,6 +847,6 @@ call frame primitives etc.
           VM_PAGE_SLOT_DATA))
 
 (module+ test #| vm-memory-manager |#
-  (inform-check-equal? (foldl + 0 (map command-len (flatten vm-memory-manager)))
+  (inform-check-equal? (code-len (flatten vm-memory-manager))
                        2958
                        "estimated length of the complete memory manager (including page allocation data)"))

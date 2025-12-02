@@ -41,7 +41,7 @@
          VM_PUSH_CALL_FRAME_N)
 
 (module+ test #| after mem init |#
-  (require (only-in "../../ast/6510-relocator.rkt" command-len))
+  (require (only-in "../../ast/6510-relocator.rkt" command-len code-len))
 
 
   (define PAGE_AVAIL_0 #x8a)
@@ -948,6 +948,6 @@
           vm-memory-manager))
 
 (module+ test #| vm-call-frame |#
-  (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-call-frame)))
+  (inform-check-equal? (code-len (flatten just-vm-call-frame))
                        626
                        "estimated code length of call-frame runtime"))

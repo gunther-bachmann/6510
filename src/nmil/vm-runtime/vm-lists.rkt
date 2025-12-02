@@ -11,7 +11,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   take)
          "../../6510.rkt"
          (only-in "../../ast/6510-relocator.rkt"
-                  command-len)
+                  command-len
+                  code-len)
          (only-in "../vm-inspector-utils.rkt"
                   vm-stack->strings
                   vm-page->strings
@@ -261,6 +262,6 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (append just-vm-list vm-call-frame))
 
 (module+ test #| vm-lists |#
-  (inform-check-equal? (foldl + 0 (map command-len (flatten just-vm-list)))
+  (inform-check-equal? (code-len (flatten just-vm-list))
                        126
                        "estimated list code length"))
