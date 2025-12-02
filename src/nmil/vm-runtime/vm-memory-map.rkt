@@ -35,6 +35,8 @@
          ZP_CELL_STACK_LB_PTR            ;; (word) pointer to low byte of current eval stack
          ZP_CELL_STACK_HB_PTR            ;; (word) pointer to high byte of current eval stack
          ZP_CELL_STACK_TOS               ;; (byte) top mark of evlstk
+         ZP_PAGE_REG                     ;; (word) page register (zp_page_reg+1 is always zero! to allow indirect access)
+         ZP_PAGE_FREE_LIST               ;; (word) pointer to first free page of list
          ZP_TEMP                         ;; (byte) temp location, can be used in combination with TEMP2 to be used as word
          ZP_TEMP2                        ;; (byte) temp location
          ZP_TEMP3                        ;; (byte) temp location, can be used in combination with TEMP4 to be used as word
@@ -73,6 +75,9 @@
    (word-const TAGGED_NIL                $0001) ;; tag indicates cell-pair-ptr
 
                                               ;; @DC-ZP: ZP_TEMP3, group: temp
+
+   (byte-const ZP_PAGE_FREE_LIST         $bc) ;; bc..bd = ptr to first free page
+   (byte-const ZP_PAGE_REG               $be) ;; be..bf = page reg
 
    (byte-const ZP_RB                     $c0) ;; c0..c1 array register b
    (byte-const ZP_RC                     $c2) ;; c2..c3 array register c
@@ -157,6 +162,8 @@
 (define ZP_CELL_STACK_LB_PTR    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_LB_PTR"))
 (define ZP_CELL_STACK_HB_PTR    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_HB_PTR"))
 (define ZP_CELL_STACK_TOS       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
+(define ZP_PAGE_REG             (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_REG"))
+(define ZP_PAGE_FREE_LIST       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_FREE_LIST"))
 (define ZP_TEMP                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP"))
 (define ZP_TEMP2                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP2"))
 (define ZP_TEMP3                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP3"))
