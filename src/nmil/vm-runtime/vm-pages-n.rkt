@@ -49,7 +49,9 @@
 (module+ test
   (require  "../../6510-test-utils.rkt"
             (only-in "../../tools/6510-interpreter.rkt"
-                     peek)
+                     peek
+                     memory-list
+                     peek-word-at-address)
             (only-in "../../util.rkt"
                      format-hex-byte)
             "./vm-memory-manager-test-utils.rkt"
@@ -86,70 +88,60 @@
 ;; initialize all pages available for memory management
 ;; memory layout:
 ;; pages: 00   .. 07  are reserved
-;;        08   .. kk  reserved for code [runtime comes first, then program to be executed]
-;;        kk+1 .. 9f  available for page memory management
+;;        08   .. kk-1  reserved for code [runtime comes first, then program to be executed]
+;;        kk   .. 9f  available for page memory management
 ;;        a0   .. bf  reserved by basic
 ;;        c0   .. cf  available for page memory management
 ;;        d0   .. df  reserved by i/o and char rom
 ;;        e0   .. ff  reserved by kernal
 ;; initialize variables for page memory management
-;;   ZP_PAGE_FREE_LIST = kk+1
+;;   ZP_PAGE_FREE_LIST = $cf
 ;;
-;; input:  X = kk+1 (first page available for page memory management behind the code)
+;; each page (starting from cf downward), is initialized to page type 0 (offset 0)
+;; and to point to the next free page (offset $ff) in the list down to kk
+;; the last page in the list (at kk) has its next ptr set to 0
+;;
+;; input:  X = kk-1 (kk first page available for page memory management behind the code)
 ;; output: ZP_PAGE_FREE_LIST = cf
-;; uses:   A, X, Y, ZP_TEMP, ZP_PAGE_REG
+;;         ZP_PAGE (byte)   = 0
+;;         ZP_PAGE+1 (byte) = kk-1
+;;         A = $00
+;;         Y = $ff
+;;         X = kk-1
+;; uses:   A, X, Y, ZP_TEMP (word), ZP_PAGE_REG (word)
 ;;
 ;; THIS CODE IS EXECUTED ONLY OPEN INITIALIZATION AND COULD BE DISCARDED,
 ;; ONCE THE PROGRAM IS TERMINATED. IN CASE OF ADDITIONAL PROGRAM LOADS, THIS
-;; MAY STILL HAVE ITS USES THOUGH
+;; - MAY STILL HAVE ITS USES THOUGH
+;; - MORE REGIONS ARE POSSIBLE, THOUGH
 (define-vm-function
   VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
   (list
-          (STX ZP_TEMP) ;; for later comparison
+          (STX ZP_TEMP+1) ;; for later comparison
 
           (LDA !$00)
           (STA ZP_PAGE_REG) ;; initialize page reg
 
-          (LDX !$cf)
+          (LDX !$cf)     ;; x = $cf
           (STX ZP_PAGE_FREE_LIST) ;; cf = first page available for allocation
 
-   (label loop_cx__)
-          (STX ZP_PAGE_REG+1)
-          (LDY !$00)
-          (TYA)
-          (STA (ZP_PAGE_REG),y) ;; @00 = 0 (page type: uninitialized)
-          (DEY)                 ;; now $FF
-          (DEX)
-          (TXA)
-          (STA (ZP_PAGE_REG),y) ;; @ff = # (next free page)
-          (CPX !$bf)
-          (BNE loop_cx__)
+          (LDY !$bf)     ;; y = $bf
+          (LDA !$9f)     ;; last page at c0 points to 9f as next free page
+          (JSR init_page_up_to__) ;; init c0..cf
 
-          (LDA !$9f)
-          (STA (ZP_PAGE_REG),y) ;; make sure for c0 to point to 9f as next free
+          (TAX)           ;; x = $9f
+          (LDY ZP_TEMP+1) ;; y = kk+1
+          (LDA !$00)      ;; last page will point to 00, being the last page of the free list
+          ;; (JMP init_page_up_to__) ;; not necessary, since we go there anyhow
+          ;; init kk+1..9f
 
-          (LDX !$9f)
-   (label loop_9x__)
-          (STX ZP_PAGE_REG+1)
-          (LDY !$00)
-          (TYA)
-          (STA (ZP_PAGE_REG),y) ;; @00 = 0 (page type: uninitialized)
-          (DEY)                 ;; now $FF
-          (DEX)
-          (TXA)
-          (STA (ZP_PAGE_REG),y) ;; @ff = # (next free page)
-          (CPX ZP_TEMP)
-          (BNE loop_9x__)
-
-          (LDA !$00)
-          (STA (ZP_PAGE_REG),y) ;; make sure for page kk+1 to point to 0 as next free (marks the tail)
-
-          (RTS)
-
+          ;; a = page to be next for the list page initialized!
           ;; x = page to start from
           ;; y = down to this page not including!
    (label init_page_up_to__)
+          (PHA)
           (STY ZP_TEMP)
+
    (label loop_page_range__)
           (STX ZP_PAGE_REG+1)
           (LDY !$00)
@@ -161,6 +153,9 @@
           (STA (ZP_PAGE_REG),y) ;; @ff = # (next free page)
           (CPX ZP_TEMP)
           (BNE loop_page_range__)
+
+          (PLA) ;; get the page to be registered as next for the last page initialized
+          (STA (ZP_PAGE_REG),y) ;; to set last page within the range to point to A
           (RTS)
    ))
 
@@ -170,7 +165,17 @@
      #:debug #f
      #:runtime-code test-runtime
      (LDX !$20)
-     (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)))
+     (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
+     (STA $0200) ;; save for later check
+     (STX $0201)
+     (STY $0202)))
+
+  (check-equal? (memory-list vm-initialize-page-memory-manager-01 #x0200 #x0202)
+                (list #x00 #x20 #xff)
+                "registers are filled with values guaranteed by function")
+
+  (check-equal? (peek-word-at-address vm-initialize-page-memory-manager-01 ZP_PAGE_REG)
+                #x2100)
 
   (check-equal? (peek vm-initialize-page-memory-manager-01 ZP_PAGE_FREE_LIST)
                 #xcf
@@ -197,9 +202,9 @@
                 #x9e
                 "next free page after $9f is $9e")
 
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #x2000)
+  (check-equal? (peek vm-initialize-page-memory-manager-01 #x2100)
                 0
                 "type of page $20 is 0")
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #x20ff)
+  (check-equal? (peek vm-initialize-page-memory-manager-01 #x21ff)
                 #x00
                 "next free page after $20 is $00, that is, there is no free list after $20"))
