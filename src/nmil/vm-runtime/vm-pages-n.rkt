@@ -31,20 +31,18 @@
 
 (provide
  VM_INITIALIZE_PAGE_MEMORY_MANAGER_N     ;; initialize page memory management (must be called before first allocation)
+ VM_ALLOCATE_NEW_PAGE_N                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
+ VM_DEALLOCATE_PAGE_N                    ;; return a page to the free list (actually push)
 )
 
 (require "../../6510.rkt"
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
          (only-in "./vm-memory-map.rkt"
-                  TAGGED_NIL
-                  ZP_RP
-                  ZP_RA
-                  ZP_RB
+                  ZP_PAGE_REG
+                  ZP_PAGE_FREE_LIST
                   ZP_TEMP
-                  ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-
 
 (module+ test
   (require  "../../6510-test-utils.rkt"
@@ -52,38 +50,78 @@
                      peek
                      memory-list
                      peek-word-at-address)
-            (only-in "../../util.rkt"
-                     format-hex-byte)
-            "./vm-memory-manager-test-utils.rkt"
-            (only-in "./vm-register-functions.rkt"
-                     WRITE_INT_AY_TO_RT)
-            (only-in "./vm-memory-map.rkt"
-                     ZP_PAGE_REG
-                     ZP_PAGE_FREE_LIST
-                     ZP_TEMP
-                     VM_MEMORY_MANAGEMENT_CONSTANTS))
-
-
-  (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
-  (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available
-  (define PAGE_AVAIL_1 #x8c)      ;; high byte of second page available for allocation
-  (define PAGE_AVAIL_1_W #x8c00)  ;; word (absolute address) of second page available
+            "./vm-memory-manager-test-utils.rkt")
 
   (define test-runtime
     (append
      VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
      VM_MEMORY_MANAGEMENT_CONSTANTS
+     VM_ALLOCATE_NEW_PAGE_N
+     VM_DEALLOCATE_PAGE_N
      (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS))))
   )
 
-;; syntactic sugure to define a vm function
-(define-syntax-rule (define-vm-function name code-list)
+;; syntactic sugar to define a vm function, without label at start of impl.
+(define-syntax-rule (define-vm-function-wo-label name code-list)
   (define name
     (add-label-suffix
      "__" (string-append "__" (symbol->string (quote name)))
-     (append
+     code-list) ))
+
+;; syntactic sugar to define a vm function
+(define-syntax-rule (define-vm-function name code-list)
+  (define-vm-function-wo-label name
+    (append
       (list (label name))
-      code-list)) ))
+      code-list)))
+
+;; pop a page off the free list (if available, else out of memory error)
+;;
+;; input:  -
+;; output: X = allocated page
+;;         ZP_PAGE_FREE_LIST = points to new head of list
+;; usage:
+(define-vm-function VM_ALLOCATE_NEW_PAGE_N (list))
+
+(module+ test #| vm-allocate-new-page-n (incomplete) |#
+  (define vm-allocate-new-page-n-01
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     (LDX !$20)
+     (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
+
+     ;; now allocate a new page
+     (JSR VM_ALLOCATE_NEW_PAGE_N)
+     (STX ZP_PAGE_REG+1)  ;; save for later check
+     ))
+
+  (skip
+   "! TODO: implement page allocation"
+   (check-equal? (peek vm-allocate-new-page-n-01 ZP_PAGE_REG)
+                 #xcf
+                 "first page should be $cf"))
+
+  (skip
+   "! TODO: implement page allocation"
+   (check-equal? (peek vm-allocate-new-page-n-01 ZP_PAGE_FREE_LIST)
+                     #xce
+                     "head of free list now is $ce")))
+
+;; return page to free list
+;; make sure to mark page as uninitialized (in $00) and adjust previous page ptr in $ff
+;;
+;; input:  x = page
+;; output: ZP_PAGE_FREE_LIST = page
+;; usage:
+(define-vm-function VM_DEALLOCATE_PAGE_N (list))
+
+(module+ test #| vm-deallocate-page-n (incomplete) |#
+  (skip
+   "! TODO: implement page deallocation"
+   (check-equal? (peek vm-deallocate-page-n-01 ZP_PAGE_FREE_LIST)
+                 #xcf
+                 "first free page should be $cf (again)")))
 
 ;; initialize all pages available for memory management
 ;; memory layout:
