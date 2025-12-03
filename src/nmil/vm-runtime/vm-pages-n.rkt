@@ -77,11 +77,26 @@
 
 ;; pop a page off the free list (if available, else out of memory error)
 ;;
-;; input:  -
+;; input:  ZP_PAGE_FREE_LIST
+;; usage:  A, X, Y, ZP_PAGE_REG, ZP_PAGE_FREE_LIST
 ;; output: X = allocated page
+;;         Y = $FF
+;;         A = next free page
+;;         ZP_PAGE_REG+1 = allocated page
 ;;         ZP_PAGE_FREE_LIST = points to new head of list
 ;; usage:
-(define-vm-function VM_ALLOCATE_NEW_PAGE_N (list))
+(define-vm-function
+  VM_ALLOCATE_NEW_PAGE_N
+  (list
+          (LDX ZP_PAGE_FREE_LIST)
+          (BEQ outof_memory__)
+          (LDY !$ff)
+          (STX ZP_PAGE_REG+1)
+          (LDA (ZP_PAGE_REG),y)
+          (STA ZP_PAGE_FREE_LIST)
+          (RTS)
+   (label outof_memory__)
+          (BRK)))
 
 (module+ test #| vm-allocate-new-page-n (incomplete) |#
   (define vm-allocate-new-page-n-01
@@ -96,32 +111,68 @@
      (STX ZP_PAGE_REG+1)  ;; save for later check
      ))
 
-  (skip
-   "! TODO: implement page allocation"
-   (check-equal? (peek vm-allocate-new-page-n-01 ZP_PAGE_REG)
-                 #xcf
-                 "first page should be $cf"))
+  (check-equal? (peek vm-allocate-new-page-n-01 (+ 1 ZP_PAGE_REG))
+                #xcf
+                "first page should be $cf")
 
-  (skip
-   "! TODO: implement page allocation"
-   (check-equal? (peek vm-allocate-new-page-n-01 ZP_PAGE_FREE_LIST)
-                     #xce
-                     "head of free list now is $ce")))
+  (check-equal? (peek vm-allocate-new-page-n-01 ZP_PAGE_FREE_LIST)
+                #xce
+                "head of free list now is $ce"))
 
 ;; return page to free list
 ;; make sure to mark page as uninitialized (in $00) and adjust previous page ptr in $ff
 ;;
-;; input:  x = page
-;; output: ZP_PAGE_FREE_LIST = page
-;; usage:
-(define-vm-function VM_DEALLOCATE_PAGE_N (list))
+;; input:  X = page
+;; output: ZP_PAGE_FREE_LIST = page (now free)
+;;         A = previous free page
+;;         X = page (now free)
+;;         Y = $00
+;;         ZP_PAGE_REG = page (now free)
+;; usage:  A, X, Y, ZP_PAGE_REG, ZP_PAGE_FREE_LIST
+(define-vm-function
+  VM_DEALLOCATE_PAGE_N
+  (list
+                (LDA ZP_PAGE_FREE_LIST)
+                (STX ZP_PAGE_REG+1)
+                (LDY !$ff)
+                (STA (ZP_PAGE_REG),y)
+                (INY)
+                (TYA)
+                (STA (ZP_PAGE_REG),y)
+                (STX ZP_PAGE_FREE_LIST)
+                (RTS)))
 
 (module+ test #| vm-deallocate-page-n (incomplete) |#
-  (skip
-   "! TODO: implement page deallocation"
-   (check-equal? (peek vm-deallocate-page-n-01 ZP_PAGE_FREE_LIST)
-                 #xcf
-                 "first free page should be $cf (again)")))
+  (define vm-deallocate-page-n-01
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+            (LDX !$20)
+            (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
+
+            ;; now allocate a new page
+            (JSR VM_ALLOCATE_NEW_PAGE_N)
+
+            (LDY !$00)
+            (LDA !$cc) ;; fill page with $cc
+     (label clear_page_loop)
+            (STA (ZP_PAGE_REG),y)
+            (INY)
+            (BNE clear_page_loop)
+
+            (JSR VM_DEALLOCATE_PAGE_N)
+     ))
+
+  (check-equal? (peek vm-deallocate-page-n-01 ZP_PAGE_FREE_LIST)
+                #xcf
+                "first free page should be $cf (again)")
+
+  (check-equal? (peek vm-deallocate-page-n-01 (peek-word-at-address vm-deallocate-page-n-01 ZP_PAGE_REG))
+                #x00
+                "first byte of freed page should be $00 (untyped) again")
+  (check-equal? (peek vm-deallocate-page-n-01 (+ #xff (peek-word-at-address vm-deallocate-page-n-01 ZP_PAGE_REG)))
+                #xce
+                "last byte of freed page should be $ce, the previous free page again"))
 
 ;; initialize all pages available for memory management
 ;; memory layout:
