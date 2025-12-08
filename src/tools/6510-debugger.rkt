@@ -501,9 +501,8 @@ EOF
   (when (emacs-capabilities-sync-step-with-source capabilities)
     (6510-debugger--remove-all-addresses-on-source file-name)))
 
-
 (define (debugger--assembler-prompter d-state)
-  (format "6510 [~x] > " (length (debug-state-states d-state))))
+  (format "6510 [S=$~x:C=~a] > " (length (debug-state-states d-state)) (cpu-state-clock-cycles (car (debug-state-states d-state)))))
 
 (define (debugger--assembler-pre-prompter d-state)
   (define c-state (car (debug-state-states d-state)))

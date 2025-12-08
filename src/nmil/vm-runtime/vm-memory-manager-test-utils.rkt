@@ -85,7 +85,7 @@ provide routines that are useful for testing memory management routines
   (define TEST_COUNTERS #xa003)
   (define (calls-to-mock state (mock-idx 0))
     (car (memory-list state (+ TEST_COUNTERS mock-idx) (+ TEST_COUNTERS mock-idx))))
-  (define (wrap-code-for-test bc complete-code (mocked-code-list (list)))
+  (define (wrap-code-for-test bc complete-code (mocked-code-list (list)) #:init-label (init-label "VM_INITIALIZE_MEMORY_MANAGER"))
     (append (list
       (org #xa000)
              (JMP TEST_START__) ;; takes three bytes => test counters start at a003
@@ -93,7 +93,8 @@ provide routines that are useful for testing memory management routines
              (byte 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)     ;; total 32 mock counters (probably never need that much)
              (byte 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
       (label TEST_START__)
-             (JSR VM_INITIALIZE_MEMORY_MANAGER)
+             ;; (JSR VM_INITIALIZE_MEMORY_MANAGER)
+             (ast-unresolved-opcode-cmd '() '(32) (ast-resolve-word-scmd init-label))
              (JSR $0100)) ;; reset clock cycles
              bc           ;; paste in test code
              (list (BRK)) ;; stop
@@ -128,15 +129,16 @@ provide routines that are useful for testing memory management routines
       list-elements)))
 
   ;; run the given code in test, wrapping it with mocks and counters, entering interactive debugger, if requested
-(define (run-code-in-test bc (debug #f) #:runtime-code (vm-memory-manager (list)) #:mock (mocked-code-list (list)))
-    (run-code-in-test-on-code (wrap-code-for-test bc vm-memory-manager mocked-code-list) debug))
+(define (run-code-in-test bc (debug #f) #:runtime-code (vm-memory-manager (list)) #:mock (mocked-code-list (list)) #:init-label (init-label "VM_INITIALIZE_MEMORY_MANAGER"))
+    (run-code-in-test-on-code (wrap-code-for-test bc vm-memory-manager mocked-code-list #:init-label init-label) debug))
 
   ;; run the given code using mocks, calls being counted, and label suffixes for the test-code
-(define (compact-run-code-in-test- #:runtime-code (vm-memory-manager (list)) #:debug (debug #f) #:mock (mocked-labels (list)) . cmds)
+(define (compact-run-code-in-test- #:runtime-code (vm-memory-manager (list)) #:debug (debug #f) #:mock (mocked-labels (list)) #:init-label (init-label "VM_INITIALIZE_MEMORY_MANAGER") . cmds)
     (run-code-in-test
      (apply list-with-label-suffix
             cmds
             #:mock mocked-labels)
      debug
      #:runtime-code vm-memory-manager
-     #:mock mocked-labels))
+     #:mock mocked-labels
+     #:init-label init-label))

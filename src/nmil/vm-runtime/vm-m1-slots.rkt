@@ -170,83 +170,83 @@
             fail          25
 
   table based decision
-;;    naive (slightly worse on profile 0, slightly better on profile 1, better on profile 2..5)
-    CPX #$30 ;; 48
-    BMI BOCK_TOO_LARGE_ERROR
-    LDA profile_table,X       (7..8 cycles), bytes used 48 (code 7 bytes) = 55
+  ;;    naive (slightly worse on profile 0, slightly better on profile 1, better on profile 2..5)
+      CPX #$30 ;; 48
+      BMI BOCK_TOO_LARGE_ERROR
+      LDA profile_table,X       (7..8 cycles), bytes used 48 (code 7 bytes) = 55
 
 
-;;  compressed table (slightly better on profiles 4+, worse on profiles 0-2)
-    1-4 LSR  0..2        add carry (ADC #$00)  1..2      LSR 0..1
-    5-6 LSR  2..3                              3        LSR 1
-    7-10 LSR 3..5                              4..5      LSR 2
-    11-22 LSR 5..11                            6..11     LSR 3..5
-    23-34 LSR 11-17                           12..17    LSR 6..8
-    35-48 LSR 17-24                           18..24    LSR 9..12
+  ;;  compressed table (slightly better on profiles 4+, worse on profiles 0-2)
+      1-4 LSR  0..2        add carry (ADC #$00)  1..2      LSR 0..1
+      5-6 LSR  2..3                              3        LSR 1
+      7-10 LSR 3..5                              4..5      LSR 2
+      11-22 LSR 5..11                            6..11     LSR 3..5
+      23-34 LSR 11-17                           12..17    LSR 6..8
+      35-48 LSR 17-24                           18..24    LSR 9..12
 
-    CMP #$30 ;; 48
-    BMI BOCK_TOO_LARGE_ERROR
-    LSR
-    ADC #$00
-    TAY
-    LDX profile_table,Y       (15 cycles), bytes used 23 (code 11 bytes) = 34
+      CMP #$30 ;; 48
+      BMI BOCK_TOO_LARGE_ERROR
+      LSR
+      ADC #$00
+      TAY
+      LDX profile_table,Y       (15 cycles), bytes used 23 (code 11 bytes) = 34
 
-VARIANCE ----- code = 16 bytes + table 11 bytes = 27 bytes total
-    CMP #$05
-    BMI SLOT5+
-    LDX #0      ;; profile 0 = 6 cycles
-    ;; do allocation with profile x
+  VARIANCE ----- code = 16 bytes + table 11 bytes = 27 bytes total
+      CMP #$05
+      BMI SLOT5+
+      LDX #0      ;; profile 0 = 6 cycles
+      ;; do allocation with profile x
 
-SLOTS5+:
-    LSR
-    ADC #$00
-    LSR
-    TAY
-    LDX profile_table,Y
-    BNE do_allocation_w_profile_x ;; other profiles 20 cycles
+  SLOTS5+:
+      LSR
+      ADC #$00
+      LSR
+      TAY
+      LDX profile_table,Y
+      BNE do_allocation_w_profile_x ;; other profiles 20 cycles
 
-;; further compressed (worse than cpx-bmi pairs!)
-    CPX #$30 ;; 48
-    BMI BOCK_TOO_LARGE_ERROR
-    CPX #$05 ;;
-    BPL COMPR_TABLE
-    ;; profile is 0         8 cycles for profile 0
+  ;; further compressed (worse than cpx-bmi pairs!)
+      CPX #$30 ;; 48
+      BMI BOCK_TOO_LARGE_ERROR
+      CPX #$05 ;;
+      BPL COMPR_TABLE
+      ;; profile is 0         8 cycles for profile 0
 
-  COMPR_TABLE:
-    TXA
-    LSR
-    ADC #$00
-    LSR
-    TAX
-    DEX
-    LDA profile_table,X       (24..25 cycles), bytes used 11 (code 18 bytes) = 29
+    COMPR_TABLE:
+      TXA
+      LSR
+      ADC #$00
+      LSR
+      TAX
+      DEX
+      LDA profile_table,X       (24..25 cycles), bytes used 11 (code 18 bytes) = 29
 
 
-;; binary search (with small cells found first)
+  ;; binary search (with small cells found first)
 
-    CPX #07
-    BPL SLOT7+
-    CPX #05
-    BPL SLOT5_6
-    ;; profile 0         8 cycles
- SLOTS5_6:
-    ;; profile 1         9 cycles
- SLOTS7+:
-    CPX #23
-    BPL SLOTS23+
-    CPX #11
-    BPL SLOTS11_22
-    ;; profile 2         13 cycles
-SLOTS11_22:
-    ;; profile 3         14 cycles
-SLOTS23+:
-    CPX #35
-    BPL SLOTS35+
-    ;; profile 4         13 cycles
-SLOTS35+:
-    CPX #48
-    BMI BLOCK_TOO_LARGE_ERROR ;; 19 cycles
-    ;; profile 5         18 cycles
+      CPX #07
+      BPL SLOT7+
+      CPX #05
+      BPL SLOT5_6
+      ;; profile 0         8 cycles
+   SLOTS5_6:
+      ;; profile 1         9 cycles
+   SLOTS7+:
+      CPX #23
+      BPL SLOTS23+
+      CPX #11
+      BPL SLOTS11_22
+      ;; profile 2         13 cycles
+  SLOTS11_22:
+      ;; profile 3         14 cycles
+  SLOTS23+:
+      CPX #35
+      BPL SLOTS35+
+      ;; profile 4         13 cycles
+  SLOTS35+:
+      CPX #48
+      BMI BLOCK_TOO_LARGE_ERROR ;; 19 cycles
+      ;; profile 5         18 cycles
 
 |#
 
@@ -265,6 +265,7 @@ SLOTS35+:
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
 
 (provide INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX       ;; initialize m1 page in x of profile y, returning first free slot in A/X
+         INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N    ;; initialize m1 page (page = RZ+1) of profile x, returning first free slot in A/X
          DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A   ;; remove all full pages at the head of m1 page list a
          PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ         ;; put the page of m1 slot in rz as head to the m1 page list
          ADD_M1_SLOT_RZ_TO_PFL                  ;; add the given m1 slot in rz to the page free list (slot must not contain any data that needs gc)

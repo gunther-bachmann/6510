@@ -36,7 +36,9 @@
          ZP_CELL_STACK_HB_PTR            ;; (word) pointer to high byte of current eval stack
          ZP_CELL_STACK_TOS               ;; (byte) top mark of evlstk
          ZP_PAGE_REG                     ;; (word) page register (zp_page_reg+1 is always zero! to allow indirect access)
-         ZP_PAGE_FREE_LIST               ;; (word) pointer to first free page of list
+         ZP_PAGE_FREE_LIST               ;; (byte) pointer to first free page of list
+         ZP_PAGE_FREE_SLOTS_LIST         ;; (byte) x profiles, bytes pointing to pages with free slots of this profile
+         ZP_PROFILE_PAGE_FREE_LIST       ;; (byte) x profiles, bytes pointing to pages which are completely free initialized with this profile
          ZP_TEMP                         ;; (byte) temp location, can be used in combination with TEMP2 to be used as word
          ZP_TEMP2                        ;; (byte) temp location
          ZP_TEMP3                        ;; (byte) temp location, can be used in combination with TEMP4 to be used as word
@@ -76,6 +78,8 @@
 
                                               ;; @DC-ZP: ZP_TEMP3, group: temp
 
+   (byte-const ZP_PROFILE_PAGE_FREE_LIST $b0) ;; b0..b5,  b0 (profile 0) .. b5 (profile 5)
+   (byte-const ZP_PAGE_FREE_SLOTS_LIST   $b6) ;; b6..bb,  b6 (profile 0) .. bb (profile 5)
    (byte-const ZP_PAGE_FREE_LIST         $bc) ;; bc..bd = ptr to first free page
    (byte-const ZP_PAGE_REG               $be) ;; be..bf = page reg
 
@@ -164,6 +168,8 @@
 (define ZP_CELL_STACK_TOS       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
 (define ZP_PAGE_REG             (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_REG"))
 (define ZP_PAGE_FREE_LIST       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_FREE_LIST"))
+(define ZP_PAGE_FREE_SLOTS_LIST       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_FREE_SLOTS_LIST"))
+(define ZP_PROFILE_PAGE_FREE_LIST (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PROFILE_PAGE_FREE_LIST"))
 (define ZP_TEMP                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP"))
 (define ZP_TEMP2                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP2"))
 (define ZP_TEMP3                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP3"))

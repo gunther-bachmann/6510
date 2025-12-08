@@ -42,7 +42,9 @@
                   ZP_PAGE_REG
                   ZP_PAGE_FREE_LIST
                   ZP_TEMP
-                  VM_MEMORY_MANAGEMENT_CONSTANTS))
+                  VM_MEMORY_MANAGEMENT_CONSTANTS
+                  ZP_PROFILE_PAGE_FREE_LIST
+                  ZP_PAGE_FREE_SLOTS_LIST))
 
 (module+ test
   (require  "../../6510-test-utils.rkt"
@@ -203,12 +205,22 @@
 ;; ONCE THE PROGRAM IS TERMINATED. IN CASE OF ADDITIONAL PROGRAM LOADS, THIS
 ;; - MAY STILL HAVE ITS USES THOUGH
 ;; - MORE REGIONS ARE POSSIBLE, THOUGH
-(define-vm-function
+(define-vm-function-wo-label
   VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
   (list
+   (label VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
+          (LDX !$20)
+   (label VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
           (STX ZP_TEMP+1) ;; for later comparison
 
-          (LDA !$00)
+          (LDX !$05) ;; last index of profile
+          (LDA !$00) ;; page = 0 => no element in the list
+   (label init_profile_pages__)
+          (STA ZP_PROFILE_PAGE_FREE_LIST,x)
+          (STA ZP_PAGE_FREE_SLOTS_LIST,x)
+          (DEX)
+          (BPL init_profile_pages__)
+
           (STA ZP_PAGE_REG) ;; initialize page reg
 
           (LDX !$cf)     ;; x = $cf
@@ -245,6 +257,7 @@
 
           (PLA) ;; get the page to be registered as next for the last page initialized
           (STA (ZP_PAGE_REG),y) ;; to set last page within the range to point to A
+
           (RTS)
    ))
 
@@ -262,6 +275,14 @@
   (check-equal? (memory-list vm-initialize-page-memory-manager-01 #x0200 #x0202)
                 (list #x00 #x20 #xff)
                 "registers are filled with values guaranteed by function")
+
+  (check-equal? (memory-list vm-initialize-page-memory-manager-01 ZP_PROFILE_PAGE_FREE_LIST (+ ZP_PROFILE_PAGE_FREE_LIST 5))
+                (list #x00 #x00 #x00 #x00 #x00 #x00)
+                "the next free page already initialized to the profiles are all $00 => none available")
+
+  (check-equal? (memory-list vm-initialize-page-memory-manager-01 ZP_PAGE_FREE_SLOTS_LIST (+ ZP_PAGE_FREE_SLOTS_LIST 5))
+                (list #x00 #x00 #x00 #x00 #x00 #x00)
+                "the next page with slots of the given profiles are all $00 => none available")
 
   (check-equal? (peek-word-at-address vm-initialize-page-memory-manager-01 ZP_PAGE_REG)
                 #x2100)
