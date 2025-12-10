@@ -272,12 +272,16 @@
          )
 
 (module+ test
-  (require "../../6510-test-utils.rkt"
+  (require (only-in racket/list
+                    range
+                    flatten
+                    make-list)
+           "../../6510-test-utils.rkt"
+           (only-in "../../ast/6510-relocator.rkt" code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     peek
                     memory-list
                     cpu-state-clock-cycles)
-           (only-in "../../util.rkt" format-hex-byte format-hex-word)
            (only-in "../vm-inspector-utils.rkt"
                     vm-page-n->strings)
            "./vm-memory-manager-test-utils.rkt"
@@ -502,8 +506,101 @@
                   "slots used:     0"
                   "next free slot: $02")))
 
-;; input:  A = size of slot
-;; output: RA = ptr to M1 SLOT (points to RC field)
+(define OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA_N
+  (add-label-suffix
+   "__" "__OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA_N"
+   (list
+    (label OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA_N)
+           (LDA ZP_PAGE_FREE_SLOTS_LIST+0)
+           (BEQ no_page_w_free_slots__)
+
+           (STA ZP_RA+1)        ;; store page to use
+           (STA inc_usage__+2)
+
+           (LDY !$00)
+           (STY ZP_RA)          ;; offset w/i RA = 0
+           (INY)
+
+           (LDA (ZP_RA),y)
+           (BEQ check_wether_empty_page_should_be_user__)
+
+           (LDY !$fe)
+           (LDA (ZP_RA),y)      ;; a next free slot
+           (BEQ no_free_slot_on_page__)
+
+    (label inc_usage__)
+           (INC $cf01)
+
+           (TAX)                ;; x = slot to allocate
+           (TAY)
+           (INY)                ;; could be saved, if @0 = offset to next slot (maybe put @1 = #of references?)
+           (LDA (ZP_RA),y)      ;; a = new next free slot
+           (LDY !$fe)
+           (STA (ZP_RA),y)      ;; page next free slot is updated
+
+           (STX ZP_RA)          ;; store just allocated offset to zp_ra
+           (RTS)
+
+    ;; ignore these cases
+    (label no_page_w_free_slots__)
+    (label no_free_slot_on_page__)
+    (label check_wether_empty_page_should_be_user__)
+           (BRK))))
+
+(module+ test #| optimized alloc test |#
+  (define (test-alloc-m1-slot-p0-optimized #:times (times 1))
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code (append test-runtime ALLOC_M1_SLOT_TO_RA_N INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA_N)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+
+            (ast-opcode-cmd '() `(162 ,times)) ;; (LDX !$20)
+            (DEX)
+            (STX $FFFF)
+            (BEQ optimized_no_loop__)
+     (label optimized_alloc_m1_slot_test_loop)
+            (LDA !$04)
+            (JSR ALLOC_M1_SLOT_TO_RA_N)
+            ;; store profile for check
+            (STX ZP_TEMP)
+            (DEC $FFFF)
+            (BNE optimized_alloc_m1_slot_test_loop)
+     (label optimized_no_loop__)
+            (JSR $0100) ;; reset cpu cycle count
+            (JSR OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA_N)))
+
+  (inform-check-equal?
+   (cpu-state-clock-cycles (test-alloc-m1-slot-p0-optimized #:times 2))
+   69
+   "allocate a slot of profile 0 on an existing page of the right profile takes 69 cycles")
+
+  (check-equal?
+   (memory-list (test-alloc-m1-slot-p0-optimized #:times 2) PAGE_AVAIL_0_W (+ 1 PAGE_AVAIL_0_W))
+   (list #x20 #x02)
+   "page type $20 = m1 page profile 0, 02 slots allocated")
+
+  (check-equal?
+   (memory-list (test-alloc-m1-slot-p0-optimized #:times 2) (+ PAGE_AVAIL_0_W #xfe) (+ PAGE_AVAIL_0_W #xff))
+   (list #x0e #x00)
+   "next free slot is at @0e, next page of same profile is 0"))
+
+;; allocate an m1 slot
+;;
+;; reuse pages marked as available (ZP_PAGE_FREE_SLOTS_LIST,x)
+;; else reuse pages marked as free of the same profile (ZP_PROFILE_PAGE_FREE_LIST,x)
+;; else allocate an unused page (ZP_PAGE_FREE_LIST)
+;; else use a free page of a different profile (ZP_PROFILE_PAGE_FREE_LIST,?)
+;;
+;; input:   A = size of slot
+;; output:  RA = ptr to M1 SLOT (points to RC field)
+;;
+;; variant: ALLOC_M1_P0_SLOT_TO_RA_N
+;; input:   none
+;; output:  RA = ptr to M1 SLOT of profile 0 (max 4 byte payload)
+;;
+;; variant: ALLOC_M1_PX_SLOT_TO_RA_N
+;; input:   x = profile (0..5)
+;; output:  RA = ptr to M1 SLOT of profile x
 (define ALLOC_M1_SLOT_TO_RA_N
   (add-label-suffix
    "__" "__ALLOC_M1_SLOT_TO_RA_N"
@@ -511,9 +608,11 @@
     (label ALLOC_M1_SLOT_TO_RA_N)
            (CMP !$05)
            (BPL SLOT5p__)  ;; >= 5, branch
+
     (label ALLOC_M1_P0_SLOT_TO_RA_N) ;; e.g. used for fast cell-pairs allocation
            (LDX !$00)      ;; profile 0 = 6 cycles
-           (STX ZP_RA)
+           (STX ZP_RA)     ;; clear RA offset
+
     (label ALLOC_M1_PX_SLOT_TO_RA_N)
            (STX ZP_TEMP)        ;; store profile in temp!!
 
@@ -524,16 +623,41 @@
 
     (label use_page_a_w_profile_temp__)
            (STA ZP_RA+1)
+           (STA inc_alloc_count__+2) ;; set page for later inc command
+
     (label use_page_ra_w_profile_temp__)
 
            ;; don't use completely free pages (which could be reclaimed), if others with free slots exist
            (LDY !$01)
            (LDA (ZP_RA),y)
-           (BNE continue_with_this_page__) ;; since it is not completely free
+           (BEQ consider_not_to_use_empty_page__) ;; since it is not completely free
+
+    (label continue_page_ra_inc_set__)
+           (LDY !$fe)
+           (LDA (ZP_RA),y) ;; get next free slot
+           (BEQ no_free_slot_on_page__)
+           ;; fall through if there is a next free slot
+           ;; a = free slot
+    (label use_page_ra_slot_a_inc_set__)
+           (TAY)
+           (TAX)                ;; remember free slot in x
+           (INY)                ;; y = @01 of slot
+           (LDA (ZP_RA),y)      ;; a = next free slot
+           (LDY !$fe)
+           (STA (ZP_RA),y)      ;; store next free slot @fe on this page
+           (STX ZP_RA)          ;; store free slot offset into ra
+
+           ;; optional inc # used, if this one drops to 0 (on free), the page us completely unused!
+    (label inc_alloc_count__)   ;; page (cf) is overwritten elsewhere (see ST_ inc_alloc_count__+2)
+           (INC $cf01)          ;; execute inc on @01 (count of used slots on page)
+
+           (RTS)
+
+    (label consider_not_to_use_empty_page__)
            ;; consider to not use this page since it is completely free
            (LDY !$ff)
            (LDA (ZP_RA),y) ;; get next page of this profile
-           (BEQ continue_with_this_page__) ;; continue, if there is no next page of this profile (and use this completely free page)
+           (BEQ continue_page_ra_inc_set__) ;; continue, if there is no next page of this profile (and use this completely free page)
 
            ;; remove this page (which is completely free) from list for free slots
            (STA ZP_PAGE_FREE_SLOTS_LIST,x) ;; a = next page
@@ -544,29 +668,6 @@
            (LDA ZP_RA+1)                   ;; a = completely free page
            (STA ZP_PROFILE_PAGE_FREE_LIST,x)
            (BNE do_allocation_w_profile_temp__) ;; always branch
-
-    (label continue_with_this_page__)
-           (LDY !$fe)
-           (LDA (ZP_RA),y) ;; get next free slot
-           (BEQ no_free_slot_on_page__)
-           ;; fall through if there is a next free slot
-           ;; a = free slot
-    (label use_page_ra_slot_a_profile_temp__)
-           (TAY)
-           (TAX)                ;; remember free slot in x
-           (INY)                ;; y = @01 of slot
-           (LDA (ZP_RA),y)      ;; a = next free slot
-           (LDY !$fe)
-           (STA (ZP_RA),y)      ;; store next free slot @fe on this page
-           (STX ZP_RA)          ;; store free slot offset into ra
-
-           ;; optional inc # used, if this one drops to 0 (on free), the page us completely unused!
-           (LDY ZP_RA+1)       ;; get page
-           (STY inc_alloc_count__+2) ;; set page on inc command
-    (label inc_alloc_count__)
-           (INC $cf01)          ;; execute inc on @01 (count of used slots on page)
-
-           (RTS)
 
     (label no_free_slot_on_page__)
            ;; remove this page from the ZP_PAGE_FREE_SLOTS_LIST,x
@@ -593,10 +694,10 @@
            (STA (ZP_RA),y)
            (LDA ZP_RA+1)
            (STA ZP_PAGE_FREE_SLOTS_LIST,x)
+           (STA inc_alloc_count__+2) ;; set page for later inc command
 
            ;; now allocate on this page (without check for complete emptiness!)
-           (CLC)
-           (BCC continue_with_this_page__)
+           (BNE continue_page_ra_inc_set__) ;; always jump (LDA ZP_RA+1 != 0)
 
     (label SLOT5p__)
            (LDX !$00)
@@ -606,7 +707,7 @@
            (LSR)        ;; this is not necessary after this lsr
            (TAY)
            (LDX profile_table__-1,y)
-           (BNE ALLOC_M1_PX_SLOT_TO_RA_N) ;; other profiles 20 cycles
+           (BNE ALLOC_M1_PX_SLOT_TO_RA_N) ;; always jump
 
     (label no_free_page_of_this_type__)
            ;; 3. check for unallocated page
@@ -614,14 +715,17 @@
            (BEQ no_free_page_at_all__)
            (JSR VM_ALLOCATE_NEW_PAGE_N)
            (STX ZP_RZ+1)      ;; x = allocated page (from previous call)
+
+    (label intialize_page_rz_profile_x__)
+           ;; now initialize this page to the new type
            (LDX ZP_TEMP)      ;; x = profile
            (JSR INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N)
            (STX ZP_RA+1)
+           (STX inc_alloc_count__+2)
            ;; now set this page as page with free slots for this profile
            (LDY ZP_TEMP) ;; y = profile
            (STX ZP_PAGE_FREE_SLOTS_LIST,y)  ;; this should (only) overwrite 0 in ZP_PAGE_FREE_SLOTS,y
-           (CLC)
-           (BCC use_page_ra_slot_a_profile_temp__)
+           (BPL use_page_ra_slot_a_inc_set__) ;; always jump (LDY ZP_TEMP) >= 0
 
     (label no_free_page_at_all__)
            ;; 4. try to reuse a free page of a different profile!
@@ -637,16 +741,8 @@
            (LDA (ZP_RA),y)
            (STA ZP_PROFILE_PAGE_FREE_LIST,x)
 
-           ;; now initialize this page to the new type
-           (LDX ZP_TEMP)  ;;  get wanted profile
-           (JSR INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N)
-           (STX ZP_RA+1)
-
-           ;; make sure to register this page as a page with free slots for the new profile
-           (LDY ZP_TEMP)
-           (STX ZP_PAGE_FREE_SLOTS_LIST,y)
            (CLC)
-           (BCC use_page_ra_slot_a_profile_temp__)
+           (BCC intialize_page_rz_profile_x__)
 
     (label continue_loop_for_any_free_page__)
            (DEX)
@@ -669,7 +765,12 @@
                  $05))))
 
 (module+ test #| vm_alloc_bucket_slot, allocate one slot of size $0b |#
-  (require (only-in racket/list range flatten make-list))
+
+  (inform-check-equal?
+   (code-len ALLOC_M1_SLOT_TO_RA_N)
+   203
+   "allocation of m1 slots takes 203 bytes")
+
   (define (test-alloc-m1-slot-p0-to-ra-n #:times (times 1))
     (compact-run-code-in-test-
      #:debug #f
@@ -677,19 +778,24 @@
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
 
      (ast-opcode-cmd '() `(162 ,times)) ;; (LDX !$20)
+     (DEX)
      (STX $FFFF)
-(label alloc_m1_slot_test_loop)
-     (JSR $0100) ;; reset cpu cycle count
+     (BEQ no_loop_test_alloc_m1_slot_p0_to_ra_n)
+     (label alloc_m1_slot_test_loop)
      (JSR ALLOC_M1_P0_SLOT_TO_RA_N)
      ;; store profile for check
      (STX ZP_TEMP)
      (DEC $FFFF)
-     (BNE alloc_m1_slot_test_loop)))
+     (BNE alloc_m1_slot_test_loop)
+     (label no_loop_test_alloc_m1_slot_p0_to_ra_n)
+     (JSR $0100) ;; reset cpu cycle count
+     (JSR ALLOC_M1_P0_SLOT_TO_RA_N)
+     ))
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-p0-to-ra-n #:times 2))
-   88
-   "allocate a slot of profile 0 on an existing page of the right profile takes 94 cycles")
+   73 ;; optimized uses 69 cycles
+   "allocate a slot of profile 0 on an existing page of the right profile takes n cycles")
 
   (define (test-alloc-m1-slot-to-ra-n n #:times (times 1))
     (compact-run-code-in-test-
@@ -710,13 +816,13 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n 35 #:times 2))
-   108
-   "allocate a slot on an existing page of the right profile takes 108 cycles")
+   104
+   "allocate a slot on an existing page of the right profile takes n cycles")
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n 4 #:times 2))
-   92
-   "allocate a slot of profile 0 on an existing page of the right profile takes 94 cycles")
+   88
+   "allocate a slot of profile 0 on an existing page of the right profile takes n cycles")
 
   (check-equal?
    (flatten
@@ -727,8 +833,8 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n 35 #:times 1))
-   374
-   "allocate completely new page, initialize it for that profile and allocate a slot on it takes 374 cycles")
+   369
+   "allocate completely new page, initialize it for that profile and allocate a slot on it takes n cycles")
 
   (check-equal?
    (memory-list (test-alloc-m1-slot-to-ra-n 35 #:times 5) (+ 5 ZP_PAGE_FREE_SLOTS_LIST) (+ 5 ZP_PAGE_FREE_SLOTS_LIST))
@@ -913,15 +1019,15 @@
    (memory-list (test-alloc-m1-slot-to-ra-n-with-free-profile-page 35) (+ PAGE_AVAIL_0_W #xfe) (+ PAGE_AVAIL_0_W #xff))
    (list #x34 #x00)
    (format "~s $~x ~s ~s ~s ~s"
-    "after registering page" PAGE_AVAIL_0 "as free page for profile 5,"
-    "then allocating a slot for profile 5"
-    "(no page of this profile with free slots exists),"
-    "=> will allocate slot from the page that is listed as free page of this profile"))
+           "after registering page" PAGE_AVAIL_0 "as free page for profile 5,"
+           "then allocating a slot for profile 5"
+           "(no page of this profile with free slots exists),"
+           "=> will allocate slot from the page that is listed as free page of this profile"))
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n-with-free-profile-page 35))
-   138
-   "reuse a free page of the same profile takes 200 cycles")
+   133
+   "reuse a free page of the same profile takes expected cycles")
 
   (check-equal?
    (memory-list (test-alloc-m1-slot-to-ra-n-with-free-profile-page 35) (+ ZP_PROFILE_PAGE_FREE_LIST 5) (+ ZP_PROFILE_PAGE_FREE_LIST 5))
@@ -965,11 +1071,11 @@
    (memory-list (test-alloc-m1-slot-to-ra-n-with-just-other-free-profile-page 35) (+ PAGE_AVAIL_0_W #xfe) (+ PAGE_AVAIL_0_W #xff))
    (list #x34 #x00)
    (format "~a $~x ~a ~a ~a ~a ~a"
-    "after registering page" PAGE_AVAIL_0 "as free page for profile 0!,"
-    "and making sure that no other free page is available,"
-    "then allocating a slot for profile 5"
-    "(no page of this profile with free slots exists),"
-    "=> will allocate slot from the page that is listed as free page of the different profile, reinitializing that page"))
+           "after registering page" PAGE_AVAIL_0 "as free page for profile 0!,"
+           "and making sure that no other free page is available,"
+           "then allocating a slot for profile 5"
+           "(no page of this profile with free slots exists),"
+           "=> will allocate slot from the page that is listed as free page of the different profile, reinitializing that page"))
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n-with-just-other-free-profile-page 35))
