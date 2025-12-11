@@ -265,7 +265,9 @@
                   ZP_PAGE_FREE_LIST
                   ZP_PAGE_FREE_SLOTS_LIST
                   ZP_PROFILE_PAGE_FREE_LIST
-                  VM_MEMORY_MANAGEMENT_CONSTANTS))
+                  VM_MEMORY_MANAGEMENT_CONSTANTS)
+         (only-in "./vm-register-functions.rkt"
+                  CP_RA_TO_RZ))
 
 (provide INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N    ;; initialize m1 page (page = RZ+1) of profile x, returning first free slot in A/X
          ALLOC_M1_SLOT_TO_RA_N                  ;; allocate an m1 slot
@@ -1267,3 +1269,184 @@
    (cpu-state-clock-cycles (inc_refcnt_m1_slot_ra_n-test 1))
    23
    "running inc on refcount executes n cycles"))
+
+;; DEC_REFCNT_M1_SLOT_RZ_N
+;;   decrement the refcount of a slot in m1
+;;   if refcount drops to 0
+;;      case 1: it is NOT a cell-array: free this slot
+;;      case 2: it is a cell-array: collect first cell and register array to inc collectibles
+;;                                  or (if it is no cell-ptr) continnue with incremental gc on the rest of that cell-array
+;; input:  ZP_RZ = ptr to slot
+;; output: -
+;;
+;; INC_GC_M1_SLOT_RZ_CELL_ARRAY_N
+;;   do an incremental cell collection of cell-array in ZP_RZ
+;;   incremental collection collects all cells except the first cell of the array
+;;
+;; input: ZP_RZ = ptr to slot
+;; output: -
+;;
+;; GC_M1_SLOT_RZ_N
+;;   garbage collect slot pointer to by ZP_RZ. refcount must have dropped to 0!
+;; input: ZP_RZ = ptr to slot
+;; output: -
+(define INC_GC_M1_SLOT_RZ_CELL_ARRAY_N #t)
+(define GC_M1_SLOT_RZ_N #t)
+(define DEC_REFCNT_M1_SLOT_RZ_N
+  (add-label-suffix
+   "__" "__DEC_REFCNT_M1_SLOT_RZ_N"
+   (list
+    (label DEC_REFCNT_M1_SLOT_RZ_N)
+           (LDA ZP_RZ+1)
+           (LDX ZP_RZ)
+           (STA inc_abs__+2)
+    (label dec_abs__)
+           (DEC $cf00,x)
+           (BEQ GC_M1_SLOT_RZ_N)
+    (label done__)
+           (RTS)
+
+    (label GC_M1_SLOT_RZ_N) ;; slot has not been gc'd neither full nor incremental!
+           (LDY !$01)
+           (LDA (ZP_RZ),y) ;; get array (m1 slot) type
+           (AND !$C0)
+           (BEQ FIRST_INC_GC_M1_SLOT_RZ_CELL_ARRAY_N)    ;; cell-array (00xx xxxx) ?  yes => do incremental gc
+           (JMP FREE_M1_SLOT_FROM_RZ_N)
+
+    (label first_slot_is_a_ptr__)
+           ;; remember current cell-ptr in array
+           (LDA (ZP_RZ),y) ;; low byte
+           (TAX)
+           (INY)
+           (LDA (ZP_RZ),y) ;; high byte
+           (PHA)
+
+           (BNE cons_to_collectible_list__) ;; always jump
+
+    (label FIRST_INC_GC_M1_SLOT_RZ_CELL_ARRAY_N) ;; called if this is the first (inc) gc of this cell-array!
+           ;; collect first slot (if it is a ptr) and add it to the list of incremental collectable arrays
+           (INY) ;; y = 2
+           (LDA (ZP_RZ),y)      ;; lowbyte of first slot
+           (BEQ is_nil_ptr__)
+           (AND !$01)           ;; tagged as pointer?
+           (BEQ first_slot_is_a_ptr__ )
+
+    (label is_nil_ptr__)
+           (DEY)
+
+    (label INC_GC_M1_SLOT_RZ_CELL_ARRAY_N) ;; incremental gc on cell-array pointed to by zp_rz
+           (LDY !$01)
+           ;; ZP_RZ points to a cell array
+           ;; 1st scan cells backword, discard atomic cells immediately,
+           ;; DEC refcount first cell-ptr (if encountered) and store meta data for next incremental run and return.
+           (LDA (ZP_RZ),y)
+           (AND !$3f)             ;; a = len
+           (BEQ no_cells_left_for_scanning__)
+
+    (label cell_reverse_scan__)
+           (ASL A)
+           (TAY)
+    (label tight_loop__)
+           (LDA (ZP_RZ),y) ;; get lowbyte
+           (AND !$01)      ;; check tagging
+           (BEQ found_cell_ptr__) ;; found cell ptr, make sure to store (y-2)>>1 into array len, store ptr to next incremental-collectable!!
+
+           (DEY)
+           (DEY)
+           (CPY !$02) ;; first slot is already checked
+           (BNE tight_loop__)
+
+    (label no_cells_left_for_scanning__)
+           ;; fully reclaimed
+
+           ;; is this the head of the inc collectible list?
+           ;; check page first? or check offset on page firs? which is faster?
+           (LDA ZP_RZ+1)
+           (CMP ZP_INC_COLLECTIBLE_LIST+1)
+           (BNE not_head_of_collectible_list__)
+           (LDA ZP_RZ)
+           (CMP ZP_INC_COLLECTIBLE_LIST)
+           (BNE not_head_of_collectible_list__)
+
+           ;; dequeue
+           (LDY !$02)
+           (LDA (ZP_RZ),y)
+           (STA ZP_INC_COLLECTIBLE_LIST)
+           (INY)
+           (LDA (ZP_RZ),y)
+           (STA ZP_INC_COLLECTIBLE_LIST+1)
+
+    (label not_head_of_collectible_list__)
+           (JMP FREE_M1_SLOT_FROM_RZ_N)
+
+    (label found_cell_ptr__)
+           ;; remember current cell-ptr in array
+           (LDA (ZP_RZ),y)
+           (TAX)
+           (INY)
+           (LDA (ZP_RZ),y)
+           (PHA)
+
+           ;; store new length (remaining cells to inspect)
+           (TYA)
+           (SEC)
+           (SBC !$03)
+           (LSR)
+           (LDY !$01)
+           (STA (ZP_RZ),y)
+
+           ;; is the first cell a ptr (then it is already in the list of collectibles), else it must be listed
+           (LDY !$02)
+           (LDA (ZP_RZ),y)
+           (AND !$01)
+           (BEQ already_on_the_collectible_list__)
+
+    (label cons_to_collectible_list__)
+           ;; store old head
+           (LDA ZP_INC_COLLECTIBLE_LIST)
+           (STA (ZP_RZ),y)
+           (INY)
+           (LDA ZP_INC_COLLECTIBLE_LIST+1)
+           (STA (ZP_RZ),y)
+
+           ;; store zp_rz as new head
+           (LDA ZP_RZ)
+           (STA ZP_INC_COLLECTIBLE_LIST)
+           (LDA ZP_RZ+1)
+           (STA ZP_INC_COLLECTIBLE_LIST+1)
+
+    (label already_on_the_collectible_list__)
+           ;; store remembered cell-ptr into rz
+    (label dec_refcnt_remembered_cell_ptr__)
+           (PLA)
+           (STA ZP_RZ+1)
+           (TXA)
+           (STA ZP_RZ)
+           ;; dec refcount of cell pointed to
+           (JMP DEC_REFCNT_M1_SLOT_RZ_N))))
+
+;; get head of current incremental collectible list and do an increment gc on that cell-array
+;;
+;; input:  ZP_INC_COLLECTIBLE_LIST (word)
+;; output:
+;;
+;; variant: INC_GC_ARRAYS_LB_IN_A
+;; input:   A = lowbyte of collectible list
+;;          ZP_INC_COLLECTRIBLE_LIST
+(define INC_GC_ARRAYS_LB_IN_A #t)
+(define INC_GC_ARRAYS
+  (add-label-suffix
+   "__" "__INC_GC_ARRAYS"
+   (list
+    (label INC_GC_ARRAYS)
+           (LDA ZP_INC_COLLECTIBLE_LIST)
+           (BEQ nothing_to_collect__) ;; actually an error, should not be necessary to check! this should be checked by the caller before the call
+    (label INC_GC_ARRAYS_LB_IN_A)
+           (STA ZP_RZ)
+           (LDA ZP_INC_COLLECTIBLE_LIST+1)
+           (STA ZP_RZ+1)
+           (JMP INC_GC_M1_SLOT_RZ_CELL_ARRAY_N)
+
+    (label nothing_to_collect__)
+           (RTS)
+    )))
