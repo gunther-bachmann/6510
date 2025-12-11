@@ -281,11 +281,11 @@
     [(char-graphic? dump-char) (string dump-char)]
     [else "."]))
 
-(define/c (memory-list state from to)
-  (-> cpu-state? word/c word/c (listof byte/c))
+(define/c (memory-list state from (to 0))
+  (->* (cpu-state? word/c) (word/c) (listof byte/c))
   (stream->list
    (map (lambda (idx) (peek state idx))
-        (range from (fx+ 1 to)))))
+        (range from (fx+ 1 (if (> to 0) to from))))))
 
 ;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
 (define/c (indexed-memory-list state from to)
