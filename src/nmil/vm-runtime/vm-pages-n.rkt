@@ -42,6 +42,7 @@
                   ZP_PAGE_REG
                   ZP_PAGE_FREE_LIST
                   ZP_TEMP
+                  ZP_INC_COLLECTIBLE_LIST
                   VM_MEMORY_MANAGEMENT_CONSTANTS
                   ZP_PROFILE_PAGE_FREE_LIST
                   ZP_PAGE_FREE_SLOTS_LIST))
@@ -215,6 +216,10 @@
 
           (LDX !$05) ;; last index of profile
           (LDA !$00) ;; page = 0 => no element in the list
+
+          (STA ZP_INC_COLLECTIBLE_LIST)   ;; init ptr to 0
+          (STA ZP_INC_COLLECTIBLE_LIST+1) ;;
+
    (label init_profile_pages__)
           (STA ZP_PROFILE_PAGE_FREE_LIST,x)
           (STA ZP_PAGE_FREE_SLOTS_LIST,x)
@@ -272,9 +277,15 @@
      (STX $0201)
      (STY $0202)))
 
-  (check-equal? (memory-list vm-initialize-page-memory-manager-01 #x0200 #x0202)
-                (list #x00 #x20 #xff)
-                "registers are filled with values guaranteed by function")
+  (check-equal?
+   (memory-list vm-initialize-page-memory-manager-01 #x0200 #x0202)
+   (list #x00 #x20 #xff)
+   "registers are filled with values guaranteed by function")
+
+  (check-equal?
+   (memory-list vm-initialize-page-memory-manager-01 ZP_INC_COLLECTIBLE_LIST (+ 1 ZP_INC_COLLECTIBLE_LIST))
+   (list #x00 #x00)
+   "head of incrementally collective cell arrays is 0")
 
   (check-equal? (memory-list vm-initialize-page-memory-manager-01 ZP_PROFILE_PAGE_FREE_LIST (+ ZP_PROFILE_PAGE_FREE_LIST 5))
                 (list #x00 #x00 #x00 #x00 #x00 #x00)

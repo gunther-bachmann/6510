@@ -265,6 +265,7 @@
                   ZP_PAGE_FREE_LIST
                   ZP_PAGE_FREE_SLOTS_LIST
                   ZP_PROFILE_PAGE_FREE_LIST
+                  ZP_INC_COLLECTIBLE_LIST
                   VM_MEMORY_MANAGEMENT_CONSTANTS)
          (only-in "./vm-register-functions.rkt"
                   CP_RA_TO_RZ))
@@ -1299,7 +1300,7 @@
     (label DEC_REFCNT_M1_SLOT_RZ_N)
            (LDA ZP_RZ+1)
            (LDX ZP_RZ)
-           (STA inc_abs__+2)
+           (STA dec_abs__+2)
     (label dec_abs__)
            (DEC $cf00,x)
            (BEQ GC_M1_SLOT_RZ_N)
@@ -1314,6 +1315,9 @@
            (JMP FREE_M1_SLOT_FROM_RZ_N)
 
     (label first_slot_is_a_ptr__)
+           ;; no optimized free after last slot
+           (STA EXEC_OPTIMIZED_LAST_SLOT_FREE__)
+
            ;; remember current cell-ptr in array
            (LDA (ZP_RZ),y) ;; low byte
            (TAX)
@@ -1325,7 +1329,9 @@
 
     (label FIRST_INC_GC_M1_SLOT_RZ_CELL_ARRAY_N) ;; called if this is the first (inc) gc of this cell-array!
            ;; collect first slot (if it is a ptr) and add it to the list of incremental collectable arrays
+           (STY EXEC_OPTIMIZED_LAST_SLOT_FREE__)
            (INY) ;; y = 2
+
            (LDA (ZP_RZ),y)      ;; lowbyte of first slot
            (BEQ is_nil_ptr__)
            (AND !$01)           ;; tagged as pointer?
@@ -1391,9 +1397,34 @@
            (TYA)
            (SEC)
            (SBC !$03)
+
+           ;; === { optimize for cell-arrays with only one cell-ptr
+           (CMP !$02)
+           (BNE cells_left_to_inspect__)
+
+           ;; if this was the first call to inc_gc'd, then just free and dec ref count, no dequeue necessary
+           (LDA EXEC_OPTIMIZED_LAST_SLOT_FREE__)
+           (BEQ cells_left_to_inspect__)
+
+           (TXA)
+           (PHA) ;; now stack holds lb (head) :: hb :: ... of cell to be dec_refcnt'd
+
+           ;; free ZP_RZ
+           (JSR FREE_M1_SLOT_FROM_RZ_N) ;; does not run any DEC_REFCNT => no recursion possible, uses ZP_TEMP
+
+           ;; now dec refcnt the last (remembered) cell
+           (PLA)
+           (STA ZP_RZ)
+           (PLA)
+           (STA ZP_RZ+1)
+           (JMP DEC_REFCNT_M1_SLOT_RZ_N) ;; tail call
+           ;; === }
+
+    (label cells_left_to_inspect__)
            (LSR)
            (LDY !$01)
            (STA (ZP_RZ),y)
+
 
            ;; is the first cell a ptr (then it is already in the list of collectibles), else it must be listed
            (LDY !$02)
@@ -1423,7 +1454,39 @@
            (TXA)
            (STA ZP_RZ)
            ;; dec refcount of cell pointed to
-           (JMP DEC_REFCNT_M1_SLOT_RZ_N))))
+           (JMP DEC_REFCNT_M1_SLOT_RZ_N) ;; tail-call
+
+    (label EXEC_OPTIMIZED_LAST_SLOT_FREE__)
+           (byte 0))))
+
+(module+ test #| dec_refcnt_m1_slot_rz_n |#
+  (define dec_refcnt_m1_slot_rz_n-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code (append test-runtime
+                            ALLOC_M1_SLOT_TO_RA_N
+                            INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
+                            FREE_M1_SLOT_FROM_RZ_N
+                            INC_REFCNT_M1_SLOT_RA_N
+                            DEC_REFCNT_M1_SLOT_RZ_N)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+
+     (RTS)))
+
+  (check-equal? (code-len DEC_REFCNT_M1_SLOT_RZ_N)
+                189)
+
+  (check-equal? #f #t "dec refcnt of a ptr to a non cell-array will free it immediately")
+
+  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just atomic cells will free it immediately")
+
+  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just one ptr in second position, will free immediately")
+
+  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just one ptr in first position, will not free but enqueue")
+
+  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with more than one ptr, will not free but enqueue")
+
+  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with n cell ptr, will free after n incremental gc calls"))
 
 ;; get head of current incremental collectible list and do an increment gc on that cell-array
 ;;
@@ -1450,3 +1513,19 @@
     (label nothing_to_collect__)
            (RTS)
     )))
+
+;; keep calling incremental gc on cell-arrays until no more arrays are available for collecting
+;;
+;; input:  ZP_INC_COLLECTIBLE_LIST
+;; output: ZP_INC_COLLECTIBLE_LIST = 0
+(define GC_ALL_ARRAYS
+  (add-label-suffix
+   "__" "__GC_ALL_ARRAYS"
+   (list
+    (label GC_ALL_ARRAYS)
+           (LDA ZP_INC_COLLECTIBLE_LIST)
+           (BEQ done__)
+           (JSR INC_GC_ARRAYS_LB_IN_A)
+           (JMP GC_ALL_ARRAYS) ;; tail call
+    (label done__)
+           (RTS))))

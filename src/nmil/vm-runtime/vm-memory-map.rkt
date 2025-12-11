@@ -29,6 +29,9 @@
          ZP_RBI                          ;; (byte) index for secondary array register
          ZP_RCI                          ;; (byte) index for tertiary array register
          ZP_RZ                           ;; (word) register reserved for garbage collection operations
+         ZP_INC_COLLECTIBLE_LIST         ;; (word) ptr to the head of the incrementally collectible cell-array list
+
+         ;; (may be obsolete)
          ZP_PART_GCD_CELL_ARRAYS         ;; (word) list of partially garbage collected cell arrays
          ZP_CALL_FRAME                   ;; (word) pointer to current call frame
          ZP_CALL_FRAME_TOP_MARK          ;; (byte) top mark of call frame stack
@@ -78,6 +81,7 @@
 
                                               ;; @DC-ZP: ZP_TEMP3, group: temp
 
+   (byte-const ZP_INC_COLLECTIBLE_LIST   $ae) ;; ae..af,  ptr to the head of incremental collectible cell-arrays list
    (byte-const ZP_PROFILE_PAGE_FREE_LIST $b0) ;; b0..b5,  b0 (profile 0) .. b5 (profile 5)
    (byte-const ZP_PAGE_FREE_SLOTS_LIST   $b6) ;; b6..bb,  b6 (profile 0) .. bb (profile 5)
    (byte-const ZP_PAGE_FREE_LIST         $bc) ;; bc..bd = ptr to first free page
@@ -151,6 +155,7 @@
     [else (ast-const-get (cdr ast-commands) key)]))
 
 ;; make constants available in racket (to allow for usage e.g. in test code)
+(define ZP_INC_COLLECTIBLE_LIST (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_INC_COLLECTIBLE_LIST"))
 (define ZP_RT                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
 (define ZP_RP                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RP"))
 (define ZP_RA                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
