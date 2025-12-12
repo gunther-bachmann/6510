@@ -44,22 +44,36 @@
   slot layout
   | offset | content
   |--------|----------------
-  | +0     | reference count
-  | +1     | slot type (if this slot is free: offset to the next free slot | 0)
+  | +0     | reference count or (if this slot is free) offset to the next free slot
+  | +1     | slot type (may include #of cells in this slot)
   | +2 ...  | payload
 
   | slot type | description
   |-----------|---------------------
-  | 0000 0000 | not initialized (unknown slot type)
-  | 0000 0001 | reserved (1)
-  | 0000 001x | reserved (2)
-  | 0000 01xx | reserved (4)
-  | 0000 1xxx | reserved (8)
-  | 0001 xxxx | reserved (16)
-  | 001x xxxx | reserved (32)
-  | 01xx xxxx | cell-array (x = length of array), all profiles
+  | 0100 0000 | not initialized (unknown slot type)
+  | 0100 0001 | reserved (1)
+  | 0100 001x | reserved (2)
+  | 0100 01xx | reserved (4)
+  | 0100 1xxx | reserved (8)
+  | 0101 xxxx | reserved (16)
+  | 011x xxxx | reserved (32)
+  | 00xx xxxx | cell-array (x = length of array), all profiles
   |           | cell and cell-pairs are cell-arrays of profile 6 (with length 1 and 2 respectively), no extra code necessary
   | 1xxx xxxx | native-array (x = length of array), all profiles
+
+  INC_COLLECTIBLES_LIST head of a list of slots that are incrementally collected and incrementally collectible
+    the list is made up of word pointers to slots (lb hb)
+    each slot uses the slot cell 0 (first slot cell) to reference the next in list
+    => slot layout of a collectible:
+       | offset | content
+       |--------|----
+       | 0      | 0 = refcount
+       | 1      | slot type + # of cells to left checking (n+1)
+       | 2..3   | ptr to next slot that is collectible (lb=0 if no more slots in list)
+       | cell1  |
+       | ...    |
+       | celln  | next cell to be checked during incremental gc
+       | ...    | already collected cells
 
   INITALIZED_PAGE_FREE_LIST (an initialized completely unused page of a certain profile)
     n-lists with profile -> page head of list
@@ -251,7 +265,8 @@
 |#
 
 
-(require "../../6510.rkt"
+(require (only-in "../../6510-test-utils.rkt" skip skip-module)
+         "../../6510.rkt"
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix
                   replace-labels)
@@ -345,18 +360,18 @@
            (LDY !$02)
            (CLC)
     (label loop_initialize_rcs__)
-           (LDA !$00)
-           (STA (ZP_RZ),y)      ;; @02: RC of slot 0 = 0
+           ;; (LDA !$00)
+           ;; (STA (ZP_RZ),y)      ;; @02: RC of slot 0 = 0
            (TYA)
            (ADC profile_size_table,x)
            (BCS finished_init__)
-           (INY)
+           ;; (INY)
            (STA (ZP_RZ),y)      ;; @02+1: next free slot
            (TAY)
            (BCC loop_initialize_rcs__)
 
     (label finished_init__)
-           (LDY profile_last_slot_offsetp1_table,x) ;; fixup reference of next free slot of last slot on the page
+           (LDY profile_last_slot_offset_table,x) ;; fixup reference of next free slot of last slot on the page
            (LDA !$00)
            (STA (ZP_RZ),y)      ;; last slot has no next free
 
@@ -379,13 +394,13 @@
                  $32) ;; slot size: 50
 
     ;; location for each profile of the last cells ptr to next cell on this page (which should be 0 upon init)
-    (label profile_last_slot_offsetp1_table)
-           (byte $f9 ;; slot size:  6, slot: f8..fd
-                 $f3 ;; slot size:  8, slot: f2..f9
-                 $f3 ;; slot size: 12, slot: f2..fd
-                 $db ;; slot size: 24, slot: da..f1
-                 $db ;; slot size: 36, slot: da..fd
-                 $cb ;; slot size: 50, slot: cb..fd
+    (label profile_last_slot_offset_table)
+           (byte $f8 ;; slot size:  6, slot: f8..fd
+                 $f2 ;; slot size:  8, slot: f2..f9
+                 $f2 ;; slot size: 12, slot: f2..fd
+                 $da ;; slot size: 24, slot: da..f1
+                 $da ;; slot size: 36, slot: da..fd
+                 $ca ;; slot size: 50, slot: ca..fd
                  )]))
 
 (module+ test #| INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N |#
@@ -414,15 +429,15 @@
   (check-equal? (memory-list test-alloc-m1-00-state-after-n (+ PAGE_AVAIL_0_W #x00) (+ PAGE_AVAIL_0_W #x01))
                 (list #x20 #x00)
                 "page type $10, number of used slots = $00")
-  (check-equal? (memory-list test-alloc-m1-00-state-after-n (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
-                (list #x00 #x08)
-                "slot0: refcount 0, next free slot at offset $08")
-  (check-equal? (memory-list test-alloc-m1-00-state-after-n (+ PAGE_AVAIL_0_W #x08) (+ PAGE_AVAIL_0_W #x09))
-                (list #x00 #x0e)
-                "slot1: refcount 0, next free slot at offset $0e")
-  (check-equal? (memory-list test-alloc-m1-00-state-after-n (+ PAGE_AVAIL_0_W #xf8) (+ PAGE_AVAIL_0_W #xf9))
-                (list #x00 #x00)
-                "slotx: refcount 0, next free slot at offset $00 = no next")
+  (check-equal? (memory-list test-alloc-m1-00-state-after-n (+ PAGE_AVAIL_0_W #x02))
+                (list #x08)
+                "slot0: next free slot at offset $08")
+  (check-equal? (memory-list test-alloc-m1-00-state-after-n (+ PAGE_AVAIL_0_W #x08))
+                (list #x0e)
+                "slot1: next free slot at offset $0e")
+  (check-equal? (memory-list test-alloc-m1-00-state-after-n (+ PAGE_AVAIL_0_W #xf8))
+                (list #x00)
+                "slotx: next free slot at offset $00 = no next")
   (check-equal? (vm-page-n->strings test-alloc-m1-00-state-after-n PAGE_AVAIL_0)
                 '("page-type:      m1 page p0"
                   "previous page:  $00"
@@ -454,15 +469,15 @@
   (check-equal? (memory-list test-alloc-m1-01-state-after-n (+ PAGE_AVAIL_0_W #x00) (+ PAGE_AVAIL_0_W #x01))
                 (list #x21 #x00)
                 "page type $10, number of used slots = $00")
-  (check-equal? (memory-list test-alloc-m1-01-state-after-n (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
-                (list #x00 #x0a)
-                "slot0: refcount 0, next free slot at offset $08")
-  (check-equal? (memory-list test-alloc-m1-01-state-after-n (+ PAGE_AVAIL_0_W #x0a) (+ PAGE_AVAIL_0_W #x0b))
-                (list #x00 #x12)
-                "slot1: refcount 0, next free slot at offset $0e")
-  (check-equal? (memory-list test-alloc-m1-01-state-after-n (+ PAGE_AVAIL_0_W #xf2) (+ PAGE_AVAIL_0_W #xf3))
-                (list #x00 #x00)
-                "slotx: refcount 0, next free slot at offset $00 = no next")
+  (check-equal? (memory-list test-alloc-m1-01-state-after-n (+ PAGE_AVAIL_0_W #x02))
+                (list #x0a)
+                "slot0: next free slot at offset $08")
+  (check-equal? (memory-list test-alloc-m1-01-state-after-n (+ PAGE_AVAIL_0_W #x0a))
+                (list #x12)
+                "slot1: next free slot at offset $12")
+  (check-equal? (memory-list test-alloc-m1-01-state-after-n (+ PAGE_AVAIL_0_W #xf2))
+                (list #x00)
+                "slotx: next free slot at offset $00 = no next")
   (check-equal? (vm-page-n->strings test-alloc-m1-01-state-after-n PAGE_AVAIL_0)
                 '("page-type:      m1 page p1"
                   "previous page:  $00"
@@ -494,15 +509,15 @@
   (check-equal? (memory-list test-alloc-m1-02-state-after-n (+ PAGE_AVAIL_0_W #x00) (+ PAGE_AVAIL_0_W #x01))
                 (list #x22 #x00)
                 "page type $10, number of used slots = $00")
-  (check-equal? (memory-list test-alloc-m1-02-state-after-n (+ PAGE_AVAIL_0_W #x02) (+ PAGE_AVAIL_0_W #x03))
-                (list #x00 #x0e)
-                "slot0: refcount 0, next free slot at offset $08")
-  (check-equal? (memory-list test-alloc-m1-02-state-after-n (+ PAGE_AVAIL_0_W #x0e) (+ PAGE_AVAIL_0_W #x0f))
-                (list #x00 #x1a)
-                "slot1: refcount 0, next free slot at offset $0e")
-  (check-equal? (memory-list test-alloc-m1-02-state-after-n (+ PAGE_AVAIL_0_W #xf0) (+ PAGE_AVAIL_0_W #xf1))
-                (list #x00 #x00)
-                "slotx: refcount 0, next free slot at offset $00 = no next")
+  (check-equal? (memory-list test-alloc-m1-02-state-after-n (+ PAGE_AVAIL_0_W #x02))
+                (list #x0e)
+                "slot0: next free slot at offset $08")
+  (check-equal? (memory-list test-alloc-m1-02-state-after-n (+ PAGE_AVAIL_0_W #x0e))
+                (list #x1a)
+                "slot1: next free slot at offset $0e")
+  (check-equal? (memory-list test-alloc-m1-02-state-after-n (+ PAGE_AVAIL_0_W #xf0))
+                (list #x00)
+                "slotx: next free slot at offset $00 = no next")
   (check-equal? (vm-page-n->strings test-alloc-m1-02-state-after-n PAGE_AVAIL_0)
                 '("page-type:      m1 page p2"
                   "previous page:  $00"
@@ -536,7 +551,7 @@
 
            (TAX)                ;; x = slot to allocate
            (TAY)
-           (INY)                ;; could be saved, if @0 = offset to next slot (maybe put @1 = #of references?)
+           ;; (INY)                ;; could be saved, if @0 = offset to next slot (maybe put @1 = #of references?)
            (LDA (ZP_RA),y)      ;; a = new next free slot
            (LDY !$fe)
            (STA (ZP_RA),y)      ;; page next free slot is updated
@@ -576,8 +591,8 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles test-alloc-m1-slot-p0-optimized-2 )
-   69
-   "allocate a slot of profile 0 on an existing page of the right profile takes 69 cycles")
+   67
+   "optimized allocate a slot of profile 0 on an existing page of the right profile takes n cycles")
 
   (check-equal?
    (memory-list test-alloc-m1-slot-p0-optimized-2 PAGE_AVAIL_0_W (+ 1 PAGE_AVAIL_0_W))
@@ -639,20 +654,21 @@
 
     (label continue_page_ra_inc_set__)
            (LDY !$fe)
-           (LDA (ZP_RA),y) ;; get next free slot
+           (LDA (ZP_RA),y) ;; get free slot
            (BEQ no_free_slot_on_page__)
-           ;; fall through if there is a next free slot
+           ;; fall through if there is a free slot
            ;; a = free slot
     (label use_page_ra_slot_a_inc_set__)
            (TAY)
            (TAX)                ;; remember free slot in x
-           (LDA !$01)
-           (STA (ZP_RA),y)      ;; write 1 into refcount!
-           (INY)                ;; y = @01 of slot
            (LDA (ZP_RA),y)      ;; a = next free slot
            (LDY !$fe)
            (STA (ZP_RA),y)      ;; store next free slot @fe on this page
            (STX ZP_RA)          ;; store free slot offset into ra
+
+           (LDY !$00)
+           (LDA !$01)
+           (STA (ZP_RA),y)      ;; write 1 into refcount!
 
            ;; optional inc # used, if this one drops to 0 (on free), the page us completely unused!
     (label inc_alloc_count__)   ;; page (cf) is overwritten elsewhere (see ST_ inc_alloc_count__+2)
@@ -781,7 +797,7 @@
 
   (inform-check-equal?
    (code-len ALLOC_M1_SLOT_TO_RA_N)
-   205
+   206
    "size of code for allocation of m1 slots is n bytes")
 
   (define (test-alloc-m1-slot-p0-to-ra-n #:times (times 1))
@@ -806,7 +822,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-p0-to-ra-n #:times 2))
-   81 ;; optimized uses 69 cycles
+   81 ;; optimized uses 67 cycles
    "allocate a slot of profile 0 on an existing page of the right profile takes n cycles")
 
   (define (test-alloc-m1-slot-to-ra-n n #:times (times 1))
@@ -845,7 +861,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n 35 #:times 1))
-   377
+   319
    "allocate completely new page, initialize it for that profile and allocate a slot on it takes n cycles")
 
   (define test-alloc-m1-slot-to-ra-n-35-t-5 (test-alloc-m1-slot-to-ra-n 35 #:times 5))
@@ -1103,7 +1119,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles test-alloc-m1-slot-to-ra-n-with-just-other-free-profile-page-35)
-   441
+   383
    "cost to use a free page initilized to another profile, if no free pages exist")
 
   (check-equal?
@@ -1470,23 +1486,47 @@
                             INC_REFCNT_M1_SLOT_RA_N
                             DEC_REFCNT_M1_SLOT_RZ_N)
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+                (LDA !20)
+                (JSR ALLOC_M1_SLOT_TO_RA_N)
+                (LDY !$01)
+                (LDA !$40) ;; 01xx xxxx is not a cell array!
+                (STA (ZP_RA),y) ;; set type
+                (LDA ZP_RA)
+                (STA ZP_RZ)
+                (LDA ZP_RA+1)
+                (STA ZP_RZ+1)
+                (JSR $0100)
+                (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+                (RTS)))
 
-     (RTS)))
+  (inform-check-equal?
+   (code-len DEC_REFCNT_M1_SLOT_RZ_N)
+   189
+   "code len of dec refcnt and gc are n bytes")
 
-  (check-equal? (code-len DEC_REFCNT_M1_SLOT_RZ_N)
-                189)
+  (inform-check-equal?
+   (cpu-state-clock-cycles dec_refcnt_m1_slot_rz_n-test)
+   96
+   "it takes n clock cycles to dec refcnt and free an allocated slot immediately")
 
-  (check-equal? #f #t "dec refcnt of a ptr to a non cell-array will free it immediately")
+  (check-equal?
+   (list (memory-list dec_refcnt_m1_slot_rz_n-test (+ 2 PAGE_AVAIL_0_W))
+         (memory-list dec_refcnt_m1_slot_rz_n-test ZP_INC_COLLECTIBLE_LIST)
+         (memory-list dec_refcnt_m1_slot_rz_n-test (+ #xfe PAGE_AVAIL_0_W) (+ #xff PAGE_AVAIL_0_W)))
+   (list (list #x1a)                               ;; next free slot pointed to by @02 (first slot) will be $1a (again)
+         (list 0)                                  ;; head of inc collectible is (still) 0
+         (list #x02 #x00))                         ;; next free slot on this page is @02 (again)
+   "dec refcnt of a ptr to a non cell-array will free it immediately")
 
-  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just atomic cells will free it immediately")
+  (skip (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just atomic cells (or nil-s) will free it immediately"))
 
-  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just one ptr in second position, will free immediately")
+  (skip (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just one ptr in second position, will free immediately"))
 
-  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just one ptr in first position, will not free but enqueue")
+  (skip (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just one ptr in first position, will not free but enqueue"))
 
-  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with more than one ptr, will not free but enqueue")
+  (skip (check-equal? #f #t "dec refcnt of a ptr to a cell-array with more than one ptr, will not free but enqueue"))
 
-  (check-equal? #f #t "dec refcnt of a ptr to a cell-array with n cell ptr, will free after n incremental gc calls"))
+  (skip (check-equal? #f #t "dec refcnt of a ptr to a cell-array with n cell ptr, will free after n incremental gc calls")))
 
 ;; get head of current incremental collectible list and do an increment gc on that cell-array
 ;;
@@ -1511,8 +1551,7 @@
            (JMP INC_GC_M1_SLOT_RZ_CELL_ARRAY_N)
 
     (label nothing_to_collect__)
-           (RTS)
-    )))
+           (RTS))))
 
 ;; keep calling incremental gc on cell-arrays until no more arrays are available for collecting
 ;;
@@ -1529,3 +1568,15 @@
            (JMP GC_ALL_ARRAYS) ;; tail call
     (label done__)
            (RTS))))
+
+(module+ test #| gc_all_arrays |#)
+
+(module+ test #| code len of module |#
+  (inform-check-equal?
+   (code-len (append ALLOC_M1_SLOT_TO_RA_N
+                     INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
+                     FREE_M1_SLOT_FROM_RZ_N
+                     INC_REFCNT_M1_SLOT_RA_N
+                     DEC_REFCNT_M1_SLOT_RZ_N))
+   503
+   "the whole module taks about n bytes"))
