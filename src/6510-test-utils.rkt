@@ -6,7 +6,7 @@
 (require rackunit) ;; TODO: remove from here to be able to use typed variant instead
 (require racket/path)
 
-(provide skip inform-check-equal?)
+(provide skip inform-check-equal? skip-module)
 (provide (all-from-out rackunit))
 (provide (all-from-out racket/path))
 (provide (all-from-out ansi-color))
@@ -80,3 +80,8 @@
             (with-colors 'red
               (lambda () (color-displayln (format "test skipped ~a." msg))))
             #t)))))))
+
+
+(define-syntax (skip-module stx)
+  (syntax-case stx ()
+    ([_ body] #'(list))))
