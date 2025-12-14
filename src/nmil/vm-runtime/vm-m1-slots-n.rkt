@@ -1340,6 +1340,7 @@
            (INY)
            (LDA (ZP_RZ),y) ;; high byte
            (PHA)
+           (DEY)
 
            (BNE cons_to_collectible_list__) ;; always jump
 
@@ -1349,12 +1350,12 @@
            (INY) ;; y = 2
 
            (LDA (ZP_RZ),y)      ;; lowbyte of first slot
-           (BEQ is_nil_ptr__)
+           (BEQ first_is_nil_ptr__)
            (AND !$01)           ;; tagged as pointer?
            (BEQ first_slot_is_a_ptr__ )
 
-    (label is_nil_ptr__)
-           (DEY)
+    (label first_is_nil_ptr__)
+           ;; (DEY)
 
     (label INC_GC_M1_SLOT_RZ_CELL_ARRAY_N) ;; incremental gc on cell-array pointed to by zp_rz
            (LDY !$01)
@@ -1363,20 +1364,23 @@
            ;; DEC refcount first cell-ptr (if encountered) and store meta data for next incremental run and return.
            (LDA (ZP_RZ),y)
            (AND !$3f)             ;; a = len
-           (BEQ no_cells_left_for_scanning__)
+           (CMP !$02)             ;; first cell is always handled first, before entering this loop!
+           (BMI no_cells_left_for_scanning__)
 
     (label cell_reverse_scan__)
            (ASL A)
            (TAY)
     (label tight_loop__)
            (LDA (ZP_RZ),y) ;; get lowbyte
+           (BEQ loop_nil_ptr__)
            (AND !$01)      ;; check tagging
            (BEQ found_cell_ptr__) ;; found cell ptr, make sure to store (y-2)>>1 into array len, store ptr to next incremental-collectable!!
 
+    (label loop_nil_ptr__)
            (DEY)
            (DEY)
-           (CPY !$02) ;; first slot is already checked
-           (BNE tight_loop__)
+           (CPY !$03) ;; first slot is already checked
+           (BPL tight_loop__)
 
     (label no_cells_left_for_scanning__)
            ;; fully reclaimed
@@ -1476,7 +1480,7 @@
            (byte 0))))
 
 (module+ test #| dec_refcnt_m1_slot_rz_n |#
-  (define dec_refcnt_m1_slot_rz_n-test
+  (define dec_refcnt_m1_slot_rz_n-test-non-cell-array-slot
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code (append test-runtime
@@ -1495,34 +1499,259 @@
                 (STA ZP_RZ)
                 (LDA ZP_RA+1)
                 (STA ZP_RZ+1)
+
                 (JSR $0100)
-                (JSR DEC_REFCNT_M1_SLOT_RZ_N)
-                (RTS)))
+                (JSR DEC_REFCNT_M1_SLOT_RZ_N)))
 
   (inform-check-equal?
    (code-len DEC_REFCNT_M1_SLOT_RZ_N)
-   189
+   193
    "code len of dec refcnt and gc are n bytes")
 
   (inform-check-equal?
-   (cpu-state-clock-cycles dec_refcnt_m1_slot_rz_n-test)
-   96
+   (cpu-state-clock-cycles dec_refcnt_m1_slot_rz_n-test-non-cell-array-slot)
+   90
    "it takes n clock cycles to dec refcnt and free an allocated slot immediately")
 
   (check-equal?
-   (list (memory-list dec_refcnt_m1_slot_rz_n-test (+ 2 PAGE_AVAIL_0_W))
-         (memory-list dec_refcnt_m1_slot_rz_n-test ZP_INC_COLLECTIBLE_LIST)
-         (memory-list dec_refcnt_m1_slot_rz_n-test (+ #xfe PAGE_AVAIL_0_W) (+ #xff PAGE_AVAIL_0_W)))
+   (list (memory-list dec_refcnt_m1_slot_rz_n-test-non-cell-array-slot (+ 2 PAGE_AVAIL_0_W))
+         (memory-list dec_refcnt_m1_slot_rz_n-test-non-cell-array-slot ZP_INC_COLLECTIBLE_LIST)
+         (memory-list dec_refcnt_m1_slot_rz_n-test-non-cell-array-slot (+ #xfe PAGE_AVAIL_0_W) (+ #xff PAGE_AVAIL_0_W)))
    (list (list #x1a)                               ;; next free slot pointed to by @02 (first slot) will be $1a (again)
          (list 0)                                  ;; head of inc collectible is (still) 0
          (list #x02 #x00))                         ;; next free slot on this page is @02 (again)
    "dec refcnt of a ptr to a non cell-array will free it immediately")
 
-  (skip (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just atomic cells (or nil-s) will free it immediately"))
+  (define (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs n-nils)
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code (append test-runtime
+                            ALLOC_M1_SLOT_TO_RA_N
+                            INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
+                            FREE_M1_SLOT_FROM_RZ_N
+                            INC_REFCNT_M1_SLOT_RA_N
+                            DEC_REFCNT_M1_SLOT_RZ_N)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+                (LDA !20)
+                (JSR ALLOC_M1_SLOT_TO_RA_N)
+                (LDY !$01)
+                ;; (LDA !$0a) ;; 00xx xxxx is a cell array! with xx xxxx = 0a = 10 cells
+                (ast-opcode-cmd '() `(169 ,n-nils))
+                (STA (ZP_RA),y) ;; set type
 
-  (skip (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just one ptr in second position, will free immediately"))
+                (ASL A)
+                (TAY)
+                (INY)
+                (LDA !$00)      ;; nil
+         (label init_loop_nils)
+                (STA (ZP_RA),y)
+                (DEY)
+                (CPY !$01)
+                (BNE init_loop_nils)
 
-  (skip (check-equal? #f #t "dec refcnt of a ptr to a cell-array with just one ptr in first position, will not free but enqueue"))
+                (LDA ZP_RA)
+                (STA ZP_RZ)
+                (LDA ZP_RA+1)
+                (STA ZP_RZ+1)
+
+                (JSR $0100)
+                (JSR DEC_REFCNT_M1_SLOT_RZ_N)))
+
+  (inform-check-equal?
+   (cpu-state-clock-cycles (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs 1))
+    128               ;; cucles
+    "freeing a cell-array with 1 nil takes n cycles")
+
+  (inform-check-equal?
+   (cpu-state-clock-cycles (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs 10))
+    283               ;; cucles
+    "freeing a cell-array with 10 nils takes n cycles")
+
+  (check-equal?
+   (list
+         (memory-list (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs 1) (+ 2 PAGE_AVAIL_0_W))
+         (memory-list (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs 1) ZP_INC_COLLECTIBLE_LIST)
+         (memory-list (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs 1) (+ #xfe PAGE_AVAIL_0_W) (+ #xff PAGE_AVAIL_0_W)))
+   (list (list #x1a)       ;; next free slot points to 1a
+         (list 0)          ;; no collectible was registered (still empty)
+         (list #x02 #x00))  ;; first free slot on page is $02 (again), next page is $00
+   "dec refcnt of a ptr to a cell-array with just atomic cells (or nil-s) will free it immediately")
+
+
+  (define dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-one-cell-ptrs
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code (append test-runtime
+                            ALLOC_M1_SLOT_TO_RA_N
+                            INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
+                            FREE_M1_SLOT_FROM_RZ_N
+                            INC_REFCNT_M1_SLOT_RA_N
+                            DEC_REFCNT_M1_SLOT_RZ_N)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+
+                (LDA !20)
+                (JSR ALLOC_M1_SLOT_TO_RA_N)
+                (LDA ZP_RA)
+                (STA ZP_RZ)
+                (LDA ZP_RA+1)
+                (STA ZP_RZ+1)
+
+                (LDA !20)
+                (JSR ALLOC_M1_SLOT_TO_RA_N)
+
+                (LDY !$01)
+                (LDA !$02) ;; 00xx xxxx is a cell array! with xx xxxx = 2 cells
+                (STA (ZP_RA),y) ;; set type
+
+                ;; set cell-array to hold only nil ptrs
+                (ASL A)
+                (TAY)
+                (INY)
+                (LDA !$00)      ;; nil
+         (label init_loop_nils)
+                (STA (ZP_RA),y)
+                (DEY)
+                (CPY !$01)
+                (BNE init_loop_nils)
+
+                ;; set second cell in cell-array to point to the previously allocated (@02)
+                (LDY !$04)
+                (LDA ZP_RZ)
+                (STA (ZP_RA),y)
+                (INY)
+                (LDA ZP_RZ+1)
+                (STA (ZP_RA),y)
+
+                (LDA ZP_RA)
+                (STA ZP_RZ)
+                (LDA ZP_RA+1)
+                (STA ZP_RZ+1)
+
+                (JSR $0100)
+                (JSR DEC_REFCNT_M1_SLOT_RZ_N)))
+
+  (check-equal?
+   (list
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-one-cell-ptrs (+ #x1a PAGE_AVAIL_0_W))
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-one-cell-ptrs ZP_INC_COLLECTIBLE_LIST)
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-one-cell-ptrs (+ #xfe PAGE_AVAIL_0_W) (+ #xff PAGE_AVAIL_0_W)))
+   (list (list #x32)       ;; next free slot points to $32
+         (list 0)          ;; no collectible was registered (still empty)
+         (list #x02 #x00))  ;; first free slot on page is $1a (again), next page is $00
+   "dec refcnt of a ptr to a cell-array with just one ptr in second position, will free immediately")
+
+(define dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code (append test-runtime
+                            ALLOC_M1_SLOT_TO_RA_N
+                            INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
+                            FREE_M1_SLOT_FROM_RZ_N
+                            INC_REFCNT_M1_SLOT_RA_N
+                            DEC_REFCNT_M1_SLOT_RZ_N)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+
+                (LDA !20)
+                (JSR ALLOC_M1_SLOT_TO_RA_N)
+                (LDA ZP_RA)
+                (STA ZP_RZ)
+                (LDA ZP_RA+1)
+                (STA ZP_RZ+1)
+
+                (LDA !20)
+                (JSR ALLOC_M1_SLOT_TO_RA_N)
+
+                (LDY !$01)
+                (LDA !$01) ;; 00xx xxxx is a cell array! with xx xxxx = 1 cell
+                (STA (ZP_RA),y) ;; set type
+
+                ;; set first cell in cell-array to point to the previously allocated (@02)
+                (LDY !$02)
+                (LDA ZP_RZ)
+                (STA (ZP_RA),y)
+                (INY)
+                (LDA ZP_RZ+1)
+                (STA (ZP_RA),y)
+
+                (LDA ZP_RA)
+                (STA ZP_RZ)
+                (LDA ZP_RA+1)
+                (STA ZP_RZ+1)
+
+                (JSR $0100)
+                (JSR DEC_REFCNT_M1_SLOT_RZ_N)))
+
+  (check-equal?
+   (list
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr (+ #x1a PAGE_AVAIL_0_W) (+ #x1d PAGE_AVAIL_0_W))
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr ZP_INC_COLLECTIBLE_LIST (+ 1 ZP_INC_COLLECTIBLE_LIST))
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr (+ #xfe PAGE_AVAIL_0_W) (+ #xff PAGE_AVAIL_0_W))
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr (+ #x02 PAGE_AVAIL_0_W)))
+   (list (list #x00 #x01 #x00 #x00)   ;; refcount=0, to scan = 1, collectible next = 00 00 (since tail)
+         (list #x1a #xcf)   ;; this cell-array is the head of the collectibles
+         (list #x02 #x00)   ;; first free slot on page is $02 freed, $1a stiil in use, next page is $00
+         (list #x32))       ;; slot 02 points to next free $32
+   "dec refcnt of a ptr to a cell-array with just one ptr in first position, will not free but enqueue")
+
+(define dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr-inc-collect
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code (append test-runtime
+                            ALLOC_M1_SLOT_TO_RA_N
+                            INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
+                            FREE_M1_SLOT_FROM_RZ_N
+                            INC_REFCNT_M1_SLOT_RA_N
+                            DEC_REFCNT_M1_SLOT_RZ_N)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+
+                (LDA !20)
+                (JSR ALLOC_M1_SLOT_TO_RA_N)
+                (LDA ZP_RA)
+                (STA ZP_RZ)
+                (LDA ZP_RA+1)
+                (STA ZP_RZ+1)
+
+                (LDA !20)
+                (JSR ALLOC_M1_SLOT_TO_RA_N)
+
+                (LDY !$01)
+                (LDA !$01) ;; 00xx xxxx is a cell array! with xx xxxx = 1 cell
+                (STA (ZP_RA),y) ;; set type
+
+                ;; set first cell in cell-array to point to the previously allocated (@02)
+                (LDY !$02)
+                (LDA ZP_RZ)
+                (STA (ZP_RA),y)
+                (INY)
+                (LDA ZP_RZ+1)
+                (STA (ZP_RA),y)
+
+                (LDA ZP_RA)
+                (STA ZP_RZ)
+                (LDA ZP_RA+1)
+                (STA ZP_RZ+1)
+
+                (JSR $0100)
+                (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+
+                (LDA ZP_INC_COLLECTIBLE_LIST)
+                (STA ZP_RZ)
+                (LDA ZP_INC_COLLECTIBLE_LIST+1)
+                (STA ZP_RZ+1)
+
+                (JSR INC_GC_M1_SLOT_RZ_CELL_ARRAY_N)))
+
+(check-equal?
+   (list
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr-inc-collect (+ #x1a PAGE_AVAIL_0_W) )
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr-inc-collect ZP_INC_COLLECTIBLE_LIST (+ 1 ZP_INC_COLLECTIBLE_LIST))
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr-inc-collect (+ #xfe PAGE_AVAIL_0_W) (+ #xff PAGE_AVAIL_0_W))
+    (memory-list dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr-inc-collect (+ #x02 PAGE_AVAIL_0_W)))
+   (list (list #x02)   ;; next free slot is $02
+         (list #x00 #x00)   ;; collectibles is empty again
+         (list #x1a #x00)   ;; first free slot on page is $1a, next page is $00
+         (list #x32))       ;; slot 02 points to next free $32
+   "dec refcnt of a ptr to a cell-array with just one ptr in first position, will not free but enqueue")
 
   (skip (check-equal? #f #t "dec refcnt of a ptr to a cell-array with more than one ptr, will not free but enqueue"))
 
@@ -1578,5 +1807,5 @@
                      FREE_M1_SLOT_FROM_RZ_N
                      INC_REFCNT_M1_SLOT_RA_N
                      DEC_REFCNT_M1_SLOT_RZ_N))
-   503
+   507
    "the whole module taks about n bytes"))
