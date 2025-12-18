@@ -32,12 +32,12 @@
   rc = LDA (ZP_RZ),0
 - slot type identification
   st = LDA (ZP_RT),1
-  - slot type cell-pair
-    0000 0000
+  - slot type cell-pair ? it is actually a cell-array (implemented as such)
+    0000 0002
   - slot type open
-    001x xxxx 32 type reserved
+    011x xxxx 32 type reserved
   - slot type cell-array size 1..41
-    01xx xxxx 0..63 <- lots of values not used (reserved?)
+    00xx xxxx 0..63 <- lots of values not used (reserved?)
   - slot type native-array size 1..81
     1xxx xxxx 0..127 <- lots of values not used (reserved?)
 - cell access
@@ -96,7 +96,7 @@ use new pointer tagging scheme :        examples (low, then high byte):
     but with big saving on runtime complexity and code
   - int now ends on 11 to allow for easy arithmetic functions
   - byte has other tag
-  - bcds cell  (new, optional)
+  - bcds cell (new, optional)
   - symbol (new, option)
 #+begin_src asm
   ;; check for pointer

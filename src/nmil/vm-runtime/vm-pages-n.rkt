@@ -1,5 +1,13 @@
 #lang racket
 
+(provide
+ VM_INITIALIZE_PAGE_MEMORY_MANAGER_N     ;; initialize page memory management (must be called before first allocation)
+ VM_ALLOCATE_NEW_PAGE_N                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
+ VM_DEALLOCATE_PAGE_N                    ;; return a page to the free list (actually push)
+
+ vm-pages-code
+)
+
 #|
 
   define all functions, data and constants for generic page level management
@@ -27,17 +35,12 @@
   | 0010 xxxx | m1 page with profile xxxx
 
 
-|#
-
-(provide
- VM_INITIALIZE_PAGE_MEMORY_MANAGER_N     ;; initialize page memory management (must be called before first allocation)
- VM_ALLOCATE_NEW_PAGE_N                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
- VM_DEALLOCATE_PAGE_N                    ;; return a page to the free list (actually push)
-)
+ |#
 
 (require "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function-wol
+                  define-vm-function)
          (only-in "./vm-memory-map.rkt"
                   ZP_PAGE_REG
                   ZP_PAGE_FREE_LIST
@@ -49,6 +52,7 @@
 
 (module+ test
   (require  "../../6510-test-utils.rkt"
+            (only-in "../../ast/6510-relocator.rkt" code-len)
             (only-in "../../tools/6510-interpreter.rkt"
                      peek
                      memory-list
@@ -63,20 +67,6 @@
      VM_DEALLOCATE_PAGE_N
      (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS))))
   )
-
-;; syntactic sugar to define a vm function, without label at start of impl.
-(define-syntax-rule (define-vm-function-wo-label name code-list)
-  (define name
-    (add-label-suffix
-     "__" (string-append "__" (symbol->string (quote name)))
-     code-list) ))
-
-;; syntactic sugar to define a vm function
-(define-syntax-rule (define-vm-function name code-list)
-  (define-vm-function-wo-label name
-    (append
-      (list (label name))
-      code-list)))
 
 ;; pop a page off the free list (if available, else out of memory error)
 ;;
@@ -206,7 +196,7 @@
 ;; ONCE THE PROGRAM IS TERMINATED. IN CASE OF ADDITIONAL PROGRAM LOADS, THIS
 ;; - MAY STILL HAVE ITS USES THOUGH
 ;; - MORE REGIONS ARE POSSIBLE, THOUGH
-(define-vm-function-wo-label
+(define-vm-function-wol
   VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
   (list
    (label VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
@@ -329,3 +319,13 @@
   (check-equal? (peek vm-initialize-page-memory-manager-01 #x21ff)
                 #x00
                 "next free page after $20 is $00, that is, there is no free list after $20"))
+
+(define vm-pages-code
+  (append
+   VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
+   VM_ALLOCATE_NEW_PAGE_N
+   VM_DEALLOCATE_PAGE_N))
+
+(module+ test #| module code len |#
+  (inform-check-equal? (code-len vm-pages-code)
+                       106))

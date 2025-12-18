@@ -1,5 +1,19 @@
 #lang racket/base
 
+(provide
+ INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N    ;; initialize m1 page (page = RZ+1) of profile x, returning first free slot in A/X
+ ALLOC_M1_SLOT_TO_RA_N                  ;; allocate an m1 slot of size A into RA
+ ALLOC_M1_P0_SLOT_TO_RA_N               ;; allocate an m1 slot profile 0 (of size 4) into RA
+ ALLOC_M1_PX_SLOT_TO_RA_N               ;; allocate an m1 slot profile X into RA
+ ALLOC_M1_SLOT_TO_RT_N                  ;; allocate an m1 slot of size A into RT
+
+ vm-m1-slot-code                        ;; complete list of code of this module
+
+ ;; derived code sequnces
+ ALLOC_M1_P0_SLOT_TO_RT_N
+ ALLOC_M1_P0_SLOT_TO_RA_N
+ )
+
 #|
 
   functions for m1 pages and slots
@@ -20,6 +34,10 @@
   | | 42      | 40      | 6             | 20            | 0     |
   |*| 50      | 48      | 5             | 24            | 2     |
   | | 84      | 82      | 3             | 41            | 0     |
+
+  - selected profiles;  6 8 12 24 36 50
+  - alternative option: 6 8 12 18 28 42
+  - alternative option: 6 8 12 18 24 36 50
 
   page layout
   | offset | content
@@ -284,10 +302,6 @@
                   VM_MEMORY_MANAGEMENT_CONSTANTS)
          (only-in "./vm-register-functions.rkt"
                   CP_RA_TO_RZ))
-
-(provide INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N    ;; initialize m1 page (page = RZ+1) of profile x, returning first free slot in A/X
-         ALLOC_M1_SLOT_TO_RA_N                  ;; allocate an m1 slot
-         )
 
 (module+ test
   (require (only-in racket/list
@@ -604,6 +618,20 @@
    (list #x0e #x00)
    "next free slot is at @0e, next page of same profile is 0"))
 
+(define ALLOC_M1_SLOT_TO_RT_N
+  (list
+   (label ALLOC_M1_SLOT_TO_RT_N)
+          ;; maybe keep RA if not empty!
+          (JSR ALLOC_M1_SLOT_TO_RA_N)
+          (JMP CP_RA_TO_RT)))
+
+(define ALLOC_M1_P0_SLOT_TO_RT_N
+  (list
+   (label ALLOC_M1_P0_SLOT_TO_RT_N)
+          ;; maybe keep RA if not empty!
+          (JSR ALLOC_M1_P0_SLOT_TO_RA_N)
+          (JMP CP_RA_TO_RT)))
+
 ;; allocate an m1 slot
 ;;
 ;; reuse pages marked as available (ZP_PAGE_FREE_SLOTS_LIST,x)
@@ -611,8 +639,9 @@
 ;; else allocate an unused page (ZP_PAGE_FREE_LIST)
 ;; else use a free page of a different profile (ZP_PROFILE_PAGE_FREE_LIST,?)
 ;;
-;; input:   A = size of slot
+;; input:   A = size of payload wanted
 ;; output:  RA = ptr to M1 SLOT (points to RC field)
+;;          x = profile used
 ;;
 ;; variant: ALLOC_M1_P0_SLOT_TO_RA_N
 ;; input:   none
@@ -621,6 +650,8 @@
 ;; variant: ALLOC_M1_PX_SLOT_TO_RA_N
 ;; input:   x = profile (0..5)
 ;; output:  RA = ptr to M1 SLOT of profile x
+(define ALLOC_M1_PX_SLOT_TO_RA_N #t)
+(define ALLOC_M1_P0_SLOT_TO_RA_N #t)
 (define ALLOC_M1_SLOT_TO_RA_N
   (add-label-suffix
    "__" "__ALLOC_M1_SLOT_TO_RA_N"
@@ -630,7 +661,7 @@
            (BPL find_profile_for_slots_size5_plus__)  ;; >= 5, branch
 
     (label ALLOC_M1_P0_SLOT_TO_RA_N) ;; e.g. used for fast cell-pairs allocation
-           (LDX !$00)      ;; profile 0 = 6 cycles
+           (LDX !$00)      ;; profile 0
            (STX ZP_RA)     ;; clear RA offset
 
     (label ALLOC_M1_PX_SLOT_TO_RA_N)
@@ -1901,14 +1932,19 @@
 
 (module+ test #| gc_all_arrays |#)
 
+(define vm-m1-slot-code
+  (append ALLOC_M1_SLOT_TO_RA_N
+          ALLOC_M1_SLOT_TO_RT_N
+          ALLOC_M1_P0_SLOT_TO_RT_N
+          INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
+          FREE_M1_SLOT_FROM_RZ_N
+          INC_REFCNT_M1_SLOT_RA_N
+          DEC_REFCNT_M1_SLOT_RZ_N
+          INC_GC_ARRAYS
+          GC_ALL_ARRAYS))
+
 (module+ test #| code len of module |#
   (inform-check-equal?
-   (code-len (append ALLOC_M1_SLOT_TO_RA_N
-                     INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
-                     FREE_M1_SLOT_FROM_RZ_N
-                     INC_REFCNT_M1_SLOT_RA_N
-                     DEC_REFCNT_M1_SLOT_RZ_N
-                     INC_GC_ARRAYS
-                     GC_ALL_ARRAYS))
-   537
+   (code-len vm-m1-slot-code)
+   549
    "the whole module taks about n bytes"))

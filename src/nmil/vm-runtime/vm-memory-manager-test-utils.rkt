@@ -1,10 +1,20 @@
 #lang racket/base
 
+(provide
+ run-code-in-test-on-code
+ remove-labels-for
+ wrap-code-for-test
+ list-with-label-suffix
+ calls-to-mock
+ compact-run-code-in-test-
+ fill-page-with                 ;; 6510 assembler to fill the given page with this byte
+ TEST_COUNTERS)
+
 #|
 
-provide routines that are useful for testing memory management routines
+ provide routines that are useful for testing memory management routines
 
-|#
+ |#
 
 (require (only-in racket/list
                   empty?
@@ -39,13 +49,19 @@ provide routines that are useful for testing memory management routines
                   run-interpreter-on
                   memory-list))
 
-(provide run-code-in-test-on-code
-         remove-labels-for
-         wrap-code-for-test
-         list-with-label-suffix
-         calls-to-mock
-         compact-run-code-in-test-
-         TEST_COUNTERS)
+;; 6510 assembler to fill the given page with this byte, skip 00-01 and fe-ff (which should be initialized)
+(define (fill-page-with page byte)
+  (define loop-label (string-replace (uuid-string) "-" "_"))
+  (list
+     ;; fill page with $xx
+         (ast-opcode-cmd '() `(169 ,byte));;(LDA !$FF)
+         (LDX !$fe)
+     (ast-label-def-cmd '() loop-label);; (label LOOP__TEST_ALLOC_M1_04_CODE)
+         (DEX)
+         (ast-opcode-cmd '() `(157 0 ,page));;(STA $cf00,x)
+         (CPX !$01)
+         (ast-unresolved-rel-opcode-cmd '() '(208) (ast-resolve-byte-scmd loop-label 'relative)) ;; (BNE LOOP__TEST_ALLOC_M1_04_CODE)
+     ))
 
 (define (remove-labels-for code labels-to-remove (result (list)))
   (cond
@@ -136,7 +152,7 @@ provide routines that are useful for testing memory management routines
 (define (compact-run-code-in-test- #:runtime-code (vm-memory-manager (list)) #:debug (debug #f) #:mock (mocked-labels (list)) #:init-label (init-label "VM_INITIALIZE_MEMORY_MANAGER") . cmds)
     (run-code-in-test
      (apply list-with-label-suffix
-            cmds
+            (flatten cmds)
             #:mock mocked-labels)
      debug
      #:runtime-code vm-memory-manager

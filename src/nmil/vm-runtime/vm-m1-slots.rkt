@@ -1,5 +1,19 @@
 #lang racket/base
 
+(provide INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX       ;; initialize m1 page in x of profile y, returning first free slot in A/X
+         INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N    ;; initialize m1 page (page = RZ+1) of profile x, returning first free slot in A/X
+         DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A   ;; remove all full pages at the head of m1 page list a
+         PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ         ;; put the page of m1 slot in rz as head to the m1 page list
+         ADD_M1_SLOT_RZ_TO_PFL                  ;; add the given m1 slot in rz to the page free list (slot must not contain any data that needs gc)
+         ALLOC_M1_SLOT_TO_RA                    ;; allocate a m1 slot into ra (size wanted in a)
+         ALLOC_M1_SLOT_TO_RB                    ;; allocate a m1 slot into rb (size wanted in a)
+         FREE_M1_SLOT_RA                        ;; free the m1 slot reference in RA (must not contain any data that need gc)
+         FREE_M1_SLOT_RZ                        ;; free the m1 slot reference in RZ (must not contain any data that need gc)
+         VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS      ;; remove full pages for the list of m1 slot page
+         VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS   ;; enqueue the page of m1 slot RA as head of the list of m1 slot pages
+         INC_REFCNT_M1_SLOT_RA                  ;; increment reference count of m1 slot pointer in RA
+         VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)  ;; remove full pages from the list of m1 slot pages of type x
+
 #|
 
   functions for m1 pages and slots
@@ -248,8 +262,7 @@
       BMI BLOCK_TOO_LARGE_ERROR ;; 19 cycles
       ;; profile 5         18 cycles
 
-|#
-
+ |#
 
 (require "../../6510.rkt"
          (only-in "../../ast/6510-resolver.rkt"
@@ -263,20 +276,6 @@
                   ZP_TEMP
                   ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-
-(provide INIT_M1Px_PAGE_X_PROFILE_Y_TO_AX       ;; initialize m1 page in x of profile y, returning first free slot in A/X
-         INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N    ;; initialize m1 page (page = RZ+1) of profile x, returning first free slot in A/X
-         DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A   ;; remove all full pages at the head of m1 page list a
-         PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ         ;; put the page of m1 slot in rz as head to the m1 page list
-         ADD_M1_SLOT_RZ_TO_PFL                  ;; add the given m1 slot in rz to the page free list (slot must not contain any data that needs gc)
-         ALLOC_M1_SLOT_TO_RA                    ;; allocate a m1 slot into ra (size wanted in a)
-         ALLOC_M1_SLOT_TO_RB                    ;; allocate a m1 slot into rb (size wanted in a)
-         FREE_M1_SLOT_RA                        ;; free the m1 slot reference in RA (must not contain any data that need gc)
-         FREE_M1_SLOT_RZ                        ;; free the m1 slot reference in RZ (must not contain any data that need gc)
-         VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS      ;; remove full pages for the list of m1 slot page
-         VM_ENQUEUE_PAGE_AS_HEAD_FOR_RA_SLOTS   ;; enqueue the page of m1 slot RA as head of the list of m1 slot pages
-         INC_REFCNT_M1_SLOT_RA                  ;; increment reference count of m1 slot pointer in RA
-         VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS)  ;; remove full pages from the list of m1 slot pages of type x
 
 (module+ test
   (require "../../6510-test-utils.rkt"
@@ -422,11 +421,11 @@
           (byte $05) ;; first ref count is 05, add 32 to get to next slot, slot-size $31 (49), page contains 5 slots
           (byte $03) ;; first ref count is 03, add 54 to get to next slot, slot-size $53 (83), page contains 3 slots
    (label TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE)
-          (byte $0a) ;; add 0a to get to next slot, slot-size $09 (09), page contains 25 slots
-          (byte $12) ;; add 12 to get to next slot, slot size $11 (17), page contains 14 slots
-          (byte $1e) ;; add 1e to get to next slot, slot size $1d (29), page contains 8 slots
-          (byte $32) ;; add 32 to get to next slot, slot-size $31 (49), page contains 5 slots
-          (byte $54) ;; add 54 to get to next slot, slot-size $53 (83), page contains 3 slots
+          (byte $0a) ;; add 0a to get to next slot, slot-payload-size $09 (09), page contains 25 slots
+          (byte $12) ;; add 12 to get to next slot, slot payload-size $11 (17), page contains 14 slots
+          (byte $1e) ;; add 1e to get to next slot, slot payload-size $1d (29), page contains 8 slots
+          (byte $32) ;; add 32 to get to next slot, slot-payload-size $31 (49), page contains 5 slots
+          (byte $54) ;; add 54 to get to next slot, slot-payload-size $53 (83), page contains 3 slots
           )))
 
 (module+ test #| vm_alloc_m1_page |#
@@ -919,8 +918,8 @@
 ;; allocate a slot of min A size, allocating a new page if necessary
 ;; input:  A = size
 ;; usage:  A, X, Y, RA, GLOBAL_M1_PX_PAGE_FOR_ALLOC
-;; output: RA = available slot of the given size (or a bit more)
-;;         Y = actual size
+;; output: RA = ptr to allocated slot of the given size (or a bit more)
+;;         Y = actual size (including gc, 6 for payload 4, 10 for payload 5)
 ;;         GLOBAL_M1_PX_PAGE_FOR_ALLOC
 ;; funcs:
 ;;   VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS
@@ -962,7 +961,7 @@
           ;; ensure y holds the actual available slot size
           (LDX PAGE_TYPE_IDX__)
           (LDY TABLE__INC_TO_NEXT_SLOT_M1Px_PAGE,x)
-          (DEY)
+          ;; (DEY)
 
    (label INC_CMD__)
           (INC $c002) ;; $c0 is overwritten with current page (increases the number of slots actually used)
