@@ -1813,6 +1813,133 @@ each cell can be either a cell pointer or a call value (never cell header)
 - Rx :: register
   - refcount-dec/inc :: refcount slot pointed to by register
   - clear :: mark as empty
+* swapping paging memory ideas
+FINAL: swapping pages can be implemented in addition to the current memory usage scheme (optional and later)
+- swap in/out pages
+- have fast heap access on non swapped pages
+- problem: pointers are only 16 bit, additional byte needed for page addressing
+- idea: define a memory region w/i which swapping is done
+  pointers w/i swappable region are 24 bit
+  pointers into swappable region are 24 bit too, but are kept separately (and should be rare)
+  access via pointer on swappable region needs to make sure memory is swapped accordingly
+  llll llll hhhh hhhh pppp xxxx
+  how is the pointer translated for access?
+  things to store in swapped pages?:
+  - cell-arrays
+  - native-arrays
+  - atomic cells
+  - text pages <- strings
+  - binary data pages <- e.g. sprite data, music data ...
+  - slot
+- idea: just store lobs into swapable pages and have a descriptor in non swapable (regular) pages!
+  get access to a lob:
+  - w/i lob: only inner page references may be given => no reference to other pages
+  - pages for swapping must be managed:
+    which pages will be used for swapping? do they need to be in continuous space?
+    implement LRU mechanism to swap in/out pages?
+    make number of swapped in and out pages a runtime decision
+    necessary functions:
+    - inc if used
+    - swap in @ (different location)
+    - swap out to (24 bit address = 16 Megabyte, 20 bit address = 1 Megabyte)
+    - translate virtual-address -> physical address (window of physical address is limited => not too large)
+  - reference to lob only via descriptor object
+    is there need for special byte code (to keep speed of regular pages?)
+    e.g. use 2 byte byte code for accessing lobs?
+  - !!!no garbage collection on lobs. must be manually allocated/freed!!!
+  - lob: mutable:
+    cell-array of atomic cells (no lists!)
+    native-array (basically really a lob)
+    text page
+    binary data page
+  - lob: constants (without references out)
+    special constant list with inner page references only (e.g. like serialized data)
+    special CCAR (for compact car, but working on regular lists, too?)
+            compact constant list format
+    make mutable by allocating into regular heap
+- idea: use regular cell-pair (2+4byte) as a lob descriptor to point to a serialized list (in swapped page)
+- idea: swap in of cell-arrays by copying
+- most recent idea: allocate swappable cell-arrays
+  - allocates cell-array in swappable space
+  - allocates descriptor in regular space
+  - keep reference count on descriptor
+  - access on descriptor will swap in cell-array
+  - descriptor holds all information necessary for swap-in
+  - array access on descriptor is translated to array access on swapped in array
+  - descriptor layout:
+    | offset | content                                                  |
+    |--------+----------------------------------------------------------|
+    |      0 | refcount                                                 |
+    |      1 | descriptor type                                          |
+    |    2-3 | virtual page                                             |
+    |      4 | shared offset                                            |
+    |      5 | physical page = 0 (if currently swapped out)             |
+    |    ... | depending on descriptor type, additional data may follow |
+    descriptor type:
+    - swappable cell-array
+    - serialized list           (e.g. deserialize into heap memory)
+    - swappable native array    (swap in makes it directly accessible until swapped out)
+    - ... additional descriptor types may include information about multiple pages
+    swap of native array
+      same as for cell-array, but: allow dereference to physical array and access directly w/o additional redirect
+      swap out: -
+    swap of serialized list:
+      swap in: make virtual page accessible, deserialize into heap
+      swap out: (only one reference for all but the head), serialize into swap space, replace head with descriptor, free the rest
+    swap of cell-array
+      swapping in means:
+      - use (up to) 16 bit virtual page to find out which page to copy from (e.g. REU)
+      - determine and write page to which it is swapped in into @5 physical page
+      - access via hb:physical-page lb:shared-offset
+      swapping out means:
+      - set virtual page to page it is swapped out to
+      - clear physical page
+  - find out whether a virtual page is (already) swapped in and where
+    fn: virtual page (16-bit) -> physical page (8-bit)
+    since space for swapped in pages may vary, this is held in an array of 4 byte entries
+    [lru-indicator][physical-page][lb virtual page][hb virtual page]
+    this list is then scanned linearly to find the right entry, non populated lists have physical-page=0
+    lru is decremented regularly (e.g. every 100 byte codes), and incremented on access
+  - alloc/find a virtual page with appropriate space
+  - free space on virtual page
+  - in what chunks should virtual space be allocated (memory management similar to regular heap management in non swapped memory)
+  - thought experiment: use same method for allocation as done by regular heap memory
+    - allocate: keep head of page-list with free objects (per object type)
+      if head does no longer have free slots, it has to be queried to find the next in list, which might not be swapped in => swap in necessary
+      if the list would be kept in regular memory, no swapping would be necessary to walk the list -- but, additional main memory is needed
+    - free: add the page freed from to the head of the list. no swapping necessary
+  - use only larger slot sizes for swappable pages (since each slot has a descriptor in regular memory!)
+    6 byte descriptor allocated on main memory * 8 minimum slot size => 50 byte min slot size
+    50, 84, 126: m1 slots, 50, 84 available for cell-array, 126 available for native array
+    252: single lob page
+  - maybe use a descriptor for multipage lobs (e.g. continuous 4k)
+  - idea: get (continuous) pages for user management (managed manually by user)
+  - use cases:
+    swap in pages with sprite data (x-times 23 byte)
+    swap in pages with graphics data (8k)
+    swap in pages with sound data sid (x k)
+    swap in pages with user data (e.g. read floppy sectors)
+    swap in pages with text data (e.g. other editor file)
+
+  - ideas for byte codes handling larger data:
+    SWAP-IN :: rt points to descriptor
+               -> all pages are swapped in, rt = byte = physical page (swapped in (1st) page)
+                  descriptor is adjusted to indicate that swap in took place (if [partially] swapped out, descriptor is adjusted)
+                  any assembler code running hereafter may use this info to work on that memory
+    COPY-PAGE-TO-PAGE :: copy one physical page to the other (stack contains two bytes) (e.g. into graphics memory, in charset memory ...) or let reu do the copying!
+    COPY-MEMORY :: copy a memory region to another region (partially copy or multipage copy)
+    SWAP-OUT :: rt = byte = physical page -> adjust descriptor accordingly
+    PIN :: pin the given page (cannot be swapped out), e.g. limit to the half number of swappable pages
+
+    PUSH_CARR_AT :: push from complex array (which might be a swappable array)
+    POP_TO_CARR_AT :: pop into complex array (which might be a swappable array)
+    READ_FROM_CARR_AT :: tos = data read from complex array
+    WRITE_TO_CARR_AT :: ...
+    ...
+- idea: use memory structures that work in block/swap related environments
+  - Cache-oblivous B-trees :: https://erikdemaine.org/papers/CacheObliviousBTrees_SICOMP/paper.pdf
+  - Concurrent CO-B-trees :: https://groups.csail.mit.edu/tds/papers/Gilbert/SPAA05.pdf
+  - Packed-memory arrays & funnels :: https://www.ittc.ku.edu/~jsv/Papers/Vit.IO_book.pdf
 * memory allocation/deallocation
 ** free-lists
 *** cell-array free list (for reusage)
