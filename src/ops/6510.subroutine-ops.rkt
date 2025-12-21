@@ -22,20 +22,20 @@
    (indirect . #x6c)))
 
 (module+ test #| JMP |#
-  (check-equal? (JMP $FFD2)
-                (ast-opcode-cmd '() '(#x4c #xd2 #xff)))
-  (check-equal? (JMP some)
-                (ast-unresolved-opcode-cmd '() '(#x4c) (ast-resolve-word-scmd "some")))
-  (check-equal? (JMP ($FFD2))
-                (ast-opcode-cmd '() '(#x6c #xd2 #xff)))
-  (check-equal? (JMP (some))
-                (ast-unresolved-opcode-cmd '() '(#x6c) (ast-resolve-word-scmd "some"))))
+  (check-match (JMP $FFD2)
+                (ast-opcode-cmd _ '(#x4c #xd2 #xff)))
+  (check-match (JMP some)
+                (ast-unresolved-opcode-cmd _ '(#x4c) (ast-resolve-word-scmd "some")))
+  (check-match (JMP ($FFD2))
+                (ast-opcode-cmd _ '(#x6c #xd2 #xff)))
+  (check-match (JMP (some))
+                (ast-unresolved-opcode-cmd _ '(#x6c) (ast-resolve-word-scmd "some"))))
 
 (define-opcode JSR ((absolute . #x20)))
 
 (module+ test #| JSR |#
-  (check-equal? (JSR $FFD2)
-                (ast-opcode-cmd '() '(#x20 #xd2 #xff))))
+  (check-match (JSR $FFD2)
+                (ast-opcode-cmd _ '(#x20 #xd2 #xff))))
 
 (define-opcode RTI ((implicit . #x40)))
 

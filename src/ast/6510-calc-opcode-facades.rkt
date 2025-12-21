@@ -13,7 +13,6 @@
 (module+ test #| setup |#
   (require "../6510-test-utils.rkt"))
 
-
 (define/contract (-pass-expression command-symbol expression)
   (-> symbol? any/c ast-command?)
   (with-syntax ((e expression)
@@ -26,40 +25,40 @@
     (eval-syntax #'(label e))))
 
 (module+ test #| label-def |#
-  (check-equal? (label-def 'some)
-                (label some)))
+  (check-equal? (drop-meta-info (label-def 'some))
+                (drop-meta-info (label some))))
 
 (define/contract (BNE-relative target)
   (-> symbol? ast-command?)
   (-pass-expression 'BNE target))
 
 (module+ test #| BNE-relative |#
-  (check-equal? (BNE-relative 'some)
-                (BNE some)))
+  (check-equal? (drop-meta-info (BNE-relative 'some))
+                (drop-meta-info (BNE some))))
 
 (define/contract (CMP-immediate expr)
   (-> exact-nonnegative-integer? ast-opcode-cmd?)
   (-pass-expression 'CMP (string-append "!" (number->string expr))))
 
 (module+ test #| CMP-immediate |#
-  (check-equal? (CMP-immediate (+ 1 2))
-                (CMP !3)))
+  (check-equal? (drop-meta-info (CMP-immediate (+ 1 2)))
+                (drop-meta-info (CMP !3))))
 
 (define/contract (JMP-absolute target)
   (-> symbol? ast-command?)
   (-pass-expression 'JMP target))
 
 (module+ test #| JMP-absolute |#
-  (check-equal? (JMP-absolute 'some)
-                (JMP some)))
+  (check-equal? (drop-meta-info (JMP-absolute 'some))
+                (drop-meta-info (JMP some))))
 
 (define/contract (JSR-absolute target)
   (-> symbol? ast-opcode-cmd?)
   (-pass-expression 'JSR target))
 
 (module+ test #| JSR-absolute |#
-  (check-equal? (JSR-absolute (string->symbol "some"))
-                (JSR some)))
+  (check-equal? (drop-meta-info (JSR-absolute (string->symbol "some")))
+                (drop-meta-info (JSR some))))
 
 ;; (define-syntax (LDA-gen stx)
 ;;   (syntax-case stx ()
@@ -79,8 +78,8 @@
 
 (module+ test #| LDA-immediate |#
   (define locally-defined 2)
-  (check-equal? (LDA-immediate (+ 1 locally-defined))
-                (ast-opcode-cmd '() (list 169 3))))
+  (check-equal? (drop-meta-info (LDA-immediate (+ 1 locally-defined)))
+                (drop-meta-info (ast-opcode-cmd '() (list 169 3)))))
 
 (define/contract (LDX-immediate expr)
   (-> exact-nonnegative-integer? ast-opcode-cmd?)

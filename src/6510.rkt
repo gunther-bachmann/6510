@@ -24,6 +24,7 @@
 (require "ops/6510.stack-ops.rkt")
 (require (for-syntax "scheme-asm/6510-syntax-utils.rkt"))
 (require (only-in "util.rkt" format-hex-byte format-hex-word bytes->int))
+(require (only-in racket/list flatten))
 
 (provide (all-from-out "util.rkt"))
 (provide (all-from-out "6510-utils.rkt"))
@@ -45,6 +46,7 @@
 (provide org-align org label byte-ref word-ref word-const byte-const byte word asc provide-byte provide-word require-byte require-word) ;; meta commands
 
 (provide (all-from-out "scheme-asm/6510-addressing-utils.rkt"))
+(provide (all-from-out racket/list))
 
 (module+ test
   (require "6510-test-utils.rkt"))

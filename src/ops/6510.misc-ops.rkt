@@ -24,7 +24,7 @@
 (define-opcode BRK ((implicit . #x00)))
 
 (module+ test #| BRK |#
-  (check-equal?  (BRK)
-                 (ast-opcode-cmd '() '(#x00))))
+  (check-match  (BRK)
+                (ast-opcode-cmd _ '(#x00))))
 
 (define-opcode NOP ((implicit . #xea)))

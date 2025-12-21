@@ -74,16 +74,16 @@
    ctx))
 
 (module+ test #| compile-bool |#
-  (check-equal? (let-values (((opcodes ctx) (compile-bool (mil-bool #t) (compile-ctx (list)))))
-                  opcodes)
-                (list
-                 (LDA !$FF)
-                 (JSR MILRT_PUSH_BOOL)))
-  (check-equal? (let-values (((opcodes ctx) (compile-bool (mil-bool #f) (compile-ctx (list)))))
-                  opcodes)
-                (list
-                 (LDA !$00)
-                 (JSR MILRT_PUSH_BOOL))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-bool (mil-bool #t) (compile-ctx (list)))))
+                                  opcodes))
+                (drop-meta-infos (list
+                                 (LDA !$FF)
+                                 (JSR MILRT_PUSH_BOOL))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-bool (mil-bool #f) (compile-ctx (list)))))
+                                  opcodes))
+                (drop-meta-infos (list
+                                 (LDA !$00)
+                                 (JSR MILRT_PUSH_BOOL)))))
 
 (define/contract (compile-uint8 expr ctx)
   (-> mil-uint8? compile-ctx? (values (listof ast-command?) compile-ctx?))
@@ -95,10 +95,10 @@
 
 (module+ test #| compile |#
 
-  (check-equal? (let-values (((opcodes ctx) (compile-uint8 (mil-uint8 #x18) (compile-ctx (list)))))
-                  opcodes)
-                (list (LDA !$18)
-                      (JSR MILRT_PUSH_UINT8))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-uint8 (mil-uint8 #x18) (compile-ctx (list)))))
+                                  opcodes))
+                (drop-meta-infos (list (LDA !$18)
+                                      (JSR MILRT_PUSH_UINT8)))))
 
 (define/contract (compile-string expr ctx)
   (-> mil-string? compile-ctx? (values (listof ast-command?) compile-ctx?))
@@ -111,10 +111,10 @@
                                  (list (mil-string-value expr)))])))
 
 (module+ test #| compile-string |#
-  (check-equal? (let-values (((opcodes ctx) (compile-string (mil-string "SOME") (compile-ctx (list)))))
-                  opcodes)
-                (list (LDA !0)
-                      (JSR MILRT_PUSH_STRING))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-string (mil-string "SOME") (compile-ctx (list)))))
+                                   opcodes))
+                (drop-meta-infos (list (LDA !0)
+                                      (JSR MILRT_PUSH_STRING)))))
 
 (define/contract (compile-list expr ctx)
   (-> mil-list? compile-ctx? (values (listof ast-command?) compile-ctx?))
@@ -130,46 +130,46 @@
                   opcodes)
                 (list))
 
-  (check-equal? (let-values (((opcodes ctx) (compile-list (mil-l (mil-symbol 'my_func)) (compile-ctx (list)))))
-                  opcodes)
-                (list (JSR FUN_my_func)))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-list (mil-l (mil-symbol 'my_func)) (compile-ctx (list)))))
+                                  opcodes))
+                (drop-meta-infos (list (JSR FUN_my_func))))
 
-  (check-equal? (let-values (((opcodes ctx)
-                              (compile-list (mil-l (mil-symbol 'my_func) (mil-uint8 #x20))
-                                            (compile-ctx (list)))))
-                  opcodes)
-                (list
-                 (LDA !$20)
-                 (JSR MILRT_PUSH_UINT8)
-                 (JSR FUN_my_func)))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx)
+                                              (compile-list (mil-l (mil-symbol 'my_func) (mil-uint8 #x20))
+                                                            (compile-ctx (list)))))
+                                  opcodes))
+                (drop-meta-infos (list
+                                 (LDA !$20)
+                                 (JSR MILRT_PUSH_UINT8)
+                                 (JSR FUN_my_func))))
 
-  (check-equal? (let-values (((opcodes ctx)
-                              (compile-list (mil-l (mil-symbol 'my_func)
-                                                   (mil-string "SOME")
-                                                   (mil-string "OTHER")
-                                                   (mil-uint8 #x20))
-                                            (compile-ctx (list)))))
-                  opcodes)
-                (list
-                 (LDA !$20)
-                 (JSR MILRT_PUSH_UINT8)
-                 (LDA !0)
-                 (JSR MILRT_PUSH_STRING)
-                 (LDA !1)
-                 (JSR MILRT_PUSH_STRING)
-                 (JSR FUN_my_func)))
-  (check-equal? (let-values (((opcodes ctx)
-                              (compile-list (mil-l (mil-symbol 'my_func)
-                                                   (mil-string "SOME")
-                                                   (mil-string "OTHER")
-                                                   (mil-uint8 #x20))
-                                            (compile-ctx (list)))))
-                  (gen-string-table ctx))
-                (list
-                 (label STRING-TABLE)
-                 (byte 5) (asc "REHTO")
-                 (byte 4) (asc "EMOS")
-                 (byte 0))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx)
+                                              (compile-list (mil-l (mil-symbol 'my_func)
+                                                                   (mil-string "SOME")
+                                                                   (mil-string "OTHER")
+                                                                   (mil-uint8 #x20))
+                                                            (compile-ctx (list)))))
+                                  opcodes))
+                (drop-meta-infos (list
+                                 (LDA !$20)
+                                 (JSR MILRT_PUSH_UINT8)
+                                 (LDA !0)
+                                 (JSR MILRT_PUSH_STRING)
+                                 (LDA !1)
+                                 (JSR MILRT_PUSH_STRING)
+                                 (JSR FUN_my_func))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx)
+                                              (compile-list (mil-l (mil-symbol 'my_func)
+                                                                   (mil-string "SOME")
+                                                                   (mil-string "OTHER")
+                                                                   (mil-uint8 #x20))
+                                                            (compile-ctx (list)))))
+                                  (gen-string-table ctx)))
+                (drop-meta-infos (list
+                                 (label STRING-TABLE)
+                                 (byte 5) (asc "REHTO")
+                                 (byte 4) (asc "EMOS")
+                                 (byte 0)))))
 
 ;; compile a list of mil-expressions (interspersed with list of opcodes), passing ctx to each next compile
 (define/contract (compile--elements elements ctx (opcodes (list)))
@@ -184,20 +184,20 @@
                (compile--elements (cdr elements) ctx (append opcodes element))))]))
 
 (module+ test #| compile--elements |#
-  (check-equal? (let-values (((opcodes ctx) (compile--elements (list (mil-uint8 15)
-                                                                     (list (JSR test))
-                                                                     (mil-bool #f)
-                                                                     (list (ADC !20))) (compile-ctx (list)))))
-                  opcodes)
-                (list (LDA !15)
-                      (JSR MILRT_PUSH_UINT8)
-                      (JSR test)
-                      (LDA !0)
-                      (JSR MILRT_PUSH_BOOL)
-                      (ADC !20))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile--elements (list (mil-uint8 15)
+                                                                                     (list (JSR test))
+                                                                                     (mil-bool #f)
+                                                                                     (list (ADC !20))) (compile-ctx (list)))))
+                                  opcodes))
+                (drop-meta-infos (list (LDA !15)
+                                      (JSR MILRT_PUSH_UINT8)
+                                      (JSR test)
+                                      (LDA !0)
+                                      (JSR MILRT_PUSH_BOOL)
+                                      (ADC !20)))))
 
 (define/contract (compile-if expr ctx (true_target (gensym "if_true")) (end_target (gensym "if_end")))
-  (->* (mil-if? compile-ctx?) (symbol? symbol?) (values (listof ast-command?) compile-ctx?))  
+  (->* [mil-if? compile-ctx?] [symbol? symbol?] (values (listof ast-command?) compile-ctx?))
   (compile--elements
    (list
     (mil-if-predicate expr)
@@ -214,24 +214,24 @@
    ctx))
 
 (module+ test #| compile-if |#
-  (check-equal? (let-values (((opcodes ctx) (compile-if (mil-if (mil-bool #f) (mil-string "SOME") (mil-string "OTHER")) (compile-ctx (list)) 'if_true 'if_end)))
-                  opcodes)
-                (list
-                 (LDA !0)
-                 (JSR MILRT_PUSH_BOOL)
-                 (JSR MILRT_POP_BOOL)
-                 (BNE if_true)
-                 (LDA !0)
-                 (JSR MILRT_PUSH_STRING)
-                 (JMP if_end)
-                 (label if_true)
-                 (LDA !1)
-                 (JSR MILRT_PUSH_STRING)
-                 (label if_end))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-if (mil-if (mil-bool #f) (mil-string "SOME") (mil-string "OTHER")) (compile-ctx (list)) 'if_true 'if_end)))
+                                  opcodes))
+                (drop-meta-infos (list
+                                 (LDA !0)
+                                 (JSR MILRT_PUSH_BOOL)
+                                 (JSR MILRT_POP_BOOL)
+                                 (BNE if_true)
+                                 (LDA !0)
+                                 (JSR MILRT_PUSH_STRING)
+                                 (JMP if_end)
+                                 (label if_true)
+                                 (LDA !1)
+                                 (JSR MILRT_PUSH_STRING)
+                                 (label if_end)))))
 
 ;; compile a list of mil-expressions (interspersed with list of opcodes), passing ctx to each next compile
 (define/contract (quote--elements elements ctx (opcodes (list)))
-  (->* ((listof (or/c mil-expression? (listof ast-command?))) compile-ctx?) ((listof ast-command?)) (values (listof ast-command?) compile-ctx?))
+  (->* [(listof (or/c mil-expression? (listof ast-command?))) compile-ctx?] [(listof ast-command?)] (values (listof ast-command?) compile-ctx?))
   (cond [(empty? elements)
          (values opcodes ctx)]
         [else
@@ -262,20 +262,20 @@
   (quote-expression quoted ctx))
 
 (module+ test #| compile-quote |#
-  (check-equal? (let-values (((opcodes ctx) (compile-quote (mil-quote (mil-l)) (compile-ctx (list)) )))
-                  opcodes)
-                (list
-                 (JSR MILRT_PUSH_LIST_END_MARKER)
-                 (JSR MILRT_PUSH_LIST_START_MARKER)))
-  (check-equal? (let-values (((opcodes ctx) (compile-quote (mil-quote (mil-l (mil-uint8 10) (mil-uint8 20))) (compile-ctx (list))) ))
-                  opcodes)
-                (list
-                 (JSR MILRT_PUSH_LIST_END_MARKER)
-                 (LDA !20)
-                 (JSR MILRT_PUSH_UINT8)
-                 (LDA !10)
-                 (JSR MILRT_PUSH_UINT8)
-                 (JSR MILRT_PUSH_LIST_START_MARKER))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-quote (mil-quote (mil-l)) (compile-ctx (list)) )))
+                                  opcodes))
+                (drop-meta-infos (list
+                                 (JSR MILRT_PUSH_LIST_END_MARKER)
+                                 (JSR MILRT_PUSH_LIST_START_MARKER))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-quote (mil-quote (mil-l (mil-uint8 10) (mil-uint8 20))) (compile-ctx (list))) ))
+                                  opcodes))
+                (drop-meta-infos (list
+                                 (JSR MILRT_PUSH_LIST_END_MARKER)
+                                 (LDA !20)
+                                 (JSR MILRT_PUSH_UINT8)
+                                 (LDA !10)
+                                 (JSR MILRT_PUSH_UINT8)
+                                 (JSR MILRT_PUSH_LIST_START_MARKER)))))
 
 (define/contract (compile-expression expr ctx)
   (-> mil-expression? compile-ctx? (values (listof ast-command?) compile-ctx?))  

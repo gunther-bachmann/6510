@@ -6,10 +6,19 @@
 (require rackunit) ;; TODO: remove from here to be able to use typed variant instead
 (require racket/path)
 
-(provide skip inform-check-equal? skip-module)
+(provide skip inform-check-equal? skip-module drop-meta-info drop-meta-infos)
 (provide (all-from-out rackunit))
 (provide (all-from-out racket/path))
 (provide (all-from-out ansi-color))
+
+(define (drop-meta-infos ast-commands)
+  (map drop-meta-info ast-commands))
+
+;; transform ast-command into a list and drop the meta-info part (useful for comparison)
+(define (drop-meta-info ast-command)
+    (define ast-command-as-list (vector->list (struct->vector ast-command)))
+    (append (take ast-command-as-list 1)
+            (drop ast-command-as-list 2)))
 
 (define-syntax (inform-check-equal? stx)
   (syntax-case stx ()

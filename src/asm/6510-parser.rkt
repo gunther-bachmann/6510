@@ -45,15 +45,17 @@
 (require (only-in "../6510-utils.rkt" parse-number-string ->string))
 (require "../6510.rkt") ;; necessary to resolve all syntax macros of 6510 dsl
 
+
 (provide 6510-program/p asm->ast scheme-asm->ast)
 
 (module+ test
   (require rackunit)
-    (begin-for-syntax
+  (require (only-in "../6510-test-utils.rkt" drop-meta-infos))
+  (begin-for-syntax
     (require rackunit))
 
-    (define (parsed-string-result syntax string)
-      (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
+  (define (parsed-string-result syntax string)
+    (syntax->datum (parse-result! (parse-string (syntax/p syntax) string)))))
 
 ;; space or tab
 (define/c space-or-tab/p
@@ -722,9 +724,9 @@
                 (list (ast-opcode-cmd '(#:line 1) '(169 32))))
   (check-equal? (scheme-asm->ast '((byte '(#:line 1) 32)))
                 (list (ast-bytes-cmd '(#:line 1) '(32))))
-  (check-equal? (scheme-asm->ast '((LDA "!32")(JSR "65490")))
-                (list (ast-opcode-cmd '() '(169 32))
-                      (ast-opcode-cmd '() '(32 210 255)))))
+  (check-equal? (drop-meta-infos (scheme-asm->ast '((LDA "!32")(JSR "65490"))))
+                (drop-meta-infos (list (ast-opcode-cmd '() '(169 32))
+                                      (ast-opcode-cmd '() '(32 210 255))))))
 
 ;; convert native assembler into ast 
 (define/c (asm->ast str [parse-rule 6510-opcodes/p])
