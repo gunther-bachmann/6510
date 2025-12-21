@@ -34,7 +34,8 @@
                                              "BC_IMAX"
                                              "BC_IADD"
                                              "BC_BNOP"
-                                             "BC_ISUB")))
+                                             "BC_ISUB"
+                                             "BC_BREAK")))
 
   (define (wrap-bytecode-for-test bc-to-wrap)
     (wrap-bytecode-for-bc-test
@@ -65,7 +66,8 @@
      (flatten
       (list
        (bc PUSH_B) (byte #x14)
-       (bc BINC)))))
+       (bc BINC)))
+     ))
 
   (check-equal? (vm-stack->strings binc-20)
                 (list "stack holds 1 item"
@@ -77,7 +79,8 @@
      (flatten
       (list
        (bc PUSH_B) (byte #x14)
-       (bc BDEC)))))
+       (bc BDEC)))
+     ))
 
   (check-equal? (vm-stack->strings bdec-20)
                 (list "stack holds 1 item"
@@ -103,7 +106,8 @@
       (list
        (bc PUSH_I2)
        (bc PUSH_I1)
-       (bc IMAX)))))
+       (bc IMAX)))
+     ))
 
   (check-equal? (vm-stack->strings max-int-state)
                 (list "stack holds 1 item"
@@ -177,8 +181,7 @@
      (list
       (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
       (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
-      (bc IADD)
-      (bc BREAK))))
+      (bc IADD))))
 
   (define (bc-int-plus-expectation state c)
     (check-equal? (vm-stack->strings state)
@@ -196,16 +199,16 @@
      (list
       (bc PUSH_I1)
       (bc PUSH_I2)
-      (bc BNOP)
+      ;;(bc BNOP)
       (bc IADD)                      ;; byte code for INT_PLUS = 3
       (bc PUSH_I) (byte #xf0 #x04)   ;; push int #x4f0 (1264)
       (bc PUSH_I) (byte #x1f #x01)   ;; push int #x11f (287)
       (bc IADD)                      ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
       (bc PUSH_I1)
       (bc PUSH_IM1)
-      (bc BNOP)                      ;; reset clock cycles
+      ;;(bc BNOP)                      ;; reset clock cycles
       (bc IADD)                      ;; byte code for INT_PLUS = 0
-      (bc BREAK))))
+      )))
 
   (inform-check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
                        333)
@@ -225,8 +228,7 @@
      (list
       (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte ra) (low-byte ra)))
       (bc PUSH_I) (ast-bytes-cmd '() (list (high-byte rb) (low-byte rb)))
-      (bc ISUB)
-      (bc BREAK))))
+      (bc ISUB))))
 
   (define (bc-int-minus-expectation state c)
     (check-equal? (vm-stack->strings state)
@@ -253,7 +255,7 @@
       (bc PUSH_I1)
       (bc PUSH_I0)
       (bc ISUB)                      ;; byte code for INT_MINUS => -1
-      (bc BREAK))))                    ;; brk
+      )))
 
 
    (inform-check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
