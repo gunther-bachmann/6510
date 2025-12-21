@@ -9,6 +9,8 @@
  ALLOC_CELL_ARRAY_TO_RT
  ;; FREE_CELL_ARRAY_RZ
  ;; INIT_CELL_ARRAY_RA_WITH_RT      ;; fill array with cell that currently is in RT
+
+ vm-cell-array-code
 )
 
 #|
@@ -48,7 +50,6 @@
                   ZP_TEMP
                   ZP_RT
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-
 
 (module+ test
   (require (only-in racket/list
@@ -132,7 +133,6 @@
           (STA (ZP_RT),y) ;; set slot type to cell array with 2 elements
           (RTS)))
 
-
 (module+ test #| test-alloc-cell-array-to-rt |#
   (define test-alloc-cell-array-to-rt
     (compact-run-code-in-test-
@@ -147,6 +147,11 @@
      ))
 
   (check-equal?
+   (memory-list test-alloc-cell-array-to-rt ZP_RT (+ #x01 ZP_RT))
+   (list #x02 PAGE_AVAIL_0)
+   "cell array is allocated to #x02 on the first page available")
+
+  (check-equal?
    (memory-list test-alloc-cell-array-to-rt (+ #x02 PAGE_AVAIL_0_W) (+ #x0d PAGE_AVAIL_0_W))
    (list #x01 #x05 #xff #xff #xff #xff #xff #xff #xff #xff #xff #xff)
    "refcount #x01, length of array #x05, lots of uninitialized cells")
@@ -159,9 +164,47 @@
   (check-equal?
    (memory-list test-alloc-cell-array-to-rt (+ #xfe PAGE_AVAIL_0_W) (+ #xff PAGE_AVAIL_0_W))
    (list #x0e #x00)
-   "next free slot at #x0e, next page #x00"))
+   "next free slot at #x0e, next page #x00")
+
+  (define test-alloc-cell-array-p0-to-rt
+    (compact-run-code-in-test-
+     ;; #:debug #t
+     #:runtime-code test-runtime
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     (fill-page-with PAGE_AVAIL_0 #xff)
+
+     ;; now allocate the page
+     (JSR ALLOC_CELL_ARRAY_P0_TO_RT)
+     ))
+
+  (check-equal?
+   (memory-list test-alloc-cell-array-to-rt ZP_RT (+ #x01 ZP_RT))
+   (list #x02 PAGE_AVAIL_0)
+   "cell array is allocated to #x02 on the first page available")
+
+  (check-equal?
+   (memory-list test-alloc-cell-array-p0-to-rt (+ #x02 PAGE_AVAIL_0_W) (+ #x07 PAGE_AVAIL_0_W))
+   (list #x01 #x02 #xff #xff #xff #xff )
+   "refcount #x01, length of array #x02, lots of uninitialized cells")
+
+  (check-equal?
+   (memory-list test-alloc-cell-array-p0-to-rt (+ #x00 PAGE_AVAIL_0_W) (+ #x01 PAGE_AVAIL_0_W))
+   (list #x20 #x01)
+   "page type 0010 0000 (m1 page, profile 0), one slot allocated")
+
+  (check-equal?
+   (memory-list test-alloc-cell-array-p0-to-rt (+ #xfe PAGE_AVAIL_0_W) (+ #xff PAGE_AVAIL_0_W))
+   (list #x08 #x00)
+   "next free slot at #x08, next page #x00")
+
+  (check-equal?
+   (memory-list test-alloc-cell-array-to-rt ZP_RT (+ #x01 ZP_RT))
+   (list #x02 PAGE_AVAIL_0)
+   "cell array is allocated to #x02 on the first page available"))
 
 ;; no refcnt adjustments!
+(define WRITE_ARR_ATal_RA_TO_RT #t)
+(define WRITE_ARR_ATyl_RA_TO_RT #t)
 (define-vm-function WRITE_ARR_ATa_RA_TO_RT
   (list
           (ASL A)
@@ -192,6 +235,8 @@
          (RTS)))
 
 ;; no refcnt adjustments!
+(define WRITE_ARR_ATal_RT_TO_RT #t)
+(define WRITE_ARR_ATyl_RT_TO_RT #t)
 (define-vm-function WRITE_ARR_ATa_RT_TO_RT
   (list
           (ASL A)
@@ -225,3 +270,20 @@
           (LDA ZP_RP+1)
           (STA (ZP_RT),y)               ;; copy high byte
           (RTS)))
+
+
+(define vm-cell-array-code
+  (append
+   ALLOC_CELL_ARRAY_TO_RT
+   ;; includes ALLOC_CELL_ARRAY_P0_TO_RT
+
+   WRITE_ARR_ATa_RT_TO_RT
+   ;; includes WRITE_ARR_ATal_RT_TO_RT
+   ;; includes WRITE_ARR_ATyl_RT_TO_RT
+   ))
+
+(module+ test #| vm-cell-array-code |#
+  (inform-check-equal?
+   (code-len vm-cell-array-code)
+   21
+   "module uses n bytes of code"))

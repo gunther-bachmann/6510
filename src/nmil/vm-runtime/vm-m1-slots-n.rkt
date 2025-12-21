@@ -285,9 +285,9 @@
 
 (require (only-in "../../6510-test-utils.rkt" skip skip-module)
          "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix
-                  replace-labels)
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function
+                  define-vm-function-wol)
          (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   ZP_RP
@@ -355,11 +355,8 @@
 ;; output: a    = 02
 ;;         x    = page
 ;;         => ax = ptr to first free slot
-(define INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
-  (add-label-suffix
-   "__" "INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N"
+(define-vm-function INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
    [list
-    (label INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N)
            (LDY !$00)
            (STY ZP_RZ)
 
@@ -415,7 +412,7 @@
                  $da ;; slot size: 24, slot: da..f1
                  $da ;; slot size: 36, slot: da..fd
                  $ca ;; slot size: 50, slot: ca..fd
-                 )]))
+                 )])
 
 (module+ test #| INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N |#
   (define test-alloc-m1-00-state-after-n
@@ -538,11 +535,8 @@
                   "slots used:     0"
                   "next free slot: $02")))
 
-(define OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA_N
-  (add-label-suffix
-   "__" "__OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA_N"
+(define-vm-function OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA_N
    (list
-    (label OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA_N)
            (LDA ZP_PAGE_FREE_SLOTS_LIST+0)
            (BEQ no_page_w_free_slots__)
 
@@ -577,7 +571,7 @@
     (label no_page_w_free_slots__)
     (label no_free_slot_on_page__)
     (label check_wether_empty_page_should_be_user__)
-           (BRK))))
+           (BRK)))
 
 (module+ test #| optimized alloc test |#
   (define (test-alloc-m1-slot-p0-optimized #:times (times 1))
@@ -652,11 +646,8 @@
 ;; output:  RA = ptr to M1 SLOT of profile x
 (define ALLOC_M1_PX_SLOT_TO_RA_N #t)
 (define ALLOC_M1_P0_SLOT_TO_RA_N #t)
-(define ALLOC_M1_SLOT_TO_RA_N
-  (add-label-suffix
-   "__" "__ALLOC_M1_SLOT_TO_RA_N"
+(define-vm-function ALLOC_M1_SLOT_TO_RA_N
    (list
-    (label ALLOC_M1_SLOT_TO_RA_N)
            (CMP !$05)
            (BPL find_profile_for_slots_size5_plus__)  ;; >= 5, branch
 
@@ -822,7 +813,7 @@
                  $05 ;; 35..48 LSR ADC -> 18..24 LSR -> 09..12
                  $05
                  $05
-                 $05))))
+                 $05)))
 
 (module+ test #| vm_alloc_bucket_slot, allocate one slot of size $0b |#
 
@@ -1171,11 +1162,8 @@
 ;; free the m1 slot pointed to by RZ
 ;;
 ;; do not GC any data. add this slot to free list. decrement slots used count
-(define FREE_M1_SLOT_FROM_RZ_N
-  (add-label-suffix
-   "__" "__FREE_M1_SLOT_FROM_RZ_N"
+(define-vm-function FREE_M1_SLOT_FROM_RZ_N
    (list
-    (label FREE_M1_SLOT_FROM_RZ_N)
            (LDX ZP_RZ)          ;; offset to slot within page
            (STX ZP_TEMP)        ;; zp_temp = offset
 
@@ -1202,7 +1190,7 @@
            ;; optional: (BEQ page_empty_now__) ;; move this page to the list of free pages
            (RTS)
            ;; - decrement slot usage
-    )))
+    ))
 
 (module+ test #| free_m1_slot_from_rz_n |#
   (define (free_m1_slot_from_rz_n-test times)
@@ -1264,11 +1252,8 @@
 ;;          allowing to directly JSR the INC command (cycles 6 + 6 = 12), not counting the jsr itself
 ;;       note: dec could be done on a different register, that is the surrounded by DEC abs and RTS
 ;; execution cycles = 3 + 3 + 4 + 7 + 6 = 23 (+jsr of caller)
-(define INC_REFCNT_M1_SLOT_RA_N
-  (add-label-suffix
-   "__" "__INC_REFCNT_M1_SLOT_RA_N"
+(define-vm-function INC_REFCNT_M1_SLOT_RA_N
    (list
-    ;; (label INC_REFCNT_M1_SLOT_RA_N)
     ;;        (LDY !$00)
     ;;        (LDA (ZP_RA),y)
     ;;        (CLC)
@@ -1276,13 +1261,12 @@
     ;;        (STA (ZP_RA),y)
     ;;        (RTS)
 
-    (label INC_REFCNT_M1_SLOT_RA_N)
            (LDA ZP_RA+1)
            (LDX ZP_RA)
            (STA inc_abs__+2)
     (label inc_abs__)
            (INC $cf00,x)
-           (RTS))))
+           (RTS)))
 
 (module+ test #| inc_refcnt_m1_slot_ra_n |#
   (define (inc_refcnt_m1_slot_ra_n-test times)
@@ -1340,11 +1324,8 @@
 ;; output: -
 (define INC_GC_M1_SLOT_RZ_CELL_ARRAY_N #t)
 (define GC_M1_SLOT_RZ_N #t)
-(define DEC_REFCNT_M1_SLOT_RZ_N
-  (add-label-suffix
-   "__" "__DEC_REFCNT_M1_SLOT_RZ_N"
+(define-vm-function DEC_REFCNT_M1_SLOT_RZ_N
    (list
-    (label DEC_REFCNT_M1_SLOT_RZ_N)
            (LDA ZP_RZ+1)
            (LDX ZP_RZ)
            (STA dec_abs__+2)
@@ -1508,7 +1489,7 @@
            (JMP DEC_REFCNT_M1_SLOT_RZ_N) ;; tail-call
 
     (label EXEC_OPTIMIZED_LAST_SLOT_FREE__)
-           (byte 0))))
+           (byte 0)))
 
 (module+ test #| dec_refcnt_m1_slot_rz_n |#
   (define dec_refcnt_m1_slot_rz_n-test-non-cell-array-slot
@@ -1898,11 +1879,8 @@
 ;; input:   A = lowbyte of collectible list
 ;;          ZP_INC_COLLECTRIBLE_LIST
 (define INC_GC_ARRAYS_LB_IN_A #t)
-(define INC_GC_ARRAYS
-  (add-label-suffix
-   "__" "__INC_GC_ARRAYS"
+(define-vm-function INC_GC_ARRAYS
    (list
-    (label INC_GC_ARRAYS)
            (LDA ZP_INC_COLLECTIBLE_LIST)
            (BEQ nothing_to_collect__) ;; actually an error, should not be necessary to check! this should be checked by the caller before the call
     (label INC_GC_ARRAYS_LB_IN_A)
@@ -1912,23 +1890,20 @@
            (JMP INC_GC_M1_SLOT_RZ_CELL_ARRAY_N)
 
     (label nothing_to_collect__)
-           (RTS))))
+           (RTS)))
 
 ;; keep calling incremental gc on cell-arrays until no more arrays are available for collecting
 ;;
 ;; input:  ZP_INC_COLLECTIBLE_LIST
 ;; output: ZP_INC_COLLECTIBLE_LIST = 0
-(define GC_ALL_ARRAYS
-  (add-label-suffix
-   "__" "__GC_ALL_ARRAYS"
+(define-vm-function GC_ALL_ARRAYS
    (list
-    (label GC_ALL_ARRAYS)
            (LDA ZP_INC_COLLECTIBLE_LIST)
            (BEQ done__)
            (JSR INC_GC_ARRAYS_LB_IN_A)
            (JMP GC_ALL_ARRAYS) ;; tail call
     (label done__)
-           (RTS))))
+           (RTS)))
 
 (module+ test #| gc_all_arrays |#)
 
