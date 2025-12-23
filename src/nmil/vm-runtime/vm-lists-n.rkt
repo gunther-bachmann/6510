@@ -24,8 +24,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
          (only-in "./vm-call-frame.rkt"
                   vm-call-frame
                   vm-call-frame-wo-data-tail)
-         (only-in "./vm-memory-manager-test-utils.rkt"
-                  run-code-in-test-on-code))
+         "./vm-memory-manager-test-utils.rkt")
 
 (provide vm-lists
          vm-lists-wo-data-tail
@@ -51,7 +50,6 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
             (list (BRK))
             vm-lists
             (list (label VM_INTERPRETER_OPTABLE)) ;; needed by interpreter_zp
-            (list (org #x0080))
             VM_INTERPRETER_ZP)) ;; needed because of references to ZP_VM_PC
 
   (define (run-code-in-test bc (debug #f))

@@ -74,7 +74,6 @@
             bc
             (list (BRK))
             (remove-labels-for complete-code (filter (lambda (ast-cmd) (ast-label-def-cmd? ast-cmd)) mocked-code-list))
-            (list (org #x0080))
             VM_INTERPRETER_ZP
             (list (label VM_INTERPRETER_OPTABLE))))
 

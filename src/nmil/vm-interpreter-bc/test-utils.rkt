@@ -87,7 +87,6 @@
            vm-lists ;; includes vm-memory-manager
            (list (org-align #x100)) ;; align to next page
            (build-interpreter-optable relevant-opcode-definitions)
-           (list (org #x0080))
            VM_INTERPRETER_ZP))) ;; TODO create opcode table w/ wanted / knonwn opcodes only?
 
 (define PAGE_CALL_FRAME #x8d)

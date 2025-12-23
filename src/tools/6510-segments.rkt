@@ -486,7 +486,7 @@ currently the following test programs are created
 
   (define zp-interpreter-loop
     (new-assemble-to-code-list
-     (append (list (org #x0080)) VM_INTERPRETER_ZP)
+     (append VM_INTERPRETER_ZP)
      (assembly-code-list-labels bc-interpreter)))
 
   (define raw-zp-interpreter-loop

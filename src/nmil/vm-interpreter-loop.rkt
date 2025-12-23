@@ -107,13 +107,14 @@ and the bc operation jump table
 (define ZP_VM_PC #x85)
 (define VM_INTERPRETER_ZP
   (list
+   (org #x0080)
 
-    ;; optional (3 additional bytes)
-    ;; (label VM_INTERPRETER_ZP_POP_EVLSTK_AND_INC_PC)
-    ;;        (JSR POP_CELL_EVLSTK_TO_RT)
    (byte-const ZP_VM_PC #x85) ;; #x80 + 5
    (byte-const JUMP_LOWBYTE #x8a) ;; #x80 + 10
 
+    ;; optional (3 additional bytes) <-- may save a lot elsewhere
+    ;; (label VM_INTERPRETER_ZP_POP_EVLSTK_AND_INC_PC)
+    ;;        (JSR POP_CELL_EVLSTK_TO_RT)
    (label VM_INTERPRETER_INC_PC)
            (INC ZP_VM_PC)                      ;; increment the lowbyte of the program counter (part of this code)
            (BEQ VM_INTZP__INC_PAGE)            ;; in the rare case of page increments jump off

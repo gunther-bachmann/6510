@@ -80,7 +80,6 @@
             (flatten bc)
             (list (org #xa000))
             vm-interpreter
-            (list (org #x0080))
             VM_INTERPRETER_ZP))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
