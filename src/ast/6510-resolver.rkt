@@ -371,24 +371,24 @@
 ;; resolve this relative opcode command (if applicable) using the given current offset of the code
 (define/c (resolve-rel-opcode-cmd instruction offset labels)
   (-> ast-unresolved-rel-opcode-cmd? word/c hash? ast-rel-opcode-cmd?)
+
   (let* ((subcmd (ast-unresolved-rel-opcode-cmd-resolve-sub-command instruction))
          (label  (ast-resolve-sub-cmd-label subcmd))
          (ex-offset (label-offset label))
          (value  (hash-ref labels (label-label label) #f)))
-    ;; (println instruction)
-    ;; (println label)
-    ;; (println ex-offset)
-    ;; (println value)
-    ;; (println offset)
-    (cond [value
-           (let ([rel-value (two-complement-of (+ ex-offset (- value (+ offset 2))))])
-             (unless (byte? rel-value)
-               (raise-user-error (format "label ~a produces non byte offset ~a in rel opcode ~a"
-                                         (label-label label)
-                                         value
-                                         instruction)))
-             (encode-label-rel-value instruction rel-value))]
-          [else instruction])))
+    (with-handlers ((exn:fail? (lambda (exception)
+                                 (display (format "instr: ~a\ncur-offset: ~a\nlabel-value: ~a\nlabel: ~a"
+                                                  instruction offset value label))
+                                 (raise exception ))))
+      (cond [value
+             (let ([rel-value (two-complement-of (+ ex-offset (- value (+ offset 2))))])
+               (unless (byte? rel-value)
+                 (raise-user-error (format "label ~a produces non byte offset ~a in rel opcode ~a"
+                                           (label-label label)
+                                           value
+                                           instruction)))
+               (encode-label-rel-value instruction rel-value))]
+            [else instruction]))))
 
 ;; resolve labels to bytes in the given program, using offset as absolute program start
 (define/c (->resolve-labels offset labels program resolved-program)
