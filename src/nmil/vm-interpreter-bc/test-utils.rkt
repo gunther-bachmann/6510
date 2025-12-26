@@ -66,12 +66,11 @@
 
 (define (wrap-bytecode-for-bc-test bc-to-wrap relevant-opcode-definitions bc-implementations)
   (flatten
-   (append (list (org #x7000)
+   (append (list (org #x07f0)
                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                 (JSR VM_INITIALIZE_CALL_FRAME)
                  (JSR VM_INTERPRETER_INIT)
                  (JMP VM_INTERPRETER))
-           (list (org #x8000))
+           (list (org #x0800))
            bc-to-wrap
            (list (bc BREAK))
            ;; ---

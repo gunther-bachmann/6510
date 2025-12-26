@@ -35,12 +35,12 @@ and the bc operation jump table
   (list
    (label VM_INTERPRETER_INIT)
           (LDA !$00)
-          (LDX !$80)                            ;; bc start at $8000
+          (LDX !$08)                            ;; bc start at $0800
    (label VM_INTERPRETER_INIT_AX)
           (STA ZP_VM_PC)
           (STA ZP_VM_FUNC_PTR)
           (STX ZP_VM_PC+1)
-          (STX ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $8000
+          (STX ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $0800
           (RTS)))
 
 ;; interpreter loop without short commands

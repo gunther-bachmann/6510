@@ -1,5 +1,33 @@
 #lang racket/base
 
+(provide vm-cell-at-nil?
+         vm-cell-at-nil-n?
+         vm-stack->strings
+         vm-stack-n->strings
+         vm-cell-at->string
+         vm-cell-at-n->string
+         vm-cell->string
+         vm-cell-n->string
+         vm-page->strings
+         vm-page-n->strings
+         vm-regt->string
+         vm-regt-n->string
+         vm-regp->string
+         vm-regp-n->string
+         vm-rega->string
+         vm-rega-n->string
+         vm-deref-cell-pair-w->string
+         vm-deref-cell-pair-w-n->string
+         vm-deref-cell-pair->string
+         vm-deref-cell-w->string
+         vm-deref-cell-w-n->string
+         vm-refcount-cell-pair-ptr
+         vm-refcount-cell-ptr
+         vm-cell-pair-free-tree->string
+         shorten-cell-string
+         shorten-cell-string-n
+         shorten-cell-strings)
+
 #|
 
   provide functions to inspect the current status of the virtual machine
@@ -32,31 +60,6 @@
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR))
-
-(provide vm-cell-at-nil?
-         vm-stack->strings
-         vm-stack-n->strings
-         vm-cell-at->string
-         vm-cell->string
-         vm-cell-n->string
-         vm-page->strings
-         vm-page-n->strings
-         vm-regt->string
-         vm-regt-n->string
-         vm-regp->string
-         vm-regp-n->string
-         vm-rega->string
-         vm-rega-n->string
-         vm-deref-cell-pair-w->string
-         vm-deref-cell-pair-w-n->string
-         vm-deref-cell-pair->string
-         vm-deref-cell-w->string
-         vm-deref-cell-w-n->string
-         vm-refcount-cell-pair-ptr
-         vm-refcount-cell-ptr
-         vm-cell-pair-free-tree->string
-         shorten-cell-string
-         shorten-cell-strings)
 
 (module+ test
   (require "../6510-test-utils.rkt"
@@ -152,6 +155,13 @@
    str
    ""))
 
+;; shorten verbose strings (e.g. pair-ptr cells or int cells)
+(define (shorten-cell-string-n str)
+  (regexp-replace*
+   #px"(pair-ptr(\\[[-0-9]*\\])? (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
+   str
+   ""))
+
 (define (shorten-cell-strings strings)
   (map shorten-cell-string strings))
 
@@ -163,7 +173,7 @@
   (cond
     [(and (regt-empty? state)
         (= stack-tos-idx #x01)
-        (= 0 (peek state (add1 stack-lb-page-start)))) (list "stack is empty")]
+        (= 0 (peek state (add1 stack-lb-page-start)))) (list "ptr NIL")]
     [else
      (define values-count (min (- stack-tos-idx 1) max-count))
      (define low-bytes (memory-list state (+ stack-lb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-lb-page-start stack-tos-idx)))
@@ -296,29 +306,28 @@
   (cond
     [(memq (bytes->int low high) visited)
      (format "RECURSION->$~a~a" (format-hex-byte high) (format-hex-byte low))]
-    [(= 0 low) "empty"]
+    [(= 0 low) "ptr NIL"]
     [(= 0 (bitwise-and #x01 low)) (format "ptr[~a] $~a~a"
                                           (if (empty? state) "-" (refcount-of-cell state low high))
                                           (format-hex-byte high)
                                           (format-hex-byte (bitwise-and #xfe low)))]
-    [(and (= 1 (bitwise-and #x03 low)) (= high 0)) "pair-ptr NIL"]
-    [(= 1 (bitwise-and #x03 low))
-     (string-append (format "pair-ptr[~a] $~a~a"
-                            (if (empty? state) "-" (refcount-of-cell-pair state low high))
-                            (format-hex-byte high)
-                            (format-hex-byte (bitwise-and #xfd low)))
-                    (if follow
-                        (vm-deref-cell-pair->string state low high #t (cons (bytes->int low high) visited))
-                        ""))]
-    [(= 3 (bitwise-and #x83 low)) (format "int $~a~a"
+    ;; [(= 1 (bitwise-and #x03 low))
+    ;;  (string-append (format "pair-ptr[~a] $~a~a"
+    ;;                         (if (empty? state) "-" (refcount-of-cell-pair state low high))
+    ;;                         (format-hex-byte high)
+    ;;                         (format-hex-byte (bitwise-and #xfd low)))
+    ;;                 (if follow
+    ;;                     (vm-deref-cell-pair->string state low high #t (cons (bytes->int low high) visited))
+    ;;                     ""))]
+    [(= 3 (bitwise-and #x03 low)) (format "int $~a~a"
                                           (format-hex-byte (arithmetic-shift low -2))
                                           (format-hex-byte high))]
     [(= TAG_BYTE_BYTE_CELL (bitwise-and #xff low)) (format "byte $~a" (format-hex-byte high))]
-    [(= TAG_BYTE_CELL_ARRAY (bitwise-and #xff low))
-     (define array-str (format "cell-array len=$~a" (format-hex-byte high)))
-     (if follow
-         (format "~a [...]" array-str)
-         array-str)]
+    ;; [(= 0 (bitwise-and #xc0 low))
+    ;;  (define array-str (format "cell-array len=$~a" (format-hex-byte high)))
+    ;;  (if follow
+    ;;      (format "~a [...]" array-str)
+    ;;      array-str)]
     ;; TODO: a structure has a special value + follow bytes
     ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
     ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
@@ -332,9 +341,17 @@
 (define (vm-cell-at-nil? state loc)
   (= TAGGED_NIL (peek-word-at-address state loc)))
 
+;; is cell at the given location = NIL?
+(define (vm-cell-at-nil-n? state loc)
+  (= TAGGED_NIL (peek-word-at-address state loc)))
+
 ;; print the cell at the given location (reverse endianess)
 (define (vm-cell-at->string state loc (rev-endian #f) (follow #f))
   (vm-cell-w->string (peek-word-at-address state loc rev-endian) state follow))
+
+;; print the cell at the given location (reverse endianess)
+(define (vm-cell-at-n->string state loc (rev-endian #f) (follow #f))
+  (vm-cell-w-n->string (peek-word-at-address state loc rev-endian) state follow))
 
 ;; write string of current RT
 (define (vm-regt->string state (follow #f))

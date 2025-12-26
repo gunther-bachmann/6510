@@ -80,15 +80,15 @@
                   disassembler-byte-code--byte-count
                   disassemble-byte-code)
          (only-in "./vm-inspector-utils.rkt"
-                  shorten-cell-string
+                  shorten-cell-string-n
                   shorten-cell-strings
-                  vm-cell-at-nil?
-                  vm-page->strings
-                  vm-stack->strings
-                  vm-regt->string
-                  vm-cell-at->string
-                  vm-cell->string
-                  vm-deref-cell-pair-w->string)
+                  vm-cell-at-nil-n?
+                  vm-page-n->strings
+                  vm-stack-n->strings
+                  vm-regt-n->string
+                  vm-cell-at-n->string
+                  vm-cell-n->string
+                  vm-deref-cell-pair-w-n->string)
          (only-in "vm-bc-opcode-definitions.rkt"
                   get-single-opcode)
          (only-in "vm-interpreter-loop.rkt"
@@ -155,7 +155,7 @@
         num))
   (format "local #$~a: ~a"
           (format-hex-byte num-i)
-          (vm-cell->string
+          (vm-cell-n->string
            (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_LB_PTR)))
            (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_HB_PTR)))
            state
@@ -170,11 +170,11 @@
          (define cell-cdr (peek-word-at-address state (+ address 2)))
          (unless (= (bitwise-and #x03 cell-cdr) #x01)
            (raise-user-error (format "cdr cell is not a cell-pair-ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
-         (if (vm-cell-at-nil? state address)
+         (if (vm-cell-at-nil-n? state address)
              (reverse string-list)
              (vm-list->strings state
                               cell-cdr
-                              (cons (vm-cell-at->string state address #f follow)
+                              (cons (vm-cell-at-n->string state address #f follow)
                                     string-list)
                               follow))]))
 (define (debugger--bc-help d-state)
@@ -320,8 +320,8 @@
      (= (cpu-state-program-counter c-state)
         interpreter-loop-adr))
    (lambda (c-state)
-     (define stack-len (sub1 (length (vm-stack->strings c-state 20))))
-     (define top (vm-regt->string c-state))
+     (define stack-len (sub1 (length (vm-stack-n->strings c-state 20))))
+     (define top (vm-regt-n->string c-state))
      (color-displayln
       (format "~a\t~a ~a" 
               (~a (debugger--disassemble c-state)
@@ -397,8 +397,8 @@
                          [else
                           (struct-copy debug-state d-state
                                        [states (drop (debug-state-states d-state) drop-num)])]))]
-                [(string=? command "ps") (begin (color-displayln (string-join (vm-stack->strings c-state) "\n  ")) d-state)]
-                [(string=? command "pt") (begin (color-displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
+                [(string=? command "ps") (begin (color-displayln (string-join (vm-stack-n->strings c-state) "\n  ")) d-state)]
+                [(string=? command "pt") (begin (color-displayln (format "rt: ~a" (vm-regt-n->string c-state))) d-state)]
                 [(string=? command "pfn") (begin
                                             (define func-ptr (peek-word-at-address c-state ZP_VM_FUNC_PTR))
                                             (color-displayln (format "function-ptr: $~a" (format-hex-word func-ptr)))
@@ -412,7 +412,7 @@
                 [(regexp-match? page-regex command)
                  (match-let (((list _ _ page) (regexp-match page-regex command)))
                    (define page-num (string->number page 16))
-                   (map color-displayln (vm-page->strings c-state page-num))
+                   (map color-displayln (vm-page-n->strings c-state page-num))
                    (cond [(vm-cell-pair-page? c-state page-num)
                           (map color-displayln (vm-cell-pairs-used-info c-state (string->number page 16)))]
                           [(vm-cell-page? c-state page-num)
@@ -449,14 +449,14 @@
                    (begin
                      (define low (peek c-state (string->number num 16)))
                      (define high (peek c-state (add1 (string->number num 16))))
-                     (color-displayln (vm-cell->string low high c-state #t))
+                     (color-displayln (vm-cell-n->string low high c-state #t))
                      d-state))]
                 [(regexp-match? ppma-regex command)
                  (match-let (((list _ num) (regexp-match ppma-regex command)))
                    (begin
                      (define low (peek c-state (string->number num 16)))
                      (define high (peek c-state (add1 (string->number num 16))))
-                     (color-displayln (shorten-cell-string (vm-cell->string low high c-state #t)))
+                     (color-displayln (shorten-cell-string-n (vm-cell-n->string low high c-state #t)))
                      d-state))]
                 [(string=? command "ruc")
                  (wrap-into-bc-states
@@ -569,7 +569,7 @@
 
 (define (vm-cell-pairs-used-info state page)
   (map (lambda (offset)
-         (vm-cell->string offset page state #t))
+         (vm-cell-n->string offset page state #t))
        (sort (vm-cell-pairs-used-on-page state page) <)))
 
 ;; get list of pages used for cell-pairs
