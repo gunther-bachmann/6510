@@ -142,7 +142,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (AND !$01)
           (BNE NO_CELL_PAIR_PTR__)
           ;; A = 0
-          (LDY !$04)
+          (LDY !$02)
           (JMP WRITE_ARR_ATyl_RT_TO_RT)))
 
 ;; @DC-FUN: VM_CDR, group: list
@@ -164,7 +164,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (AND !$01)
           (BNE NO_CELL_PAIR_PTR__)
 
-          (LDY !$06)
+          (LDY !$04)
           (JMP WRITE_ARR_ATyl_RT_TO_RT)))
 
 ;; short command for doing caar, cadr, cdar, cddr

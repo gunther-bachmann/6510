@@ -28,7 +28,8 @@ TODO: get tests (still in vm-interpreter) into this file
                   ZP_RP
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
-                  ZP_CELL_STACK_HB_PTR)
+                  ZP_CELL_STACK_HB_PTR
+                  TAG_BYTE_BYTE_CELL)
          (only-in "../vm-runtime/vm-m1-slots-n.rkt"
                   DEC_REFCNT_M1_SLOT_RT_N
                   INC_REFCNT_M1_SLOT_RT_N))
@@ -46,7 +47,7 @@ TODO: get tests (still in vm-interpreter) into this file
    (label BC_PUSH_B)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
-          (LDX !$ff)
+          (LDX !TAG_BYTE_BYTE_CELL)
           (JSR PUSH_XA_TO_EVLSTK)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 

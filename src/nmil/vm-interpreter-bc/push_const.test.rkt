@@ -35,11 +35,13 @@ test of bytecode implementation of pushing constants
       (bc PUSH_I1)
       (bc PUSH_I2)
       (bc PUSH_IM1)
-      (bc BREAK))))
+      (bc BREAK))
+     ))
 
-  (check-equal? (vm-stack->strings use-case-push-num-s-state-after)
-                (list "stack holds 4 items"
-                      "int $1fff  (rt)"
+  (check-equal? (vm-stack-n->strings use-case-push-num-s-state-after)
+                (list "stack holds 5 items"
+                      "int $3fff  (rt)"
                       "int $0002"
                       "int $0001"
-                      "int $0000")))
+                      "int $0000"
+                      "ptr NIL")))

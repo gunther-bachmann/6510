@@ -49,11 +49,12 @@ test of bytecode implementation of push
        (bc PUSH_B) (byte 10)))
      ))
 
-  (check-equal? (vm-stack->strings push-byte-state)
-                (list "stack holds 3 items"
+  (check-equal? (vm-stack-n->strings push-byte-state)
+                (list "stack holds 4 items"
                       "byte $0a  (rt)"
                       "byte $01"
-                      "byte $00")))
+                      "byte $00"
+                      "ptr NIL")))
 
 (module+ test #| pop |#
   (define pop-0-state
@@ -63,8 +64,8 @@ test of bytecode implementation of push
       (bc POP))
      ))
 
-  (check-equal? (vm-stack->strings pop-0-state)
-                (list "stack is empty"))
+  (check-equal? (vm-stack-n->strings pop-0-state)
+                (list "stack is empty or tos=nil"))
 
   (define pop-1-state
     (run-bc-wrapped-in-test
@@ -73,9 +74,10 @@ test of bytecode implementation of push
       (bc PUSH_I1)
       (bc POP))))
 
-  (check-equal? (vm-stack->strings pop-1-state)
-                (list "stack holds 1 item"
-                      "int $0000  (rt)"))
+  (check-equal? (vm-stack-n->strings pop-1-state)
+                (list "stack holds 2 items"
+                      "int $0000  (rt)"
+                      "ptr NIL"))
   (define pop-2-state
     (run-bc-wrapped-in-test
      (list
@@ -85,10 +87,11 @@ test of bytecode implementation of push
       (bc POP))
      ))
 
-  (check-equal? (vm-stack->strings pop-2-state)
-                (list "stack holds 2 items"
+  (check-equal? (vm-stack-n->strings pop-2-state)
+                (list "stack holds 3 items"
                       "int $0001  (rt)"
-                      "int $0000")))
+                      "int $0000"
+                      "ptr NIL")))
 
 (module+ test #| VM_PUSH_CONST_INT |#
   (define use-case-push-int-state-after
@@ -97,6 +100,7 @@ test of bytecode implementation of push
       (bc PUSH_I) (byte #xf0 #x04)
       (bc BREAK))))
 
-  (check-equal? (vm-stack->strings use-case-push-int-state-after)
-                (list "stack holds 1 item"
-                      "int $04f0  (rt)")))
+  (check-equal? (vm-stack-n->strings use-case-push-int-state-after)
+                (list "stack holds 2 items"
+                      "int $04f0  (rt)"
+                      "ptr NIL")))

@@ -89,14 +89,15 @@
 
   (check-equal? (vm-call-frame->strings test-bc-before-call-state)
                 (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                      "program-counter:  $8001"
-                      "function-ptr:     $8000"
+                      "program-counter:  $0801"
+                      "function-ptr:     $0800"
                       (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-   (check-equal? (vm-stack->strings test-bc-before-call-state)
-                 (list "stack holds 1 item"
-                       "int $0000  (rt)")
+   (check-equal? (vm-stack-n->strings test-bc-before-call-state)
+                 (list "stack holds 2 items"
+                       "int $0000  (rt)"
+                       "ptr NIL")
                  "stack holds just the pushed int")
 
   (define test-bc-call-state
@@ -121,15 +122,16 @@
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
                          (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8004"
-                         "return-function-ptr: $8000"
+                         "return-pc:           $0804"
+                         "return-function-ptr: $0800"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-   (check-equal? (vm-stack->strings test-bc-call-state)
-                    (list "stack holds 2 items"
+   (check-equal? (vm-stack-n->strings test-bc-call-state)
+                    (list "stack holds 3 items"
                           "int $0001  (rt)"
-                          "int $0000")
+                          "int $0000"
+                          "ptr NIL")
                     "stack holds the pushed int and the parameter passed")
 
   (define test-bc-call-wp-state
@@ -137,10 +139,10 @@
      (list
              (bc PUSH_I0)
              (bc PUSH_IM1)
-             (bc CALL) (byte 00) (byte $87)
+             (bc CALL) (byte 00) (byte $17)
              (bc BREAK)
 
-             (org #x8700)
+             (org #x1700)
       (label TEST_FUN)
              (byte 0)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
@@ -149,22 +151,23 @@
 
   (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8702"
-                         "function-ptr:     $8700"
+                         "program-counter:  $1702"
+                         "function-ptr:     $1700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
                          (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8005"
-                         "return-function-ptr: $8000"
+                         "return-pc:           $0805"
+                         "return-function-ptr: $0800"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-  (check-equal? (vm-stack->strings test-bc-call-wp-state)
-                   (list "stack holds 3 items"
+  (check-equal? (vm-stack-n->strings test-bc-call-wp-state)
+                   (list "stack holds 4 items"
                          "int $0001  (rt)"
-                         "int $1fff"
-                         "int $0000")
+                         "int $3fff"
+                         "int $0000"
+                         "ptr NIL")
                    "stack holds the pushed int, and all parameters")
 
   (define test-bc-call-wl-state
@@ -172,10 +175,10 @@
      (list
              (bc PUSH_I0)
              (bc PUSH_IM1)
-             (bc CALL) (byte 00) (byte $87)
+             (bc CALL) (byte 00) (byte $17)
              (bc BREAK)
 
-             (org #x8700)
+             (org #x1700)
       (label TEST_FUN)
              (byte 2)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
@@ -183,22 +186,23 @@
 
   (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8702"
-                         "function-ptr:     $8700"
+                         "program-counter:  $1702"
+                         "function-ptr:     $1700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
                          (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $8005"
-                         "return-function-ptr: $8000"
+                         "return-pc:           $0805"
+                         "return-function-ptr: $0800"
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-  (check-equal? (vm-stack->strings test-bc-call-wl-state)
-                   (list "stack holds 3 items"
+  (check-equal? (vm-stack-n->strings test-bc-call-wl-state)
+                   (list "stack holds 4 items"
                          "int $0001  (rt)"
-                         "int $1fff"
-                         "int $0000")
+                         "int $3fff"
+                         "int $0000"
+                         "ptr NIL")
                    "stack holds the pushed int, and all parameters"))
 
 
@@ -208,10 +212,10 @@
      (list
              (bc PUSH_NIL)
              (bc PUSH_I1)
-             (bc CALL) (byte 00) (byte $87)
+             (bc CALL) (byte 00) (byte $17)
              (bc BREAK)
 
-             (org #x8700)
+             (org #x1700)
       (label TEST_FUN)
              (byte 1)                     ;; number of locals
              (bc POP_TO_L0)          ;; pop tos into local 0 (now int 1)
@@ -219,13 +223,14 @@
              (bc BREAK))
      ))
 
- (check-equal? (vm-stack->strings bc-nil-ret-state)
-                  (list "stack holds 1 item"
-                        "int $0001  (rt)"))
+ (check-equal? (vm-stack-n->strings bc-nil-ret-state)
+                  (list "stack holds 2 items"
+                        "int $0001  (rt)"
+                        "ptr NIL"))
  (check-equal? (vm-call-frame->strings bc-nil-ret-state)
                (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                     "program-counter:  $8005"
-                     "function-ptr:     $8000"
+                     "program-counter:  $0805"
+                     "function-ptr:     $0800"
                      (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                              (format-hex-byte PAGE_LOCALS_LB)
                              (format-hex-byte PAGE_LOCALS_HB))))
@@ -235,10 +240,10 @@
      (list
              (bc PUSH_I1)
              (bc PUSH_NIL)
-             (bc CALL) (byte 00) (byte $87)
+             (bc CALL) (byte 00) (byte $17)
              (bc BREAK)
 
-             (org #x8700)
+             (org #x1700)
       (label TEST_FUN)
              (byte 2)            ;; number of locals
              (bc POP_TO_L1)
@@ -248,13 +253,14 @@
              (bc BREAK))
      ))
 
-  (check-equal? (vm-stack->strings bc-nil-ret-local-state)
-                   (list "stack holds 1 item"
-                         "int $0001  (rt)"))
+  (check-equal? (vm-stack-n->strings bc-nil-ret-local-state)
+                   (list "stack holds 2 items"
+                         "int $0001  (rt)"
+                         "ptr NIL"))
   (check-equal? (vm-call-frame->strings bc-nil-ret-local-state)
                 (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8005"
-                         "function-ptr:     $8000"
+                         "program-counter:  $0805"
+                         "function-ptr:     $0800"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
@@ -266,10 +272,10 @@
              (bc PUSH_NIL)
              (bc PUSH_I0)
              (bc CONS)
-             (bc CALL) (byte 00) (byte $87)
+             (bc CALL) (byte 00) (byte $17)
              (bc BREAK)
 
-             (org #x8700)
+             (org #x1700)
       (label TEST_FUN)
              (byte 1)            ;; number of locals
              (bc POP_TO_L0)
@@ -280,32 +286,36 @@
              (bc TAIL_CALL)
              (bc BREAK))))
 
-   (check-equal? (vm-stack->strings bc-tail-call-state)
-                   (list "stack holds 1 item"
-                         "pair-ptr NIL  (rt)"))
+   (check-equal? (vm-stack-n->strings bc-tail-call-state)
+                   (list "stack holds 2 items"
+                         "ptr NIL  (rt)"
+                         "ptr NIL"))
    (check-equal? (vm-call-frame->strings bc-tail-call-state)
                  (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                          "program-counter:  $8006"
-                          "function-ptr:     $8000"
+                          "program-counter:  $0806"
+                          "function-ptr:     $0800"
                           (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
 
   ;; convert the list given by cell-pair-ptr (addresss) as a list of strings
   (define (vm-list->strings state address (string-list '()))
-    (cond [(= address #x0001) ;; this is the nil ptr
+    (cond [(= address #x0000) ;; this is the nil ptr
            (reverse string-list)]
           [else
-           (unless (= (bitwise-and #x03 address) #x01)
-             (raise-user-error (format "address is not a cell-pair-ptr ~a" (format-hex-word address))))
-           (define cell-cdr (peek-word-at-address state (+ address 2)))
-           (unless (= (bitwise-and #x03 cell-cdr) #x01)
-             (raise-user-error (format "cdr cell is not a cell-pair-ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
-           (if (vm-cell-at-nil? state address)
+           (unless (= (bitwise-and #x01 address) #x00)
+             (raise-user-error (format "address is not a cell-array ~a" (format-hex-word address))))
+           (unless (= (peek state (bitwise-and #xff00 address )) #x20)
+             (raise-user-error (format "m1 page referenced is not a profile 0 cell-arrray page ~a"
+                                       (format-hex-word address))))
+           (define cell-cdr (peek-word-at-address state (+ address 4)))
+           (unless (= (bitwise-and #x01 cell-cdr) #x00)
+             (raise-user-error (format "cdr cell is not a ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
+           (if (vm-cell-at-nil-n? state address)
                (reverse string-list)
                (vm-list->strings state
                                 cell-cdr
-                                (cons (vm-cell-at->string state address)
+                                (cons (vm-cell-at-n->string state (+ 2 address))
                                       string-list)))]))
 
   (define bc-tail-call-reverse-state
@@ -320,10 +330,10 @@
              (bc CONS)                  ;; (add ref to this cell) does allocate a cell (removes a cell-ref from stack and adds a ref in the pair cell)
              (bc PUSH_NIL)
              (bc BNOP)
-             (bc CALL) (byte 00) (byte $87)
+             (bc CALL) (byte 00) (byte $17)
              (bc BREAK)                   ;; << to make debugger stop/exit
 
-             (org #x8700)
+             (org #x1700)
       (label TEST_FUN)
              (byte 2)                   ;; number of locals
              (bc POP_TO_L0)        ;; b-list (#refs stay)
@@ -337,27 +347,29 @@
              (bc BREAK))                  ;; just in case to make debugger stop/exit
      ))
 
-  (check-equal? (memory-list bc-tail-call-reverse-state #xcec5 (add1 #xcec5))
-                   (list #x05 PAGE_AVAIL_0))
-  (check-equal? (vm-page->strings bc-tail-call-reverse-state PAGE_AVAIL_0)
-                   (list "page-type:      cell-pair page"
+  (check-equal? (memory-list bc-tail-call-reverse-state ZP_PAGE_FREE_SLOTS_LIST)
+                   (list PAGE_AVAIL_0)
+                   "the page with free slots for profile 0")
+  (check-equal? (vm-page-n->strings bc-tail-call-reverse-state PAGE_AVAIL_0)
+                   (list "page-type:      m1 page p0"
                          "previous page:  $00"
-                         "slots used:     4"
-                         "next free slot: $49"))
+                         "slots used:     3"
+                         "next free slot: $02"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4283)
+                4005)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
                          "int $0002")
                    "list got reversed")
-  (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
-                   (list "stack holds 1 item"
-                         (format "pair-ptr[1] $~a09  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+  (check-equal? (vm-stack-n->strings bc-tail-call-reverse-state)
+                   (list "stack holds 2 items"
+                         (format "ptr[1] $~a08  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                         "ptr NIL"))
   (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $800c"
-                         "function-ptr:     $8000"
+                         "program-counter:  $080c"
+                         "function-ptr:     $0800"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB)))))
@@ -367,10 +379,10 @@
     (run-bc-wrapped-in-test
      (list
              (bc PUSH_I0)
-             (bc CALL) (byte 00) (byte $87)
+             (bc CALL) (byte 00) (byte $17)
              (bc BREAK)
 
-             (org #x8700)
+             (org #x1700)
       (label TEST_FUN)
              (byte 0)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
@@ -378,13 +390,14 @@
 
   (check-equal? (vm-call-frame->strings test-bc-ret-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 03" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8004"
-                         "function-ptr:     $8000"
+                         "program-counter:  $0804"
+                         "function-ptr:     $0800"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-  (check-equal? (vm-stack->strings test-bc-ret-state)
-                   (list "stack holds 2 items"
+  (check-equal? (vm-stack-n->strings test-bc-ret-state)
+                   (list "stack holds 3 items"
                          "int $0001  (rt)"
-                         "int $0000")
+                         "int $0000"
+                         "ptr NIL")
                    "previous value on the stack is there + returned value (in rt)"))

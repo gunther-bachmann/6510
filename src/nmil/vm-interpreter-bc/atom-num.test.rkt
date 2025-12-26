@@ -69,9 +69,10 @@
        (bc BINC)))
      ))
 
-  (check-equal? (vm-stack->strings binc-20)
-                (list "stack holds 1 item"
-                      "byte $15  (rt)")))
+  (check-equal? (vm-stack-n->strings binc-20)
+                (list "stack holds 2 items"
+                      "byte $15  (rt)"
+                      "ptr NIL")))
 
 (module+ test #| bdec |#
   (define bdec-20
@@ -82,9 +83,10 @@
        (bc BDEC)))
      ))
 
-  (check-equal? (vm-stack->strings bdec-20)
-                (list "stack holds 1 item"
-                      "byte $13  (rt)")))
+  (check-equal? (vm-stack-n->strings bdec-20)
+                (list "stack holds 2 items"
+                      "byte $13  (rt)"
+                      "ptr NIL")))
 
 (module+ test #| badd |#
   (define badd-20-9
@@ -95,9 +97,10 @@
        (bc PUSH_B) (byte #x09)
        (bc BADD)))))
 
-  (check-equal? (vm-stack->strings badd-20-9)
-                (list "stack holds 1 item"
-                      "byte $1d  (rt)")))
+  (check-equal? (vm-stack-n->strings badd-20-9)
+                (list "stack holds 2 items"
+                      "byte $1d  (rt)"
+                      "ptr NIL")))
 
 (module+ test #| ext max-int |#
   (define max-int-state
@@ -109,9 +112,10 @@
        (bc IMAX)))
      ))
 
-  (check-equal? (vm-stack->strings max-int-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings max-int-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define max-int-2-state
     (run-bc-wrapped-in-test
@@ -121,9 +125,10 @@
        (bc PUSH_I2)
        (bc IMAX)))))
 
-  (check-equal? (vm-stack->strings max-int-2-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)")))
+  (check-equal? (vm-stack-n->strings max-int-2-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL")))
 
 (module+ test #| inc int |#
   (define inc-int-0-state
@@ -133,9 +138,10 @@
        (bc PUSH_I0)
        (bc IINC)))))
 
-  (check-equal? (vm-stack->strings inc-int-0-state)
-                (list "stack holds 1 item"
-                      "int $0001  (rt)"))
+  (check-equal? (vm-stack-n->strings inc-int-0-state)
+                (list "stack holds 2 items"
+                      "int $0001  (rt)"
+                      "ptr NIL"))
 
   (define inc-int-1-state
     (run-bc-wrapped-in-test
@@ -145,9 +151,10 @@
        (bc IINC)))
      ))
 
-  (check-equal? (vm-stack->strings inc-int-1-state)
-                (list "stack holds 1 item"
-                      "int $0100  (rt)"))
+  (check-equal? (vm-stack-n->strings inc-int-1-state)
+                (list "stack holds 2 items"
+                      "int $0100  (rt)"
+                      "ptr NIL"))
 
   (define inc-int-2-state
     (run-bc-wrapped-in-test
@@ -157,9 +164,10 @@
        (bc IINC)))
      ))
 
-  (check-equal? (vm-stack->strings inc-int-2-state)
-                (list "stack holds 1 item"
-                      "int $0000  (rt)"))
+  (check-equal? (vm-stack-n->strings inc-int-2-state)
+                (list "stack holds 2 items"
+                      "int $0000  (rt)"
+                      "ptr NIL"))
 
   (define inc-int-3-state
     (run-bc-wrapped-in-test
@@ -169,9 +177,10 @@
        (bc IINC)))
      ))
 
-  (check-equal? (vm-stack->strings inc-int-3-state)
-                (list "stack holds 1 item"
-                      "int $0600  (rt)")))
+  (check-equal? (vm-stack-n->strings inc-int-3-state)
+                (list "stack holds 2 items"
+                      "int $0600  (rt)"
+                      "ptr NIL")))
 
 (module+ test #| IADD |#
   (define (bc-int-plus-state a b)
@@ -184,9 +193,10 @@
       (bc IADD))))
 
   (define (bc-int-plus-expectation state c)
-    (check-equal? (vm-stack->strings state)
-                  (list "stack holds 1 item"
-                        (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
+    (check-equal? (vm-stack-n->strings state)
+                  (list "stack holds 2 items"
+                        (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c)))
+                        "ptr NIL")))
 
   ;; Execute this test only, if major change to int + have been done
   ;; (define _run-bc-int-plus-tests
@@ -206,17 +216,18 @@
       (bc IADD)                      ;; byte code for INT_PLUS (+ #x04f0 #x011f) (1551 = #x060f)
       (bc PUSH_I1)
       (bc PUSH_IM1)
-      ;;(bc BNOP)                      ;; reset clock cycles
+      (bc BNOP)                      ;; reset clock cycles
       (bc IADD)                      ;; byte code for INT_PLUS = 0
       )))
 
   (inform-check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                       333)
-  (check-equal? (vm-stack->strings use-case-int-plus-state-after)
-                   (list "stack holds 3 items"
+                       86)
+  (check-equal? (vm-stack-n->strings use-case-int-plus-state-after)
+                   (list "stack holds 4 items"
                          "int $0000  (rt)"
                          "int $060f"
                          "int $0003"
+                         "ptr NIL"
                          )))
 
 
@@ -231,9 +242,10 @@
       (bc ISUB))))
 
   (define (bc-int-minus-expectation state c)
-    (check-equal? (vm-stack->strings state)
-                    (list "stack holds 1 item"
-                          (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c))))))
+    (check-equal? (vm-stack-n->strings state)
+                    (list "stack holds 2 item"
+                          (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c)))
+                          "ptr NIL")))
 
   ;; Execute this test only, if major change to int - have been done
   ;; (define _run-bc-int-minus-tests
@@ -247,21 +259,22 @@
      (list
       (bc PUSH_I1)
       (bc PUSH_I2)
-      (bc BNOP)
       (bc ISUB)                      ;; byte code for INT_MINUS = 2 - 1 = 1
       (bc PUSH_I) (byte #xf0 #x04) ;; push int #x4f0 (1264)
       (bc PUSH_I) (byte #x1f #x01) ;; push int #x11f (287)
       (bc ISUB)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x1c2f)
       (bc PUSH_I1)
       (bc PUSH_I0)
+      (bc BNOP)
       (bc ISUB)                      ;; byte code for INT_MINUS => -1
       )))
 
 
    (inform-check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                        880)
-    (check-equal? (vm-stack->strings use-case-int-minus-state-after)
-                    (list "stack holds 3 items"
+                        86)
+    (check-equal? (vm-stack-n->strings use-case-int-minus-state-after)
+                    (list "stack holds 4 items"
                           "int $1fff  (rt)"
                           "int $1c2f"
-                          "int $0001")))
+                          "int $0001"
+                          "ptr NIL")))

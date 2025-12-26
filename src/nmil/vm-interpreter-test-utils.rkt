@@ -162,14 +162,14 @@
            #t)))
 
 (define (vm-list->strings state address (string-list '()) (follow #f))
-  (cond [(= address #x0001) ;; this is the nil ptr
+  (cond [(= address #x0000) ;; this is the nil ptr
          (reverse string-list)]
         [else
-         (unless (= (bitwise-and #x03 address) #x01)
-           (raise-user-error (format "address is not a cell-pair-ptr ~a" (format-hex-word address))))
+         (unless (= (bitwise-and #x03 address) #x00)
+           (raise-user-error (format "address is not a ptr ~a" (format-hex-word address))))
          (define cell-cdr (peek-word-at-address state (+ address 2)))
-         (unless (= (bitwise-and #x03 cell-cdr) #x01)
-           (raise-user-error (format "cdr cell is not a cell-pair-ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
+         (unless (= (bitwise-and #x03 cell-cdr) #x00)
+           (raise-user-error (format "cdr cell is not a ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
          (if (vm-cell-at-nil-n? state address)
              (reverse string-list)
              (vm-list->strings state

@@ -42,9 +42,10 @@
       (bc PUSH_I1)
       (bc BREAK)
       (bc PUSH_I2))))
-  (check-equal? (vm-stack->strings branch-true-0-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-true-0-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-true-1-state
     (run-bc-wrapped-in-test
@@ -54,9 +55,10 @@
       (bc BREAK)
       (org-align #x78)
       (bc PUSH_I2))))
-  (check-equal? (vm-stack->strings branch-true-1-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-true-1-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-true-2-state
     (run-bc-wrapped-in-test
@@ -77,9 +79,10 @@
        ;; now at 8100
        (bc PUSH_I2)))
    ))
-  (check-equal? (vm-stack->strings branch-true-2-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-true-2-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-true-3-state
     (run-bc-wrapped-in-test
@@ -102,9 +105,10 @@
        ;; now at 8102
        (bc PUSH_I2)))
    ))
-  (check-equal? (vm-stack->strings branch-true-3-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-true-3-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-true-4-state
     (run-bc-wrapped-in-test
@@ -118,9 +122,10 @@
        (bc PUSH_I1)
        (bc T_P_BRA) (byte $fd)))
      ))
-  (check-equal? (vm-stack->strings branch-true-4-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-true-4-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-true-5-state
     (run-bc-wrapped-in-test
@@ -148,9 +153,10 @@
        (bc PUSH_I1)
        (bc T_P_BRA) (byte $fd)))
      ))
-  (check-equal? (vm-stack->strings branch-true-5-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)")))
+  (check-equal? (vm-stack-n->strings branch-true-5-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL")))
 
 (module+ test #| branch true |#
   (define branch-false-0-state
@@ -162,9 +168,10 @@
       (bc BREAK)
       (bc PUSH_I2))
      ))
-  (check-equal? (vm-stack->strings branch-false-0-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-false-0-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-false-1-state
     (run-bc-wrapped-in-test
@@ -174,9 +181,10 @@
       (bc BREAK)
       (org-align #x78)
       (bc PUSH_I2))))
-  (check-equal? (vm-stack->strings branch-false-1-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-false-1-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-false-2-state
     (run-bc-wrapped-in-test
@@ -197,9 +205,10 @@
        ;; now at 8100
        (bc PUSH_I2)))
    ))
-  (check-equal? (vm-stack->strings branch-false-2-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-false-2-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-false-3-state
     (run-bc-wrapped-in-test
@@ -222,9 +231,10 @@
        ;; now at 8102
        (bc PUSH_I2)))
    ))
-  (check-equal? (vm-stack->strings branch-false-3-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-false-3-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-false-4-state
     (run-bc-wrapped-in-test
@@ -238,9 +248,10 @@
        (bc PUSH_I0)
        (bc F_P_BRA) (byte $fd)))
      ))
-  (check-equal? (vm-stack->strings branch-false-4-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings branch-false-4-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define branch-false-5-state
     (run-bc-wrapped-in-test
@@ -268,9 +279,10 @@
        (bc PUSH_I0)
        (bc F_P_BRA) (byte $fd)))
      ))
-  (check-equal? (vm-stack->strings branch-false-5-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)")))
+  (check-equal? (vm-stack-n->strings branch-false-5-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL")))
 
 (module+ test #| goto |#
   (define goto-0-state
@@ -281,10 +293,11 @@
       (bc PUSH_IM1)
       (bc BREAK)
       (bc PUSH_I1))))
-  (check-equal? (vm-stack->strings goto-0-state)
-                (list "stack holds 2 items"
+  (check-equal? (vm-stack-n->strings goto-0-state)
+                (list "stack holds 3 items"
                       "int $0001  (rt)"
-                      "int $0000"))
+                      "int $0000"
+                      "ptr NIL"))
 
   (define goto-1-state
     (run-bc-wrapped-in-test
@@ -295,10 +308,11 @@
       (org-align #x78)
       (bc PUSH_I1))
      ))
-  (check-equal? (vm-stack->strings goto-1-state)
-                (list "stack holds 2 items"
+  (check-equal? (vm-stack-n->strings goto-1-state)
+                (list "stack holds 3 items"
                       "int $0001  (rt)"
-                      "int $0000"))
+                      "int $0000"
+                      "ptr NIL"))
 
   (define goto-2-state
     (run-bc-wrapped-in-test
@@ -319,12 +333,13 @@
        ;; now at 8100
        (bc PUSH_IM1)))
    ))
-  (check-equal? (vm-stack->strings goto-2-state)
-                (list "stack holds 4 items"
-                      "int $1fff  (rt)"
+  (check-equal? (vm-stack-n->strings goto-2-state)
+                (list "stack holds 5 items"
+                      "int $3fff  (rt)"
                       "int $0002"
                       "int $0001"
-                      "int $0000"))
+                      "int $0000"
+                      "ptr NIL"))
 
   (define goto-3-state
     (run-bc-wrapped-in-test
@@ -347,12 +362,13 @@
        ;; now at 8102
        (bc PUSH_IM1)))
    ))
-  (check-equal? (vm-stack->strings goto-3-state)
-                (list "stack holds 4 items"
-                      "int $1fff  (rt)"
+  (check-equal? (vm-stack-n->strings goto-3-state)
+                (list "stack holds 5 items"
+                      "int $3fff  (rt)"
                       "int $0002"
                       "int $0001"
-                      "int $0000"))
+                      "int $0000"
+                      "ptr NIL"))
 
   (define goto-4-state
     (run-bc-wrapped-in-test
@@ -365,10 +381,11 @@
        (bc BREAK)
        (bc GOTO) (byte $fe)))
      ))
-  (check-equal? (vm-stack->strings goto-4-state)
-                (list "stack holds 2 items"
+  (check-equal? (vm-stack-n->strings goto-4-state)
+                (list "stack holds 3 items"
                       "int $0001  (rt)"
-                      "int $0000"))
+                      "int $0000"
+                      "ptr NIL"))
 
   (define goto-5-state
     (run-bc-wrapped-in-test
@@ -396,10 +413,11 @@
        (bc PUSH_IM1)
        (bc GOTO) (byte $fd)))
      ))
-  (check-equal? (vm-stack->strings goto-5-state)
-                (list "stack holds 5 items"
+  (check-equal? (vm-stack-n->strings goto-5-state)
+                (list "stack holds 6 items"
                       "int $0000  (rt)"
-                      "int $1fff"
+                      "int $3fff"
                       "int $0002"
                       "int $0001"
-                      "int $0000")))
+                      "int $0000"
+                      "ptr NIL")))

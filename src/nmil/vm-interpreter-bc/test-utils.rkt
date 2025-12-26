@@ -25,13 +25,13 @@
          (only-in "../vm-runtime/vm-call-frame.rkt"
                   vm-call-frame->strings)
          (only-in "../vm-inspector-utils.rkt"
-                  vm-cell-at-nil?
-                  vm-page->strings
-                  vm-stack->strings
-                  vm-regt->string
-                  vm-cell-at->string
-                  vm-cell->string
-                  vm-deref-cell-pair-w->string)
+                  vm-cell-at-nil-n?
+                  vm-page-n->strings
+                  vm-stack-n->strings
+                  vm-regt-n->string
+                  vm-cell-at-n->string
+                  vm-cell-n->string
+                  vm-deref-cell-pair-w-n->string)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_ZP
@@ -87,12 +87,14 @@
            (build-interpreter-optable relevant-opcode-definitions)
            VM_INTERPRETER_ZP))) ;; TODO create opcode table w/ wanted / knonwn opcodes only?
 
-(define PAGE_CALL_FRAME #x8d)
-(define PAGE_LOCALS_LB #x8b)
-(define PAGE_LOCALS_LB_W #x8b00)
-(define PAGE_LOCALS_HB #x8c)
-(define PAGE_LOCALS_HB_W #x8c00)
-(define PAGE_AVAIL_0 #x8a)
-(define PAGE_AVAIL_0_W #x8a00)
-(define PAGE_AVAIL_1 #x89)
-(define PAGE_AVAIL_1_W #x8900)
+;; cell_stack_lb #xcf
+;; cell_stack_hb #xce
+(define PAGE_CALL_FRAME #xcd)
+(define PAGE_LOCALS_LB #xcb)
+(define PAGE_LOCALS_LB_W #xcb00)
+(define PAGE_LOCALS_HB #xcc)
+(define PAGE_LOCALS_HB_W #xcc00)
+(define PAGE_AVAIL_0 #xca)
+(define PAGE_AVAIL_0_W #xca00)
+(define PAGE_AVAIL_1 #xc9)
+(define PAGE_AVAIL_1_W #xc900)
