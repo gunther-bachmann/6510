@@ -8,7 +8,10 @@
                   VM_INTERPRETER_INC_PC_2_TIMES
                   VM_POP_EVLSTK_AND_INC_PC)
          (only-in "../vm-runtime/vm-m1-slots-n.rkt"
-                  INC_REFCNT_M1_SLOT_RT_N)
+                  INC_REFCNT_M1_SLOT_RT_N
+                  DEC_REFCNT_M1_SLOT_RA_N
+                  DEC_REFCNT_M1_SLOT_RB_N
+                  DEC_REFCNT_M1_SLOT_RC_N)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RBI
                   ZP_RAI
@@ -134,7 +137,7 @@
            (PLA)
            (JSR WRITE_ARR_ATa_RA_TO_RT)
            (JSR INC_REFCNT_M1_SLOT_RT_N)
-           (JSR DEC_REFCNT_RA)
+           (JSR DEC_REFCNT_M1_SLOT_RA_N)
            (LDA !$00)
            (STA ZP_RA)
            (STA ZP_RA+1)
@@ -148,7 +151,7 @@
            (JSR POP_CELL_EVLSTK_TO_RT)
            (PLA)
            (JSR POP_EVLSTK_TO_ARR_ATa_RA)
-           (JSR DEC_REFCNT_RA)
+           (JSR DEC_REFCNT_M1_SLOT_RA_N)
            (LDA !$00)
            (STA ZP_RA)
            (STA ZP_RA+1)
@@ -192,7 +195,7 @@
            (LDA ZP_RT+1)                  ;; index                               (stack: index)
            (JSR WRITE_ARR_ATa_RA_TO_RT)   ;; rt <- array@a                       (stack: value)
            (JSR INC_REFCNT_M1_SLOT_RT_N)            ;; now on stack and in array => inc refcnt'd
-           (JSR DEC_REFCNT_RA)            ;; removed from stack => dec refcnt'd
+           (JSR DEC_REFCNT_M1_SLOT_RA_N)            ;; removed from stack => dec refcnt'd
            (JMP VM_INTERPRETER_INC_PC))))
 
 ;; stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
@@ -208,7 +211,7 @@
            (JSR POP_CELL_EVLSTK_TO_RT)    ;; rt = value                          (stack: value)
            (PLA)                          ;; a = index
            (JSR POP_EVLSTK_TO_ARR_ATa_RA) ;; array@a <- rt (TODO: check that old value is dec-refcnt'd)
-           (JSR DEC_REFCNT_RA)            ;; since array is no longer on stack dec refcnt (value moved => no change)
+           (JSR DEC_REFCNT_M1_SLOT_RA_N)            ;; since array is no longer on stack dec refcnt (value moved => no change)
            (JMP VM_INTERPRETER_INC_PC))))
 
 (define BC_SWAP_RA_RB
@@ -225,15 +228,15 @@
    (label VM_REFCOUNT_DECR_ARRAY_REGS)
           (LDA ZP_RA)
           (BEQ DONE__)
-          (JSR DEC_REFCNT_RA)
+          (JSR DEC_REFCNT_M1_SLOT_RA_N)
    (label TRY_RB__)
           (LDA ZP_RB)
           (BEQ CLEAR_RA__)
-          (JSR DEC_REFCNT_RB)
+          (JSR DEC_REFCNT_M1_SLOT_RB_N)
    (label TRY_RC__)
           (LDA ZP_RC)
           (BEQ CLEAR_RAB__)
-          (JSR DEC_REFCNT_RC)
+          (JSR DEC_REFCNT_M1_SLOT_RC_N)
           (LDA !$00)
           (STA ZP_RC)
           (STA ZP_RC+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)

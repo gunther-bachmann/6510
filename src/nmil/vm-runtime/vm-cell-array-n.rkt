@@ -4,6 +4,8 @@
  WRITE_ARR_ATa_RA_TO_RT          ;; write from cell array RA: cell at index A into RT (replacing what has been in RT)
  POP_EVLSTK_TO_ARR_ATa_RA
  WRITE_ARR_ATa_RT_TO_RT          ;; write from cell array RT: cell at index A into RT (overwriting it)
+ WRITE_ARR_AT0_RT_TO_RT
+ WRITE_ARR_AT1_RT_TO_RT
  WRITE_RT_TO_ARR_ATa_RA
  WRITE_RP_TO_ARR_AT0_RT          ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
  POP_CELL_EVLSTK_TO_ARR_AT1_RT
@@ -257,6 +259,8 @@
          (RTS)))
 
 ;; no refcnt adjustments!
+(define WRITE_ARR_AT0_RT_TO_RT '())
+(define WRITE_ARR_AT1_RT_TO_RT '())
 (define WRITE_ARR_ATal_RT_TO_RT '())
 (define WRITE_ARR_ATyl_RT_TO_RT '())
 (define-vm-function WRITE_ARR_ATa_RT_TO_RT
@@ -273,7 +277,16 @@
           (LDA (ZP_RT),y)               ;; copy high byte
           (STA ZP_RT+1)
           (STX ZP_RT)                   ;; store low byte
-          (RTS)))
+          (RTS)
+
+   (label WRITE_ARR_AT0_RT_TO_RT)
+          (LDY !$02)
+          (BNE WRITE_ARR_ATyl_RT_TO_RT) ;; always jump
+
+   (label WRITE_ARR_AT1_RT_TO_RT)
+          (LDY !$04)
+          (BNE WRITE_ARR_ATyl_RT_TO_RT) ;; always jump
+          ))
 
 ;; no refcnt adjustments!
 (define POP_CELL_EVLSTK_TO_ARR_AT1_RT '())
@@ -299,6 +312,11 @@
    ALLOC_CELL_ARRAY_TO_RT
    ;; includes ALLOC_CELL_ARRAY_P0_TO_RT
    ALLOC_CELL_ARRAY_TO_RA
+
+   WRITE_RT_TO_ARR_ATa_RA
+   POP_EVLSTK_TO_ARR_ATa_RA ;; included in WRITE_RT_TO_ARR_ATa_RA
+
+   WRITE_ARR_ATa_RA_TO_RT
 
    WRITE_ARR_ATa_RT_TO_RT
    ;; includes WRITE_ARR_ATal_RT_TO_RT

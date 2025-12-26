@@ -21,7 +21,10 @@
                   ZP_LOCALS_LB_PTR
                   ZP_RT)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
-                  PUSH_RT_TO_EVLSTK))
+                  PUSH_RT_TO_EVLSTK)
+         (only-in "../vm-runtime/vm-cell-array-n.rkt"
+                  WRITE_ARR_AT0_RT_TO_RT
+                  WRITE_ARR_AT1_RT_TO_RT))
 
 (provide BC_WRITE_LOCAL_SHORT           ;; write a local into the tos (rt)
          BC_PUSH_LOCAL_SHORT            ;; push the local onto the eval stack
@@ -80,12 +83,12 @@
    (list
     (label BC_PUSH_LX_CAR)
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
-           (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)
+           (JSR WRITE_ARR_AT0_RT_TO_RT)
            (JSR INC_REFCNT_M1_SLOT_RT_N)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_PUSH_LX_CDR)
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
-           (JSR WRITE_CELLPAIR_RT_CELL1_TO_RT)
+           (JSR WRITE_ARR_AT1_RT_TO_RT)
            (JSR INC_REFCNT_M1_SLOT_RT_N)
            (JMP VM_INTERPRETER_INC_PC)))))

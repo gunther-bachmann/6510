@@ -8,6 +8,9 @@
  ALLOC_M1_SLOT_TO_RT_N                  ;; allocate an m1 slot of size A into RT
  DEC_REFCNT_M1_SLOT_RZ_N
  DEC_REFCNT_M1_SLOT_RT_N
+ DEC_REFCNT_M1_SLOT_RA_N
+ DEC_REFCNT_M1_SLOT_RB_N
+ DEC_REFCNT_M1_SLOT_RC_N
  INC_REFCNT_M1_SLOT_RT_N
  ALLOC_M1_SLOT_TO_RB_N
 
@@ -1342,6 +1345,21 @@
 ;;   garbage collect slot pointer to by ZP_RZ. refcount must have dropped to 0!
 ;; input: ZP_RZ = ptr to slot
 ;; output: -
+(define-vm-function DEC_REFCNT_M1_SLOT_RA_N
+  (list
+            (JSR CP_RA_TO_RZ)
+            (JMP DEC_REFCNT_M1_SLOT_RZ_N)))
+
+(define-vm-function DEC_REFCNT_M1_SLOT_RB_N
+  (list
+            (JSR CP_RB_TO_RZ)
+            (JMP DEC_REFCNT_M1_SLOT_RZ_N)))
+
+(define-vm-function DEC_REFCNT_M1_SLOT_RC_N
+  (list
+            (JSR CP_RC_TO_RZ)
+            (JMP DEC_REFCNT_M1_SLOT_RZ_N)))
+
 (define INC_GC_M1_SLOT_RZ_CELL_ARRAY_N '())
 (define DEC_REFCNT_M1_SLOT_RT_N '())
 (define GC_M1_SLOT_RZ_N '())
@@ -1964,11 +1982,14 @@
           FREE_M1_SLOT_FROM_RZ_N
           INC_REFCNT_M1_SLOT_RT_N
           DEC_REFCNT_M1_SLOT_RZ_N
+          DEC_REFCNT_M1_SLOT_RA_N
+          DEC_REFCNT_M1_SLOT_RB_N
+          DEC_REFCNT_M1_SLOT_RC_N
           INC_GC_ARRAYS
           GC_ALL_ARRAYS))
 
 (module+ test #| code len of module |#
   (inform-check-equal?
    (code-len vm-m1-slot-code)
-   571
+   589
    "the whole module taks about n bytes"))
