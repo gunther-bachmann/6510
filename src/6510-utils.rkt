@@ -27,7 +27,9 @@
          in-word-range?
          in-byte-range?
          ->string
-         base-label-str)
+         base-label-str
+
+         skip-module)
 
 ;; convert given element to string
 (define/c (->string el)
@@ -232,3 +234,7 @@
   (check-equal? (word->hex-string #xffff) "ffff")
   (check-equal? (word->hex-string #x9999) "9999")
   (check-equal? (word->hex-string #x5e5f) "5e5f"))
+
+(define-syntax (skip-module stx)
+  (syntax-case stx ()
+    ([_ body] #'(list))))

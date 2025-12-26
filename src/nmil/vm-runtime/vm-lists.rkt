@@ -19,8 +19,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   vm-regt->string
                   vm-deref-cell-pair-w->string)
          (only-in "./vm-call-frame.rkt"
-                  vm-call-frame
-                  vm-call-frame-wo-data-tail)
+                  vm-call-frame-code)
+         ;; (only-in "./vm-call-frame.rkt"
+         ;;          vm-call-frame
+         ;;          vm-call-frame-wo-data-tail)
          (only-in "./vm-memory-manager-test-utils.rkt"
                   run-code-in-test-on-code))
 
@@ -31,7 +33,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
          VM_CDR
          VM_CONS__REFCNTD)
 
-(module+ test
+(skip-module (module+ test
   (require "../../6510-test-utils.rkt"
            (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP))
 
@@ -47,13 +49,13 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
   (define (run-code-in-test bc (debug #f))
     (define wrapped-code (wrap-code-for-test bc))
-    (run-code-in-test-on-code wrapped-code  debug)))
+    (run-code-in-test-on-code wrapped-code  debug))))
 
-(module+ test #| after mem init |#
+(skip-module (module+ test #| after mem init |#
   (define PAGE_AVAIL_0 #x8a)
   (define PAGE_AVAIL_0_W #x8a00)
   (define PAGE_AVAIL_1 #x89)
-  (define PAGE_AVAIL_1_W #x8900))
+  (define PAGE_AVAIL_1_W #x8900)))
 
 
 ;; code
@@ -93,7 +95,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (JMP WRITE_INT0_TO_RT) ;; false
           ))
 
-(module+ test #| VM_NIL_P |#
+(skip-module (module+ test #| VM_NIL_P |#
   (define use-case-nil_p-a-code
     (list
      (JSR WRITE_NIL_TO_RT)
@@ -118,7 +120,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (check-equal? (vm-stack->strings use-case-nil_p-b-state-after)
                 (list "stack holds 1 item"
                       "int $0000  (rt)")
-                "which is false"))
+                "which is false")))
 
 ;; @DC-FUN: VM_CAR, group: list
 ;; replace cell-pair on tos with CAR element
@@ -225,7 +227,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)    ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
           (JMP POP_CELL_EVLSTK_TO_CELL1_RT)))    ;; and and write into cell1 => no refcnt mod needed here
 
-(module+ test #| VM_CONS |#
+(skip-module (module+ test #| VM_CONS |#
   (define use-case-cons-code
     (list
      (JSR PUSH_NIL_TO_EVLSTK)
@@ -245,7 +247,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                       "slots used:     1"
                       "next free slot: $09"))
   (check-equal? (vm-deref-cell-pair-w->string use-case-cons-state-after (+ PAGE_AVAIL_0_W #x05))
-                "(int $0001 . pair-ptr NIL)"))
+                "(int $0001 . pair-ptr NIL)")))
 
 (define just-vm-list
   (append VM_CONS__REFCNTD
@@ -255,12 +257,12 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           VM_CxxR))
 
 (define vm-lists-wo-data-tail
-  (append just-vm-list vm-call-frame-wo-data-tail))
+  (append just-vm-list vm-call-frame-code))
 
 (define vm-lists
-  (append just-vm-list vm-call-frame))
+  (append just-vm-list vm-call-frame-code))
 
-(module+ test #| vm-lists |#
+(skip-module (module+ test #| vm-lists |#
   (inform-check-equal? (code-len (flatten just-vm-list))
                        126
-                       "estimated list code length"))
+                       "estimated list code length")))

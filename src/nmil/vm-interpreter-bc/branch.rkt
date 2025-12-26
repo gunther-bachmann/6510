@@ -64,10 +64,10 @@
             (JSR POP_CELL_EVLSTK_TO_RT)
             (JMP VM_INTERPRETER_INC_PC_2_TIMES)))))
 
-(define CONTINUE_AFTER_BRA #t)
-(define POP_AND_CONTINUE_AFTER_BRA #t)
-(define BRANCH_BY_NEXT_BYTE #t)
-(define BRANCH_BY_NEXT_BYTE__NO_POP #t)
+(define CONTINUE_AFTER_BRA '())
+(define POP_AND_CONTINUE_AFTER_BRA '())
+(define BRANCH_BY_NEXT_BYTE '())
+(define BRANCH_BY_NEXT_BYTE__NO_POP '())
 (define BC_T_P_BRA
   (add-label-suffix
    "__" "__T_P_BRA"

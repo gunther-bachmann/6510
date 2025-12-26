@@ -35,16 +35,23 @@
 
 (provide vm-cell-at-nil?
          vm-stack->strings
+         vm-stack-n->strings
          vm-cell-at->string
          vm-cell->string
+         vm-cell-n->string
          vm-page->strings
          vm-page-n->strings
          vm-regt->string
+         vm-regt-n->string
          vm-regp->string
+         vm-regp-n->string
          vm-rega->string
+         vm-rega-n->string
          vm-deref-cell-pair-w->string
+         vm-deref-cell-pair-w-n->string
          vm-deref-cell-pair->string
          vm-deref-cell-w->string
+         vm-deref-cell-w-n->string
          vm-refcount-cell-pair-ptr
          vm-refcount-cell-ptr
          vm-cell-pair-free-tree->string
@@ -154,7 +161,9 @@
   (define stack-lb-page-start (peek-word-at-address state ZP_CELL_STACK_LB_PTR))
   (define stack-hb-page-start (peek-word-at-address state ZP_CELL_STACK_HB_PTR))
   (cond
-    [(and (regt-empty? state) (= stack-tos-idx #x01) (= 0 (peek state (add1 stack-lb-page-start)))) (list "stack is empty")]
+    [(and (regt-empty? state)
+        (= stack-tos-idx #x01)
+        (= 0 (peek state (add1 stack-lb-page-start)))) (list "stack is empty")]
     [else
      (define values-count (min (- stack-tos-idx 1) max-count))
      (define low-bytes (memory-list state (+ stack-lb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-lb-page-start stack-tos-idx)))
@@ -165,6 +174,23 @@
            (if (regt-empty? state)
                (list "stack is empty")
                (cons (format "~a  (rt)" (vm-regt->string state follow)) stack-strings)))]))
+
+;; produce strings describing the current cell-stack status
+(define (vm-stack-n->strings state (max-count 10) (follow #f))
+  (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
+  (define stack-lb-page-start (peek-word-at-address state ZP_CELL_STACK_LB_PTR))
+  (define stack-hb-page-start (peek-word-at-address state ZP_CELL_STACK_HB_PTR))
+  (cond
+    [(and (= stack-tos-idx #x01)
+        (= 0 (peek state (add1 stack-lb-page-start)))) (list "stack is empty or tos=nil")]
+    [else
+     (define values-count (min (- stack-tos-idx 1) max-count))
+     (define low-bytes (memory-list state (+ stack-lb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-lb-page-start stack-tos-idx)))
+     (define high-bytes (memory-list state (+ stack-hb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-hb-page-start stack-tos-idx)))
+     (define stack-item-no (+ values-count 1))
+     (define stack-strings (reverse (map (lambda (pair) (vm-cell-n->string (car pair) (cdr pair) state follow)) (map cons low-bytes high-bytes))))
+     (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
+           (cons (format "~a  (rt)" (vm-regt-n->string state follow)) stack-strings))]))
 
 ;; make a list of adjacent pairs
 (define (pairing list (paired-list '()))
@@ -186,10 +212,23 @@
           (vm-cell-w->string derefed-word-car state follow visited)
           (vm-cell-w->string derefed-word-cdr state follow visited)))
 
+;; write the car, cdr cell of the cell-pair at word in memory
+(define (vm-deref-cell-pair-w-n->string state word (follow #f) (visited (list)))
+  (define derefed-word-car (peek-word-at-address state (+ 2 word)))
+  (define derefed-word-cdr (peek-word-at-address state (+ 4 word)))
+  (format "(~a . ~a)"
+          (vm-cell-w-n->string derefed-word-car state follow visited)
+          (vm-cell-w-n->string derefed-word-cdr state follow visited)))
+
 ;; derefence word to cell and write cell as string
 (define (vm-deref-cell-w->string state word)
   (define derefed-word (peek-word-at-address state word))
   (format "~a" (vm-cell-w->string derefed-word)))
+
+;; derefence word to cell and write cell as string
+(define (vm-deref-cell-w-n->string state word)
+  (define derefed-word (peek-word-at-address state word))
+  (format "~a" (vm-cell-w-n->string derefed-word)))
 
 ;; write the car, cdr cell of the cell-pair at low/high in memory
 (define (vm-deref-cell-pair->string state low high (follow #f) (visited (list)))
@@ -202,6 +241,9 @@
 ;; write decoded cell described by word
 (define (vm-cell-w->string word (state '()) (follow #f) (visited (list)))
   (vm-cell->string (low-byte word) (high-byte word) state follow visited))
+
+(define (vm-cell-w-n->string word (state '()) (follow #f) (visited (list)))
+  (vm-cell-n->string (low-byte word) (high-byte word) state follow visited))
 
 ;; get the refcount of a cell pair
 (define (refcount-of-cell-pair state low high)
@@ -218,6 +260,35 @@
            (sub1 low)]
           [else (raise-user-error (format "unknown page type ~a" page-type))]))
   (peek state (bytes->int rc-offset high)))
+
+;; get the refcount of a cell (either on cell page, or on m1 page)
+(define (refcount-of-cell-n state low high)
+  (define page-type (peek state (bytes->int 0 high)))
+  (define rc-offset
+    (cond [(= #x20 (bitwise-and page-type #xf0)) ;; m1 page
+           low]
+          [else (raise-user-error (format "unknown page type ~a" page-type))]))
+  (peek state (bytes->int rc-offset high)))
+
+;; write decoded cell described by low high
+;; the low 2 bits are used for pointer tagging
+(define (vm-cell-n->string low high (state '()) (follow #f) (visited (list)))
+  (cond
+    [(memq (bytes->int low high) visited)
+     (format "RECURSION->$~a~a" (format-hex-byte high) (format-hex-byte low))]
+    [(= 0 low) "ptr NIL"]
+    [(= 0 (bitwise-and #x01 low)) (format "ptr[~a] $~a~a"
+                                          (if (empty? state) "-" (refcount-of-cell-n state low high))
+                                          (format-hex-byte high)
+                                          (format-hex-byte (bitwise-and #xfe low)))]
+    [(= 3 (bitwise-and #x03 low)) (format "int $~a~a"
+                                          (format-hex-byte (arithmetic-shift low -2))
+                                          (format-hex-byte high))]
+    [(= TAG_BYTE_BYTE_CELL (bitwise-and #xff low)) (format "byte $~a" (format-hex-byte high))]
+    ;; TODO: a structure has a special value + follow bytes
+    ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
+    ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
+    [else "?"]))
 
 ;; write decoded cell described by low high
 ;; the low 2 bits are used for pointer tagging
@@ -253,7 +324,6 @@
     ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
     [else "?"]))
 
-
 ;; is RT empty?
 (define (regt-empty? state)
   (= 0 (peek state ZP_RT)))
@@ -274,6 +344,14 @@
    state
    follow))
 
+;; write string of current RT
+(define (vm-regt-n->string state (follow #f))
+  (vm-cell-n->string
+   (peek state ZP_RT)
+   (peek state (add1 ZP_RT))
+   state
+   follow))
+
 ;; get the actual refcount of a cell-pair-ptr
 (define (vm-refcount-cell-pair-ptr state cell-pair-ptr)
   (define lowb  (low-byte cell-pair-ptr))
@@ -289,6 +367,13 @@
   (peek state (bytes->int refc highb) ))
 
 ;; write string of current RA
+(define (vm-rega-n->string state)
+  (vm-cell-n->string
+   (peek state ZP_RA)
+   (peek state (add1 ZP_RA))
+   state))
+
+;; write string of current RA
 (define (vm-rega->string state)
   (vm-cell->string
    (peek state ZP_RA)
@@ -297,6 +382,12 @@
 
 (define (vm-regp->string state)
   (vm-cell->string
+   (peek state ZP_RP)
+   (peek state (add1 ZP_RP))
+   state))
+
+(define (vm-regp-n->string state)
+  (vm-cell-n->string
    (peek state ZP_RP)
    (peek state (add1 ZP_RP))
    state))

@@ -21,14 +21,14 @@
                   ZP_LOCALS_LB_PTR
                   ZP_RT)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
-                  PUSH_RT_TO_EVLSTK_IF_NONEMPTY))
+                  PUSH_RT_TO_EVLSTK))
 
 (provide BC_WRITE_LOCAL_SHORT           ;; write a local into the tos (rt)
          BC_PUSH_LOCAL_SHORT            ;; push the local onto the eval stack
          BC_PUSH_LOCAL_CXR              ;; push local 0-3 and then car
          PUSH_RT_WRITE_LOCAL_bc_enc)    ;; push rt, then write local (encoded w/i bc) into rt, no refcnt!
 
-(define BC_WRITE_LOCAL_SHORT #t)
+(define BC_WRITE_LOCAL_SHORT '())
 (define BC_PUSH_LOCAL_SHORT
   (add-label-suffix
    "__" "__BC_PUSH_LOCAL_SHORT"
@@ -64,7 +64,7 @@
            (LSR)
            (AND !$03)
            (PHA)
-           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+           (JSR PUSH_RT_TO_EVLSTK)
            (PLA)
            (TAY)                                ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index

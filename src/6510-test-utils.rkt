@@ -6,7 +6,7 @@
 (require rackunit) ;; TODO: remove from here to be able to use typed variant instead
 (require racket/path)
 
-(provide skip inform-check-equal? skip-module drop-meta-info drop-meta-infos)
+(provide skip inform-check-equal? drop-meta-info drop-meta-infos)
 (provide (all-from-out rackunit))
 (provide (all-from-out racket/path))
 (provide (all-from-out ansi-color))
@@ -65,6 +65,7 @@
                         (displayln (format "name:       inform-check-equal?\nlocation:   ~a\nactual:     ~a\nexpected:   ~a\nmessage:    ~a" location a b msg))
                         (displayln "--------------------")))]))))))))
 
+
 ;; skip a test case, reporting it
 ;; usage:
 ;;   (skip (check...   ))              ;; skips the given test
@@ -89,8 +90,3 @@
             (with-colors 'red
               (lambda () (color-displayln (format "test skipped ~a." msg))))
             #t)))))))
-
-
-(define-syntax (skip-module stx)
-  (syntax-case stx ()
-    ([_ body] #'(list))))

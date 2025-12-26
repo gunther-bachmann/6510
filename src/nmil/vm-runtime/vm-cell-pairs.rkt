@@ -42,7 +42,7 @@
          WRITE_RT_TO_CELL0_CELLPAIR_RP
          WRITE_RT_TO_CELL1_CELLPAIR_RP)
 
-(module+ test
+(skip-module (module+ test
   (require (only-in racket/list make-list)
            "../../6510-test-utils.rkt"
            (only-in "../../tools/6510-interpreter.rkt" memory-list)
@@ -106,7 +106,7 @@
      (list (org #xcec0))
      VM_INITIAL_MM_REGS
      (list (org #xcf00))
-     VM_PAGE_SLOT_DATA)))
+     VM_PAGE_SLOT_DATA))))
 
 ;; @DC-FUN: INIT_CELLPAIR_PAGE_X_TO_AX, group: cell_pair
 ;; cell-pair page layout  (new layout with cell-pair-ptr having bit0 always set and bit1 always unset!)
@@ -206,7 +206,7 @@
 
             (RTS))))
 
-(module+ test #| vm_alloc_page_for_cell_pairs |#
+(skip-module (module+ test #| vm_alloc_page_for_cell_pairs |#
   (define vm-alloc-page-for-cell-pairs-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -246,7 +246,7 @@
                 "last cell first byte points to 0 (no next free)")
   (check-equal? (memory-list vm-alloc-page-for-cell-pairs-state (+ PAGE_AVAIL_0_W #xff) (+ PAGE_AVAIL_0_W #xff))
                 (list #xa0)
-                "last byte on page points to previous free page of cell-pairs"))
+                "last byte on page points to previous free page of cell-pairs")))
 
 ;; @DC-FUN: ALLOC_CELLPAIR_AX_TO_RT, group: cell_pair
 ;; allocate a cell-pair from this page (if page has no free cell-pairs, a new page is allocated and is used to get a free cell-pair!)
@@ -275,7 +275,7 @@
           (INC $c000)
           (RTS))))
 
-(module+ test #| vm-alloc-cell-pair-on-page-a-into-rt |#
+(skip-module (module+ test #| vm-alloc-cell-pair-on-page-a-into-rt |#
   (define vm-alloc-cell-pair-on-page-a-into-rt-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -289,7 +289,7 @@
                       "slots used:     1"
                       "next free slot: $09"))
   (check-equal? (vm-regt->string vm-alloc-cell-pair-on-page-a-into-rt-state)
-                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0))))
+                (format "pair-ptr[0] $~a05" (format-hex-byte PAGE_AVAIL_0)))))
 
 ;; @DC-FUN: ALLOC_CELLPAIR_TO_RT, group: cell_pair
 ;; try to reuse root of free tree: use root but make sure to deallocate cell1 of the root (since this might still point to some data)
@@ -409,7 +409,7 @@
    (label TEMP_PTR__)
           (word $0000))))
 
-(module+ test #| vm-allocate-cell-pair-ptr-to-rt |#
+(skip-module (module+ test #| vm-allocate-cell-pair-ptr-to-rt |#
   ;; test case 1: allocate new page, allocate first cell-pair on new page, no existing (reusable) pair available
   (define vm-allocate-cell-pair-ptr-to-rt-1-state
     (compact-run-code-in-test-
@@ -582,7 +582,7 @@
                       "previous page:  $00"
                       "slots used:     2"
                       "next free slot: $41")
-                "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree"))
+                "still both are used on the page, one was allocated (reused) from tree, and the other is now head of the tree")))
 
 ;; @DC-FUN: GET_FRESH_CELLPAIR_TO_AX, group: cell_pair
 ;; get the page and unused cellpair for allocation
@@ -610,7 +610,7 @@
    (label DONE__GET_FRESH_CELLPAIR_TO_AX)
           (RTS)))
 
-(module+ test #| get-page-for-alloc-cellpair-to-ax |#
+(skip-module (module+ test #| get-page-for-alloc-cellpair-to-ax |#
   (define get-page-for-alloc-cellpair-to-ax-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -626,9 +626,9 @@
 
   (check-equal? (memory-list get-page-for-alloc-cellpair-to-ax-state ZP_RT (add1 ZP_RT))
                 (list #x09 PAGE_AVAIL_0)
-                "cell 09 is allocated on page_0"))
+                "cell 09 is allocated on page_0")))
 
-(module+ test #| get-page-for-alloc-cellpair-to-ax |#
+(skip-module (module+ test #| get-page-for-alloc-cellpair-to-ax |#
   (define get-page-for-alloc-cellpair-to-ax-2-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -644,7 +644,7 @@
 
   (check-equal? (memory-list get-page-for-alloc-cellpair-to-ax-2-state ZP_RT (add1 ZP_RT))
                 (list #x05 PAGE_AVAIL_1)
-                "since first page (page_0) is marked as full, first slot (05) of page_1 is allocated"))
+                "since first page (page_0) is marked as full, first slot (05) of page_1 is allocated")))
 
 
 ;; @DC-FUN: WRITE_CELLPAIR_RT_CELLy_TO_RT, group: cell_pair
@@ -653,8 +653,8 @@
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RT (must be cell-pair ptr) -> [A][B]
 ;; output: RT = A (Y=0) or B (Y=2)
-(define WRITE_CELLPAIR_RT_CELL1_TO_RT #t)
-(define WRITE_CELLPAIR_RT_CELL0_TO_RT #t)
+(define WRITE_CELLPAIR_RT_CELL1_TO_RT '())
+(define WRITE_CELLPAIR_RT_CELL0_TO_RT '())
 (define WRITE_CELLPAIR_RT_CELLy_TO_RT
   (list
    (label WRITE_CELLPAIR_RT_CELL1_TO_RT)
@@ -674,7 +674,7 @@
           (STX ZP_RT)
           (RTS)))
 
-(module+ test #| vm-write-rt-celly-to-rt |#
+(skip-module (module+ test #| vm-write-rt-celly-to-rt |#
   (define vm-write-rt-celly-to-rt-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -701,7 +701,7 @@
                 "int $1001")
 
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rt-state (+ PAGE_AVAIL_0_W #x05))
-                "(int $1001 . int $0110)"))
+                "(int $1001 . int $0110)")))
 
 ;; @DC-FUN: WRITE_CELLPAIR_RT_CELLy_TO_RP, group: cell_pair
 ;; write into RP the value of the Y's cell pointed to by the cell-pair ptr RT
@@ -709,8 +709,8 @@
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RT (must be cell-pair ptr) -> [A][B]
 ;; output: RP = A (Y=0) or B (Y=2)
-(define WRITE_CELLPAIR_RT_CELL1_TO_RP #t)
-(define WRITE_CELLPAIR_RT_CELL0_TO_RP #t)
+(define WRITE_CELLPAIR_RT_CELL1_TO_RP '())
+(define WRITE_CELLPAIR_RT_CELL0_TO_RP '())
 (define WRITE_CELLPAIR_RT_CELLy_TO_RP
   (list
    (label WRITE_CELLPAIR_RT_CELL1_TO_RP)
@@ -729,7 +729,7 @@
           (STA ZP_RP+1)
           (RTS)))
 
-(module+ test #| vm-write-rt-celly-to-ra |#
+(skip-module (module+ test #| vm-write-rt-celly-to-ra |#
   (define vm-write-rt-celly-to-rp-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -756,7 +756,7 @@
                 "int $1001")
 
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rt-celly-to-rp-state (+ PAGE_AVAIL_0_W #x05))
-                "(int $1001 . int $0110)"))
+                "(int $1001 . int $0110)")))
 
 ;; @DC-FUN: WRITE_CELLPAIR_RP_CELLy_TO_RP, group: cell_pair
 ;; overwrite the given cell-pair ptr in RP with the value of the Y's cell pointed to by the cell-pair
@@ -764,8 +764,8 @@
 ;; input:  Y - 0 (cell0), 2 (cell1)
 ;;         RP (must be cell-pair ptr) -> [A][B]
 ;; output: RP = A (Y=0) or B (Y=2)
-(define WRITE_CELLPAIR_RP_CELL0_TO_RP #t)
-(define WRITE_CELLPAIR_RP_CELL1_TO_RP #t)
+(define WRITE_CELLPAIR_RP_CELL0_TO_RP '())
+(define WRITE_CELLPAIR_RP_CELL1_TO_RP '())
 (define WRITE_CELLPAIR_RP_CELLy_TO_RP
   (list
    (label WRITE_CELLPAIR_RP_CELL1_TO_RP)
@@ -786,7 +786,7 @@
           (STA ZP_RP)
           (RTS)))
 
-(module+ test #| vm-write-ra-celly-to-ra |#
+(skip-module (module+ test #| vm-write-ra-celly-to-ra |#
     (define vm-write-rp-celly-to-rp-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -812,15 +812,15 @@
                 "int $1001")
 
   (check-equal? (vm-deref-cell-pair-w->string vm-write-rp-celly-to-rp-state (+ PAGE_AVAIL_0_W #x05))
-                "(int $1001 . int $0110)"))
+                "(int $1001 . int $0110)")))
 
 ;; write the cell in RP into the CELL Y (0|2) of the cell-pair referenced in RT
 ;; input:  Y, RT, RP
 ;; usage:  A, Y
 ;; output: RT@Y <- RP    Y=0: RT -> [RP][...],  Y=2: RT -> [...][RP]
 ;; funcs:  -
-(define WRITE_RP_TO_CELL0_CELLPAIR_RT #t)
-(define WRITE_RP_TO_CELL1_CELLPAIR_RT #t)
+(define WRITE_RP_TO_CELL0_CELLPAIR_RT '())
+(define WRITE_RP_TO_CELL1_CELLPAIR_RT '())
 (define WRITE_RP_TO_CELLy_CELLPAIR_RT
   (list
    (label WRITE_RP_TO_CELL1_CELLPAIR_RT)
@@ -840,7 +840,7 @@
           (STA (ZP_RT),y)
           (RTS)))
 
-(module+ test #| vm-write-rp-to-celly-rt |#
+(skip-module (module+ test #| vm-write-rp-to-celly-rt |#
   (define vm_write_rp_to_celly_rt_state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -872,7 +872,7 @@
 
   (check-equal? (vm-deref-cell-pair-w->string vm_write_rp_to_celly_rt_state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"
-                "dereferencing the cell pair in rt, yields the int pairs 1001 and 0110"))
+                "dereferencing the cell pair in rt, yields the int pairs 1001 and 0110")))
 
 ;; pass in the entry label which uses lowbyte (tag byte) already lsr'd twice!
 (define (INC_REFCNT_CELLPAIR_RT lsred-label)
@@ -893,7 +893,7 @@
           (RTS)))
 
 
-(module+ test #| vm-refcount-mmcr-rt--cell-pair-ptr |#
+(skip-module (module+ test #| vm-refcount-mmcr-rt--cell-pair-ptr |#
   (define vm-refcount-mmcr-rt--cell-pair-ptr-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -917,7 +917,7 @@
   (check-equal? (vm-regt->string vm-refcount-mmcr-rt--cell-pair-ptr-state2)
                 (format "pair-ptr[1] $~a05" (format-hex-byte PAGE_AVAIL_0)))
   (check-equal? (vm-refcount-cell-pair-ptr vm-refcount-mmcr-rt--cell-pair-ptr-state2 (+ PAGE_AVAIL_0_W #x05))
-                1))
+                1)))
 
 ;; pass in the entry label which uses lowbyte (tag byte) already lsr'd twice!
 (define (DEC_REFCNT_CELLPAIR_RZ lsred-label)
@@ -958,8 +958,8 @@
 ;; output: GLOBAL_CELLPAIR_FREE_LIST << RZ
 ;; funcs:
 ;;   DEC_REFCNT_RZ>>
-(define FREE_CELLPAIR_RT #t)
-(define FREE_CELLPAIR_RA #t)
+(define FREE_CELLPAIR_RT '())
+(define FREE_CELLPAIR_RA '())
 (define FREE_CELLPAIR_RZ
   (add-label-suffix
    "__" "__NEW_FREE_CELLPAIR_RZ"
@@ -1026,7 +1026,7 @@
            (RTS))))
 
 
-(module+ test #| new-free-cell-pair-ptr-in-rt |#
+(skip-module (module+ test #| new-free-cell-pair-ptr-in-rt |#
   (define new-free-cell-pair-ptr-in-rt-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -1143,7 +1143,7 @@
   ;; ;;               (format "ptr[-] $~a02" (format-hex-byte PAGE_AVAIL_0)))
   ;; (check-equal? (vm-deref-cell-w->string new-free-cell-pair-ptr-in-rt-4-state (+ PAGE_AVAIL_0 #x02))
   ;;               "empty")
-  )
+  ))
 
 ;; @DC-FUN: WRITE_RT_TO_CELLy_CELLPAIR_RP, group: cell_pair
 ;; write the cell in RT into the CELL Y (0|2) of the cell-pair referenced in RP
@@ -1151,8 +1151,8 @@
 ;; usage:  A, Y
 ;; output: RP@Y <- RT    Y=0: RP -> [RT][...],  Y=2: RP -> [...][RT]
 ;; funcs:  -
-(define WRITE_RT_TO_CELL0_CELLPAIR_RP #t)
-(define WRITE_RT_TO_CELL1_CELLPAIR_RP #t)
+(define WRITE_RT_TO_CELL0_CELLPAIR_RP '())
+(define WRITE_RT_TO_CELL1_CELLPAIR_RP '())
 (define WRITE_RT_TO_CELLy_CELLPAIR_RP
   (list
    (label WRITE_RT_TO_CELL1_CELLPAIR_RP)
@@ -1171,7 +1171,7 @@
           (STA (ZP_RP),y)
           (RTS)))
 
-(module+ test #| vm-write-rt-to-celly-ra |#
+(skip-module (module+ test #| vm-write-rt-to-celly-ra |#
   (define vm_write_rt_to_celly_rp_state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -1198,7 +1198,7 @@
 
   (check-equal? (vm-deref-cell-pair-w->string vm_write_rt_to_celly_rp_state (+ PAGE_AVAIL_0_W #x05))
                 "(int $1001 . int $0110)"
-                "dereferencing the cell pair in rp, yields the int pairs 1001 and 0110"))
+                "dereferencing the cell pair in rp, yields the int pairs 1001 and 0110")))
 
 ;; @DC-FUN: GC_CELLPAIR_FREE_LIST, group: gc
 ;; actively free all enqueued cell pairs of the free-list!

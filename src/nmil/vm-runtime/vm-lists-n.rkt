@@ -17,17 +17,13 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   define-vm-function
                   define-vm-function-wol)
          (only-in "../vm-inspector-utils.rkt"
-                  vm-stack->strings
-                  vm-page->strings
-                  vm-regt->string
-                  vm-deref-cell-pair-w->string)
-         (only-in "./vm-call-frame.rkt"
-                  vm-call-frame
-                  vm-call-frame-wo-data-tail)
+                  vm-stack-n->strings
+                  vm-page-n->strings
+                  vm-regt-n->string
+                  vm-deref-cell-pair-w-n->string)
          "./vm-memory-manager-test-utils.rkt")
 
-(provide vm-lists
-         vm-lists-wo-data-tail
+(provide vm-list-code
          VM_CxxR
          VM_CAR
          VM_CDR
@@ -36,19 +32,28 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (module+ test
   (require "../../6510-test-utils.rkt"
            (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
+           (only-in "./vm-cell-array-n.rkt" vm-cell-array-code)
            (only-in "./vm-m1-slots-n.rkt" vm-m1-slot-code)
            (only-in "./vm-pages-n.rkt" vm-pages-code)
-           (only-in "./vm-cell-array-n.rkt" vm-cell-array-code))
+           (only-in "./vm-cell-stack.rkt" vm-cell-stack-code)
+           (only-in "./vm-register-functions.rkt" vm-register-functions-code )
+           (only-in "./vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
 
   (define (wrap-code-for-test bc)
-    (append (list (org #x2000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER))
+    (append (list (org #xA000)
+                  (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
+                  (LDA !$01) ;; just mimick an empty cell-stack
+                  (STA ZP_CELL_STACK_TOS))
+            (list (label TEST_ENTRY))
+            bc
+            (list (BRK))
             vm-m1-slot-code
             vm-pages-code
             vm-cell-array-code
-            bc
-            (list (BRK))
-            vm-lists
+            vm-list-code
+            vm-cell-stack-code
+            VM_MEMORY_MANAGEMENT_CONSTANTS
+            vm-register-functions-code
             (list (label VM_INTERPRETER_OPTABLE)) ;; needed by interpreter_zp
             VM_INTERPRETER_ZP)) ;; needed because of references to ZP_VM_PC
 
@@ -102,22 +107,21 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (define use-case-nil_p-a-state-after  ;; (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-nil_p-a-state-before))
     (run-code-in-test use-case-nil_p-a-code))
 
-  (skip (check-equal? (vm-stack->strings use-case-nil_p-a-state-after)
-                     (list "stack holds 1 item"
-                           "int $0001  (rt)")))
+  (check-equal? (vm-regt-n->string use-case-nil_p-a-state-after)
+                "int $0001"
+                "returns true")
 
   (define use-case-nil_p-b-code
     (list
-     (JSR ALLOC_CELLPAIR_TO_RT)
+     (JSR ALLOC_CELL_ARRAY_P0_TO_RT)
      (JSR VM_NIL_P)))
 
   (define use-case-nil_p-b-state-after
     (run-code-in-test use-case-nil_p-b-code))
 
-  (skip (check-equal? (vm-stack->strings use-case-nil_p-b-state-after)
-                     (list "stack holds 1 item"
-                           "int $0000  (rt)")
-                     "which is false")))
+  (check-equal? (vm-regt-n->string use-case-nil_p-b-state-after)
+                "int $0000"
+                "return false"))
 
 ;; @DC-FUN: VM_CAR, group: list
 ;; replace cell-pair on tos with CAR element
@@ -218,8 +222,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (LDA !$04) ;; payload of size 4
           (JSR ALLOC_CELL_ARRAY_P0_TO_RT)        ;; this cellpair is new
           ;; (JSR INC_REFCNT_RT) ;; already done by allocation
-          (JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)    ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
-          (JMP POP_CELL_EVLSTK_TO_CELL1_RT)))    ;; and and write into cell1 => no refcnt mod needed here
+          (JSR WRITE_RP_TO_ARR_AT0_RT)  ;;(JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)    ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
+          (JMP POP_CELL_EVLSTK_TO_ARR_AT1_RT))) ;; (JMP POP_CELL_EVLSTK_TO_CELL1_RT)    ;; and and write into cell1 => no refcnt mod needed here
 
 (module+ test #| VM_CONS |#
   (define use-case-cons-code
@@ -229,34 +233,29 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
      (JSR VM_CONS__REFCNTD)
      ))
 
-  (define use-case-cons-state-after
-    (run-code-in-test use-case-cons-code ))
+ (define use-case-cons-state-after
+       (run-code-in-test use-case-cons-code ))
 
-  (skip (check-equal? (vm-stack->strings use-case-cons-state-after)
-                     (list "stack holds 1 item"
-                           (format "pair-ptr[1] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0)))))
-  (skip (check-equal? (vm-page->strings use-case-cons-state-after PAGE_AVAIL_0)
-                     (list "page-type:      cell-pair page"
-                           "previous page:  $00"
-                           "slots used:     1"
-                           "next free slot: $09")))
-  (skip (check-equal? (vm-deref-cell-pair-w->string use-case-cons-state-after (+ PAGE_AVAIL_0_W #x05))
-                     "(int $0001 . pair-ptr NIL)")))
+ (check-equal? (vm-stack-n->strings use-case-cons-state-after)
+                  (list "stack holds 2 items"
+                        (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                        "ptr NIL"))
+ (check-equal? (vm-page-n->strings use-case-cons-state-after PAGE_AVAIL_0)
+                 (list "page-type:      m1 page p0"
+                       "previous page:  $00"
+                       "slots used:     1"
+                       "next free slot: $08"))
+  (check-equal? (vm-deref-cell-pair-w-n->string use-case-cons-state-after (+ PAGE_AVAIL_0_W #x02))
+                  "(int $0001 . ptr NIL)"))
 
-(define just-vm-list
+(define vm-list-code
   (append VM_CONS__REFCNTD
           VM_CAR
           VM_CDR
           VM_NIL_P
           VM_CxxR))
 
-(define vm-lists-wo-data-tail
-  (append just-vm-list vm-call-frame-wo-data-tail))
-
-(define vm-lists
-  (append just-vm-list vm-call-frame))
-
 (module+ test #| vm-lists |#
-  (inform-check-equal? (code-len (flatten just-vm-list))
+  (inform-check-equal? (code-len (flatten vm-list-code))
                        104
                        "estimated list code length"))

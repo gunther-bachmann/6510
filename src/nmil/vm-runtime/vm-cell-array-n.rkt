@@ -7,6 +7,7 @@
  WRITE_RP_TO_ARR_AT0_RT          ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
  POP_CELL_EVLSTK_TO_ARR_AT1_RT
  ALLOC_CELL_ARRAY_TO_RT
+ ALLOC_CELL_ARRAY_P0_TO_RT
  ;; FREE_CELL_ARRAY_RZ
  ;; INIT_CELL_ARRAY_RA_WITH_RT      ;; fill array with cell that currently is in RT
 
@@ -82,6 +83,7 @@
                     CP_RT_TO_RA
                     CP_RA_TO_RT
                     CP_RA_TO_RB
+                    CP_RT_TO_RZ
                     SWAP_RA_RB
                     SWAP_ZP_WORD))
 
@@ -100,6 +102,7 @@
      CP_RA_TO_RT
      CP_RT_TO_RA
      CP_RA_TO_RB
+     CP_RT_TO_RZ
      SWAP_RA_RB
      SWAP_ZP_WORD
      (list (label INIT_CELLSTACK_PAGE_X) (RTS)))))
@@ -115,7 +118,7 @@
 ;; input:  -
 ;; output: RT = pointer to allocated cell-array with two cells
 ;;         cell array ref count = 1
-(define ALLOC_CELL_ARRAY_P0_TO_RT #t)
+(define ALLOC_CELL_ARRAY_P0_TO_RT '())
 (define-vm-function ALLOC_CELL_ARRAY_TO_RT
   (list
           (PHA)                 ;; number of cells
@@ -203,8 +206,8 @@
    "cell array is allocated to #x02 on the first page available"))
 
 ;; no refcnt adjustments!
-(define WRITE_ARR_ATal_RA_TO_RT #t)
-(define WRITE_ARR_ATyl_RA_TO_RT #t)
+(define WRITE_ARR_ATal_RA_TO_RT '())
+(define WRITE_ARR_ATyl_RA_TO_RT '())
 (define-vm-function WRITE_ARR_ATa_RA_TO_RT
   (list
           (ASL A)
@@ -235,8 +238,8 @@
          (RTS)))
 
 ;; no refcnt adjustments!
-(define WRITE_ARR_ATal_RT_TO_RT #t)
-(define WRITE_ARR_ATyl_RT_TO_RT #t)
+(define WRITE_ARR_ATal_RT_TO_RT '())
+(define WRITE_ARR_ATyl_RT_TO_RT '())
 (define-vm-function WRITE_ARR_ATa_RT_TO_RT
   (list
           (ASL A)
@@ -254,7 +257,7 @@
           (RTS)))
 
 ;; no refcnt adjustments!
-(define POP_CELL_EVLSTK_TO_ARR_AT1_RT #t)
+(define POP_CELL_EVLSTK_TO_ARR_AT1_RT '())
 (define-vm-function-wol WRITE_RP_TO_ARR_AT0_RT
   (list
    (label POP_CELL_EVLSTK_TO_ARR_AT1_RT)
@@ -280,10 +283,13 @@
    WRITE_ARR_ATa_RT_TO_RT
    ;; includes WRITE_ARR_ATal_RT_TO_RT
    ;; includes WRITE_ARR_ATyl_RT_TO_RT
+
+   WRITE_RP_TO_ARR_AT0_RT          ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
+   ;; includes POP_CELL_EVLSTK_TO_ARR_AT1_RT
    ))
 
 (module+ test #| vm-cell-array-code |#
   (inform-check-equal?
    (code-len vm-cell-array-code)
-   21
+   59
    "module uses n bytes of code"))

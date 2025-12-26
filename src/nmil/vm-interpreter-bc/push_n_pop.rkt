@@ -22,7 +22,7 @@ TODO: get tests (still in vm-interpreter) into this file
          (only-in "../vm-runtime/vm-cell-stack.rkt"
                   PUSH_XA_TO_EVLSTK
                   PUSH_INT_TO_EVLSTK
-                  PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+                  PUSH_RT_TO_EVLSTK)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RP
@@ -51,7 +51,7 @@ TODO: get tests (still in vm-interpreter) into this file
   (list
    (label BC_DUP)
           (JSR INC_REFCNT_RT)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+          (JSR PUSH_RT_TO_EVLSTK)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_SWAP

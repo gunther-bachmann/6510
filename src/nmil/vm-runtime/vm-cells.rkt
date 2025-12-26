@@ -322,8 +322,8 @@
           (RTS)))
 
 
-(define DEC_REFCNT_CELL_RT #t)
-(define DEC_REFCNT_CELL_RA #t)
+(define DEC_REFCNT_CELL_RT '())
+(define DEC_REFCNT_CELL_RA '())
 ;; pass in the entry label which uses lowbyte (tag byte) already lsr'd twice!
 (define (DEC_REFCNT_CELL_RZ lsred-label dec-refcnt-m1-label)
   (list
@@ -397,8 +397,8 @@
 ;;   DEC_REFCNT_RZ
 ;;   (CP_RA_TO_RZ)
 ;;   (CP_RT_TO_RZ)
-(define FREE_CELL_RT #t)
-(define FREE_CELL_RA #t)
+(define FREE_CELL_RT '())
+(define FREE_CELL_RA '())
 (define FREE_CELL_RZ
   (add-label-suffix
    "__" "__NEW_FREE_CELL_RZ"

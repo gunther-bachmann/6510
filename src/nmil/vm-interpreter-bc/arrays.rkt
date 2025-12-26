@@ -18,7 +18,7 @@
                   POP_EVLSTK_TO_ARR_ATa_RA
                   WRITE_ARR_ATa_RA_TO_RT)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
-                  PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+                  PUSH_RT_TO_EVLSTK)
          (only-in "../vm-runtime/vm-m1-slots.rkt"
                   INC_REFCNT_M1_SLOT_RA)
          (only-in "../vm-runtime/vm-register-functions.rkt" SWAP_RA_RB)
@@ -69,7 +69,7 @@
            (LSR)
            (AND !$03)
            (PHA)
-           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+           (JSR PUSH_RT_TO_EVLSTK)
            (PLA)
            (JSR WRITE_ARR_ATa_RA_TO_RT)
            (JSR INC_REFCNT_RT)
@@ -161,7 +161,7 @@
 (define BC_PUSH_RA
   (list
    (label BC_PUSH_RA)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+          (JSR PUSH_RT_TO_EVLSTK)
    (label BC_WRITE_RA)
           (JSR CP_RA_TO_RT)
           (JSR INC_REFCNT_RT)
@@ -170,7 +170,7 @@
 (define BC_PUSH_RA_AF
   (list
    (label BC_PUSH_RA_AF)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+          (JSR PUSH_RT_TO_EVLSTK)
           (LDA ZP_RAI)
           (JSR WRITE_ARR_ATa_RA_TO_RT)
           (JSR INC_REFCNT_RT)

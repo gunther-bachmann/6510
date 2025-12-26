@@ -1,5 +1,15 @@
 #lang racket/base
 
+(provide vm-call-frame-code
+         vm-call-frame->strings
+         vm-call-frames->string
+
+         VM_POP_CALL_FRAME_N
+         VM_REFCOUNT_DECR_CURRENT_LOCALS
+         VM_ALLOC_LOCALS
+         VM_PUSH_CALL_FRAME_N
+         VM_INITIALIZE_CALL_FRAME)
+
 #|
 
   implementation of a call frame for vm calls
@@ -19,9 +29,24 @@
                   peek)
          (only-in "../vm-interpreter-loop.rkt"
                   ZP_VM_PC)
-         (only-in "./vm-memory-manager.rkt"
-                  vm-memory-manager-wo-data-tail
-                  vm-memory-manager)
+         (only-in "./vm-memory-map.rkt"
+                  VM_MEMORY_MANAGEMENT_CONSTANTS)
+         ;; (only-in "./vm-memory-manager.rkt"
+         ;;          vm-memory-manager-wo-data-tail
+         ;;          vm-memory-manager)
+         (only-in "./vm-cell-stack.rkt"
+                  INIT_CELLSTACK_PAGE_X
+                  vm-cell-stack-code)
+         (only-in "./vm-m1-slots-n.rkt"
+                  DEC_REFCNT_M1_SLOT_RZ_N
+                  vm-m1-slot-code)
+         (only-in "./vm-register-functions.rkt"
+                  vm-register-functions-code)
+         (only-in "./vm-pages-n.rkt"
+                    VM_ALLOCATE_NEW_PAGE_N
+                    VM_DEALLOCATE_PAGE_N
+                    VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
+                    vm-pages-code)
          (only-in "./vm-memory-map.rkt"
                   ZP_CALL_FRAME
                   ZP_VM_FUNC_PTR
@@ -30,29 +55,20 @@
                   ZP_LOCALS_TOP_MARK
                   ZP_CALL_FRAME_TOP_MARK))
 
-(provide vm-call-frame
-         vm-call-frame-wo-data-tail
-         vm-call-frame->strings
-         vm-call-frames->string
-
-         VM_POP_CALL_FRAME_N
-         VM_REFCOUNT_DECR_CURRENT_LOCALS
-         VM_ALLOC_LOCALS
-         VM_PUSH_CALL_FRAME_N)
-
 (module+ test #| after mem init |#
-  (require (only-in "../../ast/6510-relocator.rkt" command-len code-len))
+  (require (only-in "../../ast/6510-relocator.rkt" command-len code-len)
+           )
 
 
-  (define PAGE_AVAIL_0 #x8a)
-  (define PAGE_AVAIL_0_W #x8a00)
-  (define PAGE_AVAIL_1 #x89)
-  (define PAGE_AVAIL_1_W #x8900)
+  (define PAGE_AVAIL_0 #xcc)
+  (define PAGE_AVAIL_0_W #xcc00)
+  (define PAGE_AVAIL_1 #xcb)
+  (define PAGE_AVAIL_1_W #xcb00)
 
-  (define PAGE_CALL_FRAME #x8d)
-  (define PAGE_CALL_FRAME_W #x8d00)
-  (define PAGE_LOCALS_LB #x8b)
-  (define PAGE_LOCALS_HB #x8c))
+  (define PAGE_CALL_FRAME #xcf)
+  (define PAGE_CALL_FRAME_W #xcf00)
+  (define PAGE_LOCALS_LB #xcd)
+  (define PAGE_LOCALS_HB #xce))
 
 (module+ test
   (require "../../6510-test-utils.rkt"
@@ -68,18 +84,23 @@
     (append
             (list
              (org #xa000)
-             (JSR VM_INITIALIZE_MEMORY_MANAGER)
+             (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
              (JSR VM_INITIALIZE_CALL_FRAME)
              (label TEST_ENTRY))
             bc
             (list (BRK))
+            VM_MEMORY_MANAGEMENT_CONSTANTS
+            vm-pages-code
+            vm-cell-stack-code
+            vm-m1-slot-code
+            vm-register-functions-code
             (remove-labels-for complete-code (filter (lambda (ast-cmd) (ast-label-def-cmd? ast-cmd)) mocked-code-list))
             VM_INTERPRETER_ZP
             (list (label VM_INTERPRETER_OPTABLE))))
 
   (define (run-code-in-test bc (debug #f) #:mock (mocked-code-list (list)))
     (run-code-in-test-on-code 
-     (wrap-code-for-test bc vm-call-frame mocked-code-list)
+     (wrap-code-for-test bc vm-call-frame-code mocked-code-list)
      debug)))
 
 
@@ -146,12 +167,12 @@
           (STX ZP_LOCALS_HB_PTR+1)
 
    (label ALLOC_LOCALS_STACK)
-          (JSR ALLOC_PAGE_TO_X)
+          (JSR VM_ALLOCATE_NEW_PAGE_N)
           (LDA ZP_LOCALS_HB_PTR+1) ;; previous locals hb page
           (STX ZP_LOCALS_HB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_X)
 
-          (JSR ALLOC_PAGE_TO_X)
+          (JSR VM_ALLOCATE_NEW_PAGE_N)
           (LDA ZP_LOCALS_LB_PTR+1) ;; previous locals lb page
           (STX ZP_LOCALS_LB_PTR+1)
           (JMP INIT_CELLSTACK_PAGE_X)))
@@ -208,7 +229,7 @@
 
    (label NO_SAVE_OF_OLD_FRAME_DATA__VM_ALLOC_CALL_FRAME_N)
           ;; allocate completely new page
-          (JSR ALLOC_PAGE_TO_X)
+          (JSR VM_ALLOCATE_NEW_PAGE_N)
           (TXA)
 
           ;; init page as new call frame page (00 = page type, 01 = previous call frame page, 02 = top mark [uninitialized until full], rest uninitialized)
@@ -543,8 +564,9 @@
           (STA ZP_CALL_FRAME) ;; do this so zp_call_frame behaves as if no page change took place (will be put into top mark eventually)
 
           ;; free old call frame page!
-          (TXA)
-          (JSR FREE_PAGE_A)
+          (JSR VM_DEALLOCATE_PAGE_N)
+          ;; (TXA)
+          ;; (JSR FREE_PAGE_A)
 
           (LDA ZP_CALL_FRAME_TOP_MARK)
    (label NO_PAGE_CHANGE__VM_POP_CALL_FRAME_N)
@@ -591,10 +613,14 @@
           (BEQ NO_LOCALS_PAGE_CHANGE__VM_POP_CALL_FRAME_N)
 
           ;; free the old locals page (lb and hb) and set the top mark accordingly
-          (LDA ZP_TEMP)
-          (JSR FREE_PAGE_A)
-          (LDA ZP_TEMP2)
-          (JSR FREE_PAGE_A)
+          (LDX ZP_TEMP)
+          (JSR VM_DEALLOCATE_PAGE_N)
+          ;; (LDA ZP_TEMP)
+          ;; (JSR FREE_PAGE_A)
+          (LDX ZP_TEMP2)
+          (JSR VM_DEALLOCATE_PAGE_N)
+          ;; (LDA ZP_TEMP2)
+          ;; (JSR FREE_PAGE_A)
 
           ;; restore topmark of new and current locals page
           (LDA !$00)
@@ -855,10 +881,14 @@
           (STA ZP_LOCALS_TOP_MARK)      ;; keep #
 
           ;; free the pages
-          (LDA ZP_LOCALS_LB_PTR+1)
-          (JSR FREE_PAGE_A)
-          (LDA ZP_LOCALS_HB_PTR+1)
-          (JSR FREE_PAGE_A)
+          (LDX ZP_LOCALS_LB_PTR+1)
+          (JSR VM_DEALLOCATE_PAGE_N)
+          (LDX ZP_LOCALS_HB_PTR+1)
+          (JSR VM_DEALLOCATE_PAGE_N)
+          ;; (LDA ZP_LOCALS_LB_PTR+1)
+          ;; (JSR FREE_PAGE_A)
+          ;; (LDA ZP_LOCALS_HB_PTR+1)
+          ;; (JSR FREE_PAGE_A)
 
           ;; get previous page (using data from the just freed pages, so make sure no one interferes!)
           (LDY !$01)
@@ -909,7 +939,7 @@
           (BEQ NEXT_ITER__)       ;; definitely no pointer, since page is 00
           (STA ZP_RZ+1)
           (STY COUNTER__)
-          (JSR DEC_REFCNT_RZ)
+          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
           (LDY COUNTER__)
    (label S0_NEXT_ITER__)
           (LDA !$00)
@@ -928,7 +958,7 @@
 (module+ test #| free locals |#
   (skip (check-equal? #t #f)))
 
-(define just-vm-call-frame
+(define vm-call-frame-code
   (append VM_INITIALIZE_CALL_FRAME
           ALLOC_LOCALS_STACK
           VM_ALLOC_CALL_FRAME_N                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
@@ -938,15 +968,7 @@
           VM_FREE_LOCALS
           VM_REFCOUNT_DECR_CURRENT_LOCALS))
 
-(define vm-call-frame-wo-data-tail
-  (append just-vm-call-frame
-          vm-memory-manager-wo-data-tail))
-
-(define vm-call-frame
-  (append just-vm-call-frame
-          vm-memory-manager))
-
 (module+ test #| vm-call-frame |#
-  (inform-check-equal? (code-len (flatten just-vm-call-frame))
-                       626
+  (inform-check-equal? (code-len (flatten vm-call-frame-code))
+                       625
                        "estimated code length of call-frame runtime"))

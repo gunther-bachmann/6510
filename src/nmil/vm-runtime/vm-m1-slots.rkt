@@ -1237,7 +1237,7 @@
   ;; free-page for slot type 0 = cc
 
 
-(define VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS #t)
+(define VM_REMOVE_FULL_PAGE_FOR_TYPE_X_SLOTS '())
 
 ;; @DC-FUN: VM_REMOVE_FULL_PAGES_FOR_RA_SLOTS, group: m1_slot
 ;; remove full pages in the free list of pages of the same type as are currently in ZP_RA

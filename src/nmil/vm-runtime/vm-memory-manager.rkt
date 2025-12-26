@@ -234,8 +234,8 @@ call frame primitives etc.
 ;;         (in case of m1 pages, @ZP_RT-1)
 ;;         (in case of cell pages @ZP_RT>>1)
 ;;         (in case of cell-pair pages @ZP_RT>>2)
-(define INC_REFCNT_CELLARR_RT #t)
-(define INC_REFCNT_NATIVEARR_RT #t)
+(define INC_REFCNT_CELLARR_RT '())
+(define INC_REFCNT_NATIVEARR_RT '())
 (define INC_REFCNT_RT
   (add-label-suffix
    "__" "__INC_REFCNT_RT"
@@ -388,20 +388,20 @@ call frame primitives etc.
 ;;   FREE_M1_SLOT_RZ >>
 ;;   FREE_CELL_RZ >>
 ;;   FREE_CELLPAIR_RZ >>
-(define FREE_M1_SLOT_RZm1 #t)
-(define DEC_REFCNT_M1_SLOT_RZ #t)
-(define DEC_REFCNT_CELLARR_RZ #t)
-(define DEC_REFCNT_NATIVEARR_RZ #t)
-(define DEC_REFCNT_M1_SLOT_RT #t)
-(define DEC_REFCNT_CELLARR_RT #t)
-(define DEC_REFCNT_NATIVEARR_RT #t)
-(define DEC_REFCNT_M1_SLOT_RA #t)
-(define DEC_REFCNT_CELLARR_RA #t)
-(define DEC_REFCNT_NATIVEARR_RA #t)
-(define DEC_REFCNT_RT #t)
-(define DEC_REFCNT_RA #t)
-(define DEC_REFCNT_RB #t)
-(define DEC_REFCNT_RC #t)
+(define FREE_M1_SLOT_RZm1 '())
+(define DEC_REFCNT_M1_SLOT_RZ '())
+(define DEC_REFCNT_CELLARR_RZ '())
+(define DEC_REFCNT_NATIVEARR_RZ '())
+(define DEC_REFCNT_M1_SLOT_RT '())
+(define DEC_REFCNT_CELLARR_RT '())
+(define DEC_REFCNT_NATIVEARR_RT '())
+(define DEC_REFCNT_M1_SLOT_RA '())
+(define DEC_REFCNT_CELLARR_RA '())
+(define DEC_REFCNT_NATIVEARR_RA '())
+(define DEC_REFCNT_RT '())
+(define DEC_REFCNT_RA '())
+(define DEC_REFCNT_RB '())
+(define DEC_REFCNT_RC '())
 (define DEC_REFCNT_RZ
   (add-label-suffix
    "__" "__DEC_REFCNT_RZ"

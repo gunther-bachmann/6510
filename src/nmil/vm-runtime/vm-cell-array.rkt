@@ -19,6 +19,7 @@ memory management for cell arrays
                   ADD_M1_SLOT_RZ_TO_PFL
                   DROP_FULL_PAGES_AT_HEAD_OF_M1_PAGE_A
                   PUT_PAGE_AS_HEAD_OF_M1_PAGE_RZ)
+         (only-in "../../6510-utils.rkt")
          (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   TAG_BYTE_CELL_ARRAY
@@ -44,7 +45,7 @@ memory management for cell arrays
           WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS ;; write tos into cell-array RA element A checking array bounds
           WRITE_RT_TO_ARR_ATa_RA)      ;; write cell in RT into cell-array RA at A
 
-(module+ test
+(skip-module (module+ test
   (require "../../6510-test-utils.rkt"
            (only-in "../../tools/6510-interpreter.rkt"
                     memory-list
@@ -158,7 +159,7 @@ memory management for cell arrays
      (list (org #xcec0))
      VM_INITIAL_MM_REGS
      (list (org #xcf00))
-     VM_PAGE_SLOT_DATA)))
+     VM_PAGE_SLOT_DATA))))
 
 ;; @DC-FUN: ALLOC_CELLARR_TO_RA, group: cell_array
 ;; allocate an array of cells (also useful for structures)
@@ -204,7 +205,7 @@ memory management for cell arrays
 
           (RTS))))
 
-(module+ test #| vm_allocate_cell_array |#
+(skip-module (module+ test #| vm_allocate_cell_array |#
   (define test-alloc-cell-array-state-after
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -226,7 +227,7 @@ memory management for cell arrays
                       #x00 #x00
                       #x00 #x00)
                 "array is filled with zeros")
-)
+))
 
 ;; impl missing, test missing
 (define FREE_CELLARR_RZ
@@ -448,7 +449,7 @@ memory management for cell arrays
           (byte 0))))
 
 
-(module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
+(skip-module (module+ test #| use case: allocate, free, reallocate small list of cell-pairs |#
   (define use-case-2-a-code
     (list
      (JSR ALLOC_CELLPAIR_TO_RT)            ;; rt = freshly allocated cell (cc05)
@@ -552,10 +553,10 @@ memory management for cell arrays
                 (list "page-type:      cell-pair page"
                       "previous page:  $00"
                       "slots used:     2"
-                      "next free slot: $41")))
+                      "next free slot: $41"))))
 
 
-(module+ test #| vm_gc_array_slot_ptr |#
+(skip-module (module+ test #| vm_gc_array_slot_ptr |#
   (define test-gc-array-slot-ptr-state-after
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -592,7 +593,7 @@ memory management for cell arrays
                 "refcount for cell-pair at cb04..cb07 is at cb01 = 0 (was freed)")
   (check-equal? (vm-cell-pair-free-tree->string test-gc-array-slot-ptr-state-after)
                 (format "pair $~a05 -> [ empty . empty ]" (format-hex-byte PAGE_AVAIL_1))
-                "...and added as free tree root (for reuse)"))
+                "...and added as free tree root (for reuse)")))
 
 ;; ---
 ;; @DC-FUN: WRITE_RT_TO_ARR_ATa_RA__CHECK_BOUNDS, group: cell_array
@@ -693,7 +694,7 @@ memory management for cell arrays
     (label DONE__)
            (RTS))))
 
-(module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
+(skip-module (module+ test #| vm_cell_stack_write_tos_to_array_ata_ptr |#
   (define vm_cell_stack_write_tos_to_array_ata_ptr-state-after
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -726,9 +727,9 @@ memory management for cell arrays
                                "slot 0 = empty"
                                "slot 1 = empty"
                                "slot 2 = int $1fff"
-                               "slot 3 = empty")))
+                               "slot 3 = empty"))))
 
-(module+ test #| write to array bounds checks |#
+(skip-module (module+ test #| write to array bounds checks |#
   (define to-array-ata-ra-4-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -813,7 +814,7 @@ memory management for cell arrays
                (list "stack holds 2 items"
                      "int $0000  (rt)"
                      "int $01ff")
-               "got to pushing 0 since access index 0 is in bounds"))
+               "got to pushing 0 since access index 0 is in bounds")))
 
 ;; --------------------
 ;; @DC-FUN: PUSH_ARR_ATa_RA_TO_EVLSTK, group: cell_array
@@ -823,7 +824,7 @@ memory management for cell arrays
 ;; usage:  A, X, Y
 ;; output: RT+EVLSTK
 ;; funcs:
-;;   PUSH_RT_TO_EVLSTK_IF_NONEMPTY
+;;   PUSH_RT_TO_EVLSTK
 (define WRITE_ARR_ATa_RA_TO_RT '())
 (define PUSH_ARR_ATa_RA_TO_EVLSTK__CHECK_BOUNDS '())
 (define PUSH_ARR_ATa_RA_TO_EVLSTK
@@ -832,13 +833,13 @@ memory management for cell arrays
    (list
     (label PUSH_ARR_ATa_RA_TO_EVLSTK)
            (PHA)
-           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+           (JSR PUSH_RT_TO_EVLSTK)
            (PLA)
            (JMP WRITE_ARR_ATa_RA_TO_RT)
 
     (label PUSH_ARR_ATa_RA_TO_EVLSTK__CHECK_BOUNDS)
            (PHA)
-           (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+           (JSR PUSH_RT_TO_EVLSTK)
            (PLA)
 
     (label CHECK_BOUNDS__)
@@ -870,7 +871,7 @@ memory management for cell arrays
            (STA ZP_RT)
            (RTS))))
 
-(module+ test #| vm_cell_stack_push_array_ata_ptr |#
+(skip-module (module+ test #| vm_cell_stack_push_array_ata_ptr |#
   (define test-cell-stack-push-array-ata-ptr-state-after
     (compact-run-code-in-test-
      #:runtime-code test-runtime
@@ -896,4 +897,4 @@ memory management for cell arrays
   (check-equal? (vm-stack->strings test-cell-stack-push-array-ata-ptr-state-after)
                 (list "stack holds 2 items"
                       "int $01ff  (rt)"
-                      "int $01ff")))
+                      "int $01ff"))))

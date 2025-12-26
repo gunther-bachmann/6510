@@ -1,62 +1,76 @@
 #lang racket/base
 
+(provide
+ vm-cell-stack-code
+
+ INIT_CELLSTACK               ;; initialize eval stack as cell stack
+ INIT_CELLSTACK_PAGE_X        ;; initialize page A to previous cell stack page (X)
+ PUSH_XA_TO_EVLSTK            ;; push a value into RT, pushing RT onto the call frame cell stack if not empty
+ POP_CELL_EVLSTK_TO_RT        ;; pop cell-stack into RT (discarding RT)
+ POP_CELL_EVLSTK_TO_RP        ;; pop cell-stack into RP, RT is not changed, the stack is reduced by 1 (above RT)
+ POP_CELL_EVLSTK_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
+ PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack (effectively doing a dup)
+ PUSH_NIL_TO_EVLSTK           ;; push constant nil onto the eval stack
+ PUSH_INT_TO_EVLSTK           ;; push constant int onto the eval stack
+ POP_CELL_EVLSTK_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
+
 #|
 
   all functions around cell-stacks (including evlstk)
 
   cell-stacks are stack organized cells, split into a high-byte page and a low-byte page
 
-|#
+ |#
 
 (require "../../6510.rkt"
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function)
          (only-in "./vm-memory-map.rkt"
                   ZP_RT
+                  TAG_BYTE_BYTE_CELL
+                  TAGGED_NIL
+                  ZP_CELL_STACK_LB_PTR
+                  ZP_CELL_STACK_HB_PTR
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
-
-(provide INIT_CELLSTACK_PAGE_X        ;; initialize page A to previous cell stack page (X)
-         PUSH_XA_TO_EVLSTK               ;; push a value into RT, pushing RT onto the call frame cell stack if not empty
-         POP_CELL_EVLSTK_TO_RT        ;; pop cell-stack into RT (discarding RT)
-         POP_CELL_EVLSTK_TO_RP        ;; pop cell-stack into RP, RT is not changed, the stack is reduced by 1 (above RT)
-         POP_CELL_EVLSTK_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
-         PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack (effectively doing a dup)
-         PUSH_RT_TO_EVLSTK_IF_NONEMPTY ;; push RT only if it is non empty
-         PUSH_NIL_TO_EVLSTK            ;; push constant nil onto the eval stack
-         PUSH_INT_TO_EVLSTK            ;; push constant int onto the eval stack
-         POP_CELL_EVLSTK_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
 
 (module+ test
   (require "../../6510-test-utils.rkt"
            (only-in "../../tools/6510-interpreter.rkt" peek memory-list)
            (only-in "../../util.rkt" format-hex-byte format-hex-word)
+           (only-in "../../ast/6510-relocator.rkt"
+                    code-len)
            (only-in "../vm-inspector-utils.rkt"
-                    vm-deref-cell-pair-w->string
-                    vm-stack->strings
-                    vm-regt->string)
-           (only-in "./vm-cell-pairs.rkt"
-                    ALLOC_CELLPAIR_TO_RT
-                    ALLOC_CELLPAIR_AX_TO_RT
-                    WRITE_CELLPAIR_RT_CELLy_TO_RT
-                    GET_FRESH_CELLPAIR_TO_AX
-                    INIT_CELLPAIR_PAGE_X_TO_AX)
+                    vm-deref-cell-pair-w-n->string
+                    vm-regt-n->string
+                    vm-stack-n->strings)
+           (only-in "./vm-m1-slots-n.rkt"
+                    ALLOC_M1_P0_SLOT_TO_RT_N
+                    ALLOC_M1_SLOT_TO_RA_N
+                    INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N)
            "./vm-memory-manager-test-utils.rkt"
-           (only-in "./vm-pages.rkt"
-                    ALLOC_PAGE_TO_X
-                    VM_PAGE_SLOT_DATA
-                    VM_INITIAL_MM_REGS
-                    VM_INITIALIZE_MEMORY_MANAGER)
+           (only-in "./vm-pages-n.rkt"
+                    VM_INITIALIZE_PAGE_MEMORY_MANAGER_N     ;; initialize page memory management (must be called before first allocation)
+                    VM_ALLOCATE_NEW_PAGE_N                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
+                    )
            (only-in "./vm-register-functions.rkt"
+                    CP_RT_TO_RA
+                    CP_RA_TO_RT
+                    CP_RA_TO_RB
+                    SWAP_RA_RB
+                    SWAP_ZP_WORD
                     WRITE_INT_AY_TO_RT))
 
-  (define PAGE_AVAIL_0 #x8d)      ;; high byte of first page available for allocation
-  (define PAGE_AVAIL_0_W #x8d00)  ;; word (absolute address) of first page available
-  (define PAGE_AVAIL_1 #x8c)      ;; high byte of second page available for allocation
-  (define PAGE_AVAIL_1_W #x8c00) ;; word (absolute address) of second page available
+  (define PAGE_AVAIL_0 #xcf)      ;; high byte of first page available for allocation
+  (define PAGE_AVAIL_0_W #xcf00)  ;; word (absolute address) of first page available
+  (define PAGE_AVAIL_1 #xce)      ;; high byte of second page available for allocation
+  (define PAGE_AVAIL_1_W #xce00) ;; word (absolute address) of second page available
+  (define PAGE_AVAIL_2 #xcd)      ;; high byte of second page available for allocation
+  (define PAGE_AVAIL_2_W #xcd00) ;; word (absolute address) of second page available
 
   (define test-runtime
     (append
-     ALLOC_PAGE_TO_X
      INIT_CELLSTACK_PAGE_X
      PUSH_XA_TO_EVLSTK
      POP_CELL_EVLSTK_TO_RT
@@ -64,19 +78,17 @@
      PUSH_RT_TO_EVLSTK
      POP_CELL_EVLSTK_TO_CELLy_RT
 
-     WRITE_CELLPAIR_RT_CELLy_TO_RT
-     INIT_CELLPAIR_PAGE_X_TO_AX
-     ALLOC_CELLPAIR_TO_RT
-     ALLOC_CELLPAIR_AX_TO_RT
+     ALLOC_M1_P0_SLOT_TO_RT_N
+     ALLOC_M1_SLOT_TO_RA_N
+     INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
+
+
      WRITE_INT_AY_TO_RT
-     GET_FRESH_CELLPAIR_TO_AX
+     CP_RA_TO_RT
      VM_MEMORY_MANAGEMENT_CONSTANTS
-     VM_INITIALIZE_MEMORY_MANAGER
-     (list (label DEC_REFCNT_RT) (RTS))
-     (list (org #xcec0))
-     VM_INITIAL_MM_REGS
-     (list (org #xcf00))
-     VM_PAGE_SLOT_DATA)))
+     VM_ALLOCATE_NEW_PAGE_N
+     VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
+     (list (label DEC_REFCNT_RT) (RTS)))))
 
 ;; @DC-FUN: INIT_CELLSTACK_PAGE_X, group: cell_stack
 ;; cell stack page(s)
@@ -110,13 +122,15 @@
 (module+ test #| alloc cell stack pages |#
   (define alloc-cell-stack-pages-state
     (compact-run-code-in-test-
+     #:debug #f
      #:runtime-code test-runtime
-     (JSR ALLOC_PAGE_TO_X)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     (JSR VM_ALLOCATE_NEW_PAGE_N)
      (LDA !$05)
      (JSR INIT_CELLSTACK_PAGE_X)
      (STX ZP_RT+1)
 
-     (JSR ALLOC_PAGE_TO_X)
+     (JSR VM_ALLOCATE_NEW_PAGE_N)
      (LDA !$03)
      (JSR INIT_CELLSTACK_PAGE_X)
      (STX ZP_RT)))
@@ -130,6 +144,40 @@
   (check-equal? (memory-list alloc-cell-stack-pages-state PAGE_AVAIL_0_W (add1 PAGE_AVAIL_0_W))
                 (list #x1b #x05)
                 "new low byte page is initialized with cell-stack page type and 05"))
+
+(define-vm-function INIT_CELLSTACK
+  (list
+        (JSR VM_ALLOCATE_NEW_PAGE_N)
+        (LDA !$00)
+        (STA ZP_CELL_STACK_LB_PTR)
+        (JSR INIT_CELLSTACK_PAGE_X)
+        (STX ZP_CELL_STACK_LB_PTR+1)
+
+        (JSR VM_ALLOCATE_NEW_PAGE_N)
+        (LDA !$00)
+        (STA ZP_CELL_STACK_HB_PTR)
+        (JSR INIT_CELLSTACK_PAGE_X)
+        (STX ZP_CELL_STACK_HB_PTR+1)
+
+        (LDA !$01)
+        (STA ZP_CELL_STACK_TOS)
+        (RTS)))
+
+(module+ test #| init-cellstack |#
+  (define init-cellstack-test
+    (compact-run-code-in-test-
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)))
+
+  (check-equal? (memory-list init-cellstack-test ZP_CELL_STACK_LB_PTR (+ 1 ZP_CELL_STACK_LB_PTR))
+                (list #x00 PAGE_AVAIL_0)
+                "cell-stack low bytes are located here")
+
+  (check-equal? (memory-list init-cellstack-test ZP_CELL_STACK_HB_PTR (+ 1 ZP_CELL_STACK_HB_PTR))
+                (list #x00 PAGE_AVAIL_1)
+                "cell-stack high bytes are located here"))
 
 ;; @DC-FUN: POP_CELL_EVLSTK_TO_RT, group: cell_stack
 ;; pop the topmost value of the evlstk into RT (no gc done)
@@ -172,36 +220,47 @@
 (module+ test #| vm_cell_stack_pop_r (just one value) |#
   (define vm_cell_stack_pop3_r_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_1_TO_EVLSTK)
      (JSR PUSH_INT_m1_TO_EVLSTK)
      (JSR PUSH_INT_0_TO_EVLSTK)
      (JSR POP_CELL_EVLSTK_TO_RT)))
 
-  (check-equal? (vm-stack->strings vm_cell_stack_pop3_r_state)
-                (list "stack holds 2 items"
-                      "int $1fff  (rt)"
-                      "int $0001"))
+  (check-equal? (vm-stack-n->strings vm_cell_stack_pop3_r_state)
+                (list "stack holds 3 items"
+                      "int $3fff  (rt)"
+                      "int $0001"
+                      "ptr NIL"))
 
   (check-equal? (memory-list vm_cell_stack_pop3_r_state ZP_RT (add1 ZP_RT))
-                (list #x7f #xff))
+                (list #xff #xff))
 
   (define vm_cell_stack_pop2_r_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_1_TO_EVLSTK)
      (JSR PUSH_INT_m1_TO_EVLSTK)
      (JSR PUSH_INT_0_TO_EVLSTK)
      (JSR POP_CELL_EVLSTK_TO_RT)
      (JSR POP_CELL_EVLSTK_TO_RT)))
 
-  (check-equal? (vm-stack->strings vm_cell_stack_pop2_r_state)
-                (list "stack holds 1 item"
-                      "int $0001  (rt)"))
+  (check-equal? (vm-stack-n->strings vm_cell_stack_pop2_r_state)
+                (list "stack holds 2 items"
+                      "int $0001  (rt)"
+                      "ptr NIL"))
 
   (define vm_cell_stack_pop1_r_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_1_TO_EVLSTK)
      (JSR PUSH_INT_m1_TO_EVLSTK)
      (JSR PUSH_INT_0_TO_EVLSTK)
@@ -209,8 +268,8 @@
      (JSR POP_CELL_EVLSTK_TO_RT)
      (JSR POP_CELL_EVLSTK_TO_RT)))
 
-  (check-equal? (vm-stack->strings vm_cell_stack_pop1_r_state)
-                (list "stack is empty"))
+  (check-equal? (vm-stack-n->strings vm_cell_stack_pop1_r_state)
+                (list "stack is empty or tos=nil"))
 
   (check-equal? (memory-list vm_cell_stack_pop1_r_state ZP_RT (add1 ZP_RT))
                 (list #x00 #x00)))
@@ -218,58 +277,69 @@
 (module+ test #| vm_cell_stack_push_nil_r |#
   (define test-vm_cell_stack_push_nil-a-state-after
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
-      (JSR PUSH_NIL_TO_EVLSTK)))
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
+     (JSR PUSH_NIL_TO_EVLSTK)))
 
-  (check-equal? (vm-regt->string test-vm_cell_stack_push_nil-a-state-after)
-                "pair-ptr NIL")
+  (check-equal? (vm-regt-n->string test-vm_cell_stack_push_nil-a-state-after)
+                "ptr NIL")
 
   (define test-vm_cell_stack_push_nil-b-state-after
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
-      (JSR PUSH_NIL_TO_EVLSTK) ;; 1
-      (JSR PUSH_NIL_TO_EVLSTK) ;;
-      (JSR PUSH_NIL_TO_EVLSTK) ;; 3
-      (JSR PUSH_NIL_TO_EVLSTK) ;;
-      (JSR PUSH_NIL_TO_EVLSTK) ;; 5
-      (JSR PUSH_NIL_TO_EVLSTK) ;;
-      (JSR PUSH_NIL_TO_EVLSTK) ;; 7
-      (JSR PUSH_NIL_TO_EVLSTK))) ;; 8
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
+     (JSR PUSH_NIL_TO_EVLSTK) ;; 1
+     (JSR PUSH_NIL_TO_EVLSTK) ;;
+     (JSR PUSH_NIL_TO_EVLSTK) ;; 3
+     (JSR PUSH_NIL_TO_EVLSTK) ;;
+     (JSR PUSH_NIL_TO_EVLSTK) ;; 5
+     (JSR PUSH_NIL_TO_EVLSTK) ;;
+     (JSR PUSH_NIL_TO_EVLSTK) ;; 7
+     (JSR PUSH_NIL_TO_EVLSTK))) ;; 8
 
-  (check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-b-state-after)
-                '("stack holds 8 items"
-                  "pair-ptr NIL  (rt)"
-                  "pair-ptr NIL"
-                  "pair-ptr NIL"
-                  "pair-ptr NIL"
-                  "pair-ptr NIL"
-                  "pair-ptr NIL"
-                  "pair-ptr NIL"
-                  "pair-ptr NIL")))
+  (check-equal? (vm-stack-n->strings test-vm_cell_stack_push_nil-b-state-after)
+                '("stack holds 9 items"
+                  "ptr NIL  (rt)"
+                  "ptr NIL"
+                  "ptr NIL"
+                  "ptr NIL"
+                  "ptr NIL"
+                  "ptr NIL"
+                  "ptr NIL"
+                  "ptr NIL"
+                  "ptr NIL")))
 
 (module+ test #| vm_cell_push_int_r |#
   (define test-vm_cell_stack_push_int-a-state-after
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_m1_TO_EVLSTK)
-      (LDA !$00) ;; -4096
-      (LDX !$10)
-      (JSR PUSH_INT_TO_EVLSTK)
-      (JSR PUSH_INT_1_TO_EVLSTK)
-      (JSR PUSH_INT_0_TO_EVLSTK)
-      (LDA !$ff) ;; 4095
-      (LDX !$0f)
-      (JSR PUSH_INT_TO_EVLSTK)))
+     (LDA !$00) ;; -4096
+     (LDX !$10)
+     (JSR PUSH_INT_TO_EVLSTK)
+     (JSR PUSH_INT_1_TO_EVLSTK)
+     (JSR PUSH_INT_0_TO_EVLSTK)
+     (LDA !$ff) ;; 4095
+     (LDX !$0f)
+     (JSR PUSH_INT_TO_EVLSTK)))
 
-  (check-equal? (vm-regt->string test-vm_cell_stack_push_int-a-state-after)
+  (check-equal? (vm-regt-n->string test-vm_cell_stack_push_int-a-state-after)
                 "int $0fff")
-  (check-equal? (vm-stack->strings test-vm_cell_stack_push_int-a-state-after)
-                '("stack holds 5 items"
+  (check-equal? (vm-stack-n->strings test-vm_cell_stack_push_int-a-state-after)
+                '("stack holds 6 items"
                   "int $0fff  (rt)"
                   "int $0000"
                   "int $0001"
                   "int $1000"
-                  "int $1fff")))
+                  "int $3fff"
+                  "ptr NIL")))
 
 ;; ---
 ;; @DC-FUN: PUSH_NIL_TO_EVLSTK, group: cell_stack
@@ -307,13 +377,13 @@
           (ASL A)
           (ASL A)
           (ORA !$03)           ;; mask in lower two bits
-          (AND !$7f)           ;; mask out top bit
+          ;; (AND !$7f)           ;; mask out top bit
           (TAX)
           (TYA)
           (JMP PUSH_XA_TO_EVLSTK)
 
    (label PUSH_BYTE_X_TO_EVLSTK)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
+          (JSR PUSH_RT_TO_EVLSTK)
    (label WRITE_BYTE_X_TO_RT)
           (LDA !TAG_BYTE_BYTE_CELL)
           (STA ZP_RT)
@@ -321,8 +391,8 @@
           (RTS)
 
    (label PUSH_INT_m1_TO_EVLSTK)
-          (LDA !$ff) ;; 1f << 2
-          (LDX !$7f)
+          (LDA !$ff) ;; 3f << 2
+          (TAX)
           (BNE PUSH_XA_TO_EVLSTK)
 
    (label PUSH_INT_2_TO_EVLSTK)
@@ -350,7 +420,7 @@
    ;; X = tagged low byte
    (label PUSH_XA_TO_EVLSTK)
           (PHA)
-          (JSR PUSH_RT_TO_EVLSTK_IF_NONEMPTY) ;; uses A and Y
+          (JSR PUSH_RT_TO_EVLSTK) ;; uses A and Y
           (PLA)
 
    (label VM_WRITE_AX_TO_RT)
@@ -361,87 +431,110 @@
 (module+ test #| vm_cell_stack_push_r (basically on write into rt, since stack is completely empty) |#
   (define vm_cell_stack_push_r_int0_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_0_TO_EVLSTK)))
 
-  (check-equal? (vm-regt->string vm_cell_stack_push_r_int0_state)
+  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_int0_state)
                 "int $0000")
   (check-equal? (memory-list vm_cell_stack_push_r_int0_state ZP_RT (add1 ZP_RT))
                 (list #x03 #x00))
 
   (define vm_cell_stack_push_r_int1_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_1_TO_EVLSTK)))
 
-  (check-equal? (vm-regt->string vm_cell_stack_push_r_int1_state)
+  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_int1_state)
                 "int $0001")
   (check-equal? (memory-list vm_cell_stack_push_r_int1_state ZP_RT (add1 ZP_RT))
                 (list #x03 #x01))
 
   (define vm_cell_stack_push_r_intm1_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_m1_TO_EVLSTK)))
 
-  (check-equal? (vm-regt->string vm_cell_stack_push_r_intm1_state)
-                "int $1fff")
+  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_intm1_state)
+                "int $3fff")
   (check-equal? (memory-list vm_cell_stack_push_r_intm1_state ZP_RT (add1 ZP_RT))
-                (list #x7f #xff))
+                (list #xff #xff))
 
   (define vm_cell_stack_push_r_nil_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_NIL_TO_EVLSTK)))
 
-  (check-equal? (vm-regt->string vm_cell_stack_push_r_nil_state)
-                "pair-ptr NIL")
+  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_nil_state)
+                "ptr NIL")
   (check-equal? (memory-list vm_cell_stack_push_r_nil_state ZP_RT (add1 ZP_RT))
-                (list #x01 #x00))
+                (list #x00 #x00))
 
   (define vm_cell_stack_push_r_cell_ptr_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
-     (LDX !$05)
-     (LDA !$ce)
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
+     (JSR ALLOC_M1_P0_SLOT_TO_RT_N)
+     (LDX ZP_RT)
+     (LDA ZP_RT+1)
      (JSR PUSH_XA_TO_EVLSTK)))
 
-  (check-equal? (vm-regt->string vm_cell_stack_push_r_cell_ptr_state)
-                "pair-ptr[0] $ce05")
+  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_cell_ptr_state)
+                (format "ptr[1] $~a02" (format-hex-byte PAGE_AVAIL_2)))
   (check-equal? (memory-list vm_cell_stack_push_r_cell_ptr_state ZP_RT (add1 ZP_RT))
-                (list #x05 #xce)))
+                (list #x02 PAGE_AVAIL_2)))
 
 (module+ test #| vm_cell_stack_push_r (push rt, and write rt) |#
   (define vm_cell_stack_push_r_push1_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
-
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_m1_TO_EVLSTK)
      (JSR PUSH_INT_1_TO_EVLSTK)))
 
-  (check-equal? (vm-stack->strings vm_cell_stack_push_r_push1_state)
-                (list "stack holds 2 items"
+  (check-equal? (vm-stack-n->strings vm_cell_stack_push_r_push1_state)
+                (list "stack holds 3 items"
                       "int $0001  (rt)"
-                      "int $1fff"))
+                      "int $3fff"
+                      "ptr NIL"))
 
   (check-equal? (memory-list vm_cell_stack_push_r_push1_state ZP_RT (add1 ZP_RT))
                 (list #x03 #x01))
 
   (define vm_cell_stack_push_r_push2_state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_m1_TO_EVLSTK)
      (JSR PUSH_INT_1_TO_EVLSTK)
      (JSR PUSH_NIL_TO_EVLSTK)))
 
-  (check-equal? (vm-stack->strings vm_cell_stack_push_r_push2_state)
-                (list "stack holds 3 items"
-                      "pair-ptr NIL  (rt)"
+  (check-equal? (vm-stack-n->strings vm_cell_stack_push_r_push2_state)
+                (list "stack holds 4 items"
+                      "ptr NIL  (rt)"
                       "int $0001"
-                      "int $1fff"))
+                      "int $3fff"
+                      "ptr NIL"))
 
   (check-equal? (memory-list vm_cell_stack_push_r_push2_state ZP_RT (add1 ZP_RT))
-                (list #x01 #x00)))
+                (list #x00 #x00)))
 
 ;; @DC-FUN: PUSH_RT_TO_EVLSTK, group: cell_stack
 ;; push rt onto the evlstack, no dec/inc refcnt is done!
@@ -453,29 +546,22 @@
 ;;   ALLOC_PAGE_TO_X
 ;;   INIT_CELLSTACK_PAGE_X
 ;; CHECK STACK PAGE OVERFLOW
-(define PUSH_RT_TO_EVLSTK_IF_NONEMPTY #t)
 (define PUSH_RT_TO_EVLSTK
   (add-label-suffix
    "__" "__PUSH_RT_TO_EVLSTK"
   (list
-   (label PUSH_RT_TO_EVLSTK_IF_NONEMPTY)
-          (LDY ZP_RT)
-          ;; if RT empty?  = $00
-          (BEQ DONE__)        ;; then no push
-
-   ;; ----------------------------------------
    (label PUSH_RT_TO_EVLSTK)
           (LDY ZP_CELL_STACK_TOS)
           (INY)
           [BNE NO_ERROR__]
 
    (label ALLOCATE_NEW_STACK_PAGE__)
-          (JSR ALLOC_PAGE_TO_X)
+          (JSR VM_ALLOCATE_NEW_PAGE_N)
           (LDA ZP_CELL_STACK_LB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_X)
           (STX ZP_CELL_STACK_LB_PTR+1)
 
-          (JSR ALLOC_PAGE_TO_X)
+          (JSR VM_ALLOCATE_NEW_PAGE_N)
           (LDA ZP_CELL_STACK_HB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_X)
           (STX ZP_CELL_STACK_HB_PTR+1)
@@ -495,11 +581,14 @@
 (module+ test #| vm-cell-stack-just-push-rt |#
   (define vm-cell-stack-just-push-rt-state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR WRITE_INTm1_TO_RT)
      (JSR PUSH_RT_TO_EVLSTK)))
 
-  (check-equal? (vm-stack->strings vm-cell-stack-just-push-rt-state)
+  (check-equal? (vm-stack-n->strings vm-cell-stack-just-push-rt-state)
                 (list "stack holds 2 items"
                       "int $1fff  (rt)"
                       "int $1fff")))
@@ -547,21 +636,25 @@
 (module+ test #| vm-pop-fstos-to-celly-rt |#
   (define vm-pop-fstos-to-celly-rt-state
     (compact-run-code-in-test-
-     #:runtime-code test-runtime
+     #:runtime-code (append test-runtime INIT_CELLSTACK)
+     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:debug #f
+     (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_1_TO_EVLSTK)
      (JSR PUSH_INT_m1_TO_EVLSTK)
      (JSR PUSH_INT_1_TO_EVLSTK)
-     (JSR ALLOC_CELLPAIR_TO_RT)
-     (LDY !$00)
-     (JSR POP_CELL_EVLSTK_TO_CELLy_RT)
+     (JSR ALLOC_M1_P0_SLOT_TO_RT_N)
      (LDY !$02)
+     (JSR POP_CELL_EVLSTK_TO_CELLy_RT)
+     (LDY !$04)
      (JSR POP_CELL_EVLSTK_TO_CELLy_RT)))
 
-  (check-equal? (vm-stack->strings vm-pop-fstos-to-celly-rt-state)
-                (list "stack holds 1 item"
-                      (format  "pair-ptr[0] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
-  (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state (+ PAGE_AVAIL_0_W #x05))
-                "(int $1fff . int $0001)"))
+  (check-equal? (vm-stack-n->strings vm-pop-fstos-to-celly-rt-state)
+                (list "stack holds 2 items"
+                      (format  "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_2))
+                      "ptr NIL"))
+  (check-equal? (vm-deref-cell-pair-w-n->string vm-pop-fstos-to-celly-rt-state (+ PAGE_AVAIL_2_W #x02))
+                "(int $3fff . int $0001)"))
 
 ;; ----
 ;; @DC-FUN: WRITE_00_TO_RA, group: cell_array
@@ -647,3 +740,20 @@
           (STA ZP_RP)
           (STA ZP_RP+1)
           (RTS)))
+
+(define vm-cell-stack-code
+  (append
+   INIT_CELLSTACK_PAGE_X        ;; initialize page A to previous cell stack page (X)
+   PUSH_XA_TO_EVLSTK               ;; push a value into RT, pushing RT onto the call frame cell stack if not empty
+   ;; includes PUSH_NIL_TO_EVLSTK            ;; push constant nil onto the eval stack
+   ;; includes PUSH_INT_TO_EVLSTK            ;; push constant int onto the eval stack
+   POP_CELL_EVLSTK_TO_RT        ;; pop cell-stack into RT (discarding RT)
+   POP_CELL_EVLSTK_TO_RP        ;; pop cell-stack into RP, RT is not changed, the stack is reduced by 1 (above RT)
+   POP_CELL_EVLSTK_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
+   PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack (effectively doing a dup)
+   POP_CELL_EVLSTK_TO_CELLy_RT
+   INIT_CELLSTACK))
+
+(module+ test #| code len |#
+  (inform-check-equal? (code-len vm-cell-stack-code)
+                       285))

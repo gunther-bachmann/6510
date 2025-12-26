@@ -1,26 +1,5 @@
 #lang racket/base
 
-#|
-
-  list of functions of generic register operations (RT, RP, RZ, RA, RB, RC ...)
-
-|#
-
-(require "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
-         (only-in "../vm-inspector-utils.rkt"
-                  vm-cell-at-nil?
-                  vm-rega->string
-                  vm-regt->string)
-         (only-in "./vm-memory-map.rkt"
-                  TAGGED_NIL
-                  ZP_RP
-                  ZP_RT
-                  ZP_RA
-                  ZP_RC
-                  VM_MEMORY_MANAGEMENT_CONSTANTS))
-
 (provide WRITE_NIL_TO_RT        ;; write constant NIL into RT
          WRITE_NIL_TO_RP
          WRITE_INT_AY_TO_RT     ;; write integer constant into Rx
@@ -37,7 +16,33 @@
          CP_RT_TO_RB
          SWAP_ZP_WORD
          CP_RA_TO_RB
-         SWAP_RA_RB)
+         SWAP_RA_RB
+
+         vm-register-functions-code)
+
+
+#|
+
+  list of functions of generic register operations (RT, RP, RZ, RA, RB, RC ...)
+
+ |#
+
+(require "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
+                  add-label-suffix)
+         (only-in "../../ast/6510-relocator.rkt"
+                  code-len)
+         (only-in "../vm-inspector-utils.rkt"
+                  vm-cell-at-nil?
+                  vm-rega->string
+                  vm-regt->string)
+         (only-in "./vm-memory-map.rkt"
+                  TAGGED_NIL
+                  ZP_RP
+                  ZP_RT
+                  ZP_RA
+                  ZP_RC
+                  VM_MEMORY_MANAGEMENT_CONSTANTS))
 
 (module+ test
   (require  "../../6510-test-utils.rkt"
@@ -228,8 +233,8 @@
   (check-equal? (vm-regt->string vm-cp-rt-to-ra-state)
                 "int $0001"))
 
-(define WRITE_INT0_TO_RT #t)
-(define WRITE_INT1_TO_RT #t)
+(define WRITE_INT0_TO_RT '())
+(define WRITE_INT1_TO_RT '())
 ;; @DC-FUN: WRITE_INT_AY_TO_RT, group: register
 ;; write the given int in A/Y into RT, ignoring what was in RT (no dec-refcnt)
 ;; input:  A = lowbyte of int (0..255), written into high byte of cell register RT
@@ -368,3 +373,27 @@
            (STA ZP_RA)
            (STY ZP_RA+1)
            (RTS))))
+
+(define vm-register-functions-code
+  (append
+   WRITE_NIL_TO_RT        ;; write constant NIL into RT
+   WRITE_NIL_TO_RP
+   WRITE_INT_AY_TO_RT     ;; write integer constant into Rx
+   ;; WRITE_INT0_TO_RT
+   ;; WRITE_INT1_TO_RT
+   CP_RA_TO_RT            ;; copy regiser from RA to RT
+   CP_RA_TO_RZ
+   CP_RB_TO_RZ
+   CP_RC_TO_RZ
+   CP_RT_TO_RA
+   CP_RT_TO_RP
+   CP_RT_TO_RZ
+   CP_RZ_TO_RT
+   CP_RT_TO_RB
+   SWAP_ZP_WORD
+   CP_RA_TO_RB
+   SWAP_RA_RB))
+
+(module+ test #| code len |#
+  (inform-check-equal? (code-len vm-register-functions-code)
+                       249))
