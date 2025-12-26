@@ -12,8 +12,8 @@
                   VM_PUSH_CALL_FRAME_N
                   VM_ALLOC_LOCALS
                   VM_REFCOUNT_DECR_CURRENT_LOCALS)
-         (only-in "../vm-runtime/vm-memory-manager.rkt"
-                  DEC_REFCNT_RT)
+         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+                  DEC_REFCNT_M1_SLOT_RT_N)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_VM_FUNC_PTR
                   ZP_RP
@@ -96,7 +96,7 @@
            (BEQ RET__)                  ;; nothing to pop -> just return
            (STA COUNT__)                ;; keep count to pop
     (label POP_LOOP__)
-           (JSR DEC_REFCNT_RT)
+           (JSR DEC_REFCNT_M1_SLOT_RT_N)
            (JSR POP_CELL_EVLSTK_TO_RT)
            (DEC COUNT__)
            (BNE POP_LOOP__)

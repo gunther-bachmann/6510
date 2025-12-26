@@ -7,20 +7,18 @@
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES
                   VM_POP_EVLSTK_AND_INC_PC)
-         (only-in "../vm-runtime/vm-memory-manager.rkt"
-                  INC_REFCNT_RT)
+         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+                  INC_REFCNT_M1_SLOT_RT_N)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RBI
                   ZP_RAI
                   ZP_RT)
-         (only-in "../vm-runtime/vm-cell-array.rkt"
-                  ALLOC_CELLARR_TO_RA
+         (only-in "../vm-runtime/vm-cell-array-n.rkt"
+                  ALLOC_CELL_ARRAY_TO_RA
                   POP_EVLSTK_TO_ARR_ATa_RA
                   WRITE_ARR_ATa_RA_TO_RT)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
                   PUSH_RT_TO_EVLSTK)
-         (only-in "../vm-runtime/vm-m1-slots.rkt"
-                  INC_REFCNT_M1_SLOT_RA)
          (only-in "../vm-runtime/vm-register-functions.rkt" SWAP_RA_RB)
          (only-in "./branch.rkt"
                   BRANCH_BY_NEXT_BYTE__NO_POP))
@@ -72,7 +70,7 @@
            (JSR PUSH_RT_TO_EVLSTK)
            (PLA)
            (JSR WRITE_ARR_ATa_RA_TO_RT)
-           (JSR INC_REFCNT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT_N)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_SET_RA_ARRAY_FIELD)               ;; RT -> (RA),A
@@ -85,9 +83,8 @@
   (list
    (label BC_ALLOC_ARA)
           (LDA ZP_RT+1)                 ;; byte size
-          (JSR ALLOC_CELLARR_TO_RA)     ;;
-          (JSR INC_REFCNT_M1_SLOT_RA)   ;; only cell-array needs to be inc-refcnt'd
-          (LDA !$00)
+          (JSR ALLOC_CELL_ARRAY_TO_RA)     ;;
+          (LDA !$02)
           (STA ZP_RAI)
           (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
@@ -136,7 +133,7 @@
            (JSR CP_RT_TO_RA)
            (PLA)
            (JSR WRITE_ARR_ATa_RA_TO_RT)
-           (JSR INC_REFCNT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT_N)
            (JSR DEC_REFCNT_RA)
            (LDA !$00)
            (STA ZP_RA)
@@ -164,7 +161,7 @@
           (JSR PUSH_RT_TO_EVLSTK)
    (label BC_WRITE_RA)
           (JSR CP_RA_TO_RT)
-          (JSR INC_REFCNT_RT)
+          (JSR INC_REFCNT_M1_SLOT_RT_N)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_PUSH_RA_AF
@@ -173,7 +170,7 @@
           (JSR PUSH_RT_TO_EVLSTK)
           (LDA ZP_RAI)
           (JSR WRITE_ARR_ATa_RA_TO_RT)
-          (JSR INC_REFCNT_RT)
+          (JSR INC_REFCNT_M1_SLOT_RT_N)
           (JMP VM_INTERPRETER_INC_PC)))
 
 
@@ -194,7 +191,7 @@
            (JSR POP_CELL_EVLSTK_TO_RA)    ;; ra = cell-ptr -> cell-array         (stack: index)
            (LDA ZP_RT+1)                  ;; index                               (stack: index)
            (JSR WRITE_ARR_ATa_RA_TO_RT)   ;; rt <- array@a                       (stack: value)
-           (JSR INC_REFCNT_RT)            ;; now on stack and in array => inc refcnt'd
+           (JSR INC_REFCNT_M1_SLOT_RT_N)            ;; now on stack and in array => inc refcnt'd
            (JSR DEC_REFCNT_RA)            ;; removed from stack => dec refcnt'd
            (JMP VM_INTERPRETER_INC_PC))))
 

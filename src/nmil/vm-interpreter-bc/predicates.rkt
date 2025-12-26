@@ -6,9 +6,9 @@
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES)
-         (only-in "../vm-runtime/vm-memory-manager.rkt"
-                  DEC_REFCNT_RT
-                  DEC_REFCNT_RZ)
+         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+                  DEC_REFCNT_M1_SLOT_RT_N
+                  DEC_REFCNT_M1_SLOT_RZ_N)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RZ
@@ -57,7 +57,7 @@
           (AND !$83)
           (CMP !$03)
           (BEQ IS_INT__)
-          (JSR DEC_REFCNT_RT)
+          (JSR DEC_REFCNT_M1_SLOT_RT_N)
           (LDA !$03)
           (LDX !$00)
    (label IS_INT__)
@@ -81,7 +81,7 @@
           (LDA !$00)
    (label IS_PAIR__BC_CONS_PAIR_P)
           (STA ZP_RT+1)
-          (JSR DEC_REFCNT_RZ)
+          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_CELL_EQ_P
@@ -99,8 +99,8 @@
           (CMP ZP_RT)
           (BNE NE__)
 
-          (JSR DEC_REFCNT_RT)
-          (JSR DEC_REFCNT_RZ)
+          (JSR DEC_REFCNT_M1_SLOT_RT_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
@@ -109,8 +109,8 @@
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (STA ZP_RZ)
    (label NE__)
-          (JSR DEC_REFCNT_RT)
-          (JSR DEC_REFCNT_RZ)
+          (JSR DEC_REFCNT_M1_SLOT_RT_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC))))

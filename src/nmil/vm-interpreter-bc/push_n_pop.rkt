@@ -28,7 +28,9 @@ TODO: get tests (still in vm-interpreter) into this file
                   ZP_RP
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
-                  ZP_CELL_STACK_HB_PTR))
+                  ZP_CELL_STACK_HB_PTR)
+         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+                  DEC_REFCNT_M1_SLOT_RT_N))
 
 (provide BC_PUSH_B
          BC_DUP
@@ -87,7 +89,7 @@ TODO: get tests (still in vm-interpreter) into this file
           (JMP VM_POP_EVLSTK_AND_INC_PC)
 
    (label BC_POP) ;;--------------------------------------------------------------------------------
-          (JSR DEC_REFCNT_RT) ;; no dec, since ra is refcounted too
+          (JSR DEC_REFCNT_M1_SLOT_RT_N) ;; no dec, since ra is refcounted too
           (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
 (define BC_PUSH_I

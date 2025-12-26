@@ -68,15 +68,14 @@ currently the following test programs are created
                     VM_INTERPRETER_ZP)
            (only-in "../nmil/vm-interpreter.rkt"
                     just-vm-interpreter)
-           (only-in "../nmil/vm-runtime/vm-lists.rkt"
-                    vm-lists
-                    vm-lists-wo-data-tail)
+           (only-in "../nmil/vm-runtime/vm-memory-manager-n.rkt"
+                    vm-memory-manager-code)
            (only-in  "../nmil/vm-runtime/vm-memory-manager-test-utils.rkt"
                      list-with-label-suffix
                      run-code-in-test-on-code)
-           (only-in "../nmil/vm-runtime/vm-pages.rkt"
-                    VM_INITIAL_MM_REGS
-                    VM_PAGE_SLOT_DATA)
+           ;; (only-in "../nmil/vm-runtime/vm-pages.rkt"
+           ;;          VM_INITIAL_MM_REGS
+           ;;          VM_PAGE_SLOT_DATA)
            (only-in "../tools/6510-interpreter.rkt"
                     memory-list)
            "../tools/6510-prg-generator.rkt"))
@@ -439,17 +438,14 @@ currently the following test programs are created
   ;; idea
   ;; @cdc0 mm-regs
   (define mem-data
-    (new-assemble-to-code-list (append (list (org #xcdc0) (byte-const ZP_VM_PC #x85)) VM_INITIAL_MM_REGS)))
+    (new-assemble-to-code-list (append (list (org #xcdc0) (byte-const ZP_VM_PC #x85)))))
   (define raw-mem-data
     (cdar (assembly-code-list-org-code-sequences mem-data)))
 
   ;; @c000 runtime + memory management etc
   (define vm-runtime
     (new-assemble-to-code-list
-     (append (flatten
-              (list (org #xc000)
-                    (word-const VM_PAGE_SLOT_DATA $cf00)))
-             vm-lists-wo-data-tail)
+     (append (list (org #xc000)) vm-memory-manager-code)
      (assembly-code-list-labels mem-data)))
 
   (define raw-vm-runtime
@@ -507,7 +503,6 @@ currently the following test programs are created
        (assembly-code-list-labels bc-interpreter) ;; (need to add labels collected by interpreter)
        ))))
   ;; @cf00
-  (define raw-page-data (cdar (assembly-code-list-org-code-sequences (new-assemble-to-code-list (append (list (org #xcf00)) VM_PAGE_SLOT_DATA)))))
 
   (define (byte-code-loader byte-codes)
     (append
@@ -594,15 +589,6 @@ currently the following test programs are created
                    (length raw-bc-jump-table)
                    raw-bc-jump-table)
       "SECTION_BCJT")
-     (segment->copy-descriptor
-      (c64-segment 'pinned ;; type
-                   #xcf00  ;; location
-                   '()       ;; reloc info
-                   '()       ;; resolution info
-                   '()       ;; resolution symbols
-                   (length raw-page-data)
-                   raw-page-data)
-      "SECTION_PD")
      (list (byte 0 0)) ;; end mark
      LOOPED_COPY_REGION
      COPY_REGION
@@ -615,9 +601,7 @@ currently the following test programs are created
            (label "SECTION_MD")
            (ast-bytes-cmd '() raw-mem-data)
            (label "SECTION_BCJT")
-           (ast-bytes-cmd '() raw-bc-jump-table)
-           (label "SECTION_PD")
-           (ast-bytes-cmd '() raw-page-data) ;;
+           (ast-bytes-cmd '() raw-bc-jump-table) ;;
            )))
 
   (define bc-code-trampoline

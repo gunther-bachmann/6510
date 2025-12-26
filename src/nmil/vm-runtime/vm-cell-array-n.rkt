@@ -2,12 +2,14 @@
 
 (provide
  WRITE_ARR_ATa_RA_TO_RT          ;; write from cell array RA: cell at index A into RT (replacing what has been in RT)
+ POP_EVLSTK_TO_ARR_ATa_RA
  WRITE_ARR_ATa_RT_TO_RT          ;; write from cell array RT: cell at index A into RT (overwriting it)
  WRITE_RT_TO_ARR_ATa_RA
  WRITE_RP_TO_ARR_AT0_RT          ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
  POP_CELL_EVLSTK_TO_ARR_AT1_RT
  ALLOC_CELL_ARRAY_TO_RT
  ALLOC_CELL_ARRAY_P0_TO_RT
+ ALLOC_CELL_ARRAY_TO_RA
  ;; FREE_CELL_ARRAY_RZ
  ;; INIT_CELL_ARRAY_RA_WITH_RT      ;; fill array with cell that currently is in RT
 
@@ -40,7 +42,8 @@
                   define-vm-function
                   define-vm-function-wol)
          (only-in "./vm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RP)
+                  POP_CELL_EVLSTK_TO_RP
+                  POP_CELL_EVLSTK_TO_RT)
          (only-in "./vm-m1-slots-n.rkt"
                   ALLOC_M1_SLOT_TO_RT_N)
          (only-in "./vm-memory-map.rkt"
@@ -132,8 +135,18 @@
    (label ALLOC_CELL_ARRAY_P0_TO_RT)
           (JSR ALLOC_M1_P0_SLOT_TO_RT_N) ;; returns with y = 0!
           (LDA !$02)
-          (LDY !$01)
+          (LDY !$01) ;; could be iny
           (STA (ZP_RT),y) ;; set slot type to cell array with 2 elements
+          (RTS)))
+
+(define-vm-function ALLOC_CELL_ARRAY_TO_RA
+  (list
+          (PHA)                 ;; number of cells
+          (ASL A)               ;; *2 since each cell is 2 bytes
+          (JSR ALLOC_M1_SLOT_TO_RA_N)
+          (PLA)                 ;; get back number of cells
+          (LDY !$01)            ;;
+          (STA (ZP_RA),y)       ;; set slot type to cell array with x elements (00xx xxxx)
           (RTS)))
 
 (module+ test #| test-alloc-cell-array-to-rt |#
@@ -224,8 +237,14 @@
           (RTS)))
 
 ;; no refcnt adjustments!
-(define-vm-function WRITE_RT_TO_ARR_ATa_RA
+(define POP_EVLSTK_TO_ARR_ATa_RA '())
+(define-vm-function-wol WRITE_RT_TO_ARR_ATa_RA
   (list
+   (label POP_EVLSTK_TO_ARR_ATa_RA)
+          (JSR WRITE_RT_TO_ARR_ATa_RA)
+          (JMP POP_CELL_EVLSTK_TO_RT) ;; TODO
+
+   (label WRITE_RT_TO_ARR_ATa_RA)
          (ASL A)
          ;; (CLC)                       ;; should be 0, since asl a should push 0 into carry
          (ADC !$02)                    ;; get y to point to low byte of cell at index
@@ -279,6 +298,7 @@
   (append
    ALLOC_CELL_ARRAY_TO_RT
    ;; includes ALLOC_CELL_ARRAY_P0_TO_RT
+   ALLOC_CELL_ARRAY_TO_RA
 
    WRITE_ARR_ATa_RT_TO_RT
    ;; includes WRITE_ARR_ATal_RT_TO_RT
@@ -291,5 +311,5 @@
 (module+ test #| vm-cell-array-code |#
   (inform-check-equal?
    (code-len vm-cell-array-code)
-   59
+   70
    "module uses n bytes of code"))

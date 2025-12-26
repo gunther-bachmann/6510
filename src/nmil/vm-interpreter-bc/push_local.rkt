@@ -13,9 +13,9 @@
                   add-label-suffix)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC)
-         (only-in "../vm-runtime/vm-memory-manager.rkt"
-                  INC_REFCNT_RT
-                  DEC_REFCNT_RT)
+         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+                  INC_REFCNT_M1_SLOT_RT_N
+                  DEC_REFCNT_M1_SLOT_RT_N)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_LB_PTR
@@ -37,21 +37,21 @@
     (label BC_PUSH_LOCAL_SHORT)
     ;; push local
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
-           (JSR INC_REFCNT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT_N)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_WRITE_LOCAL_SHORT)
            (LSR)
            (AND !$03)
            (PHA)
-           (JSR DEC_REFCNT_RT)
+           (JSR DEC_REFCNT_M1_SLOT_RT_N)
            (PLA)
            (TAY)                                ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index
            (STA ZP_RT)                          ;;
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index
            (STA ZP_RT+1)                        ;;
-           (JSR INC_REFCNT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT_N)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
            ))))
 
@@ -81,11 +81,11 @@
     (label BC_PUSH_LX_CAR)
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR WRITE_CELLPAIR_RT_CELL0_TO_RT)
-           (JSR INC_REFCNT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT_N)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_PUSH_LX_CDR)
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR WRITE_CELLPAIR_RT_CELL1_TO_RT)
-           (JSR INC_REFCNT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT_N)
            (JMP VM_INTERPRETER_INC_PC)))))

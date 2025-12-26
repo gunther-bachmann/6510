@@ -121,8 +121,8 @@
                   VM_INTERPRETER
                   VM_INTERPRETER_ZP
                   VM_INTERPRETER_INIT)
-         (only-in "vm-runtime/vm-lists.rkt"
-                  vm-lists))
+         (only-in "vm-runtime/vm-lists-n.rkt"
+                  vm-list-code))
 
 (provide vm-interpreter
          ;; full-interpreter-opcode-table
@@ -288,7 +288,7 @@
           (list (label END__INTERPRETER))
           full-extended-optable-hb
           full-extended-optable-lb
-          vm-lists))
+          vm-list-code))
 
 (define vm-interpreter
   (append vm-interpreter-wo-jt

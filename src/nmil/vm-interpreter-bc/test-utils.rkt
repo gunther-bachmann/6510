@@ -39,9 +39,9 @@
          (only-in "../vm-interpreter-test-utils.rkt"
                   run-bc-wrapped-in-test-
                   vm-next-instruction-bytes)
-         (only-in "../vm-runtime/vm-lists.rkt"
-                  vm-lists)
-         (only-in "../vm-runtime/vm-memory-manager.rkt"
+         (only-in "../vm-runtime/vm-lists-n.rkt"
+                  vm-list-code)
+         (only-in "../vm-runtime/vm-memory-manager-n.rkt"
                   VM_INITIALIZE_MEMORY_MANAGER)
          "../vm-runtime/vm-memory-map.rkt")
 
@@ -84,7 +84,7 @@
            VM_INTERPRETER
            (build-extended-optable-hb relevant-opcode-definitions)
            (build-extended-optable-lb relevant-opcode-definitions)
-           vm-lists ;; includes vm-memory-manager
+           vm-list-code ;; includes vm-memory-manager
            (list (org-align #x100)) ;; align to next page
            (build-interpreter-optable relevant-opcode-definitions)
            VM_INTERPRETER_ZP))) ;; TODO create opcode table w/ wanted / knonwn opcodes only?

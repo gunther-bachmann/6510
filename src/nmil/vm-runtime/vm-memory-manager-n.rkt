@@ -1,7 +1,8 @@
 #lang racket/base
 
 (provide
- VM_INITIALIZE_MEMORY_MANAGER)
+ VM_INITIALIZE_MEMORY_MANAGER
+ vm-memory-manager-code)
 
 
 #|
