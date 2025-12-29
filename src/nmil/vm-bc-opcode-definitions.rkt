@@ -35,6 +35,101 @@
                   bytes->int
                   format-hex-byte
                   format-hex-word)
+         (only-in "./vm-interpreter-bc/arrays.rkt"
+                  BC_DEC_RBI_NZ_P_BRA            ;; decrement cell array index register RBI and branch if NOT Zero
+                  BC_DEC_RAI                     ;; decrement cell array index register RAI
+                  BC_WRITE_TO_RBI                ;; write tos byte cell array index register RBI
+                  BC_WRITE_TO_RAI                ;; write tos byte into cell array index register RAI
+                  BC_POP_TO_RAI                  ;; pop tos byte into cell array index register RAI
+                  BC_BINC_RAI                    ;; increment cell array index register RAI
+                  BC_ALLOC_ARA
+                  BC_XET_RA_ARRAY_FIELD
+                  BC_GET_RA_ARRAY_FIELD
+                  BC_SET_RA_ARRAY_FIELD
+                  BC_GET_ARRAY_FIELD
+                  BC_SET_ARRAY_FIELD
+                  BC_XET_ARRAY_FIELD
+                  BC_WRITE_RA                    ;; write cell-array register RA into tos
+                  BC_PUSH_RA                     ;; push cell-array register RA itself onto eval stack
+                  BC_PUSH_RA_AF                  ;; push cell-array RA field A onto the eval stack (inc ref count)
+                  BC_POP_TO_RA_AF                ;; pop tos into cell-array RA field A onto the eval stack (TODO: ref count old content!)
+                  BC_PUSH_AF                     ;; push array field (stack: index :: cell-array-ptr)
+                  BC_POP_TO_AF                   ;; pop tos to array field (stack: index :: cell-ptr->cell-array  :: value )
+                  BC_SWAP_RA_RB)
+         (only-in "./vm-interpreter-bc/atom-num.rkt"
+                  BC_BINC                        ;; increment byte (tos)
+                  BC_BDEC                        ;; decrement
+                  BC_BADD                        ;; add two topmost bytes
+                  BC_IMAX                        ;; get max of two topmost integers
+                  BC_IINC                        ;; increment integer (tos)
+                  BC_IADD                        ;; add two topmost integer
+                  BC_BSHR                        ;; shift tos byte one bit to the right
+                  BC_ISUB)
+         (only-in "./vm-interpreter-bc/branch.rkt"
+                  BC_Z_P_BRA                     ;; branch by next byte if tos is zero (byte or int), pop if branching
+                  BC_NZ_P_BRA                    ;; branch by next byte if tos is NOT zero (byte or int), pop if not branching
+                  BC_T_P_BRA                     ;; branch by next byte if tos is true (actually anything != 0), always pop
+                  BC_F_P_BRA                     ;; branch by next byte if tos is false (actually = 0), always pop
+                  BC_GOTO)
+         (only-in "./vm-interpreter-bc/call_ret.rkt"
+                  BC_CALL
+                  BC_Z_P_RET_POP_N
+                  BC_NZ_P_RET_POP_N
+                  BC_NIL_P_RET_L0_POP_N
+                  BC_TAIL_CALL
+                  BC_F_P_RET_F
+                  BC_F_P_RET
+                  BC_T_P_RET
+                  BC_RET)
+         (only-in "./vm-interpreter-bc/cell-pair.rkt"
+                  BC_CxxR
+                  BC_PUSH_NIL
+                  BC_CONS
+                  BC_COONS
+                  BC_NIL_P
+                  BC_CDR
+                  BC_CAR)
+         (only-in "./vm-interpreter-bc/compare.rkt"
+                  BC_B_GT_P
+                  BC_B_LT_P
+                  BC_B_GE_P
+                  BC_I_GT_P)
+         (only-in "./vm-interpreter-bc/ext.rkt"
+                  BC_EXT1_CMD)
+         (only-in "./vm-interpreter-bc/misc.rkt"
+                  BC_BNOP
+                  BC_BREAK
+                  BC_GC_FL)
+         (only-in "./vm-interpreter-bc/native.rkt"
+                  BC_POKE_B
+                  BC_NATIVE)
+         (only-in "./vm-interpreter-bc/pop_local.rkt"
+                  BC_POP_TO_LOCAL_SHORT
+                  BC_WRITE_TO_LOCAL_SHORT)
+         (only-in "./vm-interpreter-bc/predicates.rkt"
+                  BC_I_Z_P
+                  BC_INT_P
+                  BC_CELL_EQ_P
+                  BC_CONS_PAIR_P)
+         (only-in "./vm-interpreter-bc/push_const.rkt"
+                  BC_PUSH_CONST_NUM_SHORT
+                  BC_PUSH_INT0
+                  BC_PUSH_INT1
+                  BC_PUSH_INT2
+                  BC_PUSH_INTm1)
+         (only-in "./vm-interpreter-bc/push_local.rkt"
+                  BC_WRITE_LOCAL_SHORT           ;; write a local into the tos (rt)
+                  BC_PUSH_LOCAL_SHORT            ;; push the local onto the eval stack
+                  BC_PUSH_LOCAL_CXR)             ;; push local 0-3 and then car
+
+         (only-in "./vm-interpreter-bc/push_n_pop.rkt"
+                  BC_PUSH_B
+                  BC_DUP
+                  BC_SWAP
+                  BC_POP
+                  BC_POP_TO_RA
+                  BC_POP_TO_RB
+                  BC_PUSH_I)
          (only-in "./vm-interpreter-bc/vm-interpreter-bc.rkt"
                   BC_PUSH_LOCAL_SHORT
                   BC_EXT1_CMD

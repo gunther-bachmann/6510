@@ -1,31 +1,5 @@
 #lang racket/base
 
-(require (only-in racket/list flatten)
-         "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt" add-label-suffix)
-         (only-in "../vm-interpreter-loop.rkt"
-                  VM_INTERPRETER_INC_PC
-                  VM_INTERPRETER_INC_PC_2_TIMES
-                  VM_POP_EVLSTK_AND_INC_PC)
-         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
-                  INC_REFCNT_M1_SLOT_RT_N
-                  DEC_REFCNT_M1_SLOT_RA__IF_PTR_N
-                  DEC_REFCNT_M1_SLOT_RB__IF_PTR_N
-                  DEC_REFCNT_M1_SLOT_RC__IF_PTR_N)
-         (only-in "../vm-runtime/vm-memory-map.rkt"
-                  ZP_RBI
-                  ZP_RAI
-                  ZP_RT)
-         (only-in "../vm-runtime/vm-cell-array-n.rkt"
-                  ALLOC_CELL_ARRAY_TO_RA
-                  POP_EVLSTK_TO_ARR_ATa_RA
-                  WRITE_ARR_ATa_RA_TO_RT)
-         (only-in "../vm-runtime/vm-cell-stack.rkt"
-                  PUSH_RT_TO_EVLSTK)
-         (only-in "../vm-runtime/vm-register-functions.rkt" SWAP_RA_RB)
-         (only-in "./branch.rkt"
-                  BRANCH_BY_NEXT_BYTE__NO_POP))
-
 (provide BC_DEC_RBI_NZ_P_BRA            ;; decrement cell array index register RBI and branch if NOT Zero
          BC_DEC_RAI                     ;; decrement cell array index register RAI
          BC_WRITE_TO_RBI                ;; write tos byte cell array index register RBI
@@ -48,6 +22,34 @@
          BC_SWAP_RA_RB                  ;; swap cell array register RA with RB
          VM_REFCOUNT_DECR_ARRAY_REGS
          )
+
+(require (only-in racket/list flatten)
+         "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt" add-label-suffix)
+         (only-in "../vm-interpreter-loop.rkt"
+                  VM_INTERPRETER_INC_PC
+                  VM_INTERPRETER_INC_PC_2_TIMES
+                  VM_POP_EVLSTK_AND_INC_PC)
+         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+                  INC_REFCNT_M1_SLOT_RT_N
+                  DEC_REFCNT_M1_SLOT_RZ_N
+                  DEC_REFCNT_M1_SLOT_RA
+                  DEC_REFCNT_M1_SLOT_RB
+                  DEC_REFCNT_M1_SLOT_RC)
+         (only-in "../vm-runtime/vm-memory-map.rkt"
+                  ZP_RBI
+                  ZP_RAI
+                  ZP_RT)
+         (only-in "../vm-runtime/vm-cell-array-n.rkt"
+                  ALLOC_CELL_ARRAY_TO_RA
+                  POP_EVLSTK_TO_ARR_ATa_RA
+                  WRITE_ARR_ATa_RA_TO_RT
+                  COPY_ARR_ATa_RA_TO_RZ__IF_PTR)
+         (only-in "../vm-runtime/vm-cell-stack.rkt"
+                  PUSH_RT_TO_EVLSTK)
+         (only-in "../vm-runtime/vm-register-functions.rkt" SWAP_RA_RB)
+         (only-in "./branch.rkt"
+                  BRANCH_BY_NEXT_BYTE__NO_POP))
 
 (define BC_DEC_RBI_NZ_P_BRA
   (add-label-suffix
@@ -83,7 +85,7 @@
            (JSR POP_EVLSTK_TO_ARR_ATa_RA)       ;; no refcount adjustment, since value is off the stack (-1), but in array (+1)
            (LDA ZP_RZ)
            (BEQ continue__BC_SET_RA_ARRAY_FIELD)
-           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N) ;; decrement overwritten field (if it was a ptr)
+           (JSR DEC_REFCNT_M1_SLOT_RZ_N) ;; decrement overwritten field (if it was a ptr)
     (label continue__BC_SET_RA_ARRAY_FIELD)
            (JMP VM_INTERPRETER_INC_PC))))
 
@@ -98,12 +100,14 @@
           (LDA ZP_RT+1)
           (ASL A)
           (TAY)
-          (LDA !$00)
-   (label loop__BC_ALLOC_ARA)
-          (STA (ZP_RA),y)
-          (DEY)
-          (DEY)
-          (BNE loop__BC_ALLOC_ARA)
+
+   ;; optional: initialize lowbyte of cells with 0
+   ;;        (LDA !$00)
+   ;; (label loop__BC_ALLOC_ARA)
+   ;;        (STA (ZP_RA),y)
+   ;;        (DEY)
+   ;;        (DEY)
+   ;;        (BNE loop__BC_ALLOC_ARA)
 
           (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
@@ -153,7 +157,7 @@
            (PLA)
            (JSR WRITE_ARR_ATa_RA_TO_RT)
            (JSR INC_REFCNT_M1_SLOT_RT_N)
-           (JSR DEC_REFCNT_M1_SLOT_RA__IF_PTR_N)
+           (JSR DEC_REFCNT_M1_SLOT_RA)
            (LDA !$00)
            (STA ZP_RA)
            (STA ZP_RA+1)
@@ -170,9 +174,9 @@
            (JSR POP_EVLSTK_TO_ARR_ATa_RA)
            (LDA ZP_RZ)
            (BEQ continue__BC_SET_ARRAY_FIELD) ;; if old array entry was no ptr, this is 0
-           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)  ;; decrement overwritte (old) array entry
+           (JSR DEC_REFCNT_M1_SLOT_RZ_N)  ;; decrement overwritte (old) array entry
     (label continue__BC_SET_ARRAY_FIELD)
-           (JSR DEC_REFCNT_M1_SLOT_RA__IF_PTR_N)
+           (JSR DEC_REFCNT_M1_SLOT_RA)
            (LDA !$00)
            (STA ZP_RA)
            ;; (STA ZP_RA+1) ;; not necessary
@@ -206,7 +210,7 @@
           (JSR POP_EVLSTK_TO_ARR_ATa_RA)
           (LDA ZP_RZ)
           (BEQ continue__BC_POP_TO_RA_AF) ;; if old array entry was no ptr, this is 0
-          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)  ;; decrement overwritte (old) array entry
+          (JSR DEC_REFCNT_M1_SLOT_RZ_N)  ;; decrement overwritte (old) array entry
     (label continue__BC_POP_TO_RA_AF)
           (INC ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
@@ -221,7 +225,7 @@
            (LDA ZP_RT+1)                  ;; index                               (stack: index)
            (JSR WRITE_ARR_ATa_RA_TO_RT)   ;; rt <- array@a                       (stack: value)
            (JSR INC_REFCNT_M1_SLOT_RT_N)            ;; now on stack and in array => inc refcnt'd
-           (JSR DEC_REFCNT_M1_SLOT_RA__IF_PTR_N)            ;; removed from stack => dec refcnt'd
+           (JSR DEC_REFCNT_M1_SLOT_RA)            ;; removed from stack => dec refcnt'd
            (JMP VM_INTERPRETER_INC_PC))))
 
 ;; stack: index(byte) :: cell-ptr->cell-array  :: value (cell)
@@ -241,10 +245,10 @@
            (JSR POP_EVLSTK_TO_ARR_ATa_RA)
            (LDA ZP_RZ)
            (BEQ continue__BC_POP_TO_AF) ;; if old array entry was no ptr, this is 0
-           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)  ;; decrement overwritte (old) array entry
+           (JSR DEC_REFCNT_M1_SLOT_RZ_N)  ;; decrement overwritte (old) array entry
     (label continue__BC_POP_TO_AF)
 
-           (JSR DEC_REFCNT_M1_SLOT_RA__IF_PTR_N)            ;; since array is no longer on stack dec refcnt (value moved => no change)
+           (JSR DEC_REFCNT_M1_SLOT_RA)            ;; since array is no longer on stack dec refcnt (value moved => no change)
            (JMP VM_INTERPRETER_INC_PC))))
 
 (define BC_SWAP_RA_RB
@@ -261,15 +265,15 @@
    (label VM_REFCOUNT_DECR_ARRAY_REGS)
           (LDA ZP_RA)
           (BEQ DONE__)
-          (JSR DEC_REFCNT_M1_SLOT_RA__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RA)
    (label TRY_RB__)
           (LDA ZP_RB)
           (BEQ CLEAR_RA__)
-          (JSR DEC_REFCNT_M1_SLOT_RB__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RB)
    (label TRY_RC__)
           (LDA ZP_RC)
           (BEQ CLEAR_RAB__)
-          (JSR DEC_REFCNT_M1_SLOT_RC__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RC)
           (LDA !$00)
           (STA ZP_RC)
           (STA ZP_RC+1) ;; can most probably be optimized away (if dec refcnt checks 0 in low byte)

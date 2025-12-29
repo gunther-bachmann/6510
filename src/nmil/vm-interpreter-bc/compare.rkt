@@ -1,5 +1,11 @@
 #lang racket/base
 
+(provide BC_B_GT_P
+         BC_B_LT_P
+         BC_B_GE_P
+         BC_I_GT_P)
+
+
 #|
 
   Bytecode implementation of comparison commands
@@ -24,11 +30,6 @@
                   WRITE_INT1_TO_RT)
          (only-in "./push_n_pop.rkt"
                   BC_PUSH_B))
-
-(provide BC_B_GT_P
-         BC_B_LT_P
-         BC_B_GE_P
-         BC_I_GT_P)
 
 (define BC_B_GT_P
   (add-label-suffix

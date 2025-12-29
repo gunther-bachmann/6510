@@ -9,9 +9,9 @@
  DEC_REFCNT_M1_SLOT_RZ_N
  DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N
  DEC_REFCNT_M1_SLOT_RT__IF_PTR_N
- DEC_REFCNT_M1_SLOT_RA__IF_PTR_N
- DEC_REFCNT_M1_SLOT_RB__IF_PTR_N
- DEC_REFCNT_M1_SLOT_RC__IF_PTR_N
+ DEC_REFCNT_M1_SLOT_RA
+ DEC_REFCNT_M1_SLOT_RB
+ DEC_REFCNT_M1_SLOT_RC
  INC_REFCNT_M1_SLOT_RT_N
  ALLOC_M1_SLOT_TO_RB_N
 
@@ -1379,20 +1379,20 @@
 ;;   garbage collect slot pointer to by ZP_RZ. refcount must have dropped to 0!
 ;; input: ZP_RZ = ptr to slot
 ;; output: -
-(define-vm-function DEC_REFCNT_M1_SLOT_RA__IF_PTR_N
+(define-vm-function DEC_REFCNT_M1_SLOT_RA
   (list
             (JSR CP_RA_TO_RZ)
-            (JMP DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
+            (JMP DEC_REFCNT_M1_SLOT_RZ_N)))
 
-(define-vm-function DEC_REFCNT_M1_SLOT_RB__IF_PTR_N
+(define-vm-function DEC_REFCNT_M1_SLOT_RB
   (list
             (JSR CP_RB_TO_RZ)
-            (JMP DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
+            (JMP DEC_REFCNT_M1_SLOT_RZ_N)))
 
-(define-vm-function DEC_REFCNT_M1_SLOT_RC__IF_PTR_N
+(define-vm-function DEC_REFCNT_M1_SLOT_RC
   (list
             (JSR CP_RC_TO_RZ)
-            (JMP DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
+            (JMP DEC_REFCNT_M1_SLOT_RZ_N)))
 
 (define INC_GC_M1_SLOT_RZ_CELL_ARRAY_N '())
 (define DEC_REFCNT_M1_SLOT_RT__IF_PTR_N '())
@@ -2036,9 +2036,9 @@
           FREE_M1_SLOT_FROM_RZ_N
           INC_REFCNT_M1_SLOT_RT_N
           DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N
-          DEC_REFCNT_M1_SLOT_RA__IF_PTR_N
-          DEC_REFCNT_M1_SLOT_RB__IF_PTR_N
-          DEC_REFCNT_M1_SLOT_RC__IF_PTR_N
+          DEC_REFCNT_M1_SLOT_RA
+          DEC_REFCNT_M1_SLOT_RB
+          DEC_REFCNT_M1_SLOT_RC
           INC_GC_ARRAYS
           GC_ALL_ARRAYS))
 
