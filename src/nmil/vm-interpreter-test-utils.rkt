@@ -98,6 +98,7 @@
          (only-in "vm-runtime/vm-memory-map.rkt"
                   ast-const-get
                   ZP_RT
+                  ZP_INC_COLLECTIBLE_LIST
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
                   ZP_VM_FUNC_PTR
@@ -112,8 +113,28 @@
          vm-list->strings
          vm-cell-pair-pages
          vm-cell-pairs-free-in-page
-         vm-cell-pairs-used-num-in-page)
+         vm-cell-pairs-used-num-in-page
+         vm-slots-free-in-page
+         vm-slots-used-in-page
+         vm-num-slots-used-in-page)
 
+(define (vm-inc-collectible-list- state collectible collected-list)
+  (cond [(= 0 (bitwise-and #xff collectible))
+         collected-list]
+        [else
+         (vm-inc-collectible-list-
+          state
+          (peek-word-at-address state (+ 2 collectible))
+          (cons collectible collected-list))]))
+(define (vm-inc-collectible-list state)
+  (define collectible-head (peek-word-at-address state ZP_INC_COLLECTIBLE_LIST))
+  (vm-inc-collectible-list- state collectible-head (list)))
+
+(define (vm-inc-collectible-list->string state)
+  (string-join (reverse (map format-hex-word (vm-inc-collectible-list state))) " -> "))
+
+(define (vm-num-slots-used-in-page state page)
+  (peek state (bytes->int #x01 page)))
 
 (define (print-list-of-labels label-list label-offsets)
   (unless (empty? label-list)
@@ -165,18 +186,19 @@
   (cond [(= address #x0000) ;; this is the nil ptr
          (reverse string-list)]
         [else
-         (unless (= (bitwise-and #x03 address) #x00)
+         (unless (= (bitwise-and #x01 address) #x00)
            (raise-user-error (format "address is not a ptr ~a" (format-hex-word address))))
-         (define cell-cdr (peek-word-at-address state (+ address 2)))
-         (unless (= (bitwise-and #x03 cell-cdr) #x00)
+         (define cell-cdr (peek-word-at-address state (+ address 4)))
+         (unless (= (bitwise-and #x01 cell-cdr) #x00)
            (raise-user-error (format "cdr cell is not a ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
          (if (vm-cell-at-nil-n? state address)
              (reverse string-list)
              (vm-list->strings state
                               cell-cdr
-                              (cons (vm-cell-at-n->string state address #f follow)
+                              (cons (vm-cell-at-n->string state (+ 2 address) #f follow)
                                     string-list)
                               follow))]))
+
 (define (debugger--bc-help d-state)
   (with-colors
     'green
@@ -209,7 +231,7 @@
                                 "clear stop pc = <A>   clear that breakpoint"
                                 "sab byte              stop at the given bytecode (not implemented)"
                                 "dive                  push assembler interactor"
-                                "^                     (prefix) pass the following commands to the assembly debugger"))))
+                                "^<command>            (prefix) pass the following commands to the assembly debugger"))))
   d-state)
 
 ;; run a byte command (made up of bc-code) on the current machine without changing the pc
@@ -359,6 +381,9 @@
           (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
                 [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
                 [(string=? command "fl") (color-displayln (vm-cell-pair-free-list-info c-state)) d-state]
+                [(string=? command "gc-c")
+                 (color-displayln (vm-inc-collectible-list->string c-state))
+                 d-state]
                 [(or (string=? command "trace on")
                     (string=? command "to"))
                  (struct-copy debug-state d-state
@@ -556,6 +581,44 @@
 ;; get a list of offsets in the current page of free cells
 (define (vm-cell-pairs-free-in-page state page)
   (vm-cell-pairs-free-in-page- state page (peek state (bytes->int page #xcf))))
+
+(define (vm-slots-for-page state page)
+  (define page-profile (bitwise-and #x0f (peek state (bytes->int #x00 page))))
+  (cond
+    [(= page-profile 0)
+     (map (lambda (n) (+ (* 6 n) 2)) (range 42))]
+    [(= page-profile 1)
+     (map (lambda (n) (+ (* 8 n) 2)) (range 31))]
+    [(= page-profile 2)
+     (map (lambda (n) (+ (* 12 n) 2)) (range 21))]
+    [(= page-profile 3)
+     (map (lambda (n) (+ (* 24 n) 2)) (range 10))]
+    [(= page-profile 4)
+     (map (lambda (n) (+ (* 36 n) 2)) (range 7))]
+    [(= page-profile 5)
+     (map (lambda (n) (+ (* 50 n) 2)) (range 5))]
+    [else  (list)]))
+
+(define (vm-slots-used-in-page state page)
+  (sort
+   (set->list
+    (set-subtract
+     (apply set (vm-slots-for-page state page))
+     (apply set (vm-slots-free-in-page state page))))
+   <))
+
+(define (vm-slots-free-in-page- state page free-slot-offset (result (list)))
+  (cond [(= 0 free-slot-offset) result]
+        [else
+         (define next-free-cp-off (peek state (bytes->int free-slot-offset page)))
+         (vm-cell-pairs-free-in-page-
+          state
+          page
+          next-free-cp-off
+          (cons free-slot-offset result))]))
+
+(define (vm-slots-free-in-page state page)
+  (vm-slots-free-in-page- state page (peek state (bytes->int #xfe page))))
 
 ;; return a list of cell-pair offset that are on the page (used and free ones)
 (define (vm-cell-pairs-on-page-)

@@ -7,10 +7,11 @@
  ALLOC_M1_PX_SLOT_TO_RA_N               ;; allocate an m1 slot profile X into RA
  ALLOC_M1_SLOT_TO_RT_N                  ;; allocate an m1 slot of size A into RT
  DEC_REFCNT_M1_SLOT_RZ_N
- DEC_REFCNT_M1_SLOT_RT_N
- DEC_REFCNT_M1_SLOT_RA_N
- DEC_REFCNT_M1_SLOT_RB_N
- DEC_REFCNT_M1_SLOT_RC_N
+ DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N
+ DEC_REFCNT_M1_SLOT_RT__IF_PTR_N
+ DEC_REFCNT_M1_SLOT_RA__IF_PTR_N
+ DEC_REFCNT_M1_SLOT_RB__IF_PTR_N
+ DEC_REFCNT_M1_SLOT_RC__IF_PTR_N
  INC_REFCNT_M1_SLOT_RT_N
  ALLOC_M1_SLOT_TO_RB_N
 
@@ -332,6 +333,7 @@
                     VM_DEALLOCATE_PAGE_N
                     VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
            (only-in "./vm-register-functions.rkt"
+                    vm-register-functions-code
                     CP_RT_TO_RA
                     CP_RA_TO_RT
                     CP_RA_TO_RB
@@ -351,12 +353,7 @@
      VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
      VM_MEMORY_MANAGEMENT_CONSTANTS
 
-     CP_RA_TO_RT
-     CP_RT_TO_RA
-     CP_RA_TO_RB
-     CP_RT_TO_RZ
-     SWAP_RA_RB
-     SWAP_ZP_WORD
+     vm-register-functions-code
      (list (label INIT_CELLSTACK_PAGE_X) (RTS)))))
 
 ;; input:  RZ+1 = page to be used
@@ -632,8 +629,19 @@
   (list
    (label ALLOC_M1_P0_SLOT_TO_RT_N)
           ;; maybe keep RA if not empty!
+          (LDA ZP_RA)
+          (PHA)
+          (LDA ZP_RA+1)
+          (PHA)
+
           (JSR ALLOC_M1_P0_SLOT_TO_RA_N)
-          (JMP CP_RA_TO_RT)))
+          (JSR CP_RA_TO_RT)
+
+          (PLA)
+          (STA ZP_RA+1)
+          (PLA)
+          (STA ZP_RA)
+          (RTS)))
 
 ;; allocate an m1 slot
 ;;
@@ -1199,6 +1207,24 @@
            ;; - add slot to free list of page
            (LDY !$fe)
            (LDA (ZP_RZ),y)      ;; a = slot offset of previous free slot
+           (BNE continue_a_eq_prev__)
+
+           ;; page was full, add this page to the list of pages with free slots
+           (TAY) ;; set y = 0
+           (LDA (ZP_RZ),y)
+           (AND !$0f) ;; extract profile
+           (TAX)
+           (LDA ZP_PAGE_FREE_SLOTS_LIST,x) ;; get current head of list of pages with free slots
+           (CMP ZP_RZ+1)
+           (BEQ continue__) ;; already listed as free
+           (LDY !$ff)
+           (STA (ZP_RZ),y) ;; set previous page
+           (LDA ZP_RZ+1)
+           (STA ZP_PAGE_FREE_SLOTS_LIST,x)
+
+    (label continue__)
+           (LDA !$00) ;; since page was full, previous slot offset is 0
+    (label continue_a_eq_prev__)
            (LDY ZP_TEMP)        ;; y = slot offset
            (STA (ZP_RZ),y)
            (TYA)                ;; a = slot offset
@@ -1237,9 +1263,9 @@
 
   (define free_m1_slot_from_rz_n-test-2 (free_m1_slot_from_rz_n-test 2))
 
-  (check-equal?
+  (inform-check-equal?
    (cpu-state-clock-cycles free_m1_slot_from_rz_n-test-2)
-   56
+   59
    "free takes n cycles")
 
   (check-equal?
@@ -1273,7 +1299,7 @@
 ;;          allowing to directly JSR the INC command (cycles 6 + 6 = 12), not counting the jsr itself
 ;;       note: dec could be done on a different register, that is the surrounded by DEC abs and RTS
 ;; execution cycles = 3 + 3 + 4 + 7 + 6 = 23 (+jsr of caller)
-(define-vm-function INC_REFCNT_M1_SLOT_RT_N
+(define-vm-function-wol INC_REFCNT_M1_SLOT_RT_N
    (list
     ;;        (LDY !$00)
     ;;        (LDA (ZP_RA),y)
@@ -1282,11 +1308,19 @@
     ;;        (STA (ZP_RA),y)
     ;;        (RTS)
 
+    (label INC_REFCNT_M1_SLOT_RT__IF_PTR_N)
+           (LDA ZP_RT)
+           (BEQ done__) ;; nil? then done
+           (LSR)
+           (BCS done__) ;; atomic? then done
+
+    (label INC_REFCNT_M1_SLOT_RT_N)
            (LDA ZP_RT+1)
            (LDX ZP_RT)
            (STA inc_abs__+2)
     (label inc_abs__)
            (INC $cf00,x)
+    (label done__)
            (RTS)))
 
 (module+ test #| inc_refcnt_m1_slot_ra_n |#
@@ -1345,28 +1379,35 @@
 ;;   garbage collect slot pointer to by ZP_RZ. refcount must have dropped to 0!
 ;; input: ZP_RZ = ptr to slot
 ;; output: -
-(define-vm-function DEC_REFCNT_M1_SLOT_RA_N
+(define-vm-function DEC_REFCNT_M1_SLOT_RA__IF_PTR_N
   (list
             (JSR CP_RA_TO_RZ)
-            (JMP DEC_REFCNT_M1_SLOT_RZ_N)))
+            (JMP DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
 
-(define-vm-function DEC_REFCNT_M1_SLOT_RB_N
+(define-vm-function DEC_REFCNT_M1_SLOT_RB__IF_PTR_N
   (list
             (JSR CP_RB_TO_RZ)
-            (JMP DEC_REFCNT_M1_SLOT_RZ_N)))
+            (JMP DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
 
-(define-vm-function DEC_REFCNT_M1_SLOT_RC_N
+(define-vm-function DEC_REFCNT_M1_SLOT_RC__IF_PTR_N
   (list
             (JSR CP_RC_TO_RZ)
-            (JMP DEC_REFCNT_M1_SLOT_RZ_N)))
+            (JMP DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
 
 (define INC_GC_M1_SLOT_RZ_CELL_ARRAY_N '())
-(define DEC_REFCNT_M1_SLOT_RT_N '())
+(define DEC_REFCNT_M1_SLOT_RT__IF_PTR_N '())
+(define DEC_REFCNT_M1_SLOT_RZ_N '())
 (define GC_M1_SLOT_RZ_N '())
-(define-vm-function-wol DEC_REFCNT_M1_SLOT_RZ_N
+(define-vm-function-wol DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N
    (list
-    (label DEC_REFCNT_M1_SLOT_RT_N)
+    (label DEC_REFCNT_M1_SLOT_RT__IF_PTR_N)
            (JSR CP_RT_TO_RZ)
+
+    (label DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+           (LDA ZP_RZ)
+           (BEQ done__) ;; nil? then deon
+           (LSR)
+           (BCS done__) ;; atomic? then done
 
     (label DEC_REFCNT_M1_SLOT_RZ_N)
            (LDA ZP_RZ+1)
@@ -1481,11 +1522,22 @@
            (LDA EXEC_OPTIMIZED_LAST_SLOT_FREE__)
            (BEQ cells_left_to_inspect__)
 
+           ;; no more cells to inspect, all done for this cell
+
            (TXA)
            (PHA) ;; now stack holds lb (head) :: hb :: ... of cell to be dec_refcnt'd
 
+           ;; make sure to rewrite ZP_INC_COLLECTIBLE _LIST
+           ;; (LDY !$02)
+           ;; (LDA (ZP_RZ),y)
+           ;; (STA ZP_INC_COLLECTIBLE_LIST)
+           ;; (INY)
+           ;; (LDA (ZP_RZ),y)
+           ;; (STA ZP_INC_COLLECTIBLE_LIST+1)
+
            ;; free ZP_RZ
-           (JSR FREE_M1_SLOT_FROM_RZ_N) ;; does not run any DEC_REFCNT => no recursion possible, uses ZP_TEMP
+           ;; (JSR FREE_M1_SLOT_FROM_RZ_N) ;; does not run any DEC_REFCNT => no recursion possible, uses ZP_TEMP
+           (JSR no_cells_left_for_scanning__) ;; includes possible dequeue
 
            ;; now dec refcnt the last (remembered) cell
            (PLA)
@@ -1498,10 +1550,10 @@
     (label cells_left_to_inspect__)
            (LSR)
            (LDY !$01)
-           (STA (ZP_RZ),y)
+           (STA (ZP_RZ),y) ;; store new length (less then before)
 
 
-           ;; is the first cell a ptr (then it is already in the list of collectibles), else it must be listed
+           ;; is the first cell a ptr (then it is already is in the list of collectibles), else it must be listed
            (LDY !$02)
            (LDA (ZP_RZ),y)
            (AND !$01)
@@ -1543,7 +1595,7 @@
                             INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
                             FREE_M1_SLOT_FROM_RZ_N
                             INC_REFCNT_M1_SLOT_RT_N
-                            DEC_REFCNT_M1_SLOT_RZ_N)
+                            DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
                 (LDA !20)
                 (JSR ALLOC_M1_SLOT_TO_RA_N)
@@ -1556,16 +1608,16 @@
                 (STA ZP_RZ+1)
 
                 (JSR $0100)
-                (JSR DEC_REFCNT_M1_SLOT_RZ_N)))
+                (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
 
   (inform-check-equal?
-   (code-len DEC_REFCNT_M1_SLOT_RZ_N)
-   196
+   (code-len DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+   204
    "code len of dec refcnt and gc are n bytes")
 
   (inform-check-equal?
    (cpu-state-clock-cycles dec_refcnt_m1_slot_rz_n-test-non-cell-array-slot)
-   90
+   102
    "it takes n clock cycles to dec refcnt and free an allocated slot immediately")
 
   (check-equal?
@@ -1586,7 +1638,7 @@
                             INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
                             FREE_M1_SLOT_FROM_RZ_N
                             INC_REFCNT_M1_SLOT_RT_N
-                            DEC_REFCNT_M1_SLOT_RZ_N)
+                            DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
                 (LDA !20)
                 (JSR ALLOC_M1_SLOT_TO_RA_N)
@@ -1611,16 +1663,16 @@
                 (STA ZP_RZ+1)
 
                 (JSR $0100)
-                (JSR DEC_REFCNT_M1_SLOT_RZ_N)))
+                (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
 
   (inform-check-equal?
    (cpu-state-clock-cycles (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs 1))
-    128               ;; cucles
+    140               ;; cucles
     "freeing a cell-array with 1 nil takes n cycles")
 
   (inform-check-equal?
    (cpu-state-clock-cycles (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs 10))
-    283               ;; cucles
+    295               ;; cucles
     "freeing a cell-array with 10 nils takes n cycles")
 
   (check-equal?
@@ -1642,7 +1694,7 @@
                             INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
                             FREE_M1_SLOT_FROM_RZ_N
                             INC_REFCNT_M1_SLOT_RT_N
-                            DEC_REFCNT_M1_SLOT_RZ_N)
+                            DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
 
                 (LDA !20)
@@ -1684,7 +1736,7 @@
                 (STA ZP_RZ+1)
 
                 (JSR $0100)
-                (JSR DEC_REFCNT_M1_SLOT_RZ_N)))
+                (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
 
   (check-equal?
    (list
@@ -1705,7 +1757,7 @@
                             INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
                             FREE_M1_SLOT_FROM_RZ_N
                             INC_REFCNT_M1_SLOT_RT_N
-                            DEC_REFCNT_M1_SLOT_RZ_N)
+                            DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
 
                 (LDA !20)
@@ -1736,7 +1788,7 @@
                 (STA ZP_RZ+1)
 
                 (JSR $0100)
-                (JSR DEC_REFCNT_M1_SLOT_RZ_N)))
+                (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)))
 
   (check-equal?
    (list
@@ -1759,7 +1811,7 @@
                             INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
                             FREE_M1_SLOT_FROM_RZ_N
                             INC_REFCNT_M1_SLOT_RT_N
-                            DEC_REFCNT_M1_SLOT_RZ_N)
+                            DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
 
                 (LDA !20)
@@ -1789,7 +1841,7 @@
                 (LDA ZP_RA+1)
                 (STA ZP_RZ+1)
 
-                (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+                (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
 
                 (LDA ZP_INC_COLLECTIBLE_LIST)
                 (STA ZP_RZ)
@@ -1801,7 +1853,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr-inc-collect)
-   109
+   112
    "freeing an array incrementally for which no further cells need to be freed")
 
   (check-equal?
@@ -1825,7 +1877,7 @@
                             INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
                             FREE_M1_SLOT_FROM_RZ_N
                             INC_REFCNT_M1_SLOT_RT_N
-                            DEC_REFCNT_M1_SLOT_RZ_N)
+                            DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
 
                 (LDA !20)
@@ -1872,7 +1924,7 @@
 
                 ;; dec ref count and do first free (should free frist cell then enqueue for incremental)
                 (JSR $0100)
-                (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+                (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
 
 
                 ;; first incremental free call (free third cell (being a ptr) and return (keep this ptr enqueued))
@@ -1939,8 +1991,10 @@
 ;;
 ;; input:  ZP_INC_COLLECTIBLE_LIST
 ;; output: ZP_INC_COLLECTIBLE_LIST = 0
-(define-vm-function GC_ALL_ARRAYS
+(define-vm-function-wol GC_ALL_ARRAYS
    (list
+    (label GC_ALL)
+    (label GC_ALL_ARRAYS)
            (LDA ZP_INC_COLLECTIBLE_LIST)
            (BEQ done__)
            (JSR INC_GC_ARRAYS_LB_IN_A)
@@ -1981,15 +2035,15 @@
           INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
           FREE_M1_SLOT_FROM_RZ_N
           INC_REFCNT_M1_SLOT_RT_N
-          DEC_REFCNT_M1_SLOT_RZ_N
-          DEC_REFCNT_M1_SLOT_RA_N
-          DEC_REFCNT_M1_SLOT_RB_N
-          DEC_REFCNT_M1_SLOT_RC_N
+          DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N
+          DEC_REFCNT_M1_SLOT_RA__IF_PTR_N
+          DEC_REFCNT_M1_SLOT_RB__IF_PTR_N
+          DEC_REFCNT_M1_SLOT_RC__IF_PTR_N
           INC_GC_ARRAYS
           GC_ALL_ARRAYS))
 
 (module+ test #| code len of module |#
   (inform-check-equal?
    (code-len vm-m1-slot-code)
-   589
+   645
    "the whole module taks about n bytes"))

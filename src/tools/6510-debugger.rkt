@@ -247,7 +247,9 @@ inc pc                  increment program counter (e.g. to step over a BRK instr
 p                       print cpu state
 clear stops             clear all breakpoints
 surface                 pop interactor
+~<command>              (prefix) execute <command> on previous interactor
 list labels \"<regex>\" list labels matching the given regex
+Lcl \"regex\" <A>?      list labels close to pc or A (if present)
 q                       quit
 .                       repeat last command (multiple dots repeat multiple times)
 EOF

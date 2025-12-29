@@ -1,5 +1,37 @@
 #lang racket/base
 
+(provide vm-btree
+    REVERSE                       ;; reverse a list:  list :: result=nil -> list
+    APPEND                        ;; append to lists:  head-list :: tail-list -> list
+
+    BTREE_MAKE_ROOT               ;; create a root for a btree: value -> node
+
+    BTREE_VALUE_P                 ;; is this node a value:  node -> bool
+    BTREE_NODE_P                  ;; is this node a node w/ children:  node -> bool
+    BTREE_DEPTH                   ;; get the max depth of this tree:  node :: right-list=nil :: depth=0 :: max-depth=0 -> int
+
+    BTREE_PATH_TO_LAST            ;; generate path to the last element in the tree:  node :: result-path=nil -> path
+    BTREE_PATH_TO_FIRST           ;; generate path to the first element in the tree:  node :: result-path=nil -> path
+    BTREE_NEXT                    ;; find the next node following the given path:  path -> path
+    BTREE_PREV                    ;; find the previous node before the given path:  path -> path
+
+    BTREE_NODE_FOR_PATH           ;; extract the node for the given path:  path -> node
+
+    BTREE_REC_REBUILD_PATH_WITH   ;; recursively construct a path:  (list path) :: repl-node :: result=nil -> (list path)
+    ;; BTREE_VALIDATE
+
+    BTREE_ADD_VALUE_BEFORE        ;; add a value to the tree before the given:  value :: path -> path
+    BTREE_ADD_VALUE_AFTER         ;; add a value to the tree after the given:  value :: path -> path
+
+    BTREE_TO_LIST                 ;; translate tree into an ordered list of values:  node :: btree-prefix=nil :: result=nil -> (list node)
+    BTREE_FROM_LIST               ;; construct a (balanced) tree from a list of values:  (list node) :: result=nil -> node
+
+    BTREE_REMOVE_VALUE_AT         ;; remove the given value from the tree:  path :: result=nil :: old-prev=nil
+
+    BTREE_ROOT_FOR_PATH           ;; get the root of this path in the btree:  path -> node
+
+    BTREE_REVERSE)                ;; reverse the given btree (left/right)
+
 #|
 
   implementation of a persistent b-tree with values at leafs in pure bytecode
@@ -86,7 +118,7 @@
       (list path) :: repl-node :: result=nil -> (list path)
       [method to replace the given node up the tree in the path]
 
-|#
+ |#
 
 {require (only-in racket/list flatten)
          "../../6510.rkt"
@@ -97,44 +129,18 @@
                   bc-resolve
                   bc-bytes)
          (only-in "../vm-interpreter-loop.rkt" ZP_VM_PC)
-         (only-in "../vm-interpreter.rkt" vm-interpreter)}
-
-(provide vm-btree
-    REVERSE                       ;; reverse a list:  list :: result=nil -> list
-    APPEND                        ;; append to lists:  head-list :: tail-list -> list
-
-    BTREE_MAKE_ROOT               ;; create a root for a btree: value -> node
-
-    BTREE_VALUE_P                 ;; is this node a value:  node -> bool
-    BTREE_NODE_P                  ;; is this node a node w/ children:  node -> bool
-    BTREE_DEPTH                   ;; get the max depth of this tree:  node :: right-list=nil :: depth=0 :: max-depth=0 -> int
-
-    BTREE_PATH_TO_LAST            ;; generate path to the last element in the tree:  node :: result-path=nil -> path
-    BTREE_PATH_TO_FIRST           ;; generate path to the first element in the tree:  node :: result-path=nil -> path
-    BTREE_NEXT                    ;; find the next node following the given path:  path -> path
-    BTREE_PREV                    ;; find the previous node before the given path:  path -> path
-
-    BTREE_NODE_FOR_PATH           ;; extract the node for the given path:  path -> node
-
-    BTREE_REC_REBUILD_PATH_WITH   ;; recursively construct a path:  (list path) :: repl-node :: result=nil -> (list path)
-    ;; BTREE_VALIDATE
-
-    BTREE_ADD_VALUE_BEFORE        ;; add a value to the tree before the given:  value :: path -> path
-    BTREE_ADD_VALUE_AFTER         ;; add a value to the tree after the given:  value :: path -> path
-
-    BTREE_TO_LIST                 ;; translate tree into an ordered list of values:  node :: btree-prefix=nil :: result=nil -> (list node)
-    BTREE_FROM_LIST               ;; construct a (balanced) tree from a list of values:  (list node) :: result=nil -> node
-
-    BTREE_REMOVE_VALUE_AT         ;; remove the given value from the tree:  path :: result=nil :: old-prev=nil
-
-    BTREE_ROOT_FOR_PATH           ;; get the root of this path in the btree:  path -> node
-
-    BTREE_REVERSE)                ;; reverse the given btree (left/right)
+         (only-in "../vm-interpreter.rkt" vm-interpreter)
+         (only-in "../vm-runtime/vm-memory-manager-n.rkt"
+                  vm-memory-manager-code)
+         (only-in "../vm-runtime/vm-memory-map.rkt"
+                  ZP_RT)}
 
 (module+ test #|  |#
   (require "../../6510-test-utils.rkt"
            (only-in "../../cisc-vm/stack-virtual-machine.rkt" BRK)
-           (only-in "../../tools/6510-interpreter.rkt" cpu-state-clock-cycles)
+           (only-in "../../tools/6510-interpreter.rkt"
+                    cpu-state-clock-cycles
+                    peek-word-at-address)
            (only-in "../../util.rkt"
                     bytes->int
                     format-hex-byte
@@ -143,37 +149,40 @@
                     shorten-cell-strings
                     shorten-cell-string
                     vm-cell-at-nil?
-                    vm-page->strings
-                    vm-stack->strings
-                    vm-regt->string
-                    vm-cell-at->string
-                    vm-cell->string
-                    vm-deref-cell-pair-w->string)
+                    vm-page-n->strings
+                    vm-stack-n->strings
+                    vm-regt-n->string
+                    vm-cell-at-n->string
+                    vm-cell-n->string
+                    vm-deref-cell-pair-w-n->string)
            (only-in "../vm-interpreter-loop.rkt"
                     VM_INTERPRETER_ZP)
            (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
-                    vm-list->strings))
+                    vm-list->strings)
+           (only-in "../vm-interpreter-bc/test-utils.rkt"
+                    wrap-bytecode-for-full-bc-test))
 
-  (define PAGE_AVAIL_0 #x8a)
-  (define PAGE_AVAIL_0_W #x8a00)
-  (define PAGE_AVAIL_1 #x89)
-  (define PAGE_AVAIL_1_W #x8900)
+  (define PAGE_AVAIL_0 #xca)
+  (define PAGE_AVAIL_0_W #xca00)
+  (define PAGE_AVAIL_1 #xc9)
+  (define PAGE_AVAIL_1_W #xc900)
 
-  (define (wrap-bytecode-for-test bc)
-    (append (list (org #x7000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_INITIALIZE_CALL_FRAME)
-                  (JSR VM_INTERPRETER_INIT)
-                  (JMP VM_INTERPRETER))
-            (list (org #x8000))
-            (flatten bc)
-            (list (org #xa000))
-            vm-interpreter
-            VM_INTERPRETER_ZP))
+
+  ;; (define (wrap-bytecode-for-test bc)
+  ;;   (append (list (org #x7000)
+  ;;                 (JSR VM_INITIALIZE_MEMORY_MANAGER)
+  ;;                 (JSR VM_INTERPRETER_INIT)
+  ;;                 (JMP VM_INTERPRETER))
+  ;;           (list (org #x0800))
+  ;;           (flatten bc)
+  ;;           (list (org #xa000))
+  ;;           vm-memory-manager-code
+  ;;           vm-interpreter
+  ;;           VM_INTERPRETER_ZP))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
-    (define wrapped-code (wrap-bytecode-for-test bc))
+    (define wrapped-code (wrap-bytecode-for-full-bc-test bc))
     (run-bc-wrapped-in-test- bc wrapped-code debug)))                ;; reverse the given tree:  node -> node
 
 
@@ -201,9 +210,10 @@
       BTREE_MAKE_ROOT)
      ))
 
-  (check-equal? (vm-stack->strings btree-make-root-state)
-                  (list "stack holds 1 item"
-                        (format "pair-ptr[1] $~a05  (rt)" (format-hex-byte PAGE_AVAIL_0))))
+  (check-equal? (vm-stack-n->strings btree-make-root-state)
+                  (list "stack holds 2 items"
+                        (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                        "ptr NIL"))
 
   (define btree-make-root-2-state
     (run-bc-wrapped-in-test
@@ -217,9 +227,10 @@
       (list (org #x8800))
       BTREE_MAKE_ROOT)))
 
-  (check-equal? (vm-stack->strings btree-make-root-2-state)
-                  (list "stack holds 1 item"
-                        "int $0001  (rt)")))
+  (check-equal? (vm-stack-n->strings btree-make-root-2-state)
+                  (list "stack holds 2 items"
+                        "int $0001  (rt)"
+                        "ptr NIL")))
 
 ;; (define (btree-value? node)
 ;;   (or (string? node) (integer? node)))
@@ -246,9 +257,10 @@
       BTREE_VALUE_P)
      ))
 
-  (check-equal? (vm-stack->strings btree-value-p-state)
-                (list "stack holds 1 item"
-                      "int $0001  (rt)")
+  (check-equal? (vm-stack-n->strings btree-value-p-state)
+                (list "stack holds 2 items"
+                      "int $0001  (rt)"
+                      "ptr NIL")
                 "car of the btree root is the value 2 => result is true (which is int 1)")
 
   (define btree-value-p2-state
@@ -266,9 +278,10 @@
       BTREE_VALUE_P)
      ))
 
-  (check-equal? (vm-stack->strings btree-value-p2-state)
-                (list "stack holds 1 item"
-                      "int $0000  (rt)")
+  (check-equal? (vm-stack-n->strings btree-value-p2-state)
+                (list "stack holds 2 items"
+                      "int $0000  (rt)"
+                      "ptr NIL")
                 "cdr of the btree root is NIL => result is false (which is int 0)"))
 
 ;; (define (btree-node? node)
@@ -296,9 +309,10 @@
       BTREE_NODE_P)
      ))
 
-  (check-equal? (vm-stack->strings btree-node-p-state)
-                (list "stack holds 1 item"
-                      "int $0000  (rt)")
+  (check-equal? (vm-stack-n->strings btree-node-p-state)
+                (list "stack holds 2 items"
+                      "int $0000  (rt)"
+                      "ptr NIL")
                 "car of the btree root is the value 2 => result is false (which is int 0)")
 
   (define btree-node-p2-state
@@ -316,9 +330,10 @@
       BTREE_NODE_P)
      ))
 
-  (check-equal? (vm-stack->strings btree-node-p2-state)
-                (list "stack holds 1 item"
-                      "int $0000  (rt)")
+  (check-equal? (vm-stack-n->strings btree-node-p2-state)
+                (list "stack holds 2 items"
+                      "int $0000  (rt)"
+                      "ptr NIL")
                 "cdr of the btree root is NIL => result is false (which is int 0)"))
 
 ;; (define (btree-validate node (print-error #f))
@@ -359,14 +374,14 @@
              (bc PUSH_L0)
              (bc CALL) (word-ref BTREE_VALUE_P)
              (bc T_P_BRA) (bc-rel-ref DONE__BTREE_VALIDATE) ;; done since is-value
-             (byte 2)               ;; BRK error, passed parameter is neither value nor node!
+             (bc BREAK)               ;; BRK error, passed parameter is neither value nor node!
    
       (label IS_PAIR__BTREE_VALIDATE)
              (bc PUSH_L0_CAR)
              (bc WRITE_TO_L1) ;; local 1 now car of node
              (bc NIL_P)
              (bc F_P_BRA) (bc-rel-ref IS_NOT_NIL__BTREE_VALIDATE)
-             (byte 2)               ;; BRK error, car of pair must not be nil!
+             (bc BREAK)               ;; BRK error, car of pair must not be nil!
    
       (label IS_NOT_NIL__BTREE_VALIDATE)
              (bc PUSH_L1) ;; car of node
@@ -399,13 +414,13 @@
       BTREE_NODE_P
       BTREE_VALUE_P
       BTREE_VALIDATE)
-     ))
+    ))
 
-  (check-equal? (vm-stack->strings btree-validate-state)
-                (list "stack is empty")
+  (check-equal? (vm-stack-n->strings btree-validate-state)
+                (list "stack is empty or tos=nil")
                 "validation leaves no value on the stack")
   (check-equal? (memory-list btree-validate-state ZP_VM_PC (add1 ZP_VM_PC))
-                (list #x07 #x80)
+                (list #x07 #x08)
                 "program counter points to expected break")
 
   (define btree-validate2-state
@@ -424,7 +439,7 @@
       BTREE_VALIDATE)
     ))
 
-  (check-equal? (memory-list btree-validate2-state (add1 ZP_VM_PC) (add1 ZP_VM_PC))
+  (check-equal? (memory-list btree-validate2-state (add1 ZP_VM_PC))
                 (list #x88)
                 "program counter on other page => validation failed ")
 
@@ -525,9 +540,10 @@
       BTREE_DEPTH)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-1-state 10 #t))
-                (list "stack holds 1 item"
-                      "1  (rt)"))
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-1-state 10 #t))
+                (list "stack holds 2 items"
+                      "1  (rt)"
+                      "NIL"))
 
   (define btree-depth-2-state
     (run-bc-wrapped-in-test
@@ -546,9 +562,10 @@
       BTREE_DEPTH)
     ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-2-state 10 #t))
-                (list "stack holds 1 item"
-                      "2  (rt)"))
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-2-state 10 #t))
+                (list "stack holds 2 items"
+                      "2  (rt)"
+                      "NIL"))
 
   (define btree-depth-3-state
     (run-bc-wrapped-in-test
@@ -569,9 +586,10 @@
       BTREE_DEPTH)
     ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-3-state 10 #t))
-                (list "stack holds 1 item"
-                      "3  (rt)"))
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-3-state 10 #t))
+                (list "stack holds 2 items"
+                      "3  (rt)"
+                      "NIL"))
 
   (define btree-depth-5-state
     (run-bc-wrapped-in-test
@@ -591,9 +609,10 @@
       BTREE_DEPTH)                              ;;          2  nil                   
     ))                                          ;;                    
                                                 ;;                    
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-5-state 10 #t))
-                (list "stack holds 1 item"
-                      "2  (rt)"))
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-5-state 10 #t))
+                (list "stack holds 2 items"
+                      "2  (rt)"
+                      "NIL"))
 
   (define btree-depth-4-state
     (run-bc-wrapped-in-test
@@ -617,9 +636,10 @@
     ))                                          ;;                        / \
                                                 ;;                       2  nil
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-4-state 10 #t))
-                (list "stack holds 1 item"
-                      "3  (rt)"))
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-4-state 10 #t))
+                (list "stack holds 2 items"
+                      "3  (rt)"
+                      "NIL"))
 
   (define btree-depth-6-state
     (run-bc-wrapped-in-test
@@ -643,11 +663,12 @@
       BTREE_DEPTH)                              ;;                        / \      
     ))                                          ;;                       2  nil    
 
-   (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-6-state 10 #t))
-                (list "stack holds 1 item"
-                      "3  (rt)"))
+   (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-6-state 10 #t))
+                (list "stack holds 2 items"
+                      "3  (rt)"
+                      "NIL"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 11779))
+                 11358))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -683,8 +704,11 @@
       BTREE_PATH_TO_FIRST)
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt->string path-to-first-0-state #t))
-                "((0 . (2 . NIL)) . NIL)"
+  ;; (check-equal? (shorten-cell-strings (vm-list->strings path-to-first-0-state (peek-word-at-address path-to-first-0-state ZP_RT) '() #t))
+  ;;               "((0 . (2 . NIL)) . NIL)"
+  ;;               "result is a path to the node with value 2: ((0 . (2 . NIL)))")
+  (check-equal? (shorten-cell-strings (vm-list->strings path-to-first-0-state (peek-word-at-address path-to-first-0-state ZP_RT) '() #t))
+                '("(0 . (2 . NIL))")
                 "result is a path to the node with value 2: ((0 . (2 . NIL)))")
 
   (define path-to-first-1-state
@@ -706,8 +730,8 @@
       BTREE_PATH_TO_FIRST)                      ;;
      ))                                         ;;
 
-  (check-equal? (shorten-cell-string (vm-regt->string path-to-first-1-state #t))
-                "((0 . (0 . ((2 . NIL) . 1))) . NIL)"
+  (check-equal? (shorten-cell-strings (vm-list->strings path-to-first-1-state (peek-word-at-address path-to-first-1-state ZP_RT) '() #t))
+                '("(0 . (0 . ((2 . NIL) . 1)))")
                 "result is a path to the node with value 1: ((0 . (1 . ((2 . nil) . 1))"))
 
 
@@ -760,15 +784,15 @@
       BTREE_VALUE_P
       BTREE_MAKE_ROOT)))
 
-  (check-equal? (shorten-cell-string (vm-regt->string path-to-last-0-state #t))
-                "((0 . (2 . NIL)) . NIL)")
+  (check-equal? (shorten-cell-strings (vm-list->strings path-to-last-0-state (peek-word-at-address path-to-last-0-state ZP_RT) '() #t))
+                '("(0 . (2 . NIL))"))
 
   (define path-to-last-1-state
     (run-bc-wrapped-in-test
      (append
       (list
        (bc PUSH_NIL)
-       (bc PUSH_I2)
+        (bc PUSH_I2)
        (bc CALL) (word-ref BTREE_MAKE_ROOT)     ;;
        (bc PUSH_NIL)                            ;;         o
        (bc SWAP)                                ;;       /   \
@@ -782,12 +806,10 @@
       BTREE_PATH_TO_LAST)                       ;;
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt->string path-to-last-1-state #t))
-                (string-append
-                 "((0 . (2 . NIL))"
-                 " . ((0 . ((2 . NIL) . NIL))"
-                 " . ((1 . (0 . ((2 . NIL) . NIL)))"
-                 " . NIL)))"))
+  (check-equal? (shorten-cell-strings (vm-list->strings path-to-last-1-state (peek-word-at-address path-to-last-1-state ZP_RT) '() #t))
+                '("(0 . (2 . NIL))"
+                  "(0 . ((2 . NIL) . NIL))"
+                  "(1 . (0 . ((2 . NIL) . NIL)))"))
 
   (define path-to-last-2-state
     (run-bc-wrapped-in-test
@@ -808,7 +830,7 @@
       BTREE_PATH_TO_LAST)                       ;;
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt->string path-to-last-2-state #t))
+  (check-equal? (shorten-cell-string (vm-regt-n->string path-to-last-2-state #t))
                 (string-append
                  "((1 . ((2 . NIL) . 1))"
                  " . ((1 . (0 . ((2 . NIL) . 1)))"
@@ -865,9 +887,10 @@
       BTREE_MAKE_ROOT
       BTREE_VALUE_P)))
 
-  (check-equal? (vm-stack->strings node-for-path-0-state)
-                (list "stack holds 1 item"
-                      "int $0002  (rt)"))
+  (check-equal? (vm-stack-n->strings node-for-path-0-state)
+                (list "stack holds 2 items"
+                      "int $0002  (rt)"
+                      "ptr NIL"))
 
   (define node-for-path-1-state
     (run-bc-wrapped-in-test
@@ -887,9 +910,10 @@
       BTREE_VALUE_P)
      ))
 
-  (check-equal? (vm-stack->strings node-for-path-1-state)
-                (list "stack holds 1 item"
-                      "int $0000  (rt)")))
+  (check-equal? (vm-stack-n->strings node-for-path-1-state)
+                (list "stack holds 2 items"
+                      "int $0000  (rt)"
+                      "ptr NIL")))
 
 ;; (define (btree-prev path)
 ;;   (cond [(empty? path)
@@ -985,8 +1009,8 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-regt->string prev-0-state #t)
-                "pair-ptr NIL")
+  (check-equal? (vm-regt-n->string prev-0-state #t)
+                "ptr NIL")
 
   (define prev-1-state
     (run-bc-wrapped-in-test
@@ -1010,8 +1034,8 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-regt->string prev-1-state #t)
-                "pair-ptr NIL")
+  (check-equal? (vm-regt-n->string prev-1-state #t)
+                "ptr NIL")
 
   (define prev-2-state
     (run-bc-wrapped-in-test
@@ -1035,7 +1059,7 @@
       REVERSE)
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt->string prev-2-state #t))
+  (check-equal? (shorten-cell-string (vm-regt-n->string prev-2-state #t))
                 "((0 . (2 . 3)) . NIL)")
 
   (define prev-3-state
@@ -1062,7 +1086,7 @@
       REVERSE)
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt->string prev-3-state #t))
+  (check-equal? (shorten-cell-string (vm-regt-n->string prev-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
 
   
@@ -1098,15 +1122,16 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings prev-4-state 10 #t))
-                (list "stack holds 4 items"
+                     (vm-stack-n->strings prev-4-state 10 #t))
+                (list "stack holds 5 items"
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)  (rt)"                      
                       "((0 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))"
                       "((1 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))"
-                      "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"))
+                      "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"
+                      "NIL"))
 
   (inform-check-equal? (cpu-state-clock-cycles prev-4-state)
-                6224))
+                5947))
 
 ;; optimization idea: NIL?_RET instead of NIL?, T_P_RET
 (define REVERSE ;; list :: result=nil -> list
@@ -1145,10 +1170,10 @@
      )) ;; TODO remove #t
 
   (check-equal? (shorten-cell-string
-                 (vm-regt->string reverse-0-state #t))
-                "(0 . (1 . (2 . (1fff . NIL))))")
+                 (vm-regt-n->string reverse-0-state #t))
+                "(0 . (1 . (2 . (3fff . NIL))))")
   (inform-check-equal? (cpu-state-clock-cycles reverse-0-state)
-                5030))
+                4976))
 
 (define APPEND ;; head-list :: tail-list -> list
   (bc-resolve
@@ -1197,10 +1222,10 @@
       APPEND
       REVERSE)))
 
-  (check-equal? (shorten-cell-string (vm-regt->string append-0-state #t))
+  (check-equal? (shorten-cell-string (vm-regt-n->string append-0-state #t))
                 "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
   (inform-check-equal? (cpu-state-clock-cycles append-0-state)
-                7976))
+                7856))
 
 
 ;; (define (btree-next path)
@@ -1310,8 +1335,8 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-regt->string next-0-state #t)
-                "pair-ptr NIL")
+  (check-equal? (vm-regt-n->string next-0-state #t)
+                "ptr NIL")
 
   (define next-1-state
     (run-bc-wrapped-in-test
@@ -1335,7 +1360,7 @@
       REVERSE)
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt->string next-1-state #t))
+  (check-equal? (shorten-cell-string (vm-regt-n->string next-1-state #t))
                 "((1 . (2 . 3)) . NIL)")
 
 
@@ -1361,8 +1386,8 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-regt->string next-2-state #t)
-                "pair-ptr NIL")
+  (check-equal? (vm-regt-n->string next-2-state #t)
+                "ptr NIL")
 
   (define next-3-state
     (run-bc-wrapped-in-test
@@ -1388,7 +1413,7 @@
       REVERSE)
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt->string next-3-state #t))
+  (check-equal? (shorten-cell-string (vm-regt-n->string next-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
 
   (define next-4-state
@@ -1425,16 +1450,17 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings next-4-state 10 #t))
-                (list "stack holds 5 items"
+                     (vm-stack-n->strings next-4-state 10 #t))
+                (list "stack holds 6 items"
                       "NIL  (rt)"
                       "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"
                       "((1 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))"
                       "((0 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))"
-                      "((0 . (1 . ((2 . 3) . 4))) . NIL)"))
+                      "((0 . (1 . ((2 . 3) . 4))) . NIL)"
+                      "NIL"))
 
   (inform-check-equal? (cpu-state-clock-cycles next-4-state)
-                2011))
+                1858))
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
@@ -1576,8 +1602,8 @@
     ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings rec-rebuild-path-with-0-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings rec-rebuild-path-with-0-state 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                       "((0 . ((4 . 5) . 6))"
                       " . ((0 . (((4 . 5) . 6) . 7))"
@@ -1590,7 +1616,9 @@
                        " . ((0 . ((5 . 6) . 7))"
                        " . ((1 . (3 . ((5 . 6) . 7)))"
                        " . ((0 . ((3 . ((5 . 6) . 7)) . 8))"
-                       " . NIL))))"))
+                       " . NIL))))")
+
+                      "NIL")
 
                 "replaces the node '5' with '(4 . 5)' all the way up to the root in this path"))
 
@@ -1737,10 +1765,11 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-after-0-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-after-0-state 10 #t))
+                (list "stack holds 3 items"
                       "((1 . (4 . 5)) . NIL)  (rt)"
-                      "((0 . (4 . NIL)) . NIL)"))
+                      "((0 . (4 . NIL)) . NIL)"
+                      "NIL"))
 
   (define add-after-1-state
     (run-bc-wrapped-in-test
@@ -1769,10 +1798,11 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-after-1-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-after-1-state 10 #t))
+                (list "stack holds 3 items"
                       "((0 . (5 . 6)) . ((1 . (4 . (5 . 6))) . NIL))  (rt)"
-                      "((0 . (4 . 6)) . NIL)"))
+                      "((0 . (4 . 6)) . NIL)"
+                      "NIL"))
 
   (define add-after-2-state
     (run-bc-wrapped-in-test
@@ -1803,10 +1833,11 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-after-2-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-after-2-state 10 #t))
+                (list "stack holds 3 items"
                       "((0 . (5 . (6 . 7))) . ((1 . (4 . (5 . (6 . 7)))) . NIL))  (rt)"
-                      "((0 . (4 . (6 . 7))) . NIL)"))
+                      "((0 . (4 . (6 . 7))) . NIL)"
+                      "NIL"))
 
   (define add-after-3-state
     (run-bc-wrapped-in-test
@@ -1835,10 +1866,11 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-after-3-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-after-3-state 10 #t))
+                (list "stack holds 3 items"
                       "((1 . (6 . 7)) . ((1 . (5 . (6 . 7))) . NIL))  (rt)"
-                      "((1 . (5 . 6)) . NIL)"))
+                      "((1 . (5 . 6)) . NIL)"
+                      "NIL"))
 
 
   (define add-after-4-state
@@ -1889,15 +1921,16 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-after-4-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-after-4-state 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((1 . (6 . 7))"
                        " . ((1 . (5 . (6 . 7)))"
                        " . ((1 . (4 . (5 . (6 . 7))))"
                        " . ((1 . (3 . (4 . (5 . (6 . 7)))))"
                        " . NIL))))  (rt)")
-                      "((1 . (5 . 6)) . ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL)))")))
+                      "((1 . (5 . 6)) . ((1 . (4 . (5 . 6))) . ((1 . (3 . (4 . (5 . 6)))) . NIL)))"
+                      "NIL")))
 
 ;; (define (btree-add-value-before value path)
 ;;   (cond [(empty? path) (raise-user-error "path may not be empty")]
@@ -2035,10 +2068,11 @@
       REVERSE)))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-before-0-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-before-0-state 10 #t))
+                (list "stack holds 3 items"
                       "((0 . (5 . 6)) . NIL)  (rt)"
-                      "((0 . (6 . NIL)) . NIL)"))
+                      "((0 . (6 . NIL)) . NIL)"
+                      "NIL"))
 
   (define add-before-1-state
     (run-bc-wrapped-in-test
@@ -2089,8 +2123,8 @@
       REVERSE)))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-before-1-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-before-1-state 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . 6))"
                        " . ((1 . (3 . (5 . 6)))"
@@ -2100,7 +2134,8 @@
                        "((0 . (6 . NIL))"
                        " . ((1 . (3 . (6 . NIL)))"
                        " . ((0 . ((3 . (6 . NIL)) . 7))"
-                       " . NIL)))"))
+                       " . NIL)))")
+                      "NIL")
                 "replace null with value, make new node and replace all up to the root")
 
   (define add-before-2-state
@@ -2127,14 +2162,15 @@
       REVERSE)))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-before-2-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-before-2-state 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . 6))"
                        " . ((0 . ((5 . 6) . 7))"
                        " . NIL))  (rt)")
                       (string-append
-                       "((0 . (6 . 7)) . NIL)"))
+                       "((0 . (6 . 7)) . NIL)")
+                      "NIL")
                 "replace old node 6 with (5 . 6)")
 
   (define add-before-3-state
@@ -2181,19 +2217,20 @@
       REVERSE)))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-before-3-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-before-3-state 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . 6))"
                        " . ((0 . ((5 . 6) . 7))"
                        " . ((1 . (3 . ((5 . 6) . 7)))"
                        " . ((0 . ((3 . ((5 . 6) . 7)) . 8))"
                        " . NIL))))  (rt)")
-                      (string-append ""
+                      (string-append
                        "((0 . (6 . 7))"
                        " . ((1 . (3 . (6 . 7)))"
                        " . ((0 . ((3 . (6 . 7)) . 8))"
-                       " . NIL)))"))
+                       " . NIL)))")
+                      "NIL")
                 "replace old node 6 with (5 . 6)")
 
   (define add-before-4-state
@@ -2220,14 +2257,15 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-before-4-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-before-4-state 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . 6))"
                        " . ((1 . (4 . (5 . 6)))"
                        " . NIL))  (rt)")
-                      (string-append ""
-                       "((1 . (4 . 6)) . NIL)"))
+                      (string-append
+                       "((1 . (4 . 6)) . NIL)")
+                      "NIL")
                 "replace old node 6 with (5 . 6)")
 
   (define add-before-5-state
@@ -2289,11 +2327,11 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
-                17693)
+                17068)
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack->strings add-before-5-state 10 #t))
-                (list "stack holds 2 items"
+                     (vm-stack-n->strings add-before-5-state 10 #t))
+                (list "stack holds 3 items"
                       (string-append 
                        "((0 . (5 . 6))"
                        " . ((1 . (4 . (5 . 6)))"
@@ -2306,7 +2344,8 @@
                        " . ((0 . ((4 . 6) . 7))"
                        " . ((1 . (3 . ((4 . 6) . 7)))"
                        " . ((0 . ((3 . ((4 . 6) . 7)) . 8))"
-                       " . NIL))))"))
+                       " . NIL))))")
+                      "NIL")
                 "replace old node 6 with (5 . 6)"))
 
 ;; (define (btree<-nodes nodes (result (list)))
@@ -2398,10 +2437,11 @@
       BTREE_FROM_LIST
       REVERSE)
      ))
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-from-list-1-state 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-from-list-1-state 10 #t))
+                (list "stack holds 3 items"
                       "(1 . NIL)  (rt)"
-                      "(1 . NIL)"))
+                      "(1 . NIL)"
+                      "NIL"))
 
   (define btree-from-list-0-state
     (run-bc-wrapped-in-test
@@ -2438,10 +2478,11 @@
       BTREE_FROM_LIST
       REVERSE)))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-from-list-0-state 10 #t))
-                (list "stack holds 2 items"                                            
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-from-list-0-state 10 #t))
+                (list "stack holds 3 items"
                       "((((1 . 2) . (3 . 4)) . ((5 . 6) . (7 . 8))) . (((9 . NIL) . NIL) . NIL))  (rt)"
-                      "(1 . (2 . (3 . (4 . (5 . (6 . (7 . (8 . (9 . NIL)))))))))"))
+                      "(1 . (2 . (3 . (4 . (5 . (6 . (7 . (8 . (9 . NIL)))))))))"
+                      "NIL"))
 
     (define btree-from-list-2-state
     (run-bc-wrapped-in-test
@@ -2468,10 +2509,11 @@
       BTREE_FROM_LIST
       REVERSE)))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-from-list-2-state 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-from-list-2-state 10 #t))
+                (list "stack holds 3 items"
                       "((1 . 2) . (3 . 4))  (rt)"
-                      "(1 . (2 . (3 . (4 . NIL))))")))
+                      "(1 . (2 . (3 . (4 . NIL))))"
+                      "NIL")))
 
 ;; (define (btree->list node (btree-prefix (list)) (result (list)) )
 ;;   (cond [(and (empty? node)
@@ -2556,13 +2598,14 @@
       BTREE_VALUE_P)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-to-list-0-state 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-to-list-0-state 10 #t))
+                (list "stack holds 3 items"
                       "(1 . (2 . (3 . (4 . NIL))))  (rt)"
-                      "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"))
+                      "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"
+                      "NIL"))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                27371))
+                25646))
 
 
 ;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
@@ -2760,10 +2803,11 @@
        (bc BREAK))
       dependecies-remove-value-at)))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-0-state 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings remove-value-at-0-state 10 #t))
+                (list "stack holds 3 items"
                       "NIL  (rt)"
-                      "((0 . (8 . NIL)) . NIL)"))
+                      "((0 . (8 . NIL)) . NIL)"
+                      "NIL"))
 
   (define remove-value-at-1-state
     (run-bc-wrapped-in-test
@@ -2776,9 +2820,10 @@
        (bc BREAK))
       dependecies-remove-value-at)))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-1-state 10 #t))
-                (list "stack holds 1 item"
-                      "NIL  (rt)"))
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings remove-value-at-1-state 10 #t))
+                (list "stack holds 2 items"
+                      "NIL  (rt)"
+                      "NIL"))
 
   (define (remove-value-at-2-state)
     (run-bc-wrapped-in-test
@@ -2806,10 +2851,11 @@
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-2-state) 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-2-state) 10 #t))
+                (list "stack holds 3 items"
                       "((0 . (9 . NIL)) . NIL)  (rt)"
-                      "((0 . (8 . 9)) . NIL)"))
+                      "((0 . (8 . 9)) . NIL)"
+                      "NIL"))
 
   (define (remove-value-at-3-state)
     (run-bc-wrapped-in-test
@@ -2837,10 +2883,11 @@
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-3-state) 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-3-state) 10 #t))
+                (list "stack holds 3 items"
                       "((0 . (8 . NIL)) . NIL)  (rt)"
-                      "((1 . (8 . 9)) . NIL)"))
+                      "((1 . (8 . 9)) . NIL)"
+                      "NIL"))
 
   (define (remove-value-at-4-state)
     (run-bc-wrapped-in-test
@@ -2903,8 +2950,8 @@
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-4-state) 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-4-state) 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . NIL))"
                        " . ((0 . ((5 . NIL) . 7))"
@@ -2917,7 +2964,8 @@
                        " . ((1 . (4 . ((5 . 6) . 7)))"
                        " . ((0 . ((4 . ((5 . 6) . 7)) . 8))"
                        " . NIL))))"
-                       )))
+                       )
+                      "NIL"))
 
   (define (remove-value-at-5-state)
     (run-bc-wrapped-in-test
@@ -2980,8 +3028,8 @@
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-5-state) 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-5-state) 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (6 . NIL))"
                        " . ((0 . ((6 . NIL) . 7))"
@@ -2993,8 +3041,8 @@
                        " . ((0 . ((5 . 6) . 7))"
                        " . ((1 . (4 . ((5 . 6) . 7)))"
                        " . ((0 . ((4 . ((5 . 6) . 7)) . 8))"
-                       " . NIL))))"
-                       )))
+                       " . NIL))))")
+                      "NIL"))
 
   (define (remove-value-at-6a-state)
     (run-bc-wrapped-in-test
@@ -3057,16 +3105,16 @@
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6a-state) 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6a-state) 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (7 . NIL))"
                        " . NIL)  (rt)")
                       (string-append
                        "((0 . (5 . NIL))"
                        " . ((0 . ((5 . NIL) . 7))"
-                       " . NIL))"
-                       )))
+                       " . NIL))")
+                      "NIL"))
 
   (define (remove-value-at-6b-state)
     (run-bc-wrapped-in-test
@@ -3129,8 +3177,8 @@
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6b-state) 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6b-state) 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
                        " . NIL)  (rt)")
@@ -3138,8 +3186,8 @@
                        "((0 . (5 . NIL))"
                        " . ((0 . ((5 . NIL) . 7))"
                        " . ((1 . (4 . ((5 . NIL) . 7)))"
-                       " . NIL)))"
-                       )))
+                       " . NIL)))")
+                      "NIL"))
 
   (define (remove-value-at-6c-state)
     (run-bc-wrapped-in-test
@@ -3197,8 +3245,8 @@
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6c-state) 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6c-state) 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . ((5 . NIL) . 7)))"
                        " . NIL)  (rt)")
@@ -3206,8 +3254,8 @@
                        "((0 . (5 . NIL))"
                        " . ((0 . ((5 . NIL) . 7))"
                        " . ((1 . (4 . ((5 . NIL) . 7)))"
-                       " . NIL)))"
-                       )))
+                       " . NIL)))")
+                      "NIL"))
 
   (define (remove-value-at-6d-state)
     (run-bc-wrapped-in-test
@@ -3244,16 +3292,16 @@
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6d-state) 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6d-state) 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
                        " . NIL)  (rt)")
                       (string-append
                        "((0 . (7 . NIL))"
                        " . ((1 . (4 . (7 . NIL)))"
-                       " . NIL))"
-                       )))
+                       " . NIL))")
+                      "NIL"))
 
   (define (remove-value-at-6-state)
     (run-bc-wrapped-in-test
@@ -3316,8 +3364,8 @@
       dependecies-remove-value-at)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6-state) 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6-state) 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
                        " . ((0 . ((4 . (7 . NIL)) . 8))"
@@ -3327,8 +3375,8 @@
                        " . ((0 . ((5 . NIL) . 7))"
                        " . ((1 . (4 . ((5 . NIL) . 7)))"
                        " . ((0 . ((4 . ((5 . NIL) . 7)) . 8))"
-                       " . NIL))))"
-                       )))
+                       " . NIL))))")
+                      "NIL"))
 
   (define (remove-value-at-7-state)
     (run-bc-wrapped-in-test
@@ -3426,9 +3474,9 @@
 
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                60691)
-  (check-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
-                (list "stack holds 2 items"
+                56910)
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-7-state) 10 #t))
+                (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (6 . NIL)))"
                        " . ((1 . (3 . (4 . (6 . NIL))))"
@@ -3442,7 +3490,8 @@
                        " . ((1 . (4 . ((((5 . NIL) . NIL) . NIL) . 6)))"
                        " . ((1 . (3 . (4 . ((((5 . NIL) . NIL) . NIL) . 6))))"
                        " . ((0 . ((3 . (4 . ((((5 . NIL) . NIL) . NIL) . 6))) . 7))"
-                       " . NIL)))))))"))
+                       " . NIL)))))))")
+                      "NIL")
                 "if the node deleted has a prev, return that one and recursively replace up to root"))
 
 
@@ -3476,9 +3525,10 @@
        (bc BREAK))
       BTREE_ROOT_FOR_PATH)))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings root-for-path-0-state 10 #t))
-                (list "stack holds 1 item"
-                      "NIL  (rt)"))
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings root-for-path-0-state 10 #t))
+                (list "stack holds 2 items"
+                      "NIL  (rt)"
+                      "NIL"))
 
   (define root-for-path-1-state
     (run-bc-wrapped-in-test
@@ -3496,10 +3546,11 @@
        (bc BREAK))
       BTREE_ROOT_FOR_PATH)))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings root-for-path-1-state 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings root-for-path-1-state 10 #t))
+                (list "stack holds 3 items"
                       "(5 . NIL)  (rt)"
-                      "((0 . (5 . NIL)) . NIL)"))
+                      "((0 . (5 . NIL)) . NIL)"
+                      "NIL"))
 
   (define root-for-path-2-state
     (run-bc-wrapped-in-test
@@ -3556,15 +3607,16 @@
        (bc BREAK))
       BTREE_ROOT_FOR_PATH)))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings root-for-path-2-state 10 #t))
-                (list "stack holds 2 items"
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings root-for-path-2-state 10 #t))
+                (list "stack holds 3 items"
                       "((4 . ((5 . NIL) . 7)) . 8)  (rt)"
                       (string-append ""
                        "((0 . (5 . NIL))"
                        " . ((0 . ((5 . NIL) . 7))"
                        " . ((1 . (4 . ((5 . NIL) . 7)))"
                        " . ((0 . ((4 . ((5 . NIL) . 7)) . 8))"
-                       " . NIL))))"))))
+                       " . NIL))))")
+                      "NIL")))
 
 (define BTREE_REVERSE  ;; node -> node
   (list

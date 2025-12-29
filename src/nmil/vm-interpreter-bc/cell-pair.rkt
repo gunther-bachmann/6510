@@ -14,7 +14,7 @@
                   VM_CDR)
          (only-in "../vm-runtime/vm-m1-slots-n.rkt"
                   INC_REFCNT_M1_SLOT_RT_N
-                  DEC_REFCNT_M1_SLOT_RZ_N)
+                  DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RZ)
@@ -47,7 +47,7 @@
           ;; prepared offset for branch in VM_CxxR call ($00 = CAAR, $06 = CADR, $0c = CDAR, $12 = CDDR)
           (JSR VM_CxxR)
           (JSR INC_REFCNT_M1_SLOT_RT_N)
-          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_PUSH_NIL
@@ -68,7 +68,7 @@
    (label BC_NIL_P)
           (JSR CP_RT_TO_RZ)             ;; keep for dec-refcnt
           (JSR VM_NIL_P)                      ;; if rt is NIL replace with true (int 1) else replace with false (int 0)
-          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
           (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 (define BC_CDR
@@ -77,7 +77,7 @@
           (JSR CP_RT_TO_RZ)
           (JSR VM_CDR)
           (JSR INC_REFCNT_M1_SLOT_RT_N)
-          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_CAR
@@ -86,5 +86,5 @@
           (JSR CP_RT_TO_RZ)
           (JSR VM_CAR)
           (JSR INC_REFCNT_M1_SLOT_RT_N)
-          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
           (JMP VM_INTERPRETER_INC_PC)))

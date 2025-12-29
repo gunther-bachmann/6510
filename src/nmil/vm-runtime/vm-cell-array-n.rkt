@@ -8,12 +8,15 @@
  WRITE_ARR_AT1_RT_TO_RT
  WRITE_RT_TO_ARR_ATa_RA
  WRITE_RP_TO_ARR_AT0_RT          ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
+ WRITE_RP_TO_ARR_AT1_RT
+ POP_CELL_EVLSTK_TO_ARR_AT0_RT
  POP_CELL_EVLSTK_TO_ARR_AT1_RT
  ALLOC_CELL_ARRAY_TO_RT
  ALLOC_CELL_ARRAY_P0_TO_RT
  ALLOC_CELL_ARRAY_TO_RA
  ;; FREE_CELL_ARRAY_RZ
  ;; INIT_CELL_ARRAY_RA_WITH_RT      ;; fill array with cell that currently is in RT
+ COPY_ARR_ATa_RA_TO_RZ__IF_PTR
 
  vm-cell-array-code
 )
@@ -47,7 +50,8 @@
                   POP_CELL_EVLSTK_TO_RP
                   POP_CELL_EVLSTK_TO_RT)
          (only-in "./vm-m1-slots-n.rkt"
-                  ALLOC_M1_SLOT_TO_RT_N)
+                  ALLOC_M1_SLOT_TO_RT_N
+                  ALLOC_M1_P0_SLOT_TO_RT_N)
          (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   TAG_BYTE_CELL_ARRAY
@@ -71,8 +75,6 @@
            (only-in "../vm-inspector-utils.rkt"
                     vm-page-n->strings)
            (only-in "./vm-m1-slots-n.rkt"
-                    ALLOC_M1_SLOT_TO_RT_N
-                    ALLOC_M1_P0_SLOT_TO_RT_N
                     vm-m1-slot-code)
            (only-in "./vm-pages-n.rkt"
                     vm-pages-code)
@@ -85,12 +87,7 @@
                     VM_DEALLOCATE_PAGE_N
                     VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
            (only-in "./vm-register-functions.rkt"
-                    CP_RT_TO_RA
-                    CP_RA_TO_RT
-                    CP_RA_TO_RB
-                    CP_RT_TO_RZ
-                    SWAP_RA_RB
-                    SWAP_ZP_WORD))
+                    vm-register-functions-code))
 
   (define PAGE_AVAIL_0 #xcf)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #xcf00)  ;; word (absolute address) of first page available
@@ -104,12 +101,7 @@
      vm-pages-code
      VM_MEMORY_MANAGEMENT_CONSTANTS
 
-     CP_RA_TO_RT
-     CP_RT_TO_RA
-     CP_RA_TO_RB
-     CP_RT_TO_RZ
-     SWAP_RA_RB
-     SWAP_ZP_WORD
+     vm-register-functions-code
      (list (label INIT_CELLSTACK_PAGE_X) (RTS)))))
 
 ;; allocate a cell array of A number of cells
@@ -238,19 +230,51 @@
           (STA ZP_RT+1)
           (RTS)))
 
-;; no refcnt adjustments!
+;; before overwriting data in an array,
+;; this function can be used to save this data into rz if it is a pointer
+;; to decrement refcount after overwriting it (e.g. by WRITE_RT_TO_ARR_ATa_RA)
+(define-vm-function COPY_ARR_ATa_RA_TO_RZ__IF_PTR
+  (list
+          (PHA)
+          (ASL A)
+          ;; (CLC)                       ;; should be 0, since asl a should push 0 into carry
+          (ADC !$02)                    ;; get y to point to low byte of cell at index
+          (TAY)
+
+          (LDA (ZP_RA),y)
+          (BEQ nil__)
+          (LSR)
+          (BCS atomic__)
+
+          (LDA (ZP_RA),y)
+          (STA ZP_RZ)
+          (INY)
+          (LDA (ZP_RA),y)
+          (STA ZP_RZ+1)
+          (PLA)
+          (RTS)
+
+   (label atomic__)
+          (LDA !$00)
+   (label nil__)
+          (STA ZP_RZ) ;; clear rz
+          (PLA)
+          (RTS)))
+
+;; no refcounting
 (define POP_EVLSTK_TO_ARR_ATa_RA '())
 (define-vm-function-wol WRITE_RT_TO_ARR_ATa_RA
   (list
    (label POP_EVLSTK_TO_ARR_ATa_RA)
           (JSR WRITE_RT_TO_ARR_ATa_RA)
-          (JMP POP_CELL_EVLSTK_TO_RT) ;; TODO
+          (JMP POP_CELL_EVLSTK_TO_RT)
 
    (label WRITE_RT_TO_ARR_ATa_RA)
          (ASL A)
          ;; (CLC)                       ;; should be 0, since asl a should push 0 into carry
          (ADC !$02)                    ;; get y to point to low byte of cell at index
          (TAY)
+
          (LDA ZP_RT)                   ;; copy low byte
          (STA (ZP_RA),y)
          (INY)
@@ -258,7 +282,7 @@
          (STA (ZP_RA),y)
          (RTS)))
 
-;; no refcnt adjustments!
+;; no ref counting!!
 (define WRITE_ARR_AT0_RT_TO_RT '())
 (define WRITE_ARR_AT1_RT_TO_RT '())
 (define WRITE_ARR_ATal_RT_TO_RT '())
@@ -290,12 +314,18 @@
 
 ;; no refcnt adjustments!
 (define POP_CELL_EVLSTK_TO_ARR_AT1_RT '())
+(define POP_CELL_EVLSTK_TO_ARR_AT0_RT '())
+(define WRITE_RP_TO_ARR_AT1_RT '())
 (define-vm-function-wol WRITE_RP_TO_ARR_AT0_RT
   (list
    (label POP_CELL_EVLSTK_TO_ARR_AT1_RT)
           (JSR POP_CELL_EVLSTK_TO_RP)
+   (label WRITE_RP_TO_ARR_AT1_RT)
           (LDY !$04)
-          (BNE WRITE_RP_TO_ARR_ATyl_RT)
+          (BNE WRITE_RP_TO_ARR_ATyl_RT) ;; awlays jump
+
+   (label POP_CELL_EVLSTK_TO_ARR_AT0_RT)
+          (JSR POP_CELL_EVLSTK_TO_RP)
    (label WRITE_RP_TO_ARR_AT0_RT)
           (LDY !$02)
    (label WRITE_RP_TO_ARR_ATyl_RT)
@@ -306,12 +336,13 @@
           (STA (ZP_RT),y)               ;; copy high byte
           (RTS)))
 
-
 (define vm-cell-array-code
   (append
    ALLOC_CELL_ARRAY_TO_RT
    ;; includes ALLOC_CELL_ARRAY_P0_TO_RT
    ALLOC_CELL_ARRAY_TO_RA
+
+   COPY_ARR_ATa_RA_TO_RZ__IF_PTR
 
    WRITE_RT_TO_ARR_ATa_RA
    POP_EVLSTK_TO_ARR_ATa_RA ;; included in WRITE_RT_TO_ARR_ATa_RA
@@ -329,5 +360,5 @@
 (module+ test #| vm-cell-array-code |#
   (inform-check-equal?
    (code-len vm-cell-array-code)
-   70
+   151
    "module uses n bytes of code"))

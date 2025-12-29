@@ -356,7 +356,7 @@
                          "slots used:     3"
                          "next free slot: $02"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4005)
+                4164)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"

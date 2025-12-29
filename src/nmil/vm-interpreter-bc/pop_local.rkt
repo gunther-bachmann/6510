@@ -6,7 +6,7 @@
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
          (only-in "../vm-runtime/vm-m1-slots-n.rkt"
-                  DEC_REFCNT_M1_SLOT_RZ_N
+                  DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N
                   INC_REFCNT_M1_SLOT_RT_N))
 
 (provide BC_POP_TO_LOCAL_SHORT
@@ -29,7 +29,7 @@
            (STA ZP_RZ)
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RZ+1)
-           (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
     (label POP_NO_GC__)
            (PLA)
            (TAY)                                ;; index -> Y
@@ -54,7 +54,7 @@
            (STA ZP_RZ)
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RZ+1)
-           (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
     (label WRITE_NO_GC__)
            (PLA)
            (TAY)                                ;; index -> Y

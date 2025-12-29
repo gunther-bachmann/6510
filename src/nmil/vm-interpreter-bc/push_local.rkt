@@ -15,7 +15,7 @@
                   VM_INTERPRETER_INC_PC)
          (only-in "../vm-runtime/vm-m1-slots-n.rkt"
                   INC_REFCNT_M1_SLOT_RT_N
-                  DEC_REFCNT_M1_SLOT_RT_N)
+                  DEC_REFCNT_M1_SLOT_RT__IF_PTR_N)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_LB_PTR
@@ -47,7 +47,7 @@
            (LSR)
            (AND !$03)
            (PHA)
-           (JSR DEC_REFCNT_M1_SLOT_RT_N)
+           (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR_N)
            (PLA)
            (TAY)                                ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index

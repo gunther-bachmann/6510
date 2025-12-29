@@ -8,38 +8,46 @@
   (require (only-in racket/list flatten make-list)
            rackunit
            (only-in "../../cisc-vm/stack-virtual-machine.rkt" BRK)
-           (only-in "../../tools/6510-interpreter.rkt" initialize-cpu cpu-state-clock-cycles)
+           (only-in "../../tools/6510-interpreter.rkt"
+                    initialize-cpu
+                    cpu-state-clock-cycles
+                    peek)
            (only-in "./bc-btree.rkt" BTREE_PATH_TO_FIRST)
            (only-in "../vm-bc-opcode-definitions.rkt" bc)
            (only-in "../vm-inspector-utils.rkt"
-                    vm-page->strings
                     shorten-cell-strings
                     shorten-cell-string
-                    vm-stack->strings)
+                    vm-cell-n->string
+                    vm-stack-n->strings)
            (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings
-                    vm-cell-pair-pages
-                    vm-cell-pairs-free-in-page
-                    vm-cell-pairs-used-info
-                    vm-cell-pairs-used-num-in-page)
+                    ;; vm-cell-pair-pages
+                    ;; vm-cell-pairs-free-in-page
+                    ;; vm-cell-pairs-used-info
+                    ;; vm-cell-pairs-used-num-in-page
+                    vm-num-slots-used-in-page
+                    vm-slots-used-in-page
+                    vm-slots-free-in-page)
            (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
-           [only-in "../vm-interpreter.rkt" vm-interpreter])
+           [only-in "../vm-interpreter.rkt" vm-interpreter]
+           (only-in "../vm-interpreter-bc/test-utils.rkt"
+                    wrap-bytecode-for-full-bc-test))
 
-  (define (wrap-bytecode-for-test bc)
-    (append (list (org #x7000)
-                  (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                  (JSR VM_INITIALIZE_CALL_FRAME)
-                  (JSR VM_INTERPRETER_INIT)
-                  (JMP VM_INTERPRETER))
-            (list (org #x8000))
-            (flatten bc)
-            (list (org #xa000))
-            vm-interpreter
-            VM_INTERPRETER_ZP))
+  ;; (define (wrap-bytecode-for-test bc)
+  ;;   (append (list (org #x7000)
+  ;;                 (JSR VM_INITIALIZE_MEMORY_MANAGER)
+  ;;                 (JSR VM_INITIALIZE_CALL_FRAME)
+  ;;                 (JSR VM_INTERPRETER_INIT)
+  ;;                 (JMP VM_INTERPRETER))
+  ;;           (list (org #x8000))
+  ;;           (flatten bc)
+  ;;           (list (org #xa000))
+  ;;           vm-interpreter
+  ;;           VM_INTERPRETER_ZP))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
-    (define wrapped-code (wrap-bytecode-for-test bc))
+    (define wrapped-code (wrap-bytecode-for-full-bc-test bc))
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
 
 (module+ test #| btree from list |#
@@ -63,16 +71,15 @@
         (bc GC)
         (bc BREAK)))
       vm-btree)
-     ))
+    ))
 
-  (check-equal? (shorten-cell-strings (vm-stack->strings b-tree-0-state 10 #t))
-                (list "stack holds 1 item"
-                      "((1 . 2) . (3 . 4))  (rt)"))
-  (check-equal? (vm-cell-pair-pages b-tree-0-state)
-                (list #x8a)) ;; corresponds to (define PAGE_AVAIL_0 #x8b) in vm-interpreter
-  (check-equal? (length (vm-cell-pairs-free-in-page b-tree-0-state #x8a))
-                46) ;; after garbage collection, this should rise to (- 49 3)
-  (check-equal? (vm-cell-pairs-used-num-in-page b-tree-0-state #x8a)
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings b-tree-0-state 10 #t))
+                (list "stack holds 2 items"
+                      "((1 . 2) . (3 . 4))  (rt)"
+                      "NIL"))
+  (check-equal? (length (vm-slots-free-in-page b-tree-0-state #xca))
+                39) ;; after garbage collection, this should rise to (- 42 3)
+  (check-equal? (vm-num-slots-used-in-page b-tree-0-state #xca)
                 3)) ;; should be 3 (since the resulting tree only needs 3 cells)
 
 (module+ test #| btree from-list, to-list |#
@@ -107,14 +114,13 @@
   (cond [(void? b-tree-1-state)
          (skip (check-equal? #t #f "left debug session"))]
         [else
-         (check-equal? (shorten-cell-strings (vm-stack->strings b-tree-1-state 10 #t))
-                       (list "stack holds 1 item"
-                             "(1 . (2 . (3 . (4 . NIL))))  (rt)"))
-         (check-equal? (vm-cell-pair-pages b-tree-1-state)
-                       (list #x8a)) ;; corresponds to (define PAGE_AVAIL_0 #x8b) in vm-interpreter
-         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-1-state #x8a))
-                       45) ;; after garbage collection, this should rise to (- 49 3)
-         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-1-state #x8a)
+         (check-equal? (shorten-cell-strings (vm-stack-n->strings b-tree-1-state 10 #t))
+                       (list "stack holds 2 items"
+                             "(1 . (2 . (3 . (4 . NIL))))  (rt)"
+                             "NIL"))
+         (check-equal? (length (vm-slots-free-in-page b-tree-1-state #xca))
+                       38) ;; after garbage collection, this should rise to (- 42 4)
+         (check-equal? (vm-num-slots-used-in-page b-tree-1-state #xca)
                        4)]))
 
 (module+ test #| btree from-list, path-to-first, add-value-after, to-list |#
@@ -163,19 +169,27 @@
   (cond [(void? b-tree-2-state)
          (skip (check-equal? #t #f "left debug session"))]
         [else
-         (check-equal? (shorten-cell-strings (vm-stack->strings b-tree-2-state 10 #t))
-                       (list "stack holds 1 item"
+         (check-equal? (shorten-cell-strings (vm-stack-n->strings b-tree-2-state 10 #t))
+                       (list "stack holds 2 items"
                              "(10 . (15 . (20 . (30 . (40 . (50 . (60 . NIL)))))))  (rt)"
+                             "NIL"
                              ))
-         (check-equal? (vm-cell-pair-pages b-tree-2-state)
-                       (list #x8a)) ;; corresponds to (define PAGE_AVAIL_0 #x8a) in vm-interpreter
-         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-2-state #x8a))
-                       42) 
-         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-2-state #x8a)
+         (check-equal? (length (vm-slots-free-in-page b-tree-2-state #xca))
+                       38) ;; 42  - 4
+         (check-equal? (length (vm-slots-free-in-page b-tree-2-state #xc9))
+                       39) ;; 42  - 3
+         (check-equal? (+ (vm-num-slots-used-in-page b-tree-2-state #xca)
+                          (vm-num-slots-used-in-page b-tree-2-state #xc9))
                        7) ;; is actually the number of cons cells (which is the number of dots in the list above)
-         (check-equal? (map (lambda (str) (regexp-replace #rx"^pair-ptr\\[1\\].*" str ""))
-                            (vm-cell-pairs-used-info  b-tree-2-state #x8a))
-                       (make-list 7 "")
+         (check-equal? (map (lambda (slot-offset)
+                              (peek b-tree-2-state (bytes->int slot-offset #xca)))
+                            (vm-slots-used-in-page  b-tree-2-state #xca))
+                       (make-list 4 1)
+                       "all pair ptrs in use are referenced only once!")
+         (check-equal? (map (lambda (slot-offset)
+                              (peek b-tree-2-state (bytes->int slot-offset #xc9)))
+                            (vm-slots-used-in-page  b-tree-2-state #xc9))
+                       (make-list 3 1)
                        "all pair ptrs in use are referenced only once!")]))
 
 (module+ test #| btree from-list, path-to-first, add-value-after, to-list |#
@@ -239,20 +253,21 @@
   (cond [(void? b-tree-3-state)
          (skip (check-equal? #t #f "left debug session"))]
         [else
-         (check-equal? (shorten-cell-strings (vm-stack->strings b-tree-3-state 10 #t))
-                       (list "stack holds 1 item"
+         (check-equal? (shorten-cell-strings (vm-stack-n->strings b-tree-3-state 10 #t))
+                       (list "stack holds 2 items"
                              "(10 . (15 . (20 . (25 . (30 . (50 . (60 . NIL)))))))  (rt)"
+                             "NIL"
                              ))
-         (check-equal? (vm-cell-pair-pages b-tree-3-state)
-                       (list #x8a)) ;; corresponds to (define PAGE_AVAIL_0 #x8a) in vm-interpreter
-         (check-equal? (length (vm-cell-pairs-free-in-page b-tree-3-state #x8a))
-                       42)
-         (check-equal? (vm-cell-pairs-used-num-in-page b-tree-3-state #x8a)
+         (check-equal? (vm-num-slots-used-in-page b-tree-3-state #xca)
+                       0)
+         (check-equal? (length (vm-slots-free-in-page b-tree-3-state #xc9))
+                       35)
+         (check-equal? (vm-num-slots-used-in-page b-tree-3-state #xc9)
                        7) ;; is actually the number of cons cells (which is the number of dots in the list above)
-         (check-equal? (map (lambda (str) (regexp-replace #rx"^pair-ptr\\[1\\].*" str "ok"))
-                            (vm-cell-pairs-used-info  b-tree-3-state #x8a))
-                       (make-list 7 "ok")
-                       "all pair ptrs in use are referenced only once!")]))
+         (check-equal? (map (lambda (slot-offset)
+                              (peek b-tree-3-state (bytes->int slot-offset #xc9)))
+                            (vm-slots-used-in-page  b-tree-3-state #xc9))
+                       (make-list 7 1))]))
 
 (module+ test #| btree reverse |#
   (define btree-reverse-0-state
@@ -271,13 +286,15 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-reverse-0-state)
-                       15786)
-  (check-equal? (shorten-cell-strings (vm-stack->strings btree-reverse-0-state 10 #t))
-                (list "stack holds 1 item"
-                      "(0 . 1)  (rt)"))
-  (check-equal? (vm-cell-pairs-used-num-in-page btree-reverse-0-state #x8a)
+                       15336)
+  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-reverse-0-state 10 #t))
+                (list "stack holds 2 items"
+                      "(0 . 1)  (rt)"
+                      "NIL"))
+  (check-equal? (vm-num-slots-used-in-page btree-reverse-0-state #xca)
                 1) ;; is actually the number of cons cells (which is the number of dots in the list above)
-  (check-equal? (map (lambda (str) (regexp-replace #rx"^pair-ptr\\[1\\].*" str "ok"))
-                     (vm-cell-pairs-used-info  btree-reverse-0-state #x8a))
-                (make-list 1 "ok")
-                "all pair ptrs in use are referenced only once!"))
+  (check-equal? (map (lambda (slot-offset)
+                              (peek btree-reverse-0-state (bytes->int slot-offset #xca)))
+                            (vm-slots-used-in-page btree-reverse-0-state #xca))
+                       '(1)
+                       "all pair ptrs in use are referenced only once!"))

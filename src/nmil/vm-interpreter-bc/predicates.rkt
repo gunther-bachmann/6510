@@ -7,8 +7,8 @@
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES)
          (only-in "../vm-runtime/vm-m1-slots-n.rkt"
-                  DEC_REFCNT_M1_SLOT_RT_N
-                  DEC_REFCNT_M1_SLOT_RZ_N)
+                  DEC_REFCNT_M1_SLOT_RT__IF_PTR_N
+                  DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RZ
@@ -17,7 +17,9 @@
                   ZP_CELL_STACK_LB_PTR)
          (only-in "../vm-runtime/vm-register-functions.rkt"
                   WRITE_INT1_TO_RT
-                  WRITE_INT0_TO_RT))
+                  WRITE_INT0_TO_RT)
+         (only-in "../vm-runtime/vm-register-functions.rkt"
+                  CP_RT_TO_RZ))
 
 (provide BC_I_Z_P
          BC_INT_P
@@ -57,7 +59,7 @@
           (AND !$83)
           (CMP !$03)
           (BEQ IS_INT__)
-          (JSR DEC_REFCNT_M1_SLOT_RT_N)
+          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR_N)
           (LDA !$03)
           (LDX !$00)
    (label IS_INT__)
@@ -68,21 +70,27 @@
 (define BC_CONS_PAIR_P
   (list
    (label BC_CONS_PAIR_P)
-          (JSR CP_RT_TO_RZ)
+          (JSR CP_RT_TO_RZ) ;; A = content of ZP_RT (lowbyte)
 
-          (LDX !$03) ;; low byte of int (for bool)
-          (STX ZP_RT)
-          (CMP !$01)
           (BEQ IS_NO_PAIR_SINCE_NIL__BC_CONS_PAIR_P)
-          (AND !$03)
-          (CMP !$01)
-          (BEQ IS_PAIR__BC_CONS_PAIR_P)
+          (LSR)
+          (BCS IS_NO_PAIR_SINCE_ATOM__BC_CONS_PAIR_P)
+          ;; no check slot to be cell-array with len 2
+          (LDY !$01)
+          (LDA (ZP_RT),y)
+          (CMP !$02) ;; code for cell array with len 2
+          (BEQ storey__BC_CONS_PAIR_P) ;; is pair -> store y=1 as int
+
    (label IS_NO_PAIR_SINCE_NIL__BC_CONS_PAIR_P)
-          (LDA !$00)
-   (label IS_PAIR__BC_CONS_PAIR_P)
-          (STA ZP_RT+1)
-          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
-          (JMP VM_INTERPRETER_INC_PC)))
+   (label IS_NO_PAIR_SINCE_ATOM__BC_CONS_PAIR_P)
+          (LDY !$00)
+   (label storey__BC_CONS_PAIR_P)
+          (STY ZP_RT+1) ;; is pair, store y=1 into int
+          (LDY !$03)
+          (STY ZP_RT) ;; is pair store int tag
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+          (JMP VM_INTERPRETER_INC_PC)
+          ))
 
 (define BC_CELL_EQ_P
   (add-label-suffix
@@ -99,8 +107,8 @@
           (CMP ZP_RT)
           (BNE NE__)
 
-          (JSR DEC_REFCNT_M1_SLOT_RT_N)
-          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
@@ -109,8 +117,8 @@
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (STA ZP_RZ)
    (label NE__)
-          (JSR DEC_REFCNT_M1_SLOT_RT_N)
-          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC))))

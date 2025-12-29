@@ -61,6 +61,7 @@
                     ALLOC_M1_SLOT_TO_RB_N
                     vm-m1-slot-code)
            (only-in "./vm-register-functions.rkt"
+                    vm-register-functions-code
                     CP_RA_TO_RB
                     CP_RA_TO_RT
                     CP_RT_TO_RZ
@@ -87,10 +88,7 @@
      CP_NATARR_RA_TO_RB
      CP_NATARR_RANGE_RA_TO_RB
 
-     CP_RA_TO_RB
-     CP_RA_TO_RT
-     CP_RT_TO_RZ
-     SWAP_RA_RB
+     vm-register-functions-code
      VM_MEMORY_MANAGEMENT_CONSTANTS
      vm-pages-code
      vm-m1-slot-code

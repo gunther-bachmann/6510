@@ -26,7 +26,9 @@
          vm-cell-pair-free-tree->string
          shorten-cell-string
          shorten-cell-string-n
-         shorten-cell-strings)
+         shorten-cell-strings
+
+         vm-slot->string)
 
 #|
 
@@ -151,14 +153,14 @@
 ;; shorten verbose strings (e.g. pair-ptr cells or int cells)
 (define (shorten-cell-string str)
   (regexp-replace*
-   #px"(pair-ptr(\\[[-0-9]*\\])? (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
+   #px"(ptr(\\[[-0-9]*\\])? (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
    str
    ""))
 
 ;; shorten verbose strings (e.g. pair-ptr cells or int cells)
 (define (shorten-cell-string-n str)
   (regexp-replace*
-   #px"(pair-ptr(\\[[-0-9]*\\])? (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
+   #px"(ptr(\\[[-0-9]*\\])? (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
    str
    ""))
 
@@ -216,11 +218,11 @@
 
 ;; write the car, cdr cell of the cell-pair at word in memory
 (define (vm-deref-cell-pair-w->string state word (follow #f) (visited (list)))
-  (define derefed-word-car (peek-word-at-address state word))
-  (define derefed-word-cdr (peek-word-at-address state (+ 2 word)))
+  (define derefed-word-car (peek-word-at-address state (+ 2 word)))
+  (define derefed-word-cdr (peek-word-at-address state (+ 4 word)))
   (format "(~a . ~a)"
-          (vm-cell-w->string derefed-word-car state follow visited)
-          (vm-cell-w->string derefed-word-cdr state follow visited)))
+          (vm-cell-w-n->string derefed-word-car state follow visited)
+          (vm-cell-w-n->string derefed-word-cdr state follow visited)))
 
 ;; write the car, cdr cell of the cell-pair at word in memory
 (define (vm-deref-cell-pair-w-n->string state word (follow #f) (visited (list)))
@@ -255,6 +257,9 @@
 (define (vm-cell-w-n->string word (state '()) (follow #f) (visited (list)))
   (vm-cell-n->string (low-byte word) (high-byte word) state follow visited))
 
+(define (vm-slot-w->string word (state '()) (follow #f) (visited (list)))
+  (vm-slot->string (low-byte word) (high-byte word) state follow visited))
+
 ;; get the refcount of a cell pair
 (define (refcount-of-cell-pair state low high)
   (define rc-offset (arithmetic-shift low -2))
@@ -280,6 +285,22 @@
           [else (raise-user-error (format "unknown page type ~a" page-type))]))
   (peek state (bytes->int rc-offset high)))
 
+(define (vm-slot->string state loc (follow #f) (visited (list)))
+  (cond
+    [(memq loc visited)
+     (format "RECURSION->$~a~a" (format-hex-word loc))]
+    [else
+     (define refcnt (peek state loc))
+     (define slot-type (peek state (+ 1 loc)))
+     (cond
+       [(= 0 (bitwise-and #xc0 slot-type)) ;; cell-array
+        (define array-len (bitwise-and #x3f (peek state (+ 1 loc))))
+        (format "ptr[~a] cell-array of len ~a" refcnt array-len)]
+       [(= #x80 (bitwise-and #x80 slot-type))
+        (define array-len (bitwise-and #x7f (peek state (+ 1 loc))))
+        (format "ptr[~a] native-array of len ~a" refcnt array-len)]
+       [else (format "ptr[~a] with unknown slot type ~a" refcnt slot-type)])]))
+
 ;; write decoded cell described by low high
 ;; the low 2 bits are used for pointer tagging
 (define (vm-cell-n->string low high (state '()) (follow #f) (visited (list)))
@@ -287,10 +308,15 @@
     [(memq (bytes->int low high) visited)
      (format "RECURSION->$~a~a" (format-hex-byte high) (format-hex-byte low))]
     [(= 0 low) "ptr NIL"]
-    [(= 0 (bitwise-and #x01 low)) (format "ptr[~a] $~a~a"
-                                          (if (empty? state) "-" (refcount-of-cell-n state low high))
-                                          (format-hex-byte high)
-                                          (format-hex-byte (bitwise-and #xfe low)))]
+    [(= 0 (bitwise-and #x01 low))
+     (string-append
+      (format "ptr[~a] $~a~a"
+              (if (empty? state) "-" (refcount-of-cell-n state low high))
+              (format-hex-byte high)
+              (format-hex-byte (bitwise-and #xfe low)))
+      (if follow
+          (vm-deref-cell-pair->string state low high #t (cons (bytes->int low high) visited))
+          ""))]
     [(= 3 (bitwise-and #x03 low)) (format "int $~a~a"
                                           (format-hex-byte (arithmetic-shift low -2))
                                           (format-hex-byte high))]

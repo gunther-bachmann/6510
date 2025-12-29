@@ -21,6 +21,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   vm-page-n->strings
                   vm-regt-n->string
                   vm-deref-cell-pair-w-n->string)
+         (only-in "./vm-cell-array-n.rkt"
+                  WRITE_RP_TO_ARR_AT1_RT
+                  POP_CELL_EVLSTK_TO_ARR_AT0_RT
+                  ALLOC_CELL_ARRAY_P0_TO_RT)
          "./vm-memory-manager-test-utils.rkt")
 
 (provide vm-list-code
@@ -125,44 +129,43 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 ;; @DC-FUN: VM_CAR, group: list
 ;; replace cell-pair on tos with CAR element
+;; no refcount adjustments
 (define-vm-function-wol VM_CAR
   (list
-   (label STACK_EMPTY__)
-   (label RT_IS_NIL__)
-   (label NO_CELL_PAIR_PTR__)
+   (label RT_IS_NIL__VM_CAR)
+   (label NO_PTR__VM_CAR)
           (BRK)
    (label VM_CAR)
-          ;; check operand present
-
           ;; check RT is not nil
           (LDA ZP_RT)
-          (BEQ RT_IS_NIL__)
+          (BEQ RT_IS_NIL__VM_CAR)
 
-          ;; check RT is a cell-pair-ptr
-          (AND !$01)
-          (BNE NO_CELL_PAIR_PTR__)
+          ;; check RT is a ptr
+          (LSR)
+          (BCS NO_PTR__VM_CAR)
+
           ;; A = 0
           (LDY !$02)
           (JMP WRITE_ARR_ATyl_RT_TO_RT)))
 
 ;; @DC-FUN: VM_CDR, group: list
 ;; replace cell-pair on tos with CDR element
+;; no refcount adjustments
 (define-vm-function-wol VM_CDR
   (list
-   (label STACK_EMPTY__)
-   (label RT_IS_NIL__)
-   (label NO_CELL_PAIR_PTR__)
+   (label RT_IS_NIL__VM_CDR)
+   (label NO_PTR__VM_CDR)
           (BRK)
    (label VM_CDR)
           ;; check operand present
 
           ;; check RT is not nil
           (LDA ZP_RT)
-          (BEQ RT_IS_NIL__)
+          (BEQ RT_IS_NIL__VM_CDR)
 
           ;; check RT is a cell-pair-ptr
-          (AND !$01)
-          (BNE NO_CELL_PAIR_PTR__)
+          (LSR)
+          (BCS NO_PTR__VM_CDR)
 
           (LDY !$04)
           (JMP WRITE_ARR_ATyl_RT_TO_RT)))
@@ -214,11 +217,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (BMI STACK_HAS_LESS_THAN_TWO__)
 
    (label VM_CONS__REFCNTD__UC) ;; no checks
-          ;; (JSR CP_RT_TO_RP) ;; more compact
-          (LDA ZP_RT)
-          (STA ZP_RP)
-          (LDA ZP_RT+1)
-          (STA ZP_RP+1)
+          (JSR CP_RT_TO_RP) ;; more compact
           (LDA !$04) ;; payload of size 4
           (JSR ALLOC_CELL_ARRAY_P0_TO_RT)        ;; this cellpair is new
           ;; (JSR INC_REFCNT_RT) ;; already done by allocation
@@ -257,5 +256,5 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test #| vm-lists |#
   (inform-check-equal? (code-len (flatten vm-list-code))
-                       104
+                       93
                        "estimated list code length"))
