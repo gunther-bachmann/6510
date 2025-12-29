@@ -5,46 +5,9 @@
          "./bc-btree.rkt")
 
 (module+ test
-  (require (only-in racket/list flatten make-list)
-           rackunit
-           (only-in "../../cisc-vm/stack-virtual-machine.rkt" BRK)
-           (only-in "../../tools/6510-interpreter.rkt"
-                    initialize-cpu
-                    cpu-state-clock-cycles
-                    peek)
-           (only-in "./bc-btree.rkt" BTREE_PATH_TO_FIRST)
-           (only-in "../vm-bc-opcode-definitions.rkt" bc)
-           (only-in "../vm-inspector-utils.rkt"
-                    shorten-cell-strings
-                    shorten-cell-string
-                    vm-cell-n->string
-                    vm-stack-n->strings)
-           (only-in "../vm-interpreter-test-utils.rkt"
-                    run-bc-wrapped-in-test-
-                    vm-list->strings
-                    ;; vm-cell-pair-pages
-                    ;; vm-cell-pairs-free-in-page
-                    ;; vm-cell-pairs-used-info
-                    ;; vm-cell-pairs-used-num-in-page
-                    vm-num-slots-used-in-page
-                    vm-slots-used-in-page
-                    vm-slots-free-in-page)
-           (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
-           [only-in "../vm-interpreter.rkt" vm-interpreter]
-           (only-in "../vm-interpreter-bc/test-utils.rkt"
-                    wrap-bytecode-for-full-bc-test))
-
-  ;; (define (wrap-bytecode-for-test bc)
-  ;;   (append (list (org #x7000)
-  ;;                 (JSR VM_INITIALIZE_MEMORY_MANAGER)
-  ;;                 (JSR VM_INITIALIZE_CALL_FRAME)
-  ;;                 (JSR VM_INTERPRETER_INIT)
-  ;;                 (JMP VM_INTERPRETER))
-  ;;           (list (org #x8000))
-  ;;           (flatten bc)
-  ;;           (list (org #xa000))
-  ;;           vm-interpreter
-  ;;           VM_INTERPRETER_ZP))
+  (require
+   (only-in "./bc-btree.rkt" BTREE_PATH_TO_FIRST)
+   "./test-utils.rkt")
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-full-bc-test bc))

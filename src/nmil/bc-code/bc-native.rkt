@@ -13,7 +13,7 @@
   (require "../../6510-test-utils.rkt"
            (only-in "../vm-inspector-utils.rkt"
                     vm-stack-n->strings)
-           (only-in "../vm-interpreter-bc/test-utils.rkt"
+           (only-in "./test-utils.rkt"
                     wrap-bytecode-for-full-bc-test)
            (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-

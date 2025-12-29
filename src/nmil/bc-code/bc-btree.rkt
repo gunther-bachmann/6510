@@ -160,7 +160,7 @@
            (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings)
-           (only-in "../vm-interpreter-bc/test-utils.rkt"
+           (only-in "./test-utils.rkt"
                     wrap-bytecode-for-full-bc-test))
 
   (define PAGE_AVAIL_0 #xca)
@@ -168,18 +168,6 @@
   (define PAGE_AVAIL_1 #xc9)
   (define PAGE_AVAIL_1_W #xc900)
 
-
-  ;; (define (wrap-bytecode-for-test bc)
-  ;;   (append (list (org #x7000)
-  ;;                 (JSR VM_INITIALIZE_MEMORY_MANAGER)
-  ;;                 (JSR VM_INTERPRETER_INIT)
-  ;;                 (JMP VM_INTERPRETER))
-  ;;           (list (org #x0800))
-  ;;           (flatten bc)
-  ;;           (list (org #xa000))
-  ;;           vm-memory-manager-code
-  ;;           vm-interpreter
-  ;;           VM_INTERPRETER_ZP))
 
   (define (run-bc-wrapped-in-test bc (debug #f))
     (define wrapped-code (wrap-bytecode-for-full-bc-test bc))

@@ -45,7 +45,7 @@
            (only-in "../vm-interpreter-test-utils.rkt"
                     run-bc-wrapped-in-test-
                     vm-list->strings)
-           (only-in "../vm-interpreter-bc/test-utils.rkt"
+           (only-in "./test-utils.rkt"
                     wrap-bytecode-for-full-bc-test))
 
 
