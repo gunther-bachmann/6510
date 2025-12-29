@@ -438,10 +438,10 @@
 (module+ test #| vm-cell->strings |#
   (check-equal? (vm-cell->string #xc4 #xc0)
                 "ptr[-] $c0c4")
-  (check-equal? (vm-cell->string #xc1 #xc0)
-                "pair-ptr[-] $c0c1")
-  (check-equal? (vm-cell->string #x7b #x15)
-                "int $1e15")
+  (check-equal? (vm-cell->string #x02 #xc0)
+                "ptr[-] $c002")
+  (check-equal? (vm-cell->string #xfb #x15)
+                "int $3e15")
   (check-equal? (vm-cell->string TAG_BYTE_BYTE_CELL #x15)
                 "byte $15"))
 
@@ -456,8 +456,8 @@
              result))))
 
 (module+ test #| vm-cells->strings |#
-  (check-equal? (vm-cells->strings '(#x01 #x00 #x03 #x01))
-                '("pair-ptr NIL" "int $0001")))
+  (check-equal? (vm-cells->strings '(#x00 #x00 #x03 #x01))
+                '("ptr NIL" "int $0001")))
 
 ;; (module+ test #| vm-stack->strings |#
 ;;   (define test-vm_stack_to_string-a-code

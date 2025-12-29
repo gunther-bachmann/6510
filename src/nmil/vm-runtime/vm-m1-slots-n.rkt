@@ -2045,5 +2045,5 @@
 (module+ test #| code len of module |#
   (inform-check-equal?
    (code-len vm-m1-slot-code)
-   645
+   650
    "the whole module taks about n bytes"))
