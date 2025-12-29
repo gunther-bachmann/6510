@@ -12,7 +12,8 @@
 (define BC_BNOP
   (list
    (label BC_BNOP)
-          (JSR $0100)
+          (JSR $0100) ;; special jump address interpreted as cpu cycle reset
+                      ;; MUST BE REMOVED WHEN DEPLOYED TO C64
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_BREAK

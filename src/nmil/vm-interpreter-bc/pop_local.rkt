@@ -7,6 +7,7 @@
                   add-label-suffix)
          (only-in "../vm-runtime/vm-m1-slots-n.rkt"
                   DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N
+                  DEC_REFCNT_M1_SLOT_RZ_N
                   INC_REFCNT_M1_SLOT_RT_N))
 
 (provide BC_POP_TO_LOCAL_SHORT
@@ -18,7 +19,7 @@
    "__" "__BC_POP_TO_LOCAL_SHORT"
   (flatten
    (list
-    (label BC_POP_TO_LOCAL_SHORT)
+    (label PREP_LOCAL__)
            (LSR)
            (AND !$03)
            (PHA)
@@ -26,10 +27,14 @@
            ;; decrement old local
            (LDA (ZP_LOCALS_LB_PTR),y)
            (BEQ POP_NO_GC__)
+           (TAX)
+           (LSR)
+           (BCS POP_NO_GC__)
+           (TXA)
            (STA ZP_RZ)
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RZ+1)
-           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+           (JSR DEC_REFCNT_M1_SLOT_RZ_N)
     (label POP_NO_GC__)
            (PLA)
            (TAY)                                ;; index -> Y
@@ -37,32 +42,41 @@
            (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
            (LDA ZP_RT+1)
            (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+           (RTS)
+
+    (label BC_POP_TO_LOCAL_SHORT)
+           (JSR PREP_LOCAL__)
            (JMP VM_POP_EVLSTK_AND_INC_PC)          ;; fill RT with next tos
            ;; no increment, since pop removes it from stack
            ;; next bc
 
     ;; write to local
    (label  BC_WRITE_TO_LOCAL_SHORT)
-           (AND !$06)
-           (LSR)
-           (PHA)
-           (TAY)                                ;; index -> Y
+    ;;        (AND !$06)
+    ;;        (LSR)
+    ;;        (PHA)
+    ;;        (TAY)                                ;; index -> Y
 
-           ;; decrement old local
-           (LDA (ZP_LOCALS_LB_PTR),y)
-           (BEQ WRITE_NO_GC__)
-           (STA ZP_RZ)
-           (LDA (ZP_LOCALS_HB_PTR),y)
-           (STA ZP_RZ+1)
-           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
-    (label WRITE_NO_GC__)
-           (PLA)
-           (TAY)                                ;; index -> Y
-           (LDA ZP_RT)
-           (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
-           (LDA ZP_RT+1)
-           (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+    ;;        ;; decrement old local
+    ;;        (LDA (ZP_LOCALS_LB_PTR),y)
+    ;;        (BEQ WRITE_NO_GC__)
+    ;;        (TAX)
+    ;;        (LSR)
+    ;;        (BCS WRITE_NO_GC__)
+    ;;        (TXA)
+    ;;        (STA ZP_RZ)
+    ;;        (LDA (ZP_LOCALS_HB_PTR),y)
+    ;;        (STA ZP_RZ+1)
+    ;;        (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+    ;; (label WRITE_NO_GC__)
+    ;;        (PLA)
+    ;;        (TAY)                                ;; index -> Y
+    ;;        (LDA ZP_RT)
+    ;;        (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
+    ;;        (LDA ZP_RT+1)
+    ;;        (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
+           (JSR PREP_LOCAL__)
            ;; increment, since it is now in locals and on stack
-           (JSR INC_REFCNT_M1_SLOT_RT_N)
+           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR_N)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 ))))
