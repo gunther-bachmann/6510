@@ -8,7 +8,8 @@
                     BC_IMAX
                     BC_IINC
                     BC_IADD
-                    BC_ISUB)
+                    BC_ISUB
+                    bc-atom-num-code)
            (only-in "./ext.rkt"
                     BC_EXT1_CMD)
            (only-in "./misc.rkt"
@@ -221,7 +222,7 @@
       )))
 
   (inform-check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
-                       86)
+                       84)
   (check-equal? (vm-stack-n->strings use-case-int-plus-state-after)
                    (list "stack holds 4 items"
                          "int $0000  (rt)"
@@ -262,7 +263,7 @@
       (bc ISUB)                      ;; byte code for INT_MINUS = 2 - 1 = 1
       (bc PUSH_I) (byte #xf0 #x04) ;; push int #x4f0 (1264)
       (bc PUSH_I) (byte #x1f #x01) ;; push int #x11f (287)
-      (bc ISUB)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x1c2f)
+      (bc ISUB)                      ;; byte code for INT_MINUS (287 - 1264 = -977 = #x3c2f)
       (bc PUSH_I1)
       (bc PUSH_I0)
       (bc BNOP)
@@ -271,10 +272,15 @@
 
 
    (inform-check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                        86)
+                        84)
     (check-equal? (vm-stack-n->strings use-case-int-minus-state-after)
                     (list "stack holds 4 items"
-                          "int $1fff  (rt)"
-                          "int $1c2f"
+                          "int $3fff  (rt)"
+                          "int $3c2f"
                           "int $0001"
                           "ptr NIL")))
+
+(module+ test
+  (inform-check-equal? (code-len bc-atom-num-code)
+                       152
+                       "code len for byte and int arithmetic"))

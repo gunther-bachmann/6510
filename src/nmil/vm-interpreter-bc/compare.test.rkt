@@ -11,7 +11,8 @@
                     BC_B_GT_P
                     BC_B_LT_P
                     BC_B_GE_P
-                    BC_I_GT_P)
+                    BC_I_GT_P
+                    bc-compare-code)
            (only-in "./push_const.rkt"
                     BC_PUSH_CONST_NUM_SHORT)
            (only-in "./push_n_pop.rkt"
@@ -199,3 +200,8 @@
 
   (check-equal? (vm-regt-n->string int-greater-0>1-state)
                 "int $0000"))
+
+(module+ test #| code len |#
+  (inform-check-equal? (code-len bc-compare-code)
+                       69
+                       "compare code len"))

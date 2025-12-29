@@ -12,6 +12,8 @@
          rackunit
          "../../6510-test-utils.rkt"
          "../../6510.rkt"
+         (only-in "../../ast/6510-relocator.rkt"
+                  code-len)
          (only-in "../../tools/6510-interpreter.rkt"
                   peek
                   peek-word-at-address
@@ -58,6 +60,7 @@
          (all-from-out "../vm-runtime/vm-call-frame.rkt")
          (all-from-out "../vm-bc-opcode-definitions.rkt")
          (all-from-out "../../6510.rkt")
+         (all-from-out "../../ast/6510-relocator.rkt")
          (all-from-out "../../6510-test-utils.rkt")
          (all-from-out "../../tools/6510-interpreter.rkt")
          (all-from-out "../vm-runtime/vm-memory-map.rkt")

@@ -23,7 +23,9 @@
          BC_IINC        ;; increment integer (tos)
          BC_IADD        ;; add two topmost integer
          BC_BSHR        ;; shift tos byte one bit to the right
-         BC_ISUB)       ;; subtract two topmost integers
+         BC_ISUB
+
+         bc-atom-num-code)       ;; subtract two topmost integers
 
 (define BC_BINC
   (list
@@ -48,6 +50,7 @@
           (JMP VM_INTERPRETER_INC_PC)
 
 ;; ;; alternatively (speed optimized) : 23 bytes long
+;; ;; does inline pop of eval stack
 ;;           (LDY ZP_CELL_STACK_TOS)
 ;;           (CMP !$01)
 ;;           (BEQ SWITCH_TO_PREV_CELL_STK__BC_ADD)
@@ -97,10 +100,10 @@
    (label BC_IINC)
           (INC ZP_RT+1)
           (BNE DONE__)
-          (INC ZP_RT)
           (LDA ZP_RT)
+          (CLC)
+          (ADC !$01)
           (ORA !$03)
-          (AND !$7f)
           (STA ZP_RT)
    (label DONE__)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
@@ -117,14 +120,14 @@
           (STA ZP_RT+1)                         ;; RT untagged lowbyte = result
 
           (LDA (ZP_CELL_STACK_LB_PTR),y)       ;; A = tagged high byte of int (stored in low byte)
-          (AND !$7c)                            ;; mask out lower two and highest bit
+          (AND !$fc)                            ;; mask out lower two bits
           (BCC NO_INC_HIGH__)        ;; if previous addition had no overflow, skip inc
           (CLC)                                 ;; clear for addition
           (ADC !$04)                            ;; increment int (adding 4 into the enoded int starting at bit 2)
 
     (label NO_INC_HIGH__)
           (ADC ZP_RT)                           ;; A = A + stack value (int high byte)
-          (AND !$7f)                            ;; since ZP_RT has the lower two bits set, just mask out the highest bit
+          ;; (AND !$7f)                            ;; since ZP_RT has the lower two bits set, just mask out the highest bit
           (STA ZP_RT)                           ;; RT tagged high byte = result
 
           (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in RT as tos)
@@ -159,10 +162,20 @@
 
    (label NO_DEC_HIGH__)
           (SBC (ZP_CELL_STACK_LB_PTR),y)      ;; A = A - stack value (int high byte)
-          (AND !$7c)                            ;; mask out under/overflow (lower two bits and high bit)
+          ;; (AND !$fc)                            ;; mask out under/overflow (lower two bits and high bit)
           (ORA !$03)                            ;; set lower two bits to tag it as integer value
           (STA ZP_RT)                           ;; RT tagged high byte = result
 
    (label DONE__)
           (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in rt untouched)
           (JMP VM_INTERPRETER_INC_PC))))
+
+(define bc-atom-num-code
+  (append BC_BINC
+          BC_BDEC
+          BC_BADD
+          BC_IMAX
+          BC_IINC
+          BC_IADD
+          BC_BSHR
+          BC_ISUB))

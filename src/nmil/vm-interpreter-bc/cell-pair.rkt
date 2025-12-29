@@ -29,7 +29,9 @@
          BC_COONS
          BC_NIL_P
          BC_CDR
-         BC_CAR)
+         BC_CAR
+
+         bc-cell-pair-code)
 
 (define BC_CONS
   (list
@@ -77,7 +79,7 @@
           (JSR CP_RT_TO_RZ)
           (JSR VM_CDR)
           (JSR INC_REFCNT_M1_SLOT_RT_N)
-          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_CAR
@@ -86,5 +88,16 @@
           (JSR CP_RT_TO_RZ)
           (JSR VM_CAR)
           (JSR INC_REFCNT_M1_SLOT_RT_N)
-          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
           (JMP VM_INTERPRETER_INC_PC)))
+
+
+(define bc-cell-pair-code
+  (append
+   BC_CxxR
+   BC_PUSH_NIL
+   BC_CONS
+   BC_COONS
+   BC_NIL_P
+   BC_CDR
+   BC_CAR))

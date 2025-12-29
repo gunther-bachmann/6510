@@ -24,14 +24,24 @@ of the decoder and the jump
   (list
    (label BC_EXT1_CMD)
           (LDY !$01)
-          (LDA (ZP_VM_PC),y)
+          (LDA (ZP_VM_PC),y) ;; get second command byte
           (TAY)
-          (LDA VM_INTERPRETER_OPTABLE_EXT1_LB,y)
-          (STA CALL_COMMAND__BC_EXT1_CMD+1)
+   ;;        (LDA VM_INTERPRETER_OPTABLE_EXT1_HB,y)
+   ;;        (STA CALL_COMMAND__BC_EXT1_CMD+2)
+   ;;        (LDA VM_INTERPRETER_OPTABLE_EXT1_LB,y) ;; use as index and read jump address
+   ;;        (STA CALL_COMMAND__BC_EXT1_CMD+1)
+   ;; (label CALL_COMMAND__BC_EXT1_CMD)
+   ;;        (JMP $cf00) ;; is overwritten with table data read before
+
+;; could be optimized
+;; !! JUMP TARGETS MUST point 1 byte before actual routine !!
+;; !! RTS adds one to the address                          !!
+;; save 6 bytes and 1 cycle
           (LDA VM_INTERPRETER_OPTABLE_EXT1_HB,y)
-          (STA CALL_COMMAND__BC_EXT1_CMD+2)
-   (label CALL_COMMAND__BC_EXT1_CMD)
-          (JMP $cf00) ;; is overwritten with table data read before
+          (PHA)
+          (LDA VM_INTERPRETER_OPTABLE_EXT1_LB,y)
+          (PHA)
+          (RTS)
           ))
 
 ;; the jump table lowbyte is filled by codes defined in vm-bc-opcode-definitions.rkt

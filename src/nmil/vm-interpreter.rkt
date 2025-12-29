@@ -84,6 +84,7 @@
                   BC_CAR
                   BC_CDR)
          (only-in "./vm-interpreter-bc/compare.rkt"
+                  bc-compare-code
                   BC_B_GT_P
                   BC_B_LT_P
                   BC_B_GE_P
@@ -235,7 +236,8 @@
           BC_IADD
           BC_ISUB
           BC_INT_P
-          BC_I_GT_P
+          ;; BC_I_GT_P
+          bc-compare-code
           BC_TAIL_CALL
           BC_CELL_EQ_P
           BC_SWAP
@@ -272,9 +274,9 @@
           BC_PUSH_RA
           BC_SWAP_RA_RB
           BC_BADD
-          BC_B_GT_P
-          BC_B_LT_P
-          BC_B_GE_P
+          ;; BC_B_GT_P
+          ;; BC_B_LT_P
+          ;; BC_B_GE_P
           BC_BSHR
           BC_WRITE_TO_RAI
           BC_DEC_RAI

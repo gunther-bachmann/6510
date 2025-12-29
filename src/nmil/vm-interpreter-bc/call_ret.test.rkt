@@ -19,7 +19,8 @@
            (only-in "./cell-pair.rkt"
                     BC_CONS
                     BC_CAR
-                    BC_CDR)
+                    BC_CDR
+                    bc-cell-pair-code)
            (only-in "./misc.rkt"
                     BC_BNOP)
            (only-in "./pop_local.rkt"
@@ -401,3 +402,9 @@
                          "int $0000"
                          "ptr NIL")
                    "previous value on the stack is there + returned value (in rt)"))
+
+
+(module+ test #| code len |#
+  (inform-check-equal? (code-len bc-cell-pair-code)
+                       87
+                       "code len"))

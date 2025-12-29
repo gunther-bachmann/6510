@@ -3,8 +3,9 @@
 (provide BC_B_GT_P
          BC_B_LT_P
          BC_B_GE_P
-         BC_I_GT_P)
+         BC_I_GT_P
 
+         bc-compare-code)
 
 #|
 
@@ -39,11 +40,14 @@
            (JSR POP_CELL_EVLSTK_TO_RP)
            (LDA ZP_RP+1)
            (CMP ZP_RT+1)
-           (BMI GREATER__)
-           (JSR WRITE_INT0_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER__)
+
+    (label BPL_GREATER_WRITE_INT0)
+           (BPL GREATER__)
+    (label LESSOE__BC_B_GT_P)
            (JSR WRITE_INT1_TO_RT)
+           (JMP VM_INTERPRETER_INC_PC)
+    (label GREATER__BC_B_GT_P)
+           (JSR WRITE_INT0_TO_RT)
            (JMP VM_INTERPRETER_INC_PC))))
 
 (define BC_B_LT_P
@@ -54,12 +58,14 @@
            (JSR POP_CELL_EVLSTK_TO_RP)
            (LDA ZP_RT+1)
            (CMP ZP_RP+1)
-           (BPL GREATER_OR_EQUAL__)
-           (JSR WRITE_INT1_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER_OR_EQUAL__)
-           (JSR WRITE_INT0_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC))))
+           (JMP BPL_GREATER_WRITE_INT0)
+    ;;        (BPL GREATER_OR_EQUAL__)
+    ;;        (JSR WRITE_INT1_TO_RT)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+    ;; (label GREATER_OR_EQUAL__)
+    ;;        (JSR WRITE_INT0_TO_RT)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+           )))
 
 (define BC_B_GE_P
   (add-label-suffix
@@ -69,33 +75,45 @@
            (JSR POP_CELL_EVLSTK_TO_RP)
            (LDA ZP_RP+1)
            (CMP ZP_RT+1)
-           (BPL GREATER_OR_EQUAL__)
-           (JSR WRITE_INT1_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER_OR_EQUAL__)
-           (JSR WRITE_INT0_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC))))
+           (JMP BPL_GREATER_WRITE_INT0)
+    ;;        (BPL GREATER_OR_EQUAL__)
+    ;;        (JSR WRITE_INT1_TO_RT)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+    ;; (label GREATER_OR_EQUAL__)
+    ;;        (JSR WRITE_INT0_TO_RT)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+           )))
 
 (define BC_I_GT_P
   (add-label-suffix
    "__" "__I_GT_P"
    (list
     (label BC_I_GT_P)
-           (LDA ZP_RT)                  ;; TODO: optimize by using POP_CELL_EVLSTK_TO_RP, but take care to change branch commands accordingly
-           (STA ZP_RP)
-           (LDA ZP_RT+1)
-           (STA ZP_RP+1)
-           (JSR POP_CELL_EVLSTK_TO_RT)
-           (LDA ZP_RT)
-           (CMP ZP_RP)
-           (BMI GREATER__)
-           (BNE LESS_OR_EQUAL__)
-           (LDA ZP_RT+1)
-           (CMP ZP_RP+1)
-           (BMI GREATER__)
-    (label LESS_OR_EQUAL__)
-           (JSR WRITE_INT0_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC)
-    (label GREATER__)
-           (JSR WRITE_INT1_TO_RT)
-           (JMP VM_INTERPRETER_INC_PC))))
+           ;; (LDA ZP_RT)                  ;; TODO: optimize by using POP_CELL_EVLSTK_TO_RP, but take care to change branch commands accordingly
+           ;; (STA ZP_RP)
+           ;; (LDA ZP_RT+1)
+           ;; (STA ZP_RP+1)
+           (JSR POP_CELL_EVLSTK_TO_RP)
+           (LDA ZP_RP)
+           (CMP ZP_RT)
+           (BMI GREATER__BC_B_GT_P)
+           (BNE LESSOE__BC_B_GT_P)
+           (LDA ZP_RP+1)
+           (CMP ZP_RT+1)
+           (JMP BPL_GREATER_WRITE_INT0)
+    ;;        (BPL GREATER__)
+    ;; (label LESS_OR_EQUAL__)
+    ;;        (JSR WRITE_INT1_TO_RT)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+    ;; (label GREATER__)
+    ;;        (JSR WRITE_INT0_TO_RT)
+    ;;        (JMP VM_INTERPRETER_INC_PC)
+           )))
+
+
+(define bc-compare-code
+  (append
+   BC_B_GT_P
+   BC_B_LT_P
+   BC_B_GE_P
+   BC_I_GT_P))

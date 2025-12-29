@@ -211,6 +211,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (list
    (label STACK_HAS_LESS_THAN_TWO__)
           (BRK)
+
    (label VM_CONS__REFCNTD)
           (LDY ZP_CELL_STACK_TOS)
           (CPY !$01) ;; 01 = one element + RT = two elements

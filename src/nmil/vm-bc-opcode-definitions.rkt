@@ -1,5 +1,22 @@
 #lang racket/base
 
+(provide bc-opcode-definitions
+         (struct-out od-simple-bc)
+         (struct-out od-extended-bc)
+         find-dyn-opcode-def
+         get-dyn-opcode-simple-def
+         disassemble-od-simple-bc
+         byte-count-od-simple-bc
+         fetch-opcode-list
+         get-single-opcode
+         bc
+         full-extended-optable-lb
+         full-extended-optable-hb
+         full-interpreter-opcode-table
+         build-extended-optable-hb
+         build-extended-optable-lb
+         build-interpreter-optable
+         filtered-opcode-definitions)
 #|
 
   Byte Code Opcodes are completely defined here to be able to quickly switch between
@@ -137,24 +154,6 @@
                   VM_INTERPRETER_OPTABLE_EXT1_HB)
          (only-in "./vm-interpreter-loop.rkt"
                   VM_INTERPRETER_OPTABLE))
-
-(provide bc-opcode-definitions
-         (struct-out od-simple-bc)
-         (struct-out od-extended-bc)
-         find-dyn-opcode-def
-         get-dyn-opcode-simple-def
-         disassemble-od-simple-bc
-         byte-count-od-simple-bc
-         fetch-opcode-list
-         get-single-opcode
-         bc
-         full-extended-optable-lb
-         full-extended-optable-hb
-         full-interpreter-opcode-table
-         build-extended-optable-hb
-         build-extended-optable-lb
-         build-interpreter-optable
-         filtered-opcode-definitions)
 
 (module+ test
   (require "../6510-test-utils.rkt"))
@@ -544,7 +543,7 @@
               [(od-simple-bc? od-simple)
                (write-lb-opcode-into-x-optable
                 acc
-                (od-simple-bc--label od-simple)
+                (string-append (od-simple-bc--label od-simple) "-1") ;; add -1 to label to allow for RTS jumps (see src/nmil/vm-interpreter-bc/misc.rkt)
                 (od-simple-bc--byte-code od-simple))]
               [else (raise-user-error "unknown opcode definition")]))
           lb-table
@@ -563,7 +562,7 @@
               [(od-simple-bc? od-simple)
                (write-hb-opcode-into-x-optable
                 acc
-                (od-simple-bc--label od-simple)
+                (string-append (od-simple-bc--label od-simple) "-1") ;; add -1 to label to allow for RTS jumps (see src/nmil/vm-interpreter-bc/misc.rkt)
                 (od-simple-bc--byte-code od-simple))]
               [else (raise-user-error "unknown opcode definition")]))
           hb-table
