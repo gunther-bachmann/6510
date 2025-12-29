@@ -10,18 +10,7 @@
                   vm-interpreter))
 
 (module+ test #|  |#
-  (require "../../6510-test-utils.rkt"
-           (only-in "../vm-inspector-utils.rkt"
-                    vm-stack-n->strings)
-           (only-in "./test-utils.rkt"
-                    wrap-bytecode-for-full-bc-test)
-           (only-in "../vm-interpreter-test-utils.rkt"
-                    run-bc-wrapped-in-test-
-                    vm-list->strings))
-
-  (define (run-bc-wrapped-in-test bc (debug #f))
-    (define wrapped-code (wrap-bytecode-for-full-bc-test bc))
-    (run-bc-wrapped-in-test- bc wrapped-code debug)))
+  (require "./test-utils.rkt"))
 
 (define BC_ADD_NATIVE
   (list

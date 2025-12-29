@@ -21,49 +21,7 @@
          (only-in "../vm-interpreter.rkt" vm-interpreter))
 
 (module+ test #|  |#
-  (require "../../6510-test-utils.rkt"
-           (only-in "../../tools/6510-interpreter.rkt"
-                    cpu-state-clock-cycles
-                    peek)
-           (only-in "../../util.rkt"
-                    bytes->int
-                    format-hex-byte
-                    format-hex-word)
-           (only-in "../vm-inspector-utils.rkt"
-                    shorten-cell-strings
-                    shorten-cell-string
-                    vm-cell-at-nil?
-                    vm-stack-n->strings
-                    vm-cell-at-n->string
-                    vm-slot->string)
-           (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
-           (only-in "../vm-interpreter-test-utils.rkt"
-                    run-bc-wrapped-in-test-
-                    vm-list->strings)
-           (only-in "./test-utils.rkt"
-                    wrap-bytecode-for-full-bc-test))
-
-
-  (define PAGE_AVAIL_0 #xca)
-  (define PAGE_AVAIL_0_W #xca00)
-  (define PAGE_AVAIL_1 #xc9)
-  (define PAGE_AVAIL_1_W #xc900)
-
-  ;; (define (wrap-bytecode-for-test bc)
-  ;;   (append (list (org #x7000)
-  ;;                 (JSR VM_INITIALIZE_MEMORY_MANAGER)
-  ;;                 (JSR VM_INITIALIZE_CALL_FRAME)
-  ;;                 (JSR VM_INTERPRETER_INIT)
-  ;;                 (JMP VM_INTERPRETER))
-  ;;           (list (org #x8000))
-  ;;           (flatten bc)
-  ;;           (list (org #xa000))
-  ;;           vm-interpreter
-  ;;           VM_INTERPRETER_ZP))
-
-  (define (run-bc-wrapped-in-test bc (debug #f))
-    (define wrapped-code (wrap-bytecode-for-full-bc-test bc))
-    (run-bc-wrapped-in-test- bc wrapped-code debug)))
+  (require "./test-utils.rkt"))
 
 (define POINT_CREATE ;; x :: y :: color -> point struct
   (list

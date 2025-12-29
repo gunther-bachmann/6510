@@ -9,8 +9,18 @@
          (all-from-out "../../6510-test-utils.rkt")
          (all-from-out "../../tools/6510-interpreter.rkt")
          (all-from-out "../vm-runtime/vm-memory-map.rkt")
+         (all-from-out "../../util.rkt")
          (all-from-out racket/list)
-         wrap-bytecode-for-full-bc-test)
+         run-bc-wrapped-in-test
+         PAGE_CALL_FRAME
+         PAGE_LOCALS_LB
+         PAGE_LOCALS_LB_W
+         PAGE_LOCALS_HB
+         PAGE_LOCALS_HB_W
+         PAGE_AVAIL_0
+         PAGE_AVAIL_0_W
+         PAGE_AVAIL_1
+         PAGE_AVAIL_1_W)
 
 (require (only-in racket/list
                   flatten
@@ -22,26 +32,27 @@
                   peek-word-at-address
                   memory-list
                   cpu-state-clock-cycles)
-         (only-in "../vm-runtime/vm-call-frame.rkt"
-                  vm-call-frame->strings)
-         (only-in "../vm-inspector-utils.rkt"
-                  shorten-cell-strings
-                  shorten-cell-string
-                  vm-cell-at-nil-n?
-                  vm-page-n->strings
-                  vm-stack-n->strings
-                  vm-regt-n->string
-                  vm-cell-at-n->string
-                  vm-cell-n->string
-                  vm-deref-cell-pair-w-n->string)
-         (only-in "../vm-interpreter.rkt"
-                  just-vm-interpreter)
+         (only-in "../../util.rkt"
+                  bytes->int
+                  format-hex-byte
+                  format-hex-word)
          (only-in "../vm-bc-opcode-definitions.rkt"
                   bc
                   bc-opcode-definitions
                   full-extended-optable-lb
                   full-extended-optable-hb
                   full-interpreter-opcode-table)
+         (only-in "../vm-inspector-utils.rkt"
+                  shorten-cell-strings
+                  shorten-cell-string
+                  vm-cell-at-nil-n?
+                  vm-slot->string
+                  vm-page-n->strings
+                  vm-stack-n->strings
+                  vm-regt-n->string
+                  vm-cell-at-n->string
+                  vm-cell-n->string
+                  vm-deref-cell-pair-w-n->string)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_ZP
@@ -53,6 +64,10 @@
                   vm-slots-used-in-page
                   vm-slots-free-in-page
                   vm-next-instruction-bytes)
+         (only-in "../vm-interpreter.rkt"
+                  just-vm-interpreter)
+         (only-in "../vm-runtime/vm-call-frame.rkt"
+                  vm-call-frame->strings)
          (only-in "../vm-runtime/vm-memory-manager-n.rkt"
                   VM_INITIALIZE_MEMORY_MANAGER
                   vm-memory-manager-code)
@@ -78,3 +93,19 @@
     (list (org-align #x100)) ;; align to next page
     full-interpreter-opcode-table
     VM_INTERPRETER_ZP)))
+
+;; cell_stack_lb #xcf
+;; cell_stack_hb #xce
+(define PAGE_CALL_FRAME #xcd)
+(define PAGE_LOCALS_LB #xcb)
+(define PAGE_LOCALS_LB_W #xcb00)
+(define PAGE_LOCALS_HB #xcc)
+(define PAGE_LOCALS_HB_W #xcc00)
+(define PAGE_AVAIL_0 #xca)
+(define PAGE_AVAIL_0_W #xca00)
+(define PAGE_AVAIL_1 #xc9)
+(define PAGE_AVAIL_1_W #xc900)
+
+  (define (run-bc-wrapped-in-test bc (debug #f))
+    (define wrapped-code (wrap-bytecode-for-full-bc-test bc))
+    (run-bc-wrapped-in-test- bc wrapped-code debug))

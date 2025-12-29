@@ -28,35 +28,7 @@
          (only-in "../vm-interpreter.rkt" vm-interpreter))
 
 (module+ test #|  |#
-  (require "../../6510-test-utils.rkt"
-           (only-in "../../tools/6510-interpreter.rkt" cpu-state-clock-cycles peek memory-list)
-           (only-in "../../util.rkt" bytes->int format-hex-byte format-hex-word)
-           (only-in "../vm-inspector-utils.rkt"
-                    shorten-cell-strings
-                    shorten-cell-string
-                    vm-page-n->strings
-                    vm-stack-n->strings
-                    vm-regt-n->string
-                    vm-cell-at-n->string
-                    vm-cell-n->string
-                    vm-deref-cell-pair-w-n->string
-                    vm-slot->string)
-           (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
-           (only-in "../vm-interpreter-test-utils.rkt"
-                    run-bc-wrapped-in-test-
-                    vm-list->strings)
-           (only-in "./test-utils.rkt"
-                    wrap-bytecode-for-full-bc-test))
-
-
-  (define PAGE_AVAIL_0 #xca)
-  (define PAGE_AVAIL_0_W #xca00)
-  (define PAGE_AVAIL_1 #xc9)
-  (define PAGE_AVAIL_1_W #xc900)
-
-  (define (run-bc-wrapped-in-test bc (debug #f))
-    (define wrapped-code (wrap-bytecode-for-full-bc-test bc))
-    (run-bc-wrapped-in-test- bc wrapped-code debug)))
+  (require "./test-utils.rkt"))
 
 (define FIFO_CREATE ;;  -> point struct
   (list
@@ -81,16 +53,16 @@
       FIFO_CREATE)
      ))
 
-  (check-equal? (vm-stack-n->strings fifo-create-state)
+  (pcheck-equal? (vm-stack-n->strings fifo-create-state)
                 (list "stack holds 2 items"
                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                       "ptr NIL"))
-  (check-equal? (vm-slot->string fifo-create-state (+ PAGE_AVAIL_0_W #x02))
+  (pcheck-equal? (vm-slot->string fifo-create-state (+ PAGE_AVAIL_0_W #x02))
                 "ptr[1] cell-array of len 2")
-  (check-equal? (peek fifo-create-state(+ PAGE_AVAIL_0_W #x02))
+  (pcheck-equal? (peek fifo-create-state(+ PAGE_AVAIL_0_W #x02))
                 1
                 "reference count is 1")
-  (check-equal? (map (lambda (offset) (vm-cell-at-n->string fifo-create-state (+ PAGE_AVAIL_0_W offset) #f #t))
+  (pcheck-equal? (map (lambda (offset) (vm-cell-at-n->string fifo-create-state (+ PAGE_AVAIL_0_W offset) #f #t))
                      (list 04 06))
                 (list "ptr NIL" "ptr NIL")
                 "the first two elements of the array are decimal NIL, NIL"))
@@ -121,16 +93,16 @@
       FIFO_ENQUEUE)
      ))
 
-  (check-equal? (vm-stack-n->strings enqueue-state-1)
+  (pcheck-equal? (vm-stack-n->strings enqueue-state-1)
                 (list "stack holds 2 items"
                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                       "ptr NIL"))
 
-  (check-equal? (memory-list enqueue-state-1 (+ PAGE_AVAIL_0_W #x04) (+ PAGE_AVAIL_0_W #x07))
+  (pcheck-equal? (memory-list enqueue-state-1 (+ PAGE_AVAIL_0_W #x04) (+ PAGE_AVAIL_0_W #x07))
                 (list #x08 PAGE_AVAIL_0 #x00 #x00)
                 "first entry is a ptr to a list, second entry is NIL")
 
-  (check-equal? (vm-list->strings enqueue-state-1 (+ PAGE_AVAIL_0_W #x08))
+  (pcheck-equal? (vm-list->strings enqueue-state-1 (+ PAGE_AVAIL_0_W #x08))
                 (list "int $0001"))
 
   (inform-check-equal? (cpu-state-clock-cycles enqueue-state-1)
@@ -153,16 +125,16 @@
       FIFO_CREATE
       FIFO_ENQUEUE)))
 
-  (check-equal? (vm-stack-n->strings enqueue-state-2)
+  (pcheck-equal? (vm-stack-n->strings enqueue-state-2)
                 (list "stack holds 2 items"
                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                       "ptr NIL"))
 
-  (check-equal? (memory-list enqueue-state-2 (+ PAGE_AVAIL_0_W #x04) (+ PAGE_AVAIL_0_W #x07))
+  (pcheck-equal? (memory-list enqueue-state-2 (+ PAGE_AVAIL_0_W #x04) (+ PAGE_AVAIL_0_W #x07))
                 (list #x0e PAGE_AVAIL_0 #x00 #x00)
                 "first entry is a ptr to a list, second entry is NIL")
 
-  (check-equal? (vm-list->strings enqueue-state-2 (+ PAGE_AVAIL_0_W #x0e))
+  (pcheck-equal? (vm-list->strings enqueue-state-2 (+ PAGE_AVAIL_0_W #x0e))
                 (list "int $0002" "int $0001")))
 
 (define FIFO_DEQUEUE ;; FIFO -> T
@@ -215,7 +187,7 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-stack-n->strings dequeue-state-1)
+  (pcheck-equal? (vm-stack-n->strings dequeue-state-1)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "ptr NIL")
@@ -248,7 +220,7 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-stack-n->strings dequeue-state-2)
+  (pcheck-equal? (vm-stack-n->strings dequeue-state-2)
                 (list "stack holds 3 items"
                       "int $0002  (rt)"
                       "int $0001"
@@ -285,19 +257,19 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-stack-n->strings mem-fifo-state-1)
+  (pcheck-equal? (vm-stack-n->strings mem-fifo-state-1)
                 (list "stack holds 3 items"
                       "int $0002  (rt)"
                       "int $0001"
                       "ptr NIL")
                 "1 -> FIFO, 2 -> FIFO, FIFO -> 1, FIFO ->2")
-  ;; (check-equal? (vm-page-n->strings mem-fifo-state-1 PAGE_AVAIL_1)
+  ;; (pcheck-equal? (vm-page-n->strings mem-fifo-state-1 PAGE_AVAIL_1)
   ;;               (list "page-type:      cell-pair page"
   ;;                     "previous page:  $00"
   ;;                     "slots used:     0"
   ;;                     "next free slot: $05")
   ;;               "cell pair page is completely freed after gc")
-  (check-equal? (vm-page-n->strings mem-fifo-state-1 PAGE_AVAIL_0)
+  (pcheck-equal? (vm-page-n->strings mem-fifo-state-1 PAGE_AVAIL_0)
                 (list "page-type:      m1 page p0"
                       "previous page:  $00"
                       "slots used:     0"
@@ -330,19 +302,19 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-stack-n->strings mem-fifo-state-2)
+  (pcheck-equal? (vm-stack-n->strings mem-fifo-state-2)
                 (list "stack holds 3 items"
                       "int $0002  (rt)"
                       "int $0001"
                       "ptr NIL")
                 "1 -> FIFO, 2 -> FIFO, FIFO -> 1, FIFO ->2")
-  ;; (check-equal? (vm-page-n->strings mem-fifo-state-2 PAGE_AVAIL_1)
+  ;; (pcheck-equal? (vm-page-n->strings mem-fifo-state-2 PAGE_AVAIL_1)
   ;;               (list "page-type:      cell-pair page"
   ;;                     "previous page:  $00"
   ;;                     "slots used:     0"
   ;;                     "next free slot: $05")
   ;;               "cell pair page is completely freed after gc")
-  (check-equal? (vm-page-n->strings mem-fifo-state-2 PAGE_AVAIL_0)
+  (pcheck-equal? (vm-page-n->strings mem-fifo-state-2 PAGE_AVAIL_0)
                 (list "page-type:      m1 page p0"
                       "previous page:  $00"
                       "slots used:     0"

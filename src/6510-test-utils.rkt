@@ -2,14 +2,19 @@
 
 ;; use this instead of (require rackunit) to make use of skipping tests
 
-(require ansi-color)
-(require rackunit) ;; TODO: remove from here to be able to use typed variant instead
-(require racket/path)
 
-(provide skip inform-check-equal? drop-meta-info drop-meta-infos)
-(provide (all-from-out rackunit))
-(provide (all-from-out racket/path))
-(provide (all-from-out ansi-color))
+(provide skip
+         inform-check-equal?
+         drop-meta-info
+         drop-meta-infos
+         pcheck-equal?
+         (all-from-out rackunit)
+         (all-from-out racket/path)
+         (all-from-out ansi-color))
+
+(require ansi-color
+         rackunit ;; TODO: remove from here to be able to use typed variant instead
+         racket/path)
 
 (define (drop-meta-infos ast-commands)
   (map drop-meta-info ast-commands))
@@ -19,6 +24,17 @@
     (define ast-command-as-list (vector->list (struct->vector ast-command)))
     (append (take ast-command-as-list 1)
             (drop ast-command-as-list 2)))
+
+(define-syntax (pcheck-equal? stx)
+  (syntax-case stx ()
+    ([_ act exp]
+     #'(begin
+        (display ".")
+        (check-equal? act exp)))
+    ([_ act exp msg]
+     #'(begin
+        (display ".")
+        (check-equal? act exp msg)))))
 
 (define-syntax (inform-check-equal? stx)
   (syntax-case stx ()
