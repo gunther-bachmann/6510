@@ -44,19 +44,21 @@
                    (col (syntax-column stx))
                    (a (gensym))
                    (b (gensym))
-                   (location (gensym))]
+                   (location (gensym))
+                   (location-short (gensym))]
        (datum->syntax
         stx
         (syntax->datum
          #'(begin
              (define a val-a)
              (define b val-b)
-             (define location (format "~a:~a:~a" (file-name-from-path fname) line col))
+             (define location (format "~a:~a:~a" (path->string fname) line col))
+             (define location-short (format "~a:~a:~a" (file-name-from-path fname) line col))
              (cond [(not (eq? a b))
                     (with-colors 'yellow
                       (lambda ()
                         (displayln (format "--------------------\nINFORMATION"))
-                        (displayln (format " ~a" location))
+                        (displayln (format " ~a" location-short))
                         (displayln (format "name:       inform-check-equal?\nlocation:   ~a\nactual:     ~a\nexpected:   ~a" location a b))
                         (displayln "--------------------")))]))))))
     ([_ val-a val-b msg]
@@ -65,19 +67,21 @@
                    (col (syntax-column stx))
                    (a (gensym))
                    (b (gensym))
-                   (location (gensym))]
+                   (location (gensym))
+                   (location-short (gensym))]
        (datum->syntax
         stx
         (syntax->datum
          #'(begin
              (define a val-a)
              (define b val-b)
-             (define location (format "~a:~a:~a" (file-name-from-path fname) line col))
+             (define location (format "~a:~a:~a" (path->string fname) line col))
+             (define location-short (format "~a:~a:~a" (file-name-from-path fname) line col))
              (cond [(not (eq? a b))
                     (with-colors 'yellow
                       (lambda ()
                         (displayln (format "--------------------\nINFORMATION"))
-                        (displayln (format " ~a" location))
+                        (displayln (format " ~a" location-short))
                         (displayln (format "name:       inform-check-equal?\nlocation:   ~a\nactual:     ~a\nexpected:   ~a\nmessage:    ~a" location a b msg))
                         (displayln "--------------------")))]))))))))
 

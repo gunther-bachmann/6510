@@ -434,41 +434,46 @@ currently the following test programs are created
       (create-prg trampoline-code #x0810 "trampoline.prg")
       (create-image-with-program trampoline-code #x0810 "trampoline.prg" "trampoline.d64" "trampoline")))
 
-
   ;; idea
   ;; @cdc0 mm-regs
-  (define mem-data
-    (new-assemble-to-code-list (append (list (org #xcdc0) (byte-const ZP_VM_PC #x85)))))
-  (define raw-mem-data
-    (cdar (assembly-code-list-org-code-sequences mem-data)))
+  ;; (define mem-data
+  ;;   (new-assemble-to-code-list (append (list (org #xcdc0) (byte-const ZP_VM_PC #x85)))))
+  ;; (define raw-mem-data
+  ;;   (cdar (assembly-code-list-org-code-sequences mem-data)))
 
   ;; @c000 runtime + memory management etc
   (define vm-runtime
     (new-assemble-to-code-list
-     (append (list (org #xc000)) vm-memory-manager-code)
-     (assembly-code-list-labels mem-data)))
+     (append (list (org #x2800)
+                   (byte-const ZP_VM_PC #x85) ;; #x80 + 5
+                   )
+             vm-memory-manager-code)
+     ;; (assembly-code-list-labels mem-data)
+     ))
 
   (define raw-vm-runtime
     (cdar
      (assembly-code-list-org-code-sequences
       vm-runtime)))
 
-  (check-true (> (- #xcec0 #xc000)
+  (check-true (> (- #x3000 #x2800)
                  (length raw-vm-runtime))
-              "vm runtime must fit into upper memory")
+              "vm runtime must fit into 2k")
 
   ;; @9000 just bc interpreter
   (define bc-interpreter
     (new-assemble-to-code-list
-       (append (list (org #x9000)
-                     (word-const VM_INTERPRETER_OPTABLE $ce00)
+       (append (list (org #x2000))
+               full-interpreter-opcode-table ;; aligned to xx00 (page aligned)
+               (list ;; (org #x2100)
+                     ;; (word-const VM_INTERPRETER_OPTABLE $ce00)
                      (word-const VM_INTERPRETER $0084)
                      (word-const VM_INTERPRETER_INC_PC $0080)
                      (byte-const ZP_VM_PC #x85) ;; #x80 + 5
 
                      (JSR VM_INTERPRETER_INIT_AX)
                      (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                     (JSR VM_INITIALIZE_CALL_FRAME)
+                     ;; (JSR VM_INITIALIZE_CALL_FRAME)
                      (JMP VM_INTERPRETER))
                just-vm-interpreter
                full-extended-optable-hb
@@ -490,18 +495,18 @@ currently the following test programs are created
      (assembly-code-list-org-code-sequences
       zp-interpreter-loop)))
 
-  (check-true (> (- #xa000 #x9000)
+  (check-true (> (- #x2800 #x2000)
                  (length raw-bc-interpreter))
-              "bc interpreter must fit right before basic mem")
+              "bc interpreter must fit into 1k")
 
   ;; @ce00
-  (define raw-bc-jump-table
-    (cdar
-     (assembly-code-list-org-code-sequences
-      (new-assemble-to-code-list
-       (append (list (org #xcdc0)) full-interpreter-opcode-table)
-       (assembly-code-list-labels bc-interpreter) ;; (need to add labels collected by interpreter)
-       ))))
+  ;; (define raw-bc-jump-table
+  ;;   (cdar
+  ;;    (assembly-code-list-org-code-sequences
+  ;;     (new-assemble-to-code-list
+  ;;      (append (list (org #xcdc0)) full-interpreter-opcode-table)
+  ;;      (assembly-code-list-labels bc-interpreter) ;; (need to add labels collected by interpreter)
+  ;;      ))))
   ;; @cf00
 
   (define (byte-code-loader byte-codes)
@@ -516,7 +521,7 @@ currently the following test programs are created
              ;; add code to initialize memory manage and interpreter
              (LDA !<BC_START) ;; lb start of available memory
              (LDX !>BC_START) ;; hb  start of available memory
-             (JMP $9000)      ;; initialize memory manager & interpreter & start interpreter
+             (JMP $2100)      ;; initialize memory manager & interpreter & start interpreter
 
       (label BC_START)
              (ast-bytes-cmd '() byte-codes)
@@ -555,7 +560,7 @@ currently the following test programs are created
       "SECTION_ZI")
      (segment->copy-descriptor
       (c64-segment 'pinned ;; type
-                   #x9000  ;; location
+                   #x2000  ;; location
                    '()       ;; reloc info
                    '()       ;; resolution info
                    '()       ;; resolution symbols
@@ -564,31 +569,31 @@ currently the following test programs are created
       "SECTION_BC")
      (segment->copy-descriptor
       (c64-segment 'pinned ;; type
-                   #xc000  ;; location
+                   #x2800  ;; location
                    '()       ;; reloc info
                    '()       ;; resolution info
                    '()       ;; resolution symbols
                    (length raw-vm-runtime)
                    raw-vm-runtime)
       "SECTION_RT")
-     (segment->copy-descriptor
-      (c64-segment 'pinned ;; type
-                   #xcdc0  ;; location
-                   '()       ;; reloc info
-                   '()       ;; resolution info
-                   '()       ;; resolution symbols
-                   (length raw-mem-data)
-                   raw-mem-data)
-      "SECTION_MD")
-     (segment->copy-descriptor
-      (c64-segment 'pinned ;; type
-                   #xce00  ;; location
-                   '()       ;; reloc info
-                   '()       ;; resolution info
-                   '()       ;; resolution symbols
-                   (length raw-bc-jump-table)
-                   raw-bc-jump-table)
-      "SECTION_BCJT")
+     ;; (segment->copy-descriptor
+     ;;  (c64-segment 'pinned ;; type
+     ;;               #xcdc0  ;; location
+     ;;               '()       ;; reloc info
+     ;;               '()       ;; resolution info
+     ;;               '()       ;; resolution symbols
+     ;;               (length raw-mem-data)
+     ;;               raw-mem-data)
+     ;;  "SECTION_MD")
+     ;; (segment->copy-descriptor
+     ;;  (c64-segment 'pinned ;; type
+     ;;               #xce00  ;; location
+     ;;               '()       ;; reloc info
+     ;;               '()       ;; resolution info
+     ;;               '()       ;; resolution symbols
+     ;;               (length raw-bc-jump-table)
+     ;;               raw-bc-jump-table)
+     ;;  "SECTION_BCJT")
      (list (byte 0 0)) ;; end mark
      LOOPED_COPY_REGION
      COPY_REGION
@@ -598,10 +603,10 @@ currently the following test programs are created
            (ast-bytes-cmd '() raw-bc-interpreter) ;; <-- this part is too large to fit into c000-#xcdbf => split byte codes
            (label "SECTION_RT")
            (ast-bytes-cmd '() raw-vm-runtime)
-           (label "SECTION_MD")
-           (ast-bytes-cmd '() raw-mem-data)
-           (label "SECTION_BCJT")
-           (ast-bytes-cmd '() raw-bc-jump-table) ;;
+           ;; (label "SECTION_MD")
+           ;; (ast-bytes-cmd '() raw-mem-data)
+           ;; (label "SECTION_BCJT")
+           ;; (ast-bytes-cmd '() raw-bc-jump-table) ;;
            )))
 
   (define bc-code-trampoline
@@ -744,7 +749,7 @@ currently the following test programs are created
   (check-equal? (memory-list copy-region-state-02 #xf2fa (+ #xf2fa 9))
                 (list 1 2 3 4 5 6 7 8 9 10)))
 
-(module+ test #| program |#
+(module+ test #| loader.prg |#
   (define orgloc 2064)
 
   (define program

@@ -136,7 +136,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                       36369)
+                       35646)
 
   (pcheck-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 2) (+ PAGE_AVAIL_0_W 43))
                 (list #x01 #x14
