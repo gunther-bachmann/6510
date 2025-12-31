@@ -323,7 +323,7 @@
                     memory-list
                     cpu-state-clock-cycles)
            (only-in "../vm-inspector-utils.rkt"
-                    vm-page-n->strings)
+                    vm-page->strings)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-memory-map.rkt"
                     ZP_TEMP
@@ -455,7 +455,7 @@
   (check-equal? (memory-list test-alloc-m1-00-state-after-n (+ PAGE_AVAIL_0_W #xf8))
                 (list #x00)
                 "slotx: next free slot at offset $00 = no next")
-  (check-equal? (vm-page-n->strings test-alloc-m1-00-state-after-n PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings test-alloc-m1-00-state-after-n PAGE_AVAIL_0)
                 '("page-type:      m1 page p0"
                   "previous page:  $00"
                   "slots used:     0"
@@ -495,7 +495,7 @@
   (check-equal? (memory-list test-alloc-m1-01-state-after-n (+ PAGE_AVAIL_0_W #xf2))
                 (list #x00)
                 "slotx: next free slot at offset $00 = no next")
-  (check-equal? (vm-page-n->strings test-alloc-m1-01-state-after-n PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings test-alloc-m1-01-state-after-n PAGE_AVAIL_0)
                 '("page-type:      m1 page p1"
                   "previous page:  $00"
                   "slots used:     0"
@@ -535,7 +535,7 @@
   (check-equal? (memory-list test-alloc-m1-02-state-after-n (+ PAGE_AVAIL_0_W #xf0))
                 (list #x00)
                 "slotx: next free slot at offset $00 = no next")
-  (check-equal? (vm-page-n->strings test-alloc-m1-02-state-after-n PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings test-alloc-m1-02-state-after-n PAGE_AVAIL_0)
                 '("page-type:      m1 page p2"
                   "previous page:  $00"
                   "slots used:     0"

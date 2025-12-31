@@ -31,7 +31,7 @@
       vm-btree)
     ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings b-tree-0-state 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings b-tree-0-state 10 #t))
                 (list "stack holds 2 items"
                       "((1 . 2) . (3 . 4))  (rt)"
                       "NIL"))
@@ -73,7 +73,7 @@
   (cond [(void? b-tree-1-state)
          (skip (pcheck-equal? #t #f "left debug session"))]
         [else
-         (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings b-tree-1-state 10 #t))
+         (pcheck-equal? (shorten-cell-strings (vm-stack->strings b-tree-1-state 10 #t))
                        (list "stack holds 2 items"
                              "(1 . (2 . (3 . (4 . NIL))))  (rt)"
                              "NIL"))
@@ -129,7 +129,7 @@
   (cond [(void? b-tree-2-state)
          (skip (pcheck-equal? #t #f "left debug session"))]
         [else
-         (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings b-tree-2-state 10 #t))
+         (pcheck-equal? (shorten-cell-strings (vm-stack->strings b-tree-2-state 10 #t))
                        (list "stack holds 2 items"
                              "(10 . (15 . (20 . (30 . (40 . (50 . (60 . NIL)))))))  (rt)"
                              "NIL"
@@ -215,7 +215,7 @@
   (cond [(void? b-tree-3-state)
          (skip (pcheck-equal? #t #f "left debug session"))]
         [else
-         (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings b-tree-3-state 10 #t))
+         (pcheck-equal? (shorten-cell-strings (vm-stack->strings b-tree-3-state 10 #t))
                        (list "stack holds 2 items"
                              "(10 . (15 . (20 . (25 . (30 . (50 . (60 . NIL)))))))  (rt)"
                              "NIL"
@@ -252,7 +252,7 @@
 
   (inform-check-equal? (cpu-state-clock-cycles btree-reverse-0-state)
                        15013)
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings btree-reverse-0-state 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings btree-reverse-0-state 10 #t))
                 (list "stack holds 2 items"
                       "(0 . 1)  (rt)"
                       "NIL"))

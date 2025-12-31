@@ -59,7 +59,7 @@ implement bc push/write local commands
              (bc POP_TO_L0) ;;
              )))
 
-  (check-equal? (vm-stack-n->strings test-bc-pop-to-l-state)
+  (check-equal? (vm-stack->strings test-bc-pop-to-l-state)
                 (list "stack holds 3 items"
                       "int $3fff  (rt)"
                       "int $0000"
@@ -98,7 +98,7 @@ implement bc push/write local commands
              (bc POP_TO_L0) ;; overwrites -1
              )))
 
-  (check-equal? (vm-stack-n->strings test-bc-pop-to-p-state)
+  (check-equal? (vm-stack->strings test-bc-pop-to-p-state)
                   (list "stack is empty or tos=nil"))
   (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_LB_W #x03))
                 #x03)
@@ -136,7 +136,7 @@ implement bc push/write local commands
              (bc PUSH_I0)
              (bc PUSH_L0))))
 
-  (check-equal? (vm-stack-n->strings test-bc-push-l-state)
+  (check-equal? (vm-stack->strings test-bc-push-l-state)
                   (list "stack holds 3 items"
                         "int $0001  (rt)"
                         "int $0000"
@@ -171,7 +171,7 @@ implement bc push/write local commands
              (bc PUSH_I1)
              (bc PUSH_L0))))
 
-  (check-equal? (vm-stack-n->strings test-bc-push-p-state)
+  (check-equal? (vm-stack->strings test-bc-push-p-state)
                    (list "stack holds 3 items"
                          "int $3fff  (rt)"
                          "int $0001"
@@ -208,7 +208,7 @@ implement bc push/write local commands
       (bc PUSH_L0)
       (bc BREAK))))
 
-  (check-equal? (vm-stack-n->strings test-bc-pop-push-to-p-state)
+  (check-equal? (vm-stack->strings test-bc-pop-push-to-p-state)
                    (list "stack holds 2 items"
                          "int $0001  (rt)"
                          "ptr NIL"))

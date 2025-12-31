@@ -38,8 +38,8 @@
                     peek
                     memory-list)
            (only-in "../vm-inspector-utils.rkt"
-                    vm-stack-n->strings
-                    vm-page-n->strings)
+                    vm-stack->strings
+                    vm-page->strings)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "../../ast/6510-relocator.rkt"
                     code-len)
@@ -123,7 +123,7 @@
      (LDA !$10)
      (JSR ALLOC_NATARR_TO_RA)))
 
-  (check-equal? (vm-page-n->strings test-alloc-native-array-state-after PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings test-alloc-native-array-state-after PAGE_AVAIL_0)
                 (list
                  "page-type:      m1 page p3"
                  "previous page:  $00"
@@ -196,13 +196,13 @@
      (STA ZP_RT+1)
      (JSR WRITE_RT_TO_NATARR_RAI)))
 
-  (check-equal? (vm-page-n->strings write-rt-to-natarr-rai-t0 PAGE_AVAIL_2)
+  (check-equal? (vm-page->strings write-rt-to-natarr-rai-t0 PAGE_AVAIL_2)
                 (list
                  "page-type:      m1 page p0"
                  "previous page:  $00"
                  "slots used:     1"
                  "next free slot: $08"))
-  (check-equal? (vm-stack-n->strings write-rt-to-natarr-rai-t0)
+  (check-equal? (vm-stack->strings write-rt-to-natarr-rai-t0)
                 (list "stack holds 2 items"
                       "byte $62  (rt)"
                       "ptr NIL"))
@@ -247,13 +247,13 @@
      (JSR POP_TO_NATARR_RAI)
      ))
 
-  (check-equal? (vm-page-n->strings pop-to-natarra-rai-t0 PAGE_AVAIL_2)
+  (check-equal? (vm-page->strings pop-to-natarra-rai-t0 PAGE_AVAIL_2)
                 (list
                  "page-type:      m1 page p0"
                  "previous page:  $00"
                  "slots used:     1"
                  "next free slot: $08"))
-  (check-equal? (vm-stack-n->strings pop-to-natarra-rai-t0)
+  (check-equal? (vm-stack->strings pop-to-natarra-rai-t0)
                 (list "stack is empty or tos=nil"))
   (check-equal? (memory-list pop-to-natarra-rai-t0 (+ PAGE_AVAIL_2_W #x02) (+ PAGE_AVAIL_2_W #x04))
                 (list #x01 #x84 #x58)
@@ -298,13 +298,13 @@
      (DEC ZP_RAI)
      (JSR PUSH_NATARR_RAI)))
 
-  (check-equal? (vm-page-n->strings push-natarr-rai-t0 PAGE_AVAIL_2)
+  (check-equal? (vm-page->strings push-natarr-rai-t0 PAGE_AVAIL_2)
                 (list
                  "page-type:      m1 page p0"
                  "previous page:  $00"
                  "slots used:     1"
                  "next free slot: $08"))
-  (check-equal? (vm-stack-n->strings push-natarr-rai-t0)
+  (check-equal? (vm-stack->strings push-natarr-rai-t0)
                 (list "stack holds 2 items"
                       "byte $32  (rt)"
                       "ptr NIL"))
@@ -362,7 +362,7 @@
   (check-equal? (memory-list cp-natarr-ra-to-rb-t0 ZP_RA (+ 1 ZP_RA))
                 (list #x02 PAGE_AVAIL_0)
                 "ra is allocated first on page 0")
-  (check-equal? (vm-page-n->strings cp-natarr-ra-to-rb-t0 PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings cp-natarr-ra-to-rb-t0 PAGE_AVAIL_0)
                 (list "page-type:      m1 page p0"
                       "previous page:  $00"
                       "slots used:     1"
@@ -371,7 +371,7 @@
   (check-equal? (memory-list cp-natarr-ra-to-rb-t0 ZP_RB (+ 1 ZP_RB))
                 (list #x02 PAGE_AVAIL_1)
                 "rb is allocated first on page 1")
-  (check-equal? (vm-page-n->strings cp-natarr-ra-to-rb-t0 PAGE_AVAIL_1)
+  (check-equal? (vm-page->strings cp-natarr-ra-to-rb-t0 PAGE_AVAIL_1)
                 (list "page-type:      m1 page p2"
                       "previous page:  $00"
                       "slots used:     1"
@@ -447,7 +447,7 @@
   (check-equal? (memory-list cp-natarr-range-ra-to-rb-t0 ZP_RA (+ 1 ZP_RA))
                 (list #x02 PAGE_AVAIL_0)
                 "ra is allocated first on page 0")
-  (check-equal? (vm-page-n->strings cp-natarr-range-ra-to-rb-t0 PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings cp-natarr-range-ra-to-rb-t0 PAGE_AVAIL_0)
                 (list "page-type:      m1 page p0"
                       "previous page:  $00"
                       "slots used:     1"
@@ -456,7 +456,7 @@
   (check-equal? (memory-list cp-natarr-range-ra-to-rb-t0 ZP_RB (+ 1 ZP_RB))
                 (list #x02 PAGE_AVAIL_1)
                 "rb is allocated first on page 1")
-  (check-equal? (vm-page-n->strings cp-natarr-range-ra-to-rb-t0 PAGE_AVAIL_1)
+  (check-equal? (vm-page->strings cp-natarr-range-ra-to-rb-t0 PAGE_AVAIL_1)
                 (list "page-type:      m1 page p2"
                       "previous page:  $00"
                       "slots used:     1"

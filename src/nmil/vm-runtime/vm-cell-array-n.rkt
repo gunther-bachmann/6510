@@ -73,7 +73,7 @@
                     memory-list
                     cpu-state-clock-cycles)
            (only-in "../vm-inspector-utils.rkt"
-                    vm-page-n->strings)
+                    vm-page->strings)
            (only-in "./vm-m1-slots-n.rkt"
                     vm-m1-slot-code)
            (only-in "./vm-pages-n.rkt"

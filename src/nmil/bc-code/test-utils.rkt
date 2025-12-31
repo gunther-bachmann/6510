@@ -44,15 +44,15 @@
                   full-interpreter-opcode-table)
          (only-in "../vm-inspector-utils.rkt"
                   shorten-cell-strings
-                  shorten-cell-string-n
-                  vm-cell-at-nil-n?
+                  shorten-cell-string
+                  vm-cell-at-nil?
                   vm-slot->string
-                  vm-page-n->strings
-                  vm-stack-n->strings
-                  vm-regt-n->string
-                  vm-cell-at-n->string
-                  vm-cell-n->string
-                  vm-deref-cell-pair-w-n->string)
+                  vm-page->strings
+                  vm-stack->strings
+                  vm-regt->string
+                  vm-cell-at->string
+                  vm-cell->string
+                  vm-deref-cell-pair-w->string)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_ZP

@@ -53,7 +53,7 @@
       (bc PUSH_B) (byte 20)
       (bc B_GT_P))))
 
-  (check-equal? (vm-regt-n->string gt-01-state)
+  (check-equal? (vm-regt->string gt-01-state)
                 "int $0001")
 
   (define gt-02-state
@@ -63,7 +63,7 @@
       (bc PUSH_B) (byte 20)
       (bc B_GT_P))))
 
-  (check-equal? (vm-regt-n->string gt-02-state)
+  (check-equal? (vm-regt->string gt-02-state)
                 "int $0000")
 
   (define gt-03-state
@@ -73,7 +73,7 @@
       (bc PUSH_B) (byte 21)
       (bc B_GT_P))))
 
-  (check-equal? (vm-regt-n->string gt-03-state)
+  (check-equal? (vm-regt->string gt-03-state)
                 "int $0001")
 
   (define gt-04-state
@@ -83,7 +83,7 @@
       (bc PUSH_B) (byte 19)
       (bc B_GT_P))))
 
-  (check-equal? (vm-regt-n->string gt-04-state)
+  (check-equal? (vm-regt->string gt-04-state)
                 "int $0000"))
 
 (module+ test #| BC_B_LT_P |#
@@ -94,7 +94,7 @@
       (bc PUSH_B) (byte 10)
       (bc B_LT_P))))
 
-  (check-equal? (vm-regt-n->string lt-01-state)
+  (check-equal? (vm-regt->string lt-01-state)
                 "int $0001")
 
   (define lt-02-state
@@ -104,7 +104,7 @@
       (bc PUSH_B) (byte 20)
       (bc B_LT_P))))
 
-  (check-equal? (vm-regt-n->string lt-02-state)
+  (check-equal? (vm-regt->string lt-02-state)
                 "int $0000")
 
   (define lt-03-state
@@ -114,7 +114,7 @@
       (bc PUSH_B) (byte 21)
       (bc B_LT_P))))
 
-  (check-equal? (vm-regt-n->string lt-03-state)
+  (check-equal? (vm-regt->string lt-03-state)
                 "int $0000")
 
   (define lt-04-state
@@ -124,7 +124,7 @@
       (bc PUSH_B) (byte 19)
       (bc B_LT_P))))
 
-  (check-equal? (vm-regt-n->string lt-04-state)
+  (check-equal? (vm-regt->string lt-04-state)
                 "int $0001"))
 
 
@@ -137,7 +137,7 @@
       (bc I_GT_P))
      ))
 
-  (skip (check-equal? (vm-regt-n->string int-greater-0>-1-state)
+  (skip (check-equal? (vm-regt->string int-greater-0>-1-state)
                       "int $0001"
                       "comparison of negative with positive number (failing currently)"))
 
@@ -148,7 +148,7 @@
       (bc PUSH_I0)
       (bc I_GT_P))))
 
-  (check-equal? (vm-regt-n->string int-greater-0>0-state)
+  (check-equal? (vm-regt->string int-greater-0>0-state)
                 "int $0000")
 
   (define int-greater-1>1-state
@@ -158,7 +158,7 @@
       (bc PUSH_I1)
       (bc I_GT_P))))
 
-  (check-equal? (vm-regt-n->string int-greater-1>1-state)
+  (check-equal? (vm-regt->string int-greater-1>1-state)
                 "int $0000")
 
   (define int-greater-2>2-state
@@ -168,7 +168,7 @@
       (bc PUSH_I2)
       (bc I_GT_P))))
 
-  (check-equal? (vm-regt-n->string int-greater-2>2-state)
+  (check-equal? (vm-regt->string int-greater-2>2-state)
                 "int $0000")
 
   (define int-greater-2>1-state
@@ -178,7 +178,7 @@
       (bc PUSH_I2)
       (bc I_GT_P))))
 
-  (check-equal? (vm-regt-n->string int-greater-2>1-state)
+  (check-equal? (vm-regt->string int-greater-2>1-state)
                 "int $0001")
 
   (define int-greater-1>0-state
@@ -188,7 +188,7 @@
       (bc PUSH_I1)
       (bc I_GT_P))))
 
-  (check-equal? (vm-regt-n->string int-greater-1>0-state)
+  (check-equal? (vm-regt->string int-greater-1>0-state)
                 "int $0001")
 
   (define int-greater-0>1-state
@@ -198,7 +198,7 @@
       (bc PUSH_I0)
       (bc I_GT_P))))
 
-  (check-equal? (vm-regt-n->string int-greater-0>1-state)
+  (check-equal? (vm-regt->string int-greater-0>1-state)
                 "int $0000"))
 
 (module+ test #| code len |#

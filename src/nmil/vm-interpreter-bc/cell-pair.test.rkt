@@ -57,7 +57,7 @@
          (bc CONS)
          (bc CAAR))
       ))
-  (check-equal? (vm-stack-n->strings cxxr-0-state)
+  (check-equal? (vm-stack->strings cxxr-0-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "ptr NIL"))
@@ -72,7 +72,7 @@
          (bc CONS)
          (bc CDAR))
       ))
-  (check-equal? (vm-stack-n->strings cxxr-1-state)
+  (check-equal? (vm-stack->strings cxxr-1-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -87,7 +87,7 @@
          (bc CONS)
          (bc CADR))
       ))
-  (check-equal? (vm-stack-n->strings cxxr-2-state)
+  (check-equal? (vm-stack->strings cxxr-2-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "ptr NIL"))
@@ -102,7 +102,7 @@
          (bc CONS)
          (bc CDDR))
       ))
-  (check-equal? (vm-stack-n->strings cxxr-3-state)
+  (check-equal? (vm-stack->strings cxxr-3-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL")))
@@ -114,7 +114,7 @@
       (bc PUSH_NIL)
       (bc BREAK))))
 
-  (check-equal? (vm-stack-n->strings bc-push-const-nil-state)
+  (check-equal? (vm-stack->strings bc-push-const-nil-state)
                 (list "stack holds 2 items"
                       "ptr NIL  (rt)"
                       "ptr NIL")))
@@ -129,11 +129,11 @@
       (bc BREAK))
      ))
 
-   (check-equal? (vm-stack-n->strings bc-cons-state)
+   (check-equal? (vm-stack->strings bc-cons-state)
                    (list "stack holds 2 items"
                          (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                          "ptr NIL"))
-   (check-equal? (vm-deref-cell-pair-w-n->string bc-cons-state (+ PAGE_AVAIL_0_W #x02))
+   (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x02))
                     "(int $0000 . ptr NIL)"))
 
 (module+ test #| bc-nil-p |#
@@ -143,7 +143,7 @@
       (bc PUSH_NIL)
       (bc NIL_P))))
 
-  (check-equal? (vm-stack-n->strings bc-nil-p-state)
+  (check-equal? (vm-stack->strings bc-nil-p-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "ptr NIL"))
@@ -157,9 +157,9 @@
       (bc NIL_P))
      ))
 
-  (check-equal? (vm-deref-cell-pair-w-n->string bc-nil-p-2-state (+ PAGE_AVAIL_0_W #x02))
+  (check-equal? (vm-deref-cell-pair-w->string bc-nil-p-2-state (+ PAGE_AVAIL_0_W #x02))
                 "(int $0002 . ptr NIL)")
-  (check-equal? (vm-stack-n->strings bc-nil-p-2-state)
+  (check-equal? (vm-stack->strings bc-nil-p-2-state)
                 (list "stack holds 2 items"
                       "int $0000  (rt)"
                       "ptr NIL")))
@@ -174,7 +174,7 @@
       (bc CAR)
       (bc BREAK))))
 
-   (check-equal? (vm-stack-n->strings bc-car-state)
+   (check-equal? (vm-stack->strings bc-car-state)
                  (list "stack holds 2 items"
                        "int $0002  (rt)"
                        "ptr NIL")))
@@ -189,7 +189,7 @@
       (bc CDR)
       (bc BREAK))))
 
-   (check-equal? (vm-stack-n->strings bc-cdr-state)
+   (check-equal? (vm-stack->strings bc-cdr-state)
                  (list "stack holds 2 items"
                        "ptr NIL  (rt)"
                        "ptr NIL")))

@@ -49,7 +49,7 @@ test of bytecode implementation of push
        (bc PUSH_B) (byte 10)))
      ))
 
-  (check-equal? (vm-stack-n->strings push-byte-state)
+  (check-equal? (vm-stack->strings push-byte-state)
                 (list "stack holds 4 items"
                       "byte $0a  (rt)"
                       "byte $01"
@@ -64,7 +64,7 @@ test of bytecode implementation of push
       (bc POP))
      ))
 
-  (check-equal? (vm-stack-n->strings pop-0-state)
+  (check-equal? (vm-stack->strings pop-0-state)
                 (list "stack is empty or tos=nil"))
 
   (define pop-1-state
@@ -74,7 +74,7 @@ test of bytecode implementation of push
       (bc PUSH_I1)
       (bc POP))))
 
-  (check-equal? (vm-stack-n->strings pop-1-state)
+  (check-equal? (vm-stack->strings pop-1-state)
                 (list "stack holds 2 items"
                       "int $0000  (rt)"
                       "ptr NIL"))
@@ -87,7 +87,7 @@ test of bytecode implementation of push
       (bc POP))
      ))
 
-  (check-equal? (vm-stack-n->strings pop-2-state)
+  (check-equal? (vm-stack->strings pop-2-state)
                 (list "stack holds 3 items"
                       "int $0001  (rt)"
                       "int $0000"
@@ -100,7 +100,7 @@ test of bytecode implementation of push
       (bc PUSH_I) (byte #xf0 #x04)
       (bc BREAK))))
 
-  (check-equal? (vm-stack-n->strings use-case-push-int-state-after)
+  (check-equal? (vm-stack->strings use-case-push-int-state-after)
                 (list "stack holds 2 items"
                       "int $04f0  (rt)"
                       "ptr NIL")))

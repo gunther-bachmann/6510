@@ -70,7 +70,7 @@
        (bc BINC)))
      ))
 
-  (check-equal? (vm-stack-n->strings binc-20)
+  (check-equal? (vm-stack->strings binc-20)
                 (list "stack holds 2 items"
                       "byte $15  (rt)"
                       "ptr NIL")))
@@ -84,7 +84,7 @@
        (bc BDEC)))
      ))
 
-  (check-equal? (vm-stack-n->strings bdec-20)
+  (check-equal? (vm-stack->strings bdec-20)
                 (list "stack holds 2 items"
                       "byte $13  (rt)"
                       "ptr NIL")))
@@ -98,7 +98,7 @@
        (bc PUSH_B) (byte #x09)
        (bc BADD)))))
 
-  (check-equal? (vm-stack-n->strings badd-20-9)
+  (check-equal? (vm-stack->strings badd-20-9)
                 (list "stack holds 2 items"
                       "byte $1d  (rt)"
                       "ptr NIL")))
@@ -113,7 +113,7 @@
        (bc IMAX)))
      ))
 
-  (check-equal? (vm-stack-n->strings max-int-state)
+  (check-equal? (vm-stack->strings max-int-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -126,7 +126,7 @@
        (bc PUSH_I2)
        (bc IMAX)))))
 
-  (check-equal? (vm-stack-n->strings max-int-2-state)
+  (check-equal? (vm-stack->strings max-int-2-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL")))
@@ -139,7 +139,7 @@
        (bc PUSH_I0)
        (bc IINC)))))
 
-  (check-equal? (vm-stack-n->strings inc-int-0-state)
+  (check-equal? (vm-stack->strings inc-int-0-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "ptr NIL"))
@@ -152,7 +152,7 @@
        (bc IINC)))
      ))
 
-  (check-equal? (vm-stack-n->strings inc-int-1-state)
+  (check-equal? (vm-stack->strings inc-int-1-state)
                 (list "stack holds 2 items"
                       "int $0100  (rt)"
                       "ptr NIL"))
@@ -165,7 +165,7 @@
        (bc IINC)))
      ))
 
-  (check-equal? (vm-stack-n->strings inc-int-2-state)
+  (check-equal? (vm-stack->strings inc-int-2-state)
                 (list "stack holds 2 items"
                       "int $0000  (rt)"
                       "ptr NIL"))
@@ -178,7 +178,7 @@
        (bc IINC)))
      ))
 
-  (check-equal? (vm-stack-n->strings inc-int-3-state)
+  (check-equal? (vm-stack->strings inc-int-3-state)
                 (list "stack holds 2 items"
                       "int $0600  (rt)"
                       "ptr NIL")))
@@ -194,7 +194,7 @@
       (bc IADD))))
 
   (define (bc-int-plus-expectation state c)
-    (check-equal? (vm-stack-n->strings state)
+    (check-equal? (vm-stack->strings state)
                   (list "stack holds 2 items"
                         (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c)))
                         "ptr NIL")))
@@ -223,7 +223,7 @@
 
   (inform-check-equal? (cpu-state-clock-cycles use-case-int-plus-state-after)
                        84)
-  (check-equal? (vm-stack-n->strings use-case-int-plus-state-after)
+  (check-equal? (vm-stack->strings use-case-int-plus-state-after)
                    (list "stack holds 4 items"
                          "int $0000  (rt)"
                          "int $060f"
@@ -243,7 +243,7 @@
       (bc ISUB))))
 
   (define (bc-int-minus-expectation state c)
-    (check-equal? (vm-stack-n->strings state)
+    (check-equal? (vm-stack->strings state)
                     (list "stack holds 2 item"
                           (format  "int $~a  (rt)" (word->hex-string (if (< c 0) (+ #x2000 c) c)))
                           "ptr NIL")))
@@ -273,7 +273,7 @@
 
    (inform-check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
                         84)
-    (check-equal? (vm-stack-n->strings use-case-int-minus-state-after)
+    (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                     (list "stack holds 4 items"
                           "int $3fff  (rt)"
                           "int $3c2f"

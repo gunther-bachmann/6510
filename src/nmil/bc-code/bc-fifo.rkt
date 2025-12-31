@@ -53,7 +53,7 @@
       FIFO_CREATE)
      ))
 
-  (pcheck-equal? (vm-stack-n->strings fifo-create-state)
+  (pcheck-equal? (vm-stack->strings fifo-create-state)
                 (list "stack holds 2 items"
                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                       "ptr NIL"))
@@ -62,7 +62,7 @@
   (pcheck-equal? (peek fifo-create-state(+ PAGE_AVAIL_0_W #x02))
                 1
                 "reference count is 1")
-  (pcheck-equal? (map (lambda (offset) (vm-cell-at-n->string fifo-create-state (+ PAGE_AVAIL_0_W offset) #f #t))
+  (pcheck-equal? (map (lambda (offset) (vm-cell-at->string fifo-create-state (+ PAGE_AVAIL_0_W offset) #f #t))
                      (list 04 06))
                 (list "ptr NIL" "ptr NIL")
                 "the first two elements of the array are decimal NIL, NIL"))
@@ -93,7 +93,7 @@
       FIFO_ENQUEUE)
      ))
 
-  (pcheck-equal? (vm-stack-n->strings enqueue-state-1)
+  (pcheck-equal? (vm-stack->strings enqueue-state-1)
                 (list "stack holds 2 items"
                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                       "ptr NIL"))
@@ -125,7 +125,7 @@
       FIFO_CREATE
       FIFO_ENQUEUE)))
 
-  (pcheck-equal? (vm-stack-n->strings enqueue-state-2)
+  (pcheck-equal? (vm-stack->strings enqueue-state-2)
                 (list "stack holds 2 items"
                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                       "ptr NIL"))
@@ -187,7 +187,7 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (vm-stack-n->strings dequeue-state-1)
+  (pcheck-equal? (vm-stack->strings dequeue-state-1)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "ptr NIL")
@@ -220,7 +220,7 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (vm-stack-n->strings dequeue-state-2)
+  (pcheck-equal? (vm-stack->strings dequeue-state-2)
                 (list "stack holds 3 items"
                       "int $0002  (rt)"
                       "int $0001"
@@ -257,19 +257,19 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (vm-stack-n->strings mem-fifo-state-1)
+  (pcheck-equal? (vm-stack->strings mem-fifo-state-1)
                 (list "stack holds 3 items"
                       "int $0002  (rt)"
                       "int $0001"
                       "ptr NIL")
                 "1 -> FIFO, 2 -> FIFO, FIFO -> 1, FIFO ->2")
-  ;; (pcheck-equal? (vm-page-n->strings mem-fifo-state-1 PAGE_AVAIL_1)
+  ;; (pcheck-equal? (vm-page->strings mem-fifo-state-1 PAGE_AVAIL_1)
   ;;               (list "page-type:      cell-pair page"
   ;;                     "previous page:  $00"
   ;;                     "slots used:     0"
   ;;                     "next free slot: $05")
   ;;               "cell pair page is completely freed after gc")
-  (pcheck-equal? (vm-page-n->strings mem-fifo-state-1 PAGE_AVAIL_0)
+  (pcheck-equal? (vm-page->strings mem-fifo-state-1 PAGE_AVAIL_0)
                 (list "page-type:      m1 page p0"
                       "previous page:  $00"
                       "slots used:     0"
@@ -302,19 +302,19 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (vm-stack-n->strings mem-fifo-state-2)
+  (pcheck-equal? (vm-stack->strings mem-fifo-state-2)
                 (list "stack holds 3 items"
                       "int $0002  (rt)"
                       "int $0001"
                       "ptr NIL")
                 "1 -> FIFO, 2 -> FIFO, FIFO -> 1, FIFO ->2")
-  ;; (pcheck-equal? (vm-page-n->strings mem-fifo-state-2 PAGE_AVAIL_1)
+  ;; (pcheck-equal? (vm-page->strings mem-fifo-state-2 PAGE_AVAIL_1)
   ;;               (list "page-type:      cell-pair page"
   ;;                     "previous page:  $00"
   ;;                     "slots used:     0"
   ;;                     "next free slot: $05")
   ;;               "cell pair page is completely freed after gc")
-  (pcheck-equal? (vm-page-n->strings mem-fifo-state-2 PAGE_AVAIL_0)
+  (pcheck-equal? (vm-page->strings mem-fifo-state-2 PAGE_AVAIL_0)
                 (list "page-type:      m1 page p0"
                       "previous page:  $00"
                       "slots used:     0"

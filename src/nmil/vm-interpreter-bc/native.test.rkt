@@ -48,7 +48,7 @@ test of bytecode implementation of native commands
        (bc PUSH_B) (byte #x16)))
      ))
 
-  (check-equal? (vm-stack-n->strings native-return-test)
+  (check-equal? (vm-stack->strings native-return-test)
                 (list "stack holds 3 items"
                       "byte $16  (rt)"
                       "byte $15"

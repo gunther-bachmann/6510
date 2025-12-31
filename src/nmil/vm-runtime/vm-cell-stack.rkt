@@ -42,9 +42,9 @@
            (only-in "../../ast/6510-relocator.rkt"
                     code-len)
            (only-in "../vm-inspector-utils.rkt"
-                    vm-deref-cell-pair-w-n->string
-                    vm-regt-n->string
-                    vm-stack-n->strings)
+                    vm-deref-cell-pair-w->string
+                    vm-regt->string
+                    vm-stack->strings)
            (only-in "./vm-m1-slots-n.rkt"
                     ALLOC_M1_P0_SLOT_TO_RT_N
                     ALLOC_M1_SLOT_TO_RA_N
@@ -229,7 +229,7 @@
      (JSR PUSH_INT_0_TO_EVLSTK)
      (JSR POP_CELL_EVLSTK_TO_RT)))
 
-  (check-equal? (vm-stack-n->strings vm_cell_stack_pop3_r_state)
+  (check-equal? (vm-stack->strings vm_cell_stack_pop3_r_state)
                 (list "stack holds 3 items"
                       "int $3fff  (rt)"
                       "int $0001"
@@ -250,7 +250,7 @@
      (JSR POP_CELL_EVLSTK_TO_RT)
      (JSR POP_CELL_EVLSTK_TO_RT)))
 
-  (check-equal? (vm-stack-n->strings vm_cell_stack_pop2_r_state)
+  (check-equal? (vm-stack->strings vm_cell_stack_pop2_r_state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "ptr NIL"))
@@ -268,7 +268,7 @@
      (JSR POP_CELL_EVLSTK_TO_RT)
      (JSR POP_CELL_EVLSTK_TO_RT)))
 
-  (check-equal? (vm-stack-n->strings vm_cell_stack_pop1_r_state)
+  (check-equal? (vm-stack->strings vm_cell_stack_pop1_r_state)
                 (list "stack is empty or tos=nil"))
 
   (check-equal? (memory-list vm_cell_stack_pop1_r_state ZP_RT (add1 ZP_RT))
@@ -283,7 +283,7 @@
      (JSR INIT_CELLSTACK)
      (JSR PUSH_NIL_TO_EVLSTK)))
 
-  (check-equal? (vm-regt-n->string test-vm_cell_stack_push_nil-a-state-after)
+  (check-equal? (vm-regt->string test-vm_cell_stack_push_nil-a-state-after)
                 "ptr NIL")
 
   (define test-vm_cell_stack_push_nil-b-state-after
@@ -301,7 +301,7 @@
      (JSR PUSH_NIL_TO_EVLSTK) ;; 7
      (JSR PUSH_NIL_TO_EVLSTK))) ;; 8
 
-  (check-equal? (vm-stack-n->strings test-vm_cell_stack_push_nil-b-state-after)
+  (check-equal? (vm-stack->strings test-vm_cell_stack_push_nil-b-state-after)
                 '("stack holds 9 items"
                   "ptr NIL  (rt)"
                   "ptr NIL"
@@ -330,9 +330,9 @@
      (LDX !$0f)
      (JSR PUSH_INT_TO_EVLSTK)))
 
-  (check-equal? (vm-regt-n->string test-vm_cell_stack_push_int-a-state-after)
+  (check-equal? (vm-regt->string test-vm_cell_stack_push_int-a-state-after)
                 "int $0fff")
-  (check-equal? (vm-stack-n->strings test-vm_cell_stack_push_int-a-state-after)
+  (check-equal? (vm-stack->strings test-vm_cell_stack_push_int-a-state-after)
                 '("stack holds 6 items"
                   "int $0fff  (rt)"
                   "int $0000"
@@ -437,7 +437,7 @@
      (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_0_TO_EVLSTK)))
 
-  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_int0_state)
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_int0_state)
                 "int $0000")
   (check-equal? (memory-list vm_cell_stack_push_r_int0_state ZP_RT (add1 ZP_RT))
                 (list #x03 #x00))
@@ -450,7 +450,7 @@
      (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_1_TO_EVLSTK)))
 
-  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_int1_state)
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_int1_state)
                 "int $0001")
   (check-equal? (memory-list vm_cell_stack_push_r_int1_state ZP_RT (add1 ZP_RT))
                 (list #x03 #x01))
@@ -463,7 +463,7 @@
      (JSR INIT_CELLSTACK)
      (JSR PUSH_INT_m1_TO_EVLSTK)))
 
-  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_intm1_state)
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_intm1_state)
                 "int $3fff")
   (check-equal? (memory-list vm_cell_stack_push_r_intm1_state ZP_RT (add1 ZP_RT))
                 (list #xff #xff))
@@ -476,7 +476,7 @@
      (JSR INIT_CELLSTACK)
      (JSR PUSH_NIL_TO_EVLSTK)))
 
-  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_nil_state)
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_nil_state)
                 "ptr NIL")
   (check-equal? (memory-list vm_cell_stack_push_r_nil_state ZP_RT (add1 ZP_RT))
                 (list #x00 #x00))
@@ -492,7 +492,7 @@
      (LDA ZP_RT+1)
      (JSR PUSH_XA_TO_EVLSTK)))
 
-  (check-equal? (vm-regt-n->string vm_cell_stack_push_r_cell_ptr_state)
+  (check-equal? (vm-regt->string vm_cell_stack_push_r_cell_ptr_state)
                 (format "ptr[1] $~a02" (format-hex-byte PAGE_AVAIL_2)))
   (check-equal? (memory-list vm_cell_stack_push_r_cell_ptr_state ZP_RT (add1 ZP_RT))
                 (list #x02 PAGE_AVAIL_2)))
@@ -507,7 +507,7 @@
      (JSR PUSH_INT_m1_TO_EVLSTK)
      (JSR PUSH_INT_1_TO_EVLSTK)))
 
-  (check-equal? (vm-stack-n->strings vm_cell_stack_push_r_push1_state)
+  (check-equal? (vm-stack->strings vm_cell_stack_push_r_push1_state)
                 (list "stack holds 3 items"
                       "int $0001  (rt)"
                       "int $3fff"
@@ -526,7 +526,7 @@
      (JSR PUSH_INT_1_TO_EVLSTK)
      (JSR PUSH_NIL_TO_EVLSTK)))
 
-  (check-equal? (vm-stack-n->strings vm_cell_stack_push_r_push2_state)
+  (check-equal? (vm-stack->strings vm_cell_stack_push_r_push2_state)
                 (list "stack holds 4 items"
                       "ptr NIL  (rt)"
                       "int $0001"
@@ -588,7 +588,7 @@
      (JSR WRITE_INTm1_TO_RT)
      (JSR PUSH_RT_TO_EVLSTK)))
 
-  (check-equal? (vm-stack-n->strings vm-cell-stack-just-push-rt-state)
+  (check-equal? (vm-stack->strings vm-cell-stack-just-push-rt-state)
                 (list "stack holds 2 items"
                       "int $1fff  (rt)"
                       "int $1fff")))
@@ -649,11 +649,11 @@
      (LDY !$04)
      (JSR POP_CELL_EVLSTK_TO_CELLy_RT)))
 
-  (check-equal? (vm-stack-n->strings vm-pop-fstos-to-celly-rt-state)
+  (check-equal? (vm-stack->strings vm-pop-fstos-to-celly-rt-state)
                 (list "stack holds 2 items"
                       (format  "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_2))
                       "ptr NIL"))
-  (check-equal? (vm-deref-cell-pair-w-n->string vm-pop-fstos-to-celly-rt-state (+ PAGE_AVAIL_2_W #x02))
+  (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state (+ PAGE_AVAIL_2_W #x02))
                 "(int $3fff . int $0001)"))
 
 ;; ----

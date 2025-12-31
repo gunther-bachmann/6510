@@ -33,9 +33,9 @@
          (only-in "../../ast/6510-relocator.rkt"
                   code-len)
          (only-in "../vm-inspector-utils.rkt"
-                  vm-cell-at-nil-n?
-                  vm-rega-n->string
-                  vm-regt-n->string)
+                  vm-cell-at-nil?
+                  vm-rega->string
+                  vm-regt->string)
          (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   ZP_RP
@@ -93,14 +93,14 @@
      #:runtime-code test-runtime
      (JSR WRITE_NIL_TO_RP)))
 
-  (check-true (vm-cell-at-nil-n? write-nil-to-rp ZP_RP))
+  (check-true (vm-cell-at-nil? write-nil-to-rp ZP_RP))
 
   (define write-nil-to-rt
     (compact-run-code-in-test-
      #:runtime-code test-runtime
      (JSR WRITE_NIL_TO_RT)))
 
-  (check-true (vm-cell-at-nil-n? write-nil-to-rt ZP_RT)))
+  (check-true (vm-cell-at-nil? write-nil-to-rt ZP_RT)))
 
 ;; @DC-FUN: CP_RA_TO_RT, group: register
 ;; copy RA -> RT
@@ -228,9 +228,9 @@
     (JSR WRITE_INT1_TO_RT)
     (JSR CP_RT_TO_RA)))
 
-  (check-equal? (vm-rega-n->string vm-cp-rt-to-ra-state)
+  (check-equal? (vm-rega->string vm-cp-rt-to-ra-state)
                 "int $0001")
-  (check-equal? (vm-regt-n->string vm-cp-rt-to-ra-state)
+  (check-equal? (vm-regt->string vm-cp-rt-to-ra-state)
                 "int $0001"))
 
 (define WRITE_INT0_TO_RT '())
@@ -282,7 +282,7 @@
      (LDY !$02)
      (JSR WRITE_INT_AY_TO_RT)))
 
-  (check-equal? (vm-regt-n->string vm-write-int-ay-to-rt-state)
+  (check-equal? (vm-regt->string vm-write-int-ay-to-rt-state)
                 "int $0201"))
 
 ;; @DC-FUN: SWAP_ZP_WORD, group: register

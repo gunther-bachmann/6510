@@ -38,7 +38,7 @@ test of bytecode implementation of pushing constants
       (bc BREAK))
      ))
 
-  (check-equal? (vm-stack-n->strings use-case-push-num-s-state-after)
+  (check-equal? (vm-stack->strings use-case-push-num-s-state-after)
                 (list "stack holds 5 items"
                       "int $3fff  (rt)"
                       "int $0002"

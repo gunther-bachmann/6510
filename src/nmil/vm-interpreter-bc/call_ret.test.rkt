@@ -95,7 +95,7 @@
                       (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-   (check-equal? (vm-stack-n->strings test-bc-before-call-state)
+   (check-equal? (vm-stack->strings test-bc-before-call-state)
                  (list "stack holds 2 items"
                        "int $0000  (rt)"
                        "ptr NIL")
@@ -128,7 +128,7 @@
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-   (check-equal? (vm-stack-n->strings test-bc-call-state)
+   (check-equal? (vm-stack->strings test-bc-call-state)
                     (list "stack holds 3 items"
                           "int $0001  (rt)"
                           "int $0000"
@@ -163,7 +163,7 @@
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-  (check-equal? (vm-stack-n->strings test-bc-call-wp-state)
+  (check-equal? (vm-stack->strings test-bc-call-wp-state)
                    (list "stack holds 4 items"
                          "int $0001  (rt)"
                          "int $3fff"
@@ -198,7 +198,7 @@
                          (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-  (check-equal? (vm-stack-n->strings test-bc-call-wl-state)
+  (check-equal? (vm-stack->strings test-bc-call-wl-state)
                    (list "stack holds 4 items"
                          "int $0001  (rt)"
                          "int $3fff"
@@ -224,7 +224,7 @@
              (bc BREAK))
      ))
 
- (check-equal? (vm-stack-n->strings bc-nil-ret-state)
+ (check-equal? (vm-stack->strings bc-nil-ret-state)
                   (list "stack holds 2 items"
                         "int $0001  (rt)"
                         "ptr NIL"))
@@ -254,7 +254,7 @@
              (bc BREAK))
      ))
 
-  (check-equal? (vm-stack-n->strings bc-nil-ret-local-state)
+  (check-equal? (vm-stack->strings bc-nil-ret-local-state)
                    (list "stack holds 2 items"
                          "int $0001  (rt)"
                          "ptr NIL"))
@@ -287,7 +287,7 @@
              (bc TAIL_CALL)
              (bc BREAK))))
 
-   (check-equal? (vm-stack-n->strings bc-tail-call-state)
+   (check-equal? (vm-stack->strings bc-tail-call-state)
                    (list "stack holds 2 items"
                          "ptr NIL  (rt)"
                          "ptr NIL"))
@@ -312,11 +312,11 @@
            (define cell-cdr (peek-word-at-address state (+ address 4)))
            (unless (= (bitwise-and #x01 cell-cdr) #x00)
              (raise-user-error (format "cdr cell is not a ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
-           (if (vm-cell-at-nil-n? state address)
+           (if (vm-cell-at-nil? state address)
                (reverse string-list)
                (vm-list->strings state
                                 cell-cdr
-                                (cons (vm-cell-at-n->string state (+ 2 address))
+                                (cons (vm-cell-at->string state (+ 2 address))
                                       string-list)))]))
 
   (define bc-tail-call-reverse-state
@@ -351,7 +351,7 @@
   (check-equal? (memory-list bc-tail-call-reverse-state ZP_PAGE_FREE_SLOTS_LIST)
                    (list PAGE_AVAIL_0)
                    "the page with free slots for profile 0")
-  (check-equal? (vm-page-n->strings bc-tail-call-reverse-state PAGE_AVAIL_0)
+  (check-equal? (vm-page->strings bc-tail-call-reverse-state PAGE_AVAIL_0)
                    (list "page-type:      m1 page p0"
                          "previous page:  $00"
                          "slots used:     3"
@@ -363,7 +363,7 @@
                          "int $0001"
                          "int $0002")
                    "list got reversed")
-  (check-equal? (vm-stack-n->strings bc-tail-call-reverse-state)
+  (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
                    (list "stack holds 2 items"
                          (format "ptr[1] $~a08  (rt)" (format-hex-byte PAGE_AVAIL_0))
                          "ptr NIL"))
@@ -396,7 +396,7 @@
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))))
-  (check-equal? (vm-stack-n->strings test-bc-ret-state)
+  (check-equal? (vm-stack->strings test-bc-ret-state)
                    (list "stack holds 3 items"
                          "int $0001  (rt)"
                          "int $0000"

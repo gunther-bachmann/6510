@@ -42,7 +42,7 @@
       (bc PUSH_I1)
       (bc BREAK)
       (bc PUSH_I2))))
-  (check-equal? (vm-stack-n->strings branch-true-0-state)
+  (check-equal? (vm-stack->strings branch-true-0-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -55,7 +55,7 @@
       (bc BREAK)
       (org-align #x78)
       (bc PUSH_I2))))
-  (check-equal? (vm-stack-n->strings branch-true-1-state)
+  (check-equal? (vm-stack->strings branch-true-1-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -79,7 +79,7 @@
        ;; now at 8100
        (bc PUSH_I2)))
    ))
-  (check-equal? (vm-stack-n->strings branch-true-2-state)
+  (check-equal? (vm-stack->strings branch-true-2-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -105,7 +105,7 @@
        ;; now at 8102
        (bc PUSH_I2)))
    ))
-  (check-equal? (vm-stack-n->strings branch-true-3-state)
+  (check-equal? (vm-stack->strings branch-true-3-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -122,7 +122,7 @@
        (bc PUSH_I1)
        (bc T_P_BRA) (byte $fd)))
      ))
-  (check-equal? (vm-stack-n->strings branch-true-4-state)
+  (check-equal? (vm-stack->strings branch-true-4-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -153,7 +153,7 @@
        (bc PUSH_I1)
        (bc T_P_BRA) (byte $fd)))
      ))
-  (check-equal? (vm-stack-n->strings branch-true-5-state)
+  (check-equal? (vm-stack->strings branch-true-5-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL")))
@@ -168,7 +168,7 @@
       (bc BREAK)
       (bc PUSH_I2))
      ))
-  (check-equal? (vm-stack-n->strings branch-false-0-state)
+  (check-equal? (vm-stack->strings branch-false-0-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -181,7 +181,7 @@
       (bc BREAK)
       (org-align #x78)
       (bc PUSH_I2))))
-  (check-equal? (vm-stack-n->strings branch-false-1-state)
+  (check-equal? (vm-stack->strings branch-false-1-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -205,7 +205,7 @@
        ;; now at 8100
        (bc PUSH_I2)))
    ))
-  (check-equal? (vm-stack-n->strings branch-false-2-state)
+  (check-equal? (vm-stack->strings branch-false-2-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -231,7 +231,7 @@
        ;; now at 8102
        (bc PUSH_I2)))
    ))
-  (check-equal? (vm-stack-n->strings branch-false-3-state)
+  (check-equal? (vm-stack->strings branch-false-3-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -248,7 +248,7 @@
        (bc PUSH_I0)
        (bc F_P_BRA) (byte $fd)))
      ))
-  (check-equal? (vm-stack-n->strings branch-false-4-state)
+  (check-equal? (vm-stack->strings branch-false-4-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -279,7 +279,7 @@
        (bc PUSH_I0)
        (bc F_P_BRA) (byte $fd)))
      ))
-  (check-equal? (vm-stack-n->strings branch-false-5-state)
+  (check-equal? (vm-stack->strings branch-false-5-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL")))
@@ -293,7 +293,7 @@
       (bc PUSH_IM1)
       (bc BREAK)
       (bc PUSH_I1))))
-  (check-equal? (vm-stack-n->strings goto-0-state)
+  (check-equal? (vm-stack->strings goto-0-state)
                 (list "stack holds 3 items"
                       "int $0001  (rt)"
                       "int $0000"
@@ -308,7 +308,7 @@
       (org-align #x78)
       (bc PUSH_I1))
      ))
-  (check-equal? (vm-stack-n->strings goto-1-state)
+  (check-equal? (vm-stack->strings goto-1-state)
                 (list "stack holds 3 items"
                       "int $0001  (rt)"
                       "int $0000"
@@ -333,7 +333,7 @@
        ;; now at 8100
        (bc PUSH_IM1)))
    ))
-  (check-equal? (vm-stack-n->strings goto-2-state)
+  (check-equal? (vm-stack->strings goto-2-state)
                 (list "stack holds 5 items"
                       "int $3fff  (rt)"
                       "int $0002"
@@ -362,7 +362,7 @@
        ;; now at 8102
        (bc PUSH_IM1)))
    ))
-  (check-equal? (vm-stack-n->strings goto-3-state)
+  (check-equal? (vm-stack->strings goto-3-state)
                 (list "stack holds 5 items"
                       "int $3fff  (rt)"
                       "int $0002"
@@ -381,7 +381,7 @@
        (bc BREAK)
        (bc GOTO) (byte $fe)))
      ))
-  (check-equal? (vm-stack-n->strings goto-4-state)
+  (check-equal? (vm-stack->strings goto-4-state)
                 (list "stack holds 3 items"
                       "int $0001  (rt)"
                       "int $0000"
@@ -413,7 +413,7 @@
        (bc PUSH_IM1)
        (bc GOTO) (byte $fd)))
      ))
-  (check-equal? (vm-stack-n->strings goto-5-state)
+  (check-equal? (vm-stack->strings goto-5-state)
                 (list "stack holds 6 items"
                       "int $0000  (rt)"
                       "int $3fff"

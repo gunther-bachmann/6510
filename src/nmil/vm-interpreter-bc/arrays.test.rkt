@@ -107,7 +107,7 @@
   (check-equal? (memory-list push-array-field-state (+ ZP_RA 0) (+ ZP_RA 1))
                 (list #x02 PAGE_AVAIL_0)
                 "RA holds a pointer to the array, too")
-  (check-equal? (vm-stack-n->strings push-array-field-state)
+  (check-equal? (vm-stack->strings push-array-field-state)
                 (list "stack holds 4 items"
                       "int $0002  (rt)"
                       "int $0001"
@@ -128,7 +128,7 @@
       (bc POP_TO_AF))
      ))
 
-  (check-equal? (vm-stack-n->strings pop-to-array-field-state)
+  (check-equal? (vm-stack->strings pop-to-array-field-state)
                 (list "stack holds 2 items"
                       (format "ptr[2] $~a02  (rt)" (number->string PAGE_AVAIL_0 16))
                       "ptr NIL"))

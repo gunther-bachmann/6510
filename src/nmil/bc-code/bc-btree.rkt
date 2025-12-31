@@ -163,7 +163,7 @@
       BTREE_MAKE_ROOT)
      ))
 
-  (check-equal? (vm-stack-n->strings btree-make-root-state)
+  (check-equal? (vm-stack->strings btree-make-root-state)
                   (list "stack holds 2 items"
                         (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                         "ptr NIL"))
@@ -180,7 +180,7 @@
       (list (org #x1800))
       BTREE_MAKE_ROOT)))
 
-  (check-equal? (vm-stack-n->strings btree-make-root-2-state)
+  (check-equal? (vm-stack->strings btree-make-root-2-state)
                   (list "stack holds 2 items"
                         "int $0001  (rt)"
                         "ptr NIL")))
@@ -210,7 +210,7 @@
       BTREE_VALUE_P)
      ))
 
-  (check-equal? (vm-stack-n->strings btree-value-p-state)
+  (check-equal? (vm-stack->strings btree-value-p-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "ptr NIL")
@@ -231,7 +231,7 @@
       BTREE_VALUE_P)
      ))
 
-  (check-equal? (vm-stack-n->strings btree-value-p2-state)
+  (check-equal? (vm-stack->strings btree-value-p2-state)
                 (list "stack holds 2 items"
                       "int $0000  (rt)"
                       "ptr NIL")
@@ -262,7 +262,7 @@
       BTREE_NODE_P)
      ))
 
-  (check-equal? (vm-stack-n->strings btree-node-p-state)
+  (check-equal? (vm-stack->strings btree-node-p-state)
                 (list "stack holds 2 items"
                       "int $0000  (rt)"
                       "ptr NIL")
@@ -283,7 +283,7 @@
       BTREE_NODE_P)
      ))
 
-  (check-equal? (vm-stack-n->strings btree-node-p2-state)
+  (check-equal? (vm-stack->strings btree-node-p2-state)
                 (list "stack holds 2 items"
                       "int $0000  (rt)"
                       "ptr NIL")
@@ -369,7 +369,7 @@
       BTREE_VALIDATE)
     ))
 
-  (check-equal? (vm-stack-n->strings btree-validate-state)
+  (check-equal? (vm-stack->strings btree-validate-state)
                 (list "stack is empty or tos=nil")
                 "validation leaves no value on the stack")
   (check-equal? (memory-list btree-validate-state ZP_VM_PC (add1 ZP_VM_PC))
@@ -493,7 +493,7 @@
       BTREE_DEPTH)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-1-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-1-state 10 #t))
                 (list "stack holds 2 items"
                       "1  (rt)"
                       "NIL"))
@@ -515,7 +515,7 @@
       BTREE_DEPTH)
     ))
 
-  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-2-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-2-state 10 #t))
                 (list "stack holds 2 items"
                       "2  (rt)"
                       "NIL"))
@@ -539,7 +539,7 @@
       BTREE_DEPTH)
     ))
 
-  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-3-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-3-state 10 #t))
                 (list "stack holds 2 items"
                       "3  (rt)"
                       "NIL"))
@@ -562,7 +562,7 @@
       BTREE_DEPTH)                              ;;          2  nil                   
     ))                                          ;;                    
                                                 ;;                    
-  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-5-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-5-state 10 #t))
                 (list "stack holds 2 items"
                       "2  (rt)"
                       "NIL"))
@@ -589,7 +589,7 @@
     ))                                          ;;                        / \
                                                 ;;                       2  nil
 
-  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-4-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-4-state 10 #t))
                 (list "stack holds 2 items"
                       "3  (rt)"
                       "NIL"))
@@ -616,7 +616,7 @@
       BTREE_DEPTH)                              ;;                        / \      
     ))                                          ;;                       2  nil    
 
-   (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-depth-6-state 10 #t))
+   (check-equal? (shorten-cell-strings (vm-stack->strings btree-depth-6-state 10 #t))
                 (list "stack holds 2 items"
                       "3  (rt)"
                       "NIL"))
@@ -783,7 +783,7 @@
       BTREE_PATH_TO_LAST)                       ;;
      ))
 
-  (check-equal? (shorten-cell-string-n (vm-regt-n->string path-to-last-2-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string path-to-last-2-state #t))
                 (string-append
                  "((1 . ((2 . NIL) . 1))"
                  " . ((1 . (0 . ((2 . NIL) . 1)))"
@@ -840,7 +840,7 @@
       BTREE_MAKE_ROOT
       BTREE_VALUE_P)))
 
-  (check-equal? (vm-stack-n->strings node-for-path-0-state)
+  (check-equal? (vm-stack->strings node-for-path-0-state)
                 (list "stack holds 2 items"
                       "int $0002  (rt)"
                       "ptr NIL"))
@@ -863,7 +863,7 @@
       BTREE_VALUE_P)
      ))
 
-  (check-equal? (vm-stack-n->strings node-for-path-1-state)
+  (check-equal? (vm-stack->strings node-for-path-1-state)
                 (list "stack holds 2 items"
                       "int $0000  (rt)"
                       "ptr NIL")))
@@ -962,7 +962,7 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (vm-regt-n->string prev-0-state #t)
+  (pcheck-equal? (vm-regt->string prev-0-state #t)
                 "ptr NIL")
 
   (define prev-1-state
@@ -987,7 +987,7 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (vm-regt-n->string prev-1-state #t)
+  (pcheck-equal? (vm-regt->string prev-1-state #t)
                 "ptr NIL")
 
   (define prev-2-state
@@ -1012,7 +1012,7 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (shorten-cell-string-n (vm-regt-n->string prev-2-state #t))
+  (pcheck-equal? (shorten-cell-string (vm-regt->string prev-2-state #t))
                 "((0 . (2 . 3)) . NIL)")
 
   (define prev-3-state
@@ -1039,7 +1039,7 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (shorten-cell-string-n (vm-regt-n->string prev-3-state #t))
+  (pcheck-equal? (shorten-cell-string (vm-regt->string prev-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
 
   
@@ -1075,7 +1075,7 @@
      ))
 
   (pcheck-equal? (shorten-cell-strings
-                     (vm-stack-n->strings prev-4-state 10 #t))
+                     (vm-stack->strings prev-4-state 10 #t))
                 (list "stack holds 5 items"
                       "((0 . (1 . ((2 . 3) . 4))) . NIL)  (rt)"                      
                       "((0 . (2 . 3)) . ((0 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL)))"
@@ -1121,8 +1121,8 @@
       REVERSE)
      )) ;; TODO remove #t
 
-  (check-equal? (shorten-cell-string-n
-                 (vm-regt-n->string reverse-0-state #t))
+  (check-equal? (shorten-cell-string
+                 (vm-regt->string reverse-0-state #t))
                 "(0 . (1 . (2 . (3fff . NIL))))")
   (inform-check-equal? (cpu-state-clock-cycles reverse-0-state)
                 5027))
@@ -1174,7 +1174,7 @@
       APPEND
       REVERSE)))
 
-  (pcheck-equal? (shorten-cell-string-n (vm-regt-n->string append-0-state #t))
+  (pcheck-equal? (shorten-cell-string (vm-regt->string append-0-state #t))
                 "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
   (inform-check-equal? (cpu-state-clock-cycles append-0-state)
                 7953))
@@ -1287,7 +1287,7 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-regt-n->string next-0-state #t)
+  (check-equal? (vm-regt->string next-0-state #t)
                 "ptr NIL")
 
   (define next-1-state
@@ -1312,7 +1312,7 @@
       REVERSE)
      ))
 
-  (check-equal? (shorten-cell-string-n (vm-regt-n->string next-1-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string next-1-state #t))
                 "((1 . (2 . 3)) . NIL)")
 
 
@@ -1338,7 +1338,7 @@
       REVERSE)
      ))
 
-  (check-equal? (vm-regt-n->string next-2-state #t)
+  (check-equal? (vm-regt->string next-2-state #t)
                 "ptr NIL")
 
   (define next-3-state
@@ -1365,7 +1365,7 @@
       REVERSE)
      ))
 
-  (check-equal? (shorten-cell-string-n (vm-regt-n->string next-3-state #t))
+  (check-equal? (shorten-cell-string (vm-regt->string next-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
 
   (define next-4-state
@@ -1402,7 +1402,7 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings next-4-state 10 #t))
+                     (vm-stack->strings next-4-state 10 #t))
                 (list "stack holds 6 items"
                       "NIL  (rt)"
                       "((1 . ((2 . 3) . 4)) . ((1 . (1 . ((2 . 3) . 4))) . NIL))"
@@ -1554,7 +1554,7 @@
     ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings rec-rebuild-path-with-0-state 10 #t))
+                     (vm-stack->strings rec-rebuild-path-with-0-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                       "((0 . ((4 . 5) . 6))"
@@ -1717,7 +1717,7 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-after-0-state 10 #t))
+                     (vm-stack->strings add-after-0-state 10 #t))
                 (list "stack holds 3 items"
                       "((1 . (4 . 5)) . NIL)  (rt)"
                       "((0 . (4 . NIL)) . NIL)"
@@ -1750,7 +1750,7 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-after-1-state 10 #t))
+                     (vm-stack->strings add-after-1-state 10 #t))
                 (list "stack holds 3 items"
                       "((0 . (5 . 6)) . ((1 . (4 . (5 . 6))) . NIL))  (rt)"
                       "((0 . (4 . 6)) . NIL)"
@@ -1785,7 +1785,7 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-after-2-state 10 #t))
+                     (vm-stack->strings add-after-2-state 10 #t))
                 (list "stack holds 3 items"
                       "((0 . (5 . (6 . 7))) . ((1 . (4 . (5 . (6 . 7)))) . NIL))  (rt)"
                       "((0 . (4 . (6 . 7))) . NIL)"
@@ -1818,7 +1818,7 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-after-3-state 10 #t))
+                     (vm-stack->strings add-after-3-state 10 #t))
                 (list "stack holds 3 items"
                       "((1 . (6 . 7)) . ((1 . (5 . (6 . 7))) . NIL))  (rt)"
                       "((1 . (5 . 6)) . NIL)"
@@ -1873,7 +1873,7 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-after-4-state 10 #t))
+                     (vm-stack->strings add-after-4-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((1 . (6 . 7))"
@@ -2020,7 +2020,7 @@
       REVERSE)))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-before-0-state 10 #t))
+                     (vm-stack->strings add-before-0-state 10 #t))
                 (list "stack holds 3 items"
                       "((0 . (5 . 6)) . NIL)  (rt)"
                       "((0 . (6 . NIL)) . NIL)"
@@ -2075,7 +2075,7 @@
       REVERSE)))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-before-1-state 10 #t))
+                     (vm-stack->strings add-before-1-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . 6))"
@@ -2114,7 +2114,7 @@
       REVERSE)))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-before-2-state 10 #t))
+                     (vm-stack->strings add-before-2-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . 6))"
@@ -2169,7 +2169,7 @@
       REVERSE)))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-before-3-state 10 #t))
+                     (vm-stack->strings add-before-3-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . 6))"
@@ -2209,7 +2209,7 @@
      ))
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-before-4-state 10 #t))
+                     (vm-stack->strings add-before-4-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . 6))"
@@ -2282,7 +2282,7 @@
                 17168)
 
   (check-equal? (shorten-cell-strings
-                     (vm-stack-n->strings add-before-5-state 10 #t))
+                     (vm-stack->strings add-before-5-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append 
                        "((0 . (5 . 6))"
@@ -2389,7 +2389,7 @@
       BTREE_FROM_LIST
       REVERSE)
      ))
-  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-from-list-1-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-from-list-1-state 10 #t))
                 (list "stack holds 3 items"
                       "(1 . NIL)  (rt)"
                       "(1 . NIL)"
@@ -2430,7 +2430,7 @@
       BTREE_FROM_LIST
       REVERSE)))
 
-  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-from-list-0-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-from-list-0-state 10 #t))
                 (list "stack holds 3 items"
                       "((((1 . 2) . (3 . 4)) . ((5 . 6) . (7 . 8))) . (((9 . NIL) . NIL) . NIL))  (rt)"
                       "(1 . (2 . (3 . (4 . (5 . (6 . (7 . (8 . (9 . NIL)))))))))"
@@ -2461,7 +2461,7 @@
       BTREE_FROM_LIST
       REVERSE)))
 
-  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-from-list-2-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-from-list-2-state 10 #t))
                 (list "stack holds 3 items"
                       "((1 . 2) . (3 . 4))  (rt)"
                       "(1 . (2 . (3 . (4 . NIL))))"
@@ -2550,7 +2550,7 @@
       BTREE_VALUE_P)
      ))
 
-  (check-equal? (shorten-cell-strings (vm-stack-n->strings btree-to-list-0-state 10 #t))
+  (check-equal? (shorten-cell-strings (vm-stack->strings btree-to-list-0-state 10 #t))
                 (list "stack holds 3 items"
                       "(1 . (2 . (3 . (4 . NIL))))  (rt)"
                       "((((1 . 2) . NIL) . ((3 . NIL) . (4 . NIL))) . NIL)"
@@ -2755,7 +2755,7 @@
        (bc BREAK))
       dependecies-remove-value-at)))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings remove-value-at-0-state 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-0-state 10 #t))
                 (list "stack holds 3 items"
                       "NIL  (rt)"
                       "((0 . (8 . NIL)) . NIL)"
@@ -2772,7 +2772,7 @@
        (bc BREAK))
       dependecies-remove-value-at)))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings remove-value-at-1-state 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-1-state 10 #t))
                 (list "stack holds 2 items"
                       "NIL  (rt)"
                       "NIL"))
@@ -2803,7 +2803,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-2-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-2-state) 10 #t))
                 (list "stack holds 3 items"
                       "((0 . (9 . NIL)) . NIL)  (rt)"
                       "((0 . (8 . 9)) . NIL)"
@@ -2835,7 +2835,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-3-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-3-state) 10 #t))
                 (list "stack holds 3 items"
                       "((0 . (8 . NIL)) . NIL)  (rt)"
                       "((1 . (8 . 9)) . NIL)"
@@ -2902,7 +2902,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-4-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-4-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . NIL))"
@@ -2980,7 +2980,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-5-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-5-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (6 . NIL))"
@@ -3057,7 +3057,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6a-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6a-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (7 . NIL))"
@@ -3129,7 +3129,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6b-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6b-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
@@ -3197,7 +3197,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6c-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6c-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . ((5 . NIL) . 7)))"
@@ -3244,7 +3244,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6d-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6d-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
@@ -3316,7 +3316,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-6-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
@@ -3427,7 +3427,7 @@
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
                 57282)
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings (remove-value-at-7-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (6 . NIL)))"
@@ -3477,7 +3477,7 @@
        (bc BREAK))
       BTREE_ROOT_FOR_PATH)))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings root-for-path-0-state 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings root-for-path-0-state 10 #t))
                 (list "stack holds 2 items"
                       "NIL  (rt)"
                       "NIL"))
@@ -3498,7 +3498,7 @@
        (bc BREAK))
       BTREE_ROOT_FOR_PATH)))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings root-for-path-1-state 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings root-for-path-1-state 10 #t))
                 (list "stack holds 3 items"
                       "(5 . NIL)  (rt)"
                       "((0 . (5 . NIL)) . NIL)"
@@ -3559,7 +3559,7 @@
        (bc BREAK))
       BTREE_ROOT_FOR_PATH)))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack-n->strings root-for-path-2-state 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings root-for-path-2-state 10 #t))
                 (list "stack holds 3 items"
                       "((4 . ((5 . NIL) . 7)) . 8)  (rt)"
                       (string-append ""

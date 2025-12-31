@@ -1,16 +1,16 @@
 #lang racket/base
 
-(provide vm-cell-at-nil-n?
-         vm-stack-n->strings
-         vm-cell-at-n->string
-         vm-cell-n->string
-         vm-page-n->strings
-         vm-regt-n->string
-         vm-regp-n->string
-         vm-rega-n->string
-         vm-deref-cell-pair-w-n->string
-         vm-deref-cell-w-n->string
-         shorten-cell-string-n
+(provide vm-cell-at-nil?
+         vm-stack->strings
+         vm-cell-at->string
+         vm-cell->string
+         vm-page->strings
+         vm-regt->string
+         vm-regp->string
+         vm-rega->string
+         vm-deref-cell-pair-w->string
+         vm-deref-cell-w->string
+         shorten-cell-string
          shorten-cell-strings
 
          vm-slot->string)
@@ -53,7 +53,7 @@
            "../6510.rkt"))
 
 ;; write a status string of a memory page
-(define (vm-page-n->strings state page)
+(define (vm-page->strings state page)
   (define page-type-enc (peek state (bytes->int 0 page)))
   (define next-free-slot (peek state (bytes->int #xfe page)))
   (define page-type
@@ -88,18 +88,11 @@
    str
    ""))
 
-;; shorten verbose strings (e.g. pair-ptr cells or int cells)
-(define (shorten-cell-string-n str)
-  (regexp-replace*
-   #px"(ptr(\\[[-0-9]*\\])? (\\$[0-9A-Fa-f]*)?|int \\$0{0,3})"
-   str
-   ""))
-
 (define (shorten-cell-strings strings)
   (map shorten-cell-string strings))
 
 ;; produce strings describing the current cell-stack status
-(define (vm-stack-n->strings state (max-count 10) (follow #f))
+(define (vm-stack->strings state (max-count 10) (follow #f))
   (define stack-tos-idx (peek state ZP_CELL_STACK_TOS))
   (define stack-lb-page-start (peek-word-at-address state ZP_CELL_STACK_LB_PTR))
   (define stack-hb-page-start (peek-word-at-address state ZP_CELL_STACK_HB_PTR))
@@ -111,9 +104,9 @@
      (define low-bytes (memory-list state (+ stack-lb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-lb-page-start stack-tos-idx)))
      (define high-bytes (memory-list state (+ stack-hb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-hb-page-start stack-tos-idx)))
      (define stack-item-no (+ values-count 1))
-     (define stack-strings (reverse (map (lambda (pair) (vm-cell-n->string (car pair) (cdr pair) state follow)) (map cons low-bytes high-bytes))))
+     (define stack-strings (reverse (map (lambda (pair) (vm-cell->string (car pair) (cdr pair) state follow)) (map cons low-bytes high-bytes))))
      (cons (format "stack holds ~a ~a" stack-item-no (if (= 1 stack-item-no) "item" "items"))
-           (cons (format "~a  (rt)" (vm-regt-n->string state follow)) stack-strings))]))
+           (cons (format "~a  (rt)" (vm-regt->string state follow)) stack-strings))]))
 
 ;; make a list of adjacent pairs
 (define (pairing list (paired-list '()))
@@ -128,24 +121,24 @@
                 '((1 . 2) (3 . 4) (5 . 6))))
 
 ;; write the car, cdr cell of the cell-pair at word in memory
-(define (vm-deref-cell-pair-w-n->string state word (follow #f) (visited (list)))
+(define (vm-deref-cell-pair-w->string state word (follow #f) (visited (list)))
   (define derefed-word-car (peek-word-at-address state (+ 2 word)))
   (define derefed-word-cdr (peek-word-at-address state (+ 4 word)))
   (format "(~a . ~a)"
-          (vm-cell-w-n->string derefed-word-car state follow visited)
-          (vm-cell-w-n->string derefed-word-cdr state follow visited)))
+          (vm-cell-w->string derefed-word-car state follow visited)
+          (vm-cell-w->string derefed-word-cdr state follow visited)))
 
 ;; derefence word to cell and write cell as string
-(define (vm-deref-cell-w-n->string state word)
+(define (vm-deref-cell-w->string state word)
   (define derefed-word (peek-word-at-address state word))
-  (format "~a" (vm-cell-w-n->string derefed-word)))
+  (format "~a" (vm-cell-w->string derefed-word)))
 
 ;; write the car, cdr cell of the cell-pair at low/high in memory
 (define (vm-deref-cell-pair->string state low high (follow #f) (visited (list)))
-  (vm-deref-cell-pair-w-n->string state (bytes->int low high) follow visited))
+  (vm-deref-cell-pair-w->string state (bytes->int low high) follow visited))
 
-(define (vm-cell-w-n->string word (state '()) (follow #f) (visited (list)))
-  (vm-cell-n->string (low-byte word) (high-byte word) state follow visited))
+(define (vm-cell-w->string word (state '()) (follow #f) (visited (list)))
+  (vm-cell->string (low-byte word) (high-byte word) state follow visited))
 
 ;; get the refcount of a cell (either on cell page, or on m1 page)
 (define (refcount-of-cell state low high)
@@ -185,7 +178,7 @@
 
 ;; write decoded cell described by low high
 ;; the low 2 bits are used for pointer tagging
-(define (vm-cell-n->string low high (state '()) (follow #f) (visited (list)))
+(define (vm-cell->string low high (state '()) (follow #f) (visited (list)))
   (cond
     [(memq (bytes->int low high) visited)
      (format "RECURSION->$~a~a" (format-hex-byte high) (format-hex-byte low))]
@@ -208,64 +201,31 @@
     ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
     [else "?"]))
 
-;; write decoded cell described by low high
-;; the low 2 bits are used for pointer tagging
-(define (vm-cell->string low high (state '()) (follow #f) (visited (list)))
-  (cond
-    [(memq (bytes->int low high) visited)
-     (format "RECURSION->$~a~a" (format-hex-byte high) (format-hex-byte low))]
-    [(= 0 low) "ptr NIL"]
-    [(= 0 (bitwise-and #x01 low)) (format "ptr[~a] $~a~a"
-                                          (if (empty? state) "-" (refcount-of-cell state low high))
-                                          (format-hex-byte high)
-                                          (format-hex-byte (bitwise-and #xfe low)))]
-    ;; [(= 1 (bitwise-and #x03 low))
-    ;;  (string-append (format "pair-ptr[~a] $~a~a"
-    ;;                         (if (empty? state) "-" (refcount-of-cell-pair state low high))
-    ;;                         (format-hex-byte high)
-    ;;                         (format-hex-byte (bitwise-and #xfd low)))
-    ;;                 (if follow
-    ;;                     (vm-deref-cell-pair->string state low high #t (cons (bytes->int low high) visited))
-    ;;                     ""))]
-    [(= 3 (bitwise-and #x03 low)) (format "int $~a~a"
-                                          (format-hex-byte (arithmetic-shift low -2))
-                                          (format-hex-byte high))]
-    [(= TAG_BYTE_BYTE_CELL (bitwise-and #xff low)) (format "byte $~a" (format-hex-byte high))]
-    ;; [(= 0 (bitwise-and #xc0 low))
-    ;;  (define array-str (format "cell-array len=$~a" (format-hex-byte high)))
-    ;;  (if follow
-    ;;      (format "~a [...]" array-str)
-    ;;      array-str)]
-    ;; TODO: a structure has a special value + follow bytes
-    ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
-    ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells
-    [else "?"]))
-
 ;; is cell at the given location = NIL?
-(define (vm-cell-at-nil-n? state loc)
+(define (vm-cell-at-nil? state loc)
   (= TAGGED_NIL (peek-word-at-address state loc)))
 
 ;; print the cell at the given location (reverse endianess)
-(define (vm-cell-at-n->string state loc (rev-endian #f) (follow #f))
-  (vm-cell-w-n->string (peek-word-at-address state loc rev-endian) state follow))
+(define (vm-cell-at->string state loc (rev-endian #f) (follow #f))
+  (vm-cell-w->string (peek-word-at-address state loc rev-endian) state follow))
 
 ;; write string of current RT
-(define (vm-regt-n->string state (follow #f))
-  (vm-cell-n->string
+(define (vm-regt->string state (follow #f))
+  (vm-cell->string
    (peek state ZP_RT)
    (peek state (add1 ZP_RT))
    state
    follow))
 
 ;; write string of current RA
-(define (vm-rega-n->string state)
-  (vm-cell-n->string
+(define (vm-rega->string state)
+  (vm-cell->string
    (peek state ZP_RA)
    (peek state (add1 ZP_RA))
    state))
 
-(define (vm-regp-n->string state)
-  (vm-cell-n->string
+(define (vm-regp->string state)
+  (vm-cell->string
    (peek state ZP_RP)
    (peek state (add1 ZP_RP))
    state))

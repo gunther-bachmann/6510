@@ -17,10 +17,10 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   define-vm-function
                   define-vm-function-wol)
          (only-in "../vm-inspector-utils.rkt"
-                  vm-stack-n->strings
-                  vm-page-n->strings
-                  vm-regt-n->string
-                  vm-deref-cell-pair-w-n->string)
+                  vm-stack->strings
+                  vm-page->strings
+                  vm-regt->string
+                  vm-deref-cell-pair-w->string)
          (only-in "./vm-cell-array-n.rkt"
                   WRITE_RP_TO_ARR_AT1_RT
                   POP_CELL_EVLSTK_TO_ARR_AT0_RT
@@ -111,7 +111,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (define use-case-nil_p-a-state-after  ;; (parameterize ([current-output-port (open-output-nowhere)]) (run-interpreter-on use-case-nil_p-a-state-before))
     (run-code-in-test use-case-nil_p-a-code))
 
-  (check-equal? (vm-regt-n->string use-case-nil_p-a-state-after)
+  (check-equal? (vm-regt->string use-case-nil_p-a-state-after)
                 "int $0001"
                 "returns true")
 
@@ -123,7 +123,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
   (define use-case-nil_p-b-state-after
     (run-code-in-test use-case-nil_p-b-code))
 
-  (check-equal? (vm-regt-n->string use-case-nil_p-b-state-after)
+  (check-equal? (vm-regt->string use-case-nil_p-b-state-after)
                 "int $0000"
                 "return false"))
 
@@ -236,16 +236,16 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
  (define use-case-cons-state-after
        (run-code-in-test use-case-cons-code ))
 
- (check-equal? (vm-stack-n->strings use-case-cons-state-after)
+ (check-equal? (vm-stack->strings use-case-cons-state-after)
                   (list "stack holds 2 items"
                         (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                         "ptr NIL"))
- (check-equal? (vm-page-n->strings use-case-cons-state-after PAGE_AVAIL_0)
+ (check-equal? (vm-page->strings use-case-cons-state-after PAGE_AVAIL_0)
                  (list "page-type:      m1 page p0"
                        "previous page:  $00"
                        "slots used:     1"
                        "next free slot: $08"))
-  (check-equal? (vm-deref-cell-pair-w-n->string use-case-cons-state-after (+ PAGE_AVAIL_0_W #x02))
+  (check-equal? (vm-deref-cell-pair-w->string use-case-cons-state-after (+ PAGE_AVAIL_0_W #x02))
                   "(int $0001 . ptr NIL)"))
 
 (define vm-list-code

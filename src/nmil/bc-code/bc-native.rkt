@@ -45,7 +45,7 @@
      ))
   (inform-check-equal? (cpu-state-clock-cycles add-native-state)
                        799)
-  (check-equal? (vm-stack-n->strings add-native-state)
+  (check-equal? (vm-stack->strings add-native-state)
                 (list "stack holds 3 items"
                       "int $0001  (rt)"
                       "byte $0a"
@@ -84,7 +84,7 @@
      ))
   (inform-check-equal? (cpu-state-clock-cycles add-native-state-2)
                        766)
-  (check-equal? (vm-stack-n->strings add-native-state-2)
+  (check-equal? (vm-stack->strings add-native-state-2)
                 (list "stack holds 3 items"
                       "int $0002  (rt)"
                       "byte $0a"

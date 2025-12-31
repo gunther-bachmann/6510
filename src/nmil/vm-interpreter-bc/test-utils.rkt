@@ -23,14 +23,14 @@
                   vm-call-frame->strings)
          (only-in "../vm-inspector-utils.rkt"
                   shorten-cell-strings
-                  shorten-cell-string-n
-                  vm-cell-at-nil-n?
-                  vm-page-n->strings
-                  vm-stack-n->strings
-                  vm-regt-n->string
-                  vm-cell-at-n->string
-                  vm-cell-n->string
-                  vm-deref-cell-pair-w-n->string)
+                  shorten-cell-string
+                  vm-cell-at-nil?
+                  vm-page->strings
+                  vm-stack->strings
+                  vm-regt->string
+                  vm-cell-at->string
+                  vm-cell->string
+                  vm-deref-cell-pair-w->string)
          (only-in "../vm-interpreter.rkt"
                   just-vm-interpreter)
          (only-in "../vm-bc-opcode-definitions.rkt"

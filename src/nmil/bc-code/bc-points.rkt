@@ -48,7 +48,7 @@
       POINT_CREATE)
      ))
 
-  (check-equal? (vm-stack-n->strings point-create-state)
+  (check-equal? (vm-stack->strings point-create-state)
                 (list "stack holds 2 items"
                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
                       "ptr NIL"))
@@ -57,7 +57,7 @@
   (check-equal? (peek point-create-state(+ PAGE_AVAIL_0_W #x02))
                 1
                 "reference count is 1")
-  (check-equal? (map (lambda (offset) (vm-cell-at-n->string point-create-state (+ PAGE_AVAIL_0_W offset) #f #t))
+  (check-equal? (map (lambda (offset) (vm-cell-at->string point-create-state (+ PAGE_AVAIL_0_W offset) #f #t))
                      (list 04 06 08))
                 (list "int $01f4" "int $0064" "int $0000")
                 "the first three elements of the array are decimal 500, 100, 0")
@@ -75,7 +75,7 @@
       POINT_CREATE)
      ))
 
-  (check-equal? (vm-stack-n->strings point-create-n-pop-state)
+  (check-equal? (vm-stack->strings point-create-n-pop-state)
                 (list "stack is empty or tos=nil"))
   (check-equal? (memory-list  point-create-n-pop-state (+ PAGE_AVAIL_0_W #x02))
                 (list #x0a)
@@ -112,7 +112,7 @@
       POINT_XDIST)
      ))
 
-  (check-equal? (vm-stack-n->strings point-xdist-1-state)
+  (check-equal? (vm-stack->strings point-xdist-1-state)
                 (list "stack holds 2 items"
                       "int $0064  (rt)"
                       "ptr NIL")))
@@ -148,7 +148,7 @@
       POINT_YDIST)
      ))
 
-  (check-equal? (vm-stack-n->strings point-ydist-1-state)
+  (check-equal? (vm-stack->strings point-ydist-1-state)
                 (list "stack holds 2 items"
                       "int $0096  (rt)"
                       "ptr NIL")))
@@ -192,7 +192,7 @@
       POINT_EQUAL)
      ))
 
-  (check-equal? (vm-stack-n->strings point-equal-1-state)
+  (check-equal? (vm-stack->strings point-equal-1-state)
                 (list "stack holds 2 items"
                       "int $0001  (rt)"
                       "ptr NIL"))
@@ -220,7 +220,7 @@
       POINT_EQUAL)
      ))
 
-  (check-equal? (vm-stack-n->strings point-equal-2-state)
+  (check-equal? (vm-stack->strings point-equal-2-state)
                 (list "stack holds 2 items"
                       "int $0000  (rt)"
                       "ptr NIL"))
@@ -245,7 +245,7 @@
       POINT_EQUAL)
      ))
 
-  (check-equal? (vm-stack-n->strings point-equal-3-state)
+  (check-equal? (vm-stack->strings point-equal-3-state)
                 (list "stack holds 2 items"
                       "int $0000  (rt)"
                       "ptr NIL")))
@@ -268,7 +268,7 @@
   (check-equal? (peek mem-point-create-state-1 (+ PAGE_AVAIL_0_W #x02))
                 1
                 "reference count is 1")
-  (check-equal? (map (lambda (offset) (vm-cell-at-n->string mem-point-create-state-1 (+ PAGE_AVAIL_0_W offset) #f #t))
+  (check-equal? (map (lambda (offset) (vm-cell-at->string mem-point-create-state-1 (+ PAGE_AVAIL_0_W offset) #f #t))
                      (list 04 06 08))
                 (list "int $01f4" "int $0064" "int $0000")
                 "the first three elements of the array are decimal 500, 100, 0")
