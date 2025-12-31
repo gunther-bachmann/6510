@@ -1,30 +1,30 @@
 #lang racket/base
 
-(provide vm-cell-at-nil?
+(provide ;; vm-cell-at-nil?
          vm-cell-at-nil-n?
-         vm-stack->strings
+         ;; vm-stack->strings
          vm-stack-n->strings
-         vm-cell-at->string
+         ;; vm-cell-at->string
          vm-cell-at-n->string
-         vm-cell->string
+         ;; vm-cell->string
          vm-cell-n->string
-         vm-page->strings
+         ;; vm-page->strings
          vm-page-n->strings
-         vm-regt->string
+         ;; vm-regt->string
          vm-regt-n->string
-         vm-regp->string
+         ;; vm-regp->string
          vm-regp-n->string
-         vm-rega->string
+         ;; vm-rega->string
          vm-rega-n->string
-         vm-deref-cell-pair-w->string
+         ;; vm-deref-cell-pair-w->string
          vm-deref-cell-pair-w-n->string
          vm-deref-cell-pair->string
-         vm-deref-cell-w->string
+         ;; vm-deref-cell-w->string
          vm-deref-cell-w-n->string
          vm-refcount-cell-pair-ptr
          vm-refcount-cell-ptr
          vm-cell-pair-free-tree->string
-         shorten-cell-string
+         ;; shorten-cell-string
          shorten-cell-string-n
          shorten-cell-strings
 

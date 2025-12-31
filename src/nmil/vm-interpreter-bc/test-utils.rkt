@@ -23,7 +23,7 @@
                   vm-call-frame->strings)
          (only-in "../vm-inspector-utils.rkt"
                   shorten-cell-strings
-                  shorten-cell-string
+                  shorten-cell-string-n
                   vm-cell-at-nil-n?
                   vm-page-n->strings
                   vm-stack-n->strings

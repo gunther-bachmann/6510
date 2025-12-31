@@ -38,16 +38,7 @@
                     peek
                     memory-list)
            (only-in "../vm-inspector-utils.rkt"
-                    vm-cell-at-nil?
-                    vm-rega-n->string
-                    vm-regt-n->string
                     vm-stack-n->strings
-                    vm-cell-pair-free-tree->string
-                    vm-deref-cell-pair-w-n->string
-                    vm-deref-cell-w-n->string
-                    vm-refcount-cell-pair-ptr
-                    vm-refcount-cell-ptr
-                    vm-regp-n->string
                     vm-page-n->strings)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "../../ast/6510-relocator.rkt"

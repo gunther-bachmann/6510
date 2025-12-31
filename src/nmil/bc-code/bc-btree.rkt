@@ -783,7 +783,7 @@
       BTREE_PATH_TO_LAST)                       ;;
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt-n->string path-to-last-2-state #t))
+  (check-equal? (shorten-cell-string-n (vm-regt-n->string path-to-last-2-state #t))
                 (string-append
                  "((1 . ((2 . NIL) . 1))"
                  " . ((1 . (0 . ((2 . NIL) . 1)))"
@@ -1012,7 +1012,7 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (shorten-cell-string (vm-regt-n->string prev-2-state #t))
+  (pcheck-equal? (shorten-cell-string-n (vm-regt-n->string prev-2-state #t))
                 "((0 . (2 . 3)) . NIL)")
 
   (define prev-3-state
@@ -1039,7 +1039,7 @@
       REVERSE)
      ))
 
-  (pcheck-equal? (shorten-cell-string (vm-regt-n->string prev-3-state #t))
+  (pcheck-equal? (shorten-cell-string-n (vm-regt-n->string prev-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
 
   
@@ -1121,7 +1121,7 @@
       REVERSE)
      )) ;; TODO remove #t
 
-  (check-equal? (shorten-cell-string
+  (check-equal? (shorten-cell-string-n
                  (vm-regt-n->string reverse-0-state #t))
                 "(0 . (1 . (2 . (3fff . NIL))))")
   (inform-check-equal? (cpu-state-clock-cycles reverse-0-state)
@@ -1174,7 +1174,7 @@
       APPEND
       REVERSE)))
 
-  (pcheck-equal? (shorten-cell-string (vm-regt-n->string append-0-state #t))
+  (pcheck-equal? (shorten-cell-string-n (vm-regt-n->string append-0-state #t))
                 "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
   (inform-check-equal? (cpu-state-clock-cycles append-0-state)
                 7953))
@@ -1312,7 +1312,7 @@
       REVERSE)
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt-n->string next-1-state #t))
+  (check-equal? (shorten-cell-string-n (vm-regt-n->string next-1-state #t))
                 "((1 . (2 . 3)) . NIL)")
 
 
@@ -1365,7 +1365,7 @@
       REVERSE)
      ))
 
-  (check-equal? (shorten-cell-string (vm-regt-n->string next-3-state #t))
+  (check-equal? (shorten-cell-string-n (vm-regt-n->string next-3-state #t))
                    "((0 . (2 . 3)) . ((1 . (1 . (2 . 3))) . NIL))")
 
   (define next-4-state
