@@ -32,7 +32,7 @@
          (only-in "./vm-native-array.rkt"
                   vm-native-array-code)
          (only-in "./vm-pages-n.rkt"
-                  VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
+                  VM_INITIALIZE_PAGE_MEMORY_MANAGER
                   vm-pages-code)
          (only-in "./vm-register-functions.rkt"
                   vm-register-functions-code))

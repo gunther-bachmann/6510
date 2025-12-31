@@ -22,13 +22,13 @@
   ensure to easily reach the reference count for each object by minimal adjustments to the tagged pointer.
 * transformation hints
 INC_REFCNT_RT (vm-memory-manager.rkt)
-  => INC_REFCNT_M1_SLOT_RT_N (vm-m1-slots-n.rkt)
+  => INC_REFCNT_M1_SLOT_RT (vm-m1-slots-n.rkt)
 ALLOC_CELLARR_TO_RA (vm-cell-array.rkt)
   => ALLOC_CELL_ARRAY_TO_RA (vm_cell-array-n.rkt)
 DEC_REFCNT_RT (vm-memory-manager.rkt)
-  => DEC_REFCNT_M1_SLOT_RT_N (vm-m1-slots-n.rkt)
+  => DEC_REFCNT_M1_SLOT_RT (vm-m1-slots-n.rkt)
 DEC_REFCNT_RZ (vm-memory-manager.rkt)
-  => DEC_REFCNT_M1_SLOT_RZ_N (vm-m1-slots-n.rkt)
+  => DEC_REFCNT_M1_SLOT_RZ (vm-m1-slots-n.rkt)
 * open tasks
 ** IMPLEMENT all pointers do now point to the following layout => access to cell, cell-pairs, cell-array etc. all change!
 | offset | description      |

@@ -1,9 +1,9 @@
 #lang racket
 
 (provide
- VM_INITIALIZE_PAGE_MEMORY_MANAGER_N     ;; initialize page memory management (must be called before first allocation)
- VM_ALLOCATE_NEW_PAGE_N                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
- VM_DEALLOCATE_PAGE_N                    ;; return a page to the free list (actually push)
+ VM_INITIALIZE_PAGE_MEMORY_MANAGER     ;; initialize page memory management (must be called before first allocation)
+ VM_ALLOCATE_NEW_PAGE                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
+ VM_DEALLOCATE_PAGE                    ;; return a page to the free list (actually push)
 
  vm-pages-code
 )
@@ -61,10 +61,10 @@
 
   (define test-runtime
     (append
-     VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
+     VM_INITIALIZE_PAGE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
-     VM_ALLOCATE_NEW_PAGE_N
-     VM_DEALLOCATE_PAGE_N
+     VM_ALLOCATE_NEW_PAGE
+     VM_DEALLOCATE_PAGE
      (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS))))
   )
 
@@ -79,7 +79,7 @@
 ;;         ZP_PAGE_FREE_LIST = points to new head of list
 ;; usage:
 (define-vm-function
-  VM_ALLOCATE_NEW_PAGE_N
+  VM_ALLOCATE_NEW_PAGE
   (list
           (LDX ZP_PAGE_FREE_LIST)
           (BEQ outof_memory__)
@@ -97,10 +97,10 @@
      #:debug #f
      #:runtime-code test-runtime
      (LDX !$20)
-     (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
+     (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
 
      ;; now allocate a new page
-     (JSR VM_ALLOCATE_NEW_PAGE_N)
+     (JSR VM_ALLOCATE_NEW_PAGE)
      (STX ZP_PAGE_REG+1)  ;; save for later check
      ))
 
@@ -123,7 +123,7 @@
 ;;         ZP_PAGE_REG = page (now free)
 ;; usage:  A, X, Y, ZP_PAGE_REG, ZP_PAGE_FREE_LIST
 (define-vm-function
-  VM_DEALLOCATE_PAGE_N
+  VM_DEALLOCATE_PAGE
   (list
                 (LDA ZP_PAGE_FREE_LIST)
                 (STX ZP_PAGE_REG+1)
@@ -141,10 +141,10 @@
      #:debug #f
      #:runtime-code test-runtime
             (LDX !$20)
-            (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
+            (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
 
             ;; now allocate a new page
-            (JSR VM_ALLOCATE_NEW_PAGE_N)
+            (JSR VM_ALLOCATE_NEW_PAGE)
 
             (LDY !$00)
             (LDA !$cc) ;; fill page with $cc
@@ -153,7 +153,7 @@
             (INY)
             (BNE clear_page_loop)
 
-            (JSR VM_DEALLOCATE_PAGE_N)
+            (JSR VM_DEALLOCATE_PAGE)
      ))
 
   (check-equal? (peek vm-deallocate-page-n-01 ZP_PAGE_FREE_LIST)
@@ -197,11 +197,11 @@
 ;; - MAY STILL HAVE ITS USES THOUGH
 ;; - MORE REGIONS ARE POSSIBLE, THOUGH
 (define-vm-function-wol
-  VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
+  VM_INITIALIZE_PAGE_MEMORY_MANAGER
   (list
    (label VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
           (LDX !$30)
-   (label VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
+   (label VM_INITIALIZE_PAGE_MEMORY_MANAGER)
           (STX ZP_TEMP+1) ;; for later comparison
 
           (LDX !$05) ;; last index of profile
@@ -262,7 +262,7 @@
      #:debug #f
      #:runtime-code test-runtime
      (LDX !$20)
-     (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
+     (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
      (STA $0200) ;; save for later check
      (STX $0201)
      (STY $0202)))
@@ -322,9 +322,9 @@
 
 (define vm-pages-code
   (append
-   VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
-   VM_ALLOCATE_NEW_PAGE_N
-   VM_DEALLOCATE_PAGE_N))
+   VM_INITIALIZE_PAGE_MEMORY_MANAGER
+   VM_ALLOCATE_NEW_PAGE
+   VM_DEALLOCATE_PAGE))
 
 (module+ test #| module code len |#
   (inform-check-equal? (code-len vm-pages-code)

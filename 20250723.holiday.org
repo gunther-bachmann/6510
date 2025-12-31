@@ -2790,10 +2790,10 @@ call, tail-call, variable resolution, continuations, closures, macros?
              (word-ref BC_RET)                      ;; 7a
              (word-ref BC_BNOP)                     ;; 7c
              (word-ref BC_CDR)                      ;; 7e
-             (word-ref BC_Z_P_RET_POP_N)            ;; 80
-             (word-ref BC_Z_P_RET_POP_N)            ;; 82
-             (word-ref BC_Z_P_RET_POP_N)            ;; 84
-             (word-ref BC_Z_P_RET_POP_N)            ;; 86
+             (word-ref BC_Z_P_RET_POP)            ;; 80
+             (word-ref BC_Z_P_RET_POP)            ;; 82
+             (word-ref BC_Z_P_RET_POP)            ;; 84
+             (word-ref BC_Z_P_RET_POP)            ;; 86
              (word-ref BC_COONS)                    ;; 88
              (word-ref BC_SWAP_RA_RB)               ;; 8a
              (word-ref BC_POP_TO_RB)                ;; 8c
@@ -2814,18 +2814,18 @@ call, tail-call, variable resolution, continuations, closures, macros?
              (word-ref BC_WRITE_RA)                 ;; aa
              (word-ref BC_WRITE_TO_RAI)             ;; ac
              (word-ref BC_DEC_RAI)                  ;; ae
-             (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b0  N=1
-             (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b2  N=2
-             (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b4  N=3
-             (word-ref BC_NIL_P_RET_L0_POP_N)       ;; b6  N=4
+             (word-ref BC_NIL_P_RET_L0_POP)       ;; b0  N=1
+             (word-ref BC_NIL_P_RET_L0_POP)       ;; b2  N=2
+             (word-ref BC_NIL_P_RET_L0_POP)       ;; b4  N=3
+             (word-ref BC_NIL_P_RET_L0_POP)       ;; b6  N=4
              (word-ref BC_WRITE_TO_RBI)             ;; b8
              (word-ref BC_CAR)                      ;; ba
              (word-ref BC_ISUB)                     ;; bc
              (word-ref BC_IADD)                     ;; be
-             (word-ref BC_NZ_P_RET_POP_N)           ;; c0
-             (word-ref BC_NZ_P_RET_POP_N)           ;; c2
-             (word-ref BC_NZ_P_RET_POP_N)           ;; c4
-             (word-ref BC_NZ_P_RET_POP_N)           ;; c6
+             (word-ref BC_NZ_P_RET_POP)           ;; c0
+             (word-ref BC_NZ_P_RET_POP)           ;; c2
+             (word-ref BC_NZ_P_RET_POP)           ;; c4
+             (word-ref BC_NZ_P_RET_POP)           ;; c6
              (word-ref BC_I_GT_P)                   ;; c8
              (word-ref BC_BINC_RAI)                 ;; ca
              (word-ref BC_B_LT_P)                   ;; cc

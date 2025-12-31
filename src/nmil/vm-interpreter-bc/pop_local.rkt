@@ -6,9 +6,9 @@
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
          (only-in "../vm-runtime/vm-m1-slots-n.rkt"
-                  DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N
-                  DEC_REFCNT_M1_SLOT_RZ_N
-                  INC_REFCNT_M1_SLOT_RT_N))
+                  DEC_REFCNT_M1_SLOT_RZ__IF_PTR
+                  DEC_REFCNT_M1_SLOT_RZ
+                  INC_REFCNT_M1_SLOT_RT))
 
 (provide BC_POP_TO_LOCAL_SHORT
          BC_WRITE_TO_LOCAL_SHORT)
@@ -34,7 +34,7 @@
            (STA ZP_RZ)
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RZ+1)
-           (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+           (JSR DEC_REFCNT_M1_SLOT_RZ)
     (label POP_NO_GC__)
            (PLA)
            (TAY)                                ;; index -> Y
@@ -67,7 +67,7 @@
     ;;        (STA ZP_RZ)
     ;;        (LDA (ZP_LOCALS_HB_PTR),y)
     ;;        (STA ZP_RZ+1)
-    ;;        (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+    ;;        (JSR DEC_REFCNT_M1_SLOT_RZ)
     ;; (label WRITE_NO_GC__)
     ;;        (PLA)
     ;;        (TAY)                                ;; index -> Y
@@ -77,6 +77,6 @@
     ;;        (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
            (JSR PREP_LOCAL__)
            ;; increment, since it is now in locals and on stack
-           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR_N)
+           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
 ))))

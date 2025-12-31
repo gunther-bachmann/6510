@@ -21,7 +21,7 @@
                   add-label-suffix
                   replace-labels)
          (only-in "./vm-m1-slots-n.rkt"
-                  ALLOC_M1_SLOT_TO_RA_N)
+                  ALLOC_M1_SLOT_TO_RA)
          (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   TAG_BYTE_NATIVE_ARRAY
@@ -48,8 +48,8 @@
                     PUSH_RT_TO_EVLSTK
                     POP_CELL_EVLSTK_TO_RT)
            (only-in "./vm-m1-slots-n.rkt"
-                    ALLOC_M1_SLOT_TO_RA_N
-                    ALLOC_M1_SLOT_TO_RB_N
+                    ALLOC_M1_SLOT_TO_RA
+                    ALLOC_M1_SLOT_TO_RB
                     vm-m1-slot-code)
            (only-in "./vm-register-functions.rkt"
                     vm-register-functions-code
@@ -98,7 +98,7 @@
   (list
    (label ALLOC_NATARR_TO_RA)
           (PHA)
-          (JSR ALLOC_M1_SLOT_TO_RA_N)
+          (JSR ALLOC_M1_SLOT_TO_RA)
 
           ;; write header cell
           (LDY !$00)
@@ -143,7 +143,7 @@
   (list
    (label ALLOC_NATARR_TO_RB)
           (PHA)
-          (JSR ALLOC_M1_SLOT_TO_RB_N)
+          (JSR ALLOC_M1_SLOT_TO_RB)
 
           ;; write header cell
           (LDY !$00)

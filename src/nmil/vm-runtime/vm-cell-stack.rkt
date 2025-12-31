@@ -46,13 +46,13 @@
                     vm-regt->string
                     vm-stack->strings)
            (only-in "./vm-m1-slots-n.rkt"
-                    ALLOC_M1_P0_SLOT_TO_RT_N
-                    ALLOC_M1_SLOT_TO_RA_N
-                    INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N)
+                    ALLOC_M1_P0_SLOT_TO_RT
+                    ALLOC_M1_SLOT_TO_RA
+                    INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-pages-n.rkt"
-                    VM_INITIALIZE_PAGE_MEMORY_MANAGER_N     ;; initialize page memory management (must be called before first allocation)
-                    VM_ALLOCATE_NEW_PAGE_N                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
+                    VM_INITIALIZE_PAGE_MEMORY_MANAGER     ;; initialize page memory management (must be called before first allocation)
+                    VM_ALLOCATE_NEW_PAGE                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
                     )
            (only-in "./vm-register-functions.rkt"
                     CP_RT_TO_RA
@@ -78,16 +78,16 @@
      PUSH_RT_TO_EVLSTK
      POP_CELL_EVLSTK_TO_CELLy_RT
 
-     ALLOC_M1_P0_SLOT_TO_RT_N
-     ALLOC_M1_SLOT_TO_RA_N
-     INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX_N
+     ALLOC_M1_P0_SLOT_TO_RT
+     ALLOC_M1_SLOT_TO_RA
+     INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX
 
 
      WRITE_INT_AY_TO_RT
      CP_RA_TO_RT
      VM_MEMORY_MANAGEMENT_CONSTANTS
-     VM_ALLOCATE_NEW_PAGE_N
-     VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
+     VM_ALLOCATE_NEW_PAGE
+     VM_INITIALIZE_PAGE_MEMORY_MANAGER
      (list (label DEC_REFCNT_RT) (RTS)))))
 
 ;; @DC-FUN: INIT_CELLSTACK_PAGE_X, group: cell_stack
@@ -125,12 +125,12 @@
      #:debug #f
      #:runtime-code test-runtime
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
-     (JSR VM_ALLOCATE_NEW_PAGE_N)
+     (JSR VM_ALLOCATE_NEW_PAGE)
      (LDA !$05)
      (JSR INIT_CELLSTACK_PAGE_X)
      (STX ZP_RT+1)
 
-     (JSR VM_ALLOCATE_NEW_PAGE_N)
+     (JSR VM_ALLOCATE_NEW_PAGE)
      (LDA !$03)
      (JSR INIT_CELLSTACK_PAGE_X)
      (STX ZP_RT)))
@@ -147,13 +147,13 @@
 
 (define-vm-function INIT_CELLSTACK
   (list
-        (JSR VM_ALLOCATE_NEW_PAGE_N)
+        (JSR VM_ALLOCATE_NEW_PAGE)
         (LDA !$00)
         (STA ZP_CELL_STACK_LB_PTR)
         (JSR INIT_CELLSTACK_PAGE_X)
         (STX ZP_CELL_STACK_LB_PTR+1)
 
-        (JSR VM_ALLOCATE_NEW_PAGE_N)
+        (JSR VM_ALLOCATE_NEW_PAGE)
         (LDA !$00)
         (STA ZP_CELL_STACK_HB_PTR)
         (JSR INIT_CELLSTACK_PAGE_X)
@@ -487,7 +487,7 @@
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_CELLSTACK)
-     (JSR ALLOC_M1_P0_SLOT_TO_RT_N)
+     (JSR ALLOC_M1_P0_SLOT_TO_RT)
      (LDX ZP_RT)
      (LDA ZP_RT+1)
      (JSR PUSH_XA_TO_EVLSTK)))
@@ -556,12 +556,12 @@
           [BNE NO_ERROR__]
 
    (label ALLOCATE_NEW_STACK_PAGE__)
-          (JSR VM_ALLOCATE_NEW_PAGE_N)
+          (JSR VM_ALLOCATE_NEW_PAGE)
           (LDA ZP_CELL_STACK_LB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_X)
           (STX ZP_CELL_STACK_LB_PTR+1)
 
-          (JSR VM_ALLOCATE_NEW_PAGE_N)
+          (JSR VM_ALLOCATE_NEW_PAGE)
           (LDA ZP_CELL_STACK_HB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_X)
           (STX ZP_CELL_STACK_HB_PTR+1)
@@ -643,7 +643,7 @@
      (JSR PUSH_INT_1_TO_EVLSTK)
      (JSR PUSH_INT_m1_TO_EVLSTK)
      (JSR PUSH_INT_1_TO_EVLSTK)
-     (JSR ALLOC_M1_P0_SLOT_TO_RT_N)
+     (JSR ALLOC_M1_P0_SLOT_TO_RT)
      (LDY !$02)
      (JSR POP_CELL_EVLSTK_TO_CELLy_RT)
      (LDY !$04)

@@ -50,8 +50,8 @@
                   POP_CELL_EVLSTK_TO_RP
                   POP_CELL_EVLSTK_TO_RT)
          (only-in "./vm-m1-slots-n.rkt"
-                  ALLOC_M1_SLOT_TO_RT_N
-                  ALLOC_M1_P0_SLOT_TO_RT_N)
+                  ALLOC_M1_SLOT_TO_RT
+                  ALLOC_M1_P0_SLOT_TO_RT)
          (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
                   TAG_BYTE_CELL_ARRAY
@@ -83,9 +83,9 @@
                     ZP_TEMP
                     VM_MEMORY_MANAGEMENT_CONSTANTS)
            (only-in "./vm-pages-n.rkt"
-                    VM_ALLOCATE_NEW_PAGE_N
-                    VM_DEALLOCATE_PAGE_N
-                    VM_INITIALIZE_PAGE_MEMORY_MANAGER_N)
+                    VM_ALLOCATE_NEW_PAGE
+                    VM_DEALLOCATE_PAGE
+                    VM_INITIALIZE_PAGE_MEMORY_MANAGER)
            (only-in "./vm-register-functions.rkt"
                     vm-register-functions-code))
 
@@ -120,14 +120,14 @@
   (list
           (PHA)                 ;; number of cells
           (ASL A)               ;; *2 since each cell is 2 bytes
-          (JSR ALLOC_M1_SLOT_TO_RT_N)
+          (JSR ALLOC_M1_SLOT_TO_RT)
           (PLA)                 ;; get back number of cells
           (LDY !$01)            ;;
           (STA (ZP_RT),y)       ;; set slot type to cell array with x elements (00xx xxxx)
           (RTS)
 
    (label ALLOC_CELL_ARRAY_P0_TO_RT)
-          (JSR ALLOC_M1_P0_SLOT_TO_RT_N) ;; returns with y = 0!
+          (JSR ALLOC_M1_P0_SLOT_TO_RT) ;; returns with y = 0!
           (LDA !$02)
           (LDY !$01) ;; could be iny
           (STA (ZP_RT),y) ;; set slot type to cell array with 2 elements
@@ -137,7 +137,7 @@
   (list
           (PHA)                 ;; number of cells
           (ASL A)               ;; *2 since each cell is 2 bytes
-          (JSR ALLOC_M1_SLOT_TO_RA_N)
+          (JSR ALLOC_M1_SLOT_TO_RA)
           (PLA)                 ;; get back number of cells
           (LDY !$01)            ;;
           (STA (ZP_RA),y)       ;; set slot type to cell array with x elements (00xx xxxx)

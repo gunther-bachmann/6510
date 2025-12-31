@@ -7,8 +7,8 @@
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES)
          (only-in "../vm-runtime/vm-m1-slots-n.rkt"
-                  DEC_REFCNT_M1_SLOT_RT__IF_PTR_N
-                  DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+                  DEC_REFCNT_M1_SLOT_RT__IF_PTR
+                  DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RZ
@@ -59,7 +59,7 @@
           (AND !$83)
           (CMP !$03)
           (BEQ IS_INT__)
-          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
           (LDA !$03)
           (LDX !$00)
    (label IS_INT__)
@@ -88,7 +88,7 @@
           (STY ZP_RT+1) ;; is pair, store y=1 into int
           (LDY !$03)
           (STY ZP_RT) ;; is pair store int tag
-          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
           (JMP VM_INTERPRETER_INC_PC)
           ))
 
@@ -107,8 +107,8 @@
           (CMP ZP_RT)
           (BNE NE__)
 
-          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR_N)
-          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
@@ -117,8 +117,8 @@
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (STA ZP_RZ)
    (label NE__)
-          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR_N)
-          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR_N)
+          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
+          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC))))

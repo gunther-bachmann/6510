@@ -4,10 +4,10 @@
          vm-call-frame->strings
          vm-call-frames->string
 
-         VM_POP_CALL_FRAME_N
+         VM_POP_CALL_FRAME
          VM_REFCOUNT_DECR_CURRENT_LOCALS
          VM_ALLOC_LOCALS
-         VM_PUSH_CALL_FRAME_N
+         VM_PUSH_CALL_FRAME
          VM_INITIALIZE_CALL_FRAME)
 
 #|
@@ -38,14 +38,14 @@
                   INIT_CELLSTACK_PAGE_X
                   vm-cell-stack-code)
          (only-in "./vm-m1-slots-n.rkt"
-                  DEC_REFCNT_M1_SLOT_RZ_N
+                  DEC_REFCNT_M1_SLOT_RZ
                   vm-m1-slot-code)
          (only-in "./vm-register-functions.rkt"
                   vm-register-functions-code)
          (only-in "./vm-pages-n.rkt"
-                    VM_ALLOCATE_NEW_PAGE_N
-                    VM_DEALLOCATE_PAGE_N
-                    VM_INITIALIZE_PAGE_MEMORY_MANAGER_N
+                    VM_ALLOCATE_NEW_PAGE
+                    VM_DEALLOCATE_PAGE
+                    VM_INITIALIZE_PAGE_MEMORY_MANAGER
                     vm-pages-code)
          (only-in "./vm-memory-map.rkt"
                   ZP_CALL_FRAME
@@ -167,12 +167,12 @@
           (STX ZP_LOCALS_HB_PTR+1)
 
    (label ALLOC_LOCALS_STACK)
-          (JSR VM_ALLOCATE_NEW_PAGE_N)
+          (JSR VM_ALLOCATE_NEW_PAGE)
           (LDA ZP_LOCALS_HB_PTR+1) ;; previous locals hb page
           (STX ZP_LOCALS_HB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_X)
 
-          (JSR VM_ALLOCATE_NEW_PAGE_N)
+          (JSR VM_ALLOCATE_NEW_PAGE)
           (LDA ZP_LOCALS_LB_PTR+1) ;; previous locals lb page
           (STX ZP_LOCALS_LB_PTR+1)
           (JMP INIT_CELLSTACK_PAGE_X)))
@@ -193,7 +193,7 @@
           (LDA !$00)
           (STA ZP_CALL_FRAME+1)         ;; this ensures that NO previous call frame page is heeded!
           (STA ZP_CALL_FRAME_TOP_MARK)
-          (JSR VM_ALLOC_CALL_FRAME_N)   ;; call-frame initialized (top mark set, too)
+          (JSR VM_ALLOC_CALL_FRAME)   ;; call-frame initialized (top mark set, too)
 
           ;; alloc locals
           (JSR ALLOC_FIRST_LOCALS_STACK)
@@ -205,7 +205,7 @@
           (RTS)))
 
 
-;; @DC-FUN: VM_ALLOC_CALL_FRAME_N, group: call_frame
+;; @DC-FUN: VM_ALLOC_CALL_FRAME, group: call_frame
 ;; allocate a new call frame,
 ;; close the current call frame (set top mark)
 ;; and initialize the page accordingly
@@ -214,11 +214,11 @@
 ;; output: ZP_CALL_FRAME
 ;;         ZP_CALL_FRAME_TOP_MARK
 ;;         Y index for first byte available as payload (03) = ZP_CALL_FRAME_TOP_MARK
-(define VM_ALLOC_CALL_FRAME_N
+(define VM_ALLOC_CALL_FRAME
   (list
-   (label VM_ALLOC_CALL_FRAME_N)
+   (label VM_ALLOC_CALL_FRAME)
           (LDA ZP_CALL_FRAME+1)
-          (BEQ NO_SAVE_OF_OLD_FRAME_DATA__VM_ALLOC_CALL_FRAME_N)
+          (BEQ NO_SAVE_OF_OLD_FRAME_DATA__VM_ALLOC_CALL_FRAME)
 
           ;; make sure to write old top mark to old call frame page (if existent)
           (LDA !$00)
@@ -227,9 +227,9 @@
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (STA (ZP_CALL_FRAME),y)       ;; write (old) top mark at current page $02
 
-   (label NO_SAVE_OF_OLD_FRAME_DATA__VM_ALLOC_CALL_FRAME_N)
+   (label NO_SAVE_OF_OLD_FRAME_DATA__VM_ALLOC_CALL_FRAME)
           ;; allocate completely new page
-          (JSR VM_ALLOCATE_NEW_PAGE_N)
+          (JSR VM_ALLOCATE_NEW_PAGE)
           (TXA)
 
           ;; init page as new call frame page (00 = page type, 01 = previous call frame page, 02 = top mark [uninitialized until full], rest uninitialized)
@@ -247,7 +247,7 @@
           (STY ZP_CALL_FRAME)           ;; write new 03 into lowbyte of call-frame
           (RTS)))
 
-;; @DC-FUN: VM_PUSH_CALL_FRAME_N, group: call_frame
+;; @DC-FUN: VM_PUSH_CALL_FRAME, group: call_frame
 ;; push a call frame and allocate X locals
 ;; input:  X = number of locals to allocate on locals frame
 ;;         zp_call_frame
@@ -265,25 +265,25 @@
 ;;           1. push call frame (use this method)
 ;;           2. allocated # of locals needed, set zp_vm_locals_lb_ptr and zp_vm_locals_hb_ptr
 ;;           3. set zp_vm_pc to new function
-(define VM_PUSH_CALL_FRAME_N
+(define VM_PUSH_CALL_FRAME
 (flatten
   (list
-   (label VM_PUSH_CALL_FRAME_N)
+   (label VM_PUSH_CALL_FRAME)
           ;; check for fast frames
           ;;    push: possible if - vm_pc and func-ptr share the same page
           (LDA ZP_VM_PC+1)
           (CMP ZP_VM_FUNC_PTR+1)
-          (BNE SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
+          (BNE SLOW_FRAME__VM_PUSH_CALL_FRAME)
           ;; check not necessary, stack keeps its state, pushing, popping takes care of cell-stack ptr
           ;; ;;                      - cell-stack does not overflow (has 16 entries reserve)
           ;; (LDA ZP_CELL_STACK_TOS)
           ;; (CMP !$F0)
-          ;; (BPL SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
+          ;; (BPL SLOW_FRAME__VM_PUSH_CALL_FRAME)
           ;;                      - locals do not overflow (has reserves to hold functions' need)
           (TXA)                  ;; x = number of locals for this function
           (CLC)
           (ADC ZP_LOCALS_LB_PTR)
-          (BCS SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
+          (BCS SLOW_FRAME__VM_PUSH_CALL_FRAME)
 
           ;; do fast frame
           ;; alloc for fast frame
@@ -291,11 +291,11 @@
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (TAY)
           (ADC !$04)
-          (BCC NO_NEW_PAGE_FOR_FAST_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
+          (BCC NO_NEW_PAGE_FOR_FAST_CALL_FRAME__VM_PUSH_CALL_FRAME)
 
-          (JSR VM_ALLOC_CALL_FRAME_N)                  ;; now allocate a new page
+          (JSR VM_ALLOC_CALL_FRAME)                  ;; now allocate a new page
 
-   (label NO_NEW_PAGE_FOR_FAST_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
+   (label NO_NEW_PAGE_FOR_FAST_CALL_FRAME__VM_PUSH_CALL_FRAME)
           (STY ZP_CALL_FRAME)                          ;; set lowbyte of call frame
 
           ;; now copy fast frame values
@@ -321,20 +321,20 @@
           (STA ZP_CALL_FRAME_TOP_MARK)
           (RTS)
 
-   (label SLOW_FRAME__VM_PUSH_CALL_FRAME_N)
+   (label SLOW_FRAME__VM_PUSH_CALL_FRAME)
           ;; alloc for slow frame
           ;; ensure call frame allows 10 additional bytes
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (TAY)
           (CLC)
           (ADC !$08) ;; length of slow call frame
-          (BCC NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
+          (BCC NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME)
 
-          (JSR VM_ALLOC_CALL_FRAME_N)
+          (JSR VM_ALLOC_CALL_FRAME)
           ;; alloc call frame returns y with topmark
           ;; (LDY ZP_CALL_FRAME_TOP_MARK) ;; first payload byte available on call frame page
 
-   (label NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME_N)
+   (label NO_NEW_PAGE_FOR_SLOW_CALL_FRAME__VM_PUSH_CALL_FRAME)
           (STY ZP_CALL_FRAME)
 
           ;; now copy slow frame values
@@ -360,12 +360,12 @@
           ;; copy rest of zero page values
           ;; naiive copy: 7 * 5 bytes = 35 bytes, 7 * 9 cycles = 63 cycles
           ;; looped copy: 10 bytes + 7 table bytes, 7 * 18 cycles = 126 cycles
-    (label LOOP_ZP_COPY__VM_PUSH_CALL_FRAME_N)
+    (label LOOP_ZP_COPY__VM_PUSH_CALL_FRAME)
           (LDX SLOW_STACK_ZP_LOCATIONS,y)
           (LDA $00,x)
           (STA (ZP_CALL_FRAME),y)        ;; y currently = 6..0  (7 bytes) copied
           (DEY)
-          (BPL LOOP_ZP_COPY__VM_PUSH_CALL_FRAME_N)           ;; >= 0? -> loop
+          (BPL LOOP_ZP_COPY__VM_PUSH_CALL_FRAME)           ;; >= 0? -> loop
 
           (RTS)
 
@@ -379,7 +379,7 @@
           (byte-ref ZP_VM_FUNC_PTR)         ;; |  func-ptr  low       | $00 / $01            | func-ptr could be encoded into: lowbyte, highbyte =  vm_pc page + $00/$01 (of byte 4 in this stack) <- would save two bytes of stack size
           )))
 
-(module+ test #| VM_PUSH_CALL_FRAME_N |#
+(module+ test #| VM_PUSH_CALL_FRAME |#
   (define push-call-frame-n-fit-page-prep-code
     (list
        ;; set complete vm state to values to be pushed (mostly done by call stack init)
@@ -409,7 +409,7 @@
     (append push-call-frame-n-fit-page-prep-code
              (list
               (LDX !$02) ;; need 4 local cells
-              (JSR VM_PUSH_CALL_FRAME_N)
+              (JSR VM_PUSH_CALL_FRAME)
               (LDA !$02)
               (JSR VM_ALLOC_LOCALS))))
   (define push-call-frame-n-fit-page-state
@@ -440,13 +440,13 @@
               (LDA !$fb)
               (STA ZP_CALL_FRAME_TOP_MARK) ;; set mark such that push will need new page
               (LDX !$00)
-              (JSR VM_PUSH_CALL_FRAME_N)
+              (JSR VM_PUSH_CALL_FRAME)
               (LDA !$00)
               (JSR VM_ALLOC_LOCALS)
               (INC ZP_VM_PC+1)             ;; pc on other page => need for slow call frame
 
               (LDX !$03) ;; need 3 local cells
-              (JSR VM_PUSH_CALL_FRAME_N)
+              (JSR VM_PUSH_CALL_FRAME)
               (LDA !$03)
               (JSR VM_ALLOC_LOCALS))))
 
@@ -488,7 +488,7 @@
               (STA ZP_LOCALS_TOP_MARK)
 
               (LDX !$03) ;; need 3 local cells
-              (JSR VM_PUSH_CALL_FRAME_N)
+              (JSR VM_PUSH_CALL_FRAME)
               (LDA !$03)
               (JSR VM_ALLOC_LOCALS))))
   (define push-call-frame-misfit-page-sl-frame-1-state
@@ -519,7 +519,7 @@
                 "the call frame is a slow frame (8 bytes)
                  low byte of locals-ptr"))
 
-;; @DC-FUN: VM_POP_CALL_FRAME_N, group: call_frame
+;; @DC-FUN: VM_POP_CALL_FRAME, group: call_frame
 ;; pop the current call frame
 ;; input:  zp_call_frame_top_mark
 ;;         zp_call_frame
@@ -535,14 +535,14 @@
 ;;            zp_cell_stack_tos
 ;; NOTE: pop call completely restores the invocation frame
 ;;       it does no GC check on locals!
-(define VM_POP_CALL_FRAME_N
+(define VM_POP_CALL_FRAME
   (list
    ;; TODO: check whether locals need to move to new page (free locals page)
 
-   (label VM_POP_CALL_FRAME_N)
+   (label VM_POP_CALL_FRAME)
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (CMP !$03)                                     
-          (BNE NO_PAGE_CHANGE__VM_POP_CALL_FRAME_N) 
+          (BNE NO_PAGE_CHANGE__VM_POP_CALL_FRAME) 
 
           ;; if top mark points to base, the previous call frame page must be loaded
           (LDA ZP_CALL_FRAME+1) ;; get previous page
@@ -560,21 +560,21 @@
 
           ;; reconstruct old call-frame after page change
           (TAY)
-          (JSR LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
+          (JSR LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME)
           (STA ZP_CALL_FRAME) ;; do this so zp_call_frame behaves as if no page change took place (will be put into top mark eventually)
 
           ;; free old call frame page!
-          (JSR VM_DEALLOCATE_PAGE_N)
+          (JSR VM_DEALLOCATE_PAGE)
           ;; (TXA)
           ;; (JSR FREE_PAGE_A)
 
           (LDA ZP_CALL_FRAME_TOP_MARK)
-   (label NO_PAGE_CHANGE__VM_POP_CALL_FRAME_N)
+   (label NO_PAGE_CHANGE__VM_POP_CALL_FRAME)
           ;; current frame fast?
           (SEC)
           (SBC ZP_CALL_FRAME)
           (CMP !$04)
-          (BNE SLOW_FRAME__VM_POP_CALL_FRAME_N)
+          (BNE SLOW_FRAME__VM_POP_CALL_FRAME)
 
           ;; is a fast frame
           (LDY !$00)
@@ -591,9 +591,9 @@
           (LDA (ZP_CALL_FRAME),y)
           (STA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_HB_PTR)
-          (BNE RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)  ;; locals ptr never points in lowbyte to 0
+          (BNE RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME)  ;; locals ptr never points in lowbyte to 0
 
-   (label SLOW_FRAME__VM_POP_CALL_FRAME_N)
+   (label SLOW_FRAME__VM_POP_CALL_FRAME)
           (LDA ZP_LOCALS_LB_PTR+1) ;; old locals lb page
           (STA ZP_TEMP)            ;; remember locals lb page
           (LDA ZP_LOCALS_HB_PTR+1) ;; old locals lb page
@@ -601,24 +601,24 @@
 
           (LDY !$06)                    ;; copy 7 bytes
 
-   (label LOOP_ZP_RESTORE__VM_POP_CALL_FRAME_N)
+   (label LOOP_ZP_RESTORE__VM_POP_CALL_FRAME)
           (LDX SLOW_STACK_ZP_LOCATIONS,y)
           (LDA (ZP_CALL_FRAME),y)
           (STA $00,x)
           (DEY)
-          (BPL LOOP_ZP_RESTORE__VM_POP_CALL_FRAME_N)
+          (BPL LOOP_ZP_RESTORE__VM_POP_CALL_FRAME)
 
           (LDA ZP_LOCALS_LB_PTR+1)
           (CMP ZP_TEMP)
-          (BEQ NO_LOCALS_PAGE_CHANGE__VM_POP_CALL_FRAME_N)
+          (BEQ NO_LOCALS_PAGE_CHANGE__VM_POP_CALL_FRAME)
 
           ;; free the old locals page (lb and hb) and set the top mark accordingly
           (LDX ZP_TEMP)
-          (JSR VM_DEALLOCATE_PAGE_N)
+          (JSR VM_DEALLOCATE_PAGE)
           ;; (LDA ZP_TEMP)
           ;; (JSR FREE_PAGE_A)
           (LDX ZP_TEMP2)
-          (JSR VM_DEALLOCATE_PAGE_N)
+          (JSR VM_DEALLOCATE_PAGE)
           ;; (LDA ZP_TEMP2)
           ;; (JSR FREE_PAGE_A)
 
@@ -631,7 +631,7 @@
           (LDA (ZP_TEMP),y) ;; old top mark of this page,
           (STA ZP_LOCALS_TOP_MARK)
 
-   (label NO_LOCALS_PAGE_CHANGE__VM_POP_CALL_FRAME_N)
+   (label NO_LOCALS_PAGE_CHANGE__VM_POP_CALL_FRAME)
 
           ;; now get function pointer page from encoded byte
           (LDY !$07)                    ;; index of last byte in slow call frame
@@ -644,18 +644,18 @@
           (LDA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_HB_PTR)
 
-   (label RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME_N)
+   (label RECONSTRUCT_CALL_FRAME_AND_TOP_MARK__VM_POP_CALL_FRAME)
           (LDA ZP_CALL_FRAME)                   ;; old low byte of call frame
           (STA ZP_CALL_FRAME_TOP_MARK)          ;; set top mark 
           (CMP !$03) ;; alread at bottom => no sub
-          (BEQ NO_SUB__VM_POP_CALL_FRAME_N)     ;; 03 indicates page change of call frame
+          (BEQ NO_SUB__VM_POP_CALL_FRAME)     ;; 03 indicates page change of call frame
 
           (LDA !$00)
           (STA ZP_CALL_FRAME)                   ;; zero low byte to use topmark as index
           (LDY ZP_CALL_FRAME_TOP_MARK)          ;; get index to top
-          (JSR LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
+          (JSR LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME)
 
-   (label NO_SUB__VM_POP_CALL_FRAME_N)
+   (label NO_SUB__VM_POP_CALL_FRAME)
           (STA ZP_CALL_FRAME)
           (RTS)
 
@@ -665,18 +665,18 @@
    ;; ZP_CALL_FRAME (00 page)
    ;; fast frame = there are bits set other than just bit0
    ;; slow frame = only bit0 is used (all else is 0)
-   (label LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME_N)
+   (label LOCAL__FS_CALL_FRAME_ADJUSTMENT__VM_POP_CALL_FRAME)
           (DEY)                                                 ;; index one behind top mark
           (LDA (ZP_CALL_FRAME),y)                               ;; load that value
           (AND !$fe)                                            ;; all but bit0  are 0?
-          (BNE LOCAL__IS_FAST_CALL_FRAME__VM_POP_CALL_FRAME_N) ;; => slow frame
+          (BNE LOCAL__IS_FAST_CALL_FRAME__VM_POP_CALL_FRAME) ;; => slow frame
 
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (SEC)
           (SBC !$08)
           (RTS)
 
-   (label LOCAL__IS_FAST_CALL_FRAME__VM_POP_CALL_FRAME_N)
+   (label LOCAL__IS_FAST_CALL_FRAME__VM_POP_CALL_FRAME)
           (LDA ZP_CALL_FRAME_TOP_MARK)
           (SEC)
           (SBC !$04)
@@ -687,9 +687,9 @@
 ;;     (append push-call-frame-n-fit-page-prep-code
 ;;             (list
 ;;              (LDX !$04)
-;;              (JSR VM_PUSH_CALL_FRAME_N)
+;;              (JSR VM_PUSH_CALL_FRAME)
 ;;              (LDX !$04)
-;;              (JSR VM_PUSH_CALL_FRAME_N)
+;;              (JSR VM_PUSH_CALL_FRAME)
 
 ;;              ;; now change pc
 ;;              (LDY !$91)
@@ -707,7 +707,7 @@
 ;;              (INY)
 ;;              (STY ZP_LOCALS_HB_PTR)
 
-;;              (JSR VM_POP_CALL_FRAME_N)
+;;              (JSR VM_POP_CALL_FRAME)
 ;;              )))
 ;;   (define pop-call-frame-n-fast-cf-state
 ;;     (run-code-in-test pop-call-frame-n-fast-cf-code))
@@ -754,7 +754,7 @@
 ;;              (STY ZP_LOCALS_HB_PTR+1)
 
 ;;              ;; restore should restore all pointers of the pushed call-frame
-;;              (JSR VM_POP_CALL_FRAME_N))))
+;;              (JSR VM_POP_CALL_FRAME))))
 ;;   (define pop-call-frame-n-slow-cf-state
 ;;     (run-code-in-test pop-call-frame-n-slow-cf-code))
 
@@ -777,7 +777,7 @@
 ;;             (list
 ;;              (LDA !$02)
 ;;              (ast-bytes-cmd '() (list #x8d #xfa PAGE_CALL_FRAME)) ;; store 02 right behind top mark => ensure this is detected as fast frame
-;;              (JSR VM_POP_CALL_FRAME_N)
+;;              (JSR VM_POP_CALL_FRAME)
 ;;              )))
 ;;   (define pop-call-frame-n-slow-2-cf-state
 ;;     (run-code-in-test pop-call-frame-n-slow-2-cf-code))
@@ -882,9 +882,9 @@
 
           ;; free the pages
           (LDX ZP_LOCALS_LB_PTR+1)
-          (JSR VM_DEALLOCATE_PAGE_N)
+          (JSR VM_DEALLOCATE_PAGE)
           (LDX ZP_LOCALS_HB_PTR+1)
-          (JSR VM_DEALLOCATE_PAGE_N)
+          (JSR VM_DEALLOCATE_PAGE)
           ;; (LDA ZP_LOCALS_LB_PTR+1)
           ;; (JSR FREE_PAGE_A)
           ;; (LDA ZP_LOCALS_HB_PTR+1)
@@ -939,7 +939,7 @@
           (BEQ NEXT_ITER__)       ;; definitely no pointer, since page is 00
           (STA ZP_RZ+1)
           (STY COUNTER__)
-          (JSR DEC_REFCNT_M1_SLOT_RZ_N)
+          (JSR DEC_REFCNT_M1_SLOT_RZ)
           (LDY COUNTER__)
    (label S0_NEXT_ITER__)
           (LDA !$00)
@@ -961,9 +961,9 @@
 (define vm-call-frame-code
   (append VM_INITIALIZE_CALL_FRAME
           ALLOC_LOCALS_STACK
-          VM_ALLOC_CALL_FRAME_N                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
-          VM_PUSH_CALL_FRAME_N                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
-          VM_POP_CALL_FRAME_N                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
+          VM_ALLOC_CALL_FRAME                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
+          VM_PUSH_CALL_FRAME                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
+          VM_POP_CALL_FRAME                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
           VM_ALLOC_LOCALS
           VM_FREE_LOCALS
           VM_REFCOUNT_DECR_CURRENT_LOCALS))
