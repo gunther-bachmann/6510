@@ -18,8 +18,9 @@
                   ast-const-word-cmd-label
                   ast-const-word-cmd-word))
 
-(provide ast-const-get
+(provide ast-const-get                   ;; extract constant definition in assembler into racket constant
          VM_MEMORY_MANAGEMENT_CONSTANTS  ;; contains all zp variable locations and constant definitions to be included into a asm program
+
          ZP_RT                           ;; (word) register top of stack held on zp (whereas the rest of the evlstk is held in main memory)
          ZP_RP                           ;; (word) register used temporary for 2+ operand operations (to reduce stack copy/move ops during exec)
          ZP_RA                           ;; (word) primary register for array access
@@ -29,10 +30,8 @@
          ZP_RBI                          ;; (byte) index for secondary array register
          ZP_RCI                          ;; (byte) index for tertiary array register
          ZP_RZ                           ;; (word) register reserved for garbage collection operations
-         ZP_INC_COLLECTIBLE_LIST         ;; (word) ptr to the head of the incrementally collectible cell-array list
 
-         ;; (may be obsolete)
-         ZP_PART_GCD_CELL_ARRAYS         ;; (word) list of partially garbage collected cell arrays
+         ZP_INC_COLLECTIBLE_LIST         ;; (word) ptr to the head of the incrementally collectible cell-array list
          ZP_CALL_FRAME                   ;; (word) pointer to current call frame
          ZP_CALL_FRAME_TOP_MARK          ;; (byte) top mark of call frame stack
          ZP_CELL_STACK_LB_PTR            ;; (word) pointer to low byte of current eval stack
@@ -46,7 +45,6 @@
          ZP_TEMP2                        ;; (byte) temp location
          ZP_TEMP3                        ;; (byte) temp location, can be used in combination with TEMP4 to be used as word
          ZP_TEMP4                        ;; (byte) temp location
-         ZP_VM_PC_OLD                    ;; (word) current program counter of the vm
          ZP_VM_FUNC_PTR                  ;; (word) pointer to the currently executing function
          ZP_LOCALS_LB_PTR                ;; (word) pointer to the low byte of the current locals of this function
          ZP_LOCALS_HB_PTR                ;; (word) pointer to the high byte of the current locals of this function
@@ -108,7 +106,6 @@
    (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
    (byte-const ZP_TEMP2                  $dd) ;; may not be used after sub calls (just within a routine without jsr)
 
-   (byte-const ZP_VM_PC_OLD              $d0) ;; de..df program counter (ptr to currently executing byte code)
                                               ;; @DC-ZP: ZP_VM_FUNC_PTR, group: call_frame
    (byte-const ZP_VM_FUNC_PTR            $e0) ;; e0..e1 pointer to the currently running function
                                               ;; @DC-ZP: ZP_LOCALS_LB_PTR, group: locals
@@ -127,7 +124,6 @@
    (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2
 
    (byte-const ZP_RZ                     $f3) ;; f3..f4   for garbage collection (and temp use outside of gc) only
-   (byte-const ZP_PART_GCD_CELL_ARRAYS   $f5) ;; f5..f6   this is the cell-arrays global partially collected list (gpcl)
 
    ;; implementation using registers
    ;; register T = top of stack, used as main register for operations, could be a pointer to a cell or an atomic cell. if it is a pointer to a cell, the low byte here is without tag bits => (zp_rt) points to the cell
@@ -155,39 +151,38 @@
     [else (ast-const-get (cdr ast-commands) key)]))
 
 ;; make constants available in racket (to allow for usage e.g. in test code)
-(define ZP_INC_COLLECTIBLE_LIST (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_INC_COLLECTIBLE_LIST"))
-(define ZP_RT                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
-(define ZP_RP                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RP"))
-(define ZP_RA                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
-(define ZP_RB                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RB"))
-(define ZP_RC                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RC"))
-(define ZP_RAI                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RAI"))
-(define ZP_RBI                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RBI"))
-(define ZP_RCI                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RCI"))
-(define ZP_RZ                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RZ"))
-(define ZP_PART_GCD_CELL_ARRAYS (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PART_GCD_CELL_ARRAYS"))
-(define ZP_CALL_FRAME           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
-(define ZP_CALL_FRAME_TOP_MARK  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME_TOP_MARK"))
-(define ZP_CELL_STACK_LB_PTR    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_LB_PTR"))
-(define ZP_CELL_STACK_HB_PTR    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_HB_PTR"))
-(define ZP_CELL_STACK_TOS       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
-(define ZP_PAGE_REG             (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_REG"))
-(define ZP_PAGE_FREE_LIST       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_FREE_LIST"))
-(define ZP_PAGE_FREE_SLOTS_LIST       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_FREE_SLOTS_LIST"))
+(define ZP_INC_COLLECTIBLE_LIST   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_INC_COLLECTIBLE_LIST"))
+(define ZP_RT                     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RT"))
+(define ZP_RP                     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RP"))
+(define ZP_RA                     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RA"))
+(define ZP_RB                     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RB"))
+(define ZP_RC                     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RC"))
+(define ZP_RAI                    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RAI"))
+(define ZP_RBI                    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RBI"))
+(define ZP_RCI                    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RCI"))
+(define ZP_RZ                     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RZ"))
+(define ZP_CALL_FRAME             (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
+(define ZP_CALL_FRAME_TOP_MARK    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME_TOP_MARK"))
+(define ZP_CELL_STACK_LB_PTR      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_LB_PTR"))
+(define ZP_CELL_STACK_HB_PTR      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_HB_PTR"))
+(define ZP_CELL_STACK_TOS         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
+(define ZP_PAGE_REG               (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_REG"))
+(define ZP_PAGE_FREE_LIST         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_FREE_LIST"))
+(define ZP_PAGE_FREE_SLOTS_LIST   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_FREE_SLOTS_LIST"))
 (define ZP_PROFILE_PAGE_FREE_LIST (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PROFILE_PAGE_FREE_LIST"))
-(define ZP_TEMP                 (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP"))
-(define ZP_TEMP2                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP2"))
-(define ZP_TEMP3                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP3"))
-(define ZP_TEMP4                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP4"))
-(define ZP_VM_PC_OLD            (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_PC_OLD"))
-(define ZP_VM_FUNC_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_FUNC_PTR"))
-(define ZP_LOCALS_LB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_LB_PTR"))
-(define ZP_LOCALS_HB_PTR        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_HB_PTR"))
-(define ZP_LOCALS_TOP_MARK      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_TOP_MARK"))
-(define TAG_BYTE_BYTE_CELL      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_BYTE_CELL"))
-(define TAG_BYTE_CELL_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
-(define TAG_BYTE_NATIVE_ARRAY   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
-(define TAGGED_INT_0            (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_INT_0"))
-(define TAGGED_INT_0_HB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_INT_0_HB"))
-(define TAGGED_INT_0_LB         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_INT_0_LB"))
-(define TAGGED_NIL              (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_NIL"))
+(define ZP_TEMP                   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP"))
+(define ZP_TEMP2                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP2"))
+(define ZP_TEMP3                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP3"))
+(define ZP_TEMP4                  (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_TEMP4"))
+(define ZP_LOCALS_LB_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_LB_PTR"))
+(define ZP_LOCALS_HB_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_HB_PTR"))
+(define ZP_LOCALS_TOP_MARK        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_TOP_MARK"))
+(define ZP_VM_FUNC_PTR            (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_FUNC_PTR"))
+
+(define TAG_BYTE_BYTE_CELL        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_BYTE_CELL"))
+(define TAG_BYTE_CELL_ARRAY       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))
+(define TAG_BYTE_NATIVE_ARRAY     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_NATIVE_ARRAY"))
+(define TAGGED_INT_0              (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_INT_0"))
+(define TAGGED_INT_0_HB           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_INT_0_HB"))
+(define TAGGED_INT_0_LB           (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_INT_0_LB"))
+(define TAGGED_NIL                (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAGGED_NIL"))
