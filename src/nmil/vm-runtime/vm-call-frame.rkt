@@ -37,12 +37,12 @@
          (only-in "./vm-cell-stack.rkt"
                   INIT_CELLSTACK_PAGE_X
                   vm-cell-stack-code)
-         (only-in "./vm-m1-slots-n.rkt"
+         (only-in "./vm-m1-slots.rkt"
                   DEC_REFCNT_M1_SLOT_RZ
                   vm-m1-slot-code)
          (only-in "./vm-register-functions.rkt"
                   vm-register-functions-code)
-         (only-in "./vm-pages-n.rkt"
+         (only-in "./vm-pages.rkt"
                     VM_ALLOCATE_NEW_PAGE
                     VM_DEALLOCATE_PAGE
                     VM_INITIALIZE_PAGE_MEMORY_MANAGER

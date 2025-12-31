@@ -68,7 +68,7 @@ currently the following test programs are created
                     VM_INTERPRETER_ZP)
            (only-in "../nmil/vm-interpreter.rkt"
                     just-vm-interpreter)
-           (only-in "../nmil/vm-runtime/vm-memory-manager-n.rkt"
+           (only-in "../nmil/vm-runtime/vm-memory-manager.rkt"
                     vm-memory-manager-code)
            (only-in  "../nmil/vm-runtime/vm-memory-manager-test-utils.rkt"
                      list-with-label-suffix

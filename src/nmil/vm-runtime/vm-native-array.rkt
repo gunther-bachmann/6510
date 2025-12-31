@@ -20,7 +20,7 @@
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix
                   replace-labels)
-         (only-in "./vm-m1-slots-n.rkt"
+         (only-in "./vm-m1-slots.rkt"
                   ALLOC_M1_SLOT_TO_RA)
          (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
@@ -47,7 +47,7 @@
                     PUSH_XA_TO_EVLSTK
                     PUSH_RT_TO_EVLSTK
                     POP_CELL_EVLSTK_TO_RT)
-           (only-in "./vm-m1-slots-n.rkt"
+           (only-in "./vm-m1-slots.rkt"
                     ALLOC_M1_SLOT_TO_RA
                     ALLOC_M1_SLOT_TO_RB
                     vm-m1-slot-code)
@@ -57,7 +57,7 @@
                     CP_RA_TO_RT
                     CP_RT_TO_RZ
                     SWAP_RA_RB)
-           (only-in "./vm-pages-n.rkt"
+           (only-in "./vm-pages.rkt"
                     vm-pages-code)
            (only-in "./vm-cell-stack.rkt"
                     vm-cell-stack-code))

@@ -328,7 +328,7 @@
            (only-in "./vm-memory-map.rkt"
                     ZP_TEMP
                     VM_MEMORY_MANAGEMENT_CONSTANTS)
-           (only-in "./vm-pages-n.rkt"
+           (only-in "./vm-pages.rkt"
                     VM_ALLOCATE_NEW_PAGE
                     VM_DEALLOCATE_PAGE
                     VM_INITIALIZE_PAGE_MEMORY_MANAGER)

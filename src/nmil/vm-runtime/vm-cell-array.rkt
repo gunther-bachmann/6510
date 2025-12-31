@@ -49,7 +49,7 @@
          (only-in "./vm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RP
                   POP_CELL_EVLSTK_TO_RT)
-         (only-in "./vm-m1-slots-n.rkt"
+         (only-in "./vm-m1-slots.rkt"
                   ALLOC_M1_SLOT_TO_RT
                   ALLOC_M1_P0_SLOT_TO_RT)
          (only-in "./vm-memory-map.rkt"
@@ -74,15 +74,15 @@
                     cpu-state-clock-cycles)
            (only-in "../vm-inspector-utils.rkt"
                     vm-page->strings)
-           (only-in "./vm-m1-slots-n.rkt"
+           (only-in "./vm-m1-slots.rkt"
                     vm-m1-slot-code)
-           (only-in "./vm-pages-n.rkt"
+           (only-in "./vm-pages.rkt"
                     vm-pages-code)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-memory-map.rkt"
                     ZP_TEMP
                     VM_MEMORY_MANAGEMENT_CONSTANTS)
-           (only-in "./vm-pages-n.rkt"
+           (only-in "./vm-pages.rkt"
                     VM_ALLOCATE_NEW_PAGE
                     VM_DEALLOCATE_PAGE
                     VM_INITIALIZE_PAGE_MEMORY_MANAGER)

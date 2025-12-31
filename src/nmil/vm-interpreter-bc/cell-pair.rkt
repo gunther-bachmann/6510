@@ -7,12 +7,12 @@
                   add-label-suffix)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC)
-         (only-in "../vm-runtime/vm-lists-n.rkt"
+         (only-in "../vm-runtime/vm-lists.rkt"
                   VM_CxxR
                   VM_CONS__REFCNTD
                   VM_CAR
                   VM_CDR)
-         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+         (only-in "../vm-runtime/vm-m1-slots.rkt"
                   INC_REFCNT_M1_SLOT_RT
                   DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
          (only-in "../vm-runtime/vm-memory-map.rkt"

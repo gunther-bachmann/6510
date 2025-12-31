@@ -18,20 +18,20 @@
          (only-in "./vm-call-frame.rkt"
                   VM_INITIALIZE_CALL_FRAME
                   vm-call-frame-code)
-         (only-in "./vm-cell-array-n.rkt"
+         (only-in "./vm-cell-array.rkt"
                   vm-cell-array-code)
          (only-in "./vm-cell-stack.rkt"
                   INIT_CELLSTACK
                   vm-cell-stack-code)
-         (only-in "./vm-lists-n.rkt"
+         (only-in "./vm-lists.rkt"
                   vm-list-code)
-         (only-in "./vm-m1-slots-n.rkt"
+         (only-in "./vm-m1-slots.rkt"
                   vm-m1-slot-code)
          (only-in "./vm-memory-map.rkt"
                   VM_MEMORY_MANAGEMENT_CONSTANTS)
          (only-in "./vm-native-array.rkt"
                   vm-native-array-code)
-         (only-in "./vm-pages-n.rkt"
+         (only-in "./vm-pages.rkt"
                   VM_INITIALIZE_PAGE_MEMORY_MANAGER
                   vm-pages-code)
          (only-in "./vm-register-functions.rkt"

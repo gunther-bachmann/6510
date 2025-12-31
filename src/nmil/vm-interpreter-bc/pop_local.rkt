@@ -5,7 +5,7 @@
          "../../6510.rkt"
          (only-in "../../ast/6510-resolver.rkt"
                   add-label-suffix)
-         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+         (only-in "../vm-runtime/vm-m1-slots.rkt"
                   DEC_REFCNT_M1_SLOT_RZ__IF_PTR
                   DEC_REFCNT_M1_SLOT_RZ
                   INC_REFCNT_M1_SLOT_RT))

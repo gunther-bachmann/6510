@@ -68,7 +68,7 @@
                   just-vm-interpreter)
          (only-in "../vm-runtime/vm-call-frame.rkt"
                   vm-call-frame->strings)
-         (only-in "../vm-runtime/vm-memory-manager-n.rkt"
+         (only-in "../vm-runtime/vm-memory-manager.rkt"
                   VM_INITIALIZE_MEMORY_MANAGER
                   vm-memory-manager-code)
          "../vm-runtime/vm-memory-map.rkt")

@@ -45,12 +45,12 @@
                     vm-deref-cell-pair-w->string
                     vm-regt->string
                     vm-stack->strings)
-           (only-in "./vm-m1-slots-n.rkt"
+           (only-in "./vm-m1-slots.rkt"
                     ALLOC_M1_P0_SLOT_TO_RT
                     ALLOC_M1_SLOT_TO_RA
                     INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
            "./vm-memory-manager-test-utils.rkt"
-           (only-in "./vm-pages-n.rkt"
+           (only-in "./vm-pages.rkt"
                     VM_INITIALIZE_PAGE_MEMORY_MANAGER     ;; initialize page memory management (must be called before first allocation)
                     VM_ALLOCATE_NEW_PAGE                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
                     )

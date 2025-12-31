@@ -30,7 +30,7 @@
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES
                   VM_POP_EVLSTK_AND_INC_PC)
-         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+         (only-in "../vm-runtime/vm-m1-slots.rkt"
                   INC_REFCNT_M1_SLOT_RT
                   DEC_REFCNT_M1_SLOT_RZ
                   DEC_REFCNT_M1_SLOT_RA
@@ -40,7 +40,7 @@
                   ZP_RBI
                   ZP_RAI
                   ZP_RT)
-         (only-in "../vm-runtime/vm-cell-array-n.rkt"
+         (only-in "../vm-runtime/vm-cell-array.rkt"
                   ALLOC_CELL_ARRAY_TO_RA
                   POP_EVLSTK_TO_ARR_ATa_RA
                   WRITE_ARR_ATa_RA_TO_RT

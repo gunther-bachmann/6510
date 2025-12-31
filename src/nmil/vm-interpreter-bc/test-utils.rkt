@@ -50,7 +50,7 @@
                   run-bc-wrapped-in-test-
                   vm-list->strings
                   vm-next-instruction-bytes)
-         (only-in "../vm-runtime/vm-memory-manager-n.rkt"
+         (only-in "../vm-runtime/vm-memory-manager.rkt"
                   VM_INITIALIZE_MEMORY_MANAGER
                   vm-memory-manager-code)
          "../vm-runtime/vm-memory-map.rkt")

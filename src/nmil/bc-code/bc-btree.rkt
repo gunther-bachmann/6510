@@ -130,7 +130,7 @@
                   bc-bytes)
          (only-in "../vm-interpreter-loop.rkt" ZP_VM_PC)
          (only-in "../vm-interpreter.rkt" vm-interpreter)
-         (only-in "../vm-runtime/vm-memory-manager-n.rkt"
+         (only-in "../vm-runtime/vm-memory-manager.rkt"
                   vm-memory-manager-code)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT)}

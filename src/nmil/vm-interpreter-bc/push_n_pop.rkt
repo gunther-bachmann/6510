@@ -30,7 +30,7 @@ TODO: get tests (still in vm-interpreter) into this file
                   ZP_CELL_STACK_LB_PTR
                   ZP_CELL_STACK_HB_PTR
                   TAG_BYTE_BYTE_CELL)
-         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+         (only-in "../vm-runtime/vm-m1-slots.rkt"
                   DEC_REFCNT_M1_SLOT_RT__IF_PTR
                   INC_REFCNT_M1_SLOT_RT))
 

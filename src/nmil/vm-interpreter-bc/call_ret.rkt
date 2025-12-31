@@ -12,7 +12,7 @@
                   VM_PUSH_CALL_FRAME
                   VM_ALLOC_LOCALS
                   VM_REFCOUNT_DECR_CURRENT_LOCALS)
-         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+         (only-in "../vm-runtime/vm-m1-slots.rkt"
                   DEC_REFCNT_M1_SLOT_RT__IF_PTR
                   DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
          (only-in "../vm-runtime/vm-memory-map.rkt"

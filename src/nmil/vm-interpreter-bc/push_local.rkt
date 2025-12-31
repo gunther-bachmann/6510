@@ -13,7 +13,7 @@
                   add-label-suffix)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC)
-         (only-in "../vm-runtime/vm-m1-slots-n.rkt"
+         (only-in "../vm-runtime/vm-m1-slots.rkt"
                   INC_REFCNT_M1_SLOT_RT
                   DEC_REFCNT_M1_SLOT_RT__IF_PTR)
          (only-in "../vm-runtime/vm-memory-map.rkt"
@@ -22,7 +22,7 @@
                   ZP_RT)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
                   PUSH_RT_TO_EVLSTK)
-         (only-in "../vm-runtime/vm-cell-array-n.rkt"
+         (only-in "../vm-runtime/vm-cell-array.rkt"
                   WRITE_ARR_AT0_RT_TO_RT
                   WRITE_ARR_AT1_RT_TO_RT))
 

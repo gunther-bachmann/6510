@@ -21,7 +21,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   vm-page->strings
                   vm-regt->string
                   vm-deref-cell-pair-w->string)
-         (only-in "./vm-cell-array-n.rkt"
+         (only-in "./vm-cell-array.rkt"
                   WRITE_RP_TO_ARR_AT1_RT
                   POP_CELL_EVLSTK_TO_ARR_AT0_RT
                   ALLOC_CELL_ARRAY_P0_TO_RT)
@@ -36,9 +36,9 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (module+ test
   (require "../../6510-test-utils.rkt"
            (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
-           (only-in "./vm-cell-array-n.rkt" vm-cell-array-code)
-           (only-in "./vm-m1-slots-n.rkt" vm-m1-slot-code)
-           (only-in "./vm-pages-n.rkt" vm-pages-code)
+           (only-in "./vm-cell-array.rkt" vm-cell-array-code)
+           (only-in "./vm-m1-slots.rkt" vm-m1-slot-code)
+           (only-in "./vm-pages.rkt" vm-pages-code)
            (only-in "./vm-cell-stack.rkt" vm-cell-stack-code)
            (only-in "./vm-register-functions.rkt" vm-register-functions-code )
            (only-in "./vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
