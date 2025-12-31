@@ -54,7 +54,7 @@ TODO: get tests (still in vm-interpreter) into this file
 (define BC_DUP
   (list
    (label BC_DUP)
-          (JSR INC_REFCNT_M1_SLOT_RT)
+          (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
           (JSR PUSH_RT_TO_EVLSTK)
           (JMP VM_INTERPRETER_INC_PC)))
 

@@ -4,7 +4,9 @@
                   flatten)
          "../../6510.rkt"
          (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix))
+                  add-label-suffix)
+         (only-in "../vm-runtime/vm-memory-map.rkt"
+                  TAGGED_INT_0_LB))
 
 (provide BC_PUSH_CONST_NUM_SHORT
          BC_PUSH_INT0
@@ -26,7 +28,7 @@
     (label BC_PUSH_INT2)
            (LSR)
            (AND !$03)
-           (LDX !$03)
+           (LDX !TAGGED_INT_0_LB)
            (JSR PUSH_XA_TO_EVLSTK)
            (JMP VM_INTERPRETER_INC_PC)
 

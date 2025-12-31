@@ -251,7 +251,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-reverse-0-state)
-                       14994)
+                       14933)
   (pcheck-equal? (shorten-cell-strings (vm-stack->strings btree-reverse-0-state 10 #t))
                 (list "stack holds 2 items"
                       "(0 . 1)  (rt)"

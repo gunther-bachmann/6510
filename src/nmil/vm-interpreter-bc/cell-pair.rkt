@@ -48,8 +48,8 @@
           (STX ZP_RZ+1)
           ;; prepared offset for branch in VM_CxxR call ($00 = CAAR, $06 = CADR, $0c = CDAR, $12 = CDDR)
           (JSR VM_CxxR)
-          (JSR INC_REFCNT_M1_SLOT_RT)
-          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
+          (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
+          (JSR DEC_REFCNT_M1_SLOT_RZ) ;; rz must be a pair ptr otherwise cxxr would have failed
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_PUSH_NIL
@@ -78,7 +78,7 @@
    (label BC_CDR)
           (JSR CP_RT_TO_RZ)
           (JSR VM_CDR)
-          (JSR INC_REFCNT_M1_SLOT_RT)
+          (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
           (JSR DEC_REFCNT_M1_SLOT_RZ)
           (JMP VM_INTERPRETER_INC_PC)))
 
@@ -87,7 +87,7 @@
    (label BC_CAR)
           (JSR CP_RT_TO_RZ)
           (JSR VM_CAR)
-          (JSR INC_REFCNT_M1_SLOT_RT)
+          (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
           (JSR DEC_REFCNT_M1_SLOT_RZ)
           (JMP VM_INTERPRETER_INC_PC)))
 

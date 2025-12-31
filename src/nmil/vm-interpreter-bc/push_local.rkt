@@ -40,7 +40,7 @@
     (label BC_PUSH_LOCAL_SHORT)
     ;; push local
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
-           (JSR INC_REFCNT_M1_SLOT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_WRITE_LOCAL_SHORT)
@@ -54,10 +54,11 @@
            (STA ZP_RT)                          ;;
            (LDA (ZP_LOCALS_HB_PTR),y)           ;; load high byte of local at index
            (STA ZP_RT+1)                        ;;
-           (JSR INC_REFCNT_M1_SLOT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
            ))))
 
+;; no refcnt
 (define PUSH_RT_WRITE_LOCAL_bc_enc
   (add-label-suffix
    "__" "__PUSH_RT_WRITE_LOCAL_bc_enc"

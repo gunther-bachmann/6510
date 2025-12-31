@@ -56,11 +56,11 @@
    (label BC_INT_P)
           (LDA ZP_RT)
           (LDX !$01)
-          (AND !$83)
+          (AND !$03)
           (CMP !$03)
           (BEQ IS_INT__)
           (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
-          (LDA !$03)
+          (LDA !TAGGED_INT_0_LB)
           (LDX !$00)
    (label IS_INT__)
           (STA ZP_RT)
@@ -86,7 +86,7 @@
           (LDY !$00)
    (label storey__BC_CONS_PAIR_P)
           (STY ZP_RT+1) ;; is pair, store y=1 into int
-          (LDY !$03)
+          (LDY !TAGGED_INT_0_LB)
           (STY ZP_RT) ;; is pair store int tag
           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
           (JMP VM_INTERPRETER_INC_PC)
