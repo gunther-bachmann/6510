@@ -84,11 +84,11 @@
     (label BC_PUSH_LX_CAR)
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR WRITE_ARR_AT0_RT_TO_RT)
-           (JSR INC_REFCNT_M1_SLOT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_PUSH_LX_CDR)
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR WRITE_ARR_AT1_RT_TO_RT)
-           (JSR INC_REFCNT_M1_SLOT_RT)
+           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
            (JMP VM_INTERPRETER_INC_PC)))))

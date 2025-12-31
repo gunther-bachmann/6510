@@ -621,7 +621,7 @@
                       "3  (rt)"
                       "NIL"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 11366))
+                 11357))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -1084,7 +1084,7 @@
                       "NIL"))
 
   (inform-check-equal? (cpu-state-clock-cycles prev-4-state)
-                5999))
+                6019))
 
 ;; optimization idea: NIL?_RET instead of NIL?, T_P_RET
 (define REVERSE ;; list :: result=nil -> list
@@ -1125,7 +1125,7 @@
                  (vm-regt->string reverse-0-state #t))
                 "(0 . (1 . (2 . (3fff . NIL))))")
   (inform-check-equal? (cpu-state-clock-cycles reverse-0-state)
-                5027))
+                5015))
 
 (define APPEND ;; head-list :: tail-list -> list
   (bc-resolve
@@ -1177,7 +1177,7 @@
   (pcheck-equal? (shorten-cell-string (vm-regt->string append-0-state #t))
                 "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
   (inform-check-equal? (cpu-state-clock-cycles append-0-state)
-                7953))
+                7925))
 
 
 ;; (define (btree-next path)
@@ -1412,7 +1412,7 @@
                       "NIL"))
 
   (inform-check-equal? (cpu-state-clock-cycles next-4-state)
-                1881))
+                1888))
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
@@ -2279,7 +2279,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
-                17168)
+                17317)
 
   (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -2557,7 +2557,7 @@
                       "NIL"))
 
   (inform-check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                25734))
+                25714))
 
 
 ;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
@@ -3426,7 +3426,7 @@
 
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                57282)
+                57718)
   (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
