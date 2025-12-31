@@ -24,17 +24,16 @@
            (AND !$03)
            (PHA)
            (TAY)                                ;; index -> Y
-           ;; decrement old local
+           ;; decrement old local (if necessary)
            (LDA (ZP_LOCALS_LB_PTR),y)
            (BEQ POP_NO_GC__)
-           (TAX)
-           (LSR)
+           (ROR)
            (BCS POP_NO_GC__)
-           (TXA)
+           (ROL)
            (STA ZP_RZ)
            (LDA (ZP_LOCALS_HB_PTR),y)
            (STA ZP_RZ+1)
-           (JSR DEC_REFCNT_M1_SLOT_RZ)
+           (JSR DEC_REFCNT_M1_SLOT_RZ) ;; must be a pointer (checked before)
     (label POP_NO_GC__)
            (PLA)
            (TAY)                                ;; index -> Y
@@ -52,29 +51,6 @@
 
     ;; write to local
    (label  BC_WRITE_TO_LOCAL_SHORT)
-    ;;        (AND !$06)
-    ;;        (LSR)
-    ;;        (PHA)
-    ;;        (TAY)                                ;; index -> Y
-
-    ;;        ;; decrement old local
-    ;;        (LDA (ZP_LOCALS_LB_PTR),y)
-    ;;        (BEQ WRITE_NO_GC__)
-    ;;        (TAX)
-    ;;        (LSR)
-    ;;        (BCS WRITE_NO_GC__)
-    ;;        (TXA)
-    ;;        (STA ZP_RZ)
-    ;;        (LDA (ZP_LOCALS_HB_PTR),y)
-    ;;        (STA ZP_RZ+1)
-    ;;        (JSR DEC_REFCNT_M1_SLOT_RZ)
-    ;; (label WRITE_NO_GC__)
-    ;;        (PLA)
-    ;;        (TAY)                                ;; index -> Y
-    ;;        (LDA ZP_RT)
-    ;;        (STA (ZP_LOCALS_LB_PTR),y)           ;; store low byte of local at index
-    ;;        (LDA ZP_RT+1)
-    ;;        (STA (ZP_LOCALS_HB_PTR),y)           ;; store high byte of local at index -> A
            (JSR PREP_LOCAL__)
            ;; increment, since it is now in locals and on stack
            (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)

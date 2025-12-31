@@ -78,14 +78,14 @@
            (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
            (JMP VM_INTERPRETER_INC_PC)
 
-    (label BC_SET_RA_ARRAY_FIELD)               ;; RT -> (RA),A
+    (label BC_SET_RA_ARRAY_FIELD)                ;; RT -> (RA),A
            (LSR)
            (AND !$03)
-           (JSR COPY_ARR_ATa_RA_TO_RZ__IF_PTR) ;; keep overwritte field (if ptr)
-           (JSR POP_EVLSTK_TO_ARR_ATa_RA)       ;; no refcount adjustment, since value is off the stack (-1), but in array (+1)
+           (JSR COPY_ARR_ATa_RA_TO_RZ__IF_PTR)   ;; keep overwritte field (if ptr)
+           (JSR POP_EVLSTK_TO_ARR_ATa_RA)        ;; no refcount adjustment, since value is off the stack (-1), but in array (+1)
            (LDA ZP_RZ)
-           (BEQ continue__BC_SET_RA_ARRAY_FIELD)
-           (JSR DEC_REFCNT_M1_SLOT_RZ) ;; decrement overwritten field (if it was a ptr)
+           (BEQ continue__BC_SET_RA_ARRAY_FIELD) ;; is no ptr (copy fills it with 0 if not a ptr)
+           (JSR DEC_REFCNT_M1_SLOT_RZ)           ;; decrement overwritten field (if it was a ptr)
     (label continue__BC_SET_RA_ARRAY_FIELD)
            (JMP VM_INTERPRETER_INC_PC))))
 
@@ -93,7 +93,7 @@
   (list
    (label BC_ALLOC_ARA)
           (LDA ZP_RT+1)                 ;; byte size
-          (JSR ALLOC_CELL_ARRAY_TO_RA)     ;;
+          (JSR ALLOC_CELL_ARRAY_TO_RA)
           (LDA !$00)
           (STA ZP_RAI)
           ;; init tagged lowbytes with with zeros

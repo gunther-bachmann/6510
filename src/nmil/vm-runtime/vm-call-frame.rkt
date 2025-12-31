@@ -930,13 +930,11 @@
           (BMI DONE__)
    (label LOOP__)
           (LDA (ZP_LOCALS_LB_PTR),y)
-          (BEQ NEXT_ITER__)
+          (BEQ NEXT_ITER__) ;; nil, next iteration
           (STA ZP_RZ)
-          (AND !$03)
-          (CMP !$03)
-          (BEQ S0_NEXT_ITER__) ;; definitely no pointer since lower 2 bits are set
+          (LSR)
+          (BCS S0_NEXT_ITER__) ;; definitely no pointer since lowest bit is set
           (LDA (ZP_LOCALS_HB_PTR),y)
-          (BEQ NEXT_ITER__)       ;; definitely no pointer, since page is 00
           (STA ZP_RZ+1)
           (STY COUNTER__)
           (JSR DEC_REFCNT_M1_SLOT_RZ)
@@ -970,5 +968,5 @@
 
 (module+ test #| vm-call-frame |#
   (inform-check-equal? (code-len (flatten vm-call-frame-code))
-                       625
+                       620
                        "estimated code length of call-frame runtime"))

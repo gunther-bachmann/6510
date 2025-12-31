@@ -79,7 +79,7 @@
           (JSR CP_RT_TO_RZ)
           (JSR VM_CDR)
           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
-          (JSR DEC_REFCNT_M1_SLOT_RZ)
+          (JSR DEC_REFCNT_M1_SLOT_RZ)           ;; must be a ptr else cdr would have failed
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define BC_CAR
@@ -88,7 +88,7 @@
           (JSR CP_RT_TO_RZ)
           (JSR VM_CAR)
           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
-          (JSR DEC_REFCNT_M1_SLOT_RZ)
+          (JSR DEC_REFCNT_M1_SLOT_RZ)           ;; must be a ptr else car would have failed
           (JMP VM_INTERPRETER_INC_PC)))
 
 

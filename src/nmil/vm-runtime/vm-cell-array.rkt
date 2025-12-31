@@ -235,7 +235,7 @@
 ;; to decrement refcount after overwriting it (e.g. by WRITE_RT_TO_ARR_ATa_RA)
 (define-vm-function COPY_ARR_ATa_RA_TO_RZ__IF_PTR
   (list
-          (PHA)
+          (TAX)
           (ASL A)
           ;; (CLC)                       ;; should be 0, since asl a should push 0 into carry
           (ADC !$02)                    ;; get y to point to low byte of cell at index
@@ -243,22 +243,22 @@
 
           (LDA (ZP_RA),y)
           (BEQ nil__)
-          (LSR)
+          (ROR)
           (BCS atomic__)
 
-          (LDA (ZP_RA),y)
+          (ROL)
           (STA ZP_RZ)
           (INY)
           (LDA (ZP_RA),y)
           (STA ZP_RZ+1)
-          (PLA)
+          (TXA)
           (RTS)
 
    (label atomic__)
           (LDA !$00)
    (label nil__)
           (STA ZP_RZ) ;; clear rz
-          (PLA)
+          (TXA)
           (RTS)))
 
 ;; no refcounting
@@ -360,5 +360,5 @@
 (module+ test #| vm-cell-array-code |#
   (inform-check-equal?
    (code-len vm-cell-array-code)
-   151
+   150
    "module uses n bytes of code"))

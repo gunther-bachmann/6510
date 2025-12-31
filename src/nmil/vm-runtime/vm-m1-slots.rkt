@@ -1527,14 +1527,6 @@
            (TXA)
            (PHA) ;; now stack holds lb (head) :: hb :: ... of cell to be dec_refcnt'd
 
-           ;; make sure to rewrite ZP_INC_COLLECTIBLE _LIST
-           ;; (LDY !$02)
-           ;; (LDA (ZP_RZ),y)
-           ;; (STA ZP_INC_COLLECTIBLE_LIST)
-           ;; (INY)
-           ;; (LDA (ZP_RZ),y)
-           ;; (STA ZP_INC_COLLECTIBLE_LIST+1)
-
            ;; free ZP_RZ
            ;; (JSR FREE_M1_SLOT_FROM_RZ) ;; does not run any DEC_REFCNT => no recursion possible, uses ZP_TEMP
            (JSR no_cells_left_for_scanning__) ;; includes possible dequeue

@@ -69,4 +69,4 @@
 
 (module+ test #| code len |#
   (inform-check-equal? (code-len vm-memory-manager-code)
-                       2168))
+                       2162))
