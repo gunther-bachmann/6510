@@ -40,11 +40,11 @@
        (bc CALL) (word-ref BC_ADD_NATIVE)
        (bc PUSH_I1)
        (bc BREAK))
-      (list (org #x8700))
+      (list (org #x1700))
       BC_ADD_NATIVE)
      ))
   (inform-check-equal? (cpu-state-clock-cycles add-native-state)
-                       799)
+                       831)
   (check-equal? (vm-stack->strings add-native-state)
                 (list "stack holds 3 items"
                       "int $0001  (rt)"
@@ -79,11 +79,11 @@
        (bc CALL) (word-ref BC_ADD_NATIVE_2)
        (bc PUSH_I2)
        (bc BREAK))
-      (list (org #x8700))
+      (list (org #x1700))
       BC_ADD_NATIVE_2)
      ))
   (inform-check-equal? (cpu-state-clock-cycles add-native-state-2)
-                       766)
+                       798)
   (check-equal? (vm-stack->strings add-native-state-2)
                 (list "stack holds 3 items"
                       "int $0002  (rt)"

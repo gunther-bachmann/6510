@@ -71,7 +71,7 @@
   (list
    (label BC_CONS_PAIR_P)
           (JSR CP_RT_TO_RZ) ;; A = content of ZP_RT (lowbyte)
-
+          (TXA)
           (BEQ IS_NO_PAIR_SINCE_NIL__BC_CONS_PAIR_P)
           (LSR)
           (BCS IS_NO_PAIR_SINCE_ATOM__BC_CONS_PAIR_P)

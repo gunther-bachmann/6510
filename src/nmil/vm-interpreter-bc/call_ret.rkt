@@ -29,7 +29,9 @@
          BC_F_P_RET_F
          BC_F_P_RET
          BC_T_P_RET
-         BC_RET)
+         BC_RET
+
+         bc-call-ret-code)
 
 (define BC_CALL
   (add-label-suffix
@@ -173,25 +175,16 @@
           (LSR)                              ;;
           (AND !$03)
           (BEQ DONE__)
-          (TAX)
 
-   (label LOOP_POP__)
-          (DEC ZP_CELL_STACK_TOS)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
-          (STA ZP_RZ)
-          (LDA (ZP_CELL_STACK_HB_PTR),y)
-          (STA ZP_RZ+1)
-          (STX ZP_RP)
-          (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-          (LDX ZP_RP)
-          (LDY ZP_CELL_STACK_TOS)
-          (CPY !$01)
-          (BEQ STACK_DEPLETED__)
-          (DEX)
-          (BNE LOOP_POP__)
+          (CLC)
+          (ADC !$01)
+          (STA COUNT__)                ;; keep count to pop
 
-          (STY ZP_CELL_STACK_TOS)             ;; store new tos marker
+   (label POP_LOOP__)
+          (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
+          (JSR POP_CELL_EVLSTK_TO_RT)
+          (DEC COUNT__)
+          (BNE POP_LOOP__)
 
    (label DONE__)
           (LDY !$00)
@@ -200,7 +193,8 @@
           (LDA (ZP_LOCALS_HB_PTR),y)          ;; load high byte from local
           (STA ZP_RT+1)                       ;; -> RT
 
-          (LDA !$00)
+          ;; (LDA !$00)
+          (TYA)
           (STA (ZP_LOCALS_LB_PTR),y)          ;; clear low byte from local
           (STA (ZP_LOCALS_HB_PTR),y)          ;; clear high byte from local
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
@@ -208,22 +202,13 @@
 
           (JMP VM_INTERPRETER)                ;; and continue
 
-   (label STACK_DEPLETED__)
-          ;; (LDY !$01)                       ;; Y already is 01 when entering here
-          (LDA (ZP_CELL_STACK_LB_PTR),y)      ;; get previous lb page
-          (BEQ ERROR_EMPTY_STACK__)           ;; = 0 => stack ran empty
-
-          (STA ZP_CELL_STACK_LB_PTR+1)        ;; store previous lb page to lb ptr
-          (LDA (ZP_CELL_STACK_HB_PTR),y)      ;; get previous hb page
-          (STA ZP_CELL_STACK_HB_PTR+1)        ;; store previous hb page into hb ptr
-          (LDY !$ff)                          ;; assume $ff as new cell_stack_tos
-          (BNE LOOP_POP__)                    ;; always jump
-
-
    (label SHORTCMD__)
           ;; open for other shortcut command
    (label ERROR_EMPTY_STACK__)
-          (BRK))))
+          (BRK)
+
+   (label COUNT__)
+          (byte 0))))
 
 (define BC_TAIL_CALL
   (list
@@ -291,3 +276,15 @@
           (JMP VM_INTERPRETER)
    (label IS_FALSE__)
           (JMP VM_POP_EVLSTK_AND_INC_PC))))
+
+(define bc-call-ret-code
+  (append
+   BC_CALL
+   BC_Z_P_RET_POP_N
+   BC_NZ_P_RET_POP_N
+   BC_NIL_P_RET_L0_POP_N
+   BC_TAIL_CALL
+   BC_F_P_RET_F
+   BC_F_P_RET
+   BC_T_P_RET
+   BC_RET))

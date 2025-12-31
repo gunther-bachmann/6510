@@ -13,7 +13,8 @@
                     BC_CALL
                     BC_NIL_P_RET_L0_POP_N
                     BC_TAIL_CALL
-                    BC_RET)
+                    BC_RET
+                    bc-call-ret-code)
            (only-in "./cell-pair.rkt"
                     BC_PUSH_NIL)
            (only-in "./cell-pair.rkt"
@@ -105,10 +106,10 @@
     (run-bc-wrapped-in-test
      (list
              (bc PUSH_I0)
-             (bc CALL) (byte 00) (byte $87)
+             (bc CALL) (byte 00) (byte $17)
              (bc BREAK)
 
-             (org #x8700)
+             (org #x1700)
       (label TEST_FUN)
              (byte 0)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
@@ -117,8 +118,8 @@
 
    (check-equal? (vm-call-frame->strings test-bc-call-state)
                    (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $8702"
-                          "function-ptr:     $8700"
+                         "program-counter:  $1702"
+                          "function-ptr:     $1700"
                          (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 03"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
@@ -405,6 +406,6 @@
 
 
 (module+ test #| code len |#
-  (inform-check-equal? (code-len bc-cell-pair-code)
-                       87
+  (inform-check-equal? (code-len bc-call-ret-code)
+                       283
                        "code len"))

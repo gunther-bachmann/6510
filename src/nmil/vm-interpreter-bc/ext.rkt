@@ -33,7 +33,7 @@ of the decoder and the jump
    ;; (label CALL_COMMAND__BC_EXT1_CMD)
    ;;        (JMP $cf00) ;; is overwritten with table data read before
 
-;; could be optimized
+;; optimized:
 ;; !! JUMP TARGETS MUST point 1 byte before actual routine !!
 ;; !! RTS adds one to the address                          !!
 ;; save 6 bytes and 1 cycle
@@ -41,6 +41,7 @@ of the decoder and the jump
           (PHA)
           (LDA VM_INTERPRETER_OPTABLE_EXT1_LB,y)
           (PHA)
+          (TYA) ;; make sure to put second byte into a again, to allow for encoding short commands in second byte
           (RTS)
           ))
 

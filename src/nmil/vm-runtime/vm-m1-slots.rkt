@@ -1405,7 +1405,7 @@
 
     (label DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
            (LDA ZP_RZ)
-           (BEQ done__) ;; nil? then deon
+           (BEQ done__) ;; nil? then done
            (LSR)
            (BCS done__) ;; atomic? then done
 

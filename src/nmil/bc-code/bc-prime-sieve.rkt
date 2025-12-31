@@ -131,12 +131,12 @@
        (bc PUSH_B) (byte 20)
        (bc CALL) (word-ref PRIME_SIEVE)  ;; calc primes in the range of 1..40
        (bc BREAK))
-      (list (org #x8700))
+      (list (org #x1700))
       PRIME_SIEVE)
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                       34805)
+                       34905)
 
   (pcheck-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 2) (+ PAGE_AVAIL_0_W 43))
                 (list #x01 #x14

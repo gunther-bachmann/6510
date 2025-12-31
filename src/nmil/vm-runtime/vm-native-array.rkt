@@ -55,7 +55,6 @@
                     vm-register-functions-code
                     CP_RA_TO_RB
                     CP_RA_TO_RT
-                    CP_RT_TO_RZ
                     SWAP_RA_RB)
            (only-in "./vm-pages.rkt"
                     vm-pages-code)

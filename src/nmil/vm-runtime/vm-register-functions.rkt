@@ -159,13 +159,14 @@
 ;; copy RT -> RZ
 ;; input:  RT
 ;; output: RZ (copy of RT)
+;;         X = low byte of RT
 (define CP_RT_TO_RZ
   (list
    (label CP_RT_TO_RZ)
-          (LDA ZP_RT+1)
-          (STA ZP_RZ+1)
-          (LDA ZP_RT)
-          (STA ZP_RZ)
+          (LDX ZP_RT+1)
+          (STX ZP_RZ+1)
+          (LDX ZP_RT)
+          (STX ZP_RZ)
           (RTS)))
 
 ;; @DC-FUN: CP_RZ_TO_RT, group: register

@@ -42,10 +42,7 @@
 (define BC_CxxR
   (list
    (label BC_CxxR)
-          (LDX ZP_RT)
-          (STX ZP_RZ)
-          (LDX ZP_RT+1)
-          (STX ZP_RZ+1)
+          (JSR CP_RT_TO_RZ)             ;; keep for dec-refcnt
           ;; prepared offset for branch in VM_CxxR call ($00 = CAAR, $06 = CADR, $0c = CDAR, $12 = CDDR)
           (JSR VM_CxxR)
           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)

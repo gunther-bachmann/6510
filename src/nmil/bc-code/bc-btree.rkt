@@ -621,7 +621,7 @@
                       "3  (rt)"
                       "NIL"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                 11268))
+                 11296))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -1084,7 +1084,7 @@
                       "NIL"))
 
   (inform-check-equal? (cpu-state-clock-cycles prev-4-state)
-                5964))
+                5982))
 
 ;; optimization idea: NIL?_RET instead of NIL?, T_P_RET
 (define REVERSE ;; list :: result=nil -> list
@@ -1412,7 +1412,7 @@
                       "NIL"))
 
   (inform-check-equal? (cpu-state-clock-cycles next-4-state)
-                1852))
+                1870))
 
 ;; replace new nodes up the tree, making the tree persistent
 ;; balanced: O(lg N), worst case O(N)
@@ -2279,7 +2279,7 @@
      ))
 
   (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
-                17174)
+                17210)
 
   (check-equal? (shorten-cell-strings
                      (vm-stack->strings add-before-5-state 10 #t))
@@ -3426,7 +3426,7 @@
 
 
   (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
-                57267)
+                57423)
   (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
                 (list "stack holds 3 items"
                       (string-append
