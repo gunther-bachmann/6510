@@ -74,12 +74,16 @@
    ctx))
 
 (module+ test #| compile-bool |#
-  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-bool (mil-bool #t) (compile-ctx (list)))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx)
+                                               (compile-bool (mil-bool #t)
+                                                             (compile-ctx (list)))))
                                   opcodes))
                 (drop-meta-infos (list
                                  (LDA !$FF)
                                  (JSR MILRT_PUSH_BOOL))))
-  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-bool (mil-bool #f) (compile-ctx (list)))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx)
+                                               (compile-bool (mil-bool #f)
+                                                             (compile-ctx (list)))))
                                   opcodes))
                 (drop-meta-infos (list
                                  (LDA !$00)
@@ -95,7 +99,9 @@
 
 (module+ test #| compile |#
 
-  (check-equal? (drop-meta-infos (let-values (((opcodes ctx) (compile-uint8 (mil-uint8 #x18) (compile-ctx (list)))))
+  (check-equal? (drop-meta-infos (let-values (((opcodes ctx)
+                                               (compile-uint8 (mil-uint8 #x18)
+                                                              (compile-ctx (list)))))
                                   opcodes))
                 (drop-meta-infos (list (LDA !$18)
                                       (JSR MILRT_PUSH_UINT8)))))

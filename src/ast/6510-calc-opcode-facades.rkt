@@ -78,8 +78,8 @@
 
 (module+ test #| LDA-immediate |#
   (define locally-defined 2)
-  (check-equal? (drop-meta-info (LDA-immediate (+ 1 locally-defined)))
-                (drop-meta-info (ast-opcode-cmd '() (list 169 3)))))
+  (check-match (LDA-immediate (+ 1 locally-defined))
+               (ast-opcode-cmd _ (list 169 3))))
 
 (define/contract (LDX-immediate expr)
   (-> exact-nonnegative-integer? ast-opcode-cmd?)

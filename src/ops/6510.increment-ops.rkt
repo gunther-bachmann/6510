@@ -25,8 +25,8 @@
 (define-opcode DEX ((implicit . #xCA)))
 
 (module+ test #| DEX |#
-  (check-equal? (drop-meta-info (DEX))
-                (drop-meta-info (ast-opcode-cmd '() '(#xca)))))
+  (check-match (DEX)
+               (ast-opcode-cmd _ '(#xca))))
 
 (define-opcode DEY ((implicit . #x88)))
 
@@ -34,17 +34,17 @@
   ((zero-page . #xe6) (absolute . #xee) (absolute-x . #xfe) (zero-page-x . #xf6)))
 
 (module+ test
-  (check-equal? (drop-meta-info (INC "$10"))
-                (drop-meta-info (ast-opcode-cmd '() '(#xE6 #x10))))
+  (check-match (INC "$10")
+               (ast-opcode-cmd _ '(#xE6 #x10)))
 
-  (check-equal? (drop-meta-info (INC "$10",x))
-                (drop-meta-info (ast-opcode-cmd '() '(#xF6 #x10))))
+  (check-match (INC "$10",x)
+               (ast-opcode-cmd _ '(#xF6 #x10)))
 
-  (check-equal? (drop-meta-info (INC "$1000"))
-                (drop-meta-info (ast-opcode-cmd '() '(#xEE #x00 #x10))))
+  (check-match (INC "$1000")
+               (ast-opcode-cmd _ '(#xEE #x00 #x10)))
 
-  (check-equal? (drop-meta-info (INC "$1000",x))
-                (drop-meta-info (ast-opcode-cmd '() '(#xFE #x00 #x10)))))
+  (check-match (INC "$1000",x)
+               (ast-opcode-cmd _ '(#xFE #x00 #x10))))
 
 (define-opcode INX ((implicit . #xe8)))
 

@@ -26,10 +26,10 @@
 (define-opcode BEQ ((relative . #xf0)))
 
 (module+ test #| BEQ |#
-  (check-equal? (drop-meta-info (BEQ $10))
-                (drop-meta-info (ast-rel-opcode-cmd '() '(#xf0 #x10))))
-  (check-equal? (drop-meta-info (BEQ some))
-                (drop-meta-info (ast-unresolved-rel-opcode-cmd '() '(#xf0) (ast-resolve-byte-scmd "some" 'relative)))))
+  (check-match (BEQ $10)
+               (ast-rel-opcode-cmd _ '(#xf0 #x10)))
+  (check-match (BEQ some)
+               (ast-unresolved-rel-opcode-cmd _ '(#xf0) (ast-resolve-byte-scmd "some" 'relative))))
 
 (define-opcode BMI ((relative . #x30)))
 
