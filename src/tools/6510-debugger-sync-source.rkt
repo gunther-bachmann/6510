@@ -44,14 +44,16 @@
            (when (list? parsed-line)
              (let ([pc-mark (memq '#:pc parsed-line)]
                    [line-mark (memq '#:line parsed-line)]
-                   [org-cmd-mark (memq '#:org-cmd parsed-line)])
+                   [org-cmd-mark (memq '#:org-cmd parsed-line)]
+                   [file-name-in-map (memq '#:filename parsed-line)])
                (when (and pc-mark line-mark)
                  (hash-set! result
                            (cadr pc-mark)
                            (pc-source-map-entry
                             (cadr line-mark)
                             (if org-cmd-mark (cadr org-cmd-mark) "")
-                            file-name)))))))
+                            (if file-name-in-map (cadr file-name-in-map) file-name))))))))
+       (displayln (format "loaded source map for ~a" file-name))
        result))))
 
 ;; instrument a single source line with a prefix of the address
@@ -85,7 +87,7 @@
    (format "(~a \"~a\" ~a)"
            elisp-function-move-cursor-to-source-line
            file-name
-           (add1 line))))
+           (if (string-suffix? file-name ".rkt") line (add1 line)))))
 
 ;; display an overlay on the given source file at position of the program counter
 (define/c (6510-debugger--show-disassembly-on-source-lines file-name line disassembled)

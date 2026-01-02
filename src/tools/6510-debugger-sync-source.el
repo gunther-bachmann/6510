@@ -73,12 +73,20 @@
 
 ;;;###autoload
 (defun 6510-debugger--move-cursor-to-source-line (file-name line)
-  (when-let ((buffer (find-buffer-visiting (format "./%s" file-name))))
-    (when-let ((sel-win (get-buffer-window buffer)))
-      (with-selected-window sel-win
-        (goto-char (point-min))
-        (forward-line (1- line))
-        (recenter nil t)))))
+  (when (and (not (and follow-source-window (window-valid-p follow-source-window)))
+           (buffer-file-name (window-buffer (selected-window))))
+    (setq follow-source-window (selected-window)))
+  (when (and follow-source-window (not buffer-file-name))
+    (with-selected-window follow-source-window
+      (when-let ((buffer (find-file (if (string-prefix-p "/" file-name) file-name (format "./%s" file-name)))))
+        (when-let ((sel-win (get-buffer-window buffer)))
+          (with-selected-window sel-win
+            (goto-char (point-min))
+            (forward-line (1- line))
+            (hl-line-highlight)
+            (recenter nil t)))))))
+
+(defvar follow-source-window nil "the window to be used to follow source references")
 
 ;; (defun 6510-debugger--remove-highlighted-execution-line (file-name)
 ;;   "highlight line in the buffer visiting the given file"

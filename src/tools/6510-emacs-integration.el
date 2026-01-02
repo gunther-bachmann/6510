@@ -10,9 +10,16 @@
 (defun 6510-debugger--has-proc-display-cap () t)
 ;;;###autoload
 (defun 6510-debugger--has-single-step-cap (file-name)
-  (if (find-buffer-visiting file-name)
-      t
-    nil))
+  "allow line selection for single step, if file exists"
+  t)
+;;;###autoload
+(defun 6510-debugger--has-assembly-disp-cap (file-name)
+  "can only display complete assembly in file if it is in connected debugger mode"
+  (let ((vbuf (find-buffer-visiting file-name)))
+    (if vbuf
+        (with-current-buffer vbuf
+          6510-connected-debugger-mode)
+      nil)))
 ;;;###autoload
 (defun 6510-debugger--has-output-cap () t)
 ;;;###autoload

@@ -10,6 +10,6 @@ doc/
 /git-stats.html
 /src/vm-interpreter/*.png
 /**/ltximg/*.png
-/src/example/*.map
+*.map
 *.elc
 *.gen.png

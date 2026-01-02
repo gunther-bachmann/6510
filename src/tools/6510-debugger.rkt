@@ -11,6 +11,7 @@
 (require (rename-in  racket/contract [define/contract define/c]))
 (require readline/readline)
 (require threading)
+(require (only-in "../util.rkt" format-hex-word))
 (require "../6510-utils.rkt")
 (require "6510-interpreter.rkt")
 (require (only-in "../asm/6510-parser.rkt" asm->ast))
@@ -38,6 +39,7 @@
                   nmil-debugger--stack-buffer-kill))
 (require (only-in "./6510-emacs-integration.rkt"
                   6510-debugger--has-single-step-cap
+                  6510-debugger--has-assembly-disp-cap
                   6510-debugger--has-output-cap
                   6510-debugger--has-proc-display-cap
                   nmil-debugger--has-stack-display-cap))
@@ -452,6 +454,7 @@ EOF
 (struct emacs-capabilities
   (print-proc-status
    sync-step-with-source
+   sync-assembly-with-source
    output
    nmil-stack-display)
   #:transparent)
@@ -460,26 +463,29 @@ EOF
   (-> string? emacs-capabilities?)
   (emacs-capabilities
    (6510-debugger--has-proc-display-cap)
-   (and (non-empty-string? file-name) (file-exists? file-name) (6510-debugger--has-single-step-cap file-name))
+   (and (non-empty-string? file-name) (file-exists? (string-append file-name ".map")) (6510-debugger--has-single-step-cap file-name))
+   (and (non-empty-string? file-name) (file-exists? (string-append file-name ".map")) (6510-debugger--has-assembly-disp-cap file-name))
    (6510-debugger--has-output-cap)
    (nmil-debugger--has-stack-display-cap)))
 
 (define/c (run-debugger--prepare-emacs-integration capabilities file-name d-state)
   (-> emacs-capabilities? string? debug-state? any/c)
-  (when (emacs-capabilities-sync-step-with-source capabilities)
-    (6510-debugger--remove-all-addresses-on-source file-name)
-    (6510-debugger--show-address-on-source-lines file-name (debug-state-pc-source-map d-state))))
+  (cond [(emacs-capabilities-sync-assembly-with-source capabilities)
+          (6510-debugger--remove-all-addresses-on-source file-name)
+          (6510-debugger--show-address-on-source-lines file-name (debug-state-pc-source-map d-state))]
+        [else '()]))
 
 (define/c (run-debugger--step-update-emacs-integration capabilities s-entry d-state)
   (-> emacs-capabilities? (or/c pc-source-map-entry? #f) debug-state? any/c)
   (cond [(and (emacs-capabilities-sync-step-with-source capabilities)
             s-entry)
+         (6510-debugger--move-cursor-to-source-line (pc-source-map-entry-file s-entry) (pc-source-map-entry-line s-entry))
          (6510-debugger--show-disassembly-on-source-lines (pc-source-map-entry-file s-entry)
                                                           (pc-source-map-entry-line s-entry)
                                                           (create-disassemble-annotation-string (car (debug-state-states d-state))))]
-        [else
-         (display (apply (debug-state-pre-prompter d-state) (list d-state)))
-         (displayln "")])
+        [else '()])
+  (display (apply (debug-state-pre-prompter d-state) (list d-state)))
+  (displayln "")
   (when (and (emacs-capabilities-print-proc-status capabilities)
            (eq? (debug-state-ident d-state) '6510-debugger))
     (6510-debugger--proc-buffer-display d-state))
@@ -500,7 +506,7 @@ EOF
     (6510-debugger--proc-buffer-kill))
   (when (emacs-capabilities-nmil-stack-display capabilities)
     (nmil-debugger--stack-buffer-kill))
-  (when (emacs-capabilities-sync-step-with-source capabilities)
+  (when (emacs-capabilities-sync-assembly-with-source capabilities)
     (6510-debugger--remove-all-addresses-on-source file-name)))
 
 (define (debugger--assembler-prompter d-state)
@@ -555,7 +561,8 @@ EOF
 (define/c (run-debugger-on state (file-name "") (verbose #t) (breakpoints '()) (tracepoints '()) (interactor debugger--assembler-interactor) (run #f) #:labels (labels (hash)))
   (->* [cpu-state?] [string? boolean? (listof breakpoint?) (listof tracepoint?) (listof any/c) boolean? #:labels (hash/c string? word/c)]  any/c)
   (define capabilities (collect-emacs-capabilities file-name))
-  (define file-does-exist (and (non-empty-string? file-name) (file-exists? file-name)))
+  (define file-does-exist (and (non-empty-string? file-name) (file-exists? (string-append file-name ".map"))))
+  (displayln (format "capabilities: ~a" capabilities))
   (define d-state
     (debug-state (list state)
                  breakpoints
@@ -600,7 +607,7 @@ EOF
     (define s-entry (hash-ref (debug-state-pc-source-map d-state)
                               (cpu-state-program-counter (car (debug-state-states d-state)))
                               #f))
-    (run-debugger--step-update-emacs-integration capabilities s-entry d-state)    
+    (run-debugger--step-update-emacs-integration capabilities s-entry d-state)
     (display (apply (debug-state-prompter d-state) (list d-state)))
     (define input (begin (readline "")))
     (run-debugger--step-cleanup-emacs-integration capabilities s-entry)

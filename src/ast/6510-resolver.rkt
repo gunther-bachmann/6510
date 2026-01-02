@@ -1,18 +1,4 @@
 #lang racket
-#|
-
- decide how to resolve 6510 commands.
- decision is made depending on the width of a resolved label, for example
-
- |#
-
-(require (rename-in  racket/contract [define/contract define/c]))
-(require "6510-command.rkt")
-(require (only-in "../6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of in-word-range? in-byte-range?))
-(require (only-in "6510-relocator.rkt" command-len label-string-offsets))
-
-(module+ test #| require |#
-  (require "../6510-test-utils.rkt"))
 
 (provide resolved-instruction->bytes
          ->resolved-decisions
@@ -25,7 +11,26 @@
          label-label
          label-offset
          add-label-suffix
-         replace-labels)
+         replace-labels
+         resolved-program-length        ;; get the length of bytes of the given program (all references resolved)
+         resolved-instruction-length    ;; get the number of bytes of the given instruction (all references resolved)
+         )
+
+#|
+
+ decide how to resolve 6510 commands.
+ decision is made depending on the width of a resolved label, for example
+
+ |#
+
+(require
+ (rename-in  racket/contract [define/contract define/c])
+ "6510-command.rkt"
+ (only-in "../6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of in-word-range? in-byte-range?)
+ (only-in "6510-relocator.rkt" command-len label-string-offsets))
+
+(module+ test #| require |#
+  (require "../6510-test-utils.rkt"))
 
 ;; is this instruction introducing a label referencing a byte value (e.g. constant def)?
 (define/c (byte-label-cmd? instruction)
@@ -476,6 +481,11 @@
    "the last relative opcode command needs to jump over to the previous code section (org-command)"))
 
 
+;; get the number of bytes of the given instruction (all references resolved)
+(define/c (resolved-instruction-length instruction)
+  (-> ast-command? nonnegative-integer?)
+  (length (resolved-instruction->bytes instruction)))
+
 (define/c (resolved-instruction->bytes instruction)
   (-> ast-command? (listof byte/c))
   (cond
@@ -504,6 +514,11 @@
       (let* ((instruction (car program))
              (bytes       (resolved-instruction->bytes instruction)))
         (-resolved-program->bytes (cdr program) (append resolved bytes)))))
+
+;; get the length of bytes of the given program (all references resolved)
+(define/c (resolved-program-length program)
+  (-> (listof ast-command?) nonnegative-integer?)
+  (length (resolved-program->bytes program)))
 
 ;; transform a resolved PROGRAM into a list of bytes
 (define/c (resolved-program->bytes program)

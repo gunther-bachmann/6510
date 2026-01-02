@@ -30,6 +30,8 @@
          "../../6510.rkt"
          (only-in "../../ast/6510-assembler.rkt"
                   new-assemble-to-code-list
+                  new-assemble-to-ast-code-list
+                  map-assembly-code-list-to-resolved-bytes
                   assembly-code-list-org-code-sequences
                   assembly-code-list-labels)
          (only-in "../../ast/6510-command.rkt"
@@ -47,7 +49,9 @@
                   6510-load-multiple
                   initialize-cpu
                   run-interpreter-on
-                  memory-list))
+                  memory-list)
+         (only-in "../../tools/6510-source-map.rkt"
+                  create-source-map-for-debug))
 
 ;; 6510 assembler to fill the given page with this byte, skip 00-01 and fe-ff (which should be initialized)
 (define (fill-page-with page byte)
@@ -76,12 +80,15 @@
        [else (remove-labels-for (cdr code) labels-to-remove (cons cmd result))])]))
 
 (define (run-code-in-test-on-code wrapped-test-code (debug #f))
-  (define assembly (new-assemble-to-code-list wrapped-test-code))
+  (define ast-assembly (new-assemble-to-ast-code-list wrapped-test-code))
+  (when debug
+    (create-source-map-for-debug ast-assembly))
+  (define assembly (map-assembly-code-list-to-resolved-bytes ast-assembly))
   (define state-before
     (6510-load-multiple (initialize-cpu)
                         (assembly-code-list-org-code-sequences assembly)))
   (if debug
-      (run-debugger-on state-before "" #t
+      (run-debugger-on state-before "debug-session" #t
                        (list (breakpoint "Start of actual test code"
                                          (lambda (lc-state)
                                            (eq? (cpu-state-program-counter lc-state)

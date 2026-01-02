@@ -715,7 +715,7 @@
          (ast-decide-cmd meta-info
                          (map (lambda (addressing-mode)
                                 (let ([resolve-strategy (hash-ref address-mode-to-resolve-map (car addressing-mode))])
-                                  (ast-unresolved-opcode-cmd '()
+                                  (ast-unresolved-opcode-cmd meta-info
                                    (list (cdr addressing-mode))
                                    (cond [(eq? resolve-strategy 'resolve-word)
                                           (ast-resolve-word-scmd (->string op))]
@@ -835,7 +835,7 @@
          (list '#:line ,(syntax-line stx)
                ,(cond
                   [(path? source)
-                   `(list '#:file ,(path->string source))]
+                   `(list '#:filename ,(path->string source))]
                   [(symbol? source)
                    `(list '#:source ,(symbol->string source))]
                   [else `(list)]))))]

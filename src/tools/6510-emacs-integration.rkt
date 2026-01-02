@@ -3,12 +3,14 @@
 (provide
  6510-debugger--has-proc-display-cap
  6510-debugger--has-single-step-cap
+ 6510-debugger--has-assembly-disp-cap
  6510-debugger--has-output-cap
  6510-debugger--execute-elisp-expression
  nmil-debugger--has-stack-display-cap)
 
 (define elisp-function-has-proc-display-cap "6510-debugger--has-proc-display-cap")
 (define elisp-function-has-single-step-cap "6510-debugger--has-single-step-cap")
+(define elisp-function-has-assembly-disp-cap "6510-debugger--has-assembly-disp-cap")
 (define elisp-function-has-output-cap "6510-debugger--has-output-cap")
 (define elisp-function-has-nmil-stack-cap "nmil-debugger--has-stack-display-cap")
 
@@ -21,6 +23,9 @@
 
 (define (6510-debugger--has-single-step-cap file-name)
   (-has-cap elisp-function-has-single-step-cap file-name))
+
+(define (6510-debugger--has-assembly-disp-cap file-name)
+  (-has-cap elisp-function-has-assembly-disp-cap file-name))
 
 (define (6510-debugger--has-output-cap)
   (-has-cap elisp-function-has-output-cap))

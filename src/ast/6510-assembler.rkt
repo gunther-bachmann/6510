@@ -28,6 +28,8 @@
          translate-code-list-for-basic-loader
          org-for-code-seq
          new-assemble-to-code-list
+         new-assemble-to-ast-code-list
+         map-assembly-code-list-to-resolved-bytes
          hash-constants
          (struct-out assembly-code-list))
 
@@ -36,7 +38,7 @@
   (require "../6510-test-utils.rkt"))
 
 (define/contract (split-into-code-list code (code-list '()))
-  (->* ((listof ast-command?)) ((listof (listof ast-command?))) (listof (listof ast-command?)))
+  (->* [(listof ast-command?)] [(listof (listof ast-command?))] (listof (listof ast-command?)))
   (if (empty? code)
       (reverse code-list)
       (if (or (ast-org-command? (car code))
@@ -61,7 +63,7 @@
                                             (ast-command '())))))
 
 (define/contract (org-for-code-seq code-seq (corg #xFFFF))
-  (->* ((listof ast-command?)) (word/c) word/c)
+  [->* [(listof ast-command?)] [word/c] word/c]
   (cond [(ast-org-command? (car code-seq))
          (ast-org-command-org (car code-seq))]
         [(ast-org-align-command? (car code-seq))
@@ -216,10 +218,7 @@
                  (constant-instructions program)))))
 
 
-;; assemble the given program into a list of org-code-sequences and
-;; defined labels (and constants)
-;; one may pass additional labels (and constants) into the assembly run
-(define/contract (new-assemble-to-code-list program (labels (hash)))
+(define/contract (new-assemble-to-ast-code-list program (labels (hash)))
   (->* [(listof ast-command?)] [(hash/c string? nonnegative-integer?)] assembly-code-list?)
   (hash)
   (define constants (hash-constants program))
@@ -232,16 +231,51 @@
   (define program-p3 (resolve-constants combined-constants program-p2))
   (define code-list (split-into-code-list program-p3))
   (define result-wo-align
-    (map (lambda (code-seq) `(,(org-for-code-seq code-seq) . ,(resolved-program->bytes (cdr code-seq)))) code-list))
+    (map (lambda (code-seq) `(,(org-for-code-seq code-seq) . ;; ,(resolved-program->bytes (cdr code-seq))
+                                                      ,(cdr code-seq)
+                                                      )) code-list))
   (define cdr-result-w-align
     (assemble-to-code-list--resolve-org-aligns
      (cdr result-wo-align)
      (car result-wo-align)
      (cdr code-list)
      '()))
+
   (assembly-code-list
-   (cons (car result-wo-align) cdr-result-w-align)
-   (hash-union lsoffsets constants)))
+     (cons
+      (car result-wo-align)
+      cdr-result-w-align)
+     (hash-union lsoffsets constants)))
+
+;; assemble the given program into a list of org-code-sequences and
+;; defined labels (and constants)
+;; one may pass additional labels (and constants) into the assembly run
+(define/contract (new-assemble-to-code-list program (labels (hash)))
+  (->* [(listof ast-command?)] [(hash/c string? nonnegative-integer?)] assembly-code-list?)
+  (map-assembly-code-list-to-resolved-bytes (new-assemble-to-ast-code-list program labels)))
+
+(module+ test #| new-assembly-to-code-list |#)
+
+(define/contract (map-assembly-code-list-to-resolved-bytes code-list)
+  (-> assembly-code-list? assembly-code-list?)
+  (struct-copy assembly-code-list code-list
+               [org-code-sequences (map (lambda (ocs)
+                                          `(,(car ocs) . ,(resolved-program->bytes (cdr ocs))))
+                                        (assembly-code-list-org-code-sequences code-list))]))
+
+(module+ test #| map-assembly-code-list-to-resolved-bytes |#
+  (check-equal? (map-assembly-code-list-to-resolved-bytes
+                 (assembly-code-list
+                  (list `(#xc000 . ,(list (ast-bytes-cmd '() '(1 2))
+                                          (ast-bytes-cmd '() '(3))))
+                        `(#xc100 . ,(list (ast-bytes-cmd '() '(2))
+                                          (ast-bytes-cmd '() '(3 4)))))
+                  (hash)))
+
+                (assembly-code-list
+                 (list '(#xc000 . (1 2 3))
+                       '(#xc100 . (2 3 4)))
+                 (hash))))
 
 ;; deprecated, use new-assemble-to-code-list
 (define/contract (assemble-to-code-list program)
@@ -260,8 +294,8 @@
        (if (= #xFFFF (car result-seq))
            `(,(org-for-code-seq
                code-seq
-               (+ (car prev-result) (length (cdr prev-result))))
-             . ,(resolved-program->bytes (cdr code-seq)))
+               (+ (car prev-result) (resolved-program-length (cdr prev-result))))
+             . ,(cdr code-seq))
            result-seq))
      ;; tail call
      (assemble-to-code-list--resolve-org-aligns
