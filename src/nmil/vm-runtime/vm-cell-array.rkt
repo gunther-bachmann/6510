@@ -146,7 +146,7 @@
 (module+ test #| test-alloc-cell-array-to-rt |#
   (define test-alloc-cell-array-to-rt
     (compact-run-code-in-test-
-     ;; #:debug #t
+     #:debug #f
      #:runtime-code test-runtime
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
      (fill-page-with PAGE_AVAIL_0 #xff)

@@ -93,6 +93,23 @@
       FIFO_ENQUEUE)
      ))
 
+
+  ;; (require profile)
+  ;; (define (profile-function)
+  ;;   (run-bc-wrapped-in-test
+  ;;    (append
+  ;;     (list
+  ;;      (bc CALL) (word-ref FIFO_CREATE)
+  ;;      (bc DUP)
+  ;;      (bc PUSH_I1)
+  ;;      (bc SWAP)
+  ;;      (bc CALL) (word-ref FIFO_ENQUEUE)
+  ;;      (bc BREAK))
+  ;;     FIFO_CREATE
+  ;;     FIFO_ENQUEUE)
+  ;;    ))
+  ;; (profile-thunk profile-function)
+
   (pcheck-equal? (vm-stack->strings enqueue-state-1)
                 (list "stack holds 2 items"
                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))

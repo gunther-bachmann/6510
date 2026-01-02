@@ -2777,7 +2777,7 @@
                       "NIL  (rt)"
                       "NIL"))
 
-  (define (remove-value-at-2-state)
+  (define remove-value-at-2-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -2803,13 +2803,13 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-2-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-2-state 10 #t))
                 (list "stack holds 3 items"
                       "((0 . (9 . NIL)) . NIL)  (rt)"
                       "((0 . (8 . 9)) . NIL)"
                       "NIL"))
 
-  (define (remove-value-at-3-state)
+  (define remove-value-at-3-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -2835,13 +2835,13 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-3-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-3-state 10 #t))
                 (list "stack holds 3 items"
                       "((0 . (8 . NIL)) . NIL)  (rt)"
                       "((1 . (8 . 9)) . NIL)"
                       "NIL"))
 
-  (define (remove-value-at-4-state)
+  (define remove-value-at-4-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -2902,7 +2902,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-4-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-4-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (5 . NIL))"
@@ -2919,7 +2919,7 @@
                        )
                       "NIL"))
 
-  (define (remove-value-at-5-state)
+  (define remove-value-at-5-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -2980,7 +2980,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-5-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-5-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (6 . NIL))"
@@ -2996,7 +2996,7 @@
                        " . NIL))))")
                       "NIL"))
 
-  (define (remove-value-at-6a-state)
+  (define remove-value-at-6a-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -3057,7 +3057,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6a-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-6a-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (7 . NIL))"
@@ -3068,7 +3068,7 @@
                        " . NIL))")
                       "NIL"))
 
-  (define (remove-value-at-6b-state)
+  (define remove-value-at-6b-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -3129,7 +3129,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6b-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-6b-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
@@ -3141,7 +3141,7 @@
                        " . NIL)))")
                       "NIL"))
 
-  (define (remove-value-at-6c-state)
+  (define remove-value-at-6c-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -3197,7 +3197,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6c-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-6c-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . ((5 . NIL) . 7)))"
@@ -3209,7 +3209,7 @@
                        " . NIL)))")
                       "NIL"))
 
-  (define (remove-value-at-6d-state)
+  (define remove-value-at-6d-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -3244,7 +3244,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6d-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-6d-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
@@ -3255,7 +3255,7 @@
                        " . NIL))")
                       "NIL"))
 
-  (define (remove-value-at-6-state)
+  (define remove-value-at-6-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -3316,7 +3316,7 @@
       dependecies-remove-value-at)
      ))
 
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-6-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-6-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (7 . NIL)))"
@@ -3330,7 +3330,7 @@
                        " . NIL))))")
                       "NIL"))
 
-  (define (remove-value-at-7-state)
+  (define remove-value-at-7-state
     (run-bc-wrapped-in-test
      (append
       (list
@@ -3424,10 +3424,12 @@
       dependecies-remove-value-at)
      ))
 
+  ;; (require profile)
+  ;; (profile-thunk remove-value-at-7-state)
 
-  (inform-check-equal? (cpu-state-clock-cycles (remove-value-at-7-state))
+  (inform-check-equal? (cpu-state-clock-cycles remove-value-at-7-state)
                 57423)
-  (pcheck-equal? (shorten-cell-strings (vm-stack->strings (remove-value-at-7-state) 10 #t))
+  (pcheck-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-7-state 10 #t))
                 (list "stack holds 3 items"
                       (string-append
                        "((0 . (4 . (6 . NIL)))"
