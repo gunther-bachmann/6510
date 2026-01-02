@@ -55,7 +55,6 @@
                     VM_ALLOCATE_NEW_PAGE                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
                     )
            (only-in "./vm-register-functions.rkt"
-                    CP_RT_TO_RA
                     CP_RA_TO_RT
                     CP_RA_TO_RB
                     SWAP_RA_RB

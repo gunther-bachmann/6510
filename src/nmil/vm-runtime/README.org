@@ -3,50 +3,18 @@
 define all functions that are necessary to provide runtime functions for the
 byte code vm.
 
-
-* TODO rework memory to new tagging
-- tagging
-  - 0000 0000 => nil
-  - xxxx xxx0 =>  m1-page (with profiles)
-  - xxxx xx01 =>  cell-pair page
-    page type, number of cells free/used, next page of this type
-        0123  4567  89ab  cdef
-    00 [.01.] .[ cp0][ cp1]...
-    10  2345  6789  abcd  ef..
-    20
-    30                       .
-    40 .[ cp2] ...
-    f0  ][    ][    ][cp48]...
-
-    cp48 = f9, >>2 = 3e
-    cp2  = 41, >>2 = 10
-    cp1  = 09, >>2 = 02
-    cp0  = 03, >>2 = 01
-  - 0xxx xx11 => int
-  - 11xx xx11 => bcd
-  - 101x xx11 => symbol
-  - 1000 0011 => byte (int or byte can be &7c to check for zero on highbyte)
-  - 1001 xx11 => reserved (4)
-
-- page types (first byte on all pages, including # of slots allocated)
-  - 11xx xxxx => cell-pair page (0..48)
-  - 10xx xxxx => m1 page profile p6 (0..42)
-  - 011x xxxx => m1 page profile p8 (0..31)
-  - 010x xxxx => m1 page profile p12 (0..21)
-  - 0011 xxxx reserved (16 free values)
-  - 0001 xxxx => m1 page profile p18 (0..14)
-  - 0010 xxxx => m1 page profile p28 (0..9)
-  - 0000 1xxx => m1 page profile p42 (0..5)
-  - 0000 01xx => m1 page profile p84 (0..3)
-  - 0000 0000 => cell-stack page
-  - 0000 0001 => call-frame page
-  - 0000 0010 => code page
-  - 0000 0011 reserved
-
-- header (used e.g. as 1st byte in a m1 page)
-  - 0xxx xxxx => native array length x (0-82)  \
-  - 10xx xxxx => cell array length x (0-41)    / allows & $7f to get array length, regardless of array type
-  - 110r sccc => function header (r=reserved, s=static/no gc, ccc=#constants 0..7)
-  - 111x xxxx => reserved (32)
-
-- no more cell-pages (only m1, cell-pair, cell-stack ... )
+* TODO
+- [ ] make sure that naming is corrected
+      EVLSTK_TAIL for all but RT
+      CELL :: 2 byte tagged ptr or atomic
+      SLOT :: profile driven number of bytes on a page (refcnt x slot-type x payload)
+      PAGE :: 256 bytes
+      PAGE-TYPE :: m1-page | cell-stack | call-frame-stack | ...
+      ...
+* ...
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; org-pretty-entities-include-sub-superscripts: nil   ;; make sure _ is not interpreted as subscript
+  ;; fill-column: 100                                    ;; fill paragraphs with 100 char width
+  ;; End:
+  #+end_src

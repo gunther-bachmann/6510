@@ -202,10 +202,10 @@
 (define CP_RT_TO_RA
   (list
    (label CP_RT_TO_RA)
-          (LDA ZP_RT+1)
-          (STA ZP_RA+1)
-          (LDA ZP_RT)
-          (STA ZP_RA)
+          (LDX ZP_RT+1)
+          (STX ZP_RA+1)
+          (LDX ZP_RT)
+          (STX ZP_RA)
           (RTS)))
 
 ;; @DC-FUN: CP_RT_TO_RB, group: register

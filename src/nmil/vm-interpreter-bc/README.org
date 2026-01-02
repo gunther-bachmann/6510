@@ -4,3 +4,7 @@
 
 Tests are usually kept in separate files to avoid circular module references
 when using other byte codes during test of the byte code of interest
+
+* TODO
+- [ ] check reference counting especially for arrays
+- [ ] increase test coverage

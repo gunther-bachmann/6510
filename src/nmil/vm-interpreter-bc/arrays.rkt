@@ -46,8 +46,11 @@
                   WRITE_ARR_ATa_RA_TO_RT
                   COPY_ARR_ATa_RA_TO_RZ__IF_PTR)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
+                  POP_CELL_EVLSTK_TO_RT
                   PUSH_RT_TO_EVLSTK)
-         (only-in "../vm-runtime/vm-register-functions.rkt" SWAP_RA_RB)
+         (only-in "../vm-runtime/vm-register-functions.rkt"
+                  SWAP_RA_RB
+                  CP_RT_TO_RA)
          (only-in "./branch.rkt"
                   BRANCH_BY_NEXT_BYTE__NO_POP))
 
@@ -152,9 +155,7 @@
     (label BC_GET_ARRAY_FIELD) ;; replace RT with RT.@A
            (LSR)
            (AND !$03)
-           (PHA)
            (JSR CP_RT_TO_RA)
-           (PLA)
            (JSR WRITE_ARR_ATa_RA_TO_RT)
            (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
            (JSR DEC_REFCNT_M1_SLOT_RA)
@@ -166,10 +167,10 @@
     (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping
            (LSR)
            (AND !$03)
-           (PHA)
            (JSR CP_RT_TO_RA)
+           (TAX)
            (JSR POP_CELL_EVLSTK_TO_RT)
-           (PLA)
+           (TXA)
            (JSR COPY_ARR_ATa_RA_TO_RZ__IF_PTR)
            (JSR POP_EVLSTK_TO_ARR_ATa_RA)
            (LDA ZP_RZ)
@@ -187,7 +188,7 @@
   (list
    (label BC_PUSH_RA)
           (JSR PUSH_RT_TO_EVLSTK)
-   (label BC_WRITE_RA)
+   (label BC_WRITE_RA) ;; TODO: before overwriting rt, it needs to be checked if it is a pointer (no check if pushed before!)
           (JSR CP_RA_TO_RT)
           (JSR INC_REFCNT_M1_SLOT_RT) ;; RA can only be a ptr -> rt is one too
           (JMP VM_INTERPRETER_INC_PC)))
@@ -200,7 +201,6 @@
           (JSR WRITE_ARR_ATa_RA_TO_RT)
           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
           (JMP VM_INTERPRETER_INC_PC)))
-
 
 (define BC_POP_TO_RA_AF
   (list
@@ -221,11 +221,13 @@
   (flatten
    (list
     (label BC_PUSH_AF)
+           ;; decrement ra before overwriting
+           (JSR DEC_REFCNT_M1_SLOT_RA)
            (JSR POP_CELL_EVLSTK_TO_RA)            ;; ra = cell-ptr -> cell-array         (stack: index)
            (LDA ZP_RT+1)                          ;; index                               (stack: index)
            (JSR WRITE_ARR_ATa_RA_TO_RT)           ;; rt <- array@a                       (stack: value)
            (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)    ;; now on stack and in array => inc refcnt'd
-           (JSR DEC_REFCNT_M1_SLOT_RA)            ;; removed from stack => dec refcnt'd
+           ;; (JSR DEC_REFCNT_M1_SLOT_RA)         ;; no decrement, since it is still in RA (and can be reused)
            (JMP VM_INTERPRETER_INC_PC))))
 
 ;; stack: index(byte) :: cell-ptr->cell-array  :: value (cell)

@@ -334,7 +334,6 @@
                     VM_INITIALIZE_PAGE_MEMORY_MANAGER)
            (only-in "./vm-register-functions.rkt"
                     vm-register-functions-code
-                    CP_RT_TO_RA
                     CP_RA_TO_RT
                     CP_RA_TO_RB
                     CP_RT_TO_RZ
