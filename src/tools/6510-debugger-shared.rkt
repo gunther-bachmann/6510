@@ -32,7 +32,8 @@
    pre-prompter
    ident
    interactor-queue
-   labels)
+   labels
+   program-counter)
   #:guard (struct-guard/c (listof cpu-state?)
                           (listof breakpoint?)
                           (listof tracepoint?)
@@ -44,4 +45,5 @@
                           symbol?                   ;; identity of this interactor
                           (listof any/c)            ;; interactors
                           (hash/c string? word/c)    ;; resolved labels
+                          (-> any/c nonnegative-integer?)
                           ))

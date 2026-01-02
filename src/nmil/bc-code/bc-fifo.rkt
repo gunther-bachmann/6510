@@ -21,7 +21,7 @@
          (only-in "./bc-btree.rkt"
                   REVERSE)
          "../vm-bc-ast.rkt"
-         (only-in "../vm-bc-opcode-definitions.rkt" bc)
+         (only-in "../vm-bc-opcode-definitions.rkt" bc fetch-opcode-list)
          (only-in "../vm-bc-resolver.rkt"
                   bc-resolve
                   bc-bytes)
@@ -29,7 +29,6 @@
 
 (module+ test #|  |#
   (require "./test-utils.rkt"))
-
 (define FIFO_CREATE ;;  -> point struct
   (list
    (label FIFO_CREATE)

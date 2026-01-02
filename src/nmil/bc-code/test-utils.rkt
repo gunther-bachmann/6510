@@ -39,6 +39,7 @@
          (only-in "../vm-bc-opcode-definitions.rkt"
                   bc
                   bc-opcode-definitions
+                  fetch-opcode-list
                   full-extended-optable-lb
                   full-extended-optable-hb
                   full-interpreter-opcode-table)
@@ -82,7 +83,8 @@
           (JMP VM_INTERPRETER))
     (list (org #x0800))
     bc-to-wrap
-    (list (bc BREAK))
+    (list (ast-bytes-cmd '() (fetch-opcode-list "BREAK")))
+    ;;(bc BREAK)
     ;; ---
     ;; ---
     (list (org #xa000))

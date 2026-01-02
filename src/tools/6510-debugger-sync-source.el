@@ -81,6 +81,7 @@
       (when-let ((buffer (find-file (if (string-prefix-p "/" file-name) file-name (format "./%s" file-name)))))
         (when-let ((sel-win (get-buffer-window buffer)))
           (with-selected-window sel-win
+            (hl-line-mode 1) ;; ensure it is on
             (goto-char (point-min))
             (forward-line (1- line))
             (hl-line-highlight)

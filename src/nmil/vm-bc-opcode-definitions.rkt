@@ -27,7 +27,8 @@
 
 |#
 
-(require (only-in racket/contract
+(require (for-syntax racket/base)
+         (only-in racket/contract
                   define/contract
                   struct-guard/c
                   or/c
@@ -46,6 +47,8 @@
                   ast-unresolved-bytes-cmd
                   ast-resolve-byte-scmd
                   ast-resolve-word-scmd)
+         (for-syntax (only-in "../scheme-asm/6510-addressing-utils.rkt"
+                             retrieve-meta-info-from))
          (only-in "../tools/6510-disassembler.rkt"
                   info-for-label)
          (only-in "../util.rkt"
@@ -520,19 +523,22 @@
   (car opcodes))
 
 ;; syntactic sugar to get the assembler command for the given byte code
-(define-syntax-rule  (bc label)
-  (ast-bytes-cmd '() (fetch-opcode-list (symbol->string 'label))))
+(define-syntax (bc stx)
+  (syntax-case stx ()
+    ([_ label]
+     #`(ast-bytes-cmd #,(retrieve-meta-info-from stx);; (list '#:filename #,(syntax-source #'stx) '#:line #,(syntax-line #'stx))
+                      (fetch-opcode-list (symbol->string 'label))))))
 
 (module+ test #| bc |#
-  (check-equal? (bc CALL)
-                (ast-bytes-cmd '() '(#x68)))
+  (check-match (bc CALL)
+               (ast-bytes-cmd _ '(#x68)))
 
-  (check-equal? (bc IMAX)
-                (ast-bytes-cmd '() '(#x08 #x01))
-                "extended command consisting of two byte codes")
+  ;; extended command consisting of two byte codes
+  (check-match (bc IMAX)
+               (ast-bytes-cmd _ '(#x08 #x01)))
 
-  (check-equal? (bc IADD)
-                (ast-bytes-cmd '() '(#xbe))))
+  (check-match (bc IADD)
+               (ast-bytes-cmd _ '(#xbe))))
 
 
 ;; build table of lowbyte jump table for extended opcodes

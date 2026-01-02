@@ -53,7 +53,8 @@
          debugger--push-breakpoint
          debugger--remove-breakpoints
          push-debugger-interactor
-         pop-debugger-interactor)
+         pop-debugger-interactor
+         find-source-map-entry)
 
 (module+ test
   (require threading)
@@ -92,6 +93,7 @@
 (define/c (debugger--pretty-print address len d-state (lf #f) )
   (->* [(or/c string? false?) (or/c string? false?) debug-state?] [boolean?] debug-state?)
   (define c-state (car (debug-state-states d-state)))
+  (display "  ")
   (display (disassemble c-state
                         (if address (debugger--resolve-value address d-state) (cpu-state-program-counter c-state))
                         (if len (string->number len 16) 1)
@@ -103,6 +105,7 @@
   (-> (or/c string? false?) (or/c string? false?) debug-state? debug-state?)
   (define c-state (car (debug-state-states d-state)))
   (define adr (if address (debugger--resolve-value address d-state)  (cpu-state-program-counter c-state)))
+  (display "  ")
   (displayln (memory->string adr
                             (+ -1 adr (if len (string->number len 16) 1))
                             c-state))
@@ -153,7 +156,7 @@
                           [states (cons (-pokem c-state (cpu-state-program-counter c-state) byteList)
                                         (debug-state-states d-state))])]
             [else
-             (begin (displayln "byte length differs (use xf to force)")
+             (begin (displayln "  byte length differs (use xf to force)")
                     d-state)]))))
 
 (define/c (debugger--remove-breakpoints d-state description)
@@ -256,8 +259,13 @@ q                       quit
 .                       repeat last command (multiple dots repeat multiple times)
 EOF
     )
-  (with-colors 'green (lambda () (displayln help)))
+  (with-colors 'green (lambda () (display "  ")(displayln help)))
   d-state)
+
+(define/c (d-displayln str)
+  (-> string? void?)
+  (display "  ")
+  (displayln str))
 
 ;; decode the given debugger command and dispatch to the debugger
 (define/c (dispatch-debugger-command command d-state)
@@ -285,29 +293,29 @@ EOF
   (define options-regex #px"^t(oggle)? o(ption)? (verbose-step)")
   (define list-labels-regex #px"^l(ist)? *l(abels)?( +\"(.*)\")?")
   (with-handlers ([exn:fail?
-                   (λ (e) (displayln "don't understand, please retry or consult doc") d-state)])
+                   (λ (e) (d-displayln "don't understand, please retry or consult doc") d-state)])
     (cond
       [(string-prefix? command "~")
        (define iqueue (debug-state-interactor-queue d-state))
        (cond [(not (empty? iqueue))
               (define interactor (car iqueue))
               (define dispatcher (dict-ref interactor 'dispatcher interactor))
-              (displayln "dispatching to previous interactor ...")
+              (d-displayln "dispatching to previous interactor ...")
               (apply dispatcher (list (substring command 1) d-state))]
-             [else (displayln "no previous interactor to dispatch to.") d-state])]
+             [else (d-displayln "no previous interactor to dispatch to.") d-state])]
       [(or (string=? command "?") (string=? command "h")) (debugger--help d-state)]
       [(regexp-match? list-labels-regex command)
        (match-let (((list _ _ _ _ regex-str) (regexp-match list-labels-regex command)))
-         (displayln (format "labels for ~a" regex-str))
+         (d-displayln (format "labels for ~a" regex-str))
          (for-each
           (lambda (key)
-            (displayln (format "$~a:\t~a" (number->string (hash-ref (debug-state-labels d-state) key) 16) key)))
+            (d-displayln (format "$~a:\t~a" (number->string (hash-ref (debug-state-labels d-state) key) 16) key)))
           (filter (lambda (str) (regexp-match (or regex-str ".*") str)) (hash-keys (debug-state-labels d-state))))
          d-state)]
       ;; pop debugger interactor
       [(string=? command "surface")
        (cond [(empty? (debug-state-interactor-queue d-state))
-              (displayln "no interactor left to pop")
+              (d-displayln "no interactor left to pop")
               d-state]
              [else
               (pop-debugger-interactor d-state)])]
@@ -324,7 +332,7 @@ EOF
        (match-let (((list _ num) (regexp-match bt-regex command)))
          (define drop-num (- (length (debug-state-states d-state)) (if num (string->number num 16) 1)))
          (cond [(or (< drop-num 0) (>= drop-num (length (debug-state-states d-state))))
-                (begin (with-colors 'red (lambda () (displayln "cannot go to that point in time"))) d-state)]
+                (begin (with-colors 'red (lambda () (d-displayln "cannot go to that point in time"))) d-state)]
                [else
                 (struct-copy debug-state d-state
                              [states (drop (debug-state-states d-state) drop-num)])]))]
@@ -348,7 +356,7 @@ EOF
        (match-let (((list _ len address) (regexp-match pp-regex command)))
          (begin0
              (debugger--pretty-print address len d-state #t)
-           (displayln "")))]
+           (d-displayln "")))]
       ;; pm - print memory
       [(regexp-match? pm-regex command)
        (match-let (((list _ address len) (regexp-match pm-regex command)))
@@ -379,11 +387,11 @@ EOF
                     (value (debugger--resolve-value value-str d-state)))
          (cond [cl
                 (begin
-                  (displayln (format "clear breakpoint at pc = ~a" value-str))
+                  (d-displayln (format "clear breakpoint at pc = ~a" value-str))
                   (debugger--remove-breakpoints d-state (format "stop at pc = ~a ($~a)" value-str (number->string value 16))))]
                [else
                 (begin
-                  (displayln (format "set breakpoint at pc = ~a ($~a)" value-str (number->string value 16)))
+                  (d-displayln (format "set breakpoint at pc = ~a ($~a)" value-str (number->string value 16)))
                   (debugger--push-breakpoint d-state
                                              (lambda (lc-state)
                                                (eq? (cpu-state-program-counter lc-state)
@@ -394,11 +402,11 @@ EOF
        (match-let (((list _ cl value) (regexp-match stop-a-regex command)))
          (cond [cl
                 (begin
-                  (displayln (format "clear breakpoint at accumluator = $~a" value))
+                  (d-displayln (format "clear breakpoint at accumluator = $~a" value))
                   (debugger--remove-breakpoints d-state (format "stop when register A = $~a" value)))]
                [else
                 (begin
-                  (displayln (format "set breakpoint at accumluator = $~a" value))
+                  (d-displayln (format "set breakpoint at accumluator = $~a" value))
                   (debugger--push-breakpoint d-state
                                              (lambda (lc-state)
                                                (eq? (cpu-state-accumulator lc-state)
@@ -409,11 +417,11 @@ EOF
        (match-let (((list _ cl value) (regexp-match stop-sp-regex command)))
          (cond [cl
                 (begin
-                  (displayln (format "clear breakpoint at sp = $(1)~a" value))
+                  (d-displayln (format "clear breakpoint at sp = $(1)~a" value))
                   (debugger--remove-breakpoints d-state (format "stop when sp = $~a" value)))]
                [else
                 (begin
-                  (displayln (format "set breakpoint at sp = $(1)~a" value))
+                  (d-displayln (format "set breakpoint at sp = $(1)~a" value))
                   (debugger--push-breakpoint d-state
                                              (lambda (lc-state)
                                                (eq? (cpu-state-stack-pointer lc-state)
@@ -423,7 +431,7 @@ EOF
       [(regexp-match? list-bp-regex command)
        (begin
          (for ([description (map breakpoint-description (debug-state-breakpoints d-state))])
-           (displayln description))
+           (d-displayln description))
          d-state)]
       ;; stop cf = 0 - stop when carry is cleared
       ;; stop zf = 1 - stop when zero is set
@@ -441,7 +449,7 @@ EOF
       ;; r - run
       [(regexp-match? run-regex command) (debugger--run d-state)]
       [else (begin (unless (zero? (string-length command))
-                     (with-colors 'red (lambda () (displayln "(unknown command, enter '?' to get help)"))))
+                     (with-colors 'red (lambda () (d-displayln "(unknown command, enter '?' to get help)"))))
                    d-state)])))
 
 (define/c (create-disassemble-annotation-string c-state)
@@ -514,7 +522,9 @@ EOF
 
 (define (debugger--assembler-pre-prompter d-state)
   (define c-state (car (debug-state-states d-state)))
-  (disassemble c-state (cpu-state-program-counter c-state) 1 #:labels (debug-state-labels d-state)))
+  (string-append
+   " *"
+   (disassemble c-state (cpu-state-program-counter c-state) 1 #:labels (debug-state-labels d-state))))
 
 ;; definition of an repl interactor for regular assembly level debug repl sessions
 (define debugger--assembler-interactor
@@ -522,6 +532,7 @@ EOF
    `(prompter . ,debugger--assembler-prompter)
    `(dispatcher . ,dispatch-debugger-command)
    `(pre-prompter . ,debugger--assembler-pre-prompter)
+   `(program-counter . ,(lambda (d-state) (cpu-state-program-counter (car (debug-state-states d-state)))))
    `(ident . 6510-debugger)))
 
 (define/c (push-debugger-interactor interactor d-state)
@@ -533,6 +544,7 @@ EOF
            `(prompter . ,(debug-state-prompter d-state))
            `(dispatcher . ,(debug-state-dispatcher d-state))
            `(pre-prompter . ,(debug-state-pre-prompter d-state))
+           `(program-counter . ,(debug-state-program-counter d-state))
            `(ident . ,(debug-state-ident d-state)))
           (debug-state-interactor-queue d-state)))
   (struct-copy debug-state d-state
@@ -542,6 +554,7 @@ EOF
                [dispatcher       (dict-ref interactor 'dispatcher interactor)]
                [pre-prompter     (dict-ref interactor 'pre-prompter interactor)]
                [ident            (dict-ref interactor 'ident interactor)]
+               [program-counter  (dict-ref interactor 'program-counter interactor)]
                [interactor-queue new-interactor-queue]))
 
 (define/c (pop-debugger-interactor d-state)
@@ -555,6 +568,7 @@ EOF
                [dispatcher       (dict-ref interactor 'dispatcher interactor)]
                [pre-prompter     (dict-ref interactor 'pre-prompter interactor)]
                [ident            (dict-ref interactor 'ident interactor)]
+               [program-counter  (dict-ref interactor 'program-counter interactor)]
                [interactor-queue new-interactor-queue]))
 
 ;; run an read eval print loop debugger on the passed program
@@ -578,7 +592,8 @@ EOF
                  (dict-ref interactor 'pre-prompter debugger--assembler-pre-prompter)
                  (dict-ref interactor 'ident '6510-debugger)
                  (list)
-                 labels))
+                 labels
+                 (dict-ref interactor 'program-counter '(lambda (_) 0))))
 
   (when file-does-exist
     (run-debugger--prepare-emacs-integration capabilities file-name d-state))
@@ -598,15 +613,23 @@ EOF
     (displayln "enter '?' to get help, enter 'q' to quit"))
   (run-debugger-on (6510-load (initialize-cpu) org raw-bytes) file-name verbose #:labels labels))
 
+;; get the source map entry for the given d-state
+(define/c (find-source-map-entry d-state)
+  (-> debug-state? (or/c pc-source-map-entry? #f))
+  (hash-ref
+   (if (hash? (debug-state-pc-source-map d-state))
+       (debug-state-pc-source-map d-state)
+       (hash))
+   (apply (debug-state-program-counter d-state) (list d-state))
+   #f))
+
 ;; execute the debugger repl
 (define/c (run-debugger--repl initial-d-state capabilities)
   (-> debug-state? emacs-capabilities? any/c)
   (define d-state (struct-copy debug-state initial-d-state))
   (define previous-input '())
   (for ([_ (in-naturals)])
-    (define s-entry (hash-ref (debug-state-pc-source-map d-state)
-                              (cpu-state-program-counter (car (debug-state-states d-state)))
-                              #f))
+    (define s-entry (find-source-map-entry d-state))
     (run-debugger--step-update-emacs-integration capabilities s-entry d-state)
     (display (apply (debug-state-prompter d-state) (list d-state)))
     (define input (begin (readline "")))
@@ -619,6 +642,7 @@ EOF
              (set! previous-input input)
              (set! d-state (apply (debug-state-dispatcher d-state) (list input d-state))))]))
   d-state)
+
 
 ;; dispatch the given debugger command n-times starting with the current debug-state
 (define/c (run-debugger--dispatch-debugger-command-n-times command d-state (n 1))

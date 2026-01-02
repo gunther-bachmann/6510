@@ -39,6 +39,7 @@ functions
 (module+ test
   (require rackunit
            "../6510.rkt"
+           (only-in "../6510-test-utils.rkt" drop-meta-info)
            (only-in "./vm-bc-opcode-definitions.rkt" bc)))
 
 ;; collect all labels in this list of BC-AST-CMDS
@@ -140,18 +141,18 @@ functions
              (bc CALL) (word-ref yz)
       (label last))))
 
-  (check-equal? (bc-resolve- bc-cmds-unresolved (bc-collect-labels bc-cmds-unresolved))
-                (list
-                 (ast-label-def-cmd '() "first")
-                 (bc BNOP)
-                 (ast-label-def-cmd '() "next")
-                 (bc GOTO)
-                 (ast-bytes-cmd '() '(255))
-                 (bc GOTO)
-                 (ast-bytes-cmd '() '(3))
-                 (bc CALL)
-                 (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "yz"))
-                 (ast-label-def-cmd '() "last")))
+  (check-equal? (drop-meta-info (bc-resolve- bc-cmds-unresolved (bc-collect-labels bc-cmds-unresolved)))
+                (drop-meta-info (list
+                                (ast-label-def-cmd '() "first")
+                                (bc BNOP)
+                                (ast-label-def-cmd '() "next")
+                                (bc GOTO)
+                                (ast-bytes-cmd '() '(255))
+                                (bc GOTO)
+                                (ast-bytes-cmd '() '(3))
+                                (bc CALL)
+                                (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "yz"))
+                                (ast-label-def-cmd '() "last"))))
 
 
   (define bc-cmds-unresolved-2
@@ -171,22 +172,22 @@ functions
 
   (check-equal? (bc-collect-labels bc-cmds-unresolved-2)
                 (hash "BTREE_VALIDATE" 0 "IS_PAIR__BTREE_VALIDATE" 14))
-  (check-equal? (bc-resolve bc-cmds-unresolved-2)
+  (check-match (bc-resolve bc-cmds-unresolved-2)
                 (list
-                 (ast-label-def-cmd '() "BTREE_VALIDATE")
-                 (ast-bytes-cmd '() '(2))
-                 (ast-bytes-cmd '() '(48))
-                 (ast-bytes-cmd '() '(104))
-                 (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BTREE_NODE_P"))
-                 (ast-bytes-cmd '() '(24))
-                 (ast-bytes-cmd '() '(7))
-                 (ast-bytes-cmd '() '(0))
-                 (ast-bytes-cmd '() '(104))
-                 (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BTREE_VALUE_P"))
-                 (ast-bytes-cmd '() '(24))
-                 (ast-bytes-cmd '() '(20))
-                 (ast-bytes-cmd '() '(2))
-                 (ast-label-def-cmd '() "IS_PAIR__BTREE_VALIDATE"))))
+                 (ast-label-def-cmd _ "BTREE_VALIDATE")
+                 (ast-bytes-cmd _ '(2))
+                 (ast-bytes-cmd _ '(48))
+                 (ast-bytes-cmd _ '(104))
+                 (ast-unresolved-bytes-cmd _ '() (ast-resolve-word-scmd "BTREE_NODE_P"))
+                 (ast-bytes-cmd _ '(24))
+                 (ast-bytes-cmd _ '(7))
+                 (ast-bytes-cmd _ '(0))
+                 (ast-bytes-cmd _ '(104))
+                 (ast-unresolved-bytes-cmd _ '() (ast-resolve-word-scmd "BTREE_VALUE_P"))
+                 (ast-bytes-cmd _ '(24))
+                 (ast-bytes-cmd _ '(20))
+                 (ast-bytes-cmd _ '(2))
+                 (ast-label-def-cmd _ "IS_PAIR__BTREE_VALIDATE"))))
 
 ;; calculate the number of bytes the given list of BC-CMDS actually take
 ;; useful for calculating the length of a sequence of byte code commands

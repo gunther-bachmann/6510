@@ -32,6 +32,8 @@
                   assemble
                   assemble-to-code-list
                   new-assemble-to-code-list
+                  new-assemble-to-ast-code-list
+                  map-assembly-code-list-to-resolved-bytes
                   assembly-code-list-org-code-sequences
                   assembly-code-list-labels
                   translate-code-list-for-basic-loader
@@ -72,6 +74,8 @@
                   run-interpreter-on
                   memory-list
                   cpu-state-accumulator)
+         (only-in "../tools/6510-source-map.rkt"
+                  create-source-map-for-debug)
          (only-in "../util.rkt"
                   bytes->int
                   format-hex-byte
@@ -379,7 +383,9 @@
                                      (color-displayln (format "ignored exception: ~a" (exn->string e)))
                                      d-state)])
           (cond [(or (string=? command "?") (string=? command "h")) (debugger--bc-help d-state)]
-                [(string=? command "dive") (push-debugger-interactor debugger--assembler-interactor d-state)]
+                [(string=? command "dive")
+                 (define next-state (push-debugger-interactor debugger--assembler-interactor d-state))
+                 next-state]
                 [(string=? command "fl") (color-displayln (vm-cell-pair-free-list-info c-state)) d-state]
                 [(string=? command "gc-c")
                  (color-displayln (vm-inc-collectible-list->string c-state))
@@ -546,7 +552,8 @@
   (list
    `(dispatcher . ,(debugger--bc-dispatcher- interpreter-loop-adr))
    `(prompter . ,(lambda (d-state) (format "BC [~x] > " (length (debug-state-states d-state)))))
-   `(pre-prompter . ,(lambda (d-state) (string-append "\n" (debugger--disassemble (car (debug-state-states d-state)) #:labels (debug-state-labels d-state)))))
+   `(pre-prompter . ,(lambda (d-state) (string-append "\n *" (debugger--disassemble (car (debug-state-states d-state)) #:labels (debug-state-labels d-state)))))
+   `(program-counter . ,(lambda (d-state) (peek-word-at-address (car (debug-state-states d-state)) ZP_VM_PC)))
    `(ident . nmil-debugger)))
 
 ;; get the number of pages not in the free list nor allocated (totally untouched/free)
@@ -665,13 +672,18 @@
   (define resolved-dec (->resolved-decisions (label-instructions wrapped-code) wrapped-code))
   (define label->offset (label-string-offsets org-code-start resolved-dec))
   (define interpreter-loop (hash-ref label->offset "VM_INTERPRETER"))
-  (define assembly (new-assemble-to-code-list wrapped-code))
+  (define ast-assembly (new-assemble-to-ast-code-list wrapped-code))
+  (define assembly (map-assembly-code-list-to-resolved-bytes ast-assembly))
+  (if debug
+      (create-source-map-for-debug ast-assembly)
+      (when (file-exists? "debug-session.map")
+        (delete-file "debug-session.map")))
   (define state-before
     (6510-load-multiple (initialize-cpu)
                         (assembly-code-list-org-code-sequences assembly)))
   (if debug
       (run-debugger-on state-before
-                       ""
+                       "debug-session"
                        #t
                        (list
                         (breakpoint bc-debugger--instruction-breakpoint-name ;; (format "~a @ $~a" bc-debugger--instruction-breakpoint-name (number->string interpreter-loop 16))

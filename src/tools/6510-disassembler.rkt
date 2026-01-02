@@ -47,15 +47,15 @@
 
 (define/c (disassemble-bytes org bytes)
   (-> word/c (listof byte/c) (listof string?))
-  (string-split (disassemble (6510-load (initialize-cpu) org bytes) org 1000 (sub1 (+ org (length bytes))) #t) "\n"))
+  (string-split (disassemble (6510-load (initialize-cpu) org bytes) org 1000 (sub1 (+ org (length bytes))) #t #:sep "\n") "\n"))
 
 (module+ test #| disassemble-bytes |#
   (check-equal? (disassemble-bytes 2048 '(169 0 168))
                 (list "LDA #$00" "TAY")))
 
 ;; disassemble lines instructions
-(define/c (disassemble state [address (cpu-state-program-counter state)] [lines 1] [max-address #xffff] [short #f] #:labels (labels (hash)))
-  (->* [cpu-state?] [word/c word/c word/c boolean? #:labels (hash/c string? word/c)] string?)
+(define/c (disassemble state [address (cpu-state-program-counter state)] [lines 1] [max-address #xffff] [short #f] #:labels (labels (hash)) #:sep (sep "\n  "))
+  (->* [cpu-state?] [word/c word/c word/c boolean? #:labels (hash/c string? word/c) #:sep string?] string?)
   (let-values (((str len) (disassemble-single state address short #:labels labels)))
     (define code-byte-str (code-bytes state address len))
     (define formatted-str
@@ -63,7 +63,7 @@
           str
           (format "~a ~a\t~a" (word->hex-string address) (~a code-byte-str #:width 8) str)))
     (if (and (> lines 1) (< address max-address))
-        (string-join (list formatted-str (disassemble state (+ address len) (sub1 lines) max-address short #:labels labels)) "\n")
+        (string-join (list formatted-str (disassemble state (+ address len) (sub1 lines) max-address short #:labels labels)) sep)
         formatted-str)))
 
 ;; hex string of byte at memory address pc points to

@@ -81,8 +81,10 @@
 
 (define (run-code-in-test-on-code wrapped-test-code (debug #f))
   (define ast-assembly (new-assemble-to-ast-code-list wrapped-test-code))
-  (when debug
-    (create-source-map-for-debug ast-assembly))
+  (if debug
+    (create-source-map-for-debug ast-assembly)
+    (when (file-exists? "debug-session.map")
+        (delete-file "debug-session.map")))
   (define assembly (map-assembly-code-list-to-resolved-bytes ast-assembly))
   (define state-before
     (6510-load-multiple (initialize-cpu)
