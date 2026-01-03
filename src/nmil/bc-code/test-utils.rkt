@@ -22,6 +22,12 @@
          PAGE_AVAIL_1
          PAGE_AVAIL_1_W)
 
+#|
+
+ utility functions to do byte code tests
+
+ |#
+
 (require (only-in racket/list
                   flatten
                   make-list)
@@ -108,6 +114,6 @@
 (define PAGE_AVAIL_1 #xc9)
 (define PAGE_AVAIL_1_W #xc900)
 
-  (define (run-bc-wrapped-in-test bc (debug #f))
-    (define wrapped-code (wrap-bytecode-for-full-bc-test bc))
-    (run-bc-wrapped-in-test- bc wrapped-code debug))
+(define (run-bc-wrapped-in-test bc (debug #f))
+  (define wrapped-code (wrap-bytecode-for-full-bc-test (flatten bc)))
+  (run-bc-wrapped-in-test- (flatten bc) wrapped-code debug))

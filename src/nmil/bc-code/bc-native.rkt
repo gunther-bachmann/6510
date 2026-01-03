@@ -1,16 +1,19 @@
 #lang racket/base
 
-(require (only-in racket/list flatten)
-         "../../6510.rkt"
-         (only-in "../../tools/6510-interpreter.rkt"
-                    cpu-state-clock-cycles)
+#|
+
+ test bc native call and return by implementing two adders
+
+ |#
+
+(require "../../6510.rkt"
          (only-in "../vm-bc-opcode-definitions.rkt"
-                  bc)
-         (only-in "../vm-interpreter.rkt"
-                  vm-interpreter))
+                  bc))
 
 (module+ test #|  |#
-  (require "./test-utils.rkt"))
+  (require (only-in "../test-utils.rkt"
+                    regression-test)
+           "./test-utils.rkt"))
 
 (define BC_ADD_NATIVE
   (list
@@ -43,14 +46,18 @@
       (list (org #x1700))
       BC_ADD_NATIVE)
      ))
-  (inform-check-equal? (cpu-state-clock-cycles add-native-state)
-                       831)
-  (check-equal? (vm-stack->strings add-native-state)
-                (list "stack holds 3 items"
-                      "int $0001  (rt)"
-                      "byte $0a"
-                      "ptr NIL")
-                "native adding bytes 4 + 6 = 10 => 0a"))
+
+  (regression-test
+   add-native-state
+   "4 6 -> add native"
+   (inform-check-equal? (cpu-state-clock-cycles add-native-state)
+                        831)
+   (check-equal? (vm-stack->strings add-native-state)
+                 (list "stack holds 3 items"
+                       "int $0001  (rt)"
+                       "byte $0a"
+                       "ptr NIL")
+                 "native adding bytes 4 + 6 = 10 => 0a")))
 
 (define BC_ADD_NATIVE_2
   (list
@@ -82,11 +89,15 @@
       (list (org #x1700))
       BC_ADD_NATIVE_2)
      ))
-  (inform-check-equal? (cpu-state-clock-cycles add-native-state-2)
-                       798)
-  (check-equal? (vm-stack->strings add-native-state-2)
-                (list "stack holds 3 items"
-                      "int $0002  (rt)"
-                      "byte $0a"
-                      "ptr NIL")
-                "native adding bytes 4 + 6 = 10 => 0a"))
+
+  (regression-test
+   add-native-state-2
+   "4 6 -> add native (alternative impl)"
+   (inform-check-equal? (cpu-state-clock-cycles add-native-state-2)
+                        798)
+   (check-equal? (vm-stack->strings add-native-state-2)
+                 (list "stack holds 3 items"
+                       "int $0002  (rt)"
+                       "byte $0a"
+                       "ptr NIL")
+                 "native adding bytes 4 + 6 = 10 => 0a")))

@@ -44,19 +44,21 @@
     write local byte -> native array ra @ index rt?
 
 
-|#
+ |#
 
 
-[require (only-in racket/list flatten)
-         "../../6510.rkt"
-         (only-in "../../tools/6510-interpreter.rkt" memory-list)
+(require "../../6510.rkt"
          "../vm-bc-ast.rkt"
-         (only-in "../vm-bc-opcode-definitions.rkt" bc)
-         (only-in "../vm-bc-resolver.rkt" bc-resolve bc-bytes)
-         (only-in "../vm-interpreter.rkt" vm-interpreter)]
+         (only-in "../vm-bc-opcode-definitions.rkt"
+                  bc)
+         (only-in "../vm-bc-resolver.rkt"
+                  bc-resolve
+                  bc-bytes))
 
 (module+ test #|  |#
-  (require "./test-utils.rkt"))
+  (require (only-in "../test-utils.rkt"
+                    regression-test)
+           "./test-utils.rkt"))
 
 ;; init loop cnt (e.g. # -> RAI/BI/CI
 ;; execute loop body
@@ -66,62 +68,62 @@
 (define PRIME_SIEVE ;; currently using 46 byte
   (bc-resolve
    (flatten
-  (list
-   (label PRIME_SIEVE)
-          (byte 3) ;; locals
-          (bc WRITE_TO_L0)              ;; l0 = size/max num (as byte)
-          (bc WRITE_TO_RBI)
-          (bc DUP)
-          (bc BSHR)
-          (bc POP_TO_L2)                ;; l2 = size/2
-          (bc ALLOC_ARA)                ;; RA = cell-array
-   (label LOOP_ARR_INIT__PRIME_SIEVE)
-          (bc PUSH_I0)                  ;;                       stack: 0
-          (bc POP_TO_RA_AF)             ;; (RA),RAI = 0          stack: -
-          (bc DEC_RBI_NZ_P_BRA) (bc-rel-ref LOOP_ARR_INIT__PRIME_SIEVE)
+    (list
+     (label PRIME_SIEVE)
+            (byte 3) ;; locals
+            (bc WRITE_TO_L0)              ;; l0 = size/max num (as byte)
+            (bc WRITE_TO_RBI)
+            (bc DUP)
+            (bc BSHR)
+            (bc POP_TO_L2)                ;; l2 = size/2
+            (bc ALLOC_ARA)                ;; RA = cell-array
+     (label LOOP_ARR_INIT__PRIME_SIEVE)
+            (bc PUSH_I0)                  ;;                       stack: 0
+            (bc POP_TO_RA_AF)             ;; (RA),RAI = 0          stack: -
+            (bc DEC_RBI_NZ_P_BRA) (bc-rel-ref LOOP_ARR_INIT__PRIME_SIEVE)
 
-          (bc PUSH_B) (byte 02)         ;;                       stack: 2
-          (bc WRITE_TO_L1)              ;; l1 = current candidate
+            (bc PUSH_B) (byte 02)         ;;                       stack: 2
+            (bc WRITE_TO_L1)              ;; l1 = current candidate
 
-   (label LOOP_MARKING__PRIME_SIEVE)
-          (bc PUSH_L1)                  ;;                       stack: 2 :: 2
-          (bc BADD)                     ;;                       stack: 4
-          (bc DUP)                      ;;                       stack: 4 :: 4
-          (bc PUSH_L0)                  ;;                       stack: size :: 4 :: 4
-          (bc B_LT_P)                   ;;                       stack: < :: 4
-          (bc T_P_BRA) (bc-rel-ref DONE_MARKING__PRIME_SIEVE) ;; stack: 4
+     (label LOOP_MARKING__PRIME_SIEVE)
+            (bc PUSH_L1)                  ;;                       stack: 2 :: 2
+            (bc BADD)                     ;;                       stack: 4
+            (bc DUP)                      ;;                       stack: 4 :: 4
+            (bc PUSH_L0)                  ;;                       stack: size :: 4 :: 4
+            (bc B_LT_P)                   ;;                       stack: < :: 4
+            (bc T_P_BRA) (bc-rel-ref DONE_MARKING__PRIME_SIEVE) ;; stack: 4
 
-          (bc WRITE_TO_RAI)             ;;                       stack: 4
-          (bc DEC_RAI)
+            (bc WRITE_TO_RAI)             ;;                       stack: 4
+            (bc DEC_RAI)
 
-          (bc PUSH_I1)                  ;;                       stack: 1 :: 4
-          (bc POP_TO_RA_AF)             ;;                       stack: 4
-          (bc GOTO) (bc-rel-ref LOOP_MARKING__PRIME_SIEVE)
+            (bc PUSH_I1)                  ;;                       stack: 1 :: 4
+            (bc POP_TO_RA_AF)             ;;                       stack: 4
+            (bc GOTO) (bc-rel-ref LOOP_MARKING__PRIME_SIEVE)
 
-   (label DONE_MARKING__PRIME_SIEVE)
-          (bc WRITE_L1)                 ;;                       stack: 2
+     (label DONE_MARKING__PRIME_SIEVE)
+            (bc WRITE_L1)                 ;;                       stack: 2
 
-   (label NEXT_CAND__PRIME_SIEVE)
-          (bc WRITE_TO_RAI)             ;;                       stack: 2
-          (bc BINC)                     ;;                       stack: 3
-          ;; check whether half of size is reached => done
-          (bc DUP)                      ;;                       stack: 3 :: 3
-          (bc PUSH_L2)                  ;;                       stack: size/2 :: 3 :: 3
-          (bc B_LT_P)                   ;;                       stack: size/2 < 3 :: 3
-          (bc T_P_BRA) (bc-rel-ref ALL_DONE__PRIME_SIEVE) ;;     stack: 3
+     (label NEXT_CAND__PRIME_SIEVE)
+            (bc WRITE_TO_RAI)             ;;                       stack: 2
+            (bc BINC)                     ;;                       stack: 3
+            ;; check whether half of size is reached => done
+            (bc DUP)                      ;;                       stack: 3 :: 3
+            (bc PUSH_L2)                  ;;                       stack: size/2 :: 3 :: 3
+            (bc B_LT_P)                   ;;                       stack: size/2 < 3 :: 3
+            (bc T_P_BRA) (bc-rel-ref ALL_DONE__PRIME_SIEVE) ;;     stack: 3
 
-          (bc PUSH_RA_AF)               ;;                       stack: x :: 3
-          (bc T_P_BRA) (bc-rel-ref NEXT_CAND__PRIME_SIEVE) ;;    stack: 3
+            (bc PUSH_RA_AF)               ;;                       stack: x :: 3
+            (bc T_P_BRA) (bc-rel-ref NEXT_CAND__PRIME_SIEVE) ;;    stack: 3
 
-          (bc WRITE_TO_L1)              ;;                       stack: 3
-          (bc DUP)                      ;;                       stack: 3 :: 3
-          (bc PUSH_L0)                  ;;                       stack: size :: 3 :: 3
-          (bc B_GE_P)                   ;;                       stack: < :: 3
-          (bc T_P_BRA) (bc-rel-ref LOOP_MARKING__PRIME_SIEVE) ;; stack: 3
+            (bc WRITE_TO_L1)              ;;                       stack: 3
+            (bc DUP)                      ;;                       stack: 3 :: 3
+            (bc PUSH_L0)                  ;;                       stack: size :: 3 :: 3
+            (bc B_GE_P)                   ;;                       stack: < :: 3
+            (bc T_P_BRA) (bc-rel-ref LOOP_MARKING__PRIME_SIEVE) ;; stack: 3
 
-   (label ALL_DONE__PRIME_SIEVE)        ;;                       stack: 20+
-          (bc WRITE_RA)                 ;;                       stack: array-ptr
-          (bc RET)))))
+     (label ALL_DONE__PRIME_SIEVE)        ;;                       stack: 20+
+            (bc WRITE_RA)                 ;;                       stack: array-ptr
+            (bc RET)))))
 
 (module+ test #| primve-sieve |#
   (define prime-sieve-state
@@ -131,53 +133,55 @@
        (bc PUSH_B) (byte 20)
        (bc CALL) (word-ref PRIME_SIEVE)  ;; calc primes in the range of 1..40
        (bc BREAK))
-      (list (org #x1700))
       PRIME_SIEVE)
      ))
 
-  (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                       34905)
+  (regression-test
+   prime-sieve-state
+   "prime sieve on cell-array with the first 20 integers"
+   (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
+                        34905)
 
-  (pcheck-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 2) (+ PAGE_AVAIL_0_W 43))
-                (list #x01 #x14
-                      #x03 #x00  ;; 1 prime
-                      #x03 #x00  ;; 2 prime
-                      #x03 #x00  ;; 3 prime
-                      #x03 #x01  ;; 4
-                      #x03 #x00  ;; 5 prime
-                      #x03 #x01  ;; 6
-                      #x03 #x00  ;; 7 prime
-                      #x03 #x01  ;; 8
-                      #x03 #x01  ;; 9
-                      #x03 #x01  ;; 10
-                      #x03 #x00  ;; 11 prime
-                      #x03 #x01  ;; 12
-                      #x03 #x00  ;; 13 prime
-                      #x03 #x01  ;; 14
-                      #x03 #x01  ;; 15
-                      #x03 #x01  ;; 16
-                      #x03 #x00  ;; 17 prime
-                      #x03 #x01  ;; 18
-                      #x03 #x00  ;; 19 prime
-                      #x03 #x01  ;; 20
-                      ;; #x03 #x01  ;; 21
-                      ;; #x03 #x01  ;; 22
-                      ;; #x03 #x00  ;; 23 prime
-                      ;; #x03 #x01  ;; 24
-                      ;; #x03 #x01  ;; 25
-                      ;; #x03 #x01  ;; 26
-                      ;; #x03 #x01  ;; 27
-                      ;; #x03 #x01  ;; 28
-                      ;; #x03 #x00  ;; 29 prime
-                      ;; #x03 #x01  ;; 30
-                      ;; #x03 #x00  ;; 31 prime
-                      ;; #x03 #x01  ;; 32
-                      ;; #x03 #x01  ;; 33
-                      ;; #x03 #x01  ;; 34
-                      ;; #x03 #x01  ;; 35
-                      ;; #x03 #x01  ;; 36
-                      ;; #x03 #x00  ;; 37 prime
-                      ;; #x03 #x01  ;; 38
-                      ;; #x03 #x01  ;; 39
-                      ;; #x03 #x01  ;; 40
-                      )))
+   (check-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 2) (+ PAGE_AVAIL_0_W 43))
+                  (list #x01 #x14
+                        #x03 #x00  ;; 1 prime
+                        #x03 #x00  ;; 2 prime
+                        #x03 #x00  ;; 3 prime
+                        #x03 #x01  ;; 4
+                        #x03 #x00  ;; 5 prime
+                        #x03 #x01  ;; 6
+                        #x03 #x00  ;; 7 prime
+                        #x03 #x01  ;; 8
+                        #x03 #x01  ;; 9
+                        #x03 #x01  ;; 10
+                        #x03 #x00  ;; 11 prime
+                        #x03 #x01  ;; 12
+                        #x03 #x00  ;; 13 prime
+                        #x03 #x01  ;; 14
+                        #x03 #x01  ;; 15
+                        #x03 #x01  ;; 16
+                        #x03 #x00  ;; 17 prime
+                        #x03 #x01  ;; 18
+                        #x03 #x00  ;; 19 prime
+                        #x03 #x01  ;; 20
+                        ;; #x03 #x01  ;; 21
+                        ;; #x03 #x01  ;; 22
+                        ;; #x03 #x00  ;; 23 prime
+                        ;; #x03 #x01  ;; 24
+                        ;; #x03 #x01  ;; 25
+                        ;; #x03 #x01  ;; 26
+                        ;; #x03 #x01  ;; 27
+                        ;; #x03 #x01  ;; 28
+                        ;; #x03 #x00  ;; 29 prime
+                        ;; #x03 #x01  ;; 30
+                        ;; #x03 #x00  ;; 31 prime
+                        ;; #x03 #x01  ;; 32
+                        ;; #x03 #x01  ;; 33
+                        ;; #x03 #x01  ;; 34
+                        ;; #x03 #x01  ;; 35
+                        ;; #x03 #x01  ;; 36
+                        ;; #x03 #x00  ;; 37 prime
+                        ;; #x03 #x01  ;; 38
+                        ;; #x03 #x01  ;; 39
+                        ;; #x03 #x01  ;; 40
+                        ))))

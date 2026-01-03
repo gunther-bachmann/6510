@@ -1,4 +1,7 @@
 #+title: bc-code
 
 folder contains code that is written as pure bytecode,
-examples, code experiments and tests
+examples, code experiments and tests.
+
+the purpose is here to check the validity of byte codes,
+their usefulness and their speed.
