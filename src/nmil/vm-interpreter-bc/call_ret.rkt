@@ -1,10 +1,21 @@
 #lang racket/base
 
-(require (only-in racket/list
-                  flatten)
-         "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
+(provide BC_CALL
+         BC_Z_P_RET_POP_N
+         BC_NZ_P_RET_POP_N
+         BC_NIL_P_RET_L0_POP_N
+         BC_TAIL_CALL
+         BC_F_P_RET_F
+         BC_F_P_RET
+         BC_T_P_RET
+         BC_RET
+
+         bc-call-ret-code)
+
+(require "../../6510.rkt"
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function
+                  define-vm-function-wol)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC
                   ZP_VM_PC)
@@ -21,23 +32,8 @@
                   TAGGED_INT_0
                   TAG_BYTE_BYTE_CELL))
 
-(provide BC_CALL
-         BC_Z_P_RET_POP_N
-         BC_NZ_P_RET_POP_N
-         BC_NIL_P_RET_L0_POP_N
-         BC_TAIL_CALL
-         BC_F_P_RET_F
-         BC_F_P_RET
-         BC_T_P_RET
-         BC_RET
-
-         bc-call-ret-code)
-
-(define BC_CALL
-  (add-label-suffix
-   "__" "__CALL"
+(define-vm-function BC_CALL
   (list
-   (label BC_CALL)
           ;; load the two bytes following into ZP_RP (ptr to function descriptor)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)                    ;; load lowbyte of call target, right behind byte-code
@@ -76,14 +72,11 @@
           (STA ZP_VM_PC+1)
           (STA ZP_VM_FUNC_PTR+1)
 
-          (JMP VM_INTERPRETER_INC_PC)))) ;; function starts at function descriptor + 1
+          (JMP VM_INTERPRETER_INC_PC))) ;; function starts at function descriptor + 1
 
 (define BC_NZ_P_RET_POP_N '())
-(define BC_Z_P_RET_POP_N
-  (add-label-suffix
-   "__" "BC_Z_P_RET_POP_N"
+(define-vm-function BC_Z_P_RET_POP_N
    (list
-    (label BC_Z_P_RET_POP_N)
            (LSR)                        ;; number to pop
            (AND !$03)
            (LDX ZP_RT+1)
@@ -159,13 +152,10 @@
     ;;        (JMP VM_INTERPRETER_INC_PC)
 
     (label COUNT__)
-           (byte 0))))
+           (byte 0)))
 
-(define BC_NIL_P_RET_L0_POP_N
-  (add-label-suffix
-   "__" "__BC_NIL_P_RET_L0_POP_N"
+(define-vm-function BC_NIL_P_RET_L0_POP_N
   (list
-   (label BC_NIL_P_RET_L0_POP_N)
           (LDX ZP_RT)
           (CPX !<TAGGED_NIL)                 ;; lowbyte = tagged_nil lowbyte
           (BEQ RETURN__)                     ;; is nil => return param or local
@@ -208,11 +198,10 @@
           (BRK)
 
    (label COUNT__)
-          (byte 0))))
+          (byte 0)))
 
-(define BC_TAIL_CALL
+(define-vm-function BC_TAIL_CALL
   (list
-   (label BC_TAIL_CALL)
           (LDA ZP_VM_FUNC_PTR)
           (STA ZP_VM_PC)
           (LDA ZP_VM_FUNC_PTR+1)
@@ -221,11 +210,8 @@
           ;; adjust pc to start executing function ptr +1
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define BC_RET
-  (add-label-suffix
-   "__" "__BC_RET"
+(define-vm-function BC_RET
   (list
-   (label BC_RET)
           ;; load # locals = 0 skip this step
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (LDA ZP_RA)
@@ -233,13 +219,10 @@
           (JSR VM_REFCOUNT_DECR_ARRAY_REGS)
    (label NO_RA__)
           (JSR VM_POP_CALL_FRAME)             ;; maybe move the respective code into here, (save jsr)
-          (JMP VM_INTERPRETER))))
+          (JMP VM_INTERPRETER)))
 
-(define BC_F_P_RET_F
-  (add-label-suffix
-   "__" "__F_P_RET_F"
+(define-vm-function BC_F_P_RET_F
   (list
-   (label BC_F_P_RET_F)
           (LDA ZP_RT+1)
           (BNE IS_TRUE__)
           ;; don't pop false value, return it!
@@ -247,13 +230,10 @@
           (JSR VM_POP_CALL_FRAME)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_TRUE__)
-          (JMP VM_POP_EVLSTK_AND_INC_PC))))
+          (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
-(define BC_F_P_RET
-  (add-label-suffix
-   "__" "__F_P_RET"
+(define-vm-function BC_F_P_RET
   (list
-   (label BC_F_P_RET)
           (LDA ZP_RT+1)
           (BNE IS_TRUE__)
           (JSR POP_CELL_EVLSTK_TO_RT)
@@ -261,13 +241,10 @@
           (JSR VM_POP_CALL_FRAME)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_TRUE__)
-          (JMP VM_POP_EVLSTK_AND_INC_PC))))
+          (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
-(define BC_T_P_RET
-  (add-label-suffix
-   "__" "__BC_T_P_RET"
+(define-vm-function BC_T_P_RET
   (list
-   (label BC_T_P_RET)
           (LDA ZP_RT+1)
           (BEQ IS_FALSE__)
           (JSR POP_CELL_EVLSTK_TO_RT)
@@ -275,7 +252,7 @@
           (JSR VM_POP_CALL_FRAME)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_FALSE__)
-          (JMP VM_POP_EVLSTK_AND_INC_PC))))
+          (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
 (define bc-call-ret-code
   (append

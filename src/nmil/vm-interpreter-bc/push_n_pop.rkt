@@ -1,19 +1,24 @@
 #lang racket/base
 
+(provide BC_PUSH_B
+         BC_DUP
+         BC_SWAP
+         BC_POP
+         BC_POP_TO_RA
+         BC_POP_TO_RB
+         BC_PUSH_I)
+
 #|
 
-Bytecode implementation of comparison commands
+ Bytecode implementation of comparison commands
 
-TODO: get tests (still in vm-interpreter) into this file
-
-|#
+ |#
 
 
-(require (only-in racket/list
-                  flatten)
-         "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
+(require "../../6510.rkt"
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function
+                  define-vm-function-wol)
          (only-in "../vm-interpreter-loop.rkt"
                   ZP_VM_PC)
          (only-in "../vm-interpreter-loop.rkt"
@@ -34,33 +39,22 @@ TODO: get tests (still in vm-interpreter) into this file
                   ZP_CELL_STACK_HB_PTR
                   TAG_BYTE_BYTE_CELL))
 
-(provide BC_PUSH_B
-         BC_DUP
-         BC_SWAP
-         BC_POP
-         BC_POP_TO_RA
-         BC_POP_TO_RB
-         BC_PUSH_I)
-
-(define BC_PUSH_B
+(define-vm-function BC_PUSH_B
   (list
-   (label BC_PUSH_B)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
           (LDX !TAG_BYTE_BYTE_CELL)
           (JSR PUSH_XA_TO_EVLSTK)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
-(define BC_DUP
+(define-vm-function BC_DUP
   (list
-   (label BC_DUP)
           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
           (JSR PUSH_RT_TO_EVLSTK)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define BC_SWAP
+(define-vm-function BC_SWAP
   (list
-   (label BC_SWAP)
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_LB_PTR),y)
           (TAX)
@@ -76,7 +70,7 @@ TODO: get tests (still in vm-interpreter) into this file
 
 (define BC_POP_TO_RB '())
 (define BC_POP_TO_RA '())
-(define BC_POP
+(define-vm-function-wol BC_POP
   (list
    (label BC_POP_TO_RB)
           (LDA !$00)
@@ -94,9 +88,8 @@ TODO: get tests (still in vm-interpreter) into this file
           (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
           (JMP VM_POP_EVLSTK_AND_INC_PC)))
 
-(define BC_PUSH_I
+(define-vm-function BC_PUSH_I
   (list
-   (label BC_PUSH_I)
           (LDY !$02)                             ;; index 1 past the byte code itself
           (LDA (ZP_VM_PC),y)                     ;; load high byte of int (not encoded)
           (TAX)                                  ;; -> X

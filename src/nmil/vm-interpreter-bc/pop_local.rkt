@@ -1,23 +1,18 @@
 #lang racket/base
 
-(require (only-in racket/list
-                  flatten)
-         "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
+(provide BC_POP_TO_LOCAL_SHORT
+         BC_WRITE_TO_LOCAL_SHORT)
+
+(require "../../6510.rkt"
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function-wol)
          (only-in "../vm-runtime/vm-m1-slots.rkt"
                   DEC_REFCNT_M1_SLOT_RZ__IF_PTR
                   DEC_REFCNT_M1_SLOT_RZ
                   INC_REFCNT_M1_SLOT_RT))
 
-(provide BC_POP_TO_LOCAL_SHORT
-         BC_WRITE_TO_LOCAL_SHORT)
-
 (define BC_WRITE_TO_LOCAL_SHORT '())
-(define BC_POP_TO_LOCAL_SHORT
-  (add-label-suffix
-   "__" "__BC_POP_TO_LOCAL_SHORT"
-  (flatten
+(define-vm-function-wol BC_POP_TO_LOCAL_SHORT
    (list
     (label PREP_LOCAL__)
            (LSR)
@@ -55,4 +50,4 @@
            ;; increment, since it is now in locals and on stack
            (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
            (JMP VM_INTERPRETER_INC_PC)          ;; next bc
-))))
+))

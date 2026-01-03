@@ -3,23 +3,23 @@
 (provide
  INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX    ;; initialize m1 page (page = RZ+1) of profile x, returning first free slot in A/X
  ALLOC_M1_SLOT_TO_RA                  ;; allocate an m1 slot of size A into RA
+ ALLOC_M1_SLOT_TO_RB                  ;; allocate an m1 slot of size A into RB
  ALLOC_M1_P0_SLOT_TO_RA               ;; allocate an m1 slot profile 0 (of size 4) into RA
  ALLOC_M1_PX_SLOT_TO_RA               ;; allocate an m1 slot profile X into RA
  ALLOC_M1_SLOT_TO_RT                  ;; allocate an m1 slot of size A into RT
- DEC_REFCNT_M1_SLOT_RZ
- DEC_REFCNT_M1_SLOT_RZ__IF_PTR
- DEC_REFCNT_M1_SLOT_RT__IF_PTR
- DEC_REFCNT_M1_SLOT_RA
- DEC_REFCNT_M1_SLOT_RB
- DEC_REFCNT_M1_SLOT_RC
- INC_REFCNT_M1_SLOT_RT
- ALLOC_M1_SLOT_TO_RB
+ DEC_REFCNT_M1_SLOT_RZ                ;; decrement pointed to by RZ (without checks)
+ DEC_REFCNT_M1_SLOT_RZ__IF_PTR        ;; decrement pointed to by RZ only iff it is a ptr
+ DEC_REFCNT_M1_SLOT_RT__IF_PTR        ;; decrement pointed to by RT only iff it is a ptr
+ DEC_REFCNT_M1_SLOT_RA                ;; decrement pointed to by RZ (no checks needed, RA may only hold ptrs)
+ DEC_REFCNT_M1_SLOT_RB                ;; decrement pointed to by RZ (no checks needed, RB may only hold ptrs)
+ DEC_REFCNT_M1_SLOT_RC                ;; decrement pointed to by RZ (no checks needed, RC may only hold ptrs)
+ INC_REFCNT_M1_SLOT_RT                ;; decrement pointed to by RZ (without checks)
 
- vm-m1-slot-code                        ;; complete list of code of this module
+ vm-m1-slot-code                      ;; complete list of code of this module
 
- ;; derived code sequnces
- ALLOC_M1_P0_SLOT_TO_RT
- ALLOC_M1_P0_SLOT_TO_RA
+ ;; derived code sequences
+ ALLOC_M1_P0_SLOT_TO_RT               ;; allocate m1 slot of profile 0 to RT
+ ALLOC_M1_P0_SLOT_TO_RA               ;; allocate m1 slot of profile 0 to RA
  )
 
 #|
@@ -288,7 +288,7 @@
       BMI BLOCK_TOO_LARGE_ERROR ;; 19 cycles
       ;; profile 5         18 cycles
 
-|#
+ |#
 
 
 (require "../../6510.rkt"
@@ -617,16 +617,14 @@
    (list #x0e #x00)
    "next free slot is at @0e, next page of same profile is 0"))
 
-(define ALLOC_M1_SLOT_TO_RT
+(define-vm-function ALLOC_M1_SLOT_TO_RT
   (list
-   (label ALLOC_M1_SLOT_TO_RT)
           ;; maybe keep RA if not empty!
           (JSR ALLOC_M1_SLOT_TO_RA)
           (JMP CP_RA_TO_RT)))
 
-(define ALLOC_M1_P0_SLOT_TO_RT
+(define-vm-function ALLOC_M1_P0_SLOT_TO_RT
   (list
-   (label ALLOC_M1_P0_SLOT_TO_RT)
           ;; maybe keep RA if not empty!
           (LDA ZP_RA)
           (PHA)

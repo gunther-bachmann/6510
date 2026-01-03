@@ -1,18 +1,5 @@
 #lang racket/base
 
-(require (only-in racket/list
-                  flatten)
-         "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
-         (only-in "../vm-interpreter-loop.rkt"
-                  VM_INTERPRETER
-                  ZP_VM_PC
-                  VM_INTERPRETER_INC_PC_2_TIMES)
-         (only-in "../vm-runtime/vm-memory-map.rkt"
-                  ZP_RT
-                  TAG_BYTE_BYTE_CELL))
-
 (provide BC_Z_P_BRA                     ;; branch by next byte if tos is zero (byte or int), pop if branching
          BC_NZ_P_BRA                    ;; branch by next byte if tos is NOT zero (byte or int), pop if not branching
          BC_T_P_BRA                     ;; branch by next byte if tos is true (actually anything != 0), always pop
@@ -24,13 +11,24 @@
          BRANCH_BY_NEXT_BYTE            ;; pop eval stack and then pc += [vm+1] (+2 if forward), signed add
          BRANCH_BY_NEXT_BYTE__NO_POP)   ;; pc += [vm+1] (+2 if forward), signed add, NO POP
 
+(require "../../6510.rkt"
+         (only-in "../../ast/6510-resolver.rkt"
+                  add-label-suffix)
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function
+                  define-vm-function-wol)
+         (only-in "../vm-interpreter-loop.rkt"
+                  VM_INTERPRETER
+                  ZP_VM_PC
+                  VM_INTERPRETER_INC_PC_2_TIMES)
+         (only-in "../vm-runtime/vm-memory-map.rkt"
+                  ZP_RT
+                  TAG_BYTE_BYTE_CELL))
+
+
 ;; pop (0) if branching
-(define BC_Z_P_BRA
-  (add-label-suffix
-   "__" "__BC_Z_P_BRA"
-   (flatten
+(define-vm-function BC_Z_P_BRA
     (list
-     (label BC_Z_P_BRA)
             (LDX ZP_RT+1)
             (BNE NO_BRA__)              ;; byte !=0 or lowbyte of int != 0 => no branch
             (LDX ZP_RT)
@@ -42,15 +40,11 @@
             (JSR POP_CELL_EVLSTK_TO_RT)
             (JMP BRANCH_BY_NEXT_BYTE)
      (label NO_BRA__)
-            (JMP VM_INTERPRETER_INC_PC_2_TIMES)))))
+            (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 ;; pop (0) if not branching
-(define BC_NZ_P_BRA
-  (add-label-suffix
-   "__" "__BC_NZ_P_BRA"
-   (flatten
+(define-vm-function BC_NZ_P_BRA
     (list
-     (label BC_NZ_P_BRA)
             (LDX ZP_RT+1)
             (BNE BRA__) ;; != 0 => branch before even looking at anything else
             (LDX ZP_RT)
@@ -62,17 +56,14 @@
             (JMP BRANCH_BY_NEXT_BYTE__NO_POP)
      (label NO_BRA__)
             (JSR POP_CELL_EVLSTK_TO_RT)
-            (JMP VM_INTERPRETER_INC_PC_2_TIMES)))))
+            (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define CONTINUE_AFTER_BRA '())
 (define POP_AND_CONTINUE_AFTER_BRA '())
 (define BRANCH_BY_NEXT_BYTE '())
 (define BRANCH_BY_NEXT_BYTE__NO_POP '())
-(define BC_T_P_BRA
-  (add-label-suffix
-   "__" "__T_P_BRA"
+(define-vm-function BC_T_P_BRA
   (list
-   (label BC_T_P_BRA)
           ;; (CLC)
           (LDA ZP_RT+1)
           (BEQ POP_AND_CONTINUE_AFTER_BRA) ;; when false (A = 0), just continue, no branch
@@ -114,22 +105,18 @@
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
           (BMI NEGATIVE_BRANCH_NO_POP__)
-          (JMP CONTINUE_AFTER_BRA))))
+          (JMP CONTINUE_AFTER_BRA)))
 
-(define BC_F_P_BRA
+(define-vm-function BC_F_P_BRA
   (list
-   (label BC_F_P_BRA)
           (CLC)
           (LDA ZP_RT+1)
           (BEQ BRANCH_BY_NEXT_BYTE)
           (LDA !$00)
           (BEQ POP_AND_CONTINUE_AFTER_BRA)))
 
-(define BC_GOTO
-  (add-label-suffix
-   "__" "__GOTO"
+(define-vm-function BC_GOTO
   (list
-   (label BC_GOTO)
           (CLC)
           (LDY !$01)
           (LDA (ZP_VM_PC),y)
@@ -144,4 +131,4 @@
           (BCS NO_PAGE_CHANGE_ON_BACK__)
           (DEC ZP_VM_PC+1)
    (label NO_PAGE_CHANGE_ON_BACK__)
-          (JMP VM_INTERPRETER))))
+          (JMP VM_INTERPRETER)))

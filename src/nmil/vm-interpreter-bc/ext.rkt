@@ -1,28 +1,25 @@
 #lang racket/base
 
-#|
-
-define code and data that is used to execute extended byte code commands
-the implementation of these is defined elsewhere, here is the implementation
-of the decoder and the jump
-
-|#
-
-(require (only-in racket/list
-                  flatten)
-         "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
-         (only-in "../vm-interpreter-loop.rkt"
-                  ZP_VM_PC))
-
 (provide BC_EXT1_CMD
          VM_INTERPRETER_OPTABLE_EXT1_LB
          VM_INTERPRETER_OPTABLE_EXT1_HB)
 
-(define BC_EXT1_CMD
+#|
+
+ define code and data that is used to execute extended byte code commands
+ the implementation of these is defined elsewhere, here is the implementation
+ of the decoder and the jump
+
+ |#
+
+(require "../../6510.rkt"
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function)
+         (only-in "../vm-interpreter-loop.rkt"
+                  ZP_VM_PC))
+
+(define-vm-function BC_EXT1_CMD
   (list
-   (label BC_EXT1_CMD)
           (LDY !$01)
           (LDA (ZP_VM_PC),y) ;; get second command byte
           (TAY)

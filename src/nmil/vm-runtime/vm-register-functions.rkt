@@ -28,10 +28,11 @@
  |#
 
 (require "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
          (only-in "../../ast/6510-relocator.rkt"
                   code-len)
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function
+                  define-vm-function-wol)
          (only-in "../vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-rega->string
@@ -69,18 +70,16 @@
 ;; write NIL into register, not checking its content (no dec-refcnt)
 ;; input:  -
 ;; output: RT (RP) = NIL
-(define WRITE_NIL_TO_RT
+(define-vm-function WRITE_NIL_TO_RT
   (list
-   (label WRITE_NIL_TO_RT)
           (LDA !<TAGGED_NIL)
           (STA ZP_RT)
           (LDA !>TAGGED_NIL)
           (STA ZP_RT+1)
           (RTS)))
 
-(define WRITE_NIL_TO_RP
+(define-vm-function WRITE_NIL_TO_RP
   (list
-   (label WRITE_NIL_TO_RP)
           (LDA !<TAGGED_NIL)
           (STA ZP_RP)
           (LDA !>TAGGED_NIL)
@@ -106,9 +105,8 @@
 ;; copy RA -> RT
 ;; input:  RA
 ;; output: RT (copy of RA)
-(define CP_RA_TO_RT
+(define-vm-function CP_RA_TO_RT
   (list
-   (label CP_RA_TO_RT)
    (label CP_RA_TO_RT__VALUE) ;;just value, no tagged byte
           (LDA ZP_RA+1)
           (STA ZP_RT+1)
@@ -120,9 +118,8 @@
 ;; copy RA -> RZ
 ;; input:  RA
 ;; output: RZ (copy of RA)
-(define CP_RA_TO_RZ
+(define-vm-function CP_RA_TO_RZ
   (list
-   (label CP_RA_TO_RZ)
           (LDA ZP_RA+1)
           (STA ZP_RZ+1)
           (LDA ZP_RA)
@@ -133,9 +130,8 @@
 ;; copy RB -> RZ
 ;; input:  RB
 ;; output: RZ (copy of RA)
-(define CP_RB_TO_RZ
+(define-vm-function CP_RB_TO_RZ
   (list
-   (label CP_RB_TO_RZ)
           (LDA ZP_RB+1)
           (STA ZP_RZ+1)
           (LDA ZP_RB)
@@ -146,9 +142,8 @@
 ;; copy RC -> RZ
 ;; input:  RC
 ;; output: RZ (copy of RA)
-(define CP_RC_TO_RZ
+(define-vm-function CP_RC_TO_RZ
   (list
-   (label CP_RC_TO_RZ)
           (LDA ZP_RC+1)
           (STA ZP_RZ+1)
           (LDA ZP_RC)
@@ -160,9 +155,8 @@
 ;; input:  RT
 ;; output: RZ (copy of RT)
 ;;         X = low byte of RT
-(define CP_RT_TO_RZ
+(define-vm-function CP_RT_TO_RZ
   (list
-   (label CP_RT_TO_RZ)
           (LDX ZP_RT+1)
           (STX ZP_RZ+1)
           (LDX ZP_RT)
@@ -173,9 +167,8 @@
 ;; copy RZ -> RT
 ;; input:  RZ
 ;; output: RT (copy of RZ)
-(define CP_RZ_TO_RT
+(define-vm-function CP_RZ_TO_RT
   (list
-   (label CP_RZ_TO_RT)
           (LDA ZP_RZ+1)
           (STA ZP_RT+1)
           (LDA ZP_RZ)
@@ -186,9 +179,8 @@
 ;; copy RT -> RP
 ;; input:  RT
 ;; output: RP (copy of RT)
-(define CP_RT_TO_RP
+(define-vm-function CP_RT_TO_RP
   (list
-   (label CP_RT_TO_RP)
           (LDA ZP_RT+1)
           (STA ZP_RP+1)
           (LDA ZP_RT)
@@ -199,9 +191,8 @@
 ;; copy RT -> RA
 ;; input:  RT
 ;; output: RA (copy of RT)
-(define CP_RT_TO_RA
+(define-vm-function CP_RT_TO_RA
   (list
-   (label CP_RT_TO_RA)
           (LDX ZP_RT+1)
           (STX ZP_RA+1)
           (LDX ZP_RT)
@@ -212,9 +203,8 @@
 ;; copy RT -> RB
 ;; input:  RT
 ;; output: RB (copy of RT)
-(define CP_RT_TO_RB
+(define-vm-function CP_RT_TO_RB
   (list
-   (label CP_RT_TO_RB)
           (LDA ZP_RT+1)
           (STA ZP_RB+1)
           (LDA ZP_RT)
@@ -243,7 +233,7 @@
 ;;         X = (0 = RT, 2 = RA)
 ;; usage:  A, X, Y
 ;; output: RT = cell-int
-(define WRITE_INT_AY_TO_RT
+(define-vm-function-wol WRITE_INT_AY_TO_RT
   (list
    (label WRITE_INTm1_TO_RT)
           (LDA !$ff) ;; int lowbyte = ff
@@ -293,11 +283,8 @@
 ;;         X = zero page address 2
 ;; usage:  A, X, Y, TEMP..TEMP4
 ;; output: swapped zero page 16 bit values
-(define SWAP_ZP_WORD ;; 33 bytes
-  (add-label-suffix
-   "__" "SWAP_ZP_WORD"
+(define-vm-function SWAP_ZP_WORD ;; 33 bytes
    (list
-    (label SWAP_ZP_WORD)
            (LDY !$00)
            (STY ZP_TEMP2)
            (STA ZP_TEMP)
@@ -321,7 +308,7 @@
            (DEY)
            (TXA)
            (STA (ZP_TEMP),y)
-           (RTS))))
+           (RTS)))
 
 (module+ test #| swap-zp-word |#
   (define swap-zp-word-t0
@@ -347,22 +334,16 @@
                 (list #x1e #x1f)
                 "originally $20 $21"))
 
-(define CP_RA_TO_RB
-  (add-label-suffix
-   "__" "CP_RA_TO_RB"
+(define-vm-function CP_RA_TO_RB
    (list
-    (label CP_RA_TO_RB)
            (LDX ZP_RA)
            (STX ZP_RB)
            (LDX ZP_RA+1)
            (STX ZP_RB+1)
-           (RTS))))
+           (RTS)))
 
-(define SWAP_RA_RB ;; 17 bytes
-  (add-label-suffix
-   "__" "SWAP_RA_RB"
+(define-vm-function SWAP_RA_RB ;; 17 bytes
    (list
-    (label SWAP_RA_RB)
            (LDA ZP_RB)
            (LDY ZP_RB+1)
 
@@ -373,7 +354,7 @@
 
            (STA ZP_RA)
            (STY ZP_RA+1)
-           (RTS))))
+           (RTS)))
 
 (define vm-register-functions-code
   (append

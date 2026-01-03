@@ -300,7 +300,7 @@
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (code-len (flatten just-vm-interpreter))
-                       1560
+                       1543
                        "estimated len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#

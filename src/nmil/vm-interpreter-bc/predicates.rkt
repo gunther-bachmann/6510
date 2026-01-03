@@ -1,8 +1,13 @@
 #lang racket/base
 
+(provide BC_I_Z_P
+         BC_INT_P
+         BC_CELL_EQ_P
+         BC_CONS_PAIR_P)
+
 (require "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES)
@@ -21,16 +26,8 @@
          (only-in "../vm-runtime/vm-register-functions.rkt"
                   CP_RT_TO_RZ))
 
-(provide BC_I_Z_P
-         BC_INT_P
-         BC_CELL_EQ_P
-         BC_CONS_PAIR_P)
-
-(define BC_I_Z_P
-  (add-label-suffix
-   "__" "__I_Z_P"
+(define-vm-function BC_I_Z_P
   (list
-   (label BC_I_Z_P)
           (LDA ZP_RT+1)
           (BNE IS_NOT_ZERO__)
           (LDA ZP_RT)
@@ -47,13 +44,10 @@
    (label IS_ZERO__)
           (LDA !$01)
           (STA ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC))))
+          (JMP VM_INTERPRETER_INC_PC)))
 
-(define BC_INT_P
-  (add-label-suffix
-   "__" "__INT_P"
+(define-vm-function BC_INT_P
   (list
-   (label BC_INT_P)
           (LDA ZP_RT)
           (LDX !$01)
           (AND !$03)
@@ -65,11 +59,10 @@
    (label IS_INT__)
           (STA ZP_RT)
           (STX ZP_RT+1)
-          (JMP VM_INTERPRETER_INC_PC))))
+          (JMP VM_INTERPRETER_INC_PC)))
 
-(define BC_CONS_PAIR_P
+(define-vm-function BC_CONS_PAIR_P
   (list
-   (label BC_CONS_PAIR_P)
           (JSR CP_RT_TO_RZ) ;; A = content of ZP_RT (lowbyte)
           (TXA)
           (BEQ IS_NO_PAIR_SINCE_NIL__BC_CONS_PAIR_P)
@@ -89,14 +82,10 @@
           (LDY !TAGGED_INT_0_LB)
           (STY ZP_RT) ;; is pair store int tag
           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-          (JMP VM_INTERPRETER_INC_PC)
-          ))
+          (JMP VM_INTERPRETER_INC_PC)))
 
-(define BC_CELL_EQ_P
-  (add-label-suffix
-   "__" "__CELL_EQ_P"
+(define-vm-function BC_CELL_EQ_P
   (list
-   (label BC_CELL_EQ_P)
           (LDY ZP_CELL_STACK_TOS)
           (LDA (ZP_CELL_STACK_HB_PTR),y)
           (STA ZP_RZ+1)
@@ -121,4 +110,4 @@
           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
           (DEC ZP_CELL_STACK_TOS)
           (JSR WRITE_INT0_TO_RT)
-          (JMP VM_INTERPRETER_INC_PC))))
+          (JMP VM_INTERPRETER_INC_PC)))

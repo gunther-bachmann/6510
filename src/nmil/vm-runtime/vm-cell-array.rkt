@@ -62,26 +62,20 @@
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
 
 (module+ test
-  (require (only-in racket/list
-                    range
-                    flatten
-                    make-list)
-           "../../6510-test-utils.rkt"
+  (require "../../6510-test-utils.rkt"
            (only-in "../../ast/6510-relocator.rkt" code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     peek
                     memory-list
                     cpu-state-clock-cycles)
-           (only-in "../vm-inspector-utils.rkt"
-                    vm-page->strings)
            (only-in "./vm-m1-slots.rkt"
                     vm-m1-slot-code)
-           (only-in "./vm-pages.rkt"
-                    vm-pages-code)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-memory-map.rkt"
                     ZP_TEMP
                     VM_MEMORY_MANAGEMENT_CONSTANTS)
+           (only-in "./vm-pages.rkt"
+                    vm-pages-code)
            (only-in "./vm-pages.rkt"
                     VM_ALLOCATE_NEW_PAGE
                     VM_DEALLOCATE_PAGE

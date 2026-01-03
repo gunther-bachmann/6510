@@ -1,8 +1,17 @@
 #lang racket/base
 
+(provide BC_BINC        ;; increment byte (tos)
+         BC_BDEC        ;; decrement
+         BC_BADD        ;; add two topmost bytes
+         BC_IMAX        ;; get max of two topmost integers
+         BC_IINC        ;; increment integer (tos)
+         BC_IADD        ;; add two topmost integer
+         BC_BSHR        ;; shift tos byte one bit to the right
+         BC_ISUB
+
+         bc-atom-num-code)
+
 (require "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC
                   VM_INTERPRETER_INC_PC_2_TIMES)
@@ -14,34 +23,23 @@
                   ZP_CELL_STACK_HB_PTR)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RP
-                  POP_CELL_EVLSTK_TO_RT))
+                  POP_CELL_EVLSTK_TO_RT)
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function-wol
+                  define-vm-function))       ;; subtract two topmost integers
 
-(provide BC_BINC        ;; increment byte (tos)
-         BC_BDEC        ;; decrement
-         BC_BADD        ;; add two topmost bytes
-         BC_IMAX        ;; get max of two topmost integers
-         BC_IINC        ;; increment integer (tos)
-         BC_IADD        ;; add two topmost integer
-         BC_BSHR        ;; shift tos byte one bit to the right
-         BC_ISUB
-
-         bc-atom-num-code)       ;; subtract two topmost integers
-
-(define BC_BINC
+(define-vm-function BC_BINC
   (list
-   (label BC_BINC)
           (INC ZP_RT+1)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define BC_BDEC
+(define-vm-function BC_BDEC
   (list
-   (label BC_BDEC)
           (DEC ZP_RT+1)
           (JMP VM_INTERPRETER_INC_PC)))
 
-(define BC_BADD
+(define-vm-function BC_BADD
   (list
-   (label BC_BADD) ;; 13 bytes long
           (JSR POP_CELL_EVLSTK_TO_RP)
           (CLC)
           (LDA ZP_RT+1)
@@ -67,11 +65,8 @@
 ;;           (BNE DO_ADD__BC_ADD)
 ))
 
-(define BC_IMAX
-  (add-label-suffix
-   "__" "__IMAX"
+(define-vm-function BC_IMAX
   (list
-   (label BC_IMAX)
           (LDY ZP_CELL_STACK_TOS)
 
           ;; compare high byte of int (which is lb)
@@ -91,13 +86,10 @@
 
     (label KEEP_RT__)
           (DEC ZP_CELL_STACK_TOS) ;; just pop but keep RT, since INT no GC necessary
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
-(define BC_IINC
-  (add-label-suffix
-   "__" "__IINC"
+(define-vm-function BC_IINC
   (list
-   (label BC_IINC)
           (INC ZP_RT+1)
           (BNE DONE__)
           (LDA ZP_RT)
@@ -106,13 +98,10 @@
           (ORA !$03)
           (STA ZP_RT)
    (label DONE__)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES))))
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
-(define BC_IADD
-  (add-label-suffix
-   "__" "__IADD"
+(define-vm-function BC_IADD
   (list
-   (label BC_IADD)
           (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte
           (LDA (ZP_CELL_STACK_HB_PTR),y)        ;; A = untagged lowbyte of int (stored in high byte)
           (CLC)                                 ;; for addition the carry flags needs to be clear
@@ -131,24 +120,18 @@
           (STA ZP_RT)                           ;; RT tagged high byte = result
 
           (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in RT as tos)
-          (JMP VM_INTERPRETER_INC_PC))))         ;; interpreter loop
+          (JMP VM_INTERPRETER_INC_PC)))         ;; interpreter loop
 
 
-(define BC_BSHR
-  (add-label-suffix
-   "__" "__BC_BSHR"
+(define-vm-function BC_BSHR
    (list
-    (label BC_BSHR)
            (LDA ZP_RT+1)
            (LSR)
            (STA ZP_RT+1)
-           (JMP VM_INTERPRETER_INC_PC))))
+           (JMP VM_INTERPRETER_INC_PC)))
 
-(define BC_ISUB
-  (add-label-suffix
-   "__" "__ISUB"
+(define-vm-function BC_ISUB
   (list
-   (label BC_ISUB)
           (LDY ZP_CELL_STACK_TOS)               ;; get current index to tagged byte
           (SEC)                                 ;; for subtraction carry needs to be set
           (LDA ZP_RT+1)                         ;; A = untagged lowbyte of int (stored in high byte)
@@ -168,7 +151,7 @@
 
    (label DONE__)
           (DEC ZP_CELL_STACK_TOS)               ;; pop value from cell-stack (leave result in rt untouched)
-          (JMP VM_INTERPRETER_INC_PC))))
+          (JMP VM_INTERPRETER_INC_PC)))
 
 (define bc-atom-num-code
   (append BC_BINC

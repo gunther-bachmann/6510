@@ -17,9 +17,9 @@
  |#
 
 (require "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix
-                  replace-labels)
+         (only-in "../vm-definition-utils.rkt"
+                  define-vm-function
+                  define-vm-function-wol)
          (only-in "./vm-m1-slots.rkt"
                   ALLOC_M1_SLOT_TO_RA)
          (only-in "./vm-memory-map.rkt"
@@ -34,32 +34,32 @@
 
 (module+ test
   (require "../../6510-test-utils.rkt"
+           (only-in "../../ast/6510-relocator.rkt"
+                    code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     peek
                     memory-list)
            (only-in "../vm-inspector-utils.rkt"
                     vm-stack->strings
                     vm-page->strings)
-           "./vm-memory-manager-test-utils.rkt"
-           (only-in "../../ast/6510-relocator.rkt"
-                    code-len)
            (only-in "./vm-cell-stack.rkt"
                     PUSH_XA_TO_EVLSTK
                     PUSH_RT_TO_EVLSTK
                     POP_CELL_EVLSTK_TO_RT)
+           (only-in "./vm-cell-stack.rkt"
+                    vm-cell-stack-code)
            (only-in "./vm-m1-slots.rkt"
                     ALLOC_M1_SLOT_TO_RA
                     ALLOC_M1_SLOT_TO_RB
                     vm-m1-slot-code)
+           "./vm-memory-manager-test-utils.rkt"
+           (only-in "./vm-pages.rkt"
+                    vm-pages-code)
            (only-in "./vm-register-functions.rkt"
                     vm-register-functions-code
                     CP_RA_TO_RB
                     CP_RA_TO_RT
-                    SWAP_RA_RB)
-           (only-in "./vm-pages.rkt"
-                    vm-pages-code)
-           (only-in "./vm-cell-stack.rkt"
-                    vm-cell-stack-code))
+                    SWAP_RA_RB))
 
   (define PAGE_AVAIL_0 #xcf)      ;; high byte of first page available for allocation
   (define PAGE_AVAIL_0_W #xcf00)  ;; word (absolute address) of first page available
@@ -93,9 +93,8 @@
 ;;         RAI = 0
 ;; funcs:
 ;;   ALLOC_M1_SLOT_TO_RA
-(define ALLOC_NATARR_TO_RA
+(define-vm-function ALLOC_NATARR_TO_RA
   (list
-   (label ALLOC_NATARR_TO_RA)
           (PHA)
           (JSR ALLOC_M1_SLOT_TO_RA)
 
@@ -138,9 +137,8 @@
                 (list #x90)
                 "native array has highest bit set, following 7 bits mark the actual length of the array"))
 
-(define ALLOC_NATARR_TO_RB
+(define-vm-function ALLOC_NATARR_TO_RB
   (list
-   (label ALLOC_NATARR_TO_RB)
           (PHA)
           (JSR ALLOC_M1_SLOT_TO_RB)
 
@@ -164,7 +162,7 @@
 ;; input:  RT, RA, RAi
 ;; usage:  A, Y
 ;; output: (RA),RAi++ := (RT+1)
-(define WRITE_RT_TO_NATARR_RAI
+(define-vm-function-wol WRITE_RT_TO_NATARR_RAI
   (list
    (label WRITE_RT_TO_NATARR_RAI__CHECKED)
           (LDA ZP_RT)
@@ -217,7 +215,7 @@
 ;; input:  RT, RA, RAi, EVLSTK
 ;; usage:  A, Y
 ;; output: (RA),RAi++ := (RT+1), RT<<EVLSTK<<
-(define POP_TO_NATARR_RAI
+(define-vm-function-wol POP_TO_NATARR_RAI
   (list
    (label POP_TO_NATARR_RAI__CHECKED)
           (LDA ZP_RT)
@@ -268,7 +266,7 @@
 ;; usage:  A, Y
 ;; output: EVLSTK<<RT, RT := (RA),RAi++,
 (define PUSH_NATARR_RAI '())
-(define WRITE_NATARR_RAI_TO_RT
+(define-vm-function-wol WRITE_NATARR_RAI_TO_RT
   (list
    (label PUSH_NATARR_RAI)
           (JSR PUSH_RT_TO_EVLSTK)
@@ -319,11 +317,8 @@
 ;; input:  RA, RB
 ;; usage:  A, Y
 ;; output: start of RB is equal to RA (length of RB needs to >= RA)
-(define CP_NATARR_RA_TO_RB
-  (add-label-suffix
-   "__" "CP_NATARR_RA_TO_RB"
+(define-vm-function CP_NATARR_RA_TO_RB
    (list
-    (label CP_NATARR_RA_TO_RB)
            (LDY !$01)
            (LDA (ZP_RA),y)
            (AND !$7f)           ;; A = length of array
@@ -336,7 +331,7 @@
            (DEY)
            (CMP !$01)
            (BNE LOOP__)
-           (RTS))))
+           (RTS)))
 
 (module+ test #| cp-natarr-ra-to-rb |#
   (define cp-natarr-ra-to-rb-t0
@@ -388,11 +383,8 @@
 ;; input:  RA, RB, X, Y
 ;; usage:  A, X, Y
 ;; output: start of RB is equal to RA@X..Y (0-indexed), RB needs to have sufficient size (>=Y-X)
-(define CP_NATARR_RANGE_RA_TO_RB
-  (add-label-suffix
-   "__" "CP_NATARR_RANGE_RA_TO_RB"
+(define-vm-function CP_NATARR_RANGE_RA_TO_RB
    (list
-    (label CP_NATARR_RANGE_RA_TO_RB)
            (SEC)
            (STX ZP_TEMP)
            (LDA ZP_RB)
@@ -416,7 +408,7 @@
 
            (LDA ZP_TEMP+1)
            (STA ZP_RB) ;; restore original ZP_RB
-           (RTS))))
+           (RTS)))
 
 (module+ test #| cp-natarr-range-ra-to-rb |#
   (define cp-natarr-range-ra-to-rb-t0

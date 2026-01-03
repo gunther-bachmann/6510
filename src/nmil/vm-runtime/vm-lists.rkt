@@ -6,10 +6,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 |#
 
-(require (only-in racket/list
-                  flatten
-                  take)
-         "../../6510.rkt"
+(require "../../6510.rkt"
          (only-in "../../ast/6510-relocator.rkt"
                   command-len
                   code-len)
@@ -35,13 +32,20 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
 (module+ test
   (require "../../6510-test-utils.rkt"
-           (only-in "../vm-interpreter-loop.rkt" VM_INTERPRETER_ZP)
-           (only-in "./vm-cell-array.rkt" vm-cell-array-code)
-           (only-in "./vm-m1-slots.rkt" vm-m1-slot-code)
-           (only-in "./vm-pages.rkt" vm-pages-code)
-           (only-in "./vm-cell-stack.rkt" vm-cell-stack-code)
-           (only-in "./vm-register-functions.rkt" vm-register-functions-code )
-           (only-in "./vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
+           (only-in "../vm-interpreter-loop.rkt"
+                    VM_INTERPRETER_ZP)
+           (only-in "./vm-cell-array.rkt"
+                    vm-cell-array-code)
+           (only-in "./vm-cell-stack.rkt"
+                    vm-cell-stack-code)
+           (only-in "./vm-m1-slots.rkt"
+                    vm-m1-slot-code)
+           (only-in "./vm-memory-map.rkt"
+                    VM_MEMORY_MANAGEMENT_CONSTANTS)
+           (only-in "./vm-pages.rkt"
+                    vm-pages-code)
+           (only-in "./vm-register-functions.rkt"
+                    vm-register-functions-code ))
 
   (define (wrap-code-for-test bc)
     (append (list (org #xA000)

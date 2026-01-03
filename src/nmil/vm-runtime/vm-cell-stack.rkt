@@ -23,10 +23,9 @@
  |#
 
 (require "../../6510.rkt"
-         (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
          (only-in "../vm-definition-utils.rkt"
-                  define-vm-function)
+                  define-vm-function
+                  define-vm-function-wol)
          (only-in "./vm-memory-map.rkt"
                   ZP_RT
                   TAG_BYTE_BYTE_CELL
@@ -37,10 +36,10 @@
 
 (module+ test
   (require "../../6510-test-utils.rkt"
-           (only-in "../../tools/6510-interpreter.rkt" peek memory-list)
-           (only-in "../../util.rkt" format-hex-byte format-hex-word)
            (only-in "../../ast/6510-relocator.rkt"
                     code-len)
+           (only-in "../../tools/6510-interpreter.rkt" peek memory-list)
+           (only-in "../../util.rkt" format-hex-byte format-hex-word)
            (only-in "../vm-inspector-utils.rkt"
                     vm-deref-cell-pair-w->string
                     vm-regt->string
@@ -102,9 +101,8 @@
 ;; output: X new stack page
 ;; uses:   A, X, Y
 ;;         ZP_TEMP, ZP_TEMP+1
-(define INIT_CELLSTACK_PAGE_X
+(define-vm-function INIT_CELLSTACK_PAGE_X
   (list
-   (label INIT_CELLSTACK_PAGE_X)
           (STX ZP_TEMP+1)         ;; write page into hightbyte of ZP_TEMP ptr
           (TAX)                   ;; old page in a -> x
           (LDA !$00)
@@ -183,9 +181,8 @@
 ;; input:  EVLSTK
 ;; usage:  A,Y, RT
 ;; output: RT <<EVLSTK<<
-(define POP_CELL_EVLSTK_TO_RT
+(define-vm-function POP_CELL_EVLSTK_TO_RT
   (list
-   (label POP_CELL_EVLSTK_TO_RT)
           ;; optional: stack marked empty? => error: cannot pop from empty stack!
           ;; (LDY !$00)
           ;; (BEQ ERROR_NO_VALUE_ON_STACK)
@@ -368,7 +365,7 @@
 ;; output: call-frame stack, RT
 (define PUSH_NIL_TO_EVLSTK '())
 (define PUSH_INT_TO_EVLSTK '())
-(define PUSH_XA_TO_EVLSTK
+(define-vm-function-wol PUSH_XA_TO_EVLSTK
   (list
    (label PUSH_INT_TO_EVLSTK)         ;; idea: can be optimized since it is known that this is an atomic value
           (TAY)
@@ -545,11 +542,8 @@
 ;;   ALLOC_PAGE_TO_X
 ;;   INIT_CELLSTACK_PAGE_X
 ;; CHECK STACK PAGE OVERFLOW
-(define PUSH_RT_TO_EVLSTK
-  (add-label-suffix
-   "__" "__PUSH_RT_TO_EVLSTK"
+(define-vm-function PUSH_RT_TO_EVLSTK
   (list
-   (label PUSH_RT_TO_EVLSTK)
           (LDY ZP_CELL_STACK_TOS)
           (INY)
           [BNE NO_ERROR__]
@@ -575,7 +569,7 @@
           (STY ZP_CELL_STACK_TOS)             ;; set new tos
 
    (label DONE__)
-          (RTS))))
+          (RTS)))
 
 (module+ test #| vm-cell-stack-just-push-rt |#
   (define vm-cell-stack-just-push-rt-state
@@ -604,9 +598,7 @@
 ;; output: cell-stack (one value less)
 ;;         cell0 of RA is set
 ;; funcs:  -
-(define POP_CELL_EVLSTK_TO_CELLy_RT
-  (add-label-suffix
-   "__" "__POP_CELL_EVLSTK_TO_CELLy_RT"
+(define-vm-function-wol POP_CELL_EVLSTK_TO_CELLy_RT
   (list
    (label POP_CELL_EVLSTK_TO_CELL1_RT)
           (LDY !$03)
@@ -630,7 +622,7 @@
           (TXA)
           (STA (ZP_RT),y)
           (DEC ZP_CELL_STACK_TOS)
-          (RTS))))
+          (RTS)))
 
 (module+ test #| vm-pop-fstos-to-celly-rt |#
   (define vm-pop-fstos-to-celly-rt-state
@@ -664,9 +656,8 @@
 ;; input: call-frame stack, RA
 ;; output:  RA << EVLSTK, <<EVLSTK<<, RT unchanged!
 ;; NO GC CHECKS!
-(define POP_CELL_EVLSTK_TO_RA
+(define-vm-function POP_CELL_EVLSTK_TO_RA
   (list
-   (label POP_CELL_EVLSTK_TO_RA)
           ;; optional: stack marked empty? => error: cannot pop from empty stack!
           ;; (LDY !$00)
           ;; (BEQ ERROR_NO_VALUE_ON_STACK)
@@ -707,9 +698,8 @@
 ;; input: call-frame stack, RA
 ;; output:  RP << EVLSTK, <<EVLSTK<<, RT unchanged!
 ;; NO GC CHECKS!
-(define POP_CELL_EVLSTK_TO_RP
+(define-vm-function POP_CELL_EVLSTK_TO_RP
   (list
-   (label POP_CELL_EVLSTK_TO_RP)
           ;; optional: stack marked empty? => error: cannot pop from empty stack!
           ;; (LDY !$00)
           ;; (BEQ ERROR_NO_VALUE_ON_STACK)

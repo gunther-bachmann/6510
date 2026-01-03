@@ -6,13 +6,13 @@
          BC_WRITE_TO_RAI                ;; write tos byte into cell array index register RAI
          BC_POP_TO_RAI                  ;; pop tos byte into cell array index register RAI
          BC_BINC_RAI                    ;; increment cell array index register RAI
-         BC_ALLOC_ARA
-         BC_XET_RA_ARRAY_FIELD
-         BC_GET_RA_ARRAY_FIELD
-         BC_SET_RA_ARRAY_FIELD
-         BC_GET_ARRAY_FIELD
-         BC_SET_ARRAY_FIELD
-         BC_XET_ARRAY_FIELD
+         BC_ALLOC_ARA                   ;; allocate a cell-array with a number of cells (tos)
+         BC_XET_RA_ARRAY_FIELD          ;; -- meta, including the following two
+         BC_GET_RA_ARRAY_FIELD          ;; get array field 0..3 (A>>3) from (RA)
+         BC_SET_RA_ARRAY_FIELD          ;; set RT into array field 0..3 (A>>3) (RA)
+         BC_XET_ARRAY_FIELD             ;; -- meta, including the following two
+         BC_GET_ARRAY_FIELD             ;; RT->RA, get array field 0..3 (A>>3) from (RA), overwriting old TOS
+         BC_SET_ARRAY_FIELD             ;; RT->RA, set (new) TOS into array field 0..3 (A>>3) (RA)
          BC_WRITE_RA                    ;; write cell-array register RA into tos
          BC_PUSH_RA                     ;; push cell-array register RA itself onto eval stack
          BC_PUSH_RA_AF                  ;; push cell-array RA field A onto the eval stack (inc ref count)
@@ -20,7 +20,7 @@
          BC_PUSH_AF                     ;; push array field (stack: index :: cell-array-ptr)
          BC_POP_TO_AF                   ;; pop tos to array field (stack: index :: cell-ptr->cell-array  :: value )
          BC_SWAP_RA_RB                  ;; swap cell array register RA with RB
-         VM_REFCOUNT_DECR_ARRAY_REGS
+         VM_REFCOUNT_DECR_ARRAY_REGS    ;; decrement remaining ptrs in RA, RB, RC
          )
 
 (require "../../6510.rkt"
@@ -64,7 +64,9 @@
      (label NO_BRA__)
             (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
+;; get array field 0..3 (A>>3) from (RA)
 (define BC_GET_RA_ARRAY_FIELD '())
+;; set RT into array field 0..3 (A>>3) (RA)
 (define BC_SET_RA_ARRAY_FIELD '())
 (define-vm-function-wol BC_XET_RA_ARRAY_FIELD
   (list
@@ -89,18 +91,19 @@
     (label continue__BC_SET_RA_ARRAY_FIELD)
            (JMP VM_INTERPRETER_INC_PC)))
 
+;; allocate a cell-array with A number of cells
+;;
 (define-vm-function BC_ALLOC_ARA
   (list
-          (LDA ZP_RT+1)                 ;; byte size
+          (LDA ZP_RT+1)                 ;; byte/int size
           (JSR ALLOC_CELL_ARRAY_TO_RA)
           (LDA !$00)
           (STA ZP_RAI)
-          ;; init tagged lowbytes with with zeros
-          (LDA ZP_RT+1)
-          (ASL A)
-          (TAY)
 
    ;; optional: initialize lowbyte of cells with 0
+   ;;        (LDA ZP_RT+1)
+   ;;        (ASL A)
+   ;;        (TAY)
    ;;        (LDA !$00)
    ;; (label loop__BC_ALLOC_ARA)
    ;;        (STA (ZP_RA),y)
@@ -138,7 +141,9 @@
           (DEC ZP_RAI)
           (JMP VM_INTERPRETER_INC_PC)))
 
+;; RT->RA, get array field 0..3 (A>>3) from (RA), overwriting old TOS
 (define BC_GET_ARRAY_FIELD '())
+;; RT->RA, set (new) TOS into array field 0..3 (A>>3) (RA)
 (define BC_SET_ARRAY_FIELD '())
 (define-vm-function-wol BC_XET_ARRAY_FIELD
    (list
@@ -151,7 +156,7 @@
            (JSR DEC_REFCNT_M1_SLOT_RA)
            (LDA !$00)
            (STA ZP_RA)
-           (STA ZP_RA+1)
+           ;; (STA ZP_RA+1)
            (JMP VM_INTERPRETER_INC_PC)
 
     (label BC_SET_ARRAY_FIELD) ;; Write TOS-1 -> RT.@A, popping

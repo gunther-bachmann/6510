@@ -50,9 +50,9 @@
 
 (define-vm-function VM_INITIALIZE_MEMORY_MANAGER
   (list
-   (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
-   (JSR INIT_CELLSTACK)
-   (JMP VM_INITIALIZE_CALL_FRAME)))
+                (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
+                (JSR INIT_CELLSTACK)
+                (JMP VM_INITIALIZE_CALL_FRAME)))
 
 
 (define vm-memory-manager-code
@@ -61,6 +61,7 @@
           vm-m1-slot-code
           vm-cell-stack-code
           vm-cell-array-code
+          vm-native-array-code
           vm-call-frame-code
           vm-list-code
           VM_INITIALIZE_MEMORY_MANAGER
@@ -69,4 +70,4 @@
 
 (module+ test #| code len |#
   (inform-check-equal? (code-len vm-memory-manager-code)
-                       2162))
+                       2323))
