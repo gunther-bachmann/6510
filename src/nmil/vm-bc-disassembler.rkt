@@ -1,10 +1,13 @@
 #lang racket/base
 
+(provide disassembler-byte-code--byte-count
+         disassemble-byte-code)
+
 #|
 
-disassembler for byte code
+ disassembler for byte code
 
-|#
+ |#
 
 (require (only-in "../util.rkt"
                   bytes->int
@@ -22,9 +25,6 @@ disassembler for byte code
                   get-dyn-opcode-simple-def
                   disassemble-od-simple-bc
                   byte-count-od-simple-bc))
-
-(provide disassembler-byte-code--byte-count
-         disassemble-byte-code)
 
 ;; get count of bytes belonging to the given bc command
 (define (disassembler-byte-code--byte-count bc (bc_p1 0) (bc_p2 0))

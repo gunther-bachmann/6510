@@ -40,6 +40,17 @@ vm-interpreter-bc (6510 implementation of ... related byte codes)
 - push_​n_​pop :: other push and pop functions
 - test-utils :: utils for testing byte codes, reducing clutter in testing files
 - vm-interpreter-bc :: meta module to make importing easier
+vm-runtime (provide memory management and support functions for the interpreter)
+- vm-call-frame.rkt :: call/ret, allocation/cleanup of locals
+- vm-cell-array.rkt :: allocation, access and deallocation of cell-arrays
+- vm-cell-stack.rkt :: manage cell-stacks as used by eval-stack 
+- vm-lists.rkt :: list functions like car cdr and cons
+- vm-m1-slots.rkt :: memory management of slots on a page
+- vm-memory-manager.rkt :: meta file to combine all other code blocks
+- vm-memory-map.rkt :: constants and variables used for memory management         
+- vm-native-array.rkt :: native array implementation
+- vm-pages.rkt :: memory management for pages
+- vm-register-functions.rkt :: register copy/move functions
 root
 - ast :: definition of the mil ast used by the compiler to generate code
 - parse :: parser (basically racket syntax macros) for minimal lisp to generate ast
@@ -82,13 +93,13 @@ current items to work on are found in [[file:~/repo/+1/6510/mil.readlist.org::*n
 - basic data types :: the following basic data types exist, fitting in one cell (16-bit)
   - byte/char/boolean
   - int
-  - cell-pair-ptr :: special cell-ptr that identifies the targeted data as list (car-cell+cdr-cell)
+  - +cell-pair-ptr :: special cell-ptr that identifies the targeted data as list (car-cell+cdr-cell)+
   - ptr :: pointer to any complex data within a m1 page (first byte pointed to identifies complex structure w/ additional meta data)
-  - no cell-ptr :: ptr to cells are emulated by using cell-pair-ptr and using just the car field
+  - +no cell-ptr :: ptr to cells are emulated by using cell-pair-ptr and using just the car field+
   - tagging is used to identify the type of a cell
   - pointers can be used directly (without masking etc.) <- no need to repeatedly do masking/unmasking of tag bits when operating on pointers (which happens very often)
 - complex data types :: do not fit in a cell and thus must be pointed to
-  - list (car-cell + cdr-cell) (4 bytes) :: cell-pair-ptr points always to these cell-pairs, this should speedup list processing
+  - list (car-cell + cdr-cell) (4 bytes) :: cell-pair-ptr points always to these cell-pairs, this should speedup list processing (emulated by arrays)
   - float (6 bytes) :: float as implemented by the c64 basic
   - array/structure :: structures are arrays of fields, each a single cell (can again be any cell, either simple or complex)
   - native-byte-array (n-bytes) :: used for strings and buffers etc. (extension for later), strings are native arrays of bytes

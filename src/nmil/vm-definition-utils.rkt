@@ -12,6 +12,8 @@
  |#
 
 (require
+ (only-in racket/list
+          flatten)
  (only-in "../6510.rkt"
           label)
  (only-in "../ast/6510-resolver.rkt"
@@ -22,11 +24,13 @@
   (define name
     (add-label-suffix
      "__" (string-append "__" (symbol->string (quote name)))
-     code-list) ))
+     (flatten
+      code-list)) ))
 
 ;; syntactic sugar to define a vm function
 (define-syntax-rule (define-vm-function name code-list)
   (define-vm-function-wol name
     (append
       (list (label name))
-      code-list)))
+      (flatten
+       code-list))))

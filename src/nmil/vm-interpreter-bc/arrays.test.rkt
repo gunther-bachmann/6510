@@ -7,7 +7,9 @@
 |#
 
 (module+ test
-  (require (only-in "./arrays.rkt"
+  (require (only-in "../test-utils.rkt"
+                    regression-test)
+           (only-in "./arrays.rkt"
                     BC_DEC_RBI_NZ_P_BRA
                     BC_PUSH_AF
                     BC_POP_TO_AF
@@ -89,30 +91,33 @@
        (bc PUSH_AF)))
      ))
 
-  (check-equal? (memory-list push-array-field-state (+ PAGE_AVAIL_0_W 02) (+ PAGE_AVAIL_0_W 25))
-                (list 2      ;; refcnt = 2 (one reference on the stack, one in RA)
-                      #x14   ;; page type = cell-array with 20 elements
-                      0 0    ;; element 0
-                      3 1
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      0 0
-                      3 2   ;; element 10
-                      ))
-  (check-equal? (memory-list push-array-field-state (+ ZP_RA 0) (+ ZP_RA 1))
-                (list #x02 PAGE_AVAIL_0)
-                "RA holds a pointer to the array, too")
-  (check-equal? (vm-stack->strings push-array-field-state)
-                (list "stack holds 4 items"
-                      "int $0002  (rt)"
-                      "int $0001"
-                      (format "ptr[2] $~a02" (number->string PAGE_AVAIL_0 16))
-                      "ptr NIL")))
+  (regression-test
+   push-array-field-state
+   "alloc array -> pop 1 to array field 1 -> pop 2 to array field 10 -> push af 1 -> push af 10 "
+   (check-equal? (memory-list push-array-field-state (+ PAGE_AVAIL_0_W 02) (+ PAGE_AVAIL_0_W 25))
+                 (list 2      ;; refcnt = 2 (one reference on the stack, one in RA)
+                       #x14   ;; page type = cell-array with 20 elements
+                       0 0    ;; element 0
+                       3 1
+                       0 0
+                       0 0
+                       0 0
+                       0 0
+                       0 0
+                       0 0
+                       0 0
+                       0 0
+                       3 2   ;; element 10
+                       ))
+   (check-equal? (memory-list push-array-field-state (+ ZP_RA 0) (+ ZP_RA 1))
+                 (list #x02 PAGE_AVAIL_0)
+                 "RA holds a pointer to the array, too")
+   (check-equal? (vm-stack->strings push-array-field-state)
+                 (list "stack holds 4 items"
+                       "int $0002  (rt)"
+                       "int $0001"
+                       (format "ptr[2] $~a02" (number->string PAGE_AVAIL_0 16))
+                       "ptr NIL"))))
 
 (module+ test #| pop to array field |#
   (define pop-to-array-field-state
@@ -128,15 +133,18 @@
       (bc POP_TO_AF))
      ))
 
-  (check-equal? (vm-stack->strings pop-to-array-field-state)
-                (list "stack holds 2 items"
-                      (format "ptr[2] $~a02  (rt)" (number->string PAGE_AVAIL_0 16))
-                      "ptr NIL"))
-  (check-equal? (memory-list pop-to-array-field-state (+ ZP_RA 0) (+ ZP_RA 1))
-                (list #x02 PAGE_AVAIL_0)
-                "RA holds a pointer to the array, too")
-  (check-equal? (memory-list pop-to-array-field-state (+ PAGE_AVAIL_0_W 02) (+ PAGE_AVAIL_0_W 7))
-                (list 2      ;; refcnt = 1 (one reference on the stack)
-                      #x14   ;; page type + length of 20
-                      0 0    ;; element 0
-                      3 1))) ;; element 1 = int 1
+  (regression-test
+   pop-to-array-field-state
+   "alloc array -> pop 1 to array field 1"
+   (check-equal? (vm-stack->strings pop-to-array-field-state)
+                 (list "stack holds 2 items"
+                       (format "ptr[2] $~a02  (rt)" (number->string PAGE_AVAIL_0 16))
+                       "ptr NIL"))
+   (check-equal? (memory-list pop-to-array-field-state (+ ZP_RA 0) (+ ZP_RA 1))
+                 (list #x02 PAGE_AVAIL_0)
+                 "RA holds a pointer to the array, too")
+   (check-equal? (memory-list pop-to-array-field-state (+ PAGE_AVAIL_0_W 02) (+ PAGE_AVAIL_0_W 7))
+                 (list 2      ;; refcnt = 1 (one reference on the stack)
+                       #x14   ;; page type + length of 20
+                       0 0    ;; element 0
+                       3 1)))) ;; element 1 = int 1

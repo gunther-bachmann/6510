@@ -20,17 +20,10 @@
 - negative waste is not possible in this case, make sure waste is not negative! use even bucket sizes, which increase more slowly, not by
   powers of 2. make sure objects of these bucket sizes are addressible with tagged pointers without adjustung these pointers. additionally
   ensure to easily reach the reference count for each object by minimal adjustments to the tagged pointer.
-* transformation hints
-INC_REFCNT_RT (vm-memory-manager.rkt)
-  => INC_REFCNT_M1_SLOT_RT (vm-m1-slots.rkt)
-ALLOC_CELLARR_TO_RA (vm-cell-array.rkt)
-  => ALLOC_CELL_ARRAY_TO_RA (vm_cell-array-n.rkt)
-DEC_REFCNT_RT (vm-memory-manager.rkt)
-  => DEC_REFCNT_M1_SLOT_RT (vm-m1-slots.rkt)
-DEC_REFCNT_RZ (vm-memory-manager.rkt)
-  => DEC_REFCNT_M1_SLOT_RZ (vm-m1-slots.rkt)
 * open tasks
-** IMPLEMENT all pointers do now point to the following layout => access to cell, cell-pairs, cell-array etc. all change!
+** TODO adjust current encoding to reflect the new pointer tagging pages etc.
+** DONE all pointers do now point to the following layout => access to cell, cell-pairs, cell-array etc. all change!
+- State "DONE"       from "IMPLEMENT"  [2026-01-03 Sat 18:01]
 | offset | description      |
 |--------+------------------|
 |     +0 | reference count  |
@@ -68,7 +61,7 @@ DEC_REFCNT_RZ (vm-memory-manager.rkt)
   @0 byte = LDA (ZP_RT),2
   @1 byte = LDA (ZP_RT),3
   @N byte = LDA (ZP_RT), N+2
-** plan to implement the changes
+** OBSOLETE plan to implement the changes
 - remove all cell ptr related code,
   - put aliases for cell-pair ptr where necessary
 - ~R0~ add zp register that has offset always 0 (for indexed page access)
@@ -86,7 +79,7 @@ DEC_REFCNT_RZ (vm-memory-manager.rkt)
     - looking at the reference count of each slot (0 => must be part of the free list)
   - m1 page pointer
     - change allocation/initialization of page
-** IMPLEMENT new pointer tagging
+** BRAIN new pointer tagging
 no more cell-ptr!
 RT = 00 (low byte) is equivalent to RT is empty!
 use new pointer tagging scheme :        examples (low, then high byte):
@@ -134,7 +127,7 @@ use new pointer tagging scheme :        examples (low, then high byte):
           BNE IS_NOT_ZERO
           ;; (BEQ) IS_ZERO
 #+end_src
-** IMPLEMENT think about fast array access for cell-pairs
+** BRAIN fast array access for cell-pairs
 - no need to copy things into RA or set index of RAI, since this will always be worked on on RT and the rest of the expression stack
 - allocating new cell-pairs (array of size 2)
   allocate cplx slot (initializes RC=1, TYPE with param)
@@ -154,7 +147,7 @@ use new pointer tagging scheme :        examples (low, then high byte):
      car cell is freed on allocation
      => reuse is immediate after free, and free itself running in constant time, allocate is running in constant time, too
         reuse of large arrays may need more time when allocating partially-freed arrays
-** IMPLEMENT idea: use arrays (2 elements) for lists, too?
+** DONE idea: use arrays (2 elements) for lists, too?
 => only m1 pages
    ptr tag: xxxx xxx0
 possible sizes (with little to no waste):
@@ -382,20 +375,20 @@ JMP INTERPRETER
   - TEMP :: (cell)
   - TEMP2 :: (cell)
 IDEA: keep RT and RP in sequence to allow ,y/,x addressing them, making some functions work on either RP or RT, passing the right y/x
-** IMPLEMENT DEFINITION OF cell types and references
+** OBSOLETE DEFINITION OF cell types and references
 cell types fall into 3 categories
-*** pointers
-tag byte ends on bits 10 [complex-cell-ptr], or 00 [cell-pair-ptr]
+*** pointers (point to slots)
+tag byte ends on bit 0 [complex-cell-ptr] +or 00 [cell-pair-ptr]+
 points somewhere.
 - it points to a complex cell (on a page), e.g. cell-array, native array
-- it points to a cell-pair
+- +it points to a cell-pair+
 - pointers to cells are emulated by pointers to cell-pairs, using the car field only
 *** value cell
 a value cell holds its (complete) value
 - int, tag byte  = 1... ..11 (& $83 = $03)
 - byte, tag byte = 0000 0011 (== $03)
 - bcd, symbol, ...
-*** header cell
+*** header cell (no, these are slots not cells!)
 is a cell that is used as a header for some payload. it may only be used on complex cell pages
 the following headers exist:
 0lll llll native array (length 1..82)
@@ -450,7 +443,7 @@ the following headers exist:
   00      reference count of this field (including top 4 bits of 5th byte of float)
   01      header-byte (including 4 bits of 5th byte of float)
   02.06   5 bytes of the float
-** IMPLEMENT alternative pages
+** DONE alternative pages
 - idea: store single floats (5 bytes) in 8 byte buckets (6 bytes payload, 1 wasted)
 - idea: keep a page local free list
 - idea: keep a list of pages with free slots per profile
@@ -1168,7 +1161,7 @@ use new pointer tagging scheme :        examples (low, then high byte):
           AND #$7c
           BEQ IS_ZERO
 #+end_src
-** IMPLEMENT implement RP as (secondary) register for (only) cell pairs?
+** OBSOLETE implement RP as (secondary) register for (only) cell pairs?
 - OBSOLETE: RP dec-refctn and inc-refcnt can safely assume that rp holds either 0, nil or a reference to a cell-pair?
   not really, dereferencing RP cell0-> RP could make RP hold e.g. int 0000 and no other cell pair ptr
 ** TODO implement RP usage as TOS-1 register on demand
@@ -1192,7 +1185,7 @@ use new pointer tagging scheme :        examples (low, then high byte):
   - all tests must have a text describing the test
   - all tests should be resilient to memory location changes of registers etc.
 - use most recent test utils
-** TODO check: do pointers on cells exist that are on the locals/eval-stack?
+** OBSOLETE check: do pointers on cells exist that are on the locals/eval-stack?
 - currently the answer is *NO*, does that restrict the programming model?
 ** TODO tweak configuration parameters                -> increase speed/reduce memory consumption
 use profiling data
@@ -1218,7 +1211,7 @@ use profiling data
 - other
   - ZP_...     :: located on the zero page (6510)
   - ...__      :: local labels (usually replaced through usage of ~add-label-suffix~ function), not available from outside this function!
-** concepts
+** TODO concepts
 - cell                      :: 16 bit value (finest granular memory managed block)
 - atomic cell               :: a cell that has no followup value and is complete in itself (currently int-cell, byte-cell, cell-ptr, cell-pair-ptr)
 - cell-ptr                  :: an atomic cell, lowest bit of low byte is set, points to a cell (of any type)
@@ -1274,7 +1267,7 @@ use profiling data
 ** parameters
 - are passed as regular stack values
 - need to be copied to locals if multiple access is necessary and /dup/ does not suffice
-** pages
+** TODO pages
 #+begin_src dot :file memory-page-state.gen.png
   digraph finite_state_machine {
       node [shape=point]ENTRY; //,EXIT
@@ -1641,7 +1634,7 @@ offset  content
               the array keeps the amount of unchecked cells
               the array keeps a pointer to the next enqueued cell-array in the slot right behind the unchecked cells
 
-** cell types and references
+** TODO cell types and references
 cell types fall into 3 categories
 *** cell pointer
 tag byte ends on bits 0 [cell-ptr], or 01 [cell-pair-ptr]
@@ -1676,7 +1669,7 @@ is a cell that is used as a header of a number of cells. the following headers e
   02      byte index 0
   ...
   n+2     byte index n
-** pointer tagging
+** TODO pointer tagging
 RT = 00 (low byte) is equivalent to RT is empty!
 use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples (low, then high byte):
   zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                    0000 001[0]    1100 1101   cx01 (second allocated slot in cell-ptr page)
@@ -1950,8 +1943,8 @@ FINAL: swapping pages can be implemented in addition to the current memory usage
   - Concurrent CO-B-trees :: https://groups.csail.mit.edu/tds/papers/Gilbert/SPAA05.pdf
   - Packed-memory arrays & funnels :: https://www.ittc.ku.edu/~jsv/Papers/Vit.IO_book.pdf
 * memory allocation/deallocation
-** free-lists
-*** cell-array free list (for reusage)
+** TODO free-lists
+*** TODO cell-array free list (for reusage)
 - one per m1 profile => free list holds arrays blocking a slot of a certain m1 profile page
 root -> [tag-byte : len n]
         [cell0]
@@ -1964,17 +1957,17 @@ root -> [tag-byte : len n]
 - all but the last cell must be refcount-- before further reuse
 - once cell n-1 is recount--, n = n-1, making n-2 the next last cell
 - once all cells were refcount--, the whole array can be freed
-*** cell free list (for reusage)
+*** OBSOLETE cell free list (for reusage)
 root -> [cell]
          \_...
-*** cell-pair free list (for reusage)
+*** OBSOLETE cell-pair free list (for reusage)
 root -> [car][cdr]
          \_ [car][cdr]
              \_...
 - car cell is used to connect the cell-pairs
 - cdr cell needs to be refcount-- before reuse
-** allocation
-*** cell
+** TODO allocation
+*** OBSOLETE cell
 - if free-list nil
      allocate new cell <- IDEA: try freeing slots in cell-array free-lists (there might be cells that can be reused)
      reuse head of free list
@@ -1982,7 +1975,7 @@ root -> [car][cdr]
   - remember head
   - set head of free list to cdr of free list
   - return old head
-*** cell-pair
+*** TODO cell-pair
 - if free-list nil
      allocate new cell-pair <- IDEA: try freeing slots in cell-array free-lists (there might be cell-pairs that can be reused)
      reuse head of free list
@@ -1991,7 +1984,7 @@ root -> [car][cdr]
   - refcount-- on cdr cell of head (single subroutine jump, no recursion)
   - new head = old heads car cell
   - return remembered head
-*** cell-array
+*** TODO cell-array
 - if free-list nil
      allocate new cell-array
      free the array at the head of the list <- this might change due to the tail call
@@ -2001,7 +1994,7 @@ root -> [car][cdr]
   - copy previous last cell into now last cell
   - refcount-- remembered now last cell  <- tail call (just jump, no recursion)
 *** native-array
-** deallocation
+** TODO deallocation
 any refcount-- on a value cell will just return (and do nothing), ending a chain of refcount-- calls
 only if refcount drops to zero a free is done, else refcount returns
 *** refcount-- cell-ptr (drops to 0)
@@ -2024,11 +2017,11 @@ only if refcount drops to zero a free is done, else refcount returns
 - reclaim space (native array may not hold further references)
 ** behavior
 - overarching idea: make deallocation cheap, delay work to the time, allocation is done
-- reuse of cell is of constant time, since the head of the free list can be used (directly) or a new cell is allocated, which is both O(1)
-- reuse of cell-pair can be O(n) in worst case, if the cdr cell of the head (which needs to be refcount--) points to a tree of n cell-pairs,
-  where each car points to another cell-pair that needs to be refcount-- before enqueued into the free-list.  it is more likely to be must
-  faster since this worst case is of rather hypothetical nature.
-  IDEA: this time can be reduced by incrementally refcount-- cdr cells of the free list (e.g. during allocation of cells or cell-pairs).
+- +reuse of cell is of constant time, since the head of the free list can be used (directly) or a new cell is allocated, which is both O(1)+
+- +reuse of cell-pair can be O(n) in worst case, if the cdr cell of the head (which needs to be refcount--) points to a tree of n cell-pairs,+
+  +where each car points to another cell-pair that needs to be refcount-- before enqueued into the free-list.  it is more likely to be must+
+  +faster since this worst case is of rather hypothetical nature.+
+  +IDEA: this time can be reduced by incrementally refcount-- cdr cells of the free list (e.g. during allocation of cells or cell-pairs).+
 - reuse of cell-arrays could be very expensive if the array contains pointers to cell-arrays up to the max memory allocated thus
   IDEA: this time can be reduced by incrementally refcount-- cells of the array (e.g. during allocation of cells or cell-pairs).
 ** musings

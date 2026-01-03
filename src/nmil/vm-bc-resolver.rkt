@@ -1,5 +1,8 @@
 #lang racket/base
 
+(provide bc-resolve ;; resolve labels in commands by collecting labels first and resolve with the collected labels
+         bc-bytes)  ;; calculate the number of bytes the given list of BC-CMDS actually take
+
 #|
 
 resolve unresolved reference in byte code ast
@@ -32,9 +35,6 @@ functions
                   bc-ast-rel-branch-reference?
                   bc-cmd?
                   bc-rel-ref))
-
-(provide bc-resolve ;; resolve labels in commands by collecting labels first and resolve with the collected labels
-         bc-bytes)  ;; calculate the number of bytes the given list of BC-CMDS actually take
 
 (module+ test
   (require rackunit

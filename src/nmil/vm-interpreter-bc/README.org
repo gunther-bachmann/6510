@@ -5,6 +5,35 @@
 Tests are usually kept in separate files to avoid circular module references
 when using other byte codes during test of the byte code of interest
 
+* conventions
+** naming
+- functions prefixed with ~bc_~ take care of reference counting
+- functions prefixed with ~vm_~ do not take of reference counting
+  except if explicitly suffixed with ~_refcnt~
+** file organisation
+test files are held separate because of circular dependencies when combined
 * TODO
 - [ ] check reference counting especially for arrays
 - [ ] increase test coverage
+  - [ ] arrays.test
+  - [ ] atom-num.test.rkt
+  - [ ] branch.test.rkt
+  - [ ] call_ret.test.rkt
+  - [ ] cell-pair.test.rkt
+  - [ ] compare.test.rkt
+  - [ ] misc.test.rkt
+  - [ ] native.test.rkt
+  - [ ] create pop_local.test.rkt
+  - [ ] predicates.test.rkt
+  - [ ] push_const.test.rkt
+  - [ ] push_local.test.rkt
+  - [ ] push_n_pop.test.rkt
+- [ ] wrap tests into ~regression-test~
+- [ ] use uniform naming schema
+* ...
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; org-pretty-entities-include-sub-superscripts: nil   ;; make sure _ is not interpreted as subscript
+  ;; fill-column: 100                                    ;; fill paragraphs with 100 char width
+  ;; End:
+  #+end_src

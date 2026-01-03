@@ -3,13 +3,6 @@
 #|review: ignore|#
 #|  review does show several false positives |#
 
-#|
-
-  AST for minimal lisp (should actually be independent of VM)
-
- |#
-
-
 (provide (struct-out ast-node-)
          (struct-out ast-info-)
          make-ast-info
@@ -39,6 +32,14 @@
          (struct-out ast-ex-with-)
          (struct-out ast-ex-value-def-)
          Register)
+
+#|
+
+  AST for minimal lisp (should actually be independent of VM)
+
+ |#
+
+
 
 ;; ast-node-    :: ast=info-
 ;;    +----- ast-type-def-
