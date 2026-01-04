@@ -140,7 +140,8 @@
          (only-in "./vm-interpreter-bc/push_local.rkt"
                   BC_WRITE_LOCAL_SHORT           ;; write a local into the tos (rt)
                   BC_PUSH_LOCAL_SHORT            ;; push the local onto the eval stack
-                  BC_PUSH_LOCAL_CXR)             ;; push local 0-3 and then car
+                  BC_PUSH_LX_CDR
+                  BC_PUSH_LX_CAR)                ;; push local 0-3 and then car
 
          (only-in "./vm-interpreter-bc/push_n_pop.rkt"
                   BC_PUSH_B

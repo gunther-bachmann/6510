@@ -7,6 +7,7 @@
  ALLOC_M1_P0_SLOT_TO_RA               ;; allocate an m1 slot profile 0 (of size 4) into RA
  ALLOC_M1_PX_SLOT_TO_RA               ;; allocate an m1 slot profile X into RA
  ALLOC_M1_SLOT_TO_RT                  ;; allocate an m1 slot of size A into RT
+ ALLOC_M1_P0_SLOT_TO_RT               ;; allocate m1 slot of profile 0 to RT
  DEC_REFCNT_M1_SLOT_RZ                ;; decrement pointed to by RZ (without checks)
  DEC_REFCNT_M1_SLOT_RZ__IF_PTR        ;; decrement pointed to by RZ only iff it is a ptr
  DEC_REFCNT_M1_SLOT_RT__IF_PTR        ;; decrement pointed to by RT only iff it is a ptr
@@ -17,9 +18,6 @@
 
  vm-m1-slot-code                      ;; complete list of code of this module
 
- ;; derived code sequences
- ALLOC_M1_P0_SLOT_TO_RT               ;; allocate m1 slot of profile 0 to RT
- ALLOC_M1_P0_SLOT_TO_RA               ;; allocate m1 slot of profile 0 to RA
  )
 
 #|

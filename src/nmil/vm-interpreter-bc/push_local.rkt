@@ -2,7 +2,8 @@
 
 (provide BC_WRITE_LOCAL_SHORT           ;; write a local into the tos (rt)
          BC_PUSH_LOCAL_SHORT            ;; push the local onto the eval stack
-         BC_PUSH_LOCAL_CXR              ;; push local 0-3 and then car
+         BC_PUSH_LX_CAR                 ;; push local 0-3 and then CAR
+         BC_PUSH_LX_CDR                 ;; push local 0-3 and then CDR
          PUSH_RT_WRITE_LOCAL_bc_enc)    ;; push rt, then write local (encoded w/i bc) into rt, no refcnt!
 
 #|
@@ -68,15 +69,15 @@
            (STA ZP_RT+1)
            (RTS)))
 
-(define-vm-function-wol BC_PUSH_LOCAL_CXR
+(define-vm-function BC_PUSH_LX_CAR
    (list
-    (label BC_PUSH_LX_CAR)
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR WRITE_ARR_AT0_RT_TO_RT)
            (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
-           (JMP VM_INTERPRETER_INC_PC)
+           (JMP VM_INTERPRETER_INC_PC)))
 
-    (label BC_PUSH_LX_CDR)
+(define-vm-function BC_PUSH_LX_CDR
+   (list
            (JSR PUSH_RT_WRITE_LOCAL_bc_enc)
            (JSR WRITE_ARR_AT1_RT_TO_RT)
            (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)

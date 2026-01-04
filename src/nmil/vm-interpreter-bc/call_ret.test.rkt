@@ -30,9 +30,10 @@
            (only-in "./push_const.rkt"
                     BC_PUSH_CONST_NUM_SHORT)
            (only-in "./push_local.rkt"
+                    BC_PUSH_LX_CDR
+                    BC_PUSH_LX_CAR
                     BC_PUSH_LOCAL_SHORT
-                    PUSH_RT_WRITE_LOCAL_bc_enc
-                    BC_PUSH_LOCAL_CXR)
+                    PUSH_RT_WRITE_LOCAL_bc_enc)
            "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
@@ -66,7 +67,8 @@
            BC_RET
            ;; ---
            BC_PUSH_LOCAL_SHORT
-           BC_PUSH_LOCAL_CXR
+           BC_PUSH_LX_CDR
+           BC_PUSH_LX_CAR
            PUSH_RT_WRITE_LOCAL_bc_enc
            BC_PUSH_CONST_NUM_SHORT
            BC_POP_TO_LOCAL_SHORT

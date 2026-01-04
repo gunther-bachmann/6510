@@ -107,7 +107,8 @@
          (only-in "./vm-interpreter-bc/push_const.rkt"
                   BC_PUSH_CONST_NUM_SHORT)
          (only-in "./vm-interpreter-bc/push_local.rkt"
-                  BC_PUSH_LOCAL_CXR)
+                  BC_PUSH_LX_CDR
+                  BC_PUSH_LX_CAR)
          (only-in "./vm-interpreter-bc/push_n_pop.rkt"
                   BC_PUSH_B
                   BC_DUP
@@ -216,7 +217,8 @@
           BC_POP
           BC_PUSH_LOCAL_SHORT
           BC_POP_TO_LOCAL_SHORT
-          BC_PUSH_LOCAL_CXR
+          BC_PUSH_LX_CAR
+          BC_PUSH_LX_CDR
           BC_PUSH_B
           BC_CALL
           BC_PUSH_CONST_NUM_SHORT
