@@ -1,25 +1,30 @@
 #lang racket/base
 
+;; IDEA: reduce to the minimal needed, make the ones used more often fast, make the others generic (see swap)
+
 (provide WRITE_NIL_TO_RT        ;; write constant NIL into RT
-         WRITE_NIL_TO_RP
+         WRITE_NIL_TO_RP        ;; write constant NIL into RP
          WRITE_INT_AY_TO_RT     ;; write integer constant into Rx
-         WRITE_INT0_TO_RT
-         WRITE_INT1_TO_RT
-         CP_RA_TO_RT            ;; copy regiser from RA to RT
-         CP_RA_TO_RZ
-         CP_RB_TO_RZ
-         CP_RC_TO_RZ
-         CP_RT_TO_RA
-         CP_RT_TO_RP
-         CP_RT_TO_RZ
-         CP_RZ_TO_RT
-         CP_RT_TO_RB
-         SWAP_ZP_WORD
-         CP_RA_TO_RB
-         SWAP_RA_RB
+         WRITE_INT0_TO_RT       ;; write int 0 to RT
+         WRITE_INT1_TO_RT       ;; write int 1 to RT
+         WRITE_INTm1_TO_RT      ;; write int -1 to RT
+
+         CP_RA_TO_RT            ;; copy register RA -> RT
+         CP_RA_TO_RZ            ;; copy register RA -> RZ
+         CP_RA_TO_RB            ;; RA -> RB
+         CP_RB_TO_RZ            ;; RB -> RZ
+         CP_RC_TO_RZ            ;; RC -> RZ
+
+         CP_RT_TO_RA            ;; RT -> RA
+         CP_RT_TO_RB            ;; RT -> RB
+         CP_RT_TO_RZ            ;; RT -> RZ
+         CP_RT_TO_RP            ;; RT -> RP
+         CP_RZ_TO_RT            ;; RZ -> RT
+
+         SWAP_ZP_WORD           ;; swap 16 bits of two zero page locations (in A and X)
+         SWAP_RA_RB             ;; RA <-> RB
 
          vm-register-functions-code)
-
 
 #|
 
@@ -36,13 +41,17 @@
          (only-in "../vm-inspector-utils.rkt"
                   vm-cell-at-nil?
                   vm-rega->string
-                  vm-regt->string)
+                  vm-regb->string
+                  vm-regt->string
+                  vm-regz->string)
          (only-in "./vm-memory-map.rkt"
                   TAGGED_NIL
+                  TAGGED_INT_0_LB
                   ZP_RP
                   ZP_RT
                   ZP_RA
                   ZP_RC
+                  ZP_RZ
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
 
 (module+ test
@@ -58,6 +67,7 @@
      CP_RA_TO_RT
      CP_RA_TO_RZ
      CP_RT_TO_RA
+     CP_RT_TO_RB
      CP_RT_TO_RP
      CP_RT_TO_RZ
      CP_RZ_TO_RT
@@ -72,18 +82,18 @@
 ;; output: RT (RP) = NIL
 (define-vm-function WRITE_NIL_TO_RT
   (list
-          (LDA !<TAGGED_NIL)
-          (STA ZP_RT)
-          (LDA !>TAGGED_NIL)
-          (STA ZP_RT+1)
+          (LDX !<TAGGED_NIL)
+          (STX ZP_RT)
+          (LDX !>TAGGED_NIL)
+          (STX ZP_RT+1)
           (RTS)))
 
 (define-vm-function WRITE_NIL_TO_RP
   (list
-          (LDA !<TAGGED_NIL)
-          (STA ZP_RP)
-          (LDA !>TAGGED_NIL)
-          (STA ZP_RP+1)
+          (LDX !<TAGGED_NIL)
+          (STX ZP_RP)
+          (LDX !>TAGGED_NIL)
+          (STX ZP_RP+1)
           (RTS)))
 
 (module+ test #| WRITE_NIL_TO_Rx|#
@@ -107,11 +117,10 @@
 ;; output: RT (copy of RA)
 (define-vm-function CP_RA_TO_RT
   (list
-   (label CP_RA_TO_RT__VALUE) ;;just value, no tagged byte
-          (LDA ZP_RA+1)
-          (STA ZP_RT+1)
-          (LDA ZP_RA)
-          (STA ZP_RT)
+          (LDX ZP_RA+1)
+          (STX ZP_RT+1)
+          (LDX ZP_RA)
+          (STX ZP_RT)
           (RTS)))
 
 ;; @DC-FUN: CP_RA_TO_RZ, group: register
@@ -120,10 +129,10 @@
 ;; output: RZ (copy of RA)
 (define-vm-function CP_RA_TO_RZ
   (list
-          (LDA ZP_RA+1)
-          (STA ZP_RZ+1)
-          (LDA ZP_RA)
-          (STA ZP_RZ)
+          (LDX ZP_RA+1)
+          (STX ZP_RZ+1)
+          (LDX ZP_RA)
+          (STX ZP_RZ)
           (RTS)))
 
 ;; @DC-FUN: CP_RB_TO_RZ, group: register
@@ -132,10 +141,10 @@
 ;; output: RZ (copy of RA)
 (define-vm-function CP_RB_TO_RZ
   (list
-          (LDA ZP_RB+1)
-          (STA ZP_RZ+1)
-          (LDA ZP_RB)
-          (STA ZP_RZ)
+          (LDX ZP_RB+1)
+          (STX ZP_RZ+1)
+          (LDX ZP_RB)
+          (STX ZP_RZ)
           (RTS)))
 
 ;; @DC-FUN: CP_RC_TO_RZ, group: register
@@ -144,10 +153,10 @@
 ;; output: RZ (copy of RA)
 (define-vm-function CP_RC_TO_RZ
   (list
-          (LDA ZP_RC+1)
-          (STA ZP_RZ+1)
-          (LDA ZP_RC)
-          (STA ZP_RZ)
+          (LDX ZP_RC+1)
+          (STX ZP_RZ+1)
+          (LDX ZP_RC)
+          (STX ZP_RZ)
           (RTS)))
 
 ;; @DC-FUN: CP_RT_TO_RZ, group: register
@@ -169,10 +178,10 @@
 ;; output: RT (copy of RZ)
 (define-vm-function CP_RZ_TO_RT
   (list
-          (LDA ZP_RZ+1)
-          (STA ZP_RT+1)
-          (LDA ZP_RZ)
-          (STA ZP_RT)
+          (LDX ZP_RZ+1)
+          (STX ZP_RT+1)
+          (LDX ZP_RZ)
+          (STX ZP_RT)
           (RTS)))
 
 ;; @DC-FUN: CP_RT_TO_RP, group: register
@@ -181,10 +190,10 @@
 ;; output: RP (copy of RT)
 (define-vm-function CP_RT_TO_RP
   (list
-          (LDA ZP_RT+1)
-          (STA ZP_RP+1)
-          (LDA ZP_RT)
-          (STA ZP_RP)
+          (LDX ZP_RT+1)
+          (STX ZP_RP+1)
+          (LDX ZP_RT)
+          (STX ZP_RP)
           (RTS)))
 
 ;; @DC-FUN: CP_RT_TO_RA, group: register
@@ -205,10 +214,10 @@
 ;; output: RB (copy of RT)
 (define-vm-function CP_RT_TO_RB
   (list
-          (LDA ZP_RT+1)
-          (STA ZP_RB+1)
-          (LDA ZP_RT)
-          (STA ZP_RB)
+          (LDX ZP_RT+1)
+          (STX ZP_RB+1)
+          (LDX ZP_RT)
+          (STX ZP_RB)
           (RTS)))
 
 (module+ test #| vm-cp-rt-to-ra |#
@@ -226,6 +235,7 @@
 
 (define WRITE_INT0_TO_RT '())
 (define WRITE_INT1_TO_RT '())
+(define WRITE_INTm1_TO_RT '())
 ;; @DC-FUN: WRITE_INT_AY_TO_RT, group: register
 ;; write the given int in A/Y into RT, ignoring what was in RT (no dec-refcnt)
 ;; input:  A = lowbyte of int (0..255), written into high byte of cell register RT
@@ -237,7 +247,7 @@
   (list
    (label WRITE_INTm1_TO_RT)
           (LDA !$ff) ;; int lowbyte = ff
-          (LDY !$7f) ;; #b[0]111 11[11] = $1f for int high byte
+          (LDY !$ff) ;; #b1111 11[11] = $1f for int high byte
           (BNE ENC_WRITE_AY_TO_RT)
 
    (label WRITE_INT1_TO_RT)
@@ -248,7 +258,7 @@
           (LDA !$00)
 
    (label WRITE_INT_A_TO_RT)
-          (LDY !$03) ;; #b[0]000 00[11] = high byte of int  0
+          (LDY !TAGGED_INT_0_LB) ;; #b0000 00[11] = high byte of int  0
    (label ENC_WRITE_AY_TO_RT)
           (STY ZP_RT)
           (STA ZP_RT+1)
@@ -257,11 +267,9 @@
    (label WRITE_INT_AY_TO_RT)
           (STA ZP_RT+1)
           (TYA)      ;; #b???x xxxx
-          (SEC)
-          (ROL)      ;; #b??xx xxx1
-          (SEC)
-          (ROL)      ;; #b?xxx xx11
-          (AND !$7f) ;; #xb0xxx xx11 (mask out top bit!)
+          (ASL A)
+          (ASL A)
+          (ORA !$03)
           (STA ZP_RT) ;; encoded tagged byte of int goes into first memory cell, even though it is the high-byte part of int
           (RTS)))
 
@@ -269,12 +277,28 @@
   (define vm-write-int-ay-to-rt-state
     (compact-run-code-in-test-
      #:runtime-code test-runtime
+     (JSR WRITE_INTm1_TO_RT)
+     (JSR CP_RT_TO_RA)
+     (JSR WRITE_INT0_TO_RT)
+     (JSR CP_RT_TO_RB)
+     (JSR WRITE_INT1_TO_RT)
+     (JSR CP_RT_TO_RZ)
      (LDA !$01)
      (LDY !$02)
      (JSR WRITE_INT_AY_TO_RT)))
 
   (check-equal? (vm-regt->string vm-write-int-ay-to-rt-state)
-                "int $0201"))
+                "int $0201"
+                "WRITE_INT_AY_TO_RT encodes A and Y with tag byte")
+  (check-equal? (vm-rega->string vm-write-int-ay-to-rt-state)
+                "int $3fff"
+                "WRITE_INTm1_TO_RT writes int -1")
+  (check-equal? (vm-regb->string vm-write-int-ay-to-rt-state)
+                "int $0000"
+                "WRITE_INT0_TO_RT writes int 0")
+  (check-equal? (vm-regz->string vm-write-int-ay-to-rt-state)
+                "int $0001"
+                "WRITE_INT1_TO_RT write int 1"))
 
 ;; @DC-FUN: SWAP_ZP_WORD, group: register
 ;; swap 16 bits of two zero page locations
@@ -329,10 +353,10 @@
 
   (check-equal? (memory-list swap-zp-word-t0 ZP_RA (+ 1 ZP_RA))
                 (list #x20 #x21)
-                "originally $1e $1f")
+                "swaps rc (20 21) with ra (1e 1f)")
   (check-equal? (memory-list swap-zp-word-t0 ZP_RC (+ 1 ZP_RC))
                 (list #x1e #x1f)
-                "originally $20 $21"))
+                "swaps rc (20 21) with ra (1e 1f)"))
 
 (define-vm-function CP_RA_TO_RB
    (list
@@ -358,12 +382,13 @@
 
 (define vm-register-functions-code
   (append
-   WRITE_NIL_TO_RT        ;; write constant NIL into RT
+   WRITE_NIL_TO_RT
    WRITE_NIL_TO_RP
-   WRITE_INT_AY_TO_RT     ;; write integer constant into Rx
+   WRITE_INT_AY_TO_RT
    ;; WRITE_INT0_TO_RT
    ;; WRITE_INT1_TO_RT
-   CP_RA_TO_RT            ;; copy regiser from RA to RT
+   ;; WRITE_INTm1_TO_RT
+   CP_RA_TO_RT
    CP_RA_TO_RZ
    CP_RB_TO_RZ
    CP_RC_TO_RZ
@@ -378,4 +403,4 @@
 
 (module+ test #| code len |#
   (inform-check-equal? (code-len vm-register-functions-code)
-                       249))
+                       247))

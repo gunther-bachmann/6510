@@ -582,8 +582,8 @@
 
   (check-equal? (vm-stack->strings vm-cell-stack-just-push-rt-state)
                 (list "stack holds 2 items"
-                      "int $1fff  (rt)"
-                      "int $1fff")))
+                      "int $3fff  (rt)"
+                      "int $3fff")))
 
 
 ;; @DC-FUN: POP_EVLSTK_TAIL_TO_CELLy_RT, group: cell_stack

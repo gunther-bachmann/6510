@@ -58,12 +58,20 @@
   (define loop-label (string-replace (uuid-string) "-" "_"))
   (list
      ;; fill page with $xx
+         (PHA)
+         (TXA)
+         (PHA)
+
          (ast-opcode-cmd '() `(169 ,byte));;(LDA !$FF)
          (LDX !$00)
      (ast-label-def-cmd '() loop-label);; (label LOOP__TEST_ALLOC_M1_04_CODE)
          (DEX)
          (ast-opcode-cmd '() `(157 0 ,page));;(STA $cf00,x)
          (ast-unresolved-rel-opcode-cmd '() '(208) (ast-resolve-byte-scmd loop-label 'relative)) ;; (BNE LOOP__TEST_ALLOC_M1_04_CODE)
+
+         (PLA)
+         (TAX)
+         (PLA)
      ))
 
 (define (remove-labels-for code labels-to-remove (result (list)))

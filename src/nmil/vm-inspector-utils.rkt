@@ -8,6 +8,9 @@
          vm-regt->string
          vm-regp->string
          vm-rega->string
+         vm-regb->string
+         vm-regc->string
+         vm-regz->string
          vm-deref-cell-pair-w->string
          vm-deref-cell-w->string
          shorten-cell-string
@@ -43,7 +46,10 @@
                   TAGGED_NIL
                   ZP_RT
                   ZP_RA
+                  ZP_RB
+                  ZP_RC
                   ZP_RP
+                  ZP_RZ
                   ZP_EVAL_STACK_TAIL_TOP
                   ZP_EVAL_STACK_TAIL_LB_PTR
                   ZP_EVAL_STACK_TAIL_HB_PTR))
@@ -224,10 +230,28 @@
    (peek state (add1 ZP_RA))
    state))
 
+(define (vm-regb->string state)
+  (vm-cell->string
+   (peek state ZP_RB)
+   (peek state (add1 ZP_RB))
+   state))
+
+(define (vm-regc->string state)
+  (vm-cell->string
+   (peek state ZP_RC)
+   (peek state (add1 ZP_RC))
+   state))
+
 (define (vm-regp->string state)
   (vm-cell->string
    (peek state ZP_RP)
    (peek state (add1 ZP_RP))
+   state))
+
+(define (vm-regz->string state)
+  (vm-cell->string
+   (peek state ZP_RZ)
+   (peek state (add1 ZP_RZ))
    state))
 
 (module+ test #| vm-cell->strings |#

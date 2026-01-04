@@ -1,12 +1,11 @@
 #lang racket
 
 (provide
- VM_INITIALIZE_PAGE_MEMORY_MANAGER     ;; initialize page memory management (must be called before first allocation)
- VM_ALLOCATE_NEW_PAGE                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
- VM_DEALLOCATE_PAGE                    ;; return a page to the free list (actually push)
+ VM_INITIALIZE_PAGE_MEMORY_MANAGER ;; initialize page memory management (must be called before first allocation)
+ VM_ALLOCATE_NEW_PAGE              ;; get a page from the free list and adjust the free list accordingly (actually pop)
+ VM_DEALLOCATE_PAGE                ;; return a page to the free list (actually push)
 
- vm-pages-code
-)
+ vm-pages-code)
 
 #|
 
@@ -16,11 +15,11 @@
   page layout
   | offset | content
   |--------|--------------------
-  | +00    | page-type
-  | +01    | # of free slots / # of used slots (optional, since this offset is not available on specialized cell-pair pages)
+  | +00    | page-type (0 if not initialized, yet)
+  | +01    | # of used slots  (not written if not initialized)
   | +02    | beginning of first slot
   |  :     |
-  | +fe    | offset to first free slot (0 if there is no free slot)
+  | +fe    | offset to first free slot (0 if there is no free slot) (not written if not initialized)
   | +ff    | ptr to prev page of this type (0 if this page is full || head and tail of the PPAGE_FREE_LIST)
              if the page is free and has no type (uninitialized), it points to the next free page
 
@@ -31,7 +30,7 @@
   | 0000 0000 | unknown or uninitialized
   | 0001 0001 | page with code
   | 0001 0010 | cell stack page
-  | 0001 0011 | call stack page
+  | 0001 0011 | call frame page
   | 0010 xxxx | m1 page with profile xxxx
 
 
@@ -61,14 +60,16 @@
                      regression-test)
             "./vm-memory-manager-test-utils.rkt")
 
+  (define PAGE_AVAIL_0 #xcf)
+  (define PAGE_AVAIL_0_W #xcf00)
+
   (define test-runtime
     (append
      VM_INITIALIZE_PAGE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      VM_ALLOCATE_NEW_PAGE
      VM_DEALLOCATE_PAGE
-     (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS))))
-  )
+     (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS)))))
 
 ;; pop a page off the free list (if available, else out of memory error)
 ;;
@@ -83,12 +84,12 @@
 (define-vm-function
   VM_ALLOCATE_NEW_PAGE
   (list
-          (LDX ZP_PAGE_FREE_LIST)
-          (BEQ outof_memory__)
-          (LDY !$ff)
-          (STX ZP_PAGE_REG+1)
-          (LDA (ZP_PAGE_REG),y)
-          (STA ZP_PAGE_FREE_LIST)
+          (LDX ZP_PAGE_FREE_LIST)       ;; get current head of page free list into X
+          (BEQ outof_memory__)          ;; 0? then out of memory error
+          (LDY !$ff)                    ;; offset to next free page on this page
+          (STX ZP_PAGE_REG+1)           ;; store page as high byte
+          (LDA (ZP_PAGE_REG),y)         ;; load next free page (after this)
+          (STA ZP_PAGE_FREE_LIST)       ;; store as new head of page free list
           (RTS)
    (label outof_memory__)
           (BRK)))
@@ -110,7 +111,6 @@
    (check-equal? (peek vm-allocate-new-page-n-01 (+ 1 ZP_PAGE_REG))
                  #xcf
                  "first page should be $cf")
-
    (check-equal? (peek vm-allocate-new-page-n-01 ZP_PAGE_FREE_LIST)
                  #xce
                  "head of free list now is $ce")))
@@ -128,14 +128,14 @@
 (define-vm-function
   VM_DEALLOCATE_PAGE
   (list
-                (LDA ZP_PAGE_FREE_LIST)
-                (STX ZP_PAGE_REG+1)
-                (LDY !$ff)
-                (STA (ZP_PAGE_REG),y)
-                (INY)
-                (TYA)
-                (STA (ZP_PAGE_REG),y)
-                (STX ZP_PAGE_FREE_LIST)
+                (LDA ZP_PAGE_FREE_LIST)   ;; load old head of page free list
+                (STX ZP_PAGE_REG+1)       ;; store x (page to free) into page register
+                (LDY !$ff)                ;; offset to place where linked next free should be
+                (STA (ZP_PAGE_REG),y)     ;; store old page as link into the page about to be freed
+                (INY)                     ;; y := 0
+                (TYA)                     ;; A := 0
+                (STA (ZP_PAGE_REG),y)     ;; store page type 0 into page @00
+                (STX ZP_PAGE_FREE_LIST)   ;; store this page as new head of the page free list
                 (RTS)))
 
 (module+ test #| vm-deallocate-page-n (incomplete) |#
@@ -143,31 +143,22 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code test-runtime
-            (LDX !$20)
-            (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
-
-            ;; now allocate a new page
+            ;; given
+            (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
             (JSR VM_ALLOCATE_NEW_PAGE)
+            (fill-page-with PAGE_AVAIL_0  #xcc)
 
-            (LDY !$00)
-            (LDA !$cc) ;; fill page with $cc
-     (label clear_page_loop)
-            (STA (ZP_PAGE_REG),y)
-            (INY)
-            (BNE clear_page_loop)
-
-            (JSR VM_DEALLOCATE_PAGE)
-     ))
+            ;; when
+            (JSR VM_DEALLOCATE_PAGE)))
 
   (check-equal? (peek vm-deallocate-page-n-01 ZP_PAGE_FREE_LIST)
-                #xcf
-                "first free page should be $cf (again)")
-
+                PAGE_AVAIL_0
+                "first free page should be PAGE_AVAIL_0 (again)")
   (check-equal? (peek vm-deallocate-page-n-01 (peek-word-at-address vm-deallocate-page-n-01 ZP_PAGE_REG))
                 #x00
                 "first byte of freed page should be $00 (untyped) again")
   (check-equal? (peek vm-deallocate-page-n-01 (+ #xff (peek-word-at-address vm-deallocate-page-n-01 ZP_PAGE_REG)))
-                #xce
+                (- PAGE_AVAIL_0 1)
                 "last byte of freed page should be $ce, the previous free page again"))
 
 ;; initialize all pages available for memory management
@@ -270,58 +261,78 @@
      (STX $0201)
      (STY $0202)))
 
-  (check-equal?
-   (memory-list vm-initialize-page-memory-manager-01 #x0200 #x0202)
-   (list #x00 #x20 #xff)
-   "registers are filled with values guaranteed by function")
+  (regression-test
+   vm-initialize-page-memory-manager-01
+   "initialize all pages for memory management, CFxx .. page A, skipping A000-BFFF"
+   (check-equal?
+    (memory-list vm-initialize-page-memory-manager-01 #x0200 #x0202)
+    (list #x00 #x20 #xff)
+    "registers are filled with values guaranteed by function")
+
+   (check-equal?
+    (memory-list vm-initialize-page-memory-manager-01 ZP_INC_COLLECTIBLE_LIST (+ 1 ZP_INC_COLLECTIBLE_LIST))
+    (list #x00 #x00)
+    "head of incrementally collective cell arrays is 0")
+
+   (check-equal?
+    (memory-list vm-initialize-page-memory-manager-01 ZP_PROFILE_PAGE_FREE_LIST (+ ZP_PROFILE_PAGE_FREE_LIST 5))
+    (list #x00 #x00 #x00 #x00 #x00 #x00)
+    "the next free page already initialized to the profiles are all $00 => none available")
+
+   (check-equal?
+    (memory-list vm-initialize-page-memory-manager-01 ZP_PAGE_FREE_SLOTS_LIST (+ ZP_PAGE_FREE_SLOTS_LIST 5))
+    (list #x00 #x00 #x00 #x00 #x00 #x00)
+    "the next page with slots of the given profiles are all $00 => none available")
+
+   (check-equal?
+    (peek-word-at-address vm-initialize-page-memory-manager-01 ZP_PAGE_REG)
+    #x2100
+    "page register is set to the page before the last one allocatable")
+
+   (check-equal?
+    (peek vm-initialize-page-memory-manager-01 ZP_PAGE_FREE_LIST)
+    PAGE_AVAIL_0
+    "first free page is PAGE_AVAIL_0")
+
+   (check-equal?
+    (peek vm-initialize-page-memory-manager-01 PAGE_AVAIL_0_W)
+    0
+    "type of page $cf is 0")
+
+   (check-equal?
+    (peek vm-initialize-page-memory-manager-01 (+ PAGE_AVAIL_0_W #xff))
+    (- PAGE_AVAIL_0 1)
+    "next free page after $cf is $ce")
+
+   (check-equal?
+    (peek vm-initialize-page-memory-manager-01 #xc000)
+    0
+    "type of page $c0 is 0")
+
+   (check-equal?
+    (peek vm-initialize-page-memory-manager-01 #xc0ff)
+    #x9f
+    "next free page after $c0 is $9f"))
 
   (check-equal?
-   (memory-list vm-initialize-page-memory-manager-01 ZP_INC_COLLECTIBLE_LIST (+ 1 ZP_INC_COLLECTIBLE_LIST))
-   (list #x00 #x00)
-   "head of incrementally collective cell arrays is 0")
+   (peek vm-initialize-page-memory-manager-01 #x9f00)
+   0
+   "type of page $9f is 0")
 
-  (check-equal? (memory-list vm-initialize-page-memory-manager-01 ZP_PROFILE_PAGE_FREE_LIST (+ ZP_PROFILE_PAGE_FREE_LIST 5))
-                (list #x00 #x00 #x00 #x00 #x00 #x00)
-                "the next free page already initialized to the profiles are all $00 => none available")
+  (check-equal?
+   (peek vm-initialize-page-memory-manager-01 #x9fff)
+   #x9e
+   "next free page after $9f is $9e")
 
-  (check-equal? (memory-list vm-initialize-page-memory-manager-01 ZP_PAGE_FREE_SLOTS_LIST (+ ZP_PAGE_FREE_SLOTS_LIST 5))
-                (list #x00 #x00 #x00 #x00 #x00 #x00)
-                "the next page with slots of the given profiles are all $00 => none available")
+  (check-equal?
+   (peek vm-initialize-page-memory-manager-01 #x2100)
+   0
+   "type of page $20 is 0")
 
-  (check-equal? (peek-word-at-address vm-initialize-page-memory-manager-01 ZP_PAGE_REG)
-                #x2100)
-
-  (check-equal? (peek vm-initialize-page-memory-manager-01 ZP_PAGE_FREE_LIST)
-                #xcf
-                "first free page is $cf")
-
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #xcf00)
-                0
-                "type of page $cf is 0")
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #xcfff)
-                #xce
-                "next free page after $cf is $ce")
-
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #xc000)
-                0
-                "type of page $c0 is 0")
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #xc0ff)
-                #x9f
-                "next free page after $c0 is $9f")
-
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #x9f00)
-                0
-                "type of page $9f is 0")
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #x9fff)
-                #x9e
-                "next free page after $9f is $9e")
-
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #x2100)
-                0
-                "type of page $20 is 0")
-  (check-equal? (peek vm-initialize-page-memory-manager-01 #x21ff)
-                #x00
-                "next free page after $20 is $00, that is, there is no free list after $20"))
+  (check-equal?
+   (peek vm-initialize-page-memory-manager-01 #x21ff)
+   #x00
+   "next free page after $20 is $00, that is, there is no free list after $20"))
 
 (define vm-pages-code
   (append
