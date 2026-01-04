@@ -22,6 +22,8 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
                   WRITE_RP_TO_ARR_AT1_RT
                   POP_CELL_EVLSTK_TO_ARR_AT0_RT
                   ALLOC_CELL_ARRAY_P0_TO_RT)
+         (only-in "./vm-cell-stack.rkt"
+                  PUSH_NIL_TO_EVLSTK)
          "./vm-memory-manager-test-utils.rkt")
 
 (provide vm-list-code

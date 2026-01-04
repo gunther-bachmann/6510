@@ -21,7 +21,7 @@
                   WRITE_ARR_AT0_RT_TO_RT
                   WRITE_ARR_AT1_RT_TO_RT)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
-                  PUSH_RT_TO_EVLSTK)
+                  PUSH_RT_TO_EVLSTK_TAIL)
          (only-in "../vm-runtime/vm-m1-slots.rkt"
                   INC_REFCNT_M1_SLOT_RT
                   DEC_REFCNT_M1_SLOT_RT__IF_PTR)
@@ -59,7 +59,7 @@
            (LSR)
            (AND !$03)
            (PHA)
-           (JSR PUSH_RT_TO_EVLSTK)
+           (JSR PUSH_RT_TO_EVLSTK_TAIL)
            (PLA)
            (TAY)                                ;; index -> Y
            (LDA (ZP_LOCALS_LB_PTR),y)           ;; load low byte of local at index

@@ -825,7 +825,7 @@
   usage:  A, X, Y
   output: RT+EVLSTK
   funcs:
-    PUSH_RT_TO_EVLSTK_IF_NONEMPTY
+    PUSH_RT_TO_EVLSTK_TAIL_IF_NONEMPTY
 - [[file:vm-mm-cell-stack.rkt::284][PUSH_BYTE_X_TO_EVLSTK]] ::  push cell byte X to evlstk (actually RT TO evlstk and cell byte X into RT)
   - racket require :: (require (only-in "vm-mm-cell-stack.rkt" PUSH_XA_TO_EVLSTK))
   - assembler include :: PUSH_XA_TO_EVLSTK
@@ -856,9 +856,9 @@
   - racket require :: (require (only-in "vm-mm-cell-stack.rkt" PUSH_XA_TO_EVLSTK))
   - assembler include :: PUSH_XA_TO_EVLSTK
   push nil to evlstk (actually RT TO evlstk and nil-cell into RT)
-- [[file:vm-mm-cell-stack.rkt::441][PUSH_RT_TO_EVLSTK]] ::  push rt onto the evlstack, no dec/inc refcnt is done!
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" PUSH_RT_TO_EVLSTK))
-  - assembler include :: PUSH_RT_TO_EVLSTK
+- [[file:vm-mm-cell-stack.rkt::441][PUSH_RT_TO_EVLSTK_TAIL]] ::  push rt onto the evlstack, no dec/inc refcnt is done!
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" PUSH_RT_TO_EVLSTK_TAIL))
+  - assembler include :: PUSH_RT_TO_EVLSTK_TAIL
   push rt onto the evlstack, no dec/inc refcnt is done!
   allocate new evlstk page if necessary
   input:  RT+EVLSTK
@@ -1577,7 +1577,7 @@
   usage:  A, X, Y
   output: RT+EVLSTK
   funcs:
-    PUSH_RT_TO_EVLSTK_IF_NONEMPTY
+    PUSH_RT_TO_EVLSTK_TAIL_IF_NONEMPTY
 - [[file:vm-mm-cell-array.rkt::619][WRITE_RT_TO_ARR_ATa_RA]] ::  write the tos into array element a (0 indexed), array pointed to by RA
   - racket require :: (require (only-in "vm-mm-cell-array.rkt" WRITE_RT_TO_ARR_ATa_RA))
   - assembler include :: WRITE_RT_TO_ARR_ATa_RA
@@ -1666,9 +1666,9 @@
   output: cell-stack (one value less)
           cell0 of RA is set
   funcs:  -
-- [[file:vm-mm-cell-stack.rkt::441][PUSH_RT_TO_EVLSTK]] ::  push rt onto the evlstack, no dec/inc refcnt is done!
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" PUSH_RT_TO_EVLSTK))
-  - assembler include :: PUSH_RT_TO_EVLSTK
+- [[file:vm-mm-cell-stack.rkt::441][PUSH_RT_TO_EVLSTK_TAIL]] ::  push rt onto the evlstack, no dec/inc refcnt is done!
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" PUSH_RT_TO_EVLSTK_TAIL))
+  - assembler include :: PUSH_RT_TO_EVLSTK_TAIL
   push rt onto the evlstack, no dec/inc refcnt is done!
   allocate new evlstk page if necessary
   input:  RT+EVLSTK

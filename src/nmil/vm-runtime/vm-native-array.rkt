@@ -44,7 +44,7 @@
                     vm-page->strings)
            (only-in "./vm-cell-stack.rkt"
                     PUSH_XA_TO_EVLSTK
-                    PUSH_RT_TO_EVLSTK
+                    PUSH_RT_TO_EVLSTK_TAIL
                     POP_CELL_EVLSTK_TO_RT)
            (only-in "./vm-cell-stack.rkt"
                     vm-cell-stack-code)
@@ -269,7 +269,7 @@
 (define-vm-function-wol WRITE_NATARR_RAI_TO_RT
   (list
    (label PUSH_NATARR_RAI)
-          (JSR PUSH_RT_TO_EVLSTK)
+          (JSR PUSH_RT_TO_EVLSTK_TAIL)
    (label WRITE_NATARR_RAI_TO_RT)
           (LDA !TAG_BYTE_BYTE_CELL)
           (STA ZP_RT)

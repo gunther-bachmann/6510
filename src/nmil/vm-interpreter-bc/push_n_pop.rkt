@@ -27,7 +27,7 @@
          (only-in "../vm-runtime/vm-cell-stack.rkt"
                   PUSH_XA_TO_EVLSTK
                   PUSH_INT_TO_EVLSTK
-                  PUSH_RT_TO_EVLSTK)
+                  PUSH_RT_TO_EVLSTK_TAIL)
          (only-in "../vm-runtime/vm-m1-slots.rkt"
                   DEC_REFCNT_M1_SLOT_RT__IF_PTR
                   INC_REFCNT_M1_SLOT_RT)
@@ -50,7 +50,7 @@
 (define-vm-function BC_DUP
   (list
           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
-          (JSR PUSH_RT_TO_EVLSTK)
+          (JSR PUSH_RT_TO_EVLSTK_TAIL)
           (JMP VM_INTERPRETER_INC_PC)))
 
 (define-vm-function BC_SWAP

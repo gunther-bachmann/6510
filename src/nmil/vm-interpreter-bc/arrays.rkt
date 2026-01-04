@@ -49,7 +49,7 @@
                   COPY_ARR_ATa_RA_TO_RZ__IF_PTR)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
                   POP_CELL_EVLSTK_TO_RT
-                  PUSH_RT_TO_EVLSTK)
+                  PUSH_RT_TO_EVLSTK_TAIL)
          (only-in "../vm-runtime/vm-register-functions.rkt"
                   SWAP_RA_RB
                   CP_RT_TO_RA)
@@ -74,7 +74,7 @@
            (LSR)
            (AND !$03)
            (PHA)
-           (JSR PUSH_RT_TO_EVLSTK)
+           (JSR PUSH_RT_TO_EVLSTK_TAIL)
            (PLA)
            (JSR WRITE_ARR_ATa_RA_TO_RT)
            (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)
@@ -181,7 +181,7 @@
 (define BC_WRITE_RA '())
 (define-vm-function BC_PUSH_RA
   (list
-          (JSR PUSH_RT_TO_EVLSTK)
+          (JSR PUSH_RT_TO_EVLSTK_TAIL)
    (label BC_WRITE_RA) ;; TODO: before overwriting rt, it needs to be checked if it is a pointer (no check if pushed before!)
           (JSR CP_RA_TO_RT)
           (JSR INC_REFCNT_M1_SLOT_RT) ;; RA can only be a ptr -> rt is one too
@@ -189,7 +189,7 @@
 
 (define-vm-function BC_PUSH_RA_AF
   (list
-          (JSR PUSH_RT_TO_EVLSTK)
+          (JSR PUSH_RT_TO_EVLSTK_TAIL)
           (LDA ZP_RAI)
           (JSR WRITE_ARR_ATa_RA_TO_RT)
           (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)

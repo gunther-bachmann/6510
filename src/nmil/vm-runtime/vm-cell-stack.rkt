@@ -9,7 +9,7 @@
  POP_CELL_EVLSTK_TO_RT        ;; pop cell-stack into RT (discarding RT)
  POP_CELL_EVLSTK_TO_RP        ;; pop cell-stack into RP, RT is not changed, the stack is reduced by 1 (above RT)
  POP_CELL_EVLSTK_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
- PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack (effectively doing a dup)
+ PUSH_RT_TO_EVLSTK_TAIL       ;; push RT onto call frame cell stack (effectively doing a dup)
  PUSH_NIL_TO_EVLSTK           ;; push constant nil onto the eval stack
  PUSH_INT_TO_EVLSTK           ;; push constant int onto the eval stack
  POP_CELL_EVLSTK_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
@@ -73,7 +73,7 @@
      PUSH_XA_TO_EVLSTK
      POP_CELL_EVLSTK_TO_RT
      POP_CELL_EVLSTK_TO_RP
-     PUSH_RT_TO_EVLSTK
+     PUSH_RT_TO_EVLSTK_TAIL
      POP_CELL_EVLSTK_TO_CELLy_RT
 
      ALLOC_M1_P0_SLOT_TO_RT
@@ -379,7 +379,7 @@
           (JMP PUSH_XA_TO_EVLSTK)
 
    (label PUSH_BYTE_X_TO_EVLSTK)
-          (JSR PUSH_RT_TO_EVLSTK)
+          (JSR PUSH_RT_TO_EVLSTK_TAIL)
    (label WRITE_BYTE_X_TO_RT)
           (LDA !TAG_BYTE_BYTE_CELL)
           (STA ZP_RT)
@@ -402,8 +402,8 @@
           (BNE PUSH_XA_TO_EVLSTK)
 
    (label PUSH_INT_0_TO_EVLSTK)
-          (LDA !$00)
-          (LDX !$03)
+          (LDA !TAGGED_INT_0_HB)
+          (LDX !TAGGED_INT_0_LB)
           (BNE PUSH_XA_TO_EVLSTK)
 
    ;; push NIL (cell-pair-ptr)           ;; idea: can be optimized since it is known that this is cell-pair-ptr
@@ -416,7 +416,7 @@
    ;; X = tagged low byte
    (label PUSH_XA_TO_EVLSTK)
           (PHA)
-          (JSR PUSH_RT_TO_EVLSTK) ;; uses A and Y
+          (JSR PUSH_RT_TO_EVLSTK_TAIL) ;; uses A and Y
           (PLA)
 
    (label VM_WRITE_AX_TO_RT)
@@ -532,7 +532,7 @@
   (check-equal? (memory-list vm_cell_stack_push_r_push2_state ZP_RT (add1 ZP_RT))
                 (list #x00 #x00)))
 
-;; @DC-FUN: PUSH_RT_TO_EVLSTK, group: cell_stack
+;; @DC-FUN: PUSH_RT_TO_EVLSTK_TAIL, group: cell_stack
 ;; push rt onto the evlstack, no dec/inc refcnt is done!
 ;; allocate new evlstk page if necessary
 ;; input:  RT+EVLSTK
@@ -542,7 +542,7 @@
 ;;   ALLOC_PAGE_TO_X
 ;;   INIT_CELLSTACK_PAGE_X
 ;; CHECK STACK PAGE OVERFLOW
-(define-vm-function PUSH_RT_TO_EVLSTK
+(define-vm-function PUSH_RT_TO_EVLSTK_TAIL
   (list
           (LDY ZP_CELL_STACK_TOS)
           (INY)
@@ -579,7 +579,7 @@
      #:debug #f
      (JSR INIT_CELLSTACK)
      (JSR WRITE_INTm1_TO_RT)
-     (JSR PUSH_RT_TO_EVLSTK)))
+     (JSR PUSH_RT_TO_EVLSTK_TAIL)))
 
   (check-equal? (vm-stack->strings vm-cell-stack-just-push-rt-state)
                 (list "stack holds 2 items"
@@ -739,7 +739,7 @@
    POP_CELL_EVLSTK_TO_RT        ;; pop cell-stack into RT (discarding RT)
    POP_CELL_EVLSTK_TO_RP        ;; pop cell-stack into RP, RT is not changed, the stack is reduced by 1 (above RT)
    POP_CELL_EVLSTK_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
-   PUSH_RT_TO_EVLSTK            ;; push RT onto call frame cell stack (effectively doing a dup)
+   PUSH_RT_TO_EVLSTK_TAIL            ;; push RT onto call frame cell stack (effectively doing a dup)
    POP_CELL_EVLSTK_TO_CELLy_RT
    INIT_CELLSTACK))
 

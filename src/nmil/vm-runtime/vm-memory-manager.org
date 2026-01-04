@@ -3063,9 +3063,9 @@ use the following idea in more situations:
   | x    | CELL_STACK / RT / RA                        |                                  |      |                                                                    |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------------------|
   | x    | VM_CELL_STACK_POP_R                         | POP_CELL_EVLSTK_TO_RT            |      |                                                                    |
-  | x    | VM_CELL_STACK_PUSH_R                        | PUSH_RT_TO_EVLSTK                |      |                                                                    |
+  | x    | VM_CELL_STACK_PUSH_R                        | PUSH_RT_TO_EVLSTK_TAIL                |      |                                                                    |
   | x    | VM_CELL_STACK_PUSH_el                       | PUSH_el_TO_EVLSTK                |      |                                                                    |
-  | x    | ;; vm_cell_stack_push_rt_if_nonempty        | PUSH_RT_TO_EVLSTK_IF_NONEMPTY    |      |                                                                    |
+  | x    | ;; vm_cell_stack_push_rt_if_nonempty        | PUSH_RT_TO_EVLSTK_TAIL_IF_NONEMPTY    |      |                                                                    |
   | x    | ;; VM_WRITE_INTm1_TO_RA                     | WRITE_INTm1_TO_RA                |      |                                                                    |
   | x    | ;; VM_WRITE_INTm1_TO_RT                     | .                                |      |                                                                    |
   | x    | ;; VM_WRITE_INTm1_TO_Rx                     | .                                |      |                                                                    |
