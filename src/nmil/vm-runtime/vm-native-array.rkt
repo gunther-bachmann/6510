@@ -45,7 +45,7 @@
            (only-in "./vm-cell-stack.rkt"
                     PUSH_XA_TO_EVLSTK
                     PUSH_RT_TO_EVLSTK_TAIL
-                    POP_CELL_EVLSTK_TO_RT)
+                    POP_EVLSTK_TAIL_TO_RT)
            (only-in "./vm-cell-stack.rkt"
                     vm-cell-stack-code)
            (only-in "./vm-m1-slots.rkt"
@@ -182,7 +182,7 @@
     (compact-run-code-in-test-
      #:runtime-code test-runtime
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
-     (JSR INIT_CELLSTACK)
+     (JSR INIT_EVLSTK_TAIL)
 
      (LDA !$04)                         ;; alocates profile for 4 bytes content
      (JSR ALLOC_NATARR_TO_RA)
@@ -228,14 +228,14 @@
           (LDY ZP_RAI)
           (STA (ZP_RA),y)
           (INC ZP_RAI)
-          (JMP POP_CELL_EVLSTK_TO_RT)))
+          (JMP POP_EVLSTK_TAIL_TO_RT)))
 
 (module+ test #| pop-to-natarra-rai |#
   (define pop-to-natarra-rai-t0
     (compact-run-code-in-test-
      #:runtime-code test-runtime
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
-     (JSR INIT_CELLSTACK)
+     (JSR INIT_EVLSTK_TAIL)
 
      (LDA !$04)                         ;; alocates profile for 4 bytes content
      (JSR ALLOC_NATARR_TO_RA)
@@ -285,7 +285,7 @@
     (compact-run-code-in-test-
      #:runtime-code test-runtime
      #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
-     (JSR INIT_CELLSTACK)
+     (JSR INIT_EVLSTK_TAIL)
 
      (LDA !$04)
      (JSR ALLOC_NATARR_TO_RA)

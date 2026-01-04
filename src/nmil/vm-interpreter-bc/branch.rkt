@@ -37,7 +37,7 @@
             (CPX !TAG_BYTE_BYTE_CELL)   ;; high byte == byte tag => it is a 0 byte
             (BNE NO_BRA__)              ;; != => no branch
      (label BRA__)
-            (JSR POP_CELL_EVLSTK_TO_RT)
+            (JSR POP_EVLSTK_TAIL_TO_RT)
             (JMP BRANCH_BY_NEXT_BYTE)
      (label NO_BRA__)
             (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
@@ -55,7 +55,7 @@
      (label BRA__)
             (JMP BRANCH_BY_NEXT_BYTE__NO_POP)
      (label NO_BRA__)
-            (JSR POP_CELL_EVLSTK_TO_RT)
+            (JSR POP_EVLSTK_TAIL_TO_RT)
             (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
 (define CONTINUE_AFTER_BRA '())
@@ -76,7 +76,7 @@
 
    (label POP_AND_CONTINUE_AFTER_BRA)
           (TAX)
-          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JSR POP_EVLSTK_TAIL_TO_RT)
           (TXA)
    (label CONTINUE_AFTER_BRA)
           (CLC)
@@ -90,7 +90,7 @@
 
    (label NEGATIVE_BRANCH__)
           (TAX)
-          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JSR POP_EVLSTK_TAIL_TO_RT)
           (TXA)
    (label NEGATIVE_BRANCH_NO_POP__)
           (CLC)

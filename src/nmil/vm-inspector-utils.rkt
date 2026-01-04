@@ -45,8 +45,8 @@
                   ZP_RA
                   ZP_RP
                   ZP_EVAL_STACK_TAIL_TOP
-                  ZP_EVAL_STACK_LB_PTR
-                  ZP_EVAL_STACK_HB_PTR))
+                  ZP_EVAL_STACK_TAIL_LB_PTR
+                  ZP_EVAL_STACK_TAIL_HB_PTR))
 
 (module+ test
   (require "../6510-test-utils.rkt"
@@ -94,8 +94,8 @@
 ;; produce strings describing the current cell-stack status
 (define (vm-stack->strings state (max-count 10) (follow #f))
   (define stack-tos-idx (peek state ZP_EVAL_STACK_TAIL_TOP))
-  (define stack-lb-page-start (peek-word-at-address state ZP_EVAL_STACK_LB_PTR))
-  (define stack-hb-page-start (peek-word-at-address state ZP_EVAL_STACK_HB_PTR))
+  (define stack-lb-page-start (peek-word-at-address state ZP_EVAL_STACK_TAIL_LB_PTR))
+  (define stack-hb-page-start (peek-word-at-address state ZP_EVAL_STACK_TAIL_HB_PTR))
   (cond
     [(and (= stack-tos-idx #x01)
         (= 0 (peek state (add1 stack-lb-page-start)))) (list "stack is empty or tos=nil")]

@@ -47,8 +47,8 @@
                   define-vm-function
                   define-vm-function-wol)
          (only-in "./vm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RP
-                  POP_CELL_EVLSTK_TO_RT)
+                  POP_EVLSTK_TAIL_TO_RP
+                  POP_EVLSTK_TAIL_TO_RT)
          (only-in "./vm-m1-slots.rkt"
                   ALLOC_M1_SLOT_TO_RT
                   ALLOC_M1_P0_SLOT_TO_RT)
@@ -261,7 +261,7 @@
   (list
    (label POP_EVLSTK_TO_ARR_ATa_RA)
           (JSR WRITE_RT_TO_ARR_ATa_RA)
-          (JMP POP_CELL_EVLSTK_TO_RT)
+          (JMP POP_EVLSTK_TAIL_TO_RT)
 
    (label WRITE_RT_TO_ARR_ATa_RA)
          (ASL A)
@@ -313,13 +313,13 @@
 (define-vm-function-wol WRITE_RP_TO_ARR_AT0_RT
   (list
    (label POP_CELL_EVLSTK_TO_ARR_AT1_RT)
-          (JSR POP_CELL_EVLSTK_TO_RP)
+          (JSR POP_EVLSTK_TAIL_TO_RP)
    (label WRITE_RP_TO_ARR_AT1_RT)
           (LDY !$04)
           (BNE WRITE_RP_TO_ARR_ATyl_RT) ;; awlays jump
 
    (label POP_CELL_EVLSTK_TO_ARR_AT0_RT)
-          (JSR POP_CELL_EVLSTK_TO_RP)
+          (JSR POP_EVLSTK_TAIL_TO_RP)
    (label WRITE_RP_TO_ARR_AT0_RT)
           (LDY !$02)
    (label WRITE_RP_TO_ARR_ATyl_RT)

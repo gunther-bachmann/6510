@@ -48,7 +48,7 @@
                   WRITE_ARR_ATa_RA_TO_RT
                   COPY_ARR_ATa_RA_TO_RZ__IF_PTR)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RT
+                  POP_EVLSTK_TAIL_TO_RT
                   PUSH_RT_TO_EVLSTK_TAIL)
          (only-in "../vm-runtime/vm-register-functions.rkt"
                   SWAP_RA_RB
@@ -164,7 +164,7 @@
            (AND !$03)
            (JSR CP_RT_TO_RA)
            (TAX)
-           (JSR POP_CELL_EVLSTK_TO_RT)
+           (JSR POP_EVLSTK_TAIL_TO_RT)
            (TXA)
            (JSR COPY_ARR_ATa_RA_TO_RZ__IF_PTR)
            (JSR POP_EVLSTK_TO_ARR_ATa_RA)
@@ -213,7 +213,7 @@
    (list
            ;; decrement ra before overwriting
            (JSR DEC_REFCNT_M1_SLOT_RA)
-           (JSR POP_CELL_EVLSTK_TO_RA)            ;; ra = cell-ptr -> cell-array         (stack: index)
+           (JSR POP_EVLSTK_TAIL_TO_RA)            ;; ra = cell-ptr -> cell-array         (stack: index)
            (LDA ZP_RT+1)                          ;; index                               (stack: index)
            (JSR WRITE_ARR_ATa_RA_TO_RT)           ;; rt <- array@a                       (stack: value)
            (JSR INC_REFCNT_M1_SLOT_RT__IF_PTR)    ;; now on stack and in array => inc refcnt'd
@@ -227,8 +227,8 @@
    (list
            (LDA ZP_RT+1)                  ;; index                               (stack: index ::cell-ptr ::value )
            (PHA)
-           (JSR POP_CELL_EVLSTK_TO_RA)    ;; ra = cell-ptr -> cell-array         (stack: index ::value )
-           (JSR POP_CELL_EVLSTK_TO_RT)    ;; rt = value                          (stack: value)
+           (JSR POP_EVLSTK_TAIL_TO_RA)    ;; ra = cell-ptr -> cell-array         (stack: index ::value )
+           (JSR POP_EVLSTK_TAIL_TO_RT)    ;; rt = value                          (stack: value)
            (PLA)                          ;; a = index
 
            (JSR COPY_ARR_ATa_RA_TO_RZ__IF_PTR)

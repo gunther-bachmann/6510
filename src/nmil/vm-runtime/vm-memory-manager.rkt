@@ -21,7 +21,7 @@
          (only-in "./vm-cell-array.rkt"
                   vm-cell-array-code)
          (only-in "./vm-cell-stack.rkt"
-                  INIT_CELLSTACK
+                  INIT_EVLSTK_TAIL
                   vm-cell-stack-code)
          (only-in "./vm-lists.rkt"
                   vm-list-code)
@@ -51,7 +51,7 @@
 (define-vm-function VM_INITIALIZE_MEMORY_MANAGER
   (list
                 (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
-                (JSR INIT_CELLSTACK)
+                (JSR INIT_EVLSTK_TAIL)
                 (JMP VM_INITIALIZE_CALL_FRAME)))
 
 
@@ -70,4 +70,4 @@
 
 (module+ test #| code len |#
   (inform-check-equal? (code-len vm-memory-manager-code)
-                       2323))
+                       2319))

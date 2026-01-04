@@ -104,12 +104,12 @@
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   e4..e5 pointer to high byte of first local in call-frame
-- [[file:vm-memory-map.rkt::96][$e6]] :: ZP_EVAL_STACK_LB_PTR  e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+- [[file:vm-memory-map.rkt::96][$e6]] :: ZP_EVAL_STACK_TAIL_LB_PTR  e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
-- [[file:vm-memory-map.rkt::98][$e8]] :: ZP_EVAL_STACK_HB_PTR  e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+- [[file:vm-memory-map.rkt::98][$e8]] :: ZP_EVAL_STACK_TAIL_HB_PTR  e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -140,12 +140,12 @@
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
-- [[file:vm-memory-map.rkt::98][ZP_EVAL_STACK_HB_PTR]] :: $e8  e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+- [[file:vm-memory-map.rkt::98][ZP_EVAL_STACK_TAIL_HB_PTR]] :: $e8  e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
-- [[file:vm-memory-map.rkt::96][ZP_EVAL_STACK_LB_PTR]] :: $e6  e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+- [[file:vm-memory-map.rkt::96][ZP_EVAL_STACK_TAIL_LB_PTR]] :: $e6  e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -232,12 +232,12 @@
   the following twelve bytes need to be continuous, since they are saved into the call frame!
   de..df program counter (ptr to currently executing byte code)
 ** evlstk
-- [[file:vm-memory-map.rkt::98][ZP_EVAL_STACK_HB_PTR]] :: $e8  e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+- [[file:vm-memory-map.rkt::98][ZP_EVAL_STACK_TAIL_HB_PTR]] :: $e8  e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
-- [[file:vm-memory-map.rkt::96][ZP_EVAL_STACK_LB_PTR]] :: $e6  e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+- [[file:vm-memory-map.rkt::96][ZP_EVAL_STACK_TAIL_LB_PTR]] :: $e6  e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -760,9 +760,9 @@
   output: X = page, initialized as m1 page of profile y
           A = first free slot
   funcs:  -
-- [[file:vm-mm-cell-stack.rkt::502][POP_CELL_EVLSTK_TO_CELLy_RT]] ::  write the TOS of the EVLSTK (not RT) into CELL Y of cell-pair referenced by RT
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_CELLy_RT))
-  - assembler include :: POP_CELL_EVLSTK_TO_CELLy_RT
+- [[file:vm-mm-cell-stack.rkt::502][POP_EVLSTK_TAIL_TO_CELLy_RT]] ::  write the TOS of the EVLSTK (not RT) into CELL Y of cell-pair referenced by RT
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_CELLy_RT))
+  - assembler include :: POP_EVLSTK_TAIL_TO_CELLy_RT
   write the TOS of the EVLSTK (not RT) into CELL Y of cell-pair referenced by RT
   keep RT and pop TOS of EVLSTK ( RT+EVLSTK  -> RT+<<EVLSTK<<, and (Y=0) RT -> [<<EVLSTK][...], or (Y=1) RT -> [...][<<EVLSTK]
   no inc/dec refcnt needs to take place, since # references to RT nor the popped TOS of EVLSTK do change
@@ -773,23 +773,23 @@
   output: cell-stack (one value less)
           cell0 of RA is set
   funcs:  -
-- [[file:vm-mm-cell-stack.rkt::564][POP_CELL_EVLSTK_TO_RA]] ::  pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RA))
-  - assembler include :: POP_CELL_EVLSTK_TO_RA
+- [[file:vm-mm-cell-stack.rkt::564][POP_EVLSTK_TAIL_TO_RA]] ::  pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RA))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RA
   pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
   input: call-frame stack, RA
   output:  RA << EVLSTK, <<EVLSTK<<, RT unchanged!
   NO GC CHECKS!
-- [[file:vm-mm-cell-stack.rkt::607][POP_CELL_EVLSTK_TO_RP]] ::  pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RP))
-  - assembler include :: POP_CELL_EVLSTK_TO_RP
+- [[file:vm-mm-cell-stack.rkt::607][POP_EVLSTK_TAIL_TO_RP]] ::  pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RP))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RP
   pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
   input: call-frame stack, RA
   output:  RP << EVLSTK, <<EVLSTK<<, RT unchanged!
   NO GC CHECKS!
-- [[file:vm-mm-cell-stack.rkt::131][POP_CELL_EVLSTK_TO_RT]] ::  pop the topmost value of the evlstk into RT (no gc done)
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RT))
-  - assembler include :: POP_CELL_EVLSTK_TO_RT
+- [[file:vm-mm-cell-stack.rkt::131][POP_EVLSTK_TAIL_TO_RT]] ::  pop the topmost value of the evlstk into RT (no gc done)
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RT))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RT
   pop the topmost value of the evlstk into RT (no gc done)
   input:  EVLSTK
   usage:  A,Y, RT
@@ -808,7 +808,7 @@
   funcs:
     DEC_REFCNT_RZ
     WRITE_RT_ARR_ATa_RA
-    POP_CELL_EVLSTK_TO_RT
+    POP_EVLSTK_TAIL_TO_RT
   NO BOUNDS CHECK!
 - [[file:vm-mm-cell-array.rkt::599][POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS]] ::  pop tos into array element a (0 indexed), array pointed to by RA
   - racket require :: (require (only-in "vm-mm-cell-array.rkt" WRITE_RT_TO_ARR_ATa_RA))
@@ -1048,12 +1048,12 @@
   output: GLOBAL_M1_PX_PAGE_FOR_ALLOC
   funcs: -
 - [[file:vm-mm-cell-stack.rkt::561][WRITE_00_TO_RA]] ::  write 00 00 into RA marking it as empty!
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RA))
-  - assembler include :: POP_CELL_EVLSTK_TO_RA
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RA))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RA
   write 00 00 into RA marking it as empty!
 - [[file:vm-mm-cell-stack.rkt::604][WRITE_00_TO_RP]] ::  write 00 00 into RA marking it as empty!
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RP))
-  - assembler include :: POP_CELL_EVLSTK_TO_RP
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RP))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RP
   write 00 00 into RA marking it as empty!
 - [[file:vm-mm-cell-stack.rkt::282][WRITE_BYTE_X_TO_RT]] ::  write cell byte X into RT (overwriting it)
   - racket require :: (require (only-in "vm-mm-cell-stack.rkt" PUSH_XA_TO_EVLSTK))
@@ -1606,7 +1606,7 @@
   funcs:
     DEC_REFCNT_RZ
     WRITE_RT_ARR_ATa_RA
-    POP_CELL_EVLSTK_TO_RT
+    POP_EVLSTK_TAIL_TO_RT
   NO BOUNDS CHECK!
 - [[file:vm-mm-cell-array.rkt::599][POP_EVLSTK_TO_ARR_ATa_RA__CHECK_BOUNDS]] ::  pop tos into array element a (0 indexed), array pointed to by RA
   - racket require :: (require (only-in "vm-mm-cell-array.rkt" WRITE_RT_TO_ARR_ATa_RA))
@@ -1631,31 +1631,31 @@
   funcs:
     ALLOC_M1_SLOT_TO_RA
 - [[file:vm-mm-cell-stack.rkt::604][WRITE_00_TO_RP]] ::  write 00 00 into RA marking it as empty!
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RP))
-  - assembler include :: POP_CELL_EVLSTK_TO_RP
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RP))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RP
   write 00 00 into RA marking it as empty!
 - [[file:vm-mm-cell-stack.rkt::561][WRITE_00_TO_RA]] ::  write 00 00 into RA marking it as empty!
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RA))
-  - assembler include :: POP_CELL_EVLSTK_TO_RA
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RA))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RA
   write 00 00 into RA marking it as empty!
 ** cell_stack
-- [[file:vm-mm-cell-stack.rkt::607][POP_CELL_EVLSTK_TO_RP]] ::  pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RP))
-  - assembler include :: POP_CELL_EVLSTK_TO_RP
+- [[file:vm-mm-cell-stack.rkt::607][POP_EVLSTK_TAIL_TO_RP]] ::  pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RP))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RP
   pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
   input: call-frame stack, RA
   output:  RP << EVLSTK, <<EVLSTK<<, RT unchanged!
   NO GC CHECKS!
-- [[file:vm-mm-cell-stack.rkt::564][POP_CELL_EVLSTK_TO_RA]] ::  pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RA))
-  - assembler include :: POP_CELL_EVLSTK_TO_RA
+- [[file:vm-mm-cell-stack.rkt::564][POP_EVLSTK_TAIL_TO_RA]] ::  pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RA))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RA
   pop cell from stack (that is, discard RegT, move tos of call-frame stack into Reg A (if available))
   input: call-frame stack, RA
   output:  RA << EVLSTK, <<EVLSTK<<, RT unchanged!
   NO GC CHECKS!
-- [[file:vm-mm-cell-stack.rkt::502][POP_CELL_EVLSTK_TO_CELLy_RT]] ::  write the TOS of the EVLSTK (not RT) into CELL Y of cell-pair referenced by RT
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_CELLy_RT))
-  - assembler include :: POP_CELL_EVLSTK_TO_CELLy_RT
+- [[file:vm-mm-cell-stack.rkt::502][POP_EVLSTK_TAIL_TO_CELLy_RT]] ::  write the TOS of the EVLSTK (not RT) into CELL Y of cell-pair referenced by RT
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_CELLy_RT))
+  - assembler include :: POP_EVLSTK_TAIL_TO_CELLy_RT
   write the TOS of the EVLSTK (not RT) into CELL Y of cell-pair referenced by RT
   keep RT and pop TOS of EVLSTK ( RT+EVLSTK  -> RT+<<EVLSTK<<, and (Y=0) RT -> [<<EVLSTK][...], or (Y=1) RT -> [...][<<EVLSTK]
   no inc/dec refcnt needs to take place, since # references to RT nor the popped TOS of EVLSTK do change
@@ -1720,9 +1720,9 @@
   - racket require :: (require (only-in "vm-mm-cell-stack.rkt" PUSH_XA_TO_EVLSTK))
   - assembler include :: PUSH_XA_TO_EVLSTK
   push nil to evlstk (actually RT TO evlstk and nil-cell into RT)
-- [[file:vm-mm-cell-stack.rkt::131][POP_CELL_EVLSTK_TO_RT]] ::  pop the topmost value of the evlstk into RT (no gc done)
-  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_CELL_EVLSTK_TO_RT))
-  - assembler include :: POP_CELL_EVLSTK_TO_RT
+- [[file:vm-mm-cell-stack.rkt::131][POP_EVLSTK_TAIL_TO_RT]] ::  pop the topmost value of the evlstk into RT (no gc done)
+  - racket require :: (require (only-in "vm-mm-cell-stack.rkt" POP_EVLSTK_TAIL_TO_RT))
+  - assembler include :: POP_EVLSTK_TAIL_TO_RT
   pop the topmost value of the evlstk into RT (no gc done)
   input:  EVLSTK
   usage:  A,Y, RT

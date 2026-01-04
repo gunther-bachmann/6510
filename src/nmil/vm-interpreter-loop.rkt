@@ -12,7 +12,7 @@ and the bc operation jump table
                   flatten)
          "../6510.rkt"
          (only-in "vm-runtime/vm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RT)
+                  POP_EVLSTK_TAIL_TO_RT)
          (only-in "vm-runtime/vm-memory-map.rkt"
                   ;; ZP_VM_PC
                   ZP_FUNC_PTR))
@@ -73,7 +73,7 @@ and the bc operation jump table
           ;; alternatively jump to zero page (JMP VM_INTZP__INC_PAGE)
 
    (label VM_POP_EVLSTK_AND_INC_PC)
-          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JSR POP_EVLSTK_TAIL_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
 
    ;; (label VM_INTERPRETER_INC_PC_OLD)            ;; inc by one (regular case)
@@ -114,7 +114,7 @@ and the bc operation jump table
 
     ;; optional (3 additional bytes) <-- may save a lot elsewhere
     ;; (label VM_INTERPRETER_ZP_POP_EVLSTK_AND_INC_PC)
-    ;;        (JSR POP_CELL_EVLSTK_TO_RT)
+    ;;        (JSR POP_EVLSTK_TAIL_TO_RT)
    (label VM_INTERPRETER_INC_PC)
            (INC ZP_VM_PC)                      ;; increment the lowbyte of the program counter (part of this code)
            (BEQ VM_INTZP__INC_PAGE)            ;; in the rare case of page increments jump off

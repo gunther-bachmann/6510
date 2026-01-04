@@ -93,7 +93,7 @@
            (STA COUNT__)                ;; keep count to pop
     (label POP_LOOP__)
            (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
-           (JSR POP_CELL_EVLSTK_TO_RT)
+           (JSR POP_EVLSTK_TAIL_TO_RT)
            (DEC COUNT__)
            (BNE POP_LOOP__)
     (label RET__)
@@ -172,7 +172,7 @@
 
    (label POP_LOOP__)
           (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
-          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JSR POP_EVLSTK_TAIL_TO_RT)
           (DEC COUNT__)
           (BNE POP_LOOP__)
 
@@ -236,7 +236,7 @@
   (list
           (LDA ZP_RT+1)
           (BNE IS_TRUE__)
-          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JSR POP_EVLSTK_TAIL_TO_RT)
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
@@ -247,7 +247,7 @@
   (list
           (LDA ZP_RT+1)
           (BEQ IS_FALSE__)
-          (JSR POP_CELL_EVLSTK_TO_RT)
+          (JSR POP_EVLSTK_TAIL_TO_RT)
           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME)             ;; now pop the call frame
           (JMP VM_INTERPRETER)

@@ -108,8 +108,8 @@
                   ZP_FUNC_PTR
                   ZP_CALL_FRAME
                   ZP_EVAL_STACK_TAIL_TOP
-                  ZP_EVAL_STACK_LB_PTR
-                  ZP_EVAL_STACK_HB_PTR))
+                  ZP_EVAL_STACK_TAIL_LB_PTR
+                  ZP_EVAL_STACK_TAIL_HB_PTR))
 
 (provide run-bc-wrapped-in-test-
          vm-next-instruction-bytes

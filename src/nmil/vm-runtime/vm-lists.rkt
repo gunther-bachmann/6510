@@ -229,7 +229,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (JSR ALLOC_CELL_ARRAY_P0_TO_RT)        ;; this cellpair is new
           ;; (JSR INC_REFCNT_RT) ;; already done by allocation
           (JSR WRITE_RP_TO_ARR_AT0_RT)  ;;(JSR WRITE_RP_TO_CELL0_CELLPAIR_RT)    ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
-          (JMP POP_CELL_EVLSTK_TO_ARR_AT1_RT))) ;; (JMP POP_CELL_EVLSTK_TO_CELL1_RT)    ;; and and write into cell1 => no refcnt mod needed here
+          (JMP POP_CELL_EVLSTK_TO_ARR_AT1_RT))) ;; (JMP POP_EVLSTK_TAIL_TO_CELL1_RT)    ;; and and write into cell1 => no refcnt mod needed here
 
 (module+ test #| VM_CONS |#
   (define use-case-cons-code

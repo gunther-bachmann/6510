@@ -12,7 +12,7 @@
                   VM_INTERPRETER_INC_PC_A_TIMES
                   VM_INTERPRETER_INC_PC)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RT)
+                  POP_EVLSTK_TAIL_TO_RT)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RP))
@@ -28,7 +28,7 @@
            (LDA ZP_RT+1)        ;; byte to poke (is in RT+1
            (DEY)
            (STA (ZP_RP),y)
-           (JSR POP_CELL_EVLSTK_TO_RT)
+           (JSR POP_EVLSTK_TAIL_TO_RT)
            (LDA !$03)
            (JMP VM_INTERPRETER_INC_PC_A_TIMES)))
 

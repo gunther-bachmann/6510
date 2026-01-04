@@ -20,7 +20,7 @@
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER_INC_PC)
          (only-in "../vm-runtime/vm-cell-stack.rkt"
-                  POP_CELL_EVLSTK_TO_RP)
+                  POP_EVLSTK_TAIL_TO_RP)
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RP)
@@ -32,7 +32,7 @@
 
 (define-vm-function BC_B_GT_P
    (list
-           (JSR POP_CELL_EVLSTK_TO_RP)
+           (JSR POP_EVLSTK_TAIL_TO_RP)
            (LDA ZP_RP+1)
            (CMP ZP_RT+1)
 
@@ -47,21 +47,21 @@
 
 (define-vm-function BC_B_LT_P
    (list
-           (JSR POP_CELL_EVLSTK_TO_RP)
+           (JSR POP_EVLSTK_TAIL_TO_RP)
            (LDA ZP_RT+1)
            (CMP ZP_RP+1)
            (JMP BPL_GREATER_WRITE_INT0)))
 
 (define-vm-function BC_B_GE_P
    (list
-           (JSR POP_CELL_EVLSTK_TO_RP)
+           (JSR POP_EVLSTK_TAIL_TO_RP)
            (LDA ZP_RP+1)
            (CMP ZP_RT+1)
            (JMP BPL_GREATER_WRITE_INT0)))
 
 (define-vm-function BC_I_GT_P
    (list
-           (JSR POP_CELL_EVLSTK_TO_RP)
+           (JSR POP_EVLSTK_TAIL_TO_RP)
            (LDA ZP_RP)
            (CMP ZP_RT)
            (BMI GREATER__BC_B_GT_P)
