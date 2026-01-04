@@ -2,21 +2,21 @@
 
 (provide
  WRITE_ARR_ATa_RA_TO_RT          ;; write from cell array RA: cell at index A into RT (replacing what has been in RT)
- POP_EVLSTK_TO_ARR_ATa_RA
+ POP_EVLSTK_TO_ARR_ATa_RA        ;; pop eval stack top (RT) into cell-array RA at index A
  WRITE_ARR_ATa_RT_TO_RT          ;; write from cell array RT: cell at index A into RT (overwriting it)
- WRITE_ARR_AT0_RT_TO_RT
- WRITE_ARR_AT1_RT_TO_RT
- WRITE_RT_TO_ARR_ATa_RA
- WRITE_RP_TO_ARR_AT0_RT          ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
- WRITE_RP_TO_ARR_AT1_RT
- POP_CELL_EVLSTK_TO_ARR_AT0_RT
- POP_CELL_EVLSTK_TO_ARR_AT1_RT
- ALLOC_CELL_ARRAY_TO_RT
- ALLOC_CELL_ARRAY_P0_TO_RT
- ALLOC_CELL_ARRAY_TO_RA
+ WRITE_ARR_AT0_RT_TO_RT          ;; write cell from cell array RT at index 0 into RT (overwriting it)
+ WRITE_ARR_AT1_RT_TO_RT          ;; write cell from cell array RT at index 1 into RT (overwriting it)
+ WRITE_RT_TO_ARR_ATa_RA          ;; write RT into cell-arry RA at index A
+ WRITE_RP_TO_ARR_AT0_RT          ;; write RP into cell-array RT at index 0, overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
+ WRITE_RP_TO_ARR_AT1_RT          ;; write RP into cell-array RT at index 1
+ POP_EVLSTK_TAIL_TO_ARR_AT0_RT   ;; pop eval stack tail (NOT RT) into cell array RT at index 0
+ POP_EVLSTK_TAIL_TO_ARR_AT1_RT   ;; pop eval stack tail (NOT RT) into cell array RT at index 1
+ ALLOC_CELL_ARRAY_TO_RT          ;; alloc cell array for A cells into RT
+ ALLOC_CELL_ARRAY_P0_TO_RT       ;; alloc cell array for cell-pairs (of slot profile 0) to RT
+ ALLOC_CELL_ARRAY_TO_RA          ;; alloc cell array for A cells into RA
  ;; FREE_CELL_ARRAY_RZ
  ;; INIT_CELL_ARRAY_RA_WITH_RT      ;; fill array with cell that currently is in RT
- COPY_ARR_ATa_RA_TO_RZ__IF_PTR
+ COPY_ARR_ATa_RA_TO_RZ__IF_PTR  ;; copy from cell-array RA at index A to RZ if it is a ptr
 
  vm-cell-array-code
 )
@@ -307,18 +307,18 @@
           ))
 
 ;; no refcnt adjustments!
-(define POP_CELL_EVLSTK_TO_ARR_AT1_RT '())
-(define POP_CELL_EVLSTK_TO_ARR_AT0_RT '())
+(define POP_EVLSTK_TAIL_TO_ARR_AT1_RT '())
+(define POP_EVLSTK_TAIL_TO_ARR_AT0_RT '())
 (define WRITE_RP_TO_ARR_AT1_RT '())
 (define-vm-function-wol WRITE_RP_TO_ARR_AT0_RT
   (list
-   (label POP_CELL_EVLSTK_TO_ARR_AT1_RT)
+   (label POP_EVLSTK_TAIL_TO_ARR_AT1_RT)
           (JSR POP_EVLSTK_TAIL_TO_RP)
    (label WRITE_RP_TO_ARR_AT1_RT)
           (LDY !$04)
           (BNE WRITE_RP_TO_ARR_ATyl_RT) ;; awlays jump
 
-   (label POP_CELL_EVLSTK_TO_ARR_AT0_RT)
+   (label POP_EVLSTK_TAIL_TO_ARR_AT0_RT)
           (JSR POP_EVLSTK_TAIL_TO_RP)
    (label WRITE_RP_TO_ARR_AT0_RT)
           (LDY !$02)
@@ -348,7 +348,7 @@
    ;; includes WRITE_ARR_ATyl_RT_TO_RT
 
    WRITE_RP_TO_ARR_AT0_RT          ;; overwrite rt, but rt is put into cell0 of freshly allocated cell-pair => no refcnt mod needed here
-   ;; includes POP_CELL_EVLSTK_TO_ARR_AT1_RT
+   ;; includes POP_EVLSTK_TAIL_TO_ARR_AT1_RT
    ))
 
 (module+ test #| vm-cell-array-code |#
