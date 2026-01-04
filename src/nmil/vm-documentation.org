@@ -78,7 +78,7 @@
 - ZP_TEMP3 ::                       (byte) temp location, can be used in combination with TEMP4 to be used as word
 - ZP_TEMP4 ::                       (byte) temp location
 - ZP_VM_PC ::                       (word) current program counter of the vm
-- ZP_VM_FUNC_PTR ::                 (word) pointer to the currently executing function
+- ZP_FUNC_PTR ::                 (word) pointer to the currently executing function
 - ZP_LOCALS_LB_PTR ::               (word) pointer to the low byte of the current locals of this function
 - ZP_LOCALS_HB_PTR ::               (word) pointer to the high byte of the current locals of this function
 - ZP_LOCALS_TOP_MARK ::             (byte) top mark of locals cell stack
@@ -108,7 +108,7 @@
 - ZP_TEMP4 ::                     (byte) temp location
 ** vm
 - ZP_VM_PC ::                     (word) current program counter of the vm
-- ZP_VM_FUNC_PTR ::               (word) pointer to the currently executing function
+- ZP_FUNC_PTR ::               (word) pointer to the currently executing function
 *** evlstk
 - ZP_CELL_STACK_LB_PTR ::       (word) pointer to low byte of current eval stack
 - ZP_CELL_STACK_HB_PTR ::       (word) pointer to high byte of current eval stack

@@ -3299,7 +3299,7 @@
 
   (regression-test
    remove-value-at-6b-state
-   "pathj *5, (*(5) 7), (4 *((5) 7)) -> remove value at"
+   "path *5, (*(5) 7), (4 *((5) 7)) -> remove value at"
    (check-equal? (shorten-cell-strings
                   (vm-stack->strings remove-value-at-6b-state 10 #t))
                  (list "stack holds 3 items"

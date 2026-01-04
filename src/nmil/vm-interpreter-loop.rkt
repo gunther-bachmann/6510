@@ -15,7 +15,7 @@ and the bc operation jump table
                   POP_CELL_EVLSTK_TO_RT)
          (only-in "vm-runtime/vm-memory-map.rkt"
                   ;; ZP_VM_PC
-                  ZP_VM_FUNC_PTR))
+                  ZP_FUNC_PTR))
 
 (provide VM_INTERPRETER                         ;; fetch op at (VM_PC),y=0 and interpret that byte code
          VM_INTERPRETER_ZP
@@ -38,9 +38,9 @@ and the bc operation jump table
           (LDX !$08)                            ;; bc start at $0800
    (label VM_INTERPRETER_INIT_AX)
           (STA ZP_VM_PC)
-          (STA ZP_VM_FUNC_PTR)
+          (STA ZP_FUNC_PTR)
           (STX ZP_VM_PC+1)
-          (STX ZP_VM_FUNC_PTR+1)                ;; mark func-ptr $0800
+          (STX ZP_FUNC_PTR+1)                ;; mark func-ptr $0800
           (RTS)))
 
 ;; interpreter loop without short commands

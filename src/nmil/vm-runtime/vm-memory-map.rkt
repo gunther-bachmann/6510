@@ -34,9 +34,9 @@
          ZP_INC_COLLECTIBLE_LIST         ;; (word) ptr to the head of the incrementally collectible cell-array list
          ZP_CALL_FRAME                   ;; (word) pointer to current call frame
          ZP_CALL_FRAME_TOP_MARK          ;; (byte) top mark of call frame stack
-         ZP_CELL_STACK_LB_PTR            ;; (word) pointer to low byte of current eval stack
-         ZP_CELL_STACK_HB_PTR            ;; (word) pointer to high byte of current eval stack
-         ZP_CELL_STACK_TOS               ;; (byte) top mark of evlstk
+         ZP_CELL_STACK_LB_PTR            ;; (word) pointer to low byte of current eval stack tail
+         ZP_CELL_STACK_HB_PTR            ;; (word) pointer to high byte of current eval stack tail
+         ZP_CELL_STACK_TOS               ;; (byte) top mark of evlstk tail
          ZP_PAGE_REG                     ;; (word) page register (zp_page_reg+1 is always zero! to allow indirect access)
          ZP_PAGE_FREE_LIST               ;; (byte) pointer to first free page of list
          ZP_PAGE_FREE_SLOTS_LIST         ;; (byte) x profiles, bytes pointing to pages with free slots of this profile
@@ -45,10 +45,11 @@
          ZP_TEMP2                        ;; (byte) temp location
          ZP_TEMP3                        ;; (byte) temp location, can be used in combination with TEMP4 to be used as word
          ZP_TEMP4                        ;; (byte) temp location
-         ZP_VM_FUNC_PTR                  ;; (word) pointer to the currently executing function
+         ZP_FUNC_PTR                     ;; (word) pointer to the currently executing function
          ZP_LOCALS_LB_PTR                ;; (word) pointer to the low byte of the current locals of this function
          ZP_LOCALS_HB_PTR                ;; (word) pointer to the high byte of the current locals of this function
          ZP_LOCALS_TOP_MARK              ;; (byte) top mark of locals cell stack
+
          TAG_BYTE_BYTE_CELL              ;; (byte) constant identifying a byte cell (low-byte = this constant)
          TAG_BYTE_CELL_ARRAY             ;; (byte) constant identifying a cell-array (first byte in a m1 slot)
          TAG_BYTE_NATIVE_ARRAY           ;; (byte) constant identifying a native-array (first byte in a m1 slot)
@@ -106,8 +107,8 @@
    (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
    (byte-const ZP_TEMP2                  $dd) ;; may not be used after sub calls (just within a routine without jsr)
 
-                                              ;; @DC-ZP: ZP_VM_FUNC_PTR, group: call_frame
-   (byte-const ZP_VM_FUNC_PTR            $e0) ;; e0..e1 pointer to the currently running function
+                                              ;; @DC-ZP: ZP_FUNC_PTR, group: call_frame
+   (byte-const ZP_FUNC_PTR               $e0) ;; e0..e1 pointer to the currently running function
                                               ;; @DC-ZP: ZP_LOCALS_LB_PTR, group: locals
    (byte-const ZP_LOCALS_LB_PTR          $e2) ;; e2..e3 pointer to low byte of first local in call-frame
                                               ;; @DC-ZP: ZP_LOCALS_HB_PTR, group: locals
@@ -177,7 +178,7 @@
 (define ZP_LOCALS_LB_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_LB_PTR"))
 (define ZP_LOCALS_HB_PTR          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_HB_PTR"))
 (define ZP_LOCALS_TOP_MARK        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_LOCALS_TOP_MARK"))
-(define ZP_VM_FUNC_PTR            (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_VM_FUNC_PTR"))
+(define ZP_FUNC_PTR               (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_FUNC_PTR"))
 
 (define TAG_BYTE_BYTE_CELL        (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_BYTE_CELL"))
 (define TAG_BYTE_CELL_ARRAY       (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "TAG_BYTE_CELL_ARRAY"))

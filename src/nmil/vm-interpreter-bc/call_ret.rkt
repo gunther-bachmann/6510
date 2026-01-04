@@ -27,7 +27,7 @@
                   DEC_REFCNT_M1_SLOT_RT__IF_PTR
                   DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
          (only-in "../vm-runtime/vm-memory-map.rkt"
-                  ZP_VM_FUNC_PTR
+                  ZP_FUNC_PTR
                   ZP_RP
                   TAGGED_INT_0
                   TAG_BYTE_BYTE_CELL))
@@ -67,10 +67,10 @@
           ;; load zp_vm_pc with address of function bytecode
           (LDA ZP_RP)
           (STA ZP_VM_PC)
-          (STA ZP_VM_FUNC_PTR)
+          (STA ZP_FUNC_PTR)
           (LDA ZP_RP+1)
           (STA ZP_VM_PC+1)
-          (STA ZP_VM_FUNC_PTR+1)
+          (STA ZP_FUNC_PTR+1)
 
           (JMP VM_INTERPRETER_INC_PC))) ;; function starts at function descriptor + 1
 
@@ -202,9 +202,9 @@
 
 (define-vm-function BC_TAIL_CALL
   (list
-          (LDA ZP_VM_FUNC_PTR)
+          (LDA ZP_FUNC_PTR)
           (STA ZP_VM_PC)
-          (LDA ZP_VM_FUNC_PTR+1)
+          (LDA ZP_FUNC_PTR+1)
           (STA ZP_VM_PC+1)
 
           ;; adjust pc to start executing function ptr +1

@@ -105,7 +105,7 @@
                   ZP_INC_COLLECTIBLE_LIST
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
-                  ZP_VM_FUNC_PTR
+                  ZP_FUNC_PTR
                   ZP_CALL_FRAME
                   ZP_CELL_STACK_TOS
                   ZP_CELL_STACK_LB_PTR
@@ -431,7 +431,7 @@
                 [(string=? command "ps") (begin (color-displayln (string-join (vm-stack->strings c-state) "\n  ")) d-state)]
                 [(string=? command "pt") (begin (color-displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
                 [(string=? command "pfn") (begin
-                                            (define func-ptr (peek-word-at-address c-state ZP_VM_FUNC_PTR))
+                                            (define func-ptr (peek-word-at-address c-state ZP_FUNC_PTR))
                                             (color-displayln (format "function-ptr: $~a" (format-hex-word func-ptr)))
                                             (define locals-num (peek c-state func-ptr))
                                             (color-displayln (format "locals used : ~a" (number->string locals-num)))
@@ -457,7 +457,7 @@
                    (cond [(string? num)
                           (color-displayln (vm-local->string c-state num))]
                          [else
-                          (define func-ptr (peek-word-at-address c-state ZP_VM_FUNC_PTR))
+                          (define func-ptr (peek-word-at-address c-state ZP_FUNC_PTR))
                           (define locals-num (peek c-state func-ptr))
                           (color-displayln (format "there are ~a locals in this function:" locals-num))
                           (when (> locals-num 0)

@@ -57,6 +57,8 @@
                      peek
                      memory-list
                      peek-word-at-address)
+            (only-in "../test-utils.rkt"
+                     regression-test)
             "./vm-memory-manager-test-utils.rkt")
 
   (define test-runtime
@@ -100,17 +102,18 @@
      (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
 
      ;; now allocate a new page
-     (JSR VM_ALLOCATE_NEW_PAGE)
-     (STX ZP_PAGE_REG+1)  ;; save for later check
-     ))
+     (JSR VM_ALLOCATE_NEW_PAGE)))
 
-  (check-equal? (peek vm-allocate-new-page-n-01 (+ 1 ZP_PAGE_REG))
-                #xcf
-                "first page should be $cf")
+  (regression-test
+   vm-allocate-new-page-n-01
+   "init -> allocate new page"
+   (check-equal? (peek vm-allocate-new-page-n-01 (+ 1 ZP_PAGE_REG))
+                 #xcf
+                 "first page should be $cf")
 
-  (check-equal? (peek vm-allocate-new-page-n-01 ZP_PAGE_FREE_LIST)
-                #xce
-                "head of free list now is $ce"))
+   (check-equal? (peek vm-allocate-new-page-n-01 ZP_PAGE_FREE_LIST)
+                 #xce
+                 "head of free list now is $ce")))
 
 ;; return page to free list
 ;; make sure to mark page as uninitialized (in $00) and adjust previous page ptr in $ff

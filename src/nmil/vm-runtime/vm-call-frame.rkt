@@ -37,7 +37,7 @@
                   VM_MEMORY_MANAGEMENT_CONSTANTS)
          (only-in "./vm-memory-map.rkt"
                   ZP_CALL_FRAME
-                  ZP_VM_FUNC_PTR
+                  ZP_FUNC_PTR
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
                   ZP_LOCALS_TOP_MARK
@@ -133,7 +133,7 @@
   (append
    (list (format "call-frame-ptr:   $~a, topmark: ~a" (format-hex-word (peek-word-at-address state ZP_CALL_FRAME)) (format-hex-byte (peek state ZP_CALL_FRAME_TOP_MARK)))
          (format "program-counter:  $~a" (format-hex-word (peek-word-at-address state ZP_VM_PC)))
-         (format "function-ptr:     $~a" (format-hex-word (peek-word-at-address state ZP_VM_FUNC_PTR)))
+         (format "function-ptr:     $~a" (format-hex-word (peek-word-at-address state ZP_FUNC_PTR)))
          (format "locals-ptr:       $~a, $~a (lb, hb), topmark: ~a"
                  (format-hex-word (bytes->int (peek state ZP_LOCALS_LB_PTR) (peek state (add1 ZP_LOCALS_LB_PTR))))
                  (format-hex-word (bytes->int (peek state ZP_LOCALS_HB_PTR) (peek state (add1 ZP_LOCALS_HB_PTR))))
@@ -261,7 +261,7 @@
           ;; check for fast frames
           ;;    push: possible if - vm_pc and func-ptr share the same page
           (LDA ZP_VM_PC+1)
-          (CMP ZP_VM_FUNC_PTR+1)
+          (CMP ZP_FUNC_PTR+1)
           (BNE SLOW_FRAME__)
           ;; check not necessary, stack keeps its state, pushing, popping takes care of cell-stack ptr
           ;; ;;                      - cell-stack does not overflow (has 16 entries reserve)
@@ -297,7 +297,7 @@
           (STA (ZP_CALL_FRAME),y)
           (INY)
           ;;                             | func-ptr low-byte | locals-ptr low byte |
-          (LDA ZP_VM_FUNC_PTR)
+          (LDA ZP_FUNC_PTR)
           (STA (ZP_CALL_FRAME),y)
           (INY)
           (LDA ZP_LOCALS_LB_PTR)
@@ -341,7 +341,7 @@
           ;; set encoded page for function pointer
           (SEC)
           (LDA ZP_VM_PC+1)
-          (SBC ZP_VM_FUNC_PTR+1)
+          (SBC ZP_FUNC_PTR+1)
           ;; (AND !$01)                    ;; make sure that only bit 0 can be set (should not happen, since function code may max spread over two pages!)
           (STA (ZP_CALL_FRAME),y)         ;; y currently = 7
           (DEY)
@@ -365,7 +365,7 @@
           (byte-ref ZP_LOCALS_LB_PTR)
           (byte-ref ZP_LOCALS_LB_PTR+1)     ;; | locals-lb page       | locals-hb-page       |
           (byte-ref ZP_LOCALS_HB_PTR+1)
-          (byte-ref ZP_VM_FUNC_PTR)         ;; |  func-ptr  low       | $00 / $01            | func-ptr could be encoded into: lowbyte, highbyte =  vm_pc page + $00/$01 (of byte 4 in this stack) <- would save two bytes of stack size
+          (byte-ref ZP_FUNC_PTR)         ;; |  func-ptr  low       | $00 / $01            | func-ptr could be encoded into: lowbyte, highbyte =  vm_pc page + $00/$01 (of byte 4 in this stack) <- would save two bytes of stack size
           ))
 
 (module+ test #| VM_PUSH_CALL_FRAME |#
@@ -373,10 +373,10 @@
     (list
        ;; set complete vm state to values to be pushed (mostly done by call stack init)
       (LDY !$09) ;; 09
-      (STY ZP_VM_FUNC_PTR+1)            ;; share same page
+      (STY ZP_FUNC_PTR+1)            ;; share same page
       (STY ZP_VM_PC+1)
       (INY) ;; 0a
-      (STY ZP_VM_FUNC_PTR)              ;; => zp_vm_func_ptr $090a
+      (STY ZP_FUNC_PTR)              ;; => zp_vm_func_ptr $090a
       (INY) ;; 0b
       (STY ZP_VM_PC)                    ;; => zp_vm_pc $090b
       ))
@@ -571,10 +571,10 @@
           (INY)
           (LDA (ZP_CALL_FRAME),y)
           (STA ZP_VM_PC+1)
-          (STA ZP_VM_FUNC_PTR+1)
+          (STA ZP_FUNC_PTR+1)
           (INY)
           (LDA (ZP_CALL_FRAME),y)
-          (STA ZP_VM_FUNC_PTR)
+          (STA ZP_FUNC_PTR)
           (INY)
           (LDA (ZP_CALL_FRAME),y)
           (STA ZP_LOCALS_LB_PTR)
@@ -626,7 +626,7 @@
           (LDA ZP_VM_PC+1)              ;; was just set by copy loop before
           (SEC)
           (SBC (ZP_CALL_FRAME),y)       ;; contains either $00 or $01 since this is a slow frame
-          (STA ZP_VM_FUNC_PTR+1)           ;; page of func ptr is page of pc - $00/$01
+          (STA ZP_FUNC_PTR+1)           ;; page of func ptr is page of pc - $00/$01
 
           ;; make sure the locals ptr are synchronized (only locals-lb-ptr is put on stack completely)
           (LDA ZP_LOCALS_LB_PTR)
@@ -686,9 +686,9 @@
 ;;              (STY ZP_VM_PC+1)
 ;;              (INY)
 ;;              ;; function pointer
-;;              (STY ZP_VM_FUNC_PTR)
+;;              (STY ZP_FUNC_PTR)
 ;;              (INY)
-;;              (STY ZP_VM_FUNC_PTR+1)
+;;              (STY ZP_FUNC_PTR+1)
 ;;              (INY)
 ;;              ;; and lowbyte of locals ptr
 ;;              (STY ZP_LOCALS_LB_PTR)
@@ -730,9 +730,9 @@
 ;;              (INY)
 ;;              (STY ZP_VM_PC+1)
 ;;              (INY)
-;;              (STY ZP_VM_FUNC_PTR)
+;;              (STY ZP_FUNC_PTR)
 ;;              (INY)
-;;              (STY ZP_VM_FUNC_PTR+1)
+;;              (STY ZP_FUNC_PTR+1)
 ;;              (INY)
 ;;              (STY ZP_LOCALS_LB_PTR)
 ;;              (STY ZP_LOCALS_HB_PTR)
@@ -905,7 +905,7 @@
           (LDA ZP_LOCALS_LB_PTR)
           (STA ZP_LOCALS_TOP_MARK) ;; restore top mark
           (LDY !$00)
-          (LDA (ZP_VM_FUNC_PTR),y)
+          (LDA (ZP_FUNC_PTR),y)
           (AND !$0f)
           (TAY) ;; y = number of locals of current tunction
           ;; loop over locals -> rt, decr refcount

@@ -89,7 +89,7 @@
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   the following twelve bytes need to be continuous, since they are saved into the call frame!
   de..df program counter (ptr to currently executing byte code)
-- [[file:vm-memory-map.rkt::90][$e0]] :: ZP_VM_FUNC_PTR  e0..e1 pointer to the currently running function
+- [[file:vm-memory-map.rkt::90][$e0]] :: ZP_FUNC_PTR  e0..e1 pointer to the currently running function
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -181,7 +181,7 @@
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   zero page location 4 for temp usage
-- [[file:vm-memory-map.rkt::90][ZP_VM_FUNC_PTR]] :: $e0  e0..e1 pointer to the currently running function
+- [[file:vm-memory-map.rkt::90][ZP_FUNC_PTR]] :: $e0  e0..e1 pointer to the currently running function
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -220,7 +220,7 @@
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
-- [[file:vm-memory-map.rkt::90][ZP_VM_FUNC_PTR]] :: $e0  e0..e1 pointer to the currently running function
+- [[file:vm-memory-map.rkt::90][ZP_FUNC_PTR]] :: $e0  e0..e1 pointer to the currently running function
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
