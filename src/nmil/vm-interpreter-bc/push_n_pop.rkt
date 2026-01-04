@@ -34,9 +34,9 @@
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RP
-                  ZP_CELL_STACK_TOS
-                  ZP_CELL_STACK_LB_PTR
-                  ZP_CELL_STACK_HB_PTR
+                  ZP_EVAL_STACK_TAIL_TOP
+                  ZP_EVAL_STACK_LB_PTR
+                  ZP_EVAL_STACK_HB_PTR
                   TAG_BYTE_BYTE_CELL))
 
 (define-vm-function BC_PUSH_B
@@ -55,16 +55,16 @@
 
 (define-vm-function BC_SWAP
   (list
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
+          (LDY ZP_EVAL_STACK_TAIL_TOP)
+          (LDA (ZP_EVAL_STACK_LB_PTR),y)
           (TAX)
           (LDA ZP_RT)
-          (STA (ZP_CELL_STACK_LB_PTR),y)
+          (STA (ZP_EVAL_STACK_LB_PTR),y)
           (STX ZP_RT)
-          (LDA (ZP_CELL_STACK_HB_PTR),y)
+          (LDA (ZP_EVAL_STACK_HB_PTR),y)
           (TAX)
           (LDA ZP_RT+1)
-          (STA (ZP_CELL_STACK_HB_PTR),y)
+          (STA (ZP_EVAL_STACK_HB_PTR),y)
           (STX ZP_RT+1)
           (JMP VM_INTERPRETER_INC_PC)))
 

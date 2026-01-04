@@ -265,7 +265,7 @@
           (BNE SLOW_FRAME__)
           ;; check not necessary, stack keeps its state, pushing, popping takes care of cell-stack ptr
           ;; ;;                      - cell-stack does not overflow (has 16 entries reserve)
-          ;; (LDA ZP_CELL_STACK_TOS)
+          ;; (LDA ZP_EVAL_STACK_TAIL_TOP)
           ;; (CMP !$F0)
           ;; (BPL SLOW_FRAME__VM_PUSH_CALL_FRAME)
           ;;                      - locals do not overflow (has reserves to hold functions' need)

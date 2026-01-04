@@ -17,9 +17,9 @@
          (only-in "../vm-runtime/vm-memory-map.rkt"
                   ZP_RT
                   ZP_RZ
-                  ZP_CELL_STACK_TOS
-                  ZP_CELL_STACK_HB_PTR
-                  ZP_CELL_STACK_LB_PTR)
+                  ZP_EVAL_STACK_TAIL_TOP
+                  ZP_EVAL_STACK_HB_PTR
+                  ZP_EVAL_STACK_LB_PTR)
          (only-in "../vm-runtime/vm-register-functions.rkt"
                   WRITE_INT1_TO_RT
                   WRITE_INT0_TO_RT)
@@ -86,28 +86,28 @@
 
 (define-vm-function BC_CELL_EQ_P
   (list
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_HB_PTR),y)
+          (LDY ZP_EVAL_STACK_TAIL_TOP)
+          (LDA (ZP_EVAL_STACK_HB_PTR),y)
           (STA ZP_RZ+1)
           (CMP ZP_RT+1)
           (BNE NE_LB__)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
+          (LDA (ZP_EVAL_STACK_LB_PTR),y)
           (STA ZP_RZ)
           (CMP ZP_RT)
           (BNE NE__)
 
           (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_EVAL_STACK_TAIL_TOP)
           (JSR WRITE_INT1_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)
 
    (label NE_LB__)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
+          (LDA (ZP_EVAL_STACK_LB_PTR),y)
           (STA ZP_RZ)
    (label NE__)
           (JSR DEC_REFCNT_M1_SLOT_RT__IF_PTR)
           (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_EVAL_STACK_TAIL_TOP)
           (JSR WRITE_INT0_TO_RT)
           (JMP VM_INTERPRETER_INC_PC)))

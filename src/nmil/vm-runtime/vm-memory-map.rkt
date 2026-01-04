@@ -34,9 +34,9 @@
          ZP_INC_COLLECTIBLE_LIST         ;; (word) ptr to the head of the incrementally collectible cell-array list
          ZP_CALL_FRAME                   ;; (word) pointer to current call frame
          ZP_CALL_FRAME_TOP_MARK          ;; (byte) top mark of call frame stack
-         ZP_CELL_STACK_LB_PTR            ;; (word) pointer to low byte of current eval stack tail
-         ZP_CELL_STACK_HB_PTR            ;; (word) pointer to high byte of current eval stack tail
-         ZP_CELL_STACK_TOS               ;; (byte) top mark of evlstk tail
+         ZP_EVAL_STACK_LB_PTR            ;; (word) pointer to low byte of current eval stack tail
+         ZP_EVAL_STACK_HB_PTR            ;; (word) pointer to high byte of current eval stack tail
+         ZP_EVAL_STACK_TAIL_TOP          ;; (byte) top mark of evlstk tail
          ZP_PAGE_REG                     ;; (word) page register (zp_page_reg+1 is always zero! to allow indirect access)
          ZP_PAGE_FREE_LIST               ;; (byte) pointer to first free page of list
          ZP_PAGE_FREE_SLOTS_LIST         ;; (byte) x profiles, bytes pointing to pages with free slots of this profile
@@ -100,8 +100,8 @@
                                               ;; @DC-ZP: ZP_TEMP4, group: temp
    ;; zero page location 4 for temp usage
    (byte-const ZP_TEMP4                  $da)
-                                              ;; @DC-ZP: ZP_CELL_STACK_TOS, group: evlstk
-   (byte-const ZP_CELL_STACK_TOS         $db) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
+                                              ;; @DC-ZP: ZP_EVAL_STACK_TAIL_TOP, group: evlstk
+   (byte-const ZP_EVAL_STACK_TAIL_TOP    $db) ;; byte (fe = empty stack, 0 = first element, 2 = second element, 4 = third element ...)
 
    ;; ZP_TEMP may be used as pointer (in combination with ZP_TEMP2 => must be in adjacent memory locations)
    (byte-const ZP_TEMP                   $dc) ;; may not be used after sub calls (just within a routine without jsr)
@@ -113,10 +113,10 @@
    (byte-const ZP_LOCALS_LB_PTR          $e2) ;; e2..e3 pointer to low byte of first local in call-frame
                                               ;; @DC-ZP: ZP_LOCALS_HB_PTR, group: locals
    (byte-const ZP_LOCALS_HB_PTR          $e4) ;; e4..e5 pointer to high byte of first local in call-frame
-                                              ;; @DC-ZP: ZP_CELL_STACK_LB_PTR, group: evlstk
-   (byte-const ZP_CELL_STACK_LB_PTR      $e6) ;; e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
-                                              ;; @DC-ZP: ZP_CELL_STACK_HB_PTR, group: evlstk
-   (byte-const ZP_CELL_STACK_HB_PTR      $e8) ;; e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_CELL_STACK_TOS => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+                                              ;; @DC-ZP: ZP_EVAL_STACK_LB_PTR, group: evlstk
+   (byte-const ZP_EVAL_STACK_LB_PTR      $e6) ;; e6..e7 (pointer to low byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
+                                              ;; @DC-ZP: ZP_EVAL_STACK_HB_PTR, group: evlstk
+   (byte-const ZP_EVAL_STACK_HB_PTR      $e8) ;; e8..e9 (pointer to high byte of the eval stack of the currently running function (+ZP_EVAL_STACK_TAIL_TOP => pointer to tos of the call-frame, in register mode, actual TOS is ZP_RT!)
                                               ;; @DC-ZP: ZP_CALL_FRAME_TOP_MARK, group: call_frame
    (byte-const ZP_CALL_FRAME_TOP_MARK    $ea) ;; ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
                                               ;; @DC-ZP: ZP_LOCALS_TOP_MARK, group: locals
@@ -164,9 +164,9 @@
 (define ZP_RZ                     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RZ"))
 (define ZP_CALL_FRAME             (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
 (define ZP_CALL_FRAME_TOP_MARK    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME_TOP_MARK"))
-(define ZP_CELL_STACK_LB_PTR      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_LB_PTR"))
-(define ZP_CELL_STACK_HB_PTR      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_HB_PTR"))
-(define ZP_CELL_STACK_TOS         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CELL_STACK_TOS"))
+(define ZP_EVAL_STACK_LB_PTR      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_EVAL_STACK_LB_PTR"))
+(define ZP_EVAL_STACK_HB_PTR      (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_EVAL_STACK_HB_PTR"))
+(define ZP_EVAL_STACK_TAIL_TOP    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_EVAL_STACK_TAIL_TOP"))
 (define ZP_PAGE_REG               (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_REG"))
 (define ZP_PAGE_FREE_LIST         (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_FREE_LIST"))
 (define ZP_PAGE_FREE_SLOTS_LIST   (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_PAGE_FREE_SLOTS_LIST"))

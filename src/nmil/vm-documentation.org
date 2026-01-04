@@ -70,9 +70,9 @@
 - ZP_PART_GCD_CELL_ARRAYS ::        (word) list of partially garbage collected cell arrays
 - ZP_CALL_FRAME ::                  (word) pointer to current call frame
 - ZP_CALL_FRAME_TOP_MARK ::         (byte) top mark of call frame stack
-- ZP_CELL_STACK_LB_PTR ::           (word) pointer to low byte of current eval stack
-- ZP_CELL_STACK_HB_PTR ::           (word) pointer to high byte of current eval stack
-- ZP_CELL_STACK_TOS ::              (byte) top mark of evlstk
+- ZP_EVAL_STACK_LB_PTR ::           (word) pointer to low byte of current eval stack
+- ZP_EVAL_STACK_HB_PTR ::           (word) pointer to high byte of current eval stack
+- ZP_EVAL_STACK_TAIL_TOP ::              (byte) top mark of evlstk
 - ZP_TEMP ::                        (byte) temp location, can be used in combination with TEMP2 to be used as word
 - ZP_TEMP2 ::                       (byte) temp location
 - ZP_TEMP3 ::                       (byte) temp location, can be used in combination with TEMP4 to be used as word
@@ -89,9 +89,9 @@
 * zero-page-locations (by group)
 ** registers
 *** stack
-- ZP_CELL_STACK_LB_PTR ::       (word) pointer to low byte of current eval stack
-- ZP_CELL_STACK_HB_PTR ::       (word) pointer to high byte of current eval stack
-- ZP_CELL_STACK_TOS ::          (byte) top mark of evlstk
+- ZP_EVAL_STACK_LB_PTR ::       (word) pointer to low byte of current eval stack
+- ZP_EVAL_STACK_HB_PTR ::       (word) pointer to high byte of current eval stack
+- ZP_EVAL_STACK_TAIL_TOP ::          (byte) top mark of evlstk
 *** gc
 - ZP_RZ ::                      (word) register reserved for garbage collection operations
 *** array
@@ -110,9 +110,9 @@
 - ZP_VM_PC ::                     (word) current program counter of the vm
 - ZP_FUNC_PTR ::               (word) pointer to the currently executing function
 *** evlstk
-- ZP_CELL_STACK_LB_PTR ::       (word) pointer to low byte of current eval stack
-- ZP_CELL_STACK_HB_PTR ::       (word) pointer to high byte of current eval stack
-- ZP_CELL_STACK_TOS ::          (byte) top mark of evlstk
+- ZP_EVAL_STACK_LB_PTR ::       (word) pointer to low byte of current eval stack
+- ZP_EVAL_STACK_HB_PTR ::       (word) pointer to high byte of current eval stack
+- ZP_EVAL_STACK_TAIL_TOP ::          (byte) top mark of evlstk
 *** frame
 - ZP_CALL_FRAME ::              (word) pointer to current call frame
 - ZP_CALL_FRAME_TOP_MARK ::     (byte) top mark of call frame stack

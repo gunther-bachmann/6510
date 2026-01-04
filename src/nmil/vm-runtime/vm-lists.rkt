@@ -53,7 +53,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
     (append (list (org #xA000)
                   (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
                   (LDA !$01) ;; just mimick an empty cell-stack
-                  (STA ZP_CELL_STACK_TOS))
+                  (STA ZP_EVAL_STACK_TAIL_TOP))
             (list (label TEST_ENTRY))
             bc
             (list (BRK))
@@ -219,7 +219,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           (BRK)
 
    (label VM_CONS__REFCNTD)
-          (LDY ZP_CELL_STACK_TOS)
+          (LDY ZP_EVAL_STACK_TAIL_TOP)
           (CPY !$01) ;; 01 = one element + RT = two elements
           (BMI STACK_HAS_LESS_THAN_TWO__)
 

@@ -30,8 +30,8 @@
                   ZP_RT
                   TAG_BYTE_BYTE_CELL
                   TAGGED_NIL
-                  ZP_CELL_STACK_LB_PTR
-                  ZP_CELL_STACK_HB_PTR
+                  ZP_EVAL_STACK_LB_PTR
+                  ZP_EVAL_STACK_HB_PTR
                   VM_MEMORY_MANAGEMENT_CONSTANTS))
 
 (module+ test
@@ -146,18 +146,18 @@
   (list
         (JSR VM_ALLOCATE_NEW_PAGE)
         (LDA !$00)
-        (STA ZP_CELL_STACK_LB_PTR)
+        (STA ZP_EVAL_STACK_LB_PTR)
         (JSR INIT_CELLSTACK_PAGE_X)
-        (STX ZP_CELL_STACK_LB_PTR+1)
+        (STX ZP_EVAL_STACK_LB_PTR+1)
 
         (JSR VM_ALLOCATE_NEW_PAGE)
         (LDA !$00)
-        (STA ZP_CELL_STACK_HB_PTR)
+        (STA ZP_EVAL_STACK_HB_PTR)
         (JSR INIT_CELLSTACK_PAGE_X)
-        (STX ZP_CELL_STACK_HB_PTR+1)
+        (STX ZP_EVAL_STACK_HB_PTR+1)
 
         (LDA !$01)
-        (STA ZP_CELL_STACK_TOS)
+        (STA ZP_EVAL_STACK_TAIL_TOP)
         (RTS)))
 
 (module+ test #| init-cellstack |#
@@ -168,11 +168,11 @@
      #:debug #f
      (JSR INIT_CELLSTACK)))
 
-  (check-equal? (memory-list init-cellstack-test ZP_CELL_STACK_LB_PTR (+ 1 ZP_CELL_STACK_LB_PTR))
+  (check-equal? (memory-list init-cellstack-test ZP_EVAL_STACK_LB_PTR (+ 1 ZP_EVAL_STACK_LB_PTR))
                 (list #x00 PAGE_AVAIL_0)
                 "cell-stack low bytes are located here")
 
-  (check-equal? (memory-list init-cellstack-test ZP_CELL_STACK_HB_PTR (+ 1 ZP_CELL_STACK_HB_PTR))
+  (check-equal? (memory-list init-cellstack-test ZP_EVAL_STACK_HB_PTR (+ 1 ZP_EVAL_STACK_HB_PTR))
                 (list #x00 PAGE_AVAIL_1)
                 "cell-stack high bytes are located here"))
 
@@ -188,11 +188,11 @@
           ;; (BEQ ERROR_NO_VALUE_ON_STACK)
 
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
-          (LDY ZP_CELL_STACK_TOS)
+          (LDY ZP_EVAL_STACK_TAIL_TOP)
           (CPY !$01) ;; stack empty?
           (BEQ WRITE_00_TO_RT) ;; which effectively clears the RT
           ;; pop value from call-frame stack into RT!
-          (LDA (ZP_CELL_STACK_LB_PTR),y) ;; tagged low byte
+          (LDA (ZP_EVAL_STACK_LB_PTR),y) ;; tagged low byte
           (STA ZP_RT)
 
 
@@ -201,9 +201,9 @@
           ;; (BEQ WRITE_TOS_TO_RT__POP_CELL_EVLSTK_TO_RT)
           ;; (TXA)
 
-          (LDA (ZP_CELL_STACK_HB_PTR),y) ;; high byte
+          (LDA (ZP_EVAL_STACK_HB_PTR),y) ;; high byte
           (STA ZP_RT+1)
-          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_EVAL_STACK_TAIL_TOP)
           (RTS)
 
    (label WRITE_00_TO_RT)
@@ -544,29 +544,29 @@
 ;; CHECK STACK PAGE OVERFLOW
 (define-vm-function PUSH_RT_TO_EVLSTK_TAIL
   (list
-          (LDY ZP_CELL_STACK_TOS)
+          (LDY ZP_EVAL_STACK_TAIL_TOP)
           (INY)
           [BNE NO_ERROR__]
 
    (label ALLOCATE_NEW_STACK_PAGE__)
           (JSR VM_ALLOCATE_NEW_PAGE)
-          (LDA ZP_CELL_STACK_LB_PTR+1)
+          (LDA ZP_EVAL_STACK_LB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_X)
-          (STX ZP_CELL_STACK_LB_PTR+1)
+          (STX ZP_EVAL_STACK_LB_PTR+1)
 
           (JSR VM_ALLOCATE_NEW_PAGE)
-          (LDA ZP_CELL_STACK_HB_PTR+1)
+          (LDA ZP_EVAL_STACK_HB_PTR+1)
           (JSR INIT_CELLSTACK_PAGE_X)
-          (STX ZP_CELL_STACK_HB_PTR+1)
+          (STX ZP_EVAL_STACK_HB_PTR+1)
 
           (LDY !$02)                          ;; new tos starts
 
    (label NO_ERROR__)
           (LDA ZP_RT+1)
-          (STA (ZP_CELL_STACK_HB_PTR),y)      ;; write high byte!
+          (STA (ZP_EVAL_STACK_HB_PTR),y)      ;; write high byte!
           (LDA ZP_RT)
-          (STA (ZP_CELL_STACK_LB_PTR),y)      ;; write low byte
-          (STY ZP_CELL_STACK_TOS)             ;; set new tos
+          (STA (ZP_EVAL_STACK_LB_PTR),y)      ;; write low byte
+          (STY ZP_EVAL_STACK_TAIL_TOP)             ;; set new tos
 
    (label DONE__)
           (RTS)))
@@ -612,16 +612,16 @@
           (INY)
    (label Y_ON_HIGHBYTE__)
           (STY ZP_TEMP)
-          (LDY ZP_CELL_STACK_TOS)
-          (LDA (ZP_CELL_STACK_LB_PTR),y)
+          (LDY ZP_EVAL_STACK_TAIL_TOP)
+          (LDA (ZP_EVAL_STACK_LB_PTR),y)
           (TAX)
-          (LDA (ZP_CELL_STACK_HB_PTR),y)
+          (LDA (ZP_EVAL_STACK_HB_PTR),y)
           (LDY ZP_TEMP)
           (STA (ZP_RT),y)
           (DEY)
           (TXA)
           (STA (ZP_RT),y)
-          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_EVAL_STACK_TAIL_TOP)
           (RTS)))
 
 (module+ test #| vm-pop-fstos-to-celly-rt |#
@@ -663,11 +663,11 @@
           ;; (BEQ ERROR_NO_VALUE_ON_STACK)
 
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
-          (LDY ZP_CELL_STACK_TOS)
+          (LDY ZP_EVAL_STACK_TAIL_TOP)
           (CPY !$01) ;; stack empty?
           (BEQ WRITE_00_TO_RA) ;; which effectively clears the RT
           ;; pop value from call-frame stack into RT!
-          (LDA (ZP_CELL_STACK_LB_PTR),y) ;; tagged low byte
+          (LDA (ZP_EVAL_STACK_LB_PTR),y) ;; tagged low byte
           (STA ZP_RA)
 
 
@@ -676,9 +676,9 @@
           ;; (BEQ WRITE_TOS_TO_RA__POP_CELL_EVLSTK_TO_RA)
           ;; (TXA)
 
-          (LDA (ZP_CELL_STACK_HB_PTR),y) ;; high byte
+          (LDA (ZP_EVAL_STACK_HB_PTR),y) ;; high byte
           (STA ZP_RA+1)
-          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_EVAL_STACK_TAIL_TOP)
           (RTS)
 
    (label WRITE_00_TO_RA)
@@ -705,11 +705,11 @@
           ;; (BEQ ERROR_NO_VALUE_ON_STACK)
 
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
-          (LDY ZP_CELL_STACK_TOS)
+          (LDY ZP_EVAL_STACK_TAIL_TOP)
           (CPY !$01) ;; stack empty?
           (BEQ WRITE_00_TO_RP) ;; which effectively clears the RT
           ;; pop value from call-frame stack into RT!
-          (LDA (ZP_CELL_STACK_LB_PTR),y) ;; tagged low byte
+          (LDA (ZP_EVAL_STACK_LB_PTR),y) ;; tagged low byte
           (STA ZP_RP)
 
 
@@ -718,9 +718,9 @@
           ;; (BEQ WRITE_TOS_TO_RP__POP_CELL_EVLSTK_TO_RP)
           ;; (TXA)
 
-          (LDA (ZP_CELL_STACK_HB_PTR),y) ;; high byte
+          (LDA (ZP_EVAL_STACK_HB_PTR),y) ;; high byte
           (STA ZP_RP+1)
-          (DEC ZP_CELL_STACK_TOS)
+          (DEC ZP_EVAL_STACK_TAIL_TOP)
           (RTS)
 
    (label WRITE_00_TO_RP)
