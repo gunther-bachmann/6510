@@ -298,7 +298,7 @@ filter lines that start with ---"
          :org-link ,(format "file:%s::%s" (plist-get plist :filename) (plist-get plist :line))
          ,@plist))))
 
-;; (gb/racket--rgdc--enrich-plist-fun (gb/racket--rgdc-line-to-plist "repo/+1/6510/src/nmil/vm-pages.rkt:176:4:;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages"))
+;; (gb/racket--rgdc--enrich-plist-fun (gb/racket--rgdc-line-to-plist "repo/+1/6510/src/nmil/vm-pages.rkt:176:4:;; @DC-FUN: VM_INIT_MEMORY_MANAGER, group: pages"))
 
 (defconst gb/racket--rgdc--org-template
   (list "#+title: vm-object-index"
@@ -306,7 +306,7 @@ filter lines that start with ---"
         "- collection of all annotated elements"
         "- @DC-FUN :: function annotation"
         "  @DC_FUN: <fun-label>(, group: <fun-group>(-<fun-group)*)*"
-        "  example: ;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages"
+        "  example: ;; @DC-FUN: VM_INIT_MEMORY_MANAGER, group: pages"
         "  may have multiple groups"
         "  the file name is used for creating the racket require line"
         "  the define (following) is used for racket require line"
@@ -797,9 +797,9 @@ filter lines that start with ---"
                 :column   ,(nth 2 tokens)
                 ,@(gb/racket--rgdc-match--label match))))
 
-;; (gb/racket--rgdc-line-to-plist "src/nmil/vm-pages.rkt:176:4:;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages")
+;; (gb/racket--rgdc-line-to-plist "src/nmil/vm-pages.rkt:176:4:;; @DC-FUN: VM_INIT_MEMORY_MANAGER, group: pages")
 
-;; (plist-get (gb/racket--rgdc-line-to-plist "src/nmil/vm-pages.rkt:176:4:;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages") :filename)
+;; (plist-get (gb/racket--rgdc-line-to-plist "src/nmil/vm-pages.rkt:176:4:;; @DC-FUN: VM_INIT_MEMORY_MANAGER, group: pages") :filename)
 
 (defun gb/racket--rgdc-match--label (match-line)
   "convert the MATCH-LINE into a plist"
@@ -808,7 +808,7 @@ filter lines that start with ---"
     :label ,(match-string 2 match-line)
     :group ,(or (when (match-string 4 match-line) (split-string (match-string 4 match-line) "-")) (list))))
 
-;; (gb/racket--rgdc-match--label ";; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages-sub-a")
-;; (gb/racket--rgdc-match--label ";; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages-sub-a")
-;; (gb/racket--rgdc-match--label ";; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages")
-;; (gb/racket--rgdc-match--label ";; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER")
+;; (gb/racket--rgdc-match--label ";; @DC-FUN: VM_INIT_MEMORY_MANAGER, group: pages-sub-a")
+;; (gb/racket--rgdc-match--label ";; @DC-FUN: VM_INIT_MEMORY_MANAGER, group: pages-sub-a")
+;; (gb/racket--rgdc-match--label ";; @DC-FUN: VM_INIT_MEMORY_MANAGER, group: pages")
+;; (gb/racket--rgdc-match--label ";; @DC-FUN: VM_INIT_MEMORY_MANAGER")

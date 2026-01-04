@@ -50,7 +50,7 @@
                     INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-pages.rkt"
-                    VM_INITIALIZE_PAGE_MEMORY_MANAGER     ;; initialize page memory management (must be called before first allocation)
+                    VM_INIT_PAGE_MEMORY_MANAGER     ;; initialize page memory management (must be called before first allocation)
                     VM_ALLOCATE_NEW_PAGE                  ;; get a page from the free list and adjust the free list accordingly (actually pop)
                     )
            (only-in "./vm-register-functions.rkt"
@@ -85,7 +85,7 @@
      CP_RA_TO_RT
      VM_MEMORY_MANAGEMENT_CONSTANTS
      VM_ALLOCATE_NEW_PAGE
-     VM_INITIALIZE_PAGE_MEMORY_MANAGER
+     VM_INIT_PAGE_MEMORY_MANAGER
      (list (label DEC_REFCNT_RT) (RTS)))))
 
 ;; @DC-FUN: INIT_CELLSTACK_PAGE_X, group: cell_stack
@@ -120,7 +120,7 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code test-runtime
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      (JSR VM_ALLOCATE_NEW_PAGE)
      (LDA !$05)
      (JSR INIT_CELLSTACK_PAGE_X)
@@ -163,7 +163,7 @@
   (define init-cellstack-test
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)))
 
@@ -216,7 +216,7 @@
   (define vm_cell_stack_pop3_r_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_1_TO_EVLSTK)
@@ -236,7 +236,7 @@
   (define vm_cell_stack_pop2_r_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_1_TO_EVLSTK)
@@ -253,7 +253,7 @@
   (define vm_cell_stack_pop1_r_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_1_TO_EVLSTK)
@@ -273,7 +273,7 @@
   (define test-vm_cell_stack_push_nil-a-state-after
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_NIL_TO_EVLSTK)))
@@ -284,7 +284,7 @@
   (define test-vm_cell_stack_push_nil-b-state-after
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_NIL_TO_EVLSTK) ;; 1
@@ -312,7 +312,7 @@
   (define test-vm_cell_stack_push_int-a-state-after
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_m1_TO_EVLSTK)
@@ -427,7 +427,7 @@
   (define vm_cell_stack_push_r_int0_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_0_TO_EVLSTK)))
@@ -440,7 +440,7 @@
   (define vm_cell_stack_push_r_int1_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_1_TO_EVLSTK)))
@@ -453,7 +453,7 @@
   (define vm_cell_stack_push_r_intm1_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_m1_TO_EVLSTK)))
@@ -466,7 +466,7 @@
   (define vm_cell_stack_push_r_nil_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_NIL_TO_EVLSTK)))
@@ -479,7 +479,7 @@
   (define vm_cell_stack_push_r_cell_ptr_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR ALLOC_M1_P0_SLOT_TO_RT)
@@ -496,7 +496,7 @@
   (define vm_cell_stack_push_r_push1_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_m1_TO_EVLSTK)
@@ -514,7 +514,7 @@
   (define vm_cell_stack_push_r_push2_state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_m1_TO_EVLSTK)
@@ -574,7 +574,7 @@
   (define vm-cell-stack-just-push-rt-state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR WRITE_INTm1_TO_RT)
@@ -627,7 +627,7 @@
   (define vm-pop-fstos-to-celly-rt-state
     (compact-run-code-in-test-
      #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
      (JSR PUSH_INT_1_TO_EVLSTK)

@@ -3,7 +3,7 @@
 - collection of all annotated elements
 - @DC-FUN :: function annotation
   @DC_FUN: <fun-label>(, group: <fun-group>(-<fun-group)*)*
-  example: ;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages
+  example: ;; @DC-FUN: VM_INIT_MEMORY_MANAGER, group: pages
   may have multiple groups
   the file name is used for creating the racket require line
   the define (following) is used for racket require line
@@ -964,9 +964,9 @@
           zp_locals_hb_ptr
           zp_locals_top_mark
   uses:   A, X, Y
-- [[file:vm-call-frame.rkt::142][VM_INITIALIZE_CALL_FRAME]] ::  initialise first call frame
-  - racket require :: (require (only-in "vm-call-frame.rkt" VM_INITIALIZE_CALL_FRAME))
-  - assembler include :: VM_INITIALIZE_CALL_FRAME
+- [[file:vm-call-frame.rkt::142][VM_INIT_CALL_FRAME_STACK]] ::  initialise first call frame
+  - racket require :: (require (only-in "vm-call-frame.rkt" VM_INIT_CALL_FRAME_STACK))
+  - assembler include :: VM_INIT_CALL_FRAME_STACK
   initialise first call frame
   input:  -
   usage:  A X Y
@@ -975,9 +975,9 @@
           ZP_LOCALS_TOP_MARK
           ZP_CALL_FRAME
           ZP_CALL_FRAME_TOP_MARK
-- [[file:vm-mm-pages.rkt::180][VM_INITIALIZE_MEMORY_MANAGER]] ::  initialize memory management (paging)
-  - racket require :: (require (only-in "vm-mm-pages.rkt" VM_INITIALIZE_MEMORY_MANAGER))
-  - assembler include :: VM_INITIALIZE_MEMORY_MANAGER
+- [[file:vm-mm-pages.rkt::180][VM_INIT_MEMORY_MANAGER]] ::  initialize memory management (paging)
+  - racket require :: (require (only-in "vm-mm-pages.rkt" VM_INIT_MEMORY_MANAGER))
+  - assembler include :: VM_INIT_MEMORY_MANAGER
   initialize memory management (paging)
   - setup 'next free page' information, basically initializing the whole page with zeros
   - setup cell stack (to empty)
@@ -1546,9 +1546,9 @@
   output: ZP_CALL_FRAME
           ZP_CALL_FRAME_TOP_MARK
           Y index for first byte available as payload (03) = ZP_CALL_FRAME_TOP_MARK
-- [[file:vm-call-frame.rkt::142][VM_INITIALIZE_CALL_FRAME]] ::  initialise first call frame
-  - racket require :: (require (only-in "vm-call-frame.rkt" VM_INITIALIZE_CALL_FRAME))
-  - assembler include :: VM_INITIALIZE_CALL_FRAME
+- [[file:vm-call-frame.rkt::142][VM_INIT_CALL_FRAME_STACK]] ::  initialise first call frame
+  - racket require :: (require (only-in "vm-call-frame.rkt" VM_INIT_CALL_FRAME_STACK))
+  - assembler include :: VM_INIT_CALL_FRAME_STACK
   initialise first call frame
   input:  -
   usage:  A X Y
@@ -1761,9 +1761,9 @@
   parameter: (none)
   result: X = allocated free page (uninitialized)
   uses: A, X
-- [[file:vm-mm-pages.rkt::180][VM_INITIALIZE_MEMORY_MANAGER]] ::  initialize memory management (paging)
-  - racket require :: (require (only-in "vm-mm-pages.rkt" VM_INITIALIZE_MEMORY_MANAGER))
-  - assembler include :: VM_INITIALIZE_MEMORY_MANAGER
+- [[file:vm-mm-pages.rkt::180][VM_INIT_MEMORY_MANAGER]] ::  initialize memory management (paging)
+  - racket require :: (require (only-in "vm-mm-pages.rkt" VM_INIT_MEMORY_MANAGER))
+  - assembler include :: VM_INIT_MEMORY_MANAGER
   initialize memory management (paging)
   - setup 'next free page' information, basically initializing the whole page with zeros
   - setup cell stack (to empty)

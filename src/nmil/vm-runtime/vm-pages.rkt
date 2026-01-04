@@ -1,7 +1,7 @@
 #lang racket
 
 (provide
- VM_INITIALIZE_PAGE_MEMORY_MANAGER ;; initialize page memory management (must be called before first allocation)
+ VM_INIT_PAGE_MEMORY_MANAGER ;; initialize page memory management (must be called before first allocation)
  VM_ALLOCATE_NEW_PAGE              ;; get a page from the free list and adjust the free list accordingly (actually pop)
  VM_DEALLOCATE_PAGE                ;; return a page to the free list (actually push)
 
@@ -65,11 +65,11 @@
 
   (define test-runtime
     (append
-     VM_INITIALIZE_PAGE_MEMORY_MANAGER
+     VM_INIT_PAGE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
      VM_ALLOCATE_NEW_PAGE
      VM_DEALLOCATE_PAGE
-     (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS)))))
+     (list (label VM_INIT_MEMORY_MANAGER) (RTS)))))
 
 ;; pop a page off the free list (if available, else out of memory error)
 ;;
@@ -100,7 +100,7 @@
      #:debug #f
      #:runtime-code test-runtime
      (LDX !$20)
-     (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
+     (JSR VM_INIT_PAGE_MEMORY_MANAGER)
 
      ;; now allocate a new page
      (JSR VM_ALLOCATE_NEW_PAGE)))
@@ -144,7 +144,7 @@
      #:debug #f
      #:runtime-code test-runtime
             ;; given
-            (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
+            (JSR VM_INIT_PAGE_MEMORY_MANAGER_N20)
             (JSR VM_ALLOCATE_NEW_PAGE)
             (fill-page-with PAGE_AVAIL_0  #xcc)
 
@@ -191,11 +191,11 @@
 ;; - MAY STILL HAVE ITS USES THOUGH
 ;; - MORE REGIONS ARE POSSIBLE, THOUGH
 (define-vm-function-wol
-  VM_INITIALIZE_PAGE_MEMORY_MANAGER
+  VM_INIT_PAGE_MEMORY_MANAGER
   (list
-   (label VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
+   (label VM_INIT_PAGE_MEMORY_MANAGER_N20)
           (LDX !$30)
-   (label VM_INITIALIZE_PAGE_MEMORY_MANAGER)
+   (label VM_INIT_PAGE_MEMORY_MANAGER)
           (STX ZP_TEMP+1) ;; for later comparison
 
           (LDX !$05) ;; last index of profile
@@ -256,7 +256,7 @@
      #:debug #f
      #:runtime-code test-runtime
      (LDX !$20)
-     (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
+     (JSR VM_INIT_PAGE_MEMORY_MANAGER)
      (STA $0200) ;; save for later check
      (STX $0201)
      (STY $0202)))
@@ -336,7 +336,7 @@
 
 (define vm-pages-code
   (append
-   VM_INITIALIZE_PAGE_MEMORY_MANAGER
+   VM_INIT_PAGE_MEMORY_MANAGER
    VM_ALLOCATE_NEW_PAGE
    VM_DEALLOCATE_PAGE))
 

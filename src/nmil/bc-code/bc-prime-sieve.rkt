@@ -140,7 +140,7 @@
    prime-sieve-state
    "prime sieve on cell-array with the first 20 integers"
    (inform-check-equal? (cpu-state-clock-cycles prime-sieve-state)
-                        34875)
+                        34841)
 
    (check-equal? (memory-list prime-sieve-state (+ PAGE_AVAIL_0_W 2) (+ PAGE_AVAIL_0_W 43))
                   (list #x01 #x14

@@ -13,6 +13,22 @@ byte code vm.
       ...
 - [ ] define vm-runtime-errors.rkt that prints out error codes (e.g. BDCD, outputs integer in A/X)
       1 :: out of memory error
+- [ ] cleanup
+  minimize require
+  use ~define-vm-function~ where possible
+  use ~regression-test~
+  ensure good code coverage
+  ensure export of complete code in one variable
+  ensure code-length check
+  ensure order of ~provide~, documentation, ~require~
+  - [ ] vm-native-array.rkt
+  - [ ] vm-memory-map.rkt
+  - [ ] vm-memory-manager.rkt
+  - [ ] vm-m1-slots.rkt
+  - [ ] vm-lists.rkt
+  - [ ] vm-cell-stack.rkt
+  - [ ] vm-cell-array.rkt
+  - [ ] vm-call-frame.rkt
 * ...
 #+begin_src emacs-lisp
   ;; Local Variables:

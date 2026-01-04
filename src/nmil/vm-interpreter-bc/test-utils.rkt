@@ -51,7 +51,7 @@
                   vm-list->strings
                   vm-next-instruction-bytes)
          (only-in "../vm-runtime/vm-memory-manager.rkt"
-                  VM_INITIALIZE_MEMORY_MANAGER
+                  VM_INIT_MEMORY_MANAGER
                   vm-memory-manager-code)
          "../vm-runtime/vm-memory-map.rkt")
 
@@ -80,7 +80,7 @@
 (define (wrap-bytecode-for-bc-test bc-to-wrap relevant-opcode-definitions bc-implementations)
   (flatten
    (append (list (org #x07f0)
-                 (JSR VM_INITIALIZE_MEMORY_MANAGER)
+                 (JSR VM_INIT_MEMORY_MANAGER)
                  (JSR VM_INTERPRETER_INIT)
                  (JMP VM_INTERPRETER))
            (list (org #x0800))

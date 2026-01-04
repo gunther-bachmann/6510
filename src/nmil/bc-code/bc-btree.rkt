@@ -656,7 +656,7 @@
                        "3  (rt)"
                        "NIL"))
    (inform-check-equal? (cpu-state-clock-cycles btree-depth-6-state)
-                        11296)))
+                        11278)))
 
 ;; (define (btree-path-to-first node (path (list)))
 ;;   (cond [(btree-value? node) path]
@@ -1151,7 +1151,7 @@
                        "NIL"))
 
    (inform-check-equal? (cpu-state-clock-cycles prev-4-state)
-                        5982)))
+                        5942)))
 
 ;; optimization idea: NIL?_RET instead of NIL?, T_P_RET
 (define REVERSE ;; list :: result=nil -> list
@@ -1195,7 +1195,7 @@
                   (vm-regt->string reverse-0-state #t))
                  "(0 . (1 . (2 . (3fff . NIL))))")
    (inform-check-equal? (cpu-state-clock-cycles reverse-0-state)
-                        5007)))
+                        5001)))
 
 (define APPEND ;; head-list :: tail-list -> list
   (bc-resolve
@@ -1250,7 +1250,7 @@
    (check-equal? (shorten-cell-string (vm-regt->string append-0-state #t))
                  "(5 . (4 . (3 . (2 . (1 . (0 . NIL))))))")
    (inform-check-equal? (cpu-state-clock-cycles append-0-state)
-                        7913)))
+                        7901)))
 
 
 ;; (define (btree-next path)
@@ -2403,7 +2403,7 @@
    add-before-5-state
    "path (4 *6), (*(4 6) 7), (3 *((4 6) 7)), (*(3 *((4 6) 7)) 8) -> add 5 before 6"
    (inform-check-equal? (cpu-state-clock-cycles add-before-5-state)
-                        17210)
+                        17168)
 
    (check-equal? (shorten-cell-strings
                   (vm-stack->strings add-before-5-state 10 #t))
@@ -2697,7 +2697,7 @@
                        "NIL"))
 
    (inform-check-equal? (cpu-state-clock-cycles btree-to-list-0-state)
-                        25695)))
+                        25639)))
 
 
 ;; (define (btree-remove-value-at path (result (list)) (old-prev (list)))
@@ -3615,7 +3615,7 @@
    remove-value-at-7-state
    "path *5, (*(5)), (*((5))), (*(((5))) 6), (4 *((((5))) 6)), (3 *(4 ((((5))) 6))) (*(3 (4 ((((5))) 6))) 7) -> remove value at"
    (inform-check-equal? (cpu-state-clock-cycles remove-value-at-7-state)
-                        57423)
+                        57197)
    (check-equal? (shorten-cell-strings (vm-stack->strings remove-value-at-7-state 10 #t))
                  (list "stack holds 3 items"
                        (string-append

@@ -116,7 +116,7 @@
   (define test-alloc-native-array-state-after
     (compact-run-code-in-test-
      #:runtime-code test-runtime
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (LDA !$10)
      (JSR ALLOC_NATARR_TO_RA)))
@@ -181,7 +181,7 @@
   (define write-rt-to-natarr-rai-t0
     (compact-run-code-in-test-
      #:runtime-code test-runtime
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      (JSR INIT_EVLSTK_TAIL)
 
      (LDA !$04)                         ;; alocates profile for 4 bytes content
@@ -234,7 +234,7 @@
   (define pop-to-natarra-rai-t0
     (compact-run-code-in-test-
      #:runtime-code test-runtime
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      (JSR INIT_EVLSTK_TAIL)
 
      (LDA !$04)                         ;; alocates profile for 4 bytes content
@@ -284,7 +284,7 @@
   (define push-natarr-rai-t0
     (compact-run-code-in-test-
      #:runtime-code test-runtime
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      (JSR INIT_EVLSTK_TAIL)
 
      (LDA !$04)
@@ -337,7 +337,7 @@
   (define cp-natarr-ra-to-rb-t0
     (compact-run-code-in-test-
      #:runtime-code test-runtime
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
             (LDA !$04)
             (JSR ALLOC_NATARR_TO_RA)
             (LDY ZP_RAI)
@@ -415,7 +415,7 @@
     (compact-run-code-in-test-
      ;; #:debug #t
      #:runtime-code test-runtime
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
             (LDA !$04)
             (JSR ALLOC_NATARR_TO_RA)
             (LDY ZP_RAI)

@@ -51,7 +51,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
   (define (wrap-code-for-test bc)
     (append (list (org #xA000)
-                  (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
+                  (JSR VM_INIT_PAGE_MEMORY_MANAGER_N20)
                   (LDA !$01) ;; just mimick an empty cell-stack
                   (STA ZP_EVAL_STACK_TAIL_TOP))
             (list (label TEST_ENTRY))

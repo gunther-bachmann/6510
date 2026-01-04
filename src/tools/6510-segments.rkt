@@ -472,8 +472,8 @@ currently the following test programs are created
                      (byte-const ZP_VM_PC #x85) ;; #x80 + 5
 
                      (JSR VM_INTERPRETER_INIT_AX)
-                     (JSR VM_INITIALIZE_MEMORY_MANAGER)
-                     ;; (JSR VM_INITIALIZE_CALL_FRAME)
+                     (JSR VM_INIT_MEMORY_MANAGER)
+                     ;; (JSR VM_INIT_CALL_FRAME_STACK)
                      (JMP VM_INTERPRETER))
                just-vm-interpreter
                full-extended-optable-hb

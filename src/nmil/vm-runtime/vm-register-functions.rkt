@@ -74,7 +74,7 @@
      SWAP_ZP_WORD
 
      VM_MEMORY_MANAGEMENT_CONSTANTS
-     (list (label VM_INITIALIZE_MEMORY_MANAGER) (RTS)))))
+     (list (label VM_INIT_MEMORY_MANAGER) (RTS)))))
 
 ;; @DC-FUN: WRITE_NIL_TO_RT, group: register
 ;; write NIL into register, not checking its content (no dec-refcnt)

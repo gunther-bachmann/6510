@@ -79,7 +79,7 @@
            (only-in "./vm-pages.rkt"
                     VM_ALLOCATE_NEW_PAGE
                     VM_DEALLOCATE_PAGE
-                    VM_INITIALIZE_PAGE_MEMORY_MANAGER)
+                    VM_INIT_PAGE_MEMORY_MANAGER)
            (only-in "./vm-register-functions.rkt"
                     vm-register-functions-code))
 
@@ -142,7 +142,7 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code test-runtime
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      (fill-page-with PAGE_AVAIL_0 #xff)
 
      ;; now allocate the page
@@ -174,7 +174,7 @@
     (compact-run-code-in-test-
      ;; #:debug #t
      #:runtime-code test-runtime
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      (fill-page-with PAGE_AVAIL_0 #xff)
 
      ;; now allocate the page

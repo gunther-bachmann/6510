@@ -3103,7 +3103,7 @@ use the following idea in more situations:
   |      | VM_FREE_CELL_PAIR_PAGE                      | GLOBAL_CELL_PAGE_FOR_ALLOC       |      |                                                                    |
   |      | VM_LIST_OF_FREE_CELLS                       | GLOBAL_CELL_FREE_LIST            |      |                                                                    |
   |      | VM_MEMORY_MANAGEMENT_CONSTANTS              | CONST_MEMORY_MANAGER             |      |                                                                    |
-  |      | VM_INITIALIZE_MEMORY_MANAGER                | INIT_MEMORY_MANAGER              |      |                                                                    |
+  |      | VM_INIT_MEMORY_MANAGER                | INIT_MEMORY_MANAGER              |      |                                                                    |
   |------+---------------------------------------------+----------------------------------+------+--------------------------------------------------------------------|
   | x    | VM_CELL_STACK_PUSH_ARRAY_ATa_RA             | PUSH_ARR_ATa_RA_TO_EVLSTK        |      |                                                                    |
   | x    | VM_CELL_STACK_WRITE_TO_RT_ARRAY_ATa_RA      | WRITE_ARR_ATa_RA_TO_RT           |      |                                                                    |

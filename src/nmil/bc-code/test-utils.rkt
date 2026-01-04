@@ -76,7 +76,7 @@
          (only-in "../vm-runtime/vm-call-frame.rkt"
                   vm-call-frame->strings)
          (only-in "../vm-runtime/vm-memory-manager.rkt"
-                  VM_INITIALIZE_MEMORY_MANAGER
+                  VM_INIT_MEMORY_MANAGER
                   vm-memory-manager-code)
          "../vm-runtime/vm-memory-map.rkt")
 
@@ -84,7 +84,7 @@
   (flatten
    (append
     (list (org #x07f0)
-          (JSR VM_INITIALIZE_MEMORY_MANAGER)
+          (JSR VM_INIT_MEMORY_MANAGER)
           (JSR VM_INTERPRETER_INIT)
           (JMP VM_INTERPRETER))
     (list (org #x0800))

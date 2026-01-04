@@ -329,7 +329,7 @@
            (only-in "./vm-pages.rkt"
                     VM_ALLOCATE_NEW_PAGE
                     VM_DEALLOCATE_PAGE
-                    VM_INITIALIZE_PAGE_MEMORY_MANAGER)
+                    VM_INIT_PAGE_MEMORY_MANAGER)
            (only-in "./vm-register-functions.rkt"
                     vm-register-functions-code
                     CP_RA_TO_RT
@@ -347,7 +347,7 @@
     (append
      VM_ALLOCATE_NEW_PAGE
      VM_DEALLOCATE_PAGE
-     VM_INITIALIZE_PAGE_MEMORY_MANAGER
+     VM_INIT_PAGE_MEMORY_MANAGER
      VM_MEMORY_MANAGEMENT_CONSTANTS
 
      vm-register-functions-code
@@ -422,9 +422,9 @@
     (compact-run-code-in-test-
      ;; #:debug #t
      #:runtime-code (append test-runtime INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      ;; (LDX !$20)
-     ;; (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
+     ;; (JSR VM_INIT_PAGE_MEMORY_MANAGER)
 
      ;; fill page with $ff
      (LDA !$FF)
@@ -462,9 +462,9 @@
     (compact-run-code-in-test-
      ;; #:debug #t
      #:runtime-code (append test-runtime INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      ;; (LDX !$20)
-     ;; (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
+     ;; (JSR VM_INIT_PAGE_MEMORY_MANAGER)
 
      ;; fill page with $ff
      (LDA !$FF)
@@ -502,9 +502,9 @@
     (compact-run-code-in-test-
      ;; #:debug #t
      #:runtime-code (append test-runtime INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      ;; (LDX !$20)
-     ;; (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER)
+     ;; (JSR VM_INIT_PAGE_MEMORY_MANAGER)
 
      ;; fill page with $ff
      (LDA !$FF)
@@ -581,7 +581,7 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code (append test-runtime ALLOC_M1_SLOT_TO_RA INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX OPTIMISED_ALLOC_M1_P0_SLOT_TO_RA)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
 
             (ast-opcode-cmd '() `(162 ,times)) ;; (LDX !$20)
             (DEX)
@@ -850,7 +850,7 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code (append test-runtime ALLOC_M1_SLOT_TO_RA INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
 
             (ast-opcode-cmd '() `(162 ,times)) ;; (LDX <time>)
             (DEX)
@@ -875,7 +875,7 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code (append test-runtime ALLOC_M1_SLOT_TO_RA INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
 
             (ast-opcode-cmd '() `(162 ,times)) ;; (LDX !$20)
             (STX $FFFF)
@@ -1076,7 +1076,7 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code (append test-runtime ALLOC_M1_SLOT_TO_RA INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
 
      ;; make sure to have an initialized page of profile 5 in ZP_PROFILE_PAGE_FREE_LIST+5
      (JSR VM_ALLOCATE_NEW_PAGE)
@@ -1127,7 +1127,7 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code (append test-runtime ALLOC_M1_SLOT_TO_RA INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
 
      ;; make sure to have an initialized page of profile 5 in ZP_PROFILE_PAGE_FREE_LIST+5
      (JSR VM_ALLOCATE_NEW_PAGE)
@@ -1239,7 +1239,7 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code (append test-runtime ALLOC_M1_SLOT_TO_RA INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX FREE_M1_SLOT_FROM_RZ)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
             (ast-opcode-cmd '() `(162 ,times)) ;; (LDX <time>)
             (STX $FFFF)
      (label alloc_m1_slot_test_loop)
@@ -1323,7 +1323,7 @@
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code (append test-runtime ALLOC_M1_SLOT_TO_RA INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX FREE_M1_SLOT_FROM_RZ INC_REFCNT_M1_SLOT_RT)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
             (ast-opcode-cmd '() `(162 ,times)) ;; (LDX <time>)
             (STX $FFFF)
             (JSR ALLOC_M1_P0_SLOT_TO_RA)
@@ -1583,7 +1583,7 @@
                             FREE_M1_SLOT_FROM_RZ
                             INC_REFCNT_M1_SLOT_RT
                             DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
                 (LDA !20)
                 (JSR ALLOC_M1_SLOT_TO_RA)
                 (LDY !$01)
@@ -1626,7 +1626,7 @@
                             FREE_M1_SLOT_FROM_RZ
                             INC_REFCNT_M1_SLOT_RT
                             DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
                 (LDA !20)
                 (JSR ALLOC_M1_SLOT_TO_RA)
                 (LDY !$01)
@@ -1682,7 +1682,7 @@
                             FREE_M1_SLOT_FROM_RZ
                             INC_REFCNT_M1_SLOT_RT
                             DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
 
                 (LDA !20)
                 (JSR ALLOC_M1_SLOT_TO_RA)
@@ -1745,7 +1745,7 @@
                             FREE_M1_SLOT_FROM_RZ
                             INC_REFCNT_M1_SLOT_RT
                             DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
 
                 (LDA !20)
                 (JSR ALLOC_M1_SLOT_TO_RA)
@@ -1799,7 +1799,7 @@
                             FREE_M1_SLOT_FROM_RZ
                             INC_REFCNT_M1_SLOT_RT
                             DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
 
                 (LDA !20)
                 (JSR ALLOC_M1_SLOT_TO_RA)
@@ -1865,7 +1865,7 @@
                             FREE_M1_SLOT_FROM_RZ
                             INC_REFCNT_M1_SLOT_RT
                             DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
-     #:init-label "VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20"
+     #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
 
                 (LDA !20)
                 (JSR ALLOC_M1_SLOT_TO_RA)

@@ -2,7 +2,7 @@
 - collection of all annotated elements
 - @DC-FUN :: function annotation
   @DC_FUN: <fun-label>(, group: <fun-group>(-<fun-group)*)*
-  example: ;; @DC-FUN: VM_INITIALIZE_MEMORY_MANAGER, group: pages
+  example: ;; @DC-FUN: VM_INIT_MEMORY_MANAGER, group: pages
   may have multiple groups
   the file name is used for creating the racket require line
   the define (following) is used for racket require line
@@ -134,9 +134,9 @@
 * functions (by name)
 * functions (by group)
 ** pages
-- [[file:vm-mm-pages.rkt::(define VM_INITIALIZE_MEMORY_MANAGER][VM_INITIALIZE_MEMORY_MANAGER]] ::    initialize memory management (must be called before first allocation)
-  - racket include :: (require (only-in "./vm-mm-pages" VM_INITIALIZE_MEMORY_MANAGER))
-  - assembler include :: VM_INITIALIZE_MEMORY_MANAGER
+- [[file:vm-mm-pages.rkt::(define VM_INIT_MEMORY_MANAGER][VM_INIT_MEMORY_MANAGER]] ::    initialize memory management (must be called before first allocation)
+  - racket include :: (require (only-in "./vm-mm-pages" VM_INIT_MEMORY_MANAGER))
+  - assembler include :: VM_INIT_MEMORY_MANAGER
   initialize memory management (paging)
   - setup 'next free page' information, basically initializing the whole page with zeros
   - setup cell stack (to empty)

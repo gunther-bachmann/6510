@@ -1,7 +1,7 @@
 #lang racket/base
 
 (provide
- VM_INITIALIZE_MEMORY_MANAGER
+ VM_INIT_MEMORY_MANAGER
  vm-memory-manager-code)
 
 
@@ -16,7 +16,7 @@
          (only-in "../vm-definition-utils.rkt"
                   define-vm-function)
          (only-in "./vm-call-frame.rkt"
-                  VM_INITIALIZE_CALL_FRAME
+                  VM_INIT_CALL_FRAME_STACK
                   vm-call-frame-code)
          (only-in "./vm-cell-array.rkt"
                   vm-cell-array-code)
@@ -32,7 +32,7 @@
          (only-in "./vm-native-array.rkt"
                   vm-native-array-code)
          (only-in "./vm-pages.rkt"
-                  VM_INITIALIZE_PAGE_MEMORY_MANAGER
+                  VM_INIT_PAGE_MEMORY_MANAGER
                   vm-pages-code)
          (only-in "./vm-register-functions.rkt"
                   vm-register-functions-code))
@@ -48,11 +48,11 @@
                     ZP_TEMP)))
 
 
-(define-vm-function VM_INITIALIZE_MEMORY_MANAGER
+(define-vm-function VM_INIT_MEMORY_MANAGER
   (list
-                (JSR VM_INITIALIZE_PAGE_MEMORY_MANAGER_N20)
+                (JSR VM_INIT_PAGE_MEMORY_MANAGER_N20)
                 (JSR INIT_EVLSTK_TAIL)
-                (JMP VM_INITIALIZE_CALL_FRAME)))
+                (JMP VM_INIT_CALL_FRAME_STACK)))
 
 
 (define vm-memory-manager-code
@@ -64,10 +64,10 @@
           vm-native-array-code
           vm-call-frame-code
           vm-list-code
-          VM_INITIALIZE_MEMORY_MANAGER
+          VM_INIT_MEMORY_MANAGER
           VM_MEMORY_MANAGEMENT_CONSTANTS
           ))
 
 (module+ test #| code len |#
   (inform-check-equal? (code-len vm-memory-manager-code)
-                       2319))
+                       2227))
