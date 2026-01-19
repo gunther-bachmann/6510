@@ -122,7 +122,8 @@
 
 (require "../../6510.rkt"
          "../vm-bc-ast.rkt"
-         (only-in "../vm-bc-opcode-definitions.rkt" bc)
+         (only-in "../vm-bc-opcode-definitions.rkt"
+                  bc)
          (only-in "../vm-bc-resolver.rkt"
                   bc-resolve
                   bc-bytes)

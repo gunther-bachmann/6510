@@ -282,5 +282,5 @@
 
 (module+ test
   (inform-check-equal? (code-len bc-atom-num-code)
-                       152
+                       177
                        "code len for byte and int arithmetic"))

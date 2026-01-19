@@ -84,8 +84,9 @@ functions
 ;; resolve the given BC-AST-CMDS
 ;; collect labels first and resolve with the collected labels
 (define/c (bc-resolve bc-ast-cmds)
-  (-> (listof bc-cmd?) (listof bc-cmd?))
-  (bc-resolve- bc-ast-cmds (bc-collect-labels bc-ast-cmds)))
+  (-> (listof any/c) (listof bc-cmd?))
+  (define flat-bcs (flatten bc-ast-cmds))
+  (bc-resolve- flat-bcs (bc-collect-labels flat-bcs)))
 
 ;; inner function
 ;; resolve the given BC-AST-CMDS into the RESULT list

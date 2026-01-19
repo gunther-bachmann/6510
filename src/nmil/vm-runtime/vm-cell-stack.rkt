@@ -40,6 +40,7 @@
                     code-len)
            (only-in "../../tools/6510-interpreter.rkt" peek memory-list)
            (only-in "../../util.rkt" format-hex-byte format-hex-word)
+           (only-in "../test-utils.rkt" regression-test)
            (only-in "../vm-inspector-utils.rkt"
                     vm-deref-cell-pair-w->string
                     vm-regt->string
@@ -188,7 +189,7 @@
 
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
           (LDY ZP_EVAL_STACK_TAIL_TOP)
-          (CPY !$01) ;; stack empty?
+          (CPY !$01) ;; stack empty? ;; TODO check for previous stack
           (BEQ WRITE_00_TO_RT) ;; which effectively clears the RT
           ;; pop value from call-frame stack into RT!
           (LDA (ZP_EVAL_STACK_TAIL_LB_PTR),y) ;; tagged low byte
@@ -325,16 +326,19 @@
      (LDX !$0f)
      (JSR PUSH_INT_TO_EVLSTK)))
 
-  (check-equal? (vm-regt->string test-vm_cell_stack_push_int-a-state-after)
-                "int $0fff")
-  (check-equal? (vm-stack->strings test-vm_cell_stack_push_int-a-state-after)
-                '("stack holds 6 items"
-                  "int $0fff  (rt)"
-                  "int $0000"
-                  "int $0001"
-                  "int $1000"
-                  "int $3fff"
-                  "ptr NIL")))
+  (regression-test
+   test-vm_cell_stack_push_int-a-state-after
+   "check for pushing values onto the eval stack"
+   (check-equal? (vm-regt->string test-vm_cell_stack_push_int-a-state-after)
+                 "int $0fff")
+   (check-equal? (vm-stack->strings test-vm_cell_stack_push_int-a-state-after)
+                 '("stack holds 6 items"
+                   "int $0fff  (rt)"
+                   "int $0000"
+                   "int $0001"
+                   "int $1000"
+                   "int $3fff"
+                   "ptr NIL"))))
 
 ;; ---
 ;; @DC-FUN: PUSH_NIL_TO_EVLSTK, group: cell_stack
@@ -663,7 +667,7 @@
 
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
           (LDY ZP_EVAL_STACK_TAIL_TOP)
-          (CPY !$01) ;; stack empty?
+          (CPY !$01) ;; stack empty? ;; check for previous page
           (BEQ WRITE_00_TO_RA) ;; which effectively clears the RT
           ;; pop value from call-frame stack into RT!
           (LDA (ZP_EVAL_STACK_TAIL_LB_PTR),y) ;; tagged low byte
@@ -705,7 +709,7 @@
 
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
           (LDY ZP_EVAL_STACK_TAIL_TOP)
-          (CPY !$01) ;; stack empty?
+          (CPY !$01) ;; stack empty? ;; TODO: check for previous stack page
           (BEQ WRITE_00_TO_RP) ;; which effectively clears the RT
           ;; pop value from call-frame stack into RT!
           (LDA (ZP_EVAL_STACK_TAIL_LB_PTR),y) ;; tagged low byte

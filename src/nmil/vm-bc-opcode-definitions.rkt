@@ -82,6 +82,7 @@
                   BC_BADD                        ;; add two topmost bytes
                   BC_IMAX                        ;; get max of two topmost integers
                   BC_IINC                        ;; increment integer (tos)
+                  BC_IDEC                        ;; decrement integer (tos)
                   BC_IADD                        ;; add two topmost integer
                   BC_BSHR                        ;; shift tos byte one bit to the right
                   BC_ISUB)
@@ -231,7 +232,9 @@
      (list (define-bc VM_INTERPRETER_INC_PC_2_TIMES _             #x00 1 "reserved")    ;; stack: -, opcode must start at 0 and increment by 1
            (define-bc BC_IMAX           IMAX                      #x01 1 "int max")     ;; stack: a:b:: -> max(a,b)::
            (define-bc BC_IINC           IINC                      #x02 1 "int inc")     ;; stack: a:: -> a+1::
-           (define-bc BC_GC_FL          GC                        #x03 1 "gc")))        ;; stack: -
+           (define-bc BC_GC_FL          GC                        #x03 1 "gc")          ;; stack: -
+           (define-bc BC_IDEC           IDEC                      #x04 1 "int dec")     ;; stack: a:: -> a-1::
+           ))
 
    (define-bc VM_INTERPRETER_INC_PC    _                    #x0a 1 "reserved")          ;; reserved
    (define-bc BC_PUSH_I                PUSH_I               #x0c 3                      ;; stack: :: -> m[pc+1]<<8+m[pc+2]::

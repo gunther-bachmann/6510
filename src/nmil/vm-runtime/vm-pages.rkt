@@ -1,9 +1,9 @@
 #lang racket
 
 (provide
- VM_INIT_PAGE_MEMORY_MANAGER ;; initialize page memory management (must be called before first allocation)
- VM_ALLOCATE_NEW_PAGE              ;; get a page from the free list and adjust the free list accordingly (actually pop)
- VM_DEALLOCATE_PAGE                ;; return a page to the free list (actually push)
+ VM_INIT_PAGE_MEMORY_MANAGER   ;; initialize page memory management (must be called before first allocation)
+ VM_ALLOCATE_NEW_PAGE          ;; get a page from the free list and adjust the free list accordingly (actually pop)
+ VM_DEALLOCATE_PAGE            ;; return a page to the free list (actually push)
 
  vm-pages-code)
 

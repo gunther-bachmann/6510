@@ -65,7 +65,8 @@ currently the following test programs are created
                     full-interpreter-opcode-table
                     bc)
            (only-in "../nmil/vm-interpreter-loop.rkt"
-                    VM_INTERPRETER_ZP)
+                    VM_INTERPRETER_ZP
+                    VM_INTERPRETER_INIT_AX)
            (only-in "../nmil/vm-interpreter.rkt"
                     just-vm-interpreter)
            (only-in "../nmil/vm-runtime/vm-memory-manager.rkt"
@@ -458,7 +459,7 @@ currently the following test programs are created
 
   (check-true (> (- #x3000 #x2800)
                  (length raw-vm-runtime))
-              "vm runtime must fit into 2k")
+              "vm runtime must fit into 2k (2800..2fff), else the loader needs to be adjusted (see vm-runtime)")
 
   ;; @9000 just bc interpreter
   (define bc-interpreter
@@ -471,6 +472,7 @@ currently the following test programs are created
                      (word-const VM_INTERPRETER_INC_PC $0080)
                      (byte-const ZP_VM_PC #x85) ;; #x80 + 5
 
+                     ;; a/x set by byte-code-loader
                      (JSR VM_INTERPRETER_INIT_AX)
                      (JSR VM_INIT_MEMORY_MANAGER)
                      ;; (JSR VM_INIT_CALL_FRAME_STACK)
@@ -497,7 +499,7 @@ currently the following test programs are created
 
   (check-true (> (- #x2800 #x2000)
                  (length raw-bc-interpreter))
-              "bc interpreter must fit into 1k")
+              "bc interpreter must fit into 2k (2000..2800), else the loader needs to be adjusted (see bc-interpreter)")
 
   ;; @ce00
   ;; (define raw-bc-jump-table
@@ -514,13 +516,21 @@ currently the following test programs are created
      (list
              (org #x0810)
       (label CALLED_FROM_BASIC)
+             ;; save zero page
+             (LDY !$ff)
+      (label ZP_LOOP_ENTRY)
+             (LDA $00,y)
+             (STA $cf00,y)
+             (DEY)
+             (BNE ZP_LOOP_ENTRY)
+
              (LDA !<COPY_DESCRIPTOR)
              (LDX !>COPY_DESCRIPTOR)
              (JSR LOOPED_COPY_REGION)
 
              ;; add code to initialize memory manage and interpreter
-             (LDA !<BC_START) ;; lb start of available memory
-             (LDX !>BC_START) ;; hb  start of available memory
+             (LDA !<BC_START)
+             (LDX !>BC_START)
              (JMP $2100)      ;; initialize memory manager & interpreter & start interpreter
 
       (label BC_START)
@@ -529,7 +539,10 @@ currently the following test programs are created
              (bc PUSH_B) (byte $ff)
              (bc PUSH_B) (byte $02)
              (bc BADD)
-             (bc POKE_B) (byte $00 $04) ;; poke result $01 into $0400 (first character on screen)
+             (bc DUP)
+             (bc POKE_B) (byte $00 $04) ;; poke result $01 (A) into $0400 (first character on screen)
+             (bc BINC)
+             (bc POKE_B) (byte $01 $04) ;; poke result $02 (B) into $0401 (second character on screen)
 
              (bc NATIVE)
 
@@ -543,6 +556,14 @@ currently the following test programs are created
       ;; (label STRING1_MSG)
       ;;        (byte 6)
       ;;        (asc "!OLLEH")
+
+             ;; restore zero page
+             (LDY !$ff)
+      (label ZP_LOOP_EXIT)
+             (LDA $cf00,y)
+             (STA $00,y)
+             (DEY)
+             (BNE ZP_LOOP_EXIT)
 
              (RTS)           ;; return to basic, but since zero page is used by interpreter, don't expect anything to work
 

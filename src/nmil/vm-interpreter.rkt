@@ -57,6 +57,7 @@
                   BC_BADD
                   BC_IMAX
                   BC_IINC
+                  BC_IDEC
                   BC_IADD
                   BC_BSHR
                   BC_ISUB)
@@ -253,6 +254,7 @@
           BC_GOTO
           BC_EXT1_CMD
           BC_IINC
+          BC_IDEC
           BC_BNOP
           BC_GC_FL
           BC_ALLOC_ARA
@@ -302,7 +304,7 @@
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (code-len (flatten just-vm-interpreter))
-                       1543
+                       1568
                        "estimated len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#

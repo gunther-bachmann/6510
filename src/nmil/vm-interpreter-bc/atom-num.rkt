@@ -5,6 +5,7 @@
          BC_BADD        ;; add two topmost bytes
          BC_IMAX        ;; get max of two topmost integers
          BC_IINC        ;; increment integer (tos)
+         BC_IDEC        ;; decrement integer (tos)
          BC_IADD        ;; add two topmost integer
          BC_BSHR        ;; shift tos byte one bit to the right
          BC_ISUB
@@ -100,6 +101,21 @@
    (label DONE__)
           (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
 
+(define-vm-function BC_IDEC
+  (list
+          (LDY ZP_RT+1)
+          (DEY)
+          (STY ZP_RT+1)
+          (CPY !$ff)
+          (BNE DONE__)
+          (LDA ZP_RT)
+          (SEC)
+          (SBC !$04)
+          (ORA !$03)
+          (STA ZP_RT)
+   (label DONE__)
+          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
+
 (define-vm-function BC_IADD
   (list
           (LDY ZP_EVAL_STACK_TAIL_TOP)               ;; get current index to tagged byte
@@ -159,6 +175,7 @@
           BC_BADD
           BC_IMAX
           BC_IINC
+          BC_IDEC
           BC_IADD
           BC_BSHR
           BC_ISUB))

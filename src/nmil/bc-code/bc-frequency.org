@@ -1,0 +1,78 @@
+#+title: bc frequency
+
+reasoning about bc usage frequency and possible space saving using huffman encoded instructions
+
+* freq
+table is not complete nor consistent but a rough sketch of a possible huffman encoded bc for bc-tree!
+| code               | freq |     |     |      |      |       |       |       |       |       |      | encoding | est. len | bytes (freq*len) | bytes (if len +2 bits) |
+|--------------------+------+-----+-----+------+------+-------+-------+-------+-------+-------+------+----------+----------+------------------+------------------------|
+| CELL_EQ_P          |    1 | \   |     |      |      |       |       |       |       |       |      |          |        9 |            1.125 |                  1.375 |
+| IINC               |    1 | / 2 | \   |      |      |       |       |       |       |       |      |          |        9 |            1.125 |                  1.375 |
+| INT_P              |    1 | \   |     |      |      |       |       |       |       |       |      |          |        9 |            1.125 |                  1.375 |
+| PUSH_L2_CAR        |    1 | / 2 | / 4 | \    |      |       |       |       |       |       |      |          |        9 |            1.125 |                  1.375 |
+| WRITE_TO_L3        |    1 | \   |     |      |      |       |       |       |       |       |      |          |        9 |            1.125 |                  1.375 |
+| CONS_PAIR_P        |    2 | / 3 |     | / 7  | \    |       |       |       |       |       |      |          |        9 |             2.25 |                   2.75 |
+| IMAX               |    2 |     | \   |      |      |       |       |       |       |       |      |          |        8 |               2. |                    2.5 |
+| POP_TO_L3          |    2 |     | / 4 | \\   |      |       |       |       |       |       |      |          |        8 |               2. |                    2.5 |
+| POP_TO_L0          |    3 |     |     | \    |      |       |       |       |       |       |      |          |        7 |            2.625 |                  3.375 |
+| POP_TO_L1          |    3 |     |     | / 6  | / 13 | \     |       |       |       |       |      |          |        7 |            2.625 |                  3.375 |
+| PUSH_L3            |    3 |     |     | \    |      |       |       |       |       |       |      |          |        7 |            2.625 |                  3.375 |
+| POP                |    4 |     |     | / 7  | \    |       |       |       |       |       |      |          |        7 |              3.5 |                    4.5 |
+| PUSH_L2            |    4 |     |     | // 8 | / 15 |       | \\    |       |       |       |      |          |        7 |              3.5 |                    4.5 |
+| T_P_RET            |    5 |     |     | \    |      |       |       |       |       |       |      |          |        7 |            4.375 |                  5.625 |
+| WRITE_TO_L2        |    5 |     |     | / 10 |      |       |       |       |       |       |      |          |        7 |            4.375 |                  5.625 |
+| CAAR               |    6 |     |     | \    |      |       |       |       |       |       |      |          |        7 |             5.25 |                   6.75 |
+| CAR                |    6 |     |     | / 12 |      |       |       |       |       |       |      |          |        7 |             5.25 |                   6.75 |
+| GOTO               |    6 |     |     | \    |      |       |       |       |       |       |      |          |        7 |             5.25 |                   6.75 |
+| PUSH_I1            |    6 |     |     | / 12 |      |       |       |       |       |       |      |          |        7 |             5.25 |                   6.75 |
+| T_P_BRA            |    6 |     |     |      | \    |       |       |       |       |       |      |          |        7 |             5.25 |                   6.75 |
+| CADR               |    7 |     |     |      | / 13 | /26   |       |       |       |       |      |          |        6 |             5.25 |                     7. |
+| CDR                |    7 |     |     |      | \    |       |       |       |       |       |      |          |        6 |             5.25 |                     7. |
+| PUSH_I0            |    8 |     |     |      | / 15 | \\    |       |       |       |       |      |          |        6 |               6. |                     8. |
+| I_Z_P              |    9 |     |     |      | \    |       |       |       |       |       |      |          |        6 |             6.75 |                     9. |
+| SWAP               |    9 |     |     |      | / 18 |       | \     |       |       |       |      |          |        6 |             6.75 |                     9. |
+| PUSH_L1_CAR        |   10 |     |     |      | \    |       |       |       |       |       |      |          |        6 |              7.5 |                    10. |
+| PUSH_L1_CDR        |   10 |     |     |      | / 20 |       | /38   |       | \\    |       |      |          |        6 |              7.5 |                    10. |
+| NIL_P_RET_L0_POP_1 |   11 |     |     |      | \    |       |       |       |       |       |      |          |        6 |             8.25 |                    11. |
+| CDDR               |   12 |     |     |      | / 13 | \     |       |       |       |       |      |          |        6 |               9. |                    12. |
+| PUSH_L0            |   12 |     |     |      |      | /25   |       | \     |       |       |      |          |        6 |               9. |                    12. |
+| WRITE_TO_L1        |   14 |     |     |      |      | // 29 |       |       |       |       |      |          |        6 |             10.5 |                    14. |
+| TAIL_CALL          |   16 |     |     |      |      |       | // 31 | \\    |       |       |      |    10010 |        5 |              10. |                    14. |
+| COONS              |   17 |     |     |      |      |       | \     |       |       |       |      |     0111 |        4 |              8.5 |                  12.75 |
+| CONS               |   17 |     |     |      |      |       | / 34  |       | \     |       |      |     0110 |        4 |              8.5 |                  12.75 |
+| PUSH_L0_CDR        |   17 |     |     |      |      |       | \     |       |       |       |      |    01011 |        5 |           10.625 |                 14.875 |
+| PUSH_L1            |   17 |     |     |      |      |       | / 34  |       | /68   | \\    |      |     0100 |        4 |              8.5 |                  12.75 |
+| WRITE_TO_L0        |   20 |     |     |      |      |       | \     |       |       |       |      |     1111 |        4 |              10. |                    15. |
+| NIL_P              |   21 |     |     |      |      |       | / 41  |       | \     |       |      |     1110 |        4 |             10.5 |                  15.75 |
+| RET                |   21 |     |     |      |      |       |       | / 46  | / 87  | \     |      |     1100 |        4 |             10.5 |                  15.75 |
+| F_P_BRA            |   26 |     |     |      |      |       |       | \     |       |       |      |     1011 |        4 |              13. |                   19.5 |
+| PUSH_NIL           |   26 |     |     |      |      |       |       | / 52  | \     |       |      |     1010 |        4 |              13. |                   19.5 |
+| CALL               |   27 |     |     |      |      |       |       | // 58 | /110  | / 197 | \    |     1000 |        4 |             13.5 |                  20.25 |
+| PUSH_L0_CAR        |   32 |     |     |      |      |       |       |       | // 70 | //158 | /355 |      000 |        3 |              12. |                    20. |
+|--------------------+------+-----+-----+------+------+-------+-------+-------+-------+-------+------+----------+----------+------------------+------------------------|
+| Sum (bytes)        |  434 |     |     |      |      |       |       |       |       |       |      |          |          |          272.125 |                380.625 |
+
+Estimated reduced size: (/ 380.625 434) ~= 0.88 (88%)
+* Result:
+- additional complexity of decoding huffman encoded bc seems not to be dominating, if bytecode is already carefully chosen and does include most common operands
+- jumping into huffman encoded bc would need another 3 bits in addition to mark bit starting position 0..7 in byte target address
+* IDEAS
+- CALL+RET =​> JUMP (reuse locals if size is <=), ensure that saves a stack frame!
+- NIL_P + F_P_BRA => NOT_NIL_P_BRA (specific for list processing) [additional byte code]
+- NOT POSSIBLE, NEEDS MORE BITS TO BE USEFUL THAN AVAILABLE
+  +or F_P_BRA + offset to branch into the opcode (e.g. 5bits) (general optimization) <- kicks lot of other commands out of 1. byte table!+
+- PUSH_NIL + SWAP => PUSH_NIL_2S (push nil as second on stack) [additional byte code]
+- ALTERNATIVE TO CALL
+  - e.g. call with function index, instead of address (e.g. using 1 byte index instead of 2 byte address)
+  - e.g. part of the index w/i call opcode (lower 4 bits?) (e.g. for very common calls, or keep quick table for function-groups)
+* next steps
+** TODO collect statistics of code usage
+** TODO collect statistics of code execution (e.g. codes that are executed in tight loops might be better candidates for runtime optimization)
+* postscript
+#+begin_src emacs-lisp
+  ;; Local Variables:
+  ;; eval: (valign-mode 1)                               ;; switch pretty table mode on
+  ;; org-pretty-entities-include-sub-superscripts: nil   ;; make sure _ is not interpreted as subscript
+  ;; fill-column: 80                                     ;; fill paragraphs with 100 char width
+  ;; End:
+  #+end_src
