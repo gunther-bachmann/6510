@@ -124,17 +124,7 @@
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   eb byte pointing to the byte past the last local on the locals stack
-- [[file:vm-memory-map.rkt::104][$f1]] :: ZP_CALL_FRAME  f1..f2
-  - len :: byte
-  - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
-  - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
-  f1..f2
 * zero-page-locations (by name)
-- [[file:vm-memory-map.rkt::104][ZP_CALL_FRAME]] :: $f1  f1..f2
-  - len :: byte
-  - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
-  - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
-  f1..f2
 - [[file:vm-memory-map.rkt::100][ZP_CALL_FRAME_TOP_MARK]] :: $ea  ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
@@ -210,11 +200,6 @@
   - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
   eb byte pointing to the byte past the last local on the locals stack
 ** call_frame
-- [[file:vm-memory-map.rkt::104][ZP_CALL_FRAME]] :: $f1  f1..f2
-  - len :: byte
-  - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
-  - assembler include :: VM_MEMORY_MANAGEMENT_CONSTANTS
-  f1..f2
 - [[file:vm-memory-map.rkt::100][ZP_CALL_FRAME_TOP_MARK]] :: $ea  ea byte pointing to current top of call-frame (is swapped in/out of call-frame page $02)
   - len :: byte
   - racket require :: (require (only-in "vm-memory-map.rkt" VM_MEMORY_MANAGEMENT_CONSTANTS))
@@ -900,10 +885,8 @@
   allocate a new call frame,
   close the current call frame (set top mark)
   and initialize the page accordingly
-  input:  ZP_CALL_FRAME
-          ZP_CALL_FRAME_TOP_MARK
-  output: ZP_CALL_FRAME
-          ZP_CALL_FRAME_TOP_MARK
+  input:  ZP_CALL_FRAME_TOP_MARK
+  output: ZP_CALL_FRAME_TOP_MARK
           Y index for first byte available as payload (03) = ZP_CALL_FRAME_TOP_MARK
 - [[file:vm-call-frame.rkt::756][VM_ALLOC_LOCALS]] ::  allocate A locals onto the locals stack
   - racket require :: (require (only-in "vm-call-frame.rkt" VM_ALLOC_LOCALS))
@@ -973,7 +956,6 @@
   output: ZP_LOCALS_LB_PTR
           ZP_LOCALS_HB_PTR
           ZP_LOCALS_TOP_MARK
-          ZP_CALL_FRAME
           ZP_CALL_FRAME_TOP_MARK
 - [[file:vm-mm-pages.rkt::180][VM_INIT_MEMORY_MANAGER]] ::  initialize memory management (paging)
   - racket require :: (require (only-in "vm-mm-pages.rkt" VM_INIT_MEMORY_MANAGER))
@@ -1541,10 +1523,8 @@
   allocate a new call frame,
   close the current call frame (set top mark)
   and initialize the page accordingly
-  input:  ZP_CALL_FRAME
-          ZP_CALL_FRAME_TOP_MARK
-  output: ZP_CALL_FRAME
-          ZP_CALL_FRAME_TOP_MARK
+  input:  ZP_CALL_FRAME_TOP_MARK
+  output: ZP_CALL_FRAME_TOP_MARK
           Y index for first byte available as payload (03) = ZP_CALL_FRAME_TOP_MARK
 - [[file:vm-call-frame.rkt::142][VM_INIT_CALL_FRAME_STACK]] ::  initialise first call frame
   - racket require :: (require (only-in "vm-call-frame.rkt" VM_INIT_CALL_FRAME_STACK))
@@ -1555,7 +1535,6 @@
   output: ZP_LOCALS_LB_PTR
           ZP_LOCALS_HB_PTR
           ZP_LOCALS_TOP_MARK
-          ZP_CALL_FRAME
           ZP_CALL_FRAME_TOP_MARK
 - [[file:vm-call-frame.rkt::116][ALLOC_LOCALS_STACK]] ::  allocate two pages for a cell-stack, store previous ZP_LOCALS_xB ptrs into these
   - racket require :: (require (only-in "vm-call-frame.rkt" ALLOC_LOCALS_STACK))

@@ -21,9 +21,7 @@
                   ZP_VM_PC)
          (only-in "../vm-runtime/vm-call-frame.rkt"
                   VM_PUSH_CALL_FRAME
-                  VM_ALLOC_LOCALS
-                  VM_POP_CALL_FRAME
-                  VM_REFCOUNT_DECR_CURRENT_LOCALS)
+                  VM_POP_CALL_FRAME)
          (only-in "../vm-runtime/vm-m1-slots.rkt"
                   DEC_REFCNT_M1_SLOT_RT__IF_PTR
                   DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
@@ -60,10 +58,10 @@
           (LDA (ZP_RP),y)                       ;; A = #locals
           (TAX)
           (JSR VM_PUSH_CALL_FRAME)
-          (LDY !$00)                            ;; index to number of locals (0)
-          (LDA (ZP_RP),y)                       ;; A = #locals
-          (AND !$0f)                            ;; mask out the number of locals
-          (JSR VM_ALLOC_LOCALS)                 ;; even if A=0 will set the top_mark and the locals appropriately
+          ;; (LDY !$00)                            ;; index to number of locals (0)
+          ;; (LDA (ZP_RP),y)                       ;; A = #locals
+          ;; (AND !$0f)                            ;; mask out the number of locals
+          ;; (JSR VM_ALLOC_LOCALS)                 ;; even if A=0 will set the top_mark and the locals appropriately
 
           ;; load zp_vm_pc with address of function bytecode
           (LDA ZP_RP)
@@ -98,7 +96,7 @@
            (DEC COUNT__)
            (BNE POP_LOOP__)
     (label RET__)
-           (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+           ;; (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
            (JSR VM_POP_CALL_FRAME)                     ;; now pop the call frame
 
     (label DONE__)
@@ -188,7 +186,7 @@
           (TYA)
           (STA (ZP_LOCALS_LB_PTR),y)          ;; clear low byte from local
           (STA (ZP_LOCALS_HB_PTR),y)          ;; clear high byte from local
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          ;; (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME)           ;; now pop the call frame
 
           (JMP VM_INTERPRETER)                ;; and continue
@@ -218,7 +216,7 @@
           (BEQ NO_RA__)
           (JSR VM_REFCOUNT_DECR_ARRAY_REGS)
    (label NO_RA__)
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          ;; (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME)             ;; maybe move the respective code into here, (save jsr)
           (JMP VM_INTERPRETER)))
 
@@ -227,7 +225,7 @@
           (LDA ZP_RT+1)
           (BNE IS_TRUE__)
           ;; don't pop false value, return it!
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          ;; (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_TRUE__)
@@ -238,7 +236,7 @@
           (LDA ZP_RT+1)
           (BNE IS_TRUE__)
           (JSR POP_EVLSTK_TAIL_TO_RT)
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          ;; (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_TRUE__)
@@ -249,7 +247,7 @@
           (LDA ZP_RT+1)
           (BEQ IS_FALSE__)
           (JSR POP_EVLSTK_TAIL_TO_RT)
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          ;; (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME)             ;; now pop the call frame
           (JMP VM_INTERPRETER)
    (label IS_FALSE__)

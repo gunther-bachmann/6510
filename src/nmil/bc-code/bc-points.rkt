@@ -215,7 +215,7 @@
                        "ptr NIL"))
 
    (inform-check-equal? (cpu-state-clock-cycles point-equal-1-state)
-                        9886))
+                        9841))
 
   (define point-equal-2-state
     (run-bc-wrapped-in-test

@@ -98,7 +98,8 @@
          (only-in "vm-interpreter-loop.rkt"
                   ZP_VM_PC)
          (only-in "vm-runtime/vm-call-frame.rkt"
-                  vm-call-frame->strings)
+                  vm-call-frame->strings
+                  vm-call-frame-return-pc)
          (only-in "vm-runtime/vm-memory-map.rkt"
                   ast-const-get
                   ZP_RT
@@ -106,7 +107,6 @@
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
                   ZP_FUNC_PTR
-                  ZP_CALL_FRAME
                   ZP_EVAL_STACK_TAIL_TOP
                   ZP_EVAL_STACK_TAIL_LB_PTR
                   ZP_EVAL_STACK_TAIL_HB_PTR))
@@ -504,9 +504,8 @@
                 [(string=? command "so")
                  (cond [(= (get-single-opcode "CALL") (peek c-state (peek-word-at-address c-state ZP_VM_PC)))
                         ;; step over, since it is a call!
+                        (define parent-pc (+ 3 (peek-word-at-address c-state ZP_VM_PC)))
                         (define state-after-call (debugger--run d-state #t))
-                        (define nc-state (car (debug-state-states state-after-call)))
-                        (define parent-pc (peek-word-at-address nc-state (peek-word-at-address nc-state ZP_CALL_FRAME)))
                         (color-display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
                         (wrap-into-bc-states d-state
                                              (debugger--bc-run-until state-after-call interpreter-loop-adr
@@ -533,7 +532,7 @@
                              (format "stop at bc pc = $~a" value)))]))]
                 [(string=? command "rur")
                  ;; get previous (stored vm_pc, to which to return to)
-                 (define parent-pc (peek-word-at-address c-state (peek-word-at-address c-state ZP_CALL_FRAME)))
+                 (define parent-pc (vm-call-frame-return-pc c-state))
                  (color-display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
                  (wrap-into-bc-states
                   d-state

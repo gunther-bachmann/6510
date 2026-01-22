@@ -1,14 +1,14 @@
 #lang racket/base
 
 (provide vm-call-frame->strings              ;; provide the call frame as string
+         vm-call-frame-return-pc             ;; get the pc of the code that is returned to
 
          VM_POP_CALL_FRAME                   ;; pop the topmost call frame
-         VM_REFCOUNT_DECR_CURRENT_LOCALS     ;; decrement refcounts of all locals (where applicable) (can be done as part of the pop frame always)
+         ;; VM_REFCOUNT_DECR_CURRENT_LOCALS     ;; decrement refcounts of all locals (where applicable) (can be done as part of the pop frame always)
          VM_PUSH_CALL_FRAME                  ;; push a call frame onto the call frame stack, initializes locals for the function being called
          VM_ALLOC_CALL_FRAME                 ;; allocate a new call frame (used to init call frame)
-         VM_ALLOC_LOCALS                     ;; deprecated
          VM_INIT_CALL_FRAME_STACK
-         
+
          vm-call-frame-code)                 ;; all code of this module
 
 #|
@@ -105,6 +105,13 @@
      (wrap-code-for-test bc vm-call-frame-code mocked-code-list)
      debug)))
 
+(define (vm-call-frame-return-pc state)
+  (define call-frame-lb-ptr (peek-word-at-address state ZP_CALL_FRAME_LB))
+  (define top-mark          (peek state ZP_CALL_FRAME_TOP_MARK))
+  (define pc-offset         (peek state (+ call-frame-lb-ptr top-mark 1)))
+  (define pc-page           (peek state (+ call-frame-lb-ptr top-mark 2)))
+  (bytes->int pc-offset pc-page))
+
 ;; report call-frame specific data:
 ;;   return-pc
 ;;   return-function-ptr
@@ -182,10 +189,6 @@
    (if (= #xfe (peek state ZP_CALL_FRAME_TOP_MARK))
        (list) ;; nothing on the stack
        (vm-call-frame-tos->string state #:locals #f))))
-
-;; deprecated
-(define-vm-function VM_ALLOC_LOCALS
-  (list (RTS)))
 
 ;; allocate a new call frame,
 ;; close the current call frame (set top mark)
@@ -475,7 +478,7 @@
    ;;        (BRK) ;; TODO
 
    (label VM_POP_CALL_FRAME)
-          ;; (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
 
           (LDY ZP_CALL_FRAME_TOP_MARK)
           ;; (CPY !$FE)
@@ -715,8 +718,7 @@
   (append VM_ALLOC_CALL_FRAME                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
           VM_PUSH_CALL_FRAME                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
           VM_POP_CALL_FRAME                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
-          VM_REFCOUNT_DECR_CURRENT_LOCALS
-          VM_ALLOC_LOCALS))
+          VM_REFCOUNT_DECR_CURRENT_LOCALS))
 
 #;(module+ test #| vm-call-frame |#
   (inform-check-equal? (code-len (flatten vm-call-frame-code))

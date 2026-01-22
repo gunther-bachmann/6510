@@ -363,7 +363,7 @@
                          "slots used:     3"
                          "next free slot: $02"))
   (inform-check-equal? (cpu-state-clock-cycles bc-tail-call-reverse-state)
-                4190)
+                4175)
   (check-equal? (vm-list->strings bc-tail-call-reverse-state (peek-word-at-address bc-tail-call-reverse-state ZP_RT))
                    (list "int $0000"
                          "int $0001"
@@ -416,5 +416,5 @@
 
 (module+ test #| code len |#
   (inform-check-equal? (code-len bc-call-ret-code)
-                       283
+                       256
                        "code len"))
