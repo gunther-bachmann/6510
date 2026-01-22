@@ -32,7 +32,9 @@
          ZP_RZ                           ;; (word) register reserved for garbage collection operations
 
          ZP_INC_COLLECTIBLE_LIST         ;; (word) ptr to the head of the incrementally collectible cell-array list
-         ZP_CALL_FRAME                   ;; (word) pointer to current call frame
+         ZP_CALL_FRAME                   ;; deprecated (word) pointer to current call frame
+         ZP_CALL_FRAME_LB                ;; (word) pointer to current call frame (low byte)
+         ZP_CALL_FRAME_HB                ;; (word) pointer to current call frame (high byte)
          ZP_CALL_FRAME_TOP_MARK          ;; (byte) top mark of call frame stack
          ZP_EVAL_STACK_TAIL_LB_PTR       ;; (word) pointer to low byte of current eval stack tail
          ZP_EVAL_STACK_TAIL_HB_PTR       ;; (word) pointer to high byte of current eval stack tail
@@ -122,9 +124,13 @@
                                               ;; @DC-ZP: ZP_LOCALS_TOP_MARK, group: locals
    (byte-const ZP_LOCALS_TOP_MARK        $eb) ;; eb byte pointing to the byte past the last local on the locals stack
                                               ;; @DC-ZP: ZP_CALL_FRAME, group: call_frame
-   (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2
+   (byte-const ZP_CALL_FRAME             $f1) ;; f1..f2 (obsolete)
 
    (byte-const ZP_RZ                     $f3) ;; f3..f4   for garbage collection (and temp use outside of gc) only
+
+   (byte-const ZP_CALL_FRAME_LB          $f5) ;; f5..f6
+   (byte-const ZP_CALL_FRAME_HB          $f7) ;; f7..f8
+
 
    ;; implementation using registers
    ;; register T = top of stack, used as main register for operations, could be a pointer to a cell or an atomic cell. if it is a pointer to a cell, the low byte here is without tag bits => (zp_rt) points to the cell
@@ -162,7 +168,9 @@
 (define ZP_RBI                    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RBI"))
 (define ZP_RCI                    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RCI"))
 (define ZP_RZ                     (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_RZ"))
-(define ZP_CALL_FRAME             (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME"))
+(define ZP_CALL_FRAME             (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME")) ;; deprecated
+(define ZP_CALL_FRAME_LB          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME_LB"))
+(define ZP_CALL_FRAME_HB          (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME_HB"))
 (define ZP_CALL_FRAME_TOP_MARK    (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_CALL_FRAME_TOP_MARK"))
 (define ZP_EVAL_STACK_TAIL_LB_PTR (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_EVAL_STACK_TAIL_LB_PTR"))
 (define ZP_EVAL_STACK_TAIL_HB_PTR (ast-const-get VM_MEMORY_MANAGEMENT_CONSTANTS "ZP_EVAL_STACK_TAIL_HB_PTR"))

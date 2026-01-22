@@ -68,6 +68,7 @@
          (all-from-out rackunit)
          wrap-bytecode-for-bc-test
          PAGE_CALL_FRAME
+         PAGE_CALL_FRAME_HB
          PAGE_LOCALS_HB
          PAGE_LOCALS_LB
          PAGE_LOCALS_HB_W
@@ -103,11 +104,12 @@
 ;; cell_stack_lb #xcf
 ;; cell_stack_hb #xce
 (define PAGE_CALL_FRAME #xcd)
-(define PAGE_LOCALS_LB #xcb)
-(define PAGE_LOCALS_LB_W #xcb00)
+(define PAGE_CALL_FRAME_HB #xcc)
+(define PAGE_LOCALS_LB #xcd)
+(define PAGE_LOCALS_LB_W #xcd00)
 (define PAGE_LOCALS_HB #xcc)
 (define PAGE_LOCALS_HB_W #xcc00)
-(define PAGE_AVAIL_0 #xca)
-(define PAGE_AVAIL_0_W #xca00)
-(define PAGE_AVAIL_1 #xc9)
-(define PAGE_AVAIL_1_W #xc900)
+(define PAGE_AVAIL_0 #xcb)
+(define PAGE_AVAIL_0_W #xcb00)
+(define PAGE_AVAIL_1 #xca)
+(define PAGE_AVAIL_1_W #xca00)

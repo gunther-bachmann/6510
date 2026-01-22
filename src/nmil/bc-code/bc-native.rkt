@@ -51,7 +51,7 @@
    add-native-state
    "4 6 -> add native"
    (inform-check-equal? (cpu-state-clock-cycles add-native-state)
-                        825)
+                        797)
    (check-equal? (vm-stack->strings add-native-state)
                  (list "stack holds 3 items"
                        "int $0001  (rt)"
@@ -94,7 +94,7 @@
    add-native-state-2
    "4 6 -> add native (alternative impl)"
    (inform-check-equal? (cpu-state-clock-cycles add-native-state-2)
-                        792)
+                        764)
    (check-equal? (vm-stack->strings add-native-state-2)
                  (list "stack holds 3 items"
                        "int $0002  (rt)"

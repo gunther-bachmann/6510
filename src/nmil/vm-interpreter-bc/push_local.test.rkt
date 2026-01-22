@@ -57,30 +57,30 @@ implement bc push/write local commands
              (byte 2)            ;; number of locals
              (bc PUSH_I1)     ;; value to return
              (bc POP_TO_L0) ;;
-             )))
+             )
+     ))
 
   (check-equal? (vm-stack->strings test-bc-pop-to-l-state)
                 (list "stack holds 3 items"
                       "int $3fff  (rt)"
                       "int $0000"
                       "ptr NIL"))
-  (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_LB_W #x03))
+  (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_LB_W #xfd))
                 #x03)
-  (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_HB_W #x03))
+  (check-equal? (peek test-bc-pop-to-l-state (+ PAGE_LOCALS_HB_W #xfd))
                 #x01)
   (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $1703"
-                         "function-ptr:     $1700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                   (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fa"
+                                 (format-hex-byte PAGE_CALL_FRAME)
+                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                         "program-counter:   $1703"
+                         "function-ptr:      $1700"
+                         (format "locals-ptr:        $~afd, $~afd (lb, hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME)(format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $0805"
-                         "return-function-ptr: $0800"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
+                         "return pc:         $0805"
+                         "return func-ptr:   $0800"
+                         "return locals-ptr: undefined"))
 
   (define test-bc-pop-to-p-state
     (run-bc-wrapped-in-test
@@ -100,28 +100,27 @@ implement bc push/write local commands
 
   (check-equal? (vm-stack->strings test-bc-pop-to-p-state)
                   (list "stack is empty or tos=nil"))
-  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_LB_W #x03))
+  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_LB_W #xfd))
                 #x03)
-  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_HB_W #x03))
+  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_HB_W #xfd))
                 #x01
                 "local0 = int 1")
-  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_LB_W #x04))
+  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_LB_W #xfe))
                 #x03)
-  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_HB_W #x04))
+  (check-equal? (peek test-bc-pop-to-p-state (+ PAGE_LOCALS_HB_W #xfe))
                 #x00 "local1 = int 0")
   (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $1705"
-                         "function-ptr:     $1700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                   (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fa"
+                                 (format-hex-byte PAGE_CALL_FRAME)
+                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                         "program-counter:   $1705"
+                         "function-ptr:      $1700"
+                         (format "locals-ptr:        $~afd, $~afd (lb, hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $0805"
-                         "return-function-ptr: $0800"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
+                         "return pc:         $0805"
+                         "return func-ptr:   $0800"
+                         "return locals-ptr: undefined"))
 
   (define test-bc-push-l-state
     (run-bc-wrapped-in-test
@@ -143,18 +142,17 @@ implement bc push/write local commands
                         "ptr NIL")
                   "int 1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-l-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $1705"
-                         "function-ptr:     $1700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 04"
+                   (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fb"
+                                 (format-hex-byte PAGE_CALL_FRAME)
+                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                         "program-counter:   $1705"
+                         "function-ptr:      $1700"
+                         (format "locals-ptr:        $~afe, $~afe (lb, hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $0803"
-                         "return-function-ptr: $0800"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
+                         "return pc:         $0803"
+                         "return func-ptr:   $0800"
+                         "return locals-ptr: undefined"))
 
   (define test-bc-push-p-state
     (run-bc-wrapped-in-test
@@ -178,18 +176,17 @@ implement bc push/write local commands
                          "ptr NIL")
                    "int -1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-p-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $1705"
-                         "function-ptr:     $1700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                   (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fa"
+                                 (format-hex-byte PAGE_CALL_FRAME)
+                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                         "program-counter:   $1705"
+                         "function-ptr:      $1700"
+                         (format "locals-ptr:        $~afd, $~afd (lb, hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $0805"
-                         "return-function-ptr: $0800"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
+                         "return pc:         $0805"
+                         "return func-ptr:   $0800"
+                         "return locals-ptr: undefined"))
 
   (define test-bc-pop-push-to-p-state
     (run-bc-wrapped-in-test
@@ -213,15 +210,14 @@ implement bc push/write local commands
                          "int $0001  (rt)"
                          "ptr NIL"))
   (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
-                   (list (format "call-frame-ptr:   $~a03, topmark: 07" (format-hex-byte PAGE_CALL_FRAME))
-                         "program-counter:  $1706"
-                         "function-ptr:     $1700"
-                         (format "locals-ptr:       $~a03, $~a03 (lb, hb), topmark: 05"
+                   (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fa"
+                                 (format-hex-byte PAGE_CALL_FRAME)
+                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                         "program-counter:   $1706"
+                         "function-ptr:      $1700"
+                         (format "locals-ptr:        $~afd, $~afd (lb, hb)"
                                  (format-hex-byte PAGE_LOCALS_LB)
                                  (format-hex-byte PAGE_LOCALS_HB))
-                         (format "slim-frame ($~a03..$~a06)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME))
-                         "return-pc:           $0805"
-                         "return-function-ptr: $0800"
-                         (format "return-locals-ptr:   $~a03, $~a03 (lb,hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB)))))
+                         "return pc:         $0805"
+                         "return func-ptr:   $0800"
+                         "return locals-ptr: undefined")))

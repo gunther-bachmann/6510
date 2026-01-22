@@ -2170,10 +2170,50 @@
   (-> cpu-state? peeker/c peeker/c exact-nonnegative-integer? cpu-state?)
   (let* ((value1 (peeker1 state))
          (value2 (peeker2 state))
-         (diff   (byte (fx- value1 value2))))
+         (diff   (fx- value1 value2))
+         (diff-b   (byte diff)))
     (struct-copy cpu-state state
-                 [flags           (set-flags-czn state (not-bit7? diff) (zero? diff) (bit7? diff))]
+                 [flags           (set-flags-czn state (<= 0 diff) (zero? diff-b) (bit7? diff-b))]
                  [program-counter (next-program-counter state pc-inc)])))
+
+(module+ test #| interpret-compare |#
+  (define (peeker-dummy result)
+    (lambda (_state) result))
+  (check-true  (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 0) (peeker-dummy 0) 1)))
+  (check-true  (zero-flag?     (interpret-compare (initialize-cpu) (peeker-dummy 0) (peeker-dummy 0) 1)))
+  (check-false (negative-flag? (interpret-compare (initialize-cpu) (peeker-dummy 0) (peeker-dummy 0) 1)))
+
+  (check-true  (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 10) (peeker-dummy 10) 1)))
+  (check-true  (zero-flag?     (interpret-compare (initialize-cpu) (peeker-dummy 10) (peeker-dummy 10) 1)))
+  (check-false (negative-flag? (interpret-compare (initialize-cpu) (peeker-dummy 10) (peeker-dummy 10) 1)))
+
+  (check-true  (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 200) (peeker-dummy 200) 1)))
+  (check-true  (zero-flag?     (interpret-compare (initialize-cpu) (peeker-dummy 200) (peeker-dummy 200) 1)))
+  (check-false (negative-flag? (interpret-compare (initialize-cpu) (peeker-dummy 200) (peeker-dummy 200) 1)))
+
+  (check-true  (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 1) (peeker-dummy 0) 1)))
+  (check-false (zero-flag?     (interpret-compare (initialize-cpu) (peeker-dummy 1) (peeker-dummy 0) 1)))
+  (check-false (negative-flag? (interpret-compare (initialize-cpu) (peeker-dummy 1) (peeker-dummy 0) 1)))
+
+  (check-true  (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 5) (peeker-dummy 2) 1)))
+  (check-false (zero-flag?     (interpret-compare (initialize-cpu) (peeker-dummy 5) (peeker-dummy 2) 1)))
+  (check-false (negative-flag? (interpret-compare (initialize-cpu) (peeker-dummy 5) (peeker-dummy 2) 1)))
+
+  (check-true  (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 200) (peeker-dummy 2) 1)))
+  (check-false (zero-flag?     (interpret-compare (initialize-cpu) (peeker-dummy 200) (peeker-dummy 2) 1)))
+  (check-true  (negative-flag? (interpret-compare (initialize-cpu) (peeker-dummy 200) (peeker-dummy 2) 1)))
+
+  (check-false (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 0) (peeker-dummy 1) 1)))
+  (check-false (zero-flag?     (interpret-compare (initialize-cpu) (peeker-dummy 0) (peeker-dummy 1) 1)))
+  (check-true  (negative-flag? (interpret-compare (initialize-cpu) (peeker-dummy 0) (peeker-dummy 1) 1)))
+
+  (check-false (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 2) (peeker-dummy 5) 1)))
+  (check-false (zero-flag?     (interpret-compare (initialize-cpu) (peeker-dummy 2) (peeker-dummy 5) 1)))
+  (check-true  (negative-flag? (interpret-compare (initialize-cpu) (peeker-dummy 2) (peeker-dummy 5) 1)))
+
+  (check-false (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 2) (peeker-dummy 200) 1)))
+  (check-false (zero-flag?     (interpret-compare (initialize-cpu) (peeker-dummy 2) (peeker-dummy 200) 1)))
+  (check-false (negative-flag? (interpret-compare (initialize-cpu) (peeker-dummy 2) (peeker-dummy 200) 1))))
 
 (define/c (interpret-crement-mem state op peeker poker pc-inc)
   (-> cpu-state? (-> exact-integer? exact-integer? exact-integer?) peeker/c poker/c exact-nonnegative-integer? cpu-state?)

@@ -73,7 +73,7 @@
 
 ;; pop a page off the free list (if available, else out of memory error)
 ;;
-;; input:  ZP_PAGE_FREE_LIST
+;; input:  ZP_PAGE_FREE_LIST, A = PAGE TYPE
 ;; usage:  A, X, Y, ZP_PAGE_REG, ZP_PAGE_FREE_LIST
 ;; output: X = allocated page
 ;;         Y = $FF
@@ -86,8 +86,10 @@
   (list
           (LDX ZP_PAGE_FREE_LIST)       ;; get current head of page free list into X
           (BEQ outof_memory__)          ;; 0? then out of memory error
-          (LDY !$ff)                    ;; offset to next free page on this page
           (STX ZP_PAGE_REG+1)           ;; store page as high byte
+          (LDY !$00)
+          (STA (ZP_PAGE_REG),y)         ;; store page type
+          (DEY)                         ;; offset to next free page on this page
           (LDA (ZP_PAGE_REG),y)         ;; load next free page (after this)
           (STA ZP_PAGE_FREE_LIST)       ;; store as new head of page free list
           (RTS)
@@ -342,4 +344,4 @@
 
 (module+ test #| module code len |#
   (inform-check-equal? (code-len vm-pages-code)
-                       106))
+                       109))

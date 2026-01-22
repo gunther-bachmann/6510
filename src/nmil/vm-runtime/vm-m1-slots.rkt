@@ -907,7 +907,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n 35 #:times 1))
-   319
+   327
    "allocate completely new page, initialize it for that profile and allocate a slot on it takes n cycles")
 
   (define test-alloc-m1-slot-to-ra-n-35-t-5 (test-alloc-m1-slot-to-ra-n 35 #:times 5))

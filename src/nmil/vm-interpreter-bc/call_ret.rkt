@@ -22,6 +22,7 @@
          (only-in "../vm-runtime/vm-call-frame.rkt"
                   VM_PUSH_CALL_FRAME
                   VM_ALLOC_LOCALS
+                  VM_POP_CALL_FRAME
                   VM_REFCOUNT_DECR_CURRENT_LOCALS)
          (only-in "../vm-runtime/vm-m1-slots.rkt"
                   DEC_REFCNT_M1_SLOT_RT__IF_PTR
@@ -213,11 +214,11 @@
 (define-vm-function BC_RET
   (list
           ;; load # locals = 0 skip this step
-          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (LDA ZP_RA)
           (BEQ NO_RA__)
           (JSR VM_REFCOUNT_DECR_ARRAY_REGS)
    (label NO_RA__)
+          (JSR VM_REFCOUNT_DECR_CURRENT_LOCALS)
           (JSR VM_POP_CALL_FRAME)             ;; maybe move the respective code into here, (save jsr)
           (JMP VM_INTERPRETER)))
 

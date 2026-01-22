@@ -231,7 +231,6 @@
                          "ptr NIL"
                          )))
 
-
 (module+ test #| ISUB |#
   (define (bc-int-minus-state a b)
     (define ra (if (< a 0) (+ #x2000 a) a))
