@@ -8,7 +8,7 @@
 
 (require "./mil-structures.rkt")
 (require (only-in threading ~>>))
-(require (only-in "../6510-utils.rkt" byte two-complement-of))
+(require (only-in "../tools/data-tools.rkt" byte two-complement-of))
 (provide interpret
          module-ctx
          (struct-out interpreter-ctx))

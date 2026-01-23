@@ -14,8 +14,6 @@
 ;;   array, list, map, struct
 
 (require syntax/parse/define
-         (only-in "../6510-utils.rkt"
-                  two-complement-of)
          (only-in "../cisc-vm/rvm-structures.rkt"
                   disassemble
                   make-vm
@@ -45,7 +43,9 @@
                   l-local
                   l-param
                   l-global
-                  l-imm))
+                  l-imm)
+         (only-in "../tools/data-tools.rkt"
+                  two-complement-of))
 
 (module+ test #| require test utils |#
   (require "../6510-test-utils.rkt"))

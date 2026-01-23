@@ -131,7 +131,7 @@
 
    (check-equal? (vm-stack->strings bc-cons-state)
                    (list "stack holds 2 items"
-                         (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                         (format "ptr[1] $~a02  (rt)" (byte->hex-string PAGE_AVAIL_0))
                          "ptr NIL"))
    (check-equal? (vm-deref-cell-pair-w->string bc-cons-state (+ PAGE_AVAIL_0_W #x02))
                     "(int $0000 . ptr NIL)"))

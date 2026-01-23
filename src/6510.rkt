@@ -5,6 +5,7 @@
 
 (require "scheme-asm/6510-addressing-utils.rkt")
 (require "6510-utils.rkt")
+(require (for-syntax "tools/data-tools.rkt"))
 (require (for-syntax "6510-utils.rkt"))
 
 (require (for-syntax "ast/6510-command.rkt"))
@@ -23,13 +24,14 @@
 (require "ops/6510.subroutine-ops.rkt")
 (require "ops/6510.stack-ops.rkt")
 (require (for-syntax "scheme-asm/6510-syntax-utils.rkt"))
-(require (only-in "util.rkt" format-hex-byte format-hex-word bytes->int))
+(require "tools/data-tools.rkt")
+(require (only-in "6510-utils.rkt" byte->hex-string word->hex-string))
 (require (only-in racket/list flatten))
 
-(provide (all-from-out "util.rkt"))
+;; (provide (all-from-out "util.rkt"))
 (provide (all-from-out "6510-utils.rkt"))
 (provide (all-from-out "ast/6510-command.rkt"))
-
+(provide (all-from-out "tools/data-tools.rkt"))
 (provide (all-from-out "ops/6510.logic-ops.rkt"))
 (provide (all-from-out "ops/6510.branch-ops.rkt"))
 (provide (all-from-out "ops/6510.arithmetic-ops.rkt"))

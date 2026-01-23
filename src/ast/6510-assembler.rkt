@@ -21,7 +21,7 @@
                   ast-org-align-command-org-alignment
                   ast-label-def-cmd
                   ast-opcode-cmd))
-(require (only-in "../6510-utils.rkt" word/c byte/c low-byte high-byte))
+(require (only-in "../tools/data-tools.rkt" word/c byte/c low-byte high-byte))
 
 (provide assemble
          assemble-to-code-list

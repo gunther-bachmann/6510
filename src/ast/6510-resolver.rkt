@@ -26,7 +26,7 @@
 (require
  (rename-in  racket/contract [define/contract define/c])
  "6510-command.rkt"
- (only-in "../6510-utils.rkt" byte/c low-byte high-byte word/c two-complement-of in-word-range? in-byte-range?)
+ (only-in "../tools/data-tools.rkt" byte/c low-byte high-byte word/c two-complement-of in-word-range? in-byte-range?)
  (only-in "6510-relocator.rkt" command-len label-string-offsets))
 
 (module+ test #| require |#

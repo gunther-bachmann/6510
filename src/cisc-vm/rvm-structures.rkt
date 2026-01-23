@@ -10,7 +10,7 @@
 (require (only-in data/collection nth set-nth length))
 (require (only-in racket/fixnum fx+ fx=))
 (require (only-in threading ~>>))
-(require (only-in "../6510-utils.rkt" two-complement-of decimal-from-two-complement))
+(require (only-in "../tools/data-tools.rkt" two-complement-of decimal-from-two-complement))
 
 (provide disassemble
          make-vm

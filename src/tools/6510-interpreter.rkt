@@ -1,5 +1,36 @@
 #lang at-exp racket
 
+(provide 6510-load
+         6510-load-multiple
+         execute-cpu-step
+         (struct-out exn:fail:cpu-interpreter)
+         initialize-cpu
+         memory->string
+         memory-list
+         peek
+         peek-pc
+         peek-pc+1
+         peek-word-at-pc+1
+         peek-word-at-address
+         -pokem
+         poke
+         print-state
+         state->string
+         reset-cpu
+         run
+         run-interpreter
+         run-interpreter-on
+         set-brk-flag clear-brk-flag
+         set-carry-flag clear-carry-flag
+         set-decimal-flag clear-decimal-flag
+         set-interrupt-flag clear-interrupt-flag
+         set-negative-flag clear-negative-flag
+         set-overflow-flag clear-overflow-flag
+         set-zero-flag clear-zero-flag
+         with-accumulator
+         with-program-counter
+         reset-cycles
+         with-flags)
 
 #|
 
@@ -49,52 +80,31 @@
 ;; poke 1,0 = disable OS (default value 1,1)
 
 ;; (require (only-in racket/fixnum make-fxvector fxvector-ref fxvector-set!))
-(require (only-in threading ~>>))
-(require "../6510-utils.rkt")
-(require "../ast/6510-command.rkt")
-(require "../ast/6510-assembler.rkt")
-(require scribble/srcdoc)
-(require (for-doc scribble/base scribble/manual))
-(require data/pvector)
-(require data/collection)
-(require racket/fixnum)
-(require (rename-in  racket/contract [define/contract define/c]))
-(require (only-in ansi-color color-displayln))
+(require (only-in threading ~>>)
+         "../6510-utils.rkt"
+         "../ast/6510-command.rkt"
+         "../ast/6510-assembler.rkt"
+         (only-in "../tools/data-tools.rkt"
+                  bytes->int
+                  word/c
+                  byte/c
+                  word
+                  byte
+                  high-byte
+                  low-byte
+                  bit7?
+                  bit0?
+                  two-complement-of)
+         scribble/srcdoc
+         (for-doc scribble/base scribble/manual)
+         data/pvector
+         data/collection
+         racket/fixnum
+         (rename-in racket/contract [define/contract define/c])
+         (only-in ansi-color color-displayln))
 
 (module+ test #| include rackunit |#
   (require rackunit))
-
-(provide 6510-load
-         6510-load-multiple
-         execute-cpu-step
-         (struct-out exn:fail:cpu-interpreter)
-         initialize-cpu
-         memory->string
-         memory-list
-         peek
-         peek-pc
-         peek-pc+1
-         peek-word-at-pc+1
-         peek-word-at-address
-         -pokem
-         poke
-         print-state
-         state->string
-         reset-cpu
-         run
-         run-interpreter
-         run-interpreter-on
-         set-brk-flag clear-brk-flag
-         set-carry-flag clear-carry-flag
-         set-decimal-flag clear-decimal-flag
-         set-interrupt-flag clear-interrupt-flag
-         set-negative-flag clear-negative-flag
-         set-overflow-flag clear-overflow-flag
-         set-zero-flag clear-zero-flag
-         with-accumulator
-         with-program-counter
-         reset-cycles
-         with-flags)
 
 (struct cpu-state (program-counter ;; pointer to current program execution (16 bit)
                    flags           ;; flag register (8 bit)
@@ -184,26 +194,6 @@
   (-> cpu-state? cpu-state?)
   (struct-copy cpu-state state
                [program-counter (peek-word-at-address state #xFFFC)]))
-
-;; is bit7 set in value?
-(define/c (bit7? value)
-  (-> exact-nonnegative-integer? boolean?)
-  (not (not-bit7? value)))
-
-;; is bit0 set in value?
-(define/c (bit0? value)
-  (-> exact-nonnegative-integer? boolean?)
-  (not (not-bit0? value)))
-
-;; is bit7 blank in value?
-(define/c (not-bit7? value)
-  (-> exact-nonnegative-integer? boolean?)
-  (zero? (bitwise-and #x80 value)))
-
-;; is bit0 blank in value?
-(define/c (not-bit0? value)
-  (-> exact-nonnegative-integer? boolean?)
-  (zero? (bitwise-and #x1 value)))
 
 (define peeker/c (-> cpu-state? byte/c))
 
@@ -473,7 +463,7 @@
          [low-ret  (peek-stack+1 state)]
          [high-ret (peek-stack+2 state)])
     (struct-copy cpu-state state
-                 [program-counter (word (fx+ 1 (absolute high-ret low-ret)))]
+                 [program-counter (word (fx+ 1 (bytes->int low-ret high-ret)))]
                  [stack-pointer   (byte (fx+ sp 2))])))
 
 ;; https://www.c64-wiki.com/wiki/control_character
@@ -992,28 +982,28 @@
 
 (define/c (c64-rom-routine? high low)
   (-> byte? byte? boolean?)
-  (or (= (absolute high low) #xFFD2) ;; kernel output character
-     (= (absolute high low) #xAB1E) ;; basic output string
-     (= (absolute high low) #xBDCD) ;; basic output integer
+  (or (= (bytes->int low high) #xFFD2) ;; kernel output character
+     (= (bytes->int low high) #xAB1E) ;; basic output string
+     (= (bytes->int low high) #xBDCD) ;; basic output integer
      ))
 
 ;; since the 6502/6510 has its cpu stack located 0100-01ff, it should be safe to use JSR to these locations
 ;; for some "magic" functionality 
 (define/c (magic-interpreter-routine? high low)
   (-> byte? byte? boolean?)
-  (or (= (absolute high low) #x0100) ;; reset cpu cycles
+  (or (= (bytes->int low high) #x0100) ;; reset cpu cycles
      ))
 
 (define/c (interpret-c64-rom-routine high low state (verbose #t) (string-output-function interpreter-output-function))
   (->* [byte? byte? cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
-  (case (absolute high low)
+  (case (bytes->int low high)
     [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
      (~>> (cpu-state-accumulator state)
          (display-c64charcode _ state verbose string-output-function))]
     [(#xAB1E)
      (display-c64zerotermstring
-      (absolute (cpu-state-y-index state)
-                (cpu-state-accumulator state))
+      (bytes->int (cpu-state-accumulator state)
+                 (cpu-state-y-index state))
       state
       verbose
       string-output-function)]
@@ -1021,7 +1011,7 @@
      (when verbose
        (string-output-function
         (number->string
-         (absolute (cpu-state-accumulator state) (cpu-state-x-index state)))))
+         (bytes->int (cpu-state-x-index state) (cpu-state-accumulator state)))))
      state]))
 
 ;; interpret JSR absolute (jump to subroutine) command
@@ -1032,12 +1022,12 @@
          (let ([after-rom-state (interpret-c64-rom-routine high low state verbose string-output-function)])
            (struct-copy cpu-state after-rom-state [program-counter (next-program-counter after-rom-state 3)]))]
         [(magic-interpreter-routine? high low)
-         (case (absolute high low)
+         (case (bytes->int low high)
            [(#x0100) (struct-copy cpu-state state
                                   [program-counter (word (fx+ 3 (cpu-state-program-counter state)))]
                                   [clock-cycles 0])])]
         [else
-         (let* ([new-program-counter (absolute high low)]
+         (let* ([new-program-counter (bytes->int low high)]
                 [return-address (word (fx+ 2 (cpu-state-program-counter state)))]
                 [sp (cpu-state-stack-pointer state)])
            (struct-copy cpu-state (~>> state
@@ -1102,7 +1092,7 @@
   (if (c64-rom-routine? high low)
       (interpret-rts (interpret-c64-rom-routine high low state verbose string-output-function))
       (struct-copy cpu-state state
-                   [program-counter (word (absolute high low))])))
+                   [program-counter (word (bytes->int low high))])))
 
 ;; derive overflow by looking at accumulator, operand and result
 (define/c (derive-overflow acc oper new-acc)
@@ -1154,8 +1144,8 @@
   (-> cpu-state? cpu-state?)
   (let* ((old-sp              (cpu-state-stack-pointer state))
          (new-flags           (peek-stack+3 state))
-         (new-program-counter (absolute (peek-stack+2 state)
-                                        (peek-stack+1 state))))
+         (new-program-counter (bytes->int (peek-stack+1 state)
+                                        (peek-stack+2 state))))
     (struct-copy cpu-state state
                  [stack-pointer   (byte (fx+ old-sp 3))]
                  [flags           new-flags]
@@ -1176,7 +1166,7 @@
          (old-pc          (cpu-state-program-counter state)))
     (~>>
      (struct-copy cpu-state state
-                  [program-counter (absolute (peek state #xFFFE) (peek state #xFFFF))]
+                  [program-counter (bytes->int (peek state #xFFFF) (peek state #xFFFE))]
                   [flags           (-set-brk-flag (cpu-state-flags state))])
      (-push-on-stack old-status-byte _)
      (-push-on-stack (high-byte old-pc) _)
@@ -1483,8 +1473,8 @@
   (->* [cpu-state? word/c] [boolean?] word/c)
   (let* [(low-byte  (peek state address))
          (high-byte (peek state (word (fx+ address 1))))]
-    (absolute (if rev-endian low-byte high-byte)
-              (if rev-endian high-byte low-byte))))
+    (bytes->int (if rev-endian high-byte low-byte)
+              (if rev-endian low-byte high-byte))))
 
 ;; return word (2 bytes) stored at program-counter + 1
 (define/c (peek-word-at-pc+1 state)
@@ -2105,6 +2095,18 @@
                  [flags           (set-flags-zn state (zero? value) (< 127 value))]
                  [program-counter (next-program-counter state 1)])))
 
+(module+ test #| t_a |#
+  (check-eq? (cpu-state-accumulator
+              (interpret-t_a
+               (struct-copy cpu-state (initialize-cpu) [x-index 10])
+               cpu-state-x-index))
+             10)
+  (check-eq? (cpu-state-accumulator
+              (interpret-t_a
+               (struct-copy cpu-state (initialize-cpu) [y-index 11])
+               cpu-state-y-index))
+             11))
+
 (define/c (interpret-t_s state source)
   (-> cpu-state? (-> cpu-state? byte/c) cpu-state?)
   (let ([value (source state)])
@@ -2144,18 +2146,6 @@
                  [flags           (set-flags-zn state (zero? value) (bit7? value))]
                  [program-counter (next-program-counter state 1)])))
 
-(module+ test #| t_a |#
-  (check-eq? (cpu-state-accumulator
-              (interpret-t_a
-               (struct-copy cpu-state (initialize-cpu) [x-index 10])
-               cpu-state-x-index))
-             10)
-  (check-eq? (cpu-state-accumulator
-              (interpret-t_a
-               (struct-copy cpu-state (initialize-cpu) [y-index 11])
-               cpu-state-y-index))
-             11))
-
 (define/c (interpret-jmp-ind state (verbose #t) (string-output-function interpreter-output-function))
   (->* [cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (let* ((new-abs-address (peek-word-at-address state (peek-word-at-pc+1 state)))
@@ -2176,7 +2166,7 @@
                  [flags           (set-flags-czn state (<= 0 diff) (zero? diff-b) (bit7? diff-b))]
                  [program-counter (next-program-counter state pc-inc)])))
 
-(module+ test #| interpret-compare |#
+(module+ test #| compare |#
   (define (peeker-dummy result)
     (lambda (_state) result))
   (check-true  (carry-flag?    (interpret-compare (initialize-cpu) (peeker-dummy 0) (peeker-dummy 0) 1)))
@@ -2265,7 +2255,7 @@
                 (set-flags-cznv state carry-flag zero-flag negative-flag overflow-flag)]
                [program-counter (next-program-counter state pc-inc)]))
 
-(module+ test
+(module+ test #| bcd-- |#
   (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x10) (lambda (_s) #x01) 2))
                 #x09)
   (check-equal? (cpu-state-accumulator (bcd-- (with-accumulator (initialize-cpu) #x00) (lambda (_s) #x01) 2))
@@ -2302,7 +2292,7 @@
                 (set-flags-cznv state carry-flag zero-flag negative-flag overflow-flag)]
                [program-counter (next-program-counter state pc-inc)]))
 
-(module+ test
+(module+ test #| bcd-+ |#
   (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x10) (lambda (_s) #x01) 2))
                 #x11)
   (check-equal? (cpu-state-accumulator (bcd-+ (with-accumulator (initialize-cpu) #x19) (lambda (_s) #x01) 2))
@@ -2321,7 +2311,6 @@
   (check-true (overflow-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (_s) #x01) 2)))
   (check-true (carry-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (_s) #x01) 2)))
   (check-true (negative-flag? (bcd-+ (with-accumulator (initialize-cpu) #x99) (lambda (_s) #x01) 2))))
-
 
 (define (interpreter-output-function str)
   (display str))

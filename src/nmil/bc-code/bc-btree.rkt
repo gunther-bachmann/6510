@@ -162,7 +162,7 @@
    "make btree root"
    (check-equal? (vm-stack->strings btree-make-root-state)
                  (list "stack holds 2 items"
-                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                       (format "ptr[1] $~a02  (rt)" (byte->hex-string PAGE_AVAIL_0))
                        "ptr NIL")))
 
   (define btree-make-root-2-state

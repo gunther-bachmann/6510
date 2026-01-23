@@ -7,7 +7,8 @@
 |#
 
 (require (rename-in  racket/contract [define/contract define/c]))
-(require (only-in "../6510-utils.rkt" word/c byte/c word->hex-string))
+(require (only-in "./data-tools.rkt" word/c byte/c ))
+(require (only-in "../6510-utils.rkt" word->hex-string))
 (require (only-in "./6510-emacs-integration.rkt" 6510-debugger--execute-elisp-expression))
 
 (provide

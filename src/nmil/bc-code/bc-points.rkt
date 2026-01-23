@@ -55,7 +55,7 @@
    "100 500 -> point create"
    (check-equal? (vm-stack->strings point-create-state)
                  (list "stack holds 2 items"
-                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                       (format "ptr[1] $~a02  (rt)" (byte->hex-string PAGE_AVAIL_0))
                        "ptr NIL"))
    (check-equal? (vm-slot->string point-create-state (+ PAGE_AVAIL_0_W #x02))
                  "ptr[1] cell-array of len 3")

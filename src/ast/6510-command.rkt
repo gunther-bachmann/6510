@@ -5,7 +5,7 @@
 
 |#
 
-(require (only-in "../6510-utils.rkt" word/c byte/c))
+(require (only-in "../tools/data-tools.rkt" word/c byte/c))
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (provide (struct-out ast-program)

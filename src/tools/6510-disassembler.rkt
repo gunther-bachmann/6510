@@ -11,7 +11,8 @@
 
 (require (only-in threading ~>>))
 (require (rename-in  racket/contract [define/contract define/c]))
-(require "../6510-utils.rkt")
+(require (only-in "../tools/data-tools.rkt" word/c byte/c decimal-from-two-complement))
+(require (only-in "../6510-utils.rkt" byte->hex-string word->hex-string))
 (require (only-in "6510-interpreter.rkt"
                   6510-load
                   cpu-state?

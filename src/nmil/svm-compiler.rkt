@@ -55,13 +55,15 @@
                   sPOP_TO_PARAMn
                   sNIL?-RET-PARAMc)
          (only-in "../util.rkt"
-                  nested->list
-                  low-byte
-                  high-byte
-                  bytes->int)
+                  nested->list)
          "./ast.rkt"
          "./parse.rkt")
-(require/typed "./vm-bc-opcode-definitions.rkt" [get-single-opcode (-> String Byte)])
+(require/typed "./vm-bc-opcode-definitions.rkt"
+  [get-single-opcode (-> String Byte)])
+(require/typed "../tools/data-tools.rkt"
+  [low-byte (-> Integer Byte)]
+  [high-byte (-> Integer Byte)]
+  [bytes->int (-> Byte Byte Integer)])
 
 (provide svm-compile svm-generate (struct-out generation-artifact-) generation-artifact--bytes make-generation-artifact)
 

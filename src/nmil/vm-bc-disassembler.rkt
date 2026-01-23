@@ -9,10 +9,11 @@
 
  |#
 
-(require (only-in "../util.rkt"
-                  bytes->int
-                  format-hex-byte
-                  format-hex-word)
+(require (only-in "../6510-utils.rkt"
+                  byte->hex-string
+                  word->hex-string)
+         (only-in "../tools/data-tools.rkt"
+                  bytes->int)
          (only-in "./vm-bc-opcode-definitions.rkt"
                   bc-opcode-definitions
                   od-simple-bc?
@@ -37,7 +38,7 @@
             (find-dyn-opcode-def bc_p1 (od-extended-bc--sub-commands dyn-opcode-def))
             bc_p1
             bc_p2))]
-    [else (raise-user-error (format "unknown bc: ~a" (format-hex-byte bc)))]))                          ;; default is 1 byte (for regular byte code command)
+    [else (raise-user-error (format "unknown bc: ~a" (byte->hex-string bc)))]))                          ;; default is 1 byte (for regular byte code command)
 
 (module+ test #| disassemble |#
   (require "../6510-test-utils.rkt")

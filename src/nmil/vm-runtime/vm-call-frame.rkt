@@ -22,9 +22,15 @@
 (require (only-in racket/list range)
          (only-in racket/string string-join)
          "../../6510.rkt"
+         (only-in "../../6510-utils.rkt"
+                  word->hex-string
+                  byte->hex-string)
          (only-in "../../tools/6510-interpreter.rkt"
                   peek-word-at-address
                   peek)
+         (only-in "../../tools/data-tools.rkt"
+                  high-byte
+                  bytes->int)
          (only-in "../vm-definition-utils.rkt"
                   define-vm-function
                   define-vm-function-wol)
@@ -131,13 +137,13 @@
   (define func-offset       (peek state (+ call-frame-hb-ptr top-mark 2)))
   (define func-page         (+ pc-page (if (> func-offset pc-offset) -1 0)))
   (define func              (+ func-offset (* 256 func-page)))
-  (append (list (format "return pc:         $~a" (format-hex-word pc))
-                (format "return func-ptr:   $~a" (format-hex-word func))
+  (append (list (format "return pc:         $~a" (word->hex-string pc))
+                (format "return func-ptr:   $~a" (word->hex-string func))
                 (if (zero? locals-offset)
                     "return locals-ptr: undefined"
                     (format "return locals-ptr: $~a, $~a (lb, hb)"
-                            (format-hex-word locals-lb-ptr)
-                            (format-hex-word locals-hb-ptr))))
+                            (word->hex-string locals-lb-ptr)
+                            (word->hex-string locals-hb-ptr))))
 
           (if locals-too
               (vm-call-frame-locals->string state #:addr locals-addr)
@@ -165,8 +171,8 @@
                   local
                   (vm-cell->string (peek state lb-loc)
                                   (peek state hb-loc))
-                  (format-hex-word lb-loc)
-                  (format-hex-word hb-loc))
+                  (word->hex-string lb-loc)
+                  (word->hex-string hb-loc))
                  (format
                   "local ~a: ~a"
                   local
@@ -178,14 +184,14 @@
 (define (vm-call-frame->strings state)
   (append
    (list (format "call-frame-ptr:    $~a, $~a (lb, hb), topmark: ~a"
-                 (format-hex-word (peek-word-at-address state ZP_CALL_FRAME_LB))
-                 (format-hex-word (peek-word-at-address state ZP_CALL_FRAME_HB))
-                 (format-hex-byte (peek state ZP_CALL_FRAME_TOP_MARK)))
-         (format "program-counter:   $~a" (format-hex-word (peek-word-at-address state ZP_VM_PC)))
-         (format "function-ptr:      $~a" (format-hex-word (peek-word-at-address state ZP_FUNC_PTR)))
+                 (word->hex-string (peek-word-at-address state ZP_CALL_FRAME_LB))
+                 (word->hex-string (peek-word-at-address state ZP_CALL_FRAME_HB))
+                 (byte->hex-string (peek state ZP_CALL_FRAME_TOP_MARK)))
+         (format "program-counter:   $~a" (word->hex-string (peek-word-at-address state ZP_VM_PC)))
+         (format "function-ptr:      $~a" (word->hex-string (peek-word-at-address state ZP_FUNC_PTR)))
          (format "locals-ptr:        $~a, $~a (lb, hb)"
-                 (format-hex-word (bytes->int (peek state ZP_LOCALS_LB_PTR) (peek state (add1 ZP_LOCALS_LB_PTR))))
-                 (format-hex-word (bytes->int (peek state ZP_LOCALS_HB_PTR) (peek state (add1 ZP_LOCALS_HB_PTR))))))
+                 (word->hex-string (bytes->int (peek state ZP_LOCALS_LB_PTR) (peek state (add1 ZP_LOCALS_LB_PTR))))
+                 (word->hex-string (bytes->int (peek state ZP_LOCALS_HB_PTR) (peek state (add1 ZP_LOCALS_HB_PTR))))))
    (if (= #xfe (peek state ZP_CALL_FRAME_TOP_MARK))
        (list) ;; nothing on the stack
        (vm-call-frame-tos->string state #:locals #f))))
@@ -289,11 +295,11 @@
                  "topmark is set to $FE")
    (check-equal? (vm-page->strings alloc-call-frame-2-test (- PAGE_AVAIL_1 2))
                  (list "page-type:      call-frame page"
-                       (format "previous page:  $~a" (format-hex-byte PAGE_AVAIL_1)))
+                       (format "previous page:  $~a" (byte->hex-string PAGE_AVAIL_1)))
                  "call frame page (hb)")
    (check-equal? (vm-page->strings alloc-call-frame-2-test (- PAGE_AVAIL_0 2))
                  (list "page-type:      call-frame page"
-                       (format "previous page:  $~a" (format-hex-byte PAGE_AVAIL_0)))
+                       (format "previous page:  $~a" (byte->hex-string PAGE_AVAIL_0)))
                  "call frame page (lb)")))
 
 ;; push a call frame and allocate X locals
@@ -450,7 +456,7 @@
    (check-equal? (vm-call-frame-tos->string push-call-frame-2-test)
                  (list "return pc:         $8104"
                        "return func-ptr:   $8080"
-                       (format "return locals-ptr: $~aff, $~aff (lb, hb)" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME_HB))
+                       (format "return locals-ptr: $~aff, $~aff (lb, hb)" (byte->hex-string PAGE_CALL_FRAME) (byte->hex-string PAGE_CALL_FRAME_HB))
                        "local 0: ptr NIL"
                        "local 1: ptr NIL"
                        "local 2: byte $01"

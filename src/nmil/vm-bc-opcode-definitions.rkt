@@ -28,6 +28,8 @@
 |#
 
 (require (for-syntax racket/base)
+         (for-syntax (only-in "../scheme-asm/6510-addressing-utils.rkt"
+                             retrieve-meta-info-from))
          (only-in racket/contract
                   define/contract
                   struct-guard/c
@@ -40,6 +42,9 @@
                   flatten
                   empty?
                   drop)
+         (only-in "../6510-utils.rkt"
+                  word->hex-string
+                  byte->hex-string)
          (only-in "../ast/6510-command.rkt"
                   ast-command?
                   ast-bytes-cmd
@@ -47,14 +52,10 @@
                   ast-unresolved-bytes-cmd
                   ast-resolve-byte-scmd
                   ast-resolve-word-scmd)
-         (for-syntax (only-in "../scheme-asm/6510-addressing-utils.rkt"
-                             retrieve-meta-info-from))
          (only-in "../tools/6510-disassembler.rkt"
                   info-for-label)
-         (only-in "../util.rkt"
-                  bytes->int
-                  format-hex-byte
-                  format-hex-word)
+         (only-in "../tools/data-tools.rkt"
+                  bytes->int)
          (only-in "./vm-interpreter-bc/arrays.rkt"
                   BC_DEC_RBI_NZ_P_BRA            ;; decrement cell array index register RBI and branch if NOT Zero
                   BC_DEC_RAI                     ;; decrement cell array index register RAI
@@ -238,16 +239,16 @@
 
    (define-bc VM_INTERPRETER_INC_PC    _                    #x0a 1 "reserved")          ;; reserved
    (define-bc BC_PUSH_I                PUSH_I               #x0c 3                      ;; stack: :: -> m[pc+1]<<8+m[pc+2]::
-     (lambda (_l _bc bc-p1 bc-p2) (format "push int $~a" (format-hex-word (bytes->int bc-p1 bc-p2)))))
+     (lambda (_l _bc bc-p1 bc-p2) (format "push int $~a" (word->hex-string (bytes->int bc-p1 bc-p2)))))
    (define-bc BC_INT_P                 INT_P                #x0e 1 "int?")              ;; stack: a:: -> bool::
    (define-bc BC_WRITE_LOCAL_SHORT     WRITE_L0             #x10 1 "write l0")          ;; stack: a:: -> l0::, ensure opcode & #x06 = 0
    (define-bc BC_WRITE_LOCAL_SHORT     WRITE_L1             #x12 1 "write l1")          ;; stack: a:: -> l1::, ensure opcode & #x06 = 2
    (define-bc BC_WRITE_LOCAL_SHORT     WRITE_L2             #x14 1 "write l2")          ;; stack: a:: -> l2::, ensure opcode & #x06 = 4
    (define-bc BC_WRITE_LOCAL_SHORT     WRITE_L3             #x16 1 "write l3")          ;; stack: a:: -> l3::, ensure opcode & #x06 = 6
    (define-bc BC_T_P_BRA               T_P_BRA              #x18 2                      ;; stack: b:: -> ::, pc+=signed m[pc+1]
-     (lambda (_l _bc bc-p1 _bc-p2) (format "branch on true? by $~a" (format-hex-byte bc-p1))))
+     (lambda (_l _bc bc-p1 _bc-p2) (format "branch on true? by $~a" (byte->hex-string bc-p1))))
    (define-bc BC_F_P_BRA               F_P_BRA              #x1a 2                      ;; stack: b:: -> ::, pc+=signed m[pc+1]
-     (lambda (_l _bc bc-p1 _bc-p2) (format "branch on false? by $~a" (format-hex-byte bc-p1))))
+     (lambda (_l _bc bc-p1 _bc-p2) (format "branch on false? by $~a" (byte->hex-string bc-p1))))
    (define-bc BC_F_P_RET               F_P_RET              #x1c 1 "ret on false?")     ;; stack: b:: -> ::, pc:=previous call frame
    (define-bc BC_DUP                   DUP                  #x1e 1 "dup")               ;; stack: a:: -> a:a::
    (define-bc BC_POP_TO_LOCAL_SHORT    POP_TO_L0            #x20 1 "pop to l0")         ;; l0 := a, stack: a:: -> ::, ensure opcode & #x06 = 0
@@ -258,14 +259,14 @@
    (define-bc BC_PUSH_AF               PUSH_AF              #x2a 1 "push array field")  ;; stack: y:ca:: -> (ca),y::
    (define-bc BC_POP_TO_AF             POP_TO_AF            #x2c 1 "pop to array field");; (ca),y := a, stack: y:ca:a -> ::
    (define-bc BC_PUSH_B                PUSH_B               #x2e 2                      ;; stack: :: -> m[pc+1]::
-     (lambda (_l _bc bc-p1 _bc_p2) (format "push byte $~a" (format-hex-byte bc-p1))))
+     (lambda (_l _bc bc-p1 _bc_p2) (format "push byte $~a" (byte->hex-string bc-p1))))
    (define-bc BC_WRITE_TO_LOCAL_SHORT  WRITE_TO_L0          #x30 1 "write to l0")       ;; l0:=tos, stack: a:: -> a::, ensure opcode & #x06 = 0
    (define-bc BC_WRITE_TO_LOCAL_SHORT  WRITE_TO_L1          #x32 1 "write to l1")       ;; l1:=tos, stack: a:: -> a::, ensure opcode & #x06 = 2
    (define-bc BC_WRITE_TO_LOCAL_SHORT  WRITE_TO_L2          #x34 1 "write to l2")       ;; l2:=tos, stack: a:: -> a::, ensure opcode & #x06 = 4
    (define-bc BC_WRITE_TO_LOCAL_SHORT  WRITE_TO_L3          #x36 1 "write to l3")       ;; l3:=tos, stack: a:: -> a::, ensure opcode & #x06 = 6
    (define-bc BC_BINC                  BINC                 #x38 1 "byte inc")          ;; stack: a:: -> a+1::
    (define-bc BC_NZ_P_BRA              NZ_P_BRA             #x3a 2                      ;; on branch, stack: a:: -> a::, on no branch, stack: a:: -> ::, pc+=signed m[pc+1]
-     (lambda (_l _bc bc-p1 _bc-p2) (format "branch on not zero? by $~a" (format-hex-byte bc-p1))))
+     (lambda (_l _bc bc-p1 _bc-p2) (format "branch on not zero? by $~a" (byte->hex-string bc-p1))))
    (define-bc BC_CELL_EQ_P             CELL_EQ_P            #x3c 1 "cell eq?")          ;; stack: a:b:: -> a==b::
    (define-bc BC_F_P_RET_F             F_P_RET_F            #x3e 1 "ret false on false?");; stack: b:: -> ::
    (define-bc VM_INTERPRETER_INC_PC    _                    #x40 1 "reserved")          ;; reserved
@@ -284,14 +285,14 @@
    (define-bc BC_CONS_PAIR_P           CONS_PAIR_P          #x5a 1 "pair?")             ;; stack: l:: -> b::
    (define-bc BC_T_P_RET               T_P_RET              #x5c 1 "ret on true?")      ;;
    (define-bc BC_Z_P_BRA               Z_P_BRA              #x5e 2                      ;; stack: a:: -> ::, pc+=m[pc+1]
-     (lambda (_l _bc bc-p1 _bc-p2) (format "branch on zero? by $~a" (format-hex-byte bc-p1))))
+     (lambda (_l _bc bc-p1 _bc-p2) (format "branch on zero? by $~a" (byte->hex-string bc-p1))))
    (define-bc BC_SET_ARRAY_FIELD       SET_AF0              #x60 1 "set array field 0") ;; ensure opcode & #x06 = 0
    (define-bc BC_SET_ARRAY_FIELD       SET_AF1              #x62 1 "set array field 1") ;; ensure opcode & #x06 = 2
    (define-bc BC_SET_ARRAY_FIELD       SET_AF2              #x64 1 "set array field 2") ;; ensure opcode & #x06 = 4
    (define-bc BC_SET_ARRAY_FIELD       SET_AF3              #x66 1 "set array field 3") ;; ensure opcode & #x06 = 6
    (define-bc BC_CALL                  CALL                 #x68 3                      ;;
      (lambda (labels _bc bc-p1 bc-p2)
-       (format "call $~a ~a" (format-hex-word (add1 (bytes->int bc-p1 bc-p2))) ;; add 1 because byte code starts there (after #locals)
+       (format "call $~a ~a" (word->hex-string (add1 (bytes->int bc-p1 bc-p2))) ;; add 1 because byte code starts there (after #locals)
                (info-for-label (number->string (bytes->int bc-p1 bc-p2) 16) labels))))
    (define-bc BC_TAIL_CALL             TAIL_CALL           #x6a 1 "tail call")          ;;
    (define-bc BC_BDEC                  BDEC                #x6c 1 "byte dec")           ;; stack: a:: -> a-1::
@@ -301,7 +302,7 @@
    (define-bc BC_PUSH_INT2             PUSH_I2             #x74 1 "push int 2")         ;; stack: :: -> 2::, ensure opcode & #x06 = 4
    (define-bc BC_PUSH_INTm1            PUSH_IM1            #x76 1 "push int -1")        ;; stack: :: -> -1::, ensure opcode & #x06 = 6
    (define-bc BC_GOTO                  GOTO                #x78 2                       ;; pc+=m[pc+1]
-     (lambda (_l _bc bc-p1 _bc-p2) (format "goto relative by $~a" (format-hex-byte bc-p1))))
+     (lambda (_l _bc bc-p1 _bc-p2) (format "goto relative by $~a" (byte->hex-string bc-p1))))
    (define-bc BC_RET                   RET                 #x7a 1 "ret")                ;;
    (define-bc BC_BNOP                  BNOP                #x7c 1 "nop")                ;;
    (define-bc BC_CDR                   CDR                 #x7e 1 "cdr")                ;; stack: a++l:: -> l::
@@ -326,7 +327,7 @@
    (define-bc BC_PUSH_LX_CAR           PUSH_L2_CAR         #xa4 1 "push (car l2)")      ;; stack: :: -> car(l2)::, ensure opcode & #x06 = 4
    (define-bc BC_PUSH_LX_CAR           PUSH_L3_CAR         #xa6 1 "push (car l3)")      ;; stack: :: -> car(l3)::, ensure opcode & #x06 = 6
    (define-bc BC_DEC_RBI_NZ_P_BRA      DEC_RBI_NZ_P_BRA    #xa8 2                       ;;
-     (lambda (_l _bc bc-p1 _bc-p2) (format "dec rbi, not zero? -> branch by  $~a" (format-hex-byte bc-p1))))
+     (lambda (_l _bc bc-p1 _bc-p2) (format "dec rbi, not zero? -> branch by  $~a" (byte->hex-string bc-p1))))
    (define-bc BC_WRITE_RA              WRITE_RA            #xaa 1 "write ra")           ;; stack: a:: -> ra::
    (define-bc BC_WRITE_TO_RAI          WRITE_TO_RAI        #xac 1 "write byte to rai")  ;; rai:=tos, stack: i:: -> ::
    (define-bc BC_DEC_RAI               DEC_RAI             #xae 1 "dec rai")            ;;

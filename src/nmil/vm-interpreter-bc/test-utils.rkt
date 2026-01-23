@@ -19,8 +19,15 @@
                   peek-word-at-address
                   memory-list
                   cpu-state-clock-cycles)
-         (only-in "../vm-runtime/vm-call-frame.rkt"
-                  vm-call-frame->strings)
+         (only-in "../vm-bc-opcode-definitions.rkt"
+                  bc
+                  full-extended-optable-lb
+                  full-extended-optable-hb
+                  full-interpreter-opcode-table
+                  filtered-opcode-definitions
+                  build-extended-optable-hb
+                  build-extended-optable-lb
+                  build-interpreter-optable)
          (only-in "../vm-inspector-utils.rkt"
                   shorten-cell-strings
                   shorten-cell-string
@@ -31,17 +38,6 @@
                   vm-cell-at->string
                   vm-cell->string
                   vm-deref-cell-pair-w->string)
-         (only-in "../vm-interpreter.rkt"
-                  just-vm-interpreter)
-         (only-in "../vm-bc-opcode-definitions.rkt"
-                  bc
-                  full-extended-optable-lb
-                  full-extended-optable-hb
-                  full-interpreter-opcode-table
-                  filtered-opcode-definitions
-                  build-extended-optable-hb
-                  build-extended-optable-lb
-                  build-interpreter-optable)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_ZP
@@ -50,6 +46,10 @@
                   run-bc-wrapped-in-test-
                   vm-list->strings
                   vm-next-instruction-bytes)
+         (only-in "../vm-interpreter.rkt"
+                  just-vm-interpreter)
+         (only-in "../vm-runtime/vm-call-frame.rkt"
+                  vm-call-frame->strings)
          (only-in "../vm-runtime/vm-memory-manager.rkt"
                   VM_INIT_MEMORY_MANAGER
                   vm-memory-manager-code)

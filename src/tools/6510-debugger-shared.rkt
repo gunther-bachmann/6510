@@ -5,7 +5,7 @@
 
  |#
 
-(require (only-in "../6510-utils.rkt" word/c))
+(require (only-in "../tools/data-tools.rkt" word/c))
 (require (only-in "./6510-interpreter.rkt" cpu-state?))
 (require (only-in "./6510-debugger-sync-source.rkt" pc-source-map-entry?))
 

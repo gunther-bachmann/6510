@@ -1,49 +1,4 @@
 #lang racket
-#|
-
- allow to interactively debug 6510 opcodes (makeing use of readline)
-
- (run-debugger org raw-bytes)
-
- |#
-
-(require (only-in ansi-color with-colors))
-(require (rename-in  racket/contract [define/contract define/c]))
-(require readline/readline)
-(require threading)
-(require (only-in "../util.rkt" format-hex-word))
-(require "../6510-utils.rkt")
-(require "6510-interpreter.rkt")
-(require (only-in "../asm/6510-parser.rkt" asm->ast))
-(require (only-in "6510-disassembler.rkt" disassemble disassemble-single code-bytes))
-(require (only-in "../ast/6510-resolver.rkt" commands->bytes))
-(require (only-in racket/fixnum fx+))
-(require (only-in "../ast/6510-command.rkt" ast-command?))
-(require (only-in "../ast/6510-assembler.rkt" assemble))
-(require (only-in "./6510-screen-display.rkt" 6510-debugger--print-string))
-(require (only-in "./6510-debugger-sync-source.rkt"
-                  load-source-map
-                  6510-debugger--remove-all-addresses-on-source
-                  6510-debugger--show-disassembly-on-source-lines
-                  6510-debugger--show-address-on-source-lines
-                  6510-debugger--move-cursor-to-source-line
-                  6510-debugger--remove-disassembly-on-source-lines
-                  pc-source-map-entry?
-                  pc-source-map-entry-file
-                  pc-source-map-entry-line))
-(require (only-in "./6510-processor-display.rkt"
-                  6510-debugger--proc-buffer-display
-                  6510-debugger--proc-buffer-kill))
-(require (only-in "./nmil-debugger-stack-display.rkt"
-                  nmil-debugger--stack-buffer-display
-                  nmil-debugger--stack-buffer-kill))
-(require (only-in "./6510-emacs-integration.rkt"
-                  6510-debugger--has-single-step-cap
-                  6510-debugger--has-assembly-disp-cap
-                  6510-debugger--has-output-cap
-                  6510-debugger--has-proc-display-cap
-                  nmil-debugger--has-stack-display-cap))
-(require "6510-debugger-shared.rkt")
 
 (provide run-debugger
          run-debugger-on
@@ -55,6 +10,52 @@
          push-debugger-interactor
          pop-debugger-interactor
          find-source-map-entry)
+
+#|
+
+ allow to interactively debug 6510 opcodes (makeing use of readline)
+
+ (run-debugger org raw-bytes)
+
+ |#
+
+(require (only-in ansi-color with-colors)
+         (rename-in  racket/contract [define/contract define/c])
+         readline/readline
+         threading
+         (only-in "../6510-utils.rkt" word->hex-string)
+         (only-in "../tools/data-tools.rkt" word/c byte/c)
+         "6510-interpreter.rkt"
+         (only-in "../asm/6510-parser.rkt" asm->ast)
+         (only-in "6510-disassembler.rkt" disassemble disassemble-single code-bytes)
+         (only-in "../ast/6510-resolver.rkt" commands->bytes)
+         (only-in racket/fixnum fx+)
+         (only-in "../ast/6510-command.rkt" ast-command?)
+         (only-in "../ast/6510-assembler.rkt" assemble)
+         (only-in "./6510-screen-display.rkt" 6510-debugger--print-string)
+         (only-in "./6510-debugger-sync-source.rkt"
+                  load-source-map
+                  6510-debugger--remove-all-addresses-on-source
+                  6510-debugger--show-disassembly-on-source-lines
+                  6510-debugger--show-address-on-source-lines
+                  6510-debugger--move-cursor-to-source-line
+                  6510-debugger--remove-disassembly-on-source-lines
+                  pc-source-map-entry?
+                  pc-source-map-entry-file
+                  pc-source-map-entry-line)
+         (only-in "./6510-processor-display.rkt"
+                  6510-debugger--proc-buffer-display
+                  6510-debugger--proc-buffer-kill)
+         (only-in "./nmil-debugger-stack-display.rkt"
+                  nmil-debugger--stack-buffer-display
+                  nmil-debugger--stack-buffer-kill)
+         (only-in "./6510-emacs-integration.rkt"
+                  6510-debugger--has-single-step-cap
+                  6510-debugger--has-assembly-disp-cap
+                  6510-debugger--has-output-cap
+                  6510-debugger--has-proc-display-cap
+                  nmil-debugger--has-stack-display-cap)
+         "6510-debugger-shared.rkt")
 
 (module+ test
   (require threading)

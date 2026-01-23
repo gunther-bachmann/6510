@@ -3,7 +3,8 @@
 (require
  "../6510-utils.rkt"
  "../ast/6510-command.rkt"
- (rename-in racket/contract [define/contract define/c]))
+ (rename-in racket/contract [define/contract define/c])
+ (only-in "../tools/data-tools.rkt" in-byte-range? in-word-range? low-byte high-byte))
 
 (provide ;; all addressing mode checks
          absolute-indexed-addressing?

@@ -5,31 +5,19 @@
 
  |#
 
-(require (rename-in  racket/contract [define/contract define/c]))
+(require (rename-in  racket/contract [define/contract define/c])
+         (only-in "tools/data-tools.rkt" byte/c word/c))
 
 (module+ test
   (require "6510-test-utils.rkt"))
 
 (provide 6510-number-string?
-         absolute
-         byte
          byte->hex-string
-         byte/c
-         decimal-from-two-complement
-         high-byte
          is-immediate-number?
-         low-byte
          parse-number-string
-         two-complement-of
-         word
          word->hex-string
-         word/c
-         in-word-range?
-         in-byte-range?
          ->string
-         base-label-str
-
-         skip-module)
+         base-label-str)
 
 ;; convert given element to string
 (define/c (->string el)
@@ -59,20 +47,6 @@
                 "45")
   (check-equal? (->string #'45)
                 "45"))
-
-;; is this exact integer in word range?
-(define/c (in-word-range? word)
-  (-> exact-integer? boolean?)
-  (and (<= word 65535) (>= word 0)))
-
-;; is this exact integer in byte range?
-(define/c (in-byte-range? byte)
-  (-> exact-integer? boolean?)
-  (and (<= byte 255) (>= byte 0)))
-
-(define byte/c (and/c exact-nonnegative-integer? in-byte-range?))
-
-(define word/c (and/c exact-nonnegative-integer? in-word-range?))
 
 ;; is the given number-string prefixed with a valid number base prefix?
 (define/c (number-has-prefix? number-string)
@@ -132,66 +106,6 @@
   (check-eq? (parse-number-string "102")
              102))
 
-;; get the low byte of a (2 byte) number
-(define/c (low-byte absolute)
-  (-> exact-integer? byte/c)
-  (bitwise-and #xFF absolute))
-
-;; get the high byte of a (2 byte) number
-(define/c (high-byte absolute)
-  (-> exact-integer? byte/c)
-  (bitwise-and #xFF (arithmetic-shift absolute -8)))
-
-;; construct a 2 byte number for high byte and low byte
-(define/c (absolute high low)
-  (-> byte/c byte/c word/c)
-  (bitwise-ior (arithmetic-shift high 8) low))
-
-;; restrict value to a 2 byte value (cutting off other bits)
-(define/c (word value)
-  (-> exact-integer? word/c)
-  (bitwise-and #xffff value))
-
-;; restrict value to a 1 byte value (cutting off other bits)
-(define/c (byte value)
-  (-> exact-integer? byte/c)
-  (bitwise-and #xff value))
-
-;; return two complement of the given (possibly negative) number
-(define/c (two-complement-of num)
-  (-> exact-integer? byte/c)
-  (when (or (> -128 num) (< 127 num)) (error "num out of range"))
-  (if (< num 0)
-      (+ 256 num)
-      num))
-
-(module+ test #| two-complements |#
-  (check-eq? (two-complement-of -1)
-             #xff)
-  (check-eq? (two-complement-of -128)
-             #x80)
-  (check-eq? (two-complement-of -2)
-             #xfe)
-  (check-eq? (two-complement-of 0)
-             0)
-  (check-eq? (two-complement-of 1)
-             1)
-  (check-eq? (two-complement-of 127)
-             #x7f))
-
-(define/c (decimal-from-two-complement num)
-  (-> byte/c exact-integer?)
-  (when (or (> 0 num) (< 256 num)) (error "num out of range"))
-  (define abs-val (bitwise-and num #x7f))
-  (if (> num 127)
-      (- abs-val #x80)
-      abs-val))
-
-(module+ test #| decimal-from-two-complements |#
-  (for ([b (range -128 127)])
-    (check-eq? (decimal-from-two-complement (two-complement-of b))
-               b)))
-
 ;; if the given string an immediate string, (6510 number string prefixed by '#')?
 (define (is-immediate-number? string)
   (and (string? string)
@@ -234,7 +148,3 @@
   (check-equal? (word->hex-string #xffff) "ffff")
   (check-equal? (word->hex-string #x9999) "9999")
   (check-equal? (word->hex-string #x5e5f) "5e5f"))
-
-(define-syntax (skip-module stx)
-  (syntax-case stx ()
-    ([_ body] #'(list))))

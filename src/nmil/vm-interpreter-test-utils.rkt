@@ -23,10 +23,8 @@
                   string-join)
          "../6510-test-utils.rkt"
          (only-in "../6510-utils.rkt"
-                  absolute)
-         (only-in "../6510-utils.rkt"
-                  low-byte
-                  high-byte)
+                  byte->hex-string
+                  word->hex-string)
          "../6510.rkt"
          (only-in "../ast/6510-assembler.rkt"
                   assemble
@@ -76,10 +74,10 @@
                   cpu-state-accumulator)
          (only-in "../tools/6510-source-map.rkt"
                   create-source-map-for-debug)
-         (only-in "../util.rkt"
-                  bytes->int
-                  format-hex-byte
-                  format-hex-word)
+         (only-in "../tools/data-tools.rkt"
+                  low-byte
+                  high-byte
+                  bytes->int)
          (only-in "./vm-bc-disassembler.rkt"
                   disassembler-byte-code--byte-count
                   disassemble-byte-code)
@@ -135,7 +133,7 @@
   (vm-inc-collectible-list- state collectible-head (list)))
 
 (define (vm-inc-collectible-list->string state)
-  (string-join (reverse (map format-hex-word (vm-inc-collectible-list state))) " -> "))
+  (string-join (reverse (map word->hex-string (vm-inc-collectible-list state))) " -> "))
 
 (define (vm-num-slots-used-in-page state page)
   (peek state (bytes->int #x01 page)))
@@ -163,8 +161,8 @@
   (bitwise-and #x07 (peek state (arithmetic-shift page 8))))
 
 (define (vm-pc state)
-  (absolute (peek state (add1 ZP_VM_PC))
-            (peek state ZP_VM_PC)))
+  (bytes->int (peek state ZP_VM_PC)
+            (peek state (add1 ZP_VM_PC))))
 
 (define (vm-next-instruction-bytes state (n 1))
   (memory-list state
@@ -179,7 +177,7 @@
         (string->number num 16)
         num))
   (format "local #$~a: ~a"
-          (format-hex-byte num-i)
+          (byte->hex-string num-i)
           (vm-cell->string
            (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_LB_PTR)))
            (peek state (+ num-i (peek-word-at-address state ZP_LOCALS_HB_PTR)))
@@ -191,10 +189,10 @@
          (reverse string-list)]
         [else
          (unless (= (bitwise-and #x01 address) #x00)
-           (raise-user-error (format "address is not a ptr ~a" (format-hex-word address))))
+           (raise-user-error (format "address is not a ptr ~a" (word->hex-string address))))
          (define cell-cdr (peek-word-at-address state (+ address 4)))
          (unless (= (bitwise-and #x01 cell-cdr) #x00)
-           (raise-user-error (format "cdr cell is not a ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
+           (raise-user-error (format "cdr cell is not a ptr => this is no list ~a" (word->hex-string cell-cdr)) ))
          (if (vm-cell-at-nil? state address)
              (reverse string-list)
              (vm-list->strings state
@@ -271,8 +269,8 @@
   (define bc_p1 (peek c-state (add1 pc)))
   (define bc_p2 (peek c-state (+ 2 pc)))
   (format "~a: ~a ~a"
-          (format-hex-word pc)
-          (~a (string-join (take (map format-hex-byte
+          (word->hex-string pc)
+          (~a (string-join (take (map byte->hex-string
                                       (list bc bc_p1 bc_p2))
                                  (disassembler-byte-code--byte-count bc))
                            " ")
@@ -432,7 +430,7 @@
                 [(string=? command "pt") (begin (color-displayln (format "rt: ~a" (vm-regt->string c-state))) d-state)]
                 [(string=? command "pfn") (begin
                                             (define func-ptr (peek-word-at-address c-state ZP_FUNC_PTR))
-                                            (color-displayln (format "function-ptr: $~a" (format-hex-word func-ptr)))
+                                            (color-displayln (format "function-ptr: $~a" (word->hex-string func-ptr)))
                                             (define locals-num (peek c-state func-ptr))
                                             (color-displayln (format "locals used : ~a" (number->string locals-num)))
                                             (for-each  color-displayln (map (lambda (n) (vm-local->string c-state n)) (range locals-num)))
@@ -506,7 +504,7 @@
                         ;; step over, since it is a call!
                         (define parent-pc (+ 3 (peek-word-at-address c-state ZP_VM_PC)))
                         (define state-after-call (debugger--run d-state #t))
-                        (color-display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
+                        (color-display (format "running until hitting byte code at $~a ..." (word->hex-string parent-pc)))
                         (wrap-into-bc-states d-state
                                              (debugger--bc-run-until state-after-call interpreter-loop-adr
                                                                      (lambda (bc-state)
@@ -533,7 +531,7 @@
                 [(string=? command "rur")
                  ;; get previous (stored vm_pc, to which to return to)
                  (define parent-pc (vm-call-frame-return-pc c-state))
-                 (color-display (format "running until hitting byte code at $~a ..." (format-hex-word parent-pc)))
+                 (color-display (format "running until hitting byte code at $~a ..." (word->hex-string parent-pc)))
                  (wrap-into-bc-states
                   d-state
                   (debugger--bc-run-until d-state interpreter-loop-adr
@@ -661,7 +659,7 @@
          (string-append
           "free-list: $"
           (string-join
-           (map format-hex-word 
+           (map word->hex-string 
                 free-adr-list)
            ", $"))]))
 

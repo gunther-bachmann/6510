@@ -10,7 +10,7 @@
 |#
 
 
-(require (only-in "../6510-utils.rkt" high-byte low-byte byte/c word/c))
+(require (only-in "../tools/data-tools.rkt" high-byte low-byte byte/c word/c))
 (require (rename-in  racket/contract [define/contract define/c]))
 
 (provide

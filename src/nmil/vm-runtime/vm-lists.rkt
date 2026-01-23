@@ -244,7 +244,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 
  (check-equal? (vm-stack->strings use-case-cons-state-after)
                   (list "stack holds 2 items"
-                        (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                        (format "ptr[1] $~a02  (rt)" (byte->hex-string PAGE_AVAIL_0))
                         "ptr NIL"))
  (check-equal? (vm-page->strings use-case-cons-state-after PAGE_AVAIL_0)
                  (list "page-type:      m1 page p0"

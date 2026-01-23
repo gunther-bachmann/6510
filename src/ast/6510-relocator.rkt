@@ -9,12 +9,12 @@
                     [define/contract define/c])
          (only-in racket/fixnum
                   fx+)
-         (only-in "../6510-utils.rkt"
+         (only-in "../tools/data-tools.rkt"
                   byte/c
                   word/c
                   low-byte
                   high-byte
-                  absolute
+                  bytes->int
                   word)
          "6510-command.rkt")
 
@@ -261,11 +261,11 @@
   (-> byte/c (listof byte/c) word/c (listof byte/c))
   (cond [(= 1 width)
          (match-let* (((list _ _ _ hilo-ind low high) (take reloc-table 6))
-                      (value (word (fx+ delta (absolute high low)))))
+                      (value (word (fx+ delta (bytes->int low high)))))
            (list (value-by-hilo-ind hilo-ind value)))]
         [(= 2 width)
          (match-let* (((list _ _ _ low high) (take reloc-table 5))
-                      (value (word (fx+ delta (absolute high low)))))
+                      (value (word (fx+ delta (bytes->int low high)))))
            (list (low-byte value) (high-byte value)))]
         [else (raise-user-error (format "relocated-bytes width ~a is unknown" width))]))
 
@@ -281,7 +281,7 @@
     [else
      (match-let*
          (((list offset-low offset-high width) (take reloc-table 3))
-          (reloc-applies (eq? offset (absolute offset-high offset-low)))
+          (reloc-applies (eq? offset (bytes->int offset-low offset-high)))
           ((list offset-inc rem-reloc rem-bytes reloc-bytes)
            (if reloc-applies
                (list width

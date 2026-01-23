@@ -92,12 +92,12 @@
      ))
 
   (check-equal? (vm-call-frame->strings test-bc-before-call-state)
-                (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fe" (format-hex-byte PAGE_CALL_FRAME) (format-hex-byte PAGE_CALL_FRAME_HB))
+                (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fe" (byte->hex-string PAGE_CALL_FRAME) (byte->hex-string PAGE_CALL_FRAME_HB))
                       "program-counter:   $0801"
                       "function-ptr:      $0800"
                       (format "locals-ptr:        $~a00, $~a00 (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))))
    (check-equal? (vm-stack->strings test-bc-before-call-state)
                  (list "stack holds 2 items"
                        "int $0000  (rt)"
@@ -120,13 +120,13 @@
 
    (check-equal? (vm-call-frame->strings test-bc-call-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fc"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $1702"
                           "function-ptr:      $1700"
                          (format "locals-ptr:        $~aff, $~aff (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))
                          "return pc:         $0804"
                          "return func-ptr:   $0800"
                          (format "return locals-ptr: undefined")))
@@ -154,13 +154,13 @@
 
   (check-equal? (vm-call-frame->strings test-bc-call-wp-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fc"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $1702"
                          "function-ptr:      $1700"
                          (format "locals-ptr:        $~aff, $~aff (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))
                          "return pc:         $0805"
                          "return func-ptr:   $0800"
                          (format "return locals-ptr: undefined")))
@@ -188,13 +188,13 @@
 
   (check-equal? (vm-call-frame->strings test-bc-call-wl-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fa"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $1702"
                          "function-ptr:      $1700"
                          (format "locals-ptr:        $~afd, $~afd (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))
                          "return pc:         $0805"
                          "return func-ptr:   $0800"
                          "return locals-ptr: undefined"))
@@ -230,13 +230,13 @@
                         "ptr NIL"))
  (check-equal? (vm-call-frame->strings bc-nil-ret-state)
                (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fe"
-                             (format-hex-byte PAGE_CALL_FRAME)
-                             (format-hex-byte PAGE_CALL_FRAME_HB))
+                             (byte->hex-string PAGE_CALL_FRAME)
+                             (byte->hex-string PAGE_CALL_FRAME_HB))
                      "program-counter:   $0805"
                      "function-ptr:      $0800"
                      (format "locals-ptr:        $~a00, $~a00 (lb, hb)"
-                             (format-hex-byte PAGE_LOCALS_LB)
-                             (format-hex-byte PAGE_LOCALS_HB))))
+                             (byte->hex-string PAGE_LOCALS_LB)
+                             (byte->hex-string PAGE_LOCALS_HB))))
 
   (define bc-nil-ret-local-state
     (run-bc-wrapped-in-test
@@ -262,13 +262,13 @@
                          "ptr NIL"))
   (check-equal? (vm-call-frame->strings bc-nil-ret-local-state)
                 (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fe"
-                              (format-hex-byte PAGE_CALL_FRAME)
-                              (format-hex-byte PAGE_CALL_FRAME_HB))
+                              (byte->hex-string PAGE_CALL_FRAME)
+                              (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $0805"
                          "function-ptr:      $0800"
                          (format "locals-ptr:        $~a00, $~a00 (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB)))))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB)))))
 
 (module+ test #| bc-tail-call |#
   (define bc-tail-call-state
@@ -297,13 +297,13 @@
                          "ptr NIL"))
    (check-equal? (vm-call-frame->strings bc-tail-call-state)
                  (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fe"
-                               (format-hex-byte PAGE_CALL_FRAME)
-                               (format-hex-byte PAGE_CALL_FRAME_HB))
+                               (byte->hex-string PAGE_CALL_FRAME)
+                               (byte->hex-string PAGE_CALL_FRAME_HB))
                           "program-counter:   $0806"
                           "function-ptr:      $0800"
                           (format "locals-ptr:        $~a00, $~a00 (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))))
 
   ;; convert the list given by cell-pair-ptr (addresss) as a list of strings
   (define (vm-list->strings state address (string-list '()))
@@ -311,13 +311,13 @@
            (reverse string-list)]
           [else
            (unless (= (bitwise-and #x01 address) #x00)
-             (raise-user-error (format "address is not a cell-array ~a" (format-hex-word address))))
+             (raise-user-error (format "address is not a cell-array ~a" (word->hex-string address))))
            (unless (= (peek state (bitwise-and #xff00 address )) #x20)
              (raise-user-error (format "m1 page referenced is not a profile 0 cell-arrray page ~a"
-                                       (format-hex-word address))))
+                                       (word->hex-string address))))
            (define cell-cdr (peek-word-at-address state (+ address 4)))
            (unless (= (bitwise-and #x01 cell-cdr) #x00)
-             (raise-user-error (format "cdr cell is not a ptr => this is no list ~a" (format-hex-word cell-cdr)) ))
+             (raise-user-error (format "cdr cell is not a ptr => this is no list ~a" (word->hex-string cell-cdr)) ))
            (if (vm-cell-at-nil? state address)
                (reverse string-list)
                (vm-list->strings state
@@ -371,17 +371,17 @@
                    "list got reversed")
   (check-equal? (vm-stack->strings bc-tail-call-reverse-state)
                    (list "stack holds 2 items"
-                         (format "ptr[1] $~a08  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                         (format "ptr[1] $~a08  (rt)" (byte->hex-string PAGE_AVAIL_0))
                          "ptr NIL"))
   (check-equal? (vm-call-frame->strings bc-tail-call-reverse-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fe"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $080c"
                          "function-ptr:      $0800"
                          (format "locals-ptr:        $~a00, $~a00 (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB)))))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB)))))
 
 (module+ test #| bc_ret |#
   (define test-bc-ret-state
@@ -399,13 +399,13 @@
 
   (check-equal? (vm-call-frame->strings test-bc-ret-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fe"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $0804"
                          "function-ptr:      $0800"
                          (format "locals-ptr:        $~a00, $~a00 (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))))
   (check-equal? (vm-stack->strings test-bc-ret-state)
                    (list "stack holds 3 items"
                          "int $0001  (rt)"

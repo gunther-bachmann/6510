@@ -10,7 +10,7 @@
  |#
 
 (require (rename-in  racket/contract [define/contract define/c]))
-(require (only-in "../6510-utils.rkt" word/c))
+(require (only-in "../tools/data-tools.rkt" word/c))
 (require (only-in "../ast/6510-command.rkt" ast-command? ast-command-meta-information ast-opcode-cmd))
 (require (only-in "../ast/6510-resolver.rkt" resolved-instruction->bytes))
 (require (only-in "../ast/6510-assembler.rkt"

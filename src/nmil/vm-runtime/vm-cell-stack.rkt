@@ -36,11 +36,16 @@
 
 (module+ test
   (require "../../6510-test-utils.rkt"
+           (only-in "../../6510-utils.rkt"
+                    byte->hex-string
+                    word->hex-string)
            (only-in "../../ast/6510-relocator.rkt"
                     code-len)
-           (only-in "../../tools/6510-interpreter.rkt" peek memory-list)
-           (only-in "../../util.rkt" format-hex-byte format-hex-word)
-           (only-in "../test-utils.rkt" regression-test)
+           (only-in "../../tools/6510-interpreter.rkt"
+                    peek
+                    memory-list)
+           (only-in "../test-utils.rkt"
+                    regression-test)
            (only-in "../vm-inspector-utils.rkt"
                     vm-deref-cell-pair-w->string
                     vm-regt->string
@@ -492,7 +497,7 @@
      (JSR PUSH_XA_TO_EVLSTK)))
 
   (check-equal? (vm-regt->string vm_cell_stack_push_r_cell_ptr_state)
-                (format "ptr[1] $~a02" (format-hex-byte PAGE_AVAIL_2)))
+                (format "ptr[1] $~a02" (byte->hex-string PAGE_AVAIL_2)))
   (check-equal? (memory-list vm_cell_stack_push_r_cell_ptr_state ZP_RT (add1 ZP_RT))
                 (list #x02 PAGE_AVAIL_2)))
 
@@ -645,7 +650,7 @@
 
   (check-equal? (vm-stack->strings vm-pop-fstos-to-celly-rt-state)
                 (list "stack holds 2 items"
-                      (format  "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_2))
+                      (format  "ptr[1] $~a02  (rt)" (byte->hex-string PAGE_AVAIL_2))
                       "ptr NIL"))
   (check-equal? (vm-deref-cell-pair-w->string vm-pop-fstos-to-celly-rt-state (+ PAGE_AVAIL_2_W #x02))
                 "(int $3fff . int $0001)"))

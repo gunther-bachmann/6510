@@ -71,13 +71,13 @@ implement bc push/write local commands
                 #x01)
   (check-equal? (vm-call-frame->strings test-bc-pop-to-l-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fa"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $1703"
                          "function-ptr:      $1700"
                          (format "locals-ptr:        $~afd, $~afd (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))
                          "return pc:         $0805"
                          "return func-ptr:   $0800"
                          "return locals-ptr: undefined"))
@@ -111,13 +111,13 @@ implement bc push/write local commands
                 #x00 "local1 = int 0")
   (check-equal? (vm-call-frame->strings test-bc-pop-to-p-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fa"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $1705"
                          "function-ptr:      $1700"
                          (format "locals-ptr:        $~afd, $~afd (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))
                          "return pc:         $0805"
                          "return func-ptr:   $0800"
                          "return locals-ptr: undefined"))
@@ -143,13 +143,13 @@ implement bc push/write local commands
                   "int 1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-l-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fb"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $1705"
                          "function-ptr:      $1700"
                          (format "locals-ptr:        $~afe, $~afe (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))
                          "return pc:         $0803"
                          "return func-ptr:   $0800"
                          "return locals-ptr: undefined"))
@@ -177,13 +177,13 @@ implement bc push/write local commands
                    "int -1 was pushed from local")
   (check-equal? (vm-call-frame->strings test-bc-push-p-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fa"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $1705"
                          "function-ptr:      $1700"
                          (format "locals-ptr:        $~afd, $~afd (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))
                          "return pc:         $0805"
                          "return func-ptr:   $0800"
                          "return locals-ptr: undefined"))
@@ -211,13 +211,13 @@ implement bc push/write local commands
                          "ptr NIL"))
   (check-equal? (vm-call-frame->strings test-bc-pop-push-to-p-state)
                    (list (format "call-frame-ptr:    $~a00, $~a00 (lb, hb), topmark: fa"
-                                 (format-hex-byte PAGE_CALL_FRAME)
-                                 (format-hex-byte PAGE_CALL_FRAME_HB))
+                                 (byte->hex-string PAGE_CALL_FRAME)
+                                 (byte->hex-string PAGE_CALL_FRAME_HB))
                          "program-counter:   $1706"
                          "function-ptr:      $1700"
                          (format "locals-ptr:        $~afd, $~afd (lb, hb)"
-                                 (format-hex-byte PAGE_LOCALS_LB)
-                                 (format-hex-byte PAGE_LOCALS_HB))
+                                 (byte->hex-string PAGE_LOCALS_LB)
+                                 (byte->hex-string PAGE_LOCALS_HB))
                          "return pc:         $0805"
                          "return func-ptr:   $0800"
                          "return locals-ptr: undefined")))

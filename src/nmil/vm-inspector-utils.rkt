@@ -30,16 +30,17 @@
                   empty?
                   drop
                   make-list)
+         (only-in "../6510-utils.rkt"
+                  byte->hex-string
+                  word->hex-string)
          (only-in "../tools/6510-interpreter.rkt"
                   memory-list
                   peek-word-at-address
                   peek)
-         (only-in "../util.rkt"
+         (only-in "../tools/data-tools.rkt"
                   bytes->int
                   low-byte
-                  high-byte
-                  format-hex-byte
-                  format-hex-word)
+                  high-byte)
          (only-in "vm-runtime/vm-memory-map.rkt"
                   TAG_BYTE_BYTE_CELL
                   TAG_BYTE_CELL_ARRAY
@@ -80,12 +81,12 @@
       ))
   (cond [(= #x18 page-type-enc)
          (list (format "page-type:      ~a" page-type)
-               (format "previous page:  $~a" (format-hex-byte previous-page)))]
+               (format "previous page:  $~a" (byte->hex-string previous-page)))]
         [else
          (list (format "page-type:      ~a" page-type)
-               (format "previous page:  $~a" (format-hex-byte previous-page))
+               (format "previous page:  $~a" (byte->hex-string previous-page))
                (format "slots used:     ~a" slots-used)
-               (format "next free slot: $~a" (format-hex-byte next-free-slot)))]))
+               (format "next free slot: $~a" (byte->hex-string next-free-slot)))]))
 
 ;; shorten verbose strings (e.g. pair-ptr cells or int cells)
 (define (shorten-cell-string str)
@@ -169,7 +170,7 @@
 (define (vm-slot->string state loc (follow #f) (visited (list)))
   (cond
     [(memq loc visited)
-     (format "RECURSION->$~a~a" (format-hex-word loc))]
+     (format "RECURSION->$~a~a" (word->hex-string loc))]
     [else
      (define refcnt (peek state loc))
      (define slot-type (peek state (+ 1 loc)))
@@ -187,21 +188,21 @@
 (define (vm-cell->string low high (state '()) (follow #f) (visited (list)))
   (cond
     [(memq (bytes->int low high) visited)
-     (format "RECURSION->$~a~a" (format-hex-byte high) (format-hex-byte low))]
+     (format "RECURSION->$~a~a" (byte->hex-string high) (byte->hex-string low))]
     [(= 0 low) "ptr NIL"]
     [(= 0 (bitwise-and #x01 low))
      (string-append
       (format "ptr[~a] $~a~a"
               (if (empty? state) "-" (refcount-of-cell-n state low high))
-              (format-hex-byte high)
-              (format-hex-byte (bitwise-and #xfe low)))
+              (byte->hex-string high)
+              (byte->hex-string (bitwise-and #xfe low)))
       (if follow
           (vm-deref-cell-pair->string state low high #t (cons (bytes->int low high) visited))
           ""))]
     [(= 3 (bitwise-and #x03 low)) (format "int $~a~a"
-                                          (format-hex-byte (arithmetic-shift low -2))
-                                          (format-hex-byte high))]
-    [(= TAG_BYTE_BYTE_CELL (bitwise-and #xff low)) (format "byte $~a" (format-hex-byte high))]
+                                          (byte->hex-string (arithmetic-shift low -2))
+                                          (byte->hex-string high))]
+    [(= TAG_BYTE_BYTE_CELL (bitwise-and #xff low)) (format "byte $~a" (byte->hex-string high))]
     ;; TODO: a structure has a special value + follow bytes
     ;; (= ? (bitwise-and #xfc low)) e.g. #x04 = structure, high byte = number of fields
     ;; the following number of fields * cells cannot be structure cells, but only atomic or pointer cells

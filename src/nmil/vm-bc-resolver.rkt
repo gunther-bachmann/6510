@@ -13,7 +13,8 @@ functions
 
 |#
 
-(require (rename-in racket/contract
+(require "../6510.rkt"
+         (rename-in racket/contract
                     [define/contract define/c])
          (only-in racket/list
                   empty?
@@ -38,7 +39,6 @@ functions
 
 (module+ test
   (require rackunit
-           "../6510.rkt"
            (only-in "../6510-test-utils.rkt" drop-meta-info)
            (only-in "./vm-bc-opcode-definitions.rkt" bc)))
 

@@ -8,7 +8,7 @@
 
 (require (rename-in  racket/contract [define/contract define/c]))
 (require (only-in "6510-relocator.rkt" command-len label-string-offsets))
-(require (only-in "../6510-utils.rkt" low-byte high-byte byte/c word/c absolute))
+(require (only-in "../tools/data-tools.rkt" low-byte high-byte byte/c word/c bytes->int))
 (require (only-in threading ~>>))
 (require "6510-command.rkt")
 (require (only-in "6510-resolver.rkt" ->resolve-labels ->resolved-decisions label-instructions resolved-program->bytes))
@@ -433,7 +433,7 @@
       import-entries
       (let* ((lo    (first bytes))
              (hi    (second bytes))
-             (addr  (absolute hi lo))
+             (addr  (bytes->int lo hi))
              (width (third bytes)))
         (let-values
             (((entry-len label sym)

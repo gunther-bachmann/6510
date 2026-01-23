@@ -9,7 +9,6 @@
          (all-from-out "../../6510-test-utils.rkt")
          (all-from-out "../../tools/6510-interpreter.rkt")
          (all-from-out "../vm-runtime/vm-memory-map.rkt")
-         (all-from-out "../../util.rkt")
          (all-from-out racket/list)
          run-bc-wrapped-in-test
          PAGE_CALL_FRAME
@@ -32,16 +31,17 @@
                   flatten
                   make-list)
          "../../6510-test-utils.rkt"
+         (only-in "../../6510-utils.rkt"
+                  byte->hex-string
+                  word->hex-string)
          "../../6510.rkt"
          (only-in "../../tools/6510-interpreter.rkt"
                   peek
                   peek-word-at-address
                   memory-list
                   cpu-state-clock-cycles)
-         (only-in "../../util.rkt"
-                  bytes->int
-                  format-hex-byte
-                  format-hex-word)
+         (only-in "../../tools/data-tools.rkt"
+                  bytes->int)
          (only-in "../vm-bc-opcode-definitions.rkt"
                   bc
                   bc-opcode-definitions

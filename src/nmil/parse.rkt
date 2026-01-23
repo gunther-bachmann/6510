@@ -17,10 +17,7 @@
          (only-in racket/string
                   string-trim)
          (only-in "../util.rkt"
-                  nested->list
-                  low-byte
-                  high-byte
-                  bytes->int)
+                  nested->list)
          "./ast.rkt")
 
 (provide m-type-def

@@ -61,7 +61,7 @@
    "fifo create"
    (check-equal? (vm-stack->strings fifo-create-state)
                  (list "stack holds 2 items"
-                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                       (format "ptr[1] $~a02  (rt)" (byte->hex-string PAGE_AVAIL_0))
                        "ptr NIL"))
    (check-equal? (vm-slot->string fifo-create-state (+ PAGE_AVAIL_0_W #x02))
                  "ptr[1] cell-array of len 2")
@@ -121,7 +121,7 @@
    "fifo create -> enqueue 1"
    (check-equal? (vm-stack->strings enqueue-state-1)
                  (list "stack holds 2 items"
-                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                       (format "ptr[1] $~a02  (rt)" (byte->hex-string PAGE_AVAIL_0))
                        "ptr NIL"))
 
    (check-equal? (memory-list enqueue-state-1 (+ PAGE_AVAIL_0_W #x04) (+ PAGE_AVAIL_0_W #x07))
@@ -156,7 +156,7 @@
    "fifo create -> enqueue 1 -> enqueue 2"
    (check-equal? (vm-stack->strings enqueue-state-2)
                  (list "stack holds 2 items"
-                       (format "ptr[1] $~a02  (rt)" (format-hex-byte PAGE_AVAIL_0))
+                       (format "ptr[1] $~a02  (rt)" (byte->hex-string PAGE_AVAIL_0))
                        "ptr NIL"))
 
    (check-equal? (memory-list enqueue-state-2 (+ PAGE_AVAIL_0_W #x04) (+ PAGE_AVAIL_0_W #x07))
