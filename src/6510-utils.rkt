@@ -1,23 +1,25 @@
 #lang racket
+
+(provide
+ ->string                ;; convert anything to a string
+ 6510-number-string?     ;; is the given string a valid binary, hex or regular number?
+ base-label-str          ;; get the base label from a given label
+ byte->hex-string        ;; convert a byte to its hex string representation
+ is-immediate-number?    ;; is the given string an immediate number?
+ parse-number-string     ;; parse the given string to a number
+ word->hex-string)       ;; convert a word to its hex string representation
+
 #|
 
- provide utilities for byte/word manipulation and more
+ provide utilities for byte word formatting and parsing
 
  |#
 
 (require (rename-in  racket/contract [define/contract define/c])
          (only-in "tools/data-tools.rkt" byte/c word/c))
 
-(module+ test
+(module+ test #| require test utils |#
   (require "6510-test-utils.rkt"))
-
-(provide 6510-number-string?
-         byte->hex-string
-         is-immediate-number?
-         parse-number-string
-         word->hex-string
-         ->string
-         base-label-str)
 
 ;; convert given element to string
 (define/c (->string el)

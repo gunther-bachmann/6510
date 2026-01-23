@@ -1,56 +1,69 @@
 #lang racket
 
-;; central entry for syntax transformation rules for the translation from 6510 dsl code
-;; into 6510 byte/assembler code.
+(provide (all-from-out racket/list)
+         (all-from-out "6510-utils.rkt")
+         (all-from-out "ast/6510-command.rkt")
+         (all-from-out "ops/6510.arithmetic-ops.rkt")
+         (all-from-out "ops/6510.branch-ops.rkt")
+         (all-from-out "ops/6510.compare-ops.rkt")
+         (all-from-out "ops/6510.flag-ops.rkt")
+         (all-from-out "ops/6510.increment-ops.rkt")
+         (all-from-out "ops/6510.logic-ops.rkt")
+         (all-from-out "ops/6510.memory-ops.rkt")
+         (all-from-out "ops/6510.misc-ops.rkt")
+         (all-from-out "ops/6510.shift-ops.rkt")
+         (all-from-out "ops/6510.stack-ops.rkt")
+         (all-from-out "ops/6510.subroutine-ops.rkt")
+         (all-from-out "ops/6510.transfer-ops.rkt")
+         (all-from-out "scheme-asm/6510-addressing-utils.rkt")
+         (all-from-out "tools/data-tools.rkt")
+         asc                            ;; define string memory bytes
+         byte                           ;; define memory bytes
+         byte-const                     ;; define assembler byte constant
+         byte-ref                       ;; define assembler byte reference
+         label                          ;; define label
+         org                            ;; define origin of code
+         org-align                      ;; define origin by alignment to current position
+         provide-byte                   ;; provide byte for linker of other files
+         provide-word                   ;; provide word for linker of other files
+         require-byte                   ;; require byte from linking other files
+         require-word                   ;; require word from linking other files
+         word                           ;; define memory word
+         word-const                     ;; define assembler word constant
+         word-ref)                      ;; define an assembler word reference
 
-(require "scheme-asm/6510-addressing-utils.rkt")
-(require "6510-utils.rkt")
-(require (for-syntax "tools/data-tools.rkt"))
-(require (for-syntax "6510-utils.rkt"))
+#|
 
-(require (for-syntax "ast/6510-command.rkt"))
-(require "ast/6510-command.rkt")
+ provide all functions necessary to write 6510 assembler code
 
-(require "ops/6510.logic-ops.rkt")
-(require "ops/6510.branch-ops.rkt")
-(require "ops/6510.arithmetic-ops.rkt")
-(require "ops/6510.increment-ops.rkt")
-(require "ops/6510.flag-ops.rkt")
-(require "ops/6510.memory-ops.rkt")
-(require "ops/6510.transfer-ops.rkt")
-(require "ops/6510.shift-ops.rkt")
-(require "ops/6510.misc-ops.rkt")
-(require "ops/6510.compare-ops.rkt")
-(require "ops/6510.subroutine-ops.rkt")
-(require "ops/6510.stack-ops.rkt")
-(require (for-syntax "scheme-asm/6510-syntax-utils.rkt"))
-(require "tools/data-tools.rkt")
-(require (only-in "6510-utils.rkt" byte->hex-string word->hex-string))
-(require (only-in racket/list flatten))
+ central entry for syntax transformation rules for the translation from 6510 dsl code
+ into 6510 byte/assembler code.
 
-;; (provide (all-from-out "util.rkt"))
-(provide (all-from-out "6510-utils.rkt"))
-(provide (all-from-out "ast/6510-command.rkt"))
-(provide (all-from-out "tools/data-tools.rkt"))
-(provide (all-from-out "ops/6510.logic-ops.rkt"))
-(provide (all-from-out "ops/6510.branch-ops.rkt"))
-(provide (all-from-out "ops/6510.arithmetic-ops.rkt"))
-(provide (all-from-out "ops/6510.increment-ops.rkt"))
-(provide (all-from-out "ops/6510.flag-ops.rkt"))
-(provide (all-from-out "ops/6510.memory-ops.rkt"))
-(provide (all-from-out "ops/6510.transfer-ops.rkt"))
-(provide (all-from-out "ops/6510.shift-ops.rkt"))
-(provide (all-from-out "ops/6510.misc-ops.rkt"))
-(provide (all-from-out "ops/6510.compare-ops.rkt"))
-(provide (all-from-out "ops/6510.subroutine-ops.rkt"))
-(provide (all-from-out "ops/6510.stack-ops.rkt"))
+ |#
 
-(provide org-align org label byte-ref word-ref word-const byte-const byte word asc provide-byte provide-word require-byte require-word) ;; meta commands
+(require (for-syntax "tools/data-tools.rkt")
+         (for-syntax "6510-utils.rkt")
+         (for-syntax "ast/6510-command.rkt")
+         (for-syntax "scheme-asm/6510-syntax-utils.rkt")
+         (only-in racket/list flatten)
+         "6510-utils.rkt"
+         "ast/6510-command.rkt"
+         "ops/6510.arithmetic-ops.rkt"
+         "ops/6510.branch-ops.rkt"
+         "ops/6510.compare-ops.rkt"
+         "ops/6510.flag-ops.rkt"
+         "ops/6510.increment-ops.rkt"
+         "ops/6510.logic-ops.rkt"
+         "ops/6510.memory-ops.rkt"
+         "ops/6510.misc-ops.rkt"
+         "ops/6510.shift-ops.rkt"
+         "ops/6510.stack-ops.rkt"
+         "ops/6510.subroutine-ops.rkt"
+         "ops/6510.transfer-ops.rkt"
+         "scheme-asm/6510-addressing-utils.rkt"
+         "tools/data-tools.rkt")
 
-(provide (all-from-out "scheme-asm/6510-addressing-utils.rkt"))
-(provide (all-from-out racket/list))
-
-(module+ test
+(module+ test #| require test utils |#
   (require "6510-test-utils.rkt"))
 
 ;;--------------------------------------------------------------------------------

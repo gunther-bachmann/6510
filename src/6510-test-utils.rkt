@@ -2,7 +2,6 @@
 
 ;; use this instead of (require rackunit) to make use of skipping tests
 
-
 (provide skip
          inform-check-equal?
          drop-meta-info
@@ -11,6 +10,12 @@
          (all-from-out rackunit)
          (all-from-out racket/path)
          (all-from-out ansi-color))
+
+#|
+
+ module to require for basic test support for 6510 tests
+
+ |#
 
 (require ansi-color
          rackunit ;; TODO: remove from here to be able to use typed variant instead

@@ -3,11 +3,17 @@
 #|review: ignore|#
 #|  review does show several false positives |#
 
+(provide m-type-def
+         m-expression-def
+         m-fun-def
+         m-val-def)
+
 #|
 
   Parser for minimal lisp, generating an appropriate AST
 
  |#
+
 (require (for-syntax (only-in racket/string
                               string-suffix?)
                      syntax/parse/pre
@@ -19,11 +25,6 @@
          (only-in "../util.rkt"
                   nested->list)
          "./ast.rkt")
-
-(provide m-type-def
-         m-expression-def
-         m-fun-def
-         m-val-def)
 
 (module+ test #| require test utils |#
   ;; (require "../6510-test-utils.rkt")

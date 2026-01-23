@@ -21,10 +21,10 @@
 
 (require (only-in racket/list range)
          (only-in racket/string string-join)
-         "../../6510.rkt"
          (only-in "../../6510-utils.rkt"
                   word->hex-string
                   byte->hex-string)
+         "../../6510.rkt"
          (only-in "../../tools/6510-interpreter.rkt"
                   peek-word-at-address
                   peek)
@@ -52,7 +52,6 @@
                   ZP_FUNC_PTR
                   ZP_LOCALS_LB_PTR
                   ZP_LOCALS_HB_PTR
-                  ZP_LOCALS_TOP_MARK
                   ZP_CALL_FRAME_TOP_MARK]
          (only-in "./vm-pages.rkt"
                   VM_ALLOCATE_NEW_PAGE
