@@ -51,7 +51,7 @@
 
 (module+ test
   (require  "../../6510-test-utils.rkt"
-            (only-in "../../ast/6510-relocator.rkt" code-len)
+            (only-in "../../ast/6510-relocator.rkt" estimated-code-len)
             (only-in "../../tools/6510-interpreter.rkt"
                      peek
                      memory-list
@@ -343,5 +343,6 @@
    VM_DEALLOCATE_PAGE))
 
 (module+ test #| module code len |#
-  (inform-check-equal? (code-len vm-pages-code)
-                       109))
+  (inform-check-equal? (estimated-code-len vm-pages-code)
+                       109
+                       "estimated code len of vm pages code"))

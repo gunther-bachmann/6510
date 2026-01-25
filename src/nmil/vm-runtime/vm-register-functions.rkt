@@ -34,7 +34,7 @@
 
 (require "../../6510.rkt"
          (only-in "../../ast/6510-relocator.rkt"
-                  code-len)
+                  estimated-code-len)
          (only-in "../vm-definition-utils.rkt"
                   define-vm-function
                   define-vm-function-wol)
@@ -402,5 +402,6 @@
    SWAP_RA_RB))
 
 (module+ test #| code len |#
-  (inform-check-equal? (code-len vm-register-functions-code)
-                       247))
+  (inform-check-equal? (estimated-code-len vm-register-functions-code)
+                       247
+                       "estimated code len of vm register functions code"))

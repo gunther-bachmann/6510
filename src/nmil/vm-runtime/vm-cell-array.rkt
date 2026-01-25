@@ -63,7 +63,7 @@
 
 (module+ test
   (require "../../6510-test-utils.rkt"
-           (only-in "../../ast/6510-relocator.rkt" code-len)
+           (only-in "../../ast/6510-relocator.rkt" estimated-code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     peek
                     memory-list
@@ -353,6 +353,6 @@
 
 (module+ test #| vm-cell-array-code |#
   (inform-check-equal?
-   (code-len vm-cell-array-code)
+   (estimated-code-len vm-cell-array-code)
    150
-   "module uses n bytes of code"))
+   "estimated code line of cell array code"))

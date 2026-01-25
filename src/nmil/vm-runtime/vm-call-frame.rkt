@@ -64,7 +64,7 @@
 (module+ test #| after mem init |#
   (require "../../6510-test-utils.rkt"
            (only-in "../../ast/6510-relocator.rkt"
-                    code-len)
+                    estimated-code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     memory-list)
            (only-in "../test-utils.rkt"
@@ -726,6 +726,6 @@
           VM_REFCOUNT_DECR_CURRENT_LOCALS))
 
 #;(module+ test #| vm-call-frame |#
-  (inform-check-equal? (code-len (flatten vm-call-frame-code))
+  (inform-check-equal? (estimated-code-len (flatten vm-call-frame-code))
                        263
                        "estimated code length of call-frame runtime"))

@@ -202,6 +202,6 @@
                 "int $0000"))
 
 (module+ test #| code len |#
-  (inform-check-equal? (code-len bc-compare-code)
+  (inform-check-equal? (estimated-code-len bc-compare-code)
                        69
-                       "compare code len"))
+                       "estimated code len of bc compare implementation"))

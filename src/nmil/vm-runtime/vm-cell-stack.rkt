@@ -40,7 +40,7 @@
                     byte->hex-string
                     word->hex-string)
            (only-in "../../ast/6510-relocator.rkt"
-                    code-len)
+                    estimated-code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     peek
                     memory-list)
@@ -752,5 +752,6 @@
    INIT_EVLSTK_TAIL))
 
 (module+ test #| code len |#
-  (inform-check-equal? (code-len vm-cell-stack-code)
-                       281))
+  (inform-check-equal? (estimated-code-len vm-cell-stack-code)
+                       281
+                       "estimated code len of cell stack code"))

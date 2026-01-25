@@ -2,6 +2,11 @@
 
 * memory map and description of each location
 https://sta.c64.org/cbm64mem.html
+* assembly routines
+https://github.com/yackx/c64/tree/main
+* linux like os
+https://github.com/fachat/GeckOS-V2/
+http://www.6502.org/users/andre/osa/index.html
 * screen codes and character codes
 https://sta.c64.org/cbm64scr.html
 * peeks and pokes

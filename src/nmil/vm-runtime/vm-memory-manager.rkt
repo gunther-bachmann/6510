@@ -42,7 +42,7 @@
 
     (require
            "../../6510-test-utils.rkt"
-           (only-in "../../ast/6510-relocator.rkt" code-len)
+           (only-in "../../ast/6510-relocator.rkt" estimated-code-len)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-memory-map.rkt"
                     ZP_TEMP)))
@@ -69,5 +69,6 @@
           ))
 
 (module+ test #| code len |#
-  (inform-check-equal? (code-len vm-memory-manager-code)
-                       1978))
+  (inform-check-equal? (estimated-code-len vm-memory-manager-code)
+                       1978
+                       "estimated code len of memory manager code"))

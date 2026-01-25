@@ -13,7 +13,7 @@
          "../../6510-test-utils.rkt"
          "../../6510.rkt"
          (only-in "../../ast/6510-relocator.rkt"
-                  code-len)
+                  estimated-code-len)
          (only-in "../../tools/6510-interpreter.rkt"
                   peek
                   peek-word-at-address

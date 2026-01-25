@@ -2174,7 +2174,7 @@ black-node
     00 : #of locals
     01 : start of byte code  (defaults offset?)
     ...
-    meta-data byte-code-len
+    meta-data byte-estimated-code-len
               str-len
               function name string
 

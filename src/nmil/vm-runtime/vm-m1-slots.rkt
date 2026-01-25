@@ -315,7 +315,7 @@
                     make-list)
            "../../6510-test-utils.rkt"
            (only-in "../../6510-test-utils.rkt" skip)
-           (only-in "../../ast/6510-relocator.rkt" code-len)
+           (only-in "../../ast/6510-relocator.rkt" estimated-code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     peek
                     memory-list
@@ -842,9 +842,9 @@
 (module+ test #| vm_alloc_bucket_slot, allocate one slot of size $0b |#
 
   (inform-check-equal?
-   (code-len ALLOC_M1_SLOT_TO_RA)
+   (estimated-code-len ALLOC_M1_SLOT_TO_RA)
    216
-   "size of code for allocation of m1 slots is n bytes")
+   "estimated code len of allocation of m1 slots is n bytes")
 
   (define (test-alloc-m1-slot-p0-to-ra-n #:times (times 1))
     (compact-run-code-in-test-
@@ -1598,9 +1598,9 @@
                 (JSR DEC_REFCNT_M1_SLOT_RZ__IF_PTR)))
 
   (inform-check-equal?
-   (code-len DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
+   (estimated-code-len DEC_REFCNT_M1_SLOT_RZ__IF_PTR)
    204
-   "code len of dec refcnt and gc are n bytes")
+   "estimated code len of dec refcnt and gc")
 
   (inform-check-equal?
    (cpu-state-clock-cycles dec_refcnt_m1_slot_rz_n-test-non-cell-array-slot)
@@ -2031,6 +2031,6 @@
 
 (module+ test #| code len of module |#
   (inform-check-equal?
-   (code-len vm-m1-slot-code)
+   (estimated-code-len vm-m1-slot-code)
    650
-   "the whole module taks about n bytes"))
+   "estimated code len of m1 slot code module"))

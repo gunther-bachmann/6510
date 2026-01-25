@@ -415,6 +415,6 @@
 
 
 (module+ test #| code len |#
-  (inform-check-equal? (code-len bc-call-ret-code)
+  (inform-check-equal? (estimated-code-len bc-call-ret-code)
                        256
-                       "code len"))
+                       "estimated code len for call/return functionality"))

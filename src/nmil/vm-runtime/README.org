@@ -19,7 +19,7 @@ byte code vm.
   use ~regression-test~
   ensure good code coverage
   ensure export of complete code in one variable
-  ensure code-length check
+  ensure estimated-code-length check
   ensure order of ~provide~, documentation, ~require~
   - [ ] vm-native-array.rkt
   - [ ] vm-memory-map.rkt

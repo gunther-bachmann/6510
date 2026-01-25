@@ -20,7 +20,7 @@
 
 (provide
  label-string-offsets
- code-len
+ estimated-code-len
  command-len
  label->hilo-indicator
  )
@@ -30,24 +30,24 @@
 
 (define command/c (or/c ast-command? (listof any/c)))
 
-(define/c (code-len code)
+(define/c (estimated-code-len code)
   (-> (listof command/c) nonnegative-integer?)
   (foldl + 0 (map command-len code)))
 
-(module+ test #|code-len|#
-  (check-equal? (code-len
+(module+ test #|estimated-code-len|#
+  (check-equal? (estimated-code-len
                  (list))
                 0
                 "empty list has code len 0")
 
-  (check-equal? (code-len
+  (check-equal? (estimated-code-len
                  (list
                   (ast-label-def-cmd '() "some")
                   (ast-label-def-cmd '() "other")))
                 0
                 "just labels have together code len 0")
 
-  (check-equal? (code-len
+  (check-equal? (estimated-code-len
                  (list
                   (ast-label-def-cmd '() "some")
                   (ast-opcode-cmd '() (list 1 2 3))

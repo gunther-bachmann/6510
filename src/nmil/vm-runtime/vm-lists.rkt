@@ -9,7 +9,7 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
 (require "../../6510.rkt"
          (only-in "../../ast/6510-relocator.rkt"
                   command-len
-                  code-len)
+                  estimated-code-len)
          (only-in "../vm-definition-utils.rkt"
                   define-vm-function
                   define-vm-function-wol)
@@ -262,6 +262,6 @@ implementation of list primitives (car, cdr, cons) using 6510 assembler routines
           VM_CxxR))
 
 (module+ test #| vm-lists |#
-  (inform-check-equal? (code-len (flatten vm-list-code))
+  (inform-check-equal? (estimated-code-len (flatten vm-list-code))
                        93
-                       "estimated list code length"))
+                       "estimated code length of bc list code"))

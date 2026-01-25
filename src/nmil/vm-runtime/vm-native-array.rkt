@@ -35,7 +35,7 @@
 (module+ test
   (require "../../6510-test-utils.rkt"
            (only-in "../../ast/6510-relocator.rkt"
-                    code-len)
+                    estimated-code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     peek
                     memory-list)
@@ -472,5 +472,6 @@
     CP_NATARR_RANGE_RA_TO_RB))
 
 (module+ test #| code len |#
-  (inform-check-equal? (code-len vm-native-array-code)
-                       161))
+  (inform-check-equal? (estimated-code-len vm-native-array-code)
+                       161
+                       "estimated code len of native array code"))

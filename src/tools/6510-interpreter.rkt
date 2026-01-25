@@ -38,6 +38,11 @@
 
  e.g. (run-interpreter org raw-bytes)
 
+https://www.masswerk.at/6502/6502_instruction_set.html
+https://www.masswerk.at/6502/
+https://www.masswerk.at/6502/assembler.html
+https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
+
  |#
 
 ;; todo: check whether lense implementation is better (more efficient) than struct-copy (see https://docs.racket-lang.org/lens/struct-guide.html)

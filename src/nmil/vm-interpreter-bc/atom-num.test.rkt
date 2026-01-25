@@ -280,6 +280,6 @@
                           "ptr NIL")))
 
 (module+ test
-  (inform-check-equal? (code-len bc-atom-num-code)
+  (inform-check-equal? (estimated-code-len bc-atom-num-code)
                        177
-                       "code len for byte and int arithmetic"))
+                       "estimated code len for byte and int arithmetic"))
