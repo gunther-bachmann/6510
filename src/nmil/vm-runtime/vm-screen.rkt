@@ -93,28 +93,33 @@
 ;; input:  Y = ROW
 ;;         X = COL
 ;;         ZP_RP = ptr to screen code data
-;;         A = END_COL+1
+;;         A = # of chars to print
 ;; output: screen modified
 (define-vm-function RT_SCREEN_PUT_CHARS_AT
   (list
-          (STA ZP_TEMP)              ;; temp = end col + 1
+          (STA ZP_TEMP)              ;; temp = len
+          (STX ZP_TEMP2)
           (LDA line_start_table__,y) ;; y = row
           (TAY)
-          (AND !$07)
-          (STA write_screen_cmd__+2) ;; write page
-          (TYA)
           (AND !$F8)
+          (CLC)
+          (ADC ZP_TEMP2)
           (STA write_screen_cmd__+1) ;; write offset
 
-          (LDY !$00)
+          (TYA)
+          (AND !$07)
+          (ADC !$00)
+          (STA write_screen_cmd__+2) ;; write page
+
+          (LDY ZP_TEMP)
+          (DEY)
+
    (label char_put_loop__)
           (LDA (ZP_RP),y)
    (label write_screen_cmd__)
-          (STA $0400,x)
-          (INY)                      ;; use y as both indices (zp_rp = ptr - col)
-          (INX)
-          (CPX ZP_TEMP)              ;; use dec, precalc offset, no compare, use BNE
-          (BNE char_put_loop__)
+          (STA $0400,y)
+          (DEY)                      ;; use y as both indices (zp_rp = ptr - col)
+          (BPL char_put_loop__)
 
           (RTS)
 
@@ -139,7 +144,7 @@
 
      (LDY !5)
      (LDX !17)
-     (LDA !18)
+     (LDA !1)
 
      (JSR RT_SCREEN_PUT_CHARS_AT)
      (BRK)
@@ -167,7 +172,7 @@
 
      (LDY !20)
      (LDX !10)
-     (LDA !15)
+     (LDA !5)
 
      (JSR RT_SCREEN_PUT_CHARS_AT)
      (BRK)
@@ -196,7 +201,7 @@
 
      (LDY !16)
      (LDX !10)
-     (LDA !35)
+     (LDA !25)
 
      (JSR RT_SCREEN_PUT_CHARS_AT)
      (BRK)
