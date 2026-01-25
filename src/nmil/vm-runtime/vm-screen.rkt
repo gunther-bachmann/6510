@@ -34,11 +34,20 @@
 
 (module+ test #| require |#
   (require "../../6510-test-utils.rkt"
+           (only-in "../../ast/6510-relocator.rkt"
+                    estimated-code-len)
+           (only-in "../../tools/6510-interpreter.rkt"
+                    cpu-state-clock-cycles
+                    memory-list)
            "./vm-memory-manager-test-utils.rkt"
-           (only-in "../../ast/6510-relocator.rkt" estimated-code-len))
+           (only-in "./vm-memory-map.rkt"
+                    VM_MEMORY_MANAGEMENT_CONSTANTS))
 
   (define test-runtime
     (append
+     RT_SCREEN_PUT_CHARS_AT
+
+     VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label VM_INIT_MEMORY_MANAGER) (RTS)))))
 
 #|
@@ -118,13 +127,91 @@
                 )))
 
 (module+ test #| RT_SCREEN_PUT_CHARS_AT |#
+    (define screen-put-chars-at-0-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     ;; now put the string
+     (LDA !<test_string0)
+     (STA ZP_RP)
+     (LDA !>test_string0)
+     (STA ZP_RP+1)
+
+     (LDY !5)
+     (LDX !17)
+     (LDA !18)
+
+     (JSR RT_SCREEN_PUT_CHARS_AT)
+     (BRK)
+     (label test_string0)
+     (asc "O")
+     ))
+
+  (check-equal? (memory-list screen-put-chars-at-0-test
+                             (+ #x0400 (* 5 40) 17))
+                (map char->integer (string->list "O"))
+                "the char O was written to the right screen area")
+  (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-0-test)
+                       69
+                       "cpu cycles for writing string with 1 character to position x,y")
+
   (define screen-put-chars-at-test
     (compact-run-code-in-test-
      #:debug #f
      #:runtime-code test-runtime
      ;; now put the string
-     ;; (JSR RT_SCREEN_PUT_CHARS_AT)
-     )))
+     (LDA !<test_string1)
+     (STA ZP_RP)
+     (LDA !>test_string1)
+     (STA ZP_RP+1)
+
+     (LDY !20)
+     (LDX !10)
+     (LDA !15)
+
+     (JSR RT_SCREEN_PUT_CHARS_AT)
+     (BRK)
+     (label test_string1)
+     (asc ".SOME.")
+     ))
+
+  (check-equal? (memory-list screen-put-chars-at-test
+                             (+ #x0400 (* 20 40) 10)
+                             (+ #x0400 (* 20 40) 14))
+                (map char->integer (string->list ".SOME"))
+                "the string .SOME was written to the right screen area")
+  (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-test)
+                       149
+                       "cpu cycles for writing string with 5 characters to position x,y")
+
+  (define screen-put-chars-at-2-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     ;; now put the string
+     (LDA !<test_string2)
+     (STA ZP_RP)
+     (LDA !>test_string2)
+     (STA ZP_RP+1)
+
+     (LDY !16)
+     (LDX !10)
+     (LDA !35)
+
+     (JSR RT_SCREEN_PUT_CHARS_AT)
+     (BRK)
+     (label test_string2)
+     (asc ".SOME.OTHER.STRING.THAT.IS.A.BIT.LONGER.")
+     ))
+
+  (check-equal? (memory-list screen-put-chars-at-2-test
+                             (+ #x0400 (* 16 40) 10)
+                             (+ #x0400 (* 16 40) 34))
+                (map char->integer (string->list ".SOME.OTHER.STRING.THAT.I"))
+                "the string .SOME was written to the right screen area")
+  (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-2-test)
+                       549
+                       "cpu cycles for writing string with 25 characters to position x,y"))
 
 (define screen-code
   (append
