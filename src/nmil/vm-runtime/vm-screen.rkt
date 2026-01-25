@@ -45,10 +45,11 @@
 
   (define test-runtime
     (append
+     PREP_WRITE_SCREEN_CMD
      RT_SCREEN_PUT_CHARS_AT
      RT_SCREEN_CLEAR
      RT_SCREEN_CLEAR_CHARS_AT
-     RT_SCREEN_SCROLL_LEFT_CHARS_AT
+     RT_SCREEN_SCROLL_RIGHT_CHARS_AT
 
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label VM_INIT_MEMORY_MANAGER) (RTS)))))
@@ -92,23 +93,22 @@
  |#
 
 ;; A = page of write command
-;; X = row
+;; X = row <- must stay untouched
 ;; ZP = COL
 ;; Y = offset of write command
-(define-vm-function prep-write-screen-cmd
+(define-vm-function PREP_WRITE_SCREEN_CMD
   (list
           (STA ZP_TEMP+1)
           (STY ZP_TEMP)
 
-          (LDA line_start_table,x) ;; y = row
-          (PHA)
+          (LDA line_start_table,x) ;; x = row
           (AND !$F8)
           (CLC)
           (ADC ZP_RP)
           (LDY !$00)
           (STA (ZP_TEMP),y) ;; write offset
 
-          (PLA)
+          (LDA line_start_table,x) ;; x = row
           (AND !$07)
           (ADC !$00)
 
@@ -127,17 +127,12 @@
 ;; output: screen modified
 (define-vm-function RT_SCREEN_PUT_CHARS_AT
   (list
-          (LDA line_start_table,x) ;; x = row
-          (TAX)
-          (AND !$F8)
-          (CLC)
-          (ADC ZP_RP)
-          (STA write_screen_cmd__+1) ;; write offset
 
-          (TXA)
-          (AND !$07)
-          (ADC !$00)
-          (STA write_screen_cmd__+2) ;; write page
+          (STY ZP_RP+1)
+          (LDA !>write_screen_cmd__+1)
+          (LDY !<write_screen_cmd__+1)
+          (JSR PREP_WRITE_SCREEN_CMD)
+          (LDY ZP_RP+1)
 
    (label char_put_loop__)
    (label RT_SCREEN_PUT_CHARS_AT__STRING)
@@ -185,7 +180,7 @@
                 (map char->integer (string->list "O"))
                 "the char O was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-0-test)
-                       46
+                       76
                        "cpu cycles for writing string with 1 character to position x,y")
 
   (define screen-put-chars-at-test
@@ -216,7 +211,7 @@
                 (map char->integer (string->list ".SOME"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-test)
-                       102
+                       132
                        "cpu cycles for writing string with 5 characters to position x,y")
 
   (define screen-put-chars-at-2-test
@@ -247,46 +242,78 @@
                 (map char->integer (string->list ".SOME.OTHER.STRING.THAT.I"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-2-test)
-                       382
+                       412
                        "cpu cycles for writing string with 25 characters to position x,y"))
 
-;; scroll within one line a number of chars one char to the left
+;; scroll within one line a number of chars one char to the right
 ;;
-;; input:  Y = ROW
-;;         ZP_RP = COL
-;;         A = # of chars to scroll
+;; input:  X = ROW
+;;         ZP_RP = COL -> COL+1
+;;         Y = # of chars to scroll
 ;; output: screen modified
-(define-vm-function RT_SCREEN_SCROLL_LEFT_CHARS_AT
+(define-vm-function RT_SCREEN_SCROLL_RIGHT_CHARS_AT
   (list
-          (STA ZP_TEMP)
-          (LDA line_start_table,y) ;; y = row
-          (TAY)
-          (AND !$F8)
-          (CLC)
-          (ADC ZP_RP)
-          (STA ZP_RZ) ;; write offset
-          (STA ZP_RP)
+          (STY ZP_RP+1)
 
-          (TYA)
-          (AND !$07)
-          (ADC !$00)
-          (STA ZP_RZ+1) ;; write page
-          (STA ZP_RP+1)
-
+          (LDA !>read_screen_cmd__+1)
+          (LDY !<read_screen_cmd__+1)
+          (JSR PREP_WRITE_SCREEN_CMD)
           (INC ZP_RP)
-          (BEQ NO_INC__)
-          (INC ZP_RP+1)
-   (label NO_INC__)
+          (LDA !>write_screen_cmd__+1)
+          (LDY !<write_screen_cmd__+1)
+          (JSR PREP_WRITE_SCREEN_CMD)
 
-          (LDY ZP_TEMP)
+          (LDY ZP_RP+1)
    (label char_put_loop__)
+   (label read_screen_cmd__)
+          (LDA $0400,y)
    (label write_screen_cmd__)
-          (LDA (ZP_RZ),y)
-          (STA (ZP_RP),y)
+          (STA $0400,y)
           (DEY)                      ;; use y as both indices (zp_rp = ptr - col)
           (BPL char_put_loop__)
 
           (RTS)))
+
+(module+ test #| scroll right |#
+  (define scroll-right-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     ;; now put the string
+     (LDA !<test_string4)
+     (STA RT_SCREEN_PUT_CHARS_AT__STRING+1)
+     (LDA !>test_string4)
+     (STA RT_SCREEN_PUT_CHARS_AT__STRING+2)
+
+     (LDX !5)
+     (LDY !17)
+     (STY ZP_RP)
+     (LDY !4)
+
+     (JSR RT_SCREEN_PUT_CHARS_AT)
+
+     (LDX !5)
+     (LDY !17)
+     (STY ZP_RP)
+     (LDY !4)
+
+     (JSR $0100)
+     (JSR RT_SCREEN_SCROLL_RIGHT_CHARS_AT)
+
+     (BRK)
+
+     (label test_string4)
+     (asc "OLALA")
+     ))
+
+  (check-equal? (memory-list scroll-right-test
+                             (+ #x0400 (* 5 40) 17)
+                             (+ #x0400 (* 5 40) 22))
+                (map char->integer (string->list "OOLALA"))
+                "screen was clear where once written.")
+  (inform-check-equal? (cpu-state-clock-cycles scroll-right-test)
+                188
+                "cpu cycles needed for scrolling 5 chars right"))
 
 (define-vm-function RT_SCREEN_CLEAR
   (list
@@ -370,29 +397,23 @@
 
 ;; clear a number of chars in a row y,x position on screen
 ;;
-;; input:  Y = ROW
+;; input:  X = ROW
 ;;         ZP_RP = COL
-;;         X = # of chars to clear -1 (0 for one char, 1 for two ...)
+;;         Y = # of chars to clear -1 (0 for one char, 1 for two ...)
 ;; output: screen modified
 (define-vm-function RT_SCREEN_CLEAR_CHARS_AT
   (list
-          (LDA line_start_table,y) ;; y = row
-          (TAY)
-          (AND !$F8)
-          (CLC)
-          (ADC ZP_RP)
-          (STA write_screen_cmd__+1) ;; write offset
-
-          (TYA)
-          (AND !$07)
-          (ADC !$00)
-          (STA write_screen_cmd__+2) ;; write page
+          (STY ZP_RP+1)
+          (LDA !>write_screen_cmd__+1)
+          (LDY !<write_screen_cmd__+1)
+          (JSR PREP_WRITE_SCREEN_CMD)
+          (LDY ZP_RP+1)
 
           (LDA !$00)
    (label char_put_loop__)
    (label write_screen_cmd__)
-          (STA $0400,x)
-          (DEX)                      ;; use y as both indices (zp_rp = ptr - col)
+          (STA $0400,y)
+          (DEY)                      ;; use y as both indices (zp_rp = ptr - col)
           (BPL char_put_loop__)
 
           (RTS)))
@@ -415,10 +436,10 @@
 
      (JSR RT_SCREEN_PUT_CHARS_AT)
 
-     (LDY !5)
-     (LDX !17)
-     (STX ZP_RP)
-     (LDX !4)
+     (LDX !5)
+     (LDY !17)
+     (STY ZP_RP)
+     (LDY !4)
 
      (JSR RT_SCREEN_CLEAR_CHARS_AT)
 
@@ -434,10 +455,10 @@
 
      (JSR RT_SCREEN_PUT_CHARS_AT)
 
-     (LDY !0)
      (LDX !0)
-     (STX ZP_RP)
-     (LDX !4)
+     (LDY !0)
+     (STY ZP_RP)
+     (LDY !4)
 
      (JSR RT_SCREEN_CLEAR_CHARS_AT)
 
@@ -453,10 +474,10 @@
 
      (JSR RT_SCREEN_PUT_CHARS_AT)
 
-     (LDY !24)
-     (LDX !39)
-     (STX ZP_RP)
-     (LDX !0)
+     (LDX !24)
+     (LDY !39)
+     (STY ZP_RP)
+     (LDY !0)
 
      (JSR $0100)
      (JSR RT_SCREEN_CLEAR_CHARS_AT)
@@ -482,17 +503,18 @@
                 (list 0)
                 "screen was clear where once written.")
   (inform-check-equal? (cpu-state-clock-cycles screen-clear-chars-at-test)
-                       44
-                       "cpu cycles to clear the whole screen"))
+                       74
+                       "cpu cycles to clear a char"))
 
 (define screen-code
   (append
-   RT_SCREEN_SCROLL_LEFT_CHARS_AT
+   PREP_WRITE_SCREEN_CMD
+   RT_SCREEN_SCROLL_RIGHT_CHARS_AT
    RT_SCREEN_PUT_CHARS_AT
    RT_SCREEN_CLEAR_CHARS_AT
    RT_SCREEN_CLEAR))
 
 (module+ test #| estimated-code-len |#
   (inform-check-equal? (estimated-code-len screen-code)
-                154
+                152
                 "estimated code length change in screen runtime"))
