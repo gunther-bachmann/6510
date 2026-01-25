@@ -91,19 +91,17 @@
 ;; write a number of screen codes to y,x position on screen
 ;;
 ;; input:  Y = ROW
-;;         X = COL
-;;         ZP_RP = ptr to screen code data
-;;         A = # of chars to print
+;;         ZP_RP = COL
+;;         RT_SCREEN_PUT_CHARS_AT__STRING+1 = ptr to screen code data (low at +1, high at +2)
+;;         X = # of chars to print -1 (0 for one char, 1 for two ...)
 ;; output: screen modified
 (define-vm-function RT_SCREEN_PUT_CHARS_AT
   (list
-          (STA ZP_TEMP)              ;; temp = len
-          (STX ZP_TEMP2)
           (LDA line_start_table__,y) ;; y = row
           (TAY)
           (AND !$F8)
           (CLC)
-          (ADC ZP_TEMP2)
+          (ADC ZP_RP)
           (STA write_screen_cmd__+1) ;; write offset
 
           (TYA)
@@ -111,14 +109,12 @@
           (ADC !$00)
           (STA write_screen_cmd__+2) ;; write page
 
-          (LDY ZP_TEMP)
-          (DEY)
-
    (label char_put_loop__)
-          (LDA (ZP_RP),y)
+   (label RT_SCREEN_PUT_CHARS_AT__STRING)
+          (LDA $0400,x)
    (label write_screen_cmd__)
-          (STA $0400,y)
-          (DEY)                      ;; use y as both indices (zp_rp = ptr - col)
+          (STA $0400,x)
+          (DEX)                      ;; use y as both indices (zp_rp = ptr - col)
           (BPL char_put_loop__)
 
           (RTS)
@@ -138,14 +134,16 @@
      #:runtime-code test-runtime
      ;; now put the string
      (LDA !<test_string0)
-     (STA ZP_RP)
+     (STA RT_SCREEN_PUT_CHARS_AT__STRING+1)
      (LDA !>test_string0)
-     (STA ZP_RP+1)
+     (STA RT_SCREEN_PUT_CHARS_AT__STRING+2)
 
      (LDY !5)
      (LDX !17)
-     (LDA !1)
+     (STX ZP_RP)
+     (LDX !0)
 
+     (JSR $0100)
      (JSR RT_SCREEN_PUT_CHARS_AT)
      (BRK)
      (label test_string0)
@@ -157,7 +155,7 @@
                 (map char->integer (string->list "O"))
                 "the char O was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-0-test)
-                       69
+                       46
                        "cpu cycles for writing string with 1 character to position x,y")
 
   (define screen-put-chars-at-test
@@ -166,14 +164,16 @@
      #:runtime-code test-runtime
      ;; now put the string
      (LDA !<test_string1)
-     (STA ZP_RP)
+     (STA RT_SCREEN_PUT_CHARS_AT__STRING+1)
      (LDA !>test_string1)
-     (STA ZP_RP+1)
+     (STA RT_SCREEN_PUT_CHARS_AT__STRING+2)
 
      (LDY !20)
      (LDX !10)
-     (LDA !5)
+     (STX ZP_RP)
+     (LDX !4)
 
+     (JSR $0100)
      (JSR RT_SCREEN_PUT_CHARS_AT)
      (BRK)
      (label test_string1)
@@ -186,7 +186,7 @@
                 (map char->integer (string->list ".SOME"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-test)
-                       149
+                       102
                        "cpu cycles for writing string with 5 characters to position x,y")
 
   (define screen-put-chars-at-2-test
@@ -195,14 +195,16 @@
      #:runtime-code test-runtime
      ;; now put the string
      (LDA !<test_string2)
-     (STA ZP_RP)
+     (STA RT_SCREEN_PUT_CHARS_AT__STRING+1)
      (LDA !>test_string2)
-     (STA ZP_RP+1)
+     (STA RT_SCREEN_PUT_CHARS_AT__STRING+2)
 
      (LDY !16)
      (LDX !10)
-     (LDA !25)
+     (STX ZP_RP)
+     (LDX !24)
 
+     (JSR $0100)
      (JSR RT_SCREEN_PUT_CHARS_AT)
      (BRK)
      (label test_string2)
@@ -215,7 +217,7 @@
                 (map char->integer (string->list ".SOME.OTHER.STRING.THAT.I"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-2-test)
-                       549
+                       382
                        "cpu cycles for writing string with 25 characters to position x,y"))
 
 (define screen-code
@@ -224,5 +226,5 @@
 
 (module+ test #| estimated-code-len |#
   (inform-check-equal? (estimated-code-len screen-code)
-                58
+                56
                 "estimated code length change in screen runtime"))
