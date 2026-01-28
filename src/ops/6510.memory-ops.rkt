@@ -20,14 +20,14 @@
   (require "../6510-test-utils.rkt"))
 
 (define-opcode LDA
-  ((immediate   . #xA9)
-   (zero-page   . #xA5)
-   (zero-page-x . #xB5)
-   (absolute    . #xAD)
-   (absolute-x  . #xBD)
-   (absolute-y  . #xB9)
-   (indirect-x  . #xA1)
-   (indirect-y  . #xB1)))
+  ((immediate   . #xA9)         ;; tim: 2
+   (zero-page   . #xA5)         ;; tim: 3
+   (zero-page-x . #xB5)         ;; tim: 4
+   (absolute    . #xAD)         ;; tim: 4
+   (absolute-x  . #xBD)         ;; tim: 4+
+   (absolute-y  . #xB9)         ;; tim: 4+
+   (indirect-x  . #xA1)         ;; tim: 6
+   (indirect-y  . #xB1)))       ;; tim: 5+
 
 (module+ test #| lda |#
   (check-match (LDA "!$10")
@@ -48,11 +48,11 @@
                (ast-opcode-cmd _ '(#xA1 #xA0))))
 
 (define-opcode LDX
-  ((immediate   . #xA2)
-   (zero-page   . #xA6)
-   (zero-page-y . #xB6)
-   (absolute    . #xAE)
-   (absolute-y  . #xBE)))
+  ((immediate   . #xA2)         ;; tim: 2
+   (zero-page   . #xA6)         ;; tim: 3
+   (zero-page-y . #xB6)         ;; tim: 4
+   (absolute    . #xAE)         ;; tim: 4
+   (absolute-y  . #xBE)))       ;; tim: 4+
 
 (module+ test #| LDX |#
   (check-match (LDX !$10)
@@ -77,20 +77,20 @@
                        (ast-unresolved-opcode-cmd '(#:line 17 :#org-cmd "ldx hello") '(#xae) (ast-resolve-word-scmd "hello"))))))
 
 (define-opcode LDY
-  ((immediate   . #xA0)
-   (zero-page   . #xA4)
-   (zero-page-x . #xB4)
-   (absolute    . #xAC)
-   (absolute-x  . #xBC)))
+  ((immediate   . #xA0)         ;; tim: 2
+   (zero-page   . #xA4)         ;; tim: 3
+   (zero-page-x . #xB4)         ;; tim: 4
+   (absolute    . #xAC)         ;; tim: 4
+   (absolute-x  . #xBC)))       ;; tim: 4+
 
 (define-opcode STA
-  ((zero-page   . #x85)
-   (zero-page-x . #x95)
-   (absolute    . #x8d)
-   (absolute-x  . #x9d)
-   (absolute-y  . #x99)
-   (indirect-x  . #x81)
-   (indirect-y  . #x91)))
+  ((zero-page   . #x85)         ;; tim: 3
+   (zero-page-x . #x95)         ;; tim: 4
+   (absolute    . #x8d)         ;; tim: 4
+   (absolute-x  . #x9d)         ;; tim: 5
+   (absolute-y  . #x99)         ;; tim: 5
+   (indirect-x  . #x81)         ;; tim: 6
+   (indirect-y  . #x91)))       ;; tim: 6
 
 (module+ test
   (check-match (STA "$17")
@@ -115,9 +115,9 @@
                (ast-opcode-cmd _ '(#x95 #x28))))
 
 (define-opcode STX
-  ((zero-page   . #x86)
-   (absolute    . #x8e)
-   (zero-page-y . #x96)))
+  ((zero-page   . #x86)         ;; tim: 3
+   (absolute    . #x8e)         ;; tim: 4
+   (zero-page-y . #x96)))       ;; tim: 4
 
 (module+ test #| STX |#  
   (check-match (STX $10)
@@ -135,7 +135,6 @@
                 (ast-unresolved-opcode-cmd _ '(#x96) (ast-resolve-byte-scmd "some" 'low-byte))))
 
 (define-opcode STY
-  ((zero-page   . #x84)
-   (absolute    . #x8c)
-   (zero-page-x . #x94)))
-
+  ((zero-page   . #x84)         ;; tim: 3
+   (absolute    . #x8c)         ;; tim: 4
+   (zero-page-x . #x94)))       ;; tim: 4
