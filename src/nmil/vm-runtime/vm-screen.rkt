@@ -1,7 +1,15 @@
 #lang racket/base
 
 (provide
- RT_SCREEN_PUT_CHARS_AT         ;; write a number of screen codes to y,x position on screen
+ RT_SCREEN_PUT_CHARS_AT               ;; write a number of screen codes to y,x position on screen
+ RT_SCREEN_SCROLL_RIGHT_CHARS_AT      ;; scroll a portion of the screen by delta to the right
+ RT_SCREEN_SCROLL_RIGHT_CHARS_AT_BY1  ;; by one
+ RT_SCREEN_SCROLL_LEFT_CHARS_AT       ;; scroll a portion of the screen by delta to the left
+ RT_SCREEN_SCROLL_LEFT_CHARS_AT_BY1   ;; by one
+ RT_SCREEN_SCROLL_UP                  ;; scroll a portion of the screen up by 1 line
+ RT_SCREEN_SCROLL_DOWN                ;; scroll a portion of the screen down by 1 line
+ RT_SCREEN_CLEAR_CHARS_AT             ;; clear a portion of the screen
+ RT_SCREEN_CLEAR                      ;; clear the whole screen
 
  screen-code)
 
@@ -53,7 +61,7 @@
   (define test-runtime
     (append
      PREP_WRITE_SCREEN_CMD
-     FAST_SMALL_MEMCOPY
+     FAST_SCREEN_MEMCOPY
      RT_SCREEN_PUT_CHARS_AT
      RT_SCREEN_CLEAR
      RT_SCREEN_CLEAR_CHARS_AT
@@ -65,7 +73,7 @@
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label VM_INIT_MEMORY_MANAGER) (RTS))))
 
-  ;; write characters of this string into screen
+  ;; write characters of this string into screen (in assembler, using RT_SCREEN_PUT_CHARS_AT)
   (define (write-string-to-screen--for-test row col str)
     (define uuid-label (string-replace (uuid-string) "-" "_"))
     (define cont-label (string-replace (uuid-string) "-" "_"))
@@ -159,10 +167,12 @@
 ;; Y       : number to copy within row
 ;; ZP_RZ   : number of lines to copy
 ;; ZP_RZ+1 : 0 -> copy memory up, != 0 -> copy memory down
-(define-vm-function-wol FAST_SMALL_MEMCOPY
+(define FAST_SCREEN_MEMCOPY_DOWN '())
+(define FAST_SCREEN_MEMCOPY_UP '())
+(define-vm-function-wol FAST_SCREEN_MEMCOPY
   (list
    ;; copy from lower memory to higher memory (used for scrolling down and right)
-   (label FAST_SMALL_MEMCOPY_DOWN)
+   (label FAST_SCREEN_MEMCOPY_DOWN)
           (STY ZP_TEMP+1)
           (STA ZP_TEMP)            ;; keep target row in temp
 
@@ -192,7 +202,7 @@
           (BNE INNER_LOOP_DOWN__) ;; always branch
 
    ;; copy from higher memory to lower memory (used for scrolling up and left)
-   (label FAST_SMALL_MEMCOPY_UP)
+   (label FAST_SCREEN_MEMCOPY_UP)
           (STY ZP_TEMP+1)          ;; keep number of chars to copy per row
           (STA ZP_TEMP)            ;; keep target row in temp
 
@@ -295,6 +305,7 @@
 
           (RTS)))
 
+;; MAY BE OBSOLETE
 ;; A = page of write command
 ;; X = row <- must stay untouched
 ;; ZP = COL
@@ -330,12 +341,18 @@
 ;; output: screen modified
 (define-vm-function RT_SCREEN_PUT_CHARS_AT
   (list
+          (LDA line_start_table,x) ;; x = row
+          (AND !$F8)
+          (CLC)
+          (ADC ZP_RP)
+          (STA write_screen_cmd__+1) ;; write offset
 
-          (STY ZP_RP+1)
-          (LDA !>write_screen_cmd__+1)
-          (LDY !<write_screen_cmd__+1)
-          (JSR PREP_WRITE_SCREEN_CMD)
-          (LDY ZP_RP+1)
+          (LDA line_start_table,x) ;; x = row
+          (AND !$07)
+          (ADC !$00)
+
+          (STA write_screen_cmd__+2) ;; write page
+
 
    (label char_put_loop__)
    (label RT_SCREEN_PUT_CHARS_AT__STRING)
@@ -383,7 +400,7 @@
                 (map char->integer (string->list "O"))
                 "the char O was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-0-test)
-                       76
+                       46
                        "cpu cycles for writing string with 1 character to position x,y")
 
   (define screen-put-chars-at-test
@@ -414,7 +431,7 @@
                 (map char->integer (string->list ".SOME"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-test)
-                       132
+                       102
                        "cpu cycles for writing string with 5 characters to position x,y")
 
   (define screen-put-chars-at-2-test
@@ -445,16 +462,17 @@
                 (map char->integer (string->list ".SOME.OTHER.STRING.THAT.I"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-2-test)
-                       412
+                       382
                        "cpu cycles for writing string with 25 characters to position x,y"))
 
 ;; scroll n lines a number of chars one char to the right
 ;;
 ;; X     : screen row (last row)
-;; ZP_RP : column (start col)
-;; A     : delta (1.. to move right)
-;; Y     : number of chars to copy
 ;; ZP_RZ : number of rows (1.., up from last row, effectively scroll rows X, X-1, ... X-n)
+;; ZP_RP : column (start col) COL->COL+delta
+;; Y     : number of chars to copy -1
+;; A     : delta (1.. to move right)
+(define RT_SCREEN_SCROLL_RIGHT_CHARS_AT_BY1 '())
 (define-vm-function-wol RT_SCREEN_SCROLL_RIGHT_CHARS_AT
   (list
    (label RT_SCREEN_SCROLL_RIGHT_CHARS_AT_BY1)
@@ -466,7 +484,7 @@
 
           (TXA)         ;; row target = row source
 
-          (JMP FAST_SMALL_MEMCOPY_DOWN)
+          (JMP FAST_SCREEN_MEMCOPY_DOWN)
    ))
 
 (module+ test #| scroll right |#
@@ -555,11 +573,13 @@
 
 ;; scroll within one line a number of chars one char to the left
 ;;
-;; input:  X = ROW
-;;         ZP_RP = COL -> COL-1
+;; input:  X = ROW (first row)
+;;         ZP_RZ = # of rows
+;;         ZP_RP =  (first col) COL -> COL-delta
 ;;         Y = # of chars to scroll
 ;;         A = delta (positive: 1..)
 ;; output: screen modified
+(define RT_SCREEN_SCROLL_LEFT_CHARS_AT_BY1 '())
 (define-vm-function-wol RT_SCREEN_SCROLL_LEFT_CHARS_AT
   (list
    (label RT_SCREEN_SCROLL_LEFT_CHARS_AT_BY1)
@@ -573,7 +593,7 @@
 
           (TXA)
 
-          (JMP FAST_SMALL_MEMCOPY_UP)))
+          (JMP FAST_SCREEN_MEMCOPY_UP)))
 
 (module+ test #| scroll left |#
   (define scroll-left-test
@@ -679,23 +699,27 @@
                 (append (map char->integer (string->list "TIPOPP")))
                 "char in 39 was doubled (P), rest got scrolled left"))
 
-;; input:  X = ROW
+;; input:  X = ROW (last row to scroll)
+;;         ZP_RZ = # of rows to cop
 ;;         ZP_RP = COL
-;;         Y = # of chars to scroll
-;;         OPEN: A = delta (positive: 1..)
+;;         Y = # of chars to scroll - 1 (per row)
+;;         A = delta (positive: 1..)
 ;; output: screen modified
+(define RT_SCREEN_SCROLL_DOWN_BY1 '())
 (define-vm-function-wol RT_SCREEN_SCROLL_DOWN
   (list
    (label RT_SCREEN_SCROLL_DOWN_BY1)
-          ;; (LDA !$01)
+          (LDA !$01)
    (label RT_SCREEN_SCROLL_DOWN)
+          (STA ZP_TEMP)
           (LDA ZP_RP)
           (STA ZP_RP+1)  ;; target col = source col
-          (INX)
-          (TXA)
-          (DEX) ;; A = target row = source row (x) + 1
 
-          (JMP FAST_SMALL_MEMCOPY_DOWN)))
+          (TXA)
+          (CLC)
+          (ADC ZP_TEMP)
+
+          (JMP FAST_SCREEN_MEMCOPY_DOWN)))
 
 (module+ test #| scroll down |#
   (define scroll-down-test
@@ -721,16 +745,186 @@
                 (map char->integer (string->list "OLALA"))
                 "string was scrolled down.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-down-test)
-                163
+                169
+                "cpu cycles needed for scrolling 5 chars down")
+
+
+  (define scroll-down-2-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     ;; now put the strings
+     (write-string-to-screen--for-test 5 17 "OLALA")
+     (write-string-to-screen--for-test 6 17 "TIPOP")
+
+     (LDX !6)
+     (LDY !17)
+     (STY ZP_RP)
+     (LDY !4)
+     (LDA !$02)
+     (STA ZP_RZ) ;; two rows
+
+     (JSR $0100)
+     (JSR RT_SCREEN_SCROLL_DOWN_BY1)))
+
+  (check-equal? (memory-list scroll-down-2-test
+                             (+ screen-base-address (* 6 screen-row-bytes) 17)
+                             (+ screen-base-address (* 6 screen-row-bytes) 21))
+                (map char->integer (string->list "OLALA"))
+                "string was scrolled down.")
+  (check-equal? (memory-list scroll-down-2-test
+                             (+ screen-base-address (* 7 screen-row-bytes) 17)
+                             (+ screen-base-address (* 7 screen-row-bytes) 21))
+                (map char->integer (string->list "TIPOP"))
+                "string was scrolled down.")
+  (inform-check-equal? (cpu-state-clock-cycles scroll-down-2-test)
+                284
+                "cpu cycles needed for scrolling 5 chars down")
+
+(define scroll-down-3-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     ;; now put the strings
+     (write-string-to-screen--for-test 5 17 "OLALA")
+     (write-string-to-screen--for-test 6 17 "TIPOP")
+
+     (LDX !6)
+     (LDY !17)
+     (STY ZP_RP)
+     (LDY !4)
+     (LDA !$02)
+     (STA ZP_RZ) ;; two rows
+
+     (LDA !$04) ;; scroll down by 4
+     (JSR $0100)
+     (JSR RT_SCREEN_SCROLL_DOWN)))
+
+  (check-equal? (memory-list scroll-down-3-test
+                             (+ screen-base-address (* 9 screen-row-bytes) 17)
+                             (+ screen-base-address (* 9 screen-row-bytes) 21))
+                (map char->integer (string->list "OLALA"))
+                "string was scrolled down.")
+  (check-equal? (memory-list scroll-down-3-test
+                             (+ screen-base-address (* 10 screen-row-bytes) 17)
+                             (+ screen-base-address (* 10 screen-row-bytes) 21))
+                (map char->integer (string->list "TIPOP"))
+                "string was scrolled down.")
+  (inform-check-equal? (cpu-state-clock-cycles scroll-down-3-test)
+                282
                 "cpu cycles needed for scrolling 5 chars down"))
 
 ;; input:  X = ROW
 ;;         ZP_RP = COL
 ;;         Y = # of chars to scrol
-;;         OPEN: A = delta (positive: 1..)
-(define-vm-function RT_SCREEN_SCROLL_UP
+;;         A = delta (positive: 1..)
+(define-vm-function-wol RT_SCREEN_SCROLL_UP
   (list
-          (RTS)))
+   (label RT_SCREEN_SCROLL_UP_BY1)
+          (LDA !$01)
+   (label RT_SCREEN_SCROLL_UP)
+          (STA ZP_TEMP)
+          (LDA ZP_RP)
+          (STA ZP_RP+1)  ;; target col = source col
+
+          (TXA)
+          (SEC)
+          (SBC ZP_TEMP)
+
+          (JMP FAST_SCREEN_MEMCOPY_UP)))
+
+(module+ test #| scroll up |#
+  (define scroll-up-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     ;; now put the string
+     (write-string-to-screen--for-test 5 17 "OLALA")
+
+     (LDX !5)
+     (LDY !17)
+     (STY ZP_RP)
+     (LDY !5)
+     (LDA !$01)
+     (STA ZP_RZ) ;; one row
+
+     (JSR $0100)
+     (JSR RT_SCREEN_SCROLL_UP_BY1)))
+
+  (check-equal? (memory-list scroll-up-test
+                             (+ screen-base-address (* 4 screen-row-bytes) 17)
+                             (+ screen-base-address (* 4 screen-row-bytes) 21))
+                (map char->integer (string->list "OLALA"))
+                "string was scrolled up.")
+  (inform-check-equal? (cpu-state-clock-cycles scroll-up-test)
+                       186
+                       "cpu cycles needed for scrolling 5 chars up")
+
+
+  (define scroll-up-2-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     ;; now put the strings
+     (write-string-to-screen--for-test 5 17 "OLALA")
+     (write-string-to-screen--for-test 6 17 "TIPOP")
+
+     (LDX !5)
+     (LDY !17)
+     (STY ZP_RP)
+     (LDY !5)
+     (LDA !$02)
+     (STA ZP_RZ) ;; two rows
+
+     (JSR $0100)
+     (JSR RT_SCREEN_SCROLL_UP_BY1)))
+
+  (check-equal? (memory-list scroll-up-2-test
+                             (+ screen-base-address (* 4 screen-row-bytes) 17)
+                             (+ screen-base-address (* 4 screen-row-bytes) 21))
+                (map char->integer (string->list "OLALA"))
+                "string was scrolled up.")
+  (check-equal? (memory-list scroll-up-2-test
+                             (+ screen-base-address (* 5 screen-row-bytes) 17)
+                             (+ screen-base-address (* 5 screen-row-bytes) 21))
+                (map char->integer (string->list "TIPOP"))
+                "string was scrolled up.")
+  (inform-check-equal? (cpu-state-clock-cycles scroll-up-2-test)
+                       315
+                       "cpu cycles needed for scrolling 5 chars up")
+
+  (define scroll-up-3-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     ;; now put the strings
+     (write-string-to-screen--for-test 5 17 "OLALA")
+     (write-string-to-screen--for-test 6 17 "TIPOP")
+
+     (LDX !5)
+     (LDY !17)
+     (STY ZP_RP)
+     (LDY !5)
+     (LDA !$02)
+     (STA ZP_RZ) ;; two rows
+
+     (LDA !$04) ;; scroll up by 4
+     (JSR $0100)
+     (JSR RT_SCREEN_SCROLL_UP)))
+
+  (check-equal? (memory-list scroll-up-3-test
+                             (+ screen-base-address (* 1 screen-row-bytes) 17)
+                             (+ screen-base-address (* 1 screen-row-bytes) 21))
+                (map char->integer (string->list "OLALA"))
+                "string was scrolled up.")
+  (check-equal? (memory-list scroll-up-3-test
+                             (+ screen-base-address (* 2 screen-row-bytes) 17)
+                             (+ screen-base-address (* 2 screen-row-bytes) 21))
+                (map char->integer (string->list "TIPOP"))
+                "string was scrolled up.")
+  (inform-check-equal? (cpu-state-clock-cycles scroll-up-3-test)
+                       313
+                       "cpu cycles needed for scrolling 5 chars up"))
 
 ;; clear the whole screen
 (define-vm-function RT_SCREEN_CLEAR
@@ -821,17 +1015,23 @@
 ;; output: screen modified
 (define-vm-function RT_SCREEN_CLEAR_CHARS_AT
   (list
-          (STY ZP_RP+1)
-          (LDA !>write_screen_cmd__+1)
-          (LDY !<write_screen_cmd__+1)
-          (JSR PREP_WRITE_SCREEN_CMD)
-          (LDY ZP_RP+1)
+          (LDA line_start_table,x) ;; x = row
+          (AND !$F8)
+          (CLC)
+          (ADC ZP_RP)
+          (STA write_screen_cmd__+1) ;; write offset
+
+          (LDA line_start_table,x) ;; x = row
+          (AND !$07)
+          (ADC !$00)
+
+          (STA write_screen_cmd__+2) ;; write page
 
           (LDA !$00)
    (label char_put_loop__)
    (label write_screen_cmd__)
           (STA $0400,y)
-          (DEY)                      ;; use y as both indices (zp_rp = ptr - col)
+          (DEY)
           (BPL char_put_loop__)
 
           (RTS)))
@@ -921,13 +1121,13 @@
                 (list 0)
                 "screen was clear where once written.")
   (inform-check-equal? (cpu-state-clock-cycles screen-clear-chars-at-test)
-                       74
+                       44
                        "cpu cycles to clear a char"))
 
 (define screen-code
   (append
-   FAST_SMALL_MEMCOPY
-   PREP_WRITE_SCREEN_CMD
+   FAST_SCREEN_MEMCOPY
+   ;; PREP_WRITE_SCREEN_CMD
    RT_SCREEN_SCROLL_RIGHT_CHARS_AT
    RT_SCREEN_SCROLL_LEFT_CHARS_AT
    RT_SCREEN_SCROLL_UP
@@ -938,5 +1138,5 @@
 
 (module+ test #| estimated-code-len |#
   (inform-check-equal? (estimated-code-len screen-code)
-                368
+                381
                 "estimated code length change in screen runtime"))
