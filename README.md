@@ -5,7 +5,7 @@ rackets' capabilities to define (and interpret) languages, in this case: 6510 as
 
 ## prerequisites
 
-* racket 11.1+ (`guix package -i racket`), see https://racket-lang.org/
+* racket 8.11+ (`guix package -i racket`), see https://racket-lang.org/
 * megaparsack (`raco pkg install megaparsack-lib`) 
 * threading library (`raco pkg install threading`) 
 * pvector (`raco pkg install pvector`)
@@ -270,8 +270,6 @@ idea: use same commands as vice monitor (see https://vice-emu.sourceforge.io/vic
   - hygenic macros
 
 #### implementation without new knowledge
-* wrap multitude of flag-methods in 6510-interpreter into simple set of functions working on arbitrary flags, stored in a register, at some
-  arbitrary position
 * extend pretty print to write comments, too
 #### ... with some new knowledge
 * Increase test coverage

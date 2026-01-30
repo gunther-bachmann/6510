@@ -3,7 +3,25 @@
 define all functions that are necessary to provide runtime functions for the
 byte code vm.
 
+links: https://github.com/barryw/c64lib
+
 * TODO
+- [X] provide functions for benchmarking
+  - [X] use timers to record time spent
+  - [X] provide output function for time spent
+  - [X] provide function for waiting keypress
+  - [X] provide function for basic warmstart afterwards
+- [ ] do some scroll / text output benchmarks
+  - [ ] fill screen with 0..9, and alternating color, then scroll (and record timing), then clear screen, then output time spent
+    - left 40 times
+    - right 40 times
+    - down 24 times
+    - up 24 times
+- [ ] implement bc code/runtime functions to
+  - [ ] write strings on screen
+  - [ ] scroll screen
+  - [ ] colorize characters/regions
+  - [ ] allow for highlighting regions (e.g. inverse and set color?)
 - [ ] make sure that naming is corrected
       EVLSTK_TAIL for all but RT
       CELL :: 2 byte tagged ptr or atomic
@@ -29,6 +47,7 @@ byte code vm.
   - [ ] vm-cell-stack.rkt
   - [ ] vm-cell-array.rkt
   - [ ] vm-call-frame.rkt
+  - [ ] vm-screen.rkt
 * ...
 #+begin_src emacs-lisp
   ;; Local Variables:

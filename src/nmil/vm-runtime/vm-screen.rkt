@@ -2,6 +2,8 @@
 
 (provide
  RT_SCREEN_PUT_CHARS_AT               ;; write a number of screen codes to y,x position on screen
+ RT_SCREEN_PUT_CHARS_AT__STRING       ;; label where to put the string pointer (actuall ..+1)
+
  RT_SCREEN_CLEAR_CHARS_AT             ;; clear a number of chars in one line on the screen
  RT_SCREEN_SCROLL_RIGHT_CHARS_AT      ;; scroll a portion of the screen by delta to the right
  RT_SCREEN_SCROLL_RIGHT_CHARS_AT_BY1  ;; by one
@@ -13,11 +15,16 @@
  RT_SCREEN_PUT_YTIMES_COLOR_AT        ;; put the color in A into char color ram of row X, col ZP_RP
  RT_SCREEN_PUT_COLOR_AT               ;; set color at (lower nibble) with A, row = X, column = ZP_RP
 
+ RT_BCD_TO_SCREEN_CODE                ;; convert bcd to screen codes
+
+
  screen-code)
 
 #|
 
- screen output routine runtime for the c64
+ screen output routines for the c64
+
+
 
  useful references:
  - https://github.com/jeff-1amstudios/c64-smooth-scrolling
@@ -85,6 +92,7 @@
      RT_SCREEN_SCROLL_DOWN
      RT_SCREEN_PUT_YTIMES_COLOR_AT
      RT_SCREEN_PUT_COLOR_AT
+     RT_BCD_TO_SCREEN_CODE
      PREP_ZP_TEMP_FOR_MEM_ACCESS
 
      VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -499,6 +507,7 @@
 ;;         RT_SCREEN_PUT_CHARS_AT__STRING+1 = ptr to screen code data (low at +1, high at +2)
 ;;         y = # of chars to print -1 (0 for one char, 1 for two ...)
 ;; output: screen modified
+(define RT_SCREEN_PUT_CHARS_AT__STRING '()) ;; exported label for string source placement
 (define-vm-function RT_SCREEN_PUT_CHARS_AT
   (list
           ;; optimization saves some time!!
@@ -1361,6 +1370,66 @@
                        55
                        "cpu cycles to clear a char"))
 
+
+(define screen-code-0 48)
+(define screen-code-A 1)
+(define screen-code-space 32)
+
+;; convert bcd value in zp_rp into screen codes (that can directly written to screen)
+;;   zp_rp is not a bcd as encoded by the virtual machine <- TODO if wanted as general method
+;;
+;; input: ZP_RP bcd1 bcd0,
+;;        ZP_RP+1 xxxx bcd3
+(define-vm-function RT_BCD_TO_SCREEN_CODE
+  (list   (LDA ZP_RP+1)
+          (AND !$0f)
+          (CLC)
+          (ADC !48)
+          (STA OUT__)
+
+          (LDA ZP_RP)
+          (AND !$f0)
+          (LSR)
+          (LSR)
+          (LSR)
+          (LSR)
+          (CLC)
+          (ADC !48)
+          (STA OUT__+1)
+
+          (LDA ZP_RP)
+          (AND !$0f)
+          (CLC)
+          (ADC !48)
+          (STA OUT__+2)
+          (RTS)
+
+   (label OUT__)
+          (byte 48 48 48)))
+
+(module+ test #| bcd to screen code |#
+  (define bcd-to-screen-code-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     (LDA !$02)
+     (STA ZP_RP+1)
+     (LDA !$43)
+     (STA ZP_RP)        ;; zp := bcd (243)
+
+     (JSR RT_BCD_TO_SCREEN_CODE)
+
+     (LDA OUT__RT_BCD_TO_SCREEN_CODE)
+     (STA $0400)
+     (LDA OUT__RT_BCD_TO_SCREEN_CODE+1)
+     (STA $0401)
+     (LDA OUT__RT_BCD_TO_SCREEN_CODE+2)
+     (STA $0402)))
+
+  (check-equal? (memory-list bcd-to-screen-code-test #x0400 #x0402)
+                (map (lambda (n) (+ screen-code-0 n))
+                     (list 2 4 3))))
+
 (define screen-code
   (append
    FAST_SCREEN_MEMCOPY
@@ -1374,9 +1443,10 @@
    RT_SCREEN_CLEAR
    RT_SCREEN_PUT_YTIMES_COLOR_AT
    RT_SCREEN_PUT_COLOR_AT
+   RT_BCD_TO_SCREEN_CODE
    PREP_ZP_TEMP_FOR_MEM_ACCESS))
 
 (module+ test #| estimated-code-len |#
   (inform-check-equal? (estimated-code-len screen-code)
-                511
+                552
                 "estimated code length change in screen runtime"))
