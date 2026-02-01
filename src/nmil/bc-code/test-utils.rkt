@@ -75,6 +75,12 @@
                   just-vm-interpreter)
          (only-in "../vm-runtime/vm-call-frame.rkt"
                   vm-call-frame->strings)
+         (only-in "../vm-runtime/vm-screen.rkt"
+                  vm-screen-code)
+         (only-in "../vm-runtime/vm-bcd.rkt"
+                  vm-bcd-code)
+         (only-in "../vm-runtime/vm-benchmark.rkt"
+                  vm-benchmark-code)
          (only-in "../vm-runtime/vm-memory-manager.rkt"
                   VM_INIT_MEMORY_MANAGER
                   vm-memory-manager-code)
@@ -98,6 +104,9 @@
     full-extended-optable-hb
     full-extended-optable-lb
     vm-memory-manager-code
+    vm-screen-code
+    vm-bcd-code
+    vm-benchmark-code
     (list (org-align #x100)) ;; align to next page
     full-interpreter-opcode-table
     VM_INTERPRETER_ZP)))

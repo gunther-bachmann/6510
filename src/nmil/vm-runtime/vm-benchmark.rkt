@@ -1,5 +1,13 @@
 #lang racket/base
 
+(provide BM_START_TIMER
+         BM_STOP_TIMER
+         BM_REPORT_TIMER
+         BM_WAIT_FOR_KEYPRESS
+         BM_RESET
+
+         vm-benchmark-code)
+
 #|
 
  functions to benchmark code on real hardware c64
@@ -53,18 +61,21 @@
 
           (LDA TIMER_VAL)
           (JSR RT_INT8_TO_BCD)
+          (JSR RT_BCD_TO_SCREEN_CODE)
           (LDX !0)    ;; col
           (LDA !0)    ;; row
           (JSR PRINT_BCD_TO_AX__)
 
           (LDA TIMER_VAL+1)
           (JSR RT_INT8_TO_BCD)
+          (JSR RT_BCD_TO_SCREEN_CODE)
           (LDX !4)
           (LDA !0)    ;; row
           (JSR PRINT_BCD_TO_AX__)
 
           (LDA TIMER_VAL+2)
           (JSR RT_INT8_TO_BCD)
+          (JSR RT_BCD_TO_SCREEN_CODE)
           (LDX !8)    ;; col
           (LDA !0)    ;; row
           (JSR PRINT_BCD_TO_AX__)
@@ -74,9 +85,10 @@
    (label PRINT_BCD_TO_AX__)
           (STX ZP_RP)
           (TAX)
-          (LDA !<OUT__RT_INT8_TO_BCD)
+
+          (LDA !<OUT__RT_BCD_TO_SCREEN_CODE)
           (STA RT_SCREEN_PUT_CHARS_AT__STRING+1)
-          (LDA !>OUT__RT_INT8_TO_BCD)
+          (LDA !>OUT__RT_BCD_TO_SCREEN_CODE)
           (STA RT_SCREEN_PUT_CHARS_AT__STRING+2)
           (LDY !2)    ;; 3 chars
           (JMP RT_SCREEN_PUT_CHARS_AT)))
@@ -103,17 +115,18 @@
           (JSR SCNKEY)
           (JSR GETIN)
           (BEQ LOOP__)
+          (STA ZP_RP)
 
           (RTS)))
 
-;; execute a basic warm start
-(define-vm-function BM_BASIC_WARM_START
-  (list (JMP ($A002))))
+;; execute a machine reset
+(define-vm-function BM_RESET
+  (list (JMP $FCE2)))
 
-(define benchmark-code
+(define vm-benchmark-code
   (append
    BM_STOP_TIMER
    BM_START_TIMER
    BM_REPORT_TIMER
    BM_WAIT_FOR_KEYPRESS
-   BM_BASIC_WARM_START))
+   BM_RESET))

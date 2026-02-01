@@ -990,6 +990,8 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
   (or (= (bytes->int low high) #xFFD2) ;; kernel output character
      (= (bytes->int low high) #xAB1E) ;; basic output string
      (= (bytes->int low high) #xBDCD) ;; basic output integer
+     (= (bytes->int low high) #xFF9F) ;; scan keyboard
+     (= (bytes->int low high) #xFFE4) ;; get character from keyboard
      ))
 
 ;; since the 6502/6510 has its cpu stack located 0100-01ff, it should be safe to use JSR to these locations
@@ -1002,6 +1004,10 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
 (define/c (interpret-c64-rom-routine high low state (verbose #t) (string-output-function interpreter-output-function))
   (->* [byte? byte? cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
   (case (bytes->int low high)
+    [(#xFFE4) (struct-copy cpu-state state
+                           [accumulator #x01]
+                           [flags (-clear-zero-flag (cpu-state-flags state))])] ;; read keyboar
+    [(#xFF9F) state] ;; scan keyboard
     [(#xFFD2) ;; (display (string (integer->char (cpu-state-accumulator state))))
      (~>> (cpu-state-accumulator state)
          (display-c64charcode _ state verbose string-output-function))]

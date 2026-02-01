@@ -2,6 +2,8 @@
 
 (provide
  RT_INT8_TO_BCD                  ;; convert byte into bcd (max 3 digits)
+
+ vm-bcd-code
  )
 
 #|
@@ -177,10 +179,10 @@
                        363
                        "needed cycles for int8->bcd"))
 
-(define bcd-code
+(define vm-bcd-code
   (append RT_INT8_TO_BCD))
 
 (module+ test #| code len |#
-  (inform-check-equal? (estimated-code-len bcd-code)
+  (inform-check-equal? (estimated-code-len vm-bcd-code)
                        48
                        "estimated code len"))

@@ -17,11 +17,15 @@ links: https://github.com/barryw/c64lib
     - right 40 times
     - down 24 times
     - up 24 times
+  - [ ] run benchmark on c64
 - [ ] implement bc code/runtime functions to
   - [ ] write strings on screen
   - [ ] scroll screen
   - [ ] colorize characters/regions
   - [ ] allow for highlighting regions (e.g. inverse and set color?)
+- [ ] implement data structure of text buffers
+- [ ] implement display of buffers
+- [ ] implement large arrays (larger strings)
 - [ ] make sure that naming is corrected
       EVLSTK_TAIL for all but RT
       CELL :: 2 byte tagged ptr or atomic

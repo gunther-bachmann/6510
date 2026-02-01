@@ -24,4 +24,4 @@
 (define-vm-function BC_GC_FL
   (list
           (JSR GC_ALL)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
+          (JMP VM_INTERPRETER_INC_PC)))

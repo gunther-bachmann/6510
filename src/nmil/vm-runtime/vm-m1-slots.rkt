@@ -414,7 +414,7 @@
                  $f2 ;; slot size: 12, slot: f2..fd
                  $da ;; slot size: 24, slot: da..f1
                  $da ;; slot size: 36, slot: da..fd
-                 $ca ;; slot size: 50, slot: ca..fd
+                 $ca ;; slot size: 50, slot: ca..fb
                  )])
 
 (module+ test #| INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX |#

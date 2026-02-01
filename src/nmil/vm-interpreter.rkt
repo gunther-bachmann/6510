@@ -51,6 +51,8 @@
                   BC_PUSH_AF
                   BC_POP_TO_AF
                   BC_SWAP_RA_RB)
+         (only-in "./vm-interpreter-bc/bench.rkt"
+                  BC_BENCH)
          (only-in "./vm-interpreter-bc/atom-num.rkt"
                   BC_BINC
                   BC_BDEC
@@ -255,6 +257,7 @@
           BC_EXT1_CMD
           BC_IINC
           BC_IDEC
+          BC_BENCH
           BC_BNOP
           BC_GC_FL
           BC_ALLOC_ARA
@@ -304,7 +307,7 @@
 
 (module+ test #| vm-interpreter |#
   (inform-check-equal? (estimated-code-len (flatten just-vm-interpreter))
-                       1541
+                       1585
                        "estimated code len of (just) the interpreter"))
 
 (module+ test #| vm-interpreter total len |#

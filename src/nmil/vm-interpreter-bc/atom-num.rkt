@@ -83,11 +83,11 @@
           (BMI KEEP_RT__)
 
           (JSR POP_EVLSTK_TAIL_TO_RT)     ;; pop RT and move TOS into RT
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)
+          (JMP VM_INTERPRETER_INC_PC)
 
     (label KEEP_RT__)
           (DEC ZP_EVAL_STACK_TAIL_TOP) ;; just pop but keep RT, since INT no GC necessary
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
+          (JMP VM_INTERPRETER_INC_PC)))
 
 (define-vm-function BC_IINC
   (list
@@ -99,7 +99,7 @@
           (ORA !$03)
           (STA ZP_RT)
    (label DONE__)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
+          (JMP VM_INTERPRETER_INC_PC)))
 
 (define-vm-function BC_IDEC
   (list
@@ -114,7 +114,7 @@
           (ORA !$03)
           (STA ZP_RT)
    (label DONE__)
-          (JMP VM_INTERPRETER_INC_PC_2_TIMES)))
+          (JMP VM_INTERPRETER_INC_PC)))
 
 (define-vm-function BC_IADD
   (list

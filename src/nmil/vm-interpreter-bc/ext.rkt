@@ -22,6 +22,10 @@
   (list
           (LDY !$01)
           (LDA (ZP_VM_PC),y) ;; get second command byte
+          (INC ZP_VM_PC)
+          (BNE CONT__)
+          (INC ZP_VM_PC+1)
+   (label CONT__)
           (TAY)
    ;;        (LDA VM_INTERPRETER_OPTABLE_EXT1_HB,y)
    ;;        (STA CALL_COMMAND__BC_EXT1_CMD+2)

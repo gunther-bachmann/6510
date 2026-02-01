@@ -38,6 +38,12 @@
                   vm-cell-at->string
                   vm-cell->string
                   vm-deref-cell-pair-w->string)
+         (only-in "../vm-runtime/vm-screen.rkt"
+                  vm-screen-code)
+         (only-in "../vm-runtime/vm-bcd.rkt"
+                  vm-bcd-code)
+         (only-in "../vm-runtime/vm-benchmark.rkt"
+                  vm-benchmark-code)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_ZP
@@ -97,6 +103,9 @@
            (build-extended-optable-hb relevant-opcode-definitions)
            (build-extended-optable-lb relevant-opcode-definitions)
            vm-memory-manager-code
+           vm-bcd-code
+           vm-screen-code
+           vm-benchmark-code
            (list (org-align #x100)) ;; align to next page
            (build-interpreter-optable relevant-opcode-definitions)
            VM_INTERPRETER_ZP))) ;; TODO create opcode table w/ wanted / knonwn opcodes only?

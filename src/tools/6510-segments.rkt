@@ -71,6 +71,12 @@ currently the following test programs are created
                     just-vm-interpreter)
            (only-in "../nmil/vm-runtime/vm-memory-manager.rkt"
                     vm-memory-manager-code)
+           (only-in "../nmil/vm-runtime/vm-benchmark.rkt"
+                    vm-benchmark-code)
+           (only-in "../nmil/vm-runtime/vm-screen.rkt"
+                    vm-screen-code)
+           (only-in "../nmil/vm-runtime/vm-bcd.rkt"
+                    vm-bcd-code)
            (only-in  "../nmil/vm-runtime/vm-memory-manager-test-utils.rkt"
                      list-with-label-suffix
                      run-code-in-test-on-code)
@@ -448,7 +454,10 @@ currently the following test programs are created
      (append (list (org #x2800)
                    (byte-const ZP_VM_PC #x85) ;; #x80 + 5
                    )
-             vm-memory-manager-code)
+             vm-memory-manager-code
+             vm-screen-code
+             vm-bcd-code
+             vm-benchmark-code)
      ;; (assembly-code-list-labels mem-data)
      ))
 
@@ -457,9 +466,9 @@ currently the following test programs are created
      (assembly-code-list-org-code-sequences
       vm-runtime)))
 
-  (check-true (> (- #x3000 #x2800)
+  (check-true (> (- #x4000 #x2800)
                  (length raw-vm-runtime))
-              "vm runtime must fit into 2k (2800..2fff), else the loader needs to be adjusted (see vm-runtime)")
+              "vm runtime must fit into 2k (2800..3fff), else the loader needs to be adjusted (see vm-runtime)")
 
   ;; @9000 just bc interpreter
   (define bc-interpreter
@@ -544,18 +553,11 @@ currently the following test programs are created
              (bc BINC)
              (bc POKE_B) (byte $01 $04) ;; poke result $02 (B) into $0401 (second character on screen)
 
-             (bc NATIVE)
+             ;; implement BENCH bytecode to execute benchmark functions
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $04) ;; do warmstart
 
-      ;;        (LDY STRING1_MSG)
-      ;; (label LOOP_OUT_1)
-      ;;        (LDA STRING1_MSG,y)
-      ;;        (JSR $FFD2)
-      ;;        (DEY)
-      ;;        (BNE LOOP_OUT_1)
-      ;;        (RTS)
-      ;; (label STRING1_MSG)
-      ;;        (byte 6)
-      ;;        (asc "!OLLEH")
+             (bc NATIVE)
 
              ;; restore zero page
              (LDY !$ff)

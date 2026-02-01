@@ -18,7 +18,7 @@
  RT_BCD_TO_SCREEN_CODE                ;; convert bcd to screen codes
 
 
- screen-code)
+ vm-screen-code)
 
 #|
 
@@ -44,6 +44,7 @@
  screen organisation, color and screen modes
  - https://sta.c64.org/cbm64disp.html
  - https://www.c64-wiki.com/wiki/Color
+ - https://sta.c64.org/cbm64scr.html
 
 
  info about cpu cycles per scanline etc. (https://www.lemon64.com/forum/viewtopic.php?t=2629):
@@ -1430,7 +1431,7 @@
                 (map (lambda (n) (+ screen-code-0 n))
                      (list 2 4 3))))
 
-(define screen-code
+(define vm-screen-code
   (append
    FAST_SCREEN_MEMCOPY
    ;; PREP_WRITE_SCREEN_CMD
@@ -1447,6 +1448,6 @@
    PREP_ZP_TEMP_FOR_MEM_ACCESS))
 
 (module+ test #| estimated-code-len |#
-  (inform-check-equal? (estimated-code-len screen-code)
+  (inform-check-equal? (estimated-code-len vm-screen-code)
                 552
                 "estimated code length change in screen runtime"))

@@ -87,6 +87,8 @@
                   BC_IADD                        ;; add two topmost integer
                   BC_BSHR                        ;; shift tos byte one bit to the right
                   BC_ISUB)
+         (only-in "./vm-interpreter-bc/bench.rkt"
+                  BC_BENCH)
          (only-in "./vm-interpreter-bc/branch.rkt"
                   BC_Z_P_BRA                     ;; branch by next byte if tos is zero (byte or int), pop if branching
                   BC_NZ_P_BRA                    ;; branch by next byte if tos is NOT zero (byte or int), pop if not branching
@@ -235,6 +237,8 @@
            (define-bc BC_IINC           IINC                      #x02 1 "int inc")     ;; stack: a:: -> a+1::
            (define-bc BC_GC_FL          GC                        #x03 1 "gc")          ;; stack: -
            (define-bc BC_IDEC           IDEC                      #x04 1 "int dec")     ;; stack: a:: -> a-1::
+           (define-bc BC_BENCH          BENCH                     #x05 2
+             (lambda (_l _bc _bc-p1 bc-p2) (format "benchmark function $~a" (byte->hex-string bc-p2))))
            ))
 
    (define-bc VM_INTERPRETER_INC_PC    _                    #x0a 1 "reserved")          ;; reserved
