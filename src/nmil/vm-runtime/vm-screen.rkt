@@ -406,6 +406,8 @@
 ;;           ZP_RP = col
 ;; modifies: A, ZP_TEMP, ZP_TEMP+1
 ;; keeps:    X, Y
+(define PREP_ZP_TEMP_FOR_COLOR_ACCESS '())
+(define PREP_ZP_TEMP_FOR_SCREEN_ACCESS '())
 (define-vm-function-wol PREP_ZP_TEMP_FOR_MEM_ACCESS
   (list
    (label PREP_ZP_TEMP_FOR_COLOR_ACCESS)
@@ -1260,8 +1262,8 @@
 ;; clear the whole screen
 (define-vm-function RT_SCREEN_CLEAR
   (list
-          (LDA !0)
-          (TAX)
+          (LDA !32)
+          (LDX !$00)
    (label loop__)
           (STA $0400,x)
           (STA $0500,x)

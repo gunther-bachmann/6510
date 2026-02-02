@@ -196,7 +196,7 @@
   VM_INIT_PAGE_MEMORY_MANAGER
   (list
    (label VM_INIT_PAGE_MEMORY_MANAGER_N20)
-          (LDX !$30)
+          (LDX !$60)
    (label VM_INIT_PAGE_MEMORY_MANAGER)
           (STX ZP_TEMP+1) ;; for later comparison
 

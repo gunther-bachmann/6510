@@ -23,9 +23,41 @@
                   RT_SCREEN_CLEAR
                   RT_SCREEN_PUT_CHARS_AT
                   RT_SCREEN_PUT_CHARS_AT__STRING
-                  RT_BCD_TO_SCREEN_CODE)
+                  RT_BCD_TO_SCREEN_CODE
+                  RT_SCREEN_SCROLL_RIGHT_CHARS_AT)
          (only-in "./vm-bcd.rkt"
                   RT_INT8_TO_BCD))
+
+(module+ test #| require |#
+  (require (only-in racket/string
+                    string-replace)
+           (only-in uuid
+                    uuid-string)
+           "../../6510-test-utils.rkt"
+           (only-in "../../ast/6510-relocator.rkt"
+                    estimated-code-len)
+           (only-in "../../tools/6510-interpreter.rkt"
+                    cpu-state-clock-cycles
+                    memory-list)
+           "./vm-memory-manager-test-utils.rkt"
+           (only-in "./vm-memory-map.rkt"
+                    VM_MEMORY_MANAGEMENT_CONSTANTS
+                    ZP_RP)
+           (only-in "../vm-runtime/vm-screen.rkt"
+                    vm-screen-code)
+           (only-in "../vm-runtime/vm-bcd.rkt"
+                    vm-bcd-code))
+
+  (define test-runtime
+    (append
+     BM_START_TIMER
+     BM_STOP_TIMER
+     BM_REPORT_TIMER
+
+     VM_MEMORY_MANAGEMENT_CONSTANTS
+     vm-screen-code
+     vm-bcd-code
+     (list (label VM_INIT_MEMORY_MANAGER) (RTS)))))
 
 ;; start the timer on the c64
 (define-vm-function BM_START_TIMER
@@ -78,9 +110,7 @@
           (JSR RT_BCD_TO_SCREEN_CODE)
           (LDX !8)    ;; col
           (LDA !0)    ;; row
-          (JSR PRINT_BCD_TO_AX__)
-
-          (JMP BM_WAIT_FOR_KEYPRESS)
+          ;; print bcd_to_ax__
 
    (label PRINT_BCD_TO_AX__)
           (STX ZP_RP)
@@ -91,7 +121,16 @@
           (LDA !>OUT__RT_BCD_TO_SCREEN_CODE)
           (STA RT_SCREEN_PUT_CHARS_AT__STRING+2)
           (LDY !2)    ;; 3 chars
+                      ;; row in X
+                      ;; col in zp_rp
           (JMP RT_SCREEN_PUT_CHARS_AT)))
+
+(module+ test #| report timer|#
+  (define report-timer-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     (JSR BM_REPORT_TIMER))))
 
 ;; wait for key
 (define-vm-function BM_WAIT_FOR_KEYPRESS
@@ -119,9 +158,48 @@
 
           (RTS)))
 
+(define-vm-function BM_FILL_SCREEN_W_NUMBERS
+  (list
+          (LDX !$00)
+   (label outer_loop__)
+          (LDY !$30)
+          (TYA)
+   (label inner_loop__)
+          (DEX)
+          (STA $0400,x)
+          (STA $0500,x)
+          (STA $0600,x)
+          (STA $0700,x)
+          (BEQ done__)
+          (INY)
+          (TYA)
+          (CPY !$3a)
+          (BNE inner_loop__)
+          (BEQ outer_loop__)
+   (label done__)
+          (RTS)))
+
+(define-vm-function BM_SCROLL_RIGHT_40
+  (list
+          (LDA !$40)
+          (STA ZP_RT)
+   (label LOOP__)
+          ;; setup scroll of full screen
+          (LDX !24) ;; start at row 25 (zero indexed) [going up]
+          (LDY !0)
+          (STY ZP_RP)
+          (LDY !38) ;; copy 39 chars (counter is always 1 -)
+          (LDA !25) ;; scroll 25 rows in total
+          (STA ZP_RZ)   ;; all rows
+
+          (JSR RT_SCREEN_SCROLL_RIGHT_CHARS_AT_BY1)
+          (DEC ZP_RT)
+          (BNE LOOP__)
+          (RTS)))
+
 ;; execute a machine reset
 (define-vm-function BM_RESET
-  (list (JMP $FCE2)))
+  (list   (JMP $FCE2)))
 
 (define vm-benchmark-code
   (append
@@ -129,4 +207,6 @@
    BM_START_TIMER
    BM_REPORT_TIMER
    BM_WAIT_FOR_KEYPRESS
-   BM_RESET))
+   BM_RESET
+   BM_FILL_SCREEN_W_NUMBERS
+   BM_SCROLL_RIGHT_40))

@@ -33,4 +33,6 @@
           (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BM_STOP_TIMER"))
           (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BM_REPORT_TIMER"))
           (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BM_RESET"))
+          (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BM_FILL_SCREEN_W_NUMBERS"))
+          (ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BM_SCROLL_RIGHT_40"))
           ))

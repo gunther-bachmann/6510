@@ -56,39 +56,39 @@
 (define-vm-function RT_INT8_TO_BCD
   (list
 
-   (label bin_2_bcd)
+   (label bin_2_bcd__)
           (SED)
           (STA    ZP_RP)
           (LDA    !$00)
           (LDX    !$07)
-   (label bit_loop)
+   (label bit_loop__)
           (LSR    ZP_RP)
-          (BCC    skip_add)
+          (BCC    skip_add__)
 
           (ADC    b2b_table-1,x)
-   (label skip_add)
+   (label skip_add__)
           (DEX)
-          (BNE    bit_loop)
+          (BNE    bit_loop__)
 
 ;***********************************************************************
 ; if you only require conversion of numbers between $00 and $63 (0 to 99
 ; decimal) then omit all code between the "*"s
 
-          (BCC    skip_100)    ; branch if no 100's carry
+          (BCC    skip_100__)    ; branch if no 100's carry
                                 ; if Cb set here (and can only be set by the
                                 ; last loop add) then there was a carry into
           (INX)            ; the 100's so add 100's carry to the high byte
-   (label skip_100)
+   (label skip_100__)
                 ; now check the 2^7 (128) bit
           (LSR    ZP_RP)        ; bit 7 to carry
-          (BCC    skip_fin)    ; branch if no add
+          (BCC    skip_fin__)    ; branch if no add
 
           (INX)            ; else effectively add 100 part of 128
           (ADC    !$27)        ; and then add 128 (-1) part of 128
-          (BCC    skip_fin)    ; branch if no further carry
+          (BCC    skip_fin__)    ; branch if no further carry
 
           (INX)            ; else add 200's carry
-  (label  skip_fin)
+  (label  skip_fin__)
           (STX    ZP_RP+1)        ; save result high byte
 
 ; end of 100's code

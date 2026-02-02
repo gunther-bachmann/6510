@@ -66,7 +66,7 @@
 ;; (namespace-variable-value 25)
 ;; (eval '(+ some 5)) ;; => 30
 
-(define debugger-max-uninterrupted-steps 65536)
+(define debugger-max-uninterrupted-steps (* 12 65536))
 
 ;; set or clear flags
 (define/c (modify-flag set flag c-state)

@@ -169,13 +169,13 @@ currently the following test programs are created
           (BNE LEN_NOT_ZERO__)
           (INY)
           (LDA ($F8),y)
-          (BEQ DONE__)
+          (BEQ DONE__) ;; low byte of len and high byte of len = 0 => this is the last entry => done
 
    (label LEN_NOT_ZERO__)
           (LDY !$00)
           (LDX !$00)
 
-   (label INNER_LOOP__)
+   (label INNER_LOOP__)         ;; copy values of copy descriptor for call to copy_region
           (LDA ($F8),y)
           (STA $FA,x)
           (INY)
@@ -185,7 +185,7 @@ currently the following test programs are created
           (CLC)
           (TYA)
           (ADC $F8)
-          (STA $F8)
+          (STA $F8)             ;; move ptr to next copy descriptor
           (BCC NO_INC_PAGE__)
           (INC $F9)
    (label NO_INC_PAGE__)
@@ -451,7 +451,7 @@ currently the following test programs are created
   ;; @c000 runtime + memory management etc
   (define vm-runtime
     (new-assemble-to-code-list
-     (append (list (org #x2800)
+     (append (list (org #x4800)
                    (byte-const ZP_VM_PC #x85) ;; #x80 + 5
                    )
              vm-memory-manager-code
@@ -466,14 +466,14 @@ currently the following test programs are created
      (assembly-code-list-org-code-sequences
       vm-runtime)))
 
-  (check-true (> (- #x4000 #x2800)
+  (check-true (> (- #x6000 #x4800) ;; make sure to adjust file:~/repo/+1/6510/src/nmil/vm-runtime/vm-pages.rkt::LDX !$60 (line 199)
                  (length raw-vm-runtime))
-              "vm runtime must fit into 2k (2800..3fff), else the loader needs to be adjusted (see vm-runtime)")
+              "vm runtime must fit into 2k (4800..5fff), else the loader needs to be adjusted (see vm-runtime)")
 
   ;; @9000 just bc interpreter
   (define bc-interpreter
     (new-assemble-to-code-list
-       (append (list (org #x2000))
+       (append (list (org #x4000)) ;; make sure to adjust segment accordingly
                full-interpreter-opcode-table ;; aligned to xx00 (page aligned)
                (list ;; (org #x2100)
                      ;; (word-const VM_INTERPRETER_OPTABLE $ce00)
@@ -506,9 +506,9 @@ currently the following test programs are created
      (assembly-code-list-org-code-sequences
       zp-interpreter-loop)))
 
-  (check-true (> (- #x2800 #x2000)
+  (check-true (> (- #x4800 #x4000)
                  (length raw-bc-interpreter))
-              "bc interpreter must fit into 2k (2000..2800), else the loader needs to be adjusted (see bc-interpreter)")
+              "bc interpreter must fit into 2k (4000..4800), else the loader needs to be adjusted (see bc-interpreter)")
 
   ;; @ce00
   ;; (define raw-bc-jump-table
@@ -540,7 +540,7 @@ currently the following test programs are created
              ;; add code to initialize memory manage and interpreter
              (LDA !<BC_START)
              (LDX !>BC_START)
-             (JMP $2100)      ;; initialize memory manager & interpreter & start interpreter
+             (JMP $4100)      ;; initialize memory manager & interpreter & start interpreter
 
       (label BC_START)
              (ast-bytes-cmd '() byte-codes)
@@ -554,6 +554,14 @@ currently the following test programs are created
              (bc POKE_B) (byte $01 $04) ;; poke result $02 (B) into $0401 (second character on screen)
 
              ;; implement BENCH bytecode to execute benchmark functions
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $05) ;; fill screen
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $01) ;; start timer
+             (bc BENCH) (byte $06) ;; scroll right 40 times
+             (bc BENCH) (byte $02) ;; stop timer
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $03) ;; report timer
              (bc BENCH) (byte $00) ;; wait for keypress
              (bc BENCH) (byte $04) ;; do warmstart
 
@@ -583,7 +591,7 @@ currently the following test programs are created
       "SECTION_ZI")
      (segment->copy-descriptor
       (c64-segment 'pinned ;; type
-                   #x2000  ;; location
+                   #x4000  ;; location
                    '()       ;; reloc info
                    '()       ;; resolution info
                    '()       ;; resolution symbols
@@ -592,7 +600,7 @@ currently the following test programs are created
       "SECTION_BC")
      (segment->copy-descriptor
       (c64-segment 'pinned ;; type
-                   #x2800  ;; location
+                   #x4800  ;; location
                    '()       ;; reloc info
                    '()       ;; resolution info
                    '()       ;; resolution symbols
@@ -674,28 +682,31 @@ currently the following test programs are created
    "__" "__COPY_REGION"
   (list
    (label COPY_REGION)
-          (LDA $FD)
+          (LDA $FD)     ;; source high
           (CLC)
-          (ADC $FB)
-          (STA $FD)
+          (ADC $FB)     ;; len high
+          (STA $FD)     ;; source high
           (BCC NO_INC_SRC_HB__)
-          (INC $FD)
+          (INC $FD)     ;; source high
    (label NO_INC_SRC_HB__)
 
-          (LDA $FF)
+          (LDA $FF)     ;; target high
           (CLC)
-          (ADC $FB)
-          (STA $FF)
+          (ADC $FB)     ;; len high
+          (STA $FF)     ;; target high
           (BCC NO_INC_TAR_HB__)
-          (INC $FF)
+          (INC $FF)     ;; target high
 
    (label NO_INC_TAR_HB__)
           (INC $FB) ;; => so BNE on outer loop works exactly the number of times wanted
 
+
+          ;; copy at index 0
           (LDY !$00)
           (LDA ($FC),y)
           (STA ($FE),y)
 
+          ;; load len
           (LDY $FA)
           (BEQ NEXT_PAGE_ITER__)
 
@@ -706,10 +717,12 @@ currently the following test programs are created
           (DEY)
           (BNE INNER_LOOP__)
 
+          ;; done copying one page
+
    (label NEXT_PAGE_ITER__)
-          (DEC $FD)
-          (DEC $FF)
-          (DEC $FB)
+          (DEC $FD)     ;; from high byte
+          (DEC $FF)     ;; to high byte
+          (DEC $FB)     ;; size high byte
           (BNE OUTER_LOOP__) ;; y = 0, copies ,0 then ,ff then ,fe ...
 
    (label DONE__)

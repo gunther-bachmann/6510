@@ -31,7 +31,15 @@
   (define bench-test
     (run-bc-wrapped-in-test
      (list
-      (bc BENCH) (byte 00)) ;; wait for key press, writes it into ZP_RP
+             (bc BENCH) (byte $05) ;; fill screen
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $01) ;; start timer
+             ;; (bc BENCH) (byte $06) ;; scroll right 40 times <- quite expensive for the interpreter
+             (bc BENCH) (byte $02) ;; stop timer
+             (bc BENCH) (byte $03) ;; report timer
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $04) ;; do warmstart
+             )
      #f))
 
   (check-equal? (memory-list bench-test ZP_RP)
