@@ -554,7 +554,9 @@ currently the following test programs are created
              (bc POKE_B) (byte $01 $04) ;; poke result $02 (B) into $0401 (second character on screen)
 
              ;; implement BENCH bytecode to execute benchmark functions
+
              (bc BENCH) (byte $00) ;; wait for keypress
+
              (bc BENCH) (byte $05) ;; fill screen
              (bc BENCH) (byte $00) ;; wait for keypress
              (bc BENCH) (byte $01) ;; start timer
@@ -563,6 +565,34 @@ currently the following test programs are created
              (bc BENCH) (byte $00) ;; wait for keypress
              (bc BENCH) (byte $03) ;; report timer
              (bc BENCH) (byte $00) ;; wait for keypress
+
+             (bc BENCH) (byte $05) ;; fill screen
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $01) ;; start timer
+             (bc BENCH) (byte $07) ;; scroll down 25 times
+             (bc BENCH) (byte $02) ;; stop timer
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $03) ;; report timer
+             (bc BENCH) (byte $00) ;; wait for keypress
+
+             (bc BENCH) (byte $05) ;; fill screen
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $01) ;; start timer
+             (bc BENCH) (byte $08) ;; scroll up 25 times
+             (bc BENCH) (byte $02) ;; stop timer
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $03) ;; report timer
+             (bc BENCH) (byte $00) ;; wait for keypress
+
+             (bc BENCH) (byte $05) ;; fill screen
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $01) ;; start timer
+             (bc BENCH) (byte $09) ;; scroll left 25 times
+             (bc BENCH) (byte $02) ;; stop timer
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $03) ;; report timer
+             (bc BENCH) (byte $00) ;; wait for keypress
+
              (bc BENCH) (byte $04) ;; do warmstart
 
              (bc NATIVE)

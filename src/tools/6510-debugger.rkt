@@ -17,6 +17,9 @@
 
  (run-debugger org raw-bytes)
 
+ links:
+   commands of the vice monitor: https://vice-emu.sourceforge.io/vice_12.html
+
  |#
 
 (require (only-in ansi-color with-colors)

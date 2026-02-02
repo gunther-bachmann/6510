@@ -11,13 +11,13 @@ links: https://github.com/barryw/c64lib
   - [X] provide output function for time spent
   - [X] provide function for waiting keypress
   - [X] provide function for basic warmstart afterwards
-- [ ] do some scroll / text output benchmarks
-  - [ ] fill screen with 0..9, and alternating color, then scroll (and record timing), then clear screen, then output time spent
+- [X] do some scroll / text output benchmarks
+  - [X] fill screen with 0..9, and alternating color, then scroll (and record timing), then clear screen, then output time spent
     - left 40 times
     - right 40 times
     - down 24 times
     - up 24 times
-  - [ ] run benchmark on c64
+  - [X] run benchmark on c64
 - [ ] implement bc code/runtime functions to
   - [ ] write strings on screen
   - [ ] scroll screen

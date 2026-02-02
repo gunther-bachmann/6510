@@ -24,7 +24,10 @@
                   RT_SCREEN_PUT_CHARS_AT
                   RT_SCREEN_PUT_CHARS_AT__STRING
                   RT_BCD_TO_SCREEN_CODE
-                  RT_SCREEN_SCROLL_RIGHT_CHARS_AT)
+                  RT_SCREEN_SCROLL_LEFT_CHARS_AT_BY1
+                  RT_SCREEN_SCROLL_RIGHT_CHARS_AT
+                  RT_SCREEN_SCROLL_DOWN_BY1
+                  RT_SCREEN_SCROLL_UP_BY1)
          (only-in "./vm-bcd.rkt"
                   RT_INT8_TO_BCD))
 
@@ -173,7 +176,7 @@
           (BEQ done__)
           (INY)
           (TYA)
-          (CPY !$3a)
+          (CPY !$39) ;; just up to 8, make scroll better to follow
           (BNE inner_loop__)
           (BEQ outer_loop__)
    (label done__)
@@ -185,14 +188,68 @@
           (STA ZP_RT)
    (label LOOP__)
           ;; setup scroll of full screen
-          (LDX !24) ;; start at row 25 (zero indexed) [going up]
+          (LDX !24)    ;; start at row 25 (zero indexed) [going up]
           (LDY !0)
           (STY ZP_RP)
-          (LDY !38) ;; copy 39 chars (counter is always 1 -)
-          (LDA !25) ;; scroll 25 rows in total
-          (STA ZP_RZ)   ;; all rows
+          (LDY !38)    ;; copy 39 chars (counter is always 1 -)
+          (LDA !25)    ;; scroll 25 rows in total
+          (STA ZP_RZ)
 
           (JSR RT_SCREEN_SCROLL_RIGHT_CHARS_AT_BY1)
+          (DEC ZP_RT)
+          (BNE LOOP__)
+          (RTS)))
+
+(define-vm-function BM_SCROLL_DOWN_25
+  (list
+          (LDA !25)
+          (STA ZP_RT)
+   (label LOOP__)
+          ;; setup scroll of full screen
+          (LDX !23)   ;; start at row 24 (zero indexed) [going up]
+          (LDY !0)
+          (STY ZP_RP) ;; start col 0
+          (LDY !39)   ;; copy 40 chars (counter is always 1 -)
+          (LDA !24)   ;; scroll 24 rows in total
+          (STA ZP_RZ)
+
+          (JSR RT_SCREEN_SCROLL_DOWN_BY1)
+          (DEC ZP_RT)
+          (BNE LOOP__)
+          (RTS)))
+
+(define-vm-function BM_SCROLL_UP_25
+  (list
+          (LDA !25)
+          (STA ZP_RT)
+   (label LOOP__)
+          ;; setup scroll of full screen
+          (LDX !1)   ;; start at row 2 (zero indexed) [going down]
+          (LDY !0)
+          (STY ZP_RP) ;; start col 0
+          (LDY !40)   ;; copy 40 chars
+          (LDA !24)   ;; scroll 24 rows in total
+          (STA ZP_RZ)
+
+          (JSR RT_SCREEN_SCROLL_UP_BY1)
+          (DEC ZP_RT)
+          (BNE LOOP__)
+          (RTS)))
+
+(define-vm-function BM_SCROLL_LEFT_40
+  (list
+          (LDA !$40)
+          (STA ZP_RT)
+   (label LOOP__)
+          ;; setup scroll of full screen
+          (LDX !0)    ;; start at row 0 (zero indexed) [going down]
+          (LDY !1)
+          (STY ZP_RP)
+          (LDY !39)    ;; copy 39 chars
+          (LDA !25)    ;; scroll 25 rows in total
+          (STA ZP_RZ)
+
+          (JSR RT_SCREEN_SCROLL_LEFT_CHARS_AT_BY1)
           (DEC ZP_RT)
           (BNE LOOP__)
           (RTS)))
@@ -209,4 +266,7 @@
    BM_WAIT_FOR_KEYPRESS
    BM_RESET
    BM_FILL_SCREEN_W_NUMBERS
-   BM_SCROLL_RIGHT_40))
+   BM_SCROLL_RIGHT_40
+   BM_SCROLL_DOWN_25
+   BM_SCROLL_UP_25
+   BM_SCROLL_LEFT_40))

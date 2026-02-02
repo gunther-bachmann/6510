@@ -10,7 +10,9 @@
  RT_SCREEN_SCROLL_LEFT_CHARS_AT       ;; scroll a portion of the screen by delta to the left
  RT_SCREEN_SCROLL_LEFT_CHARS_AT_BY1   ;; by one
  RT_SCREEN_SCROLL_UP                  ;; scroll a portion of the screen up by 1 line
+ RT_SCREEN_SCROLL_UP_BY1
  RT_SCREEN_SCROLL_DOWN                ;; scroll a portion of the screen down by 1 line
+ RT_SCREEN_SCROLL_DOWN_BY1
  RT_SCREEN_CLEAR                      ;; clear the whole screen
  RT_SCREEN_PUT_YTIMES_COLOR_AT        ;; put the color in A into char color ram of row X, col ZP_RP
  RT_SCREEN_PUT_COLOR_AT               ;; set color at (lower nibble) with A, row = X, column = ZP_RP
@@ -1077,6 +1079,7 @@
 ;;         ZP_RZ = number of rows to scroll
 ;;         Y = # of chars to scroll
 ;;         A = delta (positive: 1..)
+(define RT_SCREEN_SCROLL_UP_BY1 '())
 (define-vm-function-wol RT_SCREEN_SCROLL_UP
   (list
    (label RT_SCREEN_SCROLL_UP_BY1)
