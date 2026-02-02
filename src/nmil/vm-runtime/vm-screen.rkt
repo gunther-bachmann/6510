@@ -204,11 +204,9 @@
 ;; ZP_RP+1 : target col
 ;; Y       : number to copy within row
 ;; ZP_RZ   : number of lines to copy
-;; ZP_RZ+1 : 0 -> copy memory up, != 0 -> copy memory down
 
 ;; modifed: ZP_TEMP    = screen row target
 ;;          ZP_TEMP+1  = number to copy within row
-;;          ZP_RZ      = 0
 ;;          A, X, Y    = ?
 (define FAST_SCREEN_MEMCOPY_DOWN '())
 (define FAST_SCREEN_MEMCOPY_UP '())
@@ -216,19 +214,8 @@
   (list
    ;; copy from lower memory to higher memory (used for scrolling down and right)
 
-   (label FAST_SCREEN_MEMCOPY_DOWN_COLOR)
-          (STA ZP_TEMP)            ;; keep target row in temp
-          (LDA !$d4)
-          (BNE write_page_data_down__)
-
    (label FAST_SCREEN_MEMCOPY_DOWN_CHARS)
           (STA ZP_TEMP)            ;; keep target row in temp
-          (LDA !$00)
-   (label write_page_data_down__)
-          (STA add_page_for_write_cmd_down__+1)
-          (STA add_page_for_read_cmd_down__+1)
-
-   (label FAST_SCREEN_MEMCOPY_DOWN)
           (STY ZP_TEMP+1)
 
           (LDA SCREEN_ROW_MEM_TRANSLATION_TABLE,x) ;; x = source row
@@ -236,12 +223,15 @@
           (CLC)
           (ADC ZP_RP)              ;; source col
           (STA FSMU__MEM_READ_CMD_DOWN+1)
+          (STA FSMU__MEM_READ_CMD_DOWN_COLOR+1)
 
           (LDA SCREEN_ROW_MEM_TRANSLATION_TABLE,x) ;; x = source row
           (AND !$07)
    (label add_page_for_read_cmd_down__)
-          (ADC !$00) ;; TODO: use 00 for sreen ram, use d4 for color ram (d4 + 04=screen page => color page d8)
+          (ADC !$00)
           (STA FSMU__MEM_READ_CMD_DOWN+2)
+          (ADC !$d4)
+          (STA FSMU__MEM_READ_CMD_DOWN_COLOR+2)
 
           (LDX ZP_TEMP)
           (LDA SCREEN_ROW_MEM_TRANSLATION_TABLE,x) ;; x = target row
@@ -249,29 +239,21 @@
           (CLC)
           (ADC ZP_RP+1)            ;; target col
           (STA FSMU__MEM_WRITE_CMD_DOWN+1)
+          (STA FSMU__MEM_WRITE_CMD_DOWN_COLOR+1)
 
           (LDA SCREEN_ROW_MEM_TRANSLATION_TABLE,x) ;; x = target row
           (AND !$07)
    (label add_page_for_write_cmd_down__)
           (ADC !$00) ;; TODO: use 00 for sreen ram, use d4 for color ram
           (STA FSMU__MEM_WRITE_CMD_DOWN+2)
+          (ADC !$d4)
+          (STA FSMU__MEM_WRITE_CMD_DOWN_COLOR+2)
+
+          (LDX ZP_RZ)
           (BNE INNER_LOOP_DOWN__) ;; always branch
-
-   ;; copy from higher memory to lower memory (used for scrolling up and left)
-
-   (label FAST_SCREEN_MEMCOPY_UP_COLOR)
-          (STA ZP_TEMP)            ;; keep target row in temp
-          (LDA !$d4)
-          (BNE write_page_data_up__)
 
    (label FAST_SCREEN_MEMCOPY_UP_CHARS)
           (STA ZP_TEMP)            ;; keep target row in temp
-          (LDA !$00)
-   (label write_page_data_up__)
-          (STA add_page_for_write_cmd_up__+1)
-          (STA add_page_for_read_cmd_up__+1)
-
-   (label FAST_SCREEN_MEMCOPY_UP)
           (STY ZP_TEMP+1)          ;; keep number of chars to copy per row
 
           (LDA SCREEN_ROW_MEM_TRANSLATION_TABLE,x) ;; x = source row
@@ -279,12 +261,15 @@
           (CLC)
           (ADC ZP_RP)              ;; source col
           (STA FSMU__MEM_READ_CMD_UP+1)
+          (STA FSMU__MEM_READ_CMD_UP_COLOR+1)
 
           (LDA SCREEN_ROW_MEM_TRANSLATION_TABLE,x) ;; x = source row
           (AND !$07)
    (label add_page_for_read_cmd_up__)
-          (ADC !$00) ;; TODO: use 00 for sreen ram, use d4 for color ram
+          (ADC !$00)
           (STA FSMU__MEM_READ_CMD_UP+2)
+          (ADC !$d4)
+          (STA FSMU__MEM_READ_CMD_UP_COLOR+2)
 
           (LDX ZP_TEMP)
           (LDA SCREEN_ROW_MEM_TRANSLATION_TABLE,x) ;; x = target row
@@ -292,23 +277,27 @@
           (CLC)
           (ADC ZP_RP+1)            ;; target col
           (STA FSMU__MEM_WRITE_CMD_UP+1)
+          (STA FSMU__MEM_WRITE_CMD_UP_COLOR+1)
 
           (LDA SCREEN_ROW_MEM_TRANSLATION_TABLE,x) ;; x = target row
           (AND !$07)
    (label add_page_for_write_cmd_up__)
-          (ADC !$00) ;; TODO: use 00 for sreen ram, use d4 for color ram
+          (ADC !$00)
           (STA FSMU__MEM_WRITE_CMD_UP+2)
-
+          (ADC !$d4)
+          (STA FSMU__MEM_WRITE_CMD_UP_COLOR+2)
+          (LDX ZP_RZ)
           (BNE INIT_LOOP_UP__) ;; always branch
 
    (label ROW_LOOP_INC__)
           (SEC)
-
           (LDA FSMU__MEM_READ_CMD_DOWN+1)
           (SBC !40)
           (STA FSMU__MEM_READ_CMD_DOWN+1)
+          (STA FSMU__MEM_READ_CMD_DOWN_COLOR+1)
           (BCS NO_BORROW_NEXT_READ__)
           (DEC FSMU__MEM_READ_CMD_DOWN+2)
+          (DEC FSMU__MEM_READ_CMD_DOWN_COLOR+2)
 
           (SEC)
    (label NO_BORROW_NEXT_READ__)
@@ -316,8 +305,10 @@
           (LDA FSMU__MEM_WRITE_CMD_DOWN+1)
           (SBC !40)
           (STA FSMU__MEM_WRITE_CMD_DOWN+1)
+          (STA FSMU__MEM_WRITE_CMD_DOWN_COLOR+1)
           (BCS NO_BURROW_NEXT_WRITE__)
           (DEC FSMU__MEM_WRITE_CMD_DOWN+2)
+          (DEC FSMU__MEM_WRITE_CMD_DOWN_COLOR+2)
 
    (label NO_BURROW_NEXT_WRITE__)
           (LDY ZP_TEMP+1) ;; number of chars per row
@@ -328,10 +319,14 @@
           (LDA $0400,y)
    (label FSMU__MEM_WRITE_CMD_DOWN)
           (STA $0400,y)
+   (label FSMU__MEM_READ_CMD_DOWN_COLOR)
+          (LDA $0400,y)
+   (label FSMU__MEM_WRITE_CMD_DOWN_COLOR)
+          (STA $0400,y)
           (DEY)
           (BPL INNER_LOOP_DOWN__)
 
-          (DEC ZP_RZ)
+          (DEX)
           (BNE ROW_LOOP_INC__)
 
           (RTS)
@@ -343,8 +338,10 @@
           (LDA FSMU__MEM_READ_CMD_UP+1)
           (ADC !40)
           (STA FSMU__MEM_READ_CMD_UP+1)
+          (STA FSMU__MEM_READ_CMD_UP_COLOR+1)
           (BCC NO_OVFL_NEXT_READ__)
           (INC FSMU__MEM_READ_CMD_UP+2)
+          (INC FSMU__MEM_READ_CMD_UP_COLOR+2)
 
           (CLC)
    (label NO_OVFL_NEXT_READ__)
@@ -352,8 +349,10 @@
           (LDA FSMU__MEM_WRITE_CMD_UP+1)
           (ADC !40)
           (STA FSMU__MEM_WRITE_CMD_UP+1)
+          (STA FSMU__MEM_WRITE_CMD_UP_COLOR+1)
           (BCC NO_OVFL_NEXT_WRITE__)
           (INC FSMU__MEM_WRITE_CMD_UP+2)
+          (INC FSMU__MEM_WRITE_CMD_UP_COLOR+2)
 
    (label NO_OVFL_NEXT_WRITE__)
 
@@ -366,11 +365,15 @@
           (LDA $0400,y)
    (label FSMU__MEM_WRITE_CMD_UP)
           (STA $0400,y)
+   (label FSMU__MEM_READ_CMD_UP_COLOR)
+          (LDA $0400,y)
+   (label FSMU__MEM_WRITE_CMD_UP_COLOR)
+          (STA $0400,y)
           (INY)
           (CPY ZP_TEMP+1)  ;; number of chars per row
           (BMI INNER_LOOP_UP__)
 
-          (DEC ZP_RZ)
+          (DEX)
           (BNE ROW_LOOP_DEC__)
 
           (RTS)))
@@ -664,20 +667,9 @@
           (ADC ZP_RP)
           (STA ZP_RP+1) ;; set target col
 
-          (STX ZP_RZ+1)
-          (LDA ZP_RZ)
-          (PHA) ;; keep number of rows
-
           (TXA)         ;; row target = row source
 
-          (JSR FAST_SCREEN_MEMCOPY_DOWN_CHARS)
-
-          (PLA)
-          (STA ZP_RZ)   ;; restore number of rows
-          (LDA ZP_TEMP) ;; restore registers A, Y
-          (LDY ZP_TEMP+1)
-          ;; (LDX ZP_RZ+1)
-          (JMP FAST_SCREEN_MEMCOPY_DOWN_COLOR)
+          (JMP FAST_SCREEN_MEMCOPY_DOWN_CHARS)
    ))
 
 (module+ test #| scroll right |#
@@ -729,7 +721,7 @@
                         (list 0))
                 "color line was scrolled right (too).")
   (inform-check-equal? (cpu-state-clock-cycles scroll-right-test2)
-                584
+                392
                 "cpu cycles needed for scrolling 5 chars right")
 
 
@@ -753,7 +745,7 @@
      (JSR RT_SCREEN_SCROLL_RIGHT_CHARS_AT_BY1)
      ))
   (inform-check-equal? (cpu-state-clock-cycles scroll-right-complete-screen)
-                29424
+                23648
                 "cpu cycles needed for scrolling the complete screen 1 char right")
   (check-equal? (memory-list scroll-right-complete-screen
                              (+ screen-base-address (* 0 screen-row-bytes) 0)
@@ -799,18 +791,10 @@
           (SEC)
           (SBC ZP_TEMP)
           (STA ZP_RP+1)
-          (LDA ZP_RZ)
-          (PHA)
 
           (TXA)
 
-          (JSR FAST_SCREEN_MEMCOPY_UP_CHARS)
-
-          (PLA)
-          (STA ZP_RZ)   ;; restore number of rows
-          (LDA ZP_TEMP) ;; restore registers A, Y
-          (JMP FAST_SCREEN_MEMCOPY_UP_COLOR)
-))
+          (JMP FAST_SCREEN_MEMCOPY_UP_CHARS)))
 
 (module+ test #| scroll left |#
   (define scroll-left-test
@@ -836,7 +820,7 @@
                 (map char->integer (string->list "LALAA"))
                 "line was scrolled left.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-left-test)
-                368
+                231
                 "cpu cycles needed for scrolling 5 chars left")
 
   (define scroll-left-2-test
@@ -880,7 +864,7 @@
                 (list 0 0 2 2 2)
                 "string got scrolled one char left.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-left-2-test)
-                602
+                401
                 "cpu cycles needed for scrolling 5 chars left")
 
   (define scroll-left-complete-screen
@@ -903,7 +887,7 @@
      (JSR RT_SCREEN_SCROLL_LEFT_CHARS_AT_BY1)
      ))
   (inform-check-equal? (cpu-state-clock-cycles scroll-left-complete-screen)
-                35230
+                26557
                 "cpu cycles needed for scrolling the complete screen 1 char left")
   (check-equal? (memory-list scroll-left-complete-screen
                              (+ screen-base-address (* 0 screen-row-bytes) 0)
@@ -947,23 +931,11 @@
           (LDA ZP_RP)
           (STA ZP_RP+1)  ;; target col = source col
 
-          (LDA ZP_RZ)
-          (STA ZP_TEMP3)
-          (STX ZP_TEMP4)
           (TXA)
           (CLC)
           (ADC ZP_TEMP)
-          (PHA)
 
-          (JSR FAST_SCREEN_MEMCOPY_DOWN_CHARS)
-
-          (LDA ZP_TEMP3)
-          (STA ZP_RZ)   ;; restore number of rows
-          (LDY ZP_TEMP+1)
-          (LDX ZP_TEMP4)
-          (PLA)
-          (JMP FAST_SCREEN_MEMCOPY_DOWN_COLOR)
-          ))
+          (JMP FAST_SCREEN_MEMCOPY_DOWN_CHARS)))
 
 (module+ test #| scroll down |#
   (define scroll-down-test
@@ -989,7 +961,7 @@
                 (map char->integer (string->list "OLALA"))
                 "string was scrolled down.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-down-test)
-                       380
+                       240
                        "cpu cycles needed for scrolling 5 chars down")
 
 
@@ -1035,7 +1007,7 @@
                 (list 2 2 2 2 2)
                 "string was scrolled down.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-down-2-test)
-                       610
+                       411
                        "cpu cycles needed for scrolling 5 chars down")
 
   (define scroll-down-3-test
@@ -1068,7 +1040,7 @@
                 (map char->integer (string->list "TIPOP"))
                 "string was scrolled down.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-down-3-test)
-                       608
+                       409
                        "cpu cycles needed for scrolling 5 chars down"))
 
 ;; scroll an area of the screen up by A lines
@@ -1089,22 +1061,11 @@
           (LDA ZP_RP)
           (STA ZP_RP+1)  ;; target col = source col
 
-          (LDA ZP_RZ)
-          (STA ZP_TEMP3)
-          (STX ZP_TEMP4)
           (TXA)
           (SEC)
           (SBC ZP_TEMP)
-          (PHA)
 
-          (JSR FAST_SCREEN_MEMCOPY_UP_CHARS)
-
-          (LDA ZP_TEMP3)
-          (STA ZP_RZ)   ;; restore number of rows
-          (LDY ZP_TEMP+1)
-          (LDX ZP_TEMP4)
-          (PLA)
-          (JMP FAST_SCREEN_MEMCOPY_UP_COLOR)))
+          (JMP FAST_SCREEN_MEMCOPY_UP_CHARS)))
 
 (module+ test #| scroll up |#
   (define scroll-full-page-up-test
@@ -1167,7 +1128,7 @@
                 (list 2)
                 "line was scrolled up.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-full-page-up-test)
-                       34658
+                       26125
                        "full page scroll up")
 
 
@@ -1194,7 +1155,7 @@
                 (map char->integer (string->list "OLALA"))
                 "string was scrolled up.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-up-test)
-                       414
+                       257
                        "cpu cycles needed for scrolling 5 chars up")
 
 
@@ -1227,7 +1188,7 @@
                 (map char->integer (string->list "TIPOP"))
                 "string was scrolled up.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-up-2-test)
-                       672
+                       442
                        "cpu cycles needed for scrolling 5 chars up")
 
   (define scroll-up-3-test
@@ -1260,7 +1221,7 @@
                 (map char->integer (string->list "TIPOP"))
                 "string was scrolled up.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-up-3-test)
-                       670
+                       440
                        "cpu cycles needed for scrolling 5 chars up"))
 
 ;; clear the whole screen
@@ -1455,5 +1416,5 @@
 
 (module+ test #| estimated-code-len |#
   (inform-check-equal? (estimated-code-len vm-screen-code)
-                553
+                507
                 "estimated code length change in screen runtime"))

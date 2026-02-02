@@ -18,6 +18,13 @@
    up:    057         (24*)  54
    left : 092         (39*)  87
 
+   optimized:
+   right: 064 jiffies
+   down:  039
+   up:    044
+   left : 071
+
+
    down
    measured (/ 48 60.0)
      0.8
