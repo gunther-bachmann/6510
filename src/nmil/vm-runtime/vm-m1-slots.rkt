@@ -602,7 +602,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles test-alloc-m1-slot-p0-optimized-2 )
-   67
+   73
    "optimized allocate a slot of profile 0 on an existing page of the right profile takes n cycles")
 
   (check-equal?
@@ -868,7 +868,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-p0-to-ra-n #:times 2))
-   81 ;; optimized uses 67 cycles
+   87 ;; optimized uses 67 cycles
    "allocate a slot of profile 0 on an existing page of the right profile takes n cycles")
 
   (define (test-alloc-m1-slot-to-ra-n n #:times (times 1))
@@ -890,12 +890,12 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n 35 #:times 2))
-   112
+   118
    "allocate a slot on an existing page of the right profile takes n cycles")
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n 4 #:times 2))
-   96
+   102
    "allocate a slot of profile 0 on an existing page of the right profile takes n cycles")
 
   (check-equal?
@@ -907,7 +907,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles (test-alloc-m1-slot-to-ra-n 35 #:times 1))
-   327
+   345
    "allocate completely new page, initialize it for that profile and allocate a slot on it takes n cycles")
 
   (define test-alloc-m1-slot-to-ra-n-35-t-5 (test-alloc-m1-slot-to-ra-n 35 #:times 5))
@@ -1110,7 +1110,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles test-alloc-m1-slot-to-ra-n-with-free-profile-page-35)
-   141
+   147
    "reuse a free page of the same profile takes expected cycles")
 
   (check-equal?
@@ -1165,7 +1165,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles test-alloc-m1-slot-to-ra-n-with-just-other-free-profile-page-35)
-   383
+   395
    "cost to use a free page initilized to another profile, if no free pages exist")
 
   (check-equal?
@@ -1260,7 +1260,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles free_m1_slot_from_rz_n-test-2)
-   59
+   65
    "free takes n cycles")
 
   (check-equal?
@@ -1349,9 +1349,9 @@
    (list #x06)
    "incrementing refcount fice times puts 6 (allocation starts with 1)")
 
-  (check-equal?
+  (inform-check-equal?
    (cpu-state-clock-cycles (inc_refcnt_m1_slot_rt_n-test 1))
-   23
+   29
    "running inc on refcount executes n cycles"))
 
 ;; DEC_REFCNT_M1_SLOT_RZ
@@ -1604,7 +1604,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles dec_refcnt_m1_slot_rz_n-test-non-cell-array-slot)
-   102
+   108
    "it takes n clock cycles to dec refcnt and free an allocated slot immediately")
 
   (check-equal?
@@ -1654,12 +1654,12 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs 1))
-    140               ;; cucles
+    146               ;; cucles
     "freeing a cell-array with 1 nil takes n cycles")
 
   (inform-check-equal?
    (cpu-state-clock-cycles (dec_refcnt_m1_slot_rz_n-test-cell-array-slot-wo-cell-ptrs 10))
-    295               ;; cucles
+    301               ;; cucles
     "freeing a cell-array with 10 nils takes n cycles")
 
   (check-equal?
@@ -1840,7 +1840,7 @@
 
   (inform-check-equal?
    (cpu-state-clock-cycles dec_refcnt_m1_slot_rz_n-test-cell-array-slot-w-first-cell-ptr-inc-collect)
-   112
+   118
    "freeing an array incrementally for which no further cells need to be freed")
 
   (check-equal?

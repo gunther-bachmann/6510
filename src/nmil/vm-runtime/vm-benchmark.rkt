@@ -12,6 +12,34 @@
 
  functions to benchmark code on real hardware c64
 
+ measurements:
+   right: 077 jiffies (39*)  73 (video switched off) (still with interrupts)
+   down:  048         (24*)  45
+   up:    057         (24*)  54
+   left : 092         (39*)  87
+
+   down
+   measured (/ 48 60.0)
+     0.8
+
+   up  delta (* 100.0 (- (/ 0.95 0.831) 1)) ~= 14 %
+   measured (/ 57 60.0)
+     0.95
+   calculated: (/ (* 24.0 34658.0) 1000000.0)
+     0.831792
+
+   left    delta (* 100.0 (- (/ 1.533333333333334 1.373502) 1)) ~= 12 %
+   measured (/ 92 60.0)
+     1.533333333333334
+   calculated (/ (* 39.0 35218.0) 1000000.0)
+     1.373502
+
+   right    delta (* 100.0 (- (/ 1.2833333333333334 1.147068) 1)) ~= 12 %
+   measured (/ 77 60.0)
+     1.2833333333333334
+   calculated (/ (* 39 29412.0) 1000000.0)
+     1.147068
+
  |#
 
 
@@ -66,6 +94,9 @@
 (define-vm-function BM_START_TIMER
   (list
           (SEI)
+          ;; (LDA $D011)     ; switch off video (vic status reg)
+          ;; (AND !$EF)
+          ;; (STA $D011)
           (LDA !0)
           (STA $A2)       ; Real-time jiffy Clock
           (STA $A1)       ; Real-time jiffy Clock
@@ -83,6 +114,9 @@
           (STA TIMER_VAL+1)
           (LDA $A0)       ; Real-time jiffy Clock
           (STA TIMER_VAL)
+          ;; (LDA $D011)     ; switch on video (vic status reg)
+          ;; (EOR !$10)
+          ;; (STA $D011)
           (CLI)
           (RTS)
 
@@ -173,6 +207,10 @@
           (STA $0500,x)
           (STA $0600,x)
           (STA $0700,x)
+          (STA $d800,x)
+          (STA $d900,x)
+          (STA $da00,x)
+          (STA $db00,x)
           (BEQ done__)
           (INY)
           (TYA)
@@ -184,7 +222,7 @@
 
 (define-vm-function BM_SCROLL_RIGHT_40
   (list
-          (LDA !$40)
+          (LDA !40)
           (STA ZP_RT)
    (label LOOP__)
           ;; setup scroll of full screen
@@ -238,7 +276,7 @@
 
 (define-vm-function BM_SCROLL_LEFT_40
   (list
-          (LDA !$40)
+          (LDA !40)
           (STA ZP_RT)
    (label LOOP__)
           ;; setup scroll of full screen

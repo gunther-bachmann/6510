@@ -1961,8 +1961,9 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
          [rel            (peek-pc+1 state)]
          [new-pc-jump    (word (fx+ pc 2 (if (< #x80 rel) (fx- rel 256) rel)))]
          [new-pc-no-jump (word (fx+ pc 2))]
-         [new-pc         (if (test state) new-pc-jump new-pc-no-jump)]
-         [new-clock-cycles (fx+ (if (test state) 1 0) (cpu-state-clock-cycles state))])
+         [tested         (test state)]
+         [new-pc         (if tested new-pc-jump new-pc-no-jump)]
+         [new-clock-cycles (fx+ (if tested 1 0) (cpu-state-clock-cycles state))])
     (struct-copy cpu-state state
                  [program-counter new-pc]
                  [clock-cycles new-clock-cycles])))
@@ -2328,8 +2329,10 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
 
 (define/c (add-cycles state cycles)
   (-> cpu-state? nonnegative-integer? cpu-state?)
+  (define new-clock-cycles (fx+ cycles (cpu-state-clock-cycles state)))
+  ;; (displayln (format "~a" new-clock-cycles))
   (struct-copy cpu-state state
-               [clock-cycles (+ cycles (cpu-state-clock-cycles state))]))
+               [clock-cycles new-clock-cycles]))
 
 (define/c (reset-cycles state)
   (-> cpu-state? cpu-state?)
@@ -2388,7 +2391,7 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
     [(#x1d) (interpret-logic-op-mem (add-cycles state 4) bitwise-ior peek-absx 3)]
     [(#x1e) (interpret-asl-mem (add-cycles state 7) peek-absx poke-absx 3)]
     ;; #x1f -io SLO abx
-    [(#x20) (interpret-jsr-abs (peek-pc+2 (add-cycles state 6)) (peek-pc+1 state) state verbose string-output-function)]
+    [(#x20) (interpret-jsr-abs (peek-pc+2 state) (peek-pc+1 state) (add-cycles state 6) verbose string-output-function)]
     [(#x21) (interpret-logic-op-mem (add-cycles state 6) bitwise-and peek-izx 2)]
     ;; #x22 -io KIL
     ;; #x23 -io RLA izx
@@ -2454,49 +2457,49 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
     ;; #x5f -io SRE abx
     [(#x60) (interpret-rts (add-cycles state 6))]
     [(#x61) (if (decimal-flag? state)
-                (bcd-+ state peek-izx 2)
+                (bcd-+ (add-cycles state 6) peek-izx 2)
                 (interpret-calc-op (add-cycles state 6) fx+ (if (carry-flag? state) 1 0) peek-izx derive-carry-after-addition 2))]
     ;; #x62 -io KIL
     ;; #x63 -io RRA izx
     ;; #x64 -io NOP zp
     [(#x65) (if (decimal-flag? state)
-                (bcd-+ state peek-zp 2)
+                (bcd-+ (add-cycles state 3) peek-zp 2)
                 (interpret-calc-op (add-cycles state 3) fx+ (if (carry-flag? state) 1 0) peek-zp derive-carry-after-addition 2))]
     [(#x66) (interpret-ror-mem (add-cycles state 5) peek-zp poke-zp 2)]
     ;; #x67 -io RRA zp
     [(#x68) (interpret-pla (add-cycles state 4))]
     [(#x69) (if (decimal-flag? state)
-                (bcd-+ state peek-pc+1 2)
+                (bcd-+ (add-cycles state 2) peek-pc+1 2)
                 (interpret-calc-op (add-cycles state 2) fx+ (if (carry-flag? state) 1 0) peek-pc+1 derive-carry-after-addition 2))]
     [(#x6a) (interpret-ror (add-cycles state 2))]
     ;; #x6b -io ARR imm
     [(#x6c) (interpret-jmp-ind (add-cycles state 5) verbose string-output-function)]
     [(#x6d) (if (decimal-flag? state)
-                (bcd-+ state peek-abs 3)
+                (bcd-+ (add-cycles state 4) peek-abs 3)
                 (interpret-calc-op (add-cycles state 4) fx+ (if (carry-flag? state) 1 0) peek-abs derive-carry-after-addition 3))]
     [(#x6e) (interpret-ror-mem (add-cycles state 6) peek-abs poke-abs 3)]
     ;; #x6f -io RRA abs
     [(#x70) (interpret-branch-rel (add-cycles state 2) overflow-flag?)]
     [(#x71) (if (decimal-flag? state)
-                (bcd-+ state peek-izy 2)
+                (bcd-+ (add-cycles state 5) peek-izy 2)
                 (interpret-calc-op (add-cycles state 5) fx+ (if (carry-flag? state) 1 0) peek-izy derive-carry-after-addition 2))]
     ;; #x72 -io KIL
     ;; #x73 -io RRA izy
     ;; #x74 -io NOP zpx
     [(#x75) (if (decimal-flag? state)
-                (bcd-+ state peek-zpx 2)
+                (bcd-+ (add-cycles state 4) peek-zpx 2)
                 (interpret-calc-op (add-cycles state 4) fx+ (if (carry-flag? state) 1 0) peek-zpx derive-carry-after-addition 2))]
     [(#x76) (interpret-ror-mem (add-cycles state 6) peek-zpx poke-zpx 2)]
     ;; #x77 -io RRA zpx
     [(#x78) (interpret-sei (add-cycles state 2))]
     [(#x79) (if (decimal-flag? state)
-                (bcd-+ state peek-absy 3)
+                (bcd-+ (add-cycles state 4) peek-absy 3)
                 (interpret-calc-op (add-cycles state 4) fx+ (if (carry-flag? state) 1 0) peek-absy derive-carry-after-addition 3))]
     ;; #x7a -io NOP
     ;; #x7b -io RRA aby
     ;; #x7c -io NOP abx
     [(#x7d) (if (decimal-flag? state)
-                (bcd-+ state peek-absx 3)
+                (bcd-+ (add-cycles state 4) peek-absx 3)
                 (interpret-calc-op (add-cycles state 4) fx+ (if (carry-flag? state) 1 0) peek-absx derive-carry-after-addition 3))]
     [(#x7e) (interpret-ror-mem (add-cycles state 7) peek-absx poke-absx 2)]
     ;; #x7f -io RRA abx
@@ -2598,49 +2601,49 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
     ;; #xdf -io DCP abx
     [(#xe0) (interpret-compare (add-cycles state 2) cpu-state-x-index peek-pc+1 2)]
     [(#xe1) (if (decimal-flag? state)
-                (bcd-- state peek-izx 2)
+                (bcd-- (add-cycles state 6) peek-izx 2)
                 (interpret-calc-op (add-cycles state 6) fx- 0 peek-izx derive-carry-after-subtraction 2))]
     ;; #xe2 -io NOP imm
     ;; #xe3 -io ISC izx
     [(#xe4) (interpret-compare (add-cycles state 3) cpu-state-x-index peek-zp 2)]
     [(#xe5) (if (decimal-flag? state)
-                (bcd-- state peek-zp 2)
+                (bcd-- (add-cycles state 3) peek-zp 2)
                 (interpret-calc-op (add-cycles state 3) fx- 0 peek-zp derive-carry-after-subtraction 2))]
     [(#xe6) (interpret-crement-mem (add-cycles state 5) fx+ peek-zp poke-zp 2)]
     ;; #xe7 -io ISC zp
     [(#xe8) (interpret-modify-x-index (add-cycles state 2) 1)]
     [(#xe9) (if (decimal-flag? state)
-                (bcd-- state peek-pc+1 2)
+                (bcd-- (add-cycles state 2) peek-pc+1 2)
                 (interpret-calc-op (add-cycles state 2) fx- 0 peek-pc+1 derive-carry-after-subtraction 2))]
     [(#xea) (interpret-nop (add-cycles state 2))]
     ;; #xeb -io SBC imm
     [(#xec) (interpret-compare (add-cycles state 4) cpu-state-x-index peek-abs 3)]
     [(#xed) (if (decimal-flag? state)
-                (bcd-- state peek-abs 3)
+                (bcd-- (add-cycles state 4) peek-abs 3)
                 (interpret-calc-op (add-cycles state 4) fx- 0 peek-abs derive-carry-after-subtraction 3))]
     [(#xee) (interpret-crement-mem (add-cycles state 6) fx+ peek-abs poke-abs 3)]
     ;; #xef -io ISC abs
     [(#xf0) (interpret-branch-rel (add-cycles state 2) zero-flag?)]
     [(#xf1) (if (decimal-flag? state)
-                (bcd-- state peek-izy 2)
+                (bcd-- (add-cycles state 5) peek-izy 2)
                 (interpret-calc-op (add-cycles state 5) fx- 0 peek-izy derive-carry-after-subtraction 2))]
     ;; #xf2 -io KIL
     ;; #xf3 -io ISC izy
     ;; #xf4 -io NOP zpx
     [(#xf5) (if (decimal-flag? state)
-                (bcd-- state peek-zpx 2)
+                (bcd-- (add-cycles state 4) peek-zpx 2)
                 (interpret-calc-op (add-cycles state 4) fx- 0 peek-zpx derive-carry-after-subtraction 2))]
     [(#xf6) (interpret-crement-mem (add-cycles state 6) fx+ peek-zpx poke-zpx 2)]
     ;; #xf7 -io ISC zpx
     [(#xf8) (interpret-sed (add-cycles state 2))]
     [(#xf9) (if (decimal-flag? state)
-                (bcd-- state peek-absy 3)
+                (bcd-- (add-cycles state 4) peek-absy 3)
                 (interpret-calc-op (add-cycles state 4) fx- 0 peek-absy derive-carry-after-subtraction 3))]
     ;; #xfa -io NOP
     ;; #xfb -io ISC aby
     ;; #xfc -io NOP abx
     [(#xfd) (if (decimal-flag? state)
-                (bcd-- state peek-absx 3)
+                (bcd-- (add-cycles state 4) peek-absx 3)
                 (interpret-calc-op (add-cycles state 4) fx- 0 peek-absx derive-carry-after-subtraction 3))]
     [(#xfe) (interpret-crement-mem (add-cycles state 7) fx+ peek-absx poke-absx 3)]
     ;; #xff -io ISC abx

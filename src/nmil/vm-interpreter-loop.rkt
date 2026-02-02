@@ -48,7 +48,6 @@ and the bc operation jump table
 (define VM_INTERPRETER_INC_PC_2_TIMES '())
 (define VM_INTERPRETER_INC_PC_A_TIMES '())
 (define VM_POP_EVLSTK_AND_INC_PC '())
-(define VM_INTERPRETER_INC_PC '())
 (define VM_INTERPRETER
   (list
                                                ;; for this shortcut to work, the interpreter must be initialized accordingly
@@ -105,6 +104,7 @@ and the bc operation jump table
 ;; cycle count: 19 normal, 27 on page change
 ;; compared to non zero page impl: 23 normal, 31 on page change
 (define ZP_VM_PC #x85)
+(define VM_INTERPRETER_INC_PC '())
 (define VM_INTERPRETER_ZP
   (list
    (org #x0080)

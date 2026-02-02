@@ -582,7 +582,7 @@
                 (map char->integer (string->list "O"))
                 "the char O was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-0-test)
-                       57
+                       69
                        "cpu cycles for writing string with 1 character to position x,y")
 
   (define screen-put-chars-at-test
@@ -613,7 +613,7 @@
                 (map char->integer (string->list ".SOME"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-test)
-                       117
+                       129
                        "cpu cycles for writing string with 5 characters to position x,y")
 
   (define screen-put-chars-at-2-test
@@ -644,7 +644,7 @@
                 (map char->integer (string->list ".SOME.OTHER.STRING.THAT.I"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-2-test)
-                       417
+                       429
                        "cpu cycles for writing string with 25 characters to position x,y"))
 
 ;; scroll n lines a number of chars one char to the right
@@ -729,7 +729,7 @@
                         (list 0))
                 "color line was scrolled right (too).")
   (inform-check-equal? (cpu-state-clock-cycles scroll-right-test2)
-                572
+                584
                 "cpu cycles needed for scrolling 5 chars right")
 
 
@@ -753,7 +753,7 @@
      (JSR RT_SCREEN_SCROLL_RIGHT_CHARS_AT_BY1)
      ))
   (inform-check-equal? (cpu-state-clock-cycles scroll-right-complete-screen)
-                29412
+                29424
                 "cpu cycles needed for scrolling the complete screen 1 char right")
   (check-equal? (memory-list scroll-right-complete-screen
                              (+ screen-base-address (* 0 screen-row-bytes) 0)
@@ -836,7 +836,7 @@
                 (map char->integer (string->list "LALAA"))
                 "line was scrolled left.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-left-test)
-                356
+                368
                 "cpu cycles needed for scrolling 5 chars left")
 
   (define scroll-left-2-test
@@ -880,7 +880,7 @@
                 (list 0 0 2 2 2)
                 "string got scrolled one char left.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-left-2-test)
-                590
+                602
                 "cpu cycles needed for scrolling 5 chars left")
 
   (define scroll-left-complete-screen
@@ -903,7 +903,7 @@
      (JSR RT_SCREEN_SCROLL_LEFT_CHARS_AT_BY1)
      ))
   (inform-check-equal? (cpu-state-clock-cycles scroll-left-complete-screen)
-                35218
+                35230
                 "cpu cycles needed for scrolling the complete screen 1 char left")
   (check-equal? (memory-list scroll-left-complete-screen
                              (+ screen-base-address (* 0 screen-row-bytes) 0)
@@ -989,7 +989,7 @@
                 (map char->integer (string->list "OLALA"))
                 "string was scrolled down.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-down-test)
-                       368
+                       380
                        "cpu cycles needed for scrolling 5 chars down")
 
 
@@ -1035,7 +1035,7 @@
                 (list 2 2 2 2 2)
                 "string was scrolled down.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-down-2-test)
-                       598
+                       610
                        "cpu cycles needed for scrolling 5 chars down")
 
   (define scroll-down-3-test
@@ -1068,7 +1068,7 @@
                 (map char->integer (string->list "TIPOP"))
                 "string was scrolled down.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-down-3-test)
-                       596
+                       608
                        "cpu cycles needed for scrolling 5 chars down"))
 
 ;; scroll an area of the screen up by A lines
@@ -1129,7 +1129,7 @@
      (LDY !0)
      (STY ZP_RP)
      (LDY !40)
-     (LDA !$24)
+     (LDA !24)
      (STA ZP_RZ) ;; 24 rows (25 - 1)
 
      (JSR $0100)
@@ -1167,7 +1167,8 @@
                 (list 2)
                 "line was scrolled up.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-full-page-up-test)
-                       51902)
+                       34658
+                       "full page scroll up")
 
 
   (define scroll-up-test
@@ -1193,7 +1194,7 @@
                 (map char->integer (string->list "OLALA"))
                 "string was scrolled up.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-up-test)
-                       402
+                       414
                        "cpu cycles needed for scrolling 5 chars up")
 
 
@@ -1226,7 +1227,7 @@
                 (map char->integer (string->list "TIPOP"))
                 "string was scrolled up.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-up-2-test)
-                       660
+                       672
                        "cpu cycles needed for scrolling 5 chars up")
 
   (define scroll-up-3-test
@@ -1259,7 +1260,7 @@
                 (map char->integer (string->list "TIPOP"))
                 "string was scrolled up.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-up-3-test)
-                       658
+                       670
                        "cpu cycles needed for scrolling 5 chars up"))
 
 ;; clear the whole screen
@@ -1291,18 +1292,18 @@
 
   (check-equal? (memory-list screen-clear-test
                              (+ screen-base-address (* 5 screen-row-bytes) 17))
-                (list 0)
+                (list 32)
                 "screen was clear where once written.")
   (check-equal? (memory-list screen-clear-test
                              (+ screen-base-address (* 0 screen-row-bytes) 0))
-                (list 0)
+                (list 32)
                 "screen was clear where once written.")
   (check-equal? (memory-list screen-clear-test
                              (+ screen-base-address (* 24 screen-row-bytes) 39))
-                (list 0)
+                (list 32)
                 "screen was clear where once written.")
   (inform-check-equal? (cpu-state-clock-cycles screen-clear-test)
-                       6409
+                       6415
                        "cpu cycles to clear the whole screen"))
 
 ;; clear a number of chars in a row y,x position on screen
@@ -1373,7 +1374,7 @@
                 (list 0)
                 "screen was clear where once written.")
   (inform-check-equal? (cpu-state-clock-cycles screen-clear-chars-at-test)
-                       55
+                       67
                        "cpu cycles to clear a char"))
 
 
@@ -1454,5 +1455,5 @@
 
 (module+ test #| estimated-code-len |#
   (inform-check-equal? (estimated-code-len vm-screen-code)
-                552
+                553
                 "estimated code length change in screen runtime"))

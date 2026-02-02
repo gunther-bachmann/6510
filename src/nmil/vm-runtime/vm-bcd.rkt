@@ -114,7 +114,7 @@
   (check-equal? (memory-list int8-to-bcd2-test ZP_RP (+ 1 ZP_RP))
                 (list #x43 #x02))
   (inform-check-equal? (cpu-state-clock-cycles int8-to-bcd2-test)
-                       129
+                       157
                        "needed cycles for int8->bcd"))
 
 ;; convert byte into bcd (max 3 digits)

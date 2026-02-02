@@ -18,6 +18,7 @@ links: https://github.com/barryw/c64lib
     - down 24 times
     - up 24 times
   - [X] run benchmark on c64
+- [ ] implement loading of constants (saved in a serialized way)
 - [ ] implement bc code/runtime functions to
   - [ ] write strings on screen
   - [ ] scroll screen
