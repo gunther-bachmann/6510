@@ -132,7 +132,7 @@
                  (list "int $0001"))
 
    (inform-check-equal? (cpu-state-clock-cycles enqueue-state-1)
-                        6664))
+                        6678))
 
   (define enqueue-state-2
     (run-bc-wrapped-in-test
@@ -226,7 +226,7 @@
                  "1 -> FIFO, 2 -> FIFO, FIFO -> 1")
 
    (inform-check-equal? (cpu-state-clock-cycles dequeue-state-1)
-                        13852))
+                        13866))
 
   (define dequeue-state-2
     (run-bc-wrapped-in-test

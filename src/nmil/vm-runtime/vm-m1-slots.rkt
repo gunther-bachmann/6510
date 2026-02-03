@@ -617,9 +617,11 @@
 
 (define-vm-function ALLOC_M1_SLOT_TO_RT
   (list
-          ;; maybe keep RA if not empty!
           (JSR ALLOC_M1_SLOT_TO_RA)
-          (JMP CP_RA_TO_RT)))
+          (JSR CP_RA_TO_RT)
+          (LDA !$00)
+          (STA ZP_RA)
+          (RTS)))
 
 (define-vm-function ALLOC_M1_P0_SLOT_TO_RT
   (list
@@ -2032,5 +2034,5 @@
 (module+ test #| code len of module |#
   (inform-check-equal?
    (estimated-code-len vm-m1-slot-code)
-   650
+   656
    "estimated code len of m1 slot code module"))
