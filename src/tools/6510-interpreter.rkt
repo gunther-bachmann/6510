@@ -120,15 +120,17 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
                    stack-pointer   ;; current stack pointer (8+1 bit) 1xx
                    clock-cycles    ;; used clock cycles of the current interpretation
                    )
-  #:guard (struct-guard/c
-           word/c
-           byte/c
-           pvector?
-           byte/c
-           byte/c
-           byte/c
-           byte/c
-           nonnegative-integer?))
+  ;; guard is responsible for slowdown of 50%, activate only if necessary (for some tests?)
+  ;; #:guard (struct-guard/c
+  ;;          word/c
+  ;;          byte/c
+  ;;          pvector?
+  ;;          byte/c
+  ;;          byte/c
+  ;;          byte/c
+  ;;          byte/c
+  ;;          nonnegative-integer?)
+  )
 
 (provide (struct-doc cpu-state ([program-counter word/c]
                                 [flags byte/c]
@@ -217,14 +219,21 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
                                 (word address)
                                 (byte value))]))
 
+(define/c (--pokem memory address values)
+  (-> pvector? word/c (listof byte/c) pvector?)
+  (if (empty? values)
+      memory
+      (--pokem (set-nth memory (word address) (car values))
+               (word (fx+ 1 address))
+               (cdr values))))
+
 ;; poke values starting at address into memory
 (define/c (-pokem state address values)
   (-> cpu-state? word/c (listof byte/c) cpu-state?)
   (if (empty? values)
       state
-      (-pokem (-poke state address (car values))
-              (word (fx+ 1 address))
-              (cdr values))))
+      (struct-copy cpu-state state
+                   [memory (--pokem (cpu-state-memory state) address values)])))
 
 ;; poke values starting at address into memory
 (define/c (poke state address . values)
@@ -457,8 +466,8 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
   (cond [(zero? (peek-pc state))
          state]
         [else
-         (let ([next-state (execute-cpu-step state verbose string-output-function)])
-           (run next-state verbose string-output-function))]))
+         (define next-state (execute-cpu-step state verbose string-output-function))
+         (run next-state verbose string-output-function)]))
 
 ;; interpret the RTS (return from subroutine) command
 ;; pop low-byte, then high-byte form stack, inc by one and write this into the pc
@@ -987,12 +996,17 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
 
 (define/c (c64-rom-routine? high low)
   (-> byte? byte? boolean?)
-  (or (= (bytes->int low high) #xFFD2) ;; kernel output character
-     (= (bytes->int low high) #xAB1E) ;; basic output string
-     (= (bytes->int low high) #xBDCD) ;; basic output integer
-     (= (bytes->int low high) #xFF9F) ;; scan keyboard
-     (= (bytes->int low high) #xFFE4) ;; get character from keyboard
-     ))
+  (define address (bytes->int low high))
+  (if (member address
+               (list
+                #xFFD2 ;; kernel output character
+                #xAB1E ;; basic output string
+                #xBDCD ;; basic output integer
+                #xFF9F ;; scan keyboard
+                #xFFE4 ;; get character from keyboard
+                ))
+      #t
+      #f))
 
 ;; since the 6502/6510 has its cpu stack located 0100-01ff, it should be safe to use JSR to these locations
 ;; for some "magic" functionality 
@@ -1482,10 +1496,10 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
 ;; return word (2 byte) value stored at ADDRESS
 (define/c (peek-word-at-address state address (rev-endian #f))
   (->* [cpu-state? word/c] [boolean?] word/c)
-  (let* [(low-byte  (peek state address))
-         (high-byte (peek state (word (fx+ address 1))))]
-    (bytes->int (if rev-endian high-byte low-byte)
-              (if rev-endian low-byte high-byte))))
+  (define low-byte (peek state address))
+  (define high-byte (peek state (word (fx+ address 1))))
+  (bytes->int (if rev-endian high-byte low-byte)
+             (if rev-endian low-byte high-byte)))
 
 ;; return word (2 bytes) stored at program-counter + 1
 (define/c (peek-word-at-pc+1 state)
@@ -1504,11 +1518,11 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
 
 (define/c (peek-indirect-woffset state address offset)
   (-> cpu-state? word/c exact-integer? word/c)
-  (let ([target-adr (peek-word-at-address state address)])
-    (peek state
-          (if (<= target-adr #xff)
-              (bitwise-and #xff (fx+ offset target-adr))
-              (word (fx+ offset target-adr))))))
+  (define target-adr (peek-word-at-address state address))
+  (peek state
+        (if (<= target-adr #xff)
+            (bitwise-and #xff (fx+ offset target-adr))
+            (word (fx+ offset target-adr)))))
 
 ;; put the value at the address constructed from reading
 ;; low, high byte order from the address provided
@@ -1521,41 +1535,41 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
         (peek-word-at-address state address)
         value))
 
-(define/c (poke-indirect-woffset state address offset value)
+{define/c (poke-indirect-woffset state address offset value)
   (-> cpu-state? word/c exact-integer? byte/c cpu-state?)
-  (let ([target-adr (peek-word-at-address state address)])
-    (poke state
-          (if (<= target-adr #xff)
-              (bitwise-and #xff (fx+ offset target-adr))
-              (word (fx+ offset target-adr)))
-          value)))
+  (define target-adr (peek-word-at-address state address))
+  (poke state
+        (if (<= target-adr #xff)
+            (bitwise-and #xff (fx+ offset target-adr))
+            (word (fx+ offset target-adr)))
+        value)}
 
 ;; (zp,x) ->
 (define/c (peek-izx state)
   (-> cpu-state? byte/c)
-  (let* [(zero-page-idx (peek-pc+1 state))
-         (x             (cpu-state-x-index state))]
-    (peek-indirect state (bitwise-and #xff (fx+ x zero-page-idx)))))
+  (define zero-page-idx (peek-pc+1 state))
+  (define x             (cpu-state-x-index state))
+  (peek-indirect state (bitwise-and #xff (fx+ x zero-page-idx))))
 
 ;; (zp,x) <-
 (define/c (poke-izx state value)
   (-> cpu-state? byte/c cpu-state?)
-  (let* [(zero-page-idx (peek-pc+1 state))
-         (x             (cpu-state-x-index state))]
-    (poke-indirect state (bitwise-and #xff (fx+ x zero-page-idx)) value)))
+  (define zero-page-idx (peek-pc+1 state))
+  (define x             (cpu-state-x-index state))
+  (poke-indirect state (bitwise-and #xff (fx+ x zero-page-idx)) value))
 
 ;; (zp),y ->
 (define/c (peek-izy state)
   (-> cpu-state? byte/c)
-  (let* [(zero-page-idx (peek-pc+1 state))
-         (y             (cpu-state-y-index state))]
-    (peek-indirect-woffset state zero-page-idx y)))
+  (define zero-page-idx (peek-pc+1 state))
+  (define y             (cpu-state-y-index state))
+  (peek-indirect-woffset state zero-page-idx y))
 
 (define/c (poke-izy state value)
   (-> cpu-state? byte/c cpu-state?)
-  (let* [(zero-page-idx (peek-pc+1 state))
-         (idy           (cpu-state-y-index state))]
-    (poke-indirect-woffset state zero-page-idx idy value)))
+  (define zero-page-idx (peek-pc+1 state))
+  (define idy           (cpu-state-y-index state))
+  (poke-indirect-woffset state zero-page-idx idy value))
 
 ;; peek the value stored at the zero page given at pc+1
 (define/c (peek-zp state)
@@ -1831,11 +1845,11 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
 ;; setting zero, negative flag (ZN)
 (define/c (interpret-lda-mem state peeker pc-inc)
   (-> cpu-state? peeker/c exact-nonnegative-integer? cpu-state?)
-  (let ([value (peeker state)])
-    (struct-copy cpu-state state
-                 [accumulator     value]
-                 [flags           (set-flags-zn state (zero? value) (bit7? value))]
-                 [program-counter (next-program-counter state pc-inc)])))
+  (define value (peeker state))
+  (struct-copy cpu-state state
+               [accumulator     value]
+               [flags           (set-flags-zn state (zero? value) (bit7? value))]
+               [program-counter (next-program-counter state pc-inc)]))
 
 ;; load into x-index
 ;; setting zero, negative flag (ZN)
@@ -2358,7 +2372,8 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
 ;; io = illegal opcode
 (define/c (execute-cpu-step state (verbose #t) (string-output-function interpreter-output-function))
   (->* [cpu-state?] [boolean? (-> string? any/c)] cpu-state?)
-  (case (peek-pc state)
+  (define cmd (peek-pc state))
+  (case cmd
     [(#x00) (interpret-brk state)]
     [(#x01) (interpret-logic-op-mem (add-cycles state 6) bitwise-ior peek-izx 2)]
     ;; #x02 -io KIL

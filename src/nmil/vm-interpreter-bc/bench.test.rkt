@@ -28,7 +28,7 @@
     (run-bc-wrapped-in-test- bc wrapped-code debug)))
 
 (module+ test #| bench |#
-  (define bench-test
+  (define (bench-test-code)
     (run-bc-wrapped-in-test
      (list
              (bc BENCH) (byte $05) ;; fill screen
@@ -41,6 +41,11 @@
              (bc BENCH) (byte $04) ;; do warmstart
              )
      #f))
+
+  (define bench-test (bench-test-code))
+
+  ;; (require profile)
+  ;; (profile-thunk bench-test-code)
 
   (check-equal? (memory-list bench-test ZP_RP)
                 (list 1)))

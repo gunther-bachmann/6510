@@ -3515,7 +3515,7 @@
                         " . NIL))))")
                        "NIL")))
 
-  (define remove-value-at-7-state
+  (define (remove-value-at-7-code)
     (run-bc-wrapped-in-test
      (append
       (list
@@ -3554,7 +3554,7 @@
        (bc PUSH_I0)
        (bc CONS)
        (bc SWAP)
- 
+
        (bc PUSH_I) (word $0004)
        (bc CONS)
        (bc DUP)
@@ -3609,8 +3609,11 @@
       dependecies-remove-value-at)
      ))
 
-  ;; (require profile)
-  ;; (profile-thunk remove-value-at-7-state)
+  (define remove-value-at-7-state
+    (remove-value-at-7-code))
+
+ ;; (require profile)
+ ;; (profile-thunk remove-value-at-7-code)
 
   (regression-test
    remove-value-at-7-state
