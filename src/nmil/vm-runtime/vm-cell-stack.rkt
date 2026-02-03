@@ -9,7 +9,7 @@
  POP_EVLSTK_TAIL_TO_RT        ;; pop eval-stack tail into RT (discarding RT)
  POP_EVLSTK_TAIL_TO_RP        ;; pop eval-stack tail into RP, RT is not changed, the stack is reduced by 1 (above RT)
  POP_EVLSTK_TAIL_TO_RA        ;; pop eval-stack tail into RA, RT is not changed, the stack is reduced by 1 (above RT)
- PUSH_RT_TO_EVLSTK_TAIL       ;; push RT onto call frame cell stack (effectively doing a dup)
+ PUSH_RT_TO_EVLSTK_TAIL       ;; push RT onto call frame cell stack (effectively doing a dup without refcounting!)
  PUSH_NIL_TO_EVLSTK           ;; push constant nil onto the eval stack
  PUSH_INT_TO_EVLSTK           ;; push constant int onto the eval stack
  POP_EVLSTK_TAIL_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos

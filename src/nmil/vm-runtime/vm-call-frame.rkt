@@ -4,18 +4,31 @@
          vm-call-frame-return-pc             ;; get the pc of the code that is returned to
 
          VM_POP_CALL_FRAME                   ;; pop the topmost call frame
-         ;; VM_REFCOUNT_DECR_CURRENT_LOCALS     ;; decrement refcounts of all locals (where applicable) (can be done as part of the pop frame always)
          VM_PUSH_CALL_FRAME                  ;; push a call frame onto the call frame stack, initializes locals for the function being called
-         VM_ALLOC_CALL_FRAME                 ;; allocate a new call frame (used to init call frame)
-         VM_INIT_CALL_FRAME_STACK
+
+         VM_INIT_CALL_FRAME_STACK            ;; initialize an empty call frame stack (part of vm initialisation)
 
          vm-call-frame-code)                 ;; all code of this module
 
 #|
 
   implementation of a call frame stack for vm calls
-  implemented as stack with fat/slim stack frames
   using a cell-stack
+
+    stack grows top down
+
+        | offset | description (lb) | (hb)                |                             |
+        |--------+------------------+---------------------+-----------------------------|
+        | FF     | previous page    |                     |                             |
+        |        | . . .            |                     | <-- start of previous frame |
+        |        | local #n-1       |                     |                             |
+        |        | . . .            |                     |                             |
+        |        | local #0         |                     | <-- ZP_LOCALS_xB_PTR        |
+        |        | prev. page       | prev. func offset   |                             |
+        |        | prev. pc offset  | prev. locals offset |                             |
+        |        |                  |                     | <-- ZP_CALL_FRAME_TOP_MARK  |
+        |        | . . .            |                     |                             |
+        | 00     | page type        | page type           |                             |
 
  |#
 
@@ -206,14 +219,14 @@
 ;;         Y index for first byte available as payload (03) = ZP_CALL_FRAME_TOP_MARK
 ;;         the two allocated pages are initialized (@0 = page type, @ff = previous pages)
 (define VM_INIT_CALL_FRAME_STACK '())
-(define-vm-function-wol VM_ALLOC_CALL_FRAME
+(define-vm-function-wol VM_ALLOC_CALL_FRAME_PAGE
   (list
    (label VM_INIT_CALL_FRAME_STACK)
           (LDX !$00)
           (STX ZP_CALL_FRAME_LB+1)
           (STX ZP_CALL_FRAME_HB+1)
 
-   (label VM_ALLOC_CALL_FRAME)
+   (label VM_ALLOC_CALL_FRAME_PAGE)
           ;; allocate completely new page of type $18
           (LDA !$18)
           (JSR VM_ALLOCATE_NEW_PAGE)
@@ -249,7 +262,7 @@
   (define alloc-call-frame-test
     (run-code-in-test
      (list
-      (JSR VM_ALLOC_CALL_FRAME))
+      (JSR VM_ALLOC_CALL_FRAME_PAGE))
      #f))
 
   (regression-test
@@ -276,8 +289,8 @@
   (define alloc-call-frame-2-test
     (run-code-in-test
      (list
-      (JSR VM_ALLOC_CALL_FRAME)
-      (JSR VM_ALLOC_CALL_FRAME))
+      (JSR VM_ALLOC_CALL_FRAME_PAGE)
+      (JSR VM_ALLOC_CALL_FRAME_PAGE))
      #f))
 
   (regression-test
@@ -348,7 +361,7 @@
           (RTS)
 
    (label DOES_NOT_FIT__)
-          (JSR VM_ALLOC_CALL_FRAME)
+          (JSR VM_ALLOC_CALL_FRAME_PAGE)
           (JSR VM_PUSH_CALL_FRAME)      ;; push call frame onto newly allocated pages
           (LDA ZP_CALL_FRAME_LB+1)      ;; copy new pages into page part of locals ptrs
           (STA ZP_LOCALS_LB_PTR+1)
@@ -356,29 +369,11 @@
           (STA ZP_LOCALS_HB_PTR+1)
           (RTS)))
 
-#|
-    stack grows top down
-
-        | offset | description (lb) | (hb)                |                             |
-        |--------+------------------+---------------------+-----------------------------|
-        | FF     | previous page    |                     |                             |
-        |        | . . .            |                     | <-- start of previous frame |
-        |        | local #n-1       |                     |                             |
-        |        | . . .            |                     |                             |
-        |        | local #0         |                     | <-- ZP_LOCALS_xB_PTR        |
-        |        | prev. page       | prev. func offset   |                             |
-        |        | prev. pc offset  | prev. locals offset |                             |
-        |        |                  |                     | <-- ZP_CALL_FRAME_TOP_MARK  |
-        |        | . . .            |                     |                             |
-        | 00     | page type        | page type           |                             |
-
- |#
-
 (module+ test #| VM_PUSH_CALL_FRAME |#
   (define push-call-frame-test
     (run-code-in-test
      (list
-      (JSR VM_ALLOC_CALL_FRAME)
+      (JSR VM_ALLOC_CALL_FRAME_PAGE)
 
       ;; initialize function
       (LDX !$90)
@@ -412,7 +407,7 @@
   (define push-call-frame-2-test
     (run-code-in-test
      (list
-      (JSR VM_ALLOC_CALL_FRAME)
+      (JSR VM_ALLOC_CALL_FRAME_PAGE)
 
       ;; initialize function
       (LDX !$90)
@@ -566,7 +561,7 @@
   (define pop-call-frame-test
     (run-code-in-test
      (list
-      (JSR VM_ALLOC_CALL_FRAME)
+      (JSR VM_ALLOC_CALL_FRAME_PAGE)
 
       ;; initialize function
       (LDX !$90)
@@ -624,7 +619,7 @@
   (define pop-call-frame-2-test
     (run-code-in-test
      (list
-      (JSR VM_ALLOC_CALL_FRAME)
+      (JSR VM_ALLOC_CALL_FRAME_PAGE)
 
       ;; initialize function
       (LDX !$90)
@@ -720,12 +715,12 @@
 )
 
 (define vm-call-frame-code
-  (append VM_ALLOC_CALL_FRAME                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
+  (append VM_ALLOC_CALL_FRAME_PAGE                              ;; allocate a new call frame, storing current top mark on previous frame (if existent)
           VM_PUSH_CALL_FRAME                               ;; push a new frame, respecting X = locals needed and vm_pc to decide whether fast or slow frames are used
           VM_POP_CALL_FRAME                                ;; pop last pushed frame, checking whether slow or fast frame is on top of call frame stack
           VM_REFCOUNT_DECR_CURRENT_LOCALS))
 
-#;(module+ test #| vm-call-frame |#
+(module+ test #| vm-call-frame |#
   (inform-check-equal? (estimated-code-len (flatten vm-call-frame-code))
-                       263
+                       278
                        "estimated code length of call-frame runtime"))

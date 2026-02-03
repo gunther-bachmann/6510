@@ -21,7 +21,7 @@
   powers of 2. make sure objects of these bucket sizes are addressible with tagged pointers without adjustung these pointers. additionally
   ensure to easily reach the reference count for each object by minimal adjustments to the tagged pointer.
 * open tasks
-** TODO adjust current encoding to reflect the new pointer tagging pages etc.
+** DONE adjust current encoding to reflect the new pointer tagging pages etc.
 ** DONE all pointers do now point to the following layout => access to cell, cell-pairs, cell-array etc. all change!
 - State "DONE"       from "IMPLEMENT"  [2026-01-03 Sat 18:01]
 | offset | description      |
@@ -279,25 +279,25 @@ use new pointer tagging scheme :        examples (low, then high byte):
           BNE IS_NOT_ZERO
           ;; (BEQ) IS_ZERO
 #+end_src
-** IMPLEMENT DEFINITION OF call / ret
+** DONE DEFINITION OF call / ret
 *memory layout of call frame page* (organized in stack, lb, hb on separate pages)
-                 offset  content page lb  page hb
-                 --------------------------------
-                 00      #b0000 0001 page type call-frame
+see [[file:vm-call-frame.rkt::(define-vm-function VM_PUSH_CALL_FRAME][push call frame code]]
 
-                             / \              / \
-                              |                |
-                         vm_pc offset     locals offset
-                         function offset  function page
-zp-local-ptr-hb -->      local 0 cell-lb  local 0 cell-hb   <-- zp-local-ptr-hb
-                         ...
-                 ff      local n
+    stack grows top down
 
-*memory layout of code*
----------------------
-function-ptr-> xxxx llll        0..15 locals
-               bytecode 0
-               ...
+    | offset | description (lb) | (hb)                |                             |
+    |--------+------------------+---------------------+-----------------------------|
+    | FF     | previous page    |                     |                             |
+    |        | . . .            |                     | <-- start of previous frame |
+    |        | local #n-1       |                     |                             |
+    |        | . . .            |                     |                             |
+    |        | local #0         |                     | <-- ZP_LOCALS_xB_PTR        |
+    |        | prev. page       | prev. func offset   |                             |
+    |        | prev. pc offset  | prev. locals offset |                             |
+    |        |                  |                     | <-- ZP_CALL_FRAME_TOP_MARK  |
+    |        | . . .            |                     |                             |
+    | 00     | page type        | page type           |                             |
+
 
 *** call
 vm_pc inc by call (+3)
@@ -352,29 +352,25 @@ JMP INTERPRETER
   - EVLSTK_LB :: (ptr) to eval-stack low byte (only page, offset = 0)
   - EVLSTK_HB :: (ptr) to eval-stack high byte (only page, offset = 0)
   - EVLSTK_OFF :: offset into EVLSTK_LB and _HB to 2os
+  - CALL_FRAME_LB :: (word) pointer to current call frame (low byte) (offset always 0)
+  - CALL_FRAME_HB :: (word) pointer to current call frame (high byte) (offset always 0)
+  - CALL_FRAME_TOP_MARK :: (byte) top mark of call frame stack
   - data on the eval stack (pointed to by evlstck_l/hb)
   - data on the call frame stack (pointed to by locals_l/hb)
 - vm free lists and garbage collection data
-  - FL_P8 :: (ptr) free list of profile 8
-  - FL_P12 :: (ptr) free list of profile 12
-  - FL_P16 :: (ptr) free list of profile 16
-  - FL_P20 :: (ptr) free list of profile 20
-  - FL_P28 :: (ptr) free list of profile 28
-  - FL_P36 :: (ptr) free list of profile 36
-  - FL_P48 :: (ptr) free list of profile 48
-  - FL_P84 :: (ptr) free list of profile 84
-  - FL_CELLPAIRS :: (ptr) list of free cell pairs
-  - FL_PC_CELLPAIRS :: (ptr) partially collected cell pairs (cdr field may hold pointers not collected yet)
-  - FL_PC_CELLARRAYS :: (ptr) partially collected cell pair arrays
+  - INC_COLLECTIBLE_LIST   :: (ptr) partially collected cell arrays
+  - PAGE_FREE_LIST         :: (byte) first free page (in free list)
+  - PAGE_FREE_SLOTS_LIST   :: (bytes x profiles), bytes pointing to pages with free slots of this profile
+  - PROFILE_PAGE_FREE_LIST :: (bytes x profiles), bytes pointing to pages which are completely free initialized with this profile
 - vm temporaries
   temporarily used by the implementation of byte code commands
   held on the zero page
   - RP :: (cell) aux register
   - RZ :: (cell) used for gc, refcounting etc.
   - PAGE_PTR :: (ptr) with offset always 0!
-  - TEMP :: (cell)
-  - TEMP2 :: (cell)
-IDEA: keep RT and RP in sequence to allow ,y/,x addressing them, making some functions work on either RP or RT, passing the right y/x
+  - TEMP :: (cell) TEMP TEMP2
+  - TEMP3 :: (cell) TEMP3 TEMP4
+IDEA: keep RT and RP in adjacent memory location to allow ,y/,x addressing them, making some functions work on either RP or RT, passing the right y/x
 ** OBSOLETE DEFINITION OF cell types and references
 cell types fall into 3 categories
 *** pointers (point to slots)
@@ -1267,7 +1263,7 @@ use profiling data
 ** parameters
 - are passed as regular stack values
 - need to be copied to locals if multiple access is necessary and /dup/ does not suffice
-** TODO pages
+** OBSOLETE pages
 #+begin_src dot :file memory-page-state.gen.png
   digraph finite_state_machine {
       node [shape=point]ENTRY; //,EXIT
@@ -1634,7 +1630,7 @@ offset  content
               the array keeps the amount of unchecked cells
               the array keeps a pointer to the next enqueued cell-array in the slot right behind the unchecked cells
 
-** TODO cell types and references
+** OBSOLETE cell types and references
 cell types fall into 3 categories
 *** cell pointer
 tag byte ends on bits 0 [cell-ptr], or 01 [cell-pair-ptr]
@@ -1669,7 +1665,7 @@ is a cell that is used as a header of a number of cells. the following headers e
   02      byte index 0
   ...
   n+2     byte index n
-** TODO pointer tagging
+** OBSOLETE pointer tagging
 RT = 00 (low byte) is equivalent to RT is empty!
 use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples (low, then high byte):
   zzzz zzz0 = cell-ptr (no change on cell-ptr pages)                    0000 001[0]    1100 1101   cx01 (second allocated slot in cell-ptr page)
@@ -1719,7 +1715,7 @@ use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples
           CMP !$87 ;; CMP !TAG_BYTE_NATIVE_ARRAY
           BEQ IS_CELL_NATIVE_ARRAY_HEADER
 #+end_src
-** call frames
+** OBSOLETE call frames
 - a call frame is defined by the following variables (on the zero page)
   ZP_​​VM_​PC                    *  ptr to the current byte code
   ZP_​VM_​FUNC_​PTR              *  ptr to the current running function
@@ -1771,7 +1767,7 @@ use new pointer tagging scheme (makes tagged-low-byte obsolete):        examples
     01 : start of byte code  (defaults offset?)
     ...
 
-** locals
+** OBSOLETE locals
 locals are organized as stack (page pair)
    00: page type           00: page type
    01: previous lb page    01: previous hb page
@@ -1780,7 +1776,7 @@ locals are organized as stack (page pair)
    ...
 
 each cell can be either a cell pointer or a call value (never cell header)
-** cell stack (evaluation stack)
+** OBSOLETE cell stack (evaluation stack)
 cell-stack is organized as stack (page pair)
    00: page type           00: page type
    01: previous lb page    01: previous hb page

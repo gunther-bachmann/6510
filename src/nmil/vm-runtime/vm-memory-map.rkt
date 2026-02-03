@@ -65,12 +65,7 @@
    ;; => 32 values still available
    (byte-const TAG_BYTE_BYTE_CELL         $01) ;; low byte in a cell that indicates the cell to be a byte-cell
    (byte-const TAG_BYTE_CELL_ARRAY        $83) ;; LSR -> 41, LSR -> 20
-   (byte-const TAG_BYTE_CELL_ARRAY_LSR2   $30)
    (byte-const TAG_BYTE_NATIVE_ARRAY      $87) ;; LSR -> 43, LSR -> 21
-   (byte-const TAG_BYTE_NATIVE_ARRAY_LSR2 $21)
-
-   (byte-const NEXT_FREE_PAGE_PAGE       $cf)   ;; cf00..cfff is a byte array, mapping each page idx to the next free page idx, 00 = no next free page for the given page
-   ;; (word-const VM_FIRST_FREE_SLOT_ON_PAGE     $cf00) ;; location: table of first free slot for each page
 
    (word-const TAGGED_INT_0              $0003)
    (byte-const TAGGED_INT_0_HB           $00)
@@ -200,8 +195,8 @@
  | ee     | ZP_CALL_FRAME_LB (lb)               | :                                                         |
  | ed     | ZP_RZ (hb)                          | :                                                         |
  | ec     | ZP_RZ (lb)                          | :                                                         |
- | eb     |                                     | :                                                         |
- | ea     |                                     | :                                                         |
+ | eb     | ?                                   | :                                                         |
+ | ea     | ?                                   | :                                                         |
  | e9     | ZP_EVAL_STACK_TAIL_HB_PTR (hb)      | :                                                         |
  | e8     | ZP_EVAL_STACK_TAIL_HB_PTR (lb)      | :                                                         |
  | e7     | ZP_EVAL_STACK_TAIL_LB_PTR (hb)      | :                                                         |
@@ -219,11 +214,11 @@
  | db     | ZP_EVAL_STACK_TAIL_TOP              | :                                                         |
  | da     | ZP_RP (hb)                          | :                                                         |
  | d9     | ZP_RP (lb)                          | start of screen line link table/editor storage            |
- | d8     |                                     | flag: insert mode                                         |
- | d7     |                                     | temp: ascii last char printed                             |
+ | d8     | ?                                   | flag: insert mode                                         |
+ | d7     | ?                                   | temp: ascii last char printed                             |
  | d6     | ZP_RCI                              | cursor physical line number                               |
  | d5     |                                     | max len of physical screen                                |
- | d4     |                                     | flag: editor in quote mode                                |
+ | d4     | ?                                   | flag: editor in quote mode                                |
  | d3     | ZP_RBI                              | cursor column number (0-79)                               |
  | d2     | ZP_RB (hb)                          | ptr: address of current screen line (hb)                  |
  | d1     | ZP_RB (lb)                          | ptr: address of current screen line (lb)                  |
@@ -236,7 +231,7 @@
  | ca     | ZP_INC_COLLECTIBLE_LIST (hb)        | ptr to row/col position of last char (hb)                 |
  | c9     | ZP_INC_COLLECTIBLE_LIST (lb)        | ptr to row/col position of last char (lb)                 |
  | c8     |                                     | offset end of logical line (0-79)                         |
- | c7     |                                     | flag: print reverse                                       |
+ | c7     | ?                                   | flag: print reverse                                       |
  | c6     |                                     | number of chars in keyboard buffer                        |
  | c5     |                                     | scan code of last key pressed                             |
  | c4     |                                     | ptr program start behind tape header (hb)                 |
@@ -253,7 +248,7 @@
  | b9     |                                     | current secondary address                                 |
  | b8     |                                     | current logical file number                               |
  | b7     |                                     | length of current file name                               |
- | b6     |                                     | rs-232 output buffer                                      |
+ | b6     | ?                                   | rs-232 output buffer                                      |
  | b5     | ZP_TEMP4                            | rs-232 next bit to send / end of tape flag                |
  | b4     | ZP_TEMP3                            | rs-232 output bot count / tape temp storage               |
  | b3     |                                     | ptr: start of tape buffer (hb)                            |
@@ -276,8 +271,8 @@
  | a2     |                                     | internal clock                                            |
  | a1     |                                     | internal clock                                            |
  | a0     |                                     | internal clock                                            |
- | 9f     |                                     | tape error correction log                                 |
- | 9e     |                                     | tape error log                                            |
+ | 9f     | ?                                   | tape error correction log                                 |
+ | 9e     | ?                                   | tape error log                                            |
  | 9d     |                                     | flag: kernal message control                              |
  | 9c     |                                     | flag: tape byte received                                  |
  | 9b     |                                     | tape char parity                                          |

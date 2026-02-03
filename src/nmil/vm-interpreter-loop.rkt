@@ -83,7 +83,7 @@ and the bc operation jump table
     ;; ----------------------------------------
    ;; (label VM_INTERPRETER_OLD)
    ;;        (JMP VM_INTERPRETER)
-   ;;        (LDY !$00)                            ;; use 0 offset to ZP_VM_PV
+   ;;        (LDY !$00)                            ;; use 0 offset to ZP_VM_PC
    ;; (label VM_INTERPRETERy)
    ;;        (LDA (ZP_VM_PC),y)                    ;; load byte code
    ;;        ;; normal bytecode command

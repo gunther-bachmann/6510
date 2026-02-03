@@ -638,7 +638,7 @@
           (STA ZP_RA)
           (RTS)))
 
-;; allocate an m1 slot
+;; allocate an m1 slot DOES NOT CHECK EXISTING PTR IN RA!!
 ;;
 ;; reuse pages marked as available (ZP_PAGE_FREE_SLOTS_LIST,x)
 ;; else reuse pages marked as free of the same profile (ZP_PROFILE_PAGE_FREE_LIST,x)

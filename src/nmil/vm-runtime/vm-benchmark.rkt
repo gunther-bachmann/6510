@@ -19,10 +19,10 @@
    left : 092         (39*)  87
 
    optimized:
-   right: 064 jiffies
+   right: 063 jiffies
    down:  039
-   up:    044
-   left : 071
+   up:    043
+   left : 070
 
 
    down

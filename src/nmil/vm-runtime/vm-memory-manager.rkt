@@ -52,6 +52,11 @@
   (list
                 (JSR VM_INIT_PAGE_MEMORY_MANAGER_N20)
                 (JSR INIT_EVLSTK_TAIL)
+                (LDA !$00)
+                (STA ZP_RA)
+                (STA ZP_RB)
+                (STA ZP_RC)
+                (STA ZP_RT)
                 (JMP VM_INIT_CALL_FRAME_STACK)))
 
 

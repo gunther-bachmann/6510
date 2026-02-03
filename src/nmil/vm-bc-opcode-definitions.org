@@ -1,6 +1,15 @@
 #+title: vm-bc-opcode-definitions
 
 * IMPLEMENT split vm-interpreter in smaller modules
+* system bytecodes/functions
+- create/delete/update file
+- read/write files/streams
+- read/write memory regions
+- read/write memory byte
+- flip/set/clear bits (with disabled/enabled interrupts)
+see https://www.pagetable.com/c64ref/kernal,
+and https://c64os.com/c64os/programmersguide/usingkernal_file#mod_file_fopen
+and http://www.6502.org/users/andre/lib6502/lib6502.html#dir
 * TODO use unified byte code naming (rename existing ones)
 - e.g. IADD, IPUSH, BADD, BPUSH ... _P..
 - see notebook
