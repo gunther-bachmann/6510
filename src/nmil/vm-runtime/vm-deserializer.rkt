@@ -1,6 +1,8 @@
 #lang racket/base
 
-(provide)
+(provide VM_DESERIALIZE
+
+         vm-deserializer-code)
 
 #|
 
@@ -62,10 +64,7 @@
 
   (define test-runtime
     (append
-     DESERIAL_ADDY_TO_ZP
-     VM_DESERIALIZE_NATIVE_ARRAY
-     VM_SERIALIZE_NATIVE_ARRAY
-     VM_DESERIALIZE_CELL_ARRAY
+     vm-deserializer-code
 
      (list (byte-const ZP_VM_PC #x85))
      VM_MEMORY_MANAGEMENT_CONSTANTS
@@ -133,15 +132,15 @@
             (byte $05) ;; should not be copied, since native array has length 4
             ))
 
-  (define deserialize-test-rt (peek-word-at-address deserialize-test ZP_RA))
-  (check-equal? (vm-slot->string deserialize-test deserialize-test-rt)
+  (define deserialize-test-ra (peek-word-at-address deserialize-test ZP_RA))
+  (check-equal? (vm-slot->string deserialize-test deserialize-test-ra)
                 "ptr[0] native-array of len 4"
                 "rt points to a native array of len 4")
-  (check-equal? (memory-list- deserialize-test (+ 2 deserialize-test-rt) 5)
+  (check-equal? (memory-list- deserialize-test (+ 2 deserialize-test-ra) 5)
                 (list 1 2 3 4 14)
                 "native array content is 1 2 3 4, whereas14 is already the offset to the next free m1 slot")
   (check-equal? (memory-list- deserialize-test start-of-free-test-memory 2)
-                (list (low-byte deserialize-test-rt) (high-byte deserialize-test-rt))
+                (list (low-byte deserialize-test-ra) (high-byte deserialize-test-ra))
                 "the original bytes are overwritten with the pointer of the allocated array")
   (check-equal? (memory-list- deserialize-test ZP_RP 2)
                 (int->bytes (+ start-of-free-test-memory 6))))
@@ -343,6 +342,72 @@
                       "int $0020")
                 "cell-array has a byte, a pointer to a native array and an int"))
 
+;; deserialize list of nonatomic serializations (e.g. list of native arrays and/or cell-arrays)
+;; input: ZP_RZ   ptr to serialized data (serial type 00 ends the list)
+;;
+(define-vm-function VM_DESERIALIZE
+  (list
+          (LDA ZP_RZ)
+          (STA ZP_RP)
+          (LDA ZP_RZ+1)
+          (STA ZP_RP+1)
+
+   (label loop__)
+          (LDY !$00)
+          (LDA (ZP_RP),y)
+          (BEQ done__)
+          (CMP !$81) ;; native array
+          (BNE no_native_array__)
+          (JSR VM_DESERIALIZE_NATIVE_ARRAY)
+          (JMP loop__)
+   (label no_native_array__)
+          (CMP !$85) ;; cell array
+          (BNE no_cell_array__)
+          (JSR VM_DESERIALIZE_CELL_ARRAY)
+          (JMP loop__)
+   (label no_cell_array__)
+          (BRK) ;; error
+
+   (label done__)
+          (JSR CP_RA_TO_RT) ;; now constants are tos!
+          (LDA !$00)
+          (STA ZP_RA) ;; clear ra
+          (JMP INC_REFCNT_M1_SLOT_RT)))
+
+(module+ test #| deserialize |#
+
+  (define deserialize-complete-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+            (LDA !<test_data)
+            (STA ZP_RZ)
+            (LDA !>test_data)
+            (STA ZP_RZ+1)
+            (JSR VM_DESERIALIZE)
+            (BRK)
+
+     (ast-org-command '() start-of-free-test-memory)
+     (label test_data)
+             (byte $81) ;; native array
+             (byte $05) ;; len 5
+             (byte $08 $05 $0c $0c $0f) ;; HELLO
+
+             ;; (byte $85) ;; cell array (with constants)
+             ;; (byte $01) ;; len 1
+             ;; (byte $80 $00) ;; cell ptr to offset 0 (where native array is)
+
+             (byte $00) ;; end marker
+     ))
+
+  (define deserialize-test-rt (peek-word-at-address deserialize-complete-test ZP_RT))
+  (check-equal? (vm-slot->string deserialize-complete-test deserialize-test-rt)
+                "ptr[1] native-array of len 5"
+                "rt points to a native array of len 5")
+  (check-equal? (memory-list- deserialize-complete-test (+ 2 deserialize-test-rt) 5)
+                (list 8 5 12 12 15)
+                "native array content HELLO"))
+
 (define-vm-function DESERIAL_ADDY_TO_ZP
   (list
           (TYA)
@@ -366,9 +431,10 @@
    DESERIAL_ADDY_TO_ZP
    VM_DESERIALIZE_CELL_ARRAY
    VM_DESERIALIZE_NATIVE_ARRAY
-   VM_SERIALIZE_NATIVE_ARRAY))
+   VM_SERIALIZE_NATIVE_ARRAY
+   VM_DESERIALIZE))
 
 (module+ test #| code len |#
   (inform-check-equal? (estimated-code-len vm-deserializer-code)
-                       216
+                       266
                        "length of deserializer"))

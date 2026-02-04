@@ -80,8 +80,12 @@
                   vm-screen-code)
          (only-in "../vm-runtime/vm-bcd.rkt"
                   vm-bcd-code)
+         (only-in "../vm-runtime/vm-deserializer.rkt"
+                  vm-deserializer-code)
          (only-in "../vm-runtime/vm-benchmark.rkt"
                   vm-benchmark-code)
+         (only-in "../vm-runtime/vm-bios.rkt"
+                  vm-bios-code)
          (only-in "../vm-runtime/vm-memory-manager.rkt"
                   VM_INIT_MEMORY_MANAGER
                   vm-memory-manager-code)
@@ -108,6 +112,8 @@
     vm-screen-code
     vm-bcd-code
     vm-benchmark-code
+    vm-bios-code
+    vm-deserializer-code
     (list (org-align #x100)) ;; align to next page
     full-interpreter-opcode-table
     VM_INTERPRETER_ZP)))

@@ -71,8 +71,14 @@ currently the following test programs are created
                     just-vm-interpreter)
            (only-in "../nmil/vm-runtime/vm-memory-manager.rkt"
                     vm-memory-manager-code)
+           (only-in "../nmil/vm-runtime/vm-memory-map.rkt"
+                    VM_MEMORY_MANAGEMENT_CONSTANTS)
            (only-in "../nmil/vm-runtime/vm-benchmark.rkt"
                     vm-benchmark-code)
+           (only-in "../nmil/vm-runtime/vm-bios.rkt"
+                    vm-bios-code)
+           (only-in "../nmil/vm-runtime/vm-deserializer.rkt"
+                    vm-deserializer-code)
            (only-in "../nmil/vm-runtime/vm-screen.rkt"
                     vm-screen-code)
            (only-in "../nmil/vm-runtime/vm-bcd.rkt"
@@ -457,7 +463,9 @@ currently the following test programs are created
              vm-memory-manager-code
              vm-screen-code
              vm-bcd-code
-             vm-benchmark-code)
+             vm-benchmark-code
+             vm-bios-code
+             vm-deserializer-code)
      ;; (assembly-code-list-labels mem-data)
      ))
 
@@ -475,6 +483,7 @@ currently the following test programs are created
     (new-assemble-to-code-list
        (append (list (org #x4000)) ;; make sure to adjust segment accordingly
                full-interpreter-opcode-table ;; aligned to xx00 (page aligned)
+               VM_MEMORY_MANAGEMENT_CONSTANTS
                (list ;; (org #x2100)
                      ;; (word-const VM_INTERPRETER_OPTABLE $ce00)
                      (word-const VM_INTERPRETER $0084)
@@ -484,7 +493,15 @@ currently the following test programs are created
                      ;; a/x set by byte-code-loader
                      (JSR VM_INTERPRETER_INIT_AX)
                      (JSR VM_INIT_MEMORY_MANAGER)
-                     ;; (JSR VM_INIT_CALL_FRAME_STACK)
+
+                     (LDA ZP_RZ)
+                     (BEQ no_constants_to_load__)
+
+                     ;; TODO: dummy code for loading constants,
+                     (JSR VM_DESERIALIZE)
+                      ;; constants on stack
+
+              (label no_constants_to_load__)
                      (JMP VM_INTERPRETER))
                just-vm-interpreter
                full-extended-optable-hb
@@ -522,8 +539,9 @@ currently the following test programs are created
 
   (define (byte-code-loader byte-codes)
     (append
+     (list   (org #x0810))
+     VM_MEMORY_MANAGEMENT_CONSTANTS ;; <- no code just definitions
      (list
-             (org #x0810)
       (label CALLED_FROM_BASIC)
              ;; save zero page
              (LDY !$ff)
@@ -538,20 +556,43 @@ currently the following test programs are created
              (JSR LOOPED_COPY_REGION)
 
              ;; add code to initialize memory manage and interpreter
+             (LDA !<BC_CONSTANTS)
+             (STA ZP_RZ)
+             (LDA !>BC_CONSTANTS)
+             (STA ZP_RZ+1)
              (LDA !<BC_START)
              (LDX !>BC_START)
              (JMP $4100)      ;; initialize memory manager & interpreter & start interpreter
 
-      (label BC_START)
-             (ast-bytes-cmd '() byte-codes)
+      (label BC_CONSTANTS)
+             (byte $81) ;; native array
+             (byte $12) ;; len 18
+             (byte $08 $05 $0c $0c $0f $2c $20 $10 $12 $05 $13 $13 $20 $01 $20 $0b $05 $19) ;; HELLO, PRESS A KEY
 
-             (bc PUSH_B) (byte $ff)
-             (bc PUSH_B) (byte $02)
-             (bc BADD)
-             (bc DUP)
-             (bc POKE_B) (byte $00 $04) ;; poke result $01 (A) into $0400 (first character on screen)
-             (bc BINC)
-             (bc POKE_B) (byte $01 $04) ;; poke result $02 (B) into $0401 (second character on screen)
+             ;; (byte $85) ;; cell array (with constants)
+             ;; (byte $01) ;; len 1
+             ;; (byte $80 $00) ;; cell ptr to offset 0 (where native array is)
+
+             (byte $00) ;; end marker
+
+      (label BC_START)
+             ;; (ast-bytes-cmd '() byte-codes)
+             ;; constant nat array hello is top of stack
+             ;; (bc BIOS) (byte $01) ;; clear screen
+             (bc PUSH_B) (byte $00)
+             (bc SWAP)
+             (bc PUSH_B) (byte $00)
+             (bc SWAP)
+             (bc BIOS) (byte $00) ;; print string
+
+
+             ;; (bc PUSH_B) (byte $ff)
+             ;; (bc PUSH_B) (byte $02)
+             ;; (bc BADD)
+             ;; (bc DUP)
+             ;; (bc POKE_B) (byte $00 $04) ;; poke result $01 (A) into $0400 (first character on screen)
+             ;; (bc BINC)
+             ;; (bc POKE_B) (byte $01 $04) ;; poke result $02 (B) into $0401 (second character on screen)
 
              ;; implement BENCH bytecode to execute benchmark functions
 

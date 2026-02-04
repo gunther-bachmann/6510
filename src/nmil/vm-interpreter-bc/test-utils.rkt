@@ -44,6 +44,10 @@
                   vm-bcd-code)
          (only-in "../vm-runtime/vm-benchmark.rkt"
                   vm-benchmark-code)
+         (only-in "../vm-runtime/vm-deserializer.rkt"
+                  vm-deserializer-code)
+         (only-in "../vm-runtime/vm-bios.rkt"
+                  vm-bios-code)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_ZP
@@ -106,6 +110,8 @@
            vm-bcd-code
            vm-screen-code
            vm-benchmark-code
+           vm-bios-code
+           vm-deserializer-code
            (list (org-align #x100)) ;; align to next page
            (build-interpreter-optable relevant-opcode-definitions)
            VM_INTERPRETER_ZP))) ;; TODO create opcode table w/ wanted / knonwn opcodes only?
