@@ -6,6 +6,7 @@
  byte                           ;; restrict value to a 1 byte value (cutting off other bits)
  byte/c                         ;; is the given value within byte range (used be contracts)
  bytes->int                     ;; convert two bytes to int, low the high
+ int->bytes                     ;; convert word to a list of low, high bytes
  decimal-from-two-complement    ;; give a signed decimal from a byte in two complement encoding
  high-byte                      ;; get the high byte of a (2 byte) number
  in-byte-range?                 ;; is this exact integer in byte range?
@@ -18,7 +19,7 @@
  word/c                         ;; is the given value within word range (used be contracts)
 )
 
-(require (only-in racket/contract define/contract -> and/c))
+(require (only-in racket/contract define/contract -> and/c listof))
 
 (module+ test
   (require (only-in racket/list range)
@@ -126,3 +127,23 @@
 (define/contract (bytes->int low high)
   (-> byte/c byte/c word/c)
   (bitwise-xor low (arithmetic-shift high 8)))
+
+(module+ test #| bytes->int |#
+  (check-equal? (bytes->int #x00 #x00)
+                #x0000)
+  (check-equal? (bytes->int #xff #x00)
+                #x00ff)
+  (check-equal? (bytes->int #x01 #xb0)
+                #xb001))
+
+(define/contract (int->bytes word-value)
+  (-> word/c (listof byte?))
+  (list (low-byte word-value) (high-byte word-value)))
+
+(module+ test #| int->bytes |#
+  (check-equal? (int->bytes #xb000)
+                (list #x00 #xb0))
+  (check-equal? (int->bytes #x0000)
+                (list #x00 #x00))
+  (check-equal? (int->bytes #xb0ff)
+                (list #xff #xb0)))

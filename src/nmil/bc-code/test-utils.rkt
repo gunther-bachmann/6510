@@ -41,7 +41,8 @@
                   memory-list
                   cpu-state-clock-cycles)
          (only-in "../../tools/data-tools.rkt"
-                  bytes->int)
+                  bytes->int
+                  int->bytes)
          (only-in "../vm-bc-opcode-definitions.rkt"
                   bc
                   bc-opcode-definitions

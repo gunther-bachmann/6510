@@ -7,6 +7,7 @@
          initialize-cpu
          memory->string
          memory-list
+         memory-list-
          peek
          peek-pc
          peek-pc+1
@@ -290,6 +291,10 @@ https://media.ccc.de/v/27c3-4159-en-reverse_engineering_mos_6502#t=2100
   (stream->list
    (map (lambda (idx) (peek state idx))
         (range from (fx+ 1 (if (> to 0) to from))))))
+
+(define/c (memory-list- state from (delta 1))
+  (->* (cpu-state? word/c) (word/c) (listof byte/c))
+  (memory-list state from (+ from delta -1)))
 
 ;; create a string formated with 'address byte+0 byte+1 ... byte+15' per line
 (define/c (indexed-memory-list state from to)

@@ -53,7 +53,7 @@
            (only-in "./vm-m1-slots.rkt"
                     ALLOC_M1_P0_SLOT_TO_RT
                     ALLOC_M1_SLOT_TO_RA
-                    INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX)
+                    INIT_M1Px_PAGE_PROFILE_X_TO_AX)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-pages.rkt"
                     VM_INIT_PAGE_MEMORY_MANAGER     ;; initialize page memory management (must be called before first allocation)
@@ -84,7 +84,7 @@
 
      ALLOC_M1_P0_SLOT_TO_RT
      ALLOC_M1_SLOT_TO_RA
-     INIT_M1Px_PAGE_RZ_PROFILE_X_TO_AX
+     INIT_M1Px_PAGE_PROFILE_X_TO_AX
 
 
      WRITE_INT_AY_TO_RT

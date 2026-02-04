@@ -77,7 +77,8 @@
          (only-in "../tools/data-tools.rkt"
                   low-byte
                   high-byte
-                  bytes->int)
+                  bytes->int
+                  int->bytes)
          (only-in "./vm-bc-disassembler.rkt"
                   disassembler-byte-code--byte-count
                   disassemble-byte-code)

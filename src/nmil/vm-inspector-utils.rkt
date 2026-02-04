@@ -39,6 +39,7 @@
                   peek)
          (only-in "../tools/data-tools.rkt"
                   bytes->int
+                  int->bytes
                   low-byte
                   high-byte)
          (only-in "vm-runtime/vm-memory-map.rkt"
