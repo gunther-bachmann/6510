@@ -54,7 +54,7 @@
                             (cadr line-mark)
                             (if org-cmd-mark (cadr org-cmd-mark) "")
                             (if file-name-in-map (cadr file-name-in-map) file-name))))))))
-       (displayln (format "loaded source map for ~a" file-name))
+       (displayln (format "loaded source map for ~a with ~a entries" file-name (hash-count result)))
        result))))
 
 ;; instrument a single source line with a prefix of the address
@@ -84,11 +84,13 @@
 
 (define/c (6510-debugger--move-cursor-to-source-line file-name line)
   (-> string? nonnegative-integer? any/c)
-  (6510-debugger--execute-elisp-expression
-   (format "(~a \"~a\" ~a)"
+  (define command-to-run
+    (format "(~a \"~a\" ~a)"
            elisp-function-move-cursor-to-source-line
            file-name
-           (if (string-suffix? file-name ".rkt") line (add1 line)))))
+           (if (string-suffix? file-name ".rkt") line (add1 line))))
+  ;; (displayln command-to-run)
+  (6510-debugger--execute-elisp-expression command-to-run))
 
 ;; display an overlay on the given source file at position of the program counter
 (define/c (6510-debugger--show-disassembly-on-source-lines file-name line disassembled)
