@@ -24,7 +24,8 @@
          (only-in racket/port
                   open-output-nowhere)
          (only-in racket/string
-                  string-replace)
+                  string-replace
+                  string-prefix?)
          (only-in uuid
                   uuid-string)
          "../../6510.rkt"
@@ -33,12 +34,18 @@
                   new-assemble-to-ast-code-list
                   map-assembly-code-list-to-resolved-bytes
                   assembly-code-list-org-code-sequences
-                  assembly-code-list-labels)
+                  assembly-code-list-labels
+                  org-for-code-seq
+                  )
          (only-in "../../ast/6510-command.rkt"
                   ast-label-def-cmd?
                   ast-label-def-cmd-label)
+         (only-in "../../ast/6510-relocator.rkt"
+                  label-string-offsets)
          (only-in "../../ast/6510-resolver.rkt"
-                  add-label-suffix)
+                  add-label-suffix
+                  ->resolved-decisions
+                  label-instructions)
          (only-in "../../tools/6510-debugger-shared.rkt"
                   breakpoint)
          (only-in "../../tools/6510-debugger.rkt"
@@ -88,6 +95,12 @@
        [else (remove-labels-for (cdr code) labels-to-remove (cons cmd result))])]))
 
 (define (run-code-in-test-on-code wrapped-test-code (debug #f))
+  (define org-code-start (org-for-code-seq wrapped-test-code))
+  (define resolved-dec (->resolved-decisions (label-instructions wrapped-test-code) wrapped-test-code))
+  (define label->offset (label-string-offsets org-code-start resolved-dec))
+  (define wanted-breakpoints (filter (lambda (hk)
+                                       (string-prefix? hk "BREAKPOINT"))
+                                     (hash-keys label->offset)))
   (define ast-assembly (new-assemble-to-ast-code-list wrapped-test-code))
   (if debug
     (create-source-map-for-debug ast-assembly)
@@ -99,11 +112,21 @@
                         (assembly-code-list-org-code-sequences assembly)))
   (if debug
       (run-debugger-on state-before "debug-session" #t
-                       (list (breakpoint "Start of actual test code"
-                                         (lambda (lc-state)
-                                           (eq? (cpu-state-program-counter lc-state)
-                                                (hash-ref (assembly-code-list-labels assembly) "TEST_ENTRY")))
-                                         #t))
+                       (append
+                        (list (breakpoint "Start of actual test code"
+                                          (lambda (lc-state)
+                                            (eq? (cpu-state-program-counter lc-state)
+                                                 (hash-ref (assembly-code-list-labels assembly) "TEST_ENTRY")))
+                                          #t
+                                          #f))
+                        (map (lambda (hashkey)
+                               (breakpoint (format "breakpoint ~a @ $~a" hashkey (number->string (hash-ref label->offset hashkey) 16))
+                                     (lambda (lc-state)
+                                       (eq? (cpu-state-program-counter lc-state)
+                                            (hash-ref label->offset hashkey)))
+                                     #f
+                                     #t))
+                             wanted-breakpoints))
                        (list)
                        debugger--assembler-interactor
                        #t
