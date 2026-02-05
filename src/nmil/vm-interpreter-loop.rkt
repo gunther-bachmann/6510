@@ -1,12 +1,24 @@
 #lang racket/base
 
+(provide VM_INTERPRETER                         ;; fetch op at (VM_PC),y=0 and interpret that byte code
+         VM_INTERPRETER_ZP                      ;; interpreter loop implemented in zero page (shaving off some cpu cycles)
+         VM_INTERPRETER_OPTABLE                 ;; 256 byte holding the function vector for 128 byte codes (low, high each)
+         VM_INTERPRETER_INC_PC                  ;; increment VM_PC (16 bit inc) then move on to VM_INTERPRETER
+         VM_POP_EVLSTK_AND_INC_PC               ;; pop a value from the eval stack, then move on to VM_INTERPRETER_INC_PC
+         VM_INTERPRETER_INC_PC_2_TIMES          ;; increment VM_PC 2 times then move on to VM_INTERPRETER
+         VM_INTERPRETER_INC_PC_A_TIMES          ;; increment VM_PC by content of register A then move on to VM_INTERPRETER
+         VM_INTERPRETER_INIT                    ;; init interpreter (VM_ZP and VM_FUNC_PTR) #x8000
+         VM_INTERPRETER_INIT_AX                 ;; init interpreter (VM_ZP and VM_FUNC_PTR) A-lowbyte X=highbyte
+         ZP_VM_PC                               ;; pc of the virtual byte code machine
+         interpreter-loop-label                 ;; label of the central interpreter loop (used by debugger)
+         )
+
 #|
 
 define the interpreter loop and its entry points
 and the bc operation jump table
 
 |#
-
 
 (require (only-in racket/list
                   flatten)
@@ -17,18 +29,6 @@ and the bc operation jump table
                   ;; ZP_VM_PC
                   ZP_FUNC_PTR))
 
-(provide VM_INTERPRETER                         ;; fetch op at (VM_PC),y=0 and interpret that byte code
-         VM_INTERPRETER_ZP
-         VM_INTERPRETER_OPTABLE                 ;; 256 byte holding the function vector for 128 byte codes (low, high each)
-         VM_INTERPRETER_INC_PC                  ;; increment VM_PC (16 bit inc) then move on to VM_INTERPRETER
-         VM_POP_EVLSTK_AND_INC_PC               ;; pop a value from the eval stack, then move on to VM_INTERPRETER_INC_PC
-         VM_INTERPRETER_INC_PC_2_TIMES          ;; increment VM_PC 2 times then move on to VM_INTERPRETER
-         VM_INTERPRETER_INC_PC_A_TIMES          ;; increment VM_PC by content of register A then move on to VM_INTERPRETER
-         VM_INTERPRETER_INIT                    ;; init interpreter (VM_ZP and VM_FUNC_PTR) #x8000
-         VM_INTERPRETER_INIT_AX                 ;; init interpreter (VM_ZP and VM_FUNC_PTR) A-lowbyte X=highbyte
-         ZP_VM_PC)
-
-;; @DC-FUN: VM_INTERPRETER_INIT, group: misc
 ;; initialize PC to $8000
 (define VM_INTERPRETER_INIT_AX '())
 (define VM_INTERPRETER_INIT
@@ -97,6 +97,9 @@ and the bc operation jump table
           (JMP VM_INTERPRETER)
           ;; jmp to zero page?
 ))
+
+(define interpreter-loop-label "VM_INTERPRETER")
+
 
 ;; interpreter loop completely in the zero page
 ;; the program counter (two bytes) is kept at VM_PCM1+1 and VM_PCM1+2!

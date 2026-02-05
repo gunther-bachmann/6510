@@ -1,5 +1,18 @@
 #lang racket/base
 
+(provide run-bc-wrapped-in-test-                ;; run the given byte code in test, wrapped by testing mechanigs
+         vm-next-instruction-bytes
+         vm-list->strings
+         vm-slots-free-in-page
+         vm-slots-used-in-page
+         vm-num-slots-used-in-page)
+
+#|
+
+ utilities to enable more expressive testing of the virtual byte code machine
+
+ |#
+
 (require (only-in ansi-color
                   with-colors
                   foreground-color
@@ -74,6 +87,7 @@
                   run-interpreter
                   run-interpreter-on
                   memory-list
+                  memory-list-
                   cpu-state-accumulator)
          (only-in "../tools/6510-source-map.rkt"
                   create-source-map-for-debug)
@@ -96,7 +110,8 @@
                   vm-cell->string
                   vm-deref-cell-pair-w->string)
          (only-in "vm-bc-opcode-definitions.rkt"
-                  get-single-opcode)
+                  get-single-opcode
+                  bc-breakpoint-mark-label)
          (only-in "vm-interpreter-loop.rkt"
                   ZP_VM_PC)
          (only-in "vm-runtime/vm-call-frame.rkt"
@@ -111,18 +126,11 @@
                   ZP_FUNC_PTR
                   ZP_EVAL_STACK_TAIL_TOP
                   ZP_EVAL_STACK_TAIL_LB_PTR
-                  ZP_EVAL_STACK_TAIL_HB_PTR))
-
-(provide run-bc-wrapped-in-test-
-         vm-next-instruction-bytes
-         vm-cell-pairs-used-info
-         vm-list->strings
-         vm-cell-pair-pages
-         vm-cell-pairs-free-in-page
-         vm-cell-pairs-used-num-in-page
-         vm-slots-free-in-page
-         vm-slots-used-in-page
-         vm-num-slots-used-in-page)
+                  ZP_EVAL_STACK_TAIL_HB_PTR)
+         (only-in "vm-runtime/vm-memory-manager-test-utils.rkt"
+                  breakpoint-for-native-code)
+         (only-in "vm-interpreter-loop.rkt"
+                  interpreter-loop-label))
 
 (define (vm-inc-collectible-list- state collectible collected-list)
   (cond [(= 0 (bitwise-and #xff collectible))
@@ -132,13 +140,17 @@
           state
           (peek-word-at-address state (+ 2 collectible))
           (cons collectible collected-list))]))
+
+;; get the list adresses of incremental collectible cell-arrays
 (define (vm-inc-collectible-list state)
   (define collectible-head (peek-word-at-address state ZP_INC_COLLECTIBLE_LIST))
   (vm-inc-collectible-list- state collectible-head (list)))
 
+;; string representation of adresses of incremental collectible cell-arrays
 (define (vm-inc-collectible-list->string state)
   (string-join (reverse (map word->hex-string (vm-inc-collectible-list state))) " -> "))
 
+;; get the number of used slots on slot pages (m1 pages)
 (define (vm-num-slots-used-in-page state page)
   (peek state (bytes->int #x01 page)))
 
@@ -164,14 +176,13 @@
 (define (vm-profile-of-m1-page state page)
   (bitwise-and #x07 (peek state (arithmetic-shift page 8))))
 
+;; get the currents vm program counter
 (define (vm-pc state)
-  (bytes->int (peek state ZP_VM_PC)
-            (peek state (add1 ZP_VM_PC))))
+  (peek-word-at-address state ZP_VM_PC))
 
+;; get the next n bytes starting from the vm program counter
 (define (vm-next-instruction-bytes state (n 1))
-  (memory-list state
-               (vm-pc state)
-               (sub1 (+ n (vm-pc state)))))
+  (memory-list- state (vm-pc state) n))
 
 (define bc-debugger--instruction-breakpoint-name "stop on bytecode interpreter")
 
@@ -388,7 +399,6 @@
                 [(string=? command "dive")
                  (define next-state (push-debugger-interactor debugger--assembler-interactor d-state))
                  next-state]
-                [(string=? command "fl") (color-displayln (vm-cell-pair-free-list-info c-state)) d-state]
                 [(string=? command "gc-c")
                  (color-displayln (vm-inc-collectible-list->string c-state))
                  d-state]
@@ -446,13 +456,9 @@
                  (match-let (((list _ _ page) (regexp-match page-regex command)))
                    (define page-num (string->number page 16))
                    (map color-displayln (vm-page->strings c-state page-num))
-                   (cond [(vm-cell-pair-page? c-state page-num)
-                          (map color-displayln (vm-cell-pairs-used-info c-state (string->number page 16)))]
-                          [(vm-cell-page? c-state page-num)
-                           (color-displayln "no more details for cell pages")]
-                          [(vm-m1-page? c-state page-num)
+                   (cond [(vm-m1-page? c-state page-num)
                            (color-displayln (format "no more details for m1 pages (profile ~a)" (vm-profile-of-m1-page c-state page-num)))]
-                          [else (color-displayln "no more details for this page type")]))
+                         [else (color-displayln "no more details for this page type")]))
                  d-state]
                 [(regexp-match? pl-regex command)
                  (match-let (((list _ num) (regexp-match pl-regex command)))
@@ -590,6 +596,9 @@
 (define (vm-cell-pairs-free-in-page state page)
   (vm-cell-pairs-free-in-page- state page (peek state (bytes->int page #xcf))))
 
+;; return the offset of all slots on one page, depending on its profile
+;; BEWARE: THESE PROFILES MUST MATCH THE ACTUALL PROFILES AS DEFINED IN
+;; [[file:vm-runtime/vm-m1-slots.rkt::label profile_size_table]]
 (define (vm-slots-for-page state page)
   (define page-profile (bitwise-and #x0f (peek state (bytes->int #x00 page))))
   (cond
@@ -607,6 +616,7 @@
      (map (lambda (n) (+ (* 50 n) 2)) (range 5))]
     [else  (list)]))
 
+;; list of slots used in page (available - free)
 (define (vm-slots-used-in-page state page)
   (sort
    (set->list
@@ -615,6 +625,7 @@
      (apply set (vm-slots-free-in-page state page))))
    <))
 
+;; list of free slots on page (walks the free list)
 (define (vm-slots-free-in-page- state page free-slot-offset (result (list)))
   (cond [(= 0 free-slot-offset) result]
         [else
@@ -625,60 +636,42 @@
           next-free-cp-off
           (cons free-slot-offset result))]))
 
+;; list of free slots on page (walks the free list)
 (define (vm-slots-free-in-page state page)
   (vm-slots-free-in-page- state page (peek state (bytes->int #xfe page))))
 
-;; return a list of cell-pair offset that are on the page (used and free ones)
-(define (vm-cell-pairs-on-page-)
-  `(#x05 #x09 ,@(map (lambda (n) (+ (* 4 n) #x41)) (range 47))))
+(define (breakpoint-for-interpreter-loop label->offset)
+  (breakpoint bc-debugger--instruction-breakpoint-name ;; (format "~a @ $~a" bc-debugger--instruction-breakpoint-name (number->string interpreter-loop 16))
+              (lambda (lc-state)
+                (eq? (cpu-state-program-counter lc-state)
+                     (hash-ref label->offset interpreter-loop-label)))
+              #f
+              #f))
 
-(define (vm-cell-pairs-used-on-page state page)
-  (set->list
-   (set-subtract
-    (list->set (vm-cell-pairs-on-page-))
-    (list->set (vm-cell-pairs-free-in-page state page)))))
-
-(define (vm-cell-pairs-used-info state page)
-  (map (lambda (offset)
-         (vm-cell->string offset page state #t))
-       (sort (vm-cell-pairs-used-on-page state page) <)))
-
-;; get list of pages used for cell-pairs
-(define (vm-cell-pair-pages state)
-  (define page-w-free-cell-pairs (peek state #xcec3))
-  (vm-cell-pair-pages- state page-w-free-cell-pairs))
-
-(define (vm-cell-pair-free-list- state free-cell-pair-adr (result (list)))
-  (cond [(= 0 (bitwise-and #xff free-cell-pair-adr)) (reverse result)]
-        [else
-         (define next (peek-word-at-address state free-cell-pair-adr))
-         (vm-cell-pair-free-list- state next (cons free-cell-pair-adr result))]))
-
-;; give a list of pointers to free cell-pairs that are free for reallocation
-(define (vm-cell-pair-free-list-info state)
-  (define first-free (peek-word-at-address state #xcecc))
-  (define free-adr-list (vm-cell-pair-free-list- state first-free))
-  (cond [(empty? free-adr-list) "free-list: empty"]
-        [else
-         (string-append
-          "free-list: $"
-          (string-join
-           (map word->hex-string 
-                free-adr-list)
-           ", $"))]))
+(define (breakpoint-for-bc-code label->offset bc-label)
+  (breakpoint (format "bc breakpoint ~a @ $~a" bc-label (number->string (hash-ref label->offset bc-label) 16))
+              (lambda (lc-state)
+                (and (eq? (peek-word-at-address lc-state ZP_VM_PC)
+                        (hash-ref label->offset bc-label))
+                   (eq? (cpu-state-program-counter lc-state)
+                        (hash-ref label->offset interpreter-loop-label))))
+              #f
+              #f))
 
 (define (run-bc-wrapped-in-test- bc wrapped-code (debug #f))
   ;; (define wrapped-code (wrap-bytecode-for-test bc))
   (define org-code-start (org-for-code-seq wrapped-code))
   (define resolved-dec (->resolved-decisions (label-instructions wrapped-code) wrapped-code))
   (define label->offset (label-string-offsets org-code-start resolved-dec))
-  (define interpreter-loop (hash-ref label->offset "VM_INTERPRETER"))
-  (define wanted-bc-breakpoints (filter (lambda (hk)
-                                       (string-prefix? hk "BC_BREAKPOINT"))
-                                     (hash-keys label->offset)))
-  (define wanted-breakpoints (filter (lambda (hk)
-                                       (string-prefix? hk "BREAKPOINT"))
-                                     (hash-keys label->offset)))
+  (define interpreter-loop (hash-ref label->offset interpreter-loop-label))
+  (define wanted-bc-breakpoints
+    (filter (lambda (hk)
+              (string-prefix? hk bc-breakpoint-mark-label))
+            (hash-keys label->offset)))
+  (define wanted-breakpoints
+    (filter (lambda (hk)
+              (string-prefix? hk breakpoint-mark-label))
+            (hash-keys label->offset)))
   (define ast-assembly (new-assemble-to-ast-code-list wrapped-code))
   (define assembly (map-assembly-code-list-to-resolved-bytes ast-assembly))
   (if debug
@@ -689,39 +682,18 @@
     (6510-load-multiple (initialize-cpu)
                         (assembly-code-list-org-code-sequences assembly)))
   (if debug
-      (run-debugger-on state-before
-                       "debug-session"
-                       #t
-                       (append
-                        (list
-                         (breakpoint bc-debugger--instruction-breakpoint-name ;; (format "~a @ $~a" bc-debugger--instruction-breakpoint-name (number->string interpreter-loop 16))
-                                     (lambda (lc-state)
-                                       (eq? (cpu-state-program-counter lc-state)
-                                            interpreter-loop))
-                                     #f
-                                     #f))
-                        (map (lambda (hashkey)
-                               (breakpoint (format "bc breakpoint ~a @ $~a" hashkey (number->string (hash-ref label->offset hashkey) 16))
-                                     (lambda (lc-state)
-                                       (and (eq? (peek-word-at-address lc-state ZP_VM_PC)
-                                              (hash-ref label->offset hashkey))
-                                          (eq? (cpu-state-program-counter lc-state)
-                                            interpreter-loop)))
-                                     #f
-                                     #f))
-                             wanted-bc-breakpoints)
-                        (map (lambda (hashkey)
-                               (breakpoint (format "breakpoint ~a @ $~a" hashkey (number->string (hash-ref label->offset hashkey) 16))
-                                     (lambda (lc-state)
-                                       (eq? (cpu-state-program-counter lc-state)
-                                            (hash-ref label->offset hashkey)))
-                                     #f
-                                     #t))
-                             wanted-breakpoints))
-                       (list)
-                       (debugger--bc-interactor interpreter-loop)
-                       #t
-                       #:labels (assembly-code-list-labels assembly))
+      (run-debugger-on
+       state-before
+       "debug-session"
+       #t
+       (append
+        (list (breakpoint-for-interpreter-loop label->offset))
+        (map (lambda (hashkey) (breakpoint-for-bc-code label->offset hashkey)) wanted-bc-breakpoints)
+        (map (lambda (hashkey) (breakpoint-for-native-code label->offset hashkey)) wanted-breakpoints))
+       (list)
+       (debugger--bc-interactor interpreter-loop)
+       #t
+       #:labels (assembly-code-list-labels assembly))
       (with-handlers ([exn:fail:cpu-interpreter?
                        (lambda (e)
                          (displayln "exception raised, continue in debugger")

@@ -32,6 +32,7 @@
          word-const                     ;; define assembler word constant
          word-ref                       ;; define an assembler word reference
          mark-breakpoint                ;; mark location as breakpoint for interactive debugging (else ignored)
+         breakpoint-mark-label
          )
 #|
 
@@ -300,8 +301,10 @@
   (check-equal? (asc "some")
                 (ast-bytes-cmd '() '(115 111 109 101))))
 
+(define breakpoint-mark-label "BREAKPOINT")
+
 (define (mark-breakpoint (info ""))
-  (ast-label-def-cmd '() (string-join (filter string-length (list "BREAKPOINT" info (string-replace (uuid-string) "-" "_"))) "_")))
+  (ast-label-def-cmd '() (string-join (filter string-length (list breakpoint-mark-label info (string-replace (uuid-string) "-" "_"))) "_")))
 
 
 

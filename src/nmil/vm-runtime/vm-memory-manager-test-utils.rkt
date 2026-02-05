@@ -8,6 +8,8 @@
  calls-to-mock
  compact-run-code-in-test-
  fill-page-with                 ;; 6510 assembler to fill the given page with this byte
+ breakpoint-for-native-code
+ label-TEST_ENTRY
  TEST_COUNTERS)
 
 #|
@@ -94,12 +96,28 @@
             (remove-labels-for (cdr code) labels-to-remove (cons cmd result)))]
        [else (remove-labels-for (cdr code) labels-to-remove (cons cmd result))])]))
 
+(define (breakpoint-for-test-entry label->offset)
+  (breakpoint "Start of actual test code"
+              (lambda (lc-state)
+                (eq? (cpu-state-program-counter lc-state)
+                     (hash-ref label->offset test-entry-label)))
+              #t
+              #f))
+
+(define (breakpoint-for-native-code label->offset label)
+  (breakpoint (format "breakpoint ~a @ $~a" label (number->string (hash-ref label->offset label) 16))
+              (lambda (lc-state)
+                (eq? (cpu-state-program-counter lc-state)
+                     (hash-ref label->offset label)))
+              #f
+              #t))
+
 (define (run-code-in-test-on-code wrapped-test-code (debug #f))
   (define org-code-start (org-for-code-seq wrapped-test-code))
   (define resolved-dec (->resolved-decisions (label-instructions wrapped-test-code) wrapped-test-code))
   (define label->offset (label-string-offsets org-code-start resolved-dec))
   (define wanted-breakpoints (filter (lambda (hk)
-                                       (string-prefix? hk "BREAKPOINT"))
+                                       (string-prefix? hk breakpoint-mark-label))
                                      (hash-keys label->offset)))
   (define ast-assembly (new-assemble-to-ast-code-list wrapped-test-code))
   (if debug
@@ -113,20 +131,8 @@
   (if debug
       (run-debugger-on state-before "debug-session" #t
                        (append
-                        (list (breakpoint "Start of actual test code"
-                                          (lambda (lc-state)
-                                            (eq? (cpu-state-program-counter lc-state)
-                                                 (hash-ref (assembly-code-list-labels assembly) "TEST_ENTRY")))
-                                          #t
-                                          #f))
-                        (map (lambda (hashkey)
-                               (breakpoint (format "breakpoint ~a @ $~a" hashkey (number->string (hash-ref label->offset hashkey) 16))
-                                     (lambda (lc-state)
-                                       (eq? (cpu-state-program-counter lc-state)
-                                            (hash-ref label->offset hashkey)))
-                                     #f
-                                     #t))
-                             wanted-breakpoints))
+                        (list (breakpoint-for-test-entry (assembly-code-list-labels assembly)))
+                        (map (lambda (hashkey) (breakpoint-for-native-code label->offset hashkey)) wanted-breakpoints))
                        (list)
                        debugger--assembler-interactor
                        #t
@@ -155,6 +161,9 @@
              (list (BRK)) ;; stop
              (remove-labels-for complete-code (filter (lambda (ast-cmd) (ast-label-def-cmd? ast-cmd)) mocked-code-list))))
 
+(define test-entry-label "TEST_ENTRY")
+(define (label-TEST_ENTRY) (ast-label-def-cmd '() test-entry-label))
+
   ;; add unique random suffix to labels ending on "__"
   ;; mock away labels in the mock list
   ;; add subroutine that counts calls to mocks incresing TEST_COUNTERS+<idx of mock>
@@ -166,7 +175,7 @@
       (if ast-org-cmd
           (list ast-org-cmd)
           (list))
-      (list (JMP TEST_ENTRY))
+      (list (ast-unresolved-opcode-cmd '() '(76) (ast-resolve-word-scmd test-entry-label))) ;; JMP TEST_ENTRY
       (flatten (map (lambda (mocked-label idx)
                       (list mocked-label
                             ;; INC TEST_COUNTERS+<idx-mock>
@@ -180,7 +189,7 @@
                     (range (length mocked-code-list))))
       (if provide-own-test-entry-label
           (list)
-          (list (label TEST_ENTRY)))
+          (list (label-TEST_ENTRY)))
       list-elements)))
 
   ;; run the given code in test, wrapping it with mocks and counters, entering interactive debugger, if requested

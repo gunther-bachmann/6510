@@ -85,7 +85,8 @@ currently the following test programs are created
                     vm-bcd-code)
            (only-in  "../nmil/vm-runtime/vm-memory-manager-test-utils.rkt"
                      list-with-label-suffix
-                     run-code-in-test-on-code)
+                     run-code-in-test-on-code
+                     label-TEST_ENTRY)
            ;; (only-in "../nmil/vm-runtime/vm-pages.rkt"
            ;;          VM_INITIAL_MM_REGS
            ;;          VM_PAGE_SLOT_DATA)
@@ -240,7 +241,7 @@ currently the following test programs are created
                    (byte 00 #xc0)
                    (byte 00 00))))
        (list
-            (label TEST_ENTRY)
+            (label-TEST_ENTRY)
             (label CTRL_SECTION)
             ;; now copy sections to right place
                    (LDA !<COPY_DESCRIPTOR)

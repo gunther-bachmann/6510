@@ -17,7 +17,8 @@
          build-extended-optable-lb
          build-interpreter-optable
          filtered-opcode-definitions
-         mark-bc-breakpoint)
+         mark-bc-breakpoint
+         bc-breakpoint-mark-label)
 #|
 
   Byte Code Opcodes are completely defined here to be able to quickly switch between
@@ -643,5 +644,7 @@
   (check-equal? (length (filtered-opcode-definitions (list "BC_PUSH_B" "BC_B_GT_P")))
                 2))
 
+(define bc-breakpoint-mark-label "BC_BREAKPOINT")
+
 (define (mark-bc-breakpoint (info ""))
-  (ast-label-def-cmd '() (string-join (filter string-length (list "BC_BREAKPOINT" info (string-replace (uuid-string) "-" "_"))) "_")))
+  (ast-label-def-cmd '() (string-join (filter string-length (list bc-breakpoint-mark-label info (string-replace (uuid-string) "-" "_"))) "_")))
