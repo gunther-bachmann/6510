@@ -39,6 +39,7 @@
                   peek
                   peek-word-at-address
                   memory-list
+                  memory-list-
                   cpu-state-clock-cycles)
          (only-in "../../tools/data-tools.rkt"
                   bytes->int
@@ -49,7 +50,8 @@
                   fetch-opcode-list
                   full-extended-optable-lb
                   full-extended-optable-hb
-                  full-interpreter-opcode-table)
+                  full-interpreter-opcode-table
+                  mark-bc-breakpoint)
          (only-in "../vm-inspector-utils.rkt"
                   shorten-cell-strings
                   shorten-cell-string

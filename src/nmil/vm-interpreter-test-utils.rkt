@@ -20,7 +20,10 @@
          racket/set
          (only-in racket/string
                   string-prefix?
+                  string-replace
                   string-join)
+         (only-in uuid
+                  uuid-string)
          "../6510-test-utils.rkt"
          (only-in "../6510-utils.rkt"
                   byte->hex-string
@@ -670,6 +673,12 @@
   (define resolved-dec (->resolved-decisions (label-instructions wrapped-code) wrapped-code))
   (define label->offset (label-string-offsets org-code-start resolved-dec))
   (define interpreter-loop (hash-ref label->offset "VM_INTERPRETER"))
+  (define wanted-bc-breakpoints (filter (lambda (hk)
+                                       (string-prefix? hk "BC_BREAKPOINT"))
+                                     (hash-keys label->offset)))
+  (define wanted-breakpoints (filter (lambda (hk)
+                                       (string-prefix? hk "BREAKPOINT"))
+                                     (hash-keys label->offset)))
   (define ast-assembly (new-assemble-to-ast-code-list wrapped-code))
   (define assembly (map-assembly-code-list-to-resolved-bytes ast-assembly))
   (if debug
@@ -683,12 +692,32 @@
       (run-debugger-on state-before
                        "debug-session"
                        #t
-                       (list
-                        (breakpoint bc-debugger--instruction-breakpoint-name ;; (format "~a @ $~a" bc-debugger--instruction-breakpoint-name (number->string interpreter-loop 16))
-                                    (lambda (lc-state)
-                                      (eq? (cpu-state-program-counter lc-state)
-                                           interpreter-loop))
-                                    #f))
+                       (append
+                        (list
+                         (breakpoint bc-debugger--instruction-breakpoint-name ;; (format "~a @ $~a" bc-debugger--instruction-breakpoint-name (number->string interpreter-loop 16))
+                                     (lambda (lc-state)
+                                       (eq? (cpu-state-program-counter lc-state)
+                                            interpreter-loop))
+                                     #f
+                                     #f))
+                        (map (lambda (hashkey)
+                               (breakpoint (format "bc breakpoint ~a @ $~a" hashkey (number->string (hash-ref label->offset hashkey) 16))
+                                     (lambda (lc-state)
+                                       (and (eq? (peek-word-at-address lc-state ZP_VM_PC)
+                                              (hash-ref label->offset hashkey))
+                                          (eq? (cpu-state-program-counter lc-state)
+                                            interpreter-loop)))
+                                     #f
+                                     #f))
+                             wanted-bc-breakpoints)
+                        (map (lambda (hashkey)
+                               (breakpoint (format "breakpoint ~a @ $~a" hashkey (number->string (hash-ref label->offset hashkey) 16))
+                                     (lambda (lc-state)
+                                       (eq? (cpu-state-program-counter lc-state)
+                                            (hash-ref label->offset hashkey)))
+                                     #f
+                                     #t))
+                             wanted-breakpoints))
                        (list)
                        (debugger--bc-interactor interpreter-loop)
                        #t

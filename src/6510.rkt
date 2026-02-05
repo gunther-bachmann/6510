@@ -30,8 +30,9 @@
          require-word                   ;; require word from linking other files
          word                           ;; define memory word
          word-const                     ;; define assembler word constant
-         word-ref)                      ;; define an assembler word reference
-
+         word-ref                       ;; define an assembler word reference
+         mark-breakpoint                ;; mark location as breakpoint for interactive debugging (else ignored)
+         )
 #|
 
  provide all functions necessary to write 6510 assembler code
@@ -45,7 +46,13 @@
          (for-syntax "6510-utils.rkt")
          (for-syntax "ast/6510-command.rkt")
          (for-syntax "scheme-asm/6510-syntax-utils.rkt")
-         (only-in racket/list flatten)
+         (only-in racket/list
+                  flatten)
+         (only-in racket/string
+                  string-replace
+                  string-join)
+         (only-in uuid
+                  uuid-string)
          "6510-utils.rkt"
          "ast/6510-command.rkt"
          "ops/6510.arithmetic-ops.rkt"
@@ -292,6 +299,11 @@
 (module+ test #| asc |#
   (check-equal? (asc "some")
                 (ast-bytes-cmd '() '(115 111 109 101))))
+
+(define (mark-breakpoint (info ""))
+  (ast-label-def-cmd '() (string-join (filter string-length (list "BREAKPOINT" info (string-replace (uuid-string) "-" "_"))) "_")))
+
+
 
 ;; --------------------------------------------------------------------------------
 ;; additional syntax (ideas)

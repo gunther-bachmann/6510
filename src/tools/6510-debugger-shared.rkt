@@ -13,13 +13,13 @@
          (struct-out tracepoint)
          (struct-out debug-state))
 
-(struct breakpoint (description fn verbose)
+(struct breakpoint (description fn verbose keep-on-dive)
   #:transparent
-  #:guard (struct-guard/c string? any/c boolean?))
+  #:guard (struct-guard/c string? any/c boolean? boolean?))
 
-(struct tracepoint (description fn output-fn verbose)
+(struct tracepoint (description fn output-fn verbose keep-on-dive)
   #:transparent
-  #:guard (struct-guard/c string? any/c any/c boolean?))
+  #:guard (struct-guard/c string? any/c any/c boolean? boolean?))
 
 (struct debug-state
   (states

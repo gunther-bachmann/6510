@@ -16,7 +16,8 @@
          build-extended-optable-hb
          build-extended-optable-lb
          build-interpreter-optable
-         filtered-opcode-definitions)
+         filtered-opcode-definitions
+         mark-bc-breakpoint)
 #|
 
   Byte Code Opcodes are completely defined here to be able to quickly switch between
@@ -42,6 +43,11 @@
                   flatten
                   empty?
                   drop)
+         (only-in racket/string
+                  string-replace
+                  string-join)
+         (only-in uuid
+                  uuid-string)
          (only-in "../6510-utils.rkt"
                   word->hex-string
                   byte->hex-string)
@@ -51,7 +57,8 @@
                   ast-bytes-cmd-bytes
                   ast-unresolved-bytes-cmd
                   ast-resolve-byte-scmd
-                  ast-resolve-word-scmd)
+                  ast-resolve-word-scmd
+                  ast-label-def-cmd)
          (only-in "../tools/6510-disassembler.rkt"
                   info-for-label)
          (only-in "../tools/data-tools.rkt"
@@ -635,3 +642,6 @@
 
   (check-equal? (length (filtered-opcode-definitions (list "BC_PUSH_B" "BC_B_GT_P")))
                 2))
+
+(define (mark-bc-breakpoint (info ""))
+  (ast-label-def-cmd '() (string-join (filter string-length (list "BC_BREAKPOINT" info (string-replace (uuid-string) "-" "_"))) "_")))

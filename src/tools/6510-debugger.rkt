@@ -172,10 +172,10 @@
                                           (breakpoint-description breakpoint))))
                                    (debug-state-breakpoints d-state))]))
 
-(define/c (debugger--push-breakpoint d-state fun description (verbose #f))
+(define/c (debugger--push-breakpoint d-state fun description (verbose #f) (keep-on-dive #f))
   (->* [debug-state? any/c string?] [boolean?] debug-state?)
   (struct-copy debug-state d-state
-               [breakpoints (cons (breakpoint description fun verbose)
+               [breakpoints (cons (breakpoint description fun verbose keep-on-dive)
                                   (debug-state-breakpoints d-state))]))
 
 (define/c (debugger--pop-breakpoint d-state)
@@ -552,8 +552,8 @@ EOF
            `(ident . ,(debug-state-ident d-state)))
           (debug-state-interactor-queue d-state)))
   (struct-copy debug-state d-state
-               [breakpoints      '()]
-               [tracepoints      '()]
+               [breakpoints      (filter (lambda (bp) (breakpoint-keep-on-dive bp)) (debug-state-breakpoints d-state))]
+               [tracepoints      (filter (lambda (tp) (tracepoint-keep-on-dive tp)) (debug-state-tracepoints d-state))]
                [prompter         (dict-ref interactor 'prompter interactor)]
                [dispatcher       (dict-ref interactor 'dispatcher interactor)]
                [pre-prompter     (dict-ref interactor 'pre-prompter interactor)]
@@ -666,10 +666,13 @@ EOF
          #f]
         [else
          (begin
+           ;; (displayln (format "~a: check breakpoint ~a" (number->string (cpu-state-program-counter c-state) 16) (breakpoint-description (car breakpoints))))
            (if (apply
                 (breakpoint-fn (car breakpoints))
                 (list c-state))
-               (car breakpoints)
+               (begin
+                 ;; (displayln (format "found breakpoint ~a" (breakpoint-description (car breakpoints))))
+                 (car breakpoints))
                (breakpoint-hits c-state (cdr breakpoints))))]))
 
 (define/c (tracepoint-hits c-state tracepoints)
