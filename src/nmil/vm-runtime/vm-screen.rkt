@@ -68,12 +68,14 @@
                     string-replace)
            (only-in uuid
                     uuid-string)
+           "../test-utils.rkt"
            "../../6510-test-utils.rkt"
            (only-in "../../ast/6510-relocator.rkt"
                     estimated-code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     cpu-state-clock-cycles
-                    memory-list)
+                    memory-list
+                    memory-list-)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-memory-map.rkt"
                     VM_MEMORY_MANAGEMENT_CONSTANTS))
@@ -84,19 +86,7 @@
 
   (define test-runtime
     (append
-     PREP_WRITE_SCREEN_CMD
-     FAST_SCREEN_MEMCOPY
-     RT_SCREEN_PUT_CHARS_AT
-     RT_SCREEN_CLEAR
-     RT_SCREEN_CLEAR_CHARS_AT
-     RT_SCREEN_SCROLL_RIGHT_CHARS_AT
-     RT_SCREEN_SCROLL_LEFT_CHARS_AT
-     RT_SCREEN_SCROLL_UP
-     RT_SCREEN_SCROLL_DOWN
-     RT_SCREEN_PUT_YTIMES_COLOR_AT
-     RT_SCREEN_PUT_COLOR_AT
-     RT_BCD_TO_SCREEN_CODE
-     PREP_ZP_TEMP_FOR_MEM_ACCESS
+     vm-screen-code
 
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label VM_INIT_MEMORY_MANAGER) (RTS))))
@@ -1272,23 +1262,38 @@
 ;; input:  X = ROW
 ;;         ZP_RP = COL
 ;;         Y = # of chars to clear -1 (0 for one char, 1 for two ...)
+;;         A = color (for clearing the color ram)
+;; modifies: Y=0, ZP_TEMP, ZP_TEMP+1, ZP_TEMP3
 ;; output: screen modified
 (define-vm-function RT_SCREEN_CLEAR_CHARS_AT
   (list
+          (PHA)
+          (STY ZP_TEMP3)
           (JSR PREP_ZP_TEMP_FOR_SCREEN_ACCESS)
-          (LDA !$00)
+          (LDA !$20) ;; screen code for space
    (label char_put_loop__)
-   (label write_screen_cmd__)
           (STA (ZP_TEMP),y)
           (DEY)
           (BPL char_put_loop__)
+
+          (CLC)
+          (LDA !$D4)
+          (ADC ZP_TEMP+1)
+          (STA ZP_TEMP+1)
+          (LDY ZP_TEMP3)
+          (PLA)
+
+   (label color_put_loop__)
+          (STA (ZP_TEMP),y)
+          (DEY)
+          (BPL color_put_loop__)
 
           (RTS)))
 
 (module+ test #| screen clear chars at |#
   (define screen-clear-chars-at-test
     (compact-run-code-in-test-
-     #:debug #f
+     #:debug #t
      #:runtime-code test-runtime
      ;; now put the string
      (write-string-to-screen--for-test 5 17 "OLALA")
@@ -1297,6 +1302,7 @@
      (LDY !17)
      (STY ZP_RP)
      (LDY !4)
+     (LDA !$01)
 
      (JSR RT_SCREEN_CLEAR_CHARS_AT)
 
@@ -1306,6 +1312,7 @@
      (LDY !0)
      (STY ZP_RP)
      (LDY !4)
+     (LDA !$01)
 
      (JSR RT_SCREEN_CLEAR_CHARS_AT)
 
@@ -1315,29 +1322,47 @@
      (LDY !39)
      (STY ZP_RP)
      (LDY !0)
+     (LDA !$01)
 
      (JSR $0100)
      (JSR RT_SCREEN_CLEAR_CHARS_AT)
      ))
 
-  (check-equal? (memory-list screen-clear-chars-at-test
-                             (+ screen-base-address (* 5 screen-row-bytes) 17)
-                             (+ screen-base-address (* 5 screen-row-bytes) 21))
-                (list 0 0 0 0 0)
-                "screen was clear where once written.")
-  (check-equal? (memory-list screen-clear-chars-at-test
-                             (+ screen-base-address (* 0 screen-row-bytes) 0)
-                             (+ screen-base-address (* 0 screen-row-bytes) 4))
-                (list 0 0 0 0 0)
-                "screen was clear where once written.")
-  (check-equal? (memory-list screen-clear-chars-at-test
-                             (+ screen-base-address (* 24 screen-row-bytes) 39))
-                (list 0)
-                "screen was clear where once written.")
-  (inform-check-equal? (cpu-state-clock-cycles screen-clear-chars-at-test)
-                       67
-                       "cpu cycles to clear a char"))
+  (regression-test
+   screen-clear-chars-at-test
+   "clear part of a line of screen (including color)"
 
+   (check-equal? (memory-list- screen-clear-chars-at-test
+                               (+ screen-base-address (* 5 screen-row-bytes) 17)
+                               5)
+                 (list 32 32 32 32 32)
+                 "screen was clear where once written.")
+   (check-equal? (memory-list- screen-clear-chars-at-test
+                               (+ color-base-address (* 5 screen-row-bytes) 17)
+                               5)
+                 (list 1 1 1 1 1)
+                 "color was clear where once written.")
+   (check-equal? (memory-list- screen-clear-chars-at-test
+                               (+ screen-base-address (* 0 screen-row-bytes) 0)
+                               5)
+                 (list 32 32 32 32 32)
+                 "screen was clear where once written.")
+   (check-equal? (memory-list- screen-clear-chars-at-test
+                               (+ color-base-address (* 0 screen-row-bytes) 0)
+                               5)
+                 (list 1 1 1 1 1)
+                 "color was clear where once written.")
+   (check-equal? (memory-list screen-clear-chars-at-test
+                              (+ screen-base-address (* 24 screen-row-bytes) 39))
+                 (list 32)
+                 "screen was clear where once written.")
+   (check-equal? (memory-list screen-clear-chars-at-test
+                              (+ color-base-address (* 24 screen-row-bytes) 39))
+                 (list 1)
+                 "color was clear where once written.")
+   (inform-check-equal? (cpu-state-clock-cycles screen-clear-chars-at-test)
+                        100
+                        "cpu cycles to clear a char")))
 
 (define screen-code-0 48)
 (define screen-code-A 1)
@@ -1416,5 +1441,5 @@
 
 (module+ test #| estimated-code-len |#
   (inform-check-equal? (estimated-code-len vm-screen-code)
-                507
+                529
                 "estimated code length change in screen runtime"))
