@@ -75,5 +75,5 @@
 
 (module+ test #| code len |#
   (inform-check-equal? (estimated-code-len vm-memory-manager-code)
-                       2008
+                       2088
                        "estimated code len of memory manager code"))

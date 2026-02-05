@@ -3,16 +3,18 @@
 (provide
  vm-cell-stack-code
 
- INIT_EVLSTK_TAIL             ;; initialize eval stack as cell stack
- INIT_CELLSTACK_PAGE_X        ;; initialize page A to previous cell stack page (X)
- PUSH_XA_TO_EVLSTK            ;; push a value into RT, pushing RT onto the eval stack tail
- POP_EVLSTK_TAIL_TO_RT        ;; pop eval-stack tail into RT (discarding RT)
- POP_EVLSTK_TAIL_TO_RP        ;; pop eval-stack tail into RP, RT is not changed, the stack is reduced by 1 (above RT)
- POP_EVLSTK_TAIL_TO_RA        ;; pop eval-stack tail into RA, RT is not changed, the stack is reduced by 1 (above RT)
- PUSH_RT_TO_EVLSTK_TAIL       ;; push RT onto call frame cell stack (effectively doing a dup without refcounting!)
- PUSH_NIL_TO_EVLSTK           ;; push constant nil onto the eval stack
- PUSH_INT_TO_EVLSTK           ;; push constant int onto the eval stack
- POP_EVLSTK_TAIL_TO_CELLy_RT) ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
+ INIT_EVLSTK_TAIL              ;; initialize eval stack as cell stack
+ INIT_CELLSTACK_PAGE_X         ;; initialize page A to previous cell stack page (X)
+ PUSH_XA_TO_EVLSTK             ;; push a value into RT, pushing RT onto the eval stack tail
+ POP_EVLSTK_TAIL_TO_RT         ;; pop eval-stack tail into RT (discarding RT)
+ POP_EVLSTK_TAIL_TO_RP         ;; pop eval-stack tail into RP, RT is not changed, the stack is reduced by 1 (above RT)
+ POP_EVLSTK_TAIL_TO_RA         ;; pop eval-stack tail into RA, RT is not changed, the stack is reduced by 1 (above RT)
+ PUSH_RT_TO_EVLSTK_TAIL        ;; push RT onto call frame cell stack (effectively doing a dup without refcounting!)
+ PUSH_NIL_TO_EVLSTK            ;; push constant nil onto the eval stack
+ PUSH_INT_TO_EVLSTK            ;; push constant int onto the eval stack
+ POP_EVLSTK_TAIL_TO_CELLy_RT   ;; POP the cell-stack top into CELLy (y=0 cell0, y=2 cell1) pointed to by RT, reducing the stack size by 1, keeping rt as tos
+ UNSAFE_POP_EVLSTK_TAIL_TO_HBA ;; POP top of cell-stack only the high byte into A (don't touch RT, leaving it INVALID!)
+)
 
 #|
 
@@ -32,7 +34,9 @@
                   TAGGED_NIL
                   ZP_EVAL_STACK_TAIL_LB_PTR
                   ZP_EVAL_STACK_TAIL_HB_PTR
-                  VM_MEMORY_MANAGEMENT_CONSTANTS))
+                  VM_MEMORY_MANAGEMENT_CONSTANTS)
+         (only-in "./vm-pages.rkt"
+                  VM_DEALLOCATE_PAGE))
 
 (module+ test
   (require "../../6510-test-utils.rkt"
@@ -75,22 +79,17 @@
 
   (define test-runtime
     (append
-     INIT_CELLSTACK_PAGE_X
-     PUSH_XA_TO_EVLSTK
-     POP_EVLSTK_TAIL_TO_RT
-     POP_EVLSTK_TAIL_TO_RP
-     PUSH_RT_TO_EVLSTK_TAIL
-     POP_EVLSTK_TAIL_TO_CELLy_RT
+     vm-cell-stack-code
 
      ALLOC_M1_P0_SLOT_TO_RT
      ALLOC_M1_SLOT_TO_RA
      INIT_M1Px_PAGE_PROFILE_X_TO_AX
 
-
      WRITE_INT_AY_TO_RT
      CP_RA_TO_RT
      VM_MEMORY_MANAGEMENT_CONSTANTS
      VM_ALLOCATE_NEW_PAGE
+     VM_DEALLOCATE_PAGE
      VM_INIT_PAGE_MEMORY_MANAGER
      (list (label DEC_REFCNT_RT) (RTS)))))
 
@@ -168,7 +167,7 @@
 (module+ test #| init-cellstack |#
   (define init-cellstack-test
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)))
@@ -181,37 +180,82 @@
                 (list #x00 PAGE_AVAIL_1)
                 "cell-stack high bytes are located here"))
 
-;; @DC-FUN: POP_EVLSTK_TAIL_TO_RT, group: cell_stack
+;; pop the topmost value only the high byte into register A
+;; leave RT untouched and invalid!!
+;; input:  EVLSTK
+;; usage:  A, Y
+;; output: <<EVLSTK<<
+;;         A = high byte
+(define UNSAFE_POP_EVLSTK_TAIL_TO_HBAy '()) ;; y must be filled with ZP_EVAL_STACK_TAIL_TOP
+(define-vm-function UNSAFE_POP_EVLSTK_TAIL_TO_HBA
+  (list
+          ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
+          (LDY ZP_EVAL_STACK_TAIL_TOP)
+   (label UNSAFE_POP_EVLSTK_TAIL_TO_HBAy)
+          (CPY !$01) ;; stack empty?
+          (BNE continue__) ;; continue with save pop (writing rt etc.)
+          (JSR SWITCH_TO_PREV_EVAL_STACK)
+          (BEQ WRITE_00_TO_RT)
+   (label continue__)
+          (LDA (ZP_EVAL_STACK_TAIL_HB_PTR),y) ;; high byte
+          (DEC ZP_EVAL_STACK_TAIL_TOP)
+          (RTS)))
+
 ;; pop the topmost value of the evlstk into RT (no gc done)
 ;; input:  EVLSTK
 ;; usage:  A,Y, RT
 ;; output: RT <<EVLSTK<<
+;;         A = high byte
 (define-vm-function POP_EVLSTK_TAIL_TO_RT
   (list
-          ;; optional: stack marked empty? => error: cannot pop from empty stack!
-          ;; (LDY !$00)
-          ;; (BEQ ERROR_NO_VALUE_ON_STACK)
-
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
           (LDY ZP_EVAL_STACK_TAIL_TOP)
           (CPY !$01) ;; stack empty? ;; TODO check for previous stack
-          (BEQ WRITE_00_TO_RT) ;; which effectively clears the RT
+          (BNE no_switch__)
+          (JSR SWITCH_TO_PREV_EVAL_STACK) ;; which effectively clears the RT
+          (BEQ WRITE_00_TO_RT)
           ;; pop value from call-frame stack into RT!
+   (label no_switch__)
           (LDA (ZP_EVAL_STACK_TAIL_LB_PTR),y) ;; tagged low byte
           (STA ZP_RT)
-
-
-          ;; (optional) quick check for atomic cells [speeds up popping atomic cells, slows popping cell-ptr, slight slows popping cell-pair-ptr
-          ;; (AND !$03)
-          ;; (BEQ WRITE_TOS_TO_RT__POP_EVLSTK_TAIL_TO_RT)
-          ;; (TXA)
 
           (LDA (ZP_EVAL_STACK_TAIL_HB_PTR),y) ;; high byte
           (STA ZP_RT+1)
           (DEC ZP_EVAL_STACK_TAIL_TOP)
-          (RTS)
+          (RTS)))
 
-   (label WRITE_00_TO_RT)
+;; input:    ZP_EVAL_STACK_TAIL_xB_PTR, ZP_EVAL_STACK_TAIL_TOP
+;; modifies: A, X, Y, ZP_EVAL_STACK_TAIL_xB_PTR, ZP_EVAL_STACK_TAIL_TOP
+;; output:   Zero-Flag (0 = switch to previous stack was done
+;;                      1 = this is the last page, no switch was done)
+;;           Y = ZP_EVAL_STACK_TAIL_TOP (if switch was done)
+(define-vm-function SWITCH_TO_PREV_EVAL_STACK
+  (list
+          ;; swich to previous eval stack (if available)
+          (LDY !$01)
+          (LDA (ZP_EVAL_STACK_TAIL_LB_PTR),y)
+          (BNE do_switch_to_previous_stack_page__) ;; don't deallocate, keep this last page, write nil into rt
+          (RTS) ;; ZERO FLAG IS SET
+
+   (label do_switch_to_previous_stack_page__)
+          (LDX ZP_EVAL_STACK_TAIL_LB_PTR+1)
+          (STA ZP_EVAL_STACK_TAIL_LB_PTR+1) ;; store previous page
+
+          (JSR VM_DEALLOCATE_PAGE) ;; free old lb page (in X)
+
+          (LDY !$ff)
+          (LDX ZP_EVAL_STACK_TAIL_HB_PTR+1)
+          (LDA (ZP_EVAL_STACK_TAIL_HB_PTR),y)
+          (STA ZP_EVAL_STACK_TAIL_HB_PTR+1)
+          (DEY)
+          (STY ZP_EVAL_STACK_TAIL_TOP)
+
+          (JSR VM_DEALLOCATE_PAGE) ;; free old hb page (in X)
+          (LDY ZP_EVAL_STACK_TAIL_TOP) ;; ensures that Zero Flag is NOT SET
+          (RTS)))
+
+(define-vm-function WRITE_00_TO_RT
+  (list
           ;; mark RT as empty
           (LDA !$00)
           (STA ZP_RT)
@@ -221,7 +265,7 @@
 (module+ test #| vm_cell_stack_pop_r (just one value) |#
   (define vm_cell_stack_pop3_r_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -241,7 +285,7 @@
 
   (define vm_cell_stack_pop2_r_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -258,7 +302,7 @@
 
   (define vm_cell_stack_pop1_r_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -278,7 +322,7 @@
 (module+ test #| vm_cell_stack_push_nil_r |#
   (define test-vm_cell_stack_push_nil-a-state-after
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -289,7 +333,7 @@
 
   (define test-vm_cell_stack_push_nil-b-state-after
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -317,7 +361,7 @@
 (module+ test #| vm_cell_push_int_r |#
   (define test-vm_cell_stack_push_int-a-state-after
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -435,7 +479,7 @@
 (module+ test #| vm_cell_stack_push_r (basically on write into rt, since stack is completely empty) |#
   (define vm_cell_stack_push_r_int0_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -448,7 +492,7 @@
 
   (define vm_cell_stack_push_r_int1_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -461,7 +505,7 @@
 
   (define vm_cell_stack_push_r_intm1_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -474,7 +518,7 @@
 
   (define vm_cell_stack_push_r_nil_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -487,7 +531,7 @@
 
   (define vm_cell_stack_push_r_cell_ptr_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -504,7 +548,7 @@
 (module+ test #| vm_cell_stack_push_r (push rt, and write rt) |#
   (define vm_cell_stack_push_r_push1_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -522,7 +566,7 @@
 
   (define vm_cell_stack_push_r_push2_state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -540,7 +584,6 @@
   (check-equal? (memory-list vm_cell_stack_push_r_push2_state ZP_RT (add1 ZP_RT))
                 (list #x00 #x00)))
 
-;; @DC-FUN: PUSH_RT_TO_EVLSTK_TAIL, group: cell_stack
 ;; push rt onto the evlstack, no dec/inc refcnt is done!
 ;; allocate new evlstk page if necessary
 ;; input:  RT+EVLSTK
@@ -558,12 +601,12 @@
 
    (label ALLOCATE_NEW_STACK_PAGE__)
           (JSR VM_ALLOCATE_NEW_PAGE)
-          (LDA ZP_EVAL_STACK_TAIL_LB_PTR+1)
+          (LDA ZP_EVAL_STACK_TAIL_LB_PTR+1) ;; old page (written into new page in X)
           (JSR INIT_CELLSTACK_PAGE_X)
           (STX ZP_EVAL_STACK_TAIL_LB_PTR+1)
 
           (JSR VM_ALLOCATE_NEW_PAGE)
-          (LDA ZP_EVAL_STACK_TAIL_HB_PTR+1)
+          (LDA ZP_EVAL_STACK_TAIL_HB_PTR+1) ;; old page (written into new page in X)
           (JSR INIT_CELLSTACK_PAGE_X)
           (STX ZP_EVAL_STACK_TAIL_HB_PTR+1)
 
@@ -582,7 +625,7 @@
 (module+ test #| vm-cell-stack-just-push-rt |#
   (define vm-cell-stack-just-push-rt-state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -621,6 +664,11 @@
    (label Y_ON_HIGHBYTE__)
           (STY ZP_TEMP)
           (LDY ZP_EVAL_STACK_TAIL_TOP)
+          (CPY !$01) ;; stack is empty
+          (BNE continue__)
+          (JSR SWITCH_TO_PREV_EVAL_STACK)
+          (BEQ error__)
+   (label continue__)
           (LDA (ZP_EVAL_STACK_TAIL_LB_PTR),y)
           (TAX)
           (LDA (ZP_EVAL_STACK_TAIL_HB_PTR),y)
@@ -630,12 +678,15 @@
           (TXA)
           (STA (ZP_RT),y)
           (DEC ZP_EVAL_STACK_TAIL_TOP)
-          (RTS)))
+          (RTS)
+
+   (label error__)
+          (BRK)))
 
 (module+ test #| vm-pop-fstos-to-celly-rt |#
   (define vm-pop-fstos-to-celly-rt-state
     (compact-run-code-in-test-
-     #:runtime-code (append test-runtime INIT_EVLSTK_TAIL)
+     #:runtime-code test-runtime
      #:init-label "VM_INIT_PAGE_MEMORY_MANAGER_N20"
      #:debug #f
      (JSR INIT_EVLSTK_TAIL)
@@ -673,7 +724,10 @@
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
           (LDY ZP_EVAL_STACK_TAIL_TOP)
           (CPY !$01) ;; stack empty? ;; check for previous page
-          (BEQ WRITE_00_TO_RA) ;; which effectively clears the RT
+          (BNE continue__) ;; which effectively clears the RT
+          (JSR SWITCH_TO_PREV_EVAL_STACK)
+          (BEQ WRITE_00_TO_RA)
+   (label continue__)
           ;; pop value from call-frame stack into RT!
           (LDA (ZP_EVAL_STACK_TAIL_LB_PTR),y) ;; tagged low byte
           (STA ZP_RA)
@@ -715,7 +769,10 @@
           ;; is call-frame stack empty? => mark stack as empty and return | alternatively simply write NIL into RT
           (LDY ZP_EVAL_STACK_TAIL_TOP)
           (CPY !$01) ;; stack empty? ;; TODO: check for previous stack page
-          (BEQ WRITE_00_TO_RP) ;; which effectively clears the RT
+          (BNE continue__) ;; which effectively clears the RT
+          (JSR SWITCH_TO_PREV_EVAL_STACK)
+          (BEQ WRITE_00_TO_RP)
+   (label continue__)
           ;; pop value from call-frame stack into RT!
           (LDA (ZP_EVAL_STACK_TAIL_LB_PTR),y) ;; tagged low byte
           (STA ZP_RP)
@@ -745,13 +802,17 @@
    ;; includes PUSH_NIL_TO_EVLSTK            ;; push constant nil onto the eval stack
    ;; includes PUSH_INT_TO_EVLSTK            ;; push constant int onto the eval stack
    POP_EVLSTK_TAIL_TO_RT        ;; pop cell-stack into RT (discarding RT)
+   UNSAFE_POP_EVLSTK_TAIL_TO_HBA
+   WRITE_00_TO_RT
    POP_EVLSTK_TAIL_TO_RP        ;; pop cell-stack into RP, RT is not changed, the stack is reduced by 1 (above RT)
    POP_EVLSTK_TAIL_TO_RA        ;; pop cell-stack into RA, RT is not changed, the stack is reduced by 1 (above RT)
    PUSH_RT_TO_EVLSTK_TAIL            ;; push RT onto call frame cell stack (effectively doing a dup)
    POP_EVLSTK_TAIL_TO_CELLy_RT
-   INIT_EVLSTK_TAIL))
+   INIT_EVLSTK_TAIL
+   SWITCH_TO_PREV_EVAL_STACK
+   ))
 
 (module+ test #| code len |#
   (inform-check-equal? (estimated-code-len vm-cell-stack-code)
-                       281
+                       361
                        "estimated code len of cell stack code"))
