@@ -106,7 +106,8 @@
   (define stack-hb-page-start (peek-word-at-address state ZP_EVAL_STACK_TAIL_HB_PTR))
   (cond
     [(and (= stack-tos-idx #x01)
-        (= 0 (peek state (add1 stack-lb-page-start)))) (list "stack is empty or tos=nil")]
+        (= 0 (peek state (add1 stack-lb-page-start)))
+        (= 0 (peek state ZP_RT))) (list "stack is empty or tos=nil")]
     [else
      (define values-count (min (- stack-tos-idx 1) max-count))
      (define low-bytes (memory-list state (+ stack-lb-page-start (add1 (- stack-tos-idx values-count))) (+ stack-lb-page-start stack-tos-idx)))
