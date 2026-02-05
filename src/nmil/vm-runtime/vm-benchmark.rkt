@@ -19,8 +19,8 @@
    left : 092         (39*)  87
 
    optimized:
-   right: 063 jiffies
-   down:  039
+   right: 062 jiffies
+   down:  038
    up:    043
    left : 070
 
@@ -133,6 +133,7 @@
 ;; report the timer on screen and wait for keypress
 (define-vm-function BM_REPORT_TIMER
   (list
+          (LDA !1)
           (JSR RT_SCREEN_CLEAR)
 
           (LDA TIMER_VAL)

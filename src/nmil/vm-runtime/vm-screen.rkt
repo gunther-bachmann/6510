@@ -13,7 +13,7 @@
  RT_SCREEN_SCROLL_UP_BY1
  RT_SCREEN_SCROLL_DOWN                ;; scroll a portion of the screen down by 1 line
  RT_SCREEN_SCROLL_DOWN_BY1
- RT_SCREEN_CLEAR                      ;; clear the whole screen
+ RT_SCREEN_CLEAR                      ;; clear the whole screen (and color ram, too)
  RT_SCREEN_PUT_YTIMES_COLOR_AT        ;; put the color in A into char color ram of row X, col ZP_RP
  RT_SCREEN_PUT_COLOR_AT               ;; set color at (lower nibble) with A, row = X, column = ZP_RP
 
@@ -1214,9 +1214,10 @@
                        440
                        "cpu cycles needed for scrolling 5 chars up"))
 
-;; clear the whole screen
+;; clear the whole screen (and color ram)
 (define-vm-function RT_SCREEN_CLEAR
   (list
+          (PHA)
           (LDA !32)
           (LDX !$00)
    (label loop__)
@@ -1226,6 +1227,15 @@
           (STA $0700,x)
           (DEX)
           (BNE loop__)
+          (PLA)
+          (LDX !$00)
+   (label loop_color__)
+          (STA $D800,x)
+          (STA $D900,x)
+          (STA $DA00,x)
+          (STA $DB00,x)
+          (DEX)
+          (BNE loop_color__)
           (RTS)))
 
 (module+ test #| clear screen |#
@@ -1238,12 +1248,17 @@
      (write-string-to-screen--for-test 0 0 "O")
      (write-string-to-screen--for-test 24 39 "O")
 
+     (LDA !$01)
      (JSR $0100)
      (JSR RT_SCREEN_CLEAR)))
 
   (check-equal? (memory-list screen-clear-test
                              (+ screen-base-address (* 5 screen-row-bytes) 17))
                 (list 32)
+                "screen was clear where once written.")
+  (check-equal? (memory-list screen-clear-test
+                             (+ color-base-address (* 5 screen-row-bytes) 17))
+                (list 1)
                 "screen was clear where once written.")
   (check-equal? (memory-list screen-clear-test
                              (+ screen-base-address (* 0 screen-row-bytes) 0))
@@ -1254,7 +1269,7 @@
                 (list 32)
                 "screen was clear where once written.")
   (inform-check-equal? (cpu-state-clock-cycles screen-clear-test)
-                       6415
+                       12823
                        "cpu cycles to clear the whole screen"))
 
 ;; clear a number of chars in a row y,x position on screen
@@ -1293,7 +1308,7 @@
 (module+ test #| screen clear chars at |#
   (define screen-clear-chars-at-test
     (compact-run-code-in-test-
-     #:debug #t
+     #:debug #f
      #:runtime-code test-runtime
      ;; now put the string
      (write-string-to-screen--for-test 5 17 "OLALA")
@@ -1441,5 +1456,5 @@
 
 (module+ test #| estimated-code-len |#
   (inform-check-equal? (estimated-code-len vm-screen-code)
-                529
+                548
                 "estimated code length change in screen runtime"))
