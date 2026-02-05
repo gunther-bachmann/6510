@@ -20,18 +20,26 @@
   (require "../6510-test-utils.rkt"))
 
 (define-opcode DEC
-  ((zero-page . #xc6) (absolute . #xce) (absolute-x . #xde)  (zero-page-x . #xd6)))
+  ((zero-page   . #xc6) ;; clocks: 5
+   (absolute    . #xce) ;; clocks: 6
+   (absolute-x  . #xde) ;; clocks: 7
+   (zero-page-x . #xd6) ;; clocks: 6
+   ))
 
-(define-opcode DEX ((implicit . #xCA)))
+(define-opcode DEX ((implicit . #xCA))) ;; clocks: 2
 
 (module+ test #| DEX |#
   (check-match (DEX)
                (ast-opcode-cmd _ '(#xca))))
 
-(define-opcode DEY ((implicit . #x88)))
+(define-opcode DEY ((implicit . #x88))) ;; clocks: 2
 
 (define-opcode INC
-  ((zero-page . #xe6) (absolute . #xee) (absolute-x . #xfe) (zero-page-x . #xf6)))
+  ((zero-page   . #xe6) ;; clocks: 5
+   (absolute    . #xee) ;; clocks: 6
+   (absolute-x  . #xfe) ;; clocks: 7
+   (zero-page-x . #xf6) ;; clocks: 6
+   ))
 
 (module+ test
   (check-match (INC "$10")
@@ -46,6 +54,6 @@
   (check-match (INC "$1000",x)
                (ast-opcode-cmd _ '(#xFE #x00 #x10))))
 
-(define-opcode INX ((implicit . #xe8)))
+(define-opcode INX ((implicit . #xe8))) ;; clocks: 2
 
-(define-opcode INY ((implicit . #xc8)))
+(define-opcode INY ((implicit . #xc8))) ;; clocks: 2
