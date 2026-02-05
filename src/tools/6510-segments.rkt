@@ -579,9 +579,9 @@ currently the following test programs are created
              ;; (ast-bytes-cmd '() byte-codes)
              ;; constant nat array hello is top of stack
              ;; (bc BIOS) (byte $01) ;; clear screen
-             (bc PUSH_B) (byte $00)
-             (bc SWAP)
              (bc PUSH_B) (byte $17)
+             (bc SWAP)
+             (bc PUSH_B) (byte $00)
              (bc SWAP)
              (bc BIOS) (byte $00) ;; print string
 

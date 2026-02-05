@@ -30,10 +30,9 @@
               (JSR RETURN_TO_BC)
 
               ;; actual test
-              (bc-breakpoint)
-              (bc PUSH_B) (byte $00)
+              (bc PUSH_B) (byte 23) ;; row
               (bc SWAP)
-              (bc PUSH_B) (byte $17)
+              (bc PUSH_B) (byte 5) ;; col
               (bc SWAP)
               (bc BIOS) (byte $00)
               (bc BREAK)
@@ -46,5 +45,5 @@
   (regression-test
    bios-print-state
    "print string at"
-   (check-equal? (memory-list- bios-print-state #x0400 4)
+   (check-equal? (memory-list- bios-print-state (+ (* 40 23) #x0400 5) 4)
                  (list 1 2 3 4))))

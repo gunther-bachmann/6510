@@ -54,12 +54,10 @@
           (AND !$3f) ;; get length of array
           (PHA) ;; # to print
           (JSR POP_EVLSTK_TAIL_TO_RT)
-          (LDY !$01)
-          (LDA (ZP_RT),y)
+          (LDA ZP_RT+1)
           (STA ZP_RP) ;; col is set
           (JSR POP_EVLSTK_TAIL_TO_RT)
-          (LDY !$01)
-          (LDA (ZP_RT),y)
+          (LDA ZP_RT+1)
           (TAX) ;; x = row
           (PLA)
           (TAY) ;; y = # to print
@@ -84,5 +82,5 @@
 
 (module+ test #| bios code len |#
   (inform-check-equal? (estimated-code-len vm-bios-code)
-                       61
+                       59
                        "estimated bios code len"))
