@@ -75,8 +75,8 @@
 (defun 6510-debugger--move-cursor-to-source-line (file-name line)
   (when (and (not (and follow-source-window (window-valid-p follow-source-window)))
            (buffer-file-name (window-buffer (selected-window))))
-    (setq follow-source-window (selected-window))
-    ;; (message (format "follow-source-window set to %S" follow-source-window)))
+    ;; (message (format "follow-source-window set to %S" follow-source-window))
+    (setq follow-source-window (selected-window)))
   (when (and follow-source-window (not buffer-file-name))
     ;; (message "follow-source-window and no buffer file name (I am in repl)")
     (with-selected-window follow-source-window

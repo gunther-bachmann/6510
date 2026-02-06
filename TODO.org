@@ -209,7 +209,7 @@ WRITE TOSm1​_TO​_CELy​_RA
 EVICT​_TOSm1​_FROM​_EVLSTK
 WRITE​_RA​_TO​_RT
 INC​_REFCNT​_RT
-** output a string
+** DONE output a string
 e.g. ~(displayln "hello world")~
 *** stories
 **** vm-interpreter

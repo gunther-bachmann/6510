@@ -45,6 +45,7 @@
      vm-bcd-code
      (list (label VM_INIT_MEMORY_MANAGER) (RTS)))))
 
+;; calling conventions: see https://c64os.com/c64os/programmersguide/usingkernal
 ;; POP Ptr->MEM
 ;; POP byte->X
 ;; POP byte->Y

@@ -20,7 +20,13 @@
  RT_BCD_TO_SCREEN_CODE                ;; convert bcd to screen codes
 
 
- vm-screen-code)
+ vm-screen-code
+ screen-base-address
+ color-base-address)
+
+(define screen-base-address #x0400)
+(define color-base-address #xd800)
+(define screen-row-bytes 40)
 
 #|
 
@@ -79,10 +85,6 @@
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-memory-map.rkt"
                     VM_MEMORY_MANAGEMENT_CONSTANTS))
-
-  (define screen-base-address #x0400)
-  (define color-base-address #xd800)
-  (define screen-row-bytes 40)
 
   (define test-runtime
     (append
