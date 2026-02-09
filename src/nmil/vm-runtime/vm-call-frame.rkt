@@ -527,7 +527,7 @@
           ;; find out top mark of previous page
           ;; locals offset - 3
           (LDA ZP_LOCALS_LB_PTR)
-          (CLC)
+          (SEC)
           (SBC !$03)
           (STA ZP_CALL_FRAME_TOP_MARK)
 

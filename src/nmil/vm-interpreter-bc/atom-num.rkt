@@ -158,6 +158,7 @@
           (BCS NO_DEC_HIGH__)       ;; if carry is set from subtraction of lower bits, no subtraction carry over necessary
           (SEC)                                 ;; for subtraction carry needs to be set
           (SBC !$04)                            ;; subtract 1 in the masked int highbyte (starting at bit2) => 4
+          (SEC)
 
    (label NO_DEC_HIGH__)
           (SBC (ZP_EVAL_STACK_TAIL_LB_PTR),y)      ;; A = A - stack value (int high byte)

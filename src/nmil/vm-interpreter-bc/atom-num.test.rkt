@@ -19,6 +19,8 @@
            (only-in "./push_n_pop.rkt"
                     BC_PUSH_B
                     BC_PUSH_I)
+           (only-in "../vm-bc-opcode-definitions.rkt"
+                    mark-bc-breakpoint)
            "./test-utils.rkt")
 
   (define relevant-opcode-definitions (filtered-opcode-definitions
@@ -266,12 +268,14 @@
       (bc PUSH_I1)
       (bc PUSH_I0)
       (bc BNOP)
+      (mark-bc-breakpoint)
       (bc ISUB)                      ;; byte code for INT_MINUS => -1
-      )))
+      )
+     #f))
 
 
    (inform-check-equal? (cpu-state-clock-cycles use-case-int-minus-state-after)
-                        84)
+                        86)
     (check-equal? (vm-stack->strings use-case-int-minus-state-after)
                     (list "stack holds 4 items"
                           "int $3fff  (rt)"
@@ -281,5 +285,5 @@
 
 (module+ test
   (inform-check-equal? (estimated-code-len bc-atom-num-code)
-                       177
+                       178
                        "estimated code len for byte and int arithmetic"))
