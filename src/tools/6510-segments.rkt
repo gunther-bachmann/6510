@@ -83,6 +83,10 @@ currently the following test programs are created
                     vm-screen-code)
            (only-in "../nmil/vm-runtime/vm-bcd.rkt"
                     vm-bcd-code)
+           (only-in "../nmil/vm-runtime/vm-textpage.rkt"
+                    vm-textpage-code)
+           (only-in "../nmil/vm-runtime/vm-window.rkt"
+                    vm-window-code)
            (only-in  "../nmil/vm-runtime/vm-memory-manager-test-utils.rkt"
                      list-with-label-suffix
                      run-code-in-test-on-code
@@ -463,6 +467,8 @@ currently the following test programs are created
                    )
              vm-memory-manager-code
              vm-screen-code
+             vm-textpage-code
+             vm-window-code
              vm-bcd-code
              vm-benchmark-code
              vm-bios-code
@@ -597,6 +603,15 @@ currently the following test programs are created
 
              ;; implement BENCH bytecode to execute benchmark functions
 
+             (bc BENCH) (byte $00) ;; wait for keypress
+
+             (bc BENCH) (byte $05) ;; fill screen
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $01) ;; start timer
+             (bc BENCH) (byte $0a) ;; write text in window
+             (bc BENCH) (byte $02) ;; stop timer
+             (bc BENCH) (byte $00) ;; wait for keypress
+             (bc BENCH) (byte $03) ;; report timer
              (bc BENCH) (byte $00) ;; wait for keypress
 
              (bc BENCH) (byte $05) ;; fill screen

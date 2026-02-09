@@ -14,7 +14,9 @@
                   bc-resolve
                   bc-bytes)
          (only-in "../vm-interpreter.rkt"
-                  vm-interpreter))
+                  vm-interpreter)
+         (only-in "../vm-bc-opcode-definitions.rkt"
+                  mark-bc-breakpoint))
 
 (module+ test #|  |#
   (require (only-in "../test-utils.rkt"
@@ -49,7 +51,7 @@
        (bc CALL) (word-ref RECURSE)
        (bc BREAK))
       RECURSE)
-     ))
+     #f))
 
   (regression-test
    recurse-state

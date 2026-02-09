@@ -5,6 +5,7 @@
          BM_REPORT_TIMER
          BM_WAIT_FOR_KEYPRESS
          BM_RESET
+         BM_TEXT_WINDOW
 
          vm-benchmark-code)
 
@@ -63,8 +64,15 @@
                   RT_SCREEN_SCROLL_RIGHT_CHARS_AT
                   RT_SCREEN_SCROLL_DOWN_BY1
                   RT_SCREEN_SCROLL_UP_BY1)
+         (only-in "./vm-window.rkt"
+                  WINDOW_RENDER_COMPLETE)
          (only-in "./vm-bcd.rkt"
-                  RT_INT8_TO_BCD))
+                  RT_INT8_TO_BCD)
+         (only-in "./vm-textpage.rkt"
+                  create-text-page-data-for)
+         (only-in "../../ast/6510-relocator.rkt"
+                    estimated-code-len)
+         (only-in racket/string string-join))
 
 (module+ test #| require |#
   (require (only-in racket/string
@@ -304,6 +312,44 @@
 (define-vm-function BM_RESET
   (list   (JMP $FCE2)))
 
+;; write some text in a window
+(define-vm-function BM_TEXT_WINDOW
+  (flatten
+   (list
+           (LDA !<window)
+           (STA ZP_RT)
+           (LDA !>window)
+           (STA ZP_RT+1)
+
+           (JMP WINDOW_RENDER_COMPLETE)
+
+    ;; no org align necessary, since rt is not gcd
+    (label window)
+           (byte $08)     ;; screen-x
+           (byte $05)     ;; screen-y
+           (byte $14)     ;; width
+           (byte $03)     ;; height
+           (byte $00)     ;; cursor-x
+           (byte $00)     ;; cursor-y
+           (word $0000)   ;; char position
+           (word-ref text_line_0__benchmark) ;; first visible line
+           (word $0000) ;; line number and scroll position y
+           (word-ref text_line_2__benchmark) ;; last visible line
+           (word $0002)
+           (byte $00) ;; scroll-position x
+
+    ;; no org for loader to work, page access may not work because offset add would wrap pages
+    (label text_page)
+           (create-text-page-data-for
+            (string-join
+             (list
+              "HELLO MR WORLD"
+              "  TODAY I WANT TO SHOW YOU A WINDOWED"
+              "DISPLAY OF TEXT"
+              )
+             "\n")
+            "__benchmark"))))
+
 (define vm-benchmark-code
   (append
    BM_STOP_TIMER
@@ -315,4 +361,5 @@
    BM_SCROLL_RIGHT_40
    BM_SCROLL_DOWN_25
    BM_SCROLL_UP_25
-   BM_SCROLL_LEFT_40))
+   BM_SCROLL_LEFT_40
+   BM_TEXT_WINDOW))

@@ -48,6 +48,10 @@
                   vm-deserializer-code)
          (only-in "../vm-runtime/vm-bios.rkt"
                   vm-bios-code)
+         (only-in "../vm-runtime/vm-window.rkt"
+                  vm-window-code)
+         (only-in "../vm-runtime/vm-textpage.rkt"
+                  vm-textpage-code)
          (only-in "../vm-interpreter-loop.rkt"
                   VM_INTERPRETER
                   VM_INTERPRETER_ZP
@@ -110,6 +114,8 @@
            vm-bcd-code
            vm-screen-code
            vm-benchmark-code
+           vm-window-code
+           vm-textpage-code
            vm-bios-code
            vm-deserializer-code
            (list (org-align #x100)) ;; align to next page

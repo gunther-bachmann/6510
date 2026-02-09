@@ -523,7 +523,8 @@
 
           ;; (STA write_screen_cmd__+2) ;; write page
           (JSR PREP_ZP_TEMP_FOR_SCREEN_ACCESS)
-
+          (TYA)
+          (PHA)
    (label char_put_loop__)
    (label RT_SCREEN_PUT_CHARS_AT__STRING)
           (LDA $0400,y)
@@ -531,6 +532,18 @@
           (STA (ZP_TEMP),y) ;; STA $0400,y
           (DEY)                      ;; use y as both indices (zp_rp = ptr - col)
           (BPL char_put_loop__)
+
+          (PLA)
+          (TAY)                 ;; get original Y
+          (LDA ZP_TEMP+1)
+          (CLC)
+          (ADC !$D4)
+          (STA ZP_TEMP+1) ;; set page for color ram
+          (LDA !1) ;; white
+   (label write_color_loop__)
+          (STA (ZP_TEMP),y) ;; STA $0400,y
+          (DEY)                      ;; use y as both indices (zp_rp = ptr - col)
+          (BPL write_color_loop__)
 
           (RTS)
 
@@ -577,7 +590,7 @@
                 (map char->integer (string->list "O"))
                 "the char O was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-0-test)
-                       69
+                       102
                        "cpu cycles for writing string with 1 character to position x,y")
 
   (define screen-put-chars-at-test
@@ -608,7 +621,7 @@
                 (map char->integer (string->list ".SOME"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-test)
-                       129
+                       206
                        "cpu cycles for writing string with 5 characters to position x,y")
 
   (define screen-put-chars-at-2-test
@@ -639,7 +652,7 @@
                 (map char->integer (string->list ".SOME.OTHER.STRING.THAT.I"))
                 "the string .SOME was written to the right screen area")
   (inform-check-equal? (cpu-state-clock-cycles screen-put-chars-at-2-test)
-                       429
+                       726
                        "cpu cycles for writing string with 25 characters to position x,y"))
 
 ;; scroll n lines a number of chars one char to the right
@@ -702,14 +715,14 @@
                              (+ color-base-address (* 5 screen-row-bytes) 16)
                              (+ color-base-address (* 5 screen-row-bytes) 23))
                 (append (list 0)
-                        (list 2 2 2 0 0 0)
+                        (list 2 2 2 1 1 1)
                         (list 0))
                 "color was scrolled right.")
   (check-equal? (memory-list scroll-right-test2
                              (+ color-base-address (* 4 screen-row-bytes) 16)
                              (+ color-base-address (* 4 screen-row-bytes) 23))
                 (append (list 0)
-                        (list 0 0 0 0 2 2)
+                        (list 1 1 1 1 2 2)
                         (list 0))
                 "color line was scrolled right (too).")
   (inform-check-equal? (cpu-state-clock-cycles scroll-right-test2)
@@ -848,12 +861,12 @@
   (check-equal? (memory-list scroll-left-2-test
                              (+ color-base-address (* 5 screen-row-bytes) 17)
                              (+ color-base-address (* 5 screen-row-bytes) 21))
-                (list 2 0 0 0 0)
+                (list 2 1 1 1 1)
                 "string got scrolled one char left.")
   (check-equal? (memory-list scroll-left-2-test
                              (+ color-base-address (* 6 screen-row-bytes) 17)
                              (+ color-base-address (* 6 screen-row-bytes) 21))
-                (list 0 0 2 2 2)
+                (list 1 1 2 2 2)
                 "string got scrolled one char left.")
   (inform-check-equal? (cpu-state-clock-cycles scroll-left-2-test)
                 401
@@ -1458,5 +1471,5 @@
 
 (module+ test #| estimated-code-len |#
   (inform-check-equal? (estimated-code-len vm-screen-code)
-                548
+                568
                 "estimated code length change in screen runtime"))

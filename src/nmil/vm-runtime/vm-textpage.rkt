@@ -1,5 +1,11 @@
 #lang racket/base
 
+(provide
+ WRITE_TEXT_PAGE_LINE
+
+ create-text-page-data-for
+ vm-textpage-code)
+
 #|
 
  page type for holding long texts
@@ -208,19 +214,25 @@
  |#
 
 (require "../../6510.rkt"
+         (only-in racket/string string-split string-trim string-join)
+         (only-in racket/list range take empty?)
          (only-in "../vm-definition-utils.rkt"
                   define-vm-function
                   define-vm-function-wol)
          (only-in "./vm-screen.rkt"
                   RT_SCREEN_PUT_CHARS_AT
                   RT_SCREEN_PUT_CHARS_AT__STRING
-                  RT_SCREEN_CLEAR_CHARS_AT))
+                  RT_SCREEN_CLEAR_CHARS_AT)
+         (only-in "../../ast/6510-relocator.rkt"
+                  estimated-code-len))
 
 (module+ test #| require |#
   (require (only-in racket/string
                     string-replace)
            (only-in uuid
                     uuid-string)
+           (only-in racket/list
+                    range)
            (only-in "../test-utils.rkt"
                     regression-test)
            "../../6510-test-utils.rkt"
@@ -228,6 +240,7 @@
                     estimated-code-len)
            (only-in "../../tools/6510-interpreter.rkt"
                     cpu-state-clock-cycles
+                    peek
                     memory-list-)
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-memory-map.rkt"
@@ -287,7 +300,7 @@
           (TAY)
           (LDA screen_x)
           (STA ZP_RP)
-          (LDA !1) ;; white
+          [LDA !1] ;; white
 
           (JSR RT_SCREEN_CLEAR_CHARS_AT) ;; zp_rp = col, x = row, y = #, a = color (INCOMPLETE)
           (LDA !$00)
@@ -298,23 +311,28 @@
           (LDA (ZP_RZ),y)       ;; length of string
           (SBC ZP_TEMP)
           (BMI empty_line__)    ;; line is completely empty
+          (CLC)
+          (ADC ZP_TEMP3)
           ;; check len to print with screen width
           ;; A = len to print
-          ;; ZP_TEMP = index into text to start printingg
+          ;; ZP_TEMP = index into text to start printing
           (CMP window_width)
           (BMI use_a_for_num_chars__) ;; screen-width < num chars -> print len # of chars
           (LDA window_width)    ;; print screen width # of chars
+          (SEC)
           (SBC ZP_TEMP3)
           (JMP write_len_a_to_screen__)
           ;; done, no spaces at end
 
    (label use_a_for_num_chars__)
+          (SEC)
           (SBC ZP_TEMP3)
           (STA ZP_RP+1)
           (JSR write_len_a_to_screen__)
           (LDA window_width)
           (SEC)
           (SBC ZP_RP+1)
+          (SEC)
           (SBC ZP_TEMP3)
           ;; a = number of spaces to print
 
@@ -438,9 +456,9 @@
             (LDA !10)                   ;;           s_x
             (STA screen_x)              ;;            | <- width        -> |
             (LDX !13)                   ;;  s_y    -> +--------------------+
-            (LDA !17)                   ;;        +---+----------------+---+-----+
-            (STA scroll_x)              ;;        |aaaaaaaaaaaaaaaaaaaa| spaces  |
-            (LDA !8)                    ;;        +---+----------------+---------+
+            (LDA !17)                   ;;        +---+-+------------------+-----+
+            (STA scroll_x)              ;;        |aaaaa|        spaces          |
+            (LDA !8)                    ;;        +---+-+------------------------+
             (STA window_width)          ;;            |
             (JSR WRITE_TEXT_PAGE_LINE)  ;;           t_x
 
@@ -604,8 +622,61 @@
                  "only spaces since it is an empty line")
 
    (inform-check-equal? (cpu-state-clock-cycles write-text-page-line-test)
-                        4942
-                        "clock cycles needed for windowed write text page to screen")))
+                        5640
+                        "clock cycles needed for windowed write text page to screen"))
+
+  (define write-one-column-over-24-lines
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+            (LDA !25)
+            (STA LOOP_COUNTER)
+
+     (label LOOP)
+            (LDA !<text_section)
+            (STA ZP_RZ)
+            (LDA !>text_section)
+            (STA ZP_RZ+1)
+
+            (LDA !10)
+            (STA screen_x)
+            (LDX LOOP_COUNTER)
+            (LDA !04)
+            (STA scroll_x)
+            (LDA !1)
+            (STA window_width)
+            (JSR WRITE_TEXT_PAGE_LINE)
+
+            (DEC LOOP_COUNTER)
+            (BNE LOOP)
+            (BRK)
+
+            (org-align #x100)
+      (label text_section)
+             (byte $14)
+             (byte $02)
+             (byte 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
+             (byte $14)
+      (label LOOP_COUNTER)
+             (byte 0)))
+
+  (regression-test
+   write-one-column-over-24-lines
+   "check 24 rows writing one col each"
+   (check-equal? (map (lambda (adr) (peek write-one-column-over-24-lines adr ))
+                      (map (lambda (line) (+ (* 40 line) screen-base-address 10))
+                           (range 1 25)))
+                 (build-list 24 (lambda (_) 3)))
+   (check-equal? (map (lambda (adr) (peek write-one-column-over-24-lines adr ))
+                      (map (lambda (line) (+ (* 40 line) screen-base-address 11))
+                           (range 1 25)))
+                 (build-list 24 (lambda (_) 0)))
+   (check-equal? (map (lambda (adr) (peek write-one-column-over-24-lines adr ))
+                      (map (lambda (line) (+ (* 40 line) screen-base-address 9))
+                           (range 1 25)))
+                 (build-list 24 (lambda (_) 0)))
+   (inform-check-equal? (cpu-state-clock-cycles write-one-column-over-24-lines)
+                        6433)))
 
 
 ;; flow:
@@ -621,6 +692,88 @@
 ;; idea: how to insert empty lines fast
 
 
+;; create data for text pages of the given string
+(define (create-text-page-data-for str (postfix ""))
+  (define splitted-lines (string-split str "\n" #:trim? #f))
+  (define lines (if (empty? splitted-lines) (list "") splitted-lines))
+  (define encoded-lines
+    (map (lambda (line idx)
+           (define indented-line (string-trim line))
+           (if (= 0 (string-length indented-line))
+               (list (ast-label-def-cmd '() (format (string-join (list "text_line_~a" postfix) "") idx))
+                     (ast-bytes-cmd '() (list 0)))
+               (list (ast-label-def-cmd '() (format (string-join (list "text_line_~a" postfix) "") idx))
+                     (ast-bytes-cmd '() (list (string-length indented-line)))
+                     (ast-bytes-cmd '() (list (- (string-length line) (string-length indented-line))))
+                     (ast-bytes-cmd '() (map (lambda (char) (if (>= (char->integer char) 65) (- (char->integer char) 64) (char->integer char))) (string->list indented-line)))
+                     (ast-bytes-cmd '() (list (string-length indented-line))))))
+         lines
+         (range (length lines))))
+  (define encoded-text (apply append encoded-lines))
+  (append
+   (list (byte $00 $03) ;; page type 0, first offset at 3
+         (ast-bytes-cmd '() (list (+ 2 (estimated-code-len encoded-text))))) ;; last offset at ...
+   encoded-text
+   (map (lambda (idx) (byte $00)) (range (- 252 (estimated-code-len encoded-text))))
+   (list (byte $00)) ;; next page is 0
+   ))
+
+(module+ test #| create-text-page |#
+  (check-equal? (estimated-code-len (create-text-page-data-for ""))
+                256)
+  (check-equal? (take (create-text-page-data-for "") 4)
+                (list
+                 (ast-bytes-cmd '() '(0 3))
+                 (ast-bytes-cmd '() '(3))
+                 (ast-label-def-cmd '() "text_line_0")
+                 (ast-bytes-cmd '() '(0))))
+  (check-equal? (take (create-text-page-data-for "H") 7)
+                (list
+                 (ast-bytes-cmd '() '(0 3))
+                 (ast-bytes-cmd '() '(6)) ;; ptr to tail
+                 (ast-label-def-cmd '() "text_line_0")
+                 (ast-bytes-cmd '() '(1)) ;; len
+                 (ast-bytes-cmd '() '(0)) ;; indent
+                 (ast-bytes-cmd '() '(8)) ;; H
+                 (ast-bytes-cmd '() '(1)) ;; len
+                 ))
+
+  (check-equal? (take (create-text-page-data-for "   H") 7)
+                (list
+                 (ast-bytes-cmd '() '(0 3))
+                 (ast-bytes-cmd '() '(6)) ;; ptr to tail
+                 (ast-label-def-cmd '() "text_line_0")
+                 (ast-bytes-cmd '() '(1)) ;; len
+                 (ast-bytes-cmd '() '(3)) ;; indent
+                 (ast-bytes-cmd '() '(8)) ;; H
+                 (ast-bytes-cmd '() '(1)) ;; len
+                 ))
+  (check-equal? (take (create-text-page-data-for "   HELLO") 7)
+                (list
+                 (ast-bytes-cmd '() '(0 3))
+                 (ast-bytes-cmd '() '(10)) ;; ptr to tail
+                 (ast-label-def-cmd '() "text_line_0")
+                 (ast-bytes-cmd '() '(5)) ;; len
+                 (ast-bytes-cmd '() '(3)) ;; indent
+                 (ast-bytes-cmd '() '(8 5 12 12 15)) ;; HELLO
+                 (ast-bytes-cmd '() '(5)) ;; len
+                 ))
+  (check-equal? (take (create-text-page-data-for "   HELLO\n THERE") 12)
+                (list
+                 (ast-bytes-cmd '() '(0 3))
+                 (ast-bytes-cmd '() '(18)) ;; ptr to tail
+                 (ast-label-def-cmd '() "text_line_0")
+                 (ast-bytes-cmd '() '(5)) ;; len
+                 (ast-bytes-cmd '() '(3)) ;; indent
+                 (ast-bytes-cmd '() '(8 5 12 12 15)) ;; H
+                 (ast-bytes-cmd '() '(5)) ;; len
+                 (ast-label-def-cmd '() "text_line_1")
+                 (ast-bytes-cmd '() '(5)) ;; len
+                 (ast-bytes-cmd '() '(1)) ;; indent
+                 (ast-bytes-cmd '() '(20 8 5 18 5)) ;; THERE
+                 (ast-bytes-cmd '() '(5))
+                 )))
+
 ;; prepare text buffer for editing
 ;;
 ;; (split text page into text-page before, text-page after and text-page for editing)
@@ -631,5 +784,5 @@
 
 (module+ test #| code len |#
   (inform-check-equal? (estimated-code-len vm-textpage-code)
-                       170
+                       177
                        "estimated code len of text page code"))

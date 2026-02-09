@@ -84,6 +84,10 @@
                   vm-bcd-code)
          (only-in "../vm-runtime/vm-deserializer.rkt"
                   vm-deserializer-code)
+         (only-in "../vm-runtime/vm-window.rkt"
+                  vm-window-code)
+         (only-in "../vm-runtime/vm-textpage.rkt"
+                  vm-textpage-code)
          (only-in "../vm-runtime/vm-benchmark.rkt"
                   vm-benchmark-code)
          (only-in "../vm-runtime/vm-bios.rkt"
@@ -114,6 +118,8 @@
     vm-screen-code
     vm-bcd-code
     vm-benchmark-code
+    vm-window-code
+    vm-textpage-code
     vm-bios-code
     vm-deserializer-code
     (list (org-align #x100)) ;; align to next page

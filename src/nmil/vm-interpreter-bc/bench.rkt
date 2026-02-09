@@ -38,4 +38,5 @@
           #| 07 |#(ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BM_SCROLL_DOWN_25"))
           #| 08 |#(ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BM_SCROLL_UP_25"))
           #| 09 |#(ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BM_SCROLL_LEFT_40"))
+          #| 0a |#(ast-unresolved-bytes-cmd '() '() (ast-resolve-word-scmd "BM_TEXT_WINDOW"))
           ))
