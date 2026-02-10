@@ -31,6 +31,7 @@
   | 0001 0001 | page with code
   | 0001 0010 | cell stack page
   | 0001 0011 | call frame page
+  | 0001 0100 | text page
   | 0010 xxxx | m1 page with profile xxxx
 
 

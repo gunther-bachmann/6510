@@ -16,11 +16,12 @@
 
  | offset | description             |
  |--------+-------------------------|
- |     00 | page type = 0011 0000   |
- |     01 | offset to start of text |
- |     02 | offset to end of text   | ;; allows for reverse scanning lines
+ |     00 | page type = 0001 0100   |
+ |     01 | prev page               | ;; allows for reverse scanning pages
+ |     02 | offset to start of text | ;; allows forward scanning lines
+ |     03 | offset to end of text   | ;; allows for reverse scanning lines
  |        | . . .                   |
- |     ff | next page               |
+ |     ff | next page               | ;; allows forward scanning pages
 
 
  text section w/i text page, allow for lines spanning over pages. another option would be to not allow page spanning lines.
@@ -711,10 +712,10 @@
          (range (length lines))))
   (define encoded-text (apply append encoded-lines))
   (append
-   (list (byte $00 $03) ;; page type 0, first offset at 3
-         (ast-bytes-cmd '() (list (+ 2 (estimated-code-len encoded-text))))) ;; last offset at ...
+   (list (byte $14 $00 $04) ;; page type $14, previous page 0, first offset at 3
+         (ast-bytes-cmd '() (list (+ 3 (estimated-code-len encoded-text))))) ;; last offset at ...
    encoded-text
-   (map (lambda (idx) (byte $00)) (range (- 252 (estimated-code-len encoded-text))))
+   (map (lambda (idx) (byte $00)) (range (- 251 (estimated-code-len encoded-text))))
    (list (byte $00)) ;; next page is 0
    ))
 
@@ -723,14 +724,14 @@
                 256)
   (check-equal? (take (create-text-page-data-for "") 4)
                 (list
-                 (ast-bytes-cmd '() '(0 3))
-                 (ast-bytes-cmd '() '(3))
+                 (ast-bytes-cmd '() '(20 0 4))
+                 (ast-bytes-cmd '() '(4))
                  (ast-label-def-cmd '() "text_line_0")
                  (ast-bytes-cmd '() '(0))))
   (check-equal? (take (create-text-page-data-for "H") 7)
                 (list
-                 (ast-bytes-cmd '() '(0 3))
-                 (ast-bytes-cmd '() '(6)) ;; ptr to tail
+                 (ast-bytes-cmd '() '(20 0 4))
+                 (ast-bytes-cmd '() '(7)) ;; ptr to tail
                  (ast-label-def-cmd '() "text_line_0")
                  (ast-bytes-cmd '() '(1)) ;; len
                  (ast-bytes-cmd '() '(0)) ;; indent
@@ -740,8 +741,8 @@
 
   (check-equal? (take (create-text-page-data-for "   H") 7)
                 (list
-                 (ast-bytes-cmd '() '(0 3))
-                 (ast-bytes-cmd '() '(6)) ;; ptr to tail
+                 (ast-bytes-cmd '() '(20 0 4))
+                 (ast-bytes-cmd '() '(7)) ;; ptr to tail
                  (ast-label-def-cmd '() "text_line_0")
                  (ast-bytes-cmd '() '(1)) ;; len
                  (ast-bytes-cmd '() '(3)) ;; indent
@@ -750,8 +751,8 @@
                  ))
   (check-equal? (take (create-text-page-data-for "   HELLO") 7)
                 (list
-                 (ast-bytes-cmd '() '(0 3))
-                 (ast-bytes-cmd '() '(10)) ;; ptr to tail
+                 (ast-bytes-cmd '() '(20 0 4))
+                 (ast-bytes-cmd '() '(11)) ;; ptr to tail
                  (ast-label-def-cmd '() "text_line_0")
                  (ast-bytes-cmd '() '(5)) ;; len
                  (ast-bytes-cmd '() '(3)) ;; indent
@@ -760,8 +761,8 @@
                  ))
   (check-equal? (take (create-text-page-data-for "   HELLO\n THERE") 12)
                 (list
-                 (ast-bytes-cmd '() '(0 3))
-                 (ast-bytes-cmd '() '(18)) ;; ptr to tail
+                 (ast-bytes-cmd '() '(20 0 4))
+                 (ast-bytes-cmd '() '(19)) ;; ptr to tail
                  (ast-label-def-cmd '() "text_line_0")
                  (ast-bytes-cmd '() '(5)) ;; len
                  (ast-bytes-cmd '() '(3)) ;; indent

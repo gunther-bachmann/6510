@@ -325,18 +325,19 @@
 
     ;; no org align necessary, since rt is not gcd
     (label window)
+           (byte $01 $0f) ;; native array header
            (byte $08)     ;; screen-x
            (byte $05)     ;; screen-y
+           (byte $00) ;; scroll-position x
+           (word $0000) ;; line number and scroll position y
            (byte $14)     ;; width
            (byte $03)     ;; height
            (byte $00)     ;; cursor-x
            (byte $00)     ;; cursor-y
            (word $0000)   ;; char position
            (word-ref text_line_0__benchmark) ;; first visible line
-           (word $0000) ;; line number and scroll position y
            (word-ref text_line_2__benchmark) ;; last visible line
-           (word $0002)
-           (byte $00) ;; scroll-position x
+           ;;(word $0002)
 
     ;; no org for loader to work, page access may not work because offset add would wrap pages
     (label text_page)
