@@ -16,24 +16,24 @@
   (require "../6510-test-utils.rkt"))
 
 (define-opcode ADC
-  ((immediate   . #x69)
-   (zero-page   . #x65)
-   (zero-page-x . #x75)
-   (absolute    . #x6d)
-   (absolute-x  . #x7d)
-   (absolute-y  . #x79)
-   (indirect-x  . #x61)
-   (indirect-y  . #x71)))
+  ((immediate   . #x69)   ;; cycles: 2
+   (zero-page   . #x65)   ;; cycles: 3
+   (zero-page-x . #x75)   ;; cycles: 4
+   (absolute    . #x6d)   ;; cycles: 4
+   (absolute-x  . #x7d)   ;; cycles: 4+
+   (absolute-y  . #x79)   ;; cycles: 4+
+   (indirect-x  . #x61)   ;; cycles: 6
+   (indirect-y  . #x71))) ;; cycles: 5+
 
 (define-opcode SBC
-  ((immediate   . #xe9)
-   (zero-page   . #xe5)
-   (zero-page-x . #xf5)
-   (absolute    . #xed)
-   (absolute-x  . #xfd)
-   (absolute-y  . #xf9)
-   (indirect-x  . #xe1)
-   (indirect-y  . #xf1)))
+  ((immediate   . #xe9)   ;; cycles: 2
+   (zero-page   . #xe5)   ;; cycles: 3
+   (zero-page-x . #xf5)   ;; cycles: 4
+   (absolute    . #xed)   ;; cycles: 4
+   (absolute-x  . #xfd)   ;; cycles: 4+
+   (absolute-y  . #xf9)   ;; cycles: 4+
+   (indirect-x  . #xe1)   ;; cycles: 6
+   (indirect-y  . #xf1))) ;; cycles: 5+
 
 (module+ test #| SBC |#
   (check-match (SBC !$11)
