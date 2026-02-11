@@ -2,6 +2,8 @@
 
 (provide
  WRITE_TEXT_PAGE_LINE
+ NEXT_TEXT_SECTION_RZ
+ PREV_TEXT_SECTION_RZ
 
  create-text-page-data-for
  vm-textpage-code)
@@ -246,7 +248,8 @@
            "./vm-memory-manager-test-utils.rkt"
            (only-in "./vm-memory-map.rkt"
                     VM_MEMORY_MANAGEMENT_CONSTANTS
-                    ZP_RP)
+                    ZP_RP
+                    ZP_RZ)
            (only-in "./vm-screen.rkt"
                     vm-screen-code
                     screen-base-address))
@@ -258,6 +261,172 @@
 
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label VM_INIT_MEMORY_MANAGER) (RTS)))))
+
+;; given curren text-section pointer in ZP_RZ move on to the next text-section
+;; result zero-flag = 1, means no more text was available (BEQ)
+;;        zero-flag = 0, means ZP_RZ holds the pointer to the next text-section (BNE)
+;;
+;; input:    ZP_RZ: pointer to text-section
+;;           ZP_PAGE_REG: pointer to current text-page!
+;; modifies: Y, A
+;; result:   ZP_RZ: pointer to text-section (next if successful)
+;;           zero-flag: indicator whether move to next line was successful
+(define-vm-function NEXT_TEXT_SECTION_RZ
+  (list
+          (CLC)
+          (LDY !$00)
+          (LDA (ZP_RZ),y) ;; current len of line just printed
+          (BEQ empty_line_inc__)
+          (ADC ZP_RZ)
+          (ADC !$02)
+   (label empty_line_inc__)
+          ;; check whether this is the last offset on this page, else move on to next page
+          (LDY ZP_RZ+1)
+          (STY ZP_PAGE_REG+1)
+          (LDY !$02) ;; offset of end of last entry on this text page
+          (CMP (ZP_PAGE_REG),y)
+          (BNE continue_without_page_chage__)
+
+          ;; switch to next text page
+          (LDY !$ff)
+          (LDA (ZP_RZ),y) ;; get next page
+          (BEQ next__) ;; EQ
+
+          (STA ZP_RZ+1)
+          (STA ZP_PAGE_REG+1)
+
+          ;; get offset to first text section
+          (LDY !$01)
+          (LDA (ZP_PAGE_REG),y)
+          (STA ZP_RZ)
+          (BNE next__) ;; NE
+
+   (label continue_without_page_chage__)
+          (CLC)
+          (ADC !$01)
+          (STA ZP_RZ)   ;; always != 0 -> NE
+
+   (label next__)
+          (RTS) ;; beq == no more text available
+                ;; bne == successfully advanced zp_rz to next text-section
+))
+
+;; given curren text-section pointer in ZP_RZ move on to the next text-section
+;; result zero-flag = 1, means no more text was available (BEQ) (happens if ZP_RZ points to the first text-section on the first textpage)
+;;        zero-flag = 0, means ZP_RZ holds the pointer to the previous text-section (BNE)
+;;
+;; input:    ZP_RZ: pointer to text-section
+;;           ZP_PAGE_REG: pointer to current text-page!
+;; modifies: Y, A
+;; result:   ZP_RZ: pointer to text-section (previous if successful)
+;;           zero-flag: indicator whether move to prev line was successful
+(define-vm-function PREV_TEXT_SECTION_RZ
+  (list
+          (DEC ZP_RZ) ;; point to #of chars of previous section (or behind first entry)
+          (LDA ZP_RZ)
+   (label on_end_of_prev__)
+          (LDY !2)
+          (CMP (ZP_PAGE_REG),y)
+          (BMI look_for_previous_page__)
+          (LDY !$00)
+          (LDA (ZP_RZ),y)           ;; get number of chars in prev section
+          (BEQ done__)              ;; if this is en empty line, we are done already
+
+          (EOR !$ff)                ;; reverse
+          (SEC)                     ;; set carry such that adc works as if (ZP_RZ),y was counted negative!
+          (ADC ZP_RZ)
+          (SEC)
+          (SBC !2)                  ;; A = org-offset - 1 - n-chars - 2
+          (STA ZP_RZ)
+          (RTS)
+
+   (label look_for_previous_page__)
+          (LDY !1)
+          (LDA (ZP_PAGE_REG),y) ;; load previous page
+          (BEQ donenc__)
+          (STA ZP_RZ+1)
+          (STA ZP_PAGE_REG+1)
+          (LDY !3)
+          (LDA (ZP_PAGE_REG),y) ;; a = last offset
+          (STA ZP_RZ)
+          (BNE on_end_of_prev__)
+
+   (label done__)
+          (LDA !1) ;; NE
+   (label donenc__)
+          (RTS)))
+
+(module+ test #| prev text section|#
+  (define prev-text-section-test
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     (list
+      (LDA !<text_line_1__benchmark)
+      (STA ZP_RZ)
+      (LDA !>text_line_1__benchmark)
+      (STA ZP_RZ+1)
+      (STA ZP_PAGE_REG+1)
+
+      (JSR PREV_TEXT_SECTION_RZ)
+
+      (LDA !<text_line_0__benchmark)
+      (STA ZP_RP)
+      (LDA !>text_line_0__benchmark)
+      (STA ZP_RP+1)
+      (BRK)
+
+      (org-align #x100)
+      (create-text-page-data-for
+       (string-join
+        (list
+         "HELLO MR WORLD"
+         "  TODAY I WANT TO SHOW YOU A WINDOWED"
+         "DISPLAY OF TEXT"
+         )
+        "\n")
+       "__benchmark"))))
+
+  (check-equal? (memory-list- prev-text-section-test ZP_RZ 02)
+                (memory-list- prev-text-section-test ZP_RP 02)
+                "rz = rp, which is a pointer to the previous text section")
+
+  (define prev-text-section-test-no-more
+    (compact-run-code-in-test-
+     #:debug #f
+     #:runtime-code test-runtime
+     (list
+             (LDA !<text_line_0__benchmark)
+             (STA ZP_RZ)
+             (LDA !>text_line_0__benchmark)
+             (STA ZP_RZ+1)
+             (STA ZP_PAGE_REG+1)
+
+             (JSR PREV_TEXT_SECTION_RZ)
+             (BEQ no_more_data_found__)
+             (LDA !$01)
+             (STA ZP_RP)
+             (BRK)
+      (label no_more_data_found__)
+             (LDA !$00)
+             (STA ZP_RP)
+             (BRK)
+
+      (org-align #x100)
+      (create-text-page-data-for
+       (string-join
+        (list
+         "HELLO MR WORLD"
+         "  TODAY I WANT TO SHOW YOU A WINDOWED"
+         "DISPLAY OF TEXT"
+         )
+        "\n")
+       "__benchmark"))))
+
+  (check-equal? (memory-list- prev-text-section-test-no-more ZP_RP)
+                (list 0)
+                "there is no previous text section to navigate to"))
+
 
 ;; input: screen_x
 ;;        X = screen_y
@@ -781,9 +950,11 @@
 
 (define vm-textpage-code
   (append
-   WRITE_TEXT_PAGE_LINE))
+   WRITE_TEXT_PAGE_LINE
+   NEXT_TEXT_SECTION_RZ
+   PREV_TEXT_SECTION_RZ))
 
 (module+ test #| code len |#
   (inform-check-equal? (estimated-code-len vm-textpage-code)
-                       177
+                       284
                        "estimated code len of text page code"))
