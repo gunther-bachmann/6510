@@ -72,7 +72,9 @@
                   create-text-page-data-for)
          (only-in "../../ast/6510-relocator.rkt"
                     estimated-code-len)
-         (only-in racket/string string-join))
+         (only-in racket/string string-join)
+         (only-in "./vm-pages.rkt"
+                  VM_ALLOCATE_NEW_PAGE))
 
 (module+ test #| require |#
   (require (only-in racket/string
@@ -316,10 +318,29 @@
 (define-vm-function BM_TEXT_WINDOW
   (flatten
    (list
-           (LDA !<window)
-           (STA ZP_RT)
+           ;; copy text into text area
+           (LDA !$14) ;; page type: text-page
+           (JSR VM_ALLOCATE_NEW_PAGE)
+           (STX visline_first+1) ;; $566b
+           (STX visline_last+1)
+           (STX copy_cmd__+2)
+           (LDA !4)  ;; offset to first entry in text page
+           (STA visline_first)
+           (LDA !59) ;; offset to last entry in text page (+ 4 (* 2 3) (string-length "HELLO MR WORLDTODAY I WANT TO SHOW YOU A WINDOWED"))
+           (STA visline_last)
+
+           (LDY !00)
+    (label loop__)
+           (LDA text_page,y)
+    (label copy_cmd__)
+           (STA $E000,y)
+           (DEY)
+           (BNE loop__)
+
+           (LDA !<window) ;; $5689
+           (STA ZP_RA)
            (LDA !>window)
-           (STA ZP_RT+1)
+           (STA ZP_RA+1)
 
            (JMP WINDOW_RENDER_COMPLETE)
 
@@ -335,9 +356,12 @@
            (byte $00)     ;; cursor-x
            (byte $00)     ;; cursor-y
            (word $0000)   ;; char position
+    (label visline_first)
            (word-ref text_line_0__benchmark) ;; first visible line
+    (label visline_last)
            (word-ref text_line_2__benchmark) ;; last visible line
-           ;;(word $0002)
+           (byte $ca) ;; first text page
+           (byte $00) ;; empty lines shown after last line
 
     ;; no org for loader to work, page access may not work because offset add would wrap pages
     (label text_page)
