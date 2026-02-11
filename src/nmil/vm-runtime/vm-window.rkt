@@ -377,6 +377,10 @@
 
           (LDA !1);; color white
 
+          ;; input:  X = ROW
+          ;;         ZP_RP = COL
+          ;;         Y = # of chars to clear -1 (0 for one char, 1 for two ...)
+          ;;         A = color (for clearing the color ram)
           (JSR RT_SCREEN_CLEAR_CHARS_AT)
 
           (INX)
@@ -529,7 +533,7 @@
               (byte $00) ;; scroll-position x
               (word $0000) ;; line number and scroll position y
               (byte $14)     ;; width
-              (byte $03)     ;; height
+              (byte $04)     ;; height
               (byte $00)     ;; cursor-x
               (byte $00)     ;; cursor-y
               (word $0000)   ;; char position
@@ -579,7 +583,10 @@
                  (map (lambda (char) (- (char->integer char) 64)) (string->list "OF"))
                  (list 32)
                  (map (lambda (char) (- (char->integer char) 64)) (string->list "TEXT"))
-                 (list 32 32 32 32 32 0))))
+                 (list 32 32 32 32 32 0)))
+  (check-equal? (memory-list- write-text-test (+ (* 40 8) screen-base-address 7) 22)
+                (append
+                 (list 0 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 0))))
 
 #|
 
@@ -1107,6 +1114,8 @@
           (DEX) ;; now on last row
           (DEX) ;; row that needs to be copied
           (LDA (ZP_RA),y)
+          (SEC)
+          (SBC !1)
           (STA ZP_RZ)
           (LDY !vm_window__screen_x+2)
           (LDA (ZP_RA),y)

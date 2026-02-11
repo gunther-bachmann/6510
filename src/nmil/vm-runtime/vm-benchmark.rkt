@@ -331,7 +331,7 @@
            (STX copy_cmd__+2)
            (LDA !4)  ;; offset to first entry in text page
            (STA visline_first)
-           (LDA !59) ;; offset to last entry in text page (+ 4 (* 2 3) (string-length "HELLO MR WORLDTODAY I WANT TO SHOW YOU A WINDOWED"))
+           (LDA !171) ;; offset to last entry in text page (+ 4 (* 17 3) (string-length "HELLO MR WORLDTODAY I WANT TO SHOW YOU A WINDOWEDDISPLAY OF TEXTAND MORE12345678910I WANTMORE OF THISVERY LONG LINES"))
            (STA visline_last)
 
            (LDY !00)
@@ -381,12 +381,12 @@
     ;; no org align necessary, since rt is not gcd
     (label window)
            (byte $01 $0f) ;; native array header
-           (byte $08)     ;; screen-x
-           (byte $05)     ;; screen-y
+           (byte $01)     ;; screen-x
+           (byte $01)     ;; screen-y
            (byte $00) ;; scroll-position x
            (word $0000) ;; line number and scroll position y
-           (byte $14)     ;; width
-           (byte $03)     ;; height
+           (byte $26)     ;; width
+           (byte $17)     ;; height
            (byte $00)     ;; cursor-x
            (byte $00)     ;; cursor-y
            (word $0000)   ;; char position
@@ -395,7 +395,7 @@
     (label visline_last)
            (word-ref text_line_2__benchmark) ;; last visible line
            (byte $ca) ;; first text page
-           (byte $00) ;; empty lines shown after last line
+           (byte $05) ;; empty lines shown after last line
 
     ;; no org for loader to work, page access may not work because offset add would wrap pages
     (label text_page)
@@ -405,6 +405,21 @@
               "HELLO MR WORLD"
               "  TODAY I WANT TO SHOW YOU A WINDOWED"
               "DISPLAY OF TEXT"
+              "       AND MORE"
+              "1"
+              "2"
+              "3"
+              "4"
+              " 5"
+              "  6"
+              "   7"
+              "    8"
+              "     9"
+              "                                 10"
+              " I WANT"
+              "    MORE OF THIS"
+              "                                  VERY LONG LINES"
+              "COVERING ALL THAT YOU WRITE HERE AND EVEN MORE THAN THAT"
               )
              "\n")
             "__benchmark"))))

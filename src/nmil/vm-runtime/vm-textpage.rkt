@@ -353,7 +353,7 @@
    (label on_end_of_prev__)
           (LDY !vm_textpage__offset_text_start)
           (CMP (ZP_PAGE_REG),y)
-          (BMI look_for_previous_page__)
+          (BCC look_for_previous_page__)
           (LDY !$00)
           (LDA (ZP_RZ),y)           ;; get number of chars in prev section
           (BEQ done__)              ;; if this is en empty line, we are done already
