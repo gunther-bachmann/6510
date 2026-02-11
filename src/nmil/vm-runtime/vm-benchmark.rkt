@@ -74,7 +74,12 @@
                     estimated-code-len)
          (only-in racket/string string-join)
          (only-in "./vm-pages.rkt"
-                  VM_ALLOCATE_NEW_PAGE))
+                  VM_ALLOCATE_NEW_PAGE)
+         (only-in "./vm-window.rkt"
+                  WINDOW_SCROLL_DOWN
+                  WINDOW_SCROLL_RIGHT
+                  WINDOW_SCROLL_LEFT
+                  WINDOW_SCROLL_UP))
 
 (module+ test #| require |#
   (require (only-in racket/string
@@ -200,8 +205,8 @@
           (LDA !1)
           (STA XMAX)
 
-          ; NO KEY REPEAT
-          (LDA !$40)
+          ; only cursor and space repeat
+          (LDA !$00)
           (STA RPTFLA)
 
           ; LOOP ON KEYPRESS
@@ -342,7 +347,36 @@
            (LDA !>window)
            (STA ZP_RA+1)
 
-           (JMP WINDOW_RENDER_COMPLETE)
+           (JSR WINDOW_RENDER_COMPLETE)
+
+    (label wait__)
+           (JSR BM_WAIT_FOR_KEYPRESS)
+           (LDA ZP_RP)
+           (CMP !145) ;; up
+           (BEQ scroll_down__)
+           (CMP !17)  ;; down
+           (BEQ scroll_up__)
+           (CMP !157)  ;; left
+           (BEQ scroll_right__)
+           (CMP !29)  ;; right
+           (BEQ scroll_left__)
+           (RTS)
+    (label scroll_down__)
+           (JSR WINDOW_SCROLL_DOWN)
+           (CLC)
+           (BCC wait__)
+    (label scroll_up__)
+           (JSR WINDOW_SCROLL_UP)
+           (CLC)
+           (BCC wait__)
+    (label scroll_left__)
+           (JSR WINDOW_SCROLL_LEFT)
+           (CLC)
+           (BCC wait__)
+    (label scroll_right__)
+           (JSR WINDOW_SCROLL_RIGHT)
+           (CLC)
+           (BCC wait__)
 
     ;; no org align necessary, since rt is not gcd
     (label window)

@@ -503,7 +503,7 @@
                 (list 0 32 32 32 32 32 32 17 18 19 20 21 22 32 32 32 32 32 32 32 32 0))
 
   (inform-check-equal? (cpu-state-clock-cycles window-render-complete-test)
-                       10775
+                       10421
                        "time it takes to write 4x with different x-scroll position 3 strings in a window starting at 8,5 of width 20 and height 3 "))
 
 (module+ test #| write text |#
@@ -638,6 +638,7 @@
           (LDY !vm_window__width+2)
           (LDA (ZP_RA),y)
           (TAY)
+          (DEY)
           ;; input:  X = ROW (first row)
           ;;         ZP_RZ = # of rows
           ;;         ZP_RP =  (first col) COL -> COL-delta
@@ -841,7 +842,7 @@
                  (map (lambda (char) (- (char->integer char) 64)) (string->list "TEXT"))
                  (list 0)))
   (inform-check-equal? (cpu-state-clock-cycles window-scroll-left-test2)
-                       2355))
+                       2097))
 
 ;; scroll window right, fill up firstcolumn with new data
 ;; keep cursor within window
@@ -1015,7 +1016,7 @@
                  (map (lambda (char) (- (char->integer char) 64)) (string->list "TEXT"))
                  (list 32 32 32 32 32 32 32 32 32 0)))
   (inform-check-equal? (cpu-state-clock-cycles window-scroll-right-test)
-                       2491))
+                       2497))
 
 ;; scroll window content down, fill first row with new data
 ;; keep cursor within window
@@ -1103,7 +1104,8 @@
           (CLC)
           (ADC (ZP_RA),y)
           (TAX)
-          (DEX)
+          (DEX) ;; now on last row
+          (DEX) ;; row that needs to be copied
           (LDA (ZP_RA),y)
           (STA ZP_RZ)
           (LDY !vm_window__screen_x+2)
@@ -1258,7 +1260,7 @@
           (ADC !1)
           (LDY !vm_window__height+2)
           (CMP (ZP_RA),y)
-          (BNE scrolling_necessary__)
+          (BMI scrolling_necessary__)
           (RTS)
 
    (label scrolling_necessary__)
@@ -1346,6 +1348,7 @@
           (LDY !vm_window__width+2)
           (LDA (ZP_RA),y)
           (TAY)
+          (DEY)
 
           (LDA !1)
 
@@ -1525,5 +1528,5 @@
 
 (module+ test #| code len |#
   (inform-check-equal? (estimated-code-len vm-window-code)
-                       844
+                       847
                        "estimated code len of window module"))

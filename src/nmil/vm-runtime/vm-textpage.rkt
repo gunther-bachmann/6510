@@ -6,6 +6,14 @@
  PREV_TEXT_SECTION_RZ
 
  create-text-page-data-for
+
+ vm_textpage__page_type
+ vm_textpage__prev_page
+ vm_textpage__offset_text_start
+ vm_textpage__offset_text_end
+ vm_textpage__next_page
+
+ vm-textpage-defs
  vm-textpage-code)
 
 #|
@@ -262,6 +270,24 @@
      VM_MEMORY_MANAGEMENT_CONSTANTS
      (list (label VM_INIT_MEMORY_MANAGER) (RTS)))))
 
+
+
+;; offsets into the text page
+(define vm_textpage__page_type         #x00)
+(define vm_textpage__prev_page         #x01)
+(define vm_textpage__offset_text_start #x02)
+(define vm_textpage__offset_text_end   #x03)
+(define vm_textpage__next_page         #xff)
+
+
+(define vm-textpage-defs
+  (list
+   (byte-const vm_textpage__page_type         #x00)
+   (byte-const vm_textpage__prev_page         #x01)
+   (byte-const vm_textpage__offset_text_start #x02)
+   (byte-const vm_textpage__offset_text_end   #x03)
+   (byte-const vm_textpage__next_page         #xff)))
+
 ;; given curren text-section pointer in ZP_RZ move on to the next text-section
 ;; result zero-flag = 1, means no more text was available (BEQ)
 ;;        zero-flag = 0, means ZP_RZ holds the pointer to the next text-section (BNE)
@@ -283,20 +309,20 @@
           ;; check whether this is the last offset on this page, else move on to next page
           (LDY ZP_RZ+1)
           (STY ZP_PAGE_REG+1)
-          (LDY !$02) ;; offset of end of last entry on this text page
+          (LDY !vm_textpage__offset_text_end) ;; offset of end of last entry on this text page
           (CMP (ZP_PAGE_REG),y)
           (BNE continue_without_page_chage__)
 
           ;; switch to next text page
-          (LDY !$ff)
-          (LDA (ZP_RZ),y) ;; get next page
+          (LDY !vm_textpage__next_page)
+          (LDA (ZP_PAGE_REG),y) ;; get next page
           (BEQ next__) ;; EQ
 
           (STA ZP_RZ+1)
           (STA ZP_PAGE_REG+1)
 
           ;; get offset to first text section
-          (LDY !$01)
+          (LDY !vm_textpage__offset_text_start)
           (LDA (ZP_PAGE_REG),y)
           (STA ZP_RZ)
           (BNE next__) ;; NE
@@ -325,7 +351,7 @@
           (DEC ZP_RZ) ;; point to #of chars of previous section (or behind first entry)
           (LDA ZP_RZ)
    (label on_end_of_prev__)
-          (LDY !2)
+          (LDY !vm_textpage__offset_text_start)
           (CMP (ZP_PAGE_REG),y)
           (BMI look_for_previous_page__)
           (LDY !$00)
@@ -341,12 +367,12 @@
           (RTS)
 
    (label look_for_previous_page__)
-          (LDY !1)
+          (LDY !vm_textpage__prev_page)
           (LDA (ZP_PAGE_REG),y) ;; load previous page
           (BEQ donenc__)
           (STA ZP_RZ+1)
           (STA ZP_PAGE_REG+1)
-          (LDY !3)
+          (LDY !vm_textpage__offset_text_end)
           (LDA (ZP_PAGE_REG),y) ;; a = last offset
           (STA ZP_RZ)
           (BNE on_end_of_prev__)
@@ -479,8 +505,9 @@
           (LDY !$00)
           (SEC)
           (LDA (ZP_RZ),y)       ;; length of string
-          (SBC ZP_TEMP)
+          (SBC ZP_TEMP);;TODO
           (BMI empty_line__)    ;; line is completely empty
+          (BEQ empty_line__)
           (CLC)
           (ADC ZP_TEMP3)
           ;; check len to print with screen width
@@ -792,7 +819,7 @@
                  "only spaces since it is an empty line")
 
    (inform-check-equal? (cpu-state-clock-cycles write-text-page-line-test)
-                        5640
+                        5656
                         "clock cycles needed for windowed write text page to screen"))
 
   (define write-one-column-over-24-lines
@@ -846,7 +873,7 @@
                            (range 1 25)))
                  (build-list 24 (lambda (_) 0)))
    (inform-check-equal? (cpu-state-clock-cycles write-one-column-over-24-lines)
-                        6433)))
+                        6483)))
 
 
 ;; flow:
@@ -950,11 +977,12 @@
 
 (define vm-textpage-code
   (append
+   vm-textpage-defs
    WRITE_TEXT_PAGE_LINE
    NEXT_TEXT_SECTION_RZ
    PREV_TEXT_SECTION_RZ))
 
 (module+ test #| code len |#
   (inform-check-equal? (estimated-code-len vm-textpage-code)
-                       284
+                       286
                        "estimated code len of text page code"))
