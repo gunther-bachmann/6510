@@ -128,7 +128,7 @@
            (only-in uuid
                     uuid-string)
            (only-in racket/list
-                    range)
+                    range make-list)
            (only-in "../test-utils.rkt"
                     regression-test)
            "../../6510-test-utils.rkt"
@@ -169,7 +169,34 @@
 
      ;; VM_MEMORY_MANAGEMENT_CONSTANTS
      vm-memory-manager-code
-     (list (byte-const ZP_VM_PC $85)))))
+     (list (byte-const ZP_VM_PC $85))))
+
+
+  (define (screen-memory-list state x y w h)
+    (apply append (map (lambda (line)
+                         (memory-list- state (+ (* line 40) screen-base-address x) w))
+                       (range y (+ y h)))))
+
+  (define (check-screen-untouched-except? state x y w h)
+    (when (< 0 y)
+      (check-equal? (screen-memory-list state 0 0 40 y)
+                    (make-list (* 40 y) 0)
+                    (format "upper screen untouched (0,0)..(39,~a)" (- y 1))))
+
+    (when (< 0 (- 25 y h))
+      (check-equal? (screen-memory-list state 0 (+ y h) 40 (- 25 y h))
+                    (make-list (* 40 (- 25 y h)) 0)
+                    (format "lower screen untouched (0,~a)..(39,24)" (+ y h))))
+
+    (when (< 0 x)
+      (check-equal? (screen-memory-list state 0 0 x 25)
+                    (make-list (* 25 x) 0)
+                    (format "left screen untouched (0,0)..(~a,24)" (- x 1))))
+
+    (when (< 0 (- 40 x w))
+      (check-equal? (screen-memory-list state (+ x w) 0 (- 40 x w) 25)
+                    (make-list (* 25 (- 40 x w)) 0)
+                    (format "right screen untouched (~a,0)..(39,24)" (+ x w))))))
 
 
 ;; input: screen-x, screen-y, width, ptr->textpage
@@ -476,6 +503,8 @@
             (byte $00) ;; next text-page
             ))
 
+
+  [check-screen-untouched-except? window-render-complete-test 8 5 20 13]
   ;; scroll_x = 1
   (check-equal? (memory-list- window-render-complete-test (+ (* 5 40) screen-base-address 7) 22)
                 (list 0 32 32 32 05 06 07 08 09 10 32 32 32 32 32 32 32 32 32 32 32 0))
@@ -553,6 +582,7 @@
                 "\n")
                "__benchmark")))))
 
+  (check-screen-untouched-except? write-text-test 8 5 20 4)
   (check-equal? (memory-list- write-text-test (+ (* 40 5) screen-base-address 7) 22)
                 (append
                  (list 0)
@@ -745,6 +775,7 @@
                 "\n")
                "__benchmark")))))
 
+  (check-screen-untouched-except? window-scroll-left-test 8 5 20 3)
   (check-equal? (memory-list- window-scroll-left-test (+ (* 40 5) screen-base-address 7) 22)
                 (append
                  (list 0)
@@ -821,6 +852,7 @@
                 "\n")
                "__benchmark")))))
 
+  (check-screen-untouched-except? window-scroll-left-test2 8 5 20 3)
   (check-equal? (memory-list- window-scroll-left-test2 (+ (* 40 5) screen-base-address 7) 15)
                 (append
                  (list 0)
@@ -989,6 +1021,7 @@
                 "\n")
                "__benchmark")))))
 
+  (check-screen-untouched-except? window-scroll-right-test 8 5 20 3)
   (check-equal? (memory-list- window-scroll-right-test (+ (* 40 5) screen-base-address 7) 22)
                 (append
                  (list 0)
@@ -1207,6 +1240,7 @@
                 "\n")
                "__benchmark")))))
 
+  (check-screen-untouched-except? window-scroll-down-test 8 5 20 2)
   (check-equal? (memory-list- window-scroll-down-test (+ (* 40 5) screen-base-address 7) 22)
                 (append
                  (list 0)
@@ -1444,6 +1478,7 @@
                 "\n")
                "__benchmark")))))
 
+  (check-screen-untouched-except? window-scroll-up-test 8 5 20 2)
   (check-equal? (memory-list- window-scroll-up-test (+ (* 40 5) screen-base-address 7) 22)
                 (append
                  (list 0 32 32)
@@ -1513,6 +1548,7 @@
                 "\n")
                "__benchmark")))))
 
+  (check-screen-untouched-except? window-scroll-up-test2 8 5 20 2)
   (check-equal? (memory-list- window-scroll-up-test2 (+ (* 40 5) screen-base-address 7) 22)
                 (append
                  (list 0)
@@ -1537,5 +1573,5 @@
 
 (module+ test #| code len |#
   (inform-check-equal? (estimated-code-len vm-window-code)
-                       847
+                       850
                        "estimated code len of window module"))
